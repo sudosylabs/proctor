@@ -178,17 +178,23 @@ func waitForEmailTransitionDeliveries(t *testing.T, helper *testlib.Helper) []ma
 
 func hasMatchingDelivery(deliveries []mail.Delivery, recipient string, matches func(string) bool) bool {
 	for _, delivery := range deliveries {
-		if len(delivery.Recipients) == 1 && delivery.Recipients[0] == recipient && matches(string(delivery.Data)) {
+		if len(delivery.Recipients) == 1 && delivery.Recipients[0] == recipient && matches(unfoldedMessage(delivery)) {
 			return true
 		}
 	}
 	return false
 }
 
+// unfoldedMessage joins quoted-printable soft line breaks, which can split a
+// credential link anywhere in the encoded message.
+func unfoldedMessage(delivery mail.Delivery) string {
+	return strings.ReplaceAll(string(delivery.Data), "=\r\n", "")
+}
+
 func deliveryToMatching(t *testing.T, deliveries []mail.Delivery, recipient string, matches func(string) bool) mail.Delivery {
 	t.Helper()
 	for _, delivery := range deliveries {
-		if len(delivery.Recipients) == 1 && delivery.Recipients[0] == recipient && matches(string(delivery.Data)) {
+		if len(delivery.Recipients) == 1 && delivery.Recipients[0] == recipient && matches(unfoldedMessage(delivery)) {
 			return delivery
 		}
 	}

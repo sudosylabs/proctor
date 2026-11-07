@@ -16976,6 +16976,11 @@
             "description": "Whether this Session is restricted to fresh primary proof and local authenticator enrollment after an assisted reset.",
             "type": "boolean"
           },
+          "password_changed_at": {
+            "description": "When the User's active password credential was last set or changed. Omitted for an account without a password credential.",
+            "format": "date-time",
+            "type": "string"
+          },
           "pending": {
             "type": "boolean"
           },
@@ -16983,11 +16988,26 @@
             "format": "date-time",
             "type": "string"
           },
+          "recent_authentication_minutes": {
+            "description": "Configured recent-authentication window (`Authentication.RecentAuthenticationTTL`) in whole minutes, rounded down.",
+            "minimum": 1,
+            "type": "integer"
+          },
           "recently_authenticated": {
             "type": "boolean"
           },
+          "recently_authenticated_until": {
+            "description": "When this Session's recent-authentication window ends. Present only while `recently_authenticated` is true.",
+            "format": "date-time",
+            "type": "string"
+          },
           "recovery_codes_remaining": {
             "minimum": 0,
+            "type": "integer"
+          },
+          "recovery_codes_total": {
+            "description": "Configured number of codes in a new recovery-code set (`Authentication.MFA.RecoveryCodeCount`).",
+            "minimum": 1,
             "type": "integer"
           },
           "service_enabled": {
@@ -17003,7 +17023,9 @@
           "recently_authenticated",
           "enabled",
           "pending",
-          "recovery_codes_remaining"
+          "recovery_codes_remaining",
+          "recovery_codes_total",
+          "recent_authentication_minutes"
         ],
         "type": "object"
       },
@@ -44104,7 +44126,7 @@
     },
     "/api/v1/users/me/mfa": {
       "get": {
-        "description": "Returns whether MFA is active, whether a setup is pending, and the count of unused recovery codes for the current User. TOTP secrets and recovery-code values are never returned by this status view.",
+        "description": "Returns whether MFA is active, whether a setup is pending, and the count of unused recovery codes out of the configured set size for the current User, when the User's own password last changed, and the recent-authentication window: its configured length and, while this Session is recently authenticated, when it ends. TOTP secrets, recovery-code values, and password material are never returned by this status view.",
         "operationId": "getMFAStatus",
         "responses": {
           "200": {

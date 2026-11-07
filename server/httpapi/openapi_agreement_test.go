@@ -192,7 +192,7 @@ func identityAndSystemOpenAPIAgreementSuite() openAPIAgreementSuite {
 			{Name: "MFARecoveryCodesResponse", DTO: reflect.TypeOf(mfaRecoveryCodesResponse{}), Required: []string{"recovery_codes"}},
 			{Name: "MFASetupResponse", DTO: reflect.TypeOf(mfaSetupResponse{}), Required: []string{"secret", "provisioning_uri", "expires_at"}},
 			{Name: "MFAActivationResponse", DTO: reflect.TypeOf(mfaActivationResponse{}), Required: []string{"recovery_codes"}},
-			{Name: "MFAStatusResponse", DTO: reflect.TypeOf(mfaStatusResponse{}), Required: []string{"service_enabled", "mfa_recovery_required", "authentication_method", "authentication_strength", "recently_authenticated", "enabled", "pending", "recovery_codes_remaining"}},
+			{Name: "MFAStatusResponse", DTO: reflect.TypeOf(mfaStatusResponse{}), Required: []string{"service_enabled", "mfa_recovery_required", "authentication_method", "authentication_strength", "recently_authenticated", "enabled", "pending", "recovery_codes_remaining", "recovery_codes_total", "recent_authentication_minutes"}},
 			{Name: "CreatePersonalAccessTokenRequest", DTO: reflect.TypeOf(createPersonalAccessTokenRequest{}), Required: []string{"description", "scopes", "expires_at"}},
 			{Name: "PersonalAccessTokenResponse", DTO: reflect.TypeOf(personalAccessTokenResponse{}), Required: []string{"id", "created_at", "updated_at", "user_id", "description", "scopes", "expires_at"}},
 			{Name: "PersonalAccessTokenCreationResponse", DTO: reflect.TypeOf(personalAccessTokenCreationResponse{}), Required: []string{"token", "credential"}},

@@ -2,14 +2,6 @@ import { useSyncExternalStore } from "react";
 
 import { sharedPublicAccessDiscovery } from "../../auth/PublicAccessDiscovery";
 
-/**
- * The server's default recent-authentication window
- * (`Authentication.RecentAuthenticationTTL` in server/config). The status
- * response does not yet expose the effective window, so copy states the
- * default until it does.
- */
-export const recentAuthenticationMinutes = 15;
-
 /** A localized whole-minute duration such as “10 minutes” or “1 minute”. */
 export function formatMinutes(minutes: number): string {
   return new Intl.NumberFormat(documentLocale(), {

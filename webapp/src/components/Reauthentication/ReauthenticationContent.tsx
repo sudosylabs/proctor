@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import type { SecurityContextResult } from "../../features/account-security/AccountSecurityApi";
-import { formatMinutes, recentAuthenticationMinutes } from "../../features/account-security/presentation";
+import { formatMinutes, minutesUntil } from "../../features/account-security/presentation";
 import { reauthenticationDestination, type ReauthenticationActions, type ReauthenticationFailure, type ReauthenticationTask } from "../../features/reauthenticate/ReauthenticationApi";
 import { message } from "../../i18n/messages";
 import { AccessTaskIntro } from "../AccessTaskIntro/AccessTaskIntro";
@@ -106,7 +106,11 @@ export function ReauthenticationContent({ actions, externalProofFailed, loading,
   const needsStrong = !context.recoveryRequired && context.authenticationStrength !== "multi_factor" && (context.enabled || task === "connect-provider");
   const complete = !requiresRecovery && !needsPrimary && !needsStrong;
   const step = requiresRecovery ? "recovery" : needsPrimary ? "primary" : needsStrong ? "strong" : "complete";
-  const duration = formatMinutes(recentAuthenticationMinutes);
+  // Before proof the lede states the configured window; once confirmed it
+  // states what is actually left of this Session's window.
+  const duration = formatMinutes(complete && context.recentlyAuthenticatedUntil !== undefined
+    ? Math.max(1, minutesUntil(context.recentlyAuthenticatedUntil))
+    : context.recentAuthenticationMinutes);
   const destination = reauthenticationDestination(task);
   const cancel = <a className={styles.cancel} href={destination}>{message("webapp.reauthenticate.cancel")}</a>;
 

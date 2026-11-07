@@ -4736,7 +4736,7 @@ export interface paths {
         };
         /**
          * Get current-user MFA status
-         * @description Returns whether MFA is active, whether a setup is pending, and the count of unused recovery codes for the current User. TOTP secrets and recovery-code values are never returned by this status view.
+         * @description Returns whether MFA is active, whether a setup is pending, and the count of unused recovery codes out of the configured set size for the current User, when the User's own password last changed, and the recent-authentication window: its configured length and, while this Session is recently authenticated, when it ends. TOTP secrets, recovery-code values, and password material are never returned by this status view.
          */
         get: operations["getMFAStatus"];
         put?: never;
@@ -8488,11 +8488,25 @@ export interface components {
             enabled: boolean;
             /** @description Whether this Session is restricted to fresh primary proof and local authenticator enrollment after an assisted reset. */
             mfa_recovery_required: boolean;
+            /**
+             * Format: date-time
+             * @description When the User's active password credential was last set or changed. Omitted for an account without a password credential.
+             */
+            password_changed_at?: string;
             pending: boolean;
             /** Format: date-time */
             pending_expires_at?: string;
+            /** @description Configured recent-authentication window (`Authentication.RecentAuthenticationTTL`) in whole minutes, rounded down. */
+            recent_authentication_minutes: number;
             recently_authenticated: boolean;
+            /**
+             * Format: date-time
+             * @description When this Session's recent-authentication window ends. Present only while `recently_authenticated` is true.
+             */
+            recently_authenticated_until?: string;
             recovery_codes_remaining: number;
+            /** @description Configured number of codes in a new recovery-code set (`Authentication.MFA.RecoveryCodeCount`). */
+            recovery_codes_total: number;
             /** @description Whether local authenticator enrollment and verification are currently available. */
             service_enabled: boolean;
         };

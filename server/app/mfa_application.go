@@ -40,9 +40,16 @@ type mfaEffects interface {
 
 // mfaApplicationServiceDependencies are the collaborators of mfaApplicationService;
 // newMFAApplicationService validates them once and mfaApplicationService keeps them in deps.
+// mfaPasswordCredentialReader reads only the caller's own active password
+// credential for its change time.
+type mfaPasswordCredentialReader interface {
+	GetByUser(context.Context, model.UserID) (*model.PasswordCredential, error)
+}
+
 type mfaApplicationServiceDependencies struct {
 	Users                   store.UserStore
 	Credentials             store.MFAStore
+	Passwords               mfaPasswordCredentialReader
 	Sessions                store.SessionStore
 	Institutions            store.InstitutionStore
 	Audit                   mfaAudit
@@ -66,6 +73,8 @@ func newMFAApplicationService(deps mfaApplicationServiceDependencies) (*mfaAppli
 		return nil, errors.New("MFA user store is required")
 	case deps.Credentials == nil:
 		return nil, errors.New("MFA store is required")
+	case deps.Passwords == nil:
+		return nil, errors.New("MFA password credential reader is required")
 	case deps.Sessions == nil:
 		return nil, errors.New("MFA session store is required")
 	case deps.Institutions == nil:
@@ -99,9 +108,21 @@ func (s *mfaApplicationService) GetMFAStatus(
 	if err := s.requireRecoverySession(principal, false); err != nil {
 		return nil, err
 	}
+	now := s.deps.Now()
 	status := &MFAStatus{ServiceEnabled: s.deps.Mechanics.deps.Settings.Enabled, MFARecoveryRequired: principal.MFARecoveryRequired,
 		AuthenticationMethod: principal.AuthenticationMethod, AuthenticationProviderID: principal.AuthenticationProviderID,
-		AuthenticationStrength: principal.AuthenticationStrength, RecentlyAuthenticated: principal.IsRecentlyAuthenticated(s.deps.Now(), s.deps.RecentAuthenticationTTL)}
+		AuthenticationStrength: principal.AuthenticationStrength, RecentlyAuthenticated: principal.IsRecentlyAuthenticated(now, s.deps.RecentAuthenticationTTL),
+		RecoveryCodesTotal: s.deps.Mechanics.deps.Settings.RecoveryCodeCount, RecentAuthenticationTTL: s.deps.RecentAuthenticationTTL}
+	if status.RecentlyAuthenticated {
+		status.RecentlyAuthenticatedUntil = model.OptionalTimeFrom(principal.LastAuthenticationAt().Add(s.deps.RecentAuthenticationTTL))
+	}
+	password, err := s.deps.Passwords.GetByUser(ctx, principal.UserID)
+	switch {
+	case err == nil && password != nil:
+		status.PasswordChangedAt = model.OptionalTimeFrom(password.PasswordChangedAt)
+	case err != nil && !store.IsNotFound(err):
+		return nil, mfaStoreErrors.Translate(err)
+	}
 	credential, err := s.deps.Credentials.GetByUser(ctx, principal.UserID)
 	if store.IsNotFound(err) {
 		return status, nil
@@ -110,7 +131,7 @@ func (s *mfaApplicationService) GetMFAStatus(
 		return nil, mfaStoreErrors.Translate(err)
 	}
 	status.Enabled = credential.IsActive()
-	status.Pending = credential.IsPendingAt(model.TimeUTC(s.deps.Now()))
+	status.Pending = credential.IsPendingAt(model.TimeUTC(now))
 	status.PendingExpiresAt = credential.PendingExpiresAt
 	if status.Enabled {
 		status.RecoveryCodesRemaining, err = s.deps.Credentials.CountRecoveryCodes(ctx, principal.UserID)

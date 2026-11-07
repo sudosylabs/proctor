@@ -113,6 +113,15 @@ type MFAStatus struct {
 	Pending                  bool
 	PendingExpiresAt         model.OptionalTime
 	RecoveryCodesRemaining   int
+	// RecoveryCodesTotal is the configured size of a recovery-code set.
+	RecoveryCodesTotal int
+	// PasswordChangedAt is unset for an account without a password credential.
+	PasswordChangedAt model.OptionalTime
+	// RecentAuthenticationTTL is the configured recent-authentication window;
+	// RecentlyAuthenticatedUntil is when it ends for this Session, set only
+	// while the Session is recently authenticated.
+	RecentAuthenticationTTL    time.Duration
+	RecentlyAuthenticatedUntil model.OptionalTime
 }
 
 func (s *mfaMechanics) consumeSecondFactor(

@@ -56,6 +56,10 @@ type wireMFAStatus struct {
 	Pending                bool      `json:"pending"`
 	PendingExpiresAt       time.Time `json:"pending_expires_at,omitempty"`
 	RecoveryCodesRemaining int       `json:"recovery_codes_remaining"`
+	RecoveryCodesTotal     int       `json:"recovery_codes_total"`
+	PasswordChangedAt      time.Time `json:"password_changed_at,omitempty"`
+	RecentMinutes          int       `json:"recent_authentication_minutes"`
+	RecentlyUntil          time.Time `json:"recently_authenticated_until,omitempty"`
 }
 
 func TestMFAIntegration(t *testing.T) {
@@ -142,6 +146,14 @@ func TestMFAIntegration(t *testing.T) {
 	require.NoError(t, json.Unmarshal(statusResponse.Body.Bytes(), &status))
 	require.True(t, status.Enabled)
 	require.Len(t, activation.RecoveryCodes, status.RecoveryCodesRemaining)
+	configured := helper.ConfigStore.Get().Authentication
+	require.Equal(t, configured.MFA.RecoveryCodeCount, status.RecoveryCodesTotal)
+	require.Equal(t, int(configured.RecentAuthenticationTTL.Duration/time.Minute), status.RecentMinutes)
+	passwordCredential, err := persistence.PasswordCredential().GetByUser(context.Background(), user.ID)
+	require.NoError(t, err)
+	require.True(t, status.PasswordChangedAt.Equal(passwordCredential.PasswordChangedAt), "password_changed_at = %s, want %s", status.PasswordChangedAt, passwordCredential.PasswordChangedAt)
+	require.True(t, status.RecentlyUntil.After(time.Now()), "a fresh login reported no recent-authentication end")
+	require.False(t, status.RecentlyUntil.After(time.Now().Add(configured.RecentAuthenticationTTL.Duration)), "recent-authentication end exceeds the configured window")
 	rechallenge := performJSONRequest(
 		helper.Handler(),
 		http.MethodPost,

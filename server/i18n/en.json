@@ -3711,7 +3711,7 @@
   },
   {
     "id": "webapp.security.status.codes_left",
-    "translation": "{{.Count}} left"
+    "translation": "{{.Count}} of {{.Total}} left"
   },
   {
     "id": "webapp.security.status.codes_none",
@@ -3728,6 +3728,14 @@
   {
     "id": "webapp.security.status.on",
     "translation": "On"
+  },
+  {
+    "id": "webapp.security.status.password",
+    "translation": "Password"
+  },
+  {
+    "id": "webapp.security.status.password_changed",
+    "translation": "Changed {{.Date}}"
   },
   {
     "id": "webapp.security.status.pending",

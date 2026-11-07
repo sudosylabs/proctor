@@ -11,7 +11,7 @@ paths:
       operationId: getMFAStatus
       summary: Get current-user MFA status
       description: >-
-        Returns whether MFA is active, whether a setup is pending, and the count of unused recovery codes for the current User. TOTP secrets and recovery-code values are never returned by this status view.
+        Returns whether MFA is active, whether a setup is pending, and the count of unused recovery codes out of the configured set size for the current User, when the User's own password last changed, and the recent-authentication window: its configured length and, while this Session is recently authenticated, when it ends. TOTP secrets, recovery-code values, and password material are never returned by this status view.
       tags:
         - Authentication
       x-proctor-auth: mfa_recovery_session_required
@@ -461,6 +461,8 @@ components:
         - enabled
         - pending
         - recovery_codes_remaining
+        - recovery_codes_total
+        - recent_authentication_minutes
       properties:
         service_enabled:
           type: boolean
@@ -489,3 +491,19 @@ components:
         recovery_codes_remaining:
           type: integer
           minimum: 0
+        recovery_codes_total:
+          type: integer
+          minimum: 1
+          description: Configured number of codes in a new recovery-code set (`Authentication.MFA.RecoveryCodeCount`).
+        password_changed_at:
+          type: string
+          format: date-time
+          description: When the User's active password credential was last set or changed. Omitted for an account without a password credential.
+        recent_authentication_minutes:
+          type: integer
+          minimum: 1
+          description: Configured recent-authentication window (`Authentication.RecentAuthenticationTTL`) in whole minutes, rounded down.
+        recently_authenticated_until:
+          type: string
+          format: date-time
+          description: When this Session's recent-authentication window ends. Present only while `recently_authenticated` is true.

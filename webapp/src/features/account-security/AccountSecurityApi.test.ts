@@ -8,7 +8,7 @@ import {
 } from "./AccountSecurityApi";
 
 const context = {
-  enabled: false, pending: false, recovery_codes_remaining: 0,
+  enabled: false, pending: false, recovery_codes_remaining: 0, recovery_codes_total: 10, recent_authentication_minutes: 15,
   service_enabled: true, mfa_recovery_required: false,
   authentication_method: "password", authentication_strength: "single_factor", recently_authenticated: true,
 };
@@ -108,5 +108,32 @@ describe("explicit MFA mutations", () => {
     await expect(disableAuthenticator()).resolves.toEqual({ kind: "success" });
     post.mockResolvedValue(apiResult(200));
     await expect(disableAuthenticator()).resolves.toEqual({ kind: "unavailable" });
+  });
+});
+
+describe("account security status facts", () => {
+  it("reads the password change, recovery total, and recent window", async () => {
+    vi.spyOn(apiClient, "GET").mockResolvedValue(apiResult(200, { data: {
+      ...context, password_changed_at: "2026-07-01T09:30:00Z", recently_authenticated_until: "2026-08-18T12:14:00Z",
+    } }));
+    await expect(requestSecurityContext()).resolves.toMatchObject({ kind: "ready", context: {
+      passwordChangedAt: "2026-07-01T09:30:00Z", recoveryCodesTotal: 10, recentAuthenticationMinutes: 15,
+      recentlyAuthenticatedUntil: "2026-08-18T12:14:00Z",
+    } });
+  });
+
+  it("omits absent facts and rejects malformed ones", async () => {
+    const get = vi.spyOn(apiClient, "GET").mockResolvedValue(apiResult(200, { data: context }));
+    const ready = await requestSecurityContext();
+    expect(ready.kind === "ready" && "passwordChangedAt" in ready.context).toBe(false);
+    for (const data of [
+      { ...context, recovery_codes_total: 0 },
+      { ...context, recent_authentication_minutes: undefined },
+      { ...context, password_changed_at: "yesterday" },
+      { ...context, recently_authenticated_until: 5 },
+    ]) {
+      get.mockResolvedValue(apiResult(200, { data }));
+      await expect(requestSecurityContext()).resolves.toEqual({ kind: "unavailable" });
+    }
   });
 });

@@ -18,12 +18,14 @@ strong assurance are checked by the server for each operation.
 Status is a hairline `FactList` followed by one section per decision, each
 with a small heading, one sentence, and its own action:
 
-- facts: two-step verification (On, Off, or Setup not finished, with a small
-  state marker), recovery codes left when enabled, and how this Session was
-  established (`authentication_method`, `authentication_strength`, and the
-  provider display name from public discovery when the Session is external).
-  The status response has no password-change time; a “Password” fact belongs
-  first in the list once it does.
+- facts: “Password: Changed {date}” first when the account has a password
+  (`password_changed_at`, a calendar date in the viewer's locale and time zone
+  inside a `time` element; omitted for accounts without one), two-step
+  verification (On, Off, or Setup not finished, with a small state marker),
+  recovery codes as “N of M left” when enabled (`recovery_codes_remaining` of
+  the configured `recovery_codes_total`), and how this Session was established
+  (`authentication_method`, `authentication_strength`, and the provider
+  display name from public discovery when the Session is external).
 - not enabled: “Turn on two-step verification” with the one primary action.
 - enabled: “Recovery codes” (make new codes, secondary) and “Turn off two-step
   verification” (secondary). Neither is the purple primary action.

@@ -4,7 +4,9 @@ import type {
   AuthenticatorSetup, SecurityActions, SecurityContext, SecurityContextResult, SecurityFailure,
 } from "../../features/account-security/AccountSecurityApi";
 import { formatMinutes, minutesUntil, useProviderName } from "../../features/account-security/presentation";
+import { formatDate } from "../../i18n/dateTime";
 import { message } from "../../i18n/messages";
+import { richMessage } from "../../i18n/richMessage";
 import { AccessTaskIntro, type AccessTaskKindTone } from "../AccessTaskIntro/AccessTaskIntro";
 import { Button, ButtonLink } from "../Button/Button";
 import { Fact, FactList } from "../FactList/FactList";
@@ -224,8 +226,11 @@ function StatusSummary({ context, providerName, verify }: {
   const canVerify = context.enabled && context.serviceEnabled && !context.recoveryRequired && !strong;
   return (
     <FactList>
-      {/* The status response has no password-change time yet. When it does,
-          a "Password" fact with that date belongs first in this list. */}
+      {context.passwordChangedAt === undefined ? null : <Fact label={message("webapp.security.status.password")}>
+        {richMessage("webapp.security.status.password_changed", {
+          Date: <time dateTime={context.passwordChangedAt}>{formatDate(context.passwordChangedAt)}</time>,
+        })}
+      </Fact>}
       <Fact label={message("webapp.security.status.two_step")}>
         <StateValue tone={context.enabled ? "success" : context.pending ? "warning" : "off"}>
           {message(context.enabled ? "webapp.security.status.on" : context.pending ? "webapp.security.status.pending" : "webapp.security.status.off")}
@@ -233,7 +238,10 @@ function StatusSummary({ context, providerName, verify }: {
       </Fact>
       {context.enabled ? <Fact label={message("webapp.security.status.codes")}>
         {context.recoveryCodesRemaining > 0
-          ? message("webapp.security.status.codes_left", { Count: new Intl.NumberFormat().format(context.recoveryCodesRemaining) })
+          ? message("webapp.security.status.codes_left", {
+            Count: new Intl.NumberFormat().format(context.recoveryCodesRemaining),
+            Total: new Intl.NumberFormat().format(Math.max(context.recoveryCodesTotal, context.recoveryCodesRemaining)),
+          })
           : <StateValue tone="warning">{message("webapp.security.status.codes_none")}</StateValue>}
       </Fact> : null}
       <Fact label={message("webapp.security.status.session")}>

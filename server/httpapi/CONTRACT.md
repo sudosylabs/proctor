@@ -377,7 +377,12 @@ clients may query the bounded MFA status to distinguish mandatory reenrollment
 from a signed-out browser. Restricted Sessions retain normal cookie/CSRF rules.
 MFA status projects the original password/oidc/cas method, optional provider ID,
 strength, recency, service availability and recovery restriction without requiring
-ordinary User-profile access. Every security response is `Cache-Control: no-store`.
+ordinary User-profile access. It also reports the caller's own facts a security
+page states: remaining and configured (`recovery_codes_total`) recovery codes,
+`password_changed_at` (omitted without a password credential),
+`recent_authentication_minutes` (the configured window rounded down), and
+`recently_authenticated_until` while the Session is recent. Every security
+response is `Cache-Control: no-store`.
 
 `POST /api/v1/auth/reauthenticate/password` accepts only the current User's password.
 The external counterpart accepts the closed task `security` or `connect-provider`,

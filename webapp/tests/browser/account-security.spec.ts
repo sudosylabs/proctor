@@ -4,7 +4,8 @@ import jsQR from "jsqr";
 import { PNG } from "pngjs";
 
 const baseContext = {
-  enabled: false, pending: false, recovery_codes_remaining: 0,
+  enabled: false, pending: false, recovery_codes_remaining: 0, recovery_codes_total: 10,
+  recent_authentication_minutes: 20, password_changed_at: "2026-07-01T09:30:00Z",
   service_enabled: true, mfa_recovery_required: false,
   authentication_method: "password", authentication_strength: "single_factor",
   recently_authenticated: true,
@@ -71,6 +72,7 @@ async function mockSecurity(page: Page, context = baseContext) {
     if (path === "/api/v1/auth/reauthenticate/password") {
       if (request.postDataJSON().password !== "current-password") return problem("authentication.credentials_invalid", 401);
       state.context.recently_authenticated = true;
+      (state.context as Record<string, unknown>).recently_authenticated_until = new Date(Date.now() + 12 * 60_000 - 1_000).toISOString();
       return json({ id: "current-session", client_type: "web", reauthenticated_at: new Date().toISOString() });
     }
     if (path === "/api/v1/auth/reauthenticate/external") return json({ redirect_url: "https://sso.example/reauthenticate" });
@@ -155,6 +157,11 @@ test("status names the signed-in User and signs out from the footer", async ({ p
   await page.goto("/account/security");
   await expect(page.getByText("Off", { exact: true })).toBeVisible();
   await expect(page.getByText("Signed in with password", { exact: true })).toBeVisible();
+  const facts = page.locator("[data-proctor-fact-list]");
+  await expect(facts.getByRole("term").first()).toHaveText("Password");
+  const changed = facts.getByRole("definition").first();
+  await expect(changed.locator("time")).toHaveAttribute("datetime", "2026-07-01T09:30:00Z");
+  await expect(changed).toHaveText(`Changed ${await page.evaluate(() => new Intl.DateTimeFormat(undefined, { day: "numeric", month: "long", year: "numeric" }).format(new Date("2026-07-01T09:30:00Z")))}`);
   await expect(page.getByRole("heading", { name: "Turn on two-step verification", level: 2 })).toBeVisible();
   await expect(page.getByRole("button", { name: "Verify this session" })).toHaveCount(0);
   const footer = page.getByRole("contentinfo");
@@ -295,6 +302,7 @@ test("enrollment shows codes once and requires acknowledgement before hiding the
   await finish.click();
   await expect(page.getByRole("heading", { name: "Account security", level: 1 })).toBeVisible();
   await expect(page.getByText(recoveryCodes[0], { exact: true })).toHaveCount(0);
+  await expect(page.getByText(`${recoveryCodes.length} of 10 left`, { exact: true })).toBeVisible();
   expect(mutations(state, "/activate")).toHaveLength(1);
   await page.reload();
   await expect(page.getByRole("heading", { name: "Account security", level: 1 })).toBeVisible();
@@ -358,7 +366,8 @@ test("fresh password proof and MFA challenge return without replaying the securi
   await page.getByRole("button", { name: "Replace my codes", exact: true }).click();
   await page.getByRole("link", { name: "Confirm it’s you", exact: true }).click();
   await expect(page).toHaveURL(/\/account\/reauthenticate\?task=security$/);
-  await expect(page.getByText("You won’t be asked again for 15 minutes.", { exact: false })).toBeVisible();
+  // The window comes from the server's configured value, not a client default.
+  await expect(page.getByText("You won’t be asked again for 20 minutes.", { exact: false })).toBeVisible();
   await expect(page.getByRole("contentinfo")).toContainText("Signed in as Person");
   await page.getByRole("textbox", { name: "Password" }).fill("wrong-password");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
@@ -370,6 +379,8 @@ test("fresh password proof and MFA challenge return without replaying the securi
   await enterCode(page.getByRole("textbox", { name: "Recovery code", exact: true }), "ABCD-EFGH");
   await page.getByRole("button", { name: "Verify", exact: true }).click();
   await expect(page.getByRole("heading", { name: "You’re confirmed" })).toBeVisible();
+  // Once confirmed the page states what is left of this Session's window.
+  await expect(page.getByText("You won’t be asked to confirm again for 12 minutes.", { exact: false })).toBeVisible();
   await page.getByRole("link", { name: "Back to account security" }).click();
   await expect(page.getByRole("heading", { name: "Account security", level: 1 })).toBeVisible();
   expect(mutations(state, "/regenerate")).toHaveLength(1);

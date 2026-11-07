@@ -293,6 +293,12 @@ var environmentOverrideCatalog = []environmentOverride{
 	stringEnvironmentOverride("PROCTOR_MAIL_FROM_NAME", func(cfg *Config) *string {
 		return &cfg.Mail.FromName
 	}),
+	stringEnvironmentOverride("PROCTOR_MAIL_SUPPORT_ADDRESS", func(cfg *Config) *string {
+		return &cfg.Mail.SupportAddress
+	}),
+	stringEnvironmentOverride("PROCTOR_MAIL_DISPLAY_TIMEZONE", func(cfg *Config) *string {
+		return &cfg.Mail.DisplayTimezone
+	}),
 	stringEnvironmentOverride("PROCTOR_MAIL_SMTP_ADDRESS", func(cfg *Config) *string {
 		return &cfg.Mail.SMTP.Address
 	}),

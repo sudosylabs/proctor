@@ -33,14 +33,14 @@ func TestSubmitSealsExactAcknowledgedStateBeforePublishingEffects(t *testing.T) 
 	participationID := model.NewAttemptParticipationID()
 	workspaceID := model.NewExamAttemptWorkspaceID()
 	revisionID := model.NewExamRevisionID()
-	submissionID := model.NewSubmissionID()
-	f.submissionID = submissionID
+	submissionID, receiptCode := model.NewSubmissionID(), model.NewSubmissionReceiptCode()
+	f.submissionID, f.receiptCode = submissionID, receiptCode
 	digest := strings.Repeat("d", 64)
 	f.submissions.target = &store.ExamSubmissionSealTarget{ExamID: f.sitting.ExamID, SittingID: f.sitting.ID,
 		ClassID: f.sitting.ClassID, CandidateUserID: f.userID, WorkspaceID: workspaceID, CurrentRevisionID: revisionID}
 	f.submissions.target.SealAt = f.at
 	f.submissions.sealResult = &store.ExamSubmissionSealResult{Receipt: store.ExamSubmissionReceipt{BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1},
-		SubmissionID: submissionID, AttemptID: f.attemptID, ExamRevisionID: revisionID, State: model.ExamAttemptSubmitted,
+		SubmissionID: submissionID, ReceiptCode: receiptCode, AttemptID: f.attemptID, ExamRevisionID: revisionID, State: model.ExamAttemptSubmitted,
 		WorkspaceCursor: 11, ManifestDigest: digest, SubmittedAt: f.at}, ExamID: f.sitting.ExamID,
 		SittingID: f.sitting.ID, ClassID: f.sitting.ClassID, CandidateUserID: f.userID,
 		ParticipationID: participationID, Generation: 3, ConnectionID: f.connectionID}
@@ -68,6 +68,9 @@ func TestSubmitSealsExactAcknowledgedStateBeforePublishingEffects(t *testing.T) 
 	require.True(t, f.submissions.seal.SubmissionID.IsValid(), "access=%#v seal=%#v result=%#v effects=%#v", access, f.submissions.seal, result, f.effects)
 	require.True(t, f.submissions.seal.AuditEventID.IsValid(), "access=%#v seal=%#v result=%#v effects=%#v", access, f.submissions.seal, result, f.effects)
 	require.Equal(t, submissionID, result.SubmissionID, "access=%#v seal=%#v result=%#v effects=%#v", access, f.submissions.seal, result, f.effects)
+	require.Equal(t, receiptCode, f.submissions.seal.ReceiptCode, "the proposed receipt code reaches the seal")
+	require.Equal(t, receiptCode, result.ReceiptCode, "the sealed receipt code reaches the candidate")
+	require.Equal(t, receiptCode, f.mail.request.ReceiptCode, "the receipt mail carries the proposed code")
 	require.Equal(t, 1, f.effects.submitted, "access=%#v seal=%#v result=%#v effects=%#v", access, f.submissions.seal, result, f.effects)
 	audit := fmt.Sprintf("%#v", f.audit.values)
 	for _, private := range []string{credential, model.HashToken(credential), participationID.String()} {
@@ -97,13 +100,14 @@ func TestSubmitReplayReturnsRetainedReceiptAndSuppressesEffects(t *testing.T) {
 
 	f := newFixture(t)
 	proposedID, retainedID := model.NewSubmissionID(), model.NewSubmissionID()
+	proposedCode, retainedCode := model.NewSubmissionReceiptCode(), model.NewSubmissionReceiptCode()
 	revisionID := model.NewExamRevisionID()
-	f.submissionID = proposedID
+	f.submissionID, f.receiptCode = proposedID, proposedCode
 	access := validWorkspaceMutationAccess(f)
 	f.submissions.target = &store.ExamSubmissionSealTarget{ExamID: f.sitting.ExamID, SittingID: f.sitting.ID,
 		ClassID: f.sitting.ClassID, CandidateUserID: f.userID, WorkspaceID: model.NewExamAttemptWorkspaceID(),
 		CurrentRevisionID: revisionID, Replayed: true, SealAt: f.at}
-	f.submissions.sealResult = &store.ExamSubmissionSealResult{Receipt: store.ExamSubmissionReceipt{BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1}, SubmissionID: retainedID,
+	f.submissions.sealResult = &store.ExamSubmissionSealResult{Receipt: store.ExamSubmissionReceipt{BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1}, SubmissionID: retainedID, ReceiptCode: retainedCode,
 		AttemptID: f.attemptID, ExamRevisionID: revisionID, State: model.ExamAttemptSubmitted, WorkspaceCursor: 0,
 		ManifestDigest: strings.Repeat("e", 64), SubmittedAt: f.at}, ExamID: f.sitting.ExamID,
 		SittingID: f.sitting.ID, ClassID: f.sitting.ClassID, CandidateUserID: f.userID,
@@ -115,6 +119,8 @@ func TestSubmitReplayReturnsRetainedReceiptAndSuppressesEffects(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, retainedID, result.SubmissionID, "result=%#v seal=%#v effects=%#v", result, f.submissions.seal, f.effects)
 	require.Equal(t, proposedID, f.submissions.seal.SubmissionID, "result=%#v seal=%#v effects=%#v", result, f.submissions.seal, f.effects)
+	require.Equal(t, retainedCode, result.ReceiptCode, "an exact replay returned a newly minted receipt code")
+	require.Equal(t, proposedCode, f.submissions.seal.ReceiptCode, "result=%#v seal=%#v", result, f.submissions.seal)
 	require.Equal(t, 0, f.effects.submitted, "result=%#v seal=%#v effects=%#v", result, f.submissions.seal, f.effects)
 	require.Nil(t, f.submissions.seal.Notice, "result=%#v seal=%#v effects=%#v", result, f.submissions.seal, f.effects)
 	require.Equal(t, int64(0), f.submissions.seal.ExpectedRecipientRevision, "result=%#v seal=%#v effects=%#v", result, f.submissions.seal, f.effects)
@@ -129,11 +135,11 @@ func TestAutomaticSealUsesBoundedSystemAuditAndPublishesOnlyFreshResult(t *testi
 		AttemptID: f.attemptID, WorkspaceID: model.NewExamAttemptWorkspaceID(), CurrentRevisionID: model.NewExamRevisionID(),
 		ParticipationID: model.NewAttemptParticipationID(),
 		Generation:      2, ConnectionID: f.connectionID}
-	retained := model.NewSubmissionID()
-	f.submissionID = retained
+	retained, retainedCode := model.NewSubmissionID(), model.NewSubmissionReceiptCode()
+	f.submissionID, f.receiptCode = retained, retainedCode
 	f.submissions.automaticTargets = []store.ExamSubmissionAutomaticSealTarget{target}
 	f.submissions.automaticResult = &store.ExamSubmissionAutomaticSealResult{ExamSubmissionSealResult: store.ExamSubmissionSealResult{
-		Receipt: store.ExamSubmissionReceipt{BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1}, SubmissionID: retained, AttemptID: target.AttemptID,
+		Receipt: store.ExamSubmissionReceipt{BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1}, SubmissionID: retained, ReceiptCode: retainedCode, AttemptID: target.AttemptID,
 			ExamRevisionID: target.CurrentRevisionID, State: model.ExamAttemptSubmitted, WorkspaceCursor: 4,
 			ManifestDigest: strings.Repeat("a", 64), SubmittedAt: f.at},
 		ExamID: target.ExamID, SittingID: target.SittingID, ClassID: target.ClassID, CandidateUserID: target.CandidateUserID,
@@ -156,6 +162,9 @@ func TestAutomaticSealUsesBoundedSystemAuditAndPublishesOnlyFreshResult(t *testi
 	require.Equal(t, target, f.submissions.automaticInput.Target, "result=%#v input=%#v effects=%d err", result, f.submissions.automaticInput, f.effects.submitted)
 	require.Equal(t, model.ExamSubmissionSittingClosed, f.mail.request.Provenance, "automatic mail request=%#v input=%#v", f.mail.request, f.submissions.automaticInput)
 	require.Equal(t, retained, f.mail.request.SubmissionID, "automatic mail request=%#v input=%#v", f.mail.request, f.submissions.automaticInput)
+	require.Equal(t, retainedCode, f.mail.request.ReceiptCode, "automatic mail request=%#v input=%#v", f.mail.request, f.submissions.automaticInput)
+	require.Equal(t, retainedCode, f.submissions.automaticInput.ReceiptCode, "automatic mail request=%#v input=%#v", f.mail.request, f.submissions.automaticInput)
+	require.Equal(t, retainedCode, result.Receipt.ReceiptCode, "result=%#v", result)
 	require.True(t, f.mail.request.SealedAt.Equal(f.at), "automatic mail request=%#v input=%#v", f.mail.request, f.submissions.automaticInput)
 	require.True(t, model.TimeUTC(f.at).Equal(f.submissions.automaticInput.AuditAt), "automatic mail request=%#v input=%#v", f.mail.request, f.submissions.automaticInput)
 	require.NotNil(t, f.submissions.automaticInput.Notice, "automatic mail request=%#v input=%#v", f.mail.request, f.submissions.automaticInput)
@@ -179,12 +188,12 @@ func TestManagerEndSealsWithPrivateReasonOutsideCandidateReceipt(t *testing.T) {
 		ClassID: f.sitting.ClassID, AcademicUnitID: model.NewAcademicUnitID(), CandidateUserID: f.userID,
 		AttemptID: f.attemptID, WorkspaceID: model.NewExamAttemptWorkspaceID(), CurrentRevisionID: model.NewExamRevisionID(),
 		ParticipationID: model.NewAttemptParticipationID(), Generation: 2, ConnectionID: f.connectionID}
-	submissionID := model.NewSubmissionID()
-	f.submissionID = submissionID
+	submissionID, receiptCode := model.NewSubmissionID(), model.NewSubmissionReceiptCode()
+	f.submissionID, f.receiptCode = submissionID, receiptCode
 	f.submissions.managerPreparation = &store.ExamSubmissionManagerEndPreparation{Target: target,
 		ExpectedAttemptRevision: 4, SealAt: f.at}
 	f.submissions.managerResult = &store.ExamSubmissionManagerEndResult{ExamSubmissionSealResult: store.ExamSubmissionSealResult{
-		Receipt: store.ExamSubmissionReceipt{BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1}, SubmissionID: submissionID, AttemptID: target.AttemptID,
+		Receipt: store.ExamSubmissionReceipt{BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1}, SubmissionID: submissionID, ReceiptCode: receiptCode, AttemptID: target.AttemptID,
 			ExamRevisionID: target.CurrentRevisionID, State: model.ExamAttemptSubmitted, WorkspaceCursor: 8,
 			ManifestDigest: strings.Repeat("f", 64), SubmittedAt: f.at}, ExamID: target.ExamID, SittingID: target.SittingID,
 		ClassID: target.ClassID, CandidateUserID: target.CandidateUserID, ParticipationID: target.ParticipationID,
@@ -195,6 +204,9 @@ func TestManagerEndSealsWithPrivateReasonOutsideCandidateReceipt(t *testing.T) {
 		PrivateReason: privateReason, IdempotencyKey: "manager-end-once"})
 	require.NoError(t, err)
 	require.Equal(t, submissionID, result.SubmissionID, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
+	require.Equal(t, receiptCode, result.ReceiptCode, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
+	require.Equal(t, receiptCode, f.submissions.managerInput.ReceiptCode, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
+	require.Equal(t, receiptCode, f.mail.request.ReceiptCode, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
 	require.Equal(t, 1, f.effects.submitted, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
 	require.NotNil(t, f.submissions.managerInput, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
 	require.Equal(t, privateReason, f.submissions.managerInput.Request.PrivateReason, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
@@ -397,7 +409,7 @@ func submissionFixture(t *testing.T, f *fixture, cursor int64) *model.ExamSubmis
 	t.Helper()
 	manifest, err := model.NewExamSubmissionManifest(cursor, nil)
 	require.NoError(t, err)
-	submission, err := model.NewExamSubmission(model.ExamSubmissionSpecification{ID: model.NewSubmissionID(),
+	submission, err := model.NewExamSubmission(model.ExamSubmissionSpecification{ID: model.NewSubmissionID(), ReceiptCode: model.NewSubmissionReceiptCode(),
 		AttemptID: f.attemptID, ExamRevisionID: model.NewExamRevisionID(), WorkspaceID: model.NewExamAttemptWorkspaceID(), Manifest: manifest,
 		BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1},
 		Provenance:      model.ExamSubmissionCandidateSubmitted, SubmittedAt: f.at.Add(time.Minute)})

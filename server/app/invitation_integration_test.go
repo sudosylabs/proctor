@@ -205,7 +205,7 @@ func TestStudentClassInvitationIssuesMailAndAcceptsAcrossNodes(t *testing.T) {
 	require.NoError(t, err, "class members")
 	require.Len(t, members, 1, "class members")
 	require.Equal(t, user.ID, members[0].UserID, "class members")
-	notice := waitForInvitationDeliveryContaining(t, primary, secondary, "Invitation accepted")
+	notice := waitForInvitationDeliveryContaining(t, primary, secondary, "Welcome to Proctor")
 	require.NotNil(t, notice, "acceptance notice lacks semantic copy")
 
 	replay := performJSONRequest(primary.Handler(), http.MethodPost, "/api/v1/invitations/student-class/accept",
@@ -277,7 +277,7 @@ func TestTeacherAcademicUnitInvitationIssuesMailAndAcceptsAcrossNodes(t *testing
 	require.Equal(t, accepted.AcceptedUserID, binding.UserID, "teacher package Role Binding = %#v", binding)
 	require.Equal(t, role.ID, binding.RoleID.String(), "teacher package Role Binding = %#v", binding)
 	require.Equal(t, accepted.ID, binding.OriginInvitationID, "teacher package Role Binding = %#v", binding)
-	notice := waitForInvitationDeliveryContaining(t, primary, secondary, "Invitation accepted")
+	notice := waitForInvitationDeliveryContaining(t, primary, secondary, "Welcome to Proctor")
 	require.NotNil(t, notice, "teacher acceptance notice lacks semantic copy")
 	replay := performJSONRequest(primary.Handler(), http.MethodPost, "/api/v1/invitations/teacher-academic-unit/accept",
 		map[string]any{"claim": claim, "password": "teacher correct horse battery staple", "username": "invited-teacher"}, "")

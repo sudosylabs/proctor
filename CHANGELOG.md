@@ -17,6 +17,19 @@ module when a change is not server-only. No module has been released yet.
 
 ### Changed
 
+- Server and `packages/vfs`: move `golang.org/x/net` to v0.62.0 to clear
+  CVE-2026-78661 (HIGH), with `golang.org/x/crypto` v0.58.0, `x/sys` v0.49.0,
+  `x/text` v0.43.0, `x/sync` v0.24.0 and `x/tools` v0.51.0. Exception to the
+  two-week dependency age rule: `x/net` v0.62.0 was 11 days old when adopted,
+  taken early because the advisory blocks the runtime image scan.
+- Server: transactional mail is redesigned as a plain, typeset letter with
+  rewritten copy for every message. Each message greets the recipient by first
+  name, names the institution, writes dates and times for people in the
+  recipient's time zone instead of UTC timestamps, states exact link expiry,
+  and leads security notices with what to do if the change was unexpected.
+  The email-change warning shows a masked form of the new address and the
+  retention notice shows its deletion date. Submission receipts no longer show
+  the Sitting and Submission identifiers.
 - Build: the isolated `gopls` tool moves to v0.23.0, the newest release that
   supports Go 1.26, picking up MCP go-sdk v1.6.0 and clearing its advisories.
 - Build: local, cluster, and S3 test stacks run MinIO from
@@ -181,6 +194,13 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: `Mail.SupportAddress` names a help address in every message
+  footer, and `Mail.DisplayTimezone` sets the time zone used for message times
+  when a recipient has not chosen one.
+- Server: every sealed Submission has a short receipt code, such as
+  `MBY3-KBMN-EB83-TFW1`, that a candidate can read out. The submit and
+  manager-end receipts return it as `receipt_code`, and every exact replay
+  returns the same code. Existing development databases must be recreated.
 - Server: failed password checks against one account, counted across all
   sources and both its username and email address, delay further logins for
   that account progressively
@@ -285,6 +305,11 @@ module when a change is not server-only. No module has been released yet.
 
 ### Fixed
 
+- Server: password history refused reuse only by change time, so when the
+  database clock trailed the server that stamped a previous change, two history
+  entries could share a time and a recent password could be accepted again.
+  Each change is now stamped strictly after the one before, and ties keep a
+  fixed order.
 - Server: audit, Exam, Exam Manager, Job, Job attempt, mail delivery and
   User Session listings no longer return a `next_cursor` on an exactly full
   final page.

@@ -99,22 +99,25 @@ func (s *Service) EndExamAttemptByManager(ctx context.Context, invocation invoca
 	if err = checkManagerEndPreparation(preparation, command, managerSnapshot.Attempt.CandidateUserID, sitting.Sitting.ClassID); err != nil {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, err)
 	}
-	proposed := s.deps.NewSubmission()
+	proposed, receiptCode := s.deps.NewSubmission(), s.deps.NewReceiptCode()
 	if !proposed.IsValid() {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, apperror.Invalid("exam.attempt.invalid", "submission_id"))
 	}
-	notice, expectedRecipientRevision, err := s.prepareManagerEndReceiptMail(ctx, preparation, proposed)
+	if !receiptCode.IsValid() {
+		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, apperror.Invalid("exam.attempt.invalid", "receipt_code"))
+	}
+	notice, expectedRecipientRevision, err := s.prepareManagerEndReceiptMail(ctx, preparation, proposed, receiptCode)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, err)
 	}
 	stored, err := s.deps.Submissions.EndByManager(ctx, &store.ExamSubmissionManagerEnd{Request: request,
-		Target: preparation.Target, SubmissionID: proposed, AuditEventID: auditID,
+		Target: preparation.Target, SubmissionID: proposed, ReceiptCode: receiptCode, AuditEventID: auditID,
 		AuditAt: preparation.SealAt, Notice: notice,
 		ExpectedRecipientRevision: expectedRecipientRevision}, idempotency)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, storeError(storeErrors, err))
 	}
-	result, err := projectManagerEndResult(stored, preparation.Target, command, proposed)
+	result, err := projectManagerEndResult(stored, preparation.Target, command, proposed, receiptCode)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, err
 	}
@@ -144,14 +147,14 @@ func checkManagerEndPreparation(preparation *store.ExamSubmissionManagerEndPrepa
 
 // prepareManagerEndReceiptMail prepares the candidate's Submission receipt mail unless the end is a replay.
 func (s *Service) prepareManagerEndReceiptMail(ctx context.Context, preparation *store.ExamSubmissionManagerEndPreparation,
-	proposed model.SubmissionID,
+	proposed model.SubmissionID, receiptCode model.SubmissionReceiptCode,
 ) (*store.PreparedMail, int64, error) {
 	var notice *store.PreparedMail
 	var expectedRecipientRevision int64
 	if !preparation.Replayed {
 		preparedMail, prepareErr := s.deps.Mail.PrepareSubmissionReceipt(ctx, SubmissionMailPreparation{
 			CandidateUserID: preparation.Target.CandidateUserID, ExamID: preparation.Target.ExamID,
-			SittingID: preparation.Target.SittingID, SubmissionID: proposed, SealedAt: preparation.SealAt,
+			SittingID: preparation.Target.SittingID, SubmissionID: proposed, ReceiptCode: receiptCode, SealedAt: preparation.SealAt,
 			Provenance: model.ExamSubmissionManagerEndedAttempt,
 		})
 		if prepareErr != nil || preparedMail == nil || preparedMail.Notice == nil || preparedMail.ExpectedRecipientRevision < 1 {
@@ -172,14 +175,17 @@ func validManagerEndReason(reason string) bool {
 
 func projectManagerEndResult(stored *store.ExamSubmissionManagerEndResult,
 	target store.ExamSubmissionAutomaticSealTarget, command ManagerEndCommand, proposed model.SubmissionID,
+	proposedCode model.SubmissionReceiptCode,
 ) (SubmissionResult, error) {
 	if stored == nil || stored.Receipt.State != model.ExamAttemptSubmitted || stored.Receipt.AttemptID != command.AttemptID ||
-		!stored.Receipt.ExamRevisionID.IsValid() || !stored.Receipt.SubmissionID.IsValid() || stored.Receipt.WorkspaceCursor < 0 ||
+		!stored.Receipt.ExamRevisionID.IsValid() || !stored.Receipt.SubmissionID.IsValid() || !stored.Receipt.ReceiptCode.IsValid() ||
+		stored.Receipt.WorkspaceCursor < 0 ||
 		!validWorkspaceSHA256(stored.Receipt.ManifestDigest) || stored.Receipt.SubmittedAt.IsZero() ||
 		stored.ExamID != command.ExamID || stored.SittingID != command.SittingID || stored.ClassID != target.ClassID ||
 		stored.CandidateUserID != target.CandidateUserID || stored.ParticipationID != target.ParticipationID ||
 		stored.Generation != target.Generation || stored.ConnectionID != target.ConnectionID ||
-		(!stored.Replayed && stored.Receipt.SubmissionID != proposed) || (stored.Replayed && stored.ConnectionClosed) {
+		(!stored.Replayed && (stored.Receipt.SubmissionID != proposed || stored.Receipt.ReceiptCode != proposedCode)) ||
+		(stored.Replayed && stored.ConnectionClosed) {
 		return SubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent manager-ended Submission result"))
 	}
 	return SubmissionResult{Receipt: stored.Receipt, Provenance: model.ExamSubmissionManagerEndedAttempt,

@@ -60,10 +60,7 @@ func (l *synchronizedAdmissionLogger) contains(message string) bool {
 
 func admissionFreePort(t *testing.T) int {
 	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	defer listener.Close()
-	return listener.Addr().(*net.TCPAddr).Port
+	return FreeTestPort(t)
 }
 
 func TestAdmissionFailureWithdrawsBeforeRetryAndJoinFailureRemainsNonfatal(t *testing.T) {

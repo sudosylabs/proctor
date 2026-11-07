@@ -64,7 +64,7 @@ func TestNewExamSubmissionSealsCanonicalManifestAndIntegrity(t *testing.T) {
 	require.Equal(t, manifest.SHA256, reordered.SHA256, "row-order-independent digest")
 
 	submission, err := NewExamSubmission(ExamSubmissionSpecification{
-		ID: modelSubmissionID("j"), AttemptID: ExamAttemptID(strings.Repeat("k", IDLength)),
+		ID: modelSubmissionID("j"), ReceiptCode: NewSubmissionReceiptCode(), AttemptID: ExamAttemptID(strings.Repeat("k", IDLength)),
 		ExamRevisionID: NewExamRevisionID(),
 		WorkspaceID:    ExamAttemptWorkspaceID(strings.Repeat("m", IDLength)), Manifest: manifest,
 		FinalFocusLossSequence: 9, UnresolvedIntegrityCount: 2, Provenance: ExamSubmissionCandidateSubmitted, SubmittedAt: at,
@@ -89,7 +89,7 @@ func TestExamSubmissionSettledIntegrityRequiresNoUnresolvedGaps(t *testing.T) {
 	manifest, err := NewExamSubmissionManifest(0, nil)
 	require.NoError(t, err)
 	submission, err := NewExamSubmission(ExamSubmissionSpecification{
-		ID: NewSubmissionID(), AttemptID: NewExamAttemptID(), ExamRevisionID: NewExamRevisionID(),
+		ID: NewSubmissionID(), ReceiptCode: NewSubmissionReceiptCode(), AttemptID: NewExamAttemptID(), ExamRevisionID: NewExamRevisionID(),
 		WorkspaceID: NewExamAttemptWorkspaceID(), Manifest: manifest,
 		BrowserActivity: BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1},
 		Provenance:      ExamSubmissionCandidateSubmitted, SubmittedAt: time.Unix(100, 0),
@@ -107,7 +107,7 @@ func TestExamSubmissionIntegrityRetirementRequiresRedactedState(t *testing.T) {
 	manifest, err := NewExamSubmissionManifest(7, nil)
 	require.NoError(t, err)
 	submission, err := NewExamSubmission(ExamSubmissionSpecification{
-		ID: NewSubmissionID(), AttemptID: NewExamAttemptID(), ExamRevisionID: NewExamRevisionID(),
+		ID: NewSubmissionID(), ReceiptCode: NewSubmissionReceiptCode(), AttemptID: NewExamAttemptID(), ExamRevisionID: NewExamRevisionID(),
 		WorkspaceID: NewExamAttemptWorkspaceID(), Manifest: manifest,
 		BrowserActivity: BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1},
 		Provenance:      ExamSubmissionCandidateSubmitted, SubmittedAt: time.Unix(100, 0),

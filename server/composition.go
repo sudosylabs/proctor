@@ -115,6 +115,8 @@ func defaultConsumerConstructors(
 	}
 	mailRenderer, err := mail.NewRendererWithPolicy(templateFiles, localizer, mail.RendererPolicy{
 		AllowLoopbackHTTPDevelopment: explicitLoopbackHTTPDevelopment(snapshot.Server.PublicURL),
+		SupportAddress:               snapshot.Mail.SupportAddress,
+		DisplayTimezone:              snapshot.Mail.DisplayTimezone,
 	})
 	if err != nil {
 		return consumerConstructors{}, fmt.Errorf("construct mail renderer: %w", err)

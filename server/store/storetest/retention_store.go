@@ -336,7 +336,7 @@ func newRetentionFixture(t *testing.T, ctx context.Context, ss store.Store) (exa
 	sealAccess := store.ExamSubmissionSealAccess{AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, ConnectionID: connected.Connection.ID, CandidateUserID: f.candidate.ID, SessionID: f.session.ID, ContinuityCredentialHash: focus.ContinuityCredentialHash, ExpectedCurrentRevisionID: f.sitting.ExamRevisionID, ExpectedWorkspaceCursor: created.Change.Cursor}
 	target, err := ss.ExamSubmission().ResolveSealTarget(ctx, sealAccess)
 	require.NoError(t, err)
-	input := &store.ExamSubmissionSeal{SubmissionID: model.NewSubmissionID(), Access: sealAccess, AuditEventID: saveExamAttemptAudit(t, ctx, ss, f).ID, AuditAt: target.SealAt}
+	input := &store.ExamSubmissionSeal{SubmissionID: model.NewSubmissionID(), ReceiptCode: model.NewSubmissionReceiptCode(), Access: sealAccess, AuditEventID: saveExamAttemptAudit(t, ctx, ss, f).ID, AuditAt: target.SealAt}
 	attachSubmissionReceipt(t, ctx, ss, f.candidate, input)
 	key := examCommand(f.candidate.ID, store.ExamSubmissionSealOperation, "retention-seal", "retention-seal")
 	sealed, err := ss.ExamSubmission().Seal(ctx, input, key)

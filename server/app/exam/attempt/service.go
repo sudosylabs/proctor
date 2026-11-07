@@ -96,6 +96,7 @@ type SubmissionMailPreparation struct {
 	ExamID          model.ExamID
 	SittingID       model.ExamSittingID
 	SubmissionID    model.SubmissionID
+	ReceiptCode     model.SubmissionReceiptCode
 	SealedAt        time.Time
 	Provenance      model.ExamSubmissionProvenance
 }
@@ -155,6 +156,7 @@ type Dependencies struct {
 	NewWorkspaceObject  func() model.AttemptWorkspaceObjectID
 	NewWorkspaceVersion func() model.WorkspaceContentVersion
 	NewSubmission       func() model.SubmissionID
+	NewReceiptCode      func() model.SubmissionReceiptCode
 	Operational         OperationalRecorder
 }
 
@@ -180,7 +182,7 @@ func New(deps Dependencies) (*Service, error) {
 	if deps.Persistence == nil || deps.Workspace == nil || deps.Submissions == nil || deps.Sittings == nil || deps.Managers == nil || deps.Auditor == nil || deps.SystemAuditor == nil || deps.Effects == nil ||
 		deps.EffectFailures == nil || deps.Content == nil || deps.Mail == nil || deps.DesktopBuilds == nil || deps.Now == nil || deps.NewAttemptID == nil ||
 		deps.NewWorkspaceID == nil || deps.NewParticipation == nil || deps.NewConnection == nil || deps.NewEvidence == nil ||
-		deps.NewFlag == nil || deps.NewSuspension == nil || deps.NewFocusLossSignal == nil || deps.NewDiscrepancy == nil || deps.NewWorkspaceEntry == nil || deps.NewWorkspaceObject == nil || deps.NewWorkspaceVersion == nil || deps.NewSubmission == nil {
+		deps.NewFlag == nil || deps.NewSuspension == nil || deps.NewFocusLossSignal == nil || deps.NewDiscrepancy == nil || deps.NewWorkspaceEntry == nil || deps.NewWorkspaceObject == nil || deps.NewWorkspaceVersion == nil || deps.NewSubmission == nil || deps.NewReceiptCode == nil {
 		return nil, errors.New("Exam Attempt dependencies are required")
 	}
 	return &Service{deps: deps, liveControls: controlAdmission{lane: liveControlLane}}, nil

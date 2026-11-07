@@ -103,7 +103,7 @@ func testRetentionSubmissionPrivacy(t *testing.T, ss store.Store, probe Retentio
 		require.Equal(t, firstAck.Receipts[0], replay.Receipts[0], "maximum Browser event retry changed receipt")
 	}
 	nativeInput := appendRetirementNativeCondition(t, ctx, ss, f, connected, access)
-	seal := &store.ExamSubmissionSeal{SubmissionID: model.NewSubmissionID(), Access: store.ExamSubmissionSealAccess{
+	seal := &store.ExamSubmissionSeal{SubmissionID: model.NewSubmissionID(), ReceiptCode: model.NewSubmissionReceiptCode(), Access: store.ExamSubmissionSealAccess{
 		AttemptID: connected.Attempt.ID, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation,
 		ConnectionID: connected.Connection.ID, CandidateUserID: f.candidate.ID, SessionID: f.session.ID,
 		ContinuityCredentialHash: access.ContinuityCredentialHash, ExpectedCurrentRevisionID: f.revisionID,

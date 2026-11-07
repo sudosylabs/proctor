@@ -98,6 +98,8 @@
     "Backend": "smtp",
     "FromAddress": "no-reply@localhost",
     "FromName": "Proctor",
+    "SupportAddress": "",
+    "DisplayTimezone": "UTC",
     "SMTP": {
       "Address": "127.0.0.1:1025",
       "ServerName": "",

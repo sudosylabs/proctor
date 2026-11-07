@@ -1,0 +1,70 @@
+<!--
+---------------------------------------------------------------------------------------------
+Copyright (c) 2026 Sudosy Labs. All rights reserved.
+Licensed under the GNU Affero General Public License, version 3 only.
+See LICENSE in the server module root for license information.
+SPDX-License-Identifier: AGPL-3.0-only
+---------------------------------------------------------------------------------------------
+-->
+
+<mj-section css-class="pad" padding="48px 48px 0">
+  <mj-group>
+    <mj-column width="50%" vertical-align="middle">
+      <mj-image src="cid:proctor-lockup-9867b48826bf314b6729f73941d053922d7baa7f5120894241ce197c219b8d66@proctor" alt="Proctor" align="left" width="112px" height="22px" />
+    </mj-column>
+    <mj-column width="50%" vertical-align="middle">
+      <mj-text css-class="institution" align="right" font-size="13px" line-height="18px" color="#77727F">{{.Copy.Institution}}</mj-text>
+    </mj-column>
+  </mj-group>
+</mj-section>
+<mj-section css-class="pad" padding="56px 48px 0">
+  <mj-column>
+    <mj-raw>{{if .AsideAlert}}</mj-raw>
+    <mj-text font-size="13px" line-height="18px" font-weight="500" color="#9A3412" padding="0 0 10px">{{.Copy.Kind}}</mj-text>
+    <mj-raw>{{else}}</mj-raw>
+    <mj-text font-size="13px" line-height="18px" font-weight="500" color="#77727F" padding="0 0 10px">{{.Copy.Kind}}</mj-text>
+    <mj-raw>{{end}}</mj-raw>
+    <mj-text css-class="heading" padding="0 0 24px">
+      <h1 style="margin:0;font-size:30px;line-height:36px;font-weight:500;letter-spacing:-0.02em;color:#16141B">{{.Copy.Heading}}</h1>
+    </mj-text>
+    <mj-text>
+      <p style="margin:0 0 14px">{{.Copy.Greeting}}</p>{{range .Copy.Paragraphs}}<p style="margin:0 0 14px">{{.}}</p>{{end}}
+    </mj-text>
+    <mj-raw>{{with .Hero}}</mj-raw>
+    <mj-text padding="18px 0 0" font-size="13px" line-height="18px" color="#77727F">{{.Label}}</mj-text>
+    <mj-raw>{{if .Code}}</mj-raw>
+    <mj-text css-class="code" padding="6px 0 0" font-family="IBM Plex Mono, SF Mono, Menlo, Consolas, monospace" font-size="26px" line-height="32px" font-weight="500" letter-spacing="0.06em" color="#16141B">{{.Primary}}</mj-text>
+    <mj-raw>{{else}}</mj-raw>
+    <mj-text padding="6px 0 0" font-size="28px" line-height="34px" font-weight="500" letter-spacing="-0.015em" color="#16141B">{{if .Struck}}<s style="color:#77727F">{{.Primary}}</s>{{else}}{{.Primary}}{{end}}</mj-text>
+    <mj-raw>{{end}}</mj-raw>
+    <mj-raw>{{if .Secondary}}</mj-raw>
+    <mj-text padding="4px 0 0" font-size="17px" line-height="24px">{{if .Struck}}<s style="color:#77727F">{{.Secondary}}</s>{{else}}{{.Secondary}}{{end}}</mj-text>
+    <mj-raw>{{end}}</mj-raw>
+    <mj-raw>{{end}}</mj-raw>
+    <mj-raw>{{if .Facts}}</mj-raw>
+    <mj-table padding="28px 0 0" cellpadding="0" cellspacing="0" width="100%" font-size="15px" line-height="22px">
+      {{range .Facts}}<tr>
+        <td class="fact-label" style="padding:12px 24px 12px 0;border-top:1px solid #E9E6EE;width:34%;vertical-align:top;font-size:14px;line-height:21px;color:#77727F">{{.Label}}</td>
+        <td class="fact-value" style="padding:12px 0;border-top:1px solid #E9E6EE;vertical-align:top;font-size:15px;line-height:22px;color:#16141B;word-break:break-word">{{if .Struck}}<s style="color:#77727F">{{.Value}}</s>{{else}}{{.Value}}{{end}}</td>
+      </tr>{{end}}
+      <tr><td colspan="2" style="border-top:1px solid #E9E6EE;font-size:0;line-height:0">&#160;</td></tr>
+    </mj-table>
+    <mj-raw>{{end}}</mj-raw>
+    <mj-raw>{{if and .AsideAlert .Copy.AsideTitle}}</mj-raw>
+    <mj-text padding="28px 0 0" font-size="15px" line-height="24px"><span style="font-weight:600;color:#9A3412">{{.Copy.AsideTitle}}</span> {{.Copy.AsideText}}</mj-text>
+    <mj-raw>{{end}}</mj-raw>
+    <mj-raw>{{if .ActionURL}}</mj-raw>
+    <mj-button href="{{.ActionURL}}" align="left" background-color="#5C00AA" color="#FFFFFF" border-radius="3px" font-size="15px" font-weight="500" line-height="15px" inner-padding="12px 22px" padding="32px 0 0">{{.Copy.ActionLabel}}</mj-button>
+    <mj-text padding="14px 0 0" font-size="13px" line-height="20px" color="#77727F">{{if .Copy.ActionNote}}{{.Copy.ActionNote}}<br />{{end}}{{.Copy.ActionFallback}} <a href="{{.ActionURL}}" style="color:#5C00AA">{{.Copy.ActionFallbackLink}}</a>.</mj-text>
+    <mj-raw>{{end}}</mj-raw>
+    <mj-raw>{{if and (not .AsideAlert) .Copy.AsideTitle}}</mj-raw>
+    <mj-text padding="32px 0 0" font-size="15px" line-height="24px"><span style="font-weight:600;color:#16141B">{{.Copy.AsideTitle}}</span> {{.Copy.AsideText}}</mj-text>
+    <mj-raw>{{end}}</mj-raw>
+  </mj-column>
+</mj-section>
+<mj-section css-class="pad" padding="56px 48px 48px">
+  <mj-column>
+    <mj-divider padding="0 0 20px" />
+    <mj-text font-size="12px" line-height="20px" color="#77727F">{{.Copy.Why}}<br />{{.Copy.Support}}<br /><span style="color:#A29DAA">{{.Copy.SentBy}}</span></mj-text>
+  </mj-column>
+</mj-section>

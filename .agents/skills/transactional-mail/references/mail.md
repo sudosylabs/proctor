@@ -69,7 +69,8 @@ than email.
 
 Authored MJML, generated tracked HTML, authored plain text, reusable partials,
 and packaged inline assets live under `server/templates`. Human prose,
-including subjects, headings, paragraphs, action labels, and footer copy,
+including subjects, headings, paragraphs, action labels, asides, fact labels,
+and colophon copy,
 lives under `server/i18n`. English is the only required initial catalog;
 recipient locale falls back through the installation locale and then English.
 Each locale file lives directly under that directory as a lexically sorted,
@@ -104,6 +105,17 @@ receives. Generated HTML is parsed with Go `html/template`; plain text uses
 `text/template`. The function allowlist is pure and bounded. Raw-HTML bypasses,
 filesystem or environment access, network calls, and template-selected headers
 are forbidden. User-controlled values remain contextually escaped.
+
+Every template shares one presentation model and the same layout partials:
+copy, an optional emphasised detail, ordered labelled facts, an optional aside,
+and an optional action. The renderer builds the facts for each family; the
+copy registry in `server/app/mail` closes each template's optional fields and
+copy placeholders. Messages greet the recipient by the first word of the frozen
+display name and write times for people in the frozen recipient time zone, or
+the installation `Mail.DisplayTimezone` when the recipient has none. Fan-out
+Sitting bundles are frozen once for every recipient, so they greet anonymously
+and always use the display time zone. The colophon names `Mail.SupportAddress`
+when it is configured and the institution otherwise.
 
 MJML generation uses a repository-pinned toolchain and produces committed
 HTML. CI rejects stale generated output and renders every production template

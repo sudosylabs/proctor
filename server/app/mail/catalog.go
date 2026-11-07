@@ -28,6 +28,8 @@ const (
 	presentationClassTransition
 	presentationSubmissionReceipt
 	presentationResultRelease
+	presentationEmailChange
+	presentationRetention
 )
 
 type definition struct {
@@ -93,6 +95,8 @@ var mailCatalog = func() map[model.MailTemplateKey]definition {
 		model.MailTemplateExamSubmissionAutomaticallySealed,
 	})
 	setPresentation(result, presentationResultRelease, []model.MailTemplateKey{model.MailTemplateExamResultReleased})
+	setPresentation(result, presentationEmailChange, []model.MailTemplateKey{model.MailTemplateIdentityEmailChangeWarningOld})
+	setPresentation(result, presentationRetention, []model.MailTemplateKey{model.MailTemplateExamRetentionScheduled})
 	return result
 }()
 

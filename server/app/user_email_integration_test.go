@@ -98,7 +98,7 @@ func TestEmailTransitionsUseRealServerGraphAndFrozenRecipients(t *testing.T) {
 	})
 	require.NotContains(t, helper.Logs.String(), credentialFromDelivery(t, firstUndo), "email-change undo token appeared in logs")
 	require.False(t, credentialPattern.Match(deliveryToMatching(t, deliveries, "second-new@example.edu", func(message string) bool {
-		return strings.Contains(message, "verified")
+		return strings.Contains(message, "confirmed")
 	}).Data), "privileged-verification notice contains a credential or lacks expected copy")
 	secondUndo := deliveryToMatching(t, deliveries, "second-old@example.edu", func(message string) bool {
 		return strings.Contains(message, "email address") && strings.Contains(message, "undo-email-change")
@@ -167,7 +167,7 @@ func waitForEmailTransitionDeliveries(t *testing.T, helper *testlib.Helper) []ma
 		deliveries := helper.Mailer.Deliveries()
 		if hasMatchingDelivery(deliveries, "first-new@example.edu", credentialPattern.MatchString) &&
 			hasMatchingDelivery(deliveries, "first-old@example.edu", func(message string) bool { return strings.Contains(message, "email address") }) &&
-			hasMatchingDelivery(deliveries, "second-new@example.edu", func(message string) bool { return strings.Contains(message, "verified") }) &&
+			hasMatchingDelivery(deliveries, "second-new@example.edu", func(message string) bool { return strings.Contains(message, "confirmed") }) &&
 			hasMatchingDelivery(deliveries, "second-old@example.edu", func(message string) bool { return strings.Contains(message, "email address") }) {
 			return deliveries
 		}
@@ -178,17 +178,23 @@ func waitForEmailTransitionDeliveries(t *testing.T, helper *testlib.Helper) []ma
 
 func hasMatchingDelivery(deliveries []mail.Delivery, recipient string, matches func(string) bool) bool {
 	for _, delivery := range deliveries {
-		if len(delivery.Recipients) == 1 && delivery.Recipients[0] == recipient && matches(string(delivery.Data)) {
+		if len(delivery.Recipients) == 1 && delivery.Recipients[0] == recipient && matches(unfoldedMessage(delivery)) {
 			return true
 		}
 	}
 	return false
 }
 
+// unfoldedMessage joins quoted-printable soft line breaks, which can split a
+// credential link anywhere in the encoded message.
+func unfoldedMessage(delivery mail.Delivery) string {
+	return strings.ReplaceAll(string(delivery.Data), "=\r\n", "")
+}
+
 func deliveryToMatching(t *testing.T, deliveries []mail.Delivery, recipient string, matches func(string) bool) mail.Delivery {
 	t.Helper()
 	for _, delivery := range deliveries {
-		if len(delivery.Recipients) == 1 && delivery.Recipients[0] == recipient && matches(string(delivery.Data)) {
+		if len(delivery.Recipients) == 1 && delivery.Recipients[0] == recipient && matches(unfoldedMessage(delivery)) {
 			return delivery
 		}
 	}

@@ -130,7 +130,7 @@ func TestAccountRecoveryIntegration(t *testing.T) {
 	deliveries = waitForRecoveryDeliveries(t, helper, 3)
 	changedMessage := strings.ReplaceAll(string(deliveries[2].Data), "=\r\n", "")
 	require.False(t, credentialPattern.MatchString(changedMessage), "password-changed notice contains a credential or lacks expected copy")
-	require.Contains(t, changedMessage, "Password changed", "password-changed notice contains a credential or lacks expected copy")
+	require.Contains(t, changedMessage, "Your password was changed", "password-changed notice contains a credential or lacks expected copy")
 	oldSession := performJSONRequest(
 		helper.Handler(),
 		http.MethodGet,

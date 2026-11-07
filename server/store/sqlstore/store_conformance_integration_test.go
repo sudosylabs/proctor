@@ -1594,6 +1594,7 @@ func TestSecurityPreflightStore(t *testing.T) {
 
 func TestSecureConnectStore(t *testing.T) {
 	sqlStore := openTestStore(t)
+	resetTestStore(t, sqlStore)
 	mustExec := func(query string, args ...any) {
 		t.Helper()
 		_, err := sqlStore.GetMaster().Exec(context.Background(), query, args...)

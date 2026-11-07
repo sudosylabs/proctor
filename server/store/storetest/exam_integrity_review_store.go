@@ -465,7 +465,7 @@ func testEndedFocusLossAfterAutomaticSeal(t *testing.T, ctx context.Context, ss 
 		audit := saveExamSittingSystemAudit(t, ctx, ss, fixture.sitting.ID, fixture.unitID)
 		preparation, err := ss.ExamSubmission().PrepareAutomaticSeal(ctx, targets[0])
 		require.NoError(t, err)
-		input := &store.ExamSubmissionAutomaticSeal{Target: targets[0], SubmissionID: model.NewSubmissionID(),
+		input := &store.ExamSubmissionAutomaticSeal{Target: targets[0], SubmissionID: model.NewSubmissionID(), ReceiptCode: model.NewSubmissionReceiptCode(),
 			AuditEventID: audit.ID, AuditAt: preparation.SealAt}
 		attachAutomaticSubmissionReceipt(t, fixture.candidate, input)
 		sealed, err := ss.ExamSubmission().SealForSittingClose(ctx, input)
@@ -551,7 +551,7 @@ func newIntegrityReviewFixtureWithFinalSequence(t *testing.T, ctx context.Contex
 	}
 	sealTarget, err := ss.ExamSubmission().ResolveSealTarget(ctx, sealAccess)
 	require.NoError(t, err)
-	sealInput := &store.ExamSubmissionSeal{SubmissionID: model.NewSubmissionID(), Access: sealAccess,
+	sealInput := &store.ExamSubmissionSeal{SubmissionID: model.NewSubmissionID(), ReceiptCode: model.NewSubmissionReceiptCode(), Access: sealAccess,
 		AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID,
 		AuditAt:      sealTarget.SealAt}
 	attachSubmissionReceipt(t, ctx, ss, fixture.candidate, sealInput)

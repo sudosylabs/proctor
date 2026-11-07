@@ -24,7 +24,7 @@ func TestResultReleaseMailPreparerContainsOnlyAvailabilityFacts(t *testing.T) {
 	recipient.PrepareCreate(model.NewUserID(), at.Add(-time.Hour))
 	renderer := &resultReleaseRendererFake{}
 	preparer, err := newDirectMailPreparer(renderer, &mailSenderFake{enabled: true,
-		from: MailAddress{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t))
+		from: MailAddress{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t), nil)
 	require.NoError(t, err)
 	reviewID := model.NewSubmissionReviewID()
 	details := ResultReleaseMailDetails{ExamTitle: "Algorithms", ReleasedAt: at}
@@ -50,7 +50,7 @@ func TestResultReleaseMailPreparerSuppressesInactiveCandidate(t *testing.T) {
 	recipient.PrepareCreate(model.NewUserID(), at.Add(-time.Hour))
 	recipient.DisabledAt = model.OptionalTimeFrom(at.Add(-time.Minute))
 	preparer, err := newDirectMailPreparer(&resultReleaseRendererFake{}, &mailSenderFake{enabled: true,
-		from: MailAddress{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t))
+		from: MailAddress{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t), nil)
 	require.NoError(t, err)
 	prepared, err := preparer.PrepareResultReleaseMail(ResultReleaseDirectMailPreparation{Recipient: recipient,
 		OccurrenceID: model.MailOccurrenceID(model.NewSubmissionReviewID().String()),

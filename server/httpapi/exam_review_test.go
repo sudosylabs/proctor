@@ -201,7 +201,7 @@ func newExamIntegrityReviewHTTPFake(t *testing.T) *examIntegrityReviewHTTPFake {
 	attemptID, submissionID := model.NewExamAttemptID(), model.NewSubmissionID()
 	manifest, err := model.NewExamSubmissionManifest(0, nil)
 	require.NoError(t, err)
-	submission, err := model.NewExamSubmission(model.ExamSubmissionSpecification{ID: submissionID, AttemptID: attemptID,
+	submission, err := model.NewExamSubmission(model.ExamSubmissionSpecification{ID: submissionID, ReceiptCode: model.NewSubmissionReceiptCode(), AttemptID: attemptID,
 		ExamRevisionID: model.NewExamRevisionID(), WorkspaceID: model.NewExamAttemptWorkspaceID(), Manifest: manifest,
 		BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1},
 		Provenance:      model.ExamSubmissionCandidateSubmitted, SubmittedAt: at})

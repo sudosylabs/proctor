@@ -54,6 +54,9 @@ type SittingComposerDependencies struct {
 	Sender   Sender
 	Sealer   *secretseal.Sealer
 	Now      func() time.Time
+	// Institution returns the current institution display name for message
+	// copy. It is optional.
+	Institution func() string
 }
 
 type SittingComposer struct {
@@ -131,6 +134,10 @@ func (p *SittingComposer) Prepare(actorID model.UserID, sitting *model.ExamSitti
 	}
 	bundle := FrozenSittingBundle{From: from, DefaultLocale: normalizeSittingLocale(defaultLocale),
 		Messages: make(map[string]map[model.MailTemplateKey]FrozenContent, len(locales))}
+	institution := ""
+	if p.deps.Institution != nil {
+		institution = p.deps.Institution()
+	}
 	for _, locale := range locales {
 		messages := make(map[model.MailTemplateKey]FrozenContent, 4)
 		for _, key := range sittingTemplateKeys() {
@@ -138,7 +145,10 @@ func (p *SittingComposer) Prepare(actorID model.UserID, sitting *model.ExamSitti
 			if key == model.MailTemplateExamSittingAssignmentRemoved && details.PriorClassDisplayName != "" {
 				variant.ClassDisplayName = details.PriorClassDisplayName
 			}
-			rendered, renderErr := p.deps.Renderer.Render(RenderRequest{Key: key, Locale: locale, Presentation: variant})
+			// A fan-out bundle is frozen once for every recipient, so it carries
+			// no recipient name and uses the installation display time zone.
+			rendered, renderErr := p.deps.Renderer.Render(RenderRequest{Key: key, Locale: locale, Presentation: variant,
+				Institution: institution})
 			if renderErr != nil || rendered.Subject == "" || rendered.Text == "" || rendered.HTML == "" {
 				return nil, errors.New("render sitting mail bundle")
 			}

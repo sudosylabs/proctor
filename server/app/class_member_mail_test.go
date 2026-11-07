@@ -23,7 +23,7 @@ func TestClassTransitionMailPreparerCreatesOneBoundedOrdinaryNotice(t *testing.T
 	recipient.PrepareCreate(model.NewUserID(), at.Add(-time.Hour))
 	renderer := &classTransitionRendererFake{}
 	preparer, err := newDirectMailPreparer(renderer, &mailSenderFake{enabled: true,
-		from: MailAddress{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t))
+		from: MailAddress{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t), nil)
 	require.NoError(t, err)
 	details := ClassTransitionMailDetails{PreviousClassDisplayName: `Old <Class>`, ClassDisplayName: `New & Class`,
 		StartsAt: at.Add(24 * time.Hour), EndsAt: at.Add(180 * 24 * time.Hour)}
@@ -48,7 +48,7 @@ func TestClassTransitionMailPreparerRecordsDisabledSuppression(t *testing.T) {
 	recipient.DisabledAt = model.OptionalTimeFrom(at.Add(-time.Minute))
 	renderer := &classTransitionRendererFake{}
 	preparer, err := newDirectMailPreparer(renderer, &mailSenderFake{enabled: true,
-		from: MailAddress{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t))
+		from: MailAddress{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t), nil)
 	require.NoError(t, err)
 	prepared, err := preparer.PrepareClassTransition(ClassTransitionMailPreparation{
 		Recipient: recipient, OccurrenceID: model.NewMailOccurrenceID(),

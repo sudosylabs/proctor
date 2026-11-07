@@ -335,7 +335,7 @@ func (m examAttemptHTTPModule) endByManager(request operationRequest) (operation
 		return operationResult{}, err
 	}
 	response := examSubmissionReceiptResponse{BrowserActivity: receipt.BrowserActivity, SubmissionID: receipt.SubmissionID.String(),
-		ExamAttemptID: receipt.AttemptID.String(), ExamRevisionID: receipt.ExamRevisionID.String(),
+		ReceiptCode: receipt.ReceiptCode.Display(), ExamAttemptID: receipt.AttemptID.String(), ExamRevisionID: receipt.ExamRevisionID.String(),
 		State: string(receipt.State), WorkspaceCursor: receipt.WorkspaceCursor,
 		ManifestDigest: receipt.ManifestDigest, SubmittedAt: model.FormatRFC3339(receipt.SubmittedAt)}
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil

@@ -1342,6 +1342,7 @@ type fixture struct {
 	focusFlagID               model.IntegrityFlagID
 	discrepancyID             model.IntegrityDiscrepancyID
 	submissionID              model.SubmissionID
+	receiptCode               model.SubmissionReceiptCode
 	submissionAuthorizationID model.SubmissionID
 	configuration             model.AttemptConfiguration
 	desktopBuild              model.DesktopBuildTuple
@@ -1408,6 +1409,12 @@ func newFixture(t *testing.T) *fixture {
 				return f.submissionID
 			}
 			return model.NewSubmissionID()
+		},
+		NewReceiptCode: func() model.SubmissionReceiptCode {
+			if f.receiptCode.IsValid() {
+				return f.receiptCode
+			}
+			return model.NewSubmissionReceiptCode()
 		},
 	})
 	require.NoError(t, err)

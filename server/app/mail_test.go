@@ -277,7 +277,7 @@ func TestDirectMailPreparerFreezesEncryptedCredentialPayload(t *testing.T) {
 	user := mailTestUser(principal, at)
 	actionURL := "https://proctor.example.test/account/verify-email#token=credential-secret"
 	content := FrozenMailContent{Subject: "Verify", Text: "Use " + actionURL, HTML: "<a href=\"" + actionURL + "\">Verify</a>"}
-	preparer, err := newDirectMailPreparer(mailRendererFake{content: content}, &mailSenderFake{enabled: true, from: MailAddress{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t))
+	preparer, err := newDirectMailPreparer(mailRendererFake{content: content}, &mailSenderFake{enabled: true, from: MailAddress{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t), nil)
 	require.NoError(t, err)
 	prepared, err := preparer.PrepareEmailVerification(AccountTokenMailPreparation{Recipient: user,
 		OccurrenceID: model.NewMailOccurrenceID(), ActionURL: actionURL, At: at, Deadline: at.Add(time.Hour)})
@@ -301,6 +301,7 @@ func TestRelationshipMailComposerSupportsCompleteCatalog(t *testing.T) {
 		mailRendererFake{content: FrozenMailContent{Subject: "Relationship changed", Text: "Relationship changed", HTML: "<p>Relationship changed</p>"}},
 		&mailSenderFake{enabled: true, from: MailAddress{Name: "Proctor", Address: "no-reply@example.test"}},
 		mailTestSealer(t),
+		nil,
 	)
 	require.NoError(t, err)
 	keys := []model.MailTemplateKey{
@@ -338,7 +339,7 @@ func TestDirectMailPreparerSelectsTeacherInvitationTemplate(t *testing.T) {
 	})
 	require.NoError(t, err)
 	preparer, err := newDirectMailPreparer(mailRendererFake{content: FrozenMailContent{Subject: "Invite", Text: "Invite", HTML: "<p>Invite</p>"}},
-		&mailSenderFake{enabled: true, from: MailAddress{Address: "no-reply@example.test"}}, mailTestSealer(t))
+		&mailSenderFake{enabled: true, from: MailAddress{Address: "no-reply@example.test"}}, mailTestSealer(t), nil)
 	require.NoError(t, err)
 	prepared, err := preparer.PrepareInvitation(invitation, "https://proctor.example.test/join#token=secret")
 	require.NoError(t, err)
@@ -372,7 +373,7 @@ func TestDirectMailPreparerSelectsScopedRoleInvitationTemplates(t *testing.T) {
 				ClaimHash: model.HashInvitationClaim(model.NewCredentialToken()), IssuedAt: at})
 			require.NoError(t, err)
 			preparer, err := newDirectMailPreparer(mailRendererFake{content: FrozenMailContent{Subject: "Invite", Text: "Invite", HTML: "<p>Invite</p>"}},
-				&mailSenderFake{enabled: true, from: MailAddress{Address: "no-reply@example.test"}}, mailTestSealer(t))
+				&mailSenderFake{enabled: true, from: MailAddress{Address: "no-reply@example.test"}}, mailTestSealer(t), nil)
 			require.NoError(t, err)
 			prepared, err := preparer.PrepareInvitation(invitation, "https://proctor.example.test/join#token=secret")
 			require.NoError(t, err)
@@ -385,7 +386,7 @@ func TestDirectMailPreparerSelectsScopedRoleInvitationTemplates(t *testing.T) {
 func TestDirectMailPreparerCreatesTerminalSuppressedIntentWhenDisabled(t *testing.T) {
 	at := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
 	principal := mailTestPrincipal(at)
-	preparer, err := newDirectMailPreparer(mailRendererFake{}, &mailSenderFake{enabled: false}, nil)
+	preparer, err := newDirectMailPreparer(mailRendererFake{}, &mailSenderFake{enabled: false}, nil, nil)
 	require.NoError(t, err)
 	prepared, err := preparer.PreparePasswordChanged(NoticeMailPreparation{Recipient: mailTestUser(principal, at), At: at})
 	require.NoError(t, err)

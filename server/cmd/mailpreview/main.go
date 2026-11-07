@@ -64,7 +64,11 @@ func run(args []string, stderr io.Writer) error {
 	index.WriteString("<h1>Proctor transactional-mail previews</h1>\n<ul>\n")
 	for _, key := range model.AllMailTemplateKeys() {
 		request := mail.RenderRequest{Key: key, Locale: "en",
-			ActionURL: "https://proctor.example.test/representative#token=not-a-credential"}
+			ActionURL:     "https://proctor.example.test/representative#token=not-a-credential",
+			RecipientName: "Representative Recipient", RecipientAddress: "recipient@example.test",
+			Institution: "Representative Institution",
+			At:          time.Date(2026, 8, 20, 8, 15, 0, 0, time.UTC),
+			Deadline:    time.Date(2026, 8, 23, 8, 15, 0, 0, time.UTC)}
 		switch key {
 		case model.MailTemplateIdentityPersonalAccessTokenCreated,
 			model.MailTemplateIdentityPersonalAccessTokenEnabled,
@@ -119,8 +123,13 @@ func run(args []string, stderr io.Writer) error {
 			request.Presentation = mail.SubmissionReceiptDetails{
 				ExamTitle: "Representative programming exam", SittingID: model.ExamSittingID(strings.Repeat("y", model.IDLength)),
 				SubmissionID: model.SubmissionID(strings.Repeat("b", model.IDLength)),
+				ReceiptCode:  model.SubmissionReceiptCode("MBY3KBMNEB83TFW1"),
 				SealedAt:     time.Date(2026, 8, 21, 9, 30, 0, 0, time.UTC)}
 			request.ActionURL = ""
+		case model.MailTemplateIdentityEmailChangeWarningOld:
+			request.Presentation = mail.EmailChangeDetails{NewAddress: "new-address@example.test"}
+		case model.MailTemplateExamRetentionScheduled:
+			request.Presentation = mail.RetentionDetails{RetireAfter: time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC)}
 		case model.MailTemplateExamResultReleased:
 			request.Presentation = mail.ResultReleaseDetails{ExamTitle: "Representative programming exam",
 				ReleasedAt: time.Date(2026, 8, 21, 10, 30, 0, 0, time.UTC)}

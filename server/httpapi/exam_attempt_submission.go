@@ -62,6 +62,7 @@ type submitExamAttemptRequest struct {
 type examSubmissionReceiptResponse struct {
 	BrowserActivity model.BrowserSubmissionSettlement `json:"browser_activity"`
 	SubmissionID    string                            `json:"submission_id"`
+	ReceiptCode     string                            `json:"receipt_code"`
 	ExamAttemptID   string                            `json:"exam_attempt_id"`
 	ExamRevisionID  string                            `json:"exam_revision_id"`
 	State           string                            `json:"state"`
@@ -138,7 +139,7 @@ func (m examAttemptHTTPModule) submit(request operationRequest) (operationResult
 		return operationResult{}, err
 	}
 	response := examSubmissionReceiptResponse{BrowserActivity: receipt.BrowserActivity, SubmissionID: receipt.SubmissionID.String(),
-		ExamAttemptID: receipt.AttemptID.String(), ExamRevisionID: receipt.ExamRevisionID.String(),
+		ReceiptCode: receipt.ReceiptCode.Display(), ExamAttemptID: receipt.AttemptID.String(), ExamRevisionID: receipt.ExamRevisionID.String(),
 		State: string(receipt.State), WorkspaceCursor: receipt.WorkspaceCursor,
 		ManifestDigest: receipt.ManifestDigest, SubmittedAt: model.FormatRFC3339(receipt.SubmittedAt)}
 	return jsonResult(http.StatusCreated, response).withHeaders(noStoreHeaders()), nil

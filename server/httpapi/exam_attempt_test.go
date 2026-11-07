@@ -140,7 +140,8 @@ func TestCandidateSubmitExamAttemptUsesStrictCausalSelectorsAndReturnsSafeReceip
 	require.Equal(t, "submit-once", fake.submit.IdempotencyKey, "status=%d headers=%v command=%#v body=%s", response.Code, response.Header(), fake.submit, response.Body.String())
 	var payload map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &payload), "receipt")
-	require.Len(t, payload, 8, "receipt")
+	require.Len(t, payload, 9, "receipt")
+	require.Equal(t, `"MBY3-KBMN-EB83-TFW1"`, string(payload["receipt_code"]), "receipt code is in display form")
 	require.Equal(t, `"`+fake.submissionReceipt.ExamRevisionID.String()+`"`, string(payload["exam_revision_id"]), "receipt")
 	require.Equal(t, `"submitted"`, string(payload["state"]), "receipt")
 	require.Equal(t, "4", string(payload["workspace_cursor"]), "receipt")
@@ -607,6 +608,7 @@ func TestManagerEndExamAttemptUsesRevisionFenceAndReturnsOnlySafeReceipt(t *test
 	require.NotContains(t, response.Body.String(), privateReason)
 	require.NotContains(t, response.Body.String(), "private")
 	require.Contains(t, response.Body.String(), fake.submissionReceipt.SubmissionID.String())
+	require.Contains(t, response.Body.String(), `"receipt_code":"MBY3-KBMN-EB83-TFW1"`)
 
 	invalid := newJSONRequest(http.MethodPost, path, strings.NewReader(`{"expected_revision":1,"reason":"valid","extra":true}`))
 	invalid.Header.Set("Authorization", "Bearer credential")
@@ -923,7 +925,7 @@ func newExamAttemptHTTPFake(t *testing.T) *examAttemptHTTPFake {
 		ParticipationID: fake.participation.ID, Generation: 1, SourceSessionID: sourceID,
 		Event: model.BrowserActivityEvent{Sequence: 1, Kind: model.BrowserActivityOpened, PolicyRevisionID: model.NewExamRevisionID(),
 			ClientOccurredAt: at, ReceivedAt: at.Add(time.Second)}}}}
-	fake.submissionReceipt = store.ExamSubmissionReceipt{BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1}, SubmissionID: model.NewSubmissionID(), AttemptID: examAttempt.ID,
+	fake.submissionReceipt = store.ExamSubmissionReceipt{BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1}, SubmissionID: model.NewSubmissionID(), ReceiptCode: model.SubmissionReceiptCode("MBY3KBMNEB83TFW1"), AttemptID: examAttempt.ID,
 		ExamRevisionID: examAttempt.AdmissionRevisionID, State: model.ExamAttemptSubmitted, WorkspaceCursor: 4,
 		ManifestDigest: strings.Repeat("d", 64), SubmittedAt: at.Add(time.Minute)}
 	submissionManifest, err := model.NewExamSubmissionManifest(4, []model.ExamSubmissionManifestEntry{{
@@ -933,7 +935,7 @@ func newExamAttemptHTTPFake(t *testing.T) *examAttemptHTTPFake {
 		StarterObjectID: model.NewStarterWorkspaceObjectID(),
 	}})
 	require.NoError(t, err)
-	submission, err := model.NewExamSubmission(model.ExamSubmissionSpecification{ID: fake.submissionReceipt.SubmissionID,
+	submission, err := model.NewExamSubmission(model.ExamSubmissionSpecification{ID: fake.submissionReceipt.SubmissionID, ReceiptCode: fake.submissionReceipt.ReceiptCode,
 		AttemptID: examAttempt.ID, ExamRevisionID: examAttempt.AdmissionRevisionID, WorkspaceID: workspace.ID, Manifest: submissionManifest,
 		BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1},
 		Provenance:      model.ExamSubmissionCandidateSubmitted, SubmittedAt: at.Add(time.Minute)})

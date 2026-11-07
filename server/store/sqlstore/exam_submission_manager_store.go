@@ -92,7 +92,7 @@ func (s *SQLExamSubmissionStore) EndByManager(ctx context.Context, input *store.
 	if input == nil || !validManagerEndRequest(input.Request) || !validAutomaticExamSubmissionTarget(input.Target) ||
 		input.Target.ExamID != input.Request.ExamID || input.Target.SittingID != input.Request.SittingID ||
 		input.Target.AttemptID != input.Request.AttemptID || !input.SubmissionID.IsValid() ||
-		!input.AuditEventID.IsValid() || input.AuditAt.IsZero() || command == nil ||
+		!input.ReceiptCode.IsValid() || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() || command == nil ||
 		command.Operation != store.ExamSubmissionManagerEndOperation || command.UserID != input.Request.ActorUserID {
 		return nil, store.NewErrInvalidInput("exam_submission", "manager_end", nil)
 	}
@@ -213,7 +213,7 @@ func endExamAttemptByManager(ctx context.Context, tx *sqlxTxWrapper,
 		return zero, store.NewErrConflict("exam_attempt", "exam_attempt_state", err)
 	}
 	submission, err := model.NewExamSubmission(model.ExamSubmissionSpecification{ID: input.SubmissionID,
-		AttemptID: target.AttemptID, ExamRevisionID: target.CurrentRevisionID, WorkspaceID: target.WorkspaceID,
+		ReceiptCode: input.ReceiptCode, AttemptID: target.AttemptID, ExamRevisionID: target.CurrentRevisionID, WorkspaceID: target.WorkspaceID,
 		Manifest: manifest, FinalFocusLossSequence: accounting.Integrity.LatestAcceptedSequence, BrowserActivity: browserActivity,
 		UnresolvedIntegrityCount: unresolved, Provenance: model.ExamSubmissionManagerEndedAttempt, SubmittedAt: sealAt})
 	if err != nil {

@@ -219,7 +219,7 @@ func TestClassMemberEnrollCommitsTerminalNoticeForInactiveRecipient(t *testing.T
 	user.DisabledAt = model.OptionalTimeFrom(time.UnixMilli(450))
 	users := &classMemberUserStoreFake{events: &events, value: user}
 	preparer, err := newDirectMailPreparer(&classTransitionRendererFake{}, &mailSenderFake{enabled: true,
-		from: MailAddress{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t))
+		from: MailAddress{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t), nil)
 	require.NoError(t, err)
 	service := newClassMemberService(classMemberServiceDependencies{Store: persistence, Classes: classes, Users: users, Authorization: &programmeAuthorizerFake{events: &events}, Audit: &institutionAuditorFake{events: &events, beginID: model.NewID()}, Mail: preparer, Effects: &classMemberEffectsFake{}, Now: func() time.Time { return time.UnixMilli(500) }, NewID: model.NewID})
 	_, err = service.EnrollClassMember(context.Background(), invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{}),

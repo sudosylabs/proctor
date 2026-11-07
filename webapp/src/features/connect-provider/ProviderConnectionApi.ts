@@ -1,6 +1,7 @@
 import { apiClient } from "../../api/client";
 import type { components } from "../../api/generated/schema";
 import { readProblemValue } from "../../api/problem";
+import { signedInName } from "../account-security/SignedInName";
 
 export type Provider =
   components["schemas"]["ExternalAuthenticationProviderResponse"];
@@ -8,6 +9,8 @@ export type Provider =
 export interface ProviderConnectionContext {
   providers: Provider[];
   username: string;
+  /** Safe signed-in name for the shell footer; absent when unusable. */
+  signedInName: string | undefined;
 }
 
 export type ProviderConnectionContextResult =
@@ -42,6 +45,7 @@ export async function requestProviderConnectionContext(): Promise<ProviderConnec
       context: {
         providers,
         username: userResult.data.username,
+        signedInName: signedInName(userResult.data),
       },
     };
   } catch {

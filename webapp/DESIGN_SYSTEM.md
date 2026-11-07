@@ -191,8 +191,10 @@ surfaces and interaction variants derive from them.
 | Coral | `#B4233C` | Invalid, denied, destructive, or unavailable state |
 
 Purple is the only general focal accent. Teal, amber, and coral are state
-colors, not card decoration or product-area identifiers. Every state also has
-a word, icon, shape, or position cue. Links remain distinguishable outside
+colors, not card decoration or product-area identifiers. The confirming
+action of an explicit destructive confirmation is the one place coral fills a
+control: the `danger` Button variant takes the primary position on that view.
+Every state also has a word, icon, shape, or position cue. Links remain distinguishable outside
 color alone when surrounded by prose.
 
 The initial theme surfaces are intentionally close to the established Proctor

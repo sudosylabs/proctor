@@ -2127,7 +2127,7 @@
   },
   {
     "id": "webapp.authorization_complete.checking.body",
-    "translation": "Proctor is checking for an active Session in this browser."
+    "translation": "Checking for an active Session in this browser…"
   },
   {
     "id": "webapp.authorization_complete.checking.heading",
@@ -2135,7 +2135,11 @@
   },
   {
     "id": "webapp.authorization_complete.checking.label",
-    "translation": "Confirming Session"
+    "translation": "Sign-in status"
+  },
+  {
+    "id": "webapp.authorization_complete.connect",
+    "translation": "Add a sign-in method"
   },
   {
     "id": "webapp.authorization_complete.document_title",
@@ -2151,7 +2155,11 @@
   },
   {
     "id": "webapp.authorization_complete.no_session.label",
-    "translation": "No active Session"
+    "translation": "Sign-in status"
+  },
+  {
+    "id": "webapp.authorization_complete.security",
+    "translation": "Go to account security"
   },
   {
     "id": "webapp.authorization_complete.sign_in",
@@ -2159,7 +2167,7 @@
   },
   {
     "id": "webapp.authorization_complete.signed_in.body",
-    "translation": "This browser has an active Proctor Session. You can close this page."
+    "translation": "This browser has an active Proctor Session. You can close this page, or manage how you sign in."
   },
   {
     "id": "webapp.authorization_complete.signed_in.heading",
@@ -2167,7 +2175,7 @@
   },
   {
     "id": "webapp.authorization_complete.signed_in.label",
-    "translation": "Session confirmed"
+    "translation": "Sign-in confirmed"
   },
   {
     "id": "webapp.authorization_complete.skip_to_main",
@@ -2175,7 +2183,7 @@
   },
   {
     "id": "webapp.authorization_complete.unavailable.body",
-    "translation": "Proctor couldn’t confirm whether this browser has an active Session. Try again or start a new sign-in."
+    "translation": "We couldn’t confirm whether this browser has an active Session. Try again, or sign in again."
   },
   {
     "id": "webapp.authorization_complete.unavailable.heading",
@@ -2183,99 +2191,99 @@
   },
   {
     "id": "webapp.authorization_complete.unavailable.label",
-    "translation": "Confirmation unavailable"
+    "translation": "Sign-in status"
   },
   {
     "id": "webapp.authorization_complete.unavailable.retry",
     "translation": "Try again"
   },
   {
-    "id": "webapp.connect_provider.connect",
-    "translation": "Connect {{.Provider}}"
+    "id": "webapp.connect_provider.cancel",
+    "translation": "Cancel"
   },
   {
     "id": "webapp.connect_provider.connecting",
-    "translation": "Connecting provider…"
+    "translation": "Connecting…"
   },
   {
-    "id": "webapp.connect_provider.context.body",
-    "translation": "Connect an external identity without replacing your current password."
-  },
-  {
-    "id": "webapp.connect_provider.context.eyebrow",
-    "translation": "Account security"
-  },
-  {
-    "id": "webapp.connect_provider.context.heading",
-    "translation": "Add another sign-in method"
-  },
-  {
-    "id": "webapp.connect_provider.context.note",
-    "translation": "Provider email is never used to merge accounts."
+    "id": "webapp.connect_provider.continue",
+    "translation": "Continue to {{.Provider}}"
   },
   {
     "id": "webapp.connect_provider.document_title",
-    "translation": "Connect a provider · Proctor"
+    "translation": "Sign-in methods · Proctor"
   },
   {
     "id": "webapp.connect_provider.empty.body",
-    "translation": "This installation currently has no external provider available to connect."
+    "translation": "Your institution hasn’t set up any other way to sign in."
   },
   {
     "id": "webapp.connect_provider.empty.heading",
-    "translation": "No provider is available"
+    "translation": "There’s nothing to connect"
+  },
+  {
+    "id": "webapp.connect_provider.empty.return",
+    "translation": "Back to account security"
   },
   {
     "id": "webapp.connect_provider.error.reauthentication",
-    "translation": "This connection requires a recent strong sign-in. Sign in again, then return to this page."
+    "translation": "This needs a recent sign-in. Confirm it’s you, then try again."
   },
   {
     "id": "webapp.connect_provider.error.unavailable",
-    "translation": "Proctor couldn’t start this provider connection. Try again."
-  },
-  {
-    "id": "webapp.connect_provider.evidence",
-    "translation": "Your password and Proctor profile stay unchanged."
+    "translation": "We couldn’t start connecting {{.Provider}}. Try again."
   },
   {
     "id": "webapp.connect_provider.group",
-    "translation": "Available external providers"
+    "translation": "Sign-in methods you can add"
   },
   {
-    "id": "webapp.connect_provider.heading",
-    "translation": "Connect a provider"
-  },
-  {
-    "id": "webapp.connect_provider.lede",
-    "translation": "Choose the provider you want to connect to this Proctor account."
+    "id": "webapp.connect_provider.kind",
+    "translation": "Sign-in methods"
   },
   {
     "id": "webapp.connect_provider.loading.body",
-    "translation": "Proctor is checking this User and the providers currently available."
+    "translation": "Checking which sign-in methods you can add…"
   },
   {
     "id": "webapp.connect_provider.loading.heading",
-    "translation": "Checking connection options"
+    "translation": "Checking sign-in methods"
+  },
+  {
+    "id": "webapp.connect_provider.multiple.body",
+    "translation": "Choose the account you want to sign in with, as well as the way you sign in now."
+  },
+  {
+    "id": "webapp.connect_provider.multiple.heading",
+    "translation": "Add a sign-in method"
   },
   {
     "id": "webapp.connect_provider.no_session.body",
-    "translation": "Sign in with an existing method before connecting another provider."
+    "translation": "Sign in the way you usually do, then come back to add another sign-in method."
   },
   {
     "id": "webapp.connect_provider.no_session.heading",
-    "translation": "Sign in to connect a provider"
+    "translation": "Sign in to add a sign-in method"
   },
   {
     "id": "webapp.connect_provider.no_session.sign_in",
     "translation": "Sign in"
   },
   {
-    "id": "webapp.connect_provider.return",
-    "translation": "Return to sign-in status"
+    "id": "webapp.connect_provider.note",
+    "translation": "Your password and Proctor profile stay the same, and email addresses are never used to merge accounts."
+  },
+  {
+    "id": "webapp.connect_provider.single.body",
+    "translation": "After this, you can sign in with {{.Provider}} as well as the way you sign in now."
+  },
+  {
+    "id": "webapp.connect_provider.single.heading",
+    "translation": "Connect {{.Provider}}"
   },
   {
     "id": "webapp.connect_provider.skip_to_main",
-    "translation": "Skip to provider connection"
+    "translation": "Skip to sign-in methods"
   },
   {
     "id": "webapp.connect_provider.type.cas",
@@ -2291,11 +2299,11 @@
   },
   {
     "id": "webapp.connect_provider.unavailable.body",
-    "translation": "Proctor couldn’t load this User’s provider connection options."
+    "translation": "We couldn’t load the sign-in methods you can add. Try again in a moment."
   },
   {
     "id": "webapp.connect_provider.unavailable.heading",
-    "translation": "Provider connection is unavailable"
+    "translation": "We couldn’t load sign-in methods"
   },
   {
     "id": "webapp.connect_provider.unavailable.retry",
@@ -2987,75 +2995,99 @@
   },
   {
     "id": "webapp.reauthenticate.action",
-    "translation": "Confirm your sign-in"
-  },
-  {
-    "id": "webapp.reauthenticate.body",
-    "translation": "Provide fresh proof for this session. You’ll return to your task to review and submit the action yourself."
+    "translation": "Confirm it’s you"
   },
   {
     "id": "webapp.reauthenticate.cancel",
-    "translation": "Cancel and return"
-  },
-  {
-    "id": "webapp.reauthenticate.challenge.help",
-    "translation": "Your primary sign-in is recent. Verify this session with your authenticator or an unused recovery code."
+    "translation": "Cancel"
   },
   {
     "id": "webapp.reauthenticate.complete.body",
-    "translation": "Return to your task and choose the action again. The server will check your proof when you submit it."
+    "translation": "Go back and choose what you wanted to do again. You won’t be asked to confirm again for {{.Duration}}."
+  },
+  {
+    "id": "webapp.reauthenticate.complete.connect",
+    "translation": "Back to sign-in methods"
   },
   {
     "id": "webapp.reauthenticate.complete.heading",
-    "translation": "Your proof is ready"
+    "translation": "You’re confirmed"
   },
   {
-    "id": "webapp.reauthenticate.continue",
-    "translation": "Return to your task"
+    "id": "webapp.reauthenticate.complete.security",
+    "translation": "Back to account security"
   },
   {
     "id": "webapp.reauthenticate.document_title",
-    "translation": "Confirm your sign-in · Proctor"
+    "translation": "Confirm it’s you · Proctor"
   },
   {
     "id": "webapp.reauthenticate.external.action",
-    "translation": "Continue with your original provider"
+    "translation": "Continue with {{.Provider}}"
+  },
+  {
+    "id": "webapp.reauthenticate.external.action_unnamed",
+    "translation": "Continue to your sign-in provider"
   },
   {
     "id": "webapp.reauthenticate.external.failed",
-    "translation": "Your provider sign-in could not be confirmed. You can try again; no security action has been performed."
+    "translation": "{{.Provider}} couldn’t confirm it’s you. Nothing was changed. Try again."
+  },
+  {
+    "id": "webapp.reauthenticate.external.failed_unnamed",
+    "translation": "Your sign-in provider couldn’t confirm it’s you. Nothing was changed. Try again."
   },
   {
     "id": "webapp.reauthenticate.external.help",
-    "translation": "Continue with the provider that established this session. Use the same provider account; a different account cannot refresh this session."
+    "translation": "Use the same account you signed in with. A different account can’t confirm this session."
   },
   {
     "id": "webapp.reauthenticate.heading",
-    "translation": "Confirm your sign-in"
+    "translation": "Confirm it’s you"
+  },
+  {
+    "id": "webapp.reauthenticate.kind",
+    "translation": "Security check"
+  },
+  {
+    "id": "webapp.reauthenticate.lede.connect",
+    "translation": "Confirm it’s you before you connect a sign-in method. You won’t be asked again for {{.Duration}}."
+  },
+  {
+    "id": "webapp.reauthenticate.lede.security",
+    "translation": "Confirm it’s you before you change security settings. You won’t be asked again for {{.Duration}}."
+  },
+  {
+    "id": "webapp.reauthenticate.lede.strong",
+    "translation": "Enter a code from your authenticator app or one of your recovery codes to finish confirming it’s you."
   },
   {
     "id": "webapp.reauthenticate.method_required",
-    "translation": "This proof method does not match the current session. Check the current status to continue with the correct method."
+    "translation": "This session was started a different way. Check the current status to continue with the right method."
   },
   {
     "id": "webapp.reauthenticate.password.action",
-    "translation": "Confirm password"
+    "translation": "Continue"
   },
   {
     "id": "webapp.reauthenticate.password.invalid",
-    "translation": "That password could not be verified. Try again."
+    "translation": "That password isn’t right. Try again."
   },
   {
     "id": "webapp.reauthenticate.password.label",
-    "translation": "Current password"
+    "translation": "Password"
   },
   {
     "id": "webapp.reauthenticate.password.required",
-    "translation": "Enter your current password."
+    "translation": "Enter your password."
   },
   {
     "id": "webapp.reauthenticate.setup_required",
-    "translation": "This task needs a verified session. Set up an authenticator in account security, then return to connect your provider."
+    "translation": "Connecting a sign-in method needs two-step verification. Turn it on in account security, then come back."
+  },
+  {
+    "id": "webapp.reauthenticate.setup_required.action",
+    "translation": "Go to account security"
   },
   {
     "id": "webapp.register.accepted.body",
@@ -3346,12 +3378,12 @@
     "translation": "Skip to new password"
   },
   {
-    "id": "webapp.security.back",
-    "translation": "Back to account security"
+    "id": "webapp.security.body",
+    "translation": "Check how your account is protected and change it here."
   },
   {
-    "id": "webapp.security.body",
-    "translation": "Manage the authenticator and recovery codes that protect your account."
+    "id": "webapp.security.cancel",
+    "translation": "Cancel"
   },
   {
     "id": "webapp.security.challenge.action",
@@ -3359,7 +3391,7 @@
   },
   {
     "id": "webapp.security.challenge.body",
-    "translation": "Confirm access to your authenticator before managing sensitive security settings. This does not refresh your password or provider sign-in."
+    "translation": "Enter a code from your authenticator app or one of your recovery codes. This doesn’t change your password or how you signed in."
   },
   {
     "id": "webapp.security.challenge.heading",
@@ -3367,11 +3399,11 @@
   },
   {
     "id": "webapp.security.challenge.success",
-    "translation": "This session has been verified. Choose the security action you want to take."
+    "translation": "This session is verified."
   },
   {
     "id": "webapp.security.challenge.verify",
-    "translation": "Verify code"
+    "translation": "Verify"
   },
   {
     "id": "webapp.security.code.authenticator",
@@ -3383,19 +3415,31 @@
   },
   {
     "id": "webapp.security.codes.acknowledge",
-    "translation": "I have saved these recovery codes in a secure place."
+    "translation": "I’ve saved these codes somewhere safe"
   },
   {
     "id": "webapp.security.codes.body",
-    "translation": "Keep these codes somewhere secure that you can access without your authenticator. Each code can sign you in once."
+    "translation": "Each code signs you in once if you lose your phone. This is the only time you’ll see them."
+  },
+  {
+    "id": "webapp.security.codes.copied",
+    "translation": "Recovery codes copied."
+  },
+  {
+    "id": "webapp.security.codes.copy",
+    "translation": "Copy codes"
+  },
+  {
+    "id": "webapp.security.codes.copy_failed",
+    "translation": "Couldn’t copy the codes. Download them or write them down instead."
   },
   {
     "id": "webapp.security.codes.done",
-    "translation": "Finish and hide codes"
+    "translation": "Done"
   },
   {
     "id": "webapp.security.codes.download",
-    "translation": "Download recovery codes"
+    "translation": "Download codes"
   },
   {
     "id": "webapp.security.codes.heading",
@@ -3410,32 +3454,40 @@
     "translation": "Your recovery codes are now hidden."
   },
   {
-    "id": "webapp.security.codes.warning",
-    "translation": "These codes are shown only now. Download them or save them manually before continuing. Refreshing or closing this page can lose this view."
-  },
-  {
     "id": "webapp.security.disable.action",
-    "translation": "Disable or replace authenticator"
+    "translation": "Turn off"
   },
   {
     "id": "webapp.security.disable.body",
-    "translation": "This removes your authenticator and invalidates all its recovery codes."
+    "translation": "Signing in will need only your password, and your recovery codes will stop working."
   },
   {
     "id": "webapp.security.disable.confirm",
-    "translation": "Disable authenticator"
+    "translation": "Turn off"
   },
   {
     "id": "webapp.security.disable.heading",
-    "translation": "Disable your authenticator?"
+    "translation": "Turn off two-step verification?"
+  },
+  {
+    "id": "webapp.security.disable.keep",
+    "translation": "Keep it on"
+  },
+  {
+    "id": "webapp.security.disable.section.body",
+    "translation": "Signing in will no longer ask for a code from your app."
+  },
+  {
+    "id": "webapp.security.disable.section.heading",
+    "translation": "Turn off two-step verification"
   },
   {
     "id": "webapp.security.disable.success",
-    "translation": "Your authenticator is disabled. You can now explicitly set up another authenticator."
+    "translation": "Two-step verification is off. You can set it up again at any time."
   },
   {
     "id": "webapp.security.disable.warning",
-    "translation": "Your account will have no local MFA after this action. To replace your authenticator, disable it here, then explicitly start a new setup. Protection resumes after the new setup is activated."
+    "translation": "Moving to a new phone? Turn it off here, then set it up again on the new phone. Your account has no second step until you finish."
   },
   {
     "id": "webapp.security.document_title",
@@ -3443,31 +3495,31 @@
   },
   {
     "id": "webapp.security.error.conflict",
-    "translation": "Your security settings have changed or setup has expired. Check the current status before continuing."
+    "translation": "Your settings changed or this setup expired. Check the current status before you continue."
   },
   {
     "id": "webapp.security.error.disabled",
-    "translation": "Authenticator management is disabled. Check the current status and contact your administrator if you need access restored."
+    "translation": "Your institution has turned off two-step verification. Check the current status, or contact your institution for help."
   },
   {
     "id": "webapp.security.error.invalid_code",
-    "translation": "That code could not be verified. Check the code and try again."
+    "translation": "That code isn’t right. Check it and try again."
   },
   {
     "id": "webapp.security.error.no_session",
-    "translation": "Your session is no longer available. Sign in again to continue."
+    "translation": "You’ve been signed out. Sign in again to continue."
   },
   {
     "id": "webapp.security.error.primary_required",
-    "translation": "Confirm your password or original provider sign-in, then return here and choose the action again."
+    "translation": "Confirm it’s you, then come back and try again."
   },
   {
     "id": "webapp.security.error.rate_limited",
-    "translation": "Too many attempts. Wait before trying again."
+    "translation": "Too many attempts. Wait a moment before you try again."
   },
   {
     "id": "webapp.security.error.strong_required",
-    "translation": "Verify this session before continuing. You may also need fresh password or provider proof."
+    "translation": "Verify this session with a two-step code first. You may also need to confirm your password."
   },
   {
     "id": "webapp.security.error.unavailable",
@@ -3482,8 +3534,12 @@
     "translation": "Account security"
   },
   {
+    "id": "webapp.security.kind.two_step",
+    "translation": "Two-step verification"
+  },
+  {
     "id": "webapp.security.loading.body",
-    "translation": "We’re checking the security settings for this session."
+    "translation": "Checking your security settings…"
   },
   {
     "id": "webapp.security.loading.heading",
@@ -3491,7 +3547,7 @@
   },
   {
     "id": "webapp.security.no_session.body",
-    "translation": "This browser needs an active session before you can manage an authenticator."
+    "translation": "Sign in to manage two-step verification for your account."
   },
   {
     "id": "webapp.security.no_session.heading",
@@ -3499,7 +3555,15 @@
   },
   {
     "id": "webapp.security.recovery_required",
-    "translation": "Your institution requires you to set up a new authenticator before you can use your account. Complete setup here to restore access."
+    "translation": "Your institution needs you to set up two-step verification again before you can use your account."
+  },
+  {
+    "id": "webapp.security.recovery_required.lead",
+    "translation": "Set up two-step verification to continue."
+  },
+  {
+    "id": "webapp.security.recovery_unavailable",
+    "translation": "Setup is turned off right now, so you can’t finish this yet. Contact your institution for help, or sign out and try again later."
   },
   {
     "id": "webapp.security.refresh",
@@ -3507,55 +3571,59 @@
   },
   {
     "id": "webapp.security.regenerate.action",
-    "translation": "Generate new recovery codes"
+    "translation": "Make new codes"
   },
   {
     "id": "webapp.security.regenerate.body",
-    "translation": "A new set replaces all your remaining recovery codes. You’ll need to save the new codes before leaving the next step."
+    "translation": "Your old codes stop working as soon as the new ones are made. You’ll save the new set on the next step."
   },
   {
     "id": "webapp.security.regenerate.confirm",
-    "translation": "Replace recovery codes"
+    "translation": "Replace my codes"
   },
   {
     "id": "webapp.security.regenerate.heading",
-    "translation": "Replace your recovery codes?"
+    "translation": "Make new recovery codes?"
   },
   {
-    "id": "webapp.security.regenerate.warning",
-    "translation": "Every old recovery code stops working when the new set is generated. This requires fresh sign-in proof and a verified session."
+    "id": "webapp.security.regenerate.section.body",
+    "translation": "Make a new set if you’ve used several or think they’ve been seen. Your old codes stop working."
+  },
+  {
+    "id": "webapp.security.regenerate.section.heading",
+    "translation": "Recovery codes"
   },
   {
     "id": "webapp.security.restore_access",
     "translation": "Restore account access"
   },
   {
-    "id": "webapp.security.return",
-    "translation": "Back to sign-in status"
-  },
-  {
     "id": "webapp.security.service_disabled",
-    "translation": "Authenticator management is currently disabled by your institution. Contact your administrator for help. A recovery restriction remains in place until setup can be completed."
+    "translation": "Two-step verification isn’t available right now because your institution has turned it off."
   },
   {
     "id": "webapp.security.setup.action",
-    "translation": "Set up an authenticator"
+    "translation": "Set up two-step verification"
   },
   {
     "id": "webapp.security.setup.activate",
-    "translation": "Activate authenticator"
+    "translation": "Verify and turn on"
   },
   {
     "id": "webapp.security.setup.body",
-    "translation": "Scan this QR code with your authenticator app, then enter the six-digit code it generates."
+    "translation": "Use an authenticator app such as Google Authenticator, Microsoft Authenticator or 1Password."
+  },
+  {
+    "id": "webapp.security.setup.expired",
+    "translation": "This setup has expired. Cancel and start again."
   },
   {
     "id": "webapp.security.setup.expires",
-    "translation": "Complete setup before {{.Time}}. If it expires, return to account security and restart setup."
+    "translation": "Finish within {{.Duration}}."
   },
   {
     "id": "webapp.security.setup.heading",
-    "translation": "Add your authenticator"
+    "translation": "Scan this code"
   },
   {
     "id": "webapp.security.setup.key",
@@ -3563,27 +3631,31 @@
   },
   {
     "id": "webapp.security.setup.manual",
-    "translation": "Can’t scan the code?"
-  },
-  {
-    "id": "webapp.security.setup.manual_help",
-    "translation": "Add an account manually in your authenticator app, choose a time-based code, and enter this key."
+    "translation": "Can’t scan it? Enter this setup key in your app instead."
   },
   {
     "id": "webapp.security.setup.pending",
-    "translation": "A setup is pending. Restarting replaces its setup key; the old key will no longer activate MFA."
+    "translation": "You started setting this up but didn’t finish. Starting again gives you a new code, and the old one stops working."
   },
   {
     "id": "webapp.security.setup.private",
-    "translation": "Keep this QR code and setup key private. Anyone with either can generate your authenticator codes."
+    "translation": "Keep this code and key private. Anyone who has them can make your sign-in codes."
   },
   {
     "id": "webapp.security.setup.qr_label",
-    "translation": "QR code for authenticator setup"
+    "translation": "QR code for two-step verification setup"
   },
   {
     "id": "webapp.security.setup.restart",
-    "translation": "Restart authenticator setup"
+    "translation": "Start setup again"
+  },
+  {
+    "id": "webapp.security.setup.section.body",
+    "translation": "Add a code from an authenticator app when you sign in, so a stolen password isn’t enough."
+  },
+  {
+    "id": "webapp.security.setup.section.heading",
+    "translation": "Turn on two-step verification"
   },
   {
     "id": "webapp.security.sign_in",
@@ -3594,32 +3666,68 @@
     "translation": "Sign out"
   },
   {
+    "id": "webapp.security.sign_out_failed",
+    "translation": "Couldn’t sign out. Try again."
+  },
+  {
     "id": "webapp.security.skip_to_main",
     "translation": "Skip to account security"
   },
   {
-    "id": "webapp.security.status.authenticator",
-    "translation": "Authenticator"
-  },
-  {
     "id": "webapp.security.status.codes",
-    "translation": "Recovery codes remaining"
+    "translation": "Recovery codes"
   },
   {
-    "id": "webapp.security.status.disabled",
-    "translation": "Not enabled"
+    "id": "webapp.security.status.codes_left",
+    "translation": "{{.Count}} left"
   },
   {
-    "id": "webapp.security.status.enabled",
-    "translation": "Enabled"
+    "id": "webapp.security.status.codes_none",
+    "translation": "None left"
   },
   {
     "id": "webapp.security.status.no_codes",
-    "translation": "You have no unused recovery codes. Verify this session with your authenticator, then generate a new set."
+    "translation": "You have no recovery codes left. Make a new set so you can still sign in if you lose your phone."
+  },
+  {
+    "id": "webapp.security.status.off",
+    "translation": "Off"
+  },
+  {
+    "id": "webapp.security.status.on",
+    "translation": "On"
+  },
+  {
+    "id": "webapp.security.status.pending",
+    "translation": "Setup not finished"
+  },
+  {
+    "id": "webapp.security.status.session",
+    "translation": "This session"
+  },
+  {
+    "id": "webapp.security.status.session_external",
+    "translation": "Signed in with {{.Provider}}"
+  },
+  {
+    "id": "webapp.security.status.session_external_unnamed",
+    "translation": "Signed in with your institution’s sign-in"
+  },
+  {
+    "id": "webapp.security.status.session_password",
+    "translation": "Signed in with password"
+  },
+  {
+    "id": "webapp.security.status.session_strong",
+    "translation": "Verified with two-step"
+  },
+  {
+    "id": "webapp.security.status.two_step",
+    "translation": "Two-step verification"
   },
   {
     "id": "webapp.security.unavailable.body",
-    "translation": "Your security settings couldn’t be loaded. Try again to check their current state."
+    "translation": "Your security settings couldn’t be loaded. Try again to see where things stand."
   },
   {
     "id": "webapp.security.unavailable.heading",
@@ -3627,15 +3735,15 @@
   },
   {
     "id": "webapp.security.uncertain.body",
-    "translation": "We didn’t receive a usable confirmation. The change may already have completed, so check the current status before choosing another action."
+    "translation": "We didn’t get a clear answer, so the change may already have happened. Check the current status before you try again."
   },
   {
     "id": "webapp.security.uncertain.guidance",
-    "translation": "If your authenticator is active but you didn’t receive recovery codes, verify this session with that authenticator, then explicitly generate and save a new set. Codes cannot be recovered from the status page."
+    "translation": "If two-step verification is now on but you didn’t see your recovery codes, make a new set from account security. Codes can’t be shown again."
   },
   {
     "id": "webapp.security.uncertain.heading",
-    "translation": "Check whether the change completed"
+    "translation": "Check whether the change worked"
   },
   {
     "id": "webapp.security.working",

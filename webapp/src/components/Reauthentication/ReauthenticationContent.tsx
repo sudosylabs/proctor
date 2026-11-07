@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import type { SecurityContextResult } from "../../features/account-security/AccountSecurityApi";
+import { formatMinutes, recentAuthenticationMinutes } from "../../features/account-security/presentation";
 import { reauthenticationDestination, type ReauthenticationActions, type ReauthenticationFailure, type ReauthenticationTask } from "../../features/reauthenticate/ReauthenticationApi";
 import { message } from "../../i18n/messages";
 import { AccessTaskIntro } from "../AccessTaskIntro/AccessTaskIntro";
@@ -13,11 +14,13 @@ import { Notice } from "../Notice/Notice";
 import { TaskState, TaskStateActions, TaskStateAnnouncement } from "../TaskState/TaskState";
 import styles from "./Reauthentication.module.css";
 
-export function ReauthenticationContent({ actions, externalProofFailed, loading, onRefresh, state, task }: {
+export function ReauthenticationContent({ actions, externalProofFailed, loading, onRefresh, providerName, state, task }: {
   actions: ReauthenticationActions;
   externalProofFailed: boolean;
   loading: boolean;
   onRefresh(): void;
+  /** Display name of the Session's original external provider, when known. */
+  providerName?: string;
   state: SecurityContextResult;
   task: ReauthenticationTask;
 }) {
@@ -87,6 +90,7 @@ export function ReauthenticationContent({ actions, externalProofFailed, loading,
     return <>
       <TaskStateAnnouncement message={heading} />
       <TaskState heading={heading} headingID="reauthentication-heading" focusHeading={focusHeading} busy={loading}
+        label={message("webapp.reauthenticate.kind")}
         body={message(loading ? "webapp.security.loading.body" : noSession ? "webapp.security.no_session.body" : "webapp.security.unavailable.body")}>
         {!loading ? <TaskStateActions>{noSession
           ? <ButtonLink href="/login">{message("webapp.security.sign_in")}</ButtonLink>
@@ -102,42 +106,72 @@ export function ReauthenticationContent({ actions, externalProofFailed, loading,
   const needsStrong = !context.recoveryRequired && context.authenticationStrength !== "multi_factor" && (context.enabled || task === "connect-provider");
   const complete = !requiresRecovery && !needsPrimary && !needsStrong;
   const step = requiresRecovery ? "recovery" : needsPrimary ? "primary" : needsStrong ? "strong" : "complete";
+  const duration = formatMinutes(recentAuthenticationMinutes);
+  const destination = reauthenticationDestination(task);
+  const cancel = <a className={styles.cancel} href={destination}>{message("webapp.reauthenticate.cancel")}</a>;
 
   return (
     <section className={styles.page} aria-labelledby="reauthentication-heading">
       <TaskStateAnnouncement message={pending ? message("webapp.security.working") : ""} />
       <AccessTaskIntro key={step} headingID="reauthentication-heading" focusHeading={focusHeading}
-        kind={message("webapp.security.eyebrow")}
-        heading={message(complete ? "webapp.reauthenticate.complete.heading" : "webapp.reauthenticate.heading")}
-        body={message(complete ? "webapp.reauthenticate.complete.body" : "webapp.reauthenticate.body")} />
-      {showExternalFailure ? <Notice tone="warning">{message("webapp.reauthenticate.external.failed")}</Notice> : null}
-      {requiresRecovery ? <>
-        <Notice tone="warning">{message("webapp.security.recovery_required")}</Notice>
+        kind={message(requiresRecovery ? "webapp.security.eyebrow" : "webapp.reauthenticate.kind")}
+        kindTone={requiresRecovery ? "warning" : complete ? "success" : undefined}
+        heading={message(requiresRecovery ? "webapp.security.restore_access" : complete ? "webapp.reauthenticate.complete.heading" : "webapp.reauthenticate.heading")}
+        body={stepBody(step, task, duration)} />
+      {showExternalFailure ? <Notice tone="warning">{providerName === undefined
+        ? message("webapp.reauthenticate.external.failed_unnamed")
+        : message("webapp.reauthenticate.external.failed", { Provider: providerName })}</Notice> : null}
+      {requiresRecovery ? <TaskStateActions>
         <ButtonLink href="/account/security">{message("webapp.security.restore_access")}</ButtonLink>
-      </> : needsPrimary ? <>
-        {context.authenticationMethod === "password" ? <PasswordProofForm key={formGeneration} pending={pending} onSubmit={passwordProof} /> : <>
-          <Notice>{message("webapp.reauthenticate.external.help")}</Notice>
-          <Button isLoading={pending} loadingLabel={message("webapp.security.working")} onClick={externalProof}>{message("webapp.reauthenticate.external.action")}</Button>
-        </>}
+      </TaskStateActions> : needsPrimary ? <>
+        {context.authenticationMethod === "password"
+          ? <PasswordProofForm key={formGeneration} pending={pending} onSubmit={passwordProof} cancel={cancel} />
+          : <>
+            <Notice>{message("webapp.reauthenticate.external.help")}</Notice>
+            <TaskStateActions>
+              <Button isLoading={pending} loadingLabel={message("webapp.security.working")} onClick={externalProof}>
+                {providerName === undefined
+                  ? message("webapp.reauthenticate.external.action_unnamed")
+                  : message("webapp.reauthenticate.external.action", { Provider: providerName })}
+              </Button>
+              {cancel}
+            </TaskStateActions>
+          </>}
       </> : needsStrong ? <>
-        {context.enabled && context.serviceEnabled ? <>
-          <Notice>{message("webapp.reauthenticate.challenge.help")}</Notice>
-          <SecurityCodeForm key={formGeneration} pending={pending} onSubmit={challenge} />
-        </> : <>
-          <Notice tone="warning">{message(context.serviceEnabled ? "webapp.reauthenticate.setup_required" : "webapp.security.service_disabled")}</Notice>
-          <ButtonLink href="/account/security">{message("webapp.security.heading")}</ButtonLink>
-        </>}
-      </> : <ButtonLink href={reauthenticationDestination(task)}>{message("webapp.reauthenticate.continue")}</ButtonLink>}
+        {context.enabled && context.serviceEnabled
+          ? <SecurityCodeForm key={formGeneration} pending={pending} onSubmit={challenge} cancel={cancel} />
+          : <>
+            <Notice tone="warning">{message(context.serviceEnabled ? "webapp.reauthenticate.setup_required" : "webapp.security.service_disabled")}</Notice>
+            <TaskStateActions>
+              <ButtonLink href="/account/security">{message("webapp.reauthenticate.setup_required.action")}</ButtonLink>
+              {cancel}
+            </TaskStateActions>
+          </>}
+      </> : <TaskStateActions>
+        <ButtonLink href={destination}>
+          {message(task === "connect-provider" ? "webapp.reauthenticate.complete.connect" : "webapp.reauthenticate.complete.security")}
+        </ButtonLink>
+      </TaskStateActions>}
       <FormFeedback message={failure === undefined ? undefined : proofFailureMessage(failure)} />
       {failure !== undefined && ["method_required", "primary_required", "strong_required", "conflict", "disabled"].includes(failure.kind)
-        ? <Button variant="secondary" onClick={refresh}>{message("webapp.security.refresh")}</Button> : null}
-      {failure?.kind === "no_session" ? <ButtonLink href="/login">{message("webapp.security.sign_in")}</ButtonLink> : null}
-      {!complete && !requiresRecovery ? <a className={styles.returnLink} href={reauthenticationDestination(task)}>{message("webapp.reauthenticate.cancel")}</a> : null}
+        ? <TaskStateActions><Button variant="secondary" onClick={refresh}>{message("webapp.security.refresh")}</Button></TaskStateActions> : null}
+      {failure?.kind === "no_session" ? <TaskStateActions>
+        <ButtonLink variant="secondary" href="/login">{message("webapp.security.sign_in")}</ButtonLink>
+      </TaskStateActions> : null}
     </section>
   );
 }
 
-function PasswordProofForm({ onSubmit, pending }: { onSubmit(password: string): Promise<void>; pending: boolean }) {
+function stepBody(step: "recovery" | "primary" | "strong" | "complete", task: ReauthenticationTask, duration: string): string {
+  switch (step) {
+    case "recovery": return message("webapp.security.recovery_required");
+    case "primary": return message(task === "connect-provider" ? "webapp.reauthenticate.lede.connect" : "webapp.reauthenticate.lede.security", { Duration: duration });
+    case "strong": return message("webapp.reauthenticate.lede.strong");
+    case "complete": return message("webapp.reauthenticate.complete.body", { Duration: duration });
+  }
+}
+
+function PasswordProofForm({ cancel, onSubmit, pending }: { cancel: ReactNode; onSubmit(password: string): Promise<void>; pending: boolean }) {
   const [password, setPassword] = useState("");
   const [missing, setMissing] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -153,7 +187,10 @@ function PasswordProofForm({ onSubmit, pending }: { onSubmit(password: string): 
       hidePasswordLabel={message("webapp.form.password_hide")} showPasswordLabel={message("webapp.form.password_show")}
       errorMessage={missing ? message("webapp.reauthenticate.password.required") : undefined}
       onChange={(event) => { setPassword(event.currentTarget.value); setMissing(false); }} />
-    <Button type="submit" isLoading={pending} loadingLabel={message("webapp.security.working")}>{message("webapp.reauthenticate.password.action")}</Button>
+    <TaskStateActions>
+      <Button type="submit" isLoading={pending} loadingLabel={message("webapp.security.working")}>{message("webapp.reauthenticate.password.action")}</Button>
+      {cancel}
+    </TaskStateActions>
   </form>;
 }
 

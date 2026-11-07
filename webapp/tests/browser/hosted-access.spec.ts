@@ -867,7 +867,7 @@ test("successful local login replaces the form with Session confirmation", async
   await expect(
     page.getByRole("heading", { level: 1, name: "You’re signed in" }),
   ).toBeVisible();
-  await expect(page.getByText("Session confirmed")).toBeVisible();
+  await expect(page.getByText("Sign-in confirmed")).toBeVisible();
   await expect(page.locator("body")).not.toContainText("Student");
 });
 
@@ -1741,13 +1741,23 @@ test("provider connection requires an explicit provider selection action", async
   );
   await page.goto("/account/connect-provider");
 
-  await expect(page).toHaveTitle("Connect a provider · Proctor");
-  await expect(page.getByText("University SSO", { exact: true })).toBeVisible();
-  await expect(page.getByText("OpenID Connect")).toHaveAttribute(
-    "translate",
-    "no",
+  await expect(page).toHaveTitle("Sign-in methods · Proctor");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Connect University SSO" }),
+  ).toBeVisible();
+  // One provider leaves nothing to choose: no radio group, one named action.
+  await expect(page.getByRole("radio")).toHaveCount(0);
+  await expect(page.getByRole("main").getByRole("button")).toHaveText([
+    "Continue to University SSO",
+  ]);
+  await expect(page.getByRole("link", { name: "Cancel" })).toHaveAttribute(
+    "href",
+    "/account/security",
   );
-  await page.getByRole("button", { name: "Connect University SSO" }).click();
+  await expect(page.getByRole("contentinfo")).toContainText(
+    `Signed in as ${defaultDesktopAuthorization.account.display_name}`,
+  );
+  await page.getByRole("button", { name: "Continue to University SSO" }).click();
 
   await expect(page).toHaveURL(`${canonicalOrigin}/authorization/complete`);
   await expect(
@@ -1780,6 +1790,64 @@ for (const pageCase of [
   });
 }
 
+test("several providers keep an explicit chooser with one action and adjacent errors", async ({
+  page,
+}) => {
+  await mockCurrentUser(page);
+  await page.route("**/api/v1/auth/providers", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: [
+          ...defaultDiscovery.providers,
+          { id: "campus-cas", display_name: "Campus CAS", type: "cas" },
+        ],
+      }),
+    });
+  });
+  const attempts: string[] = [];
+  await page.route(
+    "**/api/v1/authentication-methods/providers/*/connect",
+    async (route) => {
+      attempts.push(new URL(route.request().url()).pathname);
+      await route.fulfill({
+        status: 403,
+        contentType: "application/problem+json",
+        body: JSON.stringify({
+          type: "about:blank",
+          title: "Private server detail",
+          status: 403,
+          code: "authentication.strong_required",
+        }),
+      });
+    },
+  );
+  await page.goto("/account/connect-provider");
+
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Add a sign-in method" }),
+  ).toBeVisible();
+  await expect(page.getByRole("radio")).toHaveCount(2);
+  await expect(page.getByText("OpenID Connect")).toHaveAttribute(
+    "translate",
+    "no",
+  );
+  await page.getByRole("radio", { name: /Campus CAS/ }).check();
+  await page.getByRole("button", { name: "Continue to Campus CAS" }).click();
+  await expect(
+    page.getByText("This needs a recent sign-in. Confirm it’s you, then try again."),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Confirm it’s you" }),
+  ).toHaveAttribute("href", "/account/reauthenticate?task=connect-provider");
+  // The reauthentication follow-up is a link beside the error, not a second primary action.
+  await expect(page.getByRole("main").getByRole("button")).toHaveCount(1);
+  await expect(page.getByText("Private server detail")).toHaveCount(0);
+  expect(attempts).toEqual([
+    "/api/v1/authentication-methods/providers/campus-cas/connect",
+  ]);
+});
+
 test("provider connection presents a signed-out state without shifting into a chooser", async ({
   page,
 }) => {
@@ -1800,7 +1868,7 @@ test("provider connection presents a signed-out state without shifting into a ch
   await expect(
     page.getByRole("heading", {
       level: 1,
-      name: "Sign in to connect a provider",
+      name: "Sign in to add a sign-in method",
     }),
   ).toBeVisible();
   await expect(page.getByRole("link", { name: "Sign in" })).toHaveAttribute(
@@ -1839,7 +1907,7 @@ test("provider retry announces and focuses the resulting task", async ({
 
   const unavailableHeading = page.getByRole("heading", {
     level: 1,
-    name: "Provider connection is unavailable",
+    name: "We couldn’t load sign-in methods",
   });
   await expect(unavailableHeading).toBeVisible();
   await expect(unavailableHeading).not.toBeFocused();
@@ -1848,11 +1916,11 @@ test("provider retry announces and focuses the resulting task", async ({
   await expect(
     page.getByRole("heading", {
       level: 1,
-      name: "Add another sign-in method",
+      name: "Connect University SSO",
     }),
   ).toBeFocused();
   await expect(page.getByRole("status").first()).toContainText(
-    "Connect a provider",
+    "Connect University SSO",
   );
   expect(providerAttempt).toBe(2);
 });
@@ -1880,7 +1948,7 @@ for (const pageCase of [
   },
   {
     route: "/account/connect-provider",
-    heading: "Add another sign-in method",
+    heading: "Connect University SSO",
   },
 ] as const) {
   test(`${pageCase.route} follows dark mode and stays one-dimensional when narrow`, async ({

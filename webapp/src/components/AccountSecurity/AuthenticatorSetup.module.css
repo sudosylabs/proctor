@@ -2,13 +2,15 @@
 @layer components {
   .setup {
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
+    align-items: flex-start;
     min-inline-size: 0;
-    gap: var(--proctor-space-5);
+    gap: var(--proctor-space-5) var(--proctor-space-6);
   }
 
   .qr {
-    inline-size: 15rem;
+    flex: none;
+    inline-size: 12rem;
     max-inline-size: 100%;
     block-size: auto;
     border: var(--proctor-border-width-hairline) solid var(--proctor-color-border-default);
@@ -16,22 +18,37 @@
     forced-color-adjust: none;
   }
 
-  .manual summary {
-    inline-size: fit-content;
-    min-block-size: var(--proctor-control-size-default);
-    padding-block: var(--proctor-space-2);
-    color: var(--proctor-color-foreground-link);
-    cursor: pointer;
-    text-decoration: underline;
-    text-underline-offset: 0.2em;
+  .manual {
+    display: flex;
+    flex: 1 1 12rem;
+    flex-direction: column;
+    min-inline-size: 0;
+    gap: var(--proctor-space-2);
   }
 
-  .manualContent { padding-block-start: var(--proctor-space-3); }
-  .secret { font-family: var(--proctor-font-family-mono); }
-
-  .expiry {
+  .manualHelp {
     color: var(--proctor-color-foreground-muted);
     font-size: var(--proctor-font-size-body-small);
     line-height: var(--proctor-line-height-body-small);
+  }
+
+  .key code {
+    font-family: var(--proctor-font-family-mono);
+    font-size: var(--proctor-font-size-body);
+    letter-spacing: 0.08em;
+    overflow-wrap: anywhere;
+    user-select: all;
+  }
+
+  .visuallyHidden {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    padding: 0;
+    border: 0;
+    margin: -1px;
+    clip-path: inset(50%);
+    overflow: hidden;
+    white-space: nowrap;
   }
 }

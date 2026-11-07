@@ -1,6 +1,6 @@
 @layer components {
   .page,
-  .headingGroup {
+  .actionGroup {
     display: flex;
     min-inline-size: 0;
     flex-direction: column;
@@ -9,31 +9,10 @@
   .page {
     gap: var(--proctor-space-6);
     inline-size: 100%;
-    max-inline-size: 52rem;
   }
 
-  .taskState {
-    max-inline-size: 52rem;
-  }
-
-  .headingGroup {
-    gap: var(--proctor-space-3);
-  }
-
-  .headingGroup h2 {
-    font-family: var(--proctor-font-family-display);
-    font-size: var(--proctor-font-size-heading-large);
-    font-weight: var(--proctor-font-weight-semibold);
-    line-height: var(--proctor-line-height-heading-large);
-    letter-spacing: var(--proctor-letter-spacing-heading);
-    text-wrap: balance;
-  }
-
-  .headingGroup p {
-    max-inline-size: 58ch;
-    color: var(--proctor-color-foreground-muted);
-    font-size: var(--proctor-font-size-body-large);
-    line-height: var(--proctor-line-height-body-large);
+  .actionGroup {
+    gap: var(--proctor-space-4);
   }
 
   .providerList {
@@ -92,19 +71,11 @@
     line-height: var(--proctor-line-height-body-small);
   }
 
-  .connectButton {
-    inline-size: 100%;
-  }
-
-  .noticeGroup {
-    display: grid;
-    gap: var(--proctor-space-2);
-  }
-
   .returnLink {
     display: inline-flex;
     min-block-size: var(--proctor-control-size-default);
     align-items: center;
+    justify-content: center;
     align-self: flex-start;
     font-weight: var(--proctor-font-weight-semibold);
   }

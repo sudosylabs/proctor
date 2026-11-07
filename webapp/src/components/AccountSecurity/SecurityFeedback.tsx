@@ -2,6 +2,7 @@ import type { SecurityFailure } from "../../features/account-security/AccountSec
 import { message } from "../../i18n/messages";
 import { ButtonLink } from "../Button/Button";
 import { FormFeedback } from "../FormFeedback/FormFeedback";
+import styles from "./AccountSecurity.module.css";
 
 export function securityFailureMessage(failure: SecurityFailure): string {
   switch (failure.kind) {
@@ -24,12 +25,12 @@ export function SecurityFeedback({ failure, task = "security" }: {
     <>
       <FormFeedback message={failure === undefined ? undefined : securityFailureMessage(failure)} />
       {failure?.kind === "primary_required" || failure?.kind === "strong_required" ? (
-        <ButtonLink href={`/account/reauthenticate?task=${task}`}>
+        <ButtonLink className={styles.followUp} variant="secondary" href={`/account/reauthenticate?task=${task}`}>
           {message("webapp.reauthenticate.action")}
         </ButtonLink>
       ) : null}
       {failure?.kind === "no_session" ? (
-        <ButtonLink href="/login">{message("webapp.security.sign_in")}</ButtonLink>
+        <ButtonLink className={styles.followUp} variant="secondary" href="/login">{message("webapp.security.sign_in")}</ButtonLink>
       ) : null}
     </>
   );

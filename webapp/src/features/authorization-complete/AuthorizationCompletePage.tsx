@@ -5,7 +5,7 @@ import { readProblemValue } from "../../api/problem";
 import { useAsyncResource } from "../../app/AsyncResource";
 import { AccessPageShell } from "../../components/AccessPageShell/AccessPageShell";
 import { Button, ButtonLink } from "../../components/Button/Button";
-import { Loading } from "../../components/Loading/Loading";
+import { TaskState, TaskStateActions } from "../../components/TaskState/TaskState";
 import { message } from "../../i18n/messages";
 import { requestSecurityContext } from "../account-security/AccountSecurityApi";
 import styles from "./AuthorizationCompletePage.module.css";
@@ -56,14 +56,12 @@ export function AuthorizationCompletePage() {
     message("webapp.authorization_complete.checking.body"),
   );
   const retryRequested = useRef(false);
-  const unavailableRef = useRef<HTMLDivElement>(null);
+  const [focusUnavailable, setFocusUnavailable] = useState(false);
 
   useEffect(() => {
     if (!confirmation.loading && confirmation.hasResolved) {
       setLiveMessage(stateBody(confirmation.value));
-      if (retryRequested.current && confirmation.value === "unavailable") {
-        requestAnimationFrame(() => unavailableRef.current?.focus());
-      }
+      setFocusUnavailable(retryRequested.current && confirmation.value === "unavailable");
       retryRequested.current = false;
     }
   }, [confirmation.hasResolved, confirmation.loading, confirmation.value]);
@@ -73,107 +71,105 @@ export function AuthorizationCompletePage() {
       return;
     }
     retryRequested.current = true;
+    setFocusUnavailable(false);
     setLiveMessage(message("webapp.authorization_complete.checking.body"));
     confirmation.retry();
   }
 
+  const content = statusContent(state);
   return (
     <AccessPageShell skipLabel={message("webapp.authorization_complete.skip_to_main")}>
-      <div className={styles.page}>
-        <div className={styles.visuallyHidden} aria-live="polite" aria-atomic="true">
-          {liveMessage}
-        </div>
-        <StatusContent
-          state={state}
-          retrying={retrying}
-          unavailableRef={unavailableRef}
-          onRetry={retry}
-        />
+      <div className={styles.visuallyHidden} aria-live="polite" aria-atomic="true">
+        {liveMessage}
       </div>
+      <TaskState
+        key={state}
+        busy={state === "checking"}
+        label={content.label}
+        labelTone={content.tone}
+        heading={content.heading}
+        headingID="authorization-complete-heading"
+        focusHeading={focusUnavailable}
+        body={content.body}
+      >
+        <StatusActions state={state} retrying={retrying} onRetry={retry} />
+      </TaskState>
     </AccessPageShell>
   );
 }
 
 function stateBody(state: ConfirmationState): string {
-  switch (state) {
-    case "recovery_required":
-      return message("webapp.security.recovery_required");
-    case "checking":
-      return message("webapp.authorization_complete.checking.body");
-    case "signed_in":
-      return message("webapp.authorization_complete.signed_in.body");
-    case "no_session":
-      return message("webapp.authorization_complete.no_session.body");
-    case "unavailable":
-      return message("webapp.authorization_complete.unavailable.body");
-  }
+  return statusContent(state).body;
 }
 
-function StatusContent({
+function StatusActions({
   onRetry,
   retrying,
   state,
-  unavailableRef,
 }: {
   onRetry(): void;
   retrying: boolean;
   state: ConfirmationState;
-  unavailableRef: React.RefObject<HTMLDivElement | null>;
 }) {
-  const content = statusContent(state);
-  return (
-    <div
-      className={`${styles.status} ${styles[state === "recovery_required" ? "unavailable" : state]}`}
-      ref={state === "unavailable" ? unavailableRef : undefined}
-      tabIndex={state === "unavailable" ? -1 : undefined}
-    >
-      <div className={styles.rail} aria-hidden="true">
-        <span />
-      </div>
-      <div className={styles.content}>
-        <p className={styles.label}>{content.label}</p>
-        <h1 className={state === "checking" ? styles.visuallyHidden : undefined}>{content.heading}</h1>
-        {state === "checking" ? (
-          <Loading className={styles.loading} label={content.body} showLabel size="large" announce={false} />
-        ) : <p className={styles.body}>{content.body}</p>}
-        {state === "signed_in" || state === "recovery_required" ? (
-          <div className={styles.actions}><ButtonLink href="/account/security">
-            {message(state === "recovery_required" ? "webapp.security.restore_access" : "webapp.security.heading")}
-          </ButtonLink></div>
-        ) : null}
-        {state === "no_session" ? (
-          <div className={styles.actions}>
-            <ButtonLink href="/login">
-              {message("webapp.authorization_complete.sign_in")}
-            </ButtonLink>
-          </div>
-        ) : null}
-        {state === "unavailable" ? (
-          <div className={styles.actions}>
-            <Button
-              isLoading={retrying}
-              loadingLabel={message(
-                "webapp.authorization_complete.checking.label",
-              )}
-              onClick={onRetry}
-            >
-              {message("webapp.authorization_complete.unavailable.retry")}
-            </Button>
-            <ButtonLink href="/login" variant="secondary">
-              {message("webapp.authorization_complete.sign_in")}
-            </ButtonLink>
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
+  switch (state) {
+    case "checking":
+      return null;
+    case "signed_in":
+      return (
+        <TaskStateActions>
+          <ButtonLink href="/account/security">
+            {message("webapp.authorization_complete.security")}
+          </ButtonLink>
+          <ButtonLink href="/account/connect-provider" variant="secondary">
+            {message("webapp.authorization_complete.connect")}
+          </ButtonLink>
+        </TaskStateActions>
+      );
+    case "recovery_required":
+      return (
+        <TaskStateActions>
+          <ButtonLink href="/account/security">
+            {message("webapp.security.restore_access")}
+          </ButtonLink>
+        </TaskStateActions>
+      );
+    case "no_session":
+      return (
+        <TaskStateActions>
+          <ButtonLink href="/login">
+            {message("webapp.authorization_complete.sign_in")}
+          </ButtonLink>
+        </TaskStateActions>
+      );
+    case "unavailable":
+      return (
+        <TaskStateActions>
+          <Button
+            isLoading={retrying}
+            loadingLabel={message("webapp.authorization_complete.checking.heading")}
+            onClick={onRetry}
+          >
+            {message("webapp.authorization_complete.unavailable.retry")}
+          </Button>
+          <ButtonLink href="/login" variant="secondary">
+            {message("webapp.authorization_complete.sign_in")}
+          </ButtonLink>
+        </TaskStateActions>
+      );
+  }
 }
 
-function statusContent(state: ConfirmationState) {
+function statusContent(state: ConfirmationState): {
+  label: string;
+  tone?: "success" | "warning";
+  heading: string;
+  body: string;
+} {
   switch (state) {
     case "recovery_required":
       return {
         label: message("webapp.security.eyebrow"),
+        tone: "warning",
         heading: message("webapp.security.restore_access"),
         body: message("webapp.security.recovery_required"),
       };
@@ -186,6 +182,7 @@ function statusContent(state: ConfirmationState) {
     case "signed_in":
       return {
         label: message("webapp.authorization_complete.signed_in.label"),
+        tone: "success",
         heading: message("webapp.authorization_complete.signed_in.heading"),
         body: message("webapp.authorization_complete.signed_in.body"),
       };

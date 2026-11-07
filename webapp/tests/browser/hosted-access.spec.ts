@@ -743,7 +743,9 @@ test("Session confirmation distinguishes 401 from a retryable failure", async ({
 });
 
 test("password recovery keeps its accepted response generic", async ({ page }) => {
+  let requests = 0;
   await page.route("**/api/v1/auth/password-reset/request", async (route) => {
+    requests += 1;
     expect(await route.request().postDataJSON()).toEqual({
       email: "student.one@example.edu",
     });
@@ -755,10 +757,13 @@ test("password recovery keeps its accepted response generic", async ({ page }) =
   await expect(
     page.getByRole("heading", { level: 1, name: "Reset your password" }),
   ).toBeVisible();
+  await expect(page.getByRole("heading")).toHaveCount(1);
   await expect(
-    page.getByRole("heading", { level: 2, name: "Request reset link" }),
+    page.getByText(
+      "Enter the email on your Proctor account and we’ll send a reset link. It works for 1 hour.",
+    ),
   ).toBeVisible();
-  await page.getByLabel("Email address").fill("student.one@example.edu");
+  await page.getByLabel("Email").fill("student.one@example.edu");
   await page.getByRole("button", { name: "Send reset link" }).click();
 
   await expect(
@@ -766,9 +771,27 @@ test("password recovery keeps its accepted response generic", async ({ page }) =
   ).toBeFocused();
   await expect(page.getByRole("status")).toContainText("Check your email");
   await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
-  await expect(page.getByText("Request accepted")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Return to sign in" })).toBeVisible();
-  await expect(page.locator("body")).not.toContainText("student.one@example.edu");
+  await expect(page.getByText("Reset password", { exact: true })).toHaveCSS(
+    "color",
+    "rgb(11, 118, 110)",
+  );
+  // The typed address is echoed from page memory inside the same generic
+  // sentence for every address; it never claims that an account exists.
+  await expect(page.locator("main")).toContainText(
+    "If an account uses student.one@example.edu, a reset link is on its way. It works once, for 1 hour.",
+  );
+  await expect(page.getByRole("status")).not.toContainText("student.one@example.edu");
+  await expect(page).toHaveURL(`${canonicalOrigin}/account/forgot-password`);
+  await expect(page.getByRole("link", { name: "Back to sign in" })).toHaveAttribute(
+    "href",
+    "/login",
+  );
+
+  await page.getByRole("button", { name: "send it again" }).click();
+  const email = page.getByLabel("Email");
+  await expect(email).toBeFocused();
+  await expect(email).toHaveValue("student.one@example.edu");
+  expect(requests).toBe(1);
 });
 
 test("password reset consumes only the sanitized fragment credential", async ({
@@ -784,14 +807,30 @@ test("password reset consumes only the sanitized fragment credential", async ({
   await page.goto("/account/reset-password#token=private-reset-token");
 
   await expect(page).toHaveURL(`${canonicalOrigin}/account/reset-password`);
-  await expect(page).toHaveTitle("Set a new password · Proctor");
+  await expect(page).toHaveTitle("Choose a new password · Proctor");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Choose a new password" }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading")).toHaveCount(1);
+  await expect(page.locator("#new-password")).toHaveAccessibleDescription(
+    "At least 12 characters. You can’t reuse a recent password.",
+  );
+  await expect(page.locator("#confirm-new-password")).not.toHaveAttribute(
+    "aria-describedby",
+    /.+/,
+  );
+  await expect(page.locator("main")).not.toContainText("single-use link");
   await page.locator("#new-password").fill("new-private-password");
   await page.locator("#confirm-new-password").fill("new-private-password");
-  await page.getByRole("button", { name: "Set new password" }).click();
+  await page.getByRole("button", { name: "Save password" }).click();
 
   await expect(
     page.getByRole("heading", { name: "Your password was changed" }),
   ).toBeFocused();
+  await expect(page.getByRole("link", { name: "Sign in", exact: true })).toHaveAttribute(
+    "href",
+    "/login",
+  );
   await expect(page.getByRole("status")).toContainText(
     "Your password was changed",
   );
@@ -818,15 +857,27 @@ test("password reset announces an unusable link returned after submission", asyn
   await page.locator("#new-password").fill("new-private-password");
   await page.locator("#confirm-new-password").fill("new-private-password");
 
-  await page.getByRole("button", { name: "Set new password" }).click();
+  await page.getByRole("button", { name: "Save password" }).click();
 
   const heading = page.getByRole("heading", {
     level: 1,
-    name: "This reset link can’t be used",
+    name: "This reset link has expired",
   });
   await expect(heading).toBeFocused();
   await expect(page.getByRole("status")).toContainText(
-    "This reset link can’t be used",
+    "This reset link has expired",
+  );
+  await expect(page.getByText("Reset password", { exact: true })).toHaveCSS(
+    "color",
+    "rgb(180, 35, 60)",
+  );
+  await expect(page.getByRole("link", { name: "Send a new link" })).toHaveAttribute(
+    "href",
+    "/account/forgot-password",
+  );
+  await expect(page.getByRole("link", { name: "Back to sign in" })).toHaveAttribute(
+    "href",
+    "/login",
   );
   await expect(page.locator("body")).not.toContainText("private-reset-token");
   await expect(page.locator("body")).not.toContainText("new-private-password");
@@ -1531,12 +1582,14 @@ test("provider connection requires an explicit provider selection action", async
 for (const pageCase of [
   {
     route: "/account/reset-password",
-    heading: "This reset link can’t be used",
+    heading: "This reset link has expired",
+    signIn: "Back to sign in",
   },
   { route: "/join", heading: "This invitation link doesn’t work", signIn: "Sign in" },
   {
     route: "/authorize/desktop",
     heading: "This sign-in link doesn’t work",
+    signIn: "Return to sign in",
   },
 ] as const) {
   test(`${pageCase.route} rejects a missing one-time credential`, async ({
@@ -1547,11 +1600,7 @@ for (const pageCase of [
     await expect(
       page.getByRole("heading", { level: 1, name: pageCase.heading }),
     ).toBeVisible();
-    await expect(
-      page.getByRole("link", {
-        name: "signIn" in pageCase ? pageCase.signIn : "Return to sign in",
-      }),
-    ).toBeVisible();
+    await expect(page.getByRole("link", { name: pageCase.signIn })).toBeVisible();
   });
 }
 
@@ -1633,10 +1682,15 @@ test("provider retry announces and focuses the resulting task", async ({
 });
 
 for (const pageCase of [
-  { route: "/account/forgot-password", heading: "Reset your password" },
+  {
+    route: "/account/forgot-password",
+    heading: "Reset your password",
+    notice: false,
+  },
   {
     route: "/account/reset-password#token=private-reset-token",
     heading: "Choose a new password",
+    notice: false,
   },
   {
     route: "/join#token=private-invitation-claim",
@@ -1687,11 +1741,17 @@ for (const pageCase of [
     ).toBeVisible();
     await expect(page.locator("aside")).toHaveCount(0);
     await expect(page.locator("main ol")).toHaveCount(0);
-    await expect(
-      page
-        .locator("evidence" in pageCase ? pageCase.evidence : "[data-proctor-notice]")
-        .first(),
-    ).toBeVisible();
+    if ("notice" in pageCase && !pageCase.notice) {
+      // Password recovery states its evidence in the lede and field hint.
+      await expect(page.locator("[data-proctor-notice]")).toHaveCount(0);
+      await expect(page.locator("main input").first()).toBeVisible();
+    } else {
+      await expect(
+        page
+          .locator("evidence" in pageCase ? pageCase.evidence : "[data-proctor-notice]")
+          .first(),
+      ).toBeVisible();
+    }
     await expect(page.locator("[data-proctor-evidence-note]")).toHaveCount(0);
 
     const theme = await page.evaluate(() => ({

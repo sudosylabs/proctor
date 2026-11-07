@@ -20,36 +20,45 @@ test("email verification requires deliberate token consumption", async ({
   );
 
   await expect(page).toHaveURL(`${canonicalOrigin}/account/verify-email`);
-  await expect(page).toHaveTitle("Verify email · Proctor");
+  await expect(page).toHaveTitle("Confirm email · Proctor");
   await expect(
-    page.getByRole("heading", { level: 1, name: "Confirm your email" }),
+    page.getByRole("heading", { level: 1, name: "Confirm your email address" }),
   ).toBeVisible();
   expect(requests).toBe(0);
   await expect(page.locator("body")).not.toContainText(verificationToken);
-  await expect(page.getByText("This link can only be used once.")).toBeVisible();
   await expect(
-    page.locator('[data-proctor-notice-tone="accent"]'),
+    page.getByText(
+      "Confirm the address this link was sent to. The link works once, for 24 hours.",
+    ),
   ).toBeVisible();
+  await expect(page.getByText("Confirm email", { exact: true })).toHaveCSS(
+    "color",
+    "rgb(101, 95, 105)",
+  );
+  await expect(page.locator("[data-proctor-notice]")).toHaveCount(0);
   await expect(
-    page.getByRole("link", { name: "Return to sign in", exact: true }),
+    page.getByRole("link", { name: "Back to sign in", exact: true }),
   ).toHaveAttribute("href", "/login");
 
-  await page.getByRole("button", { name: "Verify email" }).click();
+  await page.getByRole("button", { name: "Confirm email address" }).click();
 
   const verifiedHeading = page.getByRole("heading", {
     level: 1,
-    name: "Your email is verified",
+    name: "Your email is confirmed",
   });
   await expect(verifiedHeading).toBeVisible();
   await expect(verifiedHeading).toBeFocused();
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
-  await expect(page.getByText("You can continue to sign in.")).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("Your email is confirmed");
+  await expect(page.getByText("You can now sign in to Proctor.")).toBeVisible();
+  await expect(page.getByText("Confirm email", { exact: true })).toHaveCSS(
+    "color",
+    "rgb(11, 118, 110)",
+  );
   await expect(
-    page.locator('[data-proctor-notice-tone="success"]'),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: "Return to sign in", exact: true }),
+    page.getByRole("link", { name: "Sign in", exact: true }),
   ).toHaveAttribute("href", "/login");
+  await expect(page.getByRole("button")).toHaveCount(0);
   expect(requests).toBe(1);
   await expect(page.locator("body")).not.toContainText(verificationToken);
 
@@ -57,7 +66,7 @@ test("email verification requires deliberate token consumption", async ({
   await expect(
     page.getByRole("heading", {
       level: 1,
-      name: "This verification link can’t be used",
+      name: "This confirmation link can’t be used",
     }),
   ).toBeVisible();
   expect(requests).toBe(1);
@@ -81,16 +90,20 @@ test("missing and malformed fragment credentials make no request", async ({
     await expect(
       page.getByRole("heading", {
         level: 1,
-        name: "This verification link can’t be used",
+        name: "This confirmation link can’t be used",
       }),
     ).toBeVisible();
-    await expect(page.getByRole("button", { name: "Verify email" })).toHaveCount(
-      0,
-    );
-    await expect(page.locator("body")).not.toContainText("secret");
     await expect(
-      page.locator('[data-proctor-notice-tone="danger"]'),
-    ).toBeVisible();
+      page.getByRole("button", { name: "Confirm email address" }),
+    ).toHaveCount(0);
+    await expect(page.locator("body")).not.toContainText("secret");
+    await expect(page.getByText("Confirm email", { exact: true })).toHaveCSS(
+      "color",
+      "rgb(180, 35, 60)",
+    );
+    await expect(
+      page.getByRole("link", { name: "Sign in", exact: true }),
+    ).toHaveAttribute("href", "/login");
   }
   expect(requests).toBe(0);
 });
@@ -113,17 +126,17 @@ test("terminal token failures remain deliberately indistinguishable", async ({
   });
 
   await page.goto(`/account/verify-email#token=${verificationToken}`);
-  await page.getByRole("button", { name: "Verify email" }).click();
+  await page.getByRole("button", { name: "Confirm email address" }).click();
 
   const invalidHeading = page.getByRole("heading", {
     level: 1,
-    name: "This verification link can’t be used",
+    name: "This confirmation link can’t be used",
   });
   await expect(invalidHeading).toBeFocused();
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
   await expect(
     page.getByText(
-      "It may have expired or already been used. Sign in to request another verification message.",
+      "Confirmation links work once, for 24 hours. Sign in to request a new one.",
     ),
   ).toBeVisible();
   await expect(page.locator("body")).not.toContainText("Private server");
@@ -161,26 +174,32 @@ test("a retryable failure retains one in-memory token without duplicate submissi
   });
 
   await page.goto(`/account/verify-email#token=${verificationToken}`);
-  const verifyButton = page.getByRole("button", { name: "Verify email" });
+  const verifyButton = page.getByRole("button", { name: "Confirm email address" });
   await verifyButton.click();
-  await expect(page.getByRole("button", { name: "Verifying…" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Confirming…" })).toBeDisabled();
+  await expect(page.getByRole("status")).toHaveText(
+    "Confirming your email address…",
+  );
   expect(requests).toBe(1);
   releaseFirstRequest?.();
 
   const unavailableHeading = page.getByRole("heading", {
     level: 1,
-    name: "We couldn’t verify your email",
+    name: "We couldn’t confirm your email",
   });
   await expect(unavailableHeading).toBeFocused();
   await expect(
-    page.getByText("Try the link again, or sign in if it has already been used."),
+    page.getByText(
+      "Proctor couldn’t finish the check. Try again, or sign in if your email is already confirmed.",
+    ),
   ).toBeVisible();
-  await expect(
-    page.locator('[data-proctor-notice-tone="warning"]'),
-  ).toBeVisible();
+  await expect(page.getByText("Confirm email", { exact: true })).toHaveCSS(
+    "color",
+    "rgb(149, 82, 13)",
+  );
   await page.getByRole("button", { name: "Try again" }).click();
   await expect(
-    page.getByRole("heading", { level: 1, name: "Your email is verified" }),
+    page.getByRole("heading", { level: 1, name: "Your email is confirmed" }),
   ).toBeFocused();
   expect(requests).toBe(2);
 });
@@ -194,7 +213,7 @@ for (const colorScheme of ["light", "dark"] as const) {
     await page.goto(`/account/verify-email#token=${verificationToken}`);
 
     await expect(
-      page.getByRole("heading", { level: 1, name: "Confirm your email" }),
+      page.getByRole("heading", { level: 1, name: "Confirm your email address" }),
     ).toBeVisible();
     const theme = await page.evaluate(() => ({
       canvas: getComputedStyle(document.documentElement).backgroundColor,

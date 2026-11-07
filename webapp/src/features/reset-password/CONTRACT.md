@@ -12,15 +12,18 @@ fields and explains that existing Sessions were revoked. Expired, consumed,
 superseded, malformed, and concurrent-loser credentials share one bounded
 unusable-link state.
 
-Password-policy rejection remains adjacent to the new-password field. General
-failure reserves stable `FormFeedback` space and permits retry while the token
-may still be usable. The one-column task introduction explains the single-use
-recovery context without a progress indicator or additional server state.
-Pre-action and terminal explanatory evidence uses the shared `Notice`
-treatment.
+The password rules are the new-password field's description, and
+password-policy rejection remains adjacent to that field; the confirmation
+field carries no rules. General failure reserves stable `FormFeedback` space
+and permits retry while the token may still be usable. The task introduction
+states only that other devices will be signed out, without a progress
+indicator or additional server state.
 
 Completion and server-reported unusable-link replacements use the shared
-`TaskState` hierarchy and persistent polite announcement. A replacement caused
+`TaskState` hierarchy, a teal or coral kind line, and the persistent polite
+announcement. Completion offers `Sign in`; the unusable-link state states the
+1-hour single-use lifetime (the server default) and offers `Send a new link`
+to `/account/forgot-password` plus a quiet return to sign in. A replacement caused
 by submission focuses its heading because it removes the invoking form. A link
 that is already missing during initial render presents the same bounded state
 without taking focus.

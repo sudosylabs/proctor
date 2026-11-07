@@ -14,12 +14,15 @@ limiting, and Problem Details.
 The page lets the holder of the previous mailbox deliberately reverse one
 email change. A successful undo restores the previous address (verified,
 because the link proves control of it), signs every Session of the account
-out, and records an audit event. The page never selects a User or address,
-creates a Session, or reveals which address is restored.
+out, and records an audit event. The page never selects a User or address
+or creates a Session. The undo API returns no change facts, so the page does
+not show the address being restored, the masked new address, or when the
+change was made; a `FactList` after the ready lede is reserved for them once
+an API slice returns them, and the page never invents them.
 
 The token is not consumed automatically: mail scanners and link previews must
-not spend it. The person must activate the explicit `Restore previous email`
-button, which sends exactly one same-origin
+not spend it. The person must activate the explicit `Undo change` button,
+which uses the destructive `danger` button style, which sends exactly one same-origin
 `POST /api/v1/auth/email-change/undo` request containing only
 `{ "token": "<captured token>" }`.
 
@@ -37,21 +40,26 @@ page drops its reference after a restored, invalid, or conflict outcome.
 
 | State | Entry | Available action |
 | --- | --- | --- |
-| Ready | One token was captured | `Restore previous email` button and `Sign in` link |
-| Restoring | The request is pending | Disabled pending button; no duplicate request |
-| Restored | The API returns exactly `204` | `Sign in` link |
-| Link unavailable | No token, `request.invalid`, or `authentication.account_token.invalid` | `Sign in` link |
-| Address in use | `authentication.email_change_undo.conflict` | `Sign in` link; contact the institution |
-| Undo unavailable | `authentication.rate_limited`, network failure, or any other failure | `Try again` button and `Sign in` link |
+| Ready | One token was captured | `Undo change` danger button and `Keep the new address` secondary link to `/login` |
+| Pending | The request is pending | The current state with its button disabled and pending; no duplicate request |
+| Restored | The API returns exactly `204` | Primary `Sign in` link and a note on what to do if the change was not theirs |
+| Link unavailable | No token, `request.invalid`, or `authentication.account_token.invalid` | Quiet `Back to sign in` link; contact the institution |
+| Address in use | `authentication.email_change_undo.conflict` | Quiet `Back to sign in` link; contact the institution |
+| Undo unavailable | `authentication.rate_limited`, network failure, or any other failure | `Try again` danger button and quiet `Back to sign in` link |
 
 The link-unavailable state does not distinguish malformed, expired, already
-used, or superseded tokens. Focus moves to the new heading after a
-user-triggered outcome, and one polite live region announces it. All copy uses
+used, or superseded tokens; it states the single-use, 72-hour window (the
+server default). The page uses the shared hosted shell column and `TaskState`
+hierarchy with the `Security` kind line: coral while the unrecognised change
+is pending and for unusable or conflicting links, teal once restored, and
+amber when the undo is unavailable. Focus moves to the new heading after a
+user-triggered outcome, and one persistent polite live region announces it. All copy uses
 `webapp.undo_email_change.*` messages in `server/i18n`.
 
 ## Acceptance
 
 Tests cover the exact request body, the `204`-only success, every mapped
 Problem code, safe failure on transport errors, fragment removal before render,
-and the hosted route descriptor; the page reuses the verify-email status
-layout, so its theme, zoom, motion, and viewport behavior follow that page.
+and the hosted route descriptor; the page shares the verify-email page's
+shell and `TaskState` composition, so its theme, zoom, motion, and viewport
+behavior follow that page.

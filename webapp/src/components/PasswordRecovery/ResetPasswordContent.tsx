@@ -3,10 +3,9 @@ import { type FormEvent, useRef, useState } from "react";
 import type { PasswordResetCompletionResult } from "../../features/reset-password/ResetPasswordApi";
 import { message } from "../../i18n/messages";
 import { AccessTaskIntro } from "../AccessTaskIntro/AccessTaskIntro";
-import { Button } from "../Button/Button";
+import { Button, ButtonLink } from "../Button/Button";
 import { FormFeedback } from "../FormFeedback/FormFeedback";
 import { PasswordField } from "../InputField/PasswordField";
-import { Notice } from "../Notice/Notice";
 import {
   TaskState,
   TaskStateActions,
@@ -103,8 +102,9 @@ export function ResetPasswordContent({
   }
 
   if (state !== "ready") {
+    const complete = state === "complete";
     const heading = message(
-      state === "complete"
+      complete
         ? "webapp.reset_password.complete.heading"
         : "webapp.reset_password.invalid.heading",
     );
@@ -113,34 +113,31 @@ export function ResetPasswordContent({
         <TaskStateAnnouncement message={transitioned ? heading : ""} />
         <TaskState
           body={message(
-            state === "complete"
+            complete
               ? "webapp.reset_password.complete.body"
               : "webapp.reset_password.invalid.body",
           )}
-          className={styles.taskState}
           focusHeading={transitioned}
           heading={heading}
           headingID="reset-heading"
-          label={message(
-            state === "complete"
-              ? "webapp.reset_password.complete.label"
-              : "webapp.reset_password.invalid.label",
-          )}
+          label={message("webapp.reset_password.kind")}
+          labelTone={complete ? "success" : "danger"}
         >
-          <Notice
-            role="note"
-            tone={state === "complete" ? "information" : "warning"}
-          >
-            {message(
-              state === "complete"
-                ? "webapp.reset_password.complete.note"
-                : "webapp.reset_password.invalid.note",
+          <TaskStateActions className={styles.afterBody}>
+            {complete ? (
+              <ButtonLink href="/login">
+                {message("webapp.reset_password.complete.action")}
+              </ButtonLink>
+            ) : (
+              <>
+                <ButtonLink href="/account/forgot-password">
+                  {message("webapp.reset_password.invalid.action")}
+                </ButtonLink>
+                <a className={styles.quietLink} href="/login">
+                  {message("webapp.reset_password.sign_in")}
+                </a>
+              </>
             )}
-          </Notice>
-          <TaskStateActions>
-            <a className={styles.signInLink} href="/login">
-              {message("webapp.reset_password.sign_in")}
-            </a>
           </TaskStateActions>
         </TaskState>
       </>
@@ -152,15 +149,11 @@ export function ResetPasswordContent({
       <TaskStateAnnouncement message="" />
       <section className={styles.page} aria-labelledby="reset-heading">
         <AccessTaskIntro
-          kind={message("webapp.reset_password.context.eyebrow")}
+          kind={message("webapp.reset_password.kind")}
           heading={message("webapp.reset_password.context.heading")}
           body={message("webapp.reset_password.context.body")}
           headingID="reset-heading"
         />
-        <header className={styles.headingGroup}>
-          <h2>{message("webapp.reset_password.heading")}</h2>
-          <p>{message("webapp.reset_password.lede")}</p>
-        </header>
         <form
           className={styles.form}
           onSubmit={submit}
@@ -172,6 +165,7 @@ export function ResetPasswordContent({
             id="new-password"
             name="new_password"
             label={message("webapp.reset_password.form.password")}
+            description={message("webapp.reset_password.form.password_help")}
             autoComplete="new-password"
             value={password}
             errorMessage={passwordError}
@@ -190,7 +184,6 @@ export function ResetPasswordContent({
             id="confirm-new-password"
             name="confirm_new_password"
             label={message("webapp.reset_password.form.confirmation")}
-            description={message("webapp.reset_password.form.password_help")}
             autoComplete="new-password"
             value={confirmation}
             errorMessage={confirmationError}
@@ -204,9 +197,6 @@ export function ResetPasswordContent({
               setFormError(undefined);
             }}
           />
-          <Notice role="note">
-            {message("webapp.reset_password.form.session_note")}
-          </Notice>
           <div className={styles.actionRow}>
             <Button
               type="submit"
@@ -215,9 +205,6 @@ export function ResetPasswordContent({
             >
               {message("webapp.reset_password.form.submit")}
             </Button>
-            <a className={styles.signInLink} href="/login">
-              {message("webapp.reset_password.sign_in")}
-            </a>
           </div>
           <FormFeedback message={formError} />
         </form>

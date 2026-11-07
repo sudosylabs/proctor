@@ -1,8 +1,8 @@
 # Focused task-state contract
 
 `TaskState` is the terminal, loading, unavailable, and context-replacement
-skeleton proven by password recovery, Invitation acceptance, provider
-connection, and Desktop authorization. It owns one ordered purpose label,
+skeleton proven by password recovery, email verification, email-change undo,
+Invitation acceptance, provider connection, and Desktop authorization. It owns one ordered purpose label,
 display-scale `h1`, supporting body, and responsive action rhythm. Feature
 modules retain state, copy, evidence, maximum width, and available actions.
 
@@ -30,6 +30,8 @@ replacement removes the invoking control and orientation would otherwise be
 lost. Initial loading, background completion, and ordinary status updates do
 not focus headings. Validation continues to focus the first invalid control.
 
-This contract excludes the email-verification outcome marker and the Session-
-confirmation state rail. It also does not replace `Notice` stable evidence or
+A feature whose task moves through several states may key `TaskState` by
+state so that a completed action remounts the heading and `focusHeading`
+applies to the new outcome. This contract excludes the Session-confirmation
+state rail. It also does not replace `Notice` stable evidence or
 `FormFeedback` action-adjacent failures.

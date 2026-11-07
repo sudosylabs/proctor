@@ -1,0 +1,206 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/search:
+    get:
+      operationId: search
+      summary: Search Exams, Classes, and Users
+      tags:
+        - Search
+      description: >-
+        Finds Exams by Draft title, Classes by name or display name, and Users by directory fields, each as a literal case-insensitive substring of the trimmed q. Every type is authorized, audited, and scoped exactly as its own list: active Exams the caller may see in the Exam catalog, unarchived Classes within the caller's class.view scope, and enabled Users visible in the User directory. A requested type the caller may not list contributes no items; the request is denied only when the caller may list none of the requested types. Items are grouped by type in the order exam, class, user, each group in its own list order and holding at most limit items. Search answers one bounded page and never continues: next_cursor is always omitted and cursor is rejected. Email addresses are never returned, and the query text is kept out of logs and audit records.
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - request.invalid
+        - search.query.invalid
+        - exam.invalid
+        - exam.unavailable
+        - administration.unavailable
+        - resource.not_found
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search text of 2 to 100 characters after trimming, matched as a literal case-insensitive substring.
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 100
+        - name: types
+          in: query
+          required: false
+          style: form
+          explode: true
+          description: Repeated result type filter, such as types=exam&types=user. Omit it to search every type; a type may not repeat.
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 3
+            uniqueItems: true
+            items:
+              $ref: '#/components/schemas/SearchType'
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of items of each type.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 5
+        - name: cursor
+          in: query
+          required: false
+          description: Not accepted. Search answers one bounded page and never issues next_cursor, so any cursor is rejected with request.invalid.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 2048
+      responses:
+        "200":
+          $ref: '#/components/responses/SearchOK'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "500":
+          $ref: '#/components/responses/InternalError'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  responses:
+    SearchOK:
+      description: Matches of each requested type within the caller's list visibility.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SearchResponse'
+          example:
+            items:
+              - type: exam
+                id: ybndrfg8ejkmcpqxot1uwisza3
+                title: Algorithms midterm
+                academic_unit_id: ybndrfg8ejkmcpqxot1uwisza4
+              - type: class
+                id: ybndrfg8ejkmcpqxot1uwisza5
+                display_name: Algorithms, group A
+                programme_level_id: ybndrfg8ejkmcpqxot1uwisza6
+              - type: user
+                id: ybndrfg8ejkmcpqxot1uwisza7
+                display_name: Ada Example
+                username: ada.example
+  schemas:
+    SearchType:
+      type: string
+      enum:
+        - exam
+        - class
+        - user
+      description: Kind of search result.
+    SearchResponse:
+      description: At most limit matches of each requested type, grouped by type. Search never continues, so next_cursor is always omitted.
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchItem'
+        next_cursor:
+          $ref: '#/components/schemas/NextCursor'
+    SearchItem:
+      description: One search match, discriminated by type.
+      oneOf:
+        - $ref: '#/components/schemas/SearchExamItem'
+        - $ref: '#/components/schemas/SearchClassItem'
+        - $ref: '#/components/schemas/SearchUserItem'
+      discriminator:
+        propertyName: type
+        mapping:
+          exam: '#/components/schemas/SearchExamItem'
+          class: '#/components/schemas/SearchClassItem'
+          user: '#/components/schemas/SearchUserItem'
+    SearchExamItem:
+      description: An Exam the caller may see in the Exam catalog, titled by its current Draft.
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - title
+        - academic_unit_id
+      properties:
+        type:
+          type: string
+          const: exam
+        id:
+          $ref: '#/components/schemas/ID'
+        title:
+          type: string
+          description: Current Draft title.
+        academic_unit_id:
+          $ref: '#/components/schemas/ID'
+    SearchClassItem:
+      description: An unarchived Class within the caller's class.view scope.
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - display_name
+        - programme_level_id
+      properties:
+        type:
+          type: string
+          const: class
+        id:
+          $ref: '#/components/schemas/ID'
+        display_name:
+          type: string
+        programme_level_id:
+          $ref: '#/components/schemas/ID'
+    SearchUserItem:
+      description: A User visible in the caller's User directory. The email address is never included.
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - id
+        - display_name
+        - username
+      properties:
+        type:
+          type: string
+          const: user
+        id:
+          $ref: '#/components/schemas/ID'
+        display_name:
+          type: string
+        username:
+          type: string

@@ -119,6 +119,9 @@ func evaluateOpenAPIShapeAgreement(
 	if goType == reflect.TypeOf(model.SecurityPolicyScope{}) {
 		return evaluateSecurityScopeCodecAgreement(violations, document, target, shape, requestSchema)
 	}
+	if goType == reflect.TypeOf(searchItemResponse{}) {
+		return evaluateSearchItemAgreement(violations, document, target, shape, requestSchema)
+	}
 	unionNullable := false
 	if len(shape.OneOf) > 0 {
 		if len(shape.OneOf) != 2 {
@@ -446,6 +449,63 @@ func evaluateSecurityScopeCodecAgreement(violations []openAPIAgreementViolation,
 			violations = appendAgreementViolation(violations, target, "scope variant", "must be closed and identify the exact kind")
 		}
 		violations = evaluateOpenAPIShapeAgreement(violations, document, target+"."+scope.Kind, branch, reflect.StructOf(fields), requestSchema, false, false, false, nil, nil)
+	}
+	return violations
+}
+
+// evaluateSearchItemAgreement holds the closed search item union to its three
+// variant DTOs: each branch is a closed object whose type member is the
+// constant its discriminator mapping names.
+func evaluateSearchItemAgreement(violations []openAPIAgreementViolation, document openAPIDocument, target string, shape openAPISchemaShape, requestSchema bool) []openAPIAgreementViolation {
+	if shape.Ref != "" {
+		component, ok := document.Components.Schemas[strings.TrimPrefix(shape.Ref, "#/components/schemas/")]
+		if !ok {
+			return appendAgreementViolation(violations, target, "reference", "missing search item schema")
+		}
+		raw, err := json.Marshal(component)
+		if err != nil {
+			panic(err)
+		}
+		if err := json.Unmarshal(raw, &shape); err != nil {
+			panic(err)
+		}
+	}
+	variants := []struct {
+		kind string
+		dto  reflect.Type
+	}{
+		{"exam", reflect.TypeOf(searchExamItemResponse{})},
+		{"class", reflect.TypeOf(searchClassItemResponse{})},
+		{"user", reflect.TypeOf(searchUserItemResponse{})},
+	}
+	if len(shape.OneOf) != len(variants) {
+		return appendAgreementViolation(violations, target, "oneOf", "must describe the three closed search item variants")
+	}
+	for i, variant := range variants {
+		branch := shape.OneOf[i]
+		if branch.Ref != "" {
+			component, ok := document.Components.Schemas[strings.TrimPrefix(branch.Ref, "#/components/schemas/")]
+			if !ok {
+				violations = appendAgreementViolation(violations, target+"."+variant.kind, "reference", "missing search item variant")
+				continue
+			}
+			raw, err := json.Marshal(component)
+			if err != nil {
+				panic(err)
+			}
+			branch = openAPISchemaShape{}
+			if err := json.Unmarshal(raw, &branch); err != nil {
+				panic(err)
+			}
+		}
+		var kind struct {
+			Const string `json:"const"`
+		}
+		_ = json.Unmarshal(branch.Properties["type"], &kind)
+		if kind.Const != variant.kind || string(branch.AdditionalProperties) != "false" {
+			violations = appendAgreementViolation(violations, target+"."+variant.kind, "variant", "must be closed and identify the exact type")
+		}
+		violations = evaluateOpenAPIShapeAgreement(violations, document, target+"."+variant.kind, branch, variant.dto, requestSchema, false, false, false, nil, nil)
 	}
 	return violations
 }

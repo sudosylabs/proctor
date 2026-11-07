@@ -65,6 +65,8 @@ type resourceApplications struct {
 	examRecords                   ExamRecordsApplication
 	examExports                   ExamExportsApplication
 
+	search SearchApplication
+
 	audit     AuditListingApplication
 	jobs      JobOperationsApplication
 	mail      MailApplication
@@ -105,6 +107,7 @@ func resolveResourceApplications(options Options) (resourceApplications, error) 
 	var examRecords ExamRecordsApplication = application
 	var examExports ExamExportsApplication = application
 	var sessionReauthentication SessionReauthentication = application
+	var search SearchApplication = application
 
 	if err := requireResourceApplicationOptions(options); err != nil {
 		return resourceApplications{}, err
@@ -140,6 +143,7 @@ func resolveResourceApplications(options Options) (resourceApplications, error) 
 		retention:            retention,
 		examRecords:          examRecords,
 		examExports:          examExports,
+		search:               search,
 		audit:                options.AuditListings, jobs: jobs, mail: options.Mail, bootstrap: options.Bootstrap,
 	}, nil
 }

@@ -2144,6 +2144,12 @@ func (s *timedClassStore) SearchByAcademicUnit(arg0 context.Context, arg1 model.
 	})
 }
 
+func (s *timedClassStore) SearchVisible(arg0 context.Context, arg1 store.ClassSearchOptions) ([]*model.Class, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateClass, methodSearchVisible), func(callCtx context.Context) ([]*model.Class, error) {
+		return s.next.SearchVisible(callCtx, arg1)
+	})
+}
+
 func (s *timedClassStore) GetAcademicUnitID(arg0 context.Context, arg1 model.ClassID) (model.AcademicUnitID, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateClass, methodGetAcademicUnitID), func(callCtx context.Context) (model.AcademicUnitID, error) {
 		return s.next.GetAcademicUnitID(callCtx, arg1)

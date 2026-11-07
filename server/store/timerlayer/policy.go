@@ -334,6 +334,7 @@ const (
 	methodSearchByAcademicUnit                      methodName = "search_by_academic_unit"
 	methodSearchByInstitution                       methodName = "search_by_institution"
 	methodSearchByProgramme                         methodName = "search_by_programme"
+	methodSearchVisible                             methodName = "search_visible"
 	methodSetDisabled                               methodName = "set_disabled"
 	methodUpdate                                    methodName = "update"
 	methodRehash                                    methodName = "rehash"

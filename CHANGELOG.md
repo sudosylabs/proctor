@@ -208,6 +208,13 @@ module when a change is not server-only. No module has been released yet.
 - Server: each retention notice from `GET /api/v1/users/me/retention-notices`
   names the `exam_title` of the Exam Revision its Sitting delivered and the
   Sitting's `sitting_start_at` and `sitting_end_at`, for every recipient.
+- Server: `GET /api/v1/search` finds Exams by Draft title, Classes by name,
+  and Users by directory fields in one request, returning typed `exam`,
+  `class` and `user` items (never an email address), at most `limit` (1–20,
+  default 5) of each. Each type is scoped and audited exactly as its own list,
+  a type the caller cannot list returns nothing, and the request is denied
+  only when no requested type is listable. Invalid search input is
+  `search.query.invalid`; the operation is under the new Search API tag.
 - Server: `Mail.SupportAddress` names a help address in every message
   footer, and `Mail.DisplayTimezone` sets the time zone used for message times
   when a recipient has not chosen one.

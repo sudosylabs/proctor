@@ -203,6 +203,7 @@ type RoleBindingApplication interface {
 // an unrelated service locator.
 type Application interface {
 	Authenticator
+	SearchApplication
 	authenticationEntryApplication
 	DesktopAuthorization
 	DesktopRegistrations
@@ -230,6 +231,12 @@ type Application interface {
 	ExamStarterWorkspaceApplication
 	ExamAttemptApplication
 	ExamIntegrityReviewApplication
+}
+
+// SearchApplication finds Exams, Classes and Users within the caller's own
+// list visibility for each type.
+type SearchApplication interface {
+	Search(context.Context, invocation.Invocation, app.SearchQuery) (app.SearchResult, error)
 }
 
 type MailApplication interface {

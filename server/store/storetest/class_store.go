@@ -47,6 +47,64 @@ func TestClassStore(t *testing.T, ss store.Store) {
 	t.Run("SearchAndArchive", func(t *testing.T) {
 		testClassStoreSearchAndArchive(t, ss)
 	})
+	t.Run("SearchVisible", func(t *testing.T) { testClassStoreSearchVisible(t, ss) })
+}
+
+func testClassStoreSearchVisible(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	institution := saveInstitution(t, ctx, ss)
+	root := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "search-root")
+	child := saveAcademicUnit(t, ctx, ss, institution.ID.String(), root.ID.String(), "search-child")
+	sibling := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "search-sibling")
+	period := saveAcademicPeriod(t, ctx, ss, institution.ID.String(), "search-period", 1_800_000_000_000)
+	classIn := func(unit *model.AcademicUnit, name string) *model.Class {
+		programme := saveProgramme(t, ctx, ss, unit.ID.String(), name+"-programme")
+		level := saveProgrammeLevel(t, ctx, ss, programme.ID.String(), name+"-level")
+		return saveClass(t, ctx, ss, level.ID.String(), period.ID.String(), name)
+	}
+	rootClass := classIn(root, "orbit-root")
+	childClass := classIn(child, "orbit-child")
+	siblingClass := classIn(sibling, "orbit-sibling")
+	archivedClass := classIn(child, "orbit-archived")
+	_, err := ArchiveClass(ctx, ss, archivedClass.ID, model.NowUTC())
+	require.NoError(t, err)
+
+	search := func(term string, limit int, visibility store.ClassVisibilityScope) []model.ClassID {
+		t.Helper()
+		found, err := ss.Class().SearchVisible(ctx, store.ClassSearchOptions{Term: term, Limit: limit, Visibility: visibility})
+		require.NoError(t, err)
+		ids := make([]model.ClassID, 0, len(found))
+		for _, class := range found {
+			ids = append(ids, class.ID)
+		}
+		return ids
+	}
+	require.Equal(t, []model.ClassID{childClass.ID, rootClass.ID, siblingClass.ID},
+		search("ORBIT", 10, store.ClassVisibilityScope{InstitutionWide: true}), "Institution-wide search")
+	require.Equal(t, []model.ClassID{childClass.ID, rootClass.ID},
+		search("orbit", 10, store.ClassVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{root.ID}}), "subtree search")
+	require.Equal(t, []model.ClassID{childClass.ID},
+		search("orbit", 10, store.ClassVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{child.ID}}), "child subtree search")
+	require.Equal(t, []model.ClassID{childClass.ID, siblingClass.ID},
+		search("orbit", 10, store.ClassVisibilityScope{
+			AcademicUnitRootIDs: []model.AcademicUnitID{child.ID}, ClassIDs: []model.ClassID{siblingClass.ID},
+		}), "subtree and Class search")
+	require.Equal(t, []model.ClassID{childClass.ID}, search("orbit", 1, store.ClassVisibilityScope{InstitutionWide: true}), "limited search")
+	require.Equal(t, []model.ClassID{siblingClass.ID}, search("sibling", 10, store.ClassVisibilityScope{InstitutionWide: true}), "term search")
+	require.Empty(t, search("orbit", 10, store.ClassVisibilityScope{}), "empty visibility")
+	require.Empty(t, search("orbit", 10, store.ClassVisibilityScope{ClassIDs: []model.ClassID{archivedClass.ID}}), "archived Class")
+	require.Empty(t, search("%", 10, store.ClassVisibilityScope{InstitutionWide: true}), "literal wildcard")
+
+	for name, options := range map[string]store.ClassSearchOptions{
+		"zero limit":     {Term: "orbit", Visibility: store.ClassVisibilityScope{InstitutionWide: true}},
+		"oversize limit": {Term: "orbit", Limit: 202, Visibility: store.ClassVisibilityScope{InstitutionWide: true}},
+		"invalid unit":   {Term: "orbit", Limit: 1, Visibility: store.ClassVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{"bad"}}},
+		"invalid class":  {Term: "orbit", Limit: 1, Visibility: store.ClassVisibilityScope{ClassIDs: []model.ClassID{"bad"}}},
+	} {
+		_, err := ss.Class().SearchVisible(ctx, options)
+		var invalid *store.ErrInvalidInput
+		require.ErrorAs(t, err, &invalid, name)
+	}
 }
 
 func testClassStoreEnforceAcademicPeriodApplicability(t *testing.T, ss store.Store) {

@@ -20,6 +20,8 @@ tags:
     description: Interactive authentication, sessions, MFA, personal access tokens, and linked authentication methods.
   - name: Users
     description: User directory profiles, settings, account administration, and profile pictures.
+  - name: Search
+    description: One bounded lookup across the Exams, Classes, and Users the caller may already list.
   - name: Academic structure
     description: The Institution, Academic Units, Programmes, Programme Levels, Academic Periods, and Classes.
   - name: Membership and progression

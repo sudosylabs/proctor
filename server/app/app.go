@@ -89,6 +89,7 @@ type App struct {
 	*auditListingService
 	*bootstrapService
 	*academicAdministrationBatchService
+	*searchService
 	*realtimeService
 	*realtimeAdmissionService
 	jobs *job.Engine

@@ -5338,6 +5338,38 @@
         },
         "description": "Role"
       },
+      "SearchOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "items": [
+                {
+                  "academic_unit_id": "ybndrfg8ejkmcpqxot1uwisza4",
+                  "id": "ybndrfg8ejkmcpqxot1uwisza3",
+                  "title": "Algorithms midterm",
+                  "type": "exam"
+                },
+                {
+                  "display_name": "Algorithms, group A",
+                  "id": "ybndrfg8ejkmcpqxot1uwisza5",
+                  "programme_level_id": "ybndrfg8ejkmcpqxot1uwisza6",
+                  "type": "class"
+                },
+                {
+                  "display_name": "Ada Example",
+                  "id": "ybndrfg8ejkmcpqxot1uwisza7",
+                  "type": "user",
+                  "username": "ada.example"
+                }
+              ]
+            },
+            "schema": {
+              "$ref": "#/components/schemas/SearchResponse"
+            }
+          }
+        },
+        "description": "Matches of each requested type within the caller's list visibility."
+      },
       "SecurityPolicyRecoveryOK": {
         "content": {
           "application/json": {
@@ -21992,6 +22024,135 @@
           "class_id",
           "scheduled_start_at",
           "scheduled_end_at"
+        ],
+        "type": "object"
+      },
+      "SearchClassItem": {
+        "additionalProperties": false,
+        "description": "An unarchived Class within the caller's class.view scope.",
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "programme_level_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "type": {
+            "const": "class",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "display_name",
+          "programme_level_id"
+        ],
+        "type": "object"
+      },
+      "SearchExamItem": {
+        "additionalProperties": false,
+        "description": "An Exam the caller may see in the Exam catalog, titled by its current Draft.",
+        "properties": {
+          "academic_unit_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "title": {
+            "description": "Current Draft title.",
+            "type": "string"
+          },
+          "type": {
+            "const": "exam",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "title",
+          "academic_unit_id"
+        ],
+        "type": "object"
+      },
+      "SearchItem": {
+        "description": "One search match, discriminated by type.",
+        "discriminator": {
+          "mapping": {
+            "class": "#/components/schemas/SearchClassItem",
+            "exam": "#/components/schemas/SearchExamItem",
+            "user": "#/components/schemas/SearchUserItem"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/SearchExamItem"
+          },
+          {
+            "$ref": "#/components/schemas/SearchClassItem"
+          },
+          {
+            "$ref": "#/components/schemas/SearchUserItem"
+          }
+        ]
+      },
+      "SearchResponse": {
+        "additionalProperties": false,
+        "description": "At most limit matches of each requested type, grouped by type. Search never continues, so next_cursor is always omitted.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SearchItem"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "SearchType": {
+        "description": "Kind of search result.",
+        "enum": [
+          "exam",
+          "class",
+          "user"
+        ],
+        "type": "string"
+      },
+      "SearchUserItem": {
+        "additionalProperties": false,
+        "description": "A User visible in the caller's User directory. The email address is never included.",
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "type": {
+            "const": "user",
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "display_name",
+          "username"
         ],
         "type": "object"
       },
@@ -42727,6 +42888,123 @@
         "x-proctor-idempotency": "none"
       }
     },
+    "/api/v1/search": {
+      "get": {
+        "description": "Finds Exams by Draft title, Classes by name or display name, and Users by directory fields, each as a literal case-insensitive substring of the trimmed q. Every type is authorized, audited, and scoped exactly as its own list: active Exams the caller may see in the Exam catalog, unarchived Classes within the caller's class.view scope, and enabled Users visible in the User directory. A requested type the caller may not list contributes no items; the request is denied only when the caller may list none of the requested types. Items are grouped by type in the order exam, class, user, each group in its own list order and holding at most limit items. Search answers one bounded page and never continues: next_cursor is always omitted and cursor is rejected. Email addresses are never returned, and the query text is kept out of logs and audit records.",
+        "operationId": "search",
+        "parameters": [
+          {
+            "description": "Search text of 2 to 100 characters after trimming, matched as a literal case-insensitive substring.",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 2,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Repeated result type filter, such as types=exam\u0026types=user. Omit it to search every type; a type may not repeat.",
+            "explode": true,
+            "in": "query",
+            "name": "types",
+            "required": false,
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/SearchType"
+              },
+              "maxItems": 3,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "style": "form"
+          },
+          {
+            "description": "Maximum number of items of each type.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 5,
+              "maximum": 20,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Not accepted. Search answers one bounded page and never issues next_cursor, so any cursor is rejected with request.invalid.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SearchOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Search Exams, Classes, and Users",
+        "tags": [
+          "Search"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "search.query.invalid",
+          "exam.invalid",
+          "exam.unavailable",
+          "administration.unavailable",
+          "resource.not_found",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
     "/api/v1/security-preflights/{security_preflight_id}/report": {
       "parameters": [
         {
@@ -47207,6 +47485,10 @@
     {
       "description": "User directory profiles, settings, account administration, and profile pictures.",
       "name": "Users"
+    },
+    {
+      "description": "One bounded lookup across the Exams, Classes, and Users the caller may already list.",
+      "name": "Search"
     },
     {
       "description": "The Institution, Academic Units, Programmes, Programme Levels, Academic Periods, and Classes.",

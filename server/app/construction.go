@@ -256,6 +256,10 @@ func assembleApplication(
 		bootstrapService:                         administration.bootstrap,
 		academicAdministrationBatchService:       administration.academicAdministrationBatches,
 		realtimeService:                          foundation.realtime,
+		searchService: newSearchService(searchServiceDependencies{
+			Exams: examinations.authoring, Users: profiles.userProfiles,
+			ClassAuthorization: access.authorization, Classes: deps.Store.Class(),
+		}),
 		realtimeAdmissionService: &realtimeAdmissionService{
 			principals: identity.authentication, exams: examinations.authoring, sittings: examinations.sittings,
 			authorization: access.authorization, operational: deps.OperationalRecorder,

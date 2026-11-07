@@ -17,9 +17,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
+	"github.com/lib/pq"
 
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -188,6 +190,40 @@ func (s SQLClassStore) SearchByAcademicUnit(ctx context.Context, academicUnitID 
 		return nil, store.NewErrInvalidInput("class", "list_options", options)
 	}
 	return s.selectClasses(ctx, query, "search classes by academic unit")
+}
+
+// SearchVisible returns up to options.Limit unarchived Classes within the
+// caller's class.view visibility. The Academic Unit subtrees expand in the
+// same statement, so no Class outside the scope is ever loaded.
+func (s SQLClassStore) SearchVisible(ctx context.Context, options store.ClassSearchOptions) ([]*model.Class, error) {
+	visibility := options.Visibility
+	if options.Limit < 1 || options.Limit > maximumAcademicPageProbe ||
+		len(visibility.AcademicUnitRootIDs)+len(visibility.ClassIDs) > 256 ||
+		!validVisibilityIDs(visibility.AcademicUnitRootIDs) || !validVisibilityIDs(visibility.ClassIDs) {
+		return nil, store.NewErrInvalidInput("class", "search_options", nil)
+	}
+	query := s.classesQuery.
+		Prefix(`WITH RECURSIVE class_visible_units AS (
+			SELECT id FROM academic_units WHERE id = ANY(?) AND archived_at IS NULL
+			UNION ALL SELECT child.id FROM academic_units child
+			JOIN class_visible_units parent ON child.parent_id = parent.id
+			WHERE child.archived_at IS NULL
+		)`, pq.Array(idStrings(visibility.AcademicUnitRootIDs))).
+		Join("programme_levels ON programme_levels.id = classes.programme_level_id").
+		Join("programmes ON programmes.id = programme_levels.programme_id").
+		Where(sq.Eq{
+			"programmes.archived_at":       nil,
+			"programme_levels.archived_at": nil,
+			"classes.archived_at":          nil,
+		}).
+		Where(`(? OR programmes.academic_unit_id IN (SELECT id FROM class_visible_units) OR classes.id = ANY(?))`,
+			visibility.InstitutionWide, pq.Array(idStrings(visibility.ClassIDs)))
+	if term := strings.TrimSpace(options.Term); term != "" {
+		pattern := directorySearchPattern(term)
+		query = query.Where("(classes.name ILIKE ? ESCAPE '!' OR classes.display_name ILIKE ? ESCAPE '!')", pattern, pattern)
+	}
+	query = query.OrderBy("classes.name", "classes.id").Limit(uint64(options.Limit))
+	return s.selectClasses(ctx, query, "search visible classes")
 }
 
 // GetAcademicUnitID returns the Academic Unit that owns the Class through its

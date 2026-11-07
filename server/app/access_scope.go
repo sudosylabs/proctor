@@ -181,6 +181,42 @@ func (s *accessControlService) authorizeUserSearch(
 	return visibility, nil
 }
 
+// authorizeClassSearch returns the caller's class.view authority across every
+// scope as a persistence-ready Class visibility and records the collection
+// decision at the Institution, as the other list authorizations do.
+func (s *accessControlService) authorizeClassSearch(
+	ctx context.Context,
+	invocation invocation.Invocation,
+) (store.ClassVisibilityScope, error) {
+	principal := invocation.Principal()
+	constraint, err := s.authorizedScopes(ctx, principal, model.ActionClassView, model.ResourceClass)
+	if err != nil {
+		return store.ClassVisibilityScope{}, err
+	}
+	institution, err := s.deps.Resolver.deps.Institutions.GetSingleton(ctx)
+	if err != nil {
+		return store.ClassVisibilityScope{}, authorizationResourceError("institution", err)
+	}
+	visibility := store.ClassVisibilityScope{
+		InstitutionWide:     constraint.InstitutionWide,
+		AcademicUnitRootIDs: append([]model.AcademicUnitID(nil), constraint.AcademicUnitRootIDs...),
+		ClassIDs:            append([]model.ClassID(nil), constraint.ClassIDs...),
+	}
+	allowed := visibility.InstitutionWide || len(visibility.AcademicUnitRootIDs) > 0 || len(visibility.ClassIDs) > 0
+	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
+	if err := s.deps.Audit.RecordAuthorizationDecision(
+		ctx, principal, model.ActionClassView, resource,
+		model.RoleScopeInstitution, institution.ID.String(),
+		invocation.RequestMetadata(), allowed,
+	); err != nil {
+		return store.ClassVisibilityScope{}, err
+	}
+	if !allowed {
+		return store.ClassVisibilityScope{}, authorizationDeniedError()
+	}
+	return visibility, nil
+}
+
 func (s *accessControlService) userVisibilityScope(
 	ctx context.Context,
 	principal model.Principal,

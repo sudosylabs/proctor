@@ -615,6 +615,9 @@ func (s *classStore) SearchByAcademicUnit(ctx context.Context, academicUnitID mo
 		return s.ClassStore.SearchByAcademicUnit(ctx, academicUnitID, options)
 	})
 }
+func (s *classStore) SearchVisible(ctx context.Context, options store.ClassSearchOptions) ([]*model.Class, error) {
+	return retryCall1(ctx, s.layer, func() ([]*model.Class, error) { return s.ClassStore.SearchVisible(ctx, options) })
+}
 func (s *classStore) GetAcademicUnitID(ctx context.Context, id model.ClassID) (model.AcademicUnitID, error) {
 	return retryCall1(ctx, s.layer, func() (model.AcademicUnitID, error) { return s.ClassStore.GetAcademicUnitID(ctx, id) })
 }

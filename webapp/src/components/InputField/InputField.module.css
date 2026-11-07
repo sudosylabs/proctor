@@ -58,6 +58,17 @@
     border-color: var(--proctor-color-state-danger);
   }
 
+  /* A read-only value is still focusable and selectable; it reads as settled
+     rather than editable, without the reduced contrast of disabled. */
+  .input:read-only:not(:disabled) {
+    border-color: var(--proctor-color-border-default);
+    background: var(--proctor-color-background-subtle);
+  }
+
+  .input:read-only:not(:disabled):hover {
+    border-color: var(--proctor-color-border-default);
+  }
+
   .input:disabled {
     border-color: var(--proctor-color-border-default);
     background: var(--proctor-color-background-subtle);

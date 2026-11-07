@@ -14,6 +14,13 @@ transaction collects no profile or credential fields and calls only the
 current-Session acceptance endpoint. Neither path invents Invitation target,
 recipient, Role, or membership details that the browser projection omits.
 
+The start projection names the address the Invitation was sent to and, for a
+student Class Invitation only, the Class display name. The account form shows
+that address first as a native read-only email field described “From your
+invitation. You can’t change it here.”; it has no `name` and is never part of
+the acceptance body, which takes no address. Session acceptance lists it as a
+“Sent to” fact instead.
+
 Acceptance is one atomic Invitation-package transition. Success clears local
 credentials and presents a sign-in return path. Invalid, expired, consumed,
 superseded, or otherwise unusable claims share bounded recipient-safe copy.
@@ -28,10 +35,10 @@ line, a heading that names the Institution when discovery supplies it, and a
 lede chosen from the closed purpose and requirement. A `FactList` then states
 what the Invitation is for (the purpose as a plain role word) and when it
 expires, formatted with `Intl` in the viewer's locale and time zone inside a
-`time` element; raw timestamps are never shown. The projection carries no
-Class, Academic Unit, or Role name, so none is shown or invented; when it
-does, that name is one more fact between the two. The account form or the
-single Session action follows. The page presents no workflow steps or
+`time` element; raw timestamps are never shown. A student Class Invitation's
+Class is one more fact between the two. Academic Unit and Role names are
+deliberately absent from the projection, as from their mail, so none is shown
+or invented. The account form or the single Session action follows. The page presents no workflow steps or
 transaction internals.
 
 Loading, unavailable, invalid, and accepted route states use the shared

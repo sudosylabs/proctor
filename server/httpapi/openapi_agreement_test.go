@@ -169,7 +169,7 @@ func identityAndSystemOpenAPIAgreementSuite() openAPIAgreementSuite {
 			{Name: "BrowserInvitationStartRequest", DTO: reflect.TypeOf(browserInvitationStartRequest{}), Required: []string{"claim"}},
 			{Name: "BrowserInvitationAcceptanceRequest", DTO: reflect.TypeOf(browserInvitationAcceptanceRequest{}), Required: []string{"handle", "password", "username"}},
 			{Name: "BrowserInvitationSessionAcceptanceRequest", DTO: reflect.TypeOf(browserInvitationSessionAcceptanceRequest{}), Required: []string{"handle"}},
-			{Name: "BrowserInvitationStartResponse", DTO: reflect.TypeOf(browserInvitationStartResponse{}), Required: []string{"handle", "purpose", "requirement", "expires_at"}},
+			{Name: "BrowserInvitationStartResponse", DTO: reflect.TypeOf(browserInvitationStartResponse{}), Required: []string{"handle", "purpose", "requirement", "expires_at", "email"}},
 			{Name: "InvitationAcceptanceResponse", DTO: reflect.TypeOf(invitationAcceptanceResponse{}), Required: []string{"user_id", "invitation_id", "replayed"}},
 			{Name: "DesktopAuthorizationStartRequest", DTO: reflect.TypeOf(desktopAuthorizationStartRequest{}), Required: []string{"callback_url", "state", "code_challenge", "public_jwk", "desktop_release", "desktop_build_id", "platform", "architecture", "realtime_protocol"}},
 			{Name: "DesktopAuthorizationProofRequest", DTO: reflect.TypeOf(desktopAuthorizationProofRequest{}), Required: []string{"handle", "browser_proof", "state"}},

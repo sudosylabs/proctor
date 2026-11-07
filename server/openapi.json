@@ -7908,6 +7908,15 @@
       "BrowserInvitationStartResponse": {
         "additionalProperties": false,
         "properties": {
+          "class_display_name": {
+            "description": "Display name of the Class a student Class Invitation enrolls the invitee in. Omitted for every other purpose.",
+            "type": "string"
+          },
+          "email": {
+            "description": "Normalized address the Invitation was sent to. Account-creating acceptance gives the new account this address; no acceptance operation takes an address from the browser.",
+            "format": "email",
+            "type": "string"
+          },
           "expires_at": {
             "format": "date-time",
             "type": "string"
@@ -7937,7 +7946,8 @@
           "handle",
           "purpose",
           "requirement",
-          "expires_at"
+          "expires_at",
+          "email"
         ],
         "type": "object"
       },
@@ -25852,7 +25862,7 @@
     },
     "/api/v1/auth/browser/invitations": {
       "post": {
-        "description": "Consumes no Invitation yet; it exchanges the one-time claim for a short-lived, same-origin browser handle bound to that exact Invitation purpose. The response omits the original claim and prevents it from entering subsequent browser URLs or logs.",
+        "description": "Consumes no Invitation yet; it exchanges the one-time claim for a short-lived, same-origin browser handle bound to that exact Invitation purpose. The response omits the original claim and prevents it from entering subsequent browser URLs or logs. It names the address the Invitation was sent to, which acceptance uses and the browser cannot change, and, for a student Class Invitation only, the Class display name; Academic Unit and Role names are never returned.",
         "operationId": "startBrowserInvitation",
         "requestBody": {
           "$ref": "#/components/requestBodies/BrowserInvitationStart"

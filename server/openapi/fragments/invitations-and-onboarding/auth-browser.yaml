@@ -11,7 +11,7 @@ paths:
       operationId: startBrowserInvitation
       summary: Exchange an Invitation claim for a purpose-bound browser acceptance transaction
       description: >-
-        Consumes no Invitation yet; it exchanges the one-time claim for a short-lived, same-origin browser handle bound to that exact Invitation purpose. The response omits the original claim and prevents it from entering subsequent browser URLs or logs.
+        Consumes no Invitation yet; it exchanges the one-time claim for a short-lived, same-origin browser handle bound to that exact Invitation purpose. The response omits the original claim and prevents it from entering subsequent browser URLs or logs. It names the address the Invitation was sent to, which acceptance uses and the browser cannot change, and, for a student Class Invitation only, the Class display name; Academic Unit and Role names are never returned.
       tags:
         - Invitations and onboarding
       x-proctor-auth: public
@@ -219,6 +219,7 @@ components:
         - purpose
         - requirement
         - expires_at
+        - email
       properties:
         handle:
           type: string
@@ -238,3 +239,10 @@ components:
         expires_at:
           type: string
           format: date-time
+        email:
+          type: string
+          format: email
+          description: Normalized address the Invitation was sent to. Account-creating acceptance gives the new account this address; no acceptance operation takes an address from the browser.
+        class_display_name:
+          type: string
+          description: Display name of the Class a student Class Invitation enrolls the invitee in. Omitted for every other purpose.

@@ -151,7 +151,11 @@ function isInvitationTransaction(
       value.purpose === "teacher_academic_unit" ||
       value.purpose === "academic_unit_role" ||
       value.purpose === "institution_role") &&
-    isWireTimestamp(value.expires_at)
+    isWireTimestamp(value.expires_at) &&
+    boundedText(value.email, 254) &&
+    (value.class_display_name === undefined ||
+      (value.purpose === "student_class" &&
+        boundedText(value.class_display_name, 256)))
   );
 }
 
@@ -161,6 +165,12 @@ function isInvitationAcceptance(value: unknown): boolean {
     typeof value.invitation_id === "string" &&
     typeof value.user_id === "string" &&
     typeof value.replayed === "boolean"
+  );
+}
+
+function boundedText(value: unknown, maximum: number): value is string {
+  return (
+    typeof value === "string" && value.trim() !== "" && value.length <= maximum
   );
 }
 

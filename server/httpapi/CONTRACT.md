@@ -680,7 +680,12 @@ unexpired Invitation with an unexpired intended relationship and maps its
 closed purpose to either the `account` or `session` acceptance requirement.
 
 The `201` response contains a random public `handle`, the Invitation `purpose`,
-the closed `requirement`, and `expires_at`. A distinct random browser proof is
+the closed `requirement`, `expires_at`, the Invitation's normalized target
+`email` (the mailbox the claim was delivered to, which no acceptance operation
+takes from the browser), and, for a student Class Invitation only,
+`class_display_name`. It never names an Academic Unit or Role, for the same
+reason their notices do not: a projection must not identify privileged
+accounts. A distinct random browser proof is
 set as a host-only, HttpOnly, SameSite=Lax cookie scoped to
 `/api/v1/auth/browser/invitations`; it is Secure outside the explicit loopback
 HTTP development mode. The named creation aggregate locks and rechecks the

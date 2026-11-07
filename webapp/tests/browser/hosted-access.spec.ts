@@ -1084,6 +1084,8 @@ test("Invitation acceptance exchanges the claim before account creation", async 
         purpose: "student_class",
         requirement: "account",
         expires_at: new Date(Date.now() + 300_000).toISOString(),
+        email: "ada.okafor@example.edu",
+        class_display_name: "Biology 101",
       }),
     });
   });
@@ -1117,9 +1119,10 @@ test("Invitation acceptance exchanges the claim before account creation", async 
     "You’ve been invited as a student. Create your account to see your exams.",
   );
   const details = page.getByRole("definition");
-  await expect(page.getByRole("term")).toHaveText(["Invited as", "Expires"]);
+  await expect(page.getByRole("term")).toHaveText(["Invited as", "Class", "Expires"]);
   await expect(details.first()).toHaveText("Student");
-  const expiry = details.nth(1).locator("time");
+  await expect(details.nth(1)).toHaveText("Biology 101");
+  const expiry = details.nth(2).locator("time");
   const expiresAt = await expiry.getAttribute("datetime");
   expect(Date.parse(expiresAt ?? "")).not.toBeNaN();
   await expect(expiry).not.toHaveText(expiresAt ?? "");
@@ -1137,6 +1140,14 @@ test("Invitation acceptance exchanges the claim before account creation", async 
         }).format(new Date(value)),
       expiresAt ?? "",
     ),
+  );
+  // The invited address is shown but cannot be edited or submitted.
+  const email = page.getByLabel("Email");
+  await expect(email).toHaveValue("ada.okafor@example.edu");
+  await expect(email).toHaveAttribute("readonly", "");
+  await expect(email).not.toHaveAttribute("name", /.*/);
+  await expect(email).toHaveAccessibleDescription(
+    "From your invitation. You can’t change it here.",
   );
   const firstNameBox = await page
     .locator("#invitation-first-name")
@@ -1202,6 +1213,8 @@ test("Invitation retry preserves the live claim after a temporary exchange failu
         purpose: "student_class",
         requirement: "account",
         expires_at: new Date(Date.now() + 300_000).toISOString(),
+        email: "ada.okafor@example.edu",
+        class_display_name: "Biology 101",
       }),
     });
   });
@@ -1264,6 +1277,7 @@ test("Session Invitation preserves its handle while warning about new-tab sign i
         purpose: "student_class",
         requirement: "session",
         expires_at: new Date(Date.now() + 300_000).toISOString(),
+        email: "ada.okafor@example.edu",
       }),
     });
   });
@@ -1293,6 +1307,8 @@ test("Session Invitation preserves its handle while warning about new-tab sign i
   await expect(page.getByRole("main")).toContainText(
     "You’ve been invited as a student. Accept with the account you’re signed in with to see your exams.",
   );
+  await expect(page.getByRole("term")).toHaveText(["Invited as", "Sent to", "Expires"]);
+  await expect(page.getByRole("definition").nth(1)).toHaveText("ada.okafor@example.edu");
   await expect(page.getByRole("textbox")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Sign in" })).toHaveCount(0);
   await page.getByRole("button", { name: "Accept invitation" }).click();
@@ -1977,6 +1993,8 @@ for (const pageCase of [
             purpose: "student_class",
             requirement: "account",
             expires_at: new Date(Date.now() + 300_000).toISOString(),
+            email: "ada.okafor@example.edu",
+            class_display_name: "Biology 101",
           }),
         });
       });

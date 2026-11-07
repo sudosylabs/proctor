@@ -2606,6 +2606,10 @@
     "translation": "Invitation · Proctor"
   },
   {
+    "id": "webapp.join.facts.class",
+    "translation": "Class"
+  },
+  {
     "id": "webapp.join.facts.expires",
     "translation": "Expires"
   },
@@ -2632,6 +2636,18 @@
   {
     "id": "webapp.join.facts.purpose.teacher_academic_unit",
     "translation": "Teacher"
+  },
+  {
+    "id": "webapp.join.facts.sent_to",
+    "translation": "Sent to"
+  },
+  {
+    "id": "webapp.join.form.email",
+    "translation": "Email"
+  },
+  {
+    "id": "webapp.join.form.email_help",
+    "translation": "From your invitation. You can’t change it here."
   },
   {
     "id": "webapp.join.form.error.details_invalid",

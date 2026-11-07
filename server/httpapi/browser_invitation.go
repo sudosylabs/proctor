@@ -26,10 +26,12 @@ type browserInvitationStartRequest struct {
 }
 
 type browserInvitationStartResponse struct {
-	Handle      string `json:"handle"`
-	Purpose     string `json:"purpose"`
-	Requirement string `json:"requirement"`
-	ExpiresAt   string `json:"expires_at"`
+	Handle           string `json:"handle"`
+	Purpose          string `json:"purpose"`
+	Requirement      string `json:"requirement"`
+	ExpiresAt        string `json:"expires_at"`
+	Email            string `json:"email"`
+	ClassDisplayName string `json:"class_display_name,omitempty"`
 }
 
 type browserInvitationAcceptanceRequest struct {
@@ -117,7 +119,7 @@ func (m browserInvitationResourceModule) start(request operationRequest) (operat
 	headers.Set("Cache-Control", "no-store")
 	return jsonResult(http.StatusCreated, browserInvitationStartResponse{
 		Handle: started.Handle, Purpose: string(started.Purpose), Requirement: string(started.Requirement),
-		ExpiresAt: wireTimeFromMillis(started.ExpiresAt),
+		ExpiresAt: wireTimeFromMillis(started.ExpiresAt), Email: started.Email, ClassDisplayName: started.ClassDisplayName,
 	}).withHeaders(headers), nil
 }
 

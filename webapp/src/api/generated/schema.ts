@@ -405,7 +405,7 @@ export interface paths {
         put?: never;
         /**
          * Exchange an Invitation claim for a purpose-bound browser acceptance transaction
-         * @description Consumes no Invitation yet; it exchanges the one-time claim for a short-lived, same-origin browser handle bound to that exact Invitation purpose. The response omits the original claim and prevents it from entering subsequent browser URLs or logs.
+         * @description Consumes no Invitation yet; it exchanges the one-time claim for a short-lived, same-origin browser handle bound to that exact Invitation purpose. The response omits the original claim and prevents it from entering subsequent browser URLs or logs. It names the address the Invitation was sent to, which acceptance uses and the browser cannot change, and, for a student Class Invitation only, the Class display name; Academic Unit and Role names are never returned.
          */
         post: operations["startBrowserInvitation"];
         delete?: never;
@@ -6034,6 +6034,13 @@ export interface components {
             claim: string;
         };
         BrowserInvitationStartResponse: {
+            /** @description Display name of the Class a student Class Invitation enrolls the invitee in. Omitted for every other purpose. */
+            class_display_name?: string;
+            /**
+             * Format: email
+             * @description Normalized address the Invitation was sent to. Account-creating acceptance gives the new account this address; no acceptance operation takes an address from the browser.
+             */
+            email: string;
             /** Format: date-time */
             expires_at: string;
             handle: string;

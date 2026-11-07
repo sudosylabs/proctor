@@ -205,6 +205,7 @@ export function InvitationContent({
           />
         ) : (
           <InvitationAccountForm
+            email={transaction.email}
             handle={transaction.handle}
             acceptAccount={acceptAccount}
             onAccepted={onAccepted}
@@ -222,13 +223,21 @@ function invitationHeading(institutionName: string | undefined) {
 }
 
 function InvitationFacts({ transaction }: { transaction: InvitationTransaction }) {
-  // The browser projection carries no Class, Academic Unit, or Role name yet.
-  // When it does, that name is one more Fact between these two.
+  // The projection names a Class only for student Class Invitations; Academic
+  // Unit and Role names are deliberately never sent, so none is shown. An
+  // account form shows the address itself, so only Session acceptance lists it.
+  const className = transaction.class_display_name?.trim();
   return (
     <FactList aria-label={message("webapp.join.facts.label")}>
       <Fact label={message("webapp.join.facts.invited_as")}>
         {message(purposeLabels[transaction.purpose])}
       </Fact>
+      {className === undefined || className === "" ? null : (
+        <Fact label={message("webapp.join.facts.class")}>{className}</Fact>
+      )}
+      {transaction.requirement === "session" ? (
+        <Fact label={message("webapp.join.facts.sent_to")}>{transaction.email}</Fact>
+      ) : null}
       <Fact label={message("webapp.join.facts.expires")}>
         <time dateTime={transaction.expires_at}>
           {formatDateTime(transaction.expires_at)}
@@ -240,12 +249,15 @@ function InvitationFacts({ transaction }: { transaction: InvitationTransaction }
 
 function InvitationAccountForm({
   acceptAccount,
+  email,
   handle,
   onAccepted,
 }: {
   acceptAccount(
     submission: InvitationAccountSubmission,
   ): Promise<InvitationAccountAcceptanceResult>;
+  /** The Invitation's address; acceptance never sends it, so it stays read-only. */
+  email: string;
   handle: string;
   onAccepted(): void;
 }) {
@@ -314,6 +326,15 @@ function InvitationAccountForm({
 
   return (
     <form className={styles.form} onSubmit={submit} aria-busy={pending} noValidate>
+      <InputField
+        id="invitation-email"
+        label={message("webapp.join.form.email")}
+        description={message("webapp.join.form.email_help")}
+        type="email"
+        autoComplete="email"
+        value={email}
+        readOnly
+      />
       <InputField
         id="invitation-first-name"
         name="first_name"

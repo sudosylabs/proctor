@@ -49,8 +49,10 @@ paste an Invitation claim into logs, a ticket, analytics, or provider state.
 ## Understand the Acceptance Branches
 
 The `/join` page removes the fragment credential before rendering and exchanges
-it once for a short-lived handle plus host-only HttpOnly proof. Depending on
-policy and package, the person may:
+it once for a short-lived handle plus host-only HttpOnly proof. The page shows
+the address the Invitation was sent to, read-only, and for a student Class
+Invitation the Class display name; it never names an Academic Unit or Role.
+Depending on policy and package, the person may:
 
 - create a local credential;
 - prove an enabled provider identity; or

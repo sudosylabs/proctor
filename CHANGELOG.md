@@ -17,6 +17,11 @@ module when a change is not server-only. No module has been released yet.
 
 ### Changed
 
+- Server and `packages/vfs`: move `golang.org/x/net` to v0.62.0 to clear
+  CVE-2026-78661 (HIGH), with `golang.org/x/crypto` v0.58.0, `x/sys` v0.49.0,
+  `x/text` v0.43.0, `x/sync` v0.24.0 and `x/tools` v0.51.0. Exception to the
+  two-week dependency age rule: `x/net` v0.62.0 was 11 days old when adopted,
+  taken early because the advisory blocks the runtime image scan.
 - Server: transactional mail is redesigned as a plain, typeset letter with
   rewritten copy for every message. Each message greets the recipient by first
   name, names the institution, writes dates and times for people in the

@@ -129,7 +129,7 @@ func TestRetentionHTTPNoticeProjectionIsRecipientOnlyAndBounded(t *testing.T) {
 	t.Parallel()
 	logger, _ := newTestLogger(t)
 	p := retentionHTTPPrincipal()
-	notice := model.RetentionNotice{RetirementID: model.NewRetentionRetirementID(), RecipientUserID: p.UserID, Scope: model.RetentionHoldScope{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(), SubmissionID: model.NewSubmissionID()}, Category: model.RetentionCategoryWork, State: model.RetentionRetirementGrace, CreatedAt: model.NowUTC(), RetireAfter: model.NowUTC().Add(7 * 24 * time.Hour), DeliveryState: "failed", DeliveryErrorCode: "mail.preparation_unavailable"}
+	notice := model.RetentionNotice{RetirementID: model.NewRetentionRetirementID(), RecipientUserID: p.UserID, Scope: model.RetentionHoldScope{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(), SubmissionID: model.NewSubmissionID()}, ExamTitle: "Algorithms final", SittingStartAt: time.Date(2026, 5, 4, 9, 0, 0, 0, time.UTC), SittingEndAt: time.Date(2026, 5, 4, 11, 0, 0, 0, time.UTC), Category: model.RetentionCategoryWork, State: model.RetentionRetirementGrace, CreatedAt: model.NowUTC(), RetireAfter: model.NowUTC().Add(7 * 24 * time.Hour), DeliveryState: "failed", DeliveryErrorCode: "mail.preparation_unavailable"}
 	application := &retentionHTTPFake{noticePage: &app.RetentionNoticePage{Items: []model.RetentionNotice{notice}, HasMore: true}}
 	api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: p}, retentionResource(application))
 	r := serveRetentionHTTP(api, "GET", "/api/v1/users/me/retention-notices?limit=1", "", "")
@@ -140,6 +140,9 @@ func TestRetentionHTTPNoticeProjectionIsRecipientOnlyAndBounded(t *testing.T) {
 	require.NotEmpty(t, page.NextCursor, "notice=%d %s", r.Code, r.Body.String())
 	require.Equal(t, "private, no-store", r.Header().Get("Cache-Control"), "notice=%d %s", r.Code, r.Body.String())
 	require.NotContains(t, r.Body.String(), "recipient_user_id", "notice leaked recipient selection")
+	require.Equal(t, "Algorithms final", page.Items[0].ExamTitle)
+	require.Equal(t, "2026-05-04T09:00:00Z", page.Items[0].SittingStartAt)
+	require.Equal(t, "2026-05-04T11:00:00Z", page.Items[0].SittingEndAt)
 	application.noticePage = &app.RetentionNoticePage{Items: []model.RetentionNotice{}}
 	r = serveRetentionHTTP(api, "GET", "/api/v1/users/me/retention-notices?limit=1&cursor="+page.NextCursor, "", "")
 	require.Equal(t, 200, r.Code, "cursor did not roundtrip")

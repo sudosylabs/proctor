@@ -205,6 +205,9 @@ module when a change is not server-only. No module has been released yet.
   `recovery_codes_generated_at`. `recovery_codes_total` is the size of the
   recovery-code set the User was actually given, used codes included, and is
   0 unless two-step verification is enabled.
+- Server: each retention notice from `GET /api/v1/users/me/retention-notices`
+  names the `exam_title` of the Exam Revision its Sitting delivered and the
+  Sitting's `sitting_start_at` and `sitting_end_at`, for every recipient.
 - Server: `Mail.SupportAddress` names a help address in every message
   footer, and `Mail.DisplayTimezone` sets the time zone used for message times
   when a recipient has not chosen one.

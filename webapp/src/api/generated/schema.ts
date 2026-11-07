@@ -4896,7 +4896,7 @@ export interface paths {
         };
         /**
          * List my retention notices
-         * @description Returns the current Session User’s own durable grace notices, including cancellation and delivery status. The notice grants no examination record access. Reading it neither acknowledges delivery nor changes cleanup. Candidate notices are optional; responsible Exam Managers and institution operators receive them by default. Pending dates are invalidated when grace is canceled.
+         * @description Returns the current Session User’s own durable grace notices, including cancellation and delivery status. The notice grants no examination record access. Reading it neither acknowledges delivery nor changes cleanup. Candidate notices are optional; responsible Exam Managers and institution operators receive them by default. Pending dates are invalidated when grace is canceled. Each notice names the Exam title and the Sitting's scheduled times so the recipient can tell which records it covers; no candidate, answer, or evidence content is included.
          */
         get: operations["listRetentionNotices"];
         put?: never;
@@ -9620,9 +9620,21 @@ export interface components {
             delivery_state: "pending" | "queued" | "sending" | "accepted" | "suppressed" | "failed" | "canceled";
             exam_id: components["schemas"]["ID"];
             exam_sitting_id: components["schemas"]["ID"];
+            /** @description Immutable title of the Exam Revision the Sitting delivered. Shown to every recipient of the notice, even one who no longer has access to the Exam. */
+            exam_title: string;
             /** Format: date-time */
             retire_after: string;
             retirement_id: components["schemas"]["ID"];
+            /**
+             * Format: date-time
+             * @description Scheduled end of the Sitting whose records the notice covers.
+             */
+            sitting_end_at: string;
+            /**
+             * Format: date-time
+             * @description Scheduled start of the Sitting whose records the notice covers.
+             */
+            sitting_start_at: string;
             /** @enum {string} */
             state: "grace" | "canceled" | "retired";
             submission_id: components["schemas"]["ID"];

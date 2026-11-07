@@ -145,7 +145,8 @@ indefinite. Scoped holds and export construction protect current descendants;
 fresh holds, changed completion, policy/control changes, and new construction
 references cancel applicable grace. Renewed eligibility starts a new positive
 grace period. Scheduling durably records manager/operator notices and optional
-candidate notices; mail failure does not authorize or prevent removal.
+candidate notices; mail failure does not authorize or prevent removal. Notices
+show their recipients the Exam title and the Sitting's scheduled time.
 
 The named Store commit irreversibly closes ordinary content access, removes
 private metadata, snapshots and retained retry copies, and reserves exact

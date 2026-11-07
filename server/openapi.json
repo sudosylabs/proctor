@@ -21207,12 +21207,28 @@
           "exam_sitting_id": {
             "$ref": "#/components/schemas/ID"
           },
+          "exam_title": {
+            "description": "Immutable title of the Exam Revision the Sitting delivered. Shown to every recipient of the notice, even one who no longer has access to the Exam.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
           "retire_after": {
             "format": "date-time",
             "type": "string"
           },
           "retirement_id": {
             "$ref": "#/components/schemas/ID"
+          },
+          "sitting_end_at": {
+            "description": "Scheduled end of the Sitting whose records the notice covers.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "sitting_start_at": {
+            "description": "Scheduled start of the Sitting whose records the notice covers.",
+            "format": "date-time",
+            "type": "string"
           },
           "state": {
             "enum": [
@@ -21231,6 +21247,9 @@
           "exam_id",
           "exam_sitting_id",
           "submission_id",
+          "exam_title",
+          "sitting_start_at",
+          "sitting_end_at",
           "category",
           "state",
           "created_at",
@@ -44973,7 +44992,7 @@
     },
     "/api/v1/users/me/retention-notices": {
       "get": {
-        "description": "Returns the current Session User’s own durable grace notices, including cancellation and delivery status. The notice grants no examination record access. Reading it neither acknowledges delivery nor changes cleanup. Candidate notices are optional; responsible Exam Managers and institution operators receive them by default. Pending dates are invalidated when grace is canceled.",
+        "description": "Returns the current Session User’s own durable grace notices, including cancellation and delivery status. The notice grants no examination record access. Reading it neither acknowledges delivery nor changes cleanup. Candidate notices are optional; responsible Exam Managers and institution operators receive them by default. Pending dates are invalidated when grace is canceled. Each notice names the Exam title and the Sitting's scheduled times so the recipient can tell which records it covers; no candidate, answer, or evidence content is included.",
         "operationId": "listRetentionNotices",
         "parameters": [
           {

@@ -48,7 +48,7 @@ paths:
     get:
       operationId: getDesktopAuthorizationContext
       summary: Read the safe current hosted-journey context
-      description: Resolves the scoped binding cookie and returns only the safe device, authentication-choice, expiry, and confirmed-account presentation needed by the current hosted page.
+      description: Resolves the scoped binding cookie and returns only the safe device, request time, authentication-choice, expiry, and confirmed-account presentation needed by the current hosted page. The account, including its own email address, appears only after this browser has authenticated as that account for the transaction.
       tags: [Authentication]
       x-proctor-auth: public
       x-proctor-error-codes: [authentication.desktop_authorization.invalid, authentication.desktop_authorization.rejected, authentication.desktop_authorization.unavailable, authentication.credential_ambiguous]
@@ -405,15 +405,19 @@ components:
     DesktopAuthorizationAccountResponse:
       type: object
       additionalProperties: false
-      required: [id, username, display_name]
+      required: [id, username, display_name, email]
       properties:
         id: {type: string, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$'}
         username: {type: string}
         display_name: {type: string}
+        email:
+          type: string
+          format: email
+          description: The authenticated account's own email address, shown so the person can confirm which account the Desktop will use.
     DesktopAuthorizationContextResponse:
       type: object
       additionalProperties: false
-      required: [state, local_login_enabled, external_providers, device_name, expires_at]
+      required: [state, local_login_enabled, external_providers, device_name, requested_at, expires_at]
       properties:
         state: {type: string, enum: [bound, authenticated]}
         account: {$ref: '#/components/schemas/DesktopAuthorizationAccountResponse'}
@@ -423,6 +427,10 @@ components:
           maxItems: 64
           items: {$ref: '#/components/schemas/ExternalAuthenticationProviderResponse'}
         device_name: {type: string, maxLength: 128}
+        requested_at:
+          type: string
+          format: date-time
+          description: When Proctor Desktop started this authorization request.
         expires_at: {type: string, format: date-time}
     DesktopAuthorizationApprovalResponse:
       type: object

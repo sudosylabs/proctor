@@ -77,6 +77,7 @@ export const catalogs = {
     "webapp.desktop_authorization.note.lead": "Didn’t start this?",
     "webapp.desktop_authorization.provider.continue": "Continue with {{.Provider}}",
     "webapp.desktop_authorization.provider.group": "Other ways to sign in",
+    "webapp.desktop_authorization.requested": "Requested",
     "webapp.desktop_authorization.resetting": "Switching account…",
     "webapp.desktop_authorization.return_to_sign_in": "Return to sign in",
     "webapp.desktop_authorization.skip_to_main": "Skip to Desktop sign-in",

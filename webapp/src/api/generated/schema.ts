@@ -623,7 +623,7 @@ export interface paths {
         };
         /**
          * Read the safe current hosted-journey context
-         * @description Resolves the scoped binding cookie and returns only the safe device, authentication-choice, expiry, and confirmed-account presentation needed by the current hosted page.
+         * @description Resolves the scoped binding cookie and returns only the safe device, request time, authentication-choice, expiry, and confirmed-account presentation needed by the current hosted page. The account, including its own email address, appears only after this browser has authenticated as that account for the transaction.
          */
         get: operations["getDesktopAuthorizationContext"];
         put?: never;
@@ -6804,6 +6804,11 @@ export interface components {
         };
         DesktopAuthorizationAccountResponse: {
             display_name: string;
+            /**
+             * Format: email
+             * @description The authenticated account's own email address, shown so the person can confirm which account the Desktop will use.
+             */
+            email: string;
             id: string;
             username: string;
         };
@@ -6827,6 +6832,11 @@ export interface components {
             expires_at: string;
             external_providers: components["schemas"]["ExternalAuthenticationProviderResponse"][];
             local_login_enabled: boolean;
+            /**
+             * Format: date-time
+             * @description When Proctor Desktop started this authorization request.
+             */
+            requested_at: string;
             /** @enum {string} */
             state: "bound" | "authenticated";
         };

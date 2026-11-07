@@ -10776,6 +10776,11 @@
           "display_name": {
             "type": "string"
           },
+          "email": {
+            "description": "The authenticated account's own email address, shown so the person can confirm which account the Desktop will use.",
+            "format": "email",
+            "type": "string"
+          },
           "id": {
             "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
             "type": "string"
@@ -10787,7 +10792,8 @@
         "required": [
           "id",
           "username",
-          "display_name"
+          "display_name",
+          "email"
         ],
         "type": "object"
       },
@@ -10857,6 +10863,11 @@
           "local_login_enabled": {
             "type": "boolean"
           },
+          "requested_at": {
+            "description": "When Proctor Desktop started this authorization request.",
+            "format": "date-time",
+            "type": "string"
+          },
           "state": {
             "enum": [
               "bound",
@@ -10870,6 +10881,7 @@
           "local_login_enabled",
           "external_providers",
           "device_name",
+          "requested_at",
           "expires_at"
         ],
         "type": "object"
@@ -26429,7 +26441,7 @@
     },
     "/api/v1/auth/desktop/authorizations/context": {
       "get": {
-        "description": "Resolves the scoped binding cookie and returns only the safe device, authentication-choice, expiry, and confirmed-account presentation needed by the current hosted page.",
+        "description": "Resolves the scoped binding cookie and returns only the safe device, request time, authentication-choice, expiry, and confirmed-account presentation needed by the current hosted page. The account, including its own email address, appears only after this browser has authenticated as that account for the transaction.",
         "operationId": "getDesktopAuthorizationContext",
         "responses": {
           "200": {

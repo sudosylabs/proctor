@@ -190,3 +190,18 @@ func testDesktopAuthorizationCookies(t *testing.T) browserCookies {
 	require.NoError(t, err)
 	return cookies
 }
+
+func TestDesktopAuthorizationContextResponseNamesAccountEmailAndRequestTime(t *testing.T) {
+	t.Parallel()
+	requestedAt := time.Date(2026, 8, 18, 11, 58, 0, 0, time.UTC)
+	userID := model.NewUserID()
+	response := desktopAuthorizationContextResponseFromApplication(&app.DesktopAuthorizationBrowserContext{
+		State: model.BrowserAuthenticationStateAuthenticated, DeviceName: "Lab Mac",
+		Account:     &app.DesktopAuthorizationAccount{ID: userID, Username: "ada", DisplayName: "Ada Okafor", Email: "ada@example.edu"},
+		RequestedAt: requestedAt.UnixMilli(), ExpiresAt: requestedAt.Add(5 * time.Minute).UnixMilli(),
+	})
+	require.Equal(t, "2026-08-18T11:58:00Z", response.RequestedAt)
+	require.NotNil(t, response.Account)
+	require.Equal(t, "ada@example.edu", response.Account.Email)
+	require.Equal(t, userID.String(), response.Account.ID)
+}

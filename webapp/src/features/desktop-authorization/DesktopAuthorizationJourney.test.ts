@@ -4,11 +4,11 @@ import type { DesktopAuthorizationContext } from "./DesktopAuthorizationApi";
 import { createDesktopAuthorizationJourney, desktopJourneyAPI } from "./DesktopAuthorizationJourney";
 
 const bound: DesktopAuthorizationContext = {
-  state: "bound", installation: "Example University", deviceName: "Exam laptop", expiresAt: "1970-01-01T00:00:01Z",
+  state: "bound", installation: "Example University", deviceName: "Exam laptop", expiresAt: "1970-01-01T00:00:01Z", requestedAt: "1970-01-01T00:00:00Z",
   localLoginEnabled: true, externalProviders: [{ id: "campus", display_name: "Campus", type: "oidc" }],
 };
 const authenticated: DesktopAuthorizationContext = {
-  ...bound, state: "authenticated", account: { id: "user-1", username: "student", display_name: "Student" },
+  ...bound, state: "authenticated", account: { id: "user-1", username: "student", display_name: "Student", email: "student@example.edu" },
 };
 const input = { servingOrigin: "https://proctor.example", state: "state", proof: { state: "state", handle: "handle", browserProof: "proof" } };
 

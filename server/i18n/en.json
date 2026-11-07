@@ -2430,6 +2430,10 @@
     "translation": "Other ways to sign in"
   },
   {
+    "id": "webapp.desktop_authorization.requested",
+    "translation": "Requested"
+  },
+  {
     "id": "webapp.desktop_authorization.resetting",
     "translation": "Switching account…"
   },

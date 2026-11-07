@@ -71,7 +71,9 @@ const defaultDesktopAuthorization = {
       desktopAuthorizationDocumentationFixture.synthetic_context.username,
     display_name:
       desktopAuthorizationDocumentationFixture.synthetic_context.display_name,
+    email: "student.one@example.edu",
   },
+  requestedAt: "2026-08-18T11:58:00.000Z",
   deviceName:
     desktopAuthorizationDocumentationFixture.synthetic_context.device_name,
 };
@@ -145,6 +147,7 @@ async function mockDesktopAuthorization(
         }
       : {}),
     device_name: request.deviceName,
+    requested_at: request.requestedAt,
     expires_at: new Date(Date.now() + 300_000).toISOString(),
     local_login_enabled: !authenticated,
     external_providers: authenticated ? [] : defaultDiscovery.providers,
@@ -1374,16 +1377,22 @@ test("Desktop authorization approves the exact sanitized request", async ({
     `Proctor Desktop on this computer is asking to use your ${desktopAuthorizationDocumentationFixture.synthetic_context.institution} account.`,
   );
   const requestDetails = page.getByRole("main").locator("[data-proctor-fact-list]");
-  await expect(requestDetails.getByRole("term")).toHaveText(["Account", "Device"]);
+  await expect(requestDetails.getByRole("term")).toHaveText(["Account", "Device", "Requested"]);
   await expect(requestDetails.getByRole("definition")).toHaveText([
-    `${desktopAuthorizationDocumentationFixture.synthetic_context.display_name} · ${desktopAuthorizationDocumentationFixture.synthetic_context.username}`,
+    `${desktopAuthorizationDocumentationFixture.synthetic_context.display_name} · ${defaultDesktopAuthorization.account.email}`,
     desktopAuthorizationDocumentationFixture.synthetic_context.device_name,
-  ]);
-  await expect(
-    page.getByText(
-      desktopAuthorizationDocumentationFixture.synthetic_context.username,
-      { exact: true },
+    await page.evaluate(
+      (value) =>
+        new Intl.DateTimeFormat(undefined, {
+          weekday: "long", day: "numeric", month: "long", year: "numeric",
+          hour: "numeric", minute: "2-digit", timeZoneName: "short",
+        }).format(new Date(value)),
+      defaultDesktopAuthorization.requestedAt,
     ),
+  ]);
+  await expect(requestDetails.locator("time")).toHaveAttribute("datetime", defaultDesktopAuthorization.requestedAt);
+  await expect(
+    page.getByText(defaultDesktopAuthorization.account.email, { exact: true }),
   ).toHaveAttribute(
     "translate",
     "no",
@@ -1531,8 +1540,10 @@ test("Desktop local authentication remains in the same tab and creates no browse
             id: "user-1",
             username: "student.one",
             display_name: "Student One",
+            email: "student.one@example.edu",
           },
           device_name: "Exam laptop",
+          requested_at: new Date(Date.now() - 60_000).toISOString(),
           expires_at: new Date(Date.now() + 300_000).toISOString(),
           local_login_enabled: false,
           external_providers: [],
@@ -1655,7 +1666,7 @@ test("Desktop local authentication disables competing actions until completion",
     desktop.authenticate();
     await route.fulfill({ contentType: "application/json", body: JSON.stringify({
       state: "authenticated", account: defaultDesktopAuthorization.account, device_name: "Exam laptop",
-      expires_at: new Date(Date.now() + 300_000).toISOString(), local_login_enabled: false, external_providers: [],
+      requested_at: new Date(Date.now() - 60_000).toISOString(), expires_at: new Date(Date.now() + 300_000).toISOString(), local_login_enabled: false, external_providers: [],
     }) });
   });
   await page.goto("/authorize/desktop?request=desktop-handle&state=desktop-state#proof=private-browser-proof");

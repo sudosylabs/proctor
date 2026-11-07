@@ -421,7 +421,9 @@ proof, validate a local password specifically for the transaction, or navigate
 through a purpose-bound external-provider state. Local and provider paths do
 not create a Web Session. Provider return resumes at
 `/authorize/desktop?state=...` through the browser binding cookie. The User
-must confirm the safe account/device projection and explicitly approve; “Use
+must confirm the safe account/device projection (after transaction
+authentication, the account's display name, username, and own email; always the
+device name and the request's start and expiry times) and explicitly approve; “Use
 another account” clears only the transaction authentication and returns to
 method selection.
 

@@ -179,6 +179,9 @@ type DesktopAuthorizationAccount struct {
 	ID          model.UserID
 	Username    string
 	DisplayName string
+	// Email is the authenticated account's own address, shown so the person
+	// can confirm which account the Desktop will use.
+	Email string
 }
 
 type DesktopAuthorizationBrowserContext struct {
@@ -187,7 +190,9 @@ type DesktopAuthorizationBrowserContext struct {
 	LocalLoginEnabled bool
 	ExternalProviders []model.ExternalAuthenticationProvider
 	DeviceName        string
-	ExpiresAt         int64
+	// RequestedAt is when Desktop started this authorization request.
+	RequestedAt int64
+	ExpiresAt   int64
 }
 
 type AuthenticateDesktopAuthorizationCommand struct{ Binding string }
@@ -284,13 +289,17 @@ func (s *desktopAuthorizationService) DesktopAuthorizationContext(ctx context.Co
 	if err != nil || current == nil {
 		return nil, desktopAuthorizationStoreErrors.Translate(err)
 	}
-	result := &DesktopAuthorizationBrowserContext{State: current.State, DeviceName: current.DeviceName, ExpiresAt: current.ExpiresAt.UnixMilli()}
+	if current.CreatedAt.IsZero() || current.ExpiresAt.Before(current.CreatedAt) {
+		return nil, apperror.New("authentication.desktop_authorization.unavailable")
+	}
+	result := &DesktopAuthorizationBrowserContext{State: current.State, DeviceName: current.DeviceName,
+		RequestedAt: current.CreatedAt.UnixMilli(), ExpiresAt: current.ExpiresAt.UnixMilli()}
 	if current.State == model.BrowserAuthenticationStateAuthenticated {
 		user, getErr := s.users.Get(ctx, current.UserID)
 		if getErr != nil || user == nil || !user.IsActive() {
 			return nil, apperror.New("authentication.desktop_authorization.unavailable").Wrap(getErr)
 		}
-		result.Account = &DesktopAuthorizationAccount{ID: user.ID, Username: user.Username, DisplayName: user.DisplayName}
+		result.Account = &DesktopAuthorizationAccount{ID: user.ID, Username: user.Username, DisplayName: user.DisplayName, Email: user.Email}
 		return result, nil
 	}
 	if current.State != model.BrowserAuthenticationStateBound {

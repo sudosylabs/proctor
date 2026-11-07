@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { desktopAccountName, type DesktopAuthorizationAccount, type DesktopAuthorizationContext, type DesktopAuthorizationProvider, type DesktopLocalAuthenticationSubmission } from "../../features/desktop-authorization/DesktopAuthorizationApi";
 import type { DesktopAuthorizationJourney, DesktopJourneySnapshot, DesktopLocalFeedback, DesktopTerminalState } from "../../features/desktop-authorization/DesktopAuthorizationJourney";
+import { formatDateTime } from "../../i18n/dateTime";
 import { message } from "../../i18n/messages";
 import { AccessTaskIntro } from "../AccessTaskIntro/AccessTaskIntro";
 import { AuthenticationCodeField, isCompleteAuthenticationCode, type AuthenticationCodeValue } from "../AuthenticationCodeField/AuthenticationCodeField";
@@ -373,25 +374,20 @@ function AuthorizationDetails({
   context: DesktopAuthorizationContext;
 }) {
   const name = desktopAccountName(account);
-  // The context carries no account email or request time; when it does, they
-  // join the Account value and become a "Requested" fact respectively.
   return (
     <FactList aria-label={message("webapp.desktop_authorization.facts.label")}>
       <Fact label={message("webapp.desktop_authorization.account")}>
-        {name === account.username ? (
-          <span translate="no">{account.username}</span>
-        ) : (
-          <>
-            {name}
-            <span className={styles.username}>
-              {" · "}
-              <span translate="no">{account.username}</span>
-            </span>
-          </>
-        )}
+        {name === account.username ? <span translate="no">{account.username}</span> : name}
+        <span className={styles.accountEmail}>
+          {" · "}
+          <span translate="no">{account.email}</span>
+        </span>
       </Fact>
       <Fact label={message("webapp.desktop_authorization.device")}>
         {context.deviceName || message("webapp.desktop_authorization.device_fallback")}
+      </Fact>
+      <Fact label={message("webapp.desktop_authorization.requested")}>
+        <time dateTime={context.requestedAt}>{formatDateTime(context.requestedAt)}</time>
       </Fact>
     </FactList>
   );

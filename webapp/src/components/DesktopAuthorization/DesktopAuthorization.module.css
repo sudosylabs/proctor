@@ -13,7 +13,7 @@
     min-inline-size: 0;
   }
 
-  .username {
+  .accountEmail {
     color: var(--proctor-color-foreground-muted);
   }
 

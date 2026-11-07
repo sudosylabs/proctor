@@ -344,6 +344,111 @@ func (s *accessControlService) CanDelegateActionsAtScope(
 	return s.canDelegateActionsAtScope(ctx, principal, actions, scopeType, scopeID)
 }
 
+// PersonalAccessTokenDelegation is where a principal may currently delegate
+// each Personal Access Token action. AcademicUnitRootIDs is the sorted union
+// of the Academic Units at which at least one action is delegable; an action
+// delegable at a root may also target any unit below it.
+type PersonalAccessTokenDelegation struct {
+	Actions             []PersonalAccessTokenActionDelegation
+	AcademicUnitRootIDs []model.AcademicUnitID
+}
+
+// PersonalAccessTokenActionDelegation is one delegable action. InstitutionWide
+// means a token may carry the action with no Academic Unit boundary or with
+// any boundary; AcademicUnitIDs lists the roots at which it is delegable.
+type PersonalAccessTokenActionDelegation struct {
+	Action          model.Action
+	InstitutionWide bool
+	AcademicUnitIDs []model.AcademicUnitID
+}
+
+// PersonalAccessTokenDelegation evaluates every Personal Access Token action
+// with the same ceiling CanDelegateActionsAtScope applies at creation, so it
+// never reports a placement that creation would refuse. Actions delegable
+// nowhere are omitted.
+func (s *accessControlService) PersonalAccessTokenDelegation(
+	ctx context.Context,
+	principal model.Principal,
+) (PersonalAccessTokenDelegation, error) {
+	var result PersonalAccessTokenDelegation
+	at := s.now()
+	var active *activeRoleBindings
+	type evaluated struct {
+		definition model.ActionDefinition
+		constraint authorizedScopeConstraint
+	}
+	evaluations := make([]evaluated, 0, len(model.PersonalAccessTokenActions()))
+	candidates := map[model.AcademicUnitID]struct{}{}
+	for _, value := range model.PersonalAccessTokenActions() {
+		registered, _ := model.DefinitionForAction(model.Action(value))
+		definition, exercisable, err := authorizedScopeDefinition(principal, registered.Action, registered.ResourceType)
+		if err != nil {
+			return result, err
+		}
+		if !exercisable {
+			continue
+		}
+		if active == nil {
+			loaded, loadErr := s.loadActiveRoleBindings(ctx, principal, at)
+			if loadErr != nil {
+				return result, loadErr
+			}
+			active = &loaded
+		}
+		constraint, err := s.scopeConstraintFromBindings(ctx, principal, definition, *active)
+		if err != nil {
+			return result, err
+		}
+		for _, rootID := range constraint.AcademicUnitRootIDs {
+			candidates[rootID] = struct{}{}
+		}
+		evaluations = append(evaluations, evaluated{definition: definition, constraint: constraint})
+	}
+	candidateIDs := make([]model.AcademicUnitID, 0, len(candidates))
+	for id := range candidates {
+		candidateIDs = append(candidateIDs, id)
+	}
+	slices.Sort(candidateIDs)
+	targets := make([]model.Resource, len(candidateIDs))
+	resolvedTargets := make([]resolvedAuthorizationResource, len(candidateIDs))
+	for index, id := range candidateIDs {
+		targets[index] = model.Resource{Type: model.ResourceAcademicUnit, ID: id.String()}
+		resolved, err := s.deps.Resolver.resolve(ctx, targets[index])
+		if err != nil {
+			return result, err
+		}
+		resolvedTargets[index] = resolved
+	}
+	institution := model.Resource{Type: model.ResourceInstitution}
+	usedRoots := map[model.AcademicUnitID]struct{}{}
+	for _, evaluation := range evaluations {
+		delegation := PersonalAccessTokenActionDelegation{
+			Action: evaluation.definition.Action,
+			InstitutionWide: delegationConstraintContains(
+				evaluation.constraint, institution, resolvedAuthorizationResource{}, false,
+			),
+		}
+		// Every candidate is an Academic Unit, where creation applies the
+		// strict-parent rule to protected actions.
+		strictParent := protectedDelegationAction(evaluation.definition.Action)
+		for index, id := range candidateIDs {
+			if delegationConstraintContains(evaluation.constraint, targets[index], resolvedTargets[index], strictParent) {
+				delegation.AcademicUnitIDs = append(delegation.AcademicUnitIDs, id)
+				usedRoots[id] = struct{}{}
+			}
+		}
+		if delegation.InstitutionWide || len(delegation.AcademicUnitIDs) > 0 {
+			result.Actions = append(result.Actions, delegation)
+		}
+	}
+	for _, id := range candidateIDs {
+		if _, used := usedRoots[id]; used {
+			result.AcademicUnitRootIDs = append(result.AcademicUnitRootIDs, id)
+		}
+	}
+	return result, nil
+}
+
 func delegationConstraintContains(
 	constraint authorizedScopeConstraint,
 	target model.Resource,
@@ -400,27 +505,59 @@ func (s *accessControlService) authorizedScopesAt(
 	resourceType model.ResourceType,
 	at time.Time,
 ) (authorizedScopeConstraint, error) {
-	var constraint authorizedScopeConstraint
+	definition, exercisable, err := authorizedScopeDefinition(principal, action, resourceType)
+	if err != nil || !exercisable {
+		return authorizedScopeConstraint{}, err
+	}
+	active, err := s.loadActiveRoleBindings(ctx, principal, at)
+	if err != nil {
+		return authorizedScopeConstraint{}, err
+	}
+	return s.scopeConstraintFromBindings(ctx, principal, definition, active)
+}
+
+// authorizedScopeDefinition validates a scope query and reports whether the
+// principal's credential may exercise the action at all.
+func authorizedScopeDefinition(
+	principal model.Principal,
+	action model.Action,
+	resourceType model.ResourceType,
+) (model.ActionDefinition, bool, error) {
 	if principal.Validate() != nil {
-		return constraint, invalidTokenAppError()
+		return model.ActionDefinition{}, false, invalidTokenAppError()
 	}
 	definition, known := model.DefinitionForAction(action)
 	if !known || !definition.AcceptsResource(resourceType) {
-		return constraint, apperror.New("authorization.request.invalid")
+		return model.ActionDefinition{}, false, apperror.New("authorization.request.invalid")
 	}
 	if principal.CredentialType == model.CredentialPersonalAccessToken {
 		if definition.PersonalAccessTokenForbidden || !slices.Contains(principal.CredentialScopes, string(action)) {
-			return constraint, nil
+			return definition, false, nil
 		}
 	}
-	bindings, grants, err := s.activeBindingGrants(ctx, principal, action, at)
-	if err != nil {
-		return constraint, err
-	}
+	return definition, true, nil
+}
+
+// activeRoleBindings is the principal's active Role Bindings with the
+// permissions of each bound Role, loaded once for one decision time.
+type activeRoleBindings struct {
+	bindings    []*model.RoleBinding
+	permissions map[model.RoleID][]string
+}
+
+func (a activeRoleBindings) grants(binding *model.RoleBinding, action model.Action) bool {
+	return slices.Contains(a.permissions[binding.RoleID], string(action))
+}
+
+// scopeConstraintFromBindings accumulates the scopes of the active bindings whose Role grants the action.
+func (s *accessControlService) scopeConstraintFromBindings(
+	ctx context.Context, principal model.Principal, definition model.ActionDefinition, active activeRoleBindings,
+) (authorizedScopeConstraint, error) {
+	var constraint authorizedScopeConstraint
 	unitRoots := map[model.AcademicUnitID]struct{}{}
 	classIDs := map[model.ClassID]struct{}{}
-	for _, binding := range bindings {
-		if !grants[binding.RoleID.String()] {
+	for _, binding := range active.bindings {
+		if !active.grants(binding, definition.Action) {
 			continue
 		}
 		if err := s.accumulateBindingScope(ctx, principal, definition, binding, &constraint, unitRoots, classIDs); err != nil {
@@ -438,16 +575,16 @@ func (s *accessControlService) authorizedScopesAt(
 	return constraint, nil
 }
 
-// activeBindingGrants loads the principal's active Role Bindings and records which of their Roles grant the action.
-func (s *accessControlService) activeBindingGrants(
-	ctx context.Context, principal model.Principal, action model.Action, at time.Time,
-) ([]*model.RoleBinding, map[string]bool, error) {
+// loadActiveRoleBindings loads the principal's active Role Bindings and the permissions of their Roles.
+func (s *accessControlService) loadActiveRoleBindings(
+	ctx context.Context, principal model.Principal, at time.Time,
+) (activeRoleBindings, error) {
 	bindings, err := s.deps.Bindings.ListActiveByUser(ctx, principal.UserID, model.TimeUTC(at))
 	if err != nil {
-		return nil, nil, authorizationUnavailableError(err)
+		return activeRoleBindings{}, authorizationUnavailableError(err)
 	}
 	if len(bindings) > 256 {
-		return nil, nil, authorizationUnavailableError(errors.New("active binding bound exceeded"))
+		return activeRoleBindings{}, authorizationUnavailableError(errors.New("active binding bound exceeded"))
 	}
 	roleIDs := make([]model.RoleID, 0, len(bindings))
 	seenRoles := map[model.RoleID]struct{}{}
@@ -459,13 +596,13 @@ func (s *accessControlService) activeBindingGrants(
 	}
 	roles, err := s.deps.Roles.GetByIDs(ctx, roleIDs)
 	if err != nil {
-		return nil, nil, authorizationUnavailableError(err)
+		return activeRoleBindings{}, authorizationUnavailableError(err)
 	}
-	grants := map[string]bool{}
+	permissions := make(map[model.RoleID][]string, len(roles))
 	for _, role := range roles {
-		grants[role.ID.String()] = slices.Contains(role.Permissions, string(action))
+		permissions[role.ID] = role.Permissions
 	}
-	return bindings, grants, nil
+	return activeRoleBindings{bindings: bindings, permissions: permissions}, nil
 }
 
 // accumulateBindingScope adds the scope of one granting Role Binding to the constraint within the principal's ceiling.

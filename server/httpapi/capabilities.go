@@ -145,6 +145,7 @@ type Sessions interface {
 type PersonalAccessTokens interface {
 	CreatePersonalAccessToken(context.Context, invocation.Invocation, app.CreatePersonalAccessTokenCommand) (*model.PersonalAccessTokenCreation, error)
 	ListPersonalAccessTokens(context.Context, invocation.Invocation, app.ListPersonalAccessTokensQuery) ([]*model.PersonalAccessToken, error)
+	ListGrantablePersonalAccessTokenScopes(context.Context, invocation.Invocation, app.ListGrantablePersonalAccessTokenScopesQuery) (*app.PersonalAccessTokenGrantableScopes, error)
 	RevokePersonalAccessToken(context.Context, invocation.Invocation, app.RevokePersonalAccessTokenCommand) (*model.PersonalAccessToken, error)
 	SetPersonalAccessTokenDisabled(context.Context, invocation.Invocation, app.SetPersonalAccessTokenDisabledCommand) (*model.PersonalAccessToken, error)
 }

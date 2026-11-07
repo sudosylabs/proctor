@@ -1,5 +1,429 @@
 [
   {
+    "id": "access.action.academic.progression.manage.description",
+    "translation": "Move students from one class to the next at the end of an academic period."
+  },
+  {
+    "id": "access.action.academic.progression.manage.title",
+    "translation": "Manage academic progression"
+  },
+  {
+    "id": "access.action.academic_audit.view.description",
+    "translation": "Read the audit history of academic structure, membership and role changes."
+  },
+  {
+    "id": "access.action.academic_audit.view.title",
+    "translation": "View academic audit history"
+  },
+  {
+    "id": "access.action.academic_period.manage.description",
+    "translation": "Create, update and archive academic periods."
+  },
+  {
+    "id": "access.action.academic_period.manage.title",
+    "translation": "Manage academic periods"
+  },
+  {
+    "id": "access.action.academic_period.view.description",
+    "translation": "Read academic periods and their dates."
+  },
+  {
+    "id": "access.action.academic_period.view.title",
+    "translation": "View academic periods"
+  },
+  {
+    "id": "access.action.academic_unit.manage.description",
+    "translation": "Create, update and archive academic units."
+  },
+  {
+    "id": "access.action.academic_unit.manage.title",
+    "translation": "Manage academic units"
+  },
+  {
+    "id": "access.action.academic_unit.members.manage.description",
+    "translation": "Add and remove academic unit members."
+  },
+  {
+    "id": "access.action.academic_unit.members.manage.title",
+    "translation": "Manage academic unit members"
+  },
+  {
+    "id": "access.action.academic_unit.members.view.description",
+    "translation": "Read the members of academic units."
+  },
+  {
+    "id": "access.action.academic_unit.members.view.title",
+    "translation": "View academic unit members"
+  },
+  {
+    "id": "access.action.academic_unit.view.description",
+    "translation": "Read academic units and their hierarchy."
+  },
+  {
+    "id": "access.action.academic_unit.view.title",
+    "translation": "View academic units"
+  },
+  {
+    "id": "access.action.audit.view.description",
+    "translation": "Read the installation's audit history."
+  },
+  {
+    "id": "access.action.audit.view.title",
+    "translation": "View audit history"
+  },
+  {
+    "id": "access.action.class.manage.description",
+    "translation": "Create, update and archive classes."
+  },
+  {
+    "id": "access.action.class.manage.title",
+    "translation": "Manage classes"
+  },
+  {
+    "id": "access.action.class.members.manage.description",
+    "translation": "Enrol, transfer and remove class members."
+  },
+  {
+    "id": "access.action.class.members.manage.title",
+    "translation": "Manage class members"
+  },
+  {
+    "id": "access.action.class.members.view.description",
+    "translation": "Read class rosters."
+  },
+  {
+    "id": "access.action.class.members.view.title",
+    "translation": "View class members"
+  },
+  {
+    "id": "access.action.class.view.description",
+    "translation": "Read classes and their details."
+  },
+  {
+    "id": "access.action.class.view.title",
+    "translation": "View classes"
+  },
+  {
+    "id": "access.action.exam.attempt.browser_activity.view.description",
+    "translation": "Read candidates' browser activity in sittings of exams you manage."
+  },
+  {
+    "id": "access.action.exam.attempt.browser_activity.view.title",
+    "translation": "View browser activity"
+  },
+  {
+    "id": "access.action.exam.create.description",
+    "translation": "Create new exams."
+  },
+  {
+    "id": "access.action.exam.create.override.description",
+    "translation": "Create exams through the audited administrator path."
+  },
+  {
+    "id": "access.action.exam.create.override.title",
+    "translation": "Create exams as administrator"
+  },
+  {
+    "id": "access.action.exam.create.title",
+    "translation": "Create exams"
+  },
+  {
+    "id": "access.action.exam.manage.description",
+    "translation": "Edit the drafts, resources and settings of exams you manage."
+  },
+  {
+    "id": "access.action.exam.manage.override.description",
+    "translation": "Edit exams without being an exam manager, through the audited administrator path."
+  },
+  {
+    "id": "access.action.exam.manage.override.title",
+    "translation": "Manage any exam"
+  },
+  {
+    "id": "access.action.exam.manage.title",
+    "translation": "Manage exams"
+  },
+  {
+    "id": "access.action.exam.publish.description",
+    "translation": "Publish new revisions of exams you manage."
+  },
+  {
+    "id": "access.action.exam.publish.override.description",
+    "translation": "Publish exam revisions without being an exam manager, through the audited administrator path."
+  },
+  {
+    "id": "access.action.exam.publish.override.title",
+    "translation": "Publish any exam"
+  },
+  {
+    "id": "access.action.exam.publish.title",
+    "translation": "Publish exams"
+  },
+  {
+    "id": "access.action.exam.sitting.create.description",
+    "translation": "Schedule sittings of exams you manage."
+  },
+  {
+    "id": "access.action.exam.sitting.create.override.description",
+    "translation": "Schedule exam sittings without being an exam manager, through the audited administrator path."
+  },
+  {
+    "id": "access.action.exam.sitting.create.override.title",
+    "translation": "Schedule sittings of any exam"
+  },
+  {
+    "id": "access.action.exam.sitting.create.title",
+    "translation": "Schedule exam sittings"
+  },
+  {
+    "id": "access.action.exam.sitting.manage.description",
+    "translation": "Reschedule and cancel sittings of exams you manage."
+  },
+  {
+    "id": "access.action.exam.sitting.manage.override.description",
+    "translation": "Reschedule and cancel exam sittings without being an exam manager, through the audited administrator path."
+  },
+  {
+    "id": "access.action.exam.sitting.manage.override.title",
+    "translation": "Manage any exam sitting"
+  },
+  {
+    "id": "access.action.exam.sitting.manage.title",
+    "translation": "Manage exam sittings"
+  },
+  {
+    "id": "access.action.exam.sitting.view.description",
+    "translation": "Read sittings of exams you manage."
+  },
+  {
+    "id": "access.action.exam.sitting.view.override.description",
+    "translation": "Read exam sittings without being an exam manager, through the audited administrator path."
+  },
+  {
+    "id": "access.action.exam.sitting.view.override.title",
+    "translation": "View any exam sitting"
+  },
+  {
+    "id": "access.action.exam.sitting.view.title",
+    "translation": "View exam sittings"
+  },
+  {
+    "id": "access.action.exam.view.description",
+    "translation": "Read exams you manage, including drafts and revisions."
+  },
+  {
+    "id": "access.action.exam.view.override.description",
+    "translation": "Read exams without being an exam manager, through the audited administrator path."
+  },
+  {
+    "id": "access.action.exam.view.override.title",
+    "translation": "View any exam"
+  },
+  {
+    "id": "access.action.exam.view.title",
+    "translation": "View exams"
+  },
+  {
+    "id": "access.action.institution.manage.description",
+    "translation": "Update the institution's settings."
+  },
+  {
+    "id": "access.action.institution.manage.title",
+    "translation": "Manage the institution"
+  },
+  {
+    "id": "access.action.invitation.create.description",
+    "translation": "Invite people to create an account."
+  },
+  {
+    "id": "access.action.invitation.create.title",
+    "translation": "Create invitations"
+  },
+  {
+    "id": "access.action.invitation.manage.description",
+    "translation": "Resend and revoke invitations."
+  },
+  {
+    "id": "access.action.invitation.manage.title",
+    "translation": "Manage invitations"
+  },
+  {
+    "id": "access.action.invitation.view.description",
+    "translation": "Read invitations and their status."
+  },
+  {
+    "id": "access.action.invitation.view.title",
+    "translation": "View invitations"
+  },
+  {
+    "id": "access.action.job.manage.description",
+    "translation": "Retry and cancel background jobs."
+  },
+  {
+    "id": "access.action.job.manage.title",
+    "translation": "Manage background jobs"
+  },
+  {
+    "id": "access.action.job.view.description",
+    "translation": "Read background jobs and their progress."
+  },
+  {
+    "id": "access.action.job.view.title",
+    "translation": "View background jobs"
+  },
+  {
+    "id": "access.action.mail.manage.description",
+    "translation": "Retry, cancel and suppress outgoing mail."
+  },
+  {
+    "id": "access.action.mail.manage.title",
+    "translation": "Manage mail delivery"
+  },
+  {
+    "id": "access.action.mail.view.description",
+    "translation": "Read the delivery status of outgoing mail."
+  },
+  {
+    "id": "access.action.mail.view.title",
+    "translation": "View mail delivery"
+  },
+  {
+    "id": "access.action.onboarding_batch.manage.description",
+    "translation": "Import and run batches that add users in bulk."
+  },
+  {
+    "id": "access.action.onboarding_batch.manage.title",
+    "translation": "Manage onboarding batches"
+  },
+  {
+    "id": "access.action.onboarding_batch.view.description",
+    "translation": "Read onboarding batches and their results."
+  },
+  {
+    "id": "access.action.onboarding_batch.view.title",
+    "translation": "View onboarding batches"
+  },
+  {
+    "id": "access.action.programme.manage.description",
+    "translation": "Create, update and archive programmes."
+  },
+  {
+    "id": "access.action.programme.manage.title",
+    "translation": "Manage programmes"
+  },
+  {
+    "id": "access.action.programme.view.description",
+    "translation": "Read programmes and their details."
+  },
+  {
+    "id": "access.action.programme.view.title",
+    "translation": "View programmes"
+  },
+  {
+    "id": "access.action.programme_level.manage.description",
+    "translation": "Create, update and archive programme levels."
+  },
+  {
+    "id": "access.action.programme_level.manage.title",
+    "translation": "Manage programme levels"
+  },
+  {
+    "id": "access.action.programme_level.view.description",
+    "translation": "Read programme levels and their details."
+  },
+  {
+    "id": "access.action.programme_level.view.title",
+    "translation": "View programme levels"
+  },
+  {
+    "id": "access.action.session.manage.description",
+    "translation": "Sign users out of their sessions."
+  },
+  {
+    "id": "access.action.session.manage.title",
+    "translation": "Manage user sessions"
+  },
+  {
+    "id": "access.action.session.view.description",
+    "translation": "Read users' active sessions."
+  },
+  {
+    "id": "access.action.session.view.title",
+    "translation": "View user sessions"
+  },
+  {
+    "id": "access.action.submission.release.description",
+    "translation": "Release review results to candidates for exams you manage."
+  },
+  {
+    "id": "access.action.submission.release.override.description",
+    "translation": "Release review results without being an exam manager, through the audited administrator path."
+  },
+  {
+    "id": "access.action.submission.release.override.title",
+    "translation": "Release results for any exam"
+  },
+  {
+    "id": "access.action.submission.release.title",
+    "translation": "Release results"
+  },
+  {
+    "id": "access.action.submission.review.description",
+    "translation": "Record integrity decisions and remarks on submissions for exams you manage."
+  },
+  {
+    "id": "access.action.submission.review.override.description",
+    "translation": "Review submissions without being an exam manager, through the audited administrator path."
+  },
+  {
+    "id": "access.action.submission.review.override.title",
+    "translation": "Review any submission"
+  },
+  {
+    "id": "access.action.submission.review.title",
+    "translation": "Review submissions"
+  },
+  {
+    "id": "access.action.submission.view.description",
+    "translation": "Read submissions for exams you manage."
+  },
+  {
+    "id": "access.action.submission.view.override.description",
+    "translation": "Read submissions without being an exam manager, through the audited administrator path."
+  },
+  {
+    "id": "access.action.submission.view.override.title",
+    "translation": "View any submission"
+  },
+  {
+    "id": "access.action.submission.view.title",
+    "translation": "View submissions"
+  },
+  {
+    "id": "access.action.user.manage.description",
+    "translation": "Update, disable and enable user accounts."
+  },
+  {
+    "id": "access.action.user.manage.title",
+    "translation": "Manage users"
+  },
+  {
+    "id": "access.action.user.profile_picture.manage.description",
+    "translation": "Change and remove users' profile pictures."
+  },
+  {
+    "id": "access.action.user.profile_picture.manage.title",
+    "translation": "Manage profile pictures"
+  },
+  {
+    "id": "access.action.user.view.description",
+    "translation": "Read user profiles."
+  },
+  {
+    "id": "access.action.user.view.title",
+    "translation": "View users"
+  },
+  {
     "id": "authorization.role.system_admin.description",
     "translation": "Protected administrator role for this Proctor installation."
   },

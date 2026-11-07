@@ -155,6 +155,7 @@ func identityAndSystemOpenAPIAgreementSuite() openAPIAgreementSuite {
 		operation("POST /api/v1/users/me/mfa/recovery-codes/regenerate", AuthStrongRecentSessionRequired, "", "", "200", "#/components/responses/MFARecoveryCodesOK", "MFARecoveryCodesResponse"),
 		operation("POST /api/v1/users/me/mfa/disable", AuthStrongRecentSessionRequired, "", "", "204", "#/components/responses/SensitiveNoContent", ""),
 		operation("GET /api/v1/users/me/tokens", AuthSessionRequired, "", "", "200", "#/components/responses/PersonalAccessTokenListOK", "PersonalAccessTokenListResponse"),
+		operation("GET /api/v1/users/me/personal-access-tokens/grantable-scopes", AuthSessionRequired, "", "", "200", "#/components/responses/PersonalAccessTokenGrantableScopesOK", "PersonalAccessTokenGrantableScopesResponse"),
 		operation("POST /api/v1/users/me/tokens", AuthRecentSessionRequired, "#/components/requestBodies/CreatePersonalAccessToken", "CreatePersonalAccessTokenRequest", "201", "#/components/responses/PersonalAccessTokenCreated", "PersonalAccessTokenCreationResponse"),
 		operation("POST /api/v1/users/me/tokens/{personal_access_token_id}/disable", AuthSessionRequired, "", "", "200", "#/components/responses/PersonalAccessTokenOK", "PersonalAccessTokenResponse"),
 		operation("POST /api/v1/users/me/tokens/{personal_access_token_id}/enable", AuthRecentSessionRequired, "", "", "200", "#/components/responses/PersonalAccessTokenOK", "PersonalAccessTokenResponse"),
@@ -204,6 +205,9 @@ func identityAndSystemOpenAPIAgreementSuite() openAPIAgreementSuite {
 			{Name: "CreatePersonalAccessTokenRequest", DTO: reflect.TypeOf(createPersonalAccessTokenRequest{}), Required: []string{"description", "scopes", "expires_at"}},
 			{Name: "PersonalAccessTokenResponse", DTO: reflect.TypeOf(personalAccessTokenResponse{}), Required: []string{"id", "created_at", "updated_at", "user_id", "description", "scopes", "expires_at"}},
 			{Name: "PersonalAccessTokenCreationResponse", DTO: reflect.TypeOf(personalAccessTokenCreationResponse{}), Required: []string{"token", "credential"}},
+			{Name: "PersonalAccessTokenGrantableScopesResponse", DTO: reflect.TypeOf(personalAccessTokenGrantableScopesResponse{}), Required: []string{"scopes", "academic_units", "academic_units_has_more"}},
+			{Name: "PersonalAccessTokenGrantableScope", DTO: reflect.TypeOf(personalAccessTokenGrantableScopeResponse{}), Required: []string{"name", "title", "description", "resource_types", "institution_wide", "academic_unit_ids"}},
+			{Name: "PersonalAccessTokenGrantableAcademicUnit", DTO: reflect.TypeOf(personalAccessTokenAcademicUnitResponse{}), Required: []string{"id", "display_name"}},
 			{Name: "ExternalAuthenticationProviderResponse", DTO: reflect.TypeOf(externalAuthenticationProviderResponse{}), Required: []string{"id", "display_name", "type"}},
 			{Name: "ExternalAuthenticationStartRequest", DTO: reflect.TypeOf(externalAuthenticationStartRequest{}), Required: []string{"invitation_claim"}},
 		},
@@ -217,7 +221,8 @@ func identityAndSystemOperation(_ string, path string) bool {
 		strings.HasPrefix(path, "/api/v1/users/me/desktop-registrations") ||
 		strings.HasPrefix(path, "/api/v1/users/me/sessions") ||
 		strings.HasPrefix(path, "/api/v1/users/me/mfa") ||
-		strings.HasPrefix(path, "/api/v1/users/me/tokens")
+		strings.HasPrefix(path, "/api/v1/users/me/tokens") ||
+		strings.HasPrefix(path, "/api/v1/users/me/personal-access-tokens/")
 }
 
 func identityAndSystemErrorContracts() map[string][]string {
@@ -265,6 +270,7 @@ func identityAndSystemErrorContracts() map[string][]string {
 		"POST /api/v1/users/me/mfa/recovery-codes/regenerate":                                {"authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.session_required"},
 		"POST /api/v1/users/me/mfa/disable":                                                  {"authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "audit.unavailable", "authentication.session_required"},
 		"GET /api/v1/users/me/tokens":                                                        {"personal_access_token.unavailable", "authentication.reauthentication_required", "authentication.session_required", "request.invalid"},
+		"GET /api/v1/users/me/personal-access-tokens/grantable-scopes":                       {"personal_access_token.unavailable", "authentication.reauthentication_required", "authentication.session_required"},
 		"POST /api/v1/users/me/tokens":                                                       {"request.invalid", "resource.not_found", "personal_access_token.invalid", "personal_access_token.maximum_reached", "personal_access_token.unavailable", "audit.unavailable", "authentication.session_required"},
 		"POST /api/v1/users/me/tokens/{personal_access_token_id}/disable":                    {"request.invalid", "resource.not_found", "personal_access_token.unavailable", "audit.unavailable", "authentication.reauthentication_required", "authentication.session_required", "personal_access_token.invalid"},
 		"POST /api/v1/users/me/tokens/{personal_access_token_id}/enable":                     {"request.invalid", "resource.not_found", "personal_access_token.maximum_reached", "personal_access_token.unavailable", "audit.unavailable", "authentication.session_required", "personal_access_token.invalid"},

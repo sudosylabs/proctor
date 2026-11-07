@@ -28,6 +28,9 @@ import (
 
 const (
 	personalAccessTokenMutationPreparationLifetime = 5 * time.Minute
+	// personalAccessTokenGrantableAcademicUnitLimit bounds the delegable
+	// Academic Unit roots listed in the grantable-scope catalogue.
+	personalAccessTokenGrantableAcademicUnitLimit = 50
 )
 
 // CreatePersonalAccessTokenCommand creates a new PAT for the interactive caller.
@@ -40,6 +43,28 @@ type CreatePersonalAccessTokenCommand struct {
 
 // ListPersonalAccessTokensQuery lists the caller's PATs.
 type ListPersonalAccessTokensQuery struct{}
+
+// ListGrantablePersonalAccessTokenScopesQuery lists the scopes the caller may
+// currently place in a new PAT.
+type ListGrantablePersonalAccessTokenScopesQuery struct{}
+
+// PersonalAccessTokenGrantableScopes is the caller's current PAT scope
+// catalogue. AcademicUnits holds at most 50 delegable roots ordered by display
+// name; AcademicUnitsHasMore reports that more exist. Each scope lists only the
+// returned roots at which it is delegable.
+type PersonalAccessTokenGrantableScopes struct {
+	Scopes               []PersonalAccessTokenGrantableScope
+	AcademicUnits        []*model.AcademicUnit
+	AcademicUnitsHasMore bool
+}
+
+// PersonalAccessTokenGrantableScope is one action the caller may delegate.
+type PersonalAccessTokenGrantableScope struct {
+	Action          model.Action
+	ResourceTypes   []model.ResourceType
+	InstitutionWide bool
+	AcademicUnitIDs []model.AcademicUnitID
+}
 
 // RevokePersonalAccessTokenCommand revokes one owned PAT.
 type RevokePersonalAccessTokenCommand struct {
@@ -61,6 +86,7 @@ type personalAccessTokenAuditor interface {
 
 type personalAccessTokenScopeAuthorizer interface {
 	CanDelegateActionsAtScope(context.Context, model.Principal, []string, model.RoleScopeType, string) (bool, error)
+	PersonalAccessTokenDelegation(context.Context, model.Principal) (PersonalAccessTokenDelegation, error)
 }
 
 type personalAccessTokenUserStore interface {
@@ -230,6 +256,71 @@ func (s *personalAccessTokenAdministrationService) ListPersonalAccessTokens(
 		return nil, personalAccessTokenFailure("personal_access_token", err)
 	}
 	return tokens, nil
+}
+
+// ListGrantablePersonalAccessTokenScopes reports which actions the interactive
+// caller may currently delegate to a new PAT, and at which Academic Unit roots.
+// It applies creation's delegation ceiling, so every offered placement is one
+// CreatePersonalAccessToken accepts for the same principal.
+func (s *personalAccessTokenAdministrationService) ListGrantablePersonalAccessTokenScopes(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	_ ListGrantablePersonalAccessTokenScopesQuery,
+) (*PersonalAccessTokenGrantableScopes, error) {
+	principal := invocation.Principal()
+	if err := requireInteractiveSession(principal, false, s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
+		return nil, err
+	}
+	delegation, err := s.deps.Authorization.PersonalAccessTokenDelegation(ctx, principal)
+	if err != nil {
+		return nil, personalAccessTokenFailure("authorization", err)
+	}
+	units := make([]*model.AcademicUnit, 0, len(delegation.AcademicUnitRootIDs))
+	for _, id := range delegation.AcademicUnitRootIDs {
+		unit, lookupErr := s.deps.AcademicUnits.Get(ctx, id)
+		if lookupErr != nil {
+			// The root was resolved moments ago, so a missing unit is a race
+			// with archival rather than a caller error.
+			return nil, apperror.New("personal_access_token.unavailable").
+				WithField("resource", "academic_unit").Wrap(lookupErr)
+		}
+		units = append(units, unit)
+	}
+	sort.SliceStable(units, func(i, j int) bool {
+		if units[i].DisplayName != units[j].DisplayName {
+			return units[i].DisplayName < units[j].DisplayName
+		}
+		return units[i].ID < units[j].ID
+	})
+	result := &PersonalAccessTokenGrantableScopes{
+		Scopes: make([]PersonalAccessTokenGrantableScope, 0, len(delegation.Actions)),
+	}
+	if len(units) > personalAccessTokenGrantableAcademicUnitLimit {
+		units = units[:personalAccessTokenGrantableAcademicUnitLimit]
+		result.AcademicUnitsHasMore = true
+	}
+	result.AcademicUnits = units
+	listed := make(map[model.AcademicUnitID]struct{}, len(units))
+	for _, unit := range units {
+		listed[unit.ID] = struct{}{}
+	}
+	for _, action := range delegation.Actions {
+		definition, ok := model.DefinitionForAction(action.Action)
+		if !ok {
+			continue
+		}
+		scope := PersonalAccessTokenGrantableScope{
+			Action: action.Action, ResourceTypes: definition.ResourceTypes(),
+			InstitutionWide: action.InstitutionWide, AcademicUnitIDs: []model.AcademicUnitID{},
+		}
+		for _, id := range action.AcademicUnitIDs {
+			if _, ok := listed[id]; ok {
+				scope.AcademicUnitIDs = append(scope.AcademicUnitIDs, id)
+			}
+		}
+		result.Scopes = append(result.Scopes, scope)
+	}
+	return result, nil
 }
 
 func (s *personalAccessTokenAdministrationService) RevokePersonalAccessToken(

@@ -8,6 +8,7 @@
 package model
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -59,6 +60,33 @@ func TestActionDefinitionDistinguishesConcreteResourcesFromRoleScopes(t *testing
 	require.True(t, examManage.SupportsRoleScope(RoleScopeAcademicUnit), "exam.manage Role scopes = institution")
 	require.False(t, examManage.SupportsRoleScope(RoleScopeClass), "exam.manage Role scopes = institution")
 	require.False(t, examManage.SupportsRoleScope(RoleScopeType("future")), "exam.manage accepted an unknown Role scope")
+}
+
+func TestPersonalAccessTokenActionsAreTheSortedEligibleCatalogue(t *testing.T) {
+	t.Parallel()
+
+	actions := PersonalAccessTokenActions()
+	require.NotEmpty(t, actions)
+	require.True(t, slices.IsSorted(actions), "actions = %v", actions)
+	for _, action := range AllActions() {
+		require.Equal(t, IsPersonalAccessTokenAction(action), slices.Contains(actions, action), "action %q", action)
+	}
+	require.Contains(t, actions, string(ActionExamView))
+	require.NotContains(t, actions, string(ActionRoleBindingManage), "PAT-forbidden action offered")
+	require.NotContains(t, actions, string(ActionRetentionPolicyManage), "system-administrator-only action offered")
+	require.NotContains(t, actions, string(ActionExamSittingParticipate), "relationship-only action offered")
+}
+
+func TestActionDefinitionResourceTypesIncludeCompatibleScopes(t *testing.T) {
+	t.Parallel()
+
+	classView, ok := DefinitionForAction(ActionClassView)
+	require.True(t, ok)
+	require.Equal(t, []ResourceType{ResourceAcademicUnit, ResourceClass, ResourceProgrammeLevel}, classView.ResourceTypes())
+	examView, ok := DefinitionForAction(ActionExamView)
+	require.True(t, ok)
+	require.Equal(t, []ResourceType{ResourceExam}, examView.ResourceTypes())
+	require.Empty(t, examView.CompatibleResourceTypes, "ResourceTypes mutated the registry")
 }
 
 func TestJobActionsAreInstitutionScopedAndKnown(t *testing.T) {

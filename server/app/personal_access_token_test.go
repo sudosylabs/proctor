@@ -342,9 +342,17 @@ func mustPersonalAccessTokenAdministrationService(
 }
 
 type personalAccessTokenScopeAuthorizerFake struct {
-	events  *[]string
-	allowed bool
-	err     error
+	events     *[]string
+	allowed    bool
+	err        error
+	delegation PersonalAccessTokenDelegation
+}
+
+func (a *personalAccessTokenScopeAuthorizerFake) PersonalAccessTokenDelegation(
+	context.Context,
+	model.Principal,
+) (PersonalAccessTokenDelegation, error) {
+	return a.delegation, a.err
 }
 
 func (a *personalAccessTokenScopeAuthorizerFake) CanDelegateActionsAtScope(

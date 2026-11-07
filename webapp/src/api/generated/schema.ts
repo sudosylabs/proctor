@@ -674,6 +674,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/email-change/undo/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read the email change an undo credential would reverse
+         * @description Returns, for one active undo token, the previous address it would restore, the account's current address masked as in the warning mail, and when the change was applied. It never consumes, extends, or reissues the token and records no audit event. It is rate-limited by token and source with the undo policy, and an unknown, malformed, expired, or already used token receives the same generic invalid-credential outcome as the undo itself. The token travels in the body so it stays out of URLs and logs; whether the previous address is still free is decided only by the undo.
+         */
+        post: operations["inspectEmailChangeUndo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/email-verification/complete": {
         parameters: {
             query?: never;
@@ -688,6 +708,26 @@ export interface paths {
          * @description Consumes one valid short-lived verification token and marks its bound email address verified. The token is single use, cannot verify another address, and an invalid or expired token reveals no account details.
          */
         post: operations["completeEmailVerification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/email-verification/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read the address an email-verification credential would confirm
+         * @description Returns the address bound to one active verification token so the hosted page can name it before the person confirms. It never consumes, extends, or reissues the token and records no audit event. It is rate-limited by token and source with the completion policy, and an unknown, malformed, expired, superseded, or already used token receives the same generic invalid-credential outcome as completion. The token travels in the body so it stays out of URLs and logs; the result is presentation only and completion rechecks the token.
+         */
+        post: operations["inspectEmailVerification"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5585,6 +5625,9 @@ export interface components {
             /** Format: int64 */
             to_revision: number;
         };
+        AccountTokenInspectionRequest: {
+            token: string;
+        };
         AcknowledgeExamCorrectionRequest: {
             expected_current_revision_id: components["schemas"]["ID"];
             /** Format: int64 */
@@ -7064,11 +7107,32 @@ export interface components {
             /** @constant */
             visibility_class_id: "examiner_restricted";
         };
+        EmailChangeUndoInspectionResponse: {
+            /**
+             * Format: date-time
+             * @description When the email change was applied.
+             */
+            changed_at: string;
+            /** @description The account's current address, masked as in the email-change warning (first character, up to three asterisks, and the domain). */
+            masked_current_email: string;
+            /**
+             * Format: email
+             * @description The previous address the undo would restore; the token was mailed to it.
+             */
+            restored_email: string;
+        };
         EmailChangeUndoRequest: {
             token: string;
         };
         EmailVerificationCompletionRequest: {
             token: string;
+        };
+        EmailVerificationInspectionResponse: {
+            /**
+             * Format: email
+             * @description The address the token was issued for and would mark verified.
+             */
+            email: string;
         };
         EndExamAttemptByManagerRequest: {
             /** Format: int64 */
@@ -10991,6 +11055,38 @@ export interface components {
                 "application/json": components["schemas"]["DesktopRegistrationListResponse"];
             };
         };
+        /** @description The email change the active undo token would reverse */
+        EmailChangeUndoInspected: {
+            headers: {
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "changed_at": "2026-08-01T00:00:00Z",
+                 *       "masked_current_email": "s***@example.org",
+                 *       "restored_email": "student.one@example.edu"
+                 *     }
+                 */
+                "application/json": components["schemas"]["EmailChangeUndoInspectionResponse"];
+            };
+        };
+        /** @description The address the active verification token would confirm */
+        EmailVerificationInspected: {
+            headers: {
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "email": "student.one@example.edu"
+                 *     }
+                 */
+                "application/json": components["schemas"]["EmailVerificationInspectionResponse"];
+            };
+        };
         /** @description Bounded manager-safe Exam Attempt collection */
         ExamAttemptManagerListOK: {
             headers: {
@@ -13717,6 +13813,28 @@ export interface components {
                 "application/json": components["schemas"]["FinalDeliveryDeclaration"];
             };
         };
+        /** @description Supplies the undo token from the link fragment; it is read, not consumed. */
+        InspectEmailChangeUndo: {
+            content: {
+                /**
+                 * @example {
+                 *       "token": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+                 *     }
+                 */
+                "application/json": components["schemas"]["AccountTokenInspectionRequest"];
+            };
+        };
+        /** @description Supplies the email-verification token from the link fragment; it is read, not consumed. */
+        InspectEmailVerification: {
+            content: {
+                /**
+                 * @example {
+                 *       "token": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+                 *     }
+                 */
+                "application/json": components["schemas"]["AccountTokenInspectionRequest"];
+            };
+        };
         /** @description The local login identifier, password, client type, optional device presentation, and optional MFA proof. Credentials are sensitive and must never be logged. */
         Login: {
             content: {
@@ -15329,6 +15447,21 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    inspectEmailChangeUndo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["InspectEmailChangeUndo"];
+        responses: {
+            200: components["responses"]["EmailChangeUndoInspected"];
+            400: components["responses"]["BadRequest"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     completeEmailVerification: {
         parameters: {
             query?: never;
@@ -15339,6 +15472,21 @@ export interface operations {
         requestBody: components["requestBodies"]["CompleteEmailVerification"];
         responses: {
             204: components["responses"]["SensitiveNoContent"];
+            400: components["responses"]["BadRequest"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    inspectEmailVerification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["InspectEmailVerification"];
+        responses: {
+            200: components["responses"]["EmailVerificationInspected"];
             400: components["responses"]["BadRequest"];
             429: components["responses"]["TooManyRequests"];
             503: components["responses"]["ServiceUnavailable"];

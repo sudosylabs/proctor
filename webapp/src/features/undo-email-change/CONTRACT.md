@@ -15,10 +15,16 @@ The page lets the holder of the previous mailbox deliberately reverse one
 email change. A successful undo restores the previous address (verified,
 because the link proves control of it), signs every Session of the account
 out, and records an audit event. The page never selects a User or address
-or creates a Session. The undo API returns no change facts, so the page does
-not show the address being restored, the masked new address, or when the
-change was made; a `FactList` after the ready lede is reserved for them once
-an API slice returns them, and the page never invents them.
+or creates a Session. On entry with a captured token the route makes one
+read-only `POST /api/v1/auth/email-change/undo/inspect` with the same
+`{ "token": … }` body; it never consumes or extends the token. When it
+answers, a `FactList` after the ready lede shows “Previous address” (the
+address the undo restores), “New address” (the current address, masked by the
+server as in the warning mail), and “Changed” (an `Intl` date and time inside a
+`time` element), all untranslated where they are addresses. The facts stay
+while the undo is pending or retryable and disappear once it resolves. Any
+lookup failure shows no facts and never blocks, delays, or replaces the
+explicit action; the page never invents the facts.
 
 The token is not consumed automatically: mail scanners and link previews must
 not spend it. The person must activate the explicit `Undo change` button,

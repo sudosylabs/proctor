@@ -609,6 +609,25 @@ Affiliation, membership, or Role Binding. The packaged runtime owns `/register`,
 whose hosted form consumes this API without acquiring any additional account
 or authorization semantics.
 
+## Account-token inspection
+
+`POST /api/v1/auth/email-verification/inspect` and `POST
+/api/v1/auth/email-change/undo/inspect` let the hosted `/account/verify-email`
+and `/account/undo-email-change` pages name the address involved before the
+person acts. Each is public, takes only `{ "token": … }` in a strict JSON body
+so the fragment credential never enters a URL or access log, and returns a
+`no-store` `200`: the address a verification token would confirm, or the
+previous address an undo token would restore, the current address masked as
+in the warning mail, and when the change was applied. Inspection never
+consumes, extends, reissues, or echoes the token, records no audit event (as
+with other reads and with rejected completions), and is rate-accounted by
+token-derived identity and source under the completion policy with its own
+counters, so reading the page cannot exhaust the confirmation budget. Unknown,
+malformed, expired, superseded, consumed, and mismatched tokens share the
+completion's `authentication.account_token.invalid` outcome. The result is
+presentation only; completion rechecks every fact against authoritative
+PostgreSQL time and alone decides an undo conflict.
+
 ## Student Class Invitations
 
 `POST /api/v1/classes/{class_id}/invitations/student` requires an authenticated

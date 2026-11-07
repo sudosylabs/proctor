@@ -3998,6 +3998,22 @@
     "translation": "Undo email change · Proctor"
   },
   {
+    "id": "webapp.undo_email_change.facts.changed",
+    "translation": "Changed"
+  },
+  {
+    "id": "webapp.undo_email_change.facts.label",
+    "translation": "Email change"
+  },
+  {
+    "id": "webapp.undo_email_change.facts.replaces",
+    "translation": "New address"
+  },
+  {
+    "id": "webapp.undo_email_change.facts.restores",
+    "translation": "Previous address"
+  },
+  {
     "id": "webapp.undo_email_change.invalid.body",
     "translation": "Undo links work once, for 72 hours after the change. If you still don’t recognize the change, contact your institution."
   },
@@ -4104,6 +4120,10 @@
   {
     "id": "webapp.verify_email.ready.body",
     "translation": "Confirm the address this link was sent to. The link works once, for 24 hours."
+  },
+  {
+    "id": "webapp.verify_email.ready.body_address",
+    "translation": "Confirm {{.Email}} as your account’s email address. The link works once, for 24 hours."
   },
   {
     "id": "webapp.verify_email.ready.heading",

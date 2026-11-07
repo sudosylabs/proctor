@@ -1501,6 +1501,34 @@
         "description": "Closed bounded native delivery control; unknown, missing, duplicate, and invalid members are rejected.",
         "required": true
       },
+      "InspectEmailChangeUndo": {
+        "content": {
+          "application/json": {
+            "example": {
+              "token": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/AccountTokenInspectionRequest"
+            }
+          }
+        },
+        "description": "Supplies the undo token from the link fragment; it is read, not consumed.",
+        "required": true
+      },
+      "InspectEmailVerification": {
+        "content": {
+          "application/json": {
+            "example": {
+              "token": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/AccountTokenInspectionRequest"
+            }
+          }
+        },
+        "description": "Supplies the email-verification token from the link fragment; it is read, not consumed.",
+        "required": true
+      },
       "Login": {
         "content": {
           "application/json": {
@@ -3193,6 +3221,44 @@
           }
         },
         "description": "Current User's Desktop Registration security history",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
+      "EmailChangeUndoInspected": {
+        "content": {
+          "application/json": {
+            "example": {
+              "changed_at": "2026-08-01T00:00:00Z",
+              "masked_current_email": "s***@example.org",
+              "restored_email": "student.one@example.edu"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/EmailChangeUndoInspectionResponse"
+            }
+          }
+        },
+        "description": "The email change the active undo token would reverse",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
+      "EmailVerificationInspected": {
+        "content": {
+          "application/json": {
+            "example": {
+              "email": "student.one@example.edu"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/EmailVerificationInspectionResponse"
+            }
+          }
+        },
+        "description": "The address the active verification token would confirm",
         "headers": {
           "Cache-Control": {
             "$ref": "#/components/headers/NoStore"
@@ -6323,6 +6389,18 @@
           "changed_fields",
           "changed_at",
           "outcome"
+        ],
+        "type": "object"
+      },
+      "AccountTokenInspectionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
         ],
         "type": "object"
       },
@@ -12461,6 +12539,31 @@
         ],
         "type": "object"
       },
+      "EmailChangeUndoInspectionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "changed_at": {
+            "description": "When the email change was applied.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "masked_current_email": {
+            "description": "The account's current address, masked as in the email-change warning (first character, up to three asterisks, and the domain).",
+            "type": "string"
+          },
+          "restored_email": {
+            "description": "The previous address the undo would restore; the token was mailed to it.",
+            "format": "email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "restored_email",
+          "masked_current_email",
+          "changed_at"
+        ],
+        "type": "object"
+      },
       "EmailChangeUndoRequest": {
         "additionalProperties": false,
         "properties": {
@@ -12482,6 +12585,20 @@
         },
         "required": [
           "token"
+        ],
+        "type": "object"
+      },
+      "EmailVerificationInspectionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "description": "The address the token was issued for and would mark verified.",
+            "format": "email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
         ],
         "type": "object"
       },
@@ -26601,6 +26718,43 @@
         "x-proctor-idempotency": "none"
       }
     },
+    "/api/v1/auth/email-change/undo/inspect": {
+      "post": {
+        "description": "Returns, for one active undo token, the previous address it would restore, the account's current address masked as in the warning mail, and when the change was applied. It never consumes, extends, or reissues the token and records no audit event. It is rate-limited by token and source with the undo policy, and an unknown, malformed, expired, or already used token receives the same generic invalid-credential outcome as the undo itself. The token travels in the body so it stays out of URLs and logs; whether the previous address is still free is decided only by the undo.",
+        "operationId": "inspectEmailChangeUndo",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/InspectEmailChangeUndo"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/EmailChangeUndoInspected"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [],
+        "summary": "Read the email change an undo credential would reverse",
+        "tags": [
+          "Authentication"
+        ],
+        "x-proctor-auth": "public",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "authentication.rate_limited",
+          "authentication.rate_limit_unavailable",
+          "authentication.account_token.invalid",
+          "authentication.account_recovery.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
     "/api/v1/auth/email-verification/complete": {
       "post": {
         "description": "Consumes one valid short-lived verification token and marks its bound email address verified. The token is single use, cannot verify another address, and an invalid or expired token reveals no account details.",
@@ -26624,6 +26778,43 @@
         },
         "security": [],
         "summary": "Consume an email-verification credential",
+        "tags": [
+          "Authentication"
+        ],
+        "x-proctor-auth": "public",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "authentication.rate_limited",
+          "authentication.rate_limit_unavailable",
+          "authentication.account_token.invalid",
+          "authentication.account_recovery.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/auth/email-verification/inspect": {
+      "post": {
+        "description": "Returns the address bound to one active verification token so the hosted page can name it before the person confirms. It never consumes, extends, or reissues the token and records no audit event. It is rate-limited by token and source with the completion policy, and an unknown, malformed, expired, superseded, or already used token receives the same generic invalid-credential outcome as completion. The token travels in the body so it stays out of URLs and logs; the result is presentation only and completion rechecks the token.",
+        "operationId": "inspectEmailVerification",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/InspectEmailVerification"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/EmailVerificationInspected"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [],
+        "summary": "Read the address an email-verification credential would confirm",
         "tags": [
           "Authentication"
         ],

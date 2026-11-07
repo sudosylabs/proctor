@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { EmailChangeUndoResult } from "../../features/undo-email-change/UndoEmailChangeApi";
+import { formatDateTime } from "../../i18n/dateTime";
 import { message, type MessageID } from "../../i18n/messages";
 import { Button, ButtonLink } from "../Button/Button";
+import { Fact, FactList } from "../FactList/FactList";
 import { Notice } from "../Notice/Notice";
 import {
   TaskState,
@@ -19,12 +21,21 @@ type UndoState =
   | "rate_limited"
   | "unavailable";
 
+export interface EmailChangeUndoFacts {
+  restoredEmail: string;
+  maskedCurrentEmail: string;
+  changedAt: string;
+}
+
 export interface EmailChangeUndoContentProps {
+  /** The change the token would reverse, once the read-only lookup names it. */
+  change?: EmailChangeUndoFacts;
   token?: string;
   undoEmailChange(token: string): Promise<EmailChangeUndoResult>;
 }
 
 export function EmailChangeUndoContent({
+  change,
   token,
   undoEmailChange,
 }: EmailChangeUndoContentProps) {
@@ -82,11 +93,19 @@ export function EmailChangeUndoContent({
         label={message("webapp.undo_email_change.kind")}
         labelTone={copy.tone}
       >
-        {/*
-          Change facts belong here in a FactList once the API returns them:
-          the address being restored, the masked new address, and when the
-          change was made. The page has none of them today.
-        */}
+        {change !== undefined && (state === "ready" || state === "rate_limited" || state === "unavailable") ? (
+          <FactList className={styles.afterBody} aria-label={message("webapp.undo_email_change.facts.label")}>
+            <Fact label={message("webapp.undo_email_change.facts.restores")}>
+              <span translate="no">{change.restoredEmail}</span>
+            </Fact>
+            <Fact label={message("webapp.undo_email_change.facts.replaces")}>
+              <span translate="no">{change.maskedCurrentEmail}</span>
+            </Fact>
+            <Fact label={message("webapp.undo_email_change.facts.changed")}>
+              <time dateTime={change.changedAt}>{formatDateTime(change.changedAt)}</time>
+            </Fact>
+          </FactList>
+        ) : null}
         {state === "restored" ? (
           <Notice
             className={styles.afterBody}

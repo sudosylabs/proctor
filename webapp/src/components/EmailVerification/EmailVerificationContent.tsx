@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { EmailVerificationResult } from "../../features/verify-email/VerifyEmailApi";
 import { message, type MessageID } from "../../i18n/messages";
+import { richMessage } from "../../i18n/richMessage";
 import { Button, ButtonLink } from "../Button/Button";
 import {
   TaskState,
@@ -13,11 +14,14 @@ import styles from "./EmailVerificationContent.module.css";
 type VerificationState = "ready" | "verified" | "invalid" | "unavailable";
 
 export interface EmailVerificationContentProps {
+  /** The address the token would confirm, once the read-only lookup names it. */
+  address?: string;
   token?: string;
   verifyEmail(token: string): Promise<EmailVerificationResult>;
 }
 
 export function EmailVerificationContent({
+  address,
   token,
   verifyEmail,
 }: EmailVerificationContentProps) {
@@ -61,6 +65,12 @@ export function EmailVerificationContent({
   }
 
   const copy = copyFor(state);
+  const body =
+    state === "ready" && address !== undefined
+      ? richMessage("webapp.verify_email.ready.body_address", {
+          Email: <strong translate="no">{address}</strong>,
+        })
+      : message(copy.body);
 
   return (
     <>
@@ -68,7 +78,7 @@ export function EmailVerificationContent({
       <TaskState
         // A new state remounts the heading so a completed action can focus it.
         key={state}
-        body={message(copy.body)}
+        body={body}
         focusHeading={transitioned}
         heading={message(copy.heading)}
         headingID="verify-email-heading"
@@ -141,8 +151,8 @@ interface VerificationCopy {
 function copyFor(state: VerificationState): VerificationCopy {
   switch (state) {
     case "ready":
-      // The address being confirmed is not returned by the API yet; when it is,
-      // the ready body names it here.
+      // When the read-only lookup names the address, the ready body is
+      // replaced by its address-bearing variant.
       return {
         heading: "webapp.verify_email.ready.heading",
         body: "webapp.verify_email.ready.body",

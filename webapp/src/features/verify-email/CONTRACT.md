@@ -3,7 +3,8 @@
 This file is the exact contract for the server-hosted
 `/account/verify-email` feature. It presents and consumes the existing
 purpose-specific email-verification User Token without adding a new account,
-Session, profile, persistence, or transport contract.
+Session, profile, or persistence contract; its only additional transport is
+the read-only address lookup below.
 [`../../../DESIGN_SYSTEM.md`](../../../DESIGN_SYSTEM.md) owns shared
 presentation and interaction rules. The server identity and HTTP contracts
 remain authoritative for token issuance, expiry, consumption, rate limiting,
@@ -49,9 +50,14 @@ the result is unavailable, and muted otherwise; the heading and lede always
 state the outcome in words. The ready lede states the single-use, 24-hour
 lifetime (the server default).
 
-The completion API returns no address, so the page does not show which
-address is being confirmed. When an API slice returns it, the ready lede is
-where it belongs.
+On entry with a captured token the route makes one read-only `POST
+/api/v1/auth/email-verification/inspect` with the same `{ "token": … }` body.
+It never consumes or extends the token. When it names the address, the ready
+lede becomes “Confirm {address} as your account’s email address. …” with the
+address untranslated in `strong`. Any lookup failure, including an unusable
+token or a rate limit, leaves the generic ready lede and the explicit action
+unchanged: the page still never decides on load that a link is unusable, and
+the lookup neither takes focus nor delays the button.
 
 There is no autofocus on initial load. After a user-triggered completion or
 retry resolves into a new state, focus moves to the resulting heading so the
@@ -76,9 +82,10 @@ instance, and unknown code values are never rendered.
 | Verification unavailable | Network failure, malformed response, rate limit, or any other bounded API failure | Explicit `Try again` button and quiet `Back to sign in` link |
 
 The browser does not attempt to determine token expiry when the page opens.
-The credential is opaque to the page, and the server checks its active,
-unconsumed state against authoritative PostgreSQL time only when the person
-activates `Confirm email address`. An expired, superseded, consumed, malformed, or
+The credential is opaque to the page, and only completion's check of its
+active, unconsumed state against authoritative PostgreSQL time decides the
+outcome when the person activates `Confirm email address`; the address lookup
+is presentation only. An expired, superseded, consumed, malformed, or
 concurrently consumed token therefore enters the same link-unavailable state;
 the copy may name those possibilities but never claims which one occurred.
 
@@ -91,7 +98,8 @@ verified, unavailable, or the same concealed invalid-link state.
 
 - Navigation to the route is never proof that an email is verified.
 - Only an exact `204` response proves completion to the page.
-- The public completion request contains no Session credential or email input.
+- The public completion and lookup requests contain no Session credential or
+  email input.
 - No state automatically redirects, resends mail, signs in, or requests a new
   token.
 - Requesting another verification message remains the authenticated API's

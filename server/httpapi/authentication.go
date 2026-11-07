@@ -78,6 +78,22 @@ type emailChangeUndoCompletion struct {
 	Token string `json:"token"`
 }
 
+// accountTokenInspectionRequest carries a fragment credential in the body so
+// it never enters a URL, access log, or Referer.
+type accountTokenInspectionRequest struct {
+	Token string `json:"token"`
+}
+
+type emailVerificationInspectionResponse struct {
+	Email string `json:"email"`
+}
+
+type emailChangeUndoInspectionResponse struct {
+	RestoredEmail      string `json:"restored_email"`
+	MaskedCurrentEmail string `json:"masked_current_email"`
+	ChangedAt          string `json:"changed_at"`
+}
+
 // authenticationResponse is the transport-owned login/refresh success body.
 // Field names match the historical v1 envelope so cookie and bearer clients
 // keep working while domain models no longer serialize directly.
@@ -255,6 +271,8 @@ type authenticationEntryApplication interface {
 	RequestEmailVerification(context.Context, invocation.Invocation, app.RequestEmailVerificationCommand) error
 	CompleteEmailVerification(context.Context, invocation.Invocation, app.CompleteEmailVerificationCommand) (*model.User, error)
 	CompleteEmailChangeUndo(context.Context, invocation.Invocation, app.CompleteEmailChangeUndoCommand) error
+	InspectEmailVerification(context.Context, invocation.Invocation, app.InspectAccountTokenCommand) (*app.EmailVerificationInspection, error)
+	InspectEmailChangeUndo(context.Context, invocation.Invocation, app.InspectAccountTokenCommand) (*app.EmailChangeUndoInspection, error)
 	RequestPasswordReset(context.Context, invocation.Invocation, app.RequestPasswordResetCommand) error
 	CompletePasswordReset(context.Context, invocation.Invocation, app.CompletePasswordResetCommand) (*model.User, error)
 }
@@ -300,6 +318,15 @@ func authenticationResource(authentication authenticationEntryApplication, cooki
 		),
 		publicRoute(
 			http.MethodPost,
+			apiPath(literal("auth"), literal("email-verification"), literal("inspect")),
+			[]string{
+				"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable",
+				"authentication.account_token.invalid", "authentication.account_recovery.unavailable",
+			},
+			module.inspectEmailVerification,
+		),
+		publicRoute(
+			http.MethodPost,
 			apiPath(literal("auth"), literal("email-change"), literal("undo")),
 			[]string{
 				"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable",
@@ -307,6 +334,15 @@ func authenticationResource(authentication authenticationEntryApplication, cooki
 				"authentication.email_change_undo.conflict",
 			},
 			module.completeEmailChangeUndo,
+		),
+		publicRoute(
+			http.MethodPost,
+			apiPath(literal("auth"), literal("email-change"), literal("undo"), literal("inspect")),
+			[]string{
+				"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable",
+				"authentication.account_token.invalid", "authentication.account_recovery.unavailable",
+			},
+			module.inspectEmailChangeUndo,
 		),
 		publicRoute(
 			http.MethodPost,
@@ -481,6 +517,33 @@ func (m authenticationResourceModule) completeEmailChangeUndo(request operationR
 		return operationResult{}, err
 	}
 	return noContentResult(), nil
+}
+
+func (m authenticationResourceModule) inspectEmailVerification(request operationRequest) (operationResult, error) {
+	var input accountTokenInspectionRequest
+	if err := request.decodeJSON(&input); err != nil {
+		return operationResult{}, err
+	}
+	inspected, err := m.authentication.InspectEmailVerification(request.context, invocation.New(model.Principal{}, request.metadata),
+		app.InspectAccountTokenCommand{Token: input.Token, Source: request.metadata.IPAddress})
+	if err != nil {
+		return operationResult{}, err
+	}
+	return jsonResult(http.StatusOK, emailVerificationInspectionResponse{Email: inspected.Email}).withHeaders(noStoreHeaders()), nil
+}
+
+func (m authenticationResourceModule) inspectEmailChangeUndo(request operationRequest) (operationResult, error) {
+	var input accountTokenInspectionRequest
+	if err := request.decodeJSON(&input); err != nil {
+		return operationResult{}, err
+	}
+	inspected, err := m.authentication.InspectEmailChangeUndo(request.context, invocation.New(model.Principal{}, request.metadata),
+		app.InspectAccountTokenCommand{Token: input.Token, Source: request.metadata.IPAddress})
+	if err != nil {
+		return operationResult{}, err
+	}
+	return jsonResult(http.StatusOK, emailChangeUndoInspectionResponse{RestoredEmail: inspected.RestoredEmail,
+		MaskedCurrentEmail: inspected.MaskedCurrentEmail, ChangedAt: model.FormatRFC3339(inspected.ChangedAt)}).withHeaders(noStoreHeaders()), nil
 }
 
 func (m authenticationResourceModule) requestPasswordReset(request operationRequest) (operationResult, error) {

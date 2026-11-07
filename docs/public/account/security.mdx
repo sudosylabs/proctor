@@ -45,7 +45,9 @@ account is signed out, any unused password-reset link stops working, and a
 When the email address on an account changes, Proctor sends the previous
 address a notice with a single-use **Undo this change** link, valid for a
 limited window after the change (72 hours by default). If you did not expect
-the change, open the link and choose **Undo change**. Proctor puts
+the change, open the link: the page names the previous address it will put
+back, the new address in masked form, and when the change happened. Choose
+**Undo change** to proceed. Proctor puts
 the previous address back (verified, because the link proved you control it),
 signs out every Session of the account, cancels pending verification and
 password-reset links for the replaced address, and records the undo in the

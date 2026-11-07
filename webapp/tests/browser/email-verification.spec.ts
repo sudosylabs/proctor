@@ -72,6 +72,97 @@ test("email verification requires deliberate token consumption", async ({
   expect(requests).toBe(1);
 });
 
+test("email verification names the address from a read-only lookup", async ({
+  page,
+}) => {
+  const inspections: unknown[] = [];
+  let completions = 0;
+  await page.route("**/api/v1/auth/email-verification/inspect", async (route) => {
+    inspections.push(await route.request().postDataJSON());
+    await route.fulfill({
+      contentType: "application/json",
+      headers: { "Cache-Control": "no-store" },
+      body: JSON.stringify({ email: "ada.okafor@example.edu" }),
+    });
+  });
+  await page.route("**/api/v1/auth/email-verification/complete", async (route) => {
+    completions += 1;
+    await route.fulfill({ status: 204 });
+  });
+
+  await page.goto(`/account/verify-email#token=${encodeURIComponent(verificationToken)}`);
+  await expect(page.getByRole("main")).toContainText(
+    "Confirm ada.okafor@example.edu as your account’s email address. The link works once, for 24 hours.",
+  );
+  await expect(page.getByText("ada.okafor@example.edu", { exact: true })).toHaveAttribute("translate", "no");
+  expect(inspections).toEqual([{ token: verificationToken }]);
+  expect(completions).toBe(0);
+  await expect(page.getByRole("heading", { level: 1 })).not.toBeFocused();
+  await page.getByRole("button", { name: "Confirm email address" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Your email is confirmed" })).toBeFocused();
+  expect(completions).toBe(1);
+  await expect(page.locator("body")).not.toContainText(verificationToken);
+});
+
+test("email-change undo describes the change and keeps its explicit action", async ({
+  page,
+}) => {
+  const undoToken = "email-change-undo-secret";
+  const inspections: unknown[] = [];
+  const undos: unknown[] = [];
+  await page.route("**/api/v1/auth/email-change/undo/inspect", async (route) => {
+    inspections.push(await route.request().postDataJSON());
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        restored_email: "ada.okafor@example.edu",
+        masked_current_email: "a***@example.org",
+        changed_at: "2026-11-06T16:05:00Z",
+      }),
+    });
+  });
+  await page.route("**/api/v1/auth/email-change/undo", async (route) => {
+    undos.push(await route.request().postDataJSON());
+    await route.fulfill({ status: 204 });
+  });
+
+  await page.goto(`/account/undo-email-change#token=${undoToken}`);
+  await expect(page).toHaveURL(`${canonicalOrigin}/account/undo-email-change`);
+  const facts = page.getByRole("main").locator("[data-proctor-fact-list]");
+  await expect(facts.getByRole("term")).toHaveText(["Previous address", "New address", "Changed"]);
+  await expect(facts.getByRole("definition")).toHaveText([
+    "ada.okafor@example.edu",
+    "a***@example.org",
+    await page.evaluate(() => new Intl.DateTimeFormat(undefined, {
+      weekday: "long", day: "numeric", month: "long", year: "numeric",
+      hour: "numeric", minute: "2-digit", timeZoneName: "short",
+    }).format(new Date("2026-11-06T16:05:00Z"))),
+  ]);
+  await expect(facts.locator("time")).toHaveAttribute("datetime", "2026-11-06T16:05:00Z");
+  expect(inspections).toEqual([{ token: undoToken }]);
+  expect(undos).toHaveLength(0);
+
+  await page.getByRole("button", { name: "Undo change" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Your previous email is back" })).toBeFocused();
+  await expect(page.locator("[data-proctor-fact-list]")).toHaveCount(0);
+  expect(undos).toEqual([{ token: undoToken }]);
+  await expect(page.locator("body")).not.toContainText(undoToken);
+});
+
+test("a failed undo lookup leaves the explicit action available", async ({ page }) => {
+  await page.route("**/api/v1/auth/email-change/undo/inspect", async (route) => {
+    await route.fulfill({
+      status: 400,
+      contentType: "application/problem+json",
+      body: JSON.stringify({ type: "about:blank", title: "Invalid", status: 400, code: "authentication.account_token.invalid" }),
+    });
+  });
+  await page.goto("/account/undo-email-change#token=email-change-undo-secret");
+  await expect(page.getByRole("heading", { level: 1, name: "Undo the email change?" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Undo change" })).toBeEnabled();
+  await expect(page.locator("[data-proctor-fact-list]")).toHaveCount(0);
+});
+
 test("missing and malformed fragment credentials make no request", async ({
   page,
 }) => {
@@ -79,6 +170,10 @@ test("missing and malformed fragment credentials make no request", async ({
   await page.route("**/api/v1/auth/email-verification/complete", async (route) => {
     requests += 1;
     await route.fulfill({ status: 204 });
+  });
+  await page.route("**/api/v1/auth/email-verification/inspect", async (route) => {
+    requests += 1;
+    await route.fulfill({ status: 500 });
   });
 
   for (const destination of [

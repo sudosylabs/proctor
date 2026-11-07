@@ -98,7 +98,7 @@ func TestEmailTransitionsUseRealServerGraphAndFrozenRecipients(t *testing.T) {
 	})
 	require.NotContains(t, helper.Logs.String(), credentialFromDelivery(t, firstUndo), "email-change undo token appeared in logs")
 	require.False(t, credentialPattern.Match(deliveryToMatching(t, deliveries, "second-new@example.edu", func(message string) bool {
-		return strings.Contains(message, "verified")
+		return strings.Contains(message, "confirmed")
 	}).Data), "privileged-verification notice contains a credential or lacks expected copy")
 	secondUndo := deliveryToMatching(t, deliveries, "second-old@example.edu", func(message string) bool {
 		return strings.Contains(message, "email address") && strings.Contains(message, "undo-email-change")
@@ -167,7 +167,7 @@ func waitForEmailTransitionDeliveries(t *testing.T, helper *testlib.Helper) []ma
 		deliveries := helper.Mailer.Deliveries()
 		if hasMatchingDelivery(deliveries, "first-new@example.edu", credentialPattern.MatchString) &&
 			hasMatchingDelivery(deliveries, "first-old@example.edu", func(message string) bool { return strings.Contains(message, "email address") }) &&
-			hasMatchingDelivery(deliveries, "second-new@example.edu", func(message string) bool { return strings.Contains(message, "verified") }) &&
+			hasMatchingDelivery(deliveries, "second-new@example.edu", func(message string) bool { return strings.Contains(message, "confirmed") }) &&
 			hasMatchingDelivery(deliveries, "second-old@example.edu", func(message string) bool { return strings.Contains(message, "email address") }) {
 			return deliveries
 		}

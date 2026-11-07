@@ -10,6 +10,7 @@ package config
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 type MailSMTP struct {
@@ -34,12 +35,17 @@ type SecretSealing struct {
 }
 
 type Mail struct {
-	Enabled       bool          `json:"Enabled"`
-	Backend       string        `json:"Backend"`
-	FromAddress   string        `json:"FromAddress"`
-	FromName      string        `json:"FromName"`
-	SMTP          MailSMTP      `json:"SMTP"`
-	SecretSealing SecretSealing `json:"SecretSealing"`
+	Enabled     bool   `json:"Enabled"`
+	Backend     string `json:"Backend"`
+	FromAddress string `json:"FromAddress"`
+	FromName    string `json:"FromName"`
+	// SupportAddress is shown in every message footer when set.
+	SupportAddress string `json:"SupportAddress"`
+	// DisplayTimezone is the IANA zone used for message times when a
+	// recipient has not chosen their own time zone.
+	DisplayTimezone string        `json:"DisplayTimezone"`
+	SMTP            MailSMTP      `json:"SMTP"`
+	SecretSealing   SecretSealing `json:"SecretSealing"`
 }
 
 func validateMail(mailConfig Mail, add func(string, string)) {
@@ -51,6 +57,14 @@ func validateMail(mailConfig Mail, add func(string, string)) {
 		mailConfig.SecretSealing,
 		add,
 	)
+	if mailConfig.SupportAddress != "" && !validMailbox(mailConfig.SupportAddress) {
+		add("mail.support_address", "must be empty or a plain email address")
+	}
+	if zone := mailConfig.DisplayTimezone; zone != "" {
+		if _, err := time.LoadLocation(zone); err != nil || zone == "Local" {
+			add("mail.display_timezone", "must be empty or an IANA time zone name such as UTC or Africa/Lagos")
+		}
+	}
 	if !mailConfig.Enabled {
 		return
 	}

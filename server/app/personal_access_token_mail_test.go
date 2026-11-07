@@ -21,7 +21,7 @@ func TestPersonalAccessTokenSecurityNoticeIsTerminalWhenMailIsDisabled(t *testin
 
 	at := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
 	principal := mailTestPrincipal(at)
-	preparer, err := newDirectMailPreparer(mailRendererFake{}, &mailSenderFake{enabled: false}, nil)
+	preparer, err := newDirectMailPreparer(mailRendererFake{}, &mailSenderFake{enabled: false}, nil, nil)
 	require.NoError(t, err)
 	prepared, err := preparer.PreparePersonalAccessTokenSecurityNotice(personalAccessTokenSecurityNoticePreparation{
 		Recipient:   mailTestUser(principal, at),

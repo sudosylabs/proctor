@@ -67,7 +67,8 @@ func constructJobs(
 	profiles.profilePictures.reads.defaultJobs = defaultJobs
 	var mailService *mailService
 	if deps.Store.Mail() != nil {
-		mailService, err = newMailService(mailServiceDependencies{Mail: deps.Store.Mail(), Users: deps.Store.User(), Authorization: mailAuthorizationAdapter{authorization: access.authorization, institutions: deps.Store.Institution()}, Audit: mailAuditAdapter{audit: foundation.audit}, Attempts: foundation.attempts, Renderer: deps.MailTemplateRenderer, Sender: deps.MailDeliverySender, Metrics: deps.MailMetricsReader, Sealer: deps.MailSecretSealer, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Now: time.Now})
+		mailService, err = newMailService(mailServiceDependencies{Mail: deps.Store.Mail(), Users: deps.Store.User(), Authorization: mailAuthorizationAdapter{authorization: access.authorization, institutions: deps.Store.Institution()}, Audit: mailAuditAdapter{audit: foundation.audit}, Attempts: foundation.attempts, Renderer: deps.MailTemplateRenderer, Sender: deps.MailDeliverySender, Metrics: deps.MailMetricsReader, Sealer: deps.MailSecretSealer, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Now: time.Now,
+			InstitutionName: (&institutionNameCache{institutions: deps.Store.Institution(), now: time.Now}).Name})
 		if err != nil {
 			return jobConstruction{}, err
 		}

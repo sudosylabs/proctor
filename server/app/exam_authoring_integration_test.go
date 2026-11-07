@@ -354,7 +354,7 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	var managerMessages int
 	for _, delivery := range helper.Mailer.Deliveries() {
 		data := string(delivery.Data)
-		if !strings.Contains(data, "Subject: ") || !strings.Contains(data, "exam manager") && !strings.Contains(data, "Exam ownership") {
+		if !strings.Contains(data, "Subject: ") || !strings.Contains(data, "exam manager") && !strings.Contains(data, "Exam ownership") && !strings.Contains(data, "You now own an exam") {
 			continue
 		}
 		managerMessages++

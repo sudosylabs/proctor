@@ -369,7 +369,7 @@ func TestPersonalAccessTokenAdministrationRendersPostgreSQLPreparedActionTime(t 
 	token := personalAccessTokenForTest(userID, nodeAt)
 	tokens := &personalAccessTokenStoreFake{current: token, preparedAt: databaseAt}
 	sealer := mailTestSealer(t)
-	composer, err := newDirectMailPreparer(personalAccessTokenActionTimeRenderer{}, &mailSenderFake{enabled: true, from: MailAddress{Name: "Proctor", Address: "no-reply@example.test"}}, sealer)
+	composer, err := newDirectMailPreparer(personalAccessTokenActionTimeRenderer{}, &mailSenderFake{enabled: true, from: MailAddress{Name: "Proctor", Address: "no-reply@example.test"}}, sealer, nil)
 	require.NoError(t, err)
 	service, err := newPersonalAccessTokenAdministrationService(personalAccessTokenAdministrationServiceDependencies{Tokens: tokens, Users: &personalAccessTokenUserStoreFake{}, AcademicUnits: &personalAccessTokenAcademicUnitStoreFake{}, Institutions: &personalAccessTokenInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, Audit: &personalAccessTokenAuditorFake{}, Authorization: &personalAccessTokenScopeAuthorizerFake{allowed: true}, Mail: composer, Policy: PersonalAccessTokenPolicy{MinimumLifetime: time.Minute, MaximumLifetime: 24 * time.Hour, MaximumPerUser: 3}, RecentAuthenticationTTL: 15 * time.Minute, NewCredential: func() string { return "credential" }, Now: func() time.Time { return nodeAt }})
 	require.NoError(t, err)

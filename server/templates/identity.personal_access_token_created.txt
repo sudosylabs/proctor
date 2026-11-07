@@ -6,31 +6,49 @@ See LICENSE in the server module root for license information.
 SPDX-License-Identifier: AGPL-3.0-only
 ---------------------------------------------------------------------------------------------
 */}}
-
-{{/*
+{{- /*
 Template properties (server/app/mail renderer):
-  .Copy.Subject — localized message subject
-  .Copy.Preheader — localized inbox preview
-  .Copy.Heading — localized visible heading
-  .Copy.Body — localized primary message
-  .Copy.ActionLabel — localized action label; empty when no action is offered
-  .Copy.Footer — localized closing and safety copy
-  .Copy.PersonalAccessToken — localized labels and closed scope names
+  .Copy.Subject, .Copy.Preheader — localized subject and inbox preview
+  .Copy.Institution — institution display name; empty when unknown
+  .Copy.Kind — localized message kind shown above the heading
+  .Copy.Heading, .Copy.Greeting, .Copy.Paragraphs — localized heading, greeting and body
+  .Hero — optional emphasised detail: .Label, .Primary, .Secondary, .Code, .Struck
+  .Facts — ordered labelled details: .Label, .Value, .Struck
+  .AsideAlert — true for security notices; the aside precedes the action
+  .Copy.AsideTitle, .Copy.AsideText — optional aside; both or neither
   .ActionURL — validated HTTPS action URL; empty when no action is offered
-  .PersonalAccessToken.Description — bounded PAT description; never a credential
-  .PersonalAccessToken.ExpiresAt — UTC RFC 3339 expiry
-  .PersonalAccessToken.ActionAt — UTC RFC 3339 transition time
-  .PersonalAccessToken.Scope — localized Institution or Academic Unit context
-  .PersonalAccessToken.ActionCount — bounded count; never the complete scopes
-*/}}
+  .Copy.ActionLabel, .Copy.ActionNote, .Copy.ActionFallback — action copy
+  .Copy.Why, .Copy.Support, .Copy.SentBy — localized colophon
+*/ -}}
 {{.Copy.Heading}}
 
-{{.Copy.Body}}
+{{.Copy.Greeting}}
+{{range .Copy.Paragraphs}}
+{{.}}
+{{end}}
+{{- with .Hero}}
+{{.Label}}: {{.Primary}}{{if .Secondary}}, {{.Secondary}}{{end}}
+{{end}}
+{{- range .Facts}}
+{{.Label}}: {{.Value}}
+{{- end}}
+{{- if and .AsideAlert .Copy.AsideTitle}}
 
-{{.Copy.PersonalAccessToken.DescriptionLabel}}: {{.PersonalAccessToken.Description}}
-{{.Copy.PersonalAccessToken.ExpiresAtLabel}}: {{.PersonalAccessToken.ExpiresAt}}
-{{.Copy.PersonalAccessToken.ActionAtLabel}}: {{.PersonalAccessToken.ActionAt}}
-{{.Copy.PersonalAccessToken.ScopeLabel}}: {{.PersonalAccessToken.Scope}}
-{{.Copy.PersonalAccessToken.ActionCountLabel}}: {{.PersonalAccessToken.ActionCount}}
+{{.Copy.AsideTitle}} {{.Copy.AsideText}}
+{{- end}}
+{{- if .ActionURL}}
 
-{{.Copy.Footer}}
+{{.Copy.ActionLabel}}: {{.ActionURL}}
+{{- if .Copy.ActionNote}}
+{{.Copy.ActionNote}}
+{{- end}}
+{{- end}}
+{{- if and (not .AsideAlert) .Copy.AsideTitle}}
+
+{{.Copy.AsideTitle}} {{.Copy.AsideText}}
+{{- end}}
+
+--
+{{.Copy.Why}}
+{{.Copy.Support}}
+{{.Copy.SentBy}}

@@ -1,0 +1,35 @@
+<!--
+---------------------------------------------------------------------------------------------
+Copyright (c) 2026 Sudosy Labs. All rights reserved.
+Licensed under the GNU Affero General Public License, version 3 only.
+See LICENSE in the server module root for license information.
+SPDX-License-Identifier: AGPL-3.0-only
+---------------------------------------------------------------------------------------------
+-->
+
+<mj-attributes>
+  <mj-all font-family="IBM Plex Sans, -apple-system, Segoe UI, Helvetica Neue, Helvetica, Arial, sans-serif" color="#16141B" />
+  <mj-text font-size="16px" line-height="26px" color="#46424F" padding="0" />
+  <mj-section background-color="#FFFFFF" />
+  <mj-column padding="0" />
+  <mj-image padding="0" />
+  <mj-divider border-color="#E9E6EE" border-width="1px" />
+</mj-attributes>
+<mj-raw>
+  <meta name="color-scheme" content="light" />
+  <meta name="supported-color-schemes" content="light" />
+</mj-raw>
+<mj-style inline="inline">
+  a { color: #5C00AA; }
+</mj-style>
+<mj-style>
+  @media only screen and (max-width: 480px) {
+    .pad > table > tbody > tr > td { padding-left: 24px !important; padding-right: 24px !important; }
+    .institution { display: none !important; }
+    .heading h1 { font-size: 26px !important; line-height: 32px !important; }
+    .fact-label, .fact-value { display: block !important; width: auto !important; }
+    .fact-label { padding: 12px 0 0 !important; }
+    .fact-value { border-top: 0 !important; padding: 2px 0 12px !important; }
+    .code div { font-size: 20px !important; line-height: 26px !important; }
+  }
+</mj-style>

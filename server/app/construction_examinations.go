@@ -76,7 +76,8 @@ func constructExamPublication(
 	if !ok {
 		return errors.New("Sitting mail template renderer is unavailable")
 	}
-	sittingMail, err := newSittingMailPreparer(sittingRenderer, deps.MailDeliverySender, deps.MailSecretSealer, time.Now)
+	sittingMail, err := newSittingMailPreparer(sittingRenderer, deps.MailDeliverySender, deps.MailSecretSealer, time.Now,
+		(&institutionNameCache{institutions: deps.Store.Institution(), now: time.Now}).Name)
 	if err != nil {
 		return err
 	}

@@ -8,15 +8,22 @@ authored here; the flat server-owned catalogs under
 [`../i18n`](../i18n) supply localized fields to
 both alternatives.
 
-The HTML presentation is a single light envelope: board `#F4F4F6`, white
-paper, ink `#161616`, violet `#5C00AA`, and the package-local lockup
-`proctor-lockup-25d-v1.png` (600×118 transparent PNG, 200×39 display,
-`alt="Proctor"`). It uses ordinary stacked
-sections so clients render the same structure. Human prose still comes only
-from `../i18n`. Maintainers may restyle the MJML without changing delivery
+The HTML presentation is set like a letter: a white page, one text column, a
+strict type scale, and hairline rules instead of boxes or badges. Ink is
+`#16141B`, secondary text `#46424F`, muted labels `#77727F`, rules `#E9E6EE`,
+and violet `#5C00AA` appears only on the action button and links. Security
+notices mark their kind line and aside lead in rust `#9A3412`. The header pairs
+the package-local lockup `proctor-lockup-25d-v1.png` (600×118 transparent PNG,
+112×22 display, `alt="Proctor"`) with the institution name. Every template
+includes the same two partials, [`partials/head.mjml`](partials/head.mjml) and
+[`partials/message.mjml`](partials/message.mjml), so all messages share one
+reading order: kind, heading, greeting and body, an optional emphasised detail,
+labelled facts, an optional aside, an optional action, and the colophon. Phones
+stack each fact's label above its value. Human prose still comes only from
+`../i18n`. Maintainers may restyle the partials without changing delivery
 logic, but must retain the semantic reading order, complete text equivalent,
-contextual escaping, accessibility, and privacy constraints in the
-repository [`transactional-mail` skill](../../.agents/skills/transactional-mail/SKILL.md).
+contextual escaping, accessibility, and privacy constraints in the repository
+[`transactional-mail` skill](../../.agents/skills/transactional-mail/SKILL.md).
 
 ## Inline branding
 
@@ -50,55 +57,60 @@ action inside a conditional comment is rejected at startup.
 ## Typed properties
 
 Every MJML and text source starts with a non-rendering license header followed
-by a non-rendering comment listing the exact private `server/app/mail` renderer
-properties it receives. The generator emits the same license header in every
-tracked HTML result before its generated-file marker:
+by a non-rendering comment listing the private `server/app/mail` renderer
+properties. The generator emits the same license header in every tracked HTML
+result before its generated-file marker. All templates receive the same model:
 
-- `.Copy.Subject`
-- `.Copy.Preheader`
-- `.Copy.Heading`
-- `.Copy.Body`
-- `.Copy.ActionLabel`
-- `.Copy.Footer`
-- `.ActionURL`
+- `.Copy.Subject`, `.Copy.Preheader`, `.Copy.Kind`, `.Copy.Heading`,
+  `.Copy.Greeting`, `.Copy.Paragraphs`, `.Copy.Why`, `.Copy.Support`, and
+  `.Copy.SentBy` — always present.
+- `.Copy.Institution` — the institution display name, empty when unknown.
+- `.Copy.AsideTitle` and `.Copy.AsideText` — both or neither.
+- `.Copy.ActionLabel`, `.Copy.ActionNote`, `.Copy.ActionFallback`, and
+  `.ActionURL` — the action and its expiry note; `.ActionURL` is empty when no
+  action is offered.
+- `.Hero` — an optional emphasised detail with `.Label`, `.Primary`,
+  `.Secondary`, `.Code`, and `.Struck`.
+- `.Facts` — ordered labelled details, each with `.Label`, `.Value`, and
+  `.Struck`.
+- `.AsideAlert` — true for security notices; their aside precedes the action.
 
-The four Personal Access Token security notices additionally receive the
-closed `.Copy.PersonalAccessToken` label set and these bounded fields under
-`.PersonalAccessToken`: `.Description`, `.ExpiresAt`, `.ActionAt`,
-`.Scope`, and `.ActionCount`. They never receive the one-time
-credential, stored token hash, or complete action list.
+The renderer, not the template, decides which facts a message shows. Times
+are written for people in the recipient's own time zone, or the installation
+`Mail.DisplayTimezone` when the recipient has none (UTC is the unset default).
+Exam Sitting messages are frozen once per locale for the whole audience, so
+they carry no recipient name and always use the display time zone. The
+greeting uses the first word of the frozen display name.
 
-The four Exam Sitting schedule messages additionally receive the closed
-`.Copy.SittingSchedule` label set and these bounded fields under
-`.SittingSchedule`: `.ExamTitle`, `.ClassDisplayName`, `.StartsAt`, `.EndsAt`,
-and `.Timezone`. They never receive Exam instructions, resources, roster
-contents, private cancellation rationale, or the actor's identity.
+Each presentation family keeps its privacy bounds:
 
-The four Exam Manager relationship notices additionally receive the closed
-`.Copy.ExamManager` label set and these bounded fields under `.ExamManager`:
-`.Title`, `.Relationship`, and `.ActionAt`. They never receive the actor,
-authorization grants, other Managers, or private audit detail.
-
-The three Class membership notices additionally receive the closed
-`.Copy.ClassTransition` label set and these bounded fields under
-`.ClassTransition`: `.PreviousClassDisplayName`, `.ClassDisplayName`,
-`.StartsAt`, `.EndsAt`, and `.Timezone`. Enrollment and ending omit the
-previous Class; open-ended enrollment omits the end time. They never receive
-the actor, roster contents, authorization grants, or private audit detail.
-
-The two Exam Submission receipt messages additionally receive the closed
-`.Copy.SubmissionReceipt` label set and these bounded fields under
-`.SubmissionReceipt`: `.ExamTitle`, `.SittingID`, `.SubmissionID`, `.SealedAt`,
-and `.Timezone`. They never receive answers, workspace paths or selectors,
-manifest contents, integrity signals, Session or continuity credentials,
-candidate profile fields, or private review state.
-
-The released-result availability message additionally receives the closed
-`.Copy.ResultRelease` label set and these bounded fields under
-`.ResultRelease`: `.ExamTitle`, `.ReleasedAt`, and `.Timezone`. It never
-receives a score, academic outcome, candidate remarks, manager notes,
-decisions, evidence, rationale, Submission or Workspace data, or an action
-link.
+- Personal Access Token notices show the description, an institution or
+  Academic Unit scope label, expiry, and action time. They never receive the
+  one-time credential, stored token hash, the complete action list, or the
+  action count.
+- Exam Sitting messages show the published Exam title, Class display name,
+  date, time window, duration, and, for a reschedule, the previous Class. They
+  never receive Exam instructions, resources, roster contents, private
+  cancellation rationale, or the actor's identity.
+- Exam Manager notices show the Exam title, resulting relationship, and action
+  time. They never receive the actor, authorization grants, other Managers, or
+  private audit detail.
+- Class membership notices show the affected Class display names and effective
+  dates. They never receive the actor, roster contents, authorization grants,
+  or private audit detail.
+- Submission receipts show the Exam title, the Submission receipt code, and
+  the sealing time. They never receive answers, workspace paths or selectors,
+  manifest contents, integrity signals, Session or continuity credentials,
+  candidate profile fields, or private review state.
+- The released-result message shows only the Exam title and release time. It
+  never receives a score, academic outcome, candidate remarks, manager notes,
+  decisions, evidence, rationale, Submission or Workspace data, or an action
+  link.
+- The email-change warning shows the previous address and a masked form of the
+  new address.
+- The retention notice shows only the planned deletion date.
+- Academic Unit membership and Role Binding notices name neither the unit nor
+  the role, so a message cannot identify privileged accounts.
 
 The renderer accepts no arbitrary map and registers no custom template
 functions. Copy is markup-free and HTML is parsed with Go `html/template`, so
@@ -137,8 +149,10 @@ must not be written below this source directory.
 
 1. Add the key to the closed `model.MailTemplateKey` catalog and add the required
    lexically sorted flat `mail.<key>.<field>` entries to `../i18n/en.json`.
-2. Add matching `<key>.mjml` and `<key>.txt` sources with the exact property
-   comment.
+2. Add matching `<key>.mjml` and `<key>.txt` sources that include the shared
+   partials and the exact property comment, list the template's optional copy
+   fields and any copy placeholders in `server/app/mail/localization.go`, and
+   build its facts in `server/app/mail/presentation.go`.
 3. Regenerate `<key>.html` and run the template and Go tests.
 4. Add or extend another top-level locale file using only English IDs and
    matching interpolation placeholders. A locale may be partial; every missing

@@ -61,7 +61,8 @@ func (a sittingScheduleMailPreparationAdapter) Prepare(ctx context.Context,
 }
 
 func newSittingMailPreparer(renderer mail.SittingRenderer, sender mail.Sender, sealer *secretseal.Sealer,
-	now func() time.Time,
+	now func() time.Time, institution func() string,
 ) (*mail.SittingComposer, error) {
-	return mail.NewSittingComposer(mail.SittingComposerDependencies{Renderer: renderer, Sender: sender, Sealer: sealer, Now: now})
+	return mail.NewSittingComposer(mail.SittingComposerDependencies{Renderer: renderer, Sender: sender, Sealer: sealer, Now: now,
+		Institution: institution})
 }

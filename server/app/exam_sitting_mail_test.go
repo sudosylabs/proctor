@@ -24,7 +24,7 @@ func TestSittingMailPreparerFreezesAllFourSafeRenderVariants(t *testing.T) {
 	require.NoError(t, err)
 	renderer := sittingMailRendererFake{}
 	preparer, err := newSittingMailPreparer(renderer, &mailSenderFake{enabled: true,
-		from: MailAddress{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t), func() time.Time { return at })
+		from: MailAddress{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t), func() time.Time { return at }, nil)
 	require.NoError(t, err)
 	prepared, err := preparer.Prepare(model.NewUserID(), sitting, store.ExamSittingMailScheduled,
 		SittingScheduleMailDetails{ExamTitle: "Algorithms", ClassDisplayName: "Class A"})

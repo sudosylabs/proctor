@@ -20,7 +20,7 @@ import (
 )
 
 func TestEnvironmentOverrideCatalogContracts(t *testing.T) {
-	require.Len(t, environmentOverrideCatalog, 138, "environment override definitions")
+	require.Len(t, environmentOverrideCatalog, 140, "environment override definitions")
 
 	seen := make(map[string]struct{}, len(environmentOverrideCatalog))
 	for _, definition := range environmentOverrideCatalog {
@@ -125,6 +125,8 @@ func environmentValueThatChanges(
 		"true",
 		"one.example:1,two.example:2",
 		"X-Changed=changed",
+		"Africa/Lagos",
+		"support@example.test",
 	} {
 		candidate := persisted.Clone()
 		if err := definition.apply(&candidate, value); err == nil &&
@@ -193,6 +195,7 @@ func validEnvironmentValue(
 		"false",
 		"true",
 		"X-Changed=changed",
+		"Africa/Lagos",
 	}
 	for _, value := range values {
 		candidate := base.Clone()

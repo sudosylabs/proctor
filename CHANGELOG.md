@@ -17,6 +17,14 @@ module when a change is not server-only. No module has been released yet.
 
 ### Changed
 
+- Server: transactional mail is redesigned as a plain, typeset letter with
+  rewritten copy for every message. Each message greets the recipient by first
+  name, names the institution, writes dates and times for people in the
+  recipient's time zone instead of UTC timestamps, states exact link expiry,
+  and leads security notices with what to do if the change was unexpected.
+  The email-change warning shows a masked form of the new address and the
+  retention notice shows its deletion date. Submission receipts no longer show
+  the Sitting and Submission identifiers.
 - Build: the isolated `gopls` tool moves to v0.23.0, the newest release that
   supports Go 1.26, picking up MCP go-sdk v1.6.0 and clearing its advisories.
 - Build: local, cluster, and S3 test stacks run MinIO from
@@ -181,6 +189,9 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: `Mail.SupportAddress` names a help address in every message
+  footer, and `Mail.DisplayTimezone` sets the time zone used for message times
+  when a recipient has not chosen one.
 - Server: failed password checks against one account, counted across all
   sources and both its username and email address, delay further logins for
   that account progressively

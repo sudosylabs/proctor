@@ -10,6 +10,8 @@ package app
 import (
 	"context"
 	"errors"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -114,6 +116,8 @@ type mailServiceDependencies struct {
 	Sealer                  *secretseal.Sealer
 	RecentAuthenticationTTL time.Duration
 	Now                     func() time.Time
+	// InstitutionName supplies the institution display name to mail copy.
+	InstitutionName func() string
 }
 
 type mailService struct {
@@ -129,8 +133,55 @@ type mailService struct {
 	wake func()
 }
 
-func newDirectMailPreparer(renderer mail.Renderer, sender mail.Sender, sealer *secretseal.Sealer) (*mail.Composer, error) {
-	return mail.NewComposer(mail.ComposerDependencies{Renderer: renderer, Sender: sender, Sealer: sealer})
+func newDirectMailPreparer(renderer mail.Renderer, sender mail.Sender, sealer *secretseal.Sealer, institution func() string) (*mail.Composer, error) {
+	return mail.NewComposer(mail.ComposerDependencies{Renderer: renderer, Sender: sender, Sealer: sealer, Institution: institution})
+}
+
+// institutionNameCacheLifetime bounds how stale the institution name in newly
+// prepared mail may be after an administrator renames the institution.
+const institutionNameCacheLifetime = time.Minute
+
+// institutionNameRetryDelay spaces read attempts while the institution cannot
+// be read, such as before bootstrap.
+const institutionNameRetryDelay = 10 * time.Second
+
+// institutionNameCache supplies the institution display name to mail copy. The
+// read happens outside the lock so one slow read never queues every message;
+// a failure keeps the last known name, and with none copy names "your
+// institution".
+type institutionNameCache struct {
+	institutions mailInstitutionStore
+	now          func() time.Time
+
+	mu        sync.Mutex
+	name      string
+	nextFetch time.Time
+}
+
+func (c *institutionNameCache) Name() string {
+	if c == nil || c.institutions == nil {
+		return ""
+	}
+	c.mu.Lock()
+	now := c.now()
+	if now.Before(c.nextFetch) {
+		name := c.name
+		c.mu.Unlock()
+		return name
+	}
+	c.nextFetch = now.Add(institutionNameRetryDelay)
+	c.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	institution, err := c.institutions.GetSingleton(ctx)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err == nil && institution != nil {
+		c.name, c.nextFetch = strings.TrimSpace(institution.DisplayName), c.now().Add(institutionNameCacheLifetime)
+	}
+	return c.name
 }
 
 func newMailService(deps mailServiceDependencies) (*mailService, error) {
@@ -140,7 +191,7 @@ func newMailService(deps mailServiceDependencies) (*mailService, error) {
 	if deps.Sender.Enabled() && deps.Sealer == nil {
 		return nil, errors.New("enabled mail requires secret sealing")
 	}
-	composer, err := newDirectMailPreparer(deps.Renderer, deps.Sender, deps.Sealer)
+	composer, err := newDirectMailPreparer(deps.Renderer, deps.Sender, deps.Sealer, deps.InstitutionName)
 	if err != nil {
 		return nil, err
 	}

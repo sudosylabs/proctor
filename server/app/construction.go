@@ -10,6 +10,7 @@ package app
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
@@ -180,7 +181,8 @@ func constructApplicationFoundation(deps Dependencies) (applicationFoundation, e
 	if err != nil {
 		return applicationFoundation{}, err
 	}
-	mail, err := newDirectMailPreparer(deps.MailTemplateRenderer, deps.MailDeliverySender, deps.MailSecretSealer)
+	institutionName := (&institutionNameCache{institutions: deps.Store.Institution(), now: time.Now})
+	mail, err := newDirectMailPreparer(deps.MailTemplateRenderer, deps.MailDeliverySender, deps.MailSecretSealer, institutionName.Name)
 	if err != nil {
 		return applicationFoundation{}, err
 	}

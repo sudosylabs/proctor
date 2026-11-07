@@ -9,26 +9,25 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <!--
 Template properties (server/app/mail renderer):
-  .Copy.Subject — localized message subject
-  .Copy.Preheader — localized inbox preview
-  .Copy.Heading — localized visible heading
-  .Copy.Body — localized primary message
-  .Copy.ActionLabel — localized action label; empty when no action is offered
-  .Copy.Footer — localized closing and safety copy
+  .Copy.Subject, .Copy.Preheader — localized subject and inbox preview
+  .Copy.Institution — institution display name; empty when unknown
+  .Copy.Kind — localized message kind shown above the heading
+  .Copy.Heading, .Copy.Greeting, .Copy.Paragraphs — localized heading, greeting and body
+  .Hero — optional emphasised detail: .Label, .Primary, .Secondary, .Code, .Struck
+  .Facts — ordered labelled details: .Label, .Value, .Struck
+  .AsideAlert — true for security notices; the aside precedes the action
+  .Copy.AsideTitle, .Copy.AsideText — optional aside; both or neither
   .ActionURL — validated HTTPS action URL; empty when no action is offered
-  .ExamManager.Title — bounded Exam title
-  .ExamManager.Relationship — localized resulting relationship
-  .ExamManager.ActionAt — UTC RFC 3339 transition time
+  .Copy.ActionLabel, .Copy.ActionNote, .Copy.ActionFallback — action copy
+  .Copy.Why, .Copy.Support, .Copy.SentBy — localized colophon
 -->
 <mjml>
   <mj-head>
     <mj-title>{{.Copy.Subject}}</mj-title>
     <mj-preview>{{.Copy.Preheader}}</mj-preview>
-    <mj-include path="./partials/foundation-head.mjml" />
+    <mj-include path="./partials/head.mjml" />
   </mj-head>
-  <mj-body background-color="#F4F4F6">
-    <mj-include path="./partials/foundation-intro.mjml" />
-    <mj-include path="./partials/facts-exam-manager.mjml" />
-    <mj-include path="./partials/foundation-footer.mjml" />
+  <mj-body background-color="#FFFFFF" width="600px">
+    <mj-include path="./partials/message.mjml" />
   </mj-body>
 </mjml>

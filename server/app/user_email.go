@@ -137,7 +137,8 @@ func (s *accountTokenService) changeUserEmail(ctx context.Context, current *mode
 	oldRecipient, newRecipient := *current, *current
 	newRecipient.Email, newRecipient.EmailVerified = newEmail, false
 	warning, err := s.deps.Mail.PrepareEmailChangeWarning(mail.AccountTokenPreparation{Recipient: &oldRecipient,
-		OccurrenceID: model.MailOccurrenceID(undo.ID.String()), ActionURL: undoLink, At: now, Deadline: undo.ExpiresAt})
+		OccurrenceID: model.MailOccurrenceID(undo.ID.String()), ActionURL: undoLink, At: now, Deadline: undo.ExpiresAt,
+		NewAddress: newEmail})
 	if err != nil {
 		return nil, accountRecoveryUnavailable(err)
 	}

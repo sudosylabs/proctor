@@ -23,7 +23,7 @@ func TestExamManagerMailPreparerCreatesOneOrdinaryBoundedNotice(t *testing.T) {
 	user := &model.User{Username: "manager", Email: "manager@example.edu", DisplayName: "Exam Manager"}
 	user.PrepareCreate(model.NewUserID(), at.Add(-time.Hour))
 	renderer := &examManagerRendererFake{}
-	preparer, err := newDirectMailPreparer(renderer, &mailSenderFake{enabled: true, from: MailAddress{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t))
+	preparer, err := newDirectMailPreparer(renderer, &mailSenderFake{enabled: true, from: MailAddress{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t), nil)
 	require.NoError(t, err)
 	prepared, err := preparer.PrepareManagerMail(exam.ManagerMailPreparation{
 		Recipient: user, OccurrenceID: model.NewMailOccurrenceID(), TemplateKey: model.MailTemplateExamManagerAdded,

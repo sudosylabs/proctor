@@ -114,10 +114,11 @@ func Default() Config {
 			},
 		},
 		Mail: Mail{
-			Enabled:     false,
-			Backend:     "smtp",
-			FromAddress: "no-reply@localhost",
-			FromName:    "Proctor",
+			Enabled:         false,
+			Backend:         "smtp",
+			FromAddress:     "no-reply@localhost",
+			FromName:        "Proctor",
+			DisplayTimezone: "UTC",
 			SMTP: MailSMTP{
 				Address:         "127.0.0.1:1025",
 				Security:        "none",

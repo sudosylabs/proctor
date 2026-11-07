@@ -715,8 +715,8 @@ func (s SQLUserTokenStore) ConsumePasswordReset(
 			WHERE s.user_id=? AND s.archived_at IS NULL AND s.revoked_at IS NULL`, token.UserID); err != nil {
 			return nil, fmt.Errorf("read password reset Session floor: %w", err)
 		}
-		at := transitionInstant(databaseNow, token.CreatedAt, token.UpdatedAt, user.UpdatedAt,
-			credential.UpdatedAt, credential.PasswordChangedAt, TimeFromNullTime(sessionFloor))
+		at := passwordChangeInstant(transitionInstant(databaseNow, token.CreatedAt, token.UpdatedAt, user.UpdatedAt,
+			credential.UpdatedAt, TimeFromNullTime(sessionFloor)), credential.PasswordChangedAt)
 		occurrence, delivery, job, err := recoveryMailAt(input.Occurrence, input.Delivery, input.Job, at)
 		if err != nil {
 			return nil, err

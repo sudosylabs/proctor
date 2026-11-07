@@ -300,6 +300,11 @@ module when a change is not server-only. No module has been released yet.
 
 ### Fixed
 
+- Server: password history refused reuse only by change time, so when the
+  database clock trailed the server that stamped a previous change, two history
+  entries could share a time and a recent password could be accepted again.
+  Each change is now stamped strictly after the one before, and ties keep a
+  fixed order.
 - Server: audit, Exam, Exam Manager, Job, Job attempt, mail delivery and
   User Session listings no longer return a `next_cursor` on an exactly full
   final page.

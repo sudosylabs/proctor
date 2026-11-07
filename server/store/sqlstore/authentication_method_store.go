@@ -281,7 +281,7 @@ func (s SQLPasswordCredentialStore) Change(ctx context.Context, input *store.Pas
 		if err != nil {
 			return nil, err
 		}
-		at := transitionInstant(databaseNow, credential.UpdatedAt, credential.PasswordChangedAt)
+		at := passwordChangeInstant(transitionInstant(databaseNow, credential.UpdatedAt), credential.PasswordChangedAt)
 		if err = retainSupersededPassword(ctx, tx, input.UserID, credential.PasswordHash, credential.PasswordChangedAt, at, input.Reuse.Limit); err != nil {
 			return nil, err
 		}

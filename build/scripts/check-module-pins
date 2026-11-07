@@ -60,6 +60,16 @@ if ! awk '
 	printf '  google.golang.org/genproto <version> // indirect\n' >&2
 fi
 
+# CI checkouts have been observed to become shallow before this check runs.
+# Fetch the missing history so a pinned commit is not misreported as rewritten.
+if [ "$(git -C "$root" rev-parse --is-shallow-repository)" = true ]; then
+	printf 'repository is shallow; fetching full history to compare module pins\n' >&2
+	if ! git -C "$root" fetch --quiet --unshallow --no-tags origin; then
+		printf 'could not fetch full history; run this check in a full clone (git fetch --unshallow)\n' >&2
+		exit 1
+	fi
+fi
+
 pins=$(awk -v prefix="$module_prefix" '
 	$1 == "require" && index($2, prefix) == 1 { print $2, $3; next }
 	index($1, prefix) == 1 { print $1, $2 }

@@ -29,10 +29,7 @@ func (testLogger) ErrorContext(context.Context, string, error) {}
 
 func freePort(t *testing.T) int {
 	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	defer listener.Close()
-	return listener.Addr().(*net.TCPAddr).Port
+	return memberlist.FreeTestPort(t)
 }
 
 func mustTransport(

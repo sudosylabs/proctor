@@ -86,6 +86,7 @@ type SubmissionReceiptDetails struct {
 	ExamTitle    string
 	SittingID    model.ExamSittingID
 	SubmissionID model.SubmissionID
+	ReceiptCode  model.SubmissionReceiptCode
 	SealedAt     time.Time
 }
 
@@ -539,7 +540,7 @@ func validManagerMeaning(key model.MailTemplateKey, relationship exam.ManagerMai
 func (p *Composer) PrepareSubmissionReceiptMail(request SubmissionReceiptPreparation) (*store.PreparedMail, error) {
 	if request.Recipient == nil || request.Recipient.Validate() != nil || !request.OccurrenceID.IsValid() ||
 		request.Details.ExamTitle == "" || !request.Details.SittingID.IsValid() || !request.Details.SubmissionID.IsValid() ||
-		request.Details.SealedAt.IsZero() || request.ActionAt.IsZero() ||
+		!request.Details.ReceiptCode.IsValid() || request.Details.SealedAt.IsZero() || request.ActionAt.IsZero() ||
 		request.TemplateKey != model.MailTemplateExamSubmissionReceived &&
 			request.TemplateKey != model.MailTemplateExamSubmissionManagerEnded &&
 			request.TemplateKey != model.MailTemplateExamSubmissionAutomaticallySealed {

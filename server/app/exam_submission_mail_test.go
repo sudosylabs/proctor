@@ -27,7 +27,7 @@ func TestSubmissionReceiptMailPreparerCreatesBoundedReceipt(t *testing.T) {
 		from: MailAddress{Name: "Proctor", Address: "no-reply@example.test"}}, mailTestSealer(t), nil)
 	require.NoError(t, err)
 	details := SubmissionReceiptMailDetails{ExamTitle: "Algorithms", SittingID: model.NewExamSittingID(),
-		SubmissionID: model.NewSubmissionID(), SealedAt: at}
+		SubmissionID: model.NewSubmissionID(), ReceiptCode: model.NewSubmissionReceiptCode(), SealedAt: at}
 	prepared, err := preparer.PrepareSubmissionReceiptMail(SubmissionReceiptMailPreparation{Recipient: recipient,
 		OccurrenceID: model.MailOccurrenceID(details.SubmissionID.String()), TemplateKey: model.MailTemplateExamSubmissionReceived,
 		Details: details, ActionAt: at})
@@ -42,6 +42,15 @@ func TestSubmissionReceiptMailPreparerCreatesBoundedReceipt(t *testing.T) {
 	relevance, relevanceErr := evaluateMailDeliveryRelevance(context.Background(), prepared.Delivery)
 	require.NoError(t, relevanceErr, "receipt relevance")
 	require.Equal(t, mailDeliveryRelevant, relevance, "receipt relevance")
+
+	for name, code := range map[string]model.SubmissionReceiptCode{"missing": "", "display form": model.SubmissionReceiptCode(details.ReceiptCode.Display())} {
+		invalid := details
+		invalid.ReceiptCode = code
+		_, err = preparer.PrepareSubmissionReceiptMail(SubmissionReceiptMailPreparation{Recipient: recipient,
+			OccurrenceID: model.MailOccurrenceID(details.SubmissionID.String()), TemplateKey: model.MailTemplateExamSubmissionReceived,
+			Details: invalid, ActionAt: at})
+		require.Error(t, err, "%s receipt code accepted", name)
+	}
 }
 
 func TestSubmissionReceiptMailPreparerSuppressesInactiveRecipient(t *testing.T) {
@@ -58,7 +67,7 @@ func TestSubmissionReceiptMailPreparerSuppressesInactiveRecipient(t *testing.T) 
 	prepared, err := preparer.PrepareSubmissionReceiptMail(SubmissionReceiptMailPreparation{Recipient: recipient,
 		OccurrenceID: model.MailOccurrenceID(submissionID.String()), TemplateKey: model.MailTemplateExamSubmissionAutomaticallySealed,
 		Details: SubmissionReceiptMailDetails{ExamTitle: "Algorithms", SittingID: model.NewExamSittingID(),
-			SubmissionID: submissionID, SealedAt: at}, ActionAt: at})
+			SubmissionID: submissionID, ReceiptCode: model.NewSubmissionReceiptCode(), SealedAt: at}, ActionAt: at})
 	require.NoError(t, err)
 	require.Equal(t, model.MailDeliverySuppressed, prepared.Delivery.State, "suppressed=%#v renderer calls", prepared.Delivery)
 	require.Equal(t, model.MailDeliveryRecipientIneligibleCode, prepared.Delivery.PublicFailureCode, "suppressed=%#v renderer calls", prepared.Delivery)

@@ -123,6 +123,7 @@ func run(args []string, stderr io.Writer) error {
 			request.Presentation = mail.SubmissionReceiptDetails{
 				ExamTitle: "Representative programming exam", SittingID: model.ExamSittingID(strings.Repeat("y", model.IDLength)),
 				SubmissionID: model.SubmissionID(strings.Repeat("b", model.IDLength)),
+				ReceiptCode:  model.SubmissionReceiptCode("MBY3KBMNEB83TFW1"),
 				SealedAt:     time.Date(2026, 8, 21, 9, 30, 0, 0, time.UTC)}
 			request.ActionURL = ""
 		case model.MailTemplateIdentityEmailChangeWarningOld:

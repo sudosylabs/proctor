@@ -29,7 +29,7 @@ func (a examSubmissionMailPreparationAdapter) PrepareSubmissionReceipt(ctx conte
 ) (*attempt.PreparedSubmissionMail, error) {
 	if a.preparer == nil || a.users == nil || a.sittings == nil || a.revisions == nil ||
 		!request.CandidateUserID.IsValid() || !request.ExamID.IsValid() || !request.SittingID.IsValid() ||
-		!request.SubmissionID.IsValid() || request.SealedAt.IsZero() {
+		!request.SubmissionID.IsValid() || !request.ReceiptCode.IsValid() || request.SealedAt.IsZero() {
 		return nil, errors.New("Submission receipt dependencies or request are invalid")
 	}
 	recipient, err := a.users.Get(ctx, request.CandidateUserID)
@@ -64,7 +64,7 @@ func (a examSubmissionMailPreparationAdapter) PrepareSubmissionReceipt(ctx conte
 	prepared, err := a.preparer.PrepareSubmissionReceiptMail(mail.SubmissionReceiptPreparation{
 		Recipient: recipient, OccurrenceID: model.MailOccurrenceID(request.SubmissionID.String()), TemplateKey: key,
 		Details: mail.SubmissionReceiptDetails{ExamTitle: revision.Title, SittingID: request.SittingID,
-			SubmissionID: request.SubmissionID, SealedAt: request.SealedAt}, ActionAt: request.SealedAt,
+			SubmissionID: request.SubmissionID, ReceiptCode: request.ReceiptCode, SealedAt: request.SealedAt}, ActionAt: request.SealedAt,
 	})
 	if err != nil {
 		return nil, err

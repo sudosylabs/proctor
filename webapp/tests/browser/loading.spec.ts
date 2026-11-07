@@ -46,12 +46,12 @@ for (const colorScheme of ["light", "dark"] as const) {
         await page.evaluate(() => document.fonts.ready);
         const main = page.getByRole("main");
         const loader = main.locator("[data-proctor-loading]");
-        const heading = page.getByRole("heading", { name: "Sign in", exact: true });
+        const heading = page.getByRole("heading", { name: "Sign in to Proctor", exact: true });
         const masthead = page.getByRole("banner");
         const institution = masthead.locator("[data-proctor-shell-institution]");
         await expect(loader).toBeVisible();
         await expect(loader).toHaveAttribute("role", "status");
-        await expect(loader).toContainText("Checking available sign-in methods…");
+        await expect(loader).toContainText("Checking how you can sign in…");
         await expect(heading).toBeVisible();
         await expect(institution).toHaveCount(0);
         await expect(page.getByRole("img", { name: "Proctor" })).toBeVisible();
@@ -157,11 +157,11 @@ test("a discovery retry uses the reserved area and leaves focus alone while pend
   });
   try {
     await page.goto("/login");
-    const heading = page.getByRole("heading", { name: "Sign in", exact: true });
+    const heading = page.getByRole("heading", { name: "Sign in to Proctor", exact: true });
     await page.evaluate(() => document.fonts.ready);
     const before = await box(heading);
     await page.getByRole("button", { name: "Try again" }).click();
-    await expect(page.getByRole("status")).toContainText("Checking available sign-in methods…");
+    await expect(page.getByRole("status")).toContainText("Checking how you can sign in…");
     await expect(heading).not.toBeFocused();
     expect(await box(heading)).toEqual(before);
     release();

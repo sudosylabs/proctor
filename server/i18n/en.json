@@ -2779,11 +2779,11 @@
   },
   {
     "id": "webapp.login.discovery_failure.body",
-    "translation": "Proctor couldn’t load the sign-in methods for this installation."
+    "translation": "Proctor couldn’t load the ways to sign in. Check your connection and try again."
   },
   {
     "id": "webapp.login.discovery_failure.heading",
-    "translation": "Sign-in methods are unavailable"
+    "translation": "Sign-in options didn’t load"
   },
   {
     "id": "webapp.login.document_title",
@@ -2791,15 +2791,27 @@
   },
   {
     "id": "webapp.login.external_failure",
-    "translation": "External sign-in wasn’t completed. Choose a method to try again."
+    "translation": "Signing in with your institution wasn’t completed. Choose how to sign in and try again."
   },
   {
     "id": "webapp.login.form.email_or_username",
     "translation": "Email or username"
   },
   {
+    "id": "webapp.login.form.error.code_rejected",
+    "translation": "That code didn’t work. Check your app and enter the current code."
+  },
+  {
+    "id": "webapp.login.form.error.code_required",
+    "translation": "Enter the code from your authenticator app, or a recovery code."
+  },
+  {
+    "id": "webapp.login.form.error.credentials_rejected",
+    "translation": "That email or password isn’t right. Check both and try again."
+  },
+  {
     "id": "webapp.login.form.error.generic",
-    "translation": "Proctor couldn’t sign you in. Check your details and try again."
+    "translation": "Something went wrong and you weren’t signed in. Try again."
   },
   {
     "id": "webapp.login.form.error.invalid_credentials",
@@ -2811,7 +2823,7 @@
   },
   {
     "id": "webapp.login.form.error.mfa_unavailable",
-    "translation": "Proctor can’t verify an authentication code right now. Try again."
+    "translation": "Proctor can’t check codes right now. Try again in a few minutes."
   },
   {
     "id": "webapp.login.form.error.password_required",
@@ -2823,7 +2835,7 @@
   },
   {
     "id": "webapp.login.form.error.sessions_maximum",
-    "translation": "You already have the maximum number of active Sessions. Resolve another Session before signing in."
+    "translation": "You’re signed in on as many devices as Proctor allows. Sign out on another device, then try again."
   },
   {
     "id": "webapp.login.form.error.username_required",
@@ -2835,15 +2847,7 @@
   },
   {
     "id": "webapp.login.form.mfa_back",
-    "translation": "Use a different password"
-  },
-  {
-    "id": "webapp.login.form.mfa_heading",
-    "translation": "Confirm it’s you"
-  },
-  {
-    "id": "webapp.login.form.mfa_help",
-    "translation": "Enter a current authenticator code or an unused recovery code."
+    "translation": "Use a different account"
   },
   {
     "id": "webapp.login.form.password",
@@ -2858,24 +2862,48 @@
     "translation": "Signing in…"
   },
   {
+    "id": "webapp.login.form.verify",
+    "translation": "Verify"
+  },
+  {
+    "id": "webapp.login.form.verifying",
+    "translation": "Verifying…"
+  },
+  {
     "id": "webapp.login.heading",
-    "translation": "Sign in"
+    "translation": "Sign in to Proctor"
   },
   {
     "id": "webapp.login.lede",
-    "translation": "Use your institution account to continue."
+    "translation": "Use your {{.Institution}} account."
+  },
+  {
+    "id": "webapp.login.lede_unnamed",
+    "translation": "Use your institution account."
   },
   {
     "id": "webapp.login.loading",
-    "translation": "Checking available sign-in methods…"
+    "translation": "Checking how you can sign in…"
   },
   {
     "id": "webapp.login.method_separator",
     "translation": "or"
   },
   {
+    "id": "webapp.login.mfa.heading",
+    "translation": "Enter your code"
+  },
+  {
+    "id": "webapp.login.mfa.kind",
+    "translation": "Sign in"
+  },
+  {
+    "id": "webapp.login.mfa.lede",
+    "translation": "Open your authenticator app and enter the 6-digit code for Proctor."
+  },
+  {
     "id": "webapp.login.origin_mismatch.body",
-    "translation": "This page doesn’t match the Proctor origin configured for this installation. Reload from the address provided by your institution."
+    "translation": "This page isn’t at the address Proctor expects. Open Proctor from the link your institution gave you."
   },
   {
     "id": "webapp.login.origin_mismatch.heading",
@@ -2887,11 +2915,23 @@
   },
   {
     "id": "webapp.login.provider.group",
-    "translation": "Institution sign-in methods"
+    "translation": "Sign in with your institution"
   },
   {
     "id": "webapp.login.registration.action",
     "translation": "Create an account"
+  },
+  {
+    "id": "webapp.login.registration.invitation",
+    "translation": "Students and staff join through an invitation from {{.Institution}}."
+  },
+  {
+    "id": "webapp.login.registration.invitation_unnamed",
+    "translation": "Students and staff join through an invitation from their institution."
+  },
+  {
+    "id": "webapp.login.registration.open",
+    "translation": "{{.Link}} if your institution allows it."
   },
   {
     "id": "webapp.login.registration.prompt",
@@ -2907,15 +2947,15 @@
   },
   {
     "id": "webapp.login.setup.body",
-    "translation": "Finish setting up this Proctor installation before signing in."
+    "translation": "Proctor needs to be set up before anyone can sign in."
   },
   {
     "id": "webapp.login.setup.heading",
-    "translation": "Setup is required"
+    "translation": "Proctor isn’t set up yet"
   },
   {
     "id": "webapp.login.setup.open",
-    "translation": "Open setup"
+    "translation": "Set up Proctor"
   },
   {
     "id": "webapp.login.skip_to_main",
@@ -2923,11 +2963,11 @@
   },
   {
     "id": "webapp.login.unavailable.body",
-    "translation": "This installation currently has no available sign-in method."
+    "translation": "No way to sign in is turned on here yet. Contact your institution."
   },
   {
     "id": "webapp.login.unavailable.heading",
-    "translation": "Sign in is unavailable"
+    "translation": "Sign-in isn’t available"
   },
   {
     "id": "webapp.password_policy.common",
@@ -3019,7 +3059,7 @@
   },
   {
     "id": "webapp.register.accepted.body",
-    "translation": "Proctor accepted your registration request. A verification message will follow; verify your email before signing in."
+    "translation": "If Proctor can create your account, you’ll get an email with a link to confirm your address. Confirm it, then sign in."
   },
   {
     "id": "webapp.register.accepted.heading",
@@ -3027,15 +3067,15 @@
   },
   {
     "id": "webapp.register.accepted.label",
-    "translation": "Registration accepted"
+    "translation": "Request received"
   },
   {
     "id": "webapp.register.discovery_failure.body",
-    "translation": "Proctor couldn’t load the registration policy for this installation."
+    "translation": "Proctor couldn’t check whether you can create an account. Try again."
   },
   {
     "id": "webapp.register.discovery_failure.heading",
-    "translation": "Registration status is unavailable"
+    "translation": "This page didn’t load"
   },
   {
     "id": "webapp.register.document_title",
@@ -3043,19 +3083,19 @@
   },
   {
     "id": "webapp.register.form.acknowledgment",
-    "translation": "I understand that registration does not grant institutional access."
+    "translation": "I understand that an account doesn’t by itself give me access to any classes or exams."
   },
   {
     "id": "webapp.register.form.email",
-    "translation": "Email address"
+    "translation": "Email"
   },
   {
     "id": "webapp.register.form.error.acknowledgment_required",
-    "translation": "Confirm that registration does not grant institutional access."
+    "translation": "Tick the box to confirm you understand."
   },
   {
     "id": "webapp.register.form.error.details_invalid",
-    "translation": "Those registration details weren’t accepted. Review them and try again."
+    "translation": "Some of those details weren’t accepted. Check them and try again."
   },
   {
     "id": "webapp.register.form.error.email_invalid",
@@ -3071,7 +3111,7 @@
   },
   {
     "id": "webapp.register.form.error.generic",
-    "translation": "Proctor couldn’t accept your registration request. Try again."
+    "translation": "Something went wrong and your account wasn’t created. Try again."
   },
   {
     "id": "webapp.register.form.error.last_name_required",
@@ -3083,15 +3123,15 @@
   },
   {
     "id": "webapp.register.form.error.password_required",
-    "translation": "Enter a password."
+    "translation": "Choose a password."
   },
   {
     "id": "webapp.register.form.error.rate_limited",
-    "translation": "Too many registration attempts were made. Try again later."
+    "translation": "Too many attempts. Wait a few minutes, then try again."
   },
   {
     "id": "webapp.register.form.error.username_required",
-    "translation": "Enter a username."
+    "translation": "Choose a username."
   },
   {
     "id": "webapp.register.form.first_name",
@@ -3102,16 +3142,12 @@
     "translation": "Last name"
   },
   {
-    "id": "webapp.register.form.mail_note",
-    "translation": "We’ll send a verification message after your request is accepted."
-  },
-  {
     "id": "webapp.register.form.password",
     "translation": "Password"
   },
   {
     "id": "webapp.register.form.password_help",
-    "translation": "Use a unique, policy-compliant password."
+    "translation": "Choose a long password you don’t use anywhere else. A short sentence works well."
   },
   {
     "id": "webapp.register.form.submit",
@@ -3126,28 +3162,48 @@
     "translation": "Username"
   },
   {
+    "id": "webapp.register.form.username_help",
+    "translation": "Lowercase letters, numbers, dots, hyphens and underscores."
+  },
+  {
     "id": "webapp.register.heading",
-    "translation": "Create your account"
+    "translation": "Create your Proctor account"
   },
   {
     "id": "webapp.register.invitation_required.body",
-    "translation": "This Institution accepts new Users through an Invitation. Use the private link sent by the Institution."
+    "translation": "{{.Institution}} adds people to Proctor by invitation. Look for an email from Proctor with an invitation link, or ask your department to send one."
+  },
+  {
+    "id": "webapp.register.invitation_required.body_unnamed",
+    "translation": "Your institution adds people to Proctor by invitation. Look for an email from Proctor with an invitation link, or ask your department to send one."
+  },
+  {
+    "id": "webapp.register.invitation_required.contact",
+    "translation": "Contact support"
   },
   {
     "id": "webapp.register.invitation_required.heading",
-    "translation": "An Invitation is required"
+    "translation": "You need an invitation"
+  },
+  {
+    "id": "webapp.register.kind",
+    "translation": "Create an account"
   },
   {
     "id": "webapp.register.lede",
-    "translation": "Enter your name and local account details to register."
+    "translation": "For {{.Institution}}. You’ll confirm your email before you can sign in."
+  },
+  {
+    "id": "webapp.register.lede_unnamed",
+    "translation": "You’ll confirm your email before you can sign in."
   },
   {
     "id": "webapp.register.loading",
-    "translation": "Checking whether public registration is available…"
+    "translation": "Checking whether you can create an account…"
   },
   {
     "id": "webapp.register.origin_mismatch.body",
-    "translation": "This page doesn’t match the Proctor origin configured for this installation. Reload from the address provided by your Institution."
+    "translation": "This page isn’t at the address Proctor expects. Open Proctor from the link your institution gave you."
   },
   {
     "id": "webapp.register.origin_mismatch.heading",
@@ -3163,19 +3219,23 @@
   },
   {
     "id": "webapp.register.setup.body",
-    "translation": "Finish setting up this Proctor installation before creating an account."
+    "translation": "Proctor needs to be set up before anyone can create an account."
   },
   {
     "id": "webapp.register.setup.heading",
-    "translation": "Setup is required"
+    "translation": "Proctor isn’t set up yet"
   },
   {
     "id": "webapp.register.setup.open",
-    "translation": "Open setup"
+    "translation": "Set up Proctor"
   },
   {
     "id": "webapp.register.sign_in.action",
     "translation": "Sign in"
+  },
+  {
+    "id": "webapp.register.sign_in.instead",
+    "translation": "{{.Link}} instead."
   },
   {
     "id": "webapp.register.sign_in.prompt",
@@ -3183,15 +3243,15 @@
   },
   {
     "id": "webapp.register.skip_to_main",
-    "translation": "Skip to account registration"
+    "translation": "Skip to create an account"
   },
   {
     "id": "webapp.register.unavailable.body",
-    "translation": "Proctor can’t accept public registration requests right now."
+    "translation": "Proctor can’t create new accounts right now. Try again later."
   },
   {
     "id": "webapp.register.unavailable.heading",
-    "translation": "Registration is unavailable"
+    "translation": "Account creation is unavailable"
   },
   {
     "id": "webapp.reset_password.complete.action",
@@ -3583,23 +3643,35 @@
   },
   {
     "id": "webapp.setup.already_initialized.body",
-    "translation": "This Proctor installation has already established its Institution and first administrator."
+    "translation": "This installation already has an institution and an administrator, so setup can’t run again."
   },
   {
     "id": "webapp.setup.already_initialized.heading",
-    "translation": "Setup is complete"
+    "translation": "Proctor is already set up"
   },
   {
-    "id": "webapp.setup.context.body",
-    "translation": "Create the Institution and first administrator for this Proctor installation."
+    "id": "webapp.setup.created.administrator",
+    "translation": "Administrator"
   },
   {
-    "id": "webapp.setup.context.eyebrow",
-    "translation": "Installation setup"
+    "id": "webapp.setup.created.administrator_value",
+    "translation": "{{.Name}} · {{.Email}}"
   },
   {
-    "id": "webapp.setup.context.heading",
-    "translation": "Establish this installation"
+    "id": "webapp.setup.created.body",
+    "translation": "Your institution and administrator account were created. Sign in to add academic units, classes and staff."
+  },
+  {
+    "id": "webapp.setup.created.facts",
+    "translation": "What setup created"
+  },
+  {
+    "id": "webapp.setup.created.heading",
+    "translation": "{{.Institution}} is ready"
+  },
+  {
+    "id": "webapp.setup.created.institution",
+    "translation": "Institution"
   },
   {
     "id": "webapp.setup.document_title",
@@ -3607,15 +3679,11 @@
   },
   {
     "id": "webapp.setup.form.administrator.display_name",
-    "translation": "Display name (optional)"
+    "translation": "Your full name (optional)"
   },
   {
     "id": "webapp.setup.form.administrator.email",
-    "translation": "Email address"
-  },
-  {
-    "id": "webapp.setup.form.administrator.heading",
-    "translation": "First administrator"
+    "translation": "Your email"
   },
   {
     "id": "webapp.setup.form.administrator.password",
@@ -3626,36 +3694,36 @@
     "translation": "Username"
   },
   {
-    "id": "webapp.setup.form.caution",
-    "translation": "This action creates the Institution, first administrator, protected Role Binding, and initial Access Policy in one transaction."
+    "id": "webapp.setup.form.administrator.username_help",
+    "translation": "Lowercase letters, numbers, dots, hyphens and underscores."
   },
   {
     "id": "webapp.setup.form.error.bootstrap_denied",
-    "translation": "That bootstrap secret wasn’t accepted. Check the value provided by the server operator."
+    "translation": "That setup key isn’t right. Check it with whoever runs the server."
   },
   {
     "id": "webapp.setup.form.error.bootstrap_secret_required",
-    "translation": "Enter the one-time bootstrap secret."
+    "translation": "Enter the setup key."
   },
   {
     "id": "webapp.setup.form.error.email_invalid",
-    "translation": "Enter a valid administrator email address."
+    "translation": "Enter a valid email address."
   },
   {
     "id": "webapp.setup.form.error.email_required",
-    "translation": "Enter the administrator email address."
+    "translation": "Enter your email address."
   },
   {
     "id": "webapp.setup.form.error.generic",
-    "translation": "Proctor couldn’t create the installation. No setup changes were applied. Review the details and try again."
+    "translation": "Proctor couldn’t create the institution, and nothing was changed. Check the details and try again."
   },
   {
     "id": "webapp.setup.form.error.institution_display_name_required",
-    "translation": "Enter the Institution display name."
+    "translation": "Enter the institution’s name."
   },
   {
     "id": "webapp.setup.form.error.institution_name_required",
-    "translation": "Enter the canonical Institution name."
+    "translation": "Enter a short name."
   },
   {
     "id": "webapp.setup.form.error.password_invalid",
@@ -3663,15 +3731,15 @@
   },
   {
     "id": "webapp.setup.form.error.password_required",
-    "translation": "Enter the first administrator password."
+    "translation": "Choose a password."
   },
   {
     "id": "webapp.setup.form.error.rate_limited",
-    "translation": "Too many setup attempts were made. Try again later."
+    "translation": "Too many attempts. Wait a few minutes, then try again."
   },
   {
     "id": "webapp.setup.form.error.username_required",
-    "translation": "Enter the first administrator username."
+    "translation": "Choose a username."
   },
   {
     "id": "webapp.setup.form.institution.description",
@@ -3679,63 +3747,63 @@
   },
   {
     "id": "webapp.setup.form.institution.display_name",
-    "translation": "Display name"
-  },
-  {
-    "id": "webapp.setup.form.institution.heading",
-    "translation": "Institution"
-  },
-  {
-    "id": "webapp.setup.form.institution.name",
     "translation": "Institution name"
   },
   {
-    "id": "webapp.setup.form.operator.body",
-    "translation": "Enter the one-time secret provided by the server operator."
+    "id": "webapp.setup.form.institution.name",
+    "translation": "Short name"
   },
   {
-    "id": "webapp.setup.form.operator.heading",
-    "translation": "Operator verification"
+    "id": "webapp.setup.form.institution.name_help",
+    "translation": "A short identifier for the institution. Lowercase letters, numbers, hyphens and underscores."
   },
   {
     "id": "webapp.setup.form.operator.secret",
-    "translation": "Bootstrap secret"
+    "translation": "Setup key"
+  },
+  {
+    "id": "webapp.setup.form.operator.secret_help",
+    "translation": "The secret whoever runs the server set in {{.Setting}}."
   },
   {
     "id": "webapp.setup.form.password_help",
-    "translation": "Use a unique, policy-compliant password."
+    "translation": "Choose a long password you don’t use anywhere else."
   },
   {
     "id": "webapp.setup.form.secret_hide",
-    "translation": "Hide bootstrap secret"
+    "translation": "Hide setup key"
   },
   {
     "id": "webapp.setup.form.secret_show",
-    "translation": "Show bootstrap secret"
+    "translation": "Show setup key"
   },
   {
     "id": "webapp.setup.form.submit",
-    "translation": "Create installation"
+    "translation": "Create institution"
   },
   {
     "id": "webapp.setup.form.submitting",
-    "translation": "Creating installation…"
+    "translation": "Creating institution…"
   },
   {
     "id": "webapp.setup.heading",
+    "translation": "Set up your institution"
+  },
+  {
+    "id": "webapp.setup.kind",
     "translation": "Set up Proctor"
   },
   {
-    "id": "webapp.setup.loading",
-    "translation": "Checking this installation’s setup status…"
+    "id": "webapp.setup.lede",
+    "translation": "This runs once. You’ll create the institution and the first administrator account."
   },
   {
-    "id": "webapp.setup.return_to_sign_in",
-    "translation": "Return to sign in"
+    "id": "webapp.setup.loading",
+    "translation": "Checking whether Proctor is set up…"
   },
   {
     "id": "webapp.setup.sign_in",
-    "translation": "Continue to sign in"
+    "translation": "Sign in"
   },
   {
     "id": "webapp.setup.skip_to_main",
@@ -3743,11 +3811,11 @@
   },
   {
     "id": "webapp.setup.status_failure.body",
-    "translation": "Proctor couldn’t confirm whether this installation still needs setup."
+    "translation": "Proctor couldn’t check whether setup is still needed. Try again."
   },
   {
     "id": "webapp.setup.status_failure.heading",
-    "translation": "Setup status is unavailable"
+    "translation": "Setup status didn’t load"
   },
   {
     "id": "webapp.setup.status_failure.retry",

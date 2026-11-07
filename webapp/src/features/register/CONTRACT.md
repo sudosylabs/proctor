@@ -23,7 +23,10 @@ whether setup, public registration, or Invitation admission applies.
   Institution presentation.
 - When public registration is false, the route explains that an Invitation is
   required and does not accept an email address or imply that an Invitation
-  exists.
+  exists. That state replaces the whole task, including the registration
+  heading, so nothing on the page also suggests that public registration is
+  open. Its kind line uses the warning tone; it offers sign-in and, when the
+  Institution publishes a support address, a secondary contact action.
 - Origin mismatch fails closed with a reload action.
 - A network failure, malformed success body, or unavailable policy produces a
   recoverable state with an explicit retry action.
@@ -45,7 +48,9 @@ The password has a centered icon-only disclosure button with localized
 accessible-name and title text. The form also contains a required, client-only
 acknowledgment that registration does not grant institutional access; its
 checkbox and complete label form one aligned hit target. The acknowledgment is
-never persisted or transported and has no authorization meaning.
+never persisted or transported and has no authorization meaning. Username and
+password guidance sits under its field as the field description, so the
+password rules are read before the person types.
 
 Empty or malformed required values are rejected before transport and focus
 moves to the first invalid control. First name, last name, username, and email
@@ -92,17 +97,22 @@ code or arbitrary response value.
 
 Server prose and arbitrary fields are never rendered. Passwords and response
 data never enter logs, analytics, storage, history, or document metadata. A
-general form failure remains in the reserved feedback region after the submit
-action and is announced politely without moving focus. Account fields and the
+general form failure remains in the `FormFeedback` region after the submit
+action, which takes no space until it holds a message, and is announced
+politely without moving focus. Account fields and the
 submit action remain stationary while ordinary failure copy appears.
 
 ## Presentation
 
 The page uses the single task column of `AccessPageShell`; the shell
-masthead names the Institution. The page heading, lede, form, and every
-admission state (including the Invitation-required explanation) live in that
-column. The accepted state's purpose label appears only after the server
-accepts the request.
+masthead names the Institution. Every state opens with one `AccessTaskIntro`
+(kind line “Create an account”, the single page heading, and a lede), so the
+page never shows two competing headings. The form's lede names the
+Institution and says email confirmation comes before sign-in, which replaces a
+separate mail notice. “Already have an account?” follows the form as a small
+heading under a hairline rule. The accepted state's success-toned kind line
+appears only after the server accepts the request, and its heading takes focus
+because the submit action that invoked it is gone.
 
 The column stays in one-dimensional document flow at every width. Both
 registered color themes follow the system preference; this page introduces no

@@ -6,12 +6,14 @@ import type {
   RegistrationSubmission,
   RegistrationSubmissionResult,
 } from "../../features/register/RegistrationApi";
+import { useHostedInstitution } from "../../auth/HostedInstitution";
 import { message } from "../../i18n/messages";
+import { richMessage } from "../../i18n/richMessage";
+import { AccessTaskIntro } from "../AccessTaskIntro/AccessTaskIntro";
 import { Button } from "../Button/Button";
 import { FormFeedback } from "../FormFeedback/FormFeedback";
 import { InputField, RequiredMark } from "../InputField/InputField";
 import { PasswordField } from "../InputField/PasswordField";
-import { Notice } from "../Notice/Notice";
 import styles from "./Registration.module.css";
 import { passwordRejectionMessage } from "../../auth/passwordRejection";
 
@@ -203,10 +205,7 @@ export function RegistrationForm({
 
   return (
     <section className={styles.page} aria-labelledby="register-heading">
-      <header className={styles.headingGroup}>
-        <h1 id="register-heading">{message("webapp.register.heading")}</h1>
-        <p>{message("webapp.register.lede")}</p>
-      </header>
+      <RegistrationIntro />
 
       <form className={styles.form} onSubmit={submit} aria-busy={pending} noValidate>
         <div className={styles.visuallyHidden} aria-live="polite" aria-atomic="true">
@@ -275,6 +274,7 @@ export function RegistrationForm({
           autoCapitalize="none"
           autoComplete="username"
           spellCheck={false}
+          description={message("webapp.register.form.username_help")}
           value={username}
           errorMessage={fieldErrors.username}
           required
@@ -342,25 +342,48 @@ export function RegistrationForm({
         </div>
 
         <div className={styles.submission}>
-          <Button
-            type="submit"
-            isLoading={pending}
-            loadingLabel={message("webapp.register.form.submitting")}
-          >
-            {message("webapp.register.form.submit")}
-          </Button>
+          <div className={styles.actions}>
+            <Button
+              type="submit"
+              isLoading={pending}
+              loadingLabel={message("webapp.register.form.submitting")}
+            >
+              {message("webapp.register.form.submit")}
+            </Button>
+          </div>
           <FormFeedback message={formError} />
         </div>
-
-        <div className={styles.signIn}>
-          <p>{message("webapp.register.sign_in.prompt")}</p>
-          <a href="/login">{message("webapp.register.sign_in.action")}</a>
-        </div>
-
-        <Notice role="note" tone="information">
-          <p>{message("webapp.register.form.mail_note")}</p>
-        </Notice>
       </form>
+
+      <section className={styles.signIn} aria-labelledby="register-sign-in-heading">
+        <h2 id="register-sign-in-heading">
+          {message("webapp.register.sign_in.prompt")}
+        </h2>
+        <p>
+          {richMessage("webapp.register.sign_in.instead", {
+            Link: <a href="/login">{message("webapp.register.sign_in.action")}</a>,
+          })}
+        </p>
+      </section>
     </section>
+  );
+}
+
+/** The registration kind line, page heading, and lede. */
+export function RegistrationIntro() {
+  const institution = useHostedInstitution();
+  return (
+    <AccessTaskIntro
+      kind={message("webapp.register.kind")}
+      heading={message("webapp.register.heading")}
+      headingID="register-heading"
+      body={
+        institution.displayName === undefined
+          ? message("webapp.register.lede_unnamed")
+          : message("webapp.register.lede", {
+              Institution: institution.displayName,
+            })
+      }
+    />
   );
 }

@@ -1,6 +1,13 @@
 @layer components {
   .feedback {
     min-inline-size: 0;
-    min-block-size: calc(var(--proctor-space-7) + var(--proctor-space-2));
+  }
+
+  /*
+   * The region stays mounted for its live announcement but occupies no space
+   * until it holds a message; the message then opens below the action.
+   */
+  .feedback:not(:empty) {
+    padding-block-start: var(--proctor-space-3);
   }
 }

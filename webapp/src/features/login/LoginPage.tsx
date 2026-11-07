@@ -1,14 +1,17 @@
 import {
   type FormEvent,
+  type ReactNode,
   useEffect,
   useRef,
   useState,
 } from "react";
 
 import { useAsyncResource } from "../../app/AsyncResource";
+import { useHostedInstitution } from "../../auth/HostedInstitution";
 import { navigateToProvider } from "../../auth/navigation";
 import type { PublicAccessDiscovery } from "../../auth/PublicAccessDiscovery";
 import { AccessPageShell } from "../../components/AccessPageShell/AccessPageShell";
+import { AccessTaskIntro } from "../../components/AccessTaskIntro/AccessTaskIntro";
 import { AuthenticationCodeField, isCompleteAuthenticationCode, type AuthenticationCodeValue } from "../../components/AuthenticationCodeField/AuthenticationCodeField";
 import { Button, ButtonLink } from "../../components/Button/Button";
 import { FormFeedback } from "../../components/FormFeedback/FormFeedback";
@@ -16,7 +19,9 @@ import { InputField } from "../../components/InputField/InputField";
 import { PasswordField } from "../../components/InputField/PasswordField";
 import { Loading } from "../../components/Loading/Loading";
 import { Notice } from "../../components/Notice/Notice";
+import { TaskHeading } from "../../components/TaskState/TaskState";
 import { message } from "../../i18n/messages";
+import { richMessage } from "../../i18n/richMessage";
 import { authenticateLocal, type AuthenticateLocal } from "./LoginApi";
 import {
   requestLoginDiscovery,
@@ -39,16 +44,35 @@ export function LoginPage({ externalLoginFailed }: LoginPageProps) {
     ? { kind: "loading" }
     : discoveryResource.value;
   const [externalNotice, setExternalNotice] = useState(externalLoginFailed);
+  const [mfaRequired, setMFARequired] = useState(false);
+  const institution = useHostedInstitution();
 
   return (
     <AccessPageShell skipLabel={message("webapp.login.skip_to_main")}>
       <section className={styles.page} aria-labelledby="login-heading">
-        <header className={styles.headingGroup}>
-          <h1 id="login-heading">{message("webapp.login.heading")}</h1>
-          <p>{message("webapp.login.lede")}</p>
-        </header>
+        {mfaRequired ? (
+          <AccessTaskIntro
+            kind={message("webapp.login.mfa.kind")}
+            heading={message("webapp.login.mfa.heading")}
+            headingID="login-heading"
+            body={message("webapp.login.mfa.lede")}
+          />
+        ) : (
+          <header className={styles.intro}>
+            <TaskHeading id="login-heading">
+              {message("webapp.login.heading")}
+            </TaskHeading>
+            <p className={styles.lede}>
+              {institution.displayName === undefined
+                ? message("webapp.login.lede_unnamed")
+                : message("webapp.login.lede", {
+                    Institution: institution.displayName,
+                  })}
+            </p>
+          </header>
+        )}
 
-        {externalNotice ? (
+        {externalNotice && !mfaRequired ? (
           <Notice role="note" tone="warning">
             <p>{message("webapp.login.external_failure")}</p>
           </Notice>
@@ -57,7 +81,10 @@ export function LoginPage({ externalLoginFailed }: LoginPageProps) {
         <div className={styles.discovery}>
           <DiscoveryContent
             authenticate={authenticateLocal}
+            institutionName={institution.displayName}
+            mfaRequired={mfaRequired}
             state={discoveryState}
+            onMFARequiredChange={setMFARequired}
             onRetry={discoveryResource.retry}
             onAuthenticationAction={() => setExternalNotice(false)}
           />
@@ -69,14 +96,20 @@ export function LoginPage({ externalLoginFailed }: LoginPageProps) {
 
 interface DiscoveryContentProps {
   authenticate: AuthenticateLocal;
+  institutionName?: string;
+  mfaRequired: boolean;
   onAuthenticationAction(): void;
+  onMFARequiredChange(required: boolean): void;
   onRetry(): void;
   state: LoginDiscoveryState;
 }
 
 function DiscoveryContent({
   authenticate,
+  institutionName,
+  mfaRequired,
   onAuthenticationAction,
+  onMFARequiredChange,
   onRetry,
   state,
 }: DiscoveryContentProps) {
@@ -134,7 +167,10 @@ function DiscoveryContent({
     <LoginMethods
       authenticate={authenticate}
       discovery={state.discovery}
+      institutionName={institutionName}
+      mfaRequired={mfaRequired}
       onAuthenticationAction={onAuthenticationAction}
+      onMFARequiredChange={onMFARequiredChange}
     />
   );
 }
@@ -145,7 +181,7 @@ function RouteState({
   heading,
 }: {
   body: string;
-  children: React.ReactNode;
+  children: ReactNode;
   heading: string;
 }) {
   return (
@@ -154,7 +190,7 @@ function RouteState({
         <h2>{heading}</h2>
         <p>{body}</p>
       </div>
-      {children}
+      <div className={styles.actions}>{children}</div>
     </div>
   );
 }
@@ -162,21 +198,29 @@ function RouteState({
 function LoginMethods({
   authenticate,
   discovery,
+  institutionName,
+  mfaRequired,
   onAuthenticationAction,
+  onMFARequiredChange,
 }: {
   authenticate: AuthenticateLocal;
   discovery: PublicAccessDiscovery;
+  institutionName?: string;
+  mfaRequired: boolean;
   onAuthenticationAction(): void;
+  onMFARequiredChange(required: boolean): void;
 }) {
   const hasLocal = discovery.capabilities.local_login;
-  const hasProviders = discovery.providers.length > 0;
+  const hasProviders = discovery.providers.length > 0 && !mfaRequired;
 
   return (
     <div className={styles.methods}>
       {hasLocal ? (
         <LocalLoginForm
           authenticate={authenticate}
+          mfaRequired={mfaRequired}
           onAuthenticationAction={onAuthenticationAction}
+          onMFARequiredChange={onMFARequiredChange}
         />
       ) : null}
 
@@ -214,27 +258,53 @@ function LoginMethods({
         </fieldset>
       ) : null}
 
-      {discovery.capabilities.public_registration ? (
-        <div className={styles.registration}>
-          <p>{message("webapp.login.registration.prompt")}</p>
-          <a href="/register">{message("webapp.login.registration.action")}</a>
-        </div>
-      ) : null}
+      {mfaRequired ? null : (
+        <section
+          className={styles.newcomer}
+          aria-labelledby="login-newcomer-heading"
+        >
+          <h2 id="login-newcomer-heading">
+            {message("webapp.login.registration.prompt")}
+          </h2>
+          <p>
+            {institutionName === undefined
+              ? message("webapp.login.registration.invitation_unnamed")
+              : message("webapp.login.registration.invitation", {
+                  Institution: institutionName,
+                })}
+            {discovery.capabilities.public_registration ? (
+              <>
+                {" "}
+                {richMessage("webapp.login.registration.open", {
+                  Link: (
+                    <a href="/register">
+                      {message("webapp.login.registration.action")}
+                    </a>
+                  ),
+                })}
+              </>
+            ) : null}
+          </p>
+        </section>
+      )}
     </div>
   );
 }
 
 function LocalLoginForm({
   authenticate,
+  mfaRequired,
   onAuthenticationAction,
+  onMFARequiredChange,
 }: {
   authenticate: AuthenticateLocal;
+  mfaRequired: boolean;
   onAuthenticationAction(): void;
+  onMFARequiredChange(required: boolean): void;
 }) {
   const [loginID, setLoginID] = useState("");
   const [password, setPassword] = useState("");
   const [mfaCode, setMFACode] = useState<AuthenticationCodeValue>({ kind: "authenticator", code: "" });
-  const [mfaRequired, setMFARequired] = useState(false);
   const [pending, setPending] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string>();
@@ -268,7 +338,7 @@ function LocalLoginForm({
       nextErrors.password = message("webapp.login.form.error.password_required");
     }
     if (mfaRequired && !isCompleteAuthenticationCode(mfaCode)) {
-      nextErrors.mfa_code = message("webapp.login.form.error.mfa_invalid");
+      nextErrors.mfa_code = message("webapp.login.form.error.code_required");
     }
     setFieldErrors(nextErrors);
     setFormError(undefined);
@@ -286,7 +356,7 @@ function LocalLoginForm({
     }
 
     setPending(true);
-    setLiveMessage(message("webapp.login.form.signing_in"));
+    setLiveMessage(message(mfaRequired ? "webapp.login.form.verifying" : "webapp.login.form.signing_in"));
     try {
       const result = await authenticate({
         loginID,
@@ -302,25 +372,34 @@ function LocalLoginForm({
       }
 
       if (result.kind === "mfa_required") {
-        setMFARequired(true);
+        onMFARequiredChange(true);
         setMFACode({ kind: "authenticator", code: "" });
         setFieldErrors({});
         setFormError(undefined);
-        setLiveMessage(message("webapp.login.form.mfa_help"));
+        setLiveMessage(message("webapp.login.mfa.lede"));
         return;
       }
       if (result.kind === "mfa_invalid") {
-        const errorMessage = message("webapp.login.form.error.mfa_invalid");
+        const errorMessage = message("webapp.login.form.error.code_rejected");
         setFieldErrors({ mfa_code: errorMessage });
         setLiveMessage(errorMessage);
         requestAnimationFrame(() => mfaCodeRef.current?.focus());
+        return;
+      }
+      if (result.kind === "invalid_credentials" && !mfaRequired) {
+        // The credentials are rejected as a pair; the message sits under the
+        // password, which is the field the person usually retypes.
+        const errorMessage = message("webapp.login.form.error.credentials_rejected");
+        setFieldErrors({ password: errorMessage });
+        setLiveMessage(errorMessage);
+        requestAnimationFrame(() => passwordRef.current?.focus());
         return;
       }
 
       let safeError: string;
       switch (result.kind) {
         case "invalid_credentials":
-          safeError = message("webapp.login.form.error.invalid_credentials");
+          safeError = message("webapp.login.form.error.credentials_rejected");
           break;
         case "mfa_unavailable":
           safeError = message("webapp.login.form.error.mfa_unavailable");
@@ -351,95 +430,94 @@ function LocalLoginForm({
         {liveMessage}
       </div>
 
-      <InputField
-        ref={loginIDRef}
-        id="login-id"
-        name="login_id"
-        label={message("webapp.login.form.email_or_username")}
-        type="text"
-        autoCapitalize="none"
-        autoComplete="username"
-        spellCheck={false}
-        value={loginID}
-        errorMessage={fieldErrors.login_id}
-        required
-        onChange={(event) => {
-          setLoginID(event.currentTarget.value);
-          setFieldErrors((errors) => ({ ...errors, login_id: undefined }));
-          clearFormFailure();
-        }}
-      />
-
-      <PasswordField
-        ref={passwordRef}
-        id="password"
-        name="password"
-        label={message("webapp.login.form.password")}
-        labelAccessory={
-          <a href="/account/forgot-password">
-            {message("webapp.login.form.forgot_password")}
-          </a>
-        }
-        autoComplete="current-password"
-        value={password}
-        errorMessage={fieldErrors.password}
-        hidePasswordLabel={message("webapp.form.password_hide")}
-        showPasswordLabel={message("webapp.form.password_show")}
-        toggleDisabled={pending}
-        required
-        onChange={(event) => {
-          setPassword(event.currentTarget.value);
-          setFieldErrors((errors) => ({ ...errors, password: undefined }));
-          clearFormFailure();
-        }}
-      />
-
       {mfaRequired ? (
-        <div className={styles.mfaGroup}>
-          <div className={styles.mfaHeading}>
-            <h2>{message("webapp.login.form.mfa_heading")}</h2>
-            <p id="mfa-help">{message("webapp.login.form.mfa_help")}</p>
-          </div>
-          <AuthenticationCodeField
-            ref={mfaCodeRef}
-            id="mfa-code"
-            name="mfa_code"
-            describedBy="mfa-help"
-            value={mfaCode}
-            errorMessage={fieldErrors.mfa_code}
-            disabled={pending}
-            onChange={(value) => {
-              setMFACode(value);
-              setFieldErrors((errors) => ({ ...errors, mfa_code: undefined }));
+        <AuthenticationCodeField
+          ref={mfaCodeRef}
+          id="mfa-code"
+          name="mfa_code"
+          value={mfaCode}
+          errorMessage={fieldErrors.mfa_code}
+          disabled={pending}
+          onChange={(value) => {
+            setMFACode(value);
+            setFieldErrors((errors) => ({ ...errors, mfa_code: undefined }));
+            clearFormFailure();
+          }}
+        />
+      ) : (
+        <>
+          <InputField
+            ref={loginIDRef}
+            id="login-id"
+            name="login_id"
+            label={message("webapp.login.form.email_or_username")}
+            type="text"
+            autoCapitalize="none"
+            autoComplete="username"
+            spellCheck={false}
+            value={loginID}
+            errorMessage={fieldErrors.login_id}
+            required
+            onChange={(event) => {
+              setLoginID(event.currentTarget.value);
+              setFieldErrors((errors) => ({ ...errors, login_id: undefined }));
               clearFormFailure();
             }}
           />
-          <Button
-            disabled={pending}
-            variant="text"
-            onClick={() => {
-              setMFARequired(false);
-              setPassword("");
-              setMFACode({ kind: "authenticator", code: "" });
-              setFieldErrors({});
-              setFormError(undefined);
-              setLiveMessage("");
-              requestAnimationFrame(() => passwordRef.current?.focus());
+
+          <PasswordField
+            ref={passwordRef}
+            id="password"
+            name="password"
+            label={message("webapp.login.form.password")}
+            labelAccessory={
+              <a href="/account/forgot-password">
+                {message("webapp.login.form.forgot_password")}
+              </a>
+            }
+            autoComplete="current-password"
+            value={password}
+            errorMessage={fieldErrors.password}
+            hidePasswordLabel={message("webapp.form.password_hide")}
+            showPasswordLabel={message("webapp.form.password_show")}
+            toggleDisabled={pending}
+            required
+            onChange={(event) => {
+              setPassword(event.currentTarget.value);
+              setFieldErrors((errors) => ({ ...errors, password: undefined }));
+              clearFormFailure();
             }}
-          >
-            {message("webapp.login.form.mfa_back")}
-          </Button>
-        </div>
-      ) : null}
+          />
+        </>
+      )}
 
       <div className={styles.submission}>
-        <Button
-          type="submit"
-          isLoading={pending}
-          loadingLabel={message("webapp.login.form.signing_in")}
-        >
-          {message("webapp.login.form.sign_in")}
-        </Button>
+        <div className={styles.actions}>
+          <Button
+            type="submit"
+            isLoading={pending}
+            loadingLabel={message(mfaRequired ? "webapp.login.form.verifying" : "webapp.login.form.signing_in")}
+          >
+            {message(mfaRequired ? "webapp.login.form.verify" : "webapp.login.form.sign_in")}
+          </Button>
+          {mfaRequired ? (
+            <Button
+              disabled={pending}
+              variant="text"
+              onClick={() => {
+                onMFARequiredChange(false);
+                setPassword("");
+                setMFACode({ kind: "authenticator", code: "" });
+                setFieldErrors({});
+                setFormError(undefined);
+                setLiveMessage("");
+                requestAnimationFrame(() => passwordRef.current?.focus());
+              }}
+            >
+              {message("webapp.login.form.mfa_back")}
+            </Button>
+          ) : null}
+        </div>
         <FormFeedback message={formError} />
       </div>
     </form>

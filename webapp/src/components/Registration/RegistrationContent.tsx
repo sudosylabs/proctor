@@ -1,14 +1,19 @@
 import type { ReactNode } from "react";
 
+import { useHostedInstitution } from "../../auth/HostedInstitution";
 import type {
   RegistrationDiscoveryState,
   RegistrationSubmission,
   RegistrationSubmissionResult,
 } from "../../features/register/RegistrationApi";
 import { message } from "../../i18n/messages";
+import {
+  AccessTaskIntro,
+  type AccessTaskKindTone,
+} from "../AccessTaskIntro/AccessTaskIntro";
 import { Button, ButtonLink } from "../Button/Button";
 import { Loading } from "../Loading/Loading";
-import { RegistrationForm } from "./RegistrationForm";
+import { RegistrationForm, RegistrationIntro } from "./RegistrationForm";
 import styles from "./Registration.module.css";
 
 export interface RegistrationContentProps {
@@ -30,26 +35,27 @@ export function RegistrationContent({
   state,
   submitRegistration,
 }: RegistrationContentProps) {
+  const institution = useHostedInstitution();
+
   if (accepted) {
     return (
-      <RegistrationRouteState
+      <RegistrationState
+        focusHeading
+        kind={message("webapp.register.accepted.label")}
+        kindTone="success"
         heading={message("webapp.register.accepted.heading")}
         body={message("webapp.register.accepted.body")}
-        label={message("webapp.register.accepted.label")}
       >
         <ButtonLink href="/login">
           {message("webapp.register.sign_in.action")}
         </ButtonLink>
-      </RegistrationRouteState>
+      </RegistrationState>
     );
   }
   if (state.kind === "loading") {
     return (
-      <section className={styles.routeState} aria-labelledby="register-heading">
-        <header className={styles.headingGroup}>
-          <h1 id="register-heading">{message("webapp.register.heading")}</h1>
-          <p>{message("webapp.register.lede")}</p>
-        </header>
+      <section className={styles.page} aria-labelledby="register-heading">
+        <RegistrationIntro />
         <div className={styles.loading}>
           <Loading label={message("webapp.register.loading")} showLabel size="large" />
         </div>
@@ -58,44 +64,59 @@ export function RegistrationContent({
   }
   if (state.kind === "setup") {
     return (
-      <RegistrationRouteState
+      <RegistrationState
         heading={message("webapp.register.setup.heading")}
         body={message("webapp.register.setup.body")}
       >
         <ButtonLink href="/setup">
           {message("webapp.register.setup.open")}
         </ButtonLink>
-      </RegistrationRouteState>
+      </RegistrationState>
     );
   }
   if (state.kind === "invitation_required") {
     return (
-      <RegistrationRouteState
+      <RegistrationState
+        kindTone="warning"
         heading={message("webapp.register.invitation_required.heading")}
-        body={message("webapp.register.invitation_required.body")}
+        body={
+          institution.displayName === undefined
+            ? message("webapp.register.invitation_required.body_unnamed")
+            : message("webapp.register.invitation_required.body", {
+                Institution: institution.displayName,
+              })
+        }
       >
         <ButtonLink href="/login">
           {message("webapp.register.sign_in.action")}
         </ButtonLink>
-      </RegistrationRouteState>
+        {institution.supportAddress === undefined ? null : (
+          <ButtonLink
+            href={`mailto:${institution.supportAddress}`}
+            variant="secondary"
+          >
+            {message("webapp.register.invitation_required.contact")}
+          </ButtonLink>
+        )}
+      </RegistrationState>
     );
   }
   if (state.kind === "origin_mismatch") {
     return (
-      <RegistrationRouteState
+      <RegistrationState
         heading={message("webapp.register.origin_mismatch.heading")}
         body={message("webapp.register.origin_mismatch.body")}
       >
         <Button onClick={() => window.location.reload()}>
           {message("webapp.register.reload")}
         </Button>
-      </RegistrationRouteState>
+      </RegistrationState>
     );
   }
   if (state.kind === "failure" || state.kind === "unavailable") {
     const unavailable = state.kind === "unavailable";
     return (
-      <RegistrationRouteState
+      <RegistrationState
         heading={message(
           unavailable
             ? "webapp.register.unavailable.heading"
@@ -110,7 +131,7 @@ export function RegistrationContent({
         <Button onClick={onRetry}>
           {message("webapp.register.retry")}
         </Button>
-      </RegistrationRouteState>
+      </RegistrationState>
     );
   }
   return (
@@ -123,25 +144,32 @@ export function RegistrationContent({
   );
 }
 
-function RegistrationRouteState({
+function RegistrationState({
   body,
   children,
+  focusHeading = false,
   heading,
-  label,
+  kind = message("webapp.register.kind"),
+  kindTone,
 }: {
   body: string;
   children: ReactNode;
+  focusHeading?: boolean;
   heading: string;
-  label?: string;
+  kind?: string;
+  kindTone?: AccessTaskKindTone;
 }) {
   return (
-    <section className={styles.routeState} aria-labelledby="register-heading">
-      {label === undefined ? null : <p className={styles.stateLabel}>{label}</p>}
-      <div className={styles.routeStateCopy}>
-        <h1 id="register-heading">{heading}</h1>
-        <p>{body}</p>
-      </div>
-      {children}
+    <section className={styles.page} aria-labelledby="register-heading">
+      <AccessTaskIntro
+        body={body}
+        focusHeading={focusHeading}
+        heading={heading}
+        headingID="register-heading"
+        kind={kind}
+        kindTone={kindTone}
+      />
+      <div className={styles.actions}>{children}</div>
     </section>
   );
 }

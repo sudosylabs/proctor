@@ -37,7 +37,7 @@ describe("submitInstallation", () => {
   });
 
   it.each([
-    ["installation.already_initialized", "complete"],
+    ["installation.already_initialized", "already_initialized"],
     ["installation.bootstrap_denied", "bootstrap_denied"],
     ["authentication.rate_limited", "rate_limited"],
     ["unexpected.code", "unavailable"],

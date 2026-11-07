@@ -923,7 +923,7 @@ func newExamAttemptHTTPFake(t *testing.T) *examAttemptHTTPFake {
 		ParticipationID: fake.participation.ID, Generation: 1, SourceSessionID: sourceID,
 		Event: model.BrowserActivityEvent{Sequence: 1, Kind: model.BrowserActivityOpened, PolicyRevisionID: model.NewExamRevisionID(),
 			ClientOccurredAt: at, ReceivedAt: at.Add(time.Second)}}}}
-	fake.submissionReceipt = store.ExamSubmissionReceipt{BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1}, SubmissionID: model.NewSubmissionID(), AttemptID: examAttempt.ID,
+	fake.submissionReceipt = store.ExamSubmissionReceipt{BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1}, SubmissionID: model.NewSubmissionID(), ReceiptCode: model.SubmissionReceiptCode("MBY3KBMNEB83TFW1"), AttemptID: examAttempt.ID,
 		ExamRevisionID: examAttempt.AdmissionRevisionID, State: model.ExamAttemptSubmitted, WorkspaceCursor: 4,
 		ManifestDigest: strings.Repeat("d", 64), SubmittedAt: at.Add(time.Minute)}
 	submissionManifest, err := model.NewExamSubmissionManifest(4, []model.ExamSubmissionManifestEntry{{
@@ -933,7 +933,7 @@ func newExamAttemptHTTPFake(t *testing.T) *examAttemptHTTPFake {
 		StarterObjectID: model.NewStarterWorkspaceObjectID(),
 	}})
 	require.NoError(t, err)
-	submission, err := model.NewExamSubmission(model.ExamSubmissionSpecification{ID: fake.submissionReceipt.SubmissionID,
+	submission, err := model.NewExamSubmission(model.ExamSubmissionSpecification{ID: fake.submissionReceipt.SubmissionID, ReceiptCode: fake.submissionReceipt.ReceiptCode,
 		AttemptID: examAttempt.ID, ExamRevisionID: examAttempt.AdmissionRevisionID, WorkspaceID: workspace.ID, Manifest: submissionManifest,
 		BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1},
 		Provenance:      model.ExamSubmissionCandidateSubmitted, SubmittedAt: at.Add(time.Minute)})

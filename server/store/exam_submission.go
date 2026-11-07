@@ -53,12 +53,14 @@ type ExamSubmissionSealTarget struct {
 	SealAt            time.Time
 }
 
-// ExamSubmissionSeal supplies the server-proposed identity and safe audit
-// attempt to the named atomic transition. SubmissionID is not part of the
-// semantic command fingerprint: an outcome-unknown retry returns the single
-// retained Submission rather than creating a second one.
+// ExamSubmissionSeal supplies the server-proposed identity, receipt code, and
+// safe audit attempt to the named atomic transition. SubmissionID and
+// ReceiptCode are not part of the semantic command fingerprint: an
+// outcome-unknown retry returns the single retained Submission and its
+// original receipt code rather than creating or minting a second one.
 type ExamSubmissionSeal struct {
 	SubmissionID              model.SubmissionID
+	ReceiptCode               model.SubmissionReceiptCode
 	Access                    ExamSubmissionSealAccess
 	AuditEventID              model.AuditEventID
 	AuditAt                   time.Time
@@ -73,6 +75,7 @@ type ExamSubmissionSeal struct {
 type ExamSubmissionReceipt struct {
 	BrowserActivity model.BrowserSubmissionSettlement
 	SubmissionID    model.SubmissionID
+	ReceiptCode     model.SubmissionReceiptCode
 	AttemptID       model.ExamAttemptID
 	ExamRevisionID  model.ExamRevisionID
 	State           model.ExamAttemptState
@@ -124,13 +127,15 @@ type ExamSubmissionAutomaticSealTarget struct {
 	ConnectionID      model.AttemptConnectionID
 }
 
-// ExamSubmissionAutomaticSeal supplies a server-proposed Submission identity
-// and actor-less audit attempt. AttemptID is the natural idempotency key: a
-// concurrent or crash replay returns the one retained Submission and completes
-// the new audit without duplicating the immutable manifest.
+// ExamSubmissionAutomaticSeal supplies a server-proposed Submission identity,
+// receipt code, and actor-less audit attempt. AttemptID is the natural
+// idempotency key: a concurrent or crash replay returns the one retained
+// Submission with its original receipt code and completes the new audit
+// without duplicating the immutable manifest.
 type ExamSubmissionAutomaticSeal struct {
 	Target                    ExamSubmissionAutomaticSealTarget
 	SubmissionID              model.SubmissionID
+	ReceiptCode               model.SubmissionReceiptCode
 	AuditEventID              model.AuditEventID
 	AuditAt                   time.Time
 	Notice                    *PreparedMail
@@ -169,6 +174,7 @@ type ExamSubmissionManagerEnd struct {
 	Request                   ExamSubmissionManagerEndRequest
 	Target                    ExamSubmissionAutomaticSealTarget
 	SubmissionID              model.SubmissionID
+	ReceiptCode               model.SubmissionReceiptCode
 	AuditEventID              model.AuditEventID
 	AuditAt                   time.Time
 	Notice                    *PreparedMail
@@ -259,8 +265,8 @@ type ExamSubmissionFileSelector struct {
 // Connection and credential, exact Workspace Cursor, and final Focus Loss
 // high-water. It reconciles accepted Workspace and integrity tails; builds the
 // canonical manifest from authoritative current Entry/object rows, never a
-// client list; creates the sole Submission and its retained content references
-// at the reserved action time; marks the Attempt Submitted; ends Participation
+// client list; creates the sole Submission, under the proposed unique receipt
+// code, and its retained content references at the reserved action time; marks the Attempt Submitted; ends Participation
 // and Connection; terminates integrity collection as Settled or Gapped;
 // completes the supplied audit; inserts exactly one semantic receipt
 // occurrence and queued or terminally suppressed delivery; and retains the
@@ -269,7 +275,8 @@ type ExamSubmissionFileSelector struct {
 // changes none of those facts.
 //
 // An exact outcome replay rechecks the exact retained causal Access selector
-// and returns the original receipt even though the committed transition is
+// and returns the original receipt, including its original receipt code and
+// ignoring the newly proposed one, even though the committed transition is
 // terminal. A changed selector or semantic input conflicts and can neither
 // reopen the Attempt nor create another Submission. Expected cursor, final
 // high-water, and the command idempotency fingerprint are nonnegative/bounded;

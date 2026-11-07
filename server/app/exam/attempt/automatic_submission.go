@@ -87,16 +87,19 @@ func (s *Service) SealForSittingClose(ctx context.Context, system invocation.Sys
 		return AutomaticSubmissionResult{}, err
 	}
 	at := preparation.SealAt
-	proposed := s.deps.NewSubmission()
+	proposed, receiptCode := s.deps.NewSubmission(), s.deps.NewReceiptCode()
 	if !proposed.IsValid() {
 		return AutomaticSubmissionResult{}, s.failSystemAudit(ctx, auditID, apperror.Invalid("exam.attempt.invalid", "submission_id"))
+	}
+	if !receiptCode.IsValid() {
+		return AutomaticSubmissionResult{}, s.failSystemAudit(ctx, auditID, apperror.Invalid("exam.attempt.invalid", "receipt_code"))
 	}
 	var notice *store.PreparedMail
 	var expectedRecipientRevision int64
 	if !preparation.Replayed {
 		preparedMail, prepareErr := s.deps.Mail.PrepareSubmissionReceipt(ctx, SubmissionMailPreparation{
 			CandidateUserID: target.CandidateUserID, ExamID: target.ExamID, SittingID: target.SittingID,
-			SubmissionID: proposed, SealedAt: at, Provenance: model.ExamSubmissionSittingClosed,
+			SubmissionID: proposed, ReceiptCode: receiptCode, SealedAt: at, Provenance: model.ExamSubmissionSittingClosed,
 		})
 		if prepareErr != nil || preparedMail == nil || preparedMail.Notice == nil || preparedMail.ExpectedRecipientRevision < 1 {
 			if prepareErr == nil {
@@ -107,13 +110,13 @@ func (s *Service) SealForSittingClose(ctx context.Context, system invocation.Sys
 		notice, expectedRecipientRevision = preparedMail.Notice, preparedMail.ExpectedRecipientRevision
 	}
 	stored, err := s.deps.Submissions.SealForSittingClose(ctx, &store.ExamSubmissionAutomaticSeal{
-		Target: target, SubmissionID: proposed, AuditEventID: auditID, AuditAt: at, Notice: notice,
+		Target: target, SubmissionID: proposed, ReceiptCode: receiptCode, AuditEventID: auditID, AuditAt: at, Notice: notice,
 		ExpectedRecipientRevision: expectedRecipientRevision,
 	})
 	if err != nil {
 		return AutomaticSubmissionResult{}, s.failSystemAudit(ctx, auditID, storeError(storeErrors, err))
 	}
-	result, err := projectAutomaticSubmissionResult(stored, target, proposed)
+	result, err := projectAutomaticSubmissionResult(stored, target, proposed, receiptCode)
 	if err != nil {
 		return AutomaticSubmissionResult{}, err
 	}
@@ -126,16 +129,18 @@ func (s *Service) SealForSittingClose(ctx context.Context, system invocation.Sys
 }
 
 func projectAutomaticSubmissionResult(stored *store.ExamSubmissionAutomaticSealResult,
-	target store.ExamSubmissionAutomaticSealTarget, proposed model.SubmissionID,
+	target store.ExamSubmissionAutomaticSealTarget, proposed model.SubmissionID, proposedCode model.SubmissionReceiptCode,
 ) (AutomaticSubmissionResult, error) {
 	if stored == nil || stored.Receipt.State != model.ExamAttemptSubmitted || stored.Receipt.AttemptID != target.AttemptID ||
 		stored.Receipt.ExamRevisionID != target.CurrentRevisionID || !stored.Receipt.SubmissionID.IsValid() ||
+		!stored.Receipt.ReceiptCode.IsValid() ||
 		stored.Receipt.WorkspaceCursor < 0 ||
 		!validWorkspaceSHA256(stored.Receipt.ManifestDigest) || stored.Receipt.SubmittedAt.IsZero() ||
 		stored.ExamID != target.ExamID || stored.SittingID != target.SittingID || stored.ClassID != target.ClassID ||
 		stored.CandidateUserID != target.CandidateUserID || stored.ParticipationID != target.ParticipationID ||
 		stored.Generation != target.Generation || stored.ConnectionID != target.ConnectionID ||
-		(!stored.Replayed && stored.Receipt.SubmissionID != proposed) || (stored.Replayed && stored.ConnectionClosed) {
+		(!stored.Replayed && (stored.Receipt.SubmissionID != proposed || stored.Receipt.ReceiptCode != proposedCode)) ||
+		(stored.Replayed && stored.ConnectionClosed) {
 		return AutomaticSubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent automatic Submission result"))
 	}
 	return AutomaticSubmissionResult{SubmissionResult: SubmissionResult{Receipt: stored.Receipt, ExamID: stored.ExamID,

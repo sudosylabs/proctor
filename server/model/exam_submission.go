@@ -172,6 +172,7 @@ func (m ExamSubmissionManifest) Validate() error {
 
 type ExamSubmissionSpecification struct {
 	ID                       SubmissionID
+	ReceiptCode              SubmissionReceiptCode
 	AttemptID                ExamAttemptID
 	ExamRevisionID           ExamRevisionID
 	WorkspaceID              ExamAttemptWorkspaceID
@@ -189,6 +190,7 @@ type ExamSubmissionSpecification struct {
 // retirement time while removing the original collection state and counters.
 type ExamSubmission struct {
 	ID                       SubmissionID
+	ReceiptCode              SubmissionReceiptCode
 	AttemptID                ExamAttemptID
 	ExamRevisionID           ExamRevisionID
 	WorkspaceID              ExamAttemptWorkspaceID
@@ -215,7 +217,7 @@ func NewExamSubmission(spec ExamSubmissionSpecification) (*ExamSubmission, error
 		state = SubmissionIntegrityGapped
 	}
 	submission := &ExamSubmission{
-		ID: spec.ID, AttemptID: spec.AttemptID, ExamRevisionID: spec.ExamRevisionID, WorkspaceID: spec.WorkspaceID,
+		ID: spec.ID, ReceiptCode: spec.ReceiptCode, AttemptID: spec.AttemptID, ExamRevisionID: spec.ExamRevisionID, WorkspaceID: spec.WorkspaceID,
 		ManifestSchemaVersion: spec.Manifest.SchemaVersion, WorkspaceCursor: spec.Manifest.WorkspaceCursor,
 		ManifestDigest: spec.Manifest.SHA256, ManifestEntryCount: spec.Manifest.EntryCount,
 		ManifestTotalFileBytes: spec.Manifest.TotalFileBytes, FinalFocusLossSequence: spec.FinalFocusLossSequence,
@@ -230,7 +232,7 @@ func NewExamSubmission(spec ExamSubmissionSpecification) (*ExamSubmission, error
 }
 
 func (s *ExamSubmission) Validate() error {
-	if s == nil || !s.ID.IsValid() || !s.AttemptID.IsValid() || !s.ExamRevisionID.IsValid() || !s.WorkspaceID.IsValid() ||
+	if s == nil || !s.ID.IsValid() || !s.ReceiptCode.IsValid() || !s.AttemptID.IsValid() || !s.ExamRevisionID.IsValid() || !s.WorkspaceID.IsValid() ||
 		s.ManifestSchemaVersion != ExamSubmissionManifestSchemaVersion || s.WorkspaceCursor < 0 ||
 		!validLowerSHA256(s.ManifestDigest) || s.ManifestEntryCount < 0 ||
 		s.ManifestEntryCount > AttemptWorkspaceMaximumEntries || s.ManifestTotalFileBytes < 0 ||

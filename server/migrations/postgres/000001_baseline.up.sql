@@ -2483,6 +2483,11 @@ ALTER TABLE exam_attempt_workspace_entries
 
 CREATE TABLE exam_submissions (
     id varchar(26) PRIMARY KEY,
+    -- Short candidate-quotable code: 16 Crockford base32 characters (80
+    -- random bits) in canonical uppercase, minted once at seal time.
+    receipt_code char(16) NOT NULL
+        CONSTRAINT exam_submissions_receipt_code_key UNIQUE
+        CONSTRAINT exam_submissions_receipt_code_canonical_check CHECK (receipt_code ~ '^[0-9A-HJKMNP-TV-Z]{16}$'),
     exam_attempt_id varchar(26) NOT NULL UNIQUE,
     exam_revision_id varchar(26) NOT NULL REFERENCES exam_revisions(id),
     workspace_id varchar(26) NOT NULL UNIQUE,

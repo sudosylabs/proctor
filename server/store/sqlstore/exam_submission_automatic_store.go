@@ -147,7 +147,7 @@ func (s *SQLExamSubmissionStore) SealForSittingClose(ctx context.Context,
 	input *store.ExamSubmissionAutomaticSeal,
 ) (*store.ExamSubmissionAutomaticSealResult, error) {
 	if input == nil || !validAutomaticExamSubmissionTarget(input.Target) || !input.SubmissionID.IsValid() ||
-		!input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+		!input.ReceiptCode.IsValid() || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("exam_submission", "automatic_seal", nil)
 	}
 	prepared := *input
@@ -253,7 +253,7 @@ func sealAutomaticExamSubmission(ctx context.Context, tx *sqlxTxWrapper,
 		return nil, store.NewErrConflict("exam_attempt", "exam_attempt_state", err)
 	}
 	submission, err := model.NewExamSubmission(model.ExamSubmissionSpecification{ID: input.SubmissionID,
-		AttemptID: target.AttemptID, ExamRevisionID: target.CurrentRevisionID, WorkspaceID: target.WorkspaceID, Manifest: manifest,
+		ReceiptCode: input.ReceiptCode, AttemptID: target.AttemptID, ExamRevisionID: target.CurrentRevisionID, WorkspaceID: target.WorkspaceID, Manifest: manifest,
 		FinalFocusLossSequence: accounting.Integrity.LatestAcceptedSequence, UnresolvedIntegrityCount: unresolved,
 		BrowserActivity: browserActivity,
 		Provenance:      model.ExamSubmissionSittingClosed, SubmittedAt: sealAt})
@@ -501,10 +501,10 @@ func insertAutomaticExamSubmission(ctx context.Context, tx *sqlxTxWrapper, submi
 	entries []model.ExamSubmissionManifestEntry,
 ) error {
 	if _, err := tx.Exec(ctx, `INSERT INTO exam_submissions
-		(id,exam_attempt_id,exam_revision_id,workspace_id,participation_id,generation,connection_id,manifest_schema_version,
+		(id,receipt_code,exam_attempt_id,exam_revision_id,workspace_id,participation_id,generation,connection_id,manifest_schema_version,
 		workspace_cursor,manifest_digest,manifest_entry_count,manifest_total_file_bytes,final_focus_loss_sequence,
 		integrity_state,unresolved_integrity_count,provenance,submitted_at,sealed)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,false)`, submission.ID.String(), submission.AttemptID.String(),
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,false)`, submission.ID.String(), submission.ReceiptCode.String(), submission.AttemptID.String(),
 		submission.ExamRevisionID.String(), submission.WorkspaceID.String(), target.ParticipationID.String(), target.Generation, target.ConnectionID.String(),
 		submission.ManifestSchemaVersion, submission.WorkspaceCursor, submission.ManifestDigest, submission.ManifestEntryCount,
 		submission.ManifestTotalFileBytes, submission.FinalFocusLossSequence, string(submission.IntegrityState),
@@ -574,7 +574,7 @@ func persistAutomaticSubmittedExamAttempt(ctx context.Context, tx *sqlxTxWrapper
 
 func automaticExamSubmissionOutcome(submission *model.ExamSubmission, target store.ExamSubmissionAutomaticSealTarget) examSubmissionSealOutcome {
 	return examSubmissionSealOutcome{Receipt: submissionReceiptDocument{BrowserActivity: submission.BrowserActivity, SubmissionID: submission.ID,
-		AttemptID: submission.AttemptID, ExamRevisionID: submission.ExamRevisionID, State: model.ExamAttemptSubmitted, WorkspaceCursor: submission.WorkspaceCursor,
+		ReceiptCode: submission.ReceiptCode, AttemptID: submission.AttemptID, ExamRevisionID: submission.ExamRevisionID, State: model.ExamAttemptSubmitted, WorkspaceCursor: submission.WorkspaceCursor,
 		ManifestDigest: submission.ManifestDigest, SubmittedAt: submission.SubmittedAt}, ExamID: target.ExamID.String(),
 		SittingID: target.SittingID.String(), ClassID: target.ClassID.String(), CandidateID: target.CandidateUserID.String(),
 		ParticipationID: target.ParticipationID.String(), Generation: target.Generation, ConnectionID: target.ConnectionID.String()}

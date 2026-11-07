@@ -22,7 +22,7 @@ func TestExamSubmissionHeaderRetirementNullability(t *testing.T) {
 	t.Parallel()
 	manifest, err := model.NewExamSubmissionManifest(5, nil)
 	require.NoError(t, err)
-	base := examSubmissionHeaderRow{BrowserState: "not_applicable", BrowserInventoryRevision: 1, ID: model.NewSubmissionID().String(), AttemptID: model.NewExamAttemptID().String(),
+	base := examSubmissionHeaderRow{BrowserState: "not_applicable", BrowserInventoryRevision: 1, ID: model.NewSubmissionID().String(), ReceiptCode: model.NewSubmissionReceiptCode().String(), AttemptID: model.NewExamAttemptID().String(),
 		ExamRevisionID: model.NewExamRevisionID().String(), WorkspaceID: model.NewExamAttemptWorkspaceID().String(),
 		ManifestSchemaVersion: model.ExamSubmissionManifestSchemaVersion,
 		WorkspaceCursor:       sql.NullInt64{Int64: 5, Valid: true}, ManifestDigest: sql.NullString{String: manifest.SHA256, Valid: true},
@@ -41,6 +41,8 @@ func TestExamSubmissionHeaderRetirementNullability(t *testing.T) {
 		"invalid retained browser revision":    func(row *examSubmissionHeaderRow) { row.BrowserInventoryRevision = 0 },
 		"retained manifest missing":            func(row *examSubmissionHeaderRow) { row.ManifestDigest = sql.NullString{} },
 		"retirement lacks marker":              func(row *examSubmissionHeaderRow) { row.IntegrityRetiredAt = sql.NullTime{} },
+		"receipt code missing":                 func(row *examSubmissionHeaderRow) { row.ReceiptCode = "" },
+		"receipt code not canonical":           func(row *examSubmissionHeaderRow) { row.ReceiptCode = "mby3kbmneb83tfw1" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			row := base

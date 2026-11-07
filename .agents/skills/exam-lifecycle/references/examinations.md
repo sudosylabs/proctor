@@ -544,6 +544,15 @@ Submission or workspace after terminal state. Authorized managers cannot read
 live candidate workspace content, but may inspect the immutable Submission
 after sealing.
 
+Every Submission carries one receipt code a candidate can read out: 80 random
+bits as 16 Crockford base32 characters, stored canonical and unique, displayed
+in hyphenated groups of four. The application proposes the code with the
+Submission identity before every seal path (voluntary, manager-ended, and
+automatic), the receipt mail freezes it, and the sealing transaction persists
+it. Like the Submission identity, the code is outside the command fingerprint:
+every replay returns the retained code and discards the newly proposed one. The
+code is neither an entity identifier nor an authorization selector.
+
 Voluntary submission rechecks current Class membership and the exact active
 Participation generation, credential, Session-bound Connection, expected
 current Revision, Workspace Cursor, final Focus Loss sequence, absence of a

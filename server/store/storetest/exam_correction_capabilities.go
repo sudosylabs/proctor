@@ -103,7 +103,7 @@ func testCorrectionCapabilityGates(t *testing.T, ss store.Store) {
 					SourceSessionID: source, Events: []model.BrowserActivityEvent{browserActivityEvent(1, model.BrowserActivityOpened, corrected.Revision.ID), browserActivityEvent(2, model.BrowserActivityClosed, corrected.Revision.ID)}})
 				require.NoError(t, err)
 			}
-			seal := &store.ExamSubmissionSeal{SubmissionID: model.NewSubmissionID(), Access: store.ExamSubmissionSealAccess{
+			seal := &store.ExamSubmissionSeal{SubmissionID: model.NewSubmissionID(), ReceiptCode: model.NewSubmissionReceiptCode(), Access: store.ExamSubmissionSealAccess{
 				AttemptID: access.AttemptID, CandidateUserID: access.CandidateUserID, SessionID: access.SessionID,
 				ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation,
 				ConnectionID: access.ConnectionID, ContinuityCredentialHash: access.ContinuityCredentialHash,

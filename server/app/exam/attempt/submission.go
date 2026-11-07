@@ -261,9 +261,12 @@ func (s *Service) SubmitExamAttempt(ctx context.Context, invocation invocation.I
 	if !validSubmissionTarget(target, access) {
 		return store.ExamSubmissionReceipt{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Submission seal target"))
 	}
-	submissionID := s.deps.NewSubmission()
+	submissionID, receiptCode := s.deps.NewSubmission(), s.deps.NewReceiptCode()
 	if !submissionID.IsValid() {
 		return store.ExamSubmissionReceipt{}, apperror.Invalid("exam.attempt.invalid", "submission_id")
+	}
+	if !receiptCode.IsValid() {
+		return store.ExamSubmissionReceipt{}, apperror.Invalid("exam.attempt.invalid", "receipt_code")
 	}
 	auditID, err := s.deps.Auditor.BeginAtScope(ctx, invocation, model.ActionExamSittingParticipate,
 		model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()}, model.RoleScopeClass,
@@ -278,7 +281,7 @@ func (s *Service) SubmitExamAttempt(ctx context.Context, invocation invocation.I
 	if !target.Replayed {
 		preparedMail, prepareErr := s.deps.Mail.PrepareSubmissionReceipt(ctx, SubmissionMailPreparation{
 			CandidateUserID: target.CandidateUserID, ExamID: target.ExamID, SittingID: target.SittingID,
-			SubmissionID: submissionID, SealedAt: at, Provenance: model.ExamSubmissionCandidateSubmitted,
+			SubmissionID: submissionID, ReceiptCode: receiptCode, SealedAt: at, Provenance: model.ExamSubmissionCandidateSubmitted,
 		})
 		if prepareErr != nil || preparedMail == nil || preparedMail.Notice == nil || preparedMail.ExpectedRecipientRevision < 1 {
 			if prepareErr == nil {
@@ -288,13 +291,13 @@ func (s *Service) SubmitExamAttempt(ctx context.Context, invocation invocation.I
 		}
 		notice, expectedRecipientRevision = preparedMail.Notice, preparedMail.ExpectedRecipientRevision
 	}
-	stored, err := s.deps.Submissions.Seal(ctx, &store.ExamSubmissionSeal{SubmissionID: submissionID,
+	stored, err := s.deps.Submissions.Seal(ctx, &store.ExamSubmissionSeal{SubmissionID: submissionID, ReceiptCode: receiptCode,
 		Access: access, AuditEventID: auditID, AuditAt: at, Notice: notice,
 		ExpectedRecipientRevision: expectedRecipientRevision}, idempotency)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, err)
 	}
-	result, err := projectSubmissionResult(stored, target, access, submissionID)
+	result, err := projectSubmissionResult(stored, target, access, submissionID, receiptCode)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, err
 	}
@@ -313,16 +316,16 @@ func validSubmissionTarget(target *store.ExamSubmissionSealTarget, access store.
 }
 
 func projectSubmissionResult(stored *store.ExamSubmissionSealResult, target *store.ExamSubmissionSealTarget,
-	access store.ExamSubmissionSealAccess, proposedID model.SubmissionID,
+	access store.ExamSubmissionSealAccess, proposedID model.SubmissionID, proposedCode model.SubmissionReceiptCode,
 ) (SubmissionResult, error) {
-	if stored == nil || !stored.Receipt.SubmissionID.IsValid() || stored.Receipt.AttemptID != access.AttemptID ||
+	if stored == nil || !stored.Receipt.SubmissionID.IsValid() || !stored.Receipt.ReceiptCode.IsValid() || stored.Receipt.AttemptID != access.AttemptID ||
 		stored.Receipt.State != model.ExamAttemptSubmitted || stored.Receipt.WorkspaceCursor != access.ExpectedWorkspaceCursor ||
 		stored.Receipt.ExamRevisionID != access.ExpectedCurrentRevisionID ||
 		!validWorkspaceSHA256(stored.Receipt.ManifestDigest) || stored.Receipt.SubmittedAt.IsZero() || stored.Receipt.BrowserActivity.Validate() != nil ||
 		stored.ExamID != target.ExamID || stored.SittingID != target.SittingID || stored.ClassID != target.ClassID ||
 		stored.CandidateUserID != target.CandidateUserID || stored.ParticipationID != access.ParticipationID ||
 		stored.Generation != access.Generation || stored.ConnectionID != access.ConnectionID ||
-		(!stored.Replayed && stored.Receipt.SubmissionID != proposedID) {
+		(!stored.Replayed && (stored.Receipt.SubmissionID != proposedID || stored.Receipt.ReceiptCode != proposedCode)) {
 		return SubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Submission seal result"))
 	}
 	return SubmissionResult{Receipt: stored.Receipt, Provenance: model.ExamSubmissionCandidateSubmitted,

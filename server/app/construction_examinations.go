@@ -154,6 +154,7 @@ func constructExamAttempts(
 		NewWorkspaceEntry: model.NewAttemptWorkspaceEntryID, NewWorkspaceObject: model.NewAttemptWorkspaceObjectID,
 		NewWorkspaceVersion: model.NewWorkspaceContentVersion,
 		NewSubmission:       model.NewSubmissionID,
+		NewReceiptCode:      model.NewSubmissionReceiptCode,
 		Operational:         operationalRecorderAdapter{recorder: deps.OperationalRecorder},
 	})
 	if err != nil {

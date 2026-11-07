@@ -376,6 +376,7 @@ func (examSubmissionSealOutcome) outcomeDocument() {}
 type submissionReceiptDocument struct {
 	BrowserActivity model.BrowserSubmissionSettlement `json:"browser_activity"`
 	SubmissionID    model.SubmissionID                `json:"submission_id"`
+	ReceiptCode     model.SubmissionReceiptCode       `json:"receipt_code"`
 	AttemptID       model.ExamAttemptID               `json:"attempt_id"`
 	ExamRevisionID  model.ExamRevisionID              `json:"exam_revision_id"`
 	State           model.ExamAttemptState            `json:"state"`
@@ -388,7 +389,7 @@ func (s *SQLExamSubmissionStore) Seal(ctx context.Context, input *store.ExamSubm
 	command *store.CommandIdempotency,
 ) (*store.ExamSubmissionSealResult, error) {
 	if input == nil || command == nil || command.Operation != store.ExamSubmissionSealOperation || command.UserID != input.Access.CandidateUserID || !input.SubmissionID.IsValid() ||
-		!validExamSubmissionSealAccess(input.Access) || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+		!input.ReceiptCode.IsValid() || !validExamSubmissionSealAccess(input.Access) || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("exam_submission", "seal", nil)
 	}
 	prepared := *input
@@ -510,7 +511,7 @@ func sealExamSubmission(ctx context.Context, tx *sqlxTxWrapper, input *store.Exa
 		return zero, invalidPersistedState("exam_submission", "workspace_id", err)
 	}
 	submission, err := model.NewExamSubmission(model.ExamSubmissionSpecification{ID: input.SubmissionID,
-		AttemptID: input.Access.AttemptID, ExamRevisionID: input.Access.ExpectedCurrentRevisionID, WorkspaceID: workspaceID, Manifest: manifest,
+		ReceiptCode: input.ReceiptCode, AttemptID: input.Access.AttemptID, ExamRevisionID: input.Access.ExpectedCurrentRevisionID, WorkspaceID: workspaceID, Manifest: manifest,
 		FinalFocusLossSequence: input.Access.FinalFocusLossSequence, UnresolvedIntegrityCount: unresolved,
 		BrowserActivity: browserActivity,
 		Provenance:      model.ExamSubmissionCandidateSubmitted, SubmittedAt: sealAt})
@@ -545,7 +546,7 @@ func sealExamSubmission(ctx context.Context, tx *sqlxTxWrapper, input *store.Exa
 		return zero, err
 	}
 	outcome := examSubmissionSealOutcome{Receipt: submissionReceiptDocument{BrowserActivity: submission.BrowserActivity, SubmissionID: submission.ID,
-		AttemptID: submission.AttemptID, ExamRevisionID: submission.ExamRevisionID, State: attempt.State, WorkspaceCursor: submission.WorkspaceCursor,
+		ReceiptCode: submission.ReceiptCode, AttemptID: submission.AttemptID, ExamRevisionID: submission.ExamRevisionID, State: attempt.State, WorkspaceCursor: submission.WorkspaceCursor,
 		ManifestDigest: submission.ManifestDigest, SubmittedAt: submission.SubmittedAt}, ExamID: target.ExamID.String(),
 		SittingID: target.SittingID.String(), ClassID: target.ClassID.String(), CandidateID: target.CandidateUserID.String(),
 		ParticipationID: participation.ID.String(), Generation: participation.Generation, ConnectionID: connection.ID.String()}
@@ -593,10 +594,10 @@ func insertVoluntaryExamSubmissionHeader(ctx context.Context, tx *sqlxTxWrapper,
 	access store.ExamSubmissionSealAccess,
 ) error {
 	if _, err := tx.Exec(ctx, `INSERT INTO exam_submissions
-		(id,exam_attempt_id,exam_revision_id,workspace_id,participation_id,generation,connection_id,manifest_schema_version,
+		(id,receipt_code,exam_attempt_id,exam_revision_id,workspace_id,participation_id,generation,connection_id,manifest_schema_version,
 		workspace_cursor,manifest_digest,manifest_entry_count,manifest_total_file_bytes,final_focus_loss_sequence,
 		integrity_state,unresolved_integrity_count,provenance,submitted_at,sealed)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,false)`, submission.ID.String(), submission.AttemptID.String(),
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,false)`, submission.ID.String(), submission.ReceiptCode.String(), submission.AttemptID.String(),
 		submission.ExamRevisionID.String(), submission.WorkspaceID.String(), access.ParticipationID.String(), access.Generation,
 		access.ConnectionID.String(), submission.ManifestSchemaVersion, submission.WorkspaceCursor,
 		submission.ManifestDigest, submission.ManifestEntryCount, submission.ManifestTotalFileBytes,
@@ -862,7 +863,7 @@ func completeExamSubmissionAudit(ctx context.Context, tx *sqlxTxWrapper, outcome
 }
 
 func examSubmissionSealResult(outcome examSubmissionSealOutcome) (*store.ExamSubmissionSealResult, error) {
-	if !outcome.Receipt.SubmissionID.IsValid() || !outcome.Receipt.AttemptID.IsValid() || !outcome.Receipt.ExamRevisionID.IsValid() ||
+	if !outcome.Receipt.SubmissionID.IsValid() || !outcome.Receipt.ReceiptCode.IsValid() || !outcome.Receipt.AttemptID.IsValid() || !outcome.Receipt.ExamRevisionID.IsValid() ||
 		outcome.Receipt.State != model.ExamAttemptSubmitted || outcome.Receipt.WorkspaceCursor < 0 ||
 		len(outcome.Receipt.ManifestDigest) != 64 || outcome.Receipt.SubmittedAt.IsZero() || outcome.Generation < 1 {
 		return nil, errors.New("invalid Exam Submission seal outcome")
@@ -897,6 +898,7 @@ func examSubmissionSealResult(outcome examSubmissionSealOutcome) (*store.ExamSub
 
 type examSubmissionHeaderRow struct {
 	ID                       string         `db:"id"`
+	ReceiptCode              string         `db:"receipt_code"`
 	AttemptID                string         `db:"exam_attempt_id"`
 	ExamRevisionID           string         `db:"exam_revision_id"`
 	WorkspaceID              string         `db:"workspace_id"`
@@ -919,7 +921,7 @@ type examSubmissionHeaderRow struct {
 	SubmittedAt              time.Time      `db:"submitted_at"`
 }
 
-const examSubmissionHeaderSelect = `SELECT id,exam_attempt_id,exam_revision_id,workspace_id,manifest_schema_version,workspace_cursor,
+const examSubmissionHeaderSelect = `SELECT id,receipt_code,exam_attempt_id,exam_revision_id,workspace_id,manifest_schema_version,workspace_cursor,
  manifest_digest,manifest_entry_count,manifest_total_file_bytes,final_focus_loss_sequence,integrity_state,
  unresolved_integrity_count,work_retired_at,integrity_retired_at,provenance,submitted_at,
  (SELECT browser_state FROM exam_attempt_delivery_budgets WHERE exam_attempt_id=exam_submissions.exam_attempt_id) AS browser_state,
@@ -964,7 +966,7 @@ func (row examSubmissionHeaderRow) model() (*model.ExamSubmission, error) {
 	if err != nil {
 		return nil, invalidPersistedState("exam_submission", "workspace_id", err)
 	}
-	submission := &model.ExamSubmission{ID: id, AttemptID: attemptID, ExamRevisionID: revisionID, WorkspaceID: workspaceID,
+	submission := &model.ExamSubmission{ID: id, ReceiptCode: model.SubmissionReceiptCode(row.ReceiptCode), AttemptID: attemptID, ExamRevisionID: revisionID, WorkspaceID: workspaceID,
 		ManifestSchemaVersion: row.ManifestSchemaVersion, WorkspaceCursor: row.WorkspaceCursor.Int64,
 		ManifestDigest: row.ManifestDigest.String, ManifestEntryCount: int(row.ManifestEntryCount.Int64),
 		ManifestTotalFileBytes: row.ManifestTotalFileBytes.Int64, FinalFocusLossSequence: row.FinalFocusLossSequence.Int64,

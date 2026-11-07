@@ -161,13 +161,14 @@ func TestRendererIncludesOnlySafeSubmissionReceiptFacts(t *testing.T) {
 		model.MailTemplateExamSubmissionManagerEnded, model.MailTemplateExamSubmissionAutomaticallySealed} {
 		message, renderErr := renderer.render(renderRequest{Key: key, SubmissionReceipt: &SubmissionReceiptDetails{
 			ExamTitle: "Algorithms <Final> & proofs", SittingID: sittingID,
-			SubmissionID: submissionID, SealedAt: time.Date(2026, 8, 21, 9, 30, 15, 0, time.FixedZone("node", 7200)),
+			SubmissionID: submissionID, ReceiptCode: model.SubmissionReceiptCode("MBY3KBMNEB83TFW1"), SealedAt: time.Date(2026, 8, 21, 9, 30, 15, 0, time.FixedZone("node", 7200)),
 		}})
 		require.NoError(t, renderErr, "Render(%q)", key)
-		for _, want := range []string{"Algorithms &lt;Final&gt; &amp; proofs", "Receipt code", "Friday 21 August 2026, 07:30:15 UTC"} {
+		for _, want := range []string{"Algorithms &lt;Final&gt; &amp; proofs", "Receipt code", "MBY3-KBMN-EB83-TFW1", "Friday 21 August 2026, 07:30:15 UTC"} {
 			assert.Contains(t, message.HTML, want, "Render(%q) HTML does not contain", key)
 		}
 		require.NotContains(t, message.HTML, sittingID.String(), "Render(%q) exposed the Sitting ID", key)
+		require.NotContains(t, message.HTML, submissionID.String(), "Render(%q) exposed the Submission ID", key)
 		for _, forbidden := range []string{"manifest", "workspace", "answer", "integrity", "path/inside"} {
 			require.NotContains(t, strings.ToLower(message.HTML), forbidden, "Render(%q) leaked forbidden content", key)
 			require.NotContains(t, strings.ToLower(message.Text), forbidden, "Render(%q) leaked forbidden content", key)
@@ -377,7 +378,7 @@ func TestRendererParsesAndRendersEveryProductionTemplate(t *testing.T) {
 		if isSubmissionReceiptTemplate(key) {
 			request.SubmissionReceipt = &SubmissionReceiptDetails{ExamTitle: "Representative exam",
 				SittingID: model.NewExamSittingID(), SubmissionID: model.NewSubmissionID(),
-				SealedAt: time.Date(2026, 8, 21, 9, 30, 0, 0, time.UTC)}
+				ReceiptCode: model.NewSubmissionReceiptCode(), SealedAt: time.Date(2026, 8, 21, 9, 30, 0, 0, time.UTC)}
 		}
 		if key == model.MailTemplateIdentityEmailChangeWarningOld {
 			request.EmailChange = &EmailChangeDetails{NewAddress: "adaeze.okonkwo@gmail.com"}

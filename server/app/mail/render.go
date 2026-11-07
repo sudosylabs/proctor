@@ -407,7 +407,7 @@ func validSubmissionReceiptDetails(details *SubmissionReceiptDetails) bool {
 	if details == nil || details.SealedAt.IsZero() || !validBoundedMailLabel(details.ExamTitle) {
 		return false
 	}
-	return details.SittingID.IsValid() && details.SubmissionID.IsValid()
+	return details.SittingID.IsValid() && details.SubmissionID.IsValid() && details.ReceiptCode.IsValid()
 }
 
 func validClassTransitionDetails(key model.MailTemplateKey, details *ClassTransitionDetails) bool {

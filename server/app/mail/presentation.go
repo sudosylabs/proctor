@@ -281,7 +281,7 @@ func submissionReceiptLayout(request renderRequest, c clock, data *copyData) lay
 	data.ExamTitle = strings.TrimSpace(receipt.ExamTitle)
 	return func(copy templateCopy, _ *copyResolver) layout {
 		labels := copy.labels
-		l := layout{Hero: &heroProperties{Label: labels.ReceiptCode, Primary: receiptCodeDisplay(receipt), Code: true}}
+		l := layout{Hero: &heroProperties{Label: labels.ReceiptCode, Primary: receipt.ReceiptCode.Display(), Code: true}}
 		l.fact(labels.Exam, data.ExamTitle)
 		sealedLabel := labels.Submitted
 		switch request.Key {
@@ -392,10 +392,4 @@ func validatePresentation(request renderRequest) error {
 		}
 	}
 	return nil
-}
-
-// receiptCodeDisplay is replaced by the Submission receipt code once it is
-// stored. RECEIPT_CODE_PENDING
-func receiptCodeDisplay(receipt *SubmissionReceiptDetails) string {
-	return receipt.SubmissionID.String()
 }

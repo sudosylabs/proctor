@@ -1215,7 +1215,7 @@ export interface paths {
         };
         /**
          * Get safe same-origin access and desktop compatibility discovery
-         * @description Returns the same-origin, unauthenticated capability document a client uses before choosing a registration or authentication flow. The response contains only safe presentation and compatibility data, is never a substitute for authorization, and is returned with Cache-Control: no-store.
+         * @description Returns the same-origin, unauthenticated capability document a client uses before choosing a registration or authentication flow. The response contains only safe presentation and compatibility data, is never a substitute for authorization, and is returned with Cache-Control: no-store. It also carries two operator-configured presentation facts that apply before and after installation setup: the optional support mailbox hosted pages offer as a contact, and the minimum password length new passwords must meet.
          */
         get: operations["getPublicAccessDiscovery"];
         put?: never;
@@ -9205,12 +9205,19 @@ export interface components {
             initialized: boolean;
             installation_id?: components["schemas"]["ID"];
             institution?: components["schemas"]["PublicInstitutionPresentationResponse"];
+            /** @description Minimum number of characters a new local password must contain (`Authentication.Password.MinimumLength`). Other password rules still apply and are reported when a password is rejected. */
+            password_minimum_length: number;
             /**
              * Format: int64
              * @description Current Access Policy revision when the installation is initialized.
              */
             policy_revision?: number;
             providers: components["schemas"]["ExternalAuthenticationProviderResponse"][];
+            /**
+             * Format: email
+             * @description Operator-configured help mailbox (`Mail.SupportAddress`) that hosted pages offer as a contact. Omitted when none is configured.
+             */
+            support_address?: string;
         };
         /** @description Safe Institution identity suitable for unauthenticated sign-in presentation. */
         PublicInstitutionPresentationResponse: {

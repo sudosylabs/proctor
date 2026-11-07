@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const discovery = {
   discovery_version: 1,
+  password_minimum_length: 12,
   canonical_origin: "http://127.0.0.1:5173",
   initialized: true,
   capabilities: { local_login: true, public_registration: false, invitation_admission: true, desktop_authorization: true },

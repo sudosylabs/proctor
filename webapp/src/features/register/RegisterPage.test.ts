@@ -7,6 +7,7 @@ import {
 
 const discovery: Discovery = {
   discovery_version: 1,
+  password_minimum_length: 12,
   canonical_origin: "https://proctor.example",
   initialized: true,
   capabilities: {

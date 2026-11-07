@@ -23,6 +23,7 @@ const desktopAuthorizationDocumentationFragment = new URLSearchParams(
 
 const defaultDiscovery = {
   discovery_version: 1,
+  password_minimum_length: 14,
   canonical_origin: canonicalOrigin,
   initialized: true,
   capabilities: {
@@ -453,7 +454,7 @@ test("public registration submits only account input and enters verification", a
   ).toBeVisible();
   // Password rules are read before the person types.
   await expect(page.locator("#registration-password")).toHaveAccessibleDescription(
-    "Choose a long password you don’t use anywhere else. A short sentence works well.",
+    "At least 14 characters. Use a password you don’t use anywhere else.",
   );
   await expect(
     page.getByRole("heading", { level: 2, name: "Already have an account?" }),
@@ -973,6 +974,10 @@ test("password recovery keeps its accepted response generic", async ({ page }) =
 test("password reset consumes only the sanitized fragment credential", async ({
   page,
 }) => {
+  await mockDiscovery(page, {
+    ...defaultDiscovery,
+    support_address: "help@northbridge.example",
+  });
   await page.route("**/api/v1/auth/password-reset/complete", async (route) => {
     expect(await route.request().postDataJSON()).toEqual({
       token: "private-reset-token",
@@ -989,8 +994,12 @@ test("password reset consumes only the sanitized fragment credential", async ({
   ).toBeVisible();
   await expect(page.getByRole("heading")).toHaveCount(1);
   await expect(page.locator("#new-password")).toHaveAccessibleDescription(
-    "At least 12 characters. You can’t reuse a recent password.",
+    "At least 14 characters. You can’t reuse a recent password.",
   );
+  // A published support address turns the Institution name into a contact.
+  await expect(
+    page.getByRole("contentinfo").getByRole("link", { name: defaultDiscovery.institution.display_name }),
+  ).toHaveAttribute("href", "mailto:help@northbridge.example");
   await expect(page.locator("#confirm-new-password")).not.toHaveAttribute(
     "aria-describedby",
     /.+/,

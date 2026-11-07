@@ -6,6 +6,7 @@ import type { PublicAccessDiscovery } from "./PublicAccessDiscovery";
 
 const discovery = {
   discovery_version: 1,
+  password_minimum_length: 12,
   canonical_origin: "https://proctor.example",
   initialized: true,
   capabilities: {
@@ -28,6 +29,36 @@ describe("hostedInstitutionFrom", () => {
     expect(hostedInstitutionFrom({ kind: "ready", discovery })).toEqual({
       displayName: "Lagoon City University",
     });
+  });
+
+  it("exposes the published support address with or without a name", () => {
+    expect(
+      hostedInstitutionFrom({
+        kind: "ready",
+        discovery: { ...discovery, support_address: "help@example.edu" },
+      }),
+    ).toEqual({
+      displayName: "Lagoon City University",
+      supportAddress: "help@example.edu",
+    });
+    expect(
+      hostedInstitutionFrom({
+        kind: "ready",
+        discovery: {
+          ...discovery,
+          institution: undefined,
+          support_address: "help@example.edu",
+        },
+      }),
+    ).toEqual({ supportAddress: "help@example.edu" });
+  });
+
+  it("drops a support address that is not a plain mailbox", () => {
+    for (const support_address of ["help@example.edu?subject=x", "not an address", ""]) {
+      expect(
+        hostedInstitutionFrom({ kind: "ready", discovery: { ...discovery, support_address } }),
+      ).toEqual({ displayName: "Lagoon City University" });
+    }
   });
 
   it("omits the name while loading, after failure, or when it is absent", () => {

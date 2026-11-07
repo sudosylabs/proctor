@@ -16,6 +16,7 @@ test("the production login entry keeps its root fully themed and initialized", a
       contentType: "application/json",
       body: JSON.stringify({
         discovery_version: 1,
+        password_minimum_length: 12,
         canonical_origin: "http://127.0.0.1:5173",
         initialized: true,
         capabilities: {

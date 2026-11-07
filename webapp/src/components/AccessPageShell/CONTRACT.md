@@ -50,10 +50,10 @@ column's width and muted label-size text:
   quiet (text-variant or plain link) presentation.
 - The help line, always present: “Need help? Contact {Institution}.”, or
   “Need help? Contact your institution.” until the name is known.
-  `HostedInstitution.supportAddress` is the reserved slot for an Institution
-  support address: when a later slice supplies it, the Institution name in
-  the same localized sentence becomes a `mailto:` link without a new prop or
-  layout change.
+  When discovery publishes a support address
+  (`HostedInstitution.supportAddress`), the Institution name in the same
+  localized sentence becomes a `mailto:` link without a new prop or layout
+  change; with no known name the sentence stays unlinked.
 
 ## Props
 

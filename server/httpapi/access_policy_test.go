@@ -80,6 +80,7 @@ func TestPublicAccessDiscoveryDTOContainsNoPrivatePolicyOrDestinations(t *testin
 		PolicyRevision: 4, Capabilities: app.PublicAccessCapabilities{LocalLogin: true, DesktopAuthorization: true},
 		Providers:            []model.ExternalAuthenticationProvider{{ID: "campus", DisplayName: "Campus", Type: "oidc"}},
 		DesktopAuthorization: app.DesktopAuthorizationCompatibility{Protocol: "proctor-desktop-authorization", MinimumVersion: 1, MaximumVersion: 1},
+		SupportAddress:       "help@example.edu", PasswordMinimumLength: 14,
 	})
 	encoded, err := json.Marshal(response)
 	require.NoError(t, err)
@@ -89,6 +90,12 @@ func TestPublicAccessDiscoveryDTOContainsNoPrivatePolicyOrDestinations(t *testin
 	}
 	require.Contains(t, text, `"canonical_origin":"https://proctor.example.edu"`)
 	require.Contains(t, text, `"id":"campus"`)
+	require.Contains(t, text, `"support_address":"help@example.edu"`)
+	require.Contains(t, text, `"password_minimum_length":14`)
+
+	withoutSupport, err := json.Marshal(publicAccessDiscoveryResponseFromView(app.PublicAccessDiscovery{PasswordMinimumLength: 12}))
+	require.NoError(t, err)
+	require.NotContains(t, string(withoutSupport), "support_address")
 }
 
 func TestAccessPolicyHTTPRetriesLostResponseAndRejectsConflictingKeyReuse(t *testing.T) {

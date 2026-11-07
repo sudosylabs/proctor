@@ -237,7 +237,9 @@ A versioned same-origin public discovery document returns only:
 - safe Institution name and branding;
 - Access Policy revision and available authentication capabilities;
 - enabled providers with ID, display name, and type;
-- supported desktop-authorization protocol and compatibility bounds.
+- supported desktop-authorization protocol and compatibility bounds;
+- the operator-configured support mailbox, when set, and the minimum password
+  length, which hosted pages present before and after initialization.
 
 The v1 public document is `GET /api/v1/discovery`. Administrative policy read,
 preflight, and revision-fenced replacement are respectively

@@ -1,4 +1,5 @@
 import { type FormEvent, useRef, useState } from "react";
+import { formatPasswordLength, usePasswordMinimumLength } from "../../auth/passwordPolicy";
 
 import type {
   SetupCreated,
@@ -54,6 +55,7 @@ export function SetupIntro() {
 }
 
 export function SetupForm({ onComplete, submitSetup }: SetupFormProps) {
+  const minimumPasswordLength = usePasswordMinimumLength();
   const [bootstrapSecret, setBootstrapSecret] = useState("");
   const [institutionName, setInstitutionName] = useState("");
   const [institutionDisplayName, setInstitutionDisplayName] = useState("");
@@ -319,7 +321,9 @@ export function SetupForm({ onComplete, submitSetup }: SetupFormProps) {
           id="administrator-password"
           name="password"
           label={message("webapp.setup.form.administrator.password")}
-          description={message("webapp.setup.form.password_help")}
+          description={minimumPasswordLength === undefined
+            ? message("webapp.setup.form.password_help_unsized")
+            : message("webapp.setup.form.password_help", { Count: formatPasswordLength(minimumPasswordLength) })}
           autoComplete="new-password"
           value={password}
           errorMessage={fieldErrors.password}

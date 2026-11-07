@@ -50,7 +50,9 @@ acknowledgment that registration does not grant institutional access; its
 checkbox and complete label form one aligned hit target. The acknowledgment is
 never persisted or transported and has no authorization meaning. Username and
 password guidance sits under its field as the field description, so the
-password rules are read before the person types.
+password rules are read before the person types. The password guidance states
+the discovered minimum length (“At least {n} characters.”) and keeps the
+reuse note.
 
 Empty or malformed required values are rejected before transport and focus
 moves to the first invalid control. First name, last name, username, and email

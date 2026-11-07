@@ -12,7 +12,8 @@ fields and explains that existing Sessions were revoked. Expired, consumed,
 superseded, malformed, and concurrent-loser credentials share one bounded
 unusable-link state.
 
-The password rules are the new-password field's description, and
+The password rules are the new-password field's description (the discovered
+minimum length, “At least {n} characters.”, plus the recent-reuse note), and
 password-policy rejection remains adjacent to that field; the confirmation
 field carries no rules. General failure appears in the action-adjacent
 `FormFeedback` region, which takes space only while it holds a message, and

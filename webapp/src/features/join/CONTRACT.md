@@ -8,7 +8,8 @@ requests and reuses one in-flight result under React Strict Mode.
 
 The returned purpose and requirement decide the closed terminal operation. An
 `account` transaction collects username, password, and optional first and last
-names, then calls the account-creating acceptance endpoint. A `session`
+names, then calls the account-creating acceptance endpoint; its password
+description states the discovered minimum length and the reuse note. A `session`
 transaction collects no profile or credential fields and calls only the
 current-Session acceptance endpoint. Neither path invents Invitation target,
 recipient, Role, or membership details that the browser projection omits.

@@ -16,6 +16,7 @@ const groupedSetupKey = "JBSW Y3DP EHPK 3PXP";
 
 const discovery = {
   discovery_version: 1,
+  password_minimum_length: 12,
   canonical_origin: "http://127.0.0.1:5173",
   initialized: true,
   capabilities: { local_login: true, public_registration: false, invitation_admission: true, desktop_authorization: true },
@@ -474,7 +475,7 @@ test("a missing Session exposes sign in and a read failure can be retried", asyn
 test("restricted password login goes directly to reenrollment", async ({ page }) => {
   const state = await mockSecurity(page, { ...baseContext, mfa_recovery_required: true });
   await page.route("**/api/v1/discovery", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({
-    discovery_version: 1, canonical_origin: "http://127.0.0.1:5173", initialized: true,
+    discovery_version: 1, password_minimum_length: 12, canonical_origin: "http://127.0.0.1:5173", initialized: true,
     capabilities: { local_login: true, public_registration: false, invitation_admission: false, desktop_authorization: true },
     desktop_authorization: { protocol: "proctor-desktop-authorization", minimum_version: 1, maximum_version: 1 },
     institution: { id: "institution", name: "institution", display_name: "Institution" }, providers: [],

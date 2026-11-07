@@ -303,10 +303,14 @@ their own connection lifetime.
 discovery document. It returns only the canonical origin, installation and
 Institution presentation, current policy revision, enabled public capability
 flags, safe provider descriptors selected by both live deployment configuration
-and Access Policy, and the supported desktop-authorization protocol range. It
-never returns provider admission rules, local-invitation credential policy,
-mail capability, secrets, redirect URIs, claim rules, or recipient data. The
-response is `no-store`.
+and Access Policy, the supported desktop-authorization protocol range, the
+optional operator-configured `support_address` (`Mail.SupportAddress`), and
+`password_minimum_length` (`Authentication.Password.MinimumLength`). The last
+two are deployment presentation facts and are present even before
+initialization. It never returns provider admission rules, local-invitation
+credential policy, mail capability, secrets, redirect URIs, claim rules, or
+recipient data; the support mailbox is an operator contact, not a recipient or
+a mail-health signal. The response is `no-store`.
 
 `GET /api/v1/system/ping` separately owns product availability and
 request-specific Desktop compatibility. It requires bounded Desktop release,

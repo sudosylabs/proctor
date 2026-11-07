@@ -137,7 +137,11 @@ function isPublicAccessDiscovery(
     (value.installation_id !== undefined &&
       typeof value.installation_id !== "string") ||
     (value.policy_revision !== undefined &&
-      typeof value.policy_revision !== "number")
+      typeof value.policy_revision !== "number") ||
+    (value.support_address !== undefined &&
+      typeof value.support_address !== "string") ||
+    (value.password_minimum_length !== undefined &&
+      !isPasswordMinimumLength(value.password_minimum_length))
   ) {
     return false;
   }
@@ -180,6 +184,15 @@ function isProvider(value: unknown): boolean {
     typeof value.display_name === "string" &&
     value.display_name !== "" &&
     typeof value.type === "string"
+  );
+}
+
+function isPasswordMinimumLength(value: unknown): boolean {
+  return (
+    typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= 1 &&
+    value <= 1024
   );
 }
 

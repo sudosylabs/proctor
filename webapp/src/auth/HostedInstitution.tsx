@@ -64,5 +64,23 @@ export function hostedInstitutionFrom(
     return {};
   }
   const displayName = result.discovery.institution?.display_name.trim();
-  return displayName === undefined || displayName === "" ? {} : { displayName };
+  const supportAddress = result.discovery.support_address?.trim();
+  return {
+    ...(displayName === undefined || displayName === "" ? {} : { displayName }),
+    ...(supportAddress !== undefined && isMailtoSafeAddress(supportAddress)
+      ? { supportAddress }
+      : {}),
+  };
+}
+
+/**
+ * A bounded plain mailbox using only characters that need no escaping in a
+ * `mailto:` link. Any other published value is dropped, so the page offers
+ * no support link rather than an unsafe or surprising one.
+ */
+function isMailtoSafeAddress(value: string): boolean {
+  return (
+    value.length <= 254 &&
+    /^[A-Za-z0-9._+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/.test(value)
+  );
 }

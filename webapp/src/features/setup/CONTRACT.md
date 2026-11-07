@@ -38,7 +38,9 @@ The visible form is one flat column, ordered by what it creates:
    value shown in the data face.
 
 The short-name and username guidance states the characters the server
-accepts. Password guidance sits under the password field.
+accepts. Password guidance sits under the password field and states the
+minimum length from public discovery, which is available before setup; while
+discovery is unavailable only the reuse note is shown.
 
 Every control has a visible label, stable name, applicable input type and
 autocomplete value, associated validation guidance, and a minimum 44-pixel

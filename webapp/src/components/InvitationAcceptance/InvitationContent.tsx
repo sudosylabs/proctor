@@ -1,4 +1,5 @@
 import { type FormEvent, useRef, useState } from "react";
+import { formatPasswordLength, usePasswordMinimumLength } from "../../auth/passwordPolicy";
 
 import { useHostedInstitution } from "../../auth/HostedInstitution";
 import { passwordRejectionMessage } from "../../auth/passwordRejection";
@@ -248,6 +249,7 @@ function InvitationAccountForm({
   handle: string;
   onAccepted(): void;
 }) {
+  const minimumPasswordLength = usePasswordMinimumLength();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [username, setUsername] = useState("");
@@ -356,7 +358,9 @@ function InvitationAccountForm({
         id="invitation-password"
         name="password"
         label={message("webapp.join.form.password")}
-        description={message("webapp.join.form.password_help")}
+        description={minimumPasswordLength === undefined
+            ? message("webapp.join.form.password_help_unsized")
+            : message("webapp.join.form.password_help", { Count: formatPasswordLength(minimumPasswordLength) })}
         autoComplete="new-password"
         value={password}
         errorMessage={passwordError}

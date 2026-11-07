@@ -1,4 +1,5 @@
 import { type FormEvent, useRef, useState } from "react";
+import { formatPasswordLength } from "../../auth/passwordPolicy";
 
 import type {
   Discovery,
@@ -41,6 +42,7 @@ export function RegistrationForm({
   onPolicyChange,
   submitRegistration,
 }: RegistrationFormProps) {
+  const minimumPasswordLength = discovery.password_minimum_length;
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -289,7 +291,9 @@ export function RegistrationForm({
           id="registration-password"
           name="password"
           label={message("webapp.register.form.password")}
-          description={message("webapp.register.form.password_help")}
+          description={minimumPasswordLength === undefined
+            ? message("webapp.register.form.password_help_unsized")
+            : message("webapp.register.form.password_help", { Count: formatPasswordLength(minimumPasswordLength) })}
           autoComplete="new-password"
           value={password}
           errorMessage={fieldErrors.password}

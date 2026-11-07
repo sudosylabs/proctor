@@ -11,6 +11,7 @@ import {
 
 const discovery = {
   discovery_version: 1,
+  password_minimum_length: 12,
   canonical_origin: "https://proctor.example",
   initialized: true,
   capabilities: {
@@ -42,6 +43,13 @@ describe("resolvePublicAccessDiscovery", () => {
     ).toEqual({ kind: "ready", discovery });
   });
 
+  it("accepts the optional support address and the password minimum", () => {
+    const withSupport = { ...discovery, support_address: "help@example.edu" };
+    expect(
+      resolvePublicAccessDiscovery(withSupport, "https://proctor.example"),
+    ).toEqual({ kind: "ready", discovery: withSupport });
+  });
+
   it("fails closed for invalid and mismatched canonical origins", () => {
     expect(
       resolvePublicAccessDiscovery(
@@ -60,6 +68,10 @@ describe("resolvePublicAccessDiscovery", () => {
     [{ ...discovery, providers: [{}] }],
     [{ ...discovery, institution: { display_name: "Incomplete" } }],
     [{ ...discovery, discovery_version: 2 }],
+    [{ ...discovery, support_address: 42 }],
+    [{ ...discovery, password_minimum_length: "12" }],
+    [{ ...discovery, password_minimum_length: 0 }],
+    [{ ...discovery, password_minimum_length: 12.5 }],
   ])("rejects malformed documents", (value) => {
     expect(
       resolvePublicAccessDiscovery(value, "https://proctor.example"),

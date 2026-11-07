@@ -1,4 +1,5 @@
 import { type FormEvent, useRef, useState } from "react";
+import { formatPasswordLength, usePasswordMinimumLength } from "../../auth/passwordPolicy";
 
 import type { PasswordResetCompletionResult } from "../../features/reset-password/ResetPasswordApi";
 import { message } from "../../i18n/messages";
@@ -28,6 +29,7 @@ export function ResetPasswordContent({
   completeReset,
   token,
 }: ResetPasswordContentProps) {
+  const minimumPasswordLength = usePasswordMinimumLength();
   const tokenRef = useRef(token);
   const [state, setState] = useState<ResetState>(
     token === undefined ? "invalid" : "ready",
@@ -165,7 +167,9 @@ export function ResetPasswordContent({
             id="new-password"
             name="new_password"
             label={message("webapp.reset_password.form.password")}
-            description={message("webapp.reset_password.form.password_help")}
+            description={minimumPasswordLength === undefined
+            ? message("webapp.reset_password.form.password_help_unsized")
+            : message("webapp.reset_password.form.password_help", { Count: formatPasswordLength(minimumPasswordLength) })}
             autoComplete="new-password"
             value={password}
             errorMessage={passwordError}

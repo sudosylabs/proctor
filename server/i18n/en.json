@@ -2671,6 +2671,10 @@
   },
   {
     "id": "webapp.join.form.password_help",
+    "translation": "At least {{.Count}} characters. Use a password you don’t use anywhere else."
+  },
+  {
+    "id": "webapp.join.form.password_help_unsized",
     "translation": "Use a password you don’t use anywhere else."
   },
   {
@@ -3179,7 +3183,11 @@
   },
   {
     "id": "webapp.register.form.password_help",
-    "translation": "Choose a long password you don’t use anywhere else. A short sentence works well."
+    "translation": "At least {{.Count}} characters. Use a password you don’t use anywhere else."
+  },
+  {
+    "id": "webapp.register.form.password_help_unsized",
+    "translation": "Use a password you don’t use anywhere else."
   },
   {
     "id": "webapp.register.form.submit",
@@ -3343,7 +3351,11 @@
   },
   {
     "id": "webapp.reset_password.form.password_help",
-    "translation": "At least 12 characters. You can’t reuse a recent password."
+    "translation": "At least {{.Count}} characters. You can’t reuse a recent password."
+  },
+  {
+    "id": "webapp.reset_password.form.password_help_unsized",
+    "translation": "You can’t reuse a recent password."
   },
   {
     "id": "webapp.reset_password.form.submit",
@@ -3875,7 +3887,11 @@
   },
   {
     "id": "webapp.setup.form.password_help",
-    "translation": "Choose a long password you don’t use anywhere else."
+    "translation": "At least {{.Count}} characters. Use a password you don’t use anywhere else."
+  },
+  {
+    "id": "webapp.setup.form.password_help_unsized",
+    "translation": "Use a password you don’t use anywhere else."
   },
   {
     "id": "webapp.setup.form.secret_hide",

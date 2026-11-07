@@ -30,7 +30,7 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/sudosylabs/proctor/packages/cache v0.0.0-20261106012608-7ca07fe32e5d
 	github.com/sudosylabs/proctor/packages/mail v0.0.0-20261105225246-102043a25f64
-	github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261106012608-7ca07fe32e5d
+	github.com/sudosylabs/proctor/packages/vfs v0.0.0-20261107175823-6fb01c2d892e
 	go.opentelemetry.io/otel v1.46.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.46.0
 	go.opentelemetry.io/otel/sdk v1.46.0

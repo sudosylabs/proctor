@@ -13,6 +13,16 @@ const setupKey = "JBSWY3DPEHPK3PXP";
 const provisioningURI = `otpauth://totp/Proctor:preview?secret=${setupKey}&issuer=Proctor`;
 const recoveryCodes = ["ABCD-EFGH-IJKL", "MNOP-QRST-UVWX", "2345-6789-ABCD", "EFGH-IJKL-MNOP"];
 
+const discovery = {
+  discovery_version: 1,
+  canonical_origin: "http://127.0.0.1:5173",
+  initialized: true,
+  capabilities: { local_login: true, public_registration: false, invitation_admission: true, desktop_authorization: true },
+  desktop_authorization: { protocol: "proctor-desktop-authorization", minimum_version: 1, maximum_version: 1 },
+  institution: { id: "institution-1", name: "northbridge", display_name: "Northbridge Institute" },
+  providers: [],
+};
+
 async function mockSecurity(page: Page, context = baseContext) {
   const state = {
     context: { ...context }, requests: [] as Array<{ path: string; method: string; body: unknown }>,
@@ -64,6 +74,7 @@ async function mockSecurity(page: Page, context = baseContext) {
     if (path === "/api/v1/auth/reauthenticate/external") return json({ redirect_url: "https://sso.example/reauthenticate" });
     if (path === "/api/v1/auth/logout") { state.signedOut = true; await route.fulfill({ status: 204 }); return; }
     if (path === "/api/v1/users/me") return json({ id: "user", username: "person", display_name: "Person" });
+    if (path === "/api/v1/discovery" && method === "GET") return json(discovery);
     return problem("unexpected.test.request", 500);
   });
   return state;

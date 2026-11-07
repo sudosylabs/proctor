@@ -3,20 +3,29 @@
     display: flex;
     min-inline-size: 0;
     flex-direction: column;
-    gap: var(--proctor-space-4);
   }
 
-  .eyebrow {
-    color: var(--proctor-color-foreground-link);
-    font-size: var(--proctor-font-size-label);
-    font-weight: var(--proctor-font-weight-semibold);
-    line-height: var(--proctor-line-height-label);
-    letter-spacing: var(--proctor-letter-spacing-label);
-    text-transform: uppercase;
+  .kind {
+    margin-block-end: var(--proctor-space-3);
+    color: var(--proctor-color-foreground-muted);
+    font-size: var(--proctor-font-size-body-small);
+    font-weight: var(--proctor-font-weight-medium);
+    line-height: var(--proctor-line-height-body-small);
+  }
+
+  .success {
+    color: var(--proctor-color-state-success);
+  }
+
+  .warning {
+    color: var(--proctor-color-state-warning);
+  }
+
+  .danger {
+    color: var(--proctor-color-state-danger);
   }
 
   .intro h1 {
-    max-inline-size: 24ch;
     font-family: var(--proctor-font-family-display);
     font-size: var(--proctor-font-size-display);
     font-weight: var(--proctor-font-weight-semibold);
@@ -26,8 +35,9 @@
   }
 
   .body {
-    max-inline-size: 58ch;
-    color: var(--proctor-color-foreground-muted);
+    max-inline-size: 34rem;
+    margin-block-start: var(--proctor-space-4);
+    color: var(--proctor-color-foreground-subtle);
     font-size: var(--proctor-font-size-body-large);
     line-height: var(--proctor-line-height-body-large);
   }

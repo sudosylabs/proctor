@@ -47,15 +47,16 @@ for (const colorScheme of ["light", "dark"] as const) {
         const main = page.getByRole("main");
         const loader = main.locator("[data-proctor-loading]");
         const heading = page.getByRole("heading", { name: "Sign in", exact: true });
-        const aside = page.getByRole("complementary");
+        const masthead = page.getByRole("banner");
+        const institution = masthead.locator("[data-proctor-shell-institution]");
         await expect(loader).toBeVisible();
         await expect(loader).toHaveAttribute("role", "status");
         await expect(loader).toContainText("Checking available sign-in methods…");
         await expect(heading).toBeVisible();
-        await expect(aside).toContainText("Your institution controls which sign-in methods are available.");
+        await expect(institution).toHaveCount(0);
         await expect(page.getByRole("img", { name: "Proctor" })).toBeVisible();
         const headingBefore = await box(heading);
-        const asideBefore = await box(aside);
+        const mastheadBefore = await box(masthead);
         const loaderBox = await box(loader);
         const mainBox = await box(main);
         const iconBox = await box(loader.locator("svg"));
@@ -71,7 +72,12 @@ for (const colorScheme of ["light", "dark"] as const) {
         await expect(page.getByLabel("Email or username")).toBeVisible();
         await expect(loader).toHaveCount(0);
         expect(await box(heading)).toEqual(headingBefore);
-        expect(await box(aside)).toEqual(asideBefore);
+        expect(await box(masthead)).toEqual(mastheadBefore);
+        if (width >= 480) {
+          await expect(institution).toHaveText(discovery.institution.display_name);
+        } else {
+          await expect(institution).toBeHidden();
+        }
         await expect(page.locator(".proctor-skip-link")).toBeFocused();
         await noOverflow(page);
       } finally { release(); }

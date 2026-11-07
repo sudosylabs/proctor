@@ -13,7 +13,7 @@ export function ReauthenticatePage({ task = "security", externalProofFailed = fa
 }) {
   const resource = useAsyncResource<SecurityContextResult>(requestSecurityContext, { kind: "unavailable" });
   return (
-    <AccessPageShell skipLabel={message("webapp.security.skip_to_main")} variant="single" mainSize="form">
+    <AccessPageShell skipLabel={message("webapp.security.skip_to_main")}>
       <ReauthenticationContent actions={actions} task={task} loading={resource.loading} state={resource.value}
         onRefresh={resource.retry} externalProofFailed={externalProofFailed} />
     </AccessPageShell>

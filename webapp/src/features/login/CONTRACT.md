@@ -11,10 +11,10 @@ and recovery. [`../../../DESIGN_SYSTEM.md`](../../../DESIGN_SYSTEM.md) owns the
 shared presentation and interaction rules; the Access Policy, authentication,
 and Session contracts remain authoritative for server behavior.
 
-The narrow shared
-[`AccessPageShell`](../../components/AccessPageShell/CONTRACT.md) is proven
-by this route and `/authorization/complete`. It owns only their structural
-frame. The domain-neutral
+The shared
+[`AccessPageShell`](../../components/AccessPageShell/CONTRACT.md) owns the
+structural frame of this and every other hosted route, including the masthead
+Institution name. The domain-neutral
 [`Notice`](../../components/Notice/CONTRACT.md) owns the inline state-evidence
 treatment; fields, buttons, provider actions, notice copy and semantics, and
 authentication behavior remain local to this feature.
@@ -66,8 +66,10 @@ content; neither may enter the document title, logs, error reports, or raw
 markup.
 
 It performs the fetch, complete runtime validation, and origin comparison once.
-Login receives only that validated result and retains ownership of setup,
-method availability, and recovery states.
+The request is the page-lifetime shared discovery also read by the hosted
+shell for the Institution name, so the page still makes one initial
+discovery request. Login receives only that validated result and retains
+ownership of setup, method availability, and recovery states.
 
 ## Document and semantic structure
 
@@ -77,7 +79,7 @@ the document controller. The visible structure contains:
 - a first-focusable skip link targeting `main-content`;
 - exactly one `main` landmark with `id="main-content"`;
 - exactly one page heading whose purpose is “Sign in”;
-- safe Proctor and Institution presentation;
+- safe Proctor and Institution presentation, provided by the shell masthead;
 - the generic external-login failure notice when bootstrap supplies it;
 - a local-login form when `capabilities.local_login` is true;
 - an external-provider action for every descriptor in `providers`; and
@@ -97,8 +99,7 @@ values remain untranslated where required.
 ## Discovery states
 
 Discovery loading occupies only the sign-in methods region. The branding,
-page heading, supporting introduction, and default Institution context remain
-visible. The methods region reserves a bounded minimum footprint in both
+page heading, supporting introduction, and shell masthead remain visible. The methods region reserves a bounded minimum footprint in both
 pending and resolved states; its spinner centers within that region and the
 loaded methods may grow naturally. The shared Loading message appears below
 the icon and is the sole discovery-progress announcement.

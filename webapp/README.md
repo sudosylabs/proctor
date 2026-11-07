@@ -44,8 +44,11 @@ StrictMode-safe initial resource and retry lifecycle used by route modules.
 The remaining focused access tasks share the narrow
 [`AccessTaskIntro`](./src/components/AccessTaskIntro/CONTRACT.md) introduction,
 [`TaskState`](./src/components/TaskState/CONTRACT.md) terminal and loading-state
-grammar, and [`Notice`](./src/components/Notice/CONTRACT.md) evidence contract
-without introducing decorative workflow steps.
+grammar, [`Notice`](./src/components/Notice/CONTRACT.md) evidence contract,
+and hairline [`FactList`](./src/components/FactList/CONTRACT.md) without
+introducing decorative workflow steps. The shell's masthead and help line read
+the Institution name from the shared hosted-page discovery described in the
+`auth` contract.
 Product icons use semantic names from the owned
 [`Icon`](./src/components/Icon/CONTRACT.md) adapter; feature code never imports
 the underlying icon library directly. Brand and provider marks remain governed

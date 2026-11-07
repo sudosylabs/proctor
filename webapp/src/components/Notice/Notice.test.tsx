@@ -36,4 +36,22 @@ describe("Notice", () => {
     expect(markup).toContain('tabindex="-1"');
     expect(markup).toContain("local-layout");
   });
+
+  it("marks only true state tones and keeps the marker out of the accessible text", () => {
+    const warning = renderToStaticMarkup(<Notice tone="warning">Check this.</Notice>);
+    const information = renderToStaticMarkup(<Notice>Context.</Notice>);
+
+    expect(warning).toMatch(/<span[^>]*aria-hidden="true"[^>]*><\/span>/);
+    expect(information).not.toContain("aria-hidden");
+  });
+
+  it("renders an optional lead before the supporting text", () => {
+    const markup = renderToStaticMarkup(
+      <Notice lead="Didn't start this?" tone="warning">
+        Close this page.
+      </Notice>,
+    );
+
+    expect(markup).toMatch(/<strong[^>]*>Didn&#x27;t start this\?<\/strong> Close this page\./);
+  });
 });

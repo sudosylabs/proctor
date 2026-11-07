@@ -175,7 +175,7 @@ function ProviderChooser({
   return (
     <section className={styles.page} aria-labelledby="connect-provider-heading">
       <AccessTaskIntro
-        eyebrow={message("webapp.connect_provider.context.eyebrow")}
+        kind={message("webapp.connect_provider.context.eyebrow")}
         heading={message("webapp.connect_provider.context.heading")}
         body={message("webapp.connect_provider.context.body")}
         focusHeading={focusHeading}

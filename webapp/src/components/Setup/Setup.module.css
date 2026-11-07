@@ -12,9 +12,7 @@
   .section,
   .routeState,
   .routeStateCopy,
-  .context,
   .sectionIntro,
-  .stepCopy,
   .submission {
     display: flex;
     flex-direction: column;
@@ -50,135 +48,8 @@
     line-height: var(--proctor-line-height-body-large);
   }
 
-  .context {
-    gap: var(--proctor-space-0);
-    max-inline-size: 24rem;
-  }
-
-  .eyebrow {
-    color: var(--proctor-color-foreground-link);
-    font-size: var(--proctor-font-size-label);
-    font-weight: var(--proctor-font-weight-semibold);
-    letter-spacing: var(--proctor-letter-spacing-label);
-    text-transform: uppercase;
-  }
-
-  .contextHeading {
-    margin-block-start: var(--proctor-space-4);
-    font-family: var(--proctor-font-family-display);
-    font-size: var(--proctor-font-size-heading-large);
-    font-weight: var(--proctor-font-weight-semibold);
-    line-height: var(--proctor-line-height-heading-large);
-    letter-spacing: var(--proctor-letter-spacing-display);
-    text-wrap: balance;
-  }
-
-  .contextBody {
-    margin-block-start: var(--proctor-space-5);
-    color: var(--proctor-color-foreground-muted);
-  }
-
-  .stepCopy span,
   .sectionHelp {
     color: var(--proctor-color-foreground-muted);
-  }
-
-  .proofRail {
-    display: flex;
-    flex-direction: column;
-    padding: var(--proctor-space-0);
-    margin-block: calc(var(--proctor-space-7) + var(--proctor-space-1))
-      var(--proctor-space-7);
-    list-style: none;
-  }
-
-  .proofRail li {
-    position: relative;
-    display: grid;
-    grid-template-columns: var(--proctor-space-7) minmax(0, 1fr);
-    grid-template-rows: auto auto;
-    align-content: start;
-    column-gap: var(--proctor-space-2);
-    row-gap: var(--proctor-space-1);
-    min-block-size: 8rem;
-  }
-
-  .proofRail li:last-child {
-    min-block-size: var(--proctor-space-0);
-  }
-
-  .proofRail li::before {
-    position: absolute;
-    inset-block-start: var(--proctor-space-1);
-    inset-inline-start: var(--proctor-space-2);
-    inline-size: var(--proctor-space-3);
-    block-size: var(--proctor-space-3);
-    border: 0;
-    border-radius: var(--proctor-radius-round);
-    background: var(--proctor-color-foreground-disabled);
-    content: "";
-  }
-
-  .proofRail li:first-child::before {
-    background: var(--proctor-color-action-primary);
-  }
-
-  .proofRail li:not(:last-child)::after {
-    position: absolute;
-    inset-block-start: var(--proctor-space-4);
-    inset-block-end: calc(var(--proctor-space-2) * -1);
-    inset-inline-start: calc(
-      var(--proctor-space-3) + var(--proctor-border-width-hairline)
-    );
-    inline-size: var(--proctor-border-width-strong);
-    background: var(--proctor-color-border-default);
-    content: "";
-  }
-
-  .stepNumber {
-    grid-column: 2;
-    color: var(--proctor-color-foreground-muted);
-    font-family: var(--proctor-font-family-mono);
-    font-size: var(--proctor-font-size-label);
-    font-weight: var(--proctor-font-weight-semibold);
-    line-height: var(--proctor-line-height-heading-small);
-  }
-
-  .proofRail li:first-child .stepNumber::before {
-    position: absolute;
-    z-index: 1;
-    inset-block-start: var(--proctor-space-4);
-    inset-inline-start: calc(
-      var(--proctor-space-3) + var(--proctor-border-width-hairline)
-    );
-    inline-size: var(--proctor-border-width-strong);
-    block-size: calc(var(--proctor-space-9) - var(--proctor-space-2));
-    background: var(--proctor-color-action-primary);
-    content: "";
-  }
-
-  .proofRail li:first-child .stepNumber {
-    color: var(--proctor-color-foreground-link);
-  }
-
-  .stepCopy {
-    grid-column: 2;
-    gap: var(--proctor-space-1);
-    margin-block-start: var(--proctor-space-1);
-  }
-
-  .stepCopy strong {
-    font-size: var(--proctor-font-size-body);
-    font-weight: var(--proctor-font-weight-semibold);
-  }
-
-  .stepCopy span {
-    font-size: var(--proctor-font-size-body-small);
-    line-height: var(--proctor-line-height-body-small);
-  }
-
-  .contextNote {
-    max-inline-size: 23.5rem;
   }
 
   .form {
@@ -267,18 +138,6 @@
   @media (min-width: 48rem) {
     .fieldGrid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-
-  @media (forced-colors: active) {
-    .proofRail li::before,
-    .proofRail li::after {
-      background: CanvasText;
-    }
-
-    .proofRail li:first-child::before,
-    .proofRail li:first-child .stepNumber::before {
-      background: Highlight;
     }
   }
 }

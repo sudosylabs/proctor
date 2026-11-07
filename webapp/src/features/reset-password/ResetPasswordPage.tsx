@@ -9,11 +9,7 @@ export interface ResetPasswordPageProps {
 
 export function ResetPasswordPage({ token }: ResetPasswordPageProps) {
   return (
-    <AccessPageShell
-      mainSize="content"
-      skipLabel={message("webapp.reset_password.skip_to_main")}
-      variant="single"
-    >
+    <AccessPageShell skipLabel={message("webapp.reset_password.skip_to_main")}>
       <ResetPasswordContent
         token={token}
         completeReset={completePasswordReset}

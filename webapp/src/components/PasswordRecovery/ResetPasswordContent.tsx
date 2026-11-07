@@ -152,7 +152,7 @@ export function ResetPasswordContent({
       <TaskStateAnnouncement message="" />
       <section className={styles.page} aria-labelledby="reset-heading">
         <AccessTaskIntro
-          eyebrow={message("webapp.reset_password.context.eyebrow")}
+          kind={message("webapp.reset_password.context.eyebrow")}
           heading={message("webapp.reset_password.context.heading")}
           body={message("webapp.reset_password.context.body")}
           headingID="reset-heading"

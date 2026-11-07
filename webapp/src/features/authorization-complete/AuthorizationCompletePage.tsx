@@ -78,10 +78,7 @@ export function AuthorizationCompletePage() {
   }
 
   return (
-    <AccessPageShell
-      skipLabel={message("webapp.authorization_complete.skip_to_main")}
-      variant="status"
-    >
+    <AccessPageShell skipLabel={message("webapp.authorization_complete.skip_to_main")}>
       <div className={styles.page}>
         <div className={styles.visuallyHidden} aria-live="polite" aria-atomic="true">
           {liveMessage}

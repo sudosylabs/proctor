@@ -30,35 +30,6 @@ export interface LoginPageProps {
   externalLoginFailed: boolean;
 }
 
-function institutionName(state: LoginDiscoveryState): string | undefined {
-  if (
-    state.kind !== "ready" &&
-    state.kind !== "setup" &&
-    state.kind !== "unavailable"
-  ) {
-    return undefined;
-  }
-  return state.discovery.institution?.display_name;
-}
-
-function LoginContext({ state }: { state: LoginDiscoveryState }) {
-  const name = institutionName(state);
-  return (
-    <div className={styles.context}>
-      <p className={styles.contextLabel}>
-        {message("webapp.login.institution.label")}
-      </p>
-      <p className={styles.contextName}>
-        {name ?? message("webapp.login.institution.fallback")}
-      </p>
-      <div className={styles.contextRule} aria-hidden="true" />
-      <p className={styles.contextBody}>
-        {message("webapp.login.institution.body")}
-      </p>
-    </div>
-  );
-}
-
 export function LoginPage({ externalLoginFailed }: LoginPageProps) {
   const discoveryResource = useAsyncResource<LoginDiscoveryState>(
     () => requestLoginDiscovery(window.location.origin),
@@ -70,12 +41,7 @@ export function LoginPage({ externalLoginFailed }: LoginPageProps) {
   const [externalNotice, setExternalNotice] = useState(externalLoginFailed);
 
   return (
-    <AccessPageShell
-      aside={<LoginContext state={discoveryState} />}
-      asideLabel={message("webapp.login.institution.label")}
-      skipLabel={message("webapp.login.skip_to_main")}
-      variant="split"
-    >
+    <AccessPageShell skipLabel={message("webapp.login.skip_to_main")}>
       <section className={styles.page} aria-labelledby="login-heading">
         <header className={styles.headingGroup}>
           <h1 id="login-heading">{message("webapp.login.heading")}</h1>

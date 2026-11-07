@@ -27,44 +27,6 @@
     line-height: var(--proctor-line-height-body-large);
   }
 
-  .context {
-    display: flex;
-    flex-direction: column;
-    gap: var(--proctor-space-2);
-    max-inline-size: 27rem;
-    padding-block-end: var(--proctor-space-5);
-    border-block-end: var(--proctor-border-width-hairline) solid
-      var(--proctor-color-border-default);
-  }
-
-  .contextLabel {
-    color: var(--proctor-color-foreground-muted);
-    font-size: var(--proctor-font-size-label);
-    font-weight: var(--proctor-font-weight-semibold);
-    letter-spacing: var(--proctor-letter-spacing-label);
-    text-transform: uppercase;
-  }
-
-  .contextName {
-    font-family: var(--proctor-font-family-display);
-    font-size: var(--proctor-font-size-heading-large);
-    font-weight: var(--proctor-font-weight-semibold);
-    line-height: var(--proctor-line-height-heading-large);
-    text-wrap: balance;
-  }
-
-  .contextRule {
-    display: none;
-    inline-size: var(--proctor-space-7);
-    block-size: var(--proctor-border-width-focus);
-    margin-block: var(--proctor-space-2);
-    background: var(--proctor-color-action-primary);
-  }
-
-  .contextBody {
-    color: var(--proctor-color-foreground-muted);
-  }
-
   .discovery {
     display: grid;
     min-inline-size: 0;
@@ -166,24 +128,7 @@
     white-space: nowrap;
   }
 
-  @media (min-width: 48rem) {
-    .context {
-      gap: var(--proctor-space-4);
-      padding-block-end: var(--proctor-space-0);
-      border-block-end: 0;
-    }
-
-    .contextRule {
-      display: block;
-    }
-
-    .contextBody {
-      max-inline-size: 32ch;
-    }
-  }
-
   @media (forced-colors: active) {
-    .contextRule,
     .separator::before,
     .separator::after {
       background: CanvasText;

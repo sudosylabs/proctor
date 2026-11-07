@@ -9,10 +9,7 @@ export interface UndoEmailChangePageProps {
 
 export function UndoEmailChangePage({ token }: UndoEmailChangePageProps) {
   return (
-    <AccessPageShell
-      skipLabel={message("webapp.undo_email_change.skip_to_main")}
-      variant="status"
-    >
+    <AccessPageShell skipLabel={message("webapp.undo_email_change.skip_to_main")}>
       <EmailChangeUndoContent token={token} undoEmailChange={undoEmailChange} />
     </AccessPageShell>
   );

@@ -91,7 +91,7 @@ export function ForgotPasswordContent({
       <TaskStateAnnouncement message="" />
       <section className={styles.page} aria-labelledby="forgot-heading">
         <AccessTaskIntro
-          eyebrow={message("webapp.forgot_password.context.eyebrow")}
+          kind={message("webapp.forgot_password.context.eyebrow")}
           heading={message("webapp.forgot_password.context.heading")}
           body={message("webapp.forgot_password.context.body")}
           headingID="forgot-heading"

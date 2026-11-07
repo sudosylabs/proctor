@@ -410,7 +410,7 @@ function InvitationIntro({
 }) {
   return (
     <AccessTaskIntro
-      eyebrow={message("webapp.join.context.eyebrow")}
+      kind={message("webapp.join.context.eyebrow")}
       focusHeading={focusHeading}
       heading={
         institutionName === undefined

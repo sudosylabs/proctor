@@ -98,13 +98,12 @@ submit action remain stationary while ordinary failure copy appears.
 
 ## Presentation
 
-The page uses the form-width split of `AccessPageShell`. Safe Institution
-context and a three-part proof rail remain distinct from the focused form. The
-rail names mailbox verification, separate institutional access, and
-installation-local credentials; each statement remains available as text
-without depending on color or iconography. The accepted state changes the
-shell proof tone to success only after the server accepts the request.
+The page uses the single task column of `AccessPageShell`; the shell
+masthead names the Institution. The page heading, lede, form, and every
+admission state (including the Invitation-required explanation) live in that
+column. The accepted state's purpose label appears only after the server
+accepts the request.
 
-At narrow widths the context precedes the form in one-dimensional document
-flow. Both registered color themes follow the system preference; this page
-introduces no persisted theme setting or third-party asset.
+The column stays in one-dimensional document flow at every width. Both
+registered color themes follow the system preference; this page introduces no
+persisted theme setting or third-party asset.

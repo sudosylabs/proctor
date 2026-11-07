@@ -107,7 +107,7 @@ export function ReauthenticationContent({ actions, externalProofFailed, loading,
     <section className={styles.page} aria-labelledby="reauthentication-heading">
       <TaskStateAnnouncement message={pending ? message("webapp.security.working") : ""} />
       <AccessTaskIntro key={step} headingID="reauthentication-heading" focusHeading={focusHeading}
-        eyebrow={message("webapp.security.eyebrow")}
+        kind={message("webapp.security.eyebrow")}
         heading={message(complete ? "webapp.reauthenticate.complete.heading" : "webapp.reauthenticate.heading")}
         body={message(complete ? "webapp.reauthenticate.complete.body" : "webapp.reauthenticate.body")} />
       {showExternalFailure ? <Notice tone="warning">{message("webapp.reauthenticate.external.failed")}</Notice> : null}

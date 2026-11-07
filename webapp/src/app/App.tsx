@@ -1,5 +1,6 @@
 import { useLayoutEffect } from "react";
 
+import { HostedInstitutionProvider } from "../auth/HostedInstitution";
 import type { ThemePreference } from "../generated/design-system/themes";
 import { message } from "../i18n/messages";
 import {
@@ -38,7 +39,7 @@ export function App({ bootstrap, themePreference = "system" }: AppProps) {
 
   return (
     <ProductThemeProvider value={theme}>
-      {renderHostedPage(bootstrap)}
+      <HostedInstitutionProvider>{renderHostedPage(bootstrap)}</HostedInstitutionProvider>
     </ProductThemeProvider>
   );
 }

@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   createPublicAccessDiscoveryLoader,
+  createSharedPublicAccessDiscovery,
   resolvePublicAccessDiscovery,
+  type PublicAccessDiscovery,
+  type PublicAccessDiscoveryResult,
   type PublicAccessDiscoveryTransport,
 } from "./PublicAccessDiscovery";
 
@@ -90,5 +93,50 @@ describe("createPublicAccessDiscoveryLoader", () => {
     await expect(rejected("https://proctor.example")).resolves.toEqual({
       kind: "unavailable",
     });
+  });
+});
+
+const sharedDiscovery = discovery as unknown as PublicAccessDiscovery;
+
+describe("createSharedPublicAccessDiscovery", () => {
+  it("shares one request and publishes its result", async () => {
+    let requests = 0;
+    const shared = createSharedPublicAccessDiscovery(async () => {
+      requests += 1;
+      return { kind: "ready", discovery: sharedDiscovery } as const;
+    });
+    let notifications = 0;
+    shared.subscribe(() => {
+      notifications += 1;
+    });
+
+    const [first, second] = await Promise.all([
+      shared.load("https://proctor.example"),
+      shared.load("https://proctor.example"),
+    ]);
+
+    expect(requests).toBe(1);
+    expect(first).toBe(second);
+    expect(shared.current()).toEqual({ kind: "ready", discovery });
+    expect(notifications).toBe(1);
+    await shared.load("https://proctor.example");
+    expect(requests).toBe(1);
+  });
+
+  it("does not retain unavailability, so a retry requests again", async () => {
+    const results: PublicAccessDiscoveryResult[] = [
+      { kind: "unavailable" },
+      { kind: "ready", discovery: sharedDiscovery },
+    ];
+    let requests = 0;
+    const shared = createSharedPublicAccessDiscovery(async () => {
+      requests += 1;
+      return results.shift() ?? { kind: "unavailable" };
+    });
+
+    expect(await shared.load("https://proctor.example")).toEqual({ kind: "unavailable" });
+    expect(await shared.load("https://proctor.example")).toEqual({ kind: "ready", discovery });
+    expect(requests).toBe(2);
+    expect(shared.current()).toEqual({ kind: "ready", discovery });
   });
 });

@@ -7,9 +7,9 @@ the existing local or external login flow creates a Web Session.
 presentation and interaction rules; the authentication and Session contracts
 remain authoritative for server behavior.
 
-The narrow shared
-[`AccessPageShell`](../../components/AccessPageShell/CONTRACT.md) is proven
-by this route and `/login`. It owns only their structural frame. This feature
+The shared
+[`AccessPageShell`](../../components/AccessPageShell/CONTRACT.md) owns the
+structural frame of this and every other hosted route. This feature
 creates no general authenticated shell, shared result component, notice, or
 button.
 

@@ -79,10 +79,9 @@ and action row remain stationary while ordinary failure copy appears.
 
 ## Presentation
 
-The page uses `AccessPageShell` with the content-width split. Its left region
-names the one-time proof chain; the main region remains a flat ordered form,
-not a wizard or a large floating card. The proof rail is structural evidence
-and the caution states that the Institution, administrator, protected Role
-Binding, and initial Access Policy are created in one transaction. On narrow
-viewports the context and form return to document order, field pairs become a
-single column, and the task remains one-dimensional at 200% zoom.
+The page uses the single task column of `AccessPageShell`. An
+`AccessTaskIntro` (kind line, page heading, lede) precedes the flat ordered
+form, which is not a wizard or a large floating card. The caution states that
+the Institution, administrator, protected Role Binding, and initial Access
+Policy are created in one transaction. On narrow viewports field pairs become
+a single column, and the task remains one-dimensional at 200% zoom.

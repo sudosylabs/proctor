@@ -3,7 +3,6 @@ import { useState } from "react";
 import { useAsyncResource } from "../../app/AsyncResource";
 import { AccessPageShell } from "../../components/AccessPageShell/AccessPageShell";
 import { RegistrationContent } from "../../components/Registration/RegistrationContent";
-import { RegistrationContext } from "../../components/Registration/RegistrationContext";
 import { message } from "../../i18n/messages";
 import {
   requestRegistrationDiscovery,
@@ -22,12 +21,7 @@ export function RegisterPage() {
   const [accepted, setAccepted] = useState(false);
 
   return (
-    <AccessPageShell
-      aside={<RegistrationContext state={state} />}
-      asideLabel={message("webapp.register.context.heading")}
-      skipLabel={message("webapp.register.skip_to_main")}
-      variant="split"
-    >
+    <AccessPageShell skipLabel={message("webapp.register.skip_to_main")}>
       <RegistrationContent
         accepted={accepted}
         state={state}

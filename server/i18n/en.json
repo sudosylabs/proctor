@@ -2838,18 +2838,6 @@
     "translation": "Sign in"
   },
   {
-    "id": "webapp.login.institution.body",
-    "translation": "Your institution controls which sign-in methods are available."
-  },
-  {
-    "id": "webapp.login.institution.fallback",
-    "translation": "Institution access"
-  },
-  {
-    "id": "webapp.login.institution.label",
-    "translation": "Institution"
-  },
-  {
     "id": "webapp.login.lede",
     "translation": "Use your institution account to continue."
   },
@@ -3018,22 +3006,6 @@
     "translation": "Registration accepted"
   },
   {
-    "id": "webapp.register.context.body",
-    "translation": "Public registration is available for this installation."
-  },
-  {
-    "id": "webapp.register.context.fallback",
-    "translation": "Institution access"
-  },
-  {
-    "id": "webapp.register.context.heading",
-    "translation": "Create a local account"
-  },
-  {
-    "id": "webapp.register.context.note",
-    "translation": "Registration creates an unverified User. Membership, roles, and Exam access are assigned separately."
-  },
-  {
     "id": "webapp.register.discovery_failure.body",
     "translation": "Proctor couldn’t load the registration policy for this installation."
   },
@@ -3156,18 +3128,6 @@
   {
     "id": "webapp.register.origin_mismatch.heading",
     "translation": "This registration page can’t be used"
-  },
-  {
-    "id": "webapp.register.proof.access",
-    "translation": "Institutional access is assigned separately"
-  },
-  {
-    "id": "webapp.register.proof.credentials",
-    "translation": "Credentials stay with this installation"
-  },
-  {
-    "id": "webapp.register.proof.verification",
-    "translation": "Email verification required"
   },
   {
     "id": "webapp.register.reload",
@@ -3626,14 +3586,6 @@
     "translation": "Setup is complete"
   },
   {
-    "id": "webapp.setup.context.administrator.body",
-    "translation": "First system administrator"
-  },
-  {
-    "id": "webapp.setup.context.administrator.label",
-    "translation": "Administrator"
-  },
-  {
     "id": "webapp.setup.context.body",
     "translation": "Create the Institution and first administrator for this Proctor installation."
   },
@@ -3644,26 +3596,6 @@
   {
     "id": "webapp.setup.context.heading",
     "translation": "Establish this installation"
-  },
-  {
-    "id": "webapp.setup.context.institution.body",
-    "translation": "Canonical and display identity"
-  },
-  {
-    "id": "webapp.setup.context.institution.label",
-    "translation": "Institution"
-  },
-  {
-    "id": "webapp.setup.context.note",
-    "translation": "One installation represents one Institution."
-  },
-  {
-    "id": "webapp.setup.context.operator.body",
-    "translation": "One-time bootstrap secret"
-  },
-  {
-    "id": "webapp.setup.context.operator.label",
-    "translation": "Operator authority"
   },
   {
     "id": "webapp.setup.document_title",
@@ -3816,6 +3748,18 @@
   {
     "id": "webapp.setup.status_failure.retry",
     "translation": "Try again"
+  },
+  {
+    "id": "webapp.shell.help.institution",
+    "translation": "Need help? Contact {{.Institution}}."
+  },
+  {
+    "id": "webapp.shell.help.unnamed",
+    "translation": "Need help? Contact your institution."
+  },
+  {
+    "id": "webapp.shell.signed_in",
+    "translation": "Signed in as {{.Name}}"
   },
   {
     "id": "webapp.undo_email_change.conflict.body",

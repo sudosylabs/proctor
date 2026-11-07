@@ -75,7 +75,7 @@ export const designTokens = {
       headingSmall: '1.25rem',
       headingMedium: '1.5rem',
       headingLarge: '2rem',
-      display: 'clamp(2.25rem, 1.8rem + 1.5vw, 3.5rem)',
+      display: 'clamp(1.875rem, 1.6rem + 1vw, 2.25rem)',
     },
     lineHeight: {
       caption: '1.4',
@@ -86,7 +86,7 @@ export const designTokens = {
       headingSmall: '1.35',
       headingMedium: '1.25',
       headingLarge: '1.15',
-      display: '1.02',
+      display: '1.08',
     },
     fontWeight: {
       regular: '400',
@@ -95,7 +95,7 @@ export const designTokens = {
       bold: '700',
     },
     letterSpacing: {
-      display: '-0.018em',
+      display: '-0.01em',
       heading: '-0.012em',
       body: '0',
       label: '0.01em',

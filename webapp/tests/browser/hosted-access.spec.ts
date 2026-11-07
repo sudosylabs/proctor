@@ -286,11 +286,20 @@ for (const colorScheme of ["light", "dark"] as const) {
 
     const lockup = page.getByRole("img", { name: "Proctor" });
     await expect(lockup).toBeVisible();
-    expect(
-      await lockup.evaluate(
-        (image) => image.closest("header")?.children.length,
-      ),
-    ).toBe(1);
+    const masthead = await lockup.evaluate((image) => {
+      const header = image.closest("header");
+      return {
+        first: header?.firstElementChild === image,
+        children: Array.from(header?.children ?? []).map((child) =>
+          child === image ? "lockup" : child.textContent,
+        ),
+      };
+    });
+    expect(masthead.first).toBe(true);
+    expect(masthead.children).toEqual([
+      "lockup",
+      defaultDiscovery.institution.display_name,
+    ]);
     const currentSource = await lockup.evaluate(
       (image: HTMLImageElement) => image.currentSrc,
     );
@@ -407,7 +416,12 @@ test("public registration submits only account input and enters verification", a
   await page.goto("/register#unexpected=private");
   await expect(page).toHaveURL(`${canonicalOrigin}/register`);
   await expect(page).toHaveTitle("Create an account · Proctor");
-  await expect(page.getByText("Northbridge Institute")).toBeVisible();
+  await expect(
+    page.getByRole("banner").getByText("Northbridge Institute", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("contentinfo")).toContainText(
+    "Need help? Contact Northbridge Institute.",
+  );
 
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByLabel("First name")).toBeFocused();
@@ -467,7 +481,12 @@ test("login presents the admitted methods and sanitizes provider failure state",
   await expect(page).toHaveURL(`${canonicalOrigin}/login`);
   await expect(page).toHaveTitle("Sign in · Proctor");
   await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
-  await expect(page.getByText("Northbridge Institute")).toBeVisible();
+  await expect(
+    page.getByRole("banner").getByText("Northbridge Institute", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("contentinfo")).toContainText(
+    "Need help? Contact Northbridge Institute.",
+  );
   await expect(page.getByLabel("Email or username")).toBeVisible();
   await expect(page.locator("#password")).toHaveAttribute(
     "autocomplete",
@@ -1055,8 +1074,9 @@ test("Desktop authorization approves the exact sanitized request", async ({
   ).toBeVisible();
   expect(desktop.bindingCount()).toBe(1);
   await expect(
-    page.getByText(
+    page.getByRole("main").getByText(
       desktopAuthorizationDocumentationFixture.synthetic_context.institution,
+      { exact: true },
     ),
   ).toBeVisible();
   await expect(
@@ -1597,9 +1617,12 @@ for (const colorScheme of ["light", "dark"] as const) {
       onPrimary: getComputedStyle(document.documentElement)
         .getPropertyValue("--proctor-color-action-on-primary")
         .trim(),
+      noticeMarker: getComputedStyle(
+        document.querySelector<HTMLElement>("[data-proctor-notice] > [aria-hidden='true']")!,
+      ).backgroundColor,
       noticeRule: getComputedStyle(
         document.querySelector<HTMLElement>("[data-proctor-notice]")!,
-      ).borderInlineStartColor,
+      ).borderInlineStartWidth,
       noticeBackground: getComputedStyle(
         document.querySelector<HTMLElement>("[data-proctor-notice]")!,
       ).backgroundColor,
@@ -1615,7 +1638,8 @@ for (const colorScheme of ["light", "dark"] as const) {
     expect(colors.primaryText).toBe(
       colorToRGB(colors.onPrimary),
     );
-    expect(colors.noticeRule).toBe(colorToRGB(colors.warningToken));
+    expect(colors.noticeMarker).toBe(colorToRGB(colors.warningToken));
+    expect(colors.noticeRule).toBe("0px");
     expect(colors.noticeBackground).toBe("rgba(0, 0, 0, 0)");
     expect(colors.noticeRadius).toBe("0px");
   });
@@ -1641,10 +1665,7 @@ test("shared notices and password disclosure controls keep their contracts", asy
   await mockSetupStatus(page);
   await page.goto("/setup");
 
-  await expect(page.locator("[data-proctor-notice]")).toHaveCount(2);
-  await expect(
-    page.locator('[data-proctor-notice-tone="information"]'),
-  ).toBeVisible();
+  await expect(page.locator("[data-proctor-notice]")).toHaveCount(1);
   await expect(
     page.locator('[data-proctor-notice-tone="warning"]'),
   ).toBeVisible();

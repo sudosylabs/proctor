@@ -12,7 +12,6 @@
   .form,
   .routeState,
   .routeStateCopy,
-  .context,
   .submission {
     display: flex;
     flex-direction: column;
@@ -47,89 +46,11 @@
     line-height: var(--proctor-line-height-body-large);
   }
 
-  .context {
-    gap: var(--proctor-space-4);
-    max-inline-size: 30rem;
-  }
-
-  .eyebrow,
   .stateLabel {
-    color: var(--proctor-color-foreground-link);
-    font-size: var(--proctor-font-size-label);
-    font-weight: var(--proctor-font-weight-semibold);
-    letter-spacing: var(--proctor-letter-spacing-label);
-    text-transform: uppercase;
-  }
-
-  .contextHeading {
-    font-family: var(--proctor-font-family-display);
-    font-size: var(--proctor-font-size-display);
-    font-weight: var(--proctor-font-weight-semibold);
-    line-height: var(--proctor-line-height-display);
-    letter-spacing: var(--proctor-letter-spacing-display);
-    text-wrap: balance;
-  }
-
-  .contextBody,
-  .contextNote {
+    margin-block-end: calc(var(--proctor-space-3) - var(--proctor-space-6));
     color: var(--proctor-color-foreground-muted);
-  }
-
-  .proofRail {
-    display: flex;
-    flex-direction: column;
-    gap: var(--proctor-space-0);
-    padding: var(--proctor-space-0);
-    margin-block: var(--proctor-space-4);
-    list-style: none;
-  }
-
-  .proofRail li {
-    position: relative;
-    display: grid;
-    grid-template-columns: var(--proctor-control-size-default) minmax(0, 1fr);
-    gap: var(--proctor-space-3);
-    min-block-size: var(--proctor-space-8);
-    align-items: start;
-  }
-
-  .proofRail li:not(:last-child)::after {
-    position: absolute;
-    inset-block-start: var(--proctor-space-5);
-    inset-block-end: var(--proctor-space-0);
-    inset-inline-start: calc(var(--proctor-control-size-default) / 2);
-    inline-size: var(--proctor-border-width-strong);
-    background: var(--proctor-color-border-default);
-    content: "";
-  }
-
-  .proofMark {
-    display: block;
-    inline-size: var(--proctor-icon-size-default);
-    block-size: var(--proctor-icon-size-default);
-    margin-block-start: var(--proctor-space-1);
-    margin-inline: auto;
-    border: var(--proctor-border-width-strong) solid
-      var(--proctor-color-border-interactive);
-    border-radius: var(--proctor-radius-round);
-    background: var(--proctor-color-background-canvas);
-  }
-
-  .proofMark::after {
-    display: block;
-    inline-size: var(--proctor-space-2);
-    block-size: var(--proctor-space-2);
-    margin: var(--proctor-space-1);
-    border-radius: var(--proctor-radius-round);
-    background: var(--proctor-color-action-primary);
-    content: "";
-  }
-
-  .contextNote {
-    padding-block-start: var(--proctor-space-5);
-    border-block-start: var(--proctor-border-width-hairline) solid
-      var(--proctor-color-border-default);
     font-size: var(--proctor-font-size-body-small);
+    font-weight: var(--proctor-font-weight-medium);
     line-height: var(--proctor-line-height-body-small);
   }
 
@@ -204,17 +125,6 @@
     clip-path: inset(50%);
     overflow: hidden;
     white-space: nowrap;
-  }
-
-  @media (forced-colors: active) {
-    .proofRail li::after,
-    .proofMark::after {
-      background: CanvasText;
-    }
-
-    .proofMark {
-      border-color: ButtonText;
-    }
   }
 
   @media (min-width: 30rem) {

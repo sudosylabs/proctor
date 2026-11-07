@@ -1,5 +1,5 @@
 import {
-  requestPublicAccessDiscovery,
+  sharedPublicAccessDiscovery,
   type PublicAccessDiscovery,
   type PublicAccessDiscoveryResult,
 } from "../../auth/PublicAccessDiscovery";
@@ -35,6 +35,6 @@ export async function requestLoginDiscovery(
   servingOrigin: string,
 ): Promise<LoginDiscoveryState> {
   return resolveLoginDiscovery(
-    await requestPublicAccessDiscovery(servingOrigin),
+    await sharedPublicAccessDiscovery.load(servingOrigin),
   );
 }

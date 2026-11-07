@@ -12,7 +12,7 @@ export interface DesktopAuthorizationPageProps {
 export function DesktopAuthorizationPage({ proof, state }: DesktopAuthorizationPageProps) {
   const journey = useDesktopAuthorizationJourney({ proof, state, servingOrigin: window.location.origin });
   return (
-    <AccessPageShell mainSize="content" skipLabel={message("webapp.desktop_authorization.skip_to_main")} variant="single">
+    <AccessPageShell skipLabel={message("webapp.desktop_authorization.skip_to_main")}>
       <DesktopAuthorizationContent journey={journey} />
     </AccessPageShell>
   );

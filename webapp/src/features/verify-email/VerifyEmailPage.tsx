@@ -9,10 +9,7 @@ export interface VerifyEmailPageProps {
 
 export function VerifyEmailPage({ token }: VerifyEmailPageProps) {
   return (
-    <AccessPageShell
-      skipLabel={message("webapp.verify_email.skip_to_main")}
-      variant="status"
-    >
+    <AccessPageShell skipLabel={message("webapp.verify_email.skip_to_main")}>
       <EmailVerificationContent
         token={token}
         verifyEmail={completeEmailVerification}

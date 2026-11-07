@@ -161,7 +161,7 @@ export function AccountSecurityContent({ actions, loading, onRefresh, state }: {
     <section className={styles.page} aria-labelledby="security-heading">
       <TaskStateAnnouncement message={pending ? message("webapp.security.working") : announcement} />
       <AccessTaskIntro key={task.kind} headingID="security-heading" focusHeading={focusHeading}
-        eyebrow={message("webapp.security.eyebrow")} heading={content.heading} body={content.body} />
+        kind={message("webapp.security.eyebrow")} heading={content.heading} body={content.body} />
       {task.kind === "status" && context !== undefined ? <>
         <StatusSummary context={context} />
         {!context.serviceEnabled ? <Notice tone="warning">{message("webapp.security.service_disabled")}</Notice> : <>

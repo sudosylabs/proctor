@@ -6,6 +6,12 @@ connection, and Desktop authorization. It owns one ordered purpose label,
 display-scale `h1`, supporting body, and responsive action rhythm. Feature
 modules retain state, copy, evidence, maximum width, and available actions.
 
+The purpose `label` uses the same quiet sentence-case kind-line treatment as
+`AccessTaskIntro`: muted, never uppercase or purple. The optional
+`labelTone` (`success`, `warning`, or `danger`) colours it teal, amber, or
+coral only when the state it introduces is that real outcome; the heading and
+body still name the outcome in words.
+
 During initial or replacement loading, `busy` retains the purpose label and
 an accessible page heading while the shared Loading indicator displays the
 supporting message below its spinner. The heading is visually hidden and does

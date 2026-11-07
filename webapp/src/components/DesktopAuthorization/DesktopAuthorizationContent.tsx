@@ -106,7 +106,7 @@ export function DesktopAuthorizationContent({ journey }: DesktopAuthorizationCon
       />
       <section className={styles.page} aria-labelledby="desktop-heading">
         <AccessTaskIntro
-          eyebrow={message("webapp.desktop_authorization.label")}
+          kind={message("webapp.desktop_authorization.label")}
           focusHeading={focusHeading}
           heading={message("webapp.desktop_authorization.heading")}
           body={message("webapp.desktop_authorization.lede")}
@@ -174,7 +174,7 @@ function AuthenticationContent({
       />
       <section className={styles.page} aria-labelledby="desktop-heading">
         <AccessTaskIntro
-          eyebrow={message("webapp.desktop_authorization.label")}
+          kind={message("webapp.desktop_authorization.label")}
           focusHeading={focusHeading}
           heading={message("webapp.desktop_authorization.authentication.heading")}
           body={message("webapp.desktop_authorization.authentication.body")}

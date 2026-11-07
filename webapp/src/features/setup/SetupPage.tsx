@@ -3,6 +3,7 @@ import { AccessPageShell } from "../../components/AccessPageShell/AccessPageShel
 import { SetupContent } from "../../components/Setup/SetupContent";
 import { SetupContext } from "../../components/Setup/SetupContext";
 import { message } from "../../i18n/messages";
+import styles from "./SetupPage.module.css";
 import {
   requestInstallationStatus,
   type SetupStatus,
@@ -19,19 +20,16 @@ export function SetupPage() {
     : statusResource.value;
 
   return (
-    <AccessPageShell
-      aside={<SetupContext />}
-      asideLabel={message("webapp.setup.context.eyebrow")}
-      mainSize="content"
-      skipLabel={message("webapp.setup.skip_to_main")}
-      variant="split"
-    >
-      <SetupContent
-        status={status}
-        submitSetup={submitInstallation}
-        onComplete={() => statusResource.replace({ kind: "complete" })}
-        onRetry={statusResource.retry}
-      />
+    <AccessPageShell skipLabel={message("webapp.setup.skip_to_main")}>
+      <div className={styles.page}>
+        <SetupContext />
+        <SetupContent
+          status={status}
+          submitSetup={submitInstallation}
+          onComplete={() => statusResource.replace({ kind: "complete" })}
+          onRetry={statusResource.retry}
+        />
+      </div>
     </AccessPageShell>
   );
 }

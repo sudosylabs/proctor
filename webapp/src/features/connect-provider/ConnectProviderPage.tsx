@@ -15,11 +15,7 @@ export function ConnectProviderPage() {
   );
 
   return (
-    <AccessPageShell
-      mainSize="content"
-      skipLabel={message("webapp.connect_provider.skip_to_main")}
-      variant="single"
-    >
+    <AccessPageShell skipLabel={message("webapp.connect_provider.skip_to_main")}>
       <ProviderConnectionContent
         loading={contextResource.loading}
         state={contextResource.value}

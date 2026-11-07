@@ -27,6 +27,14 @@ describe("Button", () => {
     expect(markup.match(/Retry/g)).toHaveLength(2);
   });
 
+  it("renders the destructive variant as a native button", () => {
+    const danger = renderToStaticMarkup(<Button variant="danger">Undo change</Button>);
+    const primary = renderToStaticMarkup(<Button>Undo change</Button>);
+
+    expect(danger).toMatch(/^<button[^>]*type="button"/);
+    expect(danger).not.toBe(primary);
+  });
+
   it("keeps navigation as an anchor", () => {
     const markup = renderToStaticMarkup(
       <ButtonLink href="/login">Sign in</ButtonLink>,

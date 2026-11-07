@@ -166,6 +166,10 @@
     --proctor-color-action-secondary-hover: #f3eafb;
     --proctor-color-action-secondary-active: #e8d7f4;
     --proctor-color-action-on-secondary: #5c00aa;
+    --proctor-color-action-danger: #b4233c;
+    --proctor-color-action-danger-hover: #961c31;
+    --proctor-color-action-danger-active: #7a1727;
+    --proctor-color-action-on-danger: #ffffff;
     --proctor-color-state-info: #5c00aa;
     --proctor-color-state-info-surface: #f3eafb;
     --proctor-color-state-success: #0b766e;
@@ -212,6 +216,10 @@
     --proctor-color-action-secondary-hover: #242424;
     --proctor-color-action-secondary-active: #2e2e2e;
     --proctor-color-action-on-secondary: #e9d5ff;
+    --proctor-color-action-danger: #f87171;
+    --proctor-color-action-danger-hover: #fca5a5;
+    --proctor-color-action-danger-active: #ef4444;
+    --proctor-color-action-on-danger: #0a0a0a;
     --proctor-color-state-info: #a855f7;
     --proctor-color-state-info-surface: #1f112c;
     --proctor-color-state-success: #3ecf8e;
@@ -258,6 +266,10 @@
     --proctor-color-action-secondary-hover: #f3eafb;
     --proctor-color-action-secondary-active: #e8d7f4;
     --proctor-color-action-on-secondary: #5c00aa;
+    --proctor-color-action-danger: #b4233c;
+    --proctor-color-action-danger-hover: #961c31;
+    --proctor-color-action-danger-active: #7a1727;
+    --proctor-color-action-on-danger: #ffffff;
     --proctor-color-state-info: #5c00aa;
     --proctor-color-state-info-surface: #f3eafb;
     --proctor-color-state-success: #0b766e;
@@ -303,6 +315,10 @@
     --proctor-color-action-secondary-hover: #242424;
     --proctor-color-action-secondary-active: #2e2e2e;
     --proctor-color-action-on-secondary: #e9d5ff;
+    --proctor-color-action-danger: #f87171;
+    --proctor-color-action-danger-hover: #fca5a5;
+    --proctor-color-action-danger-active: #ef4444;
+    --proctor-color-action-on-danger: #0a0a0a;
     --proctor-color-state-info: #a855f7;
     --proctor-color-state-info-surface: #1f112c;
     --proctor-color-state-success: #3ecf8e;

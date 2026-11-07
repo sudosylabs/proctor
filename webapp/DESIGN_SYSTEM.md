@@ -216,6 +216,11 @@ Success uses `#3ECF8E` on `#0F241C`, warning uses `#F5B942` on `#2A2110`, and
 danger uses `#F87171` on `#2A1218`. These state surfaces are reserved for
 actual state evidence rather than general section tinting.
 
+A destructive or irreversible primary action uses the danger action roles in
+place of purple: coral `#B4233C` with hover `#961C31` and a paper label in
+light, and `#F87171` with hover `#FCA5A5` and a `#0A0A0A` label in dark. The
+audit holds the label to `4.5:1` on every danger action state.
+
 The audit verifies standard foreground/surface pairs at `4.5:1`, state text on
 its state surface at `4.5:1`, and focus rings at `3:1` against their adjacent
 surfaces. Disabled content is not relied upon to convey required information.
@@ -377,7 +382,9 @@ evidence uses the unboxed `Notice`: supporting text with an optional bold
 lead and, for success, warning, or danger, a small square state marker.
 Related decisions further down a page are separated by a hairline rule and a
 small heading rather than a panel. Purple appears only on the view's one
-primary action and on links; teal, amber, and coral only for real state.
+primary action and on links; teal, amber, and coral only for real state. When
+that one action is destructive or irreversible it uses the `danger` button
+instead, so the view then carries no purple action.
 
 The live status region of a task remains mounted across task replacement. It
 announces bounded localized state copy, while heading focus moves only when a

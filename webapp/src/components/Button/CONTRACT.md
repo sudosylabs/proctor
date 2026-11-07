@@ -6,8 +6,12 @@ setup, registration, email-verification, and Session-confirmation pages.
 preserving native anchor behavior. Neither component decides an action name,
 destination, permission, confirmation rule, or API operation.
 
-`primary`, `secondary`, and `text` are hierarchy variants rather than business
-states. A page still exposes one visually dominant action. `Button` defaults
+`primary`, `secondary`, `danger`, and `text` are hierarchy variants rather
+than business states. A page still exposes one visually dominant action.
+`danger` replaces `primary` when that dominant action is destructive or
+irreversible, such as undoing an email change; it uses the coral action
+roles, never appears beside a purple primary action, and its label still
+names the consequence in words. `Button` defaults
 to `type="button"`; a submit owner must request `type="submit"` explicitly.
 `isLoading` disables repeat activation, exposes `aria-busy`, and centers the
 shared Loading spinner over the action. The original content stays in layout

@@ -8,7 +8,7 @@ import {
 import { Loading } from "../Loading/Loading";
 import styles from "./Button.module.css";
 
-export type ButtonVariant = "primary" | "secondary" | "text";
+export type ButtonVariant = "primary" | "secondary" | "danger" | "text";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   isLoading?: boolean;

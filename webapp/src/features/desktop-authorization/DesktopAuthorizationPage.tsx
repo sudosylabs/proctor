@@ -1,7 +1,7 @@
 import { AccessPageShell } from "../../components/AccessPageShell/AccessPageShell";
 import { DesktopAuthorizationContent } from "../../components/DesktopAuthorization/DesktopAuthorizationContent";
 import { message } from "../../i18n/messages";
-import type { DesktopAuthorizationProof } from "./DesktopAuthorizationApi";
+import { desktopAccountName, type DesktopAuthorizationProof } from "./DesktopAuthorizationApi";
 import { useDesktopAuthorizationJourney } from "./DesktopAuthorizationJourney";
 
 export interface DesktopAuthorizationPageProps {
@@ -11,8 +11,12 @@ export interface DesktopAuthorizationPageProps {
 
 export function DesktopAuthorizationPage({ proof, state }: DesktopAuthorizationPageProps) {
   const journey = useDesktopAuthorizationJourney({ proof, state, servingOrigin: window.location.origin });
+  const { account } = journey.snapshot;
   return (
-    <AccessPageShell skipLabel={message("webapp.desktop_authorization.skip_to_main")}>
+    <AccessPageShell
+      skipLabel={message("webapp.desktop_authorization.skip_to_main")}
+      {...(account === undefined ? {} : { signedIn: { name: desktopAccountName(account) } })}
+    >
       <DesktopAuthorizationContent journey={journey} />
     </AccessPageShell>
   );

@@ -2307,119 +2307,111 @@
   },
   {
     "id": "webapp.desktop_authorization.approve",
-    "translation": "Continue to desktop"
+    "translation": "Allow"
   },
   {
     "id": "webapp.desktop_authorization.approved.body",
-    "translation": "This browser is returning the approved request to Proctor Desktop."
+    "translation": "You can close this tab and go back to the app."
   },
   {
     "id": "webapp.desktop_authorization.approved.heading",
-    "translation": "Returning to Proctor Desktop"
+    "translation": "You’re signed in to Proctor Desktop"
   },
   {
-    "id": "webapp.desktop_authorization.approved.label",
-    "translation": "Request approved"
+    "id": "webapp.desktop_authorization.approved.returning",
+    "translation": "Returning to Proctor Desktop…"
   },
   {
     "id": "webapp.desktop_authorization.approving",
-    "translation": "Approving request…"
+    "translation": "Allowing…"
   },
   {
     "id": "webapp.desktop_authorization.authentication.body",
-    "translation": "Choose an account here. This signs in only for this Desktop request and does not create a browser Session."
+    "translation": "Use your {{.Institution}} account. This signs in Proctor Desktop only, not this browser."
   },
   {
     "id": "webapp.desktop_authorization.authentication.heading",
-    "translation": "Sign in to continue in Proctor Desktop"
+    "translation": "Sign in to Proctor Desktop"
   },
   {
     "id": "webapp.desktop_authorization.cancel",
-    "translation": "Cancel request"
+    "translation": "Cancel sign-in"
   },
   {
     "id": "webapp.desktop_authorization.canceled.body",
-    "translation": "This Desktop request can no longer be approved. You can close this page."
+    "translation": "Proctor Desktop wasn’t signed in. You can close this page."
   },
   {
     "id": "webapp.desktop_authorization.canceled.heading",
-    "translation": "The request was canceled"
-  },
-  {
-    "id": "webapp.desktop_authorization.canceled.label",
-    "translation": "Request canceled"
+    "translation": "Sign-in canceled"
   },
   {
     "id": "webapp.desktop_authorization.canceling",
-    "translation": "Canceling request…"
-  },
-  {
-    "id": "webapp.desktop_authorization.caution",
-    "translation": "Only continue if you started this request in Proctor Desktop."
+    "translation": "Canceling…"
   },
   {
     "id": "webapp.desktop_authorization.checking.body",
-    "translation": "Proctor is checking this browser Session and the installation that received the request."
+    "translation": "Checking the request from Proctor Desktop…"
   },
   {
     "id": "webapp.desktop_authorization.checking.heading",
-    "translation": "Checking this request"
+    "translation": "Checking this sign-in request"
   },
   {
-    "id": "webapp.desktop_authorization.details",
-    "translation": "Authorization details"
+    "id": "webapp.desktop_authorization.device",
+    "translation": "Device"
+  },
+  {
+    "id": "webapp.desktop_authorization.device_fallback",
+    "translation": "Proctor Desktop"
   },
   {
     "id": "webapp.desktop_authorization.document_title",
-    "translation": "Continue in Proctor Desktop · Proctor"
+    "translation": "Desktop sign-in · Proctor"
   },
   {
     "id": "webapp.desktop_authorization.error.unavailable",
-    "translation": "Proctor couldn’t complete this Desktop request. Try again."
+    "translation": "Something went wrong. Try again."
   },
   {
-    "id": "webapp.desktop_authorization.expiry",
-    "translation": "This approval is single-use and expires shortly."
+    "id": "webapp.desktop_authorization.facts.label",
+    "translation": "Sign-in request"
   },
   {
     "id": "webapp.desktop_authorization.heading",
-    "translation": "Continue in Proctor Desktop"
-  },
-  {
-    "id": "webapp.desktop_authorization.installation",
-    "translation": "Installation"
+    "translation": "Sign in to Proctor Desktop?"
   },
   {
     "id": "webapp.desktop_authorization.invalid.body",
-    "translation": "It may have expired, been canceled, or already been used. Start another request from Proctor Desktop."
+    "translation": "It may have expired, been canceled, or already been used. Start again from Proctor Desktop."
   },
   {
     "id": "webapp.desktop_authorization.invalid.heading",
-    "translation": "This Desktop request can’t be used"
+    "translation": "This sign-in link doesn’t work"
   },
   {
-    "id": "webapp.desktop_authorization.invalid.label",
-    "translation": "Request unavailable"
-  },
-  {
-    "id": "webapp.desktop_authorization.label",
-    "translation": "Desktop authorization"
+    "id": "webapp.desktop_authorization.kind",
+    "translation": "Desktop sign-in"
   },
   {
     "id": "webapp.desktop_authorization.lede",
-    "translation": "Proctor Desktop requested access to this account."
+    "translation": "Proctor Desktop on this computer is asking to use your {{.Institution}} account."
   },
   {
     "id": "webapp.desktop_authorization.locked.body",
-    "translation": "This account is already taking an Exam. Continue using the Desktop Session that owns that Attempt."
+    "translation": "This account is taking an exam in Proctor Desktop right now. Go back to that window to continue."
   },
   {
     "id": "webapp.desktop_authorization.locked.heading",
-    "translation": "This account is already active in an Exam"
+    "translation": "You’re already in an exam"
   },
   {
-    "id": "webapp.desktop_authorization.locked.label",
-    "translation": "Account unavailable"
+    "id": "webapp.desktop_authorization.note.body",
+    "translation": "Close this page. Nothing happens unless you choose Allow."
+  },
+  {
+    "id": "webapp.desktop_authorization.note.lead",
+    "translation": "Didn’t start this?"
   },
   {
     "id": "webapp.desktop_authorization.provider.continue",
@@ -2427,19 +2419,11 @@
   },
   {
     "id": "webapp.desktop_authorization.provider.group",
-    "translation": "External sign-in methods"
-  },
-  {
-    "id": "webapp.desktop_authorization.request",
-    "translation": "Request"
-  },
-  {
-    "id": "webapp.desktop_authorization.request_value",
-    "translation": "Proctor Desktop"
+    "translation": "Other ways to sign in"
   },
   {
     "id": "webapp.desktop_authorization.resetting",
-    "translation": "Changing account…"
+    "translation": "Switching account…"
   },
   {
     "id": "webapp.desktop_authorization.return_to_sign_in",
@@ -2447,15 +2431,15 @@
   },
   {
     "id": "webapp.desktop_authorization.skip_to_main",
-    "translation": "Skip to Desktop authorization"
+    "translation": "Skip to Desktop sign-in"
   },
   {
     "id": "webapp.desktop_authorization.unavailable.body",
-    "translation": "Proctor couldn’t confirm this browser Session or installation."
+    "translation": "Something went wrong on our side. Try again in a moment."
   },
   {
     "id": "webapp.desktop_authorization.unavailable.heading",
-    "translation": "The request can’t be checked"
+    "translation": "We couldn’t check this request"
   },
   {
     "id": "webapp.desktop_authorization.unavailable.retry",
@@ -2463,7 +2447,7 @@
   },
   {
     "id": "webapp.desktop_authorization.use_another_account",
-    "translation": "Use another account"
+    "translation": "Use a different account"
   },
   {
     "id": "webapp.forgot_password.accepted.body",
@@ -2578,56 +2562,84 @@
     "translation": "Use a recovery code instead"
   },
   {
-    "id": "webapp.join.accepted.body",
-    "translation": "The Invitation package was applied in one transaction. You can continue to sign in."
+    "id": "webapp.join.accepted.body.account.academic_unit_role",
+    "translation": "Your account is ready and your academic unit role is now active. Sign in to get started."
   },
   {
-    "id": "webapp.join.accepted.heading",
-    "translation": "Your Invitation is accepted"
+    "id": "webapp.join.accepted.body.account.institution_role",
+    "translation": "Your account is ready and your institution role is now active. Sign in to get started."
   },
   {
-    "id": "webapp.join.accepted.label",
-    "translation": "Invitation accepted"
+    "id": "webapp.join.accepted.body.account.student_class",
+    "translation": "Your account is ready and you’ve joined your class. Exams scheduled for your class will appear when you sign in to Proctor Desktop."
   },
   {
-    "id": "webapp.join.context.body_account",
-    "translation": "Create the local account that will receive this Invitation."
+    "id": "webapp.join.accepted.body.account.teacher_academic_unit",
+    "translation": "Your account is ready and you’ve joined your academic unit as a teacher. Sign in to work with its classes and exams."
   },
   {
-    "id": "webapp.join.context.body_session",
-    "translation": "Use your current Proctor User to receive this Invitation."
+    "id": "webapp.join.accepted.body.session.academic_unit_role",
+    "translation": "Your academic unit role is now active on your account."
   },
   {
-    "id": "webapp.join.context.eyebrow",
-    "translation": "Invitation"
+    "id": "webapp.join.accepted.body.session.institution_role",
+    "translation": "Your institution role is now active on your account."
   },
   {
-    "id": "webapp.join.context.heading",
-    "translation": "Join {{.Institution}}"
+    "id": "webapp.join.accepted.body.session.student_class",
+    "translation": "You’ve joined your class. Exams scheduled for your class will appear in Proctor Desktop."
   },
   {
-    "id": "webapp.join.context.heading_fallback",
-    "translation": "Join your Institution"
+    "id": "webapp.join.accepted.body.session.teacher_academic_unit",
+    "translation": "You’ve joined your academic unit as a teacher. Its classes and exams are now available to you."
   },
   {
-    "id": "webapp.join.context.note_account",
-    "translation": "Acceptance creates your User and applies the Invitation package in one transaction."
+    "id": "webapp.join.accepted.heading.account",
+    "translation": "Welcome to Proctor"
   },
   {
-    "id": "webapp.join.context.note_session",
-    "translation": "Acceptance applies the Invitation package only to the current User."
+    "id": "webapp.join.accepted.heading.session",
+    "translation": "You’ve accepted the invitation"
   },
   {
     "id": "webapp.join.document_title",
-    "translation": "Accept Invitation · Proctor"
+    "translation": "Invitation · Proctor"
+  },
+  {
+    "id": "webapp.join.facts.expires",
+    "translation": "Expires"
+  },
+  {
+    "id": "webapp.join.facts.invited_as",
+    "translation": "Invited as"
+  },
+  {
+    "id": "webapp.join.facts.label",
+    "translation": "Invitation details"
+  },
+  {
+    "id": "webapp.join.facts.purpose.academic_unit_role",
+    "translation": "Academic unit role"
+  },
+  {
+    "id": "webapp.join.facts.purpose.institution_role",
+    "translation": "Institution role"
+  },
+  {
+    "id": "webapp.join.facts.purpose.student_class",
+    "translation": "Student"
+  },
+  {
+    "id": "webapp.join.facts.purpose.teacher_academic_unit",
+    "translation": "Teacher"
   },
   {
     "id": "webapp.join.form.error.details_invalid",
-    "translation": "Those account details or this Invitation can’t be accepted. Review the form or ask the inviter for a current link."
+    "translation": "We couldn’t create your account with these details. Check them, or ask the person who invited you for a new link."
   },
   {
     "id": "webapp.join.form.error.password_invalid",
-    "translation": "That password doesn’t meet this installation’s requirements."
+    "translation": "That password doesn’t meet your institution’s requirements."
   },
   {
     "id": "webapp.join.form.error.password_required",
@@ -2635,11 +2647,11 @@
   },
   {
     "id": "webapp.join.form.error.rate_limited",
-    "translation": "Too many Invitation attempts were made. Try again later."
+    "translation": "Too many attempts. Wait a few minutes, then try again."
   },
   {
     "id": "webapp.join.form.error.unavailable",
-    "translation": "Proctor couldn’t accept this Invitation. No account or Invitation changes were applied. Try again."
+    "translation": "We couldn’t accept the invitation and nothing was changed. Try again."
   },
   {
     "id": "webapp.join.form.error.username_required",
@@ -2659,15 +2671,15 @@
   },
   {
     "id": "webapp.join.form.password_help",
-    "translation": "Use a unique, policy-compliant password."
+    "translation": "Use a password you don’t use anywhere else."
   },
   {
     "id": "webapp.join.form.submit",
-    "translation": "Accept invitation"
+    "translation": "Accept and create account"
   },
   {
     "id": "webapp.join.form.submitting",
-    "translation": "Accepting invitation…"
+    "translation": "Creating your account…"
   },
   {
     "id": "webapp.join.form.username",
@@ -2675,51 +2687,75 @@
   },
   {
     "id": "webapp.join.heading",
-    "translation": "Create your invited account"
+    "translation": "Join {{.Institution}} on Proctor"
+  },
+  {
+    "id": "webapp.join.heading_fallback",
+    "translation": "Join your institution on Proctor"
   },
   {
     "id": "webapp.join.invalid.body",
-    "translation": "It may have expired, been replaced, been revoked, or already been accepted. Ask the inviter for a current link."
+    "translation": "It may have expired, been withdrawn or replaced, or already been used. Ask the person who invited you to send a new one."
+  },
+  {
+    "id": "webapp.join.invalid.contact_support",
+    "translation": "Contact support"
   },
   {
     "id": "webapp.join.invalid.heading",
-    "translation": "This Invitation can’t be used"
+    "translation": "This invitation link doesn’t work"
   },
   {
-    "id": "webapp.join.invalid.label",
-    "translation": "Invitation unavailable"
+    "id": "webapp.join.kind",
+    "translation": "Invitation"
   },
   {
-    "id": "webapp.join.lede",
-    "translation": "Set the details you’ll use to sign in."
+    "id": "webapp.join.lede.account.academic_unit_role",
+    "translation": "You’ve been invited to a role in an academic unit. Create your account to accept it."
+  },
+  {
+    "id": "webapp.join.lede.account.institution_role",
+    "translation": "You’ve been invited to a role at your institution. Create your account to accept it."
+  },
+  {
+    "id": "webapp.join.lede.account.student_class",
+    "translation": "You’ve been invited as a student. Create your account to see your exams."
+  },
+  {
+    "id": "webapp.join.lede.account.teacher_academic_unit",
+    "translation": "You’ve been invited as a teacher. Create your account to work with your academic unit’s classes and exams."
+  },
+  {
+    "id": "webapp.join.lede.session.academic_unit_role",
+    "translation": "You’ve been invited to a role in an academic unit. Accept it with the account you’re signed in with."
+  },
+  {
+    "id": "webapp.join.lede.session.institution_role",
+    "translation": "You’ve been invited to a role at your institution. Accept it with the account you’re signed in with."
+  },
+  {
+    "id": "webapp.join.lede.session.student_class",
+    "translation": "You’ve been invited as a student. Accept with the account you’re signed in with to see your exams."
+  },
+  {
+    "id": "webapp.join.lede.session.teacher_academic_unit",
+    "translation": "You’ve been invited as a teacher. Accept with the account you’re signed in with to work with your academic unit’s classes and exams."
   },
   {
     "id": "webapp.join.loading.body",
-    "translation": "Proctor is checking the one-time Invitation and its acceptance requirements."
+    "translation": "Checking your invitation link…"
   },
   {
     "id": "webapp.join.loading.heading",
-    "translation": "Checking your Invitation"
+    "translation": "Checking your invitation"
   },
   {
     "id": "webapp.join.session.error.sign_in",
-    "translation": "This browser needs an active Session. Open sign in in another tab, then try acceptance again here."
+    "translation": "You need to be signed in first. Sign in opens in a new tab; when you’re done, come back here and choose Accept invitation."
   },
   {
     "id": "webapp.join.session.error.unavailable",
-    "translation": "Proctor couldn’t apply this Invitation to the current User. Try again."
-  },
-  {
-    "id": "webapp.join.session.heading",
-    "translation": "Accept with this account"
-  },
-  {
-    "id": "webapp.join.session.lede",
-    "translation": "Apply this Invitation package to the User signed in to this browser."
-  },
-  {
-    "id": "webapp.join.session.open_sign_in",
-    "translation": "Open sign in"
+    "translation": "We couldn’t accept the invitation and nothing was changed. Try again."
   },
   {
     "id": "webapp.join.session.submit",
@@ -2731,23 +2767,19 @@
   },
   {
     "id": "webapp.join.sign_in",
-    "translation": "Return to sign in"
+    "translation": "Sign in"
   },
   {
     "id": "webapp.join.skip_to_main",
-    "translation": "Skip to Invitation acceptance"
+    "translation": "Skip to invitation"
   },
   {
     "id": "webapp.join.unavailable.body",
-    "translation": "Proctor couldn’t check this Invitation. Try the link again."
+    "translation": "Something went wrong on our side. Try the link again in a moment."
   },
   {
     "id": "webapp.join.unavailable.heading",
-    "translation": "The Invitation can’t be checked"
-  },
-  {
-    "id": "webapp.join.unavailable.label",
-    "translation": "Invitation check unavailable"
+    "translation": "We couldn’t check this invitation"
   },
   {
     "id": "webapp.join.unavailable.retry",

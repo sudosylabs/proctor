@@ -21,6 +21,13 @@ export interface DesktopAuthorizationContext {
   state: "bound" | "authenticated";
 }
 
+export type DesktopAuthorizationAccount = NonNullable<DesktopAuthorizationContext["account"]>;
+
+/** The account's display name, or its username when no display name is set. */
+export function desktopAccountName(account: DesktopAuthorizationAccount): string {
+  return account.display_name.trim() === "" ? account.username : account.display_name;
+}
+
 export type DesktopContextResult =
   | { kind: "ready"; context: DesktopAuthorizationContext }
   | { kind: "invalid" }

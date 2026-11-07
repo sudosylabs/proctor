@@ -59,6 +59,26 @@ describe("Desktop Authorization journey", () => {
     expect(journey.getSnapshot().view.kind).toBe("confirmation");
   });
 
+  it("names the authenticated account while confirming and after approval only", async () => {
+    const { journey, navigate } = setup();
+    await journey.start();
+    expect(journey.getSnapshot().account).toEqual(authenticated.account);
+    await journey.approve();
+    expect(journey.getSnapshot().view.kind).toBe("approved");
+    expect(journey.getSnapshot().account).toEqual(authenticated.account);
+    expect(navigate).toHaveBeenCalledOnce();
+
+    const canceled = setup();
+    await canceled.journey.start();
+    await canceled.journey.cancel();
+    expect(canceled.journey.getSnapshot().view.kind).toBe("canceled");
+    expect(canceled.journey.getSnapshot().account).toBeUndefined();
+
+    const signedOut = setup(false);
+    await signedOut.journey.start();
+    expect(signedOut.journey.getSnapshot().account).toBeUndefined();
+  });
+
   it("discards confirmation after reset and retries without reapplying the Web Session", async () => {
     const { journey, api } = setup();
     await journey.start();

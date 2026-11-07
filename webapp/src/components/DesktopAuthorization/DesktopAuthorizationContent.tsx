@@ -1,14 +1,16 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
-import type { DesktopAuthorizationContext, DesktopAuthorizationProvider, DesktopLocalAuthenticationSubmission } from "../../features/desktop-authorization/DesktopAuthorizationApi";
+import { desktopAccountName, type DesktopAuthorizationAccount, type DesktopAuthorizationContext, type DesktopAuthorizationProvider, type DesktopLocalAuthenticationSubmission } from "../../features/desktop-authorization/DesktopAuthorizationApi";
 import type { DesktopAuthorizationJourney, DesktopJourneySnapshot, DesktopLocalFeedback, DesktopTerminalState } from "../../features/desktop-authorization/DesktopAuthorizationJourney";
 import { message } from "../../i18n/messages";
 import { AccessTaskIntro } from "../AccessTaskIntro/AccessTaskIntro";
 import { AuthenticationCodeField, isCompleteAuthenticationCode, type AuthenticationCodeValue } from "../AuthenticationCodeField/AuthenticationCodeField";
 import { Button, ButtonLink } from "../Button/Button";
+import { Fact, FactList } from "../FactList/FactList";
 import { FormFeedback } from "../FormFeedback/FormFeedback";
 import { InputField } from "../InputField/InputField";
 import { PasswordField } from "../InputField/PasswordField";
+import { Loading } from "../Loading/Loading";
 import { Notice } from "../Notice/Notice";
 import {
   TaskState,
@@ -50,10 +52,9 @@ export function DesktopAuthorizationContent({ journey }: DesktopAuthorizationCon
         <TaskState
           body={message("webapp.desktop_authorization.checking.body")}
           busy
-          className={styles.taskState}
           heading={message("webapp.desktop_authorization.checking.heading")}
           headingID="desktop-heading"
-          label={message("webapp.desktop_authorization.label")}
+          label={message("webapp.desktop_authorization.kind")}
         />
       </>
     );
@@ -66,11 +67,11 @@ export function DesktopAuthorizationContent({ journey }: DesktopAuthorizationCon
         />
         <TaskState
           body={message("webapp.desktop_authorization.unavailable.body")}
-          className={styles.taskState}
           focusHeading={focusHeading}
           heading={message("webapp.desktop_authorization.unavailable.heading")}
           headingID="desktop-heading"
-          label={message("webapp.desktop_authorization.label")}
+          label={message("webapp.desktop_authorization.kind")}
+          labelTone="warning"
         >
           <TaskStateActions>
             <Button disabled={pending !== undefined} onClick={journey.retry}>
@@ -106,51 +107,55 @@ export function DesktopAuthorizationContent({ journey }: DesktopAuthorizationCon
       />
       <section className={styles.page} aria-labelledby="desktop-heading">
         <AccessTaskIntro
-          kind={message("webapp.desktop_authorization.label")}
+          kind={message("webapp.desktop_authorization.kind")}
           focusHeading={focusHeading}
           heading={message("webapp.desktop_authorization.heading")}
-          body={message("webapp.desktop_authorization.lede")}
+          body={message("webapp.desktop_authorization.lede", {
+            Institution: view.context.installation,
+          })}
           headingID="desktop-heading"
         />
         <AuthorizationDetails
           account={view.context.account}
           context={view.context}
         />
-        <Notice role="note" tone="warning">
-          {message("webapp.desktop_authorization.caution")}
-        </Notice>
-        <TaskStateActions>
-          <Button
-            disabled={pending !== undefined && pending !== "approve"}
-            isLoading={pending === "approve"}
-            loadingLabel={message("webapp.desktop_authorization.approving")}
-            onClick={journey.approve}
+        <div className={styles.decision}>
+          <TaskStateActions>
+            <Button
+              disabled={pending !== undefined && pending !== "approve"}
+              isLoading={pending === "approve"}
+              loadingLabel={message("webapp.desktop_authorization.approving")}
+              onClick={journey.approve}
+            >
+              {message("webapp.desktop_authorization.approve")}
+            </Button>
+            <Button
+              disabled={pending === "approve" || pending === "cancel"}
+              isLoading={pending === "reset"}
+              loadingLabel={message("webapp.desktop_authorization.resetting")}
+              variant="secondary"
+              onClick={journey.useAnotherAccount}
+            >
+              {message("webapp.desktop_authorization.use_another_account")}
+            </Button>
+            <Button
+              disabled={pending === "approve" || pending === "reset"}
+              isLoading={pending === "cancel"}
+              loadingLabel={message("webapp.desktop_authorization.canceling")}
+              variant="text"
+              onClick={journey.cancel}
+            >
+              {message("webapp.desktop_authorization.cancel")}
+            </Button>
+          </TaskStateActions>
+          <FormFeedback message={feedback} />
+          <Notice
+            role="note"
+            lead={message("webapp.desktop_authorization.note.lead")}
           >
-            {message("webapp.desktop_authorization.approve")}
-          </Button>
-          <Button
-            disabled={pending === "approve" || pending === "cancel"}
-            isLoading={pending === "reset"}
-            loadingLabel={message("webapp.desktop_authorization.resetting")}
-            variant="secondary"
-            onClick={journey.useAnotherAccount}
-          >
-            {message("webapp.desktop_authorization.use_another_account")}
-          </Button>
-          <Button
-            disabled={pending === "approve" || pending === "reset"}
-            isLoading={pending === "cancel"}
-            loadingLabel={message("webapp.desktop_authorization.canceling")}
-            variant="text"
-            onClick={journey.cancel}
-          >
-            {message("webapp.desktop_authorization.cancel")}
-          </Button>
-        </TaskStateActions>
-        <p className={styles.expiry}>
-          {message("webapp.desktop_authorization.expiry")}
-        </p>
-        <FormFeedback message={feedback} />
+            {message("webapp.desktop_authorization.note.body")}
+          </Notice>
+        </div>
       </section>
     </>
   );
@@ -174,13 +179,14 @@ function AuthenticationContent({
       />
       <section className={styles.page} aria-labelledby="desktop-heading">
         <AccessTaskIntro
-          kind={message("webapp.desktop_authorization.label")}
+          kind={message("webapp.desktop_authorization.kind")}
           focusHeading={focusHeading}
           heading={message("webapp.desktop_authorization.authentication.heading")}
-          body={message("webapp.desktop_authorization.authentication.body")}
+          body={message("webapp.desktop_authorization.authentication.body", {
+            Institution: context.installation,
+          })}
           headingID="desktop-heading"
         />
-        <p className={styles.installation}>{context.installation}</p>
         {context.localLoginEnabled ? (
           <DesktopLocalLoginForm
             authenticate={authenticate}
@@ -363,27 +369,31 @@ function AuthorizationDetails({
   account,
   context,
 }: {
-  account: NonNullable<DesktopAuthorizationContext["account"]>;
+  account: DesktopAuthorizationAccount;
   context: DesktopAuthorizationContext;
 }) {
+  const name = desktopAccountName(account);
+  // The context carries no account email or request time; when it does, they
+  // join the Account value and become a "Requested" fact respectively.
   return (
-    <div className={styles.details}>
-      <h2>{message("webapp.desktop_authorization.details")}</h2>
-      <dl>
-        <div>
-          <dt>{message("webapp.desktop_authorization.installation")}</dt>
-          <dd>{context.installation}</dd>
-        </div>
-        <div>
-          <dt>{message("webapp.desktop_authorization.account")}</dt>
-          <dd translate="no">{account.username}</dd>
-        </div>
-        <div>
-          <dt>{message("webapp.desktop_authorization.request")}</dt>
-          <dd>{context.deviceName || message("webapp.desktop_authorization.request_value")}</dd>
-        </div>
-      </dl>
-    </div>
+    <FactList aria-label={message("webapp.desktop_authorization.facts.label")}>
+      <Fact label={message("webapp.desktop_authorization.account")}>
+        {name === account.username ? (
+          <span translate="no">{account.username}</span>
+        ) : (
+          <>
+            {name}
+            <span className={styles.username}>
+              {" · "}
+              <span translate="no">{account.username}</span>
+            </span>
+          </>
+        )}
+      </Fact>
+      <Fact label={message("webapp.desktop_authorization.device")}>
+        {context.deviceName || message("webapp.desktop_authorization.device_fallback")}
+      </Fact>
+    </FactList>
   );
 }
 
@@ -398,12 +408,20 @@ function TerminalContent({
   return (
     <TaskState
       body={content.body}
-      className={styles.taskState}
       focusHeading={focusHeading}
       heading={content.heading}
       headingID="desktop-heading"
-      label={content.label}
+      label={message("webapp.desktop_authorization.kind")}
+      labelTone={content.tone}
     >
+      {state === "approved" ? (
+        <Loading
+          announce={false}
+          className={styles.returning}
+          label={message("webapp.desktop_authorization.approved.returning")}
+          showLabel
+        />
+      ) : null}
       {state === "invalid" ? (
         <TaskStateActions>
           <ButtonLink href="/login" variant="secondary">
@@ -415,29 +433,32 @@ function TerminalContent({
   );
 }
 
-function terminalCopy(state: DesktopTerminalState) {
+function terminalCopy(state: DesktopTerminalState): {
+  body: string;
+  heading: string;
+  tone?: "success" | "warning" | "danger";
+} {
   switch (state) {
     case "approved":
       return {
-        label: message("webapp.desktop_authorization.approved.label"),
+        tone: "success",
         heading: message("webapp.desktop_authorization.approved.heading"),
         body: message("webapp.desktop_authorization.approved.body"),
       };
     case "canceled":
       return {
-        label: message("webapp.desktop_authorization.canceled.label"),
         heading: message("webapp.desktop_authorization.canceled.heading"),
         body: message("webapp.desktop_authorization.canceled.body"),
       };
     case "locked":
       return {
-        label: message("webapp.desktop_authorization.locked.label"),
+        tone: "warning",
         heading: message("webapp.desktop_authorization.locked.heading"),
         body: message("webapp.desktop_authorization.locked.body"),
       };
     case "invalid":
       return {
-        label: message("webapp.desktop_authorization.invalid.label"),
+        tone: "danger",
         heading: message("webapp.desktop_authorization.invalid.heading"),
         body: message("webapp.desktop_authorization.invalid.body"),
       };

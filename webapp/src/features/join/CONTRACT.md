@@ -22,13 +22,25 @@ acceptance.
 It is read only from the shared, fully validated, same-origin discovery result;
 malformed or origin-mismatched discovery is treated as absent presentation.
 
-The ready account and Session variants use one centered task column. The
-Institution purpose precedes the current acceptance task, and stable package
-evidence appears through the shared `Notice` beside the controls it qualifies;
-the page does not present decorative or server-backed workflow steps.
+The ready account and Session variants share one intro: the Invitation kind
+line, a heading that names the Institution when discovery supplies it, and a
+lede chosen from the closed purpose and requirement. A `FactList` then states
+what the Invitation is for (the purpose as a plain role word) and when it
+expires, formatted with `Intl` in the viewer's locale and time zone inside a
+`time` element; raw timestamps are never shown. The projection carries no
+Class, Academic Unit, or Role name, so none is shown or invented; when it
+does, that name is one more fact between the two. The account form or the
+single Session action follows. The page presents no workflow steps or
+transaction internals.
 
 Loading, unavailable, invalid, and accepted route states use the shared
-`TaskState` hierarchy and persistent polite announcement. Acceptance moves
+`TaskState` hierarchy and persistent polite announcement, with the kind line
+toned only for a real outcome (danger for an unusable link, warning for an
+unavailable check, success after acceptance). The unusable-link state names
+the possible causes together without revealing which applies, and offers sign
+in plus a support contact when the Institution publishes a support address.
+Acceptance states what the person can now do, chosen from the same purpose
+and requirement. Acceptance moves
 focus to the replacement heading because the action controls disappear;
 initial loading and background context completion do not take focus.
 

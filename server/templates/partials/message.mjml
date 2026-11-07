@@ -55,7 +55,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     <mj-raw>{{end}}</mj-raw>
     <mj-raw>{{if .ActionURL}}</mj-raw>
     <mj-button href="{{.ActionURL}}" align="left" background-color="#5C00AA" color="#FFFFFF" border-radius="3px" font-size="15px" font-weight="500" line-height="15px" inner-padding="12px 22px" padding="32px 0 0">{{.Copy.ActionLabel}}</mj-button>
-    <mj-text padding="14px 0 0" font-size="13px" line-height="20px" color="#77727F">{{if .Copy.ActionNote}}{{.Copy.ActionNote}}<br />{{end}}{{.Copy.ActionFallback}} <a href="{{.ActionURL}}" style="color:#5C00AA;word-break:break-all">{{.ActionURL}}</a></mj-text>
+    <mj-text padding="14px 0 0" font-size="13px" line-height="20px" color="#77727F">{{if .Copy.ActionNote}}{{.Copy.ActionNote}}<br />{{end}}{{.Copy.ActionFallback}} <a href="{{.ActionURL}}" style="color:#5C00AA">{{.Copy.ActionFallbackLink}}</a>.</mj-text>
     <mj-raw>{{end}}</mj-raw>
     <mj-raw>{{if and (not .AsideAlert) .Copy.AsideTitle}}</mj-raw>
     <mj-text padding="32px 0 0" font-size="15px" line-height="24px"><span style="font-weight:600;color:#16141B">{{.Copy.AsideTitle}}</span> {{.Copy.AsideText}}</mj-text>

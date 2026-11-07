@@ -18,7 +18,7 @@ Template properties (server/app/mail renderer):
   .AsideAlert — true for security notices; the aside precedes the action
   .Copy.AsideTitle, .Copy.AsideText — optional aside; both or neither
   .ActionURL — validated HTTPS action URL; empty when no action is offered
-  .Copy.ActionLabel, .Copy.ActionNote, .Copy.ActionFallback — action copy
+  .Copy.ActionLabel, .Copy.ActionNote, .Copy.ActionFallback, .Copy.ActionFallbackLink — action copy
   .Copy.Why, .Copy.Support, .Copy.SentBy — localized colophon
 -->
 <mjml>

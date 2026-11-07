@@ -837,7 +837,11 @@
   },
   {
     "id": "mail.common.action_fallback",
-    "translation": "Or open this link:"
+    "translation": "If the button doesn't work, open the link"
+  },
+  {
+    "id": "mail.common.action_fallback_link",
+    "translation": "here"
   },
   {
     "id": "mail.common.greeting",

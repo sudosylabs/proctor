@@ -23,7 +23,7 @@ func TestLocalizationDefinitionsMatchCatalog(t *testing.T) {
 	// Restrict this assertion to mail-owned definitions. The full cross-consumer
 	// exact-set check lives in ptool.
 	definitions := LocalizationDefinitions()
-	require.Len(t, definitions, 383, "mail localization definitions")
+	require.Len(t, definitions, 384, "mail localization definitions")
 	for _, definition := range definitions {
 		request := localization.Request{ID: definition.ID, TemplateData: representativeCopyData}
 		if definition.PluralVariable != "" {

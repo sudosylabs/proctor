@@ -80,6 +80,7 @@ var commonCopyFields = []string{
 	"support_fallback",
 	"sent_by",
 	"action_fallback",
+	"action_fallback_link",
 	"kind.security",
 	"kind.account",
 	"kind.invitation",

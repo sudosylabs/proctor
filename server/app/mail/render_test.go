@@ -267,6 +267,9 @@ func TestRendererPlainTextStartsWithTheHeading(t *testing.T) {
 	assert.Contains(t, message.Text, "Choose a new password: https://proctor.example.test/reset#token=t")
 	assert.Contains(t, message.Text, "This link works once, until Saturday 7 November 2026, 10:42 UTC.")
 	assert.NotContains(t, message.Text, "\n\n\n")
+	assert.Contains(t, message.HTML, `If the button doesn&#39;t work, open the link <a href="https://proctor.example.test/reset#token=t"`)
+	assert.Contains(t, message.HTML, `>here</a>.`)
+	assert.NotContains(t, message.HTML, ">https://proctor.example.test/reset#token=t<", "the HTML fallback printed the full URL")
 }
 
 func TestRendererContextuallyEscapesLocalizedCopyAndActionURL(t *testing.T) {

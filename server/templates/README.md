@@ -66,9 +66,10 @@ result before its generated-file marker. All templates receive the same model:
   `.Copy.SentBy` — always present.
 - `.Copy.Institution` — the institution display name, empty when unknown.
 - `.Copy.AsideTitle` and `.Copy.AsideText` — both or neither.
-- `.Copy.ActionLabel`, `.Copy.ActionNote`, `.Copy.ActionFallback`, and
-  `.ActionURL` — the action and its expiry note; `.ActionURL` is empty when no
-  action is offered.
+- `.Copy.ActionLabel`, `.Copy.ActionNote`, `.Copy.ActionFallback`,
+  `.Copy.ActionFallbackLink`, and `.ActionURL` — the action, its expiry note,
+  and a short fallback link under the button; `.ActionURL` is empty when no
+  action is offered. The text alternative prints the full URL.
 - `.Hero` — an optional emphasised detail with `.Label`, `.Primary`,
   `.Secondary`, `.Code`, and `.Struck`.
 - `.Facts` — ordered labelled details, each with `.Label`, `.Value`, and

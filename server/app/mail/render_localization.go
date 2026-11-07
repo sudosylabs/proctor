@@ -28,11 +28,14 @@ type templateCopy struct {
 	ActionLabel    string
 	ActionNote     string
 	ActionFallback string
-	AsideTitle     string
-	AsideText      string
-	Why            string
-	Support        string
-	SentBy         string
+	// ActionFallbackLink is the short link text after ActionFallback; the HTML
+	// links it to the action URL and the text alternative prints the URL.
+	ActionFallbackLink string
+	AsideTitle         string
+	AsideText          string
+	Why                string
+	Support            string
+	SentBy             string
 
 	addressLabel string
 	atLabel      string
@@ -95,8 +98,8 @@ func resolveCopy(localizer *localization.Localizer, key model.MailTemplateKey, l
 		Kind: r.common("kind."+string(kindFor(key)), nil), Heading: r.required("heading"),
 		Paragraphs:  splitParagraphs(r.required("body")),
 		ActionLabel: r.optional("action_label"), ActionNote: r.optional("action_note"),
-		ActionFallback: r.common("action_fallback", nil),
-		AsideTitle:     r.optional("aside_title"), AsideText: r.optional("aside_text"),
+		ActionFallback: r.common("action_fallback", nil), ActionFallbackLink: r.common("action_fallback_link", nil),
+		AsideTitle: r.optional("aside_title"), AsideText: r.optional("aside_text"),
 		Why:          r.required("why"),
 		SentBy:       r.common("sent_by", r.data),
 		addressLabel: r.optional("address_label"), atLabel: r.optional("at_label"), expiresLabel: r.optional("expires_label"),

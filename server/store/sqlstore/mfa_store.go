@@ -394,6 +394,34 @@ func (s SQLMFAStore) CountRecoveryCodes(ctx context.Context, userID model.UserID
 	return count, nil
 }
 
+// SummarizeRecoveryCodes counts the User's live recovery codes, consumed or
+// not, and reports the newest one's creation time.
+func (s SQLMFAStore) SummarizeRecoveryCodes(ctx context.Context, userID model.UserID) (*store.MFARecoveryCodeSummary, error) {
+	if !userID.IsValid() {
+		return nil, store.NewErrInvalidInput("mfa_recovery_code", "user_id", userID)
+	}
+	var row struct {
+		Issued      int          `db:"issued"`
+		Remaining   int          `db:"remaining"`
+		GeneratedAt sql.NullTime `db:"generated_at"`
+	}
+	if err := s.GetMaster().Get(ctx, &row, `
+		SELECT COUNT(*) AS issued,
+		       COUNT(*) FILTER (WHERE consumed_at IS NULL) AS remaining,
+		       MAX(created_at) AS generated_at
+		  FROM mfa_recovery_codes
+		 WHERE user_id = ? AND archived_at IS NULL`,
+		userID,
+	); err != nil {
+		return nil, fmt.Errorf("summarize MFA recovery codes: %w", err)
+	}
+	summary := &store.MFARecoveryCodeSummary{Issued: row.Issued, Remaining: row.Remaining}
+	if row.GeneratedAt.Valid {
+		summary.GeneratedAt = model.TimeUTC(row.GeneratedAt.Time)
+	}
+	return summary, nil
+}
+
 func (s SQLMFAStore) Disable(
 	ctx context.Context,
 	input *store.MFADisablement,

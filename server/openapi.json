@@ -17260,6 +17260,18 @@
           "enabled": {
             "type": "boolean"
           },
+          "enabled_at": {
+            "description": "When two-step verification was turned on. Present only while enabled.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "method": {
+            "description": "The second factor in use. Present while two-step verification is enabled or pending; more methods may be added later.",
+            "enum": [
+              "authenticator_app"
+            ],
+            "type": "string"
+          },
           "mfa_recovery_required": {
             "description": "Whether this Session is restricted to fresh primary proof and local authenticator enrollment after an assisted reset.",
             "type": "boolean"
@@ -17289,13 +17301,19 @@
             "format": "date-time",
             "type": "string"
           },
+          "recovery_codes_generated_at": {
+            "description": "When the live recovery-code set was issued. Omitted when there is none.",
+            "format": "date-time",
+            "type": "string"
+          },
           "recovery_codes_remaining": {
+            "description": "Unused codes in the live recovery-code set; 0 unless enabled.",
             "minimum": 0,
             "type": "integer"
           },
           "recovery_codes_total": {
-            "description": "Configured number of codes in a new recovery-code set (`Authentication.MFA.RecoveryCodeCount`).",
-            "minimum": 1,
+            "description": "Size of the live recovery-code set the User was given, used codes included, so it stays true if the configured count later changes; 0 unless enabled.",
+            "minimum": 0,
             "type": "integer"
           },
           "service_enabled": {

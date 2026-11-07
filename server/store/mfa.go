@@ -90,6 +90,8 @@ type MFAStore interface {
 	UpgradeSession(context.Context, *MFASessionUpgrade) ([]string, error)
 	ReplaceRecoveryCodes(context.Context, *MFARecoveryCodesRegeneration) error
 	CountRecoveryCodes(context.Context, model.UserID) (int, error)
+	// SummarizeRecoveryCodes describes the User's live recovery-code set.
+	SummarizeRecoveryCodes(context.Context, model.UserID) (*MFARecoveryCodeSummary, error)
 	// InspectKeyState reads the durable primary-key fence with, per sealing
 	// key, how many unarchived credentials hold a secret sealed with it,
 	// ordered by key ID. Startup uses it to prove the configured key ring can
@@ -126,4 +128,15 @@ type MFASessionUpgrade struct {
 	SessionID model.SessionID
 	UserID    model.UserID
 	Now       time.Time
+}
+
+// MFARecoveryCodeSummary describes one User's live recovery-code set: the
+// codes that regeneration, disablement, or reset has not archived. Issued
+// counts consumed and unconsumed codes alike, so it stays the size of the set
+// the User was given even if the configured count later changes. GeneratedAt
+// is the newest code's creation time and zero for an empty set.
+type MFARecoveryCodeSummary struct {
+	Remaining   int
+	Issued      int
+	GeneratedAt time.Time
 }

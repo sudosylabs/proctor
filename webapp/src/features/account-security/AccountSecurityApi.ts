@@ -154,7 +154,7 @@ function recoveryCodesResult(data: unknown, error: unknown, status: number): Rec
 function readSecurityContext(value: unknown): SecurityContext | undefined {
   if (!isRecord(value) || typeof value.enabled !== "boolean" || typeof value.pending !== "boolean" ||
     !nonnegativeInteger(value.recovery_codes_remaining) ||
-    !positiveInteger(value.recovery_codes_total) ||
+    !nonnegativeInteger(value.recovery_codes_total) ||
     !positiveInteger(value.recent_authentication_minutes) ||
     (value.password_changed_at !== undefined && !isWireTimestamp(value.password_changed_at)) ||
     (value.recently_authenticated_until !== undefined && !isWireTimestamp(value.recently_authenticated_until)) ||

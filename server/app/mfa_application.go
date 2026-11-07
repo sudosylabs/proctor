@@ -112,7 +112,7 @@ func (s *mfaApplicationService) GetMFAStatus(
 	status := &MFAStatus{ServiceEnabled: s.deps.Mechanics.deps.Settings.Enabled, MFARecoveryRequired: principal.MFARecoveryRequired,
 		AuthenticationMethod: principal.AuthenticationMethod, AuthenticationProviderID: principal.AuthenticationProviderID,
 		AuthenticationStrength: principal.AuthenticationStrength, RecentlyAuthenticated: principal.IsRecentlyAuthenticated(now, s.deps.RecentAuthenticationTTL),
-		RecoveryCodesTotal: s.deps.Mechanics.deps.Settings.RecoveryCodeCount, RecentAuthenticationTTL: s.deps.RecentAuthenticationTTL}
+		RecentAuthenticationTTL: s.deps.RecentAuthenticationTTL}
 	if status.RecentlyAuthenticated {
 		status.RecentlyAuthenticatedUntil = model.OptionalTimeFrom(principal.LastAuthenticationAt().Add(s.deps.RecentAuthenticationTTL))
 	}
@@ -133,10 +133,18 @@ func (s *mfaApplicationService) GetMFAStatus(
 	status.Enabled = credential.IsActive()
 	status.Pending = credential.IsPendingAt(model.TimeUTC(now))
 	status.PendingExpiresAt = credential.PendingExpiresAt
+	if status.Enabled || status.Pending {
+		status.Method = MFAMethodAuthenticatorApp
+	}
 	if status.Enabled {
-		status.RecoveryCodesRemaining, err = s.deps.Credentials.CountRecoveryCodes(ctx, principal.UserID)
+		status.EnabledAt = credential.ActivatedAt
+		summary, err := s.deps.Credentials.SummarizeRecoveryCodes(ctx, principal.UserID)
 		if err != nil {
 			return nil, mfaStoreErrors.Translate(err)
+		}
+		status.RecoveryCodesRemaining, status.RecoveryCodesTotal = summary.Remaining, summary.Issued
+		if !summary.GeneratedAt.IsZero() {
+			status.RecoveryCodesGeneratedAt = model.OptionalTimeFrom(summary.GeneratedAt)
 		}
 	}
 	return status, nil

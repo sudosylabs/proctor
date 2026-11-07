@@ -488,13 +488,26 @@ components:
         pending_expires_at:
           type: string
           format: date-time
+        method:
+          type: string
+          enum: [authenticator_app]
+          description: The second factor in use. Present while two-step verification is enabled or pending; more methods may be added later.
+        enabled_at:
+          type: string
+          format: date-time
+          description: When two-step verification was turned on. Present only while enabled.
         recovery_codes_remaining:
           type: integer
           minimum: 0
+          description: Unused codes in the live recovery-code set; 0 unless enabled.
         recovery_codes_total:
           type: integer
-          minimum: 1
-          description: Configured number of codes in a new recovery-code set (`Authentication.MFA.RecoveryCodeCount`).
+          minimum: 0
+          description: Size of the live recovery-code set the User was given, used codes included, so it stays true if the configured count later changes; 0 unless enabled.
+        recovery_codes_generated_at:
+          type: string
+          format: date-time
+          description: When the live recovery-code set was issued. Omitted when there is none.
         password_changed_at:
           type: string
           format: date-time

@@ -102,6 +102,11 @@ func testMFALifecycleAndSessionAssurance(t *testing.T, ss store.Store) {
 	count, err := ss.MFA().CountRecoveryCodes(ctx, user.ID)
 	require.NoError(t, err)
 	require.Equal(t, 2, count, "CountRecoveryCodes()")
+	summary, err := ss.MFA().SummarizeRecoveryCodes(ctx, user.ID)
+	require.NoError(t, err)
+	require.Equal(t, 2, summary.Issued, "SummarizeRecoveryCodes() issued")
+	require.Equal(t, 2, summary.Remaining, "SummarizeRecoveryCodes() remaining")
+	require.False(t, summary.GeneratedAt.IsZero(), "SummarizeRecoveryCodes() generated_at")
 	// One time step for both calls: recomputing it could cross a 30-second
 	// boundary between them and turn the replay into a fresh step.
 	step := time.Now().Unix()/30 + 1
@@ -122,6 +127,11 @@ func testMFALifecycleAndSessionAssurance(t *testing.T, ss store.Store) {
 	count, err = ss.MFA().CountRecoveryCodes(ctx, user.ID)
 	require.NoError(t, err)
 	require.Equal(t, 1, count, "remaining recovery codes")
+	// A consumed code stays in the issued set.
+	summary, err = ss.MFA().SummarizeRecoveryCodes(ctx, user.ID)
+	require.NoError(t, err)
+	require.Equal(t, 2, summary.Issued, "issued codes after one was used")
+	require.Equal(t, 1, summary.Remaining, "remaining codes after one was used")
 	replacementHash := model.HashToken(model.NewCredentialToken())
 	regenerationAudit, regenerationNotice := mfaSecurityNoticeFixture(t, ctx, ss, user, model.MailTemplateIdentityMFARecoveryCodesRegenerated, now.Add(5*time.Millisecond))
 	require.NoError(t, ss.MFA().ReplaceRecoveryCodes(ctx, &store.MFARecoveryCodesRegeneration{
@@ -134,6 +144,11 @@ func testMFALifecycleAndSessionAssurance(t *testing.T, ss store.Store) {
 	count, err = ss.MFA().CountRecoveryCodes(ctx, user.ID)
 	require.NoError(t, err)
 	require.Equal(t, 1, count, "replacement recovery codes")
+	// Regeneration archives the old set, so only the replacement is issued.
+	summary, err = ss.MFA().SummarizeRecoveryCodes(ctx, user.ID)
+	require.NoError(t, err)
+	require.Equal(t, 1, summary.Issued, "issued codes after regeneration")
+	require.Equal(t, 1, summary.Remaining, "remaining codes after regeneration")
 	require.True(t, store.IsNotFound(ss.MFA().ConsumeSecondFactor(
 		ctx, &store.MFASecondFactorConsumption{UserID: user.ID, TimeStep: 0, RecoveryCodeHash: secondHash, Now: now.Add(6 * time.Millisecond)},
 	)), "superseded recovery code error")

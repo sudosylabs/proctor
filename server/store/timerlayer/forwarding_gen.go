@@ -3038,6 +3038,12 @@ func (s *timedMFAStore) CountRecoveryCodes(arg0 context.Context, arg1 model.User
 	})
 }
 
+func (s *timedMFAStore) SummarizeRecoveryCodes(arg0 context.Context, arg1 model.UserID) (*store.MFARecoveryCodeSummary, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateMFA, methodSummarizeRecoveryCodes), func(callCtx context.Context) (*store.MFARecoveryCodeSummary, error) {
+		return s.next.SummarizeRecoveryCodes(callCtx, arg1)
+	})
+}
+
 func (s *timedMFAStore) InspectKeyState(arg0 context.Context) (*store.MFAKeyState, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateMFA, methodInspectKeyState), func(callCtx context.Context) (*store.MFAKeyState, error) {
 		return s.next.InspectKeyState(callCtx)

@@ -127,7 +127,7 @@ describe("account security status facts", () => {
     const ready = await requestSecurityContext();
     expect(ready.kind === "ready" && "passwordChangedAt" in ready.context).toBe(false);
     for (const data of [
-      { ...context, recovery_codes_total: 0 },
+      { ...context, recovery_codes_total: -1 },
       { ...context, recent_authentication_minutes: undefined },
       { ...context, password_changed_at: "yesterday" },
       { ...context, recently_authenticated_until: 5 },

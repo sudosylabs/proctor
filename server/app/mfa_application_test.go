@@ -340,6 +340,7 @@ type mfaApplicationStoreFake struct {
 	activation     *store.MFAActivationMutation
 	regeneration   *store.MFARecoveryCodesRegeneration
 	disablement    *store.MFADisablement
+	recoveryCodes  *store.MFARecoveryCodeSummary
 }
 
 func (s *mfaApplicationStoreFake) appendEvent(event string) {
@@ -396,6 +397,13 @@ func (s *mfaApplicationStoreFake) Activate(_ context.Context, input *store.MFAAc
 func (s *mfaApplicationStoreFake) ReplaceRecoveryCodes(_ context.Context, input *store.MFARecoveryCodesRegeneration) error {
 	s.regeneration = input
 	return nil
+}
+
+func (s *mfaApplicationStoreFake) SummarizeRecoveryCodes(context.Context, model.UserID) (*store.MFARecoveryCodeSummary, error) {
+	if s.recoveryCodes == nil {
+		return &store.MFARecoveryCodeSummary{}, nil
+	}
+	return s.recoveryCodes, nil
 }
 
 func (s *mfaApplicationStoreFake) Disable(_ context.Context, input *store.MFADisablement) (*store.MFADisableResult, error) {
@@ -549,7 +557,8 @@ func TestMFAStatusReportsPasswordChangeRecoveryTotalAndRecentWindow(t *testing.T
 	require.NoError(t, err)
 	require.True(t, status.PasswordChangedAt.Valid)
 	require.True(t, status.PasswordChangedAt.Time.Equal(changedAt))
-	require.Equal(t, 5, status.RecoveryCodesTotal)
+	require.Zero(t, status.RecoveryCodesTotal, "no credential has no issued set")
+	require.Empty(t, status.Method)
 	require.Equal(t, 15*time.Minute, status.RecentAuthenticationTTL)
 	require.True(t, status.RecentlyAuthenticated)
 	require.True(t, status.RecentlyAuthenticatedUntil.Valid)
@@ -570,4 +579,43 @@ func TestMFAStatusReportsPasswordChangeRecoveryTotalAndRecentWindow(t *testing.T
 	service.deps.Passwords = mfaPasswordCredentialsFake{err: errors.New("connection reset")}
 	_, err = service.GetMFAStatus(context.Background(), invocation.New(principal, model.RequestMetadata{}), GetMFAStatusQuery{})
 	require.Error(t, err, "a failed password read was reported as no password")
+}
+
+func TestMFAStatusReportsMethodActivationAndIssuedRecoverySet(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
+	activatedAt := time.Date(2026, 6, 2, 8, 0, 0, 0, time.UTC)
+	generatedAt := time.Date(2026, 7, 9, 10, 15, 0, 0, time.UTC)
+	principal := mfaTestPrincipal(now, model.AuthenticationMultiFactor)
+	persistence := &mfaApplicationStoreFake{
+		credential: &model.MFACredential{
+			UserID: principal.UserID, State: model.MFAStateActive, ActivatedAt: model.OptionalTimeFrom(activatedAt),
+		},
+		// Issued is the live set, not the configured count of 5.
+		recoveryCodes: &store.MFARecoveryCodeSummary{Remaining: 3, Issued: 8, GeneratedAt: generatedAt},
+	}
+	service := newTestMFAApplicationService(t, persistence, &mfaApplicationAuditFake{}, &mfaApplicationEffectsFake{}, now)
+
+	status, err := service.GetMFAStatus(context.Background(), invocation.New(principal, model.RequestMetadata{}), GetMFAStatusQuery{})
+	require.NoError(t, err)
+	require.True(t, status.Enabled)
+	require.Equal(t, MFAMethodAuthenticatorApp, status.Method)
+	require.True(t, status.EnabledAt.Valid)
+	require.True(t, status.EnabledAt.Time.Equal(activatedAt), "enabled_at = %s", status.EnabledAt.Time)
+	require.Equal(t, 3, status.RecoveryCodesRemaining)
+	require.Equal(t, 8, status.RecoveryCodesTotal)
+	require.True(t, status.RecoveryCodesGeneratedAt.Valid)
+	require.True(t, status.RecoveryCodesGeneratedAt.Time.Equal(generatedAt), "generated_at = %s", status.RecoveryCodesGeneratedAt.Time)
+
+	// A pending enrollment names its method but has no activation time or codes.
+	persistence.credential = &model.MFACredential{
+		UserID: principal.UserID, State: model.MFAStatePending, PendingExpiresAt: model.OptionalTimeFrom(now.Add(time.Minute)),
+	}
+	status, err = service.GetMFAStatus(context.Background(), invocation.New(principal, model.RequestMetadata{}), GetMFAStatusQuery{})
+	require.NoError(t, err)
+	require.True(t, status.Pending)
+	require.Equal(t, MFAMethodAuthenticatorApp, status.Method)
+	require.False(t, status.EnabledAt.Valid)
+	require.Zero(t, status.RecoveryCodesTotal)
+	require.False(t, status.RecoveryCodesGeneratedAt.Valid)
 }

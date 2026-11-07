@@ -57,6 +57,9 @@ type wireMFAStatus struct {
 	PendingExpiresAt       time.Time `json:"pending_expires_at,omitempty"`
 	RecoveryCodesRemaining int       `json:"recovery_codes_remaining"`
 	RecoveryCodesTotal     int       `json:"recovery_codes_total"`
+	Method                 string    `json:"method,omitempty"`
+	EnabledAt              time.Time `json:"enabled_at,omitempty"`
+	RecoveryCodesIssuedAt  time.Time `json:"recovery_codes_generated_at,omitempty"`
 	PasswordChangedAt      time.Time `json:"password_changed_at,omitempty"`
 	RecentMinutes          int       `json:"recent_authentication_minutes"`
 	RecentlyUntil          time.Time `json:"recently_authenticated_until,omitempty"`
@@ -147,7 +150,10 @@ func TestMFAIntegration(t *testing.T) {
 	require.True(t, status.Enabled)
 	require.Len(t, activation.RecoveryCodes, status.RecoveryCodesRemaining)
 	configured := helper.ConfigStore.Get().Authentication
-	require.Equal(t, configured.MFA.RecoveryCodeCount, status.RecoveryCodesTotal)
+	require.Len(t, activation.RecoveryCodes, status.RecoveryCodesTotal)
+	require.Equal(t, "authenticator_app", status.Method)
+	require.False(t, status.EnabledAt.IsZero(), "enabled MFA reported no enabled_at")
+	require.False(t, status.RecoveryCodesIssuedAt.IsZero(), "issued codes reported no recovery_codes_generated_at")
 	require.Equal(t, int(configured.RecentAuthenticationTTL.Duration/time.Minute), status.RecentMinutes)
 	passwordCredential, err := persistence.PasswordCredential().GetByUser(context.Background(), user.ID)
 	require.NoError(t, err)

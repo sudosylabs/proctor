@@ -200,6 +200,11 @@ module when a change is not server-only. No module has been released yet.
   `user_other_sessions`, and items in the caller's own Session list carry
   `current`, true for the Session that made the request. Existing development
   databases must be recreated.
+- Server: `GET /api/v1/users/me/mfa` reports `method` (`authenticator_app`,
+  while two-step verification is enabled or pending), `enabled_at`, and
+  `recovery_codes_generated_at`. `recovery_codes_total` is the size of the
+  recovery-code set the User was actually given, used codes included, and is
+  0 unless two-step verification is enabled.
 - Server: `Mail.SupportAddress` names a help address in every message
   footer, and `Mail.DisplayTimezone` sets the time zone used for message times
   when a recipient has not chosen one.

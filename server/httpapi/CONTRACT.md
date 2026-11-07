@@ -378,7 +378,9 @@ from a signed-out browser. Restricted Sessions retain normal cookie/CSRF rules.
 MFA status projects the original password/oidc/cas method, optional provider ID,
 strength, recency, service availability and recovery restriction without requiring
 ordinary User-profile access. It also reports the caller's own facts a security
-page states: remaining and configured (`recovery_codes_total`) recovery codes,
+page states: the second-factor `method` and `enabled_at`, remaining and issued
+(`recovery_codes_total`, the live set including used codes) recovery codes
+with `recovery_codes_generated_at`,
 `password_changed_at` (omitted without a password credential),
 `recent_authentication_minutes` (the configured window rounded down), and
 `recently_authenticated_until` while the Session is recent. Every security

@@ -136,6 +136,7 @@ const (
 	methodConsumePasswordReset                      methodName = "consume_password_reset"
 	methodConsumeSecondFactor                       methodName = "consume_second_factor"
 	methodCountRecoveryCodes                        methodName = "count_recovery_codes"
+	methodSummarizeRecoveryCodes                    methodName = "summarize_recovery_codes"
 	methodCreate                                    methodName = "create"
 	methodCreateDesktopAuthorization                methodName = "create_desktop_authorization"
 	methodBindDesktopAuthorization                  methodName = "bind_desktop_authorization"

@@ -8620,6 +8620,16 @@ export interface components {
             /** @enum {string} */
             authentication_strength: "single_factor" | "multi_factor";
             enabled: boolean;
+            /**
+             * Format: date-time
+             * @description When two-step verification was turned on. Present only while enabled.
+             */
+            enabled_at?: string;
+            /**
+             * @description The second factor in use. Present while two-step verification is enabled or pending; more methods may be added later.
+             * @enum {string}
+             */
+            method?: "authenticator_app";
             /** @description Whether this Session is restricted to fresh primary proof and local authenticator enrollment after an assisted reset. */
             mfa_recovery_required: boolean;
             /**
@@ -8638,8 +8648,14 @@ export interface components {
              * @description When this Session's recent-authentication window ends. Present only while `recently_authenticated` is true.
              */
             recently_authenticated_until?: string;
+            /**
+             * Format: date-time
+             * @description When the live recovery-code set was issued. Omitted when there is none.
+             */
+            recovery_codes_generated_at?: string;
+            /** @description Unused codes in the live recovery-code set; 0 unless enabled. */
             recovery_codes_remaining: number;
-            /** @description Configured number of codes in a new recovery-code set (`Authentication.MFA.RecoveryCodeCount`). */
+            /** @description Size of the live recovery-code set the User was given, used codes included, so it stays true if the configured count later changes; 0 unless enabled. */
             recovery_codes_total: number;
             /** @description Whether local authenticator enrollment and verification are currently available. */
             service_enabled: boolean;

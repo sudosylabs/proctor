@@ -23,7 +23,7 @@ with a small heading, one sentence, and its own action:
   inside a `time` element; omitted for accounts without one), two-step
   verification (On, Off, or Setup not finished, with a small state marker),
   recovery codes as “N of M left” when enabled (`recovery_codes_remaining` of
-  the configured `recovery_codes_total`), and how this Session was established
+  the issued `recovery_codes_total`), and how this Session was established
   (`authentication_method`, `authentication_strength`, and the provider
   display name from public discovery when the Session is external).
 - not enabled: “Turn on two-step verification” with the one primary action.

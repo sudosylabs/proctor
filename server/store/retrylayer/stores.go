@@ -680,6 +680,11 @@ func (s *mfaStore) GetByUser(ctx context.Context, userID model.UserID) (*model.M
 func (s *mfaStore) CountRecoveryCodes(ctx context.Context, userID model.UserID) (int, error) {
 	return retryCall1(ctx, s.layer, func() (int, error) { return s.MFAStore.CountRecoveryCodes(ctx, userID) })
 }
+func (s *mfaStore) SummarizeRecoveryCodes(ctx context.Context, userID model.UserID) (*store.MFARecoveryCodeSummary, error) {
+	return retryCall1(ctx, s.layer, func() (*store.MFARecoveryCodeSummary, error) {
+		return s.MFAStore.SummarizeRecoveryCodes(ctx, userID)
+	})
+}
 
 func (s *affiliationStore) Get(ctx context.Context, id model.AffiliationID) (*model.Affiliation, error) {
 	return retryCall1(ctx, s.layer, func() (*model.Affiliation, error) { return s.AffiliationStore.Get(ctx, id) })

@@ -78,9 +78,14 @@ func TestMFAStatusResponseMapsPasswordRecoveryAndRecentWindow(t *testing.T) {
 	}
 	body := read(&app.MFAStatus{AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor, Enabled: true, RecentlyAuthenticated: true,
 		RecoveryCodesRemaining: 7, RecoveryCodesTotal: 10, RecentAuthenticationTTL: 15*time.Minute + 59*time.Second,
+		Method: app.MFAMethodAuthenticatorApp, EnabledAt: model.OptionalTimeFrom(time.Date(2026, 6, 2, 8, 0, 0, 0, time.UTC)),
+		RecoveryCodesGeneratedAt:   model.OptionalTimeFrom(time.Date(2026, 7, 9, 10, 15, 0, 0, time.UTC)),
 		PasswordChangedAt:          model.OptionalTimeFrom(time.Date(2026, 7, 1, 9, 30, 0, 0, time.UTC)),
 		RecentlyAuthenticatedUntil: model.OptionalTimeFrom(time.Date(2026, 8, 18, 12, 14, 0, 0, time.UTC))})
 	require.Contains(t, body, `"recovery_codes_total":10`)
+	require.Contains(t, body, `"method":"authenticator_app"`)
+	require.Contains(t, body, `"enabled_at":"2026-06-02T08:00:00Z"`)
+	require.Contains(t, body, `"recovery_codes_generated_at":"2026-07-09T10:15:00Z"`)
 	require.Contains(t, body, `"password_changed_at":"2026-07-01T09:30:00Z"`)
 	require.Contains(t, body, `"recent_authentication_minutes":15`)
 	require.Contains(t, body, `"recently_authenticated_until":"2026-08-18T12:14:00Z"`)
@@ -88,5 +93,8 @@ func TestMFAStatusResponseMapsPasswordRecoveryAndRecentWindow(t *testing.T) {
 	body = read(&app.MFAStatus{AuthenticationMethod: "oidc", AuthenticationStrength: model.AuthenticationSingleFactor, RecoveryCodesTotal: 10, RecentAuthenticationTTL: 30 * time.Second})
 	require.NotContains(t, body, "password_changed_at")
 	require.NotContains(t, body, "recently_authenticated_until")
+	require.NotContains(t, body, `"method"`)
+	require.NotContains(t, body, "enabled_at")
+	require.NotContains(t, body, "recovery_codes_generated_at")
 	require.Contains(t, body, `"recent_authentication_minutes":1`)
 }

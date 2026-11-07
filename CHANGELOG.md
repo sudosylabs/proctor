@@ -192,6 +192,10 @@ module when a change is not server-only. No module has been released yet.
 - Server: `Mail.SupportAddress` names a help address in every message
   footer, and `Mail.DisplayTimezone` sets the time zone used for message times
   when a recipient has not chosen one.
+- Server: every sealed Submission has a short receipt code, such as
+  `MBY3-KBMN-EB83-TFW1`, that a candidate can read out. The submit and
+  manager-end receipts return it as `receipt_code`, and every exact replay
+  returns the same code. Existing development databases must be recreated.
 - Server: failed password checks against one account, counted across all
   sources and both its username and email address, delay further logins for
   that account progressively

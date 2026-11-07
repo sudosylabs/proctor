@@ -15103,6 +15103,11 @@
             "$ref": "#/components/schemas/SHA256",
             "description": "SHA-256 digest of the immutable sealed Workspace manifest."
           },
+          "receipt_code": {
+            "description": "Short receipt code the candidate can read out to identify this Submission, such as `MBY3-KBMN-EB83-TFW1`. It is minted once when the Submission seals, is unique across Submissions, and every replay returns it unchanged. It is sixteen Crockford base32 characters (no I, L, O, or U) in groups of four separated by hyphens.",
+            "pattern": "^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$",
+            "type": "string"
+          },
           "state": {
             "const": "submitted",
             "type": "string"
@@ -15124,6 +15129,7 @@
         },
         "required": [
           "submission_id",
+          "receipt_code",
           "exam_attempt_id",
           "exam_revision_id",
           "state",

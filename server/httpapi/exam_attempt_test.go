@@ -140,7 +140,8 @@ func TestCandidateSubmitExamAttemptUsesStrictCausalSelectorsAndReturnsSafeReceip
 	require.Equal(t, "submit-once", fake.submit.IdempotencyKey, "status=%d headers=%v command=%#v body=%s", response.Code, response.Header(), fake.submit, response.Body.String())
 	var payload map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &payload), "receipt")
-	require.Len(t, payload, 8, "receipt")
+	require.Len(t, payload, 9, "receipt")
+	require.Equal(t, `"MBY3-KBMN-EB83-TFW1"`, string(payload["receipt_code"]), "receipt code is in display form")
 	require.Equal(t, `"`+fake.submissionReceipt.ExamRevisionID.String()+`"`, string(payload["exam_revision_id"]), "receipt")
 	require.Equal(t, `"submitted"`, string(payload["state"]), "receipt")
 	require.Equal(t, "4", string(payload["workspace_cursor"]), "receipt")
@@ -607,6 +608,7 @@ func TestManagerEndExamAttemptUsesRevisionFenceAndReturnsOnlySafeReceipt(t *test
 	require.NotContains(t, response.Body.String(), privateReason)
 	require.NotContains(t, response.Body.String(), "private")
 	require.Contains(t, response.Body.String(), fake.submissionReceipt.SubmissionID.String())
+	require.Contains(t, response.Body.String(), `"receipt_code":"MBY3-KBMN-EB83-TFW1"`)
 
 	invalid := newJSONRequest(http.MethodPost, path, strings.NewReader(`{"expected_revision":1,"reason":"valid","extra":true}`))
 	invalid.Header.Set("Authorization", "Bearer credential")

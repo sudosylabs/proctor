@@ -7868,6 +7868,8 @@ export interface components {
             exam_revision_id: components["schemas"]["ID"];
             /** @description SHA-256 digest of the immutable sealed Workspace manifest. */
             manifest_digest: components["schemas"]["SHA256"];
+            /** @description Short receipt code the candidate can read out to identify this Submission, such as `MBY3-KBMN-EB83-TFW1`. It is minted once when the Submission seals, is unique across Submissions, and every replay returns it unchanged. It is sixteen Crockford base32 characters (no I, L, O, or U) in groups of four separated by hyphens. */
+            receipt_code: string;
             /** @constant */
             state: "submitted";
             submission_id: components["schemas"]["ID"];

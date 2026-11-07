@@ -290,6 +290,7 @@ components:
       additionalProperties: false
       required:
         - submission_id
+        - receipt_code
         - exam_attempt_id
         - exam_revision_id
         - state
@@ -300,6 +301,14 @@ components:
       properties:
         submission_id:
           $ref: '#/components/schemas/ID'
+        receipt_code:
+          type: string
+          pattern: ^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$
+          description: >-
+            Short receipt code the candidate can read out to identify this Submission, such as
+            `MBY3-KBMN-EB83-TFW1`. It is minted once when the Submission seals, is unique across Submissions, and
+            every replay returns it unchanged. It is sixteen Crockford base32 characters (no I, L, O, or U) in
+            groups of four separated by hyphens.
         exam_attempt_id:
           $ref: '#/components/schemas/ID'
         exam_revision_id:

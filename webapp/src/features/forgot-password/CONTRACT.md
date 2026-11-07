@@ -6,8 +6,9 @@ The accepted outcome is deliberately identical for known and unknown Users and
 the page never claims that an account, password, token, or mail delivery exists.
 
 The form validates required email syntax locally, focuses the first invalid
-field, keeps input stable during submission, and reserves action-adjacent
-`FormFeedback` space. Rate limiting and service failure use bounded localized
+field, keeps input stable during submission, and reports failures in the
+action-adjacent `FormFeedback` region, which takes space only while it holds a
+message. Rate limiting and service failure use bounded localized
 copy. Successful submission presents the generic check-your-email state.
 
 The accepted replacement uses the shared `TaskState` hierarchy with a teal

@@ -14,8 +14,9 @@ unusable-link state.
 
 The password rules are the new-password field's description, and
 password-policy rejection remains adjacent to that field; the confirmation
-field carries no rules. General failure reserves stable `FormFeedback` space
-and permits retry while the token may still be usable. The task introduction
+field carries no rules. General failure appears in the action-adjacent
+`FormFeedback` region, which takes space only while it holds a message, and
+permits retry while the token may still be usable. The task introduction
 states only that other devices will be signed out, without a progress
 indicator or additional server state.
 

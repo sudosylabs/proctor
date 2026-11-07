@@ -222,6 +222,8 @@ The default listener is `127.0.0.1:8065`. Available endpoints are:
 - `GET /api/v1/users/me/sessions`
 - `POST /api/v1/users/me/sessions/revoke`
 - `POST /api/v1/users/me/sessions/revoke-all`
+- `POST /api/v1/users/me/sessions/revoke-others` (keeps the requesting
+  Session and its cookies; returns `revoked_session_count`)
 - `GET /api/v1/users/me/desktop-registrations` and
   `DELETE /api/v1/users/me/desktop-registrations/{desktop_registration_id}`
   (private device/build projection; revocation requires a strong recent

@@ -96,7 +96,7 @@ func TestIdentityAndSystemOpenAPIOperationDTOsAgreeWithRuntime(t *testing.T) {
 	_, exists := websocket.Responses["101"]
 	assert.True(t, exists, "GET /api/v1/websocket has no 101 response")
 	for name, item := range map[string]string{
-		"SessionListResponse":                        "#/components/schemas/SessionResponse",
+		"SessionListResponse":                        "#/components/schemas/CurrentUserSessionResponse",
 		"PersonalAccessTokenListResponse":            "#/components/schemas/PersonalAccessTokenResponse",
 		"ExternalAuthenticationProviderListResponse": "#/components/schemas/ExternalAuthenticationProviderResponse",
 	} {
@@ -147,6 +147,7 @@ func identityAndSystemOpenAPIAgreementSuite() openAPIAgreementSuite {
 		operation("DELETE /api/v1/users/me/desktop-registrations/{desktop_registration_id}", AuthStrongRecentSessionRequired, "", "", "204", "#/components/responses/SensitiveNoContent", ""),
 		operation("POST /api/v1/users/me/sessions/revoke", AuthSessionRequired, "#/components/requestBodies/RevokeSession", "RevokeSessionRequest", "204", "#/components/responses/SensitiveNoContent", ""),
 		operation("POST /api/v1/users/me/sessions/revoke-all", AuthSessionRequired, "", "", "204", "#/components/responses/SensitiveNoContent", ""),
+		operation("POST /api/v1/users/me/sessions/revoke-others", AuthSessionRequired, "", "", "200", "#/components/responses/OtherSessionsRevoked", "RevokeOtherSessionsResponse"),
 		operation("GET /api/v1/users/me/mfa", AuthMFARecoverySessionRequired, "", "", "200", "#/components/responses/MFAStatusOK", "MFAStatusResponse"),
 		operation("POST /api/v1/users/me/mfa/setup", AuthRecentMFARecoverySessionRequired, "", "", "201", "#/components/responses/MFASetupCreated", "MFASetupResponse"),
 		operation("POST /api/v1/users/me/mfa/activate", AuthRecentMFARecoverySessionRequired, "#/components/requestBodies/MFACode", "MFACodeRequest", "200", "#/components/responses/MFAActivationOK", "MFAActivationResponse"),
@@ -192,7 +193,9 @@ func identityAndSystemOpenAPIAgreementSuite() openAPIAgreementSuite {
 			{Name: "AuthenticationResponse", DTO: reflect.TypeOf(authenticationResponse{}), Required: []string{"session"}},
 			{Name: "SessionResponse", DTO: reflect.TypeOf(sessionResponse{}), Required: []string{"id", "created_at", "updated_at", "user_id", "client_type", "authentication_method", "authentication_strength", "mfa_recovery_required", "authenticated_at", "last_activity_at", "idle_expires_at", "expires_at"}},
 			{Name: "AuthenticationTokensResponse", DTO: reflect.TypeOf(authenticationTokensResponse{}), Required: []string{"token_type", "access_token", "refresh_token", "access_expires_at", "refresh_expires_at"}},
+			{Name: "CurrentUserSessionResponse", DTO: reflect.TypeOf(currentUserSessionResponse{}), Required: []string{"id", "created_at", "updated_at", "user_id", "client_type", "authentication_method", "authentication_strength", "mfa_recovery_required", "authenticated_at", "last_activity_at", "idle_expires_at", "expires_at", "current"}},
 			{Name: "RevokeSessionRequest", DTO: reflect.TypeOf(revokeSessionRequest{}), Required: []string{"session_id"}},
+			{Name: "RevokeOtherSessionsResponse", DTO: reflect.TypeOf(revokeOtherSessionsResponse{}), Required: []string{"revoked_session_count"}},
 			{Name: "MFACodeRequest", DTO: reflect.TypeOf(mfaCodeRequest{}), Required: []string{"code"}},
 			{Name: "MFARecoveryCodesResponse", DTO: reflect.TypeOf(mfaRecoveryCodesResponse{}), Required: []string{"recovery_codes"}},
 			{Name: "MFASetupResponse", DTO: reflect.TypeOf(mfaSetupResponse{}), Required: []string{"secret", "provisioning_uri", "expires_at"}},
@@ -254,6 +257,7 @@ func identityAndSystemErrorContracts() map[string][]string {
 		"DELETE /api/v1/users/me/desktop-registrations/{desktop_registration_id}":            {"desktop_registration.unavailable", "request.invalid", "resource.not_found", "audit.unavailable", "authentication.session_required"},
 		"POST /api/v1/users/me/sessions/revoke":                                              {"request.invalid", "session.id.invalid", "session.not_found", "authentication.internal", "audit.unavailable"},
 		"POST /api/v1/users/me/sessions/revoke-all":                                          {"authentication.internal", "audit.unavailable"},
+		"POST /api/v1/users/me/sessions/revoke-others":                                       {"authentication.internal", "audit.unavailable"},
 		"GET /api/v1/users/me/mfa":                                                           {"authentication.mfa.unavailable", "authentication.reauthentication_required", "authentication.session_required"},
 		"POST /api/v1/users/me/mfa/setup":                                                    {"authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.session_required"},
 		"POST /api/v1/users/me/mfa/activate":                                                 {"request.invalid", "authentication.mfa.code_invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.session_required"},

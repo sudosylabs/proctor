@@ -4958,9 +4958,29 @@ export interface paths {
         put?: never;
         /**
          * Revoke all current-user sessions
-         * @description Revokes every active Session belonging to the current User, including the Session making the request. Clients must discard cached credentials and require a new authentication flow afterward.
+         * @description Revokes every active Session belonging to the current User, including the Session making the request, so the caller is signed out too. Clients must discard cached credentials and require a new authentication flow afterward. To stay signed in on this device, use revokeOtherCurrentUserSessions instead.
          */
         post: operations["revokeAllCurrentUserSessions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/me/sessions/revoke-others": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign out every other current-user session
+         * @description Revokes every active Session belonging to the current User except the Session making the request, which stays signed in; its cookies and credentials are left in place. The response reports how many Sessions were revoked, which is zero when no other Session was active. A personal access token has no Session to keep and is refused.
+         */
+        post: operations["revokeOtherCurrentUserSessions"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6723,6 +6743,56 @@ export interface components {
             scope_id: components["schemas"]["ID"];
             /** @enum {string} */
             scope_type: "institution" | "academic_unit";
+        };
+        /** @description One of the current User's Sessions, marked when it is the Session that made the request. */
+        CurrentUserSessionResponse: {
+            /** Format: date-time */
+            archived_at?: string;
+            /** Format: date-time */
+            authenticated_at: string;
+            authentication_method: string;
+            authentication_strength: string;
+            /** @enum {string} */
+            client_type: "desktop" | "cli" | "web";
+            /** Format: date-time */
+            created_at: string;
+            /** @description True for the Session that made the request. */
+            current: boolean;
+            /** @enum {string} */
+            desktop_architecture?: "arm64" | "x64";
+            desktop_build_id?: string;
+            /** @enum {string} */
+            desktop_platform?: "darwin" | "win32" | "linux";
+            desktop_realtime_protocol?: number;
+            desktop_registration_id?: components["schemas"]["ID"];
+            desktop_release?: string;
+            device_id?: string;
+            device_name?: string;
+            /** Format: date-time */
+            expires_at: string;
+            id: components["schemas"]["ID"];
+            /** Format: date-time */
+            idle_expires_at: string;
+            /** Format: date-time */
+            last_activity_at: string;
+            /** Format: date-time */
+            mfa_completed_at?: string;
+            /** @description Ordinary access remains unavailable until a new local authenticator is activated. */
+            mfa_recovery_required: boolean;
+            /**
+             * Format: date-time
+             * @description Most recent verified fresh primary proof for the original Session method; does not replace initial authentication or MFA history.
+             */
+            reauthenticated_at?: string;
+            /** @description Localized presentation of revocation_reason_code. */
+            revocation_reason?: string;
+            /** @enum {string} */
+            revocation_reason_code?: "mfa_reset" | "account_disabled" | "access_policy_changed" | "administrator_all_sessions" | "administrator_session" | "authentication_audit_failed" | "desktop_authorization_failed" | "desktop_registration_revoked" | "email_change_undone" | "external_identity_unlinked" | "inactive_user" | "password_changed" | "password_removed" | "password_reset" | "refresh_replay" | "user_all_sessions" | "user_logout" | "user_other_sessions" | "user_session";
+            /** Format: date-time */
+            revoked_at?: string;
+            /** Format: date-time */
+            updated_at: string;
+            user_id: components["schemas"]["ID"];
         };
         DeclareDeliveryGaps: {
             /** Format: int64 */
@@ -9693,6 +9763,10 @@ export interface components {
             /** @enum {string} */
             state: "grace" | "canceled" | "retired";
         };
+        /** @description How many of the current User's other Sessions this request revoked. */
+        RevokeOtherSessionsResponse: {
+            revoked_session_count: number;
+        };
         RevokeSessionRequest: {
             session_id: components["schemas"]["ID"];
         };
@@ -9918,7 +9992,7 @@ export interface components {
             /** @description Localized presentation of revocation_reason_code. */
             revocation_reason?: string;
             /** @enum {string} */
-            revocation_reason_code?: "account_disabled" | "access_policy_changed" | "administrator_all_sessions" | "administrator_session" | "authentication_audit_failed" | "desktop_authorization_failed" | "desktop_registration_revoked" | "email_change_undone" | "external_identity_unlinked" | "inactive_user" | "mfa_reset" | "password_changed" | "password_removed" | "password_reset" | "refresh_replay" | "user_all_sessions" | "user_logout" | "user_session";
+            revocation_reason_code?: "account_disabled" | "access_policy_changed" | "administrator_all_sessions" | "administrator_session" | "authentication_audit_failed" | "desktop_authorization_failed" | "desktop_registration_revoked" | "email_change_undone" | "external_identity_unlinked" | "inactive_user" | "mfa_reset" | "password_changed" | "password_removed" | "password_reset" | "refresh_replay" | "user_all_sessions" | "user_logout" | "user_other_sessions" | "user_session";
             /** Format: date-time */
             revoked_at?: string;
             /** Format: date-time */
@@ -9927,7 +10001,7 @@ export interface components {
         };
         /** @description One page of the collection in its stable order. */
         SessionListResponse: {
-            items: components["schemas"]["SessionResponse"][];
+            items: components["schemas"]["CurrentUserSessionResponse"][];
             next_cursor?: components["schemas"]["NextCursor"];
         };
         SessionResponse: {
@@ -9970,7 +10044,7 @@ export interface components {
             /** @description Localized presentation of revocation_reason_code. */
             revocation_reason?: string;
             /** @enum {string} */
-            revocation_reason_code?: "mfa_reset" | "account_disabled" | "access_policy_changed" | "administrator_all_sessions" | "administrator_session" | "authentication_audit_failed" | "desktop_authorization_failed" | "desktop_registration_revoked" | "email_change_undone" | "external_identity_unlinked" | "inactive_user" | "password_changed" | "password_removed" | "password_reset" | "refresh_replay" | "user_all_sessions" | "user_logout" | "user_session";
+            revocation_reason_code?: "mfa_reset" | "account_disabled" | "access_policy_changed" | "administrator_all_sessions" | "administrator_session" | "authentication_audit_failed" | "desktop_authorization_failed" | "desktop_registration_revoked" | "email_change_undone" | "external_identity_unlinked" | "inactive_user" | "password_changed" | "password_removed" | "password_reset" | "refresh_replay" | "user_all_sessions" | "user_logout" | "user_other_sessions" | "user_session";
             /** Format: date-time */
             revoked_at?: string;
             /** Format: date-time */
@@ -12173,6 +12247,21 @@ export interface components {
             };
             content: {
                 "text/csv": string;
+            };
+        };
+        /** @description Every other current-user Session was revoked */
+        OtherSessionsRevoked: {
+            headers: {
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "revoked_session_count": 3
+                 *     }
+                 */
+                "application/json": components["schemas"]["RevokeOtherSessionsResponse"];
             };
         };
         /** @description The existing Session after successful fresh proof. */
@@ -20956,6 +21045,23 @@ export interface operations {
         requestBody?: never;
         responses: {
             204: components["responses"]["SensitiveNoContent"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    revokeOtherCurrentUserSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OtherSessionsRevoked"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

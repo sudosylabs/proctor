@@ -188,6 +188,8 @@ func sessionRevocationReasonPresentation(reason model.SessionRevocationReason) s
 		return "Revoked by the user."
 	case model.SessionRevocationUserAllSessions:
 		return "All sessions were revoked by the user."
+	case model.SessionRevocationUserOtherSessions:
+		return "Signed out from another session by the user."
 	case model.SessionRevocationAdministratorSession:
 		return "Revoked by an administrator."
 	case model.SessionRevocationAdministratorAllSessions:

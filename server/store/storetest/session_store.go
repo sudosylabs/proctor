@@ -14,6 +14,7 @@ package storetest
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -37,6 +38,7 @@ func TestSessionStores(t *testing.T, ss store.Store) {
 	t.Run("SelfRevocationWithAudit", func(t *testing.T) { testSelfSessionRevocationsWithAudit(t, ss) })
 	t.Run("RevokeAllForUser", func(t *testing.T) { testSessionRevokeAllForUser(t, ss) })
 	t.Run("RevokeAllForUser", func(t *testing.T) { testSessionRevokeAllForUserWithAudit(t, ss) })
+	t.Run("RevokeOtherSessionsKeepsCurrent", func(t *testing.T) { testSessionRevokeOtherSessionsKeepsCurrent(t, ss) })
 	t.Run("DisabledMailRecordsTerminalAdministrativeNotice", func(t *testing.T) {
 		testSessionDisabledMailRecordsTerminalAdministrativeNotice(t, ss)
 	})
@@ -544,6 +546,73 @@ func testSessionRevokeAllForUserWithAudit(t *testing.T, ss store.Store) {
 	require.Empty(t, replayed.Sessions)
 	_, getErr = ss.Mail().GetDelivery(ctx, replay.Delivery.ID)
 	require.True(t, store.IsNotFound(getErr), "replayed revoke-all persisted duplicate notice")
+}
+
+func testSessionRevokeOtherSessionsKeepsCurrent(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	user := saveUser(t, ctx, ss)
+	kept, _, keptRaw := saveSession(t, ctx, ss, user.ID.String(), 10)
+	other, _, otherRaw := saveSession(t, ctx, ss, user.ID.String(), 10)
+	stranger := saveUser(t, ctx, ss)
+	strangerSession, _, _ := saveSession(t, ctx, ss, stranger.ID.String(), 10)
+	at := model.NowUTC().Add(100 * time.Millisecond)
+	revokeOthers := func(keep model.SessionID, reason model.SessionRevocationReason, auditID model.AuditEventID) (*store.UserSessionsRevocation, *store.UserSessionsRevocationResult, error) {
+		input := &store.UserSessionsRevocation{
+			UserID: user.ID, KeepSessionID: keep, RevokedAt: at, Reason: reason,
+			AuditEventID: auditID, AuditAt: at,
+		}
+		result, err := ss.Session().RevokeAllForUser(ctx, input)
+		return input, result, err
+	}
+
+	for name, test := range map[string]struct {
+		keep   model.SessionID
+		reason model.SessionRevocationReason
+	}{
+		"keep without other-sessions reason": {keep: kept.ID, reason: model.SessionRevocationUserAllSessions},
+		"other-sessions reason without keep": {reason: model.SessionRevocationUserOtherSessions},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, _, err := revokeOthers(test.keep, test.reason, saveSessionAuditAttempt(t, ctx, ss, user.ID.String()).ID)
+			var invalid *store.ErrInvalidInput
+			require.ErrorAs(t, err, &invalid)
+		})
+	}
+	_, _, err := revokeOthers(strangerSession.ID, model.SessionRevocationUserOtherSessions, saveSessionAuditAttempt(t, ctx, ss, user.ID.String()).ID)
+	require.True(t, store.IsNotFound(err), "kept Session of another User = %v", err)
+
+	attempt := saveSessionAuditAttempt(t, ctx, ss, user.ID.String())
+	input, result, err := revokeOthers(kept.ID, model.SessionRevocationUserOtherSessions, attempt.ID)
+	require.NoError(t, err)
+	require.False(t, input.NoOp)
+	require.Len(t, result.Sessions, 1)
+	require.Equal(t, other.ID, result.Sessions[0].ID)
+	require.Equal(t, model.SessionRevocationUserOtherSessions, result.Sessions[0].RevocationReason)
+	require.Len(t, result.TokenHashes, 2)
+	_, keptSession, err := ss.SessionCredential().GetSessionByTokenHash(ctx, model.HashToken(keptRaw.access), model.SessionCredentialAccess)
+	require.NoError(t, err)
+	require.False(t, keptSession.RevokedAt.Valid, "kept Session was revoked")
+	otherCredential, _, err := ss.SessionCredential().GetSessionByTokenHash(ctx, model.HashToken(otherRaw.access), model.SessionCredentialAccess)
+	require.NoError(t, err)
+	require.True(t, at.Equal(otherCredential.RevokedAt.Time), "other Session credential stayed live")
+	untouched, err := ss.Session().Get(ctx, strangerSession.ID)
+	require.NoError(t, err)
+	require.False(t, untouched.RevokedAt.Valid, "another User's Session was revoked")
+	audit, err := ss.Audit().Get(ctx, attempt.ID)
+	require.NoError(t, err)
+	require.Equal(t, model.AuditStatusSuccess, audit.Status)
+	var recorded map[string]any
+	require.NoError(t, json.Unmarshal(audit.Result, &recorded))
+	require.Equal(t, kept.ID.String(), recorded["kept_session_id"])
+	require.EqualValues(t, 1, recorded["revoked_session_count"])
+
+	repeat, repeated, err := revokeOthers(kept.ID, model.SessionRevocationUserOtherSessions, saveSessionAuditAttempt(t, ctx, ss, user.ID.String()).ID)
+	require.NoError(t, err)
+	require.True(t, repeat.NoOp, "repeat = %#v", repeated)
+	require.Empty(t, repeated.Sessions)
+
+	_, _, err = revokeOthers(other.ID, model.SessionRevocationUserOtherSessions, saveSessionAuditAttempt(t, ctx, ss, user.ID.String()).ID)
+	require.True(t, store.IsNotFound(err), "revoked kept Session = %v", err)
 }
 
 func testSessionDisabledMailRecordsTerminalAdministrativeNotice(t *testing.T, ss store.Store) {

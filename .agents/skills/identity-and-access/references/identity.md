@@ -205,8 +205,11 @@ The immutable principal selects the owning User; revoking a listed Session
 also verifies its current ownership. These intrinsic self-service operations
 do not grant administrative `session.manage` authority over another User.
 Their audit uses `session.manage` with the distinct `revoke_own_session`,
-`revoke_own_sessions`, or `logout` operation and only bounded Session/User
-identifiers plus approved Session result data. A durable attempt precedes the
+`revoke_own_sessions`, `revoke_other_sessions`, or `logout` operation and only
+bounded Session/User identifiers plus approved Session result data.
+`revoke_other_sessions` keeps the requesting Session live, records it as
+`kept_session_id`, and fails if that Session is no longer live; a Personal
+Access Token has no Session to keep and cannot call it. A durable attempt precedes the
 mutation, and Session/credential-family revocation commits atomically with its
 successful completion. An unavailable required audit fails closed before
 post-commit cache or realtime effects. Self-service reasons never create an

@@ -154,6 +154,9 @@ reset for administrator recovery is a distinct
 
 - Use <Link to="/api/reference/revoke-current-user-session">Revoke current User Session</Link>
   for one known Session.
+- Use <Link to="/api/reference/revoke-other-current-user-sessions">Sign out every other current-user session</Link>
+  when the affected Session is unknown but the device making the request is
+  trusted; the caller stays signed in.
 - Use <Link to="/api/reference/revoke-all-current-user-sessions">Revoke all current User Sessions</Link>
   when the affected Session is unknown; expect the caller's Session to end.
 - Use <Link to="/api/reference/revoke-desktop-registration">Revoke Desktop Registration</Link>

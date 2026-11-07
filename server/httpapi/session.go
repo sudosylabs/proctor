@@ -24,6 +24,16 @@ type revokeSessionRequest struct {
 	SessionID string `json:"session_id"`
 }
 
+// currentUserSessionResponse is one item of the caller's own Session list.
+type currentUserSessionResponse struct {
+	sessionResponse
+	Current bool `json:"current"`
+}
+
+type revokeOtherSessionsResponse struct {
+	RevokedSessionCount int `json:"revoked_session_count"`
+}
+
 func sessionResponsesFromModels(request *http.Request, sessions []*model.Session) []sessionResponse {
 	items := make([]sessionResponse, 0, len(sessions))
 	for _, session := range sessions {
@@ -47,6 +57,7 @@ func sessionResource(sessions Sessions, cookies browserCookies) apiResource {
 		sessionRoute(http.MethodGet, base, []string{"authentication.internal", "request.invalid"}, module.list),
 		sessionRoute(http.MethodPost, appendRoutePath(base, literal("revoke")), []string{"request.invalid", "session.id.invalid", "session.not_found", "authentication.internal", "audit.unavailable"}, module.revoke),
 		sessionRoute(http.MethodPost, appendRoutePath(base, literal("revoke-all")), []string{"authentication.internal", "audit.unavailable"}, module.revokeAll),
+		sessionRoute(http.MethodPost, appendRoutePath(base, literal("revoke-others")), []string{"authentication.internal", "audit.unavailable"}, module.revokeOthers),
 	)
 }
 
@@ -69,8 +80,11 @@ func (m sessionResourceModule) list(request operationRequest) (operationResult, 
 		func(session *model.Session) boundedPageKey {
 			return boundedPageKey{At: session.CreatedAt, ID: session.ID.String()}
 		},
-		func(session *model.Session) sessionResponse {
-			return *sessionResponseFromModel(request.request, session)
+		func(session *model.Session) currentUserSessionResponse {
+			return currentUserSessionResponse{
+				sessionResponse: *sessionResponseFromModel(request.request, session),
+				Current:         session.ID == request.principal.SessionID,
+			}
 		})
 	if err != nil {
 		return operationResult{}, err
@@ -111,4 +125,17 @@ func (m sessionResourceModule) revokeAll(request operationRequest) (operationRes
 		result = result.withHeaders(captureResponseHeaders(m.cookies.clear))
 	}
 	return result, nil
+}
+
+// revokeOthers keeps the requesting Session, so its cookies stay in place.
+func (m sessionResourceModule) revokeOthers(request operationRequest) (operationResult, error) {
+	result, err := m.sessions.RevokeOtherSessions(
+		request.context,
+		request.invocation(),
+		app.RevokeOtherSessionsCommand{},
+	)
+	if err != nil {
+		return operationResult{}, err
+	}
+	return jsonResult(http.StatusOK, revokeOtherSessionsResponse{RevokedSessionCount: result.RevokedSessionCount}), nil
 }

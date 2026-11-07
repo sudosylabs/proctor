@@ -2122,6 +2122,10 @@
     "translation": "Signed out by the user."
   },
   {
+    "id": "session.revocation.user_other_sessions",
+    "translation": "Signed out from another session by the user."
+  },
+  {
     "id": "session.revocation.user_session",
     "translation": "Revoked by the user."
   },

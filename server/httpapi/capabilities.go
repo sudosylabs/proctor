@@ -139,6 +139,7 @@ type Sessions interface {
 	ListSessions(context.Context, invocation.Invocation, app.ListSessionsQuery) ([]*model.Session, error)
 	RevokeSession(context.Context, invocation.Invocation, app.RevokeSessionCommand) error
 	RevokeAllSessions(context.Context, invocation.Invocation, app.RevokeAllSessionsCommand) error
+	RevokeOtherSessions(context.Context, invocation.Invocation, app.RevokeOtherSessionsCommand) (*app.RevokeOtherSessionsResult, error)
 }
 
 type PersonalAccessTokens interface {

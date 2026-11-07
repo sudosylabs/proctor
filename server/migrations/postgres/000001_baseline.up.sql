@@ -1632,7 +1632,7 @@ CREATE TABLE sessions (
 			'access_policy_changed', 'account_disabled', 'administrator_all_sessions',
 			'administrator_session', 'authentication_audit_failed', 'desktop_authorization_failed', 'email_change_undone', 'external_identity_unlinked',
 			'inactive_user', 'password_changed', 'password_removed', 'password_reset', 'refresh_replay', 'mfa_reset',
-			'user_all_sessions', 'user_logout', 'user_session', 'desktop_registration_revoked',
+			'user_all_sessions', 'user_other_sessions', 'user_logout', 'user_session', 'desktop_registration_revoked',
 			'exam_attempt_session_lock', 'expired'
 		))
 	),

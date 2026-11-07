@@ -4824,6 +4824,24 @@
           }
         }
       },
+      "OtherSessionsRevoked": {
+        "content": {
+          "application/json": {
+            "example": {
+              "revoked_session_count": 3
+            },
+            "schema": {
+              "$ref": "#/components/schemas/RevokeOtherSessionsResponse"
+            }
+          }
+        },
+        "description": "Every other current-user Session was revoked",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
       "PasswordReauthenticationOK": {
         "content": {
           "application/json": {
@@ -10383,6 +10401,159 @@
           "scope_type",
           "scope_id",
           "display_name"
+        ],
+        "type": "object"
+      },
+      "CurrentUserSessionResponse": {
+        "additionalProperties": false,
+        "description": "One of the current User's Sessions, marked when it is the Session that made the request.",
+        "properties": {
+          "archived_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "authenticated_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "authentication_method": {
+            "type": "string"
+          },
+          "authentication_strength": {
+            "type": "string"
+          },
+          "client_type": {
+            "enum": [
+              "desktop",
+              "cli",
+              "web"
+            ],
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "current": {
+            "description": "True for the Session that made the request.",
+            "type": "boolean"
+          },
+          "desktop_architecture": {
+            "enum": [
+              "arm64",
+              "x64"
+            ],
+            "type": "string"
+          },
+          "desktop_build_id": {
+            "type": "string"
+          },
+          "desktop_platform": {
+            "enum": [
+              "darwin",
+              "win32",
+              "linux"
+            ],
+            "type": "string"
+          },
+          "desktop_realtime_protocol": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "desktop_registration_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "desktop_release": {
+            "type": "string"
+          },
+          "device_id": {
+            "type": "string"
+          },
+          "device_name": {
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "idle_expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "last_activity_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "mfa_completed_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "mfa_recovery_required": {
+            "description": "Ordinary access remains unavailable until a new local authenticator is activated.",
+            "type": "boolean"
+          },
+          "reauthenticated_at": {
+            "description": "Most recent verified fresh primary proof for the original Session method; does not replace initial authentication or MFA history.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "revocation_reason": {
+            "description": "Localized presentation of revocation_reason_code.",
+            "type": "string"
+          },
+          "revocation_reason_code": {
+            "enum": [
+              "mfa_reset",
+              "account_disabled",
+              "access_policy_changed",
+              "administrator_all_sessions",
+              "administrator_session",
+              "authentication_audit_failed",
+              "desktop_authorization_failed",
+              "desktop_registration_revoked",
+              "email_change_undone",
+              "external_identity_unlinked",
+              "inactive_user",
+              "password_changed",
+              "password_removed",
+              "password_reset",
+              "refresh_replay",
+              "user_all_sessions",
+              "user_logout",
+              "user_other_sessions",
+              "user_session"
+            ],
+            "type": "string"
+          },
+          "revoked_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/ID"
+          }
+        },
+        "required": [
+          "current",
+          "id",
+          "created_at",
+          "updated_at",
+          "user_id",
+          "client_type",
+          "authentication_method",
+          "authentication_strength",
+          "mfa_recovery_required",
+          "authenticated_at",
+          "last_activity_at",
+          "idle_expires_at",
+          "expires_at"
         ],
         "type": "object"
       },
@@ -21535,6 +21706,20 @@
         ],
         "type": "object"
       },
+      "RevokeOtherSessionsResponse": {
+        "additionalProperties": false,
+        "description": "How many of the current User's other Sessions this request revoked.",
+        "properties": {
+          "revoked_session_count": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revoked_session_count"
+        ],
+        "type": "object"
+      },
       "RevokeSessionRequest": {
         "additionalProperties": false,
         "properties": {
@@ -22316,6 +22501,7 @@
               "refresh_replay",
               "user_all_sessions",
               "user_logout",
+              "user_other_sessions",
               "user_session"
             ],
             "type": "string"
@@ -22354,7 +22540,7 @@
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/SessionResponse"
+              "$ref": "#/components/schemas/CurrentUserSessionResponse"
             },
             "type": "array"
           },
@@ -22481,6 +22667,7 @@
               "refresh_replay",
               "user_all_sessions",
               "user_logout",
+              "user_other_sessions",
               "user_session"
             ],
             "type": "string"
@@ -44975,7 +45162,7 @@
     },
     "/api/v1/users/me/sessions/revoke-all": {
       "post": {
-        "description": "Revokes every active Session belonging to the current User, including the Session making the request. Clients must discard cached credentials and require a new authentication flow afterward.",
+        "description": "Revokes every active Session belonging to the current User, including the Session making the request, so the caller is signed out too. Clients must discard cached credentials and require a new authentication flow afterward. To stay signed in on this device, use revokeOtherCurrentUserSessions instead.",
         "operationId": "revokeAllCurrentUserSessions",
         "responses": {
           "204": {
@@ -45018,6 +45205,69 @@
             "label": "Revoke all current-user Sessions",
             "lang": "Shell",
             "source": "curl --request POST \\\n  --header \"Authorization: Bearer $PROCTOR_TOKEN\" \\\n  https://proctor.example.edu/api/v1/users/me/sessions/revoke-all"
+          }
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "authentication.internal",
+          "audit.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/users/me/sessions/revoke-others": {
+      "post": {
+        "description": "Revokes every active Session belonging to the current User except the Session making the request, which stays signed in; its cookies and credentials are left in place. The response reports how many Sessions were revoked, which is zero when no other Session was active. A personal access token has no Session to keep and is refused.",
+        "operationId": "revokeOtherCurrentUserSessions",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OtherSessionsRevoked"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Sign out every other current-user session",
+        "tags": [
+          "Authentication"
+        ],
+        "x-codeSamples": [
+          {
+            "label": "Sign out every other Session",
+            "lang": "Shell",
+            "source": "curl --request POST \\\n  --header \"Authorization: Bearer $PROCTOR_TOKEN\" \\\n  https://proctor.example.edu/api/v1/users/me/sessions/revoke-others"
           }
         ],
         "x-proctor-auth": "session_required",

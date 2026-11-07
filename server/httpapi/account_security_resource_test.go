@@ -28,7 +28,9 @@ type accountSecurityHTTPApplication struct {
 	MFA
 	PersonalAccessTokens
 
-	createToken app.CreatePersonalAccessTokenCommand
+	createToken  app.CreatePersonalAccessTokenCommand
+	sessions     []*model.Session
+	revokeOthers int
 }
 
 func (as *accountSecurityHTTPApplication) ListSessions(
@@ -36,7 +38,16 @@ func (as *accountSecurityHTTPApplication) ListSessions(
 	invocation.Invocation,
 	app.ListSessionsQuery,
 ) ([]*model.Session, error) {
-	return []*model.Session{}, nil
+	return append([]*model.Session{}, as.sessions...), nil
+}
+
+func (as *accountSecurityHTTPApplication) RevokeOtherSessions(
+	context.Context,
+	invocation.Invocation,
+	app.RevokeOtherSessionsCommand,
+) (*app.RevokeOtherSessionsResult, error) {
+	as.revokeOthers++
+	return &app.RevokeOtherSessionsResult{RevokedSessionCount: 2}, nil
 }
 
 func (as *accountSecurityHTTPApplication) GetMFAStatus(
@@ -75,7 +86,11 @@ func TestAccountSecurityResourcesRunThroughFocusedKernel(t *testing.T) {
 		AuthenticatedAt: now, MFACompletedAt: model.OptionalTimeFrom(now),
 		ClientType: model.SessionClientWeb,
 	}
-	applicationStub := &accountSecurityHTTPApplication{}
+	otherSessionID := model.NewSessionID()
+	applicationStub := &accountSecurityHTTPApplication{sessions: []*model.Session{
+		{ID: principal.SessionID, UserID: principal.UserID, CreatedAt: now},
+		{ID: otherSessionID, UserID: principal.UserID, CreatedAt: now.Add(-time.Minute)},
+	}}
 	cookies, err := newBrowserCookies("http://localhost:8065")
 	require.NoError(t, err)
 	httpAPI := newFocusedResourceAPI(
@@ -93,6 +108,35 @@ func TestAccountSecurityResourcesRunThroughFocusedKernel(t *testing.T) {
 	httpAPI.ServeHTTP(statusResponse, statusRequest)
 	require.Equal(t, http.StatusOK, statusResponse.Code, "MFA status = %d, cache = %q: %s", statusResponse.Code, statusResponse.Header().Get("Cache-Control"), statusResponse.Body.String())
 	require.Equal(t, "no-store", statusResponse.Header().Get("Cache-Control"), "MFA status = %d, cache = %q: %s", statusResponse.Code, statusResponse.Header().Get("Cache-Control"), statusResponse.Body.String())
+
+	listRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me/sessions", nil)
+	listRequest.Header.Set("Authorization", "Bearer credential")
+	listResponse := httptest.NewRecorder()
+	httpAPI.ServeHTTP(listResponse, listRequest)
+	require.Equal(t, http.StatusOK, listResponse.Code, "session list: %s", listResponse.Body.String())
+	var listed struct {
+		Items []struct {
+			ID      string `json:"id"`
+			Current *bool  `json:"current"`
+		} `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(listResponse.Body.Bytes(), &listed))
+	require.Len(t, listed.Items, 2)
+	currentByID := map[string]bool{}
+	for _, item := range listed.Items {
+		require.NotNil(t, item.Current, "session %s omits current", item.ID)
+		currentByID[item.ID] = *item.Current
+	}
+	require.Equal(t, map[string]bool{principal.SessionID.String(): true, otherSessionID.String(): false}, currentByID)
+
+	revokeOthersRequest := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/users/me/sessions/revoke-others", nil)
+	revokeOthersRequest.Header.Set("Authorization", "Bearer credential")
+	revokeOthersResponse := httptest.NewRecorder()
+	httpAPI.ServeHTTP(revokeOthersResponse, revokeOthersRequest)
+	require.Equal(t, http.StatusOK, revokeOthersResponse.Code, "revoke others: %s", revokeOthersResponse.Body.String())
+	require.JSONEq(t, `{"revoked_session_count":2}`, revokeOthersResponse.Body.String())
+	require.Empty(t, revokeOthersResponse.Header().Values("Set-Cookie"), "revoke others must leave cookies in place")
+	require.Equal(t, 1, applicationStub.revokeOthers)
 
 	createRequest := httptest.NewRequest(
 		http.MethodPost,

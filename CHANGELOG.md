@@ -194,6 +194,12 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: `POST /api/v1/users/me/sessions/revoke-others` signs the caller out
+  of every other Session while the requesting Session stays signed in, and
+  returns `revoked_session_count`. Revoked Sessions record the new reason
+  `user_other_sessions`, and items in the caller's own Session list carry
+  `current`, true for the Session that made the request. Existing development
+  databases must be recreated.
 - Server: `Mail.SupportAddress` names a help address in every message
   footer, and `Mail.DisplayTimezone` sets the time zone used for message times
   when a recipient has not chosen one.

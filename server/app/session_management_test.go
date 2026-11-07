@@ -103,7 +103,7 @@ func TestSelfSessionServiceRequiresFocusedDependencies(t *testing.T) {
 
 func TestSelfSessionRevocationsRequireAuditBeforeMutationAndEffects(t *testing.T) {
 	t.Parallel()
-	for _, operation := range []string{"revoke_own_session", "revoke_own_sessions", "logout"} {
+	for _, operation := range []string{"revoke_own_session", "revoke_own_sessions", "revoke_other_sessions", "logout"} {
 		for _, outcome := range []string{"success", "attempt unavailable", "completion unavailable"} {
 			t.Run(operation+"/"+outcome, func(t *testing.T) {
 				now := time.Date(2026, 8, 12, 9, 30, 0, 0, time.UTC)
@@ -127,6 +127,15 @@ func TestSelfSessionRevocationsRequireAuditBeforeMutationAndEffects(t *testing.T
 					err = self.RevokeSession(context.Background(), invocation, RevokeSessionCommand{SessionID: principal.SessionID})
 				case "revoke_own_sessions":
 					err = self.RevokeAllSessions(context.Background(), invocation, RevokeAllSessionsCommand{})
+				case "revoke_other_sessions":
+					var result *RevokeOtherSessionsResult
+					result, err = self.RevokeOtherSessions(context.Background(), invocation, RevokeOtherSessionsCommand{})
+					if err == nil {
+						require.Equal(t, 1, result.RevokedSessionCount)
+						require.Equal(t, principal.SessionID, persistence.allRevocation.KeepSessionID)
+						require.Equal(t, model.SessionRevocationUserOtherSessions, persistence.allRevocation.Reason)
+						require.Equal(t, map[string]any{"kept_session_id": principal.SessionID.String()}, audit.attempt.Value)
+					}
 				case "logout":
 					authentication := &authenticationService{deps: authenticationServiceDependencies{Sessions: persistence, Audit: audit, SecurityEffects: effects, Now: self.deps.Now}}
 					err = authentication.Logout(context.Background(), invocation, LogoutCommand{})
@@ -179,7 +188,7 @@ func TestSelfSessionRevocationsRequireAuditBeforeMutationAndEffects(t *testing.T
 
 func TestSelfSessionRevocationRepeatOutcomes(t *testing.T) {
 	t.Parallel()
-	for _, operation := range []string{"revoke_own_session", "revoke_own_sessions", "logout"} {
+	for _, operation := range []string{"revoke_own_session", "revoke_own_sessions", "revoke_other_sessions", "logout"} {
 		t.Run(operation, func(t *testing.T) {
 			now := time.Date(2026, 8, 12, 9, 30, 0, 0, time.UTC)
 			principal := selfSessionPrincipal(now)
@@ -200,6 +209,11 @@ func TestSelfSessionRevocationRepeatOutcomes(t *testing.T) {
 			case "revoke_own_sessions":
 				err = self.RevokeAllSessions(context.Background(), invocation, RevokeAllSessionsCommand{})
 				require.NoError(t, err)
+				require.True(t, persistence.allRevocation.NoOp)
+			case "revoke_other_sessions":
+				result, revokeErr := self.RevokeOtherSessions(context.Background(), invocation, RevokeOtherSessionsCommand{})
+				require.NoError(t, revokeErr)
+				require.Zero(t, result.RevokedSessionCount)
 				require.True(t, persistence.allRevocation.NoOp)
 			case "logout":
 				authentication := &authenticationService{deps: authenticationServiceDependencies{Sessions: persistence, Audit: audit, SecurityEffects: effects, Now: self.deps.Now}}

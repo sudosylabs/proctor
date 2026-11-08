@@ -101,10 +101,17 @@ func TestMailResourceRejectsCallerSuppliedContentAndProjectsNoSecrets(t *testing
 	require.NoError(t, err, "empty test = %#v", result)
 	require.Equal(t, http.StatusAccepted, result.status, "empty test = %#v", result)
 	require.Equal(t, 1, fake.sends, "empty test = %#v", result)
-	response := mailResponse(fake.view)
-	encoded := response.ID + response.MaskedRecipient + response.MessageID
-	for _, forbidden := range []string{"operator@example.test", "ciphertext", "subject", "html", "body"} {
-		require.NotContains(t, encoded, forbidden)
+	// Field names are checked, not values: delivery and message IDs are random
+	// and can spell any short word.
+	encoded, err := json.Marshal(mailResponse(fake.view))
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "operator@example.test")
+	var fields map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(encoded, &fields))
+	for name := range fields {
+		for _, forbidden := range []string{"ciphertext", "subject", "html", "body"} {
+			require.NotContains(t, name, forbidden, "mail response field %q", name)
+		}
 	}
 }
 

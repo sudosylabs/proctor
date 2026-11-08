@@ -78,6 +78,8 @@ func auditResource(audits AuditListingApplication) apiResource {
 		"audits",
 		principalRoute(http.MethodGet, apiPath(literal("audits")),
 			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.query.invalid", "audit.unavailable", "request.invalid", "resource.not_found"}, module.list),
+		sessionRoute(http.MethodGet, apiPath(literal("users"), literal("me"), literal("audits")),
+			[]string{"audit.query.invalid", "audit.unavailable", "request.invalid"}, module.listSelf),
 	)
 }
 

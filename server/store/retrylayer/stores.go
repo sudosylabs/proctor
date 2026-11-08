@@ -804,6 +804,9 @@ func (s *auditStore) Get(ctx context.Context, id model.AuditEventID) (*model.Aud
 func (s *auditStore) List(ctx context.Context, options store.AuditListOptions) ([]*model.AuditEvent, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.AuditEvent, error) { return s.AuditStore.List(ctx, options) })
 }
+func (s *auditStore) ListSelf(ctx context.Context, options store.AuditSelfListOptions) ([]*store.AuditSelfEntry, error) {
+	return retryCall1(ctx, s.layer, func() ([]*store.AuditSelfEntry, error) { return s.AuditStore.ListSelf(ctx, options) })
+}
 
 func (s *installationStore) Get(ctx context.Context) (*model.InstallationState, error) {
 	return retryCall1(ctx, s.layer, func() (*model.InstallationState, error) { return s.InstallationStore.Get(ctx) })

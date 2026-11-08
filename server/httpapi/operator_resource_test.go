@@ -124,10 +124,19 @@ func TestRoleBindingResourceOwnsPathCommandAndAuthentication(t *testing.T) {
 }
 
 type focusedAuditApplication struct {
-	query   app.ListAuditEventsQuery
-	events  []*model.AuditEvent
-	hasMore bool
-	err     error
+	query     app.ListAuditEventsQuery
+	events    []*model.AuditEvent
+	hasMore   bool
+	err       error
+	selfQuery app.ListSelfAuditEventsQuery
+	self      []app.SelfAuditEvent
+	selfCalls int
+}
+
+func (f *focusedAuditApplication) ListSelfAuditEvents(_ context.Context, _ invocation.Invocation, query app.ListSelfAuditEventsQuery) (app.Page[app.SelfAuditEvent], error) {
+	f.selfQuery = query
+	f.selfCalls++
+	return app.Page[app.SelfAuditEvent]{Items: f.self, HasMore: f.hasMore}, f.err
 }
 
 func (f *focusedAuditApplication) ListAuditEvents(_ context.Context, _ invocation.Invocation, query app.ListAuditEventsQuery) (app.Page[*model.AuditEvent], error) {

@@ -38,6 +38,58 @@ type AuditVisibilityScope struct {
 	AllowedActions          []string
 }
 
+// AuditSelfRelation narrows a User's own history to the events about their
+// account (subject) or the events they performed on anything else (actor).
+// The zero value selects both.
+type AuditSelfRelation string
+
+const (
+	AuditSelfRelationSubject AuditSelfRelation = "subject"
+	AuditSelfRelationActor   AuditSelfRelation = "actor"
+)
+
+// MaximumAuditSelfEventKeys bounds the closed catalogue keys one self-history
+// read may match.
+const MaximumAuditSelfEventKeys = 256
+
+// AuditSelfListOptions selects one keyset page of a User's own terminal audit
+// history: events whose subject is the User, and events the User performed
+// whose subject is anyone or nothing else. Events names the exact catalogue
+// keys to match and is required; attempt rows never match. Since is
+// inclusive and Until exclusive; both are optional.
+type AuditSelfListOptions struct {
+	UserID   model.UserID
+	Relation AuditSelfRelation
+	Events   []model.AuditSelfEventKey
+	Since    time.Time
+	Until    time.Time
+	// BeforeCreatedAt and BeforeID continue a page at microsecond precision.
+	BeforeCreatedAt time.Time
+	BeforeID        model.AuditEventID
+	Limit           int
+}
+
+// AuditSelfEntry is the bounded projection of one self-history event. It
+// carries no parameters, prior state, or result beyond the recorded
+// operation name. ResourceRelated reports whether the resource is the User
+// themself, the Institution, or an Academic Unit or Class the User has a
+// membership or Role Binding at, whether current or ended.
+type AuditSelfEntry struct {
+	ID              model.AuditEventID
+	CreatedAt       time.Time
+	ActorID         model.UserID
+	SubjectUserID   model.UserID
+	Action          string
+	Operation       string
+	Status          model.AuditStatus
+	Resource        model.Resource
+	ResourceRelated bool
+	ClientType      string
+	IPAddress       string
+	UserAgent       string
+	ErrorCode       string
+}
+
 // AuditStore owns authoritative security records. Events are append-oriented;
 // Complete permits only the terminal transition from attempt to success/fail.
 type AuditStore interface {
@@ -45,6 +97,10 @@ type AuditStore interface {
 	Get(context.Context, model.AuditEventID) (*model.AuditEvent, error)
 	Complete(context.Context, *AuditCompletion) (*model.AuditEvent, error)
 	List(context.Context, AuditListOptions) ([]*model.AuditEvent, error)
+	// ListSelf returns up to Limit entries of one User's own history, newest
+	// first by (created_at, id). It is the union of the subject and actor
+	// relations, each read through its own index.
+	ListSelf(context.Context, AuditSelfListOptions) ([]*AuditSelfEntry, error)
 	// FailAbandonedAttempts terminalizes up to Limit attempts created longer
 	// than Age ago by PostgreSQL time, oldest first, as failures with
 	// model.AuditErrorAttemptAbandoned, and returns how many it changed.

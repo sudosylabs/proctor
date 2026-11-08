@@ -1,0 +1,84 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+
+package httpapi
+
+import (
+	"encoding/json"
+	"net/http"
+	"net/url"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
+)
+
+func TestSelfAuditResourceParsesFiltersAndPagesPrivately(t *testing.T) {
+	t.Parallel()
+	logger, _ := newTestLogger(t)
+	principal := operatorTestPrincipal()
+	at := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
+	last := app.SelfAuditEvent{
+		ID: model.NewAuditEventID(), CreatedAt: at, Event: model.AuditSelfEventMFAResetByAdministrator,
+		Status: model.AuditStatusSuccess, Relation: store.AuditSelfRelationSubject, ActorKind: app.SelfAuditActorAdministrator,
+		Resource: model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()}, ClientType: "web",
+	}
+	audits := &focusedAuditApplication{self: []app.SelfAuditEvent{last}, hasMore: true}
+	httpAPI := newFocusedResourceAPI(t, logger, &academicUnitHTTPApplication{principal: principal}, auditResource(audits))
+
+	response := serveOperatorRequest(httpAPI, http.MethodGet,
+		"/api/v1/users/me/audits?limit=1&event=mfa.reset_by_administrator&event=password.changed&status=success&relation=subject"+
+			"&created_after=2026-07-01T00:00:00Z&created_before=2026-09-01T00:00:00Z", "", true)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.Equal(t, "private, no-store", response.Header().Get("Cache-Control"))
+	require.Equal(t, 1, audits.selfQuery.Limit)
+	require.Equal(t, []model.AuditSelfEvent{model.AuditSelfEventMFAResetByAdministrator, model.AuditSelfEventPasswordChanged}, audits.selfQuery.Events)
+	require.Equal(t, model.AuditStatusSuccess, audits.selfQuery.Status)
+	require.Equal(t, store.AuditSelfRelationSubject, audits.selfQuery.Relation)
+	require.True(t, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC).Equal(audits.selfQuery.Since))
+	require.True(t, time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC).Equal(audits.selfQuery.Until))
+
+	var page listResponse[selfAuditEventResponse]
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
+	require.Len(t, page.Items, 1)
+	require.Equal(t, "mfa.reset_by_administrator", page.Items[0].Event)
+	require.Equal(t, "administrator", page.Items[0].Actor.Kind)
+	require.Empty(t, page.Items[0].IPAddress)
+	require.NotEmpty(t, page.NextCursor)
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &raw))
+	item := raw["items"].([]any)[0].(map[string]any)
+	require.NotContains(t, item, "actor_id", "an administrator's identity escaped")
+	require.NotContains(t, item, "parameters")
+
+	audits.self, audits.hasMore = nil, false
+	second := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/users/me/audits?cursor="+url.QueryEscape(page.NextCursor), "", true)
+	require.Equal(t, http.StatusOK, second.Code, second.Body.String())
+	require.True(t, at.Equal(audits.selfQuery.BeforeCreatedAt))
+	require.Equal(t, last.ID, audits.selfQuery.BeforeID)
+
+	calls := audits.selfCalls
+	for _, query := range []string{"created_after=yesterday", "created_before=2026-09-01", "since=2026-07-01T00:00:00Z", "status=success&status=fail", "actor_id=" + model.NewID()} {
+		invalid := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/users/me/audits?"+query, "", true)
+		assertHTTPProblem(t, invalid, http.StatusBadRequest, "request.invalid")
+	}
+	require.Equal(t, calls, audits.selfCalls, "a malformed filter reached the application")
+
+	audits.err = apperror.New("audit.query.invalid")
+	refused := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/users/me/audits?event=mfa.activate&status=attempt&relation=observer", "", true)
+	assertHTTPProblem(t, refused, http.StatusBadRequest, "audit.query.invalid")
+	require.Equal(t, []model.AuditSelfEvent{"mfa.activate"}, audits.selfQuery.Events, "the application decides the closed vocabulary")
+	require.Equal(t, model.AuditStatusAttempt, audits.selfQuery.Status)
+	require.Equal(t, store.AuditSelfRelation("observer"), audits.selfQuery.Relation)
+	malformed := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/users/me/audits?cursor=not-a-cursor", "", true)
+	assertHTTPProblem(t, malformed, http.StatusBadRequest, "request.invalid")
+}

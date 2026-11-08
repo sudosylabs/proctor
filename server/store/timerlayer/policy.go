@@ -225,6 +225,7 @@ const (
 	methodAcceptScopedRole                          methodName = "accept_scoped_role"
 	methodAcceptExternalIdentity                    methodName = "accept_external_identity"
 	methodList                                      methodName = "list"
+	methodListSelf                                  methodName = "list_self"
 	methodListCandidateActivity                     methodName = "list_candidate_activity"
 	methodListSessionRevocationInvalidationTargets  methodName = "list_session_revocation_invalidation_targets"
 	methodListSittingCandidateStatuses              methodName = "list_sitting_candidate_statuses"

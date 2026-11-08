@@ -229,6 +229,15 @@ module when a change is not server-only. No module has been released yet.
   the Personal Access Token scopes the signed-in User may grant now, each with
   a localized title and description, its resource types, and where it may be
   granted: institution-wide or at up to 50 listed Academic Unit roots.
+- Server: `GET /api/v1/users/me/audits` lists the signed-in User's own
+  account history: sign-ins, sign-outs, password, two-step verification,
+  Session, Personal Access Token, profile, email, account state, Role, and
+  membership events, whoever performed them, plus the account events the User
+  performed on others. Each item has a stable `event` name from a closed
+  catalogue, an `actor.kind` of `self`, `administrator`, or `system` that never
+  names another person, and the IP address and user agent only for the User's
+  own actions. It filters by `created_after`, `created_before`, repeated
+  `event`, `status`, and `relation`, and refuses Personal Access Tokens.
 - Server: `Mail.SupportAddress` names a help address in every message
   footer, and `Mail.DisplayTimezone` sets the time zone used for message times
   when a recipient has not chosen one.

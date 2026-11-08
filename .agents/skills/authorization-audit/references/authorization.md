@@ -209,6 +209,20 @@ identity, provider, and security events remain excluded. Onboarding domain
 actions likewise expose actor/scope-filtered Job projections without granting
 generic Job inspection.
 
+The self audit projection (`GET /users/me/audits`) is a third, permission-free
+view: an interactive Session User's own account history. It is the caller's
+own record, like other `/users/me` reads, so it records no authorization
+decision, and Personal Access Tokens cannot read it. "My history" is every
+terminal event whose subject is the caller plus every one the caller performed
+whose subject is anyone or nothing else. Only the closed
+`model.AuditSelfEvent` catalogue, keyed by action, recorded operation, and
+(for sign-in) status, is shown; attempts and other rows never are. Another
+person is never named: the actor is only `self`, `administrator`, or `system`;
+the IP address and user agent appear only on the caller's own actions; and a
+resource identity appears only for the caller, the Institution, or an Academic
+Unit or Class the caller has or had a membership or Role Binding at. It never
+returns parameters, prior state, or results.
+
 Examination authorization begins with Exam, Exam Sitting, Exam Attempt, and
 Submission resources. Drafts and Revisions authorize through their Exam;
 supporting material, workspace state, flags, evidence, and reviews authorize

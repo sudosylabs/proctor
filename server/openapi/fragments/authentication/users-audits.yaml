@@ -1,0 +1,279 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/users/me/audits:
+    get:
+      operationId: listCurrentUserAuditEvents
+      summary: List the current User's own account history
+      description: >-
+        Returns one page of the current Session User's own account history, newest first. The history holds
+        events about the User's account, whoever performed them, and account-relevant events the User performed
+        on anything else. Each item carries a stable `event` name from a closed catalogue, which clients label
+        themselves; rows outside the catalogue and unfinished attempts are never returned. Another person is
+        never named: the actor is only `self`, `administrator`, or `system`, and the IP address and user agent
+        appear only on the User's own actions. A resource identity appears only when the resource is the User,
+        the Institution, or an Academic Unit or Class the User has or had a membership or Role Binding at.
+        Personal Access Tokens cannot read this history. Reading it records no authorization decision.
+      tags:
+        - Authentication
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - audit.query.invalid
+        - audit.unavailable
+        - request.invalid
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/PageCursor'
+        - name: created_after
+          in: query
+          required: false
+          description: Return only events recorded at or after this RFC 3339 instant.
+          schema:
+            type: string
+            format: date-time
+        - name: created_before
+          in: query
+          required: false
+          description: Return only events recorded before this RFC 3339 instant; it must be later than `created_after`.
+          schema:
+            type: string
+            format: date-time
+        - name: event
+          in: query
+          required: false
+          description: Return only these events. Repeat the parameter to select several; omit it for all.
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 64
+            items:
+              $ref: '#/components/schemas/SelfAuditEvent'
+        - name: status
+          in: query
+          required: false
+          description: Return only events with this outcome.
+          schema:
+            type: string
+            enum:
+              - success
+              - fail
+        - name: relation
+          in: query
+          required: false
+          description: >-
+            Return only events about the User's account (`subject`) or only events the User performed on
+            anything else (`actor`). Omit it for both.
+          schema:
+            type: string
+            enum:
+              - subject
+              - actor
+      responses:
+        "200":
+          $ref: '#/components/responses/SelfAuditListOK'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "500":
+          $ref: '#/components/responses/InternalError'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  responses:
+    SelfAuditListOK:
+      description: One page of the current User's own account history.
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/PrivateNoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SelfAuditListResponse'
+          example:
+            items:
+              - id: ybndrfg8ejkmcpqxot1uwisza3
+                created_at: '2026-08-01T09:30:00Z'
+                event: password.changed
+                status: success
+                relation: subject
+                actor:
+                  kind: self
+                resource:
+                  type: user
+                  id: ybndrfg8ejkmcpqxot1uwisza4
+                client_type: web
+                ip_address: 192.0.2.10
+                user_agent: Mozilla/5.0
+              - id: ybndrfg8ejkmcpqxot1uwisza5
+                created_at: '2026-07-30T14:05:00Z'
+                event: mfa.reset_by_administrator
+                status: success
+                relation: subject
+                actor:
+                  kind: administrator
+                resource:
+                  type: user
+                  id: ybndrfg8ejkmcpqxot1uwisza4
+                client_type: web
+            next_cursor: eyJjcmVhdGVkX2F0IjoiMjAyNi0wNy0zMFQxNDowNTowMFoifQ
+  schemas:
+    SelfAuditEvent:
+      description: >-
+        Stable name of one account-relevant event. The catalogue is closed and may grow; clients own the
+        labels and should present an unknown name generically.
+      type: string
+      enum:
+        - academic_unit.joined
+        - academic_unit.left
+        - account.disabled
+        - account.enabled
+        - account.recovered_by_administrator
+        - affiliation.ended
+        - affiliation.started
+        - class.enrolled
+        - class.transferred_in
+        - class.transferred_out
+        - class.unenrolled
+        - desktop.registration_revoked
+        - desktop.signed_in
+        - email.change_undone
+        - email.changed
+        - email.verified
+        - invitation.accepted
+        - mfa.disabled
+        - mfa.enabled
+        - mfa.recovery_codes_regenerated
+        - mfa.reset_by_administrator
+        - mfa.setup_started
+        - password.changed
+        - password.enrolled
+        - password.removed
+        - password.reset
+        - personal_access_token.created
+        - personal_access_token.disabled
+        - personal_access_token.enabled
+        - personal_access_token.revoked
+        - profile.changed
+        - profile_picture.changed
+        - profile_picture.removed
+        - provider.unlinked
+        - role.ended
+        - role.granted
+        - session.revoked
+        - sessions.revoked_all
+        - sessions.revoked_others
+        - sign_in.failed
+        - sign_in.succeeded
+        - sign_out
+    SelfAuditEventResponse:
+      description: One event in the current User's own account history.
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - created_at
+        - event
+        - status
+        - relation
+        - actor
+        - resource
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        created_at:
+          type: string
+          format: date-time
+          description: Time the event began.
+        event:
+          $ref: '#/components/schemas/SelfAuditEvent'
+        status:
+          type: string
+          enum:
+            - success
+            - fail
+          description: Outcome of the event.
+        relation:
+          type: string
+          enum:
+            - subject
+            - actor
+          description: >-
+            `subject` when the event is about the User's account; `actor` when the User performed it on
+            anything else.
+        actor:
+          type: object
+          additionalProperties: false
+          required:
+            - kind
+          properties:
+            kind:
+              type: string
+              enum:
+                - self
+                - administrator
+                - system
+              description: >-
+                Who performed the event: the User, another person with authority over the account, or work
+                with no signed-in actor such as a background Job, offline recovery, or an emailed link.
+        resource:
+          type: object
+          additionalProperties: false
+          required:
+            - type
+          properties:
+            type:
+              type: string
+              description: Stable type of the resource the event was recorded against.
+            id:
+              $ref: '#/components/schemas/ID'
+        error_code:
+          type: string
+          maxLength: 128
+          description: Stable safe failure category of a failed event.
+        client_type:
+          type: string
+          maxLength: 32
+          description: Kind of client the event came from, when recorded.
+        ip_address:
+          type: string
+          maxLength: 64
+          description: Network address of the User's own action; omitted for anyone else's.
+        user_agent:
+          type: string
+          maxLength: 512
+          description: User agent of the User's own action; omitted for anyone else's.
+    SelfAuditListResponse:
+      description: One bounded page of the current User's own account history.
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/SelfAuditEventResponse'
+        next_cursor:
+          type: string
+          maxLength: 2048
+          description: Opaque continuation for the next page, omitted after the final page.

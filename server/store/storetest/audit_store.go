@@ -166,6 +166,125 @@ func TestAuditStore(t *testing.T, ss store.Store) {
 	require.ErrorAs(t, err, &invalid, "mixed academic audit visibility error")
 
 	testAuditAbandonedAttempts(t, ctx, ss, institution.ID.String(), user.ID)
+	testAuditSelfHistory(t, ctx, ss, institution.ID.String())
+}
+
+// testAuditSelfHistory proves the self-history read: the subject and actor
+// relations, terminal catalogue rows only, keyset paging, the date range and
+// status filters, and the resource relationship flag.
+func testAuditSelfHistory(t *testing.T, ctx context.Context, ss store.Store, institutionID string) {
+	t.Helper()
+	me, administrator, other := saveUser(t, ctx, ss), saveUser(t, ctx, ss), saveUser(t, ctx, ss)
+	memberUnit := saveAcademicUnit(t, ctx, ss, institutionID, "", "self-history-member-unit")
+	foreignUnit := saveAcademicUnit(t, ctx, ss, institutionID, "", "self-history-foreign-unit")
+	_, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: memberUnit.ID, UserID: me.ID, StartsAt: model.NowUTC()})
+	require.NoError(t, err)
+	institution := model.Resource{Type: model.ResourceInstitution, ID: institutionID}
+	userResource := func(user *model.User) model.Resource {
+		return model.Resource{Type: model.ResourceUser, ID: user.ID.String()}
+	}
+	save := func(event *model.AuditEvent) *model.AuditEvent {
+		t.Helper()
+		time.Sleep(2 * time.Millisecond)
+		event.ScopeType, event.ScopeID, event.NodeID = model.RoleScopeInstitution, institutionID, "test-node"
+		saved, saveErr := ss.Audit().Save(ctx, event)
+		require.NoError(t, saveErr)
+		return saved
+	}
+	operation := func(name string) []byte { return []byte(`{"operation":"` + name + `","value":{}}`) }
+	passwordChanged := save(&model.AuditEvent{ActorID: me.ID, Action: string(model.ActionExternalIdentityManage), Resource: userResource(me),
+		Parameters: operation("change_password"), Status: model.AuditStatusSuccess, IPAddress: "192.0.2.10", UserAgent: "Browser"})
+	administratorReset := save(&model.AuditEvent{ActorID: administrator.ID, Action: string(model.ActionUserMFAReset), Resource: userResource(me),
+		Status: model.AuditStatusSuccess})
+	failedSignIn := save(&model.AuditEvent{Action: string(model.ActionAuthenticationLogin), Resource: userResource(me),
+		Status: model.AuditStatusFail, ErrorCode: "authentication.invalid_credentials"})
+	save(&model.AuditEvent{ActorID: me.ID, Action: string(model.ActionExternalIdentityManage), Resource: userResource(me),
+		Parameters: operation("remove_password"), Status: model.AuditStatusAttempt})
+	save(&model.AuditEvent{ActorID: me.ID, Action: string(model.ActionUserSettingsReplace), Resource: userResource(me), Status: model.AuditStatusSuccess})
+	grantedToOther := save(&model.AuditEvent{ActorID: me.ID, SubjectUserID: other.ID, Action: string(model.ActionRoleBindingManage),
+		Resource: model.Resource{Type: model.ResourceAcademicUnit, ID: foreignUnit.ID.String()}, Parameters: operation("create_binding"),
+		Status: model.AuditStatusSuccess})
+	grantedToMe := save(&model.AuditEvent{ActorID: administrator.ID, SubjectUserID: me.ID, Action: string(model.ActionRoleBindingManage),
+		Resource: model.Resource{Type: model.ResourceAcademicUnit, ID: memberUnit.ID.String()}, Parameters: operation("create_binding"),
+		Status: model.AuditStatusSuccess})
+	save(&model.AuditEvent{ActorID: administrator.ID, Action: string(model.ActionUserMFAReset), Resource: userResource(other), Status: model.AuditStatusSuccess})
+	mfaEnabled := save(&model.AuditEvent{ActorID: me.ID, SubjectUserID: me.ID, Action: string(model.ActionMFAActivate), Resource: institution,
+		Status: model.AuditStatusSuccess})
+
+	all := model.AuditSelfEventKeys(nil, "")
+	list := func(options store.AuditSelfListOptions) []model.AuditEventID {
+		t.Helper()
+		options.UserID = me.ID
+		if options.Events == nil {
+			options.Events = all
+		}
+		if options.Limit == 0 {
+			options.Limit = 50
+		}
+		entries, listErr := ss.Audit().ListSelf(ctx, options)
+		require.NoError(t, listErr)
+		ids := make([]model.AuditEventID, 0, len(entries))
+		for _, entry := range entries {
+			ids = append(ids, entry.ID)
+		}
+		return ids
+	}
+	newestFirst := []model.AuditEventID{mfaEnabled.ID, grantedToMe.ID, grantedToOther.ID, failedSignIn.ID, administratorReset.ID, passwordChanged.ID}
+	require.Equal(t, newestFirst, list(store.AuditSelfListOptions{}), "attempt, uncatalogued, and foreign rows must not appear")
+
+	entries, err := ss.Audit().ListSelf(ctx, store.AuditSelfListOptions{UserID: me.ID, Events: all, Limit: 50})
+	require.NoError(t, err)
+	byID := map[model.AuditEventID]*store.AuditSelfEntry{}
+	for _, entry := range entries {
+		byID[entry.ID] = entry
+	}
+	require.True(t, byID[passwordChanged.ID].ResourceRelated, "the caller's own User resource")
+	require.Equal(t, "change_password", byID[passwordChanged.ID].Operation)
+	require.Equal(t, "192.0.2.10", byID[passwordChanged.ID].IPAddress)
+	require.Equal(t, me.ID, byID[passwordChanged.ID].SubjectUserID)
+	require.True(t, byID[mfaEnabled.ID].ResourceRelated, "the Institution")
+	require.True(t, byID[grantedToMe.ID].ResourceRelated, "an Academic Unit the caller belongs to")
+	require.False(t, byID[grantedToOther.ID].ResourceRelated, "an Academic Unit the caller has no relationship with")
+	require.Equal(t, other.ID, byID[grantedToOther.ID].SubjectUserID)
+	require.True(t, byID[failedSignIn.ID].ActorID.IsZero())
+
+	var paged []model.AuditEventID
+	options := store.AuditSelfListOptions{Limit: 2}
+	for page := 0; page < 4; page++ {
+		ids := list(options)
+		if len(ids) == 0 {
+			break
+		}
+		paged = append(paged, ids...)
+		last := byID[ids[len(ids)-1]]
+		options.BeforeCreatedAt, options.BeforeID = last.CreatedAt, last.ID
+	}
+	require.Equal(t, newestFirst, paged, "keyset pages")
+
+	require.Equal(t, []model.AuditEventID{mfaEnabled.ID, grantedToMe.ID, failedSignIn.ID, administratorReset.ID, passwordChanged.ID},
+		list(store.AuditSelfListOptions{Relation: store.AuditSelfRelationSubject}))
+	require.Equal(t, []model.AuditEventID{grantedToOther.ID}, list(store.AuditSelfListOptions{Relation: store.AuditSelfRelationActor}))
+	require.Equal(t, []model.AuditEventID{failedSignIn.ID}, list(store.AuditSelfListOptions{Events: model.AuditSelfEventKeys(nil, model.AuditStatusFail)}))
+	require.Equal(t, []model.AuditEventID{grantedToMe.ID, grantedToOther.ID},
+		list(store.AuditSelfListOptions{Events: model.AuditSelfEventKeys([]model.AuditSelfEvent{model.AuditSelfEventRoleGranted}, "")}))
+	require.Equal(t, []model.AuditEventID{grantedToOther.ID, failedSignIn.ID, administratorReset.ID},
+		list(store.AuditSelfListOptions{Since: administratorReset.CreatedAt, Until: grantedToMe.CreatedAt}), "since is inclusive and until exclusive")
+
+	strangerEntries, err := ss.Audit().ListSelf(ctx, store.AuditSelfListOptions{UserID: other.ID, Events: all, Limit: 50})
+	require.NoError(t, err)
+	require.Len(t, strangerEntries, 2, "the other User sees the grant and the reset about them, never the caller's history")
+
+	var invalid *store.ErrInvalidInput
+	for name, bad := range map[string]store.AuditSelfListOptions{
+		"no events": {UserID: me.ID, Limit: 10},
+		"attempt":   {UserID: me.ID, Limit: 10, Events: []model.AuditSelfEventKey{{Action: string(model.ActionMFAActivate), Status: model.AuditStatusAttempt}}},
+		"relation":  {UserID: me.ID, Limit: 10, Events: all, Relation: "observer"},
+		"limit":     {UserID: me.ID, Limit: 202, Events: all},
+		"cursor":    {UserID: me.ID, Limit: 10, Events: all, BeforeCreatedAt: model.NowUTC()},
+	} {
+		_, err = ss.Audit().ListSelf(ctx, bad)
+		require.ErrorAs(t, err, &invalid, name)
+	}
 }
 
 func testAuditAbandonedAttempts(t *testing.T, ctx context.Context, ss store.Store, institutionID string, userID model.UserID) {

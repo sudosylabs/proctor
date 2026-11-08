@@ -5458,6 +5458,58 @@
         },
         "description": "Authenticated security preflight result."
       },
+      "SelfAuditListOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "items": [
+                {
+                  "actor": {
+                    "kind": "self"
+                  },
+                  "client_type": "web",
+                  "created_at": "2026-08-01T09:30:00Z",
+                  "event": "password.changed",
+                  "id": "ybndrfg8ejkmcpqxot1uwisza3",
+                  "ip_address": "192.0.2.10",
+                  "relation": "subject",
+                  "resource": {
+                    "id": "ybndrfg8ejkmcpqxot1uwisza4",
+                    "type": "user"
+                  },
+                  "status": "success",
+                  "user_agent": "Mozilla/5.0"
+                },
+                {
+                  "actor": {
+                    "kind": "administrator"
+                  },
+                  "client_type": "web",
+                  "created_at": "2026-07-30T14:05:00Z",
+                  "event": "mfa.reset_by_administrator",
+                  "id": "ybndrfg8ejkmcpqxot1uwisza5",
+                  "relation": "subject",
+                  "resource": {
+                    "id": "ybndrfg8ejkmcpqxot1uwisza4",
+                    "type": "user"
+                  },
+                  "status": "success"
+                }
+              ],
+              "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wNy0zMFQxNDowNTowMFoifQ"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/SelfAuditListResponse"
+            }
+          }
+        },
+        "description": "One page of the current User's own account history.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
+      },
       "SensitiveAccepted": {
         "description": "Accepted",
         "headers": {
@@ -22752,6 +22804,173 @@
           "reason_codes",
           "server_time",
           "expires_at"
+        ],
+        "type": "object"
+      },
+      "SelfAuditEvent": {
+        "description": "Stable name of one account-relevant event. The catalogue is closed and may grow; clients own the labels and should present an unknown name generically.",
+        "enum": [
+          "academic_unit.joined",
+          "academic_unit.left",
+          "account.disabled",
+          "account.enabled",
+          "account.recovered_by_administrator",
+          "affiliation.ended",
+          "affiliation.started",
+          "class.enrolled",
+          "class.transferred_in",
+          "class.transferred_out",
+          "class.unenrolled",
+          "desktop.registration_revoked",
+          "desktop.signed_in",
+          "email.change_undone",
+          "email.changed",
+          "email.verified",
+          "invitation.accepted",
+          "mfa.disabled",
+          "mfa.enabled",
+          "mfa.recovery_codes_regenerated",
+          "mfa.reset_by_administrator",
+          "mfa.setup_started",
+          "password.changed",
+          "password.enrolled",
+          "password.removed",
+          "password.reset",
+          "personal_access_token.created",
+          "personal_access_token.disabled",
+          "personal_access_token.enabled",
+          "personal_access_token.revoked",
+          "profile.changed",
+          "profile_picture.changed",
+          "profile_picture.removed",
+          "provider.unlinked",
+          "role.ended",
+          "role.granted",
+          "session.revoked",
+          "sessions.revoked_all",
+          "sessions.revoked_others",
+          "sign_in.failed",
+          "sign_in.succeeded",
+          "sign_out"
+        ],
+        "type": "string"
+      },
+      "SelfAuditEventResponse": {
+        "additionalProperties": false,
+        "description": "One event in the current User's own account history.",
+        "properties": {
+          "actor": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "description": "Who performed the event: the User, another person with authority over the account, or work with no signed-in actor such as a background Job, offline recovery, or an emailed link.",
+                "enum": [
+                  "self",
+                  "administrator",
+                  "system"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "client_type": {
+            "description": "Kind of client the event came from, when recorded.",
+            "maxLength": 32,
+            "type": "string"
+          },
+          "created_at": {
+            "description": "Time the event began.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "error_code": {
+            "description": "Stable safe failure category of a failed event.",
+            "maxLength": 128,
+            "type": "string"
+          },
+          "event": {
+            "$ref": "#/components/schemas/SelfAuditEvent"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "ip_address": {
+            "description": "Network address of the User's own action; omitted for anyone else's.",
+            "maxLength": 64,
+            "type": "string"
+          },
+          "relation": {
+            "description": "`subject` when the event is about the User's account; `actor` when the User performed it on anything else.",
+            "enum": [
+              "subject",
+              "actor"
+            ],
+            "type": "string"
+          },
+          "resource": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/ID"
+              },
+              "type": {
+                "description": "Stable type of the resource the event was recorded against.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "type": "object"
+          },
+          "status": {
+            "description": "Outcome of the event.",
+            "enum": [
+              "success",
+              "fail"
+            ],
+            "type": "string"
+          },
+          "user_agent": {
+            "description": "User agent of the User's own action; omitted for anyone else's.",
+            "maxLength": 512,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "event",
+          "status",
+          "relation",
+          "actor",
+          "resource"
+        ],
+        "type": "object"
+      },
+      "SelfAuditListResponse": {
+        "additionalProperties": false,
+        "description": "One bounded page of the current User's own account history.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SelfAuditEventResponse"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "next_cursor": {
+            "description": "Opaque continuation for the next page, omitted after the final page.",
+            "maxLength": 2048,
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
         ],
         "type": "object"
       },
@@ -44745,6 +44964,127 @@
           "authorization.unavailable",
           "resource.not_found",
           "administration.unavailable",
+          "request.invalid",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/users/me/audits": {
+      "get": {
+        "description": "Returns one page of the current Session User's own account history, newest first. The history holds events about the User's account, whoever performed them, and account-relevant events the User performed on anything else. Each item carries a stable `event` name from a closed catalogue, which clients label themselves; rows outside the catalogue and unfinished attempts are never returned. Another person is never named: the actor is only `self`, `administrator`, or `system`, and the IP address and user agent appear only on the User's own actions. A resource identity appears only when the resource is the User, the Institution, or an Academic Unit or Class the User has or had a membership or Role Binding at. Personal Access Tokens cannot read this history. Reading it records no authorization decision.",
+        "operationId": "listCurrentUserAuditEvents",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageCursor"
+          },
+          {
+            "description": "Return only events recorded at or after this RFC 3339 instant.",
+            "in": "query",
+            "name": "created_after",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Return only events recorded before this RFC 3339 instant; it must be later than `created_after`.",
+            "in": "query",
+            "name": "created_before",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Return only these events. Repeat the parameter to select several; omit it for all.",
+            "explode": true,
+            "in": "query",
+            "name": "event",
+            "required": false,
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/SelfAuditEvent"
+              },
+              "maxItems": 64,
+              "type": "array"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Return only events with this outcome.",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": [
+                "success",
+                "fail"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Return only events about the User's account (`subject`) or only events the User performed on anything else (`actor`). Omit it for both.",
+            "in": "query",
+            "name": "relation",
+            "required": false,
+            "schema": {
+              "enum": [
+                "subject",
+                "actor"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SelfAuditListOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List the current User's own account history",
+        "tags": [
+          "Authentication"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "audit.query.invalid",
+          "audit.unavailable",
           "request.invalid",
           "authentication.required",
           "authentication.token_invalid",

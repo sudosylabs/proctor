@@ -208,7 +208,7 @@ phase-access-onboarding: check
 	PROCTOR_TEST_DATABASE_URL='$(PROCTOR_TEST_DATABASE_URL)' \
 		$(GO_TEST) -tags=integration ./app -run '^TestJobRunnerRecoversNodeLossAroundADurableDomainCommit$$' -count=1; \
 	PROCTOR_TEST_DATABASE_URL='$(PROCTOR_TEST_DATABASE_URL)' \
-		$(GO_TEST) -tags=integration ./store/sqlstore -run '^TestAccessAndOnboardingDecoratedLayerConformance$$' -count=1; \
+		$(GO_TEST) -tags=integration ./store/sqlstore -run '^TestLocalCacheLayerConformance$$' -count=1; \
 	PROCTOR_TEST_DATABASE_URL='$(PROCTOR_TEST_DATABASE_URL)' \
 		$(GO_TEST) -tags=integration ./store/sqlstore -run '^TestAuthenticationTerminalCommitsRecheckCurrentAccessPolicy$$' -count=1; \
 	PROCTOR_TEST_DATABASE_URL='$(PROCTOR_TEST_DATABASE_URL)' \

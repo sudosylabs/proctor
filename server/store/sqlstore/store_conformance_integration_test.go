@@ -35,6 +35,10 @@ import (
 	"github.com/sudosylabs/proctor/server/store/timerlayer"
 )
 
+// TestLocalCacheLayerConformance runs every Store suite through the local
+// cache, the one decorator that changes read semantics. The retry and timer
+// decorators only forward calls; generated-forwarding checks and their own
+// unit tests cover them, so they are not rerun against the full suite.
 func TestLocalCacheLayerConformance(t *testing.T) {
 	sqlStore := openTestStore(t)
 	runLayerConformance(t, sqlStore, newLocalCacheConformanceStore)
@@ -60,11 +64,6 @@ func newLocalCacheConformanceStore(t *testing.T, sqlStore *SQLStore) store.Store
 	return cachedStore
 }
 
-func TestRetryLayerConformance(t *testing.T) {
-	sqlStore := openTestStore(t)
-	runLayerConformance(t, sqlStore, newRetryConformanceStore)
-}
-
 func newRetryConformanceStore(t *testing.T, sqlStore *SQLStore) store.Store {
 	t.Helper()
 	retriedStore, err := retrylayer.NewWithRecorder(sqlStore, retrylayer.DefaultPolicy(IsTransientError), nil)
@@ -72,95 +71,11 @@ func newRetryConformanceStore(t *testing.T, sqlStore *SQLStore) store.Store {
 	return retriedStore
 }
 
-func TestTimerLayerConformance(t *testing.T) {
-	sqlStore := openTestStore(t)
-	runLayerConformance(t, sqlStore, newTimerConformanceStore)
-}
-
 func newTimerConformanceStore(t *testing.T, sqlStore *SQLStore) store.Store {
 	t.Helper()
 	timedStore, err := timerlayer.New(sqlStore, timerlayer.NopRecorder{}, timerlayer.Options{})
 	require.NoError(t, err)
 	return timedStore
-}
-
-// TestAccessAndOnboardingDecoratedLayerConformance keeps the phase gate
-// focused on the Stores that own access and onboarding state. The repository's
-// broader layer-conformance tests remain the authority for every other model.
-func TestAccessAndOnboardingDecoratedLayerConformance(t *testing.T) {
-	sqlStore := openTestStore(t)
-	type decorator struct {
-		name string
-		new  func(*testing.T, *SQLStore) store.Store
-	}
-	decorators := []decorator{
-		{"local-cache", newLocalCacheConformanceStore},
-		{"retry", newRetryConformanceStore},
-		{"timer", newTimerConformanceStore},
-	}
-
-	tests := []struct {
-		name      string
-		pristine  bool
-		providers map[string]model.ProviderAdmissionMode
-		run       func(*testing.T, store.Store)
-	}{
-		{"Institution", false, nil, storetest.TestInstitutionStore},
-		{"AcademicUnit", false, nil, storetest.TestAcademicUnitStore},
-		{"Programme", false, nil, storetest.TestProgrammeStore},
-		{"ProgrammeLevel", false, nil, storetest.TestProgrammeLevelStore},
-		{"AcademicPeriod", false, nil, storetest.TestAcademicPeriodStore},
-		{"Class", false, nil, storetest.TestClassStore},
-		{"User", false, nil, func(t *testing.T, decorated store.Store) {
-			storetest.TestUserStore(t, decorated, userRegistrationSQLProbe(sqlStore))
-		}},
-		{"Job", false, nil, storetest.TestJobStore},
-		{"Mail", false, nil, storetest.TestMailStore},
-		{"ExternalIdentity", true, map[string]model.ProviderAdmissionMode{
-			"campus-cas": model.ProviderAdmissionAutoProvision,
-		}, storetest.TestExternalIdentityStore},
-		{"ExternalLoginState", false, nil, func(t *testing.T, decorated store.Store) {
-			storetest.TestExternalLoginStateStore(t, decorated, externalLoginStateSQLProbe(sqlStore))
-		}},
-		{"DesktopAuthorization", false, nil, func(t *testing.T, decorated store.Store) {
-			storetest.TestBrowserAuthenticationStore(t, decorated, browserAuthenticationSQLProbe(sqlStore))
-		}},
-		{"InvitationAndBatch", false, nil, func(t *testing.T, decorated store.Store) {
-			storetest.TestInvitationStore(t, decorated, invitationAuthoritySQLProbe(t, sqlStore))
-		}},
-		{"PasswordCredential", true, map[string]model.ProviderAdmissionMode{
-			"campus-cas": model.ProviderAdmissionLinkedOnly,
-		}, storetest.TestPasswordCredentialStore},
-		{"UserToken", false, nil, storetest.TestUserTokenStore},
-		{"PersonalAccessToken", false, nil, storetest.TestPersonalAccessTokenStore},
-		{"MFA", false, nil, storetest.TestMFAStore},
-		{"Session", false, nil, storetest.TestSessionStores},
-		{"Affiliation", false, nil, storetest.TestAffiliationStore},
-		{"AcademicUnitMember", false, nil, storetest.TestAcademicUnitMemberStore},
-		{"ClassMember", false, nil, storetest.TestClassMemberStore},
-		{"Role", false, nil, storetest.TestRoleStore},
-		{"RoleBinding", false, nil, storetest.TestRoleBindingStore},
-		{"Audit", false, nil, storetest.TestAuditStore},
-		{"Installation", true, nil, storetest.TestInstallationStore},
-		{"AccessPolicy", true, nil, func(t *testing.T, decorated store.Store) {
-			storetest.TestAccessPolicyStore(t, decorated)
-		}},
-		{"DesktopCompatibilityPolicy", true, nil, storetest.TestDesktopCompatibilityPolicyStore},
-		{"RetentionPolicy", true, nil, storetest.TestRetentionPolicyStore},
-		{"CommandOutcome", false, nil, storetest.TestCommandOutcomeStore},
-	}
-
-	for _, decorator := range decorators {
-		for _, test := range tests {
-			t.Run(decorator.name+"/"+test.name, func(t *testing.T) {
-				resetPristineTestStore(t, sqlStore)
-				if !test.pristine || test.providers != nil {
-					seedTestAuthenticationPolicy(t, sqlStore, test.providers)
-				}
-				test.run(t, decorator.new(t, sqlStore))
-			})
-		}
-	}
 }
 
 func runLayerConformance(

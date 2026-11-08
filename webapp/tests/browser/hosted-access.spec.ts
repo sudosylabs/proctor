@@ -274,7 +274,7 @@ async function expectPersistentSubmissionFailure(
 }
 
 for (const colorScheme of ["light", "dark"] as const) {
-  test(`${colorScheme} presentation selects the governed favicon and lockup`, async ({
+  test(`${colorScheme} presentation selects the governed favicon and lockup`, { tag: "@cross-browser" }, async ({
     page,
   }) => {
     await page.emulateMedia({ colorScheme });
@@ -330,7 +330,7 @@ for (const colorScheme of ["light", "dark"] as const) {
   });
 }
 
-test("setup validates and atomically submits the installation", async ({
+test("setup validates and atomically submits the installation", { tag: "@cross-browser" }, async ({
   page,
 }) => {
   await page.route("**/api/v1/bootstrap", async (route) => {
@@ -423,7 +423,7 @@ test("setup refuses to replace an initialized installation", async ({ page }) =>
   await expect(page.locator("[data-proctor-fact-list]")).toHaveCount(0);
 });
 
-test("public registration submits only account input and enters verification", async ({
+test("public registration submits only account input and enters verification", { tag: "@cross-browser" }, async ({
   page,
 }) => {
   await mockDiscovery(page);
@@ -592,7 +592,7 @@ test("login offers account creation only while public registration is open", asy
   await expect(page.getByRole("link", { name: "Create an account" })).toHaveCount(0);
 });
 
-test("local validation focuses the first invalid field", async ({ page }) => {
+test("local validation focuses the first invalid field", { tag: "@cross-browser" }, async ({ page }) => {
   await mockDiscovery(page, { ...defaultDiscovery, providers: [] });
   await page.goto("/login");
   await page.getByRole("button", { name: "Sign in" }).click();
@@ -602,7 +602,7 @@ test("local validation focuses the first invalid field", async ({ page }) => {
   await expect(page.getByText("Enter your password.")).toBeVisible();
 });
 
-test("login failure stays beside the action without moving the credentials", async ({
+test("login failure stays beside the action without moving the credentials", { tag: "@cross-browser" }, async ({
   page,
 }) => {
   await mockDiscovery(page, { ...defaultDiscovery, providers: [] });
@@ -633,7 +633,7 @@ test("login failure stays beside the action without moving the credentials", asy
   );
 });
 
-test("rejected credentials sit under the password and keep both values", async ({
+test("rejected credentials sit under the password and keep both values", { tag: "@cross-browser" }, async ({
   page,
 }) => {
   await mockDiscovery(page, { ...defaultDiscovery, providers: [] });
@@ -674,7 +674,7 @@ test("rejected credentials sit under the password and keep both values", async (
   await expect(password).not.toHaveAttribute("aria-invalid", "true");
 });
 
-test("setup failure stays below the action without moving the atomic form", async ({
+test("setup failure stays below the action without moving the atomic form", { tag: "@cross-browser" }, async ({
   page,
 }) => {
   await page.route("**/api/v1/bootstrap", async (route) => {
@@ -715,7 +715,7 @@ test("setup failure stays below the action without moving the atomic form", asyn
   );
 });
 
-test("a rejected setup key sits under the setup key field", async ({ page }) => {
+test("a rejected setup key sits under the setup key field", { tag: "@cross-browser" }, async ({ page }) => {
   await page.route("**/api/v1/bootstrap", async (route) => {
     if (route.request().method() === "GET") {
       await route.fulfill({
@@ -753,7 +753,7 @@ test("a rejected setup key sits under the setup key field", async ({ page }) => 
   await expect(page.locator("[data-proctor-form-feedback]")).toBeEmpty();
 });
 
-test("registration failure stays below the action without moving account input", async ({
+test("registration failure stays below the action without moving account input", { tag: "@cross-browser" }, async ({
   page,
 }) => {
   await mockDiscovery(page);
@@ -1028,7 +1028,7 @@ test("password reset consumes only the sanitized fragment credential", async ({
   await expect(page.locator("body")).not.toContainText("new-private-password");
 });
 
-test("password reset announces an unusable link returned after submission", async ({
+test("password reset announces an unusable link returned after submission", { tag: "@cross-browser" }, async ({
   page,
 }) => {
   await page.route("**/api/v1/auth/password-reset/complete", async (route) => {
@@ -1073,7 +1073,7 @@ test("password reset announces an unusable link returned after submission", asyn
   await expect(page.locator("body")).not.toContainText("new-private-password");
 });
 
-test("Invitation acceptance exchanges the claim before account creation", async ({
+test("Invitation acceptance exchanges the claim before account creation", { tag: "@cross-browser" }, async ({
   page,
 }) => {
   await mockDiscovery(page);
@@ -1916,7 +1916,7 @@ test("provider connection presents a signed-out state without shifting into a ch
   await expect(page.getByRole("radio")).toHaveCount(0);
 });
 
-test("provider retry announces and focuses the resulting task", async ({
+test("provider retry announces and focuses the resulting task", { tag: "@cross-browser" }, async ({
   page,
 }) => {
   let providerAttempt = 0;
@@ -1989,7 +1989,7 @@ for (const pageCase of [
     heading: "Connect University SSO",
   },
 ] as const) {
-  test(`${pageCase.route} follows dark mode and stays one-dimensional when narrow`, async ({
+  test(`${pageCase.route} follows dark mode and stays one-dimensional when narrow`, { tag: "@cross-browser" }, async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
@@ -2059,7 +2059,7 @@ for (const pageCase of [
 }
 
 for (const colorScheme of ["light", "dark"] as const) {
-  test(`login follows the ${colorScheme} system theme`, async ({ page }) => {
+  test(`login follows the ${colorScheme} system theme`, { tag: "@cross-browser" }, async ({ page }) => {
     await page.emulateMedia({ colorScheme });
     await mockDiscovery(page, { ...defaultDiscovery, providers: [] });
     await page.goto("/login#external_login=failed");
@@ -2164,7 +2164,7 @@ test("shared notices and password disclosure controls keep their contracts", asy
   ).toBeVisible();
 });
 
-test("required controls are marked and compound controls stay optically aligned", async ({
+test("required controls are marked and compound controls stay optically aligned", { tag: "@cross-browser" }, async ({
   page,
 }) => {
   await mockDiscovery(page, { ...defaultDiscovery, providers: [] });
@@ -2255,7 +2255,7 @@ for (const pageCase of [
   { route: "/setup", heading: "Set up your institution" },
   { route: "/register", heading: "Create your Proctor account" },
 ] as const) {
-  test(`${pageCase.route} follows dark mode and stays one-dimensional when narrow`, async ({
+  test(`${pageCase.route} follows dark mode and stays one-dimensional when narrow`, { tag: "@cross-browser" }, async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
@@ -2302,7 +2302,7 @@ for (const pageCase of [
   });
 }
 
-test("the access shell remains keyboard reachable and one-dimensional at zoom", async ({
+test("the access shell remains keyboard reachable and one-dimensional at zoom", { tag: "@cross-browser" }, async ({
   browserName,
   page,
 }) => {

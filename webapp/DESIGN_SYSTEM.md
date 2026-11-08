@@ -555,11 +555,16 @@ bundling floor, not permission to assume every CSS feature or browser behavior
 is identical.
 
 Required tasks must work in the Playwright versions of Chromium, Firefox, and
-WebKit pinned by the package lock. A change that depends on Safari- or
-platform-specific behavior also receives review in that actual browser or
-platform; WebKit automation alone is not presented as Safari coverage. The
-application uses capability detection and progressive enhancement rather than
-user-agent branching.
+WebKit pinned by the package lock. Browser tests whose outcome depends on the
+engine, such as layout and geometry, zoom, focus and skip links, text entry and
+paste, color scheme and forced colors, CSP, history restoration, and
+screenshot decoding, carry the `@cross-browser` tag and run in all three.
+Logic-only tests run in Chromium.
+
+A change that depends on Safari- or platform-specific behavior also receives
+review in that actual browser or platform; WebKit automation alone is not
+presented as Safari coverage. The application uses capability detection and
+progressive enhancement rather than user-agent branching.
 
 CSS Grid, Flexbox, custom properties, logical properties, and ordinary dynamic
 viewport units are foundation capabilities. Container queries, balanced text,

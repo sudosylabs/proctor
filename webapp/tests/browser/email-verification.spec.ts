@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 const canonicalOrigin = "http://127.0.0.1:5173";
 const verificationToken = "email-verification-secret";
 
-test("email verification requires deliberate token consumption", async ({
+test("email verification requires deliberate token consumption", { tag: "@cross-browser" }, async ({
   page,
 }) => {
   let requests = 0;
@@ -72,7 +72,7 @@ test("email verification requires deliberate token consumption", async ({
   expect(requests).toBe(1);
 });
 
-test("email verification names the address from a read-only lookup", async ({
+test("email verification names the address from a read-only lookup", { tag: "@cross-browser" }, async ({
   page,
 }) => {
   const inspections: unknown[] = [];
@@ -104,7 +104,7 @@ test("email verification names the address from a read-only lookup", async ({
   await expect(page.locator("body")).not.toContainText(verificationToken);
 });
 
-test("email-change undo describes the change and keeps its explicit action", async ({
+test("email-change undo describes the change and keeps its explicit action", { tag: "@cross-browser" }, async ({
   page,
 }) => {
   const undoToken = "email-change-undo-secret";
@@ -203,7 +203,7 @@ test("missing and malformed fragment credentials make no request", async ({
   expect(requests).toBe(0);
 });
 
-test("terminal token failures remain deliberately indistinguishable", async ({
+test("terminal token failures remain deliberately indistinguishable", { tag: "@cross-browser" }, async ({
   page,
 }) => {
   await page.route("**/api/v1/auth/email-verification/complete", async (route) => {
@@ -238,7 +238,7 @@ test("terminal token failures remain deliberately indistinguishable", async ({
   await expect(page.locator("body")).not.toContainText(verificationToken);
 });
 
-test("a retryable failure retains one in-memory token without duplicate submission", async ({
+test("a retryable failure retains one in-memory token without duplicate submission", { tag: "@cross-browser" }, async ({
   page,
 }) => {
   let requests = 0;
@@ -300,7 +300,7 @@ test("a retryable failure retains one in-memory token without duplicate submissi
 });
 
 for (const colorScheme of ["light", "dark"] as const) {
-  test(`email verification follows the ${colorScheme} theme without narrow overflow`, async ({
+  test(`email verification follows the ${colorScheme} theme without narrow overflow`, { tag: "@cross-browser" }, async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });

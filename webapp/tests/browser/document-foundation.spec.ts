@@ -8,7 +8,7 @@ const acceptanceViewports = [
   { name: "desktop", width: 1440, height: 900 },
 ] as const;
 
-test("the production login entry keeps its root fully themed and initialized", async ({
+test("the production login entry keeps its root fully themed and initialized", { tag: "@cross-browser" }, async ({
   page,
 }) => {
   await page.route("**/api/v1/discovery", async (route) => {
@@ -60,7 +60,7 @@ test("the production login entry keeps its root fully themed and initialized", a
 });
 
 for (const viewport of acceptanceViewports) {
-  test(`${viewport.name} canvas remains full-height and one-dimensional at 200% zoom`, async ({
+  test(`${viewport.name} canvas remains full-height and one-dimensional at 200% zoom`, { tag: "@cross-browser" }, async ({
     page,
   }) => {
     await page.setViewportSize(viewport);
@@ -172,7 +172,7 @@ for (const viewport of acceptanceViewports) {
   });
 }
 
-test("system and explicit themes synchronize the canvas and browser metadata", async ({
+test("system and explicit themes synchronize the canvas and browser metadata", { tag: "@cross-browser" }, async ({
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "dark" });
@@ -211,7 +211,7 @@ test("system and explicit themes synchronize the canvas and browser metadata", a
   expect(explicit.metadata[0]?.media).toBe("");
 });
 
-test("keyboard traversal reveals the skip link and visible focus treatment", async ({
+test("keyboard traversal reveals the skip link and visible focus treatment", { tag: "@cross-browser" }, async ({
   browserName,
   page,
 }) => {
@@ -239,7 +239,7 @@ test("keyboard traversal reveals the skip link and visible focus treatment", asy
   await expect(proseLink).toHaveCSS("outline-width", "3px");
 });
 
-test("reduced motion retains final content without smooth document scrolling", async ({
+test("reduced motion retains final content without smooth document scrolling", { tag: "@cross-browser" }, async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -258,7 +258,7 @@ test("reduced motion retains final content without smooth document scrolling", a
   expect(motion.disclosureAvailable).toContain("Disclosure content");
 });
 
-test("forced colors retains an outlined focus target and named action", async ({
+test("forced colors retains an outlined focus target and named action", { tag: "@cross-browser" }, async ({
   browserName,
   page,
 }) => {

@@ -10410,6 +10410,9 @@
           "id": {
             "$ref": "#/components/schemas/ID"
           },
+          "profile_picture_kind": {
+            "$ref": "#/components/schemas/ProfilePictureKind"
+          },
           "profile_picture_reference": {
             "type": "string"
           },
@@ -10421,7 +10424,8 @@
           "id",
           "username",
           "display_name",
-          "profile_picture_reference"
+          "profile_picture_reference",
+          "profile_picture_kind"
         ],
         "type": "object"
       },
@@ -20577,6 +20581,14 @@
         ],
         "type": "object"
       },
+      "ProfilePictureKind": {
+        "description": "Which picture the profile picture route serves: the User's own upload (custom), which can be removed, or the picture generated for every User (default).",
+        "enum": [
+          "custom",
+          "default"
+        ],
+        "type": "string"
+      },
       "ProgrammeLevelListResponse": {
         "additionalProperties": false,
         "description": "One page of the collection in its stable order.",
@@ -24523,8 +24535,12 @@
             "type": "string"
           },
           "profile_picture_changed_at": {
+            "description": "Time of the latest upload or removal. It is not a sign that a custom picture exists; use profile_picture_kind.",
             "format": "date-time",
             "type": "string"
+          },
+          "profile_picture_kind": {
+            "$ref": "#/components/schemas/ProfilePictureKind"
           },
           "profile_picture_url": {
             "type": "string"
@@ -24548,7 +24564,8 @@
           "display_name",
           "first_name",
           "last_name",
-          "profile_picture_url"
+          "profile_picture_url",
+          "profile_picture_kind"
         ],
         "type": "object"
       },

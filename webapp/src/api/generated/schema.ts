@@ -6779,6 +6779,7 @@ export interface components {
         CurrentUserContextIdentity: {
             display_name: string;
             id: components["schemas"]["ID"];
+            profile_picture_kind: components["schemas"]["ProfilePictureKind"];
             profile_picture_reference: string;
             username: string;
         };
@@ -9396,6 +9397,11 @@ export interface components {
             /** Format: uri-reference */
             type: string;
         };
+        /**
+         * @description Which picture the profile picture route serves: the User's own upload (custom), which can be removed, or the picture generated for every User (default).
+         * @enum {string}
+         */
+        ProfilePictureKind: "custom" | "default";
         /** @description One page of the collection in its stable order. */
         ProgrammeLevelListResponse: {
             items: components["schemas"]["ProgrammeLevelResponse"][];
@@ -10658,8 +10664,12 @@ export interface components {
             last_login_at?: string;
             last_name: string;
             locale?: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Time of the latest upload or removal. It is not a sign that a custom picture exists; use profile_picture_kind.
+             */
             profile_picture_changed_at?: string;
+            profile_picture_kind: components["schemas"]["ProfilePictureKind"];
             profile_picture_url: string;
             timezone?: string;
             /** Format: date-time */

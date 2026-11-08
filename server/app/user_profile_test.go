@@ -75,7 +75,7 @@ func TestCurrentUserContextReturnsBoundedNavigationProjection(t *testing.T) {
 		AttemptID: model.NewExamAttemptID(), SittingID: model.NewExamSittingID(), State: model.ExamAttemptSuspended,
 	}
 	persisted := &store.CurrentUserContext{
-		UserID: userID, Username: "student", DisplayName: "Student",
+		UserID: userID, Username: "student", DisplayName: "Student", ProfilePictureKind: model.ProfilePictureCustom,
 		AvailableProductAreas: []store.CurrentUserProductArea{
 			store.CurrentUserProductAreaAccount, store.CurrentUserProductAreaSettings, store.CurrentUserProductAreaStudentActivity,
 		},
@@ -103,6 +103,7 @@ func TestCurrentUserContextReturnsBoundedNavigationProjection(t *testing.T) {
 	require.Equal(t, 21, persistence.currentContextLimit)
 	require.Equal(t, userID, got.UserID)
 	require.Equal(t, "/api/v1/users/"+userID.String()+"/profile-picture", got.ProfilePictureReference)
+	require.Equal(t, model.ProfilePictureCustom, got.ProfilePictureKind)
 	require.True(t, got.SessionManagementAvailable)
 	require.Equal(t, principal.DesktopRegistrationID, got.CurrentDesktopRegistrationID)
 	require.NotNil(t, got.UnresolvedAttempt)

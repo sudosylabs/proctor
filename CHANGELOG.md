@@ -204,6 +204,10 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: User profiles and the current User context carry
+  `profile_picture_kind`, `custom` when the User uploaded their own picture and
+  `default` when the generated picture is served, so clients can offer removal
+  only when there is something to remove.
 - Server: `POST /api/v1/users/me/sessions/revoke-others` signs the caller out
   of every other Session while the requesting Session stays signed in, and
   returns `revoked_session_count`. Revoked Sessions record the new reason

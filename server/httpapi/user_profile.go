@@ -39,6 +39,7 @@ type userProfileResponse struct {
 	DisabledAt              string  `json:"disabled_at,omitempty"`
 	ProfilePictureURL       string  `json:"profile_picture_url"`
 	ProfilePictureChangedAt string  `json:"profile_picture_changed_at,omitempty"`
+	ProfilePictureKind      string  `json:"profile_picture_kind"`
 }
 
 type updateUserProfileRequest struct {
@@ -84,10 +85,11 @@ type currentUserContextAttemptResponse struct {
 }
 
 type currentUserContextUserResponse struct {
-	ID                      string `json:"id"`
-	Username                string `json:"username"`
-	DisplayName             string `json:"display_name"`
-	ProfilePictureReference string `json:"profile_picture_reference"`
+	ID                      string                   `json:"id"`
+	Username                string                   `json:"username"`
+	DisplayName             string                   `json:"display_name"`
+	ProfilePictureReference string                   `json:"profile_picture_reference"`
+	ProfilePictureKind      model.ProfilePictureKind `json:"profile_picture_kind"`
 }
 
 const (
@@ -264,7 +266,8 @@ func (m userProfileResourceModule) context(request operationRequest) (operationR
 		return operationResult{}, err
 	}
 	response := currentUserContextResponse{User: currentUserContextUserResponse{ID: view.UserID.String(), Username: view.Username,
-		DisplayName: view.DisplayName, ProfilePictureReference: view.ProfilePictureReference},
+		DisplayName: view.DisplayName, ProfilePictureReference: view.ProfilePictureReference,
+		ProfilePictureKind: view.ProfilePictureKind},
 		NoCurrentAffiliation: view.NoCurrentAffiliation, NoAssignedAccess: view.NoAssignedAccess,
 		AvailableProductAreas:   append([]store.CurrentUserProductArea(nil), view.AvailableProductAreas...),
 		ManagementScopesHasMore: view.ManagementScopesHasMore, SessionManagementAvailable: view.SessionManagementAvailable,
@@ -537,6 +540,7 @@ func userProfileResponseFromModel(user *model.User) userProfileResponse {
 		DisabledAt:              user.DisabledAt.FormatRFC3339(),
 		ProfilePictureURL:       pictureURL,
 		ProfilePictureChangedAt: user.ProfilePictureChangedAt.FormatRFC3339(),
+		ProfilePictureKind:      string(user.ProfilePictureKind()),
 	}
 	if user.Email != "" {
 		response.Email = &user.Email

@@ -29,6 +29,9 @@ type mutationAttempt struct {
 	Operation  string
 	Value      map[string]any
 	Prior      map[string]any
+	// Subject names the User the mutation concerns when Resource is not that
+	// User, such as the bound User of a Role Binding or the member of a Class.
+	Subject model.UserID
 }
 
 type scopedMutationAuditor interface {
@@ -36,6 +39,13 @@ type scopedMutationAuditor interface {
 		context.Context, invocation.Invocation, model.Action, model.Resource,
 		model.RoleScopeType, string, string, map[string]any, map[string]any,
 	) (model.AuditEventID, error)
+}
+
+// subjectMutationAuditor begins an attempt that names its subject User. An
+// auditor that cannot record the subject refuses such a mutation rather than
+// losing the User's own history.
+type subjectMutationAuditor interface {
+	BeginForSubject(context.Context, mutationAttempt) (model.AuditEventID, error)
 }
 
 // mutationAttemptReference is the complete audit input a named Store mutation
@@ -60,7 +70,14 @@ func runAuditedMutation[T any](
 	var zero T
 	var auditID model.AuditEventID
 	var err error
-	if attempt.ScopeType != "" || attempt.ScopeID != "" {
+	if !attempt.Subject.IsZero() {
+		subjectAuditor, ok := auditor.(subjectMutationAuditor)
+		if !ok || !attempt.Subject.IsValid() || (attempt.ScopeType != "" || attempt.ScopeID != "") &&
+			(!attempt.ScopeType.IsValid() || !model.IsValidOpaqueID(attempt.ScopeID)) {
+			return zero, apperror.New("audit.internal")
+		}
+		auditID, err = subjectAuditor.BeginForSubject(ctx, attempt)
+	} else if attempt.ScopeType != "" || attempt.ScopeID != "" {
 		scoped, ok := auditor.(scopedMutationAuditor)
 		if !ok || !attempt.ScopeType.IsValid() || !model.IsValidOpaqueID(attempt.ScopeID) {
 			return zero, apperror.New("audit.internal")

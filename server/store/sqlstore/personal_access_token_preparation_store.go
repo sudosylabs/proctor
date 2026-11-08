@@ -215,7 +215,8 @@ func deletePersonalAccessTokenPreparation(ctx context.Context, tx *sqlxTxWrapper
 func (row personalAccessTokenPreparationRow) auditEvent(status model.AuditStatus, errorCode string, result json.RawMessage) (*model.AuditEvent, error) {
 	audit := auditRow{
 		ID: row.ID, CreatedAt: row.CreatedAt, UpdatedAt: row.CreatedAt,
-		ActorID: row.ActorID, SessionID: row.SessionID, Action: row.Action,
+		// A token mutation always concerns the preparing User's own account.
+		ActorID: row.ActorID, SessionID: row.SessionID, SubjectID: nullableAuditString(row.UserID), Action: row.Action,
 		ResourceType: row.ResourceType, ResourceID: row.ResourceID,
 		ScopeType: row.ScopeType, ScopeID: row.ScopeID, Status: status,
 		RequestID: row.RequestID, NodeID: row.NodeID, ClientType: row.ClientType,
@@ -257,7 +258,7 @@ func validatePersonalAccessTokenPreparationAudit(input *store.PersonalAccessToke
 		store.PersonalAccessTokenMutationDisable: model.ActionPersonalAccessTokenDisable,
 		store.PersonalAccessTokenMutationRevoke:  model.ActionPersonalAccessTokenRevoke,
 	}[input.Kind]
-	if event.ActorID != input.UserID || !event.SessionID.IsValid() || event.Status != model.AuditStatusAttempt || expectedAction == "" || event.Action != string(expectedAction) ||
+	if event.ActorID != input.UserID || (!event.SubjectUserID.IsZero() && event.SubjectUserID != input.UserID) || !event.SessionID.IsValid() || event.Status != model.AuditStatusAttempt || expectedAction == "" || event.Action != string(expectedAction) ||
 		event.Resource.Type != model.ResourceInstitution || event.ScopeType != model.RoleScopeInstitution || event.Resource.ID != event.ScopeID ||
 		event.ErrorCode != "" || len(event.Result) != 0 {
 		return store.NewErrInvalidInput("personal_access_token", "audit", nil)

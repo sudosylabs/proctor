@@ -71,6 +71,15 @@ type institutionAuditorFake struct {
 	resources []model.Resource
 	scopeType model.RoleScopeType
 	scopeID   string
+	subjects  []model.UserID
+}
+
+func (a *institutionAuditorFake) BeginForSubject(ctx context.Context, attempt mutationAttempt) (model.AuditEventID, error) {
+	a.subjects = append(a.subjects, attempt.Subject)
+	if attempt.ScopeType != "" {
+		return a.BeginAtScope(ctx, attempt.Invocation, attempt.Action, attempt.Resource, attempt.ScopeType, attempt.ScopeID, attempt.Operation, attempt.Value, attempt.Prior)
+	}
+	return a.Begin(ctx, attempt.Invocation, attempt.Action, attempt.Resource, attempt.Operation, attempt.Value, attempt.Prior)
 }
 
 func (a *institutionAuditorFake) Begin(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource, _ string, _, _ map[string]any) (model.AuditEventID, error) {

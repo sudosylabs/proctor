@@ -278,6 +278,16 @@ from the catalog, such as the academic audit actions (declared per action with
 `AcademicAudit`), are never maintained by hand. Architecture and model tests
 enforce both halves.
 
+Every event about a User's account names that User as its subject
+(`subject_user_id`). A User resource is always its own subject, enforced by
+the model and a database check; a writer whose resource is a scope, Class, or
+the Institution names the affected User through `mutationAttempt.Subject` or
+the draft's `SubjectUserID` (Role Binding grants and ends, Class and Academic
+Unit membership, Invitation acceptance, self-service MFA, and Personal Access
+Token changes). A runner given a subject its auditor cannot record refuses the
+mutation. A writer that adds an account-relevant operation adds its
+`model.AuditSelfEvent` row in the same change.
+
 Authorization decisions fail closed when their durable record cannot be
 written. A critical mutation writes an `attempt` before state changes and that
 attempt transitions once to `success` or `fail`. Completion ignores the

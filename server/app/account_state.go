@@ -107,6 +107,10 @@ func (s *accountStateService) SetUserEnabled(ctx context.Context, invocation inv
 			return nil, accountStateStoreErrors.Translate(err)
 		}
 	}
+	operation := model.AuditOperationEnableAccount
+	if disabled {
+		operation = model.AuditOperationDisableAccount
+	}
 	result, err := runAuditedMutation(
 		ctx,
 		s.deps.Audit,
@@ -114,7 +118,7 @@ func (s *accountStateService) SetUserEnabled(ctx context.Context, invocation inv
 			Invocation: invocation,
 			Action:     model.ActionUserManage,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: userID.String()},
-			Operation:  "set_disabled",
+			Operation:  operation,
 			Value:      map[string]any{"user_id": userID, "disabled": disabled},
 			Prior:      current.Auditable(),
 		},

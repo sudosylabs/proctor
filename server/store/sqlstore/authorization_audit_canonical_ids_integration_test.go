@@ -35,6 +35,8 @@ func TestAuthorizationAuditCanonicalIDConstraintsRejectNoncanonicalValues(t *tes
 		{name: "audit id", query: `INSERT INTO audit_events (id, created_at, updated_at, action, resource_type, resource_id, scope_type, scope_id, status, node_id) VALUES ('bad', ?, ?, 'audit.view', 'institution', ?, 'institution', ?, 'success', 'node')`, constraint: "audit_events_id_canonical_check"},
 		{name: "audit actor", query: `INSERT INTO audit_events (id, created_at, updated_at, actor_id, action, resource_type, resource_id, scope_type, scope_id, status, node_id) VALUES (?, ?, ?, 'bad', 'audit.view', 'institution', ?, 'institution', ?, 'success', 'node')`, constraint: "audit_events_actor_id_canonical_check"},
 		{name: "audit session", query: `INSERT INTO audit_events (id, created_at, updated_at, session_id, action, resource_type, resource_id, scope_type, scope_id, status, node_id) VALUES (?, ?, ?, 'bad', 'audit.view', 'institution', ?, 'institution', ?, 'success', 'node')`, constraint: "audit_events_session_id_canonical_check"},
+		{name: "audit subject", query: `INSERT INTO audit_events (id, created_at, updated_at, subject_user_id, action, resource_type, resource_id, scope_type, scope_id, status, node_id) VALUES (?, ?, ?, 'bad', 'audit.view', 'institution', ?, 'institution', ?, 'success', 'node')`, constraint: "audit_events_subject_user_id_canonical_check"},
+		{name: "audit user without subject", query: `INSERT INTO audit_events (id, created_at, updated_at, action, resource_type, resource_id, scope_type, scope_id, status, node_id) VALUES (?, ?, ?, 'user.manage', 'user', ?, 'institution', ?, 'success', 'node')`, constraint: "audit_events_user_subject_check"},
 		{name: "audit resource", query: `INSERT INTO audit_events (id, created_at, updated_at, action, resource_type, resource_id, scope_type, scope_id, status, node_id) VALUES (?, ?, ?, 'audit.view', 'institution', 'bad', 'institution', ?, 'success', 'node')`, constraint: "audit_events_resource_id_canonical_check"},
 		{name: "audit scope", query: `INSERT INTO audit_events (id, created_at, updated_at, action, resource_type, resource_id, scope_type, scope_id, status, node_id) VALUES (?, ?, ?, 'audit.view', 'institution', ?, 'institution', 'bad', 'success', 'node')`, constraint: "audit_events_scope_id_canonical_check"},
 	}
@@ -60,7 +62,9 @@ func canonicalConstraintArgs(name, canonical string, at time.Time) []any {
 		return []any{canonical, at, at, canonical, canonical, at}
 	case "audit id":
 		return []any{at, at, canonical, canonical}
-	case "audit actor", "audit session":
+	case "audit user without subject":
+		return []any{canonical, at, at, model.NewID(), canonical}
+	case "audit actor", "audit session", "audit subject":
 		return []any{canonical, at, at, canonical, canonical}
 	case "audit resource", "audit scope":
 		return []any{canonical, at, at, canonical}

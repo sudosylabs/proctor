@@ -540,9 +540,16 @@ func (s *mfaApplicationService) failMutation(
 
 type mfaAuditAdapter struct{ audit *auditService }
 
+// Begin records self-service MFA mutations, which are audited against the
+// Institution, with the acting User as their subject. An administrator reset
+// names the target User as its resource, which is its own subject.
 func (a mfaAuditAdapter) Begin(ctx context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource, prior any) (model.AuditEventID, error) {
-	event, err := a.audit.BeginCriticalAction(
-		ctx, invocation.Principal(), action, resource,
+	var subject model.UserID
+	if resource.Type != model.ResourceUser {
+		subject = invocation.Principal().UserID
+	}
+	event, err := a.audit.BeginCriticalActionForSubject(
+		ctx, invocation.Principal(), subject, action, resource,
 		invocation.RequestMetadata(), nil, prior,
 	)
 	if err != nil {

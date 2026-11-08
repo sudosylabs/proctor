@@ -20,6 +20,13 @@ module when a change is not server-only. No module has been released yet.
 - Server: `CreatePersonalAccessTokenRequest.scopes` now lists the accepted
   action names as an `enum`, and its example uses the real scope `exam.view`
   instead of the invalid `examinations:read`.
+- Server: audit events record the User they concern in `subject_user_id`: a
+  User resource is always its own subject, and Role Binding, Class and Academic
+  Unit membership, Invitation acceptance, self-service two-step verification,
+  and Personal Access Token events name the affected User. Existing
+  development databases must be recreated.
+- Server: the account disable and enable audit records the operation
+  `disable_account` or `enable_account` instead of `set_disabled`.
 - Server and `packages/vfs`: move `golang.org/x/net` to v0.62.0 to clear
   CVE-2026-78661 (HIGH), with `golang.org/x/crypto` v0.58.0, `x/sys` v0.49.0,
   `x/text` v0.43.0, `x/sync` v0.24.0 and `x/tools` v0.51.0. Exception to the

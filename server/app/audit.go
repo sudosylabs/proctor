@@ -309,20 +309,48 @@ func (s *auditService) BeginCriticalAction(
 	if principal.ValidateMFARecovery() != nil {
 		return nil, invalidTokenAppError()
 	}
+	return s.BeginCriticalActionForSubject(ctx, principal, "", action, resource, metadata, parameters, priorState)
+}
+
+// BeginCriticalActionForSubject is BeginCriticalAction for a mutation whose
+// resource is not the affected User itself, such as a Role Binding at a
+// scope or a self-service change recorded against the Institution. A zero
+// subject leaves the User resource rule of model.AuditEvent to decide.
+func (s *auditService) BeginCriticalActionForSubject(
+	ctx context.Context,
+	principal model.Principal,
+	subject model.UserID,
+	action model.Action,
+	resource model.Resource,
+	metadata model.RequestMetadata,
+	parameters any,
+	priorState any,
+) (*model.AuditEvent, error) {
+	if principal.ValidateMFARecovery() != nil {
+		return nil, invalidTokenAppError()
+	}
 	if s.deps.Audits == nil {
 		return nil, auditUnavailable(store.NewErrNotFound("audit_store", ""))
 	}
-	scopeType := model.RoleScopeType(resource.Type)
-	scopeID := resource.ID
-	if resource.Type == model.ResourceUser {
-		institution, err := s.deps.Institutions.GetSingleton(ctx)
-		if err != nil {
-			return nil, auditUnavailable(err)
-		}
-		scopeType = model.RoleScopeInstitution
-		scopeID = institution.ID.String()
+	scopeType, scopeID, err := s.resourceScope(ctx, resource)
+	if err != nil {
+		return nil, err
 	}
-	return s.beginCriticalActionAtScope(ctx, principal, action, resource, scopeType, scopeID, metadata, parameters, priorState)
+	return s.beginCriticalActionAtScope(ctx, principal, subject, action, resource, scopeType, scopeID, metadata, parameters, priorState)
+}
+
+// resourceScope is the authorization scope a resource's audit is recorded
+// at when the caller names none: the resource itself, or the Institution for
+// a User.
+func (s *auditService) resourceScope(ctx context.Context, resource model.Resource) (model.RoleScopeType, string, error) {
+	if resource.Type != model.ResourceUser {
+		return model.RoleScopeType(resource.Type), resource.ID, nil
+	}
+	institution, err := s.deps.Institutions.GetSingleton(ctx)
+	if err != nil {
+		return "", "", auditUnavailable(err)
+	}
+	return model.RoleScopeInstitution, institution.ID.String(), nil
 }
 
 // PrepareCriticalAction builds the bounded safe audit draft owned by a named
@@ -341,17 +369,11 @@ func (s *auditService) PrepareCriticalAction(
 	if principal.ValidateMFARecovery() != nil {
 		return nil, invalidTokenAppError()
 	}
-	scopeType := model.RoleScopeType(resource.Type)
-	scopeID := resource.ID
-	if resource.Type == model.ResourceUser {
-		institution, err := s.deps.Institutions.GetSingleton(ctx)
-		if err != nil {
-			return nil, auditUnavailable(err)
-		}
-		scopeType = model.RoleScopeInstitution
-		scopeID = institution.ID.String()
+	scopeType, scopeID, err := s.resourceScope(ctx, resource)
+	if err != nil {
+		return nil, err
 	}
-	return s.prepareCriticalActionAtScope(principal, action, resource, scopeType, scopeID, metadata, parameters, priorState)
+	return s.prepareCriticalActionAtScope(principal, "", action, resource, scopeType, scopeID, metadata, parameters, priorState)
 }
 
 // BeginCriticalActionAtScope records a mutation against its domain resource
@@ -375,7 +397,7 @@ func (s *auditService) BeginCriticalActionAtScope(
 	if s.deps.Audits == nil {
 		return nil, auditUnavailable(store.NewErrNotFound("audit_store", ""))
 	}
-	return s.beginCriticalActionAtScope(ctx, principal, action, resource, scopeType, scopeID, metadata, parameters, priorState)
+	return s.beginCriticalActionAtScope(ctx, principal, "", action, resource, scopeType, scopeID, metadata, parameters, priorState)
 }
 
 // BeginSystemCriticalActionAtScope persists an actor-less critical mutation
@@ -459,6 +481,7 @@ func (s *auditService) BeginAccountActionAtScope(
 func (s *auditService) beginCriticalActionAtScope(
 	ctx context.Context,
 	principal model.Principal,
+	subject model.UserID,
 	action model.Action,
 	resource model.Resource,
 	scopeType model.RoleScopeType,
@@ -467,7 +490,7 @@ func (s *auditService) beginCriticalActionAtScope(
 	parameters any,
 	priorState any,
 ) (*model.AuditEvent, error) {
-	event, appErr := s.prepareCriticalActionAtScope(principal, action, resource, scopeType, scopeID, metadata, parameters, priorState)
+	event, appErr := s.prepareCriticalActionAtScope(principal, subject, action, resource, scopeType, scopeID, metadata, parameters, priorState)
 	if appErr != nil {
 		return nil, appErr
 	}
@@ -480,6 +503,7 @@ func (s *auditService) beginCriticalActionAtScope(
 
 func (s *auditService) prepareCriticalActionAtScope(
 	principal model.Principal,
+	subject model.UserID,
 	action model.Action,
 	resource model.Resource,
 	scopeType model.RoleScopeType,
@@ -497,7 +521,7 @@ func (s *auditService) prepareCriticalActionAtScope(
 		return nil, domainInvalid("audit.internal", err)
 	}
 	event := &model.AuditEvent{
-		ActorID: principal.UserID, SessionID: principal.SessionID,
+		ActorID: principal.UserID, SessionID: principal.SessionID, SubjectUserID: subject,
 		Action: string(action), Resource: resource,
 		ScopeType: scopeType, ScopeID: scopeID,
 		Status: model.AuditStatusAttempt, RequestID: metadata.RequestID,

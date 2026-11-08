@@ -293,7 +293,7 @@ func (s *classMemberService) enrollRetainedClassMember(
 	bindAcademicAdministrationBatch(idempotency, command.batchMetadata)
 	freshMutation := false
 	result, replayErr := runAuditedMutation(ctx, s.deps.Audit, mutationAttempt{Invocation: invocation, Action: model.ActionClassMembersManage,
-		Resource: resource, Operation: "enroll", Value: candidate.Auditable()}, func() time.Time { return at },
+		Resource: resource, Operation: "enroll", Value: candidate.Auditable(), Subject: candidate.UserID}, func() time.Time { return at },
 		func(ctx context.Context, reference mutationAttemptReference) (*store.ClassEnrollmentResult, error) {
 			execute := func(ctx context.Context, sourceAuditID model.AuditEventID) (*store.ClassEnrollmentResult, error) {
 				input := &store.ClassMemberEnrollment{Member: candidate, ExpectedRecipientRevision: 1, StudentProgression: command.studentProgression,
@@ -311,7 +311,7 @@ func (s *classMemberService) enrollRetainedClassMember(
 			}
 			sourceAttempt := mutationAttempt{Invocation: invocation, Action: model.ActionClassMembersManage,
 				Resource:  model.Resource{Type: model.ResourceClass, ID: retainedPrevious.ClassID.String()},
-				Operation: "transfer_out", Prior: retainedPrevious.Auditable()}
+				Operation: "transfer_out", Prior: retainedPrevious.Auditable(), Subject: retainedPrevious.UserID}
 			return runAuditedMutation(ctx, s.deps.Audit, sourceAttempt, func() time.Time { return at },
 				func(ctx context.Context, sourceReference mutationAttemptReference) (*store.ClassEnrollmentResult, error) {
 					return execute(ctx, sourceReference.ID)
@@ -437,7 +437,7 @@ func (s *classMemberService) runClassEnrollment(
 ) (*model.ClassEnrollment, error) {
 	candidate, previous := plan.candidate, plan.previous
 	destinationAttempt := mutationAttempt{Invocation: invocation, Action: model.ActionClassMembersManage,
-		Resource: resource, Operation: "enroll", Value: candidate.Auditable()}
+		Resource: resource, Operation: "enroll", Value: candidate.Auditable(), Subject: candidate.UserID}
 	if previous != nil {
 		destinationAttempt.Operation = "transfer_in"
 	}
@@ -463,7 +463,7 @@ func (s *classMemberService) runClassEnrollment(
 			expectedPreviousID = previous.ID
 			sourceAttempt := mutationAttempt{Invocation: invocation, Action: model.ActionClassMembersManage,
 				Resource:  model.Resource{Type: model.ResourceClass, ID: previous.ClassID.String()},
-				Operation: "transfer_out", Prior: previous.Auditable()}
+				Operation: "transfer_out", Prior: previous.Auditable(), Subject: previous.UserID}
 			return runAuditedMutation(ctx, s.deps.Audit, sourceAttempt,
 				func() time.Time { return model.TimeUTC(destinationReference.MutationAt) },
 				func(ctx context.Context, sourceReference mutationAttemptReference) (*store.ClassEnrollmentResult, error) {
@@ -551,6 +551,7 @@ func (s *classMemberService) EndClassMember(ctx context.Context, invocation invo
 			Resource:   resource,
 			Operation:  "end",
 			Prior:      current.Auditable(),
+			Subject:    current.UserID,
 		},
 		func() time.Time { return at },
 		func(ctx context.Context, reference mutationAttemptReference) (*model.ClassMember, error) {

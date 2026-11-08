@@ -267,6 +267,7 @@ func TestClassMemberTransferAuthorizesSourceAndCreatesOneTransferNotice(t *testi
 	require.Equal(t, model.AuditEventID(sourceAuditID), persistence.enrollInput.PreviousAuditEventID, "transfer mail/input = %#v / %#v", mailer.requests, persistence.enrollInput)
 	wantAuditResources := []model.Resource{{Type: model.ResourceClass, ID: destination.ID.String()}, {Type: model.ResourceClass, ID: source.ID.String()}}
 	require.Equal(t, wantAuditResources, auditor.resources, "transfer audit resources")
+	require.Equal(t, []model.UserID{userID, userID}, auditor.subjects, "both transfer audits name the member as their subject")
 	require.NotNil(t, persistence.enrollInput.Command)
 	require.Equal(t, previous.ID, persistence.enrollInput.Command.Authorization.ClassMemberID)
 	// Contract (guardrail 8): authorization precedes the audit, and the audit

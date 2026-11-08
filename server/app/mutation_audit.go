@@ -12,6 +12,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 type mutationAuditor interface {
@@ -51,6 +52,34 @@ func (a mutationAuditAdapter) BeginAtScope(ctx context.Context, invocation invoc
 	return event.ID, nil
 }
 
+// BeginForSubject begins the attempt of a mutation whose resource is not the
+// affected User, naming that User as the event's subject.
+func (a mutationAuditAdapter) BeginForSubject(ctx context.Context, attempt mutationAttempt) (model.AuditEventID, error) {
+	principal := attempt.Invocation.Principal()
+	if principal.ValidateMFARecovery() != nil {
+		return "", invalidTokenAppError()
+	}
+	if a.audit == nil || a.audit.deps.Audits == nil {
+		return "", auditUnavailable(store.NewErrNotFound("audit_store", ""))
+	}
+	scopeType, scopeID := attempt.ScopeType, attempt.ScopeID
+	if scopeType == "" && scopeID == "" {
+		var err error
+		if scopeType, scopeID, err = a.audit.resourceScope(ctx, attempt.Resource); err != nil {
+			return "", err
+		}
+	}
+	event, err := a.audit.beginCriticalActionAtScope(
+		ctx, principal, attempt.Subject, attempt.Action, attempt.Resource, scopeType, scopeID,
+		attempt.Invocation.RequestMetadata(),
+		map[string]any{"operation": attempt.Operation, "value": attempt.Value}, attempt.Prior,
+	)
+	if err != nil {
+		return "", err
+	}
+	return event.ID, nil
+}
+
 func (a mutationAuditAdapter) Fail(ctx context.Context, auditID model.AuditEventID, errorCode string) error {
 	_, appErr := a.audit.CompleteCriticalAction(
 		ctx, auditID, model.AuditStatusFail, errorCode, nil,
@@ -61,7 +90,7 @@ func (a mutationAuditAdapter) Fail(ctx context.Context, auditID model.AuditEvent
 func (a mutationAuditAdapter) PrepareAtScope(_ context.Context, invocation invocation.Invocation, action model.Action,
 	resource model.Resource, scopeType model.RoleScopeType, scopeID, operation string, value map[string]any,
 ) (*model.AuditEvent, error) {
-	return a.audit.prepareCriticalActionAtScope(invocation.Principal(), action, resource, scopeType, scopeID,
+	return a.audit.prepareCriticalActionAtScope(invocation.Principal(), "", action, resource, scopeType, scopeID,
 		invocation.RequestMetadata(), map[string]any{"operation": operation, "value": value}, nil)
 }
 

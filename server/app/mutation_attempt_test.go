@@ -63,6 +63,19 @@ func (a *mutationAttemptAuditorFake) Begin(_ context.Context, invocation invocat
 	return model.AuditEventID(a.nextBeginID()), a.beginErr
 }
 
+func (a *mutationAttemptAuditorFake) BeginForSubject(ctx context.Context, attempt mutationAttempt) (model.AuditEventID, error) {
+	var id model.AuditEventID
+	var err error
+	if attempt.ScopeType != "" {
+		id, err = a.BeginAtScope(ctx, attempt.Invocation, attempt.Action, attempt.Resource, attempt.ScopeType, attempt.ScopeID, attempt.Operation, attempt.Value, attempt.Prior)
+	} else {
+		id, err = a.Begin(ctx, attempt.Invocation, attempt.Action, attempt.Resource, attempt.Operation, attempt.Value, attempt.Prior)
+	}
+	a.attempt.Subject = attempt.Subject
+	a.attempts[len(a.attempts)-1].Subject = attempt.Subject
+	return id, err
+}
+
 func (a *mutationAttemptAuditorFake) nextBeginID() string {
 	if len(a.beginIDs) == 0 {
 		return a.beginID

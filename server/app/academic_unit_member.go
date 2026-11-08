@@ -148,6 +148,7 @@ func (s *academicUnitMemberService) CreateAcademicUnitMember(ctx context.Context
 			Resource:   resource,
 			Operation:  "create_member",
 			Value:      candidate.Auditable(),
+			Subject:    candidate.UserID,
 		},
 		func() time.Time { return at },
 		func(ctx context.Context, reference mutationAttemptReference) (*model.AcademicUnitMember, error) {
@@ -225,6 +226,7 @@ func (s *academicUnitMemberService) EndAcademicUnitMember(ctx context.Context, i
 			Resource:   resource,
 			Operation:  "end_member",
 			Prior:      current.Auditable(),
+			Subject:    current.UserID,
 		},
 		func() time.Time { return at },
 		func(ctx context.Context, reference mutationAttemptReference) (*model.AcademicUnitMember, error) {

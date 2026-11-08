@@ -41,6 +41,7 @@ type auditRow struct {
 	UpdatedAt    time.Time           `db:"updated_at"`
 	ActorID      sql.NullString      `db:"actor_id"`
 	SessionID    sql.NullString      `db:"session_id"`
+	SubjectID    sql.NullString      `db:"subject_user_id"`
 	Action       string              `db:"action"`
 	ResourceType model.ResourceType  `db:"resource_type"`
 	ResourceID   string              `db:"resource_id"`
@@ -62,7 +63,7 @@ type auditRow struct {
 func auditSliceColumns() []string {
 	return []string{
 		"audit_events.id", "audit_events.created_at", "audit_events.updated_at",
-		"audit_events.actor_id", "audit_events.session_id", "audit_events.action",
+		"audit_events.actor_id", "audit_events.session_id", "audit_events.subject_user_id", "audit_events.action",
 		"audit_events.resource_type", "audit_events.resource_id",
 		"audit_events.scope_type", "audit_events.scope_id", "audit_events.status",
 		"audit_events.request_id", "audit_events.node_id", "audit_events.client_type",
@@ -127,12 +128,12 @@ func insertAuditEventBetween(
 	row := newAuditRow(candidate)
 	if _, err := executor.NamedExec(ctx, `
 		INSERT INTO audit_events (
-			id, created_at, updated_at, actor_id, session_id, action,
+			id, created_at, updated_at, actor_id, session_id, subject_user_id, action,
 			resource_type, resource_id, scope_type, scope_id, status,
 			request_id, node_id, client_type, authentication_method,
 			ip_address, user_agent, error_code, parameters, prior_state, result
 		) VALUES (
-			:id, :created_at, :updated_at, :actor_id, :session_id, :action,
+			:id, :created_at, :updated_at, :actor_id, :session_id, :subject_user_id, :action,
 			:resource_type, :resource_id, :scope_type, :scope_id, :status,
 			:request_id, :node_id, :client_type, :authentication_method,
 			:ip_address, :user_agent, :error_code, :parameters, :prior_state, :result
@@ -188,7 +189,7 @@ func completeAuditEvent(
 		UPDATE audit_events
 		   SET updated_at = GREATEST(updated_at, ?), status = ?, error_code = ?, result = ?
 		 WHERE id = ? AND status = 'attempt'
-		RETURNING id, created_at, updated_at, actor_id, session_id, action,
+		RETURNING id, created_at, updated_at, actor_id, session_id, subject_user_id, action,
 		          resource_type, resource_id, scope_type, scope_id, status,
 		          request_id, node_id, client_type, authentication_method,
 		          ip_address, user_agent, error_code, parameters, prior_state, result`,
@@ -326,7 +327,8 @@ func newAuditRow(event *model.AuditEvent) auditRow {
 		ID: event.ID.String(), CreatedAt: createdAt,
 		UpdatedAt: updatedAt,
 		ActorID:   nullableAuditString(event.ActorID.String()), SessionID: nullableAuditString(event.SessionID.String()),
-		Action: event.Action, ResourceType: event.Resource.Type, ResourceID: event.Resource.ID,
+		SubjectID: nullableAuditString(event.SubjectUserID.String()),
+		Action:    event.Action, ResourceType: event.Resource.Type, ResourceID: event.Resource.ID,
 		ScopeType: event.ScopeType, ScopeID: event.ScopeID, Status: event.Status,
 		RequestID: event.RequestID, NodeID: event.NodeID, ClientType: event.ClientType,
 		AuthMethod: event.AuthMethod, IPAddress: event.IPAddress, UserAgent: event.UserAgent,
@@ -348,6 +350,10 @@ func (row auditRow) model() (*model.AuditEvent, error) {
 	if err != nil {
 		return nil, err
 	}
+	subjectID, err := parseNullablePersistedID("audit_event", "subject_user_id", row.SubjectID, model.ParseUserID)
+	if err != nil {
+		return nil, err
+	}
 	if err := validatePersistedResourceID(row.ResourceType, row.ResourceID); err != nil {
 		return nil, err
 	}
@@ -357,7 +363,7 @@ func (row auditRow) model() (*model.AuditEvent, error) {
 	value := &model.AuditEvent{
 		ID: id, CreatedAt: row.CreatedAt.UTC(),
 		UpdatedAt: row.UpdatedAt.UTC(),
-		ActorID:   actorID, SessionID: sessionID,
+		ActorID:   actorID, SessionID: sessionID, SubjectUserID: subjectID,
 		Action:    row.Action,
 		Resource:  model.Resource{Type: row.ResourceType, ID: row.ResourceID},
 		ScopeType: row.ScopeType, ScopeID: row.ScopeID, Status: row.Status,

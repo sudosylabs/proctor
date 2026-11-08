@@ -212,6 +212,7 @@ func (s *roleBindingService) CreateRoleBinding(ctx context.Context, invocation i
 			Resource:   resource,
 			Operation:  "create_binding",
 			Value:      candidate.Auditable(),
+			Subject:    candidate.UserID,
 		},
 		func() time.Time { return mailAt },
 		func(ctx context.Context, reference mutationAttemptReference) (*model.RoleBinding, error) {
@@ -356,6 +357,7 @@ func (s *roleBindingService) EndRoleBinding(ctx context.Context, invocation invo
 			Operation:  "end_binding",
 			Value:      map[string]any{"role_binding_id": id},
 			Prior:      current.Auditable(),
+			Subject:    current.UserID,
 		},
 		func() time.Time { return mailAt },
 		func(ctx context.Context, reference mutationAttemptReference) (*model.RoleBinding, error) {

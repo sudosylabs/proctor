@@ -1450,6 +1450,7 @@ func TestAuditStore(t *testing.T) {
 
 func TestAuditStoreAcceptsGranularAcademicResources(t *testing.T) {
 	persistence := openTestStore(t)
+	resetTestStore(t, persistence)
 	for _, test := range []struct {
 		name     string
 		action   model.Action
@@ -1666,6 +1667,7 @@ func TestSecureConnectStore(t *testing.T) {
 
 func TestNativeDeliveryAppendStore(t *testing.T) {
 	s := openTestStore(t)
+	resetTestStore(t, s)
 	storetest.TestNativeDeliveryAppendStore(t, s, func(part model.AttemptParticipationID, records, occurrences int64) {
 		var row struct {
 			Records     int64 `db:"records"`

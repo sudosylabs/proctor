@@ -52,6 +52,7 @@ type CurrentUserContextView struct {
 	Username                     string
 	DisplayName                  string
 	ProfilePictureReference      string
+	ProfilePictureKind           model.ProfilePictureKind
 	NoCurrentAffiliation         bool
 	NoAssignedAccess             bool
 	AvailableProductAreas        []store.CurrentUserProductArea
@@ -72,11 +73,13 @@ func (s *userProfileService) GetCurrentUserContext(ctx context.Context, invocati
 		return nil, userStoreErrors.Translate(err)
 	}
 	if value == nil || value.UserID != principal.UserID || value.Username == "" || value.DisplayName == "" ||
+		(value.ProfilePictureKind != model.ProfilePictureCustom && value.ProfilePictureKind != model.ProfilePictureDefault) ||
 		len(value.AvailableProductAreas) < 2 || len(value.ManagementScopes) > 20 {
 		return nil, apperror.New("administration.unavailable").Wrap(errors.New("current User context projection is incomplete"))
 	}
 	view := &CurrentUserContextView{UserID: value.UserID, Username: value.Username, DisplayName: value.DisplayName,
 		ProfilePictureReference: "/api/v1/users/" + value.UserID.String() + "/profile-picture",
+		ProfilePictureKind:      value.ProfilePictureKind,
 		NoCurrentAffiliation:    value.NoCurrentAffiliation, NoAssignedAccess: value.NoAssignedAccess,
 		AvailableProductAreas:   append([]store.CurrentUserProductArea(nil), value.AvailableProductAreas...),
 		ManagementScopes:        append([]store.CurrentUserManagementScope(nil), value.ManagementScopes...),

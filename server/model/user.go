@@ -81,6 +81,22 @@ type User struct {
 	ProfilePictureChangedAt     OptionalTime
 }
 
+// ProfilePictureKind says whether a User's picture is their own upload or the generated default.
+type ProfilePictureKind string
+
+const (
+	ProfilePictureCustom  ProfilePictureKind = "custom"
+	ProfilePictureDefault ProfilePictureKind = "default"
+)
+
+// ProfilePictureKind reports which picture the User's profile picture route serves.
+func (u *User) ProfilePictureKind() ProfilePictureKind {
+	if u != nil && !u.CustomProfilePictureFileID.IsZero() {
+		return ProfilePictureCustom
+	}
+	return ProfilePictureDefault
+}
+
 // PrepareCreate applies application-owned lifecycle fields before validation.
 func (u *User) PrepareCreate(id UserID, at time.Time) {
 	if u == nil {

@@ -77,9 +77,10 @@ type DesktopAuthorizationContext struct {
 // exact External Identity. Source Session and direct password proof cannot mix.
 // Fresh password authentication and MFA use the Store's transition instant.
 // External authentication and MFA retain their asserted history, capped at that
-// instant when the provider clock is ahead. Session reuse preserves the exact
-// stored authentication and MFA instants and rechecks Session and access-proof
-// expiry at the transition. An inconsistent resulting state rolls back. None
+// instant when the provider clock is ahead. Session reuse takes the Session's
+// latest primary proof (initial or reauthenticated) and its MFA history,
+// recording an earlier MFA completion at that proof instant, and rechecks
+// Session and access-proof expiry at the transition. An inconsistent resulting state rolls back. None
 // of these operations extend the browser transaction's original deadline.
 type DesktopAuthorizationAuthentication struct {
 	PasswordProof            PasswordCredentialProof
@@ -147,8 +148,9 @@ type BrowserAuthenticationMaintenanceResult struct {
 }
 
 // BrowserAuthenticationStore owns the shared durable browser-authentication
-// transaction aggregate used by desktop authorization and hosted Invitation
-// acceptance. No raw browser credential crosses this boundary.
+// transaction aggregate used by desktop authorization, desktop
+// reauthentication and hosted Invitation acceptance. No raw browser credential
+// crosses this boundary.
 type BrowserAuthenticationStore interface {
 	CreateDesktopAuthorization(context.Context, *DesktopAuthorizationCreation) (*DesktopAuthorizationCreated, error)
 	BindDesktopAuthorization(context.Context, *DesktopAuthorizationBinding) (*DesktopAuthorizationBound, error)
@@ -162,4 +164,11 @@ type BrowserAuthenticationStore interface {
 	ResolveDesktopAuthorizationExchange(context.Context, *DesktopAuthorizationExchangeProof) (*DesktopAuthorizationExchangeTarget, error)
 	Exchange(context.Context, *DesktopAuthorizationExchange) (*DesktopAuthorizationExchangeResult, error)
 	Maintain(context.Context, int) (*BrowserAuthenticationMaintenanceResult, error)
+	CreateDesktopReauthentication(context.Context, *DesktopReauthenticationCreation) (*DesktopAuthorizationCreated, error)
+	BindDesktopReauthentication(context.Context, *DesktopAuthorizationBinding) (*DesktopAuthorizationBound, error)
+	GetDesktopReauthenticationContext(context.Context, string) (*DesktopReauthenticationContext, error)
+	AuthenticateDesktopReauthentication(context.Context, *DesktopReauthenticationAuthentication) (*DesktopReauthenticationAuthenticationResult, error)
+	IssueDesktopReauthenticationCode(context.Context, *DesktopReauthenticationCodeIssue) (*DesktopAuthorizationCodeIssued, error)
+	CancelDesktopReauthentication(context.Context, *DesktopAuthorizationCancellation) error
+	CompleteDesktopReauthentication(context.Context, *DesktopReauthenticationCompletion) (*SessionReauthenticationResult, error)
 }

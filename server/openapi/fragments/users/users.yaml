@@ -347,6 +347,7 @@ components:
         - username
         - display_name
         - profile_picture_reference
+        - profile_picture_kind
       properties:
         id:
           $ref: '#/components/schemas/ID'
@@ -356,6 +357,8 @@ components:
           type: string
         profile_picture_reference:
           type: string
+        profile_picture_kind:
+          $ref: '#/components/schemas/ProfilePictureKind'
     CurrentUserManagementScope:
       type: object
       additionalProperties: false

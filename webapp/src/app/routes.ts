@@ -4,6 +4,7 @@ export const hostedRoutes = [
   "/login",
   "/register",
   "/authorize/desktop",
+  "/reauthenticate/desktop",
   "/join",
   "/account/forgot-password",
   "/account/reset-password",

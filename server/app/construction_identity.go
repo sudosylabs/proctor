@@ -75,7 +75,11 @@ func constructSessionAuthentication(
 		return nil, err
 	}
 	built.mail, built.mfaApplication = accountMail, mfaApplication
-	built.authentication, built.desktopAuthorization = authentication, desktopAuthorization
+	desktopReauthentication, err := newDesktopReauthenticationService(desktopReauthenticationServiceDependencies{Transactions: deps.Store.BrowserAuthentication(), Institutions: deps.Store.Institution(), Users: deps.Store.User(), Capabilities: capabilities, Audit: desktopReauthenticationAuditAdapter{audit: foundation.audit}, Attempts: desktopAuthorizationAttemptAccounting{attempts: foundation.attempts, policy: deps.LoginRateLimit}, Authentication: authentication, Policy: DesktopAuthorizationPolicy{Issuer: deps.PublicURL, AllowLoopbackHTTPDevelopment: deps.LoopbackHTTPDevelopment}, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, NewCredential: model.NewCredentialToken, Now: time.Now})
+	if err != nil {
+		return nil, err
+	}
+	built.authentication, built.desktopAuthorization, built.desktopReauthentication = authentication, desktopAuthorization, desktopReauthentication
 	return authenticationAccess, nil
 }
 
@@ -159,7 +163,7 @@ func constructExternalAuthentication(
 	if externalPolicy.LoginRateLimit == (LoginRateLimitPolicy{}) {
 		externalPolicy.LoginRateLimit = deps.LoginRateLimit
 	}
-	externalAuthentication, err := newExternalAuthenticationService(externalAuthenticationServiceDependencies{Registry: deps.Registry, LoginStates: deps.Store.ExternalLoginState(), Institutions: deps.Store.Institution(), Identities: deps.Store.ExternalIdentity(), Sessions: deps.Store.Session(), AccessPolicy: authenticationAccess, Attempts: foundation.attempts, Authentication: authentication, Invalidator: foundation.invalidator, Audit: foundation.audit, MutationAudit: mutationAuditAdapter{audit: foundation.audit}, Capabilities: capabilities, InvitationAcceptor: invitations, DesktopAuthorization: desktopAuthorization, Policy: externalPolicy, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Diagnostics: deps.AuthenticationDiagnostics, NewCredential: model.NewCredentialToken, Now: time.Now})
+	externalAuthentication, err := newExternalAuthenticationService(externalAuthenticationServiceDependencies{Registry: deps.Registry, LoginStates: deps.Store.ExternalLoginState(), Institutions: deps.Store.Institution(), Identities: deps.Store.ExternalIdentity(), Sessions: deps.Store.Session(), AccessPolicy: authenticationAccess, Attempts: foundation.attempts, Authentication: authentication, Invalidator: foundation.invalidator, Audit: foundation.audit, MutationAudit: mutationAuditAdapter{audit: foundation.audit}, Capabilities: capabilities, InvitationAcceptor: invitations, DesktopAuthorization: desktopAuthorization, DesktopReauthentication: built.desktopReauthentication, Policy: externalPolicy, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Diagnostics: deps.AuthenticationDiagnostics, NewCredential: model.NewCredentialToken, Now: time.Now})
 	if err != nil {
 		return err
 	}

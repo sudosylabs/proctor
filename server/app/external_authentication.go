@@ -86,6 +86,15 @@ type externalAuthenticationDesktopAuthorization interface {
 		*model.User, *model.ExternalIdentity, string, *model.ExternalAuthenticationAssertion) error
 }
 
+// externalAuthenticationDesktopReauthentication keeps the Desktop
+// reauthentication transaction with its owning service; provider proof only
+// names the External Identity it verified.
+type externalAuthenticationDesktopReauthentication interface {
+	resolveExternalReauthentication(context.Context, string, string, string) (desktopExternalAuthenticationTarget, error)
+	authenticateExternalReauthentication(context.Context, invocation.Invocation, model.BrowserAuthenticationTransactionID,
+		*model.ExternalIdentity, string, *model.ExternalAuthenticationAssertion) error
+}
+
 type desktopExternalAuthenticationTarget struct {
 	transactionID model.BrowserAuthenticationTransactionID
 	returnTo      string
@@ -122,6 +131,7 @@ type externalAuthenticationServiceDependencies struct {
 	Capabilities            accessPolicyCapabilitySource
 	InvitationAcceptor      externalInvitationAcceptor
 	DesktopAuthorization    externalAuthenticationDesktopAuthorization
+	DesktopReauthentication externalAuthenticationDesktopReauthentication
 	Policy                  ExternalAuthenticationPolicy
 	RecentAuthenticationTTL time.Duration
 	Diagnostics             authenticationDiagnostics
@@ -158,7 +168,7 @@ func newExternalAuthenticationService(deps externalAuthenticationServiceDependen
 	if deps.MutationAudit == nil || deps.Capabilities == nil || deps.InvitationAcceptor == nil || deps.RecentAuthenticationTTL <= 0 {
 		return nil, errors.New("external authentication method lifecycle dependencies are required")
 	}
-	if deps.DesktopAuthorization == nil {
+	if deps.DesktopAuthorization == nil || deps.DesktopReauthentication == nil {
 		return nil, errors.New("external authentication desktop authorization is required")
 	}
 	if deps.Diagnostics == nil {
@@ -220,6 +230,28 @@ func (s *externalAuthenticationService) BeginDesktopExternalAuthentication(ctx c
 	}
 	return s.beginForPurpose(ctx, command.ProviderID, target.returnTo,
 		model.SessionClientWeb, "", "", command.Source, model.ExternalAuthenticationPurposeDesktopAuthorization,
+		"", "", "", target.transactionID, nil)
+}
+
+// BeginDesktopReauthenticationExternalAuthenticationCommand starts fresh
+// provider proof for the Desktop reauthentication bound to the browser.
+type BeginDesktopReauthenticationExternalAuthenticationCommand struct {
+	ProviderID string
+	Binding    string
+	State      string
+	Source     string
+}
+
+// BeginDesktopReauthenticationExternalAuthentication redirects to the Desktop
+// Session's own provider with a fresh-authentication challenge. The provider
+// callback returns to the hosted reauthentication page.
+func (s *externalAuthenticationService) BeginDesktopReauthenticationExternalAuthentication(ctx context.Context, _ invocation.Invocation, command BeginDesktopReauthenticationExternalAuthenticationCommand) (*model.ExternalAuthenticationStart, error) {
+	target, err := s.deps.DesktopReauthentication.resolveExternalReauthentication(ctx, command.Binding, command.State, command.ProviderID)
+	if err != nil {
+		return nil, err
+	}
+	return s.beginForPurpose(ctx, command.ProviderID, target.returnTo,
+		model.SessionClientWeb, "", "", command.Source, model.ExternalAuthenticationPurposeDesktopReauthentication,
 		"", "", "", target.transactionID, nil)
 }
 
@@ -374,10 +406,11 @@ func (s *externalAuthenticationService) beginProviderChallenge(
 	challenge, err := provider.Begin(
 		ctx,
 		ExternalProviderBeginRequest{
-			CallbackURL:         callbackURL,
-			State:               stateToken,
-			Proof:               bindingToken,
-			FreshAuthentication: purpose == model.ExternalAuthenticationPurposeReauthenticate || purpose == model.ExternalAuthenticationPurposeMFARecovery,
+			CallbackURL: callbackURL,
+			State:       stateToken,
+			Proof:       bindingToken,
+			FreshAuthentication: purpose == model.ExternalAuthenticationPurposeReauthenticate || purpose == model.ExternalAuthenticationPurposeMFARecovery ||
+				purpose == model.ExternalAuthenticationPurposeDesktopReauthentication,
 		},
 	)
 	if err != nil {
@@ -494,6 +527,13 @@ func (s *externalAuthenticationService) complete(
 			completion = &model.ExternalAuthenticationCompletion{ReturnTo: "/account/reauthenticate?task=" + task + "#external_login=failed"}
 			completionErr = nil
 		}
+		// The hosted Desktop reauthentication page reloads its own state;
+		// the closed fragment only says this provider attempt did not count.
+		if completionErr != nil && state.Purpose == model.ExternalAuthenticationPurposeDesktopReauthentication &&
+			model.IsSafeRelativeURL(state.ReturnTo) {
+			completion = &model.ExternalAuthenticationCompletion{ReturnTo: state.ReturnTo + "#external_login=failed"}
+			completionErr = nil
+		}
 	}()
 	nowTime := s.deps.Now()
 
@@ -516,6 +556,9 @@ func (s *externalAuthenticationService) complete(
 	}
 	if state.Purpose == model.ExternalAuthenticationPurposeReauthenticate {
 		return s.completeReauthentication(ctx, state, assertion)
+	}
+	if state.Purpose == model.ExternalAuthenticationPurposeDesktopReauthentication {
+		return s.completeDesktopReauthentication(ctx, attempt, assertion)
 	}
 	if state.Purpose == model.ExternalAuthenticationPurposeConnect {
 		return s.completeProviderConnection(ctx, state, assertion, metadata, institution)
@@ -603,7 +646,8 @@ func (s *externalAuthenticationService) completeProviderAssertion(
 	request ExternalProviderCompleteRequest,
 ) (*model.ExternalAuthenticationAssertion, error) {
 	state := attempt.state
-	if state.Purpose == model.ExternalAuthenticationPurposeReauthenticate || state.Purpose == model.ExternalAuthenticationPurposeMFARecovery {
+	if state.Purpose == model.ExternalAuthenticationPurposeReauthenticate || state.Purpose == model.ExternalAuthenticationPurposeMFARecovery ||
+		state.Purpose == model.ExternalAuthenticationPurposeDesktopReauthentication {
 		request.AuthenticationStartedAt = state.CreatedAt
 	}
 	assertion, providerErr := provider.Complete(ctx, request)
@@ -958,4 +1002,32 @@ func externalProviderOperationError(err error) error {
 		return apperror.New("authentication.external.unavailable").Wrap(err)
 	}
 	return authenticationUnavailable(err)
+}
+
+// completeDesktopReauthentication hands verified provider proof of an
+// already linked External Identity to its Desktop reauthentication. It never
+// provisions a User, links an identity or issues a Session.
+func (s *externalAuthenticationService) completeDesktopReauthentication(ctx context.Context, attempt externalCompletionAttempt,
+	assertion *model.ExternalAuthenticationAssertion,
+) (*model.ExternalAuthenticationCompletion, error) {
+	state := attempt.state
+	if !state.BrowserAuthenticationTransactionID.IsValid() || assertion.AuthenticatedAt < state.CreatedAt.Truncate(time.Second).UnixMilli() ||
+		assertion.AuthenticatedAt > s.deps.Now().UnixMilli() {
+		return nil, invalidExternalAuthenticationError()
+	}
+	identity, err := s.deps.Identities.GetByProviderSubject(ctx, attempt.providerID, assertion.Subject)
+	if err != nil || identity == nil || identity.UserID.IsZero() {
+		if err != nil && !store.IsNotFound(err) {
+			return nil, authenticationUnavailable(err)
+		}
+		if auditErr := s.recordCompletionFailure(ctx, attempt, "authentication.external.account_not_linked"); auditErr != nil {
+			return nil, auditErr
+		}
+		return nil, apperror.New("authentication.external.account_not_linked")
+	}
+	if appErr := s.deps.DesktopReauthentication.authenticateExternalReauthentication(ctx, invocation.New(model.Principal{}, attempt.metadata),
+		state.BrowserAuthenticationTransactionID, identity, attempt.method, assertion); appErr != nil {
+		return nil, appErr
+	}
+	return &model.ExternalAuthenticationCompletion{ReturnTo: state.ReturnTo}, nil
 }

@@ -45,6 +45,8 @@ var applicationErrorMappings = map[string]applicationErrorMapping{
 	"authentication.desktop_authorization.invalid":                {status: http.StatusBadRequest},
 	"authentication.desktop_authorization.rejected":               {status: http.StatusUnauthorized},
 	"authentication.desktop_authorization.unavailable":            {status: http.StatusServiceUnavailable},
+	"authentication.desktop_reauthentication.denied":              {status: http.StatusForbidden},
+	"authentication.desktop_reauthentication.invalid":             {status: http.StatusBadRequest},
 	"authentication.dpop.invalid":                                 {status: http.StatusUnauthorized},
 	"authentication.dpop.replayed":                                {status: http.StatusUnauthorized},
 	"authentication.dpop.unavailable":                             {status: http.StatusServiceUnavailable},

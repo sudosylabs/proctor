@@ -49,6 +49,7 @@ describe("hosted route descriptors", () => {
       "/login": "webapp.login.document_title",
       "/register": "webapp.register.document_title",
       "/authorize/desktop": "webapp.desktop_authorization.document_title",
+      "/reauthenticate/desktop": "webapp.desktop_reauthentication.document_title",
       "/join": "webapp.join.document_title",
       "/account/forgot-password": "webapp.forgot_password.document_title",
       "/account/reset-password": "webapp.reset_password.document_title",
@@ -179,6 +180,26 @@ describe("hosted route bootstrap", () => {
     expect(bootstrap("/authorize/desktop", "#token=secret")).toEqual({
       replacements: ["https://proctor.example/authorize/desktop"],
       value: { route: "/authorize/desktop" },
+    });
+  });
+
+  it("captures the Desktop reauthentication proof and the provider failure notice", () => {
+    expect(
+      bootstrap("/reauthenticate/desktop?request=handle&state=state", "#proof=secret"),
+    ).toEqual({
+      replacements: ["https://proctor.example/reauthenticate/desktop?state=state"],
+      value: {
+        route: "/reauthenticate/desktop",
+        state: "state",
+        credential: { kind: "desktop_reauthentication_proof", handle: "handle", value: "secret" },
+      },
+    });
+    expect(bootstrap("/reauthenticate/desktop?state=state", "#external_login=failed")).toEqual({
+      replacements: ["https://proctor.example/reauthenticate/desktop?state=state"],
+      value: { route: "/reauthenticate/desktop", state: "state", notice: "external_login_failed" },
+    });
+    expect(bootstrap("/reauthenticate/desktop?state=state", "#proof=secret").value).toEqual({
+      route: "/reauthenticate/desktop", state: "state",
     });
   });
 });

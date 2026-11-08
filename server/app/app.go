@@ -45,6 +45,7 @@ type (
 type App struct {
 	*authenticationService
 	*desktopAuthorizationService
+	*desktopReauthenticationService
 	*desktopRegistrationService
 	*browserInvitationService
 	*selfSessionService

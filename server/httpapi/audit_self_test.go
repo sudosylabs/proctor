@@ -32,7 +32,7 @@ func TestSelfAuditResourceParsesFiltersAndPagesPrivately(t *testing.T) {
 		Status: model.AuditStatusSuccess, Relation: store.AuditSelfRelationSubject, ActorKind: app.SelfAuditActorAdministrator,
 		Resource: model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()}, ClientType: "web",
 	}
-	audits := &focusedAuditApplication{self: []app.SelfAuditEvent{last}, hasMore: true}
+	audits := &focusedAuditApplication{self: []app.SelfAuditEvent{last}, hasMore: true, selfTotal: 248}
 	httpAPI := newFocusedResourceAPI(t, logger, &academicUnitHTTPApplication{principal: principal}, auditResource(audits))
 
 	response := serveOperatorRequest(httpAPI, http.MethodGet,
@@ -54,20 +54,38 @@ func TestSelfAuditResourceParsesFiltersAndPagesPrivately(t *testing.T) {
 	require.Equal(t, "administrator", page.Items[0].Actor.Kind)
 	require.Empty(t, page.Items[0].IPAddress)
 	require.NotEmpty(t, page.NextCursor)
+	require.False(t, audits.selfQuery.Ascending, "newest first is the default order")
 	var raw map[string]any
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &raw))
 	item := raw["items"].([]any)[0].(map[string]any)
 	require.NotContains(t, item, "actor_id", "an administrator's identity escaped")
 	require.NotContains(t, item, "parameters")
+	require.InDelta(t, 248, raw["total"], 0, "the first page counts the whole history")
+	require.Equal(t, false, raw["total_is_lower_bound"])
 
 	audits.self, audits.hasMore = nil, false
 	second := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/users/me/audits?cursor="+url.QueryEscape(page.NextCursor), "", true)
 	require.Equal(t, http.StatusOK, second.Code, second.Body.String())
 	require.True(t, at.Equal(audits.selfQuery.BeforeCreatedAt))
 	require.Equal(t, last.ID, audits.selfQuery.BeforeID)
+	require.NotContains(t, second.Body.String(), "total", "a later page repeats no count")
+	crossed := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/users/me/audits?order=asc&cursor="+url.QueryEscape(page.NextCursor), "", true)
+	assertHTTPProblem(t, crossed, http.StatusBadRequest, "request.invalid")
+
+	audits.self, audits.hasMore, audits.selfTotal = []app.SelfAuditEvent{last}, true, store.MaximumAuditSelfCount
+	oldest := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/users/me/audits?order=asc&limit=1", "", true)
+	require.Equal(t, http.StatusOK, oldest.Code, oldest.Body.String())
+	require.True(t, audits.selfQuery.Ascending)
+	var capped map[string]any
+	require.NoError(t, json.Unmarshal(oldest.Body.Bytes(), &capped))
+	require.Equal(t, true, capped["total_is_lower_bound"])
+	audits.self, audits.hasMore = nil, false
+	oldestNext := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/users/me/audits?order=asc&cursor="+url.QueryEscape(capped["next_cursor"].(string)), "", true)
+	require.Equal(t, http.StatusOK, oldestNext.Code, oldestNext.Body.String())
+	require.True(t, audits.selfQuery.Ascending)
 
 	calls := audits.selfCalls
-	for _, query := range []string{"created_after=yesterday", "created_before=2026-09-01", "since=2026-07-01T00:00:00Z", "status=success&status=fail", "actor_id=" + model.NewID()} {
+	for _, query := range []string{"created_after=yesterday", "created_before=2026-09-01", "since=2026-07-01T00:00:00Z", "status=success&status=fail", "order=oldest", "order=asc&order=desc", "actor_id=" + model.NewID()} {
 		invalid := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/users/me/audits?"+query, "", true)
 		assertHTTPProblem(t, invalid, http.StatusBadRequest, "request.invalid")
 	}

@@ -57,13 +57,17 @@ func TestSelfAuditListingProjectsOnlyTheCallersFacts(t *testing.T) {
 		Resource: model.Resource{Type: model.ResourceClass, ID: foreignClassID}, ResourceRelated: false,
 		ClientType: "desktop", IPAddress: "192.0.2.10", UserAgent: "Proctor Desktop",
 	}
-	persistence := &auditListingStoreFake{events: &events, self: []*store.AuditSelfEntry{ownChange, adminReset, failedSignIn, roleGrant, enrolledOther}}
+	persistence := &auditListingStoreFake{events: &events, self: []*store.AuditSelfEntry{ownChange, adminReset, failedSignIn, roleGrant, enrolledOther}, count: 5}
 	service := newAuditListingService(auditListingServiceDependencies{Audits: persistence, Authorization: &auditListingAuthorizerFake{events: &events}})
 
 	page, err := service.ListSelfAuditEvents(context.Background(), caller, ListSelfAuditEventsQuery{Limit: 4})
 	require.NoError(t, err)
-	require.Equal(t, []string{"list-self-audits"}, events, "a self read must not authorize or record a decision")
+	require.Equal(t, []string{"list-self-audits", "count-self-audits"}, events, "a self read must not authorize or record a decision")
 	require.Equal(t, me, persistence.selfInput.UserID)
+	require.Equal(t, persistence.selfInput, persistence.countInput, "the total counts the listed filters")
+	require.True(t, page.Counted)
+	require.Equal(t, 5, page.Total)
+	require.False(t, page.TotalIsLowerBound)
 	require.Equal(t, 5, persistence.selfInput.Limit)
 	require.Equal(t, model.AuditSelfEventKeys(nil, ""), persistence.selfInput.Events)
 	require.True(t, page.HasMore)
@@ -93,9 +97,15 @@ func TestSelfAuditListingProjectsOnlyTheCallersFacts(t *testing.T) {
 	require.Equal(t, model.AuditSelfEventRoleGranted, grant.Event)
 	require.Equal(t, unitID, grant.Resource.ID)
 
+	events = events[:0]
 	persistence.self = []*store.AuditSelfEntry{enrolledOther}
-	page, err = service.ListSelfAuditEvents(context.Background(), caller, ListSelfAuditEventsQuery{Limit: 10})
+	page, err = service.ListSelfAuditEvents(context.Background(), caller, ListSelfAuditEventsQuery{
+		Limit: 10, Ascending: true, BeforeCreatedAt: at.Add(-5 * time.Minute), BeforeID: model.NewAuditEventID(),
+	})
 	require.NoError(t, err)
+	require.Equal(t, []string{"list-self-audits"}, events, "a later page must not count again")
+	require.True(t, persistence.selfInput.Ascending)
+	require.False(t, page.Counted)
 	require.Len(t, page.Items, 1)
 	require.Equal(t, store.AuditSelfRelationActor, page.Items[0].Relation)
 	require.Equal(t, model.Resource{Type: model.ResourceClass}, page.Items[0].Resource, "an unrelated Class identity escaped")
@@ -172,4 +182,19 @@ func TestSelfAuditListingRefusesRowsOutsideTheCallersHistory(t *testing.T) {
 		_, err := service.ListSelfAuditEvents(context.Background(), caller, ListSelfAuditEventsQuery{})
 		require.True(t, apperror.Is(err, "audit.unavailable"), "%s escaped: %v", name, err)
 	}
+}
+
+func TestSelfAuditListingReportsTheCountBoundAsALowerBound(t *testing.T) {
+	t.Parallel()
+	events := []string{}
+	persistence := &auditListingStoreFake{events: &events, count: store.MaximumAuditSelfCount}
+	service := newAuditListingService(auditListingServiceDependencies{Audits: persistence, Authorization: &auditListingAuthorizerFake{events: &events}})
+	page, err := service.ListSelfAuditEvents(context.Background(), selfAuditSessionInvocation(), ListSelfAuditEventsQuery{Limit: 10})
+	require.NoError(t, err)
+	require.Equal(t, store.MaximumAuditSelfCount, page.Total)
+	require.True(t, page.TotalIsLowerBound)
+
+	persistence.count = store.MaximumAuditSelfCount + 1
+	_, err = service.ListSelfAuditEvents(context.Background(), selfAuditSessionInvocation(), ListSelfAuditEventsQuery{Limit: 10})
+	require.True(t, apperror.Is(err, "audit.unavailable"), "a count past the bound was presented: %v", err)
 }

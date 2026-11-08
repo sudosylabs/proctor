@@ -11,7 +11,11 @@ paths:
       operationId: listCurrentUserAuditEvents
       summary: List the current User's own account history
       description: >-
-        Returns one page of the current Session User's own account history, newest first. The history holds
+        Returns one page of the current Session User's own account history, newest first unless `order=asc`
+        asks for oldest first. The first page, read without a cursor, also carries `total`: the number of events
+        the filters match across every page, exact below 10,000 and reported as 10,000 with
+        `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Reading the
+        first page oldest first reaches the end of the history without counting pages. The history holds
         events about the User's account, whoever performed them, and account-relevant events the User performed
         on anything else. Each item carries a stable `event` name from a closed catalogue, which clients label
         themselves; rows outside the catalogue and unfinished attempts are never returned. Another person is
@@ -86,6 +90,17 @@ paths:
             enum:
               - subject
               - actor
+        - name: order
+          in: query
+          required: false
+          description: >-
+            Read newest first (`desc`, the default) or oldest first (`asc`). A cursor continues only the order
+            that produced it.
+          schema:
+            type: string
+            enum:
+              - desc
+              - asc
       responses:
         "200":
           $ref: '#/components/responses/SelfAuditListOK'
@@ -135,6 +150,8 @@ components:
                   id: ybndrfg8ejkmcpqxot1uwisza4
                 client_type: web
             next_cursor: eyJjcmVhdGVkX2F0IjoiMjAyNi0wNy0zMFQxNDowNTowMFoifQ
+            total: 248
+            total_is_lower_bound: false
   schemas:
     SelfAuditEvent:
       description: >-
@@ -277,3 +294,13 @@ components:
           type: string
           maxLength: 2048
           description: Opaque continuation for the next page, omitted after the final page.
+        total:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            Events matching the filters across every page, present only on the first page. At 10,000 counting
+            stops and `total_is_lower_bound` is true.
+        total_is_lower_bound:
+          type: boolean
+          description: True when `total` reached the 10,000 bound and the history may be longer. Present with `total`.

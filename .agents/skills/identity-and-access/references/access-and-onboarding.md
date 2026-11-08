@@ -336,7 +336,7 @@ action.
 
 Purpose-specific `BrowserAuthenticationTransaction` records own the hosted
 handoffs that exchange a browser credential or issue a later client code:
-Desktop authorization and Invitation acceptance. They store hashed bearer
+Desktop authorization, Desktop reauthentication, and Invitation acceptance. They store hashed bearer
 proofs, exact purpose and expected provider where applicable, bounded
 destination, creation/expiry/consumption state, and only the minimum resolved
 identity needed for the terminal effect. A host-only Secure, HttpOnly,
@@ -548,6 +548,44 @@ credential store. `device_id` and `device_name` remain untrusted Session
 metadata, not authentication or MFA bypass. When secure persistence is
 unavailable, sign-in is session-only. There is no first-slice Device Token or
 trusted-device aggregate.
+
+## Desktop reauthentication
+
+Proctor Desktop never renders a password form, and the Web reauthentication
+routes need a Web Session cookie, so a Desktop Session refreshes its own
+primary proof through a third `BrowserAuthenticationTransaction` purpose,
+`desktop_reauthentication`:
+
+1. the Desktop calls `POST /api/v1/auth/desktop/reauthentications` with DPoP
+   from its registered key (a Web Session or Personal Access Token is
+   refused) and the same exact loopback callback, state, and S256 challenge
+   rules as Desktop authorization start; the transaction is pinned to the
+   calling Session, Desktop Registration, key thumbprint, and User, and to the
+   Session's own authentication method and provider;
+2. the hosted `/reauthenticate/desktop` page binds its own route-scoped
+   HttpOnly cookie and offers exactly that one method: the User's password
+   (no login identifier, no second factor, no Web Session created) or a fresh
+   provider authentication (`FreshAuthentication`, external-login purpose
+   `desktop_reauthentication`, no provisioning) that must prove the Session's
+   own External Identity;
+3. proof of any other account or identity terminally denies the transaction
+   and is audited as a failed `authentication.reauthenticate` naming the
+   proving account as actor and the Desktop Session's account as resource. A
+   browser Web Session is never accepted as proof;
+4. approval issues a one-minute single-use code and the loopback redirect;
+5. `POST /api/v1/auth/desktop/reauthentications/complete`, with DPoP from the
+   same Session and key, consumes the code after PKCE, state, lifetime, live
+   Session, current password revision or External Identity, and MFA-reset
+   generation checks, then commits `reauthenticated_at` and the
+   `authentication.reauthenticate` audit (`desktop_password` or
+   `desktop_external`) through the shared Session reauthentication
+   transition. No Session is created, the Desktop Registration is unchanged,
+   and existing access credentials stay valid with refreshed cached assurance.
+
+The transaction never binds the rotating Session credential identifier;
+refresh rotation during the five-minute handoff does not invalidate it, while
+revoking or deleting the Session does (the row cascades with the Session).
+Start and complete use distinct desktop-authorization attempt domains.
 
 ## Local and external credential lifecycle
 

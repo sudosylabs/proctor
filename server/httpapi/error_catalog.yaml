@@ -110,6 +110,11 @@ codes:
     description: "The desktop authorization grant is unknown, expired, or no longer valid."
   - code: authentication.desktop_authorization.unavailable
     description: "Desktop authorization failed or is temporarily unavailable; retry later."
+  - code: authentication.desktop_reauthentication.denied
+    description: "The browser proved another account than the one signed in to Proctor Desktop."
+  - code: authentication.desktop_reauthentication.invalid
+    description: "The Desktop reauthentication request is malformed, unknown, expired, or no longer valid."
+    transport: true
   - code: authentication.dpop.invalid
     status: 401
     reason: "A failed credential presentation is an authentication failure."

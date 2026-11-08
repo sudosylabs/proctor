@@ -32,7 +32,7 @@ func TestSessionReauthenticationPreservesAssuranceHistory(t *testing.T) {
 	require.False(t, principal.HasStrongAuthentication(), "fresh primary proof did not supply recency without supplying MFA")
 	principal.MFACompletedAt = OptionalTimeFrom(at.Add(31 * time.Minute))
 	principal.AuthenticationStrength = AuthenticationMultiFactor
-	require.True(t, principal.LastAuthenticationAt().Equal(principal.MFACompletedAt.Time), "later MFA proof lost")
+	require.True(t, principal.LastAuthenticationAt().Equal(principal.ReauthenticatedAt.Time), "later MFA proof counted as primary proof")
 	require.False(t, principal.IsRecentlyAuthenticated(at, time.Hour), "future proof granted recency")
 	for _, invalid := range []time.Time{at.Add(-time.Microsecond), session.UpdatedAt.Add(time.Microsecond)} {
 		session.ReauthenticatedAt = OptionalTimeFrom(invalid)

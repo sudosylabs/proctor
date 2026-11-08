@@ -460,6 +460,7 @@ components:
         - first_name
         - last_name
         - profile_picture_url
+        - profile_picture_kind
       properties:
         id:
           $ref: '#/components/schemas/ID'
@@ -503,6 +504,17 @@ components:
         profile_picture_changed_at:
           type: string
           format: date-time
+          description: >-
+            Time of the latest upload or removal. It is not a sign that a custom picture exists; use
+            profile_picture_kind.
+        profile_picture_kind:
+          $ref: '#/components/schemas/ProfilePictureKind'
+    ProfilePictureKind:
+      type: string
+      enum: [custom, default]
+      description: >-
+        Which picture the profile picture route serves: the User's own upload (custom), which can be removed, or
+        the picture generated for every User (default).
     RoleResponse:
       description: Reusable Role definition; effective access still requires a scoped Role Binding.
       type: object

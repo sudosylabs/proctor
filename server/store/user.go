@@ -180,6 +180,7 @@ type CurrentUserContext struct {
 	UserID                  model.UserID
 	Username                string
 	DisplayName             string
+	ProfilePictureKind      model.ProfilePictureKind
 	NoCurrentAffiliation    bool
 	NoAssignedAccess        bool
 	AvailableProductAreas   []CurrentUserProductArea

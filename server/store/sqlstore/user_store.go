@@ -467,6 +467,7 @@ func (s SQLUserStore) currentUserProductAreas(ctx context.Context, userID model.
 		UserID             string `db:"user_id"`
 		Username           string `db:"username"`
 		DisplayName        string `db:"display_name"`
+		CustomPicture      bool   `db:"custom_picture"`
 		HasAffiliation     bool   `db:"has_affiliation"`
 		HasAssignedAccess  bool   `db:"has_assigned_access"`
 		HasStudentActivity bool   `db:"has_student_activity"`
@@ -491,7 +492,7 @@ func (s SQLUserStore) currentUserProductAreas(ctx context.Context, userID model.
 		WHERE member.archived_at IS NULL AND member.start_at<=statement_timestamp()
 		AND (member.end_at IS NULL OR member.end_at>statement_timestamp())
 	)
-	SELECT u.id AS user_id,u.username,u.display_name,
+	SELECT u.id AS user_id,u.username,u.display_name,u.custom_profile_picture_file_id IS NOT NULL AS custom_picture,
 		EXISTS(SELECT 1 FROM affiliations affiliation WHERE affiliation.user_id=u.id AND affiliation.archived_at IS NULL
 			AND affiliation.start_at<=statement_timestamp() AND (affiliation.end_at IS NULL OR affiliation.end_at>statement_timestamp())) AS has_affiliation,
 		EXISTS(SELECT 1 FROM active_bindings) AS has_assigned_access,
@@ -514,7 +515,11 @@ func (s SQLUserStore) currentUserProductAreas(ctx context.Context, userID model.
 		return nil, translateError("user", userID.String(), err)
 	}
 	result := &store.CurrentUserContext{Username: row.Username, DisplayName: row.DisplayName,
+		ProfilePictureKind:   model.ProfilePictureDefault,
 		NoCurrentAffiliation: !row.HasAffiliation, NoAssignedAccess: !row.HasAssignedAccess}
+	if row.CustomPicture {
+		result.ProfilePictureKind = model.ProfilePictureCustom
+	}
 	if result.UserID, err = model.ParseUserID(row.UserID); err != nil {
 		return nil, invalidPersistedState("user", "id", err)
 	}

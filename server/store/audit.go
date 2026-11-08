@@ -63,11 +63,19 @@ type AuditSelfListOptions struct {
 	Events   []model.AuditSelfEventKey
 	Since    time.Time
 	Until    time.Time
-	// BeforeCreatedAt and BeforeID continue a page at microsecond precision.
+	// Ascending reads oldest first; the default is newest first.
+	Ascending bool
+	// BeforeCreatedAt and BeforeID are the previous page's last key, at
+	// microsecond precision. The page continues past it in the read order:
+	// older entries when newest first, newer entries when Ascending.
 	BeforeCreatedAt time.Time
 	BeforeID        model.AuditEventID
 	Limit           int
 }
+
+// MaximumAuditSelfCount bounds CountSelf. A history at the bound reports the
+// bound, and the caller presents it as a lower bound.
+const MaximumAuditSelfCount = 10000
 
 // AuditSelfEntry is the bounded projection of one self-history event. It
 // carries no parameters, prior state, or result beyond the recorded
@@ -101,6 +109,10 @@ type AuditStore interface {
 	// first by (created_at, id). It is the union of the subject and actor
 	// relations, each read through its own index.
 	ListSelf(context.Context, AuditSelfListOptions) ([]*AuditSelfEntry, error)
+	// CountSelf counts the entries ListSelf would return across every page
+	// for the same filters, ignoring the order, keyset, and limit, and stops
+	// at MaximumAuditSelfCount.
+	CountSelf(context.Context, AuditSelfListOptions) (int, error)
 	// FailAbandonedAttempts terminalizes up to Limit attempts created longer
 	// than Age ago by PostgreSQL time, oldest first, as failures with
 	// model.AuditErrorAttemptAbandoned, and returns how many it changed.

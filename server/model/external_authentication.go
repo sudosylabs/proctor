@@ -33,11 +33,16 @@ const (
 	ExternalAuthenticationPurposeConnect              ExternalAuthenticationPurpose = "connect"
 	ExternalAuthenticationPurposeInvitationAdmission  ExternalAuthenticationPurpose = "invitation_admission"
 	ExternalAuthenticationPurposeDesktopAuthorization ExternalAuthenticationPurpose = "desktop_authorization"
+	// ExternalAuthenticationPurposeDesktopReauthentication proves fresh
+	// provider authentication for one Desktop reauthentication transaction.
+	// It never creates a Session or provisions a User.
+	ExternalAuthenticationPurposeDesktopReauthentication ExternalAuthenticationPurpose = "desktop_reauthentication"
 )
 
 func (p ExternalAuthenticationPurpose) IsValid() bool {
 	return p == ExternalAuthenticationPurposeMFARecovery || p == ExternalAuthenticationPurposeReauthenticate || p == ExternalAuthenticationPurposeLogin || p == ExternalAuthenticationPurposeConnect ||
-		p == ExternalAuthenticationPurposeInvitationAdmission || p == ExternalAuthenticationPurposeDesktopAuthorization
+		p == ExternalAuthenticationPurposeInvitationAdmission || p == ExternalAuthenticationPurposeDesktopAuthorization ||
+		p == ExternalAuthenticationPurposeDesktopReauthentication
 }
 
 var ErrInvalidExternalAuthenticationCallback = errors.New(
@@ -269,7 +274,7 @@ func (s *ExternalLoginState) validatePurposeTarget(details string) error {
 		(s.Purpose == ExternalAuthenticationPurposeLogin && (!s.TargetUserID.IsZero() || !s.InvitationID.IsZero() || !s.BrowserAuthenticationTransactionID.IsZero() || s.AuditEventID != "")) ||
 		(s.Purpose == ExternalAuthenticationPurposeConnect && (!s.TargetUserID.IsValid() || !s.InvitationID.IsZero() || !s.BrowserAuthenticationTransactionID.IsZero() || !AuditEventID(s.AuditEventID).IsValid())) ||
 		(s.Purpose == ExternalAuthenticationPurposeInvitationAdmission && (!s.TargetUserID.IsZero() || !s.InvitationID.IsValid() || !s.BrowserAuthenticationTransactionID.IsZero() || s.AuditEventID != "")) ||
-		(s.Purpose == ExternalAuthenticationPurposeDesktopAuthorization && (!s.TargetUserID.IsZero() || !s.InvitationID.IsZero() || !s.BrowserAuthenticationTransactionID.IsValid() || s.AuditEventID != "")) {
+		((s.Purpose == ExternalAuthenticationPurposeDesktopAuthorization || s.Purpose == ExternalAuthenticationPurposeDesktopReauthentication) && (!s.TargetUserID.IsZero() || !s.InvitationID.IsZero() || !s.BrowserAuthenticationTransactionID.IsValid() || s.AuditEventID != "")) {
 		return invalidModelError(where, "external_login_state", "purpose", "has an invalid target", details)
 	}
 	if s.Purpose == ExternalAuthenticationPurposeMFARecovery && (!s.TargetUserID.IsValid() || !s.InvitationID.IsZero() || !s.BrowserAuthenticationTransactionID.IsZero() || s.AuditEventID != "" || s.ReturnTo != "/account/security") {

@@ -634,6 +634,166 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/desktop/reauthentications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start confirming the Desktop Session's account in the system browser
+         * @description Accepts only a Desktop Session whose request carries a valid DPoP proof from its registered key; Web Sessions and Personal Access Tokens are refused. Pins the exact loopback callback, state and S256 PKCE challenge, binds the handoff to the calling Session, Desktop Registration, key and User, and returns the hosted reauthentication page. The page accepts only the authentication method the Desktop Session itself used, and the handoff lives at most five minutes.
+         */
+        post: operations["startDesktopReauthentication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/desktop/reauthentications/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hand the confirmed proof back to Proctor Desktop
+         * @description Requires the browser binding, the exact pinned state, a proved reauthentication and a still-live Desktop Session, then issues one single-use code that expires within a minute and returns the loopback redirect carrying only that code and the state.
+         */
+        post: operations["approveDesktopReauthentication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/desktop/reauthentications/authenticate/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Prove the Desktop Session account's password
+         * @description Checks the password of the Desktop Session's own User for a password Session only. It takes no login identifier, asks for no second factor, creates no Web Session and does not yet refresh the Desktop Session; the Desktop redeems the proof through the complete operation.
+         */
+        post: operations["authenticateDesktopReauthenticationWithPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/desktop/reauthentications/authenticate/providers/{provider_id}/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Begin fresh provider authentication for this Desktop reauthentication
+         * @description Accepts only the Desktop Session's own identity provider, asks it for fresh authentication, and returns to the hosted reauthentication page. The provider must prove the Desktop Session's own linked identity; proof of any other account denies the handoff and is audited. No User is provisioned and no Session is created.
+         */
+        get: operations["beginDesktopReauthenticationExternalAuthentication"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/desktop/reauthentications/bind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchange the one-time fragment proof for an HttpOnly reauthentication binding
+         * @description Exchanges the handle, fragment-delivered browser proof and pinned state exactly once for a host-only HttpOnly cookie scoped to the Desktop reauthentication route family. No credential material reaches rendered content.
+         */
+        post: operations["bindDesktopReauthenticationBrowser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/desktop/reauthentications/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Terminally cancel the browser-bound Desktop reauthentication
+         * @description Validates the binding cookie and exact pinned state before terminally canceling the reauthentication and destroying every remaining browser proof.
+         */
+        post: operations["cancelDesktopReauthentication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/desktop/reauthentications/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redeem the reauthentication code as recent authentication
+         * @description Requires DPoP from the same Desktop Session and registered key that started the handoff. Verifies the S256 verifier, the pinned state, the code lifetime and single use, rechecks the proof and the live Session, then records fresh primary proof on that existing Session together with its audit. No Session is created and the Desktop Registration is unchanged; existing access credentials stay valid.
+         */
+        post: operations["completeDesktopReauthentication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/desktop/reauthentications/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the hosted Desktop reauthentication context
+         * @description Resolves the scoped binding cookie and returns the Desktop Session's account display name, the one authentication method it accepts (a password, or the Desktop Session's own identity provider) and the handoff expiry. An existing browser Web Session is never offered as proof.
+         */
+        get: operations["getDesktopReauthenticationContext"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/desktop/token": {
         parameters: {
             query?: never;
@@ -4716,7 +4876,7 @@ export interface paths {
         };
         /**
          * List the current User's own account history
-         * @description Returns one page of the current Session User's own account history, newest first. The history holds events about the User's account, whoever performed them, and account-relevant events the User performed on anything else. Each item carries a stable `event` name from a closed catalogue, which clients label themselves; rows outside the catalogue and unfinished attempts are never returned. Another person is never named: the actor is only `self`, `administrator`, or `system`, and the IP address and user agent appear only on the User's own actions. A resource identity appears only when the resource is the User, the Institution, or an Academic Unit or Class the User has or had a membership or Role Binding at. Personal Access Tokens cannot read this history. Reading it records no authorization decision.
+         * @description Returns one page of the current Session User's own account history, newest first unless `order=asc` asks for oldest first. The first page, read without a cursor, also carries `total`: the number of events the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Reading the first page oldest first reaches the end of the history without counting pages. The history holds events about the User's account, whoever performed them, and account-relevant events the User performed on anything else. Each item carries a stable `event` name from a closed catalogue, which clients label themselves; rows outside the catalogue and unfinished attempts are never returned. Another person is never named: the actor is only `self`, `administrator`, or `system`, and the IP address and user agent appear only on the User's own actions. A resource identity appears only when the resource is the User, the Institution, or an Academic Unit or Class the User has or had a membership or Role Binding at. Personal Access Tokens cannot read this history. Reading it records no authorization decision.
          */
         get: operations["listCurrentUserAuditEvents"];
         put?: never;
@@ -6779,6 +6939,7 @@ export interface components {
         CurrentUserContextIdentity: {
             display_name: string;
             id: components["schemas"]["ID"];
+            profile_picture_kind: components["schemas"]["ProfilePictureKind"];
             profile_picture_reference: string;
             username: string;
         };
@@ -7106,6 +7267,46 @@ export interface components {
             kty: "EC";
             x: string;
             y: string;
+        };
+        DesktopReauthenticationCompleteRequest: {
+            code: string;
+            code_verifier: string;
+            state: string;
+        };
+        DesktopReauthenticationCompleteResponse: {
+            /**
+             * Format: date-time
+             * @description The instant after which recent-authentication operations again require reauthentication.
+             */
+            recently_authenticated_until: string;
+        };
+        DesktopReauthenticationContextResponse: {
+            /**
+             * @description The one proof this reauthentication accepts, which is the Desktop Session's own method.
+             * @enum {string}
+             */
+            authentication_method: "password" | "external";
+            /** @description The Desktop Session account's display name, so the person can see whose sign-in they are confirming. */
+            display_name: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** @description The Desktop Session's own identity provider; present only for the external method. */
+            provider?: components["schemas"]["ExternalAuthenticationProviderResponse"];
+            /** @enum {string} */
+            state: "bound" | "authenticated";
+        };
+        DesktopReauthenticationPasswordRequest: {
+            /** Format: password */
+            password: string;
+        };
+        DesktopReauthenticationStartRequest: {
+            /**
+             * Format: uri
+             * @description Exact HTTP loopback URL using 127.0.0.1 or [::1], a decimal port from 49152 through 65535, and one random token path, validated like Desktop Authorization.
+             */
+            callback_url: string;
+            code_challenge: string;
+            state: string;
         };
         /** @description One page of the collection in its stable order. */
         DesktopRegistrationListResponse: {
@@ -9396,6 +9597,11 @@ export interface components {
             /** Format: uri-reference */
             type: string;
         };
+        /**
+         * @description Which picture the profile picture route serves: the User's own upload (custom), which can be removed, or the picture generated for every User (default).
+         * @enum {string}
+         */
+        ProfilePictureKind: "custom" | "default";
         /** @description One page of the collection in its stable order. */
         ProgrammeLevelListResponse: {
             items: components["schemas"]["ProgrammeLevelResponse"][];
@@ -10154,6 +10360,10 @@ export interface components {
             items: components["schemas"]["SelfAuditEventResponse"][];
             /** @description Opaque continuation for the next page, omitted after the final page. */
             next_cursor?: string;
+            /** @description Events matching the filters across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true. */
+            total?: number;
+            /** @description True when `total` reached the 10,000 bound and the history may be longer. Present with `total`. */
+            total_is_lower_bound?: boolean;
         };
         SequenceRange: {
             /** Format: int64 */
@@ -10658,8 +10868,12 @@ export interface components {
             last_login_at?: string;
             last_name: string;
             locale?: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Time of the latest upload or removal. It is not a sign that a custom picture exists; use profile_picture_kind.
+             */
             profile_picture_changed_at?: string;
+            profile_picture_kind: components["schemas"]["ProfilePictureKind"];
             profile_picture_url: string;
             timezone?: string;
             /** Format: date-time */
@@ -11331,6 +11545,60 @@ export interface components {
                  *     }
                  */
                 "application/json": components["schemas"]["DesktopCompatibilityPolicyResponse"];
+            };
+        };
+        /** @description The Desktop Session counts as recently authenticated */
+        DesktopReauthenticationCompleted: {
+            headers: {
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "recently_authenticated_until": "2026-08-01T09:17:00Z"
+                 *     }
+                 */
+                "application/json": components["schemas"]["DesktopReauthenticationCompleteResponse"];
+            };
+        };
+        /** @description Safe current hosted Desktop reauthentication context */
+        DesktopReauthenticationContextOK: {
+            headers: {
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "authentication_method": "external",
+                 *       "display_name": "Ada Candidate",
+                 *       "expires_at": "2026-08-01T09:05:00Z",
+                 *       "provider": {
+                 *         "display_name": "Campus sign-in",
+                 *         "id": "campus",
+                 *         "type": "oidc"
+                 *       },
+                 *       "state": "bound"
+                 *     }
+                 */
+                "application/json": components["schemas"]["DesktopReauthenticationContextResponse"];
+            };
+        };
+        /** @description Desktop reauthentication handoff created */
+        DesktopReauthenticationStarted: {
+            headers: {
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "authorization_url": "https://proctor.example.edu/reauthenticate/desktop?request=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&state=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB#proof=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+                 *       "expires_at": "2026-08-01T09:05:00Z"
+                 *     }
+                 */
+                "application/json": components["schemas"]["DesktopAuthorizationStartResponse"];
             };
         };
         /** @description Current User's Desktop Registration security history */
@@ -13051,7 +13319,9 @@ export interface components {
                  *           "status": "success"
                  *         }
                  *       ],
-                 *       "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wNy0zMFQxNDowNTowMFoifQ"
+                 *       "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wNy0zMFQxNDowNTowMFoifQ",
+                 *       "total": 248,
+                 *       "total_is_lower_bound": false
                  *     }
                  */
                 "application/json": components["schemas"]["SelfAuditListResponse"];
@@ -14131,6 +14401,43 @@ export interface components {
                  *     }
                  */
                 "application/json": components["schemas"]["DesktopAuthorizationStateRequest"];
+            };
+        };
+        /** @description The one-use code from the loopback redirect, the S256 verifier and the pinned state. */
+        DesktopReauthenticationComplete: {
+            content: {
+                /**
+                 * @example {
+                 *       "code": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                 *       "code_verifier": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+                 *       "state": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+                 *     }
+                 */
+                "application/json": components["schemas"]["DesktopReauthenticationCompleteRequest"];
+            };
+        };
+        /** @description The password of the Desktop Session's own account; there is no login identifier to choose. */
+        DesktopReauthenticationPassword: {
+            content: {
+                /**
+                 * @example {
+                 *       "password": "synthetic-local-password"
+                 *     }
+                 */
+                "application/json": components["schemas"]["DesktopReauthenticationPasswordRequest"];
+            };
+        };
+        /** @description Exact loopback callback, state and S256 PKCE challenge to pin to the new reauthentication. */
+        DesktopReauthenticationStart: {
+            content: {
+                /**
+                 * @example {
+                 *       "callback_url": "http://127.0.0.1:49152/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                 *       "code_challenge": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+                 *       "state": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+                 *     }
+                 */
+                "application/json": components["schemas"]["DesktopReauthenticationStartRequest"];
             };
         };
         /** @description Exact source and destination academic structure plus the future effective instant to validate without mutation. */
@@ -15840,6 +16147,147 @@ export interface operations {
             409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    startDesktopReauthentication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["DesktopReauthenticationStart"];
+        responses: {
+            201: components["responses"]["DesktopReauthenticationStarted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    approveDesktopReauthentication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["DesktopAuthorizationState"];
+        responses: {
+            200: components["responses"]["DesktopAuthorizationApproved"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    authenticateDesktopReauthenticationWithPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["DesktopReauthenticationPassword"];
+        responses: {
+            200: components["responses"]["DesktopReauthenticationContextOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    beginDesktopReauthenticationExternalAuthentication: {
+        parameters: {
+            query: {
+                /** @description The exact opaque state pinned by the Desktop when it started this reauthentication. */
+                state: string;
+            };
+            header?: never;
+            path: {
+                /** @description The configured external authentication provider identifier. */
+                provider_id: components["parameters"]["ProviderID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            303: components["responses"]["ExternalAuthenticationRedirect"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalError"];
+            502: components["responses"]["BadGateway"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    bindDesktopReauthenticationBrowser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["DesktopAuthorizationProof"];
+        responses: {
+            204: components["responses"]["SensitiveNoContent"];
+            400: components["responses"]["BadRequest"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    cancelDesktopReauthentication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["DesktopAuthorizationState"];
+        responses: {
+            204: components["responses"]["SensitiveNoContent"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    completeDesktopReauthentication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["DesktopReauthenticationComplete"];
+        responses: {
+            200: components["responses"]["DesktopReauthenticationCompleted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getDesktopReauthenticationContext: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["DesktopReauthenticationContextOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
         };
     };
     exchangeDesktopAuthorizationCode: {
@@ -21160,6 +21608,8 @@ export interface operations {
                 status?: "success" | "fail";
                 /** @description Return only events about the User's account (`subject`) or only events the User performed on anything else (`actor`). Omit it for both. */
                 relation?: "subject" | "actor";
+                /** @description Read newest first (`desc`, the default) or oldest first (`asc`). A cursor continues only the order that produced it. */
+                order?: "desc" | "asc";
             };
             header?: never;
             path?: never;

@@ -42,7 +42,10 @@ type ListSelfAuditEventsQuery struct {
 	Events   []model.AuditSelfEvent
 	Status   model.AuditStatus
 	Relation store.AuditSelfRelation
-	// BeforeCreatedAt and BeforeID continue a page at microsecond precision.
+	// Ascending reads oldest first; the default is newest first.
+	Ascending bool
+	// BeforeCreatedAt and BeforeID are the previous page's last key at
+	// microsecond precision; the page continues past it in the read order.
 	BeforeCreatedAt time.Time
 	BeforeID        model.AuditEventID
 	Limit           int
@@ -67,46 +70,70 @@ type SelfAuditEvent struct {
 	UserAgent  string
 }
 
+// SelfAuditPage is one page of the caller's history. The first page, read
+// without a keyset, also carries Total: every matching event across all
+// pages, stopped at store.MaximumAuditSelfCount, where TotalIsLowerBound is
+// set. Later pages leave Counted false and the client keeps the first total.
+type SelfAuditPage struct {
+	Page[SelfAuditEvent]
+	Counted           bool
+	Total             int
+	TotalIsLowerBound bool
+}
+
 // ListSelfAuditEvents returns the current Session User's own account
 // history. It is the caller's own record, like other /users/me reads, so it
 // records no authorization decision; Personal Access Tokens are refused
 // because the history includes credential and Session changes.
-func (s *auditListingService) ListSelfAuditEvents(ctx context.Context, invocation invocation.Invocation, query ListSelfAuditEventsQuery) (Page[SelfAuditEvent], error) {
+func (s *auditListingService) ListSelfAuditEvents(ctx context.Context, invocation invocation.Invocation, query ListSelfAuditEventsQuery) (SelfAuditPage, error) {
 	principal := invocation.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
-		return Page[SelfAuditEvent]{}, apperror.New("authentication.required")
+		return SelfAuditPage{}, apperror.New("authentication.required")
 	}
 	if query.Limit == 0 {
 		query.Limit = 50
 	}
 	if !validSelfAuditQuery(query) {
-		return Page[SelfAuditEvent]{}, apperror.New("audit.query.invalid")
+		return SelfAuditPage{}, apperror.New("audit.query.invalid")
 	}
+	counted := query.BeforeID.IsZero()
 	keys := model.AuditSelfEventKeys(query.Events, query.Status)
 	if len(keys) == 0 {
-		return newPage[SelfAuditEvent](nil, query.Limit), nil
+		return SelfAuditPage{Page: newPage[SelfAuditEvent](nil, query.Limit), Counted: counted}, nil
 	}
-	entries, err := s.deps.Audits.ListSelf(ctx, store.AuditSelfListOptions{
+	options := store.AuditSelfListOptions{
 		UserID: principal.UserID, Relation: query.Relation, Events: keys,
-		Since: query.Since, Until: query.Until,
+		Since: query.Since, Until: query.Until, Ascending: query.Ascending,
 		BeforeCreatedAt: query.BeforeCreatedAt, BeforeID: query.BeforeID,
 		Limit: query.Limit + 1,
-	})
+	}
+	entries, err := s.deps.Audits.ListSelf(ctx, options)
 	if err != nil {
-		return Page[SelfAuditEvent]{}, auditListingError(err)
+		return SelfAuditPage{}, auditListingError(err)
 	}
 	if len(entries) > query.Limit+1 {
-		return Page[SelfAuditEvent]{}, apperror.New("audit.unavailable").WithField("resource", "audit")
+		return SelfAuditPage{}, apperror.New("audit.unavailable").WithField("resource", "audit")
 	}
 	items := make([]SelfAuditEvent, 0, len(entries))
 	for _, entry := range entries {
 		item, ok := selfAuditProjection(principal.UserID, entry)
 		if !ok {
-			return Page[SelfAuditEvent]{}, apperror.New("audit.unavailable").WithField("resource", "audit")
+			return SelfAuditPage{}, apperror.New("audit.unavailable").WithField("resource", "audit")
 		}
 		items = append(items, item)
 	}
-	return newPage(items, query.Limit), nil
+	page := SelfAuditPage{Page: newPage(items, query.Limit), Counted: counted}
+	if !counted {
+		return page, nil
+	}
+	if page.Total, err = s.deps.Audits.CountSelf(ctx, options); err != nil {
+		return SelfAuditPage{}, auditListingError(err)
+	}
+	if page.Total < len(page.Items) || page.Total > store.MaximumAuditSelfCount {
+		return SelfAuditPage{}, apperror.New("audit.unavailable").WithField("resource", "audit")
+	}
+	page.TotalIsLowerBound = page.Total == store.MaximumAuditSelfCount
+	return page, nil
 }
 
 func validSelfAuditQuery(query ListSelfAuditEventsQuery) bool {

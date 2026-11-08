@@ -9,6 +9,7 @@ import { AuthorizationCompletePage } from "../features/authorization-complete/Au
 import { AccountSecurityPage } from "../features/account-security/AccountSecurityPage";
 import { ConnectProviderPage } from "../features/connect-provider/ConnectProviderPage";
 import { DesktopAuthorizationPage } from "../features/desktop-authorization/DesktopAuthorizationPage";
+import { DesktopReauthenticationPage } from "../features/desktop-reauthentication/DesktopReauthenticationPage";
 import { ForgotPasswordPage } from "../features/forgot-password/ForgotPasswordPage";
 import { JoinPage } from "../features/join/JoinPage";
 import { LoginPage } from "../features/login/LoginPage";
@@ -31,6 +32,16 @@ export type HostedPageBootstrap =
       state?: string;
       credential?: {
         kind: "desktop_browser_proof";
+        handle: string;
+        value: string;
+      };
+    }
+  | {
+      route: "/reauthenticate/desktop";
+      state?: string;
+      notice?: "external_login_failed";
+      credential?: {
+        kind: "desktop_reauthentication_proof";
         handle: string;
         value: string;
       };
@@ -68,6 +79,7 @@ type FragmentPolicy =
   | { kind: "reauthentication_task" }
   | { kind: "invitation_claim"; name: "token" }
   | { kind: "desktop_browser_proof"; name: "proof" }
+  | { kind: "desktop_reauthentication_proof"; name: "proof" }
   | { kind: "password_reset_token"; name: "token" }
   | { kind: "email_verification_token"; name: "token" }
   | { kind: "email_change_undo_token"; name: "token" };
@@ -108,6 +120,25 @@ const hostedRouteDescriptors = {
     render: (bootstrap) => (
       <DesktopAuthorizationPage
         state={bootstrap.state}
+        proof={
+          bootstrap.credential !== undefined && bootstrap.state !== undefined
+            ? {
+                browserProof: bootstrap.credential.value,
+                handle: bootstrap.credential.handle,
+                state: bootstrap.state,
+              }
+            : undefined
+        }
+      />
+    ),
+  },
+  "/reauthenticate/desktop": {
+    documentTitle: "webapp.desktop_reauthentication.document_title",
+    fragment: { kind: "desktop_reauthentication_proof", name: "proof" },
+    render: (bootstrap) => (
+      <DesktopReauthenticationPage
+        state={bootstrap.state}
+        providerFailed={bootstrap.notice === "external_login_failed"}
         proof={
           bootstrap.credential !== undefined && bootstrap.state !== undefined
             ? {
@@ -209,33 +240,28 @@ export function bootstrapHostedPage(
           : {}),
       } as RouteBootstrap<typeof route>;
     }
-    case "desktop_browser_proof": {
-      const url = new URL(location.href);
-      const handle = boundedParameter(url.searchParams.get("request"));
-      const state = boundedParameter(url.searchParams.get("state"));
-      const fragment = location.hash.startsWith("#")
-        ? location.hash.slice(1)
-        : location.hash;
-      const fragmentParameters = new URLSearchParams(fragment);
-      const value = fragmentParameters.get(policy.name);
-      const sanitized = new URL(location.href);
-      sanitized.hash = "";
-      sanitized.searchParams.delete("request");
-      if (sanitized.href !== location.href) {
-        history.replaceState(history.state, "", sanitized);
-      }
+    case "desktop_reauthentication_proof": {
+      // The provider return carries only the closed failure notice; the
+      // first entry carries the one-use handle and fragment proof.
+      const failed = location.hash === "#external_login=failed";
+      const captured = captureDesktopProof(location, history, policy.name);
       return {
         route,
-        ...(state === undefined ? {} : { state }),
-        ...(value === null || value === "" || fragmentParameters.size !== 1 || handle === undefined || state === undefined
+        ...(captured.state === undefined ? {} : { state: captured.state }),
+        ...(failed ? { notice: "external_login_failed" as const } : {}),
+        ...(captured.credential === undefined
           ? {}
-          : {
-              credential: {
-                kind: "desktop_browser_proof" as const,
-                handle,
-                value,
-              },
-            }),
+          : { credential: { kind: "desktop_reauthentication_proof" as const, ...captured.credential } }),
+      } as RouteBootstrap<typeof route>;
+    }
+    case "desktop_browser_proof": {
+      const captured = captureDesktopProof(location, history, policy.name);
+      return {
+        route,
+        ...(captured.state === undefined ? {} : { state: captured.state }),
+        ...(captured.credential === undefined
+          ? {}
+          : { credential: { kind: "desktop_browser_proof" as const, ...captured.credential } }),
       } as RouteBootstrap<typeof route>;
     }
     case "invitation_claim":
@@ -269,6 +295,32 @@ export function renderHostedPage(bootstrap: HostedPageBootstrap): ReactNode {
 export const authoredHostedRoutes = Object.freeze(
   Object.keys(hostedRouteDescriptors) as HostedRoute[],
 );
+
+// captureDesktopProof removes the one-use request handle and every fragment
+// from browser history and returns the bounded state and proof it carried.
+function captureDesktopProof(
+  location: BrowserLocation,
+  history: BrowserHistory,
+  name: string,
+): { state?: string; credential?: { handle: string; value: string } } {
+  const url = new URL(location.href);
+  const handle = boundedParameter(url.searchParams.get("request"));
+  const state = boundedParameter(url.searchParams.get("state"));
+  const fragmentParameters = new URLSearchParams(location.hash.startsWith("#") ? location.hash.slice(1) : location.hash);
+  const value = fragmentParameters.get(name);
+  const sanitized = new URL(location.href);
+  sanitized.hash = "";
+  sanitized.searchParams.delete("request");
+  if (sanitized.href !== location.href) {
+    history.replaceState(history.state, "", sanitized);
+  }
+  return {
+    ...(state === undefined ? {} : { state }),
+    ...(value === null || value === "" || fragmentParameters.size !== 1 || handle === undefined || state === undefined
+      ? {}
+      : { credential: { handle, value } }),
+  };
+}
 
 function clearFragment(
   location: BrowserLocation,

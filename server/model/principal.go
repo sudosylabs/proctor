@@ -162,13 +162,13 @@ func (p Principal) HasRegisteredDesktopKey() bool {
 		p.DesktopRegistrationID.IsValid() && IsValidDPoPKeyThumbprint(p.DPoPKeyThumbprint)
 }
 
+// LastAuthenticationAt is the latest primary proof: the initial
+// authentication or a later reauthentication. An MFA challenge proves the
+// second factor, never fresh primary proof, so it does not refresh recency.
 func (p Principal) LastAuthenticationAt() time.Time {
 	latest := p.AuthenticatedAt
 	if p.ReauthenticatedAt.Valid && p.ReauthenticatedAt.Time.After(latest) {
 		latest = p.ReauthenticatedAt.Time
-	}
-	if p.MFACompletedAt.Valid && p.MFACompletedAt.Time.After(latest) {
-		latest = p.MFACompletedAt.Time
 	}
 	return latest
 }

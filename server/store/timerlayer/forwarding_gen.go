@@ -2642,6 +2642,48 @@ func (s *timedBrowserAuthenticationStore) Maintain(arg0 context.Context, arg1 in
 	})
 }
 
+func (s *timedBrowserAuthenticationStore) CreateDesktopReauthentication(arg0 context.Context, arg1 *store.DesktopReauthenticationCreation) (*store.DesktopAuthorizationCreated, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateBrowserAuthentication, methodCreateDesktopReauthentication), func(callCtx context.Context) (*store.DesktopAuthorizationCreated, error) {
+		return s.next.CreateDesktopReauthentication(callCtx, arg1)
+	})
+}
+
+func (s *timedBrowserAuthenticationStore) BindDesktopReauthentication(arg0 context.Context, arg1 *store.DesktopAuthorizationBinding) (*store.DesktopAuthorizationBound, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateBrowserAuthentication, methodBindDesktopReauthentication), func(callCtx context.Context) (*store.DesktopAuthorizationBound, error) {
+		return s.next.BindDesktopReauthentication(callCtx, arg1)
+	})
+}
+
+func (s *timedBrowserAuthenticationStore) GetDesktopReauthenticationContext(arg0 context.Context, arg1 string) (*store.DesktopReauthenticationContext, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateBrowserAuthentication, methodGetDesktopReauthenticationContext), func(callCtx context.Context) (*store.DesktopReauthenticationContext, error) {
+		return s.next.GetDesktopReauthenticationContext(callCtx, arg1)
+	})
+}
+
+func (s *timedBrowserAuthenticationStore) AuthenticateDesktopReauthentication(arg0 context.Context, arg1 *store.DesktopReauthenticationAuthentication) (*store.DesktopReauthenticationAuthenticationResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateBrowserAuthentication, methodAuthenticateDesktopReauthentication), func(callCtx context.Context) (*store.DesktopReauthenticationAuthenticationResult, error) {
+		return s.next.AuthenticateDesktopReauthentication(callCtx, arg1)
+	})
+}
+
+func (s *timedBrowserAuthenticationStore) IssueDesktopReauthenticationCode(arg0 context.Context, arg1 *store.DesktopReauthenticationCodeIssue) (*store.DesktopAuthorizationCodeIssued, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateBrowserAuthentication, methodIssueDesktopReauthenticationCode), func(callCtx context.Context) (*store.DesktopAuthorizationCodeIssued, error) {
+		return s.next.IssueDesktopReauthenticationCode(callCtx, arg1)
+	})
+}
+
+func (s *timedBrowserAuthenticationStore) CancelDesktopReauthentication(arg0 context.Context, arg1 *store.DesktopAuthorizationCancellation) error {
+	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateBrowserAuthentication, methodCancelDesktopReauthentication), func(callCtx context.Context) error {
+		return s.next.CancelDesktopReauthentication(callCtx, arg1)
+	})
+}
+
+func (s *timedBrowserAuthenticationStore) CompleteDesktopReauthentication(arg0 context.Context, arg1 *store.DesktopReauthenticationCompletion) (*store.SessionReauthenticationResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateBrowserAuthentication, methodCompleteDesktopReauthentication), func(callCtx context.Context) (*store.SessionReauthenticationResult, error) {
+		return s.next.CompleteDesktopReauthentication(callCtx, arg1)
+	})
+}
+
 func (s *timedDesktopRegistrationStore) Get(arg0 context.Context, arg1 model.DesktopRegistrationID) (*model.DesktopRegistration, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateDesktopRegistration, methodGet), func(callCtx context.Context) (*model.DesktopRegistration, error) {
 		return s.next.Get(callCtx, arg1)

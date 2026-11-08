@@ -58,6 +58,7 @@ type identityConstruction struct {
 	mail                              *mail.Composer
 	authentication                    *authenticationService
 	desktopAuthorization              *desktopAuthorizationService
+	desktopReauthentication           *desktopReauthenticationService
 	desktopRegistrations              *desktopRegistrationService
 	browserInvitations                *browserInvitationService
 	selfSessions                      *selfSessionService
@@ -214,6 +215,7 @@ func assembleApplication(
 	return &App{
 		authenticationService:                    identity.authentication,
 		desktopAuthorizationService:              identity.desktopAuthorization,
+		desktopReauthenticationService:           identity.desktopReauthentication,
 		desktopRegistrationService:               identity.desktopRegistrations,
 		browserInvitationService:                 identity.browserInvitations,
 		selfSessionService:                       identity.selfSessions,

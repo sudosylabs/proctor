@@ -214,7 +214,7 @@ export async function approveDesktopAuthorization(
       { body: { state } },
     );
     if (response.status === 200 && isRecord(data) && isWireTimestamp(data.expires_at) &&
-      validApprovalRedirect(data.redirect_url, state)) {
+      validDesktopApprovalRedirect(data.redirect_url, state)) {
       return { kind: "approved", redirectURL: data.redirect_url };
     }
     return desktopFailure(error);
@@ -296,7 +296,7 @@ function validProvider(value: unknown): value is DesktopAuthorizationProvider {
 
 // The server owns the registered callback. The browser accepts only the same
 // narrow loopback protocol and the exact state it is approving.
-function validApprovalRedirect(value: unknown, state: string): value is string {
+export function validDesktopApprovalRedirect(value: unknown, state: string): value is string {
   if (typeof value !== "string" || value.length > 2048) return false;
   // The server preserves a valid decimal port, including leading zeroes.
   // Check the exact loopback spelling without relying on URL's port rewriting.

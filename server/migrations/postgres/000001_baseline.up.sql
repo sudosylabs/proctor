@@ -3164,7 +3164,7 @@ CREATE TABLE external_login_states (
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL,
     provider varchar(64) NOT NULL,
-	purpose varchar(32) NOT NULL CHECK (purpose IN ('login', 'connect', 'invitation_admission', 'desktop_authorization', 'reauthenticate', 'mfa_recovery')),
+	purpose varchar(32) NOT NULL CHECK (purpose IN ('login', 'connect', 'invitation_admission', 'desktop_authorization', 'desktop_reauthentication', 'reauthenticate', 'mfa_recovery')),
 	target_user_id varchar(26) REFERENCES users(id),
 	session_id varchar(26) REFERENCES sessions(id),
 	session_credential_id varchar(26) REFERENCES session_credentials(id),
@@ -3194,7 +3194,7 @@ CREATE TABLE external_login_states (
 		(purpose = 'login' AND target_user_id IS NULL AND invitation_id IS NULL AND browser_authentication_transaction_id IS NULL AND audit_event_id IS NULL) OR
 		(purpose = 'connect' AND target_user_id IS NOT NULL AND invitation_id IS NULL AND browser_authentication_transaction_id IS NULL AND audit_event_id IS NOT NULL) OR
 		(purpose = 'invitation_admission' AND target_user_id IS NULL AND invitation_id IS NOT NULL AND browser_authentication_transaction_id IS NULL AND audit_event_id IS NULL) OR
-		(purpose = 'desktop_authorization' AND target_user_id IS NULL AND invitation_id IS NULL AND browser_authentication_transaction_id IS NOT NULL AND audit_event_id IS NULL)))
+		(purpose IN ('desktop_authorization', 'desktop_reauthentication') AND target_user_id IS NULL AND invitation_id IS NULL AND browser_authentication_transaction_id IS NOT NULL AND audit_event_id IS NULL)))
 	)
 );
 
@@ -3208,7 +3208,7 @@ CREATE TABLE browser_authentication_transactions (
     id varchar(26) PRIMARY KEY,
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL,
-    purpose varchar(32) NOT NULL CHECK (purpose IN ('desktop_authorization', 'invitation_acceptance')),
+    purpose varchar(32) NOT NULL CHECK (purpose IN ('desktop_authorization', 'desktop_reauthentication', 'invitation_acceptance')),
     state varchar(16) NOT NULL CHECK (state IN ('pending', 'bound', 'authenticated', 'code_issued', 'exchanged', 'completed', 'canceled', 'denied', 'expired')),
     institution_id varchar(26) NOT NULL REFERENCES institutions(id),
     issuer varchar(2048) NOT NULL,
@@ -3245,10 +3245,21 @@ CREATE TABLE browser_authentication_transactions (
     code_expires_at timestamptz,
     canceled_at timestamptz,
     denied_at timestamptz,
-    denial_reason varchar(48) CHECK (denial_reason IN ('active_attempt_session_lock')),
+    denial_reason varchar(48) CHECK (denial_reason IN ('active_attempt_session_lock', 'account_mismatch')),
     exchanged_at timestamptz,
     completed_at timestamptz,
     expired_at timestamptz,
+    -- Desktop reauthentication refreshes primary proof on this exact live
+    -- Desktop Session; only that Session's registered key may complete it.
+    session_id varchar(26) REFERENCES sessions(id) ON DELETE CASCADE,
+    desktop_registration_id varchar(26) REFERENCES desktop_registrations(id),
+    dpop_key_thumbprint varchar(43),
+    CONSTRAINT browser_authentication_transactions_desktop_session_check CHECK (
+        (purpose = 'desktop_reauthentication') = (session_id IS NOT NULL) AND
+        (purpose = 'desktop_reauthentication') = (desktop_registration_id IS NOT NULL) AND
+        (purpose = 'desktop_reauthentication') = (dpop_key_thumbprint IS NOT NULL) AND
+        (dpop_key_thumbprint IS NULL OR dpop_key_thumbprint ~ '^[A-Za-z0-9_-]{43}$')
+    ),
     CONSTRAINT browser_authentication_transactions_password_proof_check CHECK (
         (authentication_method IS NOT DISTINCT FROM 'password' AND
          password_credential_id IS NOT NULL AND password_credential_revision IS NOT NULL AND password_credential_revision > 0) OR
@@ -3262,7 +3273,10 @@ CREATE TABLE browser_authentication_transactions (
         updated_at >= created_at AND expires_at > created_at AND expires_at <= created_at + interval '5 minutes'
     ),
     CONSTRAINT browser_authentication_transactions_expected_path_check CHECK (
-        expected_authentication_method = '' AND expected_provider_id IS NULL
+        (purpose <> 'desktop_reauthentication' AND expected_authentication_method = '' AND expected_provider_id IS NULL) OR
+        (purpose = 'desktop_reauthentication' AND (
+         (expected_authentication_method = 'password' AND expected_provider_id IS NULL) OR
+         (expected_authentication_method NOT IN ('', 'password') AND expected_provider_id IS NOT NULL)))
     ),
     CONSTRAINT browser_authentication_transactions_desktop_key_check CHECK (
         (purpose = 'desktop_authorization' AND state IN ('pending', 'bound', 'authenticated', 'code_issued') AND
@@ -3275,7 +3289,7 @@ CREATE TABLE browser_authentication_transactions (
          desktop_platform IN ('darwin', 'win32', 'linux') AND desktop_architecture IN ('arm64', 'x64') AND
          desktop_realtime_protocol > 0) OR
         ((purpose = 'desktop_authorization' AND state IN ('exchanged', 'canceled', 'denied', 'expired')) OR
-         purpose = 'invitation_acceptance') AND
+         purpose IN ('invitation_acceptance', 'desktop_reauthentication')) AND
          proposed_public_jwk IS NULL AND proposed_key_thumbprint IS NULL AND desktop_release IS NULL AND
          desktop_build_id IS NULL AND desktop_platform IS NULL AND desktop_architecture IS NULL AND
          desktop_realtime_protocol IS NULL
@@ -3348,6 +3362,38 @@ CREATE TABLE browser_authentication_transactions (
            ((authentication_strength = 'single_factor' AND mfa_completed_at IS NULL) OR
             (authentication_strength = 'multi_factor' AND mfa_completed_at BETWEEN authenticated_at AND updated_at))))
         ))) OR
+      (purpose = 'desktop_reauthentication' AND client_type = 'desktop' AND invitation_id IS NULL AND
+       invitation_claim_hash IS NULL AND completed_at IS NULL AND user_id IS NOT NULL AND
+       authentication_strength IS NULL AND mfa_completed_at IS NULL AND (
+        (state IN ('pending', 'bound') AND (handle_hash IS NOT NULL) = (state = 'pending') AND browser_proof_hash IS NOT NULL AND
+         state_hash IS NOT NULL AND callback_url IS NOT NULL AND code_challenge IS NOT NULL AND
+         authentication_method IS NULL AND authentication_provider_id IS NULL AND external_identity_id IS NULL AND
+         authenticated_at IS NULL AND code_hash IS NULL AND code_expires_at IS NULL AND canceled_at IS NULL AND
+         denied_at IS NULL AND denial_reason IS NULL AND exchanged_at IS NULL AND expired_at IS NULL) OR
+        (state IN ('authenticated', 'code_issued') AND handle_hash IS NULL AND
+         (browser_proof_hash IS NOT NULL) = (state = 'authenticated') AND
+         state_hash IS NOT NULL AND callback_url IS NOT NULL AND code_challenge IS NOT NULL AND
+         authentication_method = expected_authentication_method AND
+         authentication_provider_id IS NOT DISTINCT FROM expected_provider_id AND
+         ((authentication_method = 'password' AND external_identity_id IS NULL) OR
+          (authentication_method <> 'password' AND external_identity_id IS NOT NULL)) AND
+         authenticated_at IS NOT NULL AND authenticated_at <= updated_at AND
+         ((state = 'authenticated' AND code_hash IS NULL AND code_expires_at IS NULL) OR
+          (state = 'code_issued' AND code_hash IS NOT NULL AND code_expires_at > updated_at AND
+           code_expires_at <= LEAST(expires_at, updated_at + interval '1 minute'))) AND
+         canceled_at IS NULL AND denied_at IS NULL AND denial_reason IS NULL AND exchanged_at IS NULL AND expired_at IS NULL) OR
+        (state IN ('exchanged', 'canceled', 'denied', 'expired') AND handle_hash IS NULL AND browser_proof_hash IS NULL AND
+         state_hash IS NULL AND callback_url IS NULL AND code_challenge IS NULL AND code_hash IS NULL AND code_expires_at IS NULL AND (
+          (state = 'exchanged' AND exchanged_at = updated_at AND authenticated_at IS NOT NULL AND
+           canceled_at IS NULL AND denied_at IS NULL AND denial_reason IS NULL AND expired_at IS NULL) OR
+          (state = 'canceled' AND canceled_at = updated_at AND authentication_method IS NULL AND
+           authentication_provider_id IS NULL AND external_identity_id IS NULL AND authenticated_at IS NULL AND
+           denied_at IS NULL AND denial_reason IS NULL AND exchanged_at IS NULL AND expired_at IS NULL) OR
+          (state = 'denied' AND denied_at = updated_at AND denial_reason = 'account_mismatch' AND authentication_method IS NULL AND
+           authentication_provider_id IS NULL AND external_identity_id IS NULL AND authenticated_at IS NULL AND
+           canceled_at IS NULL AND exchanged_at IS NULL AND expired_at IS NULL) OR
+          (state = 'expired' AND expired_at = updated_at AND updated_at <= expires_at AND
+           canceled_at IS NULL AND denied_at IS NULL AND denial_reason IS NULL AND exchanged_at IS NULL))))) OR
       (purpose = 'invitation_acceptance' AND client_type = 'web' AND invitation_id IS NOT NULL AND
        state_hash IS NULL AND callback_url IS NULL AND code_challenge IS NULL AND
        expected_authentication_method = '' AND expected_provider_id IS NULL AND device_id = '' AND device_name = '' AND
@@ -4482,7 +4528,11 @@ ALTER TABLE browser_authentication_transactions
 	ADD CONSTRAINT browser_authentication_transactions_in_a7a2fe1d_canonical_check
 	CHECK (invitation_id IS NULL OR invitation_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
 	ADD CONSTRAINT browser_authentication_transactions_ex_ae8f9bc3_canonical_check
-	CHECK (external_identity_id IS NULL OR external_identity_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+	CHECK (external_identity_id IS NULL OR external_identity_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+	ADD CONSTRAINT browser_authentication_transactions_session_id_canonical_check
+	CHECK (session_id IS NULL OR session_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+	ADD CONSTRAINT browser_authentication_transactions_de_9be65fe3_canonical_check
+	CHECK (desktop_registration_id IS NULL OR desktop_registration_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
 
 ALTER TABLE audit_events
     ADD CONSTRAINT audit_events_id_canonical_check
@@ -5304,6 +5354,10 @@ CREATE INDEX retention_holds_release_audit_event_id_idx
 -- Invitation and browser-authentication maintenance purge parents in bulk.
 CREATE INDEX browser_authentication_transactions_invitation_id_idx
     ON browser_authentication_transactions (invitation_id) WHERE invitation_id IS NOT NULL;
+CREATE INDEX browser_authentication_transactions_session_id_idx
+    ON browser_authentication_transactions (session_id) WHERE session_id IS NOT NULL;
+CREATE INDEX browser_authentication_transactions_desktop_registration_id_idx
+    ON browser_authentication_transactions (desktop_registration_id) WHERE desktop_registration_id IS NOT NULL;
 CREATE INDEX external_login_states_invitation_id_idx
     ON external_login_states (invitation_id) WHERE invitation_id IS NOT NULL;
 CREATE INDEX external_login_states_browser_authentication_transaction_id_idx

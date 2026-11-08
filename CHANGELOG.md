@@ -17,6 +17,11 @@ module when a change is not server-only. No module has been released yet.
 
 ### Changed
 
+- Server: recent authentication now counts primary proof only. An MFA
+  challenge no longer refreshes recency; it still makes a Session strong.
+- Server: Desktop Authorization that reuses a recently reauthenticated Web
+  Session now gives the new Desktop Session that latest primary proof instead
+  of the Web Session's original sign-in time.
 - Server: `CreatePersonalAccessTokenRequest.scopes` now lists the accepted
   action names as an `enum`, and its example uses the real scope `exam.view`
   instead of the invalid `examinations:read`.
@@ -211,6 +216,17 @@ module when a change is not server-only. No module has been released yet.
   `profile_picture_kind`, `custom` when the User uploaded their own picture and
   `default` when the generated picture is served, so clients can offer removal
   only when there is something to remove.
+- Server: Desktop reauthentication. A DPoP Desktop Session starts
+  `POST /api/v1/auth/desktop/reauthentications`, the person confirms it's them
+  on the hosted `/reauthenticate/desktop` page with the Desktop Session's own
+  password or provider, and the same Session and key redeem the one-use code
+  through `POST /api/v1/auth/desktop/reauthentications/complete`, refreshing
+  that Session's recent authentication without creating a Session. Adds the
+  `authentication.desktop_reauthentication.invalid` and
+  `authentication.desktop_reauthentication.denied` error codes and the
+  `desktop_reauthentication` browser-authentication and external-login
+  purposes. Existing development databases must be recreated.
+
 - Server: `POST /api/v1/users/me/sessions/revoke-others` signs the caller out
   of every other Session while the requesting Session stays signed in, and
   returns `revoked_session_count`. Revoked Sessions record the new reason

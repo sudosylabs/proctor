@@ -47,6 +47,7 @@ var typedIDNames = map[string]string{
 	"ProviderID":                "operator-configured identity provider (model.IsValidIdentityProviderID)",
 	"providerID":                "operator-configured identity provider (model.IsValidIdentityProviderID)",
 	"AuthenticationProviderID":  "operator-configured identity provider (model.IsValidIdentityProviderID)",
+	"ExpectedProviderID":        "operator-configured identity provider (model.IsValidIdentityProviderID)",
 	"DeviceID":                  "Desktop-reported device identifier",
 	"DesktopBuildID":            "Desktop build identifier defined by the compatibility policy",
 	"ReleaseID":                 "Desktop native delivery release identifier",

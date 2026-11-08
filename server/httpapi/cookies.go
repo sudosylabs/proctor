@@ -35,18 +35,22 @@ const (
 	BrowserExternalLoginCookieName        = "PROCTOR_EXTERNAL_LOGIN"
 	BrowserInvitationProofCookieName      = "PROCTOR_INVITATION_PROOF"
 	BrowserDesktopAuthorizationCookieName = "PROCTOR_DESKTOP_AUTHORIZATION"
-	BrowserCSRFHeader                     = "X-Proctor-CSRF-Token"
+	// BrowserDesktopReauthenticationCookieName carries the opaque binding of
+	// one hosted Desktop reauthentication, scoped to its route family.
+	BrowserDesktopReauthenticationCookieName = "PROCTOR_DESKTOP_REAUTHENTICATION"
+	BrowserCSRFHeader                        = "X-Proctor-CSRF-Token"
 )
 
 const csrfMessage = "proctor.browser_csrf"
 
 type browserCookies struct {
-	secure                   bool
-	refreshPath              string
-	externalLoginPath        string
-	invitationPath           string
-	desktopAuthorizationPath string
-	now                      func() time.Time
+	secure                      bool
+	refreshPath                 string
+	externalLoginPath           string
+	invitationPath              string
+	desktopAuthorizationPath    string
+	desktopReauthenticationPath string
+	now                         func() time.Time
 }
 
 func newBrowserCookies(publicURL string) (browserCookies, error) {
@@ -56,17 +60,26 @@ func newBrowserCookies(publicURL string) (browserCookies, error) {
 		return browserCookies{}, errors.New("public URL must be an absolute HTTP or HTTPS URL")
 	}
 	return browserCookies{
-		secure:                   parsed.Scheme == "https",
-		refreshPath:              model.APIURLSuffix + "/auth/refresh",
-		externalLoginPath:        model.APIURLSuffix + "/auth/providers/",
-		invitationPath:           model.APIURLSuffix + "/auth/browser/invitations",
-		desktopAuthorizationPath: model.APIURLSuffix + "/auth/desktop/authorizations",
-		now:                      time.Now,
+		secure:                      parsed.Scheme == "https",
+		refreshPath:                 model.APIURLSuffix + "/auth/refresh",
+		externalLoginPath:           model.APIURLSuffix + "/auth/providers/",
+		invitationPath:              model.APIURLSuffix + "/auth/browser/invitations",
+		desktopAuthorizationPath:    model.APIURLSuffix + "/auth/desktop/authorizations",
+		desktopReauthenticationPath: model.APIURLSuffix + "/auth/desktop/reauthentications",
+		now:                         time.Now,
 	}, nil
 }
 
 func (c browserCookies) attachDesktopAuthorizationBinding(writer http.ResponseWriter, binding string, expiresAt int64) {
 	c.set(writer, BrowserDesktopAuthorizationCookieName, binding, c.desktopAuthorizationPath, expiresAt, true)
+}
+
+func (c browserCookies) attachDesktopReauthenticationBinding(writer http.ResponseWriter, binding string, expiresAt int64) {
+	c.set(writer, BrowserDesktopReauthenticationCookieName, binding, c.desktopReauthenticationPath, expiresAt, true)
+}
+
+func (c browserCookies) clearDesktopReauthenticationBinding(writer http.ResponseWriter) {
+	c.expire(writer, BrowserDesktopReauthenticationCookieName, c.desktopReauthenticationPath, true)
 }
 
 func (c browserCookies) clearDesktopAuthorizationBinding(writer http.ResponseWriter) {

@@ -256,6 +256,9 @@ ordinary Desktop Session. Access and refresh credentials never appear in URLs;
 provider credentials and tokens terminate at the server. Exact discovery,
 transaction, storage, concurrency, and callback rules live in
 [access and onboarding](access-and-onboarding.md#desktop-authorization).
+A Desktop Session that needs recent authentication uses the same browser
+handoff shape to refresh its own primary proof; see
+[Desktop reauthentication](access-and-onboarding.md#desktop-reauthentication).
 
 ## CLI and purpose-specific credentials
 
@@ -343,8 +346,10 @@ durable handoff and never enters a browser projection.
 Desktop authentication uses the PostgreSQL transition instant for fresh local
 password proof. External authentication retains older asserted authentication
 and MFA instants; future assertions are capped at that transition instant.
-Session reuse preserves the exact persisted authentication and MFA instants
-without refreshing assurance or rounding to milliseconds. Inconsistent future
+Session reuse hands over the source Session's latest primary proof (its
+initial or reauthenticated instant) and its MFA history, recording an earlier
+MFA completion at that proof instant, without refreshing assurance or
+rounding to milliseconds. Inconsistent future
 Session provenance fails atomically. The resulting handoff must satisfy its
 persisted invariants before commit; authentication timestamps never extend
 transaction or credential deadlines.
@@ -372,7 +377,11 @@ fenced primary or any key still sealing a live secret.
 Primary reauthentication preserves the Session's original method, provider,
 initial authentication and MFA history. Password proof targets the exact current
 User and current password revision. A separate optional reauthentication instant
-refreshes recency; it does not manufacture a new MFA completion. Both primary
+refreshes recency; it does not manufacture a new MFA completion. Recency counts
+primary proof only: the initial authentication or the latest reauthentication.
+An MFA challenge proves the second factor and makes a Session strong, but never
+substitutes for fresh primary proof, so it does not refresh recency in the
+Principal or in PostgreSQL assurance checks. Both primary
 reauthentication and challenge commit their Session transition and required audit
 atomically, then invalidate disposable credential state. Setup, activation,
 recovery-code replacement, and disablement recheck the live current Session

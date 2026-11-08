@@ -215,6 +215,10 @@ The default listener is `127.0.0.1:8065`. Available endpoints are:
   initiation)
 - `GET /api/v1/auth/providers/{provider_id}/callback` (browser-bound provider
   callback)
+- `POST /api/v1/auth/desktop/reauthentications` (DPoP Desktop Session only;
+  starts the hosted `/reauthenticate/desktop` page) and
+  `POST /api/v1/auth/desktop/reauthentications/complete` (the same Desktop
+  Session and key redeem the one-use code as fresh primary proof)
 - `GET /api/v1/users/me`
 - `GET /api/v1/users/me/settings` and `PUT /api/v1/users/me/settings`
   (interactive Session only; exact JSONC source with conditional revision and
@@ -399,6 +403,18 @@ URLs, and requests containing both a relevant cookie and bearer header are
 rejected. PATs use the same header but are not sessions: they cannot refresh,
 log out, manage sessions, create/revoke PATs, or satisfy strong/recent
 authentication wrappers.
+
+Recent authentication is primary proof only: a Session is recent while its
+initial authentication or its latest reauthentication (password or fresh
+provider proof) falls inside `Authentication.RecentAuthenticationTTL`. An MFA
+challenge proves the second factor and makes a Session strong; it never
+substitutes for fresh primary proof and does not refresh recency. Proctor
+Desktop, which never shows a password form, refreshes recency through the
+browser: `POST /api/v1/auth/desktop/reauthentications` opens the hosted
+`/reauthenticate/desktop` page, which accepts only the Desktop Session's own
+method for its own User and never a browser Web Session, and the loopback code
+it returns is redeemed by that same Desktop Session and DPoP key. No Session
+is created and the Desktop Registration is unchanged.
 
 Validate a configuration without starting the server:
 

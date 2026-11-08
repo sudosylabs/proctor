@@ -15,12 +15,13 @@ import "errors"
 type resourceApplications struct {
 	authenticator Authenticator
 
-	authentication         authenticationEntryApplication
-	authenticationMethods  authenticationMethodApplication
-	desktopAuthorization   DesktopAuthorization
-	desktopRegistrations   DesktopRegistrations
-	externalAuthentication externalAuthenticationEntryApplication
-	browserInvitations     BrowserInvitationApplication
+	authentication          authenticationEntryApplication
+	authenticationMethods   authenticationMethodApplication
+	desktopAuthorization    DesktopAuthorization
+	desktopReauthentication DesktopReauthentication
+	desktopRegistrations    DesktopRegistrations
+	externalAuthentication  externalAuthenticationEntryApplication
+	browserInvitations      BrowserInvitationApplication
 
 	userProfiles            UserProfileApplication
 	userSettings            UserSettingsApplication
@@ -85,6 +86,7 @@ func resolveResourceApplications(options Options) (resourceApplications, error) 
 	var authentication authenticationEntryApplication = application
 	var authenticationMethods authenticationMethodApplication = application
 	var desktopAuthorization DesktopAuthorization = application
+	var desktopReauthentication DesktopReauthentication = application
 	var desktopRegistrations DesktopRegistrations = application
 	var externalAuthentication externalAuthenticationEntryApplication = application
 	var sessions Sessions = application
@@ -117,9 +119,10 @@ func resolveResourceApplications(options Options) (resourceApplications, error) 
 		authenticator:  authenticator,
 		authentication: authentication, authenticationMethods: authenticationMethods,
 		desktopAuthorization: desktopAuthorization, externalAuthentication: externalAuthentication,
-		desktopRegistrations: desktopRegistrations,
-		browserInvitations:   options.BrowserInvitations,
-		userProfiles:         options.UserProfiles, userSettings: options.UserSettings,
+		desktopReauthentication: desktopReauthentication,
+		desktopRegistrations:    desktopRegistrations,
+		browserInvitations:      options.BrowserInvitations,
+		userProfiles:            options.UserProfiles, userSettings: options.UserSettings,
 		accountStates: options.AccountStates, sessionAdministration: options.SessionAdministrations,
 		sessions: sessions, mfa: mfa, personalAccessTokens: personalAccessTokens,
 		mfaAdministration:       mfaAdministration,

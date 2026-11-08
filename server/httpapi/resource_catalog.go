@@ -30,6 +30,7 @@ func productionResources(
 		authenticationResource(applications.authentication, cookies),
 		authenticationMethodResource(applications.authenticationMethods, cookies),
 		desktopAuthorizationResource(applications.desktopAuthorization, cookies),
+		desktopReauthenticationResource(applications.desktopReauthentication, cookies),
 		desktopRegistrationResource(applications.desktopRegistrations),
 		externalAuthenticationResource(applications.externalAuthentication, cookies),
 		browserInvitationResource(applications.browserInvitations, cookies),

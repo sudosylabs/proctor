@@ -2890,6 +2890,126 @@
     "translation": "Use a different account"
   },
   {
+    "id": "webapp.desktop_reauthentication.approved.body",
+    "translation": "Go back to Proctor Desktop to continue. You can close this tab."
+  },
+  {
+    "id": "webapp.desktop_reauthentication.approved.heading",
+    "translation": "You’re confirmed"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.approved.returning",
+    "translation": "Returning to Proctor Desktop…"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.cancel",
+    "translation": "Cancel"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.canceled.body",
+    "translation": "Nothing changed in Proctor Desktop. You can close this page."
+  },
+  {
+    "id": "webapp.desktop_reauthentication.canceled.heading",
+    "translation": "Confirmation canceled"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.checking.body",
+    "translation": "Checking the request from Proctor Desktop…"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.checking.heading",
+    "translation": "Checking this request"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.document_title",
+    "translation": "Confirm it’s you · Proctor"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.error.unavailable",
+    "translation": "Something went wrong. Try again."
+  },
+  {
+    "id": "webapp.desktop_reauthentication.heading",
+    "translation": "Confirm it’s you"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.invalid.body",
+    "translation": "It may have expired, been canceled, already been used, or been used with a different account. Start again from Proctor Desktop."
+  },
+  {
+    "id": "webapp.desktop_reauthentication.invalid.heading",
+    "translation": "This link doesn’t work"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.kind",
+    "translation": "Proctor Desktop"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.lede.password",
+    "translation": "Enter the password for {{.Name}} to continue in Proctor Desktop."
+  },
+  {
+    "id": "webapp.desktop_reauthentication.lede.provider",
+    "translation": "Sign in to {{.Provider}} as {{.Name}} to continue in Proctor Desktop."
+  },
+  {
+    "id": "webapp.desktop_reauthentication.note",
+    "translation": "This confirms it’s you in Proctor Desktop only. It doesn’t sign in this browser."
+  },
+  {
+    "id": "webapp.desktop_reauthentication.password.action",
+    "translation": "Confirm"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.password.invalid",
+    "translation": "That password isn’t right. Try again."
+  },
+  {
+    "id": "webapp.desktop_reauthentication.password.label",
+    "translation": "Password"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.password.required",
+    "translation": "Enter your password."
+  },
+  {
+    "id": "webapp.desktop_reauthentication.provider.action",
+    "translation": "Continue with {{.Provider}}"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.provider.failed",
+    "translation": "{{.Provider}} couldn’t confirm it’s you. Use the account that’s signed in to Proctor Desktop and try again."
+  },
+  {
+    "id": "webapp.desktop_reauthentication.rate_limited",
+    "translation": "Too many attempts. Wait a moment, then try again."
+  },
+  {
+    "id": "webapp.desktop_reauthentication.returning.heading",
+    "translation": "Returning to Proctor Desktop"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.skip_to_main",
+    "translation": "Skip to confirmation"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.unavailable.body",
+    "translation": "Something went wrong on our side. Try again in a moment."
+  },
+  {
+    "id": "webapp.desktop_reauthentication.unavailable.heading",
+    "translation": "We couldn’t check this request"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.unavailable.retry",
+    "translation": "Try again"
+  },
+  {
+    "id": "webapp.desktop_reauthentication.working",
+    "translation": "Working…"
+  },
+  {
     "id": "webapp.forgot_password.accepted.body",
     "translation": "If an account uses {{.Email}}, a reset link is on its way. It works once, for 1 hour."
   },

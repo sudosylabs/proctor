@@ -72,6 +72,8 @@ type desktopAuthorizationAttemptOperation uint8
 const (
 	desktopAuthorizationAttemptStart desktopAuthorizationAttemptOperation = iota + 1
 	desktopAuthorizationAttemptExchange
+	desktopAuthorizationAttemptReauthenticationStart
+	desktopAuthorizationAttemptReauthenticationComplete
 )
 
 func (o desktopAuthorizationAttemptOperation) qualifier() (string, bool) {
@@ -80,6 +82,10 @@ func (o desktopAuthorizationAttemptOperation) qualifier() (string, bool) {
 		return "start", true
 	case desktopAuthorizationAttemptExchange:
 		return "exchange", true
+	case desktopAuthorizationAttemptReauthenticationStart:
+		return "reauthentication_start", true
+	case desktopAuthorizationAttemptReauthenticationComplete:
+		return "reauthentication_complete", true
 	default:
 		return "", false
 	}
@@ -926,15 +932,5 @@ func (s *desktopAuthorizationService) hasAuthenticationChoice(ctx context.Contex
 }
 
 func desktopAuthorizationURL(issuer, handle, proof, state string) (string, error) {
-	parsed, err := url.Parse(issuer)
-	if err != nil || parsed.Host == "" {
-		return "", errors.New("desktop authorization issuer is invalid")
-	}
-	parsed.Path = strings.TrimSuffix(parsed.Path, "/") + "/authorize/desktop"
-	query := parsed.Query()
-	query.Set("request", handle)
-	query.Set("state", state)
-	parsed.RawQuery = query.Encode()
-	parsed.Fragment = "proof=" + proof
-	return parsed.String(), nil
+	return hostedDesktopURL(issuer, "/authorize/desktop", handle, proof, state)
 }

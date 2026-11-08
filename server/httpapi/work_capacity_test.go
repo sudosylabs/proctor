@@ -54,6 +54,7 @@ func TestOnlyExpensiveWorkRoutesDeclareCapacityRefusal(t *testing.T) {
 		"POST /api/v1/invitations/student-class/accept":                                      true,
 		"POST /api/v1/invitations/teacher-academic-unit/accept":                              true,
 		"POST /api/v1/auth/desktop/authorizations/authenticate/password":                     true,
+		"POST /api/v1/auth/desktop/reauthentications/authenticate/password":                  true,
 		"GET /api/v1/users/{user_id}/profile-picture":                                        true,
 		"PUT /api/v1/users/{user_id}/profile-picture":                                        true,
 		"POST /api/v1/exams/{exam_id}/draft/resources":                                       true,

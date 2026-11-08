@@ -97,8 +97,10 @@ func TestPrincipalAssuranceRequirements(t *testing.T) {
 	strongOld.AuthenticationStrength = model.AuthenticationMultiFactor
 	strongOld.AuthenticatedAt = now.Add(-time.Hour)
 	strongOld.MFACompletedAt = model.OptionalTimeFrom(now.Add(-time.Hour))
+	mfaOnly := strongOld
+	mfaOnly.MFACompletedAt = model.OptionalTimeFrom(now.Add(-time.Minute))
 	strongRecent := strongOld
-	strongRecent.MFACompletedAt = model.OptionalTimeFrom(now.Add(-time.Minute))
+	strongRecent.ReauthenticatedAt = model.OptionalTimeFrom(now.Add(-time.Minute))
 	require.NoError(t, requirePrincipalAssurance(
 		recent, AuthRecentSessionRequired, now, 15*time.Minute,
 	))
@@ -108,6 +110,9 @@ func TestPrincipalAssuranceRequirements(t *testing.T) {
 	require.Equal(t, "authentication.reauthentication_required", applicationErrorCode(requirePrincipalAssurance(
 		strongOld, AuthRecentSessionRequired, now, 15*time.Minute,
 	)), "old recent requirement error")
+	require.Equal(t, "authentication.reauthentication_required", applicationErrorCode(requirePrincipalAssurance(
+		mfaOnly, AuthStrongRecentSessionRequired, now, 15*time.Minute,
+	)), "an MFA challenge alone counted as recent primary proof")
 	require.NoError(t, requirePrincipalAssurance(
 		strongRecent,
 		AuthStrongRecentSessionRequired,

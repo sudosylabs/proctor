@@ -208,6 +208,7 @@ type Application interface {
 	SearchApplication
 	authenticationEntryApplication
 	DesktopAuthorization
+	DesktopReauthentication
 	DesktopRegistrations
 	externalAuthenticationEntryApplication
 	authenticationMethodApplication

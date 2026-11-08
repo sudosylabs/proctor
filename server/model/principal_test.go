@@ -54,9 +54,9 @@ func TestSessionPrincipalUsesNativeAssuranceTimes(t *testing.T) {
 		MFACompletedAt:         OptionalTimeFrom(now.Add(-time.Minute)),
 	}
 	require.NoError(t, principal.Validate())
-	require.True(t, principal.LastAuthenticationAt().Equal(now.Add(-time.Minute)))
-	require.True(t, principal.IsRecentlyAuthenticated(now, 15*time.Minute), "recent MFA completion was not accepted")
-	require.False(t, principal.IsRecentlyAuthenticated(now, 30*time.Second), "stale MFA completion was accepted")
+	require.True(t, principal.LastAuthenticationAt().Equal(now.Add(-time.Hour)))
+	require.False(t, principal.IsRecentlyAuthenticated(now, 15*time.Minute), "an MFA completion alone refreshed recency")
+	require.True(t, principal.IsRecentlyAuthenticated(now, 2*time.Hour), "primary proof within the window was rejected")
 }
 
 func TestSessionPrincipalRetainsExactExternalProviderIdentity(t *testing.T) {

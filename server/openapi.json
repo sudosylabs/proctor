@@ -1362,6 +1362,52 @@
         "description": "Exact opaque state already pinned to the browser-bound Desktop transaction.",
         "required": true
       },
+      "DesktopReauthenticationComplete": {
+        "content": {
+          "application/json": {
+            "example": {
+              "code": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+              "code_verifier": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+              "state": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/DesktopReauthenticationCompleteRequest"
+            }
+          }
+        },
+        "description": "The one-use code from the loopback redirect, the S256 verifier and the pinned state.",
+        "required": true
+      },
+      "DesktopReauthenticationPassword": {
+        "content": {
+          "application/json": {
+            "example": {
+              "password": "synthetic-local-password"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/DesktopReauthenticationPasswordRequest"
+            }
+          }
+        },
+        "description": "The password of the Desktop Session's own account; there is no login identifier to choose.",
+        "required": true
+      },
+      "DesktopReauthenticationStart": {
+        "content": {
+          "application/json": {
+            "example": {
+              "callback_url": "http://127.0.0.1:49152/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+              "code_challenge": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+              "state": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/DesktopReauthenticationStartRequest"
+            }
+          }
+        },
+        "description": "Exact loopback callback, state and S256 PKCE challenge to pin to the new reauthentication.",
+        "required": true
+      },
       "DryRunStudentProgression": {
         "content": {
           "application/json": {
@@ -3209,6 +3255,69 @@
         "headers": {
           "Cache-Control": {
             "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
+      },
+      "DesktopReauthenticationCompleted": {
+        "content": {
+          "application/json": {
+            "example": {
+              "recently_authenticated_until": "2026-08-01T09:17:00Z"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/DesktopReauthenticationCompleteResponse"
+            }
+          }
+        },
+        "description": "The Desktop Session counts as recently authenticated",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
+      "DesktopReauthenticationContextOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "authentication_method": "external",
+              "display_name": "Ada Candidate",
+              "expires_at": "2026-08-01T09:05:00Z",
+              "provider": {
+                "display_name": "Campus sign-in",
+                "id": "campus",
+                "type": "oidc"
+              },
+              "state": "bound"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/DesktopReauthenticationContextResponse"
+            }
+          }
+        },
+        "description": "Safe current hosted Desktop reauthentication context",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
+      "DesktopReauthenticationStarted": {
+        "content": {
+          "application/json": {
+            "example": {
+              "authorization_url": "https://proctor.example.edu/reauthenticate/desktop?request=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\u0026state=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB#proof=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+              "expires_at": "2026-08-01T09:05:00Z"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/DesktopAuthorizationStartResponse"
+            }
+          }
+        },
+        "description": "Desktop reauthentication handoff created",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
           }
         }
       },
@@ -11618,6 +11727,123 @@
           "crv",
           "x",
           "y"
+        ],
+        "type": "object"
+      },
+      "DesktopReauthenticationCompleteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "type": "string"
+          },
+          "code_verifier": {
+            "maxLength": 128,
+            "minLength": 43,
+            "pattern": "^[A-Za-z0-9._~-]+$",
+            "type": "string"
+          },
+          "state": {
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "code_verifier",
+          "state"
+        ],
+        "type": "object"
+      },
+      "DesktopReauthenticationCompleteResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "recently_authenticated_until": {
+            "description": "The instant after which recent-authentication operations again require reauthentication.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "recently_authenticated_until"
+        ],
+        "type": "object"
+      },
+      "DesktopReauthenticationContextResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "authentication_method": {
+            "description": "The one proof this reauthentication accepts, which is the Desktop Session's own method.",
+            "enum": [
+              "password",
+              "external"
+            ],
+            "type": "string"
+          },
+          "display_name": {
+            "description": "The Desktop Session account's display name, so the person can see whose sign-in they are confirming.",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ExternalAuthenticationProviderResponse",
+            "description": "The Desktop Session's own identity provider; present only for the external method."
+          },
+          "state": {
+            "enum": [
+              "bound",
+              "authenticated"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "display_name",
+          "authentication_method",
+          "expires_at"
+        ],
+        "type": "object"
+      },
+      "DesktopReauthenticationPasswordRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "format": "password",
+            "maxLength": 1024,
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "type": "object"
+      },
+      "DesktopReauthenticationStartRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "callback_url": {
+            "description": "Exact HTTP loopback URL using 127.0.0.1 or [::1], a decimal port from 49152 through 65535, and one random token path, validated like Desktop Authorization.",
+            "format": "uri",
+            "maxLength": 1024,
+            "type": "string"
+          },
+          "code_challenge": {
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "type": "string"
+          },
+          "state": {
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "callback_url",
+          "state",
+          "code_challenge"
         ],
         "type": "object"
       },
@@ -27453,6 +27679,405 @@
           "authentication.desktop_authorization.invalid",
           "authentication.desktop_authorization.rejected",
           "authentication.desktop_authorization.unavailable",
+          "authentication.credential_ambiguous"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/auth/desktop/reauthentications": {
+      "post": {
+        "description": "Accepts only a Desktop Session whose request carries a valid DPoP proof from its registered key; Web Sessions and Personal Access Tokens are refused. Pins the exact loopback callback, state and S256 PKCE challenge, binds the handoff to the calling Session, Desktop Registration, key and User, and returns the hosted reauthentication page. The page accepts only the authentication method the Desktop Session itself used, and the handoff lives at most five minutes.",
+        "operationId": "startDesktopReauthentication",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/DesktopReauthenticationStart"
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/DesktopReauthenticationStarted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Start confirming the Desktop Session's account in the system browser",
+        "tags": [
+          "Authentication"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "authentication.rate_limited",
+          "authentication.rate_limit_unavailable",
+          "authentication.desktop_reauthentication.invalid",
+          "authentication.internal",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/auth/desktop/reauthentications/approve": {
+      "post": {
+        "description": "Requires the browser binding, the exact pinned state, a proved reauthentication and a still-live Desktop Session, then issues one single-use code that expires within a minute and returns the loopback redirect carrying only that code and the state.",
+        "operationId": "approveDesktopReauthentication",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/DesktopAuthorizationState"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/DesktopAuthorizationApproved"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "security": [],
+        "summary": "Hand the confirmed proof back to Proctor Desktop",
+        "tags": [
+          "Authentication"
+        ],
+        "x-proctor-auth": "public",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "authentication.desktop_reauthentication.invalid",
+          "authentication.internal",
+          "authentication.credential_ambiguous"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/auth/desktop/reauthentications/authenticate/password": {
+      "post": {
+        "description": "Checks the password of the Desktop Session's own User for a password Session only. It takes no login identifier, asks for no second factor, creates no Web Session and does not yet refresh the Desktop Session; the Desktop redeems the proof through the complete operation.",
+        "operationId": "authenticateDesktopReauthenticationWithPassword",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/DesktopReauthenticationPassword"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/DesktopReauthenticationContextOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [],
+        "summary": "Prove the Desktop Session account's password",
+        "tags": [
+          "Authentication"
+        ],
+        "x-proctor-auth": "public",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "authentication.desktop_reauthentication.invalid",
+          "authentication.reauthentication_method_required",
+          "authentication.desktop_reauthentication.denied",
+          "authentication.credentials_invalid",
+          "authentication.rate_limited",
+          "authentication.rate_limit_unavailable",
+          "authentication.internal",
+          "authentication.credential_ambiguous",
+          "audit.unavailable",
+          "service.busy"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/auth/desktop/reauthentications/authenticate/providers/{provider_id}/login": {
+      "get": {
+        "description": "Accepts only the Desktop Session's own identity provider, asks it for fresh authentication, and returns to the hosted reauthentication page. The provider must prove the Desktop Session's own linked identity; proof of any other account denies the handoff and is audited. No User is provisioned and no Session is created.",
+        "operationId": "beginDesktopReauthenticationExternalAuthentication",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProviderID"
+          },
+          {
+            "description": "The exact opaque state pinned by the Desktop when it started this reauthentication.",
+            "in": "query",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{43}$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "$ref": "#/components/responses/ExternalAuthenticationRedirect"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [],
+        "summary": "Begin fresh provider authentication for this Desktop reauthentication",
+        "tags": [
+          "Authentication"
+        ],
+        "x-proctor-auth": "public",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "authentication.desktop_reauthentication.invalid",
+          "authentication.reauthentication_method_required",
+          "authentication.internal",
+          "authentication.external.provider_not_found",
+          "authentication.external.request.invalid",
+          "authentication.external.unavailable",
+          "authentication.external.account_not_linked",
+          "authentication.external.rejected",
+          "authentication.desktop_authorization.invalid",
+          "authentication.token_invalid",
+          "authentication.rate_limited",
+          "authentication.rate_limit_unavailable",
+          "authentication.credential_ambiguous"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/auth/desktop/reauthentications/bind": {
+      "post": {
+        "description": "Exchanges the handle, fragment-delivered browser proof and pinned state exactly once for a host-only HttpOnly cookie scoped to the Desktop reauthentication route family. No credential material reaches rendered content.",
+        "operationId": "bindDesktopReauthenticationBrowser",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/DesktopAuthorizationProof"
+        },
+        "responses": {
+          "204": {
+            "$ref": "#/components/responses/SensitiveNoContent"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "security": [],
+        "summary": "Exchange the one-time fragment proof for an HttpOnly reauthentication binding",
+        "tags": [
+          "Authentication"
+        ],
+        "x-proctor-auth": "public",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "authentication.desktop_reauthentication.invalid",
+          "authentication.internal"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/auth/desktop/reauthentications/cancel": {
+      "post": {
+        "description": "Validates the binding cookie and exact pinned state before terminally canceling the reauthentication and destroying every remaining browser proof.",
+        "operationId": "cancelDesktopReauthentication",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/DesktopAuthorizationState"
+        },
+        "responses": {
+          "204": {
+            "$ref": "#/components/responses/SensitiveNoContent"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "security": [],
+        "summary": "Terminally cancel the browser-bound Desktop reauthentication",
+        "tags": [
+          "Authentication"
+        ],
+        "x-proctor-auth": "public",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "authentication.desktop_reauthentication.invalid",
+          "authentication.internal",
+          "authentication.credential_ambiguous"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/auth/desktop/reauthentications/complete": {
+      "post": {
+        "description": "Requires DPoP from the same Desktop Session and registered key that started the handoff. Verifies the S256 verifier, the pinned state, the code lifetime and single use, rechecks the proof and the live Session, then records fresh primary proof on that existing Session together with its audit. No Session is created and the Desktop Registration is unchanged; existing access credentials stay valid.",
+        "operationId": "completeDesktopReauthentication",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/DesktopReauthenticationComplete"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/DesktopReauthenticationCompleted"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Redeem the reauthentication code as recent authentication",
+        "tags": [
+          "Authentication"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "authentication.rate_limited",
+          "authentication.rate_limit_unavailable",
+          "authentication.desktop_reauthentication.invalid",
+          "authentication.credentials_invalid",
+          "authentication.internal",
+          "audit.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/auth/desktop/reauthentications/context": {
+      "get": {
+        "description": "Resolves the scoped binding cookie and returns the Desktop Session's account display name, the one authentication method it accepts (a password, or the Desktop Session's own identity provider) and the handoff expiry. An existing browser Web Session is never offered as proof.",
+        "operationId": "getDesktopReauthenticationContext",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/DesktopReauthenticationContextOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "security": [],
+        "summary": "Read the hosted Desktop reauthentication context",
+        "tags": [
+          "Authentication"
+        ],
+        "x-proctor-auth": "public",
+        "x-proctor-error-codes": [
+          "authentication.desktop_reauthentication.invalid",
+          "authentication.internal",
           "authentication.credential_ambiguous"
         ],
         "x-proctor-idempotency": "none"

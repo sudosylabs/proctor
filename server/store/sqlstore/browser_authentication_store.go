@@ -256,11 +256,20 @@ func markDesktopAuthorizationAuthenticated(ctx context.Context, tx *sqlxTxWrappe
 	source *model.Session, selector, selectorValue string,
 ) error {
 	// Fresh local proof gets one database authentication instant. Provider
-	// history can only move back to that instant; Session history stays exact.
+	// history can only move back to that instant. A reused Session hands over
+	// its latest primary proof, so a recently reauthenticated Web Session does
+	// not give birth to a stale Desktop Session. An MFA completion that
+	// preceded that proof is recorded at the proof instant, never later.
 	authenticatedAt := model.TimeUTC(input.AuthenticatedAt)
 	mfaCompletedAt := input.MFACompletedAt.UTC()
 	if source != nil {
 		authenticatedAt, mfaCompletedAt = source.AuthenticatedAt, source.MFACompletedAt
+		if source.ReauthenticatedAt.Valid && source.ReauthenticatedAt.Time.After(authenticatedAt) {
+			authenticatedAt = source.ReauthenticatedAt.Time
+		}
+		if mfaCompletedAt.Valid && mfaCompletedAt.Time.Before(authenticatedAt) {
+			mfaCompletedAt = model.OptionalTimeFrom(authenticatedAt)
+		}
 	}
 	freshPassword := source == nil && input.AuthenticationMethod == "password"
 	// A User row lock above may outlast a previously checked source proof.
@@ -644,7 +653,7 @@ func (s SQLBrowserAuthenticationStore) Cancel(ctx context.Context, input *store.
 	       user_id=NULL,authentication_method=NULL,authentication_provider_id=NULL,external_identity_id=NULL,password_credential_id=NULL,password_credential_revision=NULL,
 	       authentication_strength=NULL,authenticated_at=NULL,mfa_completed_at=NULL,canceled_at = terminal.at
 	  FROM (SELECT clock_timestamp() AS at) AS terminal
-	 WHERE browser_proof_hash = ? AND state_hash = ? AND state IN ('bound','authenticated')
+	 WHERE purpose = 'desktop_authorization' AND browser_proof_hash = ? AND state_hash = ? AND state IN ('bound','authenticated')
 	   AND created_at <= terminal.at AND expires_at > terminal.at`, input.BindingHash, input.StateHash)
 		if err != nil {
 			return struct{}{}, translateError("browser_authentication_transaction", "", err)

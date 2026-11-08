@@ -8,7 +8,7 @@
 paths:
   /api/v1/search:
     get:
-      operationId: search
+      operationId: searchAccessible
       summary: Search Exams, Classes, and Users
       tags:
         - Search

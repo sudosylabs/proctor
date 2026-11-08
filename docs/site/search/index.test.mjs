@@ -26,7 +26,7 @@ test('search covers authored pages, product areas, and every operation', async (
   const methods = new Set(['get', 'put', 'post', 'delete', 'patch', 'head', 'options', 'trace']);
   const operations = Object.values(openapi.paths).flatMap((item) => Object.keys(item).filter((key) => methods.has(key)));
   assert.equal(entries.filter((entry) => entry.kind === 'endpoint').length, operations.length);
-  assert.equal(entries.filter((entry) => entry.kind === 'product-area').length, 17);
+  assert.equal(entries.filter((entry) => entry.kind === 'product-area').length, 18);
   assert(entries.some((entry) => entry.href === '/operator/'));
   assert(entries.some((entry) => entry.href === '/glossary/'));
   assert(entries.some((entry) => entry.href === '/api/guides/authentication'));

@@ -4291,7 +4291,7 @@ export interface paths {
          * Search Exams, Classes, and Users
          * @description Finds Exams by Draft title, Classes by name or display name, and Users by directory fields, each as a literal case-insensitive substring of the trimmed q. Every type is authorized, audited, and scoped exactly as its own list: active Exams the caller may see in the Exam catalog, unarchived Classes within the caller's class.view scope, and enabled Users visible in the User directory. A requested type the caller may not list contributes no items; the request is denied only when the caller may list none of the requested types. Items are grouped by type in the order exam, class, user, each group in its own list order and holding at most limit items. Search answers one bounded page and never continues: next_cursor is always omitted and cursor is rejected. Email addresses are never returned, and the query text is kept out of logs and audit records.
          */
-        get: operations["search"];
+        get: operations["searchAccessible"];
         put?: never;
         post?: never;
         delete?: never;
@@ -20667,7 +20667,7 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
-    search: {
+    searchAccessible: {
         parameters: {
             query: {
                 /** @description Search text of 2 to 100 characters after trimming, matched as a literal case-insensitive substring. */

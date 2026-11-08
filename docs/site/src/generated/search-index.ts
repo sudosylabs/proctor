@@ -929,7 +929,7 @@ export const searchEntries = [
     "title": "Pagination",
     "description": "Traverse Proctor collections safely with bounded opaque keyset cursors.",
     "href": "/api/guides/pagination",
-    "searchText": "pagination traverse proctor collections safely with bounded opaque keyset cursors. pagination list operations return a response object with a non-null items array and, when more results are available, a next cursor value. the cursor is opaque, versioned, and tied to a canonical query. never decode, modify, synthesize, or persist assumptions about its contents. traverse a collection 1. send the first request with the desired filters, ordering, and limit . 2. process every element of items . an empty collection is \"items\": [] , not null and not a missing field. 3. if next cursor is present, repeat the same query and add that exact value as cursor . 4. stop when next cursor is absent. changing a filter, order, or scope while reusing a cursor is invalid. start a new traversal instead. do not concatenate cursor values into a url without url encoding them. keyset pagination is designed for collections that may change during traversal. it does not promise a transactionally frozen snapshot unless the individual endpoint explicitly says so. consumers that reconcile durable state should make their processing idempotent."
+    "searchText": "pagination traverse proctor collections safely with bounded opaque keyset cursors. pagination list operations return a response object with a non-null items array and, when more results are available, a next cursor value. the cursor is opaque, versioned, and tied to a canonical query. never decode, modify, synthesize, or persist assumptions about its contents. traverse a collection 1. send the first request with the desired filters, ordering, and limit . 2. process every element of items . an empty collection is \"items\": [] , not null and not a missing field. 3. if next cursor is present, repeat the same query and add that exact value as cursor . 4. stop when next cursor is absent. changing a filter, order, or scope while reusing a cursor is invalid. start a new traversal instead. do not concatenate cursor values into a url without url encoding them. keyset pagination is designed for collections that may change during traversal. it does not promise a transactionally frozen snapshot unless the individual endpoint explicitly says so. consumers that reconcile durable state should make their processing idempotent. search is one bounded page get /api/v1/search uses the same items envelope but never continues. it returns at most limit matches of each requested type, so next cursor is always absent and a cursor parameter is rejected. to see more results of one type, use that type's own list operation with its filters and cursor."
   },
   {
     "id": "page:/api/guides/realtime",
@@ -1128,6 +1128,15 @@ export const searchEntries = [
     "description": "User directory profiles, settings, account administration, and profile pictures.",
     "href": "/api/reference/users",
     "searchText": "users user directory profiles, settings, account administration, and profile pictures."
+  },
+  {
+    "id": "area:search",
+    "kind": "product-area",
+    "group": "API product area",
+    "title": "Search",
+    "description": "One bounded lookup across the Exams, Classes, and Users the caller may already list.",
+    "href": "/api/reference/search",
+    "searchText": "search one bounded lookup across the exams, classes, and users the caller may already list."
   },
   {
     "id": "area:academic-structure",
@@ -3764,6 +3773,17 @@ export const searchEntries = [
     "searchText": "updaterole update a custom role changes the presentation or complete permission set of one custom role after rechecking current authority. built-in roles are protected, and a permission change can fail when active historical guarantees make the proposed replacement unsafe. roles and access patch /api/v1/roles/{role_id} principal_required none authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.csrf.invalid authorization.denied authorization.request.invalid authorization.unavailable audit.unavailable request.invalid resource.not_found role.invalid role.conflict role.built_in.protected role.permission.invalid administration.unavailable authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
+    "id": "operation:searchAccessible",
+    "kind": "endpoint",
+    "group": "Search",
+    "title": "Search Exams, Classes, and Users",
+    "description": "Finds Exams by Draft title, Classes by name or display name, and Users by directory fields, each as a literal case-insensitive substring of the trimmed q. Every type is authorized, audited, and scoped exactly as its own list: active Exams the caller may see in the Exam catalog, unarchived Classes within the caller's class.view scope, and enabled Users visible in the User directory. A requested type the caller may not list contributes no items; the request is denied only when the caller may list none of the requested types. Items are grouped by type in the order exam, class, user, each group in its own list order and holding at most limit items. Search answers one bounded page and never continues: next_cursor is always omitted and cursor is rejected. Email addresses are never returned, and the query text is kept out of logs and audit records.",
+    "href": "/api/reference/search-accessible",
+    "method": "GET",
+    "path": "/api/v1/search",
+    "searchText": "searchaccessible search exams, classes, and users finds exams by draft title, classes by name or display name, and users by directory fields, each as a literal case-insensitive substring of the trimmed q. every type is authorized, audited, and scoped exactly as its own list: active exams the caller may see in the exam catalog, unarchived classes within the caller's class.view scope, and enabled users visible in the user directory. a requested type the caller may not list contributes no items; the request is denied only when the caller may list none of the requested types. items are grouped by type in the order exam, class, user, each group in its own list order and holding at most limit items. search answers one bounded page and never continues: next_cursor is always omitted and cursor is rejected. email addresses are never returned, and the query text is kept out of logs and audit records. search get /api/v1/search principal_required none authorization.denied authorization.request.invalid authorization.unavailable request.invalid search.query.invalid exam.invalid exam.unavailable administration.unavailable resource.not_found authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
     "id": "operation:reportSecurityPreflight",
     "kind": "endpoint",
     "group": "Attempts and workspaces",
@@ -3973,6 +3993,17 @@ export const searchEntries = [
     "searchText": "getcurrentuserprofile get the authenticated user profile returns the current principal's own safe user profile from durable state. the projection contains no password data, authentication-provider claims, session credentials, personal access token material, or private authorization bindings. users get /api/v1/users/me principal_required none authorization.denied authorization.request.invalid authorization.unavailable resource.not_found administration.unavailable request.invalid authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
+    "id": "operation:listCurrentUserAuditEvents",
+    "kind": "endpoint",
+    "group": "Authentication",
+    "title": "List the current User's own account history",
+    "description": "Returns one page of the current Session User's own account history, newest first. The history holds events about the User's account, whoever performed them, and account-relevant events the User performed on anything else. Each item carries a stable `event` name from a closed catalogue, which clients label themselves; rows outside the catalogue and unfinished attempts are never returned. Another person is never named: the actor is only `self`, `administrator`, or `system`, and the IP address and user agent appear only on the User's own actions. A resource identity appears only when the resource is the User, the Institution, or an Academic Unit or Class the User has or had a membership or Role Binding at. Personal Access Tokens cannot read this history. Reading it records no authorization decision.",
+    "href": "/api/reference/list-current-user-audit-events",
+    "method": "GET",
+    "path": "/api/v1/users/me/audits",
+    "searchText": "listcurrentuserauditevents list the current user's own account history returns one page of the current session user's own account history, newest first. the history holds events about the user's account, whoever performed them, and account-relevant events the user performed on anything else. each item carries a stable `event` name from a closed catalogue, which clients label themselves; rows outside the catalogue and unfinished attempts are never returned. another person is never named: the actor is only `self`, `administrator`, or `system`, and the ip address and user agent appear only on the user's own actions. a resource identity appears only when the resource is the user, the institution, or an academic unit or class the user has or had a membership or role binding at. personal access tokens cannot read this history. reading it records no authorization decision. authentication get /api/v1/users/me/audits session_required none audit.query.invalid audit.unavailable request.invalid authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+  },
+  {
     "id": "operation:getCurrentUserContext",
     "kind": "endpoint",
     "group": "Users",
@@ -4087,11 +4118,11 @@ export const searchEntries = [
     "kind": "endpoint",
     "group": "Data retention",
     "title": "List my retention notices",
-    "description": "Returns the current Session User’s own durable grace notices, including cancellation and delivery status. The notice grants no examination record access. Reading it neither acknowledges delivery nor changes cleanup. Candidate notices are optional; responsible Exam Managers and institution operators receive them by default. Pending dates are invalidated when grace is canceled.",
+    "description": "Returns the current Session User’s own durable grace notices, including cancellation and delivery status. The notice grants no examination record access. Reading it neither acknowledges delivery nor changes cleanup. Candidate notices are optional; responsible Exam Managers and institution operators receive them by default. Pending dates are invalidated when grace is canceled. Each notice names the Exam title and the Sitting's scheduled times so the recipient can tell which records it covers; no candidate, answer, or evidence content is included.",
     "href": "/api/reference/list-retention-notices",
     "method": "GET",
     "path": "/api/v1/users/me/retention-notices",
-    "searchText": "listretentionnotices list my retention notices returns the current session user’s own durable grace notices, including cancellation and delivery status. the notice grants no examination record access. reading it neither acknowledges delivery nor changes cleanup. candidate notices are optional; responsible exam managers and institution operators receive them by default. pending dates are invalidated when grace is canceled. data retention get /api/v1/users/me/retention-notices session_required none authorization.denied request.invalid retention.invalid retention.unavailable retention_policy.revision_conflict retention_policy.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
+    "searchText": "listretentionnotices list my retention notices returns the current session user’s own durable grace notices, including cancellation and delivery status. the notice grants no examination record access. reading it neither acknowledges delivery nor changes cleanup. candidate notices are optional; responsible exam managers and institution operators receive them by default. pending dates are invalidated when grace is canceled. each notice names the exam title and the sitting's scheduled times so the recipient can tell which records it covers; no candidate, answer, or evidence content is included. data retention get /api/v1/users/me/retention-notices session_required none authorization.denied request.invalid retention.invalid retention.unavailable retention_policy.revision_conflict retention_policy.unavailable authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:listCurrentUserSessions",
@@ -4180,6 +4211,17 @@ export const searchEntries = [
     "method": "POST",
     "path": "/api/v1/users/me/tokens",
     "searchText": "createpersonalaccesstoken create a personal access token creates a bounded personal access token after recent interactive authentication and returns its credential exactly once. requested scopes and any academic unit boundary are validated against current authority and policy. authentication post /api/v1/users/me/tokens recent_session_required none request.invalid resource.not_found personal_access_token.invalid personal_access_token.maximum_reached personal_access_token.unavailable audit.unavailable authentication.session_required authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable authentication.csrf.invalid authentication.reauthentication_required"
+  },
+  {
+    "id": "operation:listGrantablePersonalAccessTokenScopes",
+    "kind": "endpoint",
+    "group": "Authentication",
+    "title": "List grantable Personal Access Token scopes",
+    "description": "Returns the Personal Access Token scopes the current User may grant right now, with a localized title and description for each. A scope with `institution_wide` set may be granted with no Academic Unit boundary or with any boundary. Otherwise it may be granted only with a boundary at one of its `academic_unit_ids` or at a unit below one of them. `academic_units` lists at most 50 of those delegable roots, ordered by display name; `academic_units_has_more` reports that more exist. Scopes the User cannot grant anywhere are omitted. Creation still rechecks current authority.",
+    "href": "/api/reference/list-grantable-personal-access-token-scopes",
+    "method": "GET",
+    "path": "/api/v1/users/me/tokens/grantable-scopes",
+    "searchText": "listgrantablepersonalaccesstokenscopes list grantable personal access token scopes returns the personal access token scopes the current user may grant right now, with a localized title and description for each. a scope with `institution_wide` set may be granted with no academic unit boundary or with any boundary. otherwise it may be granted only with a boundary at one of its `academic_unit_ids` or at a unit below one of them. `academic_units` lists at most 50 of those delegable roots, ordered by display name; `academic_units_has_more` reports that more exist. scopes the user cannot grant anywhere are omitted. creation still rechecks current authority. authentication get /api/v1/users/me/tokens/grantable-scopes session_required none personal_access_token.unavailable authentication.reauthentication_required authentication.session_required authentication.required authentication.token_invalid authentication.credential_ambiguous authentication.dpop.invalid authentication.dpop.replayed authentication.dpop.use_nonce authentication.dpop.unavailable"
   },
   {
     "id": "operation:revokePersonalAccessToken",

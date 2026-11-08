@@ -4716,7 +4716,7 @@ export interface paths {
         };
         /**
          * List the current User's own account history
-         * @description Returns one page of the current Session User's own account history, newest first. The history holds events about the User's account, whoever performed them, and account-relevant events the User performed on anything else. Each item carries a stable `event` name from a closed catalogue, which clients label themselves; rows outside the catalogue and unfinished attempts are never returned. Another person is never named: the actor is only `self`, `administrator`, or `system`, and the IP address and user agent appear only on the User's own actions. A resource identity appears only when the resource is the User, the Institution, or an Academic Unit or Class the User has or had a membership or Role Binding at. Personal Access Tokens cannot read this history. Reading it records no authorization decision.
+         * @description Returns one page of the current Session User's own account history, newest first unless `order=asc` asks for oldest first. The first page, read without a cursor, also carries `total`: the number of events the filters match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's. Reading the first page oldest first reaches the end of the history without counting pages. The history holds events about the User's account, whoever performed them, and account-relevant events the User performed on anything else. Each item carries a stable `event` name from a closed catalogue, which clients label themselves; rows outside the catalogue and unfinished attempts are never returned. Another person is never named: the actor is only `self`, `administrator`, or `system`, and the IP address and user agent appear only on the User's own actions. A resource identity appears only when the resource is the User, the Institution, or an Academic Unit or Class the User has or had a membership or Role Binding at. Personal Access Tokens cannot read this history. Reading it records no authorization decision.
          */
         get: operations["listCurrentUserAuditEvents"];
         put?: never;
@@ -10160,6 +10160,10 @@ export interface components {
             items: components["schemas"]["SelfAuditEventResponse"][];
             /** @description Opaque continuation for the next page, omitted after the final page. */
             next_cursor?: string;
+            /** @description Events matching the filters across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true. */
+            total?: number;
+            /** @description True when `total` reached the 10,000 bound and the history may be longer. Present with `total`. */
+            total_is_lower_bound?: boolean;
         };
         SequenceRange: {
             /** Format: int64 */
@@ -13061,7 +13065,9 @@ export interface components {
                  *           "status": "success"
                  *         }
                  *       ],
-                 *       "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wNy0zMFQxNDowNTowMFoifQ"
+                 *       "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wNy0zMFQxNDowNTowMFoifQ",
+                 *       "total": 248,
+                 *       "total_is_lower_bound": false
                  *     }
                  */
                 "application/json": components["schemas"]["SelfAuditListResponse"];
@@ -21170,6 +21176,8 @@ export interface operations {
                 status?: "success" | "fail";
                 /** @description Return only events about the User's account (`subject`) or only events the User performed on anything else (`actor`). Omit it for both. */
                 relation?: "subject" | "actor";
+                /** @description Read newest first (`desc`, the default) or oldest first (`asc`). A cursor continues only the order that produced it. */
+                order?: "desc" | "asc";
             };
             header?: never;
             path?: never;

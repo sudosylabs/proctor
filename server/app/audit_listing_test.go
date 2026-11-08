@@ -20,18 +20,26 @@ import (
 )
 
 type auditListingStoreFake struct {
-	events    *[]string
-	list      []*model.AuditEvent
-	input     store.AuditListOptions
-	self      []*store.AuditSelfEntry
-	selfInput store.AuditSelfListOptions
-	err       error
+	events     *[]string
+	list       []*model.AuditEvent
+	input      store.AuditListOptions
+	self       []*store.AuditSelfEntry
+	selfInput  store.AuditSelfListOptions
+	count      int
+	countInput store.AuditSelfListOptions
+	err        error
 }
 
 func (s *auditListingStoreFake) ListSelf(_ context.Context, options store.AuditSelfListOptions) ([]*store.AuditSelfEntry, error) {
 	*s.events = append(*s.events, "list-self-audits")
 	s.selfInput = options
 	return s.self, s.err
+}
+
+func (s *auditListingStoreFake) CountSelf(_ context.Context, options store.AuditSelfListOptions) (int, error) {
+	*s.events = append(*s.events, "count-self-audits")
+	s.countInput = options
+	return s.count, s.err
 }
 
 func (s *auditListingStoreFake) List(_ context.Context, options store.AuditListOptions) ([]*model.AuditEvent, error) {

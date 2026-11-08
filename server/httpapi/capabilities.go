@@ -161,7 +161,7 @@ type MFA interface {
 
 type AuditListingApplication interface {
 	ListAuditEvents(context.Context, invocation.Invocation, app.ListAuditEventsQuery) (app.Page[*model.AuditEvent], error)
-	ListSelfAuditEvents(context.Context, invocation.Invocation, app.ListSelfAuditEventsQuery) (app.Page[app.SelfAuditEvent], error)
+	ListSelfAuditEvents(context.Context, invocation.Invocation, app.ListSelfAuditEventsQuery) (app.SelfAuditPage, error)
 }
 
 type BootstrapApplication interface {

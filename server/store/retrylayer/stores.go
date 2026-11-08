@@ -808,6 +808,10 @@ func (s *auditStore) ListSelf(ctx context.Context, options store.AuditSelfListOp
 	return retryCall1(ctx, s.layer, func() ([]*store.AuditSelfEntry, error) { return s.AuditStore.ListSelf(ctx, options) })
 }
 
+func (s *auditStore) CountSelf(ctx context.Context, options store.AuditSelfListOptions) (int, error) {
+	return retryCall1(ctx, s.layer, func() (int, error) { return s.AuditStore.CountSelf(ctx, options) })
+}
+
 func (s *installationStore) Get(ctx context.Context) (*model.InstallationState, error) {
 	return retryCall1(ctx, s.layer, func() (*model.InstallationState, error) { return s.InstallationStore.Get(ctx) })
 }

@@ -333,7 +333,7 @@ var openAPIDTOs = map[string]reflect.Type{
 	"SecurityPreflightReport":                        reflect.TypeOf(model.SecurityPreflightReport{}),
 	"SecurityPreflightResult":                        reflect.TypeOf(model.SecurityPreflightResult{}),
 	"SelfAuditEventResponse":                         reflect.TypeOf(selfAuditEventResponse{}),
-	"SelfAuditListResponse":                          reflect.TypeOf(listResponse[selfAuditEventResponse]{}),
+	"SelfAuditListResponse":                          reflect.TypeOf(selfAuditListResponse{}),
 	"SessionAdministrationListResponse":              reflect.TypeOf(sessionAdministrationListResponse{}),
 	"SessionAdministrationResponse":                  reflect.TypeOf(sessionResponse{}),
 	"SessionResponse":                                reflect.TypeOf(sessionResponse{}),

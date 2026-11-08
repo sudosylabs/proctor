@@ -204,6 +204,9 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: `GET /api/v1/users/me/audits` takes `order=asc` to read oldest
+  first, and its first page reports `total`, the events the filters match,
+  exact below 10,000 and flagged by `total_is_lower_bound` at that bound.
 - Server: User profiles and the current User context carry
   `profile_picture_kind`, `custom` when the User uploaded their own picture and
   `default` when the generated picture is served, so clients can offer removal

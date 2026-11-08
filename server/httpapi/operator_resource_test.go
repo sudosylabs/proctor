@@ -24,6 +24,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 func operatorTestPrincipal() model.Principal {
@@ -131,12 +132,17 @@ type focusedAuditApplication struct {
 	selfQuery app.ListSelfAuditEventsQuery
 	self      []app.SelfAuditEvent
 	selfCalls int
+	selfTotal int
 }
 
-func (f *focusedAuditApplication) ListSelfAuditEvents(_ context.Context, _ invocation.Invocation, query app.ListSelfAuditEventsQuery) (app.Page[app.SelfAuditEvent], error) {
+func (f *focusedAuditApplication) ListSelfAuditEvents(_ context.Context, _ invocation.Invocation, query app.ListSelfAuditEventsQuery) (app.SelfAuditPage, error) {
 	f.selfQuery = query
 	f.selfCalls++
-	return app.Page[app.SelfAuditEvent]{Items: f.self, HasMore: f.hasMore}, f.err
+	page := app.SelfAuditPage{Page: app.Page[app.SelfAuditEvent]{Items: f.self, HasMore: f.hasMore}, Counted: query.BeforeID.IsZero()}
+	if page.Counted {
+		page.Total, page.TotalIsLowerBound = f.selfTotal, f.selfTotal == store.MaximumAuditSelfCount
+	}
+	return page, f.err
 }
 
 func (f *focusedAuditApplication) ListAuditEvents(_ context.Context, _ invocation.Invocation, query app.ListAuditEventsQuery) (app.Page[*model.AuditEvent], error) {

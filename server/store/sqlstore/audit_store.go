@@ -18,6 +18,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -347,48 +348,20 @@ func (s SQLAuditStore) ListSelf(ctx context.Context, options store.AuditSelfList
 	if err := validateAuditSelfListOptions(options); err != nil {
 		return nil, err
 	}
-	actions := make([]string, 0, len(options.Events))
-	operations := make([]string, 0, len(options.Events))
-	statuses := make([]string, 0, len(options.Events))
-	for _, key := range options.Events {
-		actions = append(actions, key.Action)
-		operations = append(operations, key.Operation)
-		statuses = append(statuses, string(key.Status))
+	direction, keyset := "DESC", "<"
+	if options.Ascending {
+		direction, keyset = "ASC", ">"
 	}
-	userID := options.UserID.String()
-	common := `e.status <> 'attempt'
-		AND (e.action, COALESCE(e.parameters->>'operation', ''), e.status::text) IN (SELECT action, operation, status FROM self_event_keys)`
-	var commonArgs []any
-	if !options.Since.IsZero() {
-		common += ` AND e.created_at >= ?`
-		commonArgs = append(commonArgs, model.TimeUTC(options.Since))
-	}
-	if !options.Until.IsZero() {
-		common += ` AND e.created_at < ?`
-		commonArgs = append(commonArgs, model.TimeUTC(options.Until))
-	}
+	filter, filterArgs := auditSelfFilter(options)
 	if !options.BeforeCreatedAt.IsZero() {
-		common += ` AND (e.created_at, e.id) < (?, ?)`
-		commonArgs = append(commonArgs, model.TimeUTC(options.BeforeCreatedAt), options.BeforeID.String())
+		filter += ` AND (e.created_at, e.id) ` + keyset + ` (?, ?)`
+		filterArgs = append(filterArgs, model.TimeUTC(options.BeforeCreatedAt), options.BeforeID.String())
 	}
-	branches := make([]string, 0, 2)
-	args := []any{pq.Array(actions), pq.Array(operations), pq.Array(statuses)}
-	if options.Relation != store.AuditSelfRelationActor {
-		branches = append(branches, `(SELECT e.id, e.created_at FROM audit_events e
-			WHERE e.subject_user_id = ? AND `+common+`
-			ORDER BY e.created_at DESC, e.id DESC LIMIT ?)`)
-		args = append(append(append(args, userID), commonArgs...), options.Limit)
-	}
-	if options.Relation != store.AuditSelfRelationSubject {
-		branches = append(branches, `(SELECT e.id, e.created_at FROM audit_events e
-			WHERE e.actor_id = ? AND e.subject_user_id IS DISTINCT FROM ? AND `+common+`
-			ORDER BY e.created_at DESC, e.id DESC LIMIT ?)`)
-		args = append(append(append(args, userID, userID), commonArgs...), options.Limit)
-	}
+	order := `ORDER BY e.created_at ` + direction + `, e.id ` + direction
+	branches, args := auditSelfBranches(options, filter, filterArgs, `e.id, e.created_at`, order+` LIMIT ?`, options.Limit)
+	userID := options.UserID.String()
 	args = append(args, userID, userID, userID, userID, userID, options.Limit)
-	query := `WITH self_event_keys(action, operation, status) AS (
-			SELECT * FROM unnest(?::text[], ?::text[], ?::text[])
-		), candidates AS (` + strings.Join(branches, " UNION ALL ") + `)
+	query := auditSelfEventKeysCTE + `, candidates AS (` + strings.Join(branches, " UNION ALL ") + `)
 		SELECT e.id, e.created_at, e.actor_id, e.subject_user_id, e.action,
 		       COALESCE(e.parameters->>'operation', '') AS operation, e.status,
 		       e.resource_type, e.resource_id, e.client_type, e.ip_address,
@@ -414,7 +387,7 @@ func (s SQLAuditStore) ListSelf(ctx context.Context, options store.AuditSelfList
 		       END AS resource_related
 		  FROM candidates c
 		  JOIN audit_events e ON e.id = c.id
-		 ORDER BY e.created_at DESC, e.id DESC
+		 ` + order + `
 		 LIMIT ?`
 	rows := []auditSelfRow{}
 	if err := s.GetMaster().Select(ctx, &rows, query, args...); err != nil {
@@ -429,6 +402,77 @@ func (s SQLAuditStore) ListSelf(ctx context.Context, options store.AuditSelfList
 		entries = append(entries, entry)
 	}
 	return entries, nil
+}
+
+// CountSelf counts through the same two relations as ListSelf. Each branch
+// stops one past the bound, so a long history costs at most two bounded
+// index reads.
+func (s SQLAuditStore) CountSelf(ctx context.Context, options store.AuditSelfListOptions) (int, error) {
+	options.Ascending, options.BeforeCreatedAt, options.BeforeID = false, time.Time{}, ""
+	if options.Limit == 0 {
+		options.Limit = 1
+	}
+	if err := validateAuditSelfListOptions(options); err != nil {
+		return 0, err
+	}
+	filter, filterArgs := auditSelfFilter(options)
+	branches, args := auditSelfBranches(options, filter, filterArgs, `e.id`, `LIMIT ?`, store.MaximumAuditSelfCount+1)
+	query := auditSelfEventKeysCTE + `
+		SELECT LEAST(count(*), ` + strconv.Itoa(store.MaximumAuditSelfCount) + `) FROM (` + strings.Join(branches, " UNION ALL ") + `) candidates`
+	var total int
+	if err := s.GetMaster().Get(ctx, &total, query, args...); err != nil {
+		return 0, fmt.Errorf("count self audit events: %w", err)
+	}
+	return total, nil
+}
+
+const auditSelfEventKeysCTE = `WITH self_event_keys(action, operation, status) AS (
+			SELECT * FROM unnest(?::text[], ?::text[], ?::text[])
+		)`
+
+// auditSelfFilter is the event, outcome, and time filter both relations share.
+func auditSelfFilter(options store.AuditSelfListOptions) (string, []any) {
+	filter := `e.status <> 'attempt'
+		AND (e.action, COALESCE(e.parameters->>'operation', ''), e.status::text) IN (SELECT action, operation, status FROM self_event_keys)`
+	var args []any
+	if !options.Since.IsZero() {
+		filter += ` AND e.created_at >= ?`
+		args = append(args, model.TimeUTC(options.Since))
+	}
+	if !options.Until.IsZero() {
+		filter += ` AND e.created_at < ?`
+		args = append(args, model.TimeUTC(options.Until))
+	}
+	return filter, args
+}
+
+// auditSelfBranches builds the subject and actor relations the options ask
+// for, after the event key arguments of auditSelfEventKeysCTE.
+func auditSelfBranches(options store.AuditSelfListOptions, filter string, filterArgs []any, columns, tail string, limit int) ([]string, []any) {
+	actions := make([]string, 0, len(options.Events))
+	operations := make([]string, 0, len(options.Events))
+	statuses := make([]string, 0, len(options.Events))
+	for _, key := range options.Events {
+		actions = append(actions, key.Action)
+		operations = append(operations, key.Operation)
+		statuses = append(statuses, string(key.Status))
+	}
+	userID := options.UserID.String()
+	branches := make([]string, 0, 2)
+	args := []any{pq.Array(actions), pq.Array(operations), pq.Array(statuses)}
+	if options.Relation != store.AuditSelfRelationActor {
+		branches = append(branches, `(SELECT `+columns+` FROM audit_events e
+			WHERE e.subject_user_id = ? AND `+filter+`
+			`+tail+`)`)
+		args = append(append(append(args, userID), filterArgs...), limit)
+	}
+	if options.Relation != store.AuditSelfRelationSubject {
+		branches = append(branches, `(SELECT `+columns+` FROM audit_events e
+			WHERE e.actor_id = ? AND e.subject_user_id IS DISTINCT FROM ? AND `+filter+`
+			`+tail+`)`)
+		args = append(append(append(args, userID, userID), filterArgs...), limit)
+	}
+	return branches, args
 }
 
 func validateAuditSelfListOptions(options store.AuditSelfListOptions) error {

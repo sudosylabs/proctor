@@ -31,6 +31,7 @@ type ListAuditEventsQuery struct {
 type auditListingStore interface {
 	List(context.Context, store.AuditListOptions) ([]*model.AuditEvent, error)
 	ListSelf(context.Context, store.AuditSelfListOptions) ([]*store.AuditSelfEntry, error)
+	CountSelf(context.Context, store.AuditSelfListOptions) (int, error)
 }
 
 type auditListingAuthorizer interface {

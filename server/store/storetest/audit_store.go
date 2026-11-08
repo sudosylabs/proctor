@@ -261,6 +261,41 @@ func testAuditSelfHistory(t *testing.T, ctx context.Context, ss store.Store, ins
 	}
 	require.Equal(t, newestFirst, paged, "keyset pages")
 
+	oldestFirst := make([]model.AuditEventID, 0, len(newestFirst))
+	for index := len(newestFirst) - 1; index >= 0; index-- {
+		oldestFirst = append(oldestFirst, newestFirst[index])
+	}
+	paged = nil
+	options = store.AuditSelfListOptions{Limit: 4, Ascending: true}
+	for page := 0; page < 3; page++ {
+		ids := list(options)
+		if len(ids) == 0 {
+			break
+		}
+		paged = append(paged, ids...)
+		last := byID[ids[len(ids)-1]]
+		options.BeforeCreatedAt, options.BeforeID = last.CreatedAt, last.ID
+	}
+	require.Equal(t, oldestFirst, paged, "ascending keyset pages continue toward newer entries")
+
+	count := func(options store.AuditSelfListOptions) int {
+		t.Helper()
+		options.UserID = me.ID
+		if options.Events == nil {
+			options.Events = all
+		}
+		total, countErr := ss.Audit().CountSelf(ctx, options)
+		require.NoError(t, countErr)
+		return total
+	}
+	require.Equal(t, len(newestFirst), count(store.AuditSelfListOptions{}))
+	require.Equal(t, len(newestFirst), count(store.AuditSelfListOptions{Limit: 2, Ascending: true,
+		BeforeCreatedAt: passwordChanged.CreatedAt, BeforeID: passwordChanged.ID}), "the count ignores the page")
+	require.Equal(t, 5, count(store.AuditSelfListOptions{Relation: store.AuditSelfRelationSubject}))
+	require.Equal(t, 1, count(store.AuditSelfListOptions{Relation: store.AuditSelfRelationActor}))
+	require.Equal(t, 1, count(store.AuditSelfListOptions{Events: model.AuditSelfEventKeys(nil, model.AuditStatusFail)}))
+	require.Equal(t, 3, count(store.AuditSelfListOptions{Since: administratorReset.CreatedAt, Until: grantedToMe.CreatedAt}))
+
 	require.Equal(t, []model.AuditEventID{mfaEnabled.ID, grantedToMe.ID, failedSignIn.ID, administratorReset.ID, passwordChanged.ID},
 		list(store.AuditSelfListOptions{Relation: store.AuditSelfRelationSubject}))
 	require.Equal(t, []model.AuditEventID{grantedToOther.ID}, list(store.AuditSelfListOptions{Relation: store.AuditSelfRelationActor}))
@@ -284,6 +319,10 @@ func testAuditSelfHistory(t *testing.T, ctx context.Context, ss store.Store, ins
 	} {
 		_, err = ss.Audit().ListSelf(ctx, bad)
 		require.ErrorAs(t, err, &invalid, name)
+		if name != "limit" && name != "cursor" {
+			_, err = ss.Audit().CountSelf(ctx, bad)
+			require.ErrorAs(t, err, &invalid, "count "+name)
+		}
 	}
 }
 

@@ -925,7 +925,11 @@ a Store keyset; a collection the application already bounds and returns whole
 (a User's Sessions, the configured providers, a Draft's Resources) is paged on
 the wire as keyset slices of its stable order. A collection may carry
 non-paging context members beside the envelope, such as a snapshot's
-`workspace_cursor`. `TestOpenAPIListOperationsUseOneEnvelope` enforces the
+`workspace_cursor`. A collection whose rows are bounded per User may also
+report `total` on its first page only, counted with a fixed bound and paired
+with `total_is_lower_bound`. The User's own account history counts this way
+and adds `order=asc` so the end of the history is one read away; a total
+never comes with offset paging. `TestOpenAPIListOperationsUseOneEnvelope` enforces the
 idiom over the reviewed OpenAPI document.
 
 ## Ownership and extension workflow

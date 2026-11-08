@@ -55,6 +55,29 @@ func selfAuditEventResponseFromApplication(event app.SelfAuditEvent) selfAuditEv
 	}
 }
 
+// selfAuditListResponse is the collection envelope plus the history size,
+// which only the first page carries. The count is bounded per User, so the
+// total is exact below store.MaximumAuditSelfCount and a lower bound at it.
+type selfAuditListResponse struct {
+	Items             []selfAuditEventResponse `json:"items"`
+	NextCursor        string                   `json:"next_cursor,omitempty"`
+	Total             *int                     `json:"total,omitempty"`
+	TotalIsLowerBound *bool                    `json:"total_is_lower_bound,omitempty"`
+}
+
+// selfAuditCursor continues one read order; a cursor from the other order is
+// an invalid query, not a position.
+type selfAuditCursor struct {
+	CreatedAt string `json:"created_at"`
+	ID        string `json:"id"`
+	Order     string `json:"order"`
+}
+
+const (
+	selfAuditOrderNewest = "desc"
+	selfAuditOrderOldest = "asc"
+)
+
 func (m auditResourceModule) listSelf(request operationRequest) (operationResult, error) {
 	page, err := request.pageRequest()
 	if err != nil {
@@ -64,12 +87,19 @@ func (m auditResourceModule) listSelf(request operationRequest) (operationResult
 	if err != nil {
 		return operationResult{}, invalidRequestError(err)
 	}
+	order := selfAuditOrderNewest
+	if query.Ascending {
+		order = selfAuditOrderOldest
+	}
 	query.Limit = page.Limit
 	cursor, continued, err := decodePageCursor(page, selfAuditCursorSpec())
 	if err != nil {
 		return operationResult{}, err
 	}
 	if continued {
+		if cursor.Order != order {
+			return operationResult{}, invalidRequestError(errAuditQuery("cursor"))
+		}
 		createdAt, _ := model.ParseRFC3339(cursor.CreatedAt)
 		query.BeforeCreatedAt, query.BeforeID = createdAt, model.AuditEventID(cursor.ID)
 	}
@@ -77,14 +107,19 @@ func (m auditResourceModule) listSelf(request operationRequest) (operationResult
 	if err != nil {
 		return operationResult{}, err
 	}
-	if len(result.Items) > query.Limit {
+	if len(result.Items) > query.Limit || result.Counted == continued {
 		return operationResult{}, errUnpresentableResult
 	}
-	response, err := newListResponse(result.Items, result.HasMore, selfAuditEventResponseFromApplication, func(last app.SelfAuditEvent) (string, error) {
-		return encodeOpaqueCursor(auditCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String()}, selfAuditCursorSpec())
+	envelope, err := newListResponse(result.Items, result.HasMore, selfAuditEventResponseFromApplication, func(last app.SelfAuditEvent) (string, error) {
+		return encodeOpaqueCursor(selfAuditCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String(), Order: order}, selfAuditCursorSpec())
 	})
 	if err != nil {
 		return operationResult{}, err
+	}
+	response := selfAuditListResponse{Items: envelope.Items, NextCursor: envelope.NextCursor}
+	if result.Counted {
+		total, lowerBound := result.Total, result.TotalIsLowerBound
+		response.Total, response.TotalIsLowerBound = &total, &lowerBound
 	}
 	return jsonResult(http.StatusOK, response).withHeaders(privateNoStoreHeaders()), nil
 }
@@ -94,7 +129,7 @@ func selfAuditQueryFromValues(values url.Values) (app.ListSelfAuditEventsQuery, 
 	for key, entries := range values {
 		switch key {
 		case "limit", "cursor", "event":
-		case "created_after", "created_before", "status", "relation":
+		case "created_after", "created_before", "status", "relation", "order":
 			if len(entries) != 1 || entries[0] == "" {
 				return query, errAuditQuery(key)
 			}
@@ -114,6 +149,13 @@ func selfAuditQueryFromValues(values url.Values) (app.ListSelfAuditEventsQuery, 
 	for _, raw := range values["event"] {
 		query.Events = append(query.Events, model.AuditSelfEvent(raw))
 	}
+	switch values.Get("order") {
+	case "", selfAuditOrderNewest:
+	case selfAuditOrderOldest:
+		query.Ascending = true
+	default:
+		return query, errAuditQuery("order")
+	}
 	query.Status = model.AuditStatus(values.Get("status"))
 	query.Relation = store.AuditSelfRelation(values.Get("relation"))
 	return query, nil
@@ -131,13 +173,14 @@ func optionalSelfAuditTime(values url.Values, name string) (time.Time, error) {
 	return at, nil
 }
 
-func selfAuditCursorSpec() opaqueCursorSpec[auditCursor] {
-	return opaqueCursorSpec[auditCursor]{
+func selfAuditCursorSpec() opaqueCursorSpec[selfAuditCursor] {
+	return opaqueCursorSpec[selfAuditCursor]{
 		label: "self_audit", maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members: []string{"created_at", "id"},
-		validate: func(cursor auditCursor) error {
+		members: []string{"created_at", "id", "order"},
+		validate: func(cursor selfAuditCursor) error {
 			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
-			if err != nil || createdAt.IsZero() || !model.AuditEventID(cursor.ID).IsValid() {
+			if err != nil || createdAt.IsZero() || !model.AuditEventID(cursor.ID).IsValid() ||
+				(cursor.Order != selfAuditOrderNewest && cursor.Order != selfAuditOrderOldest) {
 				return errors.New("invalid self audit keyset")
 			}
 			return nil

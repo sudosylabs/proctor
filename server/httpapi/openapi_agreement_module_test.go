@@ -110,6 +110,13 @@ func readOpenAPIDocument(t *testing.T) openAPIDocument {
 	return document
 }
 
+func readOpenAPIDocumentBytes(t *testing.T) []byte {
+	t.Helper()
+	encoded, err := readOpenAPIDocumentFile()
+	require.NoError(t, err)
+	return encoded
+}
+
 func readOpenAPIDocumentFile() ([]byte, error) {
 	_, currentFile, _, ok := runtime.Caller(0)
 	if !ok {

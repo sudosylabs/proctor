@@ -45476,68 +45476,6 @@
         "x-proctor-idempotency": "none"
       }
     },
-    "/api/v1/users/me/personal-access-tokens/grantable-scopes": {
-      "get": {
-        "description": "Returns the Personal Access Token scopes the current User may grant right now, with a localized title and description for each. A scope with `institution_wide` set may be granted with no Academic Unit boundary or with any boundary. Otherwise it may be granted only with a boundary at one of its `academic_unit_ids` or at a unit below one of them. `academic_units` lists at most 50 of those delegable roots, ordered by display name; `academic_units_has_more` reports that more exist. Scopes the User cannot grant anywhere are omitted. Creation still rechecks current authority.",
-        "operationId": "listGrantablePersonalAccessTokenScopes",
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/PersonalAccessTokenGrantableScopesOK"
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "dpopAuth": []
-          },
-          {
-            "sessionCookie": []
-          }
-        ],
-        "summary": "List grantable Personal Access Token scopes",
-        "tags": [
-          "Authentication"
-        ],
-        "x-codeSamples": [
-          {
-            "label": "List grantable Personal Access Token scopes",
-            "lang": "Shell",
-            "source": "curl --header \"Authorization: Bearer $PROCTOR_TOKEN\" \\\n  https://proctor.example.edu/api/v1/users/me/personal-access-tokens/grantable-scopes"
-          }
-        ],
-        "x-proctor-auth": "session_required",
-        "x-proctor-error-codes": [
-          "personal_access_token.unavailable",
-          "authentication.reauthentication_required",
-          "authentication.session_required",
-          "authentication.required",
-          "authentication.token_invalid",
-          "authentication.credential_ambiguous",
-          "authentication.dpop.invalid",
-          "authentication.dpop.replayed",
-          "authentication.dpop.use_nonce",
-          "authentication.dpop.unavailable"
-        ],
-        "x-proctor-idempotency": "none"
-      }
-    },
     "/api/v1/users/me/retention-notices": {
       "get": {
         "description": "Returns the current Session User’s own durable grace notices, including cancellation and delivery status. The notice grants no examination record access. Reading it neither acknowledges delivery nor changes cleanup. Candidate notices are optional; responsible Exam Managers and institution operators receive them by default. Pending dates are invalidated when grace is canceled. Each notice names the Exam title and the Sitting's scheduled times so the recipient can tell which records it covers; no candidate, answer, or evidence content is included.",
@@ -46123,6 +46061,68 @@
           "authentication.dpop.unavailable",
           "authentication.csrf.invalid",
           "authentication.reauthentication_required"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/users/me/tokens/grantable-scopes": {
+      "get": {
+        "description": "Returns the Personal Access Token scopes the current User may grant right now, with a localized title and description for each. A scope with `institution_wide` set may be granted with no Academic Unit boundary or with any boundary. Otherwise it may be granted only with a boundary at one of its `academic_unit_ids` or at a unit below one of them. `academic_units` lists at most 50 of those delegable roots, ordered by display name; `academic_units_has_more` reports that more exist. Scopes the User cannot grant anywhere are omitted. Creation still rechecks current authority.",
+        "operationId": "listGrantablePersonalAccessTokenScopes",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PersonalAccessTokenGrantableScopesOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List grantable Personal Access Token scopes",
+        "tags": [
+          "Authentication"
+        ],
+        "x-codeSamples": [
+          {
+            "label": "List grantable Personal Access Token scopes",
+            "lang": "Shell",
+            "source": "curl --header \"Authorization: Bearer $PROCTOR_TOKEN\" \\\n  https://proctor.example.edu/api/v1/users/me/tokens/grantable-scopes"
+          }
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "personal_access_token.unavailable",
+          "authentication.reauthentication_required",
+          "authentication.session_required",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
         ],
         "x-proctor-idempotency": "none"
       }

@@ -136,7 +136,7 @@ func personalAccessTokenResource(tokens PersonalAccessTokens) apiResource {
 	module := personalAccessTokenResourceModule{tokens: tokens}
 	collection := apiPath(literal("users"), literal("me"), literal("tokens"))
 	item := apiPath(literal("users"), literal("me"), literal("tokens"), canonicalID("personal_access_token_id"))
-	grantableScopes := apiPath(literal("users"), literal("me"), literal("personal-access-tokens"), literal("grantable-scopes"))
+	grantableScopes := apiPath(literal("users"), literal("me"), literal("tokens"), literal("grantable-scopes"))
 	return newResource(
 		"personal-access-tokens",
 		recentSessionRoute(http.MethodPost, collection, []string{"request.invalid", "resource.not_found", "personal_access_token.invalid", "personal_access_token.maximum_reached", "personal_access_token.unavailable", "audit.unavailable", "authentication.session_required"}, module.create),

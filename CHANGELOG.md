@@ -218,7 +218,7 @@ module when a change is not server-only. No module has been released yet.
   a type the caller cannot list returns nothing, and the request is denied
   only when no requested type is listable. Invalid search input is
   `search.query.invalid`; the operation is under the new Search API tag.
-- Server: `GET /api/v1/users/me/personal-access-tokens/grantable-scopes` lists
+- Server: `GET /api/v1/users/me/tokens/grantable-scopes` lists
   the Personal Access Token scopes the signed-in User may grant now, each with
   a localized title and description, its resource types, and where it may be
   granted: institution-wide or at up to 50 listed Academic Unit roots.

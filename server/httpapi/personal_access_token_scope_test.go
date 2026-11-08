@@ -117,7 +117,7 @@ func TestGrantablePersonalAccessTokenScopesRouteLocalizesCopy(t *testing.T) {
 	}
 	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, personalAccessTokenResource(application))
 
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me/personal-access-tokens/grantable-scopes", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me/tokens/grantable-scopes", nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	request = request.WithContext(withRequestLocalization(request.Context(), repositoryLocalizer(t), "en"))
 	response := httptest.NewRecorder()

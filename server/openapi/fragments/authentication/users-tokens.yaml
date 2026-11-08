@@ -98,7 +98,7 @@ paths:
           $ref: '#/components/responses/InternalError'
         "503":
           $ref: '#/components/responses/ServiceUnavailable'
-  /api/v1/users/me/personal-access-tokens/grantable-scopes:
+  /api/v1/users/me/tokens/grantable-scopes:
     get:
       operationId: listGrantablePersonalAccessTokenScopes
       summary: List grantable Personal Access Token scopes
@@ -109,7 +109,7 @@ paths:
           label: List grantable Personal Access Token scopes
           source: |-
             curl --header "Authorization: Bearer $PROCTOR_TOKEN" \
-              https://proctor.example.edu/api/v1/users/me/personal-access-tokens/grantable-scopes
+              https://proctor.example.edu/api/v1/users/me/tokens/grantable-scopes
       tags:
         - Authentication
       x-proctor-auth: session_required

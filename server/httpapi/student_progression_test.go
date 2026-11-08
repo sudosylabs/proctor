@@ -96,7 +96,5 @@ func TestStudentProgressionResponseExposesOnlySafeExactTargetsAndRows(t *testing
 	for _, required := range []string{view.SourcePeriodID.String(), view.SourceClassID.String(), view.DestinationPeriodID.String(), view.DestinationClassID.String(), `"effective_at":"`} {
 		require.Contains(t, body, required, "response omits")
 	}
-	for _, forbidden := range []string{"email", "username", "recipient", "claim", "secret", "principal"} {
-		require.NotContains(t, body, forbidden, "response contains private field")
-	}
+	requireNoPrivateFieldNames(t, encoded, "email", "username", "recipient", "claim", "secret", "principal")
 }

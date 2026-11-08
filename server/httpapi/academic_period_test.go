@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -114,4 +115,32 @@ func TestAcademicPeriodPatchOptionalWireStates(t *testing.T) {
 	end := body.EndAt.ValuePointer()
 	require.NotNil(t, end)
 	require.Equal(t, "2026-01-02T03:04:05Z", *end)
+}
+
+func TestAcademicPeriodOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+
+	document := readOpenAPIDocument(t)
+	var listOperation openAPIOperation
+	require.NoError(t, json.Unmarshal(document.Paths[model.APIURLSuffix+"/academic-periods"]["get"], &listOperation))
+	require.Equal(t, []string{"cursor", "limit", "q"}, academicStructureQueryParameterNames(listOperation.Parameters), "Academic Period list query parameters")
+	list := document.Components.Schemas["AcademicPeriodListResponse"]
+	requireOpenAPIListEnvelope(t, list, "#/components/schemas/AcademicPeriodResponse")
+	require.Equal(t, "#/components/headers/NoStore", document.Components.Responses["AcademicPeriodArchived"].Headers["Cache-Control"].Ref)
+}
+
+func academicStructureQueryParameterNames(parameters []openAPIParameter) []string {
+	names := make([]string, 0, len(parameters))
+	for _, parameter := range parameters {
+		switch {
+		case parameter.In == "query":
+			names = append(names, parameter.Name)
+		case strings.HasSuffix(parameter.Ref, "/PageLimit"):
+			names = append(names, "limit")
+		case strings.HasSuffix(parameter.Ref, "/PageCursor"):
+			names = append(names, "cursor")
+		}
+	}
+	sort.Strings(names)
+	return names
 }

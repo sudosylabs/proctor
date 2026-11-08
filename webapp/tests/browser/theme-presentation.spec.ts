@@ -40,7 +40,7 @@ for (const themeCase of [
     themeColor: "#ffffff",
   },
 ] as const) {
-  test(`${themeCase.name} keeps tokens, metadata, lockup, and favicon coherent`, async ({
+  test(`${themeCase.name} keeps tokens, metadata, lockup, and favicon coherent`, { tag: "@cross-browser" }, async ({
     page,
   }) => {
     await page.emulateMedia({ colorScheme: themeCase.system });

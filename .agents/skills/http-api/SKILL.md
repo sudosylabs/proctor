@@ -28,11 +28,12 @@ description: Add or change Proctor HTTP routes, handlers, DTOs, credential or as
    check passes and no transport code path constructs a domain code.
    A route's error table lists what its operation can return, no more and no
    less; when `TestRouteErrorTablesMatchReachableCodes` reports a mismatch,
-   change the table, its OpenAPI `x-proctor-error-codes`, and the agreement
-   contract together. Completion: the route check and OpenAPI agreement pass.
-6. Update route, mapping, Problem Details, OpenAPI agreement, upload/download,
-   WebSocket, and concealment tests, then run the focused HTTP/OpenAPI checks
-   and `make -C server architecture`.
+   change the table and its OpenAPI `x-proctor-error-codes` together.
+   Completion: the route check and OpenAPI agreement pass.
+6. Register each new request or response DTO in the DTO→schema registry;
+   route/document agreement is derived. Update route, mapping, Problem
+   Details, upload/download, WebSocket, and concealment tests, then run the
+   focused HTTP/OpenAPI checks and `make -C server architecture`.
 
 ## Current open decision
 

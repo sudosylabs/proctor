@@ -88,3 +88,17 @@ func TestSearchResourcePresentsTypedItemsWithoutEmail(t *testing.T) {
 	}
 	require.Equal(t, calls, search.calls, "rejected requests reached the application")
 }
+
+func TestSearchOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+
+	document := readOpenAPIDocument(t)
+	var operation openAPIOperation
+	require.NoError(t, json.Unmarshal(document.Paths[model.APIURLSuffix+"/search"]["get"], &operation))
+	require.Equal(t, []string{"cursor", "limit", "q", "types"}, academicStructureQueryParameterNames(operation.Parameters), "search query parameters")
+	requireOpenAPIListEnvelope(t, document.Components.Schemas["SearchResponse"], "#/components/schemas/SearchItem")
+	for _, variant := range []string{"SearchExamItem", "SearchClassItem", "SearchUserItem"} {
+		_, exposesEmail := document.Components.Schemas[variant].Properties["email"]
+		require.False(t, exposesEmail, "%s exposes email", variant)
+	}
+}

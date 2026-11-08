@@ -33,7 +33,7 @@ async function noOverflow(page: Page) {
 
 for (const colorScheme of ["light", "dark"] as const) {
   for (const width of [320, 390, 768, 1440]) {
-    test(`sign-in loading reserves only the methods area at ${width}px in ${colorScheme}`, async ({ page }, testInfo) => {
+    test(`sign-in loading reserves only the methods area at ${width}px in ${colorScheme}`, { tag: "@cross-browser" }, async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height: 1024 });
       await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
       let release!: () => void;
@@ -85,7 +85,7 @@ for (const colorScheme of ["light", "dark"] as const) {
     });
   }
 
-  test(`loading fits inline, compact, and message parents in ${colorScheme}`, async ({ page }) => {
+  test(`loading fits inline, compact, and message parents in ${colorScheme}`, { tag: "@cross-browser" }, async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.emulateMedia({ colorScheme, reducedMotion: "no-preference" });
     await page.goto("/tests/fixtures/loading.html");
@@ -119,7 +119,7 @@ for (const colorScheme of ["light", "dark"] as const) {
   });
 }
 
-test("every button variant preserves its footprint and accessible name while loading", async ({ page }) => {
+test("every button variant preserves its footprint and accessible name while loading", { tag: "@cross-browser" }, async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/tests/fixtures/loading.html");
   await page.evaluate(() => document.fonts.ready);
@@ -146,7 +146,7 @@ test("every button variant preserves its footprint and accessible name while loa
   }
 });
 
-test("a discovery retry uses the reserved area and leaves focus alone while pending", async ({ page }) => {
+test("a discovery retry uses the reserved area and leaves focus alone while pending", { tag: "@cross-browser" }, async ({ page }) => {
   let release!: () => void;
   let requests = 0;
   const pending = new Promise<void>((resolve) => { release = resolve; });
@@ -181,7 +181,7 @@ for (const route of [
   "/join#token=private-invitation-claim",
   "/authorization/complete",
 ]) {
-  test(`${route} keeps initial loading inside its task region`, async ({ page }, testInfo) => {
+  test(`${route} keeps initial loading inside its task region`, { tag: "@cross-browser" }, async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
     let release!: () => void;

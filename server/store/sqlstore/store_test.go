@@ -144,7 +144,7 @@ func resetPristineTestStore(t *testing.T, sqlStore *SQLStore) {
 			role_bindings, roles, class_members, academic_unit_members,
 			affiliations, password_credentials, external_identities, users, file_revisions, file_entries,
 			classes, academic_periods, programme_levels, programmes,
-			academic_units, institutions CASCADE`)
+			academic_units, institutions, serving_node_leases, cluster_discovery_nodes CASCADE`)
 	require.NoError(t, err)
 	_, err = sqlStore.GetMaster().Exec(context.Background(), `INSERT INTO mail_key_state(singleton, required_primary_key_id, active_rekey_job_id, updated_at) VALUES (TRUE, NULL, NULL, clock_timestamp())`)
 	require.NoError(t, err)

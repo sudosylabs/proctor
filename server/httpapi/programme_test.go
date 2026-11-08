@@ -119,3 +119,16 @@ func TestProgrammePatchOptionalWireStates(t *testing.T) {
 	require.NotNil(t, value)
 	require.Empty(t, *value)
 }
+
+func TestProgrammeOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+
+	document := readOpenAPIDocument(t)
+	var listOperation openAPIOperation
+	path := model.APIURLSuffix + "/academic-units/{academic_unit_id}/programmes"
+	require.NoError(t, json.Unmarshal(document.Paths[path]["get"], &listOperation))
+	require.Equal(t, []string{"cursor", "limit", "q"}, academicStructureQueryParameterNames(listOperation.Parameters), "Programme list query parameters")
+	list := document.Components.Schemas["ProgrammeListResponse"]
+	requireOpenAPIListEnvelope(t, list, "#/components/schemas/ProgrammeResponse")
+	require.Equal(t, "#/components/headers/NoStore", document.Components.Responses["ProgrammeArchived"].Headers["Cache-Control"].Ref)
+}

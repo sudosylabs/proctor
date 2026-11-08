@@ -152,3 +152,11 @@ func TestRetentionHTTPNoticeProjectionIsRecipientOnlyAndBounded(t *testing.T) {
 	r = serveRetentionHTTP(api, "GET", "/api/v1/users/me/retention-notices", "", "")
 	require.Equal(t, 500, r.Code, "wrong recipient response exposed")
 }
+
+func TestRetentionOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+	document := readOpenAPIDocument(t)
+	for _, name := range []string{"RetentionControlOK", "RetentionPreviewOK", "RetentionRecordsOK", "RetentionNoticesOK"} {
+		require.Equal(t, "#/components/headers/PrivateNoStore", document.Components.Responses[name].Headers["Cache-Control"].Ref, "%s lacks no-store", name)
+	}
+}

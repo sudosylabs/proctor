@@ -21,8 +21,10 @@ export default defineConfig({
   },
   projects: [
     { name: "chromium", use: { browserName: "chromium" } },
-    { name: "firefox", use: { browserName: "firefox" } },
-    { name: "webkit", use: { browserName: "webkit" } },
+    // Logic-only tests run once; tests whose behaviour depends on the engine
+    // carry @cross-browser and also run in Firefox and WebKit.
+    { name: "firefox", use: { browserName: "firefox" }, grep: /@cross-browser/ },
+    { name: "webkit", use: { browserName: "webkit" }, grep: /@cross-browser/ },
   ],
   webServer: {
     command: "npm run dev",

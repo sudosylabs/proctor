@@ -22,7 +22,9 @@ description: Add or change Proctor HTTP operations, schemas, examples, product-a
 4. Run `make -C server openapi-build` and review the generated
    `server/openapi.json` diff. Completion: the deterministic artifact expresses
    only the intended contract change.
-5. Run `make -C server openapi-check` and the relevant HTTP agreement tests.
+5. Register each new request or response DTO in the DTO→schema registry;
+   route/document agreement is derived. Run `make -C server openapi-check`
+   and `make -C server openapi-agreement`.
    For reference presentation changes, also run the OpenAPI audit and renderer
    checks from `docs/site`. Completion: source, runtime agreement, artifact,
    and rendered reference agree.

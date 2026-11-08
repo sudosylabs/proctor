@@ -114,3 +114,31 @@ func (a *classMemberHTTPApplication) ListClassMembersPage(_ context.Context, _ i
 	}
 	return &app.ClassMemberPage{}, nil
 }
+
+func TestClassMemberOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+
+	// Enrollment responses retain both the new membership and an optional
+	// historical membership; the DTO registry verifies both.
+	// Roster discovery also keeps its explicit point-in-time/history controls.
+	document := readOpenAPIDocument(t)
+	var listOperation struct {
+		Parameters []struct {
+			Name string `json:"name"`
+			In   string `json:"in"`
+		} `json:"parameters"`
+	}
+	require.NoError(t, json.Unmarshal(document.Paths["/api/v1/classes/{class_id}/members"]["get"], &listOperation))
+	queryParameters := map[string]bool{}
+	for _, parameter := range listOperation.Parameters {
+		if parameter.In == "query" {
+			queryParameters[parameter.Name] = true
+		}
+	}
+	require.True(t, queryParameters["active_at"], "list query parameters = %#v, want active_at and history", queryParameters)
+	require.True(t, queryParameters["history"], "list query parameters = %#v, want active_at and history", queryParameters)
+
+	// This v1 relationship collection remains a legacy bare array.
+	list := document.Components.Schemas["ClassMemberListResponse"]
+	requireOpenAPIListEnvelope(t, list, "#/components/schemas/ClassMemberResponse")
+}

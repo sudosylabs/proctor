@@ -128,3 +128,26 @@ func TestAdminSessionRevokeUsesApplicationCommand(t *testing.T) {
 	require.Equal(t, model.UserID(userID), sessions.revokeCommand.UserID)
 	require.Equal(t, model.SessionID(sessionID), sessions.revokeCommand.SessionID)
 }
+
+func TestSessionAdministrationOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+
+	document := readOpenAPIDocument(t)
+	list := document.Components.Schemas["SessionAdministrationListResponse"]
+	require.Equal(t, "object", list.Type)
+	var items struct {
+		Items struct {
+			Ref string `json:"$ref"`
+		} `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(list.Properties["items"], &items))
+	require.Equal(t, "#/components/schemas/SessionAdministrationResponse", items.Items.Ref)
+
+	// Administrative session projections must never expose usable credentials
+	// or their hashes, even when the underlying Session model gains fields.
+	sessionSchema := document.Components.Schemas["SessionAdministrationResponse"]
+	for _, forbidden := range []string{"token", "access_token", "refresh_token", "credential", "token_hash"} {
+		_, exists := sessionSchema.Properties[forbidden]
+		require.False(t, exists, "session schema exposes %q", forbidden)
+	}
+}

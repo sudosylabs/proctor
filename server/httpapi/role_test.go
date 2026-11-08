@@ -77,3 +77,25 @@ func TestRoleResponsePreservesExistingWireShape(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, string(want), string(got), "response")
 }
+
+func TestRoleOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+
+	// Permissions are the scoped-authorization vocabulary carried by Role DTOs;
+	// the DTO registry keeps those fields explicit. The v1
+	// list contract remains a legacy bare array.
+	document := readOpenAPIDocument(t)
+	list := document.Components.Schemas["RoleListResponse"]
+	requireOpenAPIListEnvelope(t, list, "#/components/schemas/RoleResponse")
+}
+
+func TestRoleBindingOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+
+	// The DTO registry keeps scope_type and scope_id visible as the
+	// authorization scope carried by each binding. The v1 collection remains a
+	// legacy bare array rather than a new collection-envelope precedent.
+	document := readOpenAPIDocument(t)
+	list := document.Components.Schemas["RoleBindingListResponse"]
+	requireOpenAPIListEnvelope(t, list, "#/components/schemas/RoleBindingResponse")
+}

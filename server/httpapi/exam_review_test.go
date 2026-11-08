@@ -317,3 +317,21 @@ func (f *examIntegrityReviewHTTPFake) GetStudentExamResult(context.Context, invo
 func (f *examIntegrityReviewHTTPFake) ListNativeConditions(context.Context, invocation.Invocation, store.NativeConditionListOptions) (*store.NativeConditionPage, error) {
 	return &store.NativeConditionPage{Items: []model.NativeConditionEvidence{}}, nil
 }
+
+func TestExamIntegrityReviewOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+
+	base := "/api/v1/submissions/{submission_id}"
+	flags := base + "/integrity-flags"
+	evidence := flags + "/{integrity_flag_id}/evidence"
+	discrepancies := base + "/integrity-discrepancies"
+
+	document := readOpenAPIDocument(t)
+	for _, path := range []string{flags, evidence, discrepancies} {
+		assertExamAttemptQueryParameters(t, document, path, []string{"limit", "cursor"})
+	}
+	for _, response := range []string{"ExamIntegrityFlagListOK", "ExamIntegrityEvidenceListOK",
+		"ExamIntegrityDiscrepancyListOK", "ExamIntegrityReviewOK", "ExamIntegrityReviewMutationOK", "StudentExamResultOK"} {
+		assertProtectedExamCacheControl(t, response, "no-store")
+	}
+}

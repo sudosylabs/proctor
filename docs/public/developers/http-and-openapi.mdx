@@ -43,8 +43,9 @@ An operation change normally touches these surfaces together:
 3. **Route catalog** — one explicit credential and assurance requirement.
 4. **OpenAPI source** — exact path, method, schema, prose, examples, and Proctor
    extensions.
-5. **Agreement tests** — route, authentication, DTO, success schema, and public
-   error agreement.
+5. **DTO registry** — register each new request or response DTO in the
+   DTO→schema registry; route, authentication, idempotency, public-error, and
+   DTO/schema agreement is derived.
 6. **Consumer adapters** — regenerate webapp API types or update authored API
    recipes when the public contract requires it.
 
@@ -121,8 +122,8 @@ Problem Details responses.
 
 Unknown or undeclared errors become a generic correlated internal failure and
 are logged once at the outer operational boundary. Never improvise a status
-from an error string. The owning resource’s agreement test proves its complete
-success schema and public-error set against OpenAPI.
+from an error string. The derived route agreement proves each route's
+public-error set against OpenAPI.
 
 Read [authorization, errors, and audit](./server/authorization-errors-audit.mdx)
 before deciding whether a denied exact resource is safely forbidden or

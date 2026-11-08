@@ -344,3 +344,12 @@ func TestAcademicUnitHTTPMutationsMapCommandsWithoutPermissionPreflight(t *testi
 	require.Equal(t, "no-store", archiveResponse.Header().Get("Cache-Control"))
 	require.Equal(t, unit.ID, fakeApplication.archiveCommand.ID)
 }
+
+func TestAcademicUnitOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+
+	document := readOpenAPIDocument(t)
+	require.Equal(t, "3.1.0", document.OpenAPI, "OpenAPI version")
+	requireOpenAPIListEnvelope(t, document.Components.Schemas["AcademicUnitListResponse"], "#/components/schemas/AcademicUnitResponse")
+	require.Equal(t, "#/components/headers/NoStore", document.Components.Responses["AcademicUnitArchived"].Headers["Cache-Control"].Ref)
+}

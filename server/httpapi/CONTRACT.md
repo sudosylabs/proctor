@@ -75,8 +75,11 @@ Use the Academic Unit slice as the conceptual pattern for later capabilities:
   (missing, malformed, over its wire bound, or not encodable as a cursor) is a
   server fault answered with the generic `server.internal` problem, never a domain
   `*.unavailable` code;
-- add an agreement test that compares registered route/auth metadata, DTO JSON
-  fields, success schemas, and public errors with OpenAPI;
+- register each new request or response DTO in the DTO→schema registry
+  (`openapi_dto_registry_test.go`). Route/document agreement is derived: the
+  route catalog supplies auth, idempotency, and public errors, and each
+  registered DTO supplies its members, required list, and nullability. Record
+  only a handler decision the DTO's type cannot show as a commented exception;
 - preserve characterized behavior deliberately. Before the first supported
   release, the current `/api/v1` contract may change in place when the server,
   generated contract, and compatible clients are activated together; no
@@ -958,18 +961,19 @@ To add or change a cohesive resource family:
    allowlist;
 3. add the resource constructor once to `productionResources` in
    `resource_catalog.go`;
-4. update the checked-in OpenAPI operation and declare independently reviewed
-   operation, authentication, error, and ordinary DTO/schema expectations
-   through the shared agreement-test module; and
+4. update the checked-in OpenAPI operation and register each new request or
+   response DTO in the DTO→schema registry; route/document agreement is
+   derived; and
 5. keep exceptional protocol and compatibility assertions—including headers,
    binary responses, query parameters, forbidden fields, and legacy response
-   shapes—explicit beside the owning resource suite.
+   shapes—explicit in the owning resource's handler test.
 
-The agreement-test module owns portable document loading, runtime-path
-normalization, deterministic operation comparison, security, request and
-success references, public-error parity, Problem Details, and ordinary
-DTO/schema agreement. Runtime routes and OpenAPI never generate the expected
-contracts they are checked against.
+`TestOpenAPIAgreesWithRuntime` derives each operation's authentication,
+security, idempotency, public errors, and Problem Details from the route
+catalog. `TestOpenAPISchemasAgreeWithDTOs` derives each registered schema's
+members, required list, and nullability from its DTO and fails when an
+operation body names a component that is neither registered nor a list
+envelope of one.
 
 Package initialization, mutable router access, late registration, arbitrary
 path regular expressions, and direct persistence or platform access are not
@@ -986,8 +990,8 @@ patterns:
   field unchanged while empty strings or arrays are present and validated.
   Later slices use `Optional[T]` when omission and null have different meaning.
 
-The agreement test records these exceptions so migration cannot silently
-change existing clients. It does not make them conventions for new endpoints.
+The DTO registry derives these shapes from the DTOs so migration cannot
+silently change existing clients. It does not make them conventions for new endpoints.
 
 All keyset cursors use the shared bounded opaque envelope. Encoding is
 deterministic canonical unpadded raw URL-safe Base64 of one strict JSON object.

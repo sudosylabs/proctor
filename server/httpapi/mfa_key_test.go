@@ -11,7 +11,6 @@ import (
 	"bytes"
 	"context"
 	"net/http"
-	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -41,29 +40,6 @@ func (f *mfaKeyAPIFake) StartMFARekey(_ context.Context, _ invocation.Invocation
 func (f *mfaKeyAPIFake) GetMFARekeyStatus(_ context.Context, _ invocation.Invocation, query app.GetMFARekeyStatusQuery) (app.MFARekeyStatusView, error) {
 	f.status = query
 	return app.MFARekeyStatusView{JobID: query.JobID}, f.err
-}
-
-func TestMFAKeyOpenAPIAgreesWithRuntime(t *testing.T) {
-	t.Parallel()
-	suite := openAPIAgreementSuite{
-		Operations: []openAPIAgreementOperation{
-			{Key: "GET /api/v1/mfa/keys", Auth: AuthStrongRecentSessionRequired, SuccessStatus: "200", SuccessRef: "#/components/responses/MFAKeyStateOK", SuccessSchema: "MFAKeyStateResponse", PublicErrorCodes: []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "authentication.mfa.unavailable", "resource.not_found"}},
-			{Key: "POST /api/v1/mfa/rekey", Auth: AuthStrongRecentSessionRequired, RequestBodyRef: "#/components/requestBodies/StartMFARekey", RequestSchema: "MFARekeyRequest", SuccessStatus: "202", SuccessRef: "#/components/responses/MFARekeyAccepted", SuccessSchema: "MFARekeyResponse", PublicErrorCodes: []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "authentication.mfa.rekey.invalid", "authentication.mfa.rekey.conflict", "authentication.mfa.unavailable", "resource.not_found"}},
-			{Key: "GET /api/v1/mfa/rekey/{job_id}", Auth: AuthStrongRecentSessionRequired, SuccessStatus: "200", SuccessRef: "#/components/responses/MFARekeyStatusOK", SuccessSchema: "MFARekeyStatusResponse", PublicErrorCodes: principalContractCodes("authentication.strong_required", "authentication.reauthentication_required", "request.invalid", "resource.not_found", "authentication.mfa.unavailable")},
-		},
-		Schemas: []openAPIAgreementSchema{
-			{Name: "MFARekeyRequest", DTO: reflect.TypeOf(mfaRekeyRequest{}), Required: []string{"retiring_key_id"}},
-			{Name: "MFAKeyStateResponse", DTO: reflect.TypeOf(mfaKeyStateResponse{}), Required: []string{"primary_key_id", "active"}},
-			{Name: "MFASecretKeyUsage", DTO: reflect.TypeOf(mfaSecretKeyUsageResponse{}), Required: []string{"key_id", "credentials", "configured"}},
-			{Name: "MFARekeyResponse", DTO: reflect.TypeOf(mfaRekeyResponse{}), Required: []string{"job_id", "primary_key_id", "retiring_key_id", "created_at"}},
-			{Name: "MFARekeyProgress", DTO: reflect.TypeOf(mfaRekeyProgressResponse{}), Required: []string{"current", "total", "stage"}},
-			{Name: "MFARekeyProof", DTO: reflect.TypeOf(mfaRekeyProofResponse{}), Required: []string{"non_primary_references", "retiring_references", "retirement_safe"}},
-			{Name: "MFARekeyStatusResponse", DTO: reflect.TypeOf(mfaRekeyStatusResponse{}), Required: []string{"job_id", "status", "primary_key_id", "retiring_key_id", "created_at", "updated_at", "attempt_count", "maximum_attempts", "processed", "resealed"}},
-		},
-	}
-	runtimeAPI := newRoutingTestAPI(model.APIURLSuffix)
-	require.NoError(t, runtimeAPI.collectResources(model.APIURLSuffix, mfaKeyResource(&mfaKeyAPIFake{})))
-	assertOpenAPIAgreement(t, suite, runtimeAPI.Routes())
 }
 
 func TestMFARekeyAcceptsOnlyAKeyIdentity(t *testing.T) {

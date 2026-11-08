@@ -276,3 +276,13 @@ func TestUserSettingsHTTPRejectsNonSessionAndArbitraryUserPaths(t *testing.T) {
 	}
 	require.Equal(t, 0, applicationFake.calls, "rejected requests reached application")
 }
+
+func TestUserSettingsOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+
+	document := readOpenAPIDocument(t)
+	response := document.Components.Responses["UserSettingsOK"]
+	require.Equal(t, "#/components/headers/PrivateNoStore", response.Headers["Cache-Control"].Ref)
+	replaced := document.Components.Responses["UserSettingsReplaced"]
+	require.Equal(t, "#/components/headers/PrivateNoStore", replaced.Headers["Cache-Control"].Ref)
+}

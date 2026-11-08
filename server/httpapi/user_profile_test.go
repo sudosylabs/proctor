@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app"
@@ -500,4 +501,74 @@ func TestAccountDisableUsesApplicationCommandAndAllowlistedResponse(t *testing.T
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
 	_, exposed := body["revision"]
 	require.False(t, exposed, "revision exposed: %#v", body)
+}
+
+func TestUserProfileOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+
+	// Binary download/upload and conditional request behavior are reviewed
+	// protocol exceptions, not ordinary JSON schema agreement.
+	document := readOpenAPIDocument(t)
+	picturePath := model.APIURLSuffix + "/users/{user_id}/profile-picture"
+	download := decodeOpenAPIOperationForProfile(t, document, picturePath, "get")
+	response := document.Components.Responses["ProfilePictureOK"]
+	shape := response.Content["image/webp"].Schema
+	_, hasETag := response.Headers["ETag"]
+	_, hasCacheControl := response.Headers["Cache-Control"]
+	assert.Equal(t, "string", shape.Type, "GET %s binary response", picturePath)
+	assert.Equal(t, "binary", shape.Format, "GET %s binary response", picturePath)
+	assert.True(t, hasETag, "GET %s binary response has no ETag", picturePath)
+	assert.True(t, hasCacheControl, "GET %s binary response has no Cache-Control", picturePath)
+	assert.True(t, hasOpenAPIHeaderParameter(download, "If-None-Match"), "GET %s does not document If-None-Match", picturePath)
+
+	upload := decodeOpenAPIOperationForProfile(t, document, picturePath, "put")
+	for _, mediaType := range []string{"image/png", "image/jpeg", "image/webp"} {
+		shape := upload.RequestBody.Content[mediaType].Schema
+		assert.Equal(t, "string", shape.Type, "PUT %s request %s = %#v", picturePath, mediaType, shape)
+		assert.Equal(t, "binary", shape.Format, "PUT %s request %s = %#v", picturePath, mediaType, shape)
+	}
+	assertOpenAPIIfMatchForProfile(t, "PUT "+picturePath, upload, false)
+
+	remove := decodeOpenAPIOperationForProfile(t, document, picturePath, "delete")
+	assertOpenAPIIfMatchForProfile(t, "DELETE "+picturePath, remove, true)
+
+	list := document.Components.Schemas["UserProfileListResponse"]
+	requireOpenAPIListEnvelope(t, list, "#/components/schemas/UserProfileResponse")
+}
+
+func decodeOpenAPIOperationForProfile(
+	t *testing.T,
+	document openAPIDocument,
+	path string,
+	method string,
+) openAPIOperation {
+	t.Helper()
+	var operation openAPIOperation
+	require.NoError(t, json.Unmarshal(document.Paths[path][method], &operation), "decode %s %s", method, path)
+	return operation
+}
+
+func hasOpenAPIHeaderParameter(operation openAPIOperation, name string) bool {
+	for _, parameter := range operation.Parameters {
+		if parameter.Name == name && parameter.In == "header" {
+			return true
+		}
+	}
+	return false
+}
+
+func assertOpenAPIIfMatchForProfile(
+	t *testing.T,
+	key string,
+	operation openAPIOperation,
+	wantRequired bool,
+) {
+	t.Helper()
+	for _, parameter := range operation.Parameters {
+		if parameter.Name == "If-Match" && parameter.In == "header" {
+			assert.Equal(t, wantRequired, parameter.Required, "%s If-Match required", key)
+			return
+		}
+	}
+	assert.Fail(t, fmt.Sprintf("%s does not document If-Match", key))
 }

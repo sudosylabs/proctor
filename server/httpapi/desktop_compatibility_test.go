@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -57,27 +58,6 @@ func (a *desktopCompatibilityHTTPApplication) ReplaceDesktopCompatibilityPolicy(
 ) (*model.DesktopCompatibilityPolicy, error) {
 	a.replaceCommand = command
 	return a.policy.Clone(), nil
-}
-
-func TestDesktopCompatibilityRoutesDeclarePublicPingAndProtectedPolicyMutation(t *testing.T) {
-	t.Parallel()
-	resources := []apiResource{
-		systemResourceWithApplication(systemHTTPHealth{}, BuildInfo{}, nil, time.Now),
-		desktopCompatibilityPolicyResource(nil),
-	}
-	byMethodPath := map[string]routeDefinition{}
-	for _, resource := range resources {
-		for _, route := range resource.routes {
-			path, _, err := route.path.compile(model.APIURLSuffix)
-			require.NoError(t, err)
-			byMethodPath[route.method+" "+path] = route
-		}
-	}
-	require.Equal(t, AuthPublic, byMethodPath["GET /api/v1/system/ping"].auth)
-	require.Equal(t, AuthPrincipalRequired, byMethodPath["GET /api/v1/desktop-compatibility-policy"].auth)
-	route := byMethodPath["PUT /api/v1/desktop-compatibility-policy"]
-	require.Equal(t, AuthStrongRecentSessionRequired, route.auth)
-	require.Equal(t, IdempotencyRequired, route.idempotency)
 }
 
 func TestSystemPingReturnsRequestSpecificNoStoreCompatibility(t *testing.T) {
@@ -306,4 +286,28 @@ func TestDesktopCompatibilityPolicyHTTPUsesCompleteReplacementAndNoStore(t *test
 		require.Equal(t, http.StatusBadRequest, invalidResponse.Code, "incomplete body")
 		require.Contains(t, invalidResponse.Body.String(), `"code":"request.invalid"`, "incomplete body")
 	}
+}
+
+func TestDesktopCompatibilityOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+
+	document := readOpenAPIDocument(t)
+	var operation openAPIOperation
+	require.NoError(t, json.Unmarshal(document.Paths["/api/v1/system/ping"]["get"], &operation))
+	parameters := make([]string, 0, len(operation.Parameters))
+	for _, parameter := range operation.Parameters {
+		require.Equal(t, "query", parameter.In)
+		require.True(t, parameter.Required)
+		parameters = append(parameters, parameter.Name)
+	}
+	slices.Sort(parameters)
+	require.True(t, slices.Equal(parameters, []string{
+		"architecture",
+		"desktop_build_id",
+		"desktop_release",
+		"platform",
+		"realtime_protocol",
+	}), "ping parameters = %#v", parameters)
+	require.Equal(t, "#/components/headers/NoStore", document.Components.Responses["SystemPingOK"].Headers["Cache-Control"].Ref, "SystemPingOK does not require no-store")
+	require.Equal(t, "#/components/headers/PrivateNoStore", document.Components.Responses["DesktopCompatibilityPolicyOK"].Headers["Cache-Control"].Ref, "DesktopCompatibilityPolicyOK does not require private no-store")
 }

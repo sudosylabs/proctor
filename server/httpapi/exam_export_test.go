@@ -158,3 +158,10 @@ func TestExamExportsHTTPForbidsPATBeforeUseCase(t *testing.T) {
 	require.NotEqual(t, http.StatusOK, w.Code, "PAT reached export: %d %s", w.Code, w.Body.String())
 	require.Equal(t, 0, fake.calls, "PAT reached export: %d %s", w.Code, w.Body.String())
 }
+
+func TestExamExportsOpenAPIDocument(t *testing.T) {
+	doc := readOpenAPIDocument(t)
+	for _, name := range []string{"ExamExportAccepted", "ExamExportOK", "ExamExportArchive"} {
+		require.Equal(t, "#/components/headers/PrivateNoStore", doc.Components.Responses[name].Headers["Cache-Control"].Ref, "%s misses private no-store", name)
+	}
+}

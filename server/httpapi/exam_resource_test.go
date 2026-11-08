@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -20,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -271,4 +273,70 @@ func examResourceMultipart(t *testing.T, metadata string, content []byte, traili
 	err = writer.Close()
 	require.NoError(t, err)
 	return &body, writer.FormDataContentType()
+}
+
+func TestExamResourceOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+	base := "/api/v1/exams/{exam_id}/draft/resources"
+	member := base + "/{exam_resource_id}"
+	content := member + "/content"
+
+	document := readOpenAPIDocument(t)
+	assertExamMultipartOperation(t, document, base, "post", "#/components/schemas/ExamResourceUploadMultipart")
+	assertExamMultipartOperation(t, document, content, "put", "#/components/schemas/ExamResourceContentReplacementMultipart")
+	assertProtectedExamContentResponse(t, document, content, "ExamResourceProtectedContent")
+	assertProtectedExamCacheControl(t, "ExamResourceProtectedContent", "private, max-age=300")
+	_, ok := document.Components.Responses["ExamResourceProtectedContent"].Headers["Content-Disposition"]
+	assert.False(t, ok, "GET %s protected response documents forbidden Content-Disposition", content)
+	operation := decodeExamContentOpenAPIOperation(t, document, content, "get")
+	response304 := operation.Responses["304"]
+	assert.Equal(t, "#/components/responses/ExamProtectedContentNotModified", response304.Ref, "GET %s 304 response = %#v", content, response304)
+}
+
+func assertExamMultipartOperation(t *testing.T, document openAPIDocument, path, method, schemaRef string) {
+	t.Helper()
+	operation := decodeExamContentOpenAPIOperation(t, document, path, method)
+	shape, ok := operation.RequestBody.Content["multipart/form-data"]
+	assert.True(t, ok, "%s %s has no multipart body", method, path)
+	assert.Equal(t, schemaRef, shape.Schema.Ref, "%s %s multipart body", method, path)
+	assert.Len(t, operation.RequestBody.Content, 1, "%s %s accepts more than a multipart body", method, path)
+}
+
+func assertProtectedExamContentResponse(t *testing.T, document openAPIDocument, path, responseName string) {
+	t.Helper()
+	operation := decodeExamContentOpenAPIOperation(t, document, path, "get")
+	assert.True(t, hasOpenAPIHeaderParameter(operation, "If-None-Match"), "GET %s does not document If-None-Match", path)
+	response := document.Components.Responses[responseName]
+	shape, ok := response.Content["*/*"]
+	assert.True(t, ok, "GET %s has no protected binary response", path)
+	assert.Equal(t, "string", shape.Schema.Type, "GET %s protected binary response", path)
+	assert.Equal(t, "binary", shape.Schema.Format, "GET %s protected binary response", path)
+	for _, header := range []string{"ETag", "Cache-Control", "X-Content-Type-Options"} {
+		_, ok := response.Headers[header]
+		assert.True(t, ok, "GET %s protected response does not document %s", path, header)
+	}
+}
+
+func decodeExamContentOpenAPIOperation(t *testing.T, document openAPIDocument, path, method string) openAPIOperation {
+	t.Helper()
+	var operation openAPIOperation
+	require.NoError(t, json.Unmarshal(document.Paths[path][method], &operation), "decode %s %s", method, path)
+	return operation
+}
+
+func assertProtectedExamCacheControl(t *testing.T, responseName, want string) {
+	t.Helper()
+	var document struct {
+		Components struct {
+			Responses map[string]struct {
+				Headers map[string]struct {
+					Schema struct {
+						Const string `json:"const"`
+					} `json:"schema"`
+				} `json:"headers"`
+			} `json:"responses"`
+		} `json:"components"`
+	}
+	require.NoError(t, json.Unmarshal(readOpenAPIDocumentBytes(t), &document))
+	assert.Equal(t, want, document.Components.Responses[responseName].Headers["Cache-Control"].Schema.Const, "%s Cache-Control", responseName)
 }

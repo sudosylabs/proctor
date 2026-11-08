@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -268,4 +270,82 @@ func (f *examStarterWorkspaceHTTPFake) ReplaceExamStarterWorkspaceFile(_ context
 func (f *examStarterWorkspaceHTTPFake) RemoveExamStarterWorkspaceEntry(_ context.Context, _ invocation.Invocation, command workspace.RemoveEntryCommand) (workspace.Result, error) {
 	f.removeEntry = command
 	return f.result(), nil
+}
+
+func TestExamStarterWorkspaceOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+	base := "/api/v1/exams/{exam_id}/draft/starter-workspace"
+	content := base + "/files/{starter_workspace_entry_id}/content"
+
+	document := readOpenAPIDocument(t)
+	assertExamMultipartOperation(t, document, base+"/files", "post", "#/components/schemas/ExamStarterWorkspaceFileUploadMultipart")
+	assertExamMultipartOperation(t, document, content, "put", "#/components/schemas/ExamStarterWorkspaceFileReplacementMultipart")
+	assertProtectedExamContentResponse(t, document, content, "ExamStarterWorkspaceProtectedContent")
+	assertProtectedExamCacheControl(t, "ExamStarterWorkspaceProtectedContent", "private, no-store")
+	_, ok := document.Components.Responses["ExamStarterWorkspaceProtectedContent"].Headers["Content-Disposition"]
+	assert.False(t, ok, "GET %s protected response documents forbidden Content-Disposition", content)
+	operation := decodeExamContentOpenAPIOperation(t, document, content, "get")
+	response304 := operation.Responses["304"]
+	assert.Equal(t, "#/components/responses/ExamStarterWorkspaceContentNotModified", response304.Ref, "GET %s 304 response = %#v", content, response304)
+	assertWorkspaceContentVersionOpenAPI(t, document)
+	assertWorkspaceEntryVariantsOpenAPI(t)
+}
+
+func assertWorkspaceContentVersionOpenAPI(t *testing.T, document openAPIDocument) {
+	t.Helper()
+	const wantRef = "#/components/schemas/WorkspaceContentVersion"
+	for _, target := range []struct {
+		schema   string
+		property string
+	}{
+		{schema: "ExamStarterWorkspaceFileReplacementMetadata", property: "expected_content_version"},
+		{schema: "ExamStarterWorkspaceEntryResponse", property: "content_version"},
+		{schema: "ExamStarterWorkspaceListItemResponse", property: "content_version"},
+	} {
+		t.Run(target.schema, func(t *testing.T) {
+			var shape openAPISchemaShape
+			require.NoError(t, json.Unmarshal(document.Components.Schemas[target.schema].Properties[target.property], &shape), "decode %s.%s", target.schema, target.property)
+			assert.Equal(t, wantRef, shape.Ref, "%s.%s reference", target.schema, target.property)
+		})
+	}
+
+	var raw struct {
+		Components struct {
+			Schemas map[string]struct {
+				Type    any    `json:"type"`
+				Pattern string `json:"pattern"`
+			} `json:"schemas"`
+		} `json:"components"`
+	}
+	require.NoError(t, json.Unmarshal(readOpenAPIDocumentBytes(t), &raw))
+	token := raw.Components.Schemas["WorkspaceContentVersion"]
+	assert.Equal(t, "string", token.Type)
+	assert.Equal(t, `^[A-Za-z0-9_-]{26}$`, token.Pattern)
+}
+
+func assertWorkspaceEntryVariantsOpenAPI(t *testing.T) {
+	t.Helper()
+	var document struct {
+		Components struct {
+			Schemas map[string]struct {
+				Required []string          `json:"required"`
+				OneOf    []json.RawMessage `json:"oneOf"`
+			} `json:"schemas"`
+		} `json:"components"`
+	}
+	require.NoError(t, json.Unmarshal(readOpenAPIDocumentBytes(t), &document))
+	for _, name := range []string{"ExamStarterWorkspaceEntryResponse", "ExamStarterWorkspaceListItemResponse"} {
+		schema := document.Components.Schemas[name]
+		assert.Len(t, schema.OneOf, 2, "%s oneOf variants", name)
+		encoded, err := json.Marshal(schema.OneOf)
+		require.NoError(t, err)
+		text := string(encoded)
+		for _, invariant := range []string{`"const":"file"`, `"const":"directory"`, `"content_version"`, `"media_type"`, `"size"`, `"sha256"`, `"not"`} {
+			assert.Contains(t, text, invariant, "%s variants omit", name)
+		}
+	}
+	mutation := document.Components.Schemas["ExamStarterWorkspaceEntryResponse"]
+	list := document.Components.Schemas["ExamStarterWorkspaceListItemResponse"]
+	assert.Contains(t, mutation.Required, "draft_revision", "draft_revision requirement mutation")
+	assert.NotContains(t, list.Required, "draft_revision", "draft_revision requirement mutation")
 }

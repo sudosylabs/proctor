@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -18,21 +19,54 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-func evaluateOpenAPISchemaAgreement(
+// dtoSchemaException records a decision about a registered DTO's schema that
+// its Go type cannot show. Required and Optional name top-level members;
+// Nullable and NonNullable paths are dot-separated for nested members.
+type dtoSchemaException struct {
+	// Required members must be present although their pointer or Optional
+	// type could observe absence: the handler rejects the omission.
+	Required []string
+	// Optional members may be absent although the DTO type would always carry
+	// them: the handler defaults a missing plain request value, or the schema
+	// leaves a response member that success always fills out of required.
+	Optional []string
+	// Nullable members deliberately carry JSON null where the type implies
+	// they never do.
+	Nullable []string
+	// NonNullable members reject or never carry JSON null where their pointer
+	// or Optional type could: the handler refuses a null request value, or
+	// the response always fills the pointer.
+	NonNullable []string
+}
+
+// evaluateDTOSchemaAgreement compares a registered DTO with its component
+// schema. Member names, required members, and nullability are derived from
+// the DTO's JSON tags and Go types (see jsonFieldRequired and
+// evaluateOpenAPIShapeAgreement); exception records only what they cannot
+// show.
+func evaluateDTOSchemaAgreement(
 	violations []openAPIAgreementViolation,
 	document openAPIDocument,
-	contract openAPIAgreementSchema,
+	name string,
+	dto reflect.Type,
+	request bool,
+	exception dtoSchemaException,
 ) []openAPIAgreementViolation {
-	target := "schema " + contract.Name
-	schema, exists := document.Components.Schemas[contract.Name]
+	target := "schema " + name
+	if request {
+		target += " (request)"
+	}
+	schema, exists := document.Components.Schemas[name]
+	// A schema that only aliases another describes the same wire shape.
+	for alias := 0; exists && schema.Ref != "" && alias < 4; alias++ {
+		schema, exists = document.Components.Schemas[strings.TrimPrefix(schema.Ref, "#/components/schemas/")]
+	}
 	if !exists {
 		return appendAgreementViolation(violations, target, "component", "is missing")
 	}
 	if schema.Type != "object" || schema.AdditionalProperties != false {
 		violations = appendAgreementViolation(violations, target, "shape", "is not a closed object")
 	}
-
-	dto := contract.DTO
 	for dto.Kind() == reflect.Pointer {
 		dto = dto.Elem()
 	}
@@ -41,19 +75,32 @@ func evaluateOpenAPISchemaAgreement(
 	if !reflect.DeepEqual(gotProperties, wantProperties) {
 		violations = appendAgreementViolation(violations, target, "fields", fmt.Sprintf("got %v, want DTO fields %v", gotProperties, wantProperties))
 	}
-	gotRequired := sortedStrings(schema.Required)
-	wantRequired := sortedStrings(contract.Required)
-	if !reflect.DeepEqual(gotRequired, wantRequired) {
-		violations = appendAgreementViolation(violations, target, "required fields", fmt.Sprintf("got %v, want %v", gotRequired, wantRequired))
-	}
-
-	for _, field := range serializedJSONFields(dto) {
-		name := jsonFieldName(field)
-		if name == "" {
-			continue
+	required := func(member jsonMember) bool {
+		name := jsonFieldName(member.StructField)
+		switch {
+		case slices.Contains(exception.Required, name):
+			return true
+		case slices.Contains(exception.Optional, name):
+			return false
+		default:
+			return jsonFieldRequired(member, request)
 		}
+	}
+	wantRequired := make([]string, 0)
+	for _, member := range jsonMembers(dto) {
+		if required(member) {
+			wantRequired = append(wantRequired, jsonFieldName(member.StructField))
+		}
+	}
+	gotRequired := sortedStrings(schema.Required)
+	sort.Strings(wantRequired)
+	if !slices.Equal(gotRequired, wantRequired) {
+		violations = appendAgreementViolation(violations, target, "required fields", fmt.Sprintf("got %v, DTO requires %v", gotRequired, wantRequired))
+	}
+	for _, member := range jsonMembers(dto) {
+		name := jsonFieldName(member.StructField)
 		raw, exists := schema.Properties[name]
-		if !exists {
+		if name == "" || !exists {
 			continue
 		}
 		var shape openAPISchemaShape
@@ -66,18 +113,51 @@ func evaluateOpenAPISchemaAgreement(
 			document,
 			target+"."+name,
 			shape,
-			field.Type,
-			strings.HasSuffix(contract.Name, "Request"),
-			!stringSliceContains(contract.Required, name),
-			stringSliceContains(contract.Nullable, name),
-			stringSliceContains(contract.NonNullable, name),
-			nestedAgreementPaths(contract.Nullable, name),
-			nestedAgreementPaths(contract.NonNullable, name),
+			member.Type,
+			request,
+			!required(member),
+			slices.Contains(exception.Nullable, name),
+			slices.Contains(exception.NonNullable, name),
+			nestedAgreementPaths(exception.Nullable, name),
+			nestedAgreementPaths(exception.NonNullable, name),
 		)
 	}
 	return violations
 }
 
+// jsonMember is a serialized struct field. Promoted marks a field promoted
+// from an embedded pointer, which encoding/json omits with a nil embedding.
+type jsonMember struct {
+	reflect.StructField
+	Promoted bool
+}
+
+// jsonFieldRequired derives whether a member is always present. A member is
+// optional when omitempty can leave it out or a nil embedded pointer drops
+// it; a request member is also optional when its pointer or Optional type
+// observes absence.
+func jsonFieldRequired(member jsonMember, request bool) bool {
+	parts := strings.Split(member.Tag.Get("json"), ",")
+	if parts[0] == "" || parts[0] == "-" || member.Promoted || slices.Contains(parts[1:], "omitempty") {
+		return false
+	}
+	return !request || !presenceAwareType(member.Type)
+}
+
+func presenceAwareType(goType reflect.Type) bool {
+	return goType.Kind() == reflect.Pointer || isOptionalType(goType)
+}
+
+func isOptionalType(goType reflect.Type) bool {
+	return goType.PkgPath() == reflect.TypeOf(Optional[string]{}).PkgPath() &&
+		strings.HasPrefix(goType.Name(), "Optional[")
+}
+
+// evaluateOpenAPIShapeAgreement compares one member's schema with its Go
+// type. A pointer or Optional member is nullable when it is an optional
+// request member (a JSON null clears or skips it) or a required response
+// member (a nil pointer encodes as null); forceNullable and forceNonNullable
+// carry the exceptions.
 func evaluateOpenAPIShapeAgreement(
 	violations []openAPIAgreementViolation,
 	document openAPIDocument,
@@ -94,14 +174,11 @@ func evaluateOpenAPIShapeAgreement(
 	if name := agreementTargetField(target); isWireTimestampName(name) {
 		violations = evaluateWireTimestampAgreement(violations, target, name, shape, goType, requestSchema)
 	}
-	nullable := forceNullable
+	nullable := forceNullable || presenceAwareType(goType) && requestSchema == fieldOptional
 	for goType.Kind() == reflect.Pointer {
-		nullable = nullable || requestSchema && fieldOptional
 		goType = goType.Elem()
 	}
-	if goType.PkgPath() == reflect.TypeOf(Optional[string]{}).PkgPath() &&
-		strings.HasPrefix(goType.Name(), "Optional[") {
-		nullable = true
+	if isOptionalType(goType) {
 		goType = goType.Field(0).Type
 	}
 	if forceNonNullable {
@@ -227,17 +304,14 @@ func evaluateOpenAPIShapeAgreement(
 		violations = appendAgreementViolation(violations, target, "fields", fmt.Sprintf("got %v, want Go fields %v", gotProperties, wantProperties))
 	}
 	gotRequired := sortedStrings(shape.Required)
-	wantRequired := requiredJSONFieldNames(goType)
-	if !reflect.DeepEqual(gotRequired, wantRequired) {
+	wantRequired := requiredJSONFieldNames(goType, requestSchema)
+	if !slices.Equal(gotRequired, wantRequired) {
 		violations = appendAgreementViolation(violations, target, "required fields", fmt.Sprintf("got %v, Go JSON tags require %v", gotRequired, wantRequired))
 	}
-	for _, field := range serializedJSONFields(goType) {
-		name := jsonFieldName(field)
-		if name == "" {
-			continue
-		}
+	for _, member := range jsonMembers(goType) {
+		name := jsonFieldName(member.StructField)
 		raw, exists := shape.Properties[name]
-		if !exists {
+		if name == "" || !exists {
 			continue
 		}
 		var property openAPISchemaShape
@@ -250,11 +324,11 @@ func evaluateOpenAPIShapeAgreement(
 			document,
 			target+"."+name,
 			property,
-			field.Type,
+			member.Type,
 			requestSchema,
-			!stringSliceContains(shape.Required, name),
-			stringSliceContains(nullablePaths, name),
-			stringSliceContains(nonNullablePaths, name),
+			!jsonFieldRequired(member, requestSchema),
+			slices.Contains(nullablePaths, name),
+			slices.Contains(nonNullablePaths, name),
 			nestedAgreementPaths(nullablePaths, name),
 			nestedAgreementPaths(nonNullablePaths, name),
 		)
@@ -287,9 +361,8 @@ func sortedStrings(values []string) []string {
 
 func jsonFieldNames(dto reflect.Type) []string {
 	fields := make([]string, 0, dto.NumField())
-	for _, field := range serializedJSONFields(dto) {
-		name := jsonFieldName(field)
-		if name != "" {
+	for _, member := range jsonMembers(dto) {
+		if name := jsonFieldName(member.StructField); name != "" {
 			fields = append(fields, name)
 		}
 	}
@@ -297,33 +370,15 @@ func jsonFieldNames(dto reflect.Type) []string {
 	return fields
 }
 
-func requiredJSONFieldNames(dto reflect.Type) []string {
+func requiredJSONFieldNames(dto reflect.Type, request bool) []string {
 	fields := make([]string, 0, dto.NumField())
-	for _, field := range serializedJSONFields(dto) {
-		tag := field.Tag.Get("json")
-		parts := strings.Split(tag, ",")
-		if parts[0] == "" || parts[0] == "-" {
-			continue
-		}
-		optional := false
-		for _, option := range parts[1:] {
-			optional = optional || option == "omitempty"
-		}
-		if !optional {
-			fields = append(fields, parts[0])
+	for _, member := range jsonMembers(dto) {
+		if jsonFieldRequired(member, request) {
+			fields = append(fields, jsonFieldName(member.StructField))
 		}
 	}
 	sort.Strings(fields)
 	return fields
-}
-
-func stringSliceContains(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
 }
 
 func nestedAgreementPaths(values []string, field string) []string {
@@ -404,8 +459,8 @@ func evaluateNativeFamilyCodecAgreement(violations []openAPIAgreementViolation, 
 	return violations
 }
 
-func serializedJSONFields(dto reflect.Type) []reflect.StructField {
-	var fields []reflect.StructField
+func jsonMembers(dto reflect.Type) []jsonMember {
+	var members []jsonMember
 	for i := 0; i < dto.NumField(); i++ {
 		field := dto.Field(i)
 		embeddedType := field.Type
@@ -413,12 +468,15 @@ func serializedJSONFields(dto reflect.Type) []reflect.StructField {
 			embeddedType = embeddedType.Elem()
 		}
 		if field.Anonymous && field.Tag.Get("json") == "" && embeddedType.Kind() == reflect.Struct {
-			fields = append(fields, serializedJSONFields(embeddedType)...)
+			for _, member := range jsonMembers(embeddedType) {
+				member.Promoted = member.Promoted || field.Type.Kind() == reflect.Pointer
+				members = append(members, member)
+			}
 		} else {
-			fields = append(fields, field)
+			members = append(members, jsonMember{StructField: field})
 		}
 	}
-	return fields
+	return members
 }
 func evaluateSecurityScopeCodecAgreement(violations []openAPIAgreementViolation, document openAPIDocument, target string, shape openAPISchemaShape, requestSchema bool) []openAPIAgreementViolation {
 	scopes := []model.SecurityPolicyScope{{Kind: "admission", AdmissionScopeID: "admission"}, {Kind: "attempt", AttemptID: model.NewExamAttemptID()}}

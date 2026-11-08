@@ -116,7 +116,7 @@ async function expectScannableSetup(page: Page) {
 
 for (const colorScheme of ["light", "dark"] as const) {
   for (const width of [320, 1440]) {
-    test(`QR setup and OTP entry remain usable at ${width}px in ${colorScheme}`, async ({ page }, testInfo) => {
+    test(`QR setup and OTP entry remain usable at ${width}px in ${colorScheme}`, { tag: "@cross-browser" }, async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height: 1000 });
       await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
       await mockSecurity(page);
@@ -171,7 +171,7 @@ test("status names the signed-in User and signs out from the footer", async ({ p
   expect(mutations(state, "/logout")).toHaveLength(1);
 });
 
-test("OTP supports leading zeroes, editing, paste, validation and explicit submission", async ({ page }) => {
+test("OTP supports leading zeroes, editing, paste, validation and explicit submission", { tag: "@cross-browser" }, async ({ page }) => {
   const state = await mockSecurity(page);
   await page.goto("/account/security");
   await page.getByRole("button", { name: "Set up two-step verification", exact: true }).click();
@@ -219,7 +219,7 @@ test("OTP supports leading zeroes, editing, paste, validation and explicit submi
   await expect(page.getByRole("img", { name: "QR code for two-step verification setup" })).toHaveCount(0);
 });
 
-test("switching proof methods clears values, restores focus and preserves recovery codes", async ({ page }) => {
+test("switching proof methods clears values, restores focus and preserves recovery codes", { tag: "@cross-browser" }, async ({ page }) => {
   const state = await mockSecurity(page, { ...baseContext, enabled: true });
   await page.goto("/account/security");
   await page.getByRole("button", { name: "Verify this session", exact: true }).click();
@@ -242,7 +242,7 @@ test("switching proof methods clears values, restores focus and preserves recove
   expect(mutations(state, "/challenge")[0]?.body).toEqual({ code: "ABCD-EFGH-IJKL" });
 });
 
-test("production QR and OTP work under the server Content Security Policy", async ({ page }) => {
+test("production QR and OTP work under the server Content Security Policy", { tag: "@cross-browser" }, async ({ page }) => {
   const serverSource = await readFile("../server/webui/webui.go", "utf8");
   const policy = serverSource.match(/header\.Set\("Content-Security-Policy", "([^"]+)"\)/)?.[1];
   expect(policy).toBeDefined();
@@ -272,7 +272,7 @@ test("production QR and OTP work under the server Content Security Policy", asyn
   expect(errors).toEqual([]);
 });
 
-test("enrollment shows codes once and requires acknowledgement before hiding them", async ({ page }) => {
+test("enrollment shows codes once and requires acknowledgement before hiding them", { tag: "@cross-browser" }, async ({ page }) => {
   const state = await mockSecurity(page);
   const logs: string[] = [];
   page.on("console", (entry) => logs.push(entry.text()));
@@ -439,7 +439,7 @@ test("pending enrollment restarts explicitly and invalid codes keep the setup ke
   expect(mutations(state, "/setup")).toHaveLength(1);
 });
 
-test("a response arriving after page exit cannot restore one-time codes on history restoration", async ({ page }) => {
+test("a response arriving after page exit cannot restore one-time codes on history restoration", { tag: "@cross-browser" }, async ({ page }) => {
   const state = await mockSecurity(page);
   let release!: () => void;
   let observed!: () => void;
@@ -519,7 +519,7 @@ test("sign-in status offers the bounded security destination for ordinary and re
   await expect(page.getByText("Private recovery detail")).toHaveCount(0);
 });
 
-test("fresh proof remains usable with expanded copy, dark mode, and 200 percent zoom", async ({ browserName, page }, testInfo) => {
+test("fresh proof remains usable with expanded copy, dark mode, and 200 percent zoom", { tag: "@cross-browser" }, async ({ browserName, page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
   await mockSecurity(page, { ...baseContext, recently_authenticated: false });
@@ -542,7 +542,7 @@ test("fresh proof remains usable with expanded copy, dark mode, and 200 percent 
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1440, height: 1024 }]) {
   for (const colorScheme of ["light", "dark"] as const) {
-    test(`security lifecycle fits ${viewport.width}px ${colorScheme} with keyboard and zoom`, async ({ browserName, page }, testInfo) => {
+    test(`security lifecycle fits ${viewport.width}px ${colorScheme} with keyboard and zoom`, { tag: "@cross-browser" }, async ({ browserName, page }, testInfo) => {
       await page.setViewportSize(viewport);
       await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
       await mockSecurity(page);

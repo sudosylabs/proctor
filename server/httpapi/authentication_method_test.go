@@ -8,30 +8,18 @@
 package httpapi
 
 import (
-	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/sudosylabs/proctor/server/model"
 )
 
-func TestAuthenticationMethodRoutesRequireSessionAndStrongRecentMutations(t *testing.T) {
-	resource := authenticationMethodResource(nil, browserCookies{})
-	require.Len(t, resource.routes, 6, "routes")
-	got := map[string]AuthRequirement{}
-	for _, route := range resource.routes {
-		path, _, err := route.path.compile(model.APIURLSuffix)
-		require.NoError(t, err)
-		got[route.method+" "+path] = route.auth
-	}
-	require.Equal(t, AuthSessionRequired, got[http.MethodGet+" /api/v1/authentication-methods"])
-	strong := 0
-	for key, requirement := range got {
-		if key != http.MethodGet+" /api/v1/authentication-methods" {
-			require.Equal(t, AuthStrongRecentSessionRequired, requirement, "%s auth", key)
-			strong++
+func TestAuthenticationMethodOpenAPIDocument(t *testing.T) {
+	document := readOpenAPIDocument(t)
+	for _, schemaName := range []string{"AuthenticationMethodResponse", "AuthenticationProviderMethodResponse"} {
+		schema := document.Components.Schemas[schemaName]
+		for _, forbidden := range []string{"subject", "password_hash", "token", "credential"} {
+			_, exists := schema.Properties[forbidden]
+			require.False(t, exists, "%s exposes %q", schemaName, forbidden)
 		}
 	}
-	require.Equal(t, 5, strong, "strong recent routes")
 }

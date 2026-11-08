@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -454,4 +455,41 @@ func examSittingCollectionPath(examID model.ExamID) string {
 
 func examSittingMemberPath(examID model.ExamID, sittingID model.ExamSittingID) string {
 	return examSittingCollectionPath(examID) + "/" + sittingID.String()
+}
+
+func TestExamSittingOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+	base := "/api/v1/exams/{exam_id}/sittings"
+	member := base + "/{exam_sitting_id}"
+	assertExamSittingListParameters(t, base)
+	assertExamSittingNoShowListParameters(t, member+"/no-shows")
+}
+
+func assertExamSittingNoShowListParameters(t *testing.T, path string) {
+	t.Helper()
+	document := readOpenAPIDocument(t)
+	var operation openAPIOperation
+	require.NoError(t, json.Unmarshal(document.Paths[path]["get"], &operation))
+	want := []string{"limit", "cursor"}
+	got := make([]string, 0, len(operation.Parameters))
+	for _, parameter := range operation.Parameters {
+		got = append(got, parameter.Name)
+	}
+	assert.True(t, slices.Equal(got, want), "GET %s query parameters = %v, want exactly %v", path, got, want)
+}
+
+func assertExamSittingListParameters(t *testing.T, path string) {
+	t.Helper()
+	document := readOpenAPIDocument(t)
+	var operation openAPIOperation
+	require.NoError(t, json.Unmarshal(document.Paths[path]["get"], &operation))
+	want := []string{"class_id", "state", "ends_after", "starts_before", "limit", "cursor"}
+	got := make([]string, 0, len(operation.Parameters))
+	for _, parameter := range operation.Parameters {
+		got = append(got, parameter.Name)
+	}
+	for _, name := range want {
+		assert.Contains(t, got, name, "GET %s omits query parameter", path)
+	}
+	assert.Len(t, got, len(want), "GET %s query parameters", path)
 }

@@ -24,8 +24,11 @@ for (const match of source.matchAll(matcher)) {
   variables.push({name, parser});
 }
 
-if (variables.length !== 140) {
-  throw new Error(`expected 140 environment overrides, found ${variables.length}`);
+// Every override constructor call must match a known parser above, so a new
+// parser kind cannot silently drop variables from the generated reference.
+const declared = [...source.matchAll(/EnvironmentOverride\(\s*"PROCTOR_/g)].length;
+if (variables.length === 0 || variables.length !== declared) {
+  throw new Error(`parsed ${variables.length} of ${declared} environment overrides`);
 }
 
 const typeLabel = {

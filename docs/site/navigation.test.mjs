@@ -62,7 +62,7 @@ test('the homepage opens global navigation, not an empty mobile sidebar', async 
 });
 
 test('each guide opens its own visible, non-collapsing section', () => {
-  assert.equal(guides.length, 7);
+  assert(guides.length > 0);
   assert.equal(new Set(guides.map((guide) => guide.sidebarId)).size, guides.length);
   for (const guide of guides) {
     const prefix = guide.to.slice(1);

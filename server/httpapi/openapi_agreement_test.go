@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -21,9 +22,11 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// TestOpenAPIAgreesWithRuntime owns catalog-wide invariants. Resource contract
-// details are independently declared through the shared agreement evaluator in
-// the focused suites below and in the resource agreement files.
+// TestOpenAPIAgreesWithRuntime derives every route's documented contract from
+// the runtime route catalog: the same operation set, and for each operation
+// the same credential requirement and security, idempotency and its header,
+// and public error codes, each with a Problem Details response. Request and
+// response bodies are held to their DTOs by TestOpenAPISchemasAgreeWithDTOs.
 func TestOpenAPIAgreesWithRuntime(t *testing.T) {
 	t.Parallel()
 
@@ -31,16 +34,18 @@ func TestOpenAPIAgreesWithRuntime(t *testing.T) {
 	runtimeAPI := newRoutingTestAPI(model.APIURLSuffix)
 	require.NoError(t, runtimeAPI.collectResources(model.APIURLSuffix, productionResources(agreementResourceApplications(), nil, BuildInfo{}, browserCookies{}, nil)...))
 
+	runtimeRoutes := make(map[string]Route)
 	runtimeOperations := make(map[string]AuthRequirement)
 	for _, route := range runtimeAPI.Routes() {
 		key := route.Method + " " + normalizeRuntimeRoutePath(route.Path)
 		_, exists := runtimeOperations[key]
 		assert.False(t, exists, "runtime catalog repeats %s", key)
 		runtimeOperations[key] = route.Auth
+		runtimeRoutes[key] = route
 	}
 	documentedOperations := make(map[string]AuthRequirement)
 	operationIDs := make(map[string]string)
-	statuses := openAPIErrorStatuses()
+	var violations []openAPIAgreementViolation
 	for path, pathItem := range document.Paths {
 		for method, raw := range pathItem {
 			upperMethod := strings.ToUpper(method)
@@ -64,17 +69,67 @@ func TestOpenAPIAgreesWithRuntime(t *testing.T) {
 					assert.Equal(t, want, operation.Security, "%s security", key)
 				}
 			}
-			assert.NotEmpty(t, operation.Responses, "%s has no responses", key)
-			for _, code := range operation.ErrorCodes {
-				status, exists := statuses[code]
-				if !assert.True(t, exists, "%s documents unmapped error code %q", key, code) {
-					continue
-				}
-				assert.NotEmpty(t, operation.Responses[statusCode(status)].Ref, "%s code %q has no %d response", key, code, status)
+			violations = evaluateOpenAPIResponseAgreement(violations, document, key, operation)
+			if route, exists := runtimeRoutes[key]; exists {
+				violations = evaluateOpenAPIRouteAgreement(violations, key, route, operation)
 			}
 		}
 	}
 	require.Equal(t, runtimeOperations, documentedOperations, "OpenAPI operations")
+	reportOpenAPIAgreementViolations(t, violations)
+}
+
+// evaluateOpenAPIRouteAgreement compares one documented operation with the
+// route that serves it. Route.ErrorCodes is already the complete public list:
+// routeErrorCodes adds the kernel codes the credential requirement and method
+// imply to the codes the resource declares, so the document must list both.
+func evaluateOpenAPIRouteAgreement(
+	violations []openAPIAgreementViolation,
+	key string,
+	route Route,
+	operation openAPIOperation,
+) []openAPIAgreementViolation {
+	violations = compareStringSet(violations, key, "error codes", operation.ErrorCodes, route.ErrorCodes)
+	want := effectiveIdempotencyRequirement(route.Idempotency)
+	if got := effectiveIdempotencyRequirement(operation.Idempotency); got != want {
+		violations = appendAgreementViolation(violations, key, "idempotency", fmt.Sprintf("got %q, runtime %q", got, want))
+	}
+	parameters := map[IdempotencyRequirement]string{
+		IdempotencyOptional: "#/components/parameters/OptionalIdempotencyKey",
+		IdempotencyRequired: "#/components/parameters/RequiredIdempotencyKey",
+	}
+	for requirement, ref := range parameters {
+		documented := slices.ContainsFunc(operation.Parameters, func(parameter openAPIParameter) bool { return parameter.Ref == ref })
+		if documented != (requirement == want) {
+			violations = appendAgreementViolation(violations, key, "idempotency header", fmt.Sprintf("%s Idempotency-Key parameter documented %t, runtime %q", requirement, documented, want))
+		}
+	}
+	return violations
+}
+
+// evaluateOpenAPIResponseAgreement requires a success response and a Problem
+// Details response for every documented error status. A 204 has no content.
+func evaluateOpenAPIResponseAgreement(
+	violations []openAPIAgreementViolation,
+	document openAPIDocument,
+	key string,
+	operation openAPIOperation,
+) []openAPIAgreementViolation {
+	success := false
+	for status, reference := range operation.Responses {
+		success = success || status < "400"
+		if status != "204" {
+			continue
+		}
+		response := document.Components.Responses[strings.TrimPrefix(reference.Ref, "#/components/responses/")]
+		if len(response.Content) != 0 {
+			violations = appendAgreementViolation(violations, key, "success", "204 response declares content")
+		}
+	}
+	if !success {
+		violations = appendAgreementViolation(violations, key, "success", "no success response")
+	}
+	return evaluateOpenAPIProblemAgreement(violations, document, key, operation)
 }
 
 func TestIdentityAndSystemOpenAPISchemasAgreeWithDTOs(t *testing.T) {

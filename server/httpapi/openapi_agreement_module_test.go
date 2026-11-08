@@ -57,6 +57,7 @@ type openAPIReference struct {
 }
 
 type openAPISchema struct {
+	Ref                  string                     `json:"$ref,omitempty"`
 	OneOf                []openAPISchemaShape       `json:"oneOf,omitempty"`
 	Type                 any                        `json:"type"`
 	Required             []string                   `json:"required"`
@@ -77,6 +78,7 @@ type openAPISchemaShape struct {
 }
 
 type openAPIResponse struct {
+	Ref     string                      `json:"$ref"`
 	Headers map[string]openAPIReference `json:"headers"`
 	Content map[string]struct {
 		Schema openAPISchemaShape `json:"schema"`
@@ -303,7 +305,13 @@ func evaluateOpenAPIAgreement(
 	}
 
 	for _, schema := range suite.Schemas {
-		violations = evaluateOpenAPISchemaAgreement(violations, document, schema)
+		dto := schema.DTO
+		for dto.Kind() == reflect.Pointer {
+			dto = dto.Elem()
+		}
+		if openAPIDTOs[schema.Name] != dto {
+			violations = appendAgreementViolation(violations, "schema "+schema.Name, "registry", fmt.Sprintf("registers %v, suite declares %v", openAPIDTOs[schema.Name], dto))
+		}
 	}
 
 	sort.Slice(violations, func(i, j int) bool {

@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/exam"
@@ -472,4 +473,34 @@ func assertExamHTTPResponse(t *testing.T, data []byte, view exam.View) {
 	require.Equal(t, view.Draft.Title, got.Draft.Title)
 	require.Equal(t, view.OwnerUserID.String(), got.OwnerUserID)
 	require.Equal(t, 1, got.ManagerCount)
+}
+
+func TestExamOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+
+	document := readOpenAPIDocument(t)
+	var listOperation openAPIOperation
+	require.NoError(t, json.Unmarshal(document.Paths[model.APIURLSuffix+"/exams"]["get"], &listOperation))
+	require.Equal(t, []string{"academic_unit_id", "archive_state", "cursor", "ends_after", "limit", "q", "sitting_state", "starts_before"}, academicStructureQueryParameterNames(listOperation.Parameters))
+}
+
+func TestEditExamDraftTextOpenAPISchemaRequiresANonNullAuthoredValue(t *testing.T) {
+	t.Parallel()
+	document, err := openapi3.NewLoader().LoadFromFile(openAPIDocumentPath(t))
+	require.NoError(t, err)
+	schema := document.Components.Schemas["EditExamDraftTextRequest"]
+	require.NotNil(t, schema, "EditExamDraftTextRequest schema is missing")
+	require.NotNil(t, schema.Value, "EditExamDraftTextRequest schema is missing")
+	for _, invalid := range []map[string]any{
+		{"expected_revision": float64(1)},
+		{"expected_revision": float64(1), "title": nil, "instructions_markdown": nil},
+	} {
+		require.Error(t, schema.Value.VisitJSON(invalid), "schema accepted %#v", invalid)
+	}
+	for _, valid := range []map[string]any{
+		{"expected_revision": float64(1), "title": "Algorithms"},
+		{"expected_revision": float64(1), "instructions_markdown": ""},
+	} {
+		require.NoError(t, schema.Value.VisitJSON(valid), "schema rejected %#v", valid)
+	}
 }

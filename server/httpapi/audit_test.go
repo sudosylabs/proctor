@@ -10,6 +10,8 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http/httptest"
+	"slices"
+	"sort"
 	"testing"
 	"time"
 
@@ -46,4 +48,37 @@ func TestAuditCursorKeepsMicrosecondsSoSameMillisecondRowsAreNotSkipped(t *testi
 	require.NoError(t, err)
 	require.True(t, createdAt.Equal(query.BeforeCreatedAt), "cursor instant = %v", query.BeforeCreatedAt)
 	require.Equal(t, id, query.BeforeID)
+}
+
+func TestAuditListingOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+	document := readOpenAPIDocument(t)
+	require.Equal(t, "#/components/headers/PrivateNoStore", document.Components.Responses["SelfAuditListOK"].Headers["Cache-Control"].Ref)
+}
+
+// TestSelfAuditEventEnumMatchesTheCatalogue keeps the published event names
+// equal to the closed Go catalogue, so a client never meets an undocumented
+// name and the document never promises one the server cannot produce.
+func TestSelfAuditEventEnumMatchesTheCatalogue(t *testing.T) {
+	t.Parallel()
+	encoded, err := readOpenAPIDocumentFile()
+	require.NoError(t, err)
+	var document struct {
+		Components struct {
+			Schemas map[string]struct {
+				Enum []string `json:"enum"`
+			} `json:"schemas"`
+		} `json:"components"`
+	}
+	require.NoError(t, json.Unmarshal(encoded, &document))
+	want := []string{}
+	for _, key := range model.AuditSelfEventKeys(nil, "") {
+		event, ok := model.AuditSelfEventFor(key.Action, key.Operation, key.Status)
+		require.True(t, ok, "%v has no event name", key)
+		if !slices.Contains(want, string(event)) {
+			want = append(want, string(event))
+		}
+	}
+	sort.Strings(want)
+	require.Equal(t, want, document.Components.Schemas["SelfAuditEvent"].Enum)
 }

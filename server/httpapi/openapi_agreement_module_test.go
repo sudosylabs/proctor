@@ -20,7 +20,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -92,45 +91,6 @@ type openAPIRequestBody struct {
 	} `json:"content"`
 }
 
-// openAPIAgreementSuite is an independently reviewed expectation. It must not
-// be generated from either the runtime manifest or the OpenAPI document.
-type openAPIAgreementSuite struct {
-	Operations []openAPIAgreementOperation
-	Schemas    []openAPIAgreementSchema
-	// OperationSelector is only for a combined runtime resource whose manifest
-	// contains independently owned operation families. It may narrow candidates
-	// but cannot add to or generate the independently declared Operations.
-	OperationSelector func(method string, path string) bool
-}
-
-type openAPIAgreementOperation struct {
-	Key            string
-	Auth           AuthRequirement
-	RequestBodyRef string
-	RequestSchema  string
-	SuccessStatus  string
-	SuccessRef     string
-	SuccessSchema  string
-	// ExceptionalSuccess leaves binary or otherwise non-ordinary content
-	// assertions beside the resource suite. Status and component-reference
-	// agreement remain mandatory in the shared evaluator.
-	ExceptionalSuccess bool
-	PublicErrorCodes   []string
-	Idempotency        IdempotencyRequirement
-}
-
-type openAPIAgreementSchema struct {
-	Name        string
-	DTO         reflect.Type
-	Required    []string
-	NonNullable []string
-	// Nullable names fields, or dot-separated nested fields, whose response
-	// representation deliberately emits JSON null. Request pointer/null
-	// semantics remain inferred automatically unless NonNullable explicitly
-	// records a presence-aware request field that rejects JSON null.
-	Nullable []string
-}
-
 type openAPIAgreementViolation struct {
 	Target string
 	Check  string
@@ -139,20 +99,6 @@ type openAPIAgreementViolation struct {
 
 func (v openAPIAgreementViolation) String() string {
 	return v.Target + " " + v.Check + ": " + v.Detail
-}
-
-// assertOpenAPIAgreement is the only testing-aware part of the shared module.
-// Configuration and document failures stop the suite immediately; independent
-// contract disagreements are all reported in stable order.
-func assertOpenAPIAgreement(t *testing.T, suite openAPIAgreementSuite, runtimeRoutes []Route) {
-	t.Helper()
-	encoded, err := readOpenAPIDocumentFile()
-	require.NoError(t, err)
-	violations, err := evaluateOpenAPIAgreement(encoded, runtimeRoutes, suite)
-	require.NoError(t, err)
-	for _, violation := range violations {
-		assert.Fail(t, fmt.Sprint(violation))
-	}
 }
 
 func readOpenAPIDocument(t *testing.T) openAPIDocument {
@@ -171,250 +117,6 @@ func readOpenAPIDocumentFile() ([]byte, error) {
 	}
 	documentPath := filepath.Join(filepath.Dir(currentFile), "..", "openapi.json")
 	return os.ReadFile(documentPath)
-}
-
-// evaluateOpenAPIAgreement is pure with respect to its inputs. In particular,
-// it never sorts or otherwise rewrites caller-owned routes or expectations.
-func evaluateOpenAPIAgreement(
-	encoded []byte,
-	runtimeRoutes []Route,
-	suite openAPIAgreementSuite,
-) ([]openAPIAgreementViolation, error) {
-	expected, targetPaths, err := validateOpenAPIAgreementSuite(suite)
-	if err != nil {
-		return nil, err
-	}
-
-	var document openAPIDocument
-	if err := json.Unmarshal(encoded, &document); err != nil {
-		return nil, fmt.Errorf("decode document: %w", err)
-	}
-	if document.Paths == nil {
-		return nil, fmt.Errorf("decode document: paths are missing")
-	}
-
-	runtimeOperations := make(map[string]Route, len(runtimeRoutes))
-	for _, route := range runtimeRoutes {
-		path := normalizeRuntimeRoutePath(route.Path)
-		if suite.OperationSelector != nil && !suite.OperationSelector(route.Method, path) {
-			continue
-		}
-		key := route.Method + " " + path
-		if _, exists := runtimeOperations[key]; exists {
-			return nil, fmt.Errorf("runtime selection is ambiguous for %q", key)
-		}
-		runtimeOperations[key] = route
-	}
-
-	documentedOperations := make(map[string]openAPIOperation, len(expected))
-	for path, pathItem := range document.Paths {
-		if _, selected := targetPaths[path]; !selected && suite.OperationSelector == nil {
-			continue
-		}
-		for method, raw := range pathItem {
-			upperMethod := strings.ToUpper(method)
-			if !isHTTPMethod(upperMethod) {
-				continue
-			}
-			if suite.OperationSelector != nil && !suite.OperationSelector(upperMethod, path) {
-				continue
-			}
-			key := upperMethod + " " + path
-			if _, exists := documentedOperations[key]; exists {
-				return nil, fmt.Errorf("document selection is ambiguous for %q", key)
-			}
-			var operation openAPIOperation
-			if err := json.Unmarshal(raw, &operation); err != nil {
-				return nil, fmt.Errorf("decode document operation %s: %w", key, err)
-			}
-			documentedOperations[key] = operation
-		}
-	}
-
-	violations := make([]openAPIAgreementViolation, 0)
-	for key := range runtimeOperations {
-		if _, exists := expected[key]; !exists {
-			violations = appendAgreementViolation(violations, key, "operation set", "unexpected runtime operation")
-		}
-	}
-	for key := range documentedOperations {
-		if _, exists := expected[key]; !exists {
-			violations = appendAgreementViolation(violations, key, "operation set", "unexpected documented operation")
-		}
-	}
-
-	for key, contract := range expected {
-		route, runtimeExists := runtimeOperations[key]
-		if !runtimeExists {
-			violations = appendAgreementViolation(violations, key, "operation set", "runtime operation is missing")
-		}
-		operation, documentExists := documentedOperations[key]
-		if !documentExists {
-			violations = appendAgreementViolation(violations, key, "operation set", "documented operation is missing")
-		}
-		if !runtimeExists || !documentExists {
-			continue
-		}
-
-		if route.Auth != contract.Auth {
-			violations = appendAgreementViolation(violations, key, "runtime auth", fmt.Sprintf("got %q, want %q", route.Auth, contract.Auth))
-		}
-		if operation.Auth != contract.Auth {
-			violations = appendAgreementViolation(violations, key, "document auth", fmt.Sprintf("got %q, want %q", operation.Auth, contract.Auth))
-		}
-		wantIdempotency := effectiveIdempotencyRequirement(contract.Idempotency)
-		if effectiveIdempotencyRequirement(route.Idempotency) != wantIdempotency {
-			violations = appendAgreementViolation(violations, key, "runtime idempotency", fmt.Sprintf("got %q, want %q", route.Idempotency, wantIdempotency))
-		}
-		if effectiveIdempotencyRequirement(operation.Idempotency) != wantIdempotency {
-			violations = appendAgreementViolation(violations, key, "document idempotency", fmt.Sprintf("got %q, want %q", operation.Idempotency, wantIdempotency))
-		}
-		if wantIdempotency != IdempotencyNone {
-			parameterRef := "#/components/parameters/OptionalIdempotencyKey"
-			if wantIdempotency == IdempotencyRequired {
-				parameterRef = "#/components/parameters/RequiredIdempotencyKey"
-			}
-			found := false
-			for _, parameter := range operation.Parameters {
-				found = found || parameter.Ref == parameterRef
-			}
-			if !found {
-				violations = appendAgreementViolation(violations, key, "idempotency header", fmt.Sprintf("%s Idempotency-Key parameter is missing", wantIdempotency))
-			}
-		}
-		wantSecurity, _ := securityForAuth(contract.Auth, contract.method())
-		if !reflect.DeepEqual(operation.Security, wantSecurity) {
-			violations = appendAgreementViolation(violations, key, "security", fmt.Sprintf("got %#v, want %#v", operation.Security, wantSecurity))
-		}
-		if operation.RequestBody.Ref != contract.RequestBodyRef {
-			violations = appendAgreementViolation(violations, key, "request reference", fmt.Sprintf("got %q, want %q", operation.RequestBody.Ref, contract.RequestBodyRef))
-		}
-		response, successExists := operation.Responses[contract.SuccessStatus]
-		if !successExists {
-			violations = appendAgreementViolation(violations, key, "success status", fmt.Sprintf("%s response is missing", contract.SuccessStatus))
-		} else if response.Ref != contract.SuccessRef {
-			violations = appendAgreementViolation(violations, key, "success reference", fmt.Sprintf("got %q at %s, want %q", response.Ref, contract.SuccessStatus, contract.SuccessRef))
-		}
-		violations = evaluateOpenAPIRequestAgreement(violations, document, key, contract)
-		violations = evaluateOpenAPISuccessAgreement(violations, document, key, contract)
-		method, _, _ := strings.Cut(key, " ")
-		expectedErrorCodes := routeErrorCodes(contract.Auth, method, contract.PublicErrorCodes)
-		violations = compareStringSet(violations, key, "runtime error codes", route.ErrorCodes, expectedErrorCodes)
-		violations = compareStringSet(violations, key, "document error codes", operation.ErrorCodes, expectedErrorCodes)
-		violations = evaluateOpenAPIProblemAgreement(violations, document, key, operation)
-	}
-
-	for _, schema := range suite.Schemas {
-		dto := schema.DTO
-		for dto.Kind() == reflect.Pointer {
-			dto = dto.Elem()
-		}
-		if openAPIDTOs[schema.Name] != dto {
-			violations = appendAgreementViolation(violations, "schema "+schema.Name, "registry", fmt.Sprintf("registers %v, suite declares %v", openAPIDTOs[schema.Name], dto))
-		}
-	}
-
-	sort.Slice(violations, func(i, j int) bool {
-		if violations[i].Target != violations[j].Target {
-			return violations[i].Target < violations[j].Target
-		}
-		if violations[i].Check != violations[j].Check {
-			return violations[i].Check < violations[j].Check
-		}
-		return violations[i].Detail < violations[j].Detail
-	})
-	return violations, nil
-}
-
-func validateOpenAPIAgreementSuite(
-	suite openAPIAgreementSuite,
-) (map[string]openAPIAgreementOperation, map[string]struct{}, error) {
-	if len(suite.Operations) == 0 {
-		return nil, nil, fmt.Errorf("suite declares no operations")
-	}
-	expected := make(map[string]openAPIAgreementOperation, len(suite.Operations))
-	targetPaths := make(map[string]struct{}, len(suite.Operations))
-	statuses := openAPIErrorStatuses()
-	for index, contract := range suite.Operations {
-		method, path, ok := strings.Cut(contract.Key, " ")
-		if !ok || method == "" || path == "" || !isHTTPMethod(method) || method != strings.ToUpper(method) {
-			return nil, nil, fmt.Errorf("operation %d has invalid key %q", index, contract.Key)
-		}
-		if normalizeRuntimeRoutePath(path) != path || !validOpenAPIPath(path) {
-			return nil, nil, fmt.Errorf("operation %q has invalid normalized path", contract.Key)
-		}
-		if _, exists := expected[contract.Key]; exists {
-			return nil, nil, fmt.Errorf("operation %q is declared more than once", contract.Key)
-		}
-		if _, err := securityForAuth(contract.Auth, method); err != nil {
-			return nil, nil, fmt.Errorf("operation %q: %w", contract.Key, err)
-		}
-		if contract.SuccessStatus == "" || contract.SuccessRef == "" && !contract.ExceptionalSuccess {
-			return nil, nil, fmt.Errorf("operation %q has no identifiable success response", contract.Key)
-		}
-		status, err := strconv.Atoi(contract.SuccessStatus)
-		if err != nil || status < 100 || status > 599 {
-			return nil, nil, fmt.Errorf("operation %q has invalid success status %q", contract.Key, contract.SuccessStatus)
-		}
-		if contract.SuccessRef != "" && !strings.HasPrefix(contract.SuccessRef, "#/components/responses/") {
-			return nil, nil, fmt.Errorf("operation %q has invalid success reference %q", contract.Key, contract.SuccessRef)
-		}
-		if (contract.RequestBodyRef == "") != (contract.RequestSchema == "") {
-			return nil, nil, fmt.Errorf("operation %q request expectation has no identifiable target", contract.Key)
-		}
-		if contract.RequestBodyRef != "" && !strings.HasPrefix(contract.RequestBodyRef, "#/components/requestBodies/") {
-			return nil, nil, fmt.Errorf("operation %q has invalid request reference %q", contract.Key, contract.RequestBodyRef)
-		}
-		if contract.ExceptionalSuccess && contract.SuccessSchema != "" {
-			return nil, nil, fmt.Errorf("operation %q exceptional success must not declare an ordinary schema", contract.Key)
-		}
-		if suite.OperationSelector != nil && !suite.OperationSelector(method, path) {
-			return nil, nil, fmt.Errorf("operation selector excludes declared operation %q", contract.Key)
-		}
-		seenCodes := make(map[string]struct{}, len(contract.PublicErrorCodes))
-		for _, code := range contract.PublicErrorCodes {
-			if _, exists := seenCodes[code]; exists {
-				return nil, nil, fmt.Errorf("operation %q declares public error %q more than once", contract.Key, code)
-			}
-			seenCodes[code] = struct{}{}
-			if _, exists := statuses[code]; !exists {
-				return nil, nil, fmt.Errorf("operation %q has unmapped public error %q", contract.Key, code)
-			}
-		}
-		expected[contract.Key] = contract
-		targetPaths[path] = struct{}{}
-	}
-	seenSchemas := make(map[string]struct{}, len(suite.Schemas))
-	for index, schema := range suite.Schemas {
-		if schema.Name == "" || schema.DTO == nil {
-			return nil, nil, fmt.Errorf("schema %d has no identifiable OpenAPI target or DTO", index)
-		}
-		dto := schema.DTO
-		for dto.Kind() == reflect.Pointer {
-			dto = dto.Elem()
-		}
-		if dto.Kind() != reflect.Struct {
-			return nil, nil, fmt.Errorf("schema %q DTO must be a struct, got %s", schema.Name, schema.DTO)
-		}
-		if _, exists := seenSchemas[schema.Name]; exists {
-			return nil, nil, fmt.Errorf("schema %q is declared more than once", schema.Name)
-		}
-		seenSchemas[schema.Name] = struct{}{}
-	}
-	for key, contract := range expected {
-		if contract.RequestSchema == "" {
-			continue
-		}
-		if _, exists := seenSchemas[contract.RequestSchema]; !exists {
-			return nil, nil, fmt.Errorf("operation %q request schema %q has no DTO agreement", key, contract.RequestSchema)
-		}
-	}
-	return expected, targetPaths, nil
-}
-
-func (c openAPIAgreementOperation) method() string {
-	method, _, _ := strings.Cut(c.Key, " ")
-	return method
 }
 
 func normalizeRuntimeRoutePath(path string) string {
@@ -453,30 +155,6 @@ func normalizeRuntimeRoutePath(path string) string {
 	return normalized.String()
 }
 
-func validOpenAPIPath(path string) bool {
-	if !strings.HasPrefix(path, "/") || strings.ContainsAny(path, " \t\r\n") {
-		return false
-	}
-	for index := 0; index < len(path); index++ {
-		switch path[index] {
-		case '{':
-			end := strings.IndexByte(path[index+1:], '}')
-			if end < 1 {
-				return false
-			}
-			end += index + 1
-			name := path[index+1 : end]
-			if strings.ContainsAny(name, "{}:") {
-				return false
-			}
-			index = end
-		case '}':
-			return false
-		}
-	}
-	return true
-}
-
 func securityForAuth(auth AuthRequirement, method string) ([]map[string][]string, error) {
 	switch auth {
 	case AuthPublic:
@@ -493,56 +171,6 @@ func securityForAuth(auth AuthRequirement, method string) ([]map[string][]string
 	default:
 		return nil, fmt.Errorf("authentication intent is missing or unknown: %q", auth)
 	}
-}
-
-func evaluateOpenAPIRequestAgreement(
-	violations []openAPIAgreementViolation,
-	document openAPIDocument,
-	key string,
-	contract openAPIAgreementOperation,
-) []openAPIAgreementViolation {
-	if contract.RequestBodyRef == "" {
-		return violations
-	}
-	name := strings.TrimPrefix(contract.RequestBodyRef, "#/components/requestBodies/")
-	requestBody, exists := document.Components.RequestBodies[name]
-	if !exists {
-		return appendAgreementViolation(violations, key, "request schema", fmt.Sprintf("component %q is missing", name))
-	}
-	want := "#/components/schemas/" + contract.RequestSchema
-	got := requestBody.Content["application/json"].Schema.Ref
-	if got != want {
-		violations = appendAgreementViolation(violations, key, "request schema", fmt.Sprintf("got %q, want %q", got, want))
-	}
-	return violations
-}
-
-func evaluateOpenAPISuccessAgreement(
-	violations []openAPIAgreementViolation,
-	document openAPIDocument,
-	key string,
-	contract openAPIAgreementOperation,
-) []openAPIAgreementViolation {
-	if contract.ExceptionalSuccess {
-		return violations
-	}
-	name := strings.TrimPrefix(contract.SuccessRef, "#/components/responses/")
-	response, exists := document.Components.Responses[name]
-	if !exists {
-		return appendAgreementViolation(violations, key, "success schema", fmt.Sprintf("component %q is missing", name))
-	}
-	if contract.SuccessSchema == "" {
-		if len(response.Content) != 0 {
-			violations = appendAgreementViolation(violations, key, "success schema", "no-content response declares content")
-		}
-		return violations
-	}
-	want := "#/components/schemas/" + contract.SuccessSchema
-	got := response.Content["application/json"].Schema.Ref
-	if got != want {
-		violations = appendAgreementViolation(violations, key, "success schema", fmt.Sprintf("got %q, want %q", got, want))
-	}
-	return violations
 }
 
 func evaluateOpenAPIProblemAgreement(

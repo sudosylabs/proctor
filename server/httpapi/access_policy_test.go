@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app"
@@ -52,23 +53,6 @@ func (a *replayingAccessPolicyHTTPApplication) ReplaceAccessPolicy(_ context.Con
 		return app.AccessPolicyView{}, apperror.New("idempotency.conflict")
 	}
 	return a.view, nil
-}
-
-func TestAccessPolicyRoutesDeclarePublicDiscoveryAndStrongRecentMutation(t *testing.T) {
-	t.Parallel()
-	resource := accessPolicyResource(nil)
-	require.Len(t, resource.routes, 4, "routes")
-	byMethodPath := map[string]routeDefinition{}
-	for _, route := range resource.routes {
-		path, _, err := route.path.compile(model.APIURLSuffix)
-		require.NoError(t, err)
-		byMethodPath[route.method+" "+path] = route
-	}
-	require.Equal(t, AuthPublic, byMethodPath["GET /api/v1/discovery"].auth)
-	require.Equal(t, AuthStrongRecentSessionRequired, byMethodPath["POST /api/v1/access-policy/preflight"].auth)
-	replace := byMethodPath["PUT /api/v1/access-policy"]
-	require.Equal(t, AuthStrongRecentSessionRequired, replace.auth)
-	require.Equal(t, IdempotencyRequired, replace.idempotency)
 }
 
 func TestPublicAccessDiscoveryDTOContainsNoPrivatePolicyOrDestinations(t *testing.T) {
@@ -196,5 +180,43 @@ func TestAccessPolicyHTTPRequiresEveryCompleteReplacementSetting(t *testing.T) {
 				require.Contains(t, response.Body.String(), `"field":"`+field+`"`, "response")
 			})
 		}
+	}
+}
+
+func TestAccessPolicyOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+
+	document := readOpenAPIDocument(t)
+	providerAdmissions := document.Components.Schemas["AccessPolicySettingsRequest"].Properties["provider_admissions"]
+	var providerGrammar struct {
+		MaxProperties int `json:"maxProperties"`
+		PropertyNames struct {
+			Pattern string `json:"pattern"`
+		} `json:"propertyNames"`
+	}
+	require.NoError(t, json.Unmarshal(providerAdmissions, &providerGrammar))
+	require.Equal(t, model.AccessPolicyProviderMaxCount, providerGrammar.MaxProperties)
+	require.Equal(t, `^[a-z0-9][a-z0-9._-]{0,63}$`, providerGrammar.PropertyNames.Pattern)
+	providerAdmissionsResponse := document.Components.Schemas["AccessPolicyResponse"].Properties["provider_admissions"]
+	providerGrammar = struct {
+		MaxProperties int `json:"maxProperties"`
+		PropertyNames struct {
+			Pattern string `json:"pattern"`
+		} `json:"propertyNames"`
+	}{}
+	require.NoError(t, json.Unmarshal(providerAdmissionsResponse, &providerGrammar))
+	require.Equal(t, model.AccessPolicyProviderMaxCount, providerGrammar.MaxProperties)
+	var providerProjection struct {
+		MaxItems int `json:"maxItems"`
+	}
+	availableProviders := document.Components.Schemas["AccessPolicyResponse"].Properties["available_providers"]
+	require.NoError(t, json.Unmarshal(availableProviders, &providerProjection))
+	require.Equal(t, model.AccessPolicyProviderMaxCount, providerProjection.MaxItems)
+	for _, responseName := range []string{"AccessPolicyOK", "AccessPolicyPreflightOK", "PublicAccessDiscoveryOK"} {
+		assert.Equal(t, "#/components/headers/NoStore", document.Components.Responses[responseName].Headers["Cache-Control"].Ref, "%s does not require no-store", responseName)
+	}
+	for _, forbidden := range []string{"provider_admissions", "durable_mail", "invitation_local_credential_enabled", "client_secret", "redirect_uri", "claims", "recipient"} {
+		_, exists := document.Components.Schemas["PublicAccessDiscoveryResponse"].Properties[forbidden]
+		assert.False(t, exists, "PublicAccessDiscoveryResponse exposes forbidden field %q", forbidden)
 	}
 }

@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app"
@@ -175,4 +176,20 @@ func TestOptionalDistinguishesInstitutionPatchWireStates(t *testing.T) {
 	require.True(t, nullCapacity.ExamCapacity.IsSet())
 	require.True(t, nullCapacity.ExamCapacity.IsNull())
 	require.Nil(t, nullCapacity.ExamCapacity.ValuePointer())
+}
+
+func TestInstitutionOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+
+	document := readOpenAPIDocument(t)
+
+	patchSchema := document.Components.Schemas["UpdateInstitutionRequest"]
+	for _, propertyName := range []string{"name", "display_name", "description"} {
+		var property struct {
+			Description string `json:"description"`
+		}
+		require.NoError(t, json.Unmarshal(patchSchema.Properties[propertyName], &property))
+		assert.Contains(t, property.Description, "Omitted or null leaves the value unchanged", "%s semantics", propertyName)
+		assert.Contains(t, property.Description, "empty string is present", "%s semantics", propertyName)
+	}
 }

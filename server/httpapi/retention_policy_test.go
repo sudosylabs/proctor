@@ -115,3 +115,27 @@ func TestRetentionPolicyHTTPRequiresCompleteSettingsAndNeverEnablesDeletion(t *t
 	require.Equal(t, http.StatusBadRequest, response.Code, "deletion enable attempt reached application: %d %s", response.Code, response.Body.String())
 	require.Equal(t, before, application.calls, "deletion enable attempt reached application: %d %s", response.Code, response.Body.String())
 }
+
+func TestRetentionPolicyOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+
+	document := readOpenAPIDocument(t)
+	require.Equal(t, "#/components/headers/PrivateNoStore", document.Components.Responses["RetentionPolicyOK"].Headers["Cache-Control"].Ref, "RetentionPolicyOK must require private no-store")
+	for _, name := range []string{"RetentionPolicyRequest", "RetentionPolicyResponse"} {
+		for _, field := range []string{"submission_retention_days", "integrity_retention_days", "browser_activity_retention_days", "security_operational_retention_days", "audit_retention_days", "export_retention_days", "deletion_grace_days"} {
+			var bounds struct {
+				Minimum *int `json:"minimum"`
+				Maximum *int `json:"maximum"`
+			}
+			require.NoError(t, json.Unmarshal(document.Components.Schemas[name].Properties[field], &bounds))
+			maximum := 36500
+			if field == "export_retention_days" {
+				maximum = 7
+			}
+			require.NotNil(t, bounds.Minimum, "%s.%s must accept 0 through", name, field)
+			require.Equal(t, 0, *bounds.Minimum, "%s.%s must accept 0 through", name, field)
+			require.NotNil(t, bounds.Maximum, "%s.%s must accept 0 through", name, field)
+			require.Equal(t, maximum, *bounds.Maximum, "%s.%s must accept 0 through", name, field)
+		}
+	}
+}

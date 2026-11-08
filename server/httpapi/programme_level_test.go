@@ -110,3 +110,16 @@ func TestProgrammeLevelPatchOptionalWireStates(t *testing.T) {
 	require.NotNil(t, value)
 	require.Empty(t, *value)
 }
+
+func TestProgrammeLevelOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+
+	document := readOpenAPIDocument(t)
+	var listOperation openAPIOperation
+	path := model.APIURLSuffix + "/programmes/{programme_id}/levels"
+	require.NoError(t, json.Unmarshal(document.Paths[path]["get"], &listOperation))
+	require.Equal(t, []string{"cursor", "limit", "q"}, academicStructureQueryParameterNames(listOperation.Parameters), "Programme Level list query parameters")
+	list := document.Components.Schemas["ProgrammeLevelListResponse"]
+	requireOpenAPIListEnvelope(t, list, "#/components/schemas/ProgrammeLevelResponse")
+	require.Equal(t, "#/components/headers/NoStore", document.Components.Responses["ProgrammeLevelArchived"].Headers["Cache-Control"].Ref)
+}

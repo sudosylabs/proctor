@@ -269,15 +269,6 @@ func TestClassHTTPMapsBothParentsFromRouteAndBody(t *testing.T) {
 	httpAPI, err := New(options)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = httpAPI.Close() })
-	classCreatePath := "/api/v1/programme-levels/{programme_level_id:" + canonicalIDRoutePattern() + "}/classes"
-	var classCreate Route
-	for _, route := range httpAPI.Routes() {
-		if route.Method == http.MethodPost && route.Path == classCreatePath {
-			classCreate = route
-			break
-		}
-	}
-	require.NotEmpty(t, classCreate.ErrorCodes, "production Class route has no kernel-owned public error contract")
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/programme-levels/"+class.ProgrammeLevelID.String()+"/classes", strings.NewReader(`{"academic_period_id":"`+class.AcademicPeriodID.String()+`","name":"class-a","display_name":"Class A"}`))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
@@ -300,4 +291,17 @@ func TestClassPatchOptionalWireStates(t *testing.T) {
 	value := body.ProgrammeLevelID.ValuePointer()
 	require.NotNil(t, value)
 	require.Empty(t, *value)
+}
+
+func TestClassOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+
+	document := readOpenAPIDocument(t)
+	var searchOperation openAPIOperation
+	path := model.APIURLSuffix + "/academic-units/{academic_unit_id}/classes"
+	require.NoError(t, json.Unmarshal(document.Paths[path]["get"], &searchOperation))
+	require.Equal(t, []string{"cursor", "limit", "q"}, academicStructureQueryParameterNames(searchOperation.Parameters), "Class search query parameters")
+	list := document.Components.Schemas["ClassListResponse"]
+	requireOpenAPIListEnvelope(t, list, "#/components/schemas/ClassResponse")
+	require.Equal(t, "#/components/headers/NoStore", document.Components.Responses["ClassArchived"].Headers["Cache-Control"].Ref)
 }

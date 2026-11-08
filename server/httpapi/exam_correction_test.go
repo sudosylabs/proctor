@@ -294,3 +294,11 @@ func (f *examSittingCorrectionHTTPFake) ApplyExamSittingCorrection(_ context.Con
 func examSittingCorrectionBasePath(fake *examSittingCorrectionHTTPFake) string {
 	return "/api/v1/exams/" + fake.examID.String() + "/sittings/" + fake.sittingID.String()
 }
+
+func TestExamSittingCorrectionOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+	base := "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}"
+	stages := base + "/correction-resource-stages"
+	document := readOpenAPIDocument(t)
+	assertExamMultipartOperation(t, document, stages, "post", "#/components/schemas/ExamSittingCorrectionResourceStageMultipart")
+}

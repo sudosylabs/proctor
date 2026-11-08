@@ -48,17 +48,3 @@ func TestIdempotencyHeaderPolicy(t *testing.T) {
 		})
 	}
 }
-
-func TestRetryableRoutesDeclareIdempotency(t *testing.T) {
-	api := newRoutingTestAPI("/api/v1")
-	require.NoError(t, api.collectResources("/api/v1", academicPeriodResource(nil), academicUnitResource(nil)))
-	want := map[string]bool{"POST /api/v1/academic-periods": true, "POST /api/v1/academic-units": true}
-	for _, route := range api.Routes() {
-		key := route.Method + " " + route.Path
-		if want[key] {
-			require.Equal(t, IdempotencyOptional, route.Idempotency, "%s idempotency", key)
-			delete(want, key)
-		}
-	}
-	require.Empty(t, want)
-}

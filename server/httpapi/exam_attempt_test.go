@@ -13,6 +13,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -1269,5 +1271,96 @@ func TestWorkspaceContentNeverRendersAsAnActiveDocument(t *testing.T) {
 			require.Equal(t, want, headers.Get("Content-Type"))
 			require.Equal(t, "sandbox", headers.Get("Content-Security-Policy"))
 		})
+	}
+}
+
+func TestExamAttemptOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+	managerBase := "/api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/attempts"
+	managerMember := managerBase + "/{exam_attempt_id}"
+	managerBrowserActivity := managerMember + "/browser-activity"
+	candidateBase := "/api/v1/exam-attempts/{exam_attempt_id}"
+	presentation := candidateBase + "/presentation"
+	workspace := candidateBase + "/workspace"
+	workspaceChanges := workspace + "/changes"
+	workspaceDirectories := workspace + "/directories"
+	workspaceFiles := workspace + "/files"
+	workspaceEntry := workspace + "/entries/{attempt_workspace_entry_id}"
+	resourceContent := candidateBase + "/resources/{exam_resource_id}/content"
+	workspaceContent := candidateBase + "/workspace/files/{attempt_workspace_entry_id}/content"
+	candidateSubmissions := candidateBase + "/submissions"
+	correctionAcknowledgement := candidateBase + "/corrections/{exam_revision_id}/acknowledgement"
+	managerSubmission := managerMember + "/submissions/{submission_id}"
+	managerSubmissionManifest := managerSubmission + "/manifest"
+	managerSubmissionContent := managerSubmission + "/files/{attempt_workspace_entry_id}/content"
+
+	document := readOpenAPIDocument(t)
+	for _, path := range []string{presentation, workspace, workspaceChanges, workspaceDirectories, workspaceFiles, workspaceEntry, resourceContent, workspaceContent, candidateSubmissions, correctionAcknowledgement} {
+		method := "get"
+		if path == workspaceDirectories || path == workspaceFiles {
+			method = "post"
+		}
+		if path == candidateSubmissions {
+			method = "post"
+		}
+		if path == correctionAcknowledgement {
+			method = "put"
+		}
+		if path == workspaceEntry {
+			method = "patch"
+		}
+		operation := decodeExamContentOpenAPIOperation(t, document, path, method)
+		for _, expected := range []struct{ name, ref string }{
+			{name: candidateAttemptCredentialHeader, ref: "#/components/parameters/CandidateAttemptCredential"},
+			{name: candidateAttemptConnectionHeader, ref: "#/components/parameters/CandidateAttemptConnectionID"},
+		} {
+			t.Run(expected.name, func(t *testing.T) {
+				if !hasOpenAPIHeaderParameter(operation, expected.name) {
+					assert.True(t, hasOpenAPIParameterRef(operation, expected.ref), "GET %s does not document %s", path, expected.name)
+				}
+			})
+		}
+	}
+	for _, path := range []string{resourceContent, workspaceContent} {
+		assertProtectedExamContentResponse(t, document, path, "CandidateExamProtectedContent")
+		operation := decodeExamContentOpenAPIOperation(t, document, path, "get")
+		assert.Equal(t, "#/components/responses/CandidateExamContentNotModified", operation.Responses["304"].Ref, "GET %s 304 response = %#v", path, operation.Responses["304"])
+	}
+	assertProtectedExamContentResponse(t, document, managerSubmissionContent, "ExamSubmissionFileContent")
+	managerContentOperation := decodeExamContentOpenAPIOperation(t, document, managerSubmissionContent, "get")
+	assert.Equal(t, "#/components/responses/ExamSubmissionFileNotModified", managerContentOperation.Responses["304"].Ref, "GET %s 304 response = %#v", managerSubmissionContent, managerContentOperation.Responses["304"])
+	assertProtectedExamCacheControl(t, "ExamSubmissionFileContent", "private, no-store")
+	_, ok := document.Components.Responses["ExamSubmissionFileContent"].Headers["Content-Disposition"]
+	assert.False(t, ok, "Submission protected response documents forbidden Content-Disposition")
+	assertProtectedExamCacheControl(t, "CandidateExamProtectedContent", "private, no-store")
+	_, ok = document.Components.Responses["CandidateExamProtectedContent"].Headers["Content-Disposition"]
+	assert.False(t, ok, "candidate protected response documents forbidden Content-Disposition")
+	assertExamAttemptQueryParameters(t, document, managerBase, []string{"state", "limit", "cursor"})
+	assertExamAttemptQueryParameters(t, document, managerBrowserActivity, []string{"limit", "cursor"})
+	assertExamAttemptQueryParameters(t, document, workspace, []string{"limit", "cursor"})
+	assertExamAttemptQueryParameters(t, document, workspaceChanges, []string{"cursor", "limit", "workspace_cursor"})
+	assertExamAttemptQueryParameters(t, document, managerSubmissionManifest, []string{"limit", "cursor"})
+}
+
+func hasOpenAPIParameterRef(operation openAPIOperation, ref string) bool {
+	for _, parameter := range operation.Parameters {
+		if parameter.Ref == ref {
+			return true
+		}
+	}
+	return false
+}
+
+func assertExamAttemptQueryParameters(t *testing.T, document openAPIDocument, path string, want []string) {
+	t.Helper()
+	operation := decodeExamContentOpenAPIOperation(t, document, path, "get")
+	got := make([]string, 0, len(operation.Parameters))
+	got = append(got, academicStructureQueryParameterNames(operation.Parameters)...)
+	for _, name := range want {
+		assert.Contains(t, got, name, "GET %s omits query parameter", path)
+	}
+	if len(got) != len(want) {
+		encoded, _ := json.Marshal(got)
+		assert.Fail(t, fmt.Sprintf("GET %s query parameters = %s, want exactly %v", path, encoded, want))
 	}
 }

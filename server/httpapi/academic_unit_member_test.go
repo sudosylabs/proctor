@@ -127,3 +127,30 @@ func (a *academicUnitMemberHTTPApplication) ListAcademicUnitMembersPage(_ contex
 	}
 	return &app.AcademicUnitMemberPage{}, nil
 }
+
+func TestAcademicUnitMemberOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+
+	// Relationship history remains an explicit wire-level compatibility rule:
+	// clients can select an instant or request the complete historical roster.
+	document := readOpenAPIDocument(t)
+	var listOperation struct {
+		Parameters []struct {
+			Name string `json:"name"`
+			In   string `json:"in"`
+		} `json:"parameters"`
+	}
+	require.NoError(t, json.Unmarshal(document.Paths["/api/v1/academic-units/{academic_unit_id}/members"]["get"], &listOperation))
+	queryParameters := map[string]bool{}
+	for _, parameter := range listOperation.Parameters {
+		if parameter.In == "query" {
+			queryParameters[parameter.Name] = true
+		}
+	}
+	require.True(t, queryParameters["active_at"], "list query parameters = %#v, want active_at and history", queryParameters)
+	require.True(t, queryParameters["history"], "list query parameters = %#v, want active_at and history", queryParameters)
+
+	// This v1 relationship collection remains a legacy bare array.
+	list := document.Components.Schemas["AcademicUnitMemberListResponse"]
+	requireOpenAPIListEnvelope(t, list, "#/components/schemas/AcademicUnitMemberResponse")
+}

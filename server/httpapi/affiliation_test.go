@@ -120,3 +120,13 @@ func TestAffiliationResourceRejectsInvalidBodyAndIdentifier(t *testing.T) {
 	httpAPI.ServeHTTP(idResponse, invalidID)
 	require.Equal(t, http.StatusNotFound, idResponse.Code, "identifier status = %d: %s", idResponse.Code, idResponse.Body.String())
 }
+
+func TestAffiliationOpenAPIDocument(t *testing.T) {
+	t.Parallel()
+
+	// AffiliationListResponse is a frozen legacy bare-array compatibility shape,
+	// not an ordinary DTO contract and not a pattern for new collection routes.
+	document := readOpenAPIDocument(t)
+	list := document.Components.Schemas["AffiliationListResponse"]
+	requireOpenAPIListEnvelope(t, list, "#/components/schemas/AffiliationResponse")
+}

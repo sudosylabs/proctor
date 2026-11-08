@@ -253,8 +253,10 @@ async function expectPersistentSubmissionFailure(
   await expect(feedback).not.toBeFocused();
 
   const after = await submissionGeometry(page, firstControl);
-  expect(after.controlTop).toBe(before.controlTop);
-  expect(after.buttonTop).toBe(before.buttonTop);
+  // Firefox can re-round fractional layout by a few hundred-thousandths of a
+  // pixel when the region below opens; any visible shift is far larger.
+  expect(after.controlTop).toBeCloseTo(before.controlTop, 1);
+  expect(after.buttonTop).toBeCloseTo(before.buttonTop, 1);
   // The empty region reserves no space; it opens only for the message.
   expect(before.feedbackHeight).toBe(0);
   expect(after.feedbackHeight).toBeGreaterThan(0);

@@ -39,7 +39,7 @@ func insertExamSittingMailFanout(ctx context.Context, tx *sqlxTxWrapper, input *
 	var completedAt any
 	terminalReason := ""
 	if input.Bundle == nil {
-		if job.Status != model.JobStatusCanceled || !job.CompletedAt.Valid || disabledEligibilityRevision < 1 {
+		if job.Status != model.JobStatusCanceled || !job.CompletedAt.Valid || disabledEligibilityRevision < 0 {
 			return store.NewErrInvalidInput("exam_sitting", "mail_fanout", nil)
 		}
 		job.CompletedAt = model.OptionalTimeFrom(databaseNow)

@@ -58,7 +58,9 @@ rg -n '/api/v1/exams|operationId: createExam' server/openapi/fragments
 4. Co-locate definitions used only by that resource. Promote a definition to
    the area's `shared.yaml` or the root `shared.yaml` only when a second real
    consumer needs it.
-5. Regenerate and run agreement checks:
+5. Register each new request or response DTO in the DTO→schema registry
+   (`server/httpapi/openapi_dto_registry_test.go`); route/document agreement
+   is derived from the route catalog. Regenerate and run agreement checks:
 
    ```sh
    make -C server openapi-build

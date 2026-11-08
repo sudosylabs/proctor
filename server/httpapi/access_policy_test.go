@@ -85,9 +85,7 @@ func TestPublicAccessDiscoveryDTOContainsNoPrivatePolicyOrDestinations(t *testin
 	encoded, err := json.Marshal(response)
 	require.NoError(t, err)
 	text := string(encoded)
-	for _, forbidden := range []string{"provider_admissions", "invitation_local_credential", "client_secret", "redirect", "claims", "recipient"} {
-		require.NotContains(t, text, forbidden, "discovery exposed")
-	}
+	requireNoPrivateFieldNames(t, encoded, "provider_admissions", "invitation_local_credential", "client_secret", "redirect", "claims", "recipient")
 	require.Contains(t, text, `"canonical_origin":"https://proctor.example.edu"`)
 	require.Contains(t, text, `"id":"campus"`)
 	require.Contains(t, text, `"support_address":"help@example.edu"`)

@@ -28,9 +28,7 @@ func TestOnboardingImportResponseExcludesPrivateRowAndCredentialMaterial(t *test
 	encoded, err := json.Marshal(onboardingImportResponseFromView(view, rows))
 	require.NoError(t, err)
 	body := string(encoded)
-	for _, forbidden := range []string{"target_email", "email", "claim", "hash", "recipient", "secret"} {
-		require.NotContains(t, body, forbidden, "response contains private field")
-	}
+	requireNoPrivateFieldNames(t, encoded, "target_email", "email", "claim", "hash", "recipient", "secret")
 	require.Contains(t, body, `"reference":"safe-row"`)
 	require.Contains(t, body, `"status":"valid"`)
 }

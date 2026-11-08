@@ -482,7 +482,7 @@ func (s *desktopAuthorizationStoreFake) GetDesktopAuthorizationContext(_ context
 		userID = model.NewUserID()
 	}
 	return &store.DesktopAuthorizationContext{ID: model.NewBrowserAuthenticationTransactionID(),
-		State: model.BrowserAuthenticationStateAuthenticated, UserID: userID, ExpiresAt: time.Now().Add(time.Minute)}, nil
+		State: model.BrowserAuthenticationStateAuthenticated, UserID: userID, CreatedAt: time.Now().Add(-time.Minute), ExpiresAt: time.Now().Add(time.Minute)}, nil
 }
 
 func (s *desktopAuthorizationStoreFake) AuthenticateDesktopAuthorization(_ context.Context, input *store.DesktopAuthorizationAuthentication) (*store.DesktopAuthorizationAuthenticationResult, error) {
@@ -749,4 +749,50 @@ func testDesktopAuthorizationExchangeResult(
 	}
 	session.PrepareCreate(model.NewSessionID(), at)
 	return session, registration
+}
+
+type desktopAuthorizationContextUserStoreFake struct {
+	store.UserStore
+	user *model.User
+}
+
+func (s desktopAuthorizationContextUserStoreFake) Get(context.Context, model.UserID) (*model.User, error) {
+	return s.user, nil
+}
+
+func TestDesktopAuthorizationContextNamesTheAuthenticatedAccountAndRequestTime(t *testing.T) {
+	t.Parallel()
+	requestedAt := time.Date(2026, 8, 18, 11, 58, 0, 0, time.UTC)
+	user := &model.User{ID: model.NewUserID(), Username: "ada", DisplayName: "Ada Okafor", Email: "ada@example.edu"}
+	newService := func(current *store.DesktopAuthorizationContext) *desktopAuthorizationService {
+		identity := testDesktopAuthorizationIdentity(t, "https://proctor.example.edu", time.Now)
+		identity.users = desktopAuthorizationContextUserStoreFake{user: user}
+		service, err := newDesktopAuthorizationService(desktopAuthorizationServiceDependencies{Transactions: &desktopAuthorizationStoreFake{contextResult: current},
+			Institutions: desktopAuthorizationInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, AccessPolicy: desktopAuthorizationAccessPolicyFake{enabled: true},
+			Capabilities: &accessPolicyCapabilitiesFake{}, Audit: desktopAuthorizationAuditorFake{}, Attempts: &desktopAuthorizationAttemptLimiterFake{},
+			SessionPolicy: testDesktopSessionPolicy(), Policy: DesktopAuthorizationPolicy{Issuer: "https://proctor.example.edu"},
+			NewCredential: model.NewCredentialToken, Now: time.Now, Identity: identity})
+		require.NoError(t, err)
+		return service
+	}
+	authenticated := &store.DesktopAuthorizationContext{ID: model.NewBrowserAuthenticationTransactionID(), State: model.BrowserAuthenticationStateAuthenticated,
+		UserID: user.ID, DeviceName: "Lab Mac", CreatedAt: requestedAt, ExpiresAt: requestedAt.Add(5 * time.Minute)}
+	result, err := newService(authenticated).DesktopAuthorizationContext(context.Background(), invocation.Invocation{}, model.NewCredentialToken())
+	require.NoError(t, err)
+	require.Equal(t, requestedAt.UnixMilli(), result.RequestedAt)
+	require.NotNil(t, result.Account)
+	require.Equal(t, "ada@example.edu", result.Account.Email)
+	require.Equal(t, "Ada Okafor", result.Account.DisplayName)
+
+	bound := *authenticated
+	bound.State, bound.UserID = model.BrowserAuthenticationStateBound, ""
+	result, err = newService(&bound).DesktopAuthorizationContext(context.Background(), invocation.Invocation{}, model.NewCredentialToken())
+	require.NoError(t, err)
+	require.Nil(t, result.Account, "an unauthenticated request named an account")
+	require.Equal(t, requestedAt.UnixMilli(), result.RequestedAt)
+
+	missingRequest := *authenticated
+	missingRequest.CreatedAt = time.Time{}
+	_, err = newService(&missingRequest).DesktopAuthorizationContext(context.Background(), invocation.Invocation{}, model.NewCredentialToken())
+	require.True(t, apperror.Is(err, "authentication.desktop_authorization.unavailable"), "context error = %v", err)
 }

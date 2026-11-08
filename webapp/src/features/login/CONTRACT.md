@@ -11,10 +11,10 @@ and recovery. [`../../../DESIGN_SYSTEM.md`](../../../DESIGN_SYSTEM.md) owns the
 shared presentation and interaction rules; the Access Policy, authentication,
 and Session contracts remain authoritative for server behavior.
 
-The narrow shared
-[`AccessPageShell`](../../components/AccessPageShell/CONTRACT.md) is proven
-by this route and `/authorization/complete`. It owns only their structural
-frame. The domain-neutral
+The shared
+[`AccessPageShell`](../../components/AccessPageShell/CONTRACT.md) owns the
+structural frame of this and every other hosted route, including the masthead
+Institution name. The domain-neutral
 [`Notice`](../../components/Notice/CONTRACT.md) owns the inline state-evidence
 treatment; fields, buttons, provider actions, notice copy and semantics, and
 authentication behavior remain local to this feature.
@@ -66,8 +66,10 @@ content; neither may enter the document title, logs, error reports, or raw
 markup.
 
 It performs the fetch, complete runtime validation, and origin comparison once.
-Login receives only that validated result and retains ownership of setup,
-method availability, and recovery states.
+The request is the page-lifetime shared discovery also read by the hosted
+shell for the Institution name, so the page still makes one initial
+discovery request. Login receives only that validated result and retains
+ownership of setup, method availability, and recovery states.
 
 ## Document and semantic structure
 
@@ -76,29 +78,38 @@ the document controller. The visible structure contains:
 
 - a first-focusable skip link targeting `main-content`;
 - exactly one `main` landmark with `id="main-content"`;
-- exactly one page heading whose purpose is “Sign in”;
-- safe Proctor and Institution presentation;
+- exactly one page heading, “Sign in to Proctor”, with no kind line, and a
+  lede naming the Institution once discovery supplies it;
+- safe Proctor and Institution presentation, provided by the shell masthead;
 - the generic external-login failure notice when bootstrap supplies it;
 - a local-login form when `capabilities.local_login` is true;
-- an external-provider action for every descriptor in `providers`; and
+- an external-provider action for every descriptor in `providers`;
+- a “New to Proctor?” section, separated by a hairline rule, explaining that
+  people join through an Invitation from the Institution; and
 - only the registration and recovery links admitted below.
 
+Actions keep their natural width beside the column's start edge and fill the
+column below `30rem`. The empty `FormFeedback` region takes no space, so the
+method separator follows the submit action at the form's ordinary rhythm.
+
 There is no autofocus on page load. Loading, failure, and method availability
-do not move focus. Each changed state has one announcement path: progress and
-the MFA transition use the page-owned live region, while a general submission
-failure uses the always-mounted `FormFeedback` region after the submit action.
+do not move focus. Each changed state has one announcement path: progress, the MFA transition,
+and field-placed server failures use the page-owned live region, while a
+general submission failure uses the always-mounted `FormFeedback` region
+after the submit action.
 Focus moves only for invalid form input or the MFA transition described below.
 
 All authored page copy uses `webapp.login.*` messages in `server/i18n`; the
 generated webapp catalog is the runtime view. The implementation does not
-concatenate translated fragments. The Proctor name, identifiers, and protocol
+concatenate translated fragments; an inline link is placed into its sentence
+through a catalog placeholder (`richMessage`), so word order stays in the
+catalog. The Proctor name, identifiers, and protocol
 values remain untranslated where required.
 
 ## Discovery states
 
 Discovery loading occupies only the sign-in methods region. The branding,
-page heading, supporting introduction, and default Institution context remain
-visible. The methods region reserves a bounded minimum footprint in both
+page heading, supporting introduction, and shell masthead remain visible. The methods region reserves a bounded minimum footprint in both
 pending and resolved states; its spinner centers within that region and the
 loaded methods may grow naturally. The shared Loading message appears below
 the icon and is the sole discovery-progress announcement.
@@ -126,7 +137,8 @@ The ready state follows the full method matrix:
 
 The password-recovery link to `/account/forgot-password` appears only while
 local login is available. The registration link to `/register` appears only
-while `capabilities.public_registration` is true. `/join` is not a generic
+while `capabilities.public_registration` is true, inside the “New to Proctor?”
+sentence; otherwise that section states only the Invitation route. `/join` is not a generic
 login-page action; Invitation links carry their own purpose into that route.
 
 Discovery retry returns through Loading and re-evaluates every capability and
@@ -180,8 +192,12 @@ Back does not restore a submitted credential form.
 ## MFA continuation
 
 `authentication.mfa.required` changes the same feature into an MFA challenge;
-it is not presented as a failed password. The challenge adds one visibly
-labelled `mfa_code` control using the shared
+it is not presented as a failed password. The page heading becomes an
+`AccessTaskIntro` with the kind line “Sign in”, the heading “Enter your code”,
+and a lede naming the authenticator app. The credential fields, provider
+actions, and “New to Proctor?” section leave the page; the submit action reads
+“Verify”, and a text action returns to the credential step. The challenge
+shows one visibly labelled `mfa_code` control using the shared
 [`authentication-code field`](../../components/AuthenticationCodeField/CONTRACT.md).
 Its default is a six-slot numeric TOTP field with `autocomplete="one-time-code"`.
 An explicit switch selects an ordinary recovery-code text field. Both retain
@@ -247,7 +263,7 @@ it does not receive or compare server codes.
 
 | Problem code | Page behavior |
 | --- | --- |
-| `authentication.credentials_invalid` | One generic form error; do not identify the login ID, password, User state, or local-login policy as the cause |
+| `authentication.credentials_invalid` | One generic error that names the email and password together, placed under the password field (the field the person retypes) with focus moved there; both values are kept. It does not identify the login ID, password, User state, or local-login policy as the cause. During the MFA step, where the password is not shown, it uses the form-level region instead |
 | `authentication.mfa.required` | Enter the MFA continuation |
 | `authentication.mfa.code_invalid` | MFA-control error; keep the challenge active |
 | `authentication.mfa.unavailable` | Recoverable MFA challenge error; never bypass MFA |
@@ -259,10 +275,11 @@ it does not receive or compare server codes.
 
 Empty required controls are caught before transport, with errors placed beside
 and associated with the controls. After a rejected submission, focus moves to
-the first invalid control. A general credential- or challenge-level failure
-appears persistently in the reserved region after the submit action, is
-announced politely, and does not move focus. The fields and submit action do
-not move when ordinary failure copy appears. Changing input clears only the
+the first invalid control. A general challenge- or service-level failure
+appears persistently in the `FormFeedback` region after the submit action,
+which takes no space until it holds a message, is announced politely, and
+does not move focus. The fields and submit action do not move when ordinary
+failure copy appears; only the content after the action moves down. Changing input clears only the
 error made obsolete by that change. Failures do not clear typed credentials
 unless the person leaves the form or explicitly returns from the MFA step.
 
@@ -303,7 +320,8 @@ The feature is complete only when tests cover:
 
 - every discovery state and the full local/provider method matrix;
 - canonical-origin mismatch and malformed discovery;
-- local success, generic credentials failure, duplicate-submit prevention,
+- local success, generic credentials failure under the password field,
+  duplicate-submit prevention,
   rate limiting, Session maximum, transport failure, and retry;
 - TOTP and recovery-code MFA, invalid code, verifier unavailability, Back, and
   secret cleanup;

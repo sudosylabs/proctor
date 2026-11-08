@@ -70,6 +70,64 @@ func personalAccessTokenResponseFromModel(token *model.PersonalAccessToken) pers
 	}
 }
 
+type personalAccessTokenGrantableScopesResponse struct {
+	Scopes               []personalAccessTokenGrantableScopeResponse `json:"scopes"`
+	AcademicUnits        []personalAccessTokenAcademicUnitResponse   `json:"academic_units"`
+	AcademicUnitsHasMore bool                                        `json:"academic_units_has_more"`
+}
+
+type personalAccessTokenGrantableScopeResponse struct {
+	Name            string   `json:"name"`
+	Title           string   `json:"title"`
+	Description     string   `json:"description"`
+	ResourceTypes   []string `json:"resource_types"`
+	InstitutionWide bool     `json:"institution_wide"`
+	AcademicUnitIDs []string `json:"academic_unit_ids"`
+}
+
+type personalAccessTokenAcademicUnitResponse struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
+}
+
+func personalAccessTokenGrantableScopesResponseFromApp(
+	request *http.Request,
+	catalogue *app.PersonalAccessTokenGrantableScopes,
+) personalAccessTokenGrantableScopesResponse {
+	response := personalAccessTokenGrantableScopesResponse{
+		Scopes:        []personalAccessTokenGrantableScopeResponse{},
+		AcademicUnits: []personalAccessTokenAcademicUnitResponse{},
+	}
+	if catalogue == nil {
+		return response
+	}
+	response.AcademicUnitsHasMore = catalogue.AcademicUnitsHasMore
+	for _, unit := range catalogue.AcademicUnits {
+		response.AcademicUnits = append(response.AcademicUnits, personalAccessTokenAcademicUnitResponse{
+			ID: unit.ID.String(), DisplayName: unit.DisplayName,
+		})
+	}
+	for _, scope := range catalogue.Scopes {
+		name := string(scope.Action)
+		item := personalAccessTokenGrantableScopeResponse{
+			Name:            name,
+			Title:           translatedRequestText(request, accessActionTitleLocalizationID(scope.Action), name),
+			Description:     translatedRequestText(request, accessActionDescriptionLocalizationID(scope.Action), ""),
+			ResourceTypes:   make([]string, 0, len(scope.ResourceTypes)),
+			InstitutionWide: scope.InstitutionWide,
+			AcademicUnitIDs: make([]string, 0, len(scope.AcademicUnitIDs)),
+		}
+		for _, resourceType := range scope.ResourceTypes {
+			item.ResourceTypes = append(item.ResourceTypes, string(resourceType))
+		}
+		for _, id := range scope.AcademicUnitIDs {
+			item.AcademicUnitIDs = append(item.AcademicUnitIDs, id.String())
+		}
+		response.Scopes = append(response.Scopes, item)
+	}
+	return response
+}
+
 type personalAccessTokenResourceModule struct {
 	tokens PersonalAccessTokens
 }
@@ -78,10 +136,12 @@ func personalAccessTokenResource(tokens PersonalAccessTokens) apiResource {
 	module := personalAccessTokenResourceModule{tokens: tokens}
 	collection := apiPath(literal("users"), literal("me"), literal("tokens"))
 	item := apiPath(literal("users"), literal("me"), literal("tokens"), canonicalID("personal_access_token_id"))
+	grantableScopes := apiPath(literal("users"), literal("me"), literal("tokens"), literal("grantable-scopes"))
 	return newResource(
 		"personal-access-tokens",
 		recentSessionRoute(http.MethodPost, collection, []string{"request.invalid", "resource.not_found", "personal_access_token.invalid", "personal_access_token.maximum_reached", "personal_access_token.unavailable", "audit.unavailable", "authentication.session_required"}, module.create),
 		sessionRoute(http.MethodGet, collection, []string{"personal_access_token.unavailable", "authentication.reauthentication_required", "authentication.session_required", "request.invalid"}, module.list),
+		sessionRoute(http.MethodGet, grantableScopes, []string{"personal_access_token.unavailable", "authentication.reauthentication_required", "authentication.session_required"}, module.grantableScopes),
 		sessionRoute(http.MethodPost, appendRoutePath(item, literal("disable")), []string{"request.invalid", "resource.not_found", "personal_access_token.unavailable", "audit.unavailable", "authentication.reauthentication_required", "authentication.session_required", "personal_access_token.invalid"}, module.disable),
 		recentSessionRoute(http.MethodPost, appendRoutePath(item, literal("enable")), []string{"request.invalid", "resource.not_found", "personal_access_token.maximum_reached", "personal_access_token.unavailable", "audit.unavailable", "authentication.session_required", "personal_access_token.invalid"}, module.enable),
 		sessionRoute(http.MethodDelete, item, []string{"request.invalid", "resource.not_found", "personal_access_token.unavailable", "audit.unavailable", "authentication.reauthentication_required", "authentication.session_required", "personal_access_token.invalid"}, module.revoke),
@@ -167,6 +227,19 @@ func (m personalAccessTokenResourceModule) list(request operationRequest) (opera
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
+}
+
+func (m personalAccessTokenResourceModule) grantableScopes(request operationRequest) (operationResult, error) {
+	catalogue, err := m.tokens.ListGrantablePersonalAccessTokenScopes(
+		request.context,
+		request.invocation(),
+		app.ListGrantablePersonalAccessTokenScopesQuery{},
+	)
+	if err != nil {
+		return operationResult{}, err
+	}
+	return jsonResult(http.StatusOK, personalAccessTokenGrantableScopesResponseFromApp(request.request, catalogue)).
+		withHeaders(noStoreHeaders()), nil
 }
 
 func (m personalAccessTokenResourceModule) revoke(request operationRequest) (operationResult, error) {

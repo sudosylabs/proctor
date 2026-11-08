@@ -4,7 +4,8 @@ import jsQR from "jsqr";
 import { PNG } from "pngjs";
 
 const baseContext = {
-  enabled: false, pending: false, recovery_codes_remaining: 0,
+  enabled: false, pending: false, recovery_codes_remaining: 0, recovery_codes_total: 10,
+  recent_authentication_minutes: 20, password_changed_at: "2026-07-01T09:30:00Z",
   service_enabled: true, mfa_recovery_required: false,
   authentication_method: "password", authentication_strength: "single_factor",
   recently_authenticated: true,
@@ -12,6 +13,18 @@ const baseContext = {
 const setupKey = "JBSWY3DPEHPK3PXP";
 const provisioningURI = `otpauth://totp/Proctor:preview?secret=${setupKey}&issuer=Proctor`;
 const recoveryCodes = ["ABCD-EFGH-IJKL", "MNOP-QRST-UVWX", "2345-6789-ABCD", "EFGH-IJKL-MNOP"];
+const groupedSetupKey = "JBSW Y3DP EHPK 3PXP";
+
+const discovery = {
+  discovery_version: 1,
+  password_minimum_length: 12,
+  canonical_origin: "http://127.0.0.1:5173",
+  initialized: true,
+  capabilities: { local_login: true, public_registration: false, invitation_admission: true, desktop_authorization: true },
+  desktop_authorization: { protocol: "proctor-desktop-authorization", minimum_version: 1, maximum_version: 1 },
+  institution: { id: "institution-1", name: "northbridge", display_name: "Northbridge Institute" },
+  providers: [],
+};
 
 async function mockSecurity(page: Page, context = baseContext) {
   const state = {
@@ -59,11 +72,13 @@ async function mockSecurity(page: Page, context = baseContext) {
     if (path === "/api/v1/auth/reauthenticate/password") {
       if (request.postDataJSON().password !== "current-password") return problem("authentication.credentials_invalid", 401);
       state.context.recently_authenticated = true;
+      (state.context as Record<string, unknown>).recently_authenticated_until = new Date(Date.now() + 12 * 60_000 - 1_000).toISOString();
       return json({ id: "current-session", client_type: "web", reauthenticated_at: new Date().toISOString() });
     }
     if (path === "/api/v1/auth/reauthenticate/external") return json({ redirect_url: "https://sso.example/reauthenticate" });
     if (path === "/api/v1/auth/logout") { state.signedOut = true; await route.fulfill({ status: 204 }); return; }
     if (path === "/api/v1/users/me") return json({ id: "user", username: "person", display_name: "Person" });
+    if (path === "/api/v1/discovery" && method === "GET") return json(discovery);
     return problem("unexpected.test.request", 500);
   });
   return state;
@@ -85,14 +100,14 @@ async function enterCode(field: Locator, code: string) {
 }
 
 async function activate(page: Page) {
-  await page.getByRole("button", { name: "Set up an authenticator", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Add your authenticator", level: 1 })).toBeFocused();
+  await page.getByRole("button", { name: "Set up two-step verification", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Scan this code", level: 1 })).toBeFocused();
   await enterCode(page.getByLabel("Authenticator code", { exact: false }), "123456");
-  await page.getByRole("button", { name: "Activate authenticator", exact: true }).click();
+  await page.getByRole("button", { name: "Verify and turn on", exact: true }).click();
 }
 
 async function expectScannableSetup(page: Page) {
-  const qr = page.getByRole("img", { name: "QR code for authenticator setup" });
+  const qr = page.getByRole("img", { name: "QR code for two-step verification setup" });
   await expect(qr).toBeVisible();
   const png = PNG.sync.read(await qr.screenshot());
   const decoded = jsQR(new Uint8ClampedArray(png.data), png.width, png.height);
@@ -110,14 +125,15 @@ for (const colorScheme of ["light", "dark"] as const) {
         if (!request.url().startsWith("http://127.0.0.1:5173/")) external.push(request.url());
       });
       await page.goto("/account/security");
-      await page.getByRole("button", { name: "Set up an authenticator", exact: true }).click();
+      await page.getByRole("button", { name: "Set up two-step verification", exact: true }).click();
       await expectScannableSetup(page);
-      await expect(page.getByLabel("Setup key", { exact: true })).not.toBeVisible();
-      const manual = page.getByText("Can’t scan the code?", { exact: true });
-      await manual.focus();
-      await page.keyboard.press("Enter");
-      await expect(page.getByLabel("Setup key", { exact: true })).toHaveValue(setupKey);
-      await expect(page.getByLabel("Setup key", { exact: true })).toBeVisible();
+      const key = page.locator("#authenticator-secret");
+      await expect(key).toBeVisible();
+      await expect(key).toHaveText(groupedSetupKey);
+      await expect(key).toHaveAttribute("translate", "no");
+      await expect(page.getByText("Can’t scan it? Enter this setup key in your app instead.")).toBeVisible();
+      await expect(page.locator("#authenticator-setup-expiry")).toHaveText("Finish within 10 minutes.");
+      await expect(page.getByLabel("Authenticator code")).toHaveAttribute("aria-describedby", /authenticator-setup-expiry/);
       await enterCode(page.getByLabel("Authenticator code"), "012345");
       await expect(page.locator("[data-proctor-otp-slot]")).toHaveText(["0", "1", "2", "3", "4", "5"]);
       await page.screenshot({ path: testInfo.outputPath(`mfa-setup-${width}-${colorScheme}.png`), fullPage: true });
@@ -136,16 +152,35 @@ for (const colorScheme of ["light", "dark"] as const) {
   }
 }
 
+test("status names the signed-in User and signs out from the footer", async ({ page }) => {
+  const state = await mockSecurity(page);
+  await page.goto("/account/security");
+  await expect(page.getByText("Off", { exact: true })).toBeVisible();
+  await expect(page.getByText("Signed in with password", { exact: true })).toBeVisible();
+  const facts = page.locator("[data-proctor-fact-list]");
+  await expect(facts.getByRole("term").first()).toHaveText("Password");
+  const changed = facts.getByRole("definition").first();
+  await expect(changed.locator("time")).toHaveAttribute("datetime", "2026-07-01T09:30:00Z");
+  await expect(changed).toHaveText(`Changed ${await page.evaluate(() => new Intl.DateTimeFormat(undefined, { day: "numeric", month: "long", year: "numeric" }).format(new Date("2026-07-01T09:30:00Z")))}`);
+  await expect(page.getByRole("heading", { name: "Turn on two-step verification", level: 2 })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Verify this session" })).toHaveCount(0);
+  const footer = page.getByRole("contentinfo");
+  await expect(footer).toContainText("Signed in as Person");
+  await footer.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  expect(mutations(state, "/logout")).toHaveLength(1);
+});
+
 test("OTP supports leading zeroes, editing, paste, validation and explicit submission", async ({ page }) => {
   const state = await mockSecurity(page);
   await page.goto("/account/security");
-  await page.getByRole("button", { name: "Set up an authenticator", exact: true }).click();
+  await page.getByRole("button", { name: "Set up two-step verification", exact: true }).click();
   const input = page.getByLabel("Authenticator code");
   await expect(input).toHaveAttribute("type", "text");
   await expect(input).toHaveAttribute("inputmode", "numeric");
   await expect(input).toHaveAttribute("autocomplete", "one-time-code");
   await input.pressSequentially("012");
-  await page.getByRole("button", { name: "Activate authenticator" }).click();
+  await page.getByRole("button", { name: "Verify and turn on" }).click();
   await expect(input).toBeFocused();
   await expect(input).toHaveAttribute("aria-invalid", "true");
   await expect(page.getByText("Enter all six digits of your authenticator code.")).toBeVisible();
@@ -181,7 +216,7 @@ test("OTP supports leading zeroes, editing, paste, validation and explicit submi
   await input.press("Enter");
   await expect(page.getByRole("heading", { name: "Save your recovery codes" })).toBeVisible();
   expect(mutations(state, "/activate")[0]?.body).toEqual({ code: "123456" });
-  await expect(page.getByRole("img", { name: "QR code for authenticator setup" })).toHaveCount(0);
+  await expect(page.getByRole("img", { name: "QR code for two-step verification setup" })).toHaveCount(0);
 });
 
 test("switching proof methods clears values, restores focus and preserves recovery codes", async ({ page }) => {
@@ -197,7 +232,7 @@ test("switching proof methods clears values, restores focus and preserves recove
   await page.getByRole("button", { name: "Use an authenticator code" }).click();
   await expect(page.getByLabel("Authenticator code")).toBeFocused();
   await expect(page.getByLabel("Authenticator code")).toHaveValue("");
-  await page.getByRole("button", { name: "Verify code", exact: true }).click();
+  await page.getByRole("button", { name: "Verify", exact: true }).click();
   await expect(page.getByLabel("Authenticator code")).toBeFocused();
   expect(mutations(state, "/challenge")).toHaveLength(0);
   await page.getByRole("button", { name: "Use a recovery code instead" }).click();
@@ -227,12 +262,12 @@ test("production QR and OTP work under the server Content Security Policy", asyn
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (entry) => { if (entry.type() === "error") errors.push(entry.text()); });
   await page.goto("/account/security");
-  await page.getByRole("button", { name: "Set up an authenticator", exact: true }).click();
+  await page.getByRole("button", { name: "Set up two-step verification", exact: true }).click();
   // QR decoding is covered separately: Playwright's WebKit screenshots inject an inline style.
-  await expect(page.getByRole("img", { name: "QR code for authenticator setup" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "QR code for two-step verification setup" })).toBeVisible();
   await page.getByLabel("Authenticator code").pressSequentially("123456");
   await expect(page.locator("[data-proctor-otp-slot]")).toHaveText(["1", "2", "3", "4", "5", "6"]);
-  await page.getByRole("button", { name: "Activate authenticator", exact: true }).click();
+  await page.getByRole("button", { name: "Verify and turn on", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Save your recovery codes" })).toBeVisible();
   expect(errors).toEqual([]);
 });
@@ -246,11 +281,13 @@ test("enrollment shows codes once and requires acknowledgement before hiding the
   expect(state.requests.filter(({ method }) => method === "POST")).toHaveLength(0);
   await activate(page);
   await expect(page.getByRole("heading", { name: "Save your recovery codes", level: 1 })).toBeFocused();
-  const finish = page.getByRole("button", { name: "Finish and hide codes" });
+  await expect(page.getByText("Two-step verification", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("list", { name: "Recovery codes" }).getByRole("listitem")).toHaveText(recoveryCodes);
+  const finish = page.getByRole("button", { name: "Done", exact: true });
   await expect(finish).toBeDisabled();
-  await expect(page.getByRole("link", { name: "Back to sign-in status" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Cancel" })).toHaveCount(0);
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download recovery codes" }).click();
+  await page.getByRole("button", { name: "Download codes" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe("proctor-recovery-codes.txt");
   expect(await readFile((await download.path())!, "utf8")).toBe(`${recoveryCodes.join("\n")}\n`);
@@ -261,10 +298,11 @@ test("enrollment shows codes once and requires acknowledgement before hiding the
     expect(page.url()).not.toContain(secret);
     expect(logs.join("\n")).not.toContain(secret);
   }
-  await page.getByRole("checkbox", { name: "I have saved these recovery codes in a secure place." }).check();
+  await page.getByRole("checkbox", { name: "I’ve saved these codes somewhere safe" }).check();
   await finish.click();
   await expect(page.getByRole("heading", { name: "Account security", level: 1 })).toBeVisible();
   await expect(page.getByText(recoveryCodes[0], { exact: true })).toHaveCount(0);
+  await expect(page.getByText(`${recoveryCodes.length} of 10 left`, { exact: true })).toBeVisible();
   expect(mutations(state, "/activate")).toHaveLength(1);
   await page.reload();
   await expect(page.getByRole("heading", { name: "Account security", level: 1 })).toBeVisible();
@@ -276,19 +314,15 @@ test("lost activation confirmation reads status and requires explicit challenge 
   state.lostActivation = true;
   await page.goto("/account/security");
   await activate(page);
-  await expect(page.getByRole("heading", { name: "Check whether the change completed" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Check whether the change worked" })).toBeVisible();
   await page.getByRole("button", { name: "Check current status" }).click();
-  await expect(page.getByText("Enabled", { exact: true })).toBeVisible();
+  await expect(page.getByText("On", { exact: true })).toBeVisible();
   expect(mutations(state, "/activate")).toHaveLength(1);
   expect(mutations(state, "/regenerate")).toHaveLength(0);
-  await page.getByRole("button", { name: "Verify this session", exact: true }).click();
-  await enterCode(page.getByLabel("Authenticator code"), "123456");
-  await page.getByRole("button", { name: "Verify code", exact: true }).click();
+  await page.getByRole("button", { name: "Make new codes", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Make new recovery codes?" })).toBeVisible();
   expect(mutations(state, "/regenerate")).toHaveLength(0);
-  await page.getByRole("button", { name: "Generate new recovery codes", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Replace your recovery codes?" })).toBeVisible();
-  expect(mutations(state, "/regenerate")).toHaveLength(0);
-  await page.getByRole("button", { name: "Replace recovery codes", exact: true }).click();
+  await page.getByRole("button", { name: "Replace my codes", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Save your recovery codes" })).toBeVisible();
   expect(mutations(state, "/regenerate")).toHaveLength(1);
 });
@@ -296,11 +330,31 @@ test("lost activation confirmation reads status and requires explicit challenge 
 test("disable and replacement require an explicit destructive confirmation", async ({ page }) => {
   const state = await mockSecurity(page, { ...baseContext, enabled: true, authentication_strength: "multi_factor" });
   await page.goto("/account/security");
-  await page.getByRole("button", { name: "Disable or replace authenticator" }).click();
-  await expect(page.getByText("Your account will have no local MFA after this action.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recovery codes", level: 2 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Turn off two-step verification", level: 2 })).toBeVisible();
+  // A verified Session is not offered verification as its main action.
+  await expect(page.getByRole("button", { name: "Verify this session" })).toHaveCount(0);
+  await expect(page.getByText("Verified with two-step", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Turn off", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Turn off two-step verification?", level: 1 })).toBeFocused();
+  await expect(page.getByText("Moving to a new phone?", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Keep it on", exact: true })).toBeVisible();
+  const confirm = page.getByRole("button", { name: "Turn off", exact: true });
+  const colors = await confirm.evaluate((button) => ({
+    background: getComputedStyle(button).backgroundColor,
+    danger: (() => {
+      const probe = document.createElement("span");
+      probe.style.color = "var(--proctor-color-action-danger)";
+      document.body.append(probe);
+      const value = getComputedStyle(probe).color;
+      probe.remove();
+      return value;
+    })(),
+  }));
+  expect(colors.background).toBe(colors.danger);
   expect(mutations(state, "/disable")).toHaveLength(0);
-  await page.getByRole("button", { name: "Disable authenticator", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Set up an authenticator", exact: true })).toBeVisible();
+  await confirm.click();
+  await expect(page.getByRole("button", { name: "Set up two-step verification", exact: true })).toBeVisible();
   expect(mutations(state, "/disable")).toHaveLength(1);
   expect(mutations(state, "/setup")).toHaveLength(0);
 });
@@ -308,21 +362,26 @@ test("disable and replacement require an explicit destructive confirmation", asy
 test("fresh password proof and MFA challenge return without replaying the security action", async ({ page }) => {
   const state = await mockSecurity(page, { ...baseContext, enabled: true, recently_authenticated: false });
   await page.goto("/account/security");
-  await page.getByRole("button", { name: "Generate new recovery codes", exact: true }).click();
-  await page.getByRole("button", { name: "Replace recovery codes", exact: true }).click();
-  await page.getByRole("link", { name: "Confirm your sign-in", exact: true }).click();
+  await page.getByRole("button", { name: "Make new codes", exact: true }).click();
+  await page.getByRole("button", { name: "Replace my codes", exact: true }).click();
+  await page.getByRole("link", { name: "Confirm it’s you", exact: true }).click();
   await expect(page).toHaveURL(/\/account\/reauthenticate\?task=security$/);
-  await page.getByLabel("Current password", { exact: false }).fill("wrong-password");
-  await page.getByRole("button", { name: "Confirm password" }).click();
-  await expect(page.getByText("That password could not be verified. Try again.")).toBeVisible();
-  await expect(page.getByLabel("Current password", { exact: false })).toHaveValue("");
-  await page.getByLabel("Current password", { exact: false }).fill("current-password");
-  await page.getByRole("button", { name: "Confirm password" }).click();
+  // The window comes from the server's configured value, not a client default.
+  await expect(page.getByText("You won’t be asked again for 20 minutes.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("contentinfo")).toContainText("Signed in as Person");
+  await page.getByRole("textbox", { name: "Password" }).fill("wrong-password");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(page.getByText("That password isn’t right. Try again.")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Password" })).toHaveValue("");
+  await page.getByRole("textbox", { name: "Password" }).fill("current-password");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByRole("button", { name: "Use a recovery code instead" }).click();
   await enterCode(page.getByRole("textbox", { name: "Recovery code", exact: true }), "ABCD-EFGH");
-  await page.getByRole("button", { name: "Verify code" }).click();
-  await expect(page.getByRole("heading", { name: "Your proof is ready" })).toBeVisible();
-  await page.getByRole("link", { name: "Return to your task" }).click();
+  await page.getByRole("button", { name: "Verify", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "You’re confirmed" })).toBeVisible();
+  // Once confirmed the page states what is left of this Session's window.
+  await expect(page.getByText("You won’t be asked to confirm again for 12 minutes.", { exact: false })).toBeVisible();
+  await page.getByRole("link", { name: "Back to account security" }).click();
   await expect(page.getByRole("heading", { name: "Account security", level: 1 })).toBeVisible();
   expect(mutations(state, "/regenerate")).toHaveLength(1);
   expect(mutations(state, "/login")).toHaveLength(0);
@@ -331,25 +390,30 @@ test("fresh password proof and MFA challenge return without replaying the securi
 });
 
 test("external fresh proof uses the original provider and an explicit closed task", async ({ page }) => {
-  const state = await mockSecurity(page, { ...baseContext, authentication_method: "oidc", recently_authenticated: false });
+  const state = await mockSecurity(page, { ...baseContext, authentication_method: "oidc", authentication_provider_id: "university-oidc", recently_authenticated: false } as typeof baseContext);
+  await page.route("**/api/v1/discovery", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({
+    ...discovery, providers: [{ id: "university-oidc", display_name: "University SSO", type: "oidc" }],
+  }) }));
   await page.route("https://sso.example/reauthenticate", (route) => route.fulfill({ contentType: "text/html", body: "<h1>Provider proof</h1>" }));
   await page.goto("/account/reauthenticate?task=connect-provider&return_to=https://attacker.example#external_login=failed");
-  await expect(page.getByText("Your provider sign-in could not be confirmed.", { exact: false })).toBeVisible();
+  await expect(page.getByText("University SSO couldn’t confirm it’s you. Nothing was changed.", { exact: false })).toBeVisible();
   await expect(page).toHaveURL(/\/account\/reauthenticate\?task=connect-provider$/);
   expect(mutations(state, "/external")).toHaveLength(0);
-  await expect(page.getByLabel("Current password", { exact: false })).toHaveCount(0);
-  await page.getByRole("button", { name: "Continue with your original provider" }).click();
+  await expect(page.getByRole("textbox", { name: "Password" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Continue with University SSO" }).click();
   await expect(page.getByRole("heading", { name: "Provider proof" })).toBeVisible();
   expect(mutations(state, "/external")[0]?.body).toEqual({ task: "connect-provider" });
 });
 
-test("recovery restriction remains visible with management disabled and offers only sign out", async ({ page }) => {
+test("recovery restriction remains visible with management disabled and offers only its real actions", async ({ page }) => {
   const state = await mockSecurity(page, { ...baseContext, service_enabled: false, mfa_recovery_required: true });
   await page.goto("/account/security");
-  await expect(page.getByText("Your institution requires you to set up a new authenticator", { exact: false })).toBeVisible();
-  await expect(page.getByText("Authenticator management is currently disabled", { exact: false })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Set up an authenticator", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Back to sign-in status" })).toHaveCount(0);
+  await expect(page.getByText("Your institution needs you to set up two-step verification again", { exact: false })).toBeVisible();
+  await expect(page.getByText("Setup is turned off right now, so you can’t finish this yet.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Set up two-step verification", exact: true })).toHaveCount(0);
+  const main = page.getByRole("main");
+  await expect(main.getByRole("button")).toHaveText(["Check current status", "Sign out"]);
+  await expect(page.getByRole("contentinfo")).not.toContainText("Signed in as");
   expect(state.requests.some(({ path }) => path === "/api/v1/users/me")).toBe(false);
   await page.goto("/account/reauthenticate?task=connect-provider");
   await expect(page.getByRole("link", { name: "Restore account access" })).toHaveAttribute("href", "/account/security");
@@ -359,17 +423,18 @@ test("recovery restriction remains visible with management disabled and offers o
 test("pending enrollment restarts explicitly and invalid codes keep the setup key available", async ({ page }) => {
   const state = await mockSecurity(page, { ...baseContext, pending: true });
   await page.goto("/account/security");
-  await expect(page.getByText("Restarting replaces its setup key", { exact: false })).toBeVisible();
+  await expect(page.getByText("Setup not finished", { exact: true })).toBeVisible();
+  await expect(page.getByText("Starting again gives you a new code", { exact: false })).toBeVisible();
   expect(mutations(state, "/setup")).toHaveLength(0);
-  await page.getByRole("button", { name: "Restart authenticator setup" }).click();
+  await page.getByRole("button", { name: "Start setup again" }).click();
   // Restarting re-renders the form with the new setup key; type the code only
   // after that render so it cannot clear the field under load.
   await expect.poll(() => mutations(state, "/setup").length).toBe(1);
-  await expect(page.getByLabel("Setup key", { exact: true })).toHaveValue(setupKey);
+  await expect(page.locator("#authenticator-secret")).toHaveText(groupedSetupKey);
   await enterCode(page.getByLabel("Authenticator code", { exact: false }), "000000");
-  await page.getByRole("button", { name: "Activate authenticator" }).click();
-  await expect(page.getByText("That code could not be verified.", { exact: false })).toBeVisible();
-  await expect(page.getByLabel("Setup key", { exact: true })).toHaveValue(setupKey);
+  await page.getByRole("button", { name: "Verify and turn on" }).click();
+  await expect(page.getByText("That code isn’t right.", { exact: false })).toBeVisible();
+  await expect(page.locator("#authenticator-secret")).toHaveText(groupedSetupKey);
   await expect(page.getByLabel("Authenticator code", { exact: false })).toHaveValue("");
   expect(mutations(state, "/setup")).toHaveLength(1);
 });
@@ -387,18 +452,18 @@ test("a response arriving after page exit cannot restore one-time codes on histo
     await route.fulfill({ contentType: "application/json", body: JSON.stringify({ recovery_codes: recoveryCodes }) });
   });
   await page.goto("/account/security");
-  await page.getByRole("button", { name: "Set up an authenticator", exact: true }).click();
+  await page.getByRole("button", { name: "Set up two-step verification", exact: true }).click();
   await enterCode(page.getByLabel("Authenticator code", { exact: false }), "123456");
-  await page.getByRole("button", { name: "Activate authenticator" }).click();
+  await page.getByRole("button", { name: "Verify and turn on" }).click();
   await requested;
   await page.evaluate(() => { window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true })); });
   const response = page.waitForResponse("**/api/v1/users/me/mfa/activate");
   release();
   await response;
   await page.evaluate(() => { window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })); });
-  await expect(page.getByText("Enabled", { exact: true })).toBeVisible();
+  await expect(page.getByText("On", { exact: true })).toBeVisible();
   await expect(page.getByText(recoveryCodes[0], { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel("Setup key", { exact: true })).toHaveCount(0);
+  await expect(page.locator("#authenticator-secret")).toHaveCount(0);
 });
 
 test("a missing Session exposes sign in and a read failure can be retried", async ({ page }) => {
@@ -421,7 +486,7 @@ test("a missing Session exposes sign in and a read failure can be retried", asyn
 test("restricted password login goes directly to reenrollment", async ({ page }) => {
   const state = await mockSecurity(page, { ...baseContext, mfa_recovery_required: true });
   await page.route("**/api/v1/discovery", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({
-    discovery_version: 1, canonical_origin: "http://127.0.0.1:5173", initialized: true,
+    discovery_version: 1, password_minimum_length: 12, canonical_origin: "http://127.0.0.1:5173", initialized: true,
     capabilities: { local_login: true, public_registration: false, invitation_admission: false, desktop_authorization: true },
     desktop_authorization: { protocol: "proctor-desktop-authorization", minimum_version: 1, maximum_version: 1 },
     institution: { id: "institution", name: "institution", display_name: "Institution" }, providers: [],
@@ -432,14 +497,18 @@ test("restricted password login goes directly to reenrollment", async ({ page })
   await page.locator("#password").fill("current-password");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/\/account\/security$/);
-  await expect(page.getByText("Your institution requires you to set up a new authenticator", { exact: false })).toBeVisible();
+  await expect(page.getByText("Your institution needs you to set up two-step verification again", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Set up two-step verification", exact: true })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("button", { name: "Sign out" })).toBeVisible();
   expect(state.requests.some(({ path }) => path === "/api/v1/users/me")).toBe(false);
 });
 
 test("sign-in status offers the bounded security destination for ordinary and restricted Sessions", async ({ page }) => {
   const state = await mockSecurity(page);
   await page.goto("/authorization/complete");
-  await expect(page.getByRole("link", { name: "Account security" })).toHaveAttribute("href", "/account/security");
+  await expect(page.getByText("Sign-in confirmed", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Go to account security" })).toHaveAttribute("href", "/account/security");
+  await expect(page.getByRole("link", { name: "Add a sign-in method" })).toHaveAttribute("href", "/account/connect-provider");
   state.context.mfa_recovery_required = true;
   await page.route("**/api/v1/users/me", (route) => route.fulfill({ status: 401, contentType: "application/problem+json", body: JSON.stringify({
     type: "about:blank", title: "Private recovery detail", status: 401, code: "authentication.token_invalid",
@@ -455,7 +524,7 @@ test("fresh proof remains usable with expanded copy, dark mode, and 200 percent 
   await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
   await mockSecurity(page, { ...baseContext, recently_authenticated: false });
   await page.goto("/account/reauthenticate?task=security");
-  await expect(page.getByRole("heading", { name: "Confirm your sign-in" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Confirm it’s you" })).toBeVisible();
   await page.keyboard.press(browserName === "webkit" ? "Alt+Tab" : "Tab");
   await page.keyboard.press("Enter");
   await expect(page.getByRole("main")).toBeFocused();
@@ -466,9 +535,9 @@ test("fresh proof remains usable with expanded copy, dark mode, and 200 percent 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("reauthentication-expanded-dark.png"), fullPage: true });
   await page.locator("#current-password").fill("current-password");
-  await page.getByRole("button", { name: "Confirm password" }).click();
-  await expect(page.getByRole("heading", { name: "Your proof is ready" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Return to your task" })).toHaveAttribute("href", "/account/security");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "You’re confirmed" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Back to account security" })).toHaveAttribute("href", "/account/security");
 });
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1440, height: 1024 }]) {
@@ -491,9 +560,9 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 768, height: 1024 
       await page.getByRole("checkbox").focus();
       await page.keyboard.press("Space");
       await page.keyboard.press(browserName === "webkit" ? "Alt+Tab" : "Tab");
-      await expect(page.getByRole("button", { name: "Finish and hide codes" })).toBeFocused();
+      await expect(page.getByRole("button", { name: "Done", exact: true })).toBeFocused();
       await page.emulateMedia({ forcedColors: "active" });
-      await expect(page.getByRole("button", { name: "Finish and hide codes" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Done", exact: true })).toBeVisible();
     });
   }
 }

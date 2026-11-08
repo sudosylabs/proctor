@@ -78,6 +78,8 @@ func TestAccountRecoveryAttemptAccountingIsolatesAndNormalizesOperations(t *test
 		accountRecoveryAttemptPasswordResetRequest,
 		accountRecoveryAttemptEmailVerificationComplete,
 		accountRecoveryAttemptPasswordResetComplete,
+		accountRecoveryAttemptEmailVerificationInspect,
+		accountRecoveryAttemptEmailChangeUndoInspect,
 	}
 	for _, operation := range operations {
 		require.NoError(t, service.checkAccountRecoveryRateLimit(
@@ -108,6 +110,8 @@ func TestAccountRecoveryAttemptAccountingUsesExactThresholdForEveryOperation(t *
 		accountRecoveryAttemptPasswordResetRequest,
 		accountRecoveryAttemptEmailVerificationComplete,
 		accountRecoveryAttemptPasswordResetComplete,
+		accountRecoveryAttemptEmailVerificationInspect,
+		accountRecoveryAttemptEmailChangeUndoInspect,
 	}
 	for _, operation := range operations {
 		operation := operation

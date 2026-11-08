@@ -1632,7 +1632,7 @@ CREATE TABLE sessions (
 			'access_policy_changed', 'account_disabled', 'administrator_all_sessions',
 			'administrator_session', 'authentication_audit_failed', 'desktop_authorization_failed', 'email_change_undone', 'external_identity_unlinked',
 			'inactive_user', 'password_changed', 'password_removed', 'password_reset', 'refresh_replay', 'mfa_reset',
-			'user_all_sessions', 'user_logout', 'user_session', 'desktop_registration_revoked',
+			'user_all_sessions', 'user_other_sessions', 'user_logout', 'user_session', 'desktop_registration_revoked',
 			'exam_attempt_session_lock', 'expired'
 		))
 	),
@@ -3394,6 +3394,11 @@ CREATE TABLE audit_events (
     updated_at timestamptz NOT NULL,
     actor_id varchar(26) REFERENCES users(id),
     session_id varchar(26) REFERENCES sessions(id),
+    -- The User whose account the event concerns, when there is one. A User
+    -- resource is always its own subject; Role Bindings, Class and Academic
+    -- Unit membership, and self-service actions recorded against the
+    -- Institution name the User here so their own history can find them.
+    subject_user_id varchar(26) REFERENCES users(id),
     action varchar(128) NOT NULL,
     resource_type varchar(32) NOT NULL
         CHECK (resource_type IN ('institution', 'academic_unit', 'programme', 'programme_level', 'academic_period', 'class', 'user', 'exam', 'exam_sitting', 'submission', 'mail_delivery')),
@@ -3412,13 +3417,18 @@ CREATE TABLE audit_events (
     parameters jsonb,
     prior_state jsonb,
     result jsonb,
-    CONSTRAINT audit_events_lifecycle_check CHECK (updated_at >= created_at)
+    CONSTRAINT audit_events_lifecycle_check CHECK (updated_at >= created_at),
+    CONSTRAINT audit_events_user_subject_check
+        CHECK (resource_type <> 'user' OR subject_user_id IS NOT DISTINCT FROM resource_id)
 );
 
 CREATE INDEX audit_events_created_at_id_idx ON audit_events (created_at DESC, id DESC);
 CREATE INDEX audit_events_actor_id_created_at_id_idx
     ON audit_events (actor_id, created_at DESC, id DESC)
     WHERE actor_id IS NOT NULL;
+CREATE INDEX audit_events_subject_user_id_created_at_id_idx
+    ON audit_events (subject_user_id, created_at DESC, id DESC)
+    WHERE subject_user_id IS NOT NULL;
 CREATE INDEX audit_events_action_created_at_id_idx
     ON audit_events (action, created_at DESC, id DESC);
 CREATE INDEX audit_events_resource_type_resource_id_created_at_id_idx
@@ -4481,6 +4491,8 @@ ALTER TABLE audit_events
     CHECK (actor_id IS NULL OR actor_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
     ADD CONSTRAINT audit_events_session_id_canonical_check
     CHECK (session_id IS NULL OR session_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT audit_events_subject_user_id_canonical_check
+    CHECK (subject_user_id IS NULL OR subject_user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
     ADD CONSTRAINT audit_events_resource_id_canonical_check
     CHECK (resource_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
     ADD CONSTRAINT audit_events_scope_id_canonical_check

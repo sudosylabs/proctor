@@ -15,7 +15,7 @@
   "state": "authenticated_confirmation",
   "wait_for": {
     "role": "heading",
-    "name": "Continue in Proctor Desktop"
+    "name": "Sign in to Proctor Desktop?"
   },
   "capture_environment": "PROCTOR_DOCS_DESKTOP_AUTHORIZATION_SCREENSHOT",
   "capture_command": "cd webapp && PROCTOR_DOCS_DESKTOP_AUTHORIZATION_SCREENSHOT=../docs/public/static/assets/screenshots/desktop-authorization-confirmation.png npx playwright test tests/browser/hosted-access.spec.ts --project=chromium --grep 'Desktop authorization approves the exact sanitized request' --workers=1",

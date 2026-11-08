@@ -1108,10 +1108,10 @@
           "application/json": {
             "example": {
               "academic_unit_id": "ybndrfg8ejkmcpqxot1uwisza3",
-              "description": "Read examination schedules from the registrar tool",
+              "description": "Read exams from the registrar tool",
               "expires_at": "2027-01-01T00:00:00Z",
               "scopes": [
-                "examinations:read"
+                "exam.view"
               ]
             },
             "schema": {
@@ -1499,6 +1499,34 @@
           }
         },
         "description": "Closed bounded native delivery control; unknown, missing, duplicate, and invalid members are rejected.",
+        "required": true
+      },
+      "InspectEmailChangeUndo": {
+        "content": {
+          "application/json": {
+            "example": {
+              "token": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/AccountTokenInspectionRequest"
+            }
+          }
+        },
+        "description": "Supplies the undo token from the link fragment; it is read, not consumed.",
+        "required": true
+      },
+      "InspectEmailVerification": {
+        "content": {
+          "application/json": {
+            "example": {
+              "token": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/AccountTokenInspectionRequest"
+            }
+          }
+        },
+        "description": "Supplies the email-verification token from the link fragment; it is read, not consumed.",
         "required": true
       },
       "Login": {
@@ -3199,6 +3227,44 @@
           }
         }
       },
+      "EmailChangeUndoInspected": {
+        "content": {
+          "application/json": {
+            "example": {
+              "changed_at": "2026-08-01T00:00:00Z",
+              "masked_current_email": "s***@example.org",
+              "restored_email": "student.one@example.edu"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/EmailChangeUndoInspectionResponse"
+            }
+          }
+        },
+        "description": "The email change the active undo token would reverse",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
+      "EmailVerificationInspected": {
+        "content": {
+          "application/json": {
+            "example": {
+              "email": "student.one@example.edu"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/EmailVerificationInspectionResponse"
+            }
+          }
+        },
+        "description": "The address the active verification token would confirm",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
       "ExamAttemptManagerListOK": {
         "content": {
           "application/json": {
@@ -4758,6 +4824,24 @@
           }
         }
       },
+      "OtherSessionsRevoked": {
+        "content": {
+          "application/json": {
+            "example": {
+              "revoked_session_count": 3
+            },
+            "schema": {
+              "$ref": "#/components/schemas/RevokeOtherSessionsResponse"
+            }
+          }
+        },
+        "description": "Every other current-user Session was revoked",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
       "PasswordReauthenticationOK": {
         "content": {
           "application/json": {
@@ -4782,6 +4866,56 @@
           }
         },
         "description": "Personal Access Token with one-time credential",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
+      "PersonalAccessTokenGrantableScopesOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "academic_units": [
+                {
+                  "display_name": "School of Computing",
+                  "id": "ybndrfg8ejkmcpqxot1uwisza3"
+                }
+              ],
+              "academic_units_has_more": false,
+              "scopes": [
+                {
+                  "academic_unit_ids": [
+                    "ybndrfg8ejkmcpqxot1uwisza3"
+                  ],
+                  "description": "Read the installation's audit history.",
+                  "institution_wide": true,
+                  "name": "audit.view",
+                  "resource_types": [
+                    "institution"
+                  ],
+                  "title": "View audit history"
+                },
+                {
+                  "academic_unit_ids": [
+                    "ybndrfg8ejkmcpqxot1uwisza3"
+                  ],
+                  "description": "Read exams you manage, including drafts and revisions.",
+                  "institution_wide": false,
+                  "name": "exam.view",
+                  "resource_types": [
+                    "exam"
+                  ],
+                  "title": "View exams"
+                }
+              ]
+            },
+            "schema": {
+              "$ref": "#/components/schemas/PersonalAccessTokenGrantableScopesResponse"
+            }
+          }
+        },
+        "description": "Grantable Personal Access Token scopes",
         "headers": {
           "Cache-Control": {
             "$ref": "#/components/headers/NoStore"
@@ -5254,6 +5388,38 @@
         },
         "description": "Role"
       },
+      "SearchOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "items": [
+                {
+                  "academic_unit_id": "ybndrfg8ejkmcpqxot1uwisza4",
+                  "id": "ybndrfg8ejkmcpqxot1uwisza3",
+                  "title": "Algorithms midterm",
+                  "type": "exam"
+                },
+                {
+                  "display_name": "Algorithms, group A",
+                  "id": "ybndrfg8ejkmcpqxot1uwisza5",
+                  "programme_level_id": "ybndrfg8ejkmcpqxot1uwisza6",
+                  "type": "class"
+                },
+                {
+                  "display_name": "Ada Example",
+                  "id": "ybndrfg8ejkmcpqxot1uwisza7",
+                  "type": "user",
+                  "username": "ada.example"
+                }
+              ]
+            },
+            "schema": {
+              "$ref": "#/components/schemas/SearchResponse"
+            }
+          }
+        },
+        "description": "Matches of each requested type within the caller's list visibility."
+      },
       "SecurityPolicyRecoveryOK": {
         "content": {
           "application/json": {
@@ -5291,6 +5457,58 @@
           }
         },
         "description": "Authenticated security preflight result."
+      },
+      "SelfAuditListOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "items": [
+                {
+                  "actor": {
+                    "kind": "self"
+                  },
+                  "client_type": "web",
+                  "created_at": "2026-08-01T09:30:00Z",
+                  "event": "password.changed",
+                  "id": "ybndrfg8ejkmcpqxot1uwisza3",
+                  "ip_address": "192.0.2.10",
+                  "relation": "subject",
+                  "resource": {
+                    "id": "ybndrfg8ejkmcpqxot1uwisza4",
+                    "type": "user"
+                  },
+                  "status": "success",
+                  "user_agent": "Mozilla/5.0"
+                },
+                {
+                  "actor": {
+                    "kind": "administrator"
+                  },
+                  "client_type": "web",
+                  "created_at": "2026-07-30T14:05:00Z",
+                  "event": "mfa.reset_by_administrator",
+                  "id": "ybndrfg8ejkmcpqxot1uwisza5",
+                  "relation": "subject",
+                  "resource": {
+                    "id": "ybndrfg8ejkmcpqxot1uwisza4",
+                    "type": "user"
+                  },
+                  "status": "success"
+                }
+              ],
+              "next_cursor": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wNy0zMFQxNDowNTowMFoifQ"
+            },
+            "schema": {
+              "$ref": "#/components/schemas/SelfAuditListResponse"
+            }
+          }
+        },
+        "description": "One page of the current User's own account history.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/PrivateNoStore"
+          }
+        }
       },
       "SensitiveAccepted": {
         "description": "Accepted",
@@ -6323,6 +6541,18 @@
           "changed_fields",
           "changed_at",
           "outcome"
+        ],
+        "type": "object"
+      },
+      "AccountTokenInspectionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
         ],
         "type": "object"
       },
@@ -7908,6 +8138,15 @@
       "BrowserInvitationStartResponse": {
         "additionalProperties": false,
         "properties": {
+          "class_display_name": {
+            "description": "Display name of the Class a student Class Invitation enrolls the invitee in. Omitted for every other purpose.",
+            "type": "string"
+          },
+          "email": {
+            "description": "Normalized address the Invitation was sent to. Account-creating acceptance gives the new account this address; no acceptance operation takes an address from the browser.",
+            "format": "email",
+            "type": "string"
+          },
           "expires_at": {
             "format": "date-time",
             "type": "string"
@@ -7937,7 +8176,8 @@
           "handle",
           "purpose",
           "requirement",
-          "expires_at"
+          "expires_at",
+          "email"
         ],
         "type": "object"
       },
@@ -10006,7 +10246,7 @@
           },
           "scopes": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/PersonalAccessTokenScope"
             },
             "type": "array"
           }
@@ -10295,6 +10535,159 @@
           "scope_type",
           "scope_id",
           "display_name"
+        ],
+        "type": "object"
+      },
+      "CurrentUserSessionResponse": {
+        "additionalProperties": false,
+        "description": "One of the current User's Sessions, marked when it is the Session that made the request.",
+        "properties": {
+          "archived_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "authenticated_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "authentication_method": {
+            "type": "string"
+          },
+          "authentication_strength": {
+            "type": "string"
+          },
+          "client_type": {
+            "enum": [
+              "desktop",
+              "cli",
+              "web"
+            ],
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "current": {
+            "description": "True for the Session that made the request.",
+            "type": "boolean"
+          },
+          "desktop_architecture": {
+            "enum": [
+              "arm64",
+              "x64"
+            ],
+            "type": "string"
+          },
+          "desktop_build_id": {
+            "type": "string"
+          },
+          "desktop_platform": {
+            "enum": [
+              "darwin",
+              "win32",
+              "linux"
+            ],
+            "type": "string"
+          },
+          "desktop_realtime_protocol": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "desktop_registration_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "desktop_release": {
+            "type": "string"
+          },
+          "device_id": {
+            "type": "string"
+          },
+          "device_name": {
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "idle_expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "last_activity_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "mfa_completed_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "mfa_recovery_required": {
+            "description": "Ordinary access remains unavailable until a new local authenticator is activated.",
+            "type": "boolean"
+          },
+          "reauthenticated_at": {
+            "description": "Most recent verified fresh primary proof for the original Session method; does not replace initial authentication or MFA history.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "revocation_reason": {
+            "description": "Localized presentation of revocation_reason_code.",
+            "type": "string"
+          },
+          "revocation_reason_code": {
+            "enum": [
+              "mfa_reset",
+              "account_disabled",
+              "access_policy_changed",
+              "administrator_all_sessions",
+              "administrator_session",
+              "authentication_audit_failed",
+              "desktop_authorization_failed",
+              "desktop_registration_revoked",
+              "email_change_undone",
+              "external_identity_unlinked",
+              "inactive_user",
+              "password_changed",
+              "password_removed",
+              "password_reset",
+              "refresh_replay",
+              "user_all_sessions",
+              "user_logout",
+              "user_other_sessions",
+              "user_session"
+            ],
+            "type": "string"
+          },
+          "revoked_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/ID"
+          }
+        },
+        "required": [
+          "current",
+          "id",
+          "created_at",
+          "updated_at",
+          "user_id",
+          "client_type",
+          "authentication_method",
+          "authentication_strength",
+          "mfa_recovery_required",
+          "authenticated_at",
+          "last_activity_at",
+          "idle_expires_at",
+          "expires_at"
         ],
         "type": "object"
       },
@@ -10766,6 +11159,11 @@
           "display_name": {
             "type": "string"
           },
+          "email": {
+            "description": "The authenticated account's own email address, shown so the person can confirm which account the Desktop will use.",
+            "format": "email",
+            "type": "string"
+          },
           "id": {
             "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
             "type": "string"
@@ -10777,7 +11175,8 @@
         "required": [
           "id",
           "username",
-          "display_name"
+          "display_name",
+          "email"
         ],
         "type": "object"
       },
@@ -10847,6 +11246,11 @@
           "local_login_enabled": {
             "type": "boolean"
           },
+          "requested_at": {
+            "description": "When Proctor Desktop started this authorization request.",
+            "format": "date-time",
+            "type": "string"
+          },
           "state": {
             "enum": [
               "bound",
@@ -10860,6 +11264,7 @@
           "local_login_enabled",
           "external_providers",
           "device_name",
+          "requested_at",
           "expires_at"
         ],
         "type": "object"
@@ -12439,6 +12844,31 @@
         ],
         "type": "object"
       },
+      "EmailChangeUndoInspectionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "changed_at": {
+            "description": "When the email change was applied.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "masked_current_email": {
+            "description": "The account's current address, masked as in the email-change warning (first character, up to three asterisks, and the domain).",
+            "type": "string"
+          },
+          "restored_email": {
+            "description": "The previous address the undo would restore; the token was mailed to it.",
+            "format": "email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "restored_email",
+          "masked_current_email",
+          "changed_at"
+        ],
+        "type": "object"
+      },
       "EmailChangeUndoRequest": {
         "additionalProperties": false,
         "properties": {
@@ -12460,6 +12890,20 @@
         },
         "required": [
           "token"
+        ],
+        "type": "object"
+      },
+      "EmailVerificationInspectionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "description": "The address the token was issued for and would mark verified.",
+            "format": "email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
         ],
         "type": "object"
       },
@@ -16950,9 +17394,26 @@
           "enabled": {
             "type": "boolean"
           },
+          "enabled_at": {
+            "description": "When two-step verification was turned on. Present only while enabled.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "method": {
+            "description": "The second factor in use. Present while two-step verification is enabled or pending; more methods may be added later.",
+            "enum": [
+              "authenticator_app"
+            ],
+            "type": "string"
+          },
           "mfa_recovery_required": {
             "description": "Whether this Session is restricted to fresh primary proof and local authenticator enrollment after an assisted reset.",
             "type": "boolean"
+          },
+          "password_changed_at": {
+            "description": "When the User's active password credential was last set or changed. Omitted for an account without a password credential.",
+            "format": "date-time",
+            "type": "string"
           },
           "pending": {
             "type": "boolean"
@@ -16961,10 +17422,31 @@
             "format": "date-time",
             "type": "string"
           },
+          "recent_authentication_minutes": {
+            "description": "Configured recent-authentication window (`Authentication.RecentAuthenticationTTL`) in whole minutes, rounded down.",
+            "minimum": 1,
+            "type": "integer"
+          },
           "recently_authenticated": {
             "type": "boolean"
           },
+          "recently_authenticated_until": {
+            "description": "When this Session's recent-authentication window ends. Present only while `recently_authenticated` is true.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "recovery_codes_generated_at": {
+            "description": "When the live recovery-code set was issued. Omitted when there is none.",
+            "format": "date-time",
+            "type": "string"
+          },
           "recovery_codes_remaining": {
+            "description": "Unused codes in the live recovery-code set; 0 unless enabled.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "recovery_codes_total": {
+            "description": "Size of the live recovery-code set the User was given, used codes included, so it stays true if the configured count later changes; 0 unless enabled.",
             "minimum": 0,
             "type": "integer"
           },
@@ -16981,7 +17463,9 @@
           "recently_authenticated",
           "enabled",
           "pending",
-          "recovery_codes_remaining"
+          "recovery_codes_remaining",
+          "recovery_codes_total",
+          "recent_authentication_minutes"
         ],
         "type": "object"
       },
@@ -19752,6 +20236,105 @@
         ],
         "type": "object"
       },
+      "PersonalAccessTokenGrantableAcademicUnit": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          }
+        },
+        "required": [
+          "id",
+          "display_name"
+        ],
+        "type": "object"
+      },
+      "PersonalAccessTokenGrantableScope": {
+        "additionalProperties": false,
+        "properties": {
+          "academic_unit_ids": {
+            "description": "The listed `academic_units` at which the scope is grantable; it is also grantable at any unit below them.",
+            "items": {
+              "$ref": "#/components/schemas/ID"
+            },
+            "type": "array"
+          },
+          "description": {
+            "description": "One localized sentence explaining what the scope allows.",
+            "type": "string"
+          },
+          "institution_wide": {
+            "description": "True when the scope may be granted without an Academic Unit boundary, or with any boundary.",
+            "type": "boolean"
+          },
+          "name": {
+            "$ref": "#/components/schemas/PersonalAccessTokenScope"
+          },
+          "resource_types": {
+            "description": "The resource types the action applies to.",
+            "items": {
+              "enum": [
+                "academic_period",
+                "academic_unit",
+                "class",
+                "exam",
+                "exam_sitting",
+                "institution",
+                "programme",
+                "programme_level",
+                "submission",
+                "user"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "description": "Short localized title.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "title",
+          "description",
+          "resource_types",
+          "institution_wide",
+          "academic_unit_ids"
+        ],
+        "type": "object"
+      },
+      "PersonalAccessTokenGrantableScopesResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "academic_units": {
+            "description": "At most 50 Academic Unit roots at which at least one scope is grantable, ordered by display name.",
+            "items": {
+              "$ref": "#/components/schemas/PersonalAccessTokenGrantableAcademicUnit"
+            },
+            "type": "array"
+          },
+          "academic_units_has_more": {
+            "description": "True when more grantable roots exist than are listed.",
+            "type": "boolean"
+          },
+          "scopes": {
+            "items": {
+              "$ref": "#/components/schemas/PersonalAccessTokenGrantableScope"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "scopes",
+          "academic_units",
+          "academic_units_has_more"
+        ],
+        "type": "object"
+      },
       "PersonalAccessTokenListResponse": {
         "additionalProperties": false,
         "description": "One page of the collection in its stable order.",
@@ -19831,6 +20414,65 @@
           "expires_at"
         ],
         "type": "object"
+      },
+      "PersonalAccessTokenScope": {
+        "description": "An action a Personal Access Token may carry. The grantable-scopes operation reports which of them the current User may grant.",
+        "enum": [
+          "academic.progression.manage",
+          "academic_audit.view",
+          "academic_period.manage",
+          "academic_period.view",
+          "academic_unit.manage",
+          "academic_unit.members.manage",
+          "academic_unit.members.view",
+          "academic_unit.view",
+          "audit.view",
+          "class.manage",
+          "class.members.manage",
+          "class.members.view",
+          "class.view",
+          "exam.attempt.browser_activity.view",
+          "exam.create",
+          "exam.create.override",
+          "exam.manage",
+          "exam.manage.override",
+          "exam.publish",
+          "exam.publish.override",
+          "exam.sitting.create",
+          "exam.sitting.create.override",
+          "exam.sitting.manage",
+          "exam.sitting.manage.override",
+          "exam.sitting.view",
+          "exam.sitting.view.override",
+          "exam.view",
+          "exam.view.override",
+          "institution.manage",
+          "invitation.create",
+          "invitation.manage",
+          "invitation.view",
+          "job.manage",
+          "job.view",
+          "mail.manage",
+          "mail.view",
+          "onboarding_batch.manage",
+          "onboarding_batch.view",
+          "programme.manage",
+          "programme.view",
+          "programme_level.manage",
+          "programme_level.view",
+          "session.manage",
+          "session.view",
+          "submission.release",
+          "submission.release.override",
+          "submission.review",
+          "submission.review.override",
+          "submission.view",
+          "submission.view.override",
+          "user.manage",
+          "user.profile_picture.manage",
+          "user.view"
+        ],
+        "type": "string"
       },
       "PrepareSecurityPreflightRequest": {
         "additionalProperties": false,
@@ -20152,6 +20794,12 @@
           "institution": {
             "$ref": "#/components/schemas/PublicInstitutionPresentationResponse"
           },
+          "password_minimum_length": {
+            "description": "Minimum number of characters a new local password must contain (`Authentication.Password.MinimumLength`). Other password rules still apply and are reported when a password is rejected.",
+            "maximum": 128,
+            "minimum": 8,
+            "type": "integer"
+          },
           "policy_revision": {
             "description": "Current Access Policy revision when the installation is initialized.",
             "format": "int64",
@@ -20164,6 +20812,12 @@
             },
             "maxItems": 64,
             "type": "array"
+          },
+          "support_address": {
+            "description": "Operator-configured help mailbox (`Mail.SupportAddress`) that hosted pages offer as a contact. Omitted when none is configured.",
+            "format": "email",
+            "maxLength": 254,
+            "type": "string"
           }
         },
         "required": [
@@ -20172,7 +20826,8 @@
           "initialized",
           "capabilities",
           "providers",
-          "desktop_authorization"
+          "desktop_authorization",
+          "password_minimum_length"
         ],
         "type": "object"
       },
@@ -20844,12 +21499,28 @@
           "exam_sitting_id": {
             "$ref": "#/components/schemas/ID"
           },
+          "exam_title": {
+            "description": "Immutable title of the Exam Revision the Sitting delivered. Shown to every recipient of the notice, even one who no longer has access to the Exam.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
           "retire_after": {
             "format": "date-time",
             "type": "string"
           },
           "retirement_id": {
             "$ref": "#/components/schemas/ID"
+          },
+          "sitting_end_at": {
+            "description": "Scheduled end of the Sitting whose records the notice covers.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "sitting_start_at": {
+            "description": "Scheduled start of the Sitting whose records the notice covers.",
+            "format": "date-time",
+            "type": "string"
           },
           "state": {
             "enum": [
@@ -20868,6 +21539,9 @@
           "exam_id",
           "exam_sitting_id",
           "submission_id",
+          "exam_title",
+          "sitting_start_at",
+          "sitting_end_at",
           "category",
           "state",
           "created_at",
@@ -21361,6 +22035,20 @@
         ],
         "type": "object"
       },
+      "RevokeOtherSessionsResponse": {
+        "additionalProperties": false,
+        "description": "How many of the current User's other Sessions this request revoked.",
+        "properties": {
+          "revoked_session_count": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revoked_session_count"
+        ],
+        "type": "object"
+      },
       "RevokeSessionRequest": {
         "additionalProperties": false,
         "properties": {
@@ -21596,6 +22284,135 @@
           "class_id",
           "scheduled_start_at",
           "scheduled_end_at"
+        ],
+        "type": "object"
+      },
+      "SearchClassItem": {
+        "additionalProperties": false,
+        "description": "An unarchived Class within the caller's class.view scope.",
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "programme_level_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "type": {
+            "const": "class",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "display_name",
+          "programme_level_id"
+        ],
+        "type": "object"
+      },
+      "SearchExamItem": {
+        "additionalProperties": false,
+        "description": "An Exam the caller may see in the Exam catalog, titled by its current Draft.",
+        "properties": {
+          "academic_unit_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "title": {
+            "description": "Current Draft title.",
+            "type": "string"
+          },
+          "type": {
+            "const": "exam",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "title",
+          "academic_unit_id"
+        ],
+        "type": "object"
+      },
+      "SearchItem": {
+        "description": "One search match, discriminated by type.",
+        "discriminator": {
+          "mapping": {
+            "class": "#/components/schemas/SearchClassItem",
+            "exam": "#/components/schemas/SearchExamItem",
+            "user": "#/components/schemas/SearchUserItem"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/SearchExamItem"
+          },
+          {
+            "$ref": "#/components/schemas/SearchClassItem"
+          },
+          {
+            "$ref": "#/components/schemas/SearchUserItem"
+          }
+        ]
+      },
+      "SearchResponse": {
+        "additionalProperties": false,
+        "description": "At most limit matches of each requested type, grouped by type. Search never continues, so next_cursor is always omitted.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SearchItem"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "$ref": "#/components/schemas/NextCursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "SearchType": {
+        "description": "Kind of search result.",
+        "enum": [
+          "exam",
+          "class",
+          "user"
+        ],
+        "type": "string"
+      },
+      "SearchUserItem": {
+        "additionalProperties": false,
+        "description": "A User visible in the caller's User directory. The email address is never included.",
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "type": {
+            "const": "user",
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "display_name",
+          "username"
         ],
         "type": "object"
       },
@@ -21990,6 +22807,173 @@
         ],
         "type": "object"
       },
+      "SelfAuditEvent": {
+        "description": "Stable name of one account-relevant event. The catalogue is closed and may grow; clients own the labels and should present an unknown name generically.",
+        "enum": [
+          "academic_unit.joined",
+          "academic_unit.left",
+          "account.disabled",
+          "account.enabled",
+          "account.recovered_by_administrator",
+          "affiliation.ended",
+          "affiliation.started",
+          "class.enrolled",
+          "class.transferred_in",
+          "class.transferred_out",
+          "class.unenrolled",
+          "desktop.registration_revoked",
+          "desktop.signed_in",
+          "email.change_undone",
+          "email.changed",
+          "email.verified",
+          "invitation.accepted",
+          "mfa.disabled",
+          "mfa.enabled",
+          "mfa.recovery_codes_regenerated",
+          "mfa.reset_by_administrator",
+          "mfa.setup_started",
+          "password.changed",
+          "password.enrolled",
+          "password.removed",
+          "password.reset",
+          "personal_access_token.created",
+          "personal_access_token.disabled",
+          "personal_access_token.enabled",
+          "personal_access_token.revoked",
+          "profile.changed",
+          "profile_picture.changed",
+          "profile_picture.removed",
+          "provider.unlinked",
+          "role.ended",
+          "role.granted",
+          "session.revoked",
+          "sessions.revoked_all",
+          "sessions.revoked_others",
+          "sign_in.failed",
+          "sign_in.succeeded",
+          "sign_out"
+        ],
+        "type": "string"
+      },
+      "SelfAuditEventResponse": {
+        "additionalProperties": false,
+        "description": "One event in the current User's own account history.",
+        "properties": {
+          "actor": {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "description": "Who performed the event: the User, another person with authority over the account, or work with no signed-in actor such as a background Job, offline recovery, or an emailed link.",
+                "enum": [
+                  "self",
+                  "administrator",
+                  "system"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "client_type": {
+            "description": "Kind of client the event came from, when recorded.",
+            "maxLength": 32,
+            "type": "string"
+          },
+          "created_at": {
+            "description": "Time the event began.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "error_code": {
+            "description": "Stable safe failure category of a failed event.",
+            "maxLength": 128,
+            "type": "string"
+          },
+          "event": {
+            "$ref": "#/components/schemas/SelfAuditEvent"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "ip_address": {
+            "description": "Network address of the User's own action; omitted for anyone else's.",
+            "maxLength": 64,
+            "type": "string"
+          },
+          "relation": {
+            "description": "`subject` when the event is about the User's account; `actor` when the User performed it on anything else.",
+            "enum": [
+              "subject",
+              "actor"
+            ],
+            "type": "string"
+          },
+          "resource": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/ID"
+              },
+              "type": {
+                "description": "Stable type of the resource the event was recorded against.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "type": "object"
+          },
+          "status": {
+            "description": "Outcome of the event.",
+            "enum": [
+              "success",
+              "fail"
+            ],
+            "type": "string"
+          },
+          "user_agent": {
+            "description": "User agent of the User's own action; omitted for anyone else's.",
+            "maxLength": 512,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "event",
+          "status",
+          "relation",
+          "actor",
+          "resource"
+        ],
+        "type": "object"
+      },
+      "SelfAuditListResponse": {
+        "additionalProperties": false,
+        "description": "One bounded page of the current User's own account history.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SelfAuditEventResponse"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "next_cursor": {
+            "description": "Opaque continuation for the next page, omitted after the final page.",
+            "maxLength": 2048,
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "SequenceRange": {
         "additionalProperties": false,
         "properties": {
@@ -22142,6 +23126,7 @@
               "refresh_replay",
               "user_all_sessions",
               "user_logout",
+              "user_other_sessions",
               "user_session"
             ],
             "type": "string"
@@ -22180,7 +23165,7 @@
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/SessionResponse"
+              "$ref": "#/components/schemas/CurrentUserSessionResponse"
             },
             "type": "array"
           },
@@ -22307,6 +23292,7 @@
               "refresh_replay",
               "user_all_sessions",
               "user_logout",
+              "user_other_sessions",
               "user_session"
             ],
             "type": "string"
@@ -25839,7 +26825,7 @@
     },
     "/api/v1/auth/browser/invitations": {
       "post": {
-        "description": "Consumes no Invitation yet; it exchanges the one-time claim for a short-lived, same-origin browser handle bound to that exact Invitation purpose. The response omits the original claim and prevents it from entering subsequent browser URLs or logs.",
+        "description": "Consumes no Invitation yet; it exchanges the one-time claim for a short-lived, same-origin browser handle bound to that exact Invitation purpose. The response omits the original claim and prevents it from entering subsequent browser URLs or logs. It names the address the Invitation was sent to, which acceptance uses and the browser cannot change, and, for a student Class Invitation only, the Class display name; Academic Unit and Role names are never returned.",
         "operationId": "startBrowserInvitation",
         "requestBody": {
           "$ref": "#/components/requestBodies/BrowserInvitationStart"
@@ -26406,7 +27392,7 @@
     },
     "/api/v1/auth/desktop/authorizations/context": {
       "get": {
-        "description": "Resolves the scoped binding cookie and returns only the safe device, authentication-choice, expiry, and confirmed-account presentation needed by the current hosted page.",
+        "description": "Resolves the scoped binding cookie and returns only the safe device, request time, authentication-choice, expiry, and confirmed-account presentation needed by the current hosted page. The account, including its own email address, appears only after this browser has authenticated as that account for the transaction.",
         "operationId": "getDesktopAuthorizationContext",
         "responses": {
           "200": {
@@ -26544,6 +27530,43 @@
         "x-proctor-idempotency": "none"
       }
     },
+    "/api/v1/auth/email-change/undo/inspect": {
+      "post": {
+        "description": "Returns, for one active undo token, the previous address it would restore, the account's current address masked as in the warning mail, and when the change was applied. It never consumes, extends, or reissues the token and records no audit event. It is rate-limited by token and source with the undo policy, and an unknown, malformed, expired, or already used token receives the same generic invalid-credential outcome as the undo itself. The token travels in the body so it stays out of URLs and logs; whether the previous address is still free is decided only by the undo.",
+        "operationId": "inspectEmailChangeUndo",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/InspectEmailChangeUndo"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/EmailChangeUndoInspected"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [],
+        "summary": "Read the email change an undo credential would reverse",
+        "tags": [
+          "Authentication"
+        ],
+        "x-proctor-auth": "public",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "authentication.rate_limited",
+          "authentication.rate_limit_unavailable",
+          "authentication.account_token.invalid",
+          "authentication.account_recovery.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
     "/api/v1/auth/email-verification/complete": {
       "post": {
         "description": "Consumes one valid short-lived verification token and marks its bound email address verified. The token is single use, cannot verify another address, and an invalid or expired token reveals no account details.",
@@ -26567,6 +27590,43 @@
         },
         "security": [],
         "summary": "Consume an email-verification credential",
+        "tags": [
+          "Authentication"
+        ],
+        "x-proctor-auth": "public",
+        "x-proctor-error-codes": [
+          "request.invalid",
+          "authentication.rate_limited",
+          "authentication.rate_limit_unavailable",
+          "authentication.account_token.invalid",
+          "authentication.account_recovery.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/auth/email-verification/inspect": {
+      "post": {
+        "description": "Returns the address bound to one active verification token so the hosted page can name it before the person confirms. It never consumes, extends, or reissues the token and records no audit event. It is rate-limited by token and source with the completion policy, and an unknown, malformed, expired, superseded, or already used token receives the same generic invalid-credential outcome as completion. The token travels in the body so it stays out of URLs and logs; the result is presentation only and completion rechecks the token.",
+        "operationId": "inspectEmailVerification",
+        "requestBody": {
+          "$ref": "#/components/requestBodies/InspectEmailVerification"
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/EmailVerificationInspected"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [],
+        "summary": "Read the address an email-verification credential would confirm",
         "tags": [
           "Authentication"
         ],
@@ -28580,7 +29640,7 @@
     },
     "/api/v1/discovery": {
       "get": {
-        "description": "Returns the same-origin, unauthenticated capability document a client uses before choosing a registration or authentication flow. The response contains only safe presentation and compatibility data, is never a substitute for authorization, and is returned with Cache-Control: no-store.",
+        "description": "Returns the same-origin, unauthenticated capability document a client uses before choosing a registration or authentication flow. The response contains only safe presentation and compatibility data, is never a substitute for authorization, and is returned with Cache-Control: no-store. It also carries two operator-configured presentation facts that apply before and after installation setup: the optional support mailbox hosted pages offer as a contact, and the minimum password length new passwords must meet.",
         "operationId": "getPublicAccessDiscovery",
         "responses": {
           "200": {
@@ -42255,6 +43315,123 @@
         "x-proctor-idempotency": "none"
       }
     },
+    "/api/v1/search": {
+      "get": {
+        "description": "Finds Exams by Draft title, Classes by name or display name, and Users by directory fields, each as a literal case-insensitive substring of the trimmed q. Every type is authorized, audited, and scoped exactly as its own list: active Exams the caller may see in the Exam catalog, unarchived Classes within the caller's class.view scope, and enabled Users visible in the User directory. A requested type the caller may not list contributes no items; the request is denied only when the caller may list none of the requested types. Items are grouped by type in the order exam, class, user, each group in its own list order and holding at most limit items. Search answers one bounded page and never continues: next_cursor is always omitted and cursor is rejected. Email addresses are never returned, and the query text is kept out of logs and audit records.",
+        "operationId": "searchAccessible",
+        "parameters": [
+          {
+            "description": "Search text of 2 to 100 characters after trimming, matched as a literal case-insensitive substring.",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "maxLength": 100,
+              "minLength": 2,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Repeated result type filter, such as types=exam\u0026types=user. Omit it to search every type; a type may not repeat.",
+            "explode": true,
+            "in": "query",
+            "name": "types",
+            "required": false,
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/SearchType"
+              },
+              "maxItems": 3,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "style": "form"
+          },
+          {
+            "description": "Maximum number of items of each type.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 5,
+              "maximum": 20,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Not accepted. Search answers one bounded page and never issues next_cursor, so any cursor is rejected with request.invalid.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SearchOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Search Exams, Classes, and Users",
+        "tags": [
+          "Search"
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "search.query.invalid",
+          "exam.invalid",
+          "exam.unavailable",
+          "administration.unavailable",
+          "resource.not_found",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
     "/api/v1/security-preflights/{security_preflight_id}/report": {
       "parameters": [
         {
@@ -43799,6 +44976,127 @@
         "x-proctor-idempotency": "none"
       }
     },
+    "/api/v1/users/me/audits": {
+      "get": {
+        "description": "Returns one page of the current Session User's own account history, newest first. The history holds events about the User's account, whoever performed them, and account-relevant events the User performed on anything else. Each item carries a stable `event` name from a closed catalogue, which clients label themselves; rows outside the catalogue and unfinished attempts are never returned. Another person is never named: the actor is only `self`, `administrator`, or `system`, and the IP address and user agent appear only on the User's own actions. A resource identity appears only when the resource is the User, the Institution, or an Academic Unit or Class the User has or had a membership or Role Binding at. Personal Access Tokens cannot read this history. Reading it records no authorization decision.",
+        "operationId": "listCurrentUserAuditEvents",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageCursor"
+          },
+          {
+            "description": "Return only events recorded at or after this RFC 3339 instant.",
+            "in": "query",
+            "name": "created_after",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Return only events recorded before this RFC 3339 instant; it must be later than `created_after`.",
+            "in": "query",
+            "name": "created_before",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Return only these events. Repeat the parameter to select several; omit it for all.",
+            "explode": true,
+            "in": "query",
+            "name": "event",
+            "required": false,
+            "schema": {
+              "items": {
+                "$ref": "#/components/schemas/SelfAuditEvent"
+              },
+              "maxItems": 64,
+              "type": "array"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Return only events with this outcome.",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": [
+                "success",
+                "fail"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Return only events about the User's account (`subject`) or only events the User performed on anything else (`actor`). Omit it for both.",
+            "in": "query",
+            "name": "relation",
+            "required": false,
+            "schema": {
+              "enum": [
+                "subject",
+                "actor"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SelfAuditListOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List the current User's own account history",
+        "tags": [
+          "Authentication"
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "audit.query.invalid",
+          "audit.unavailable",
+          "request.invalid",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
     "/api/v1/users/me/context": {
       "get": {
         "description": "Returns a credential-free navigation projection for the current interactive Session. It identifies available product areas, a bounded list of management scopes, and the current unresolved Attempt selector without exposing Roles, permissions, provider claims, Session credentials, or examination content. This response is not an authorization receipt and must never be cached.",
@@ -44069,7 +45367,7 @@
     },
     "/api/v1/users/me/mfa": {
       "get": {
-        "description": "Returns whether MFA is active, whether a setup is pending, and the count of unused recovery codes for the current User. TOTP secrets and recovery-code values are never returned by this status view.",
+        "description": "Returns whether MFA is active, whether a setup is pending, and the count of unused recovery codes out of the configured set size for the current User, when the User's own password last changed, and the recent-authentication window: its configured length and, while this Session is recently authenticated, when it ends. TOTP secrets, recovery-code values, and password material are never returned by this status view.",
         "operationId": "getMFAStatus",
         "responses": {
           "200": {
@@ -44520,7 +45818,7 @@
     },
     "/api/v1/users/me/retention-notices": {
       "get": {
-        "description": "Returns the current Session User’s own durable grace notices, including cancellation and delivery status. The notice grants no examination record access. Reading it neither acknowledges delivery nor changes cleanup. Candidate notices are optional; responsible Exam Managers and institution operators receive them by default. Pending dates are invalidated when grace is canceled.",
+        "description": "Returns the current Session User’s own durable grace notices, including cancellation and delivery status. The notice grants no examination record access. Reading it neither acknowledges delivery nor changes cleanup. Candidate notices are optional; responsible Exam Managers and institution operators receive them by default. Pending dates are invalidated when grace is canceled. Each notice names the Exam title and the Sitting's scheduled times so the recipient can tell which records it covers; no candidate, answer, or evidence content is included.",
         "operationId": "listRetentionNotices",
         "parameters": [
           {
@@ -44727,7 +46025,7 @@
     },
     "/api/v1/users/me/sessions/revoke-all": {
       "post": {
-        "description": "Revokes every active Session belonging to the current User, including the Session making the request. Clients must discard cached credentials and require a new authentication flow afterward.",
+        "description": "Revokes every active Session belonging to the current User, including the Session making the request, so the caller is signed out too. Clients must discard cached credentials and require a new authentication flow afterward. To stay signed in on this device, use revokeOtherCurrentUserSessions instead.",
         "operationId": "revokeAllCurrentUserSessions",
         "responses": {
           "204": {
@@ -44770,6 +46068,69 @@
             "label": "Revoke all current-user Sessions",
             "lang": "Shell",
             "source": "curl --request POST \\\n  --header \"Authorization: Bearer $PROCTOR_TOKEN\" \\\n  https://proctor.example.edu/api/v1/users/me/sessions/revoke-all"
+          }
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "authentication.internal",
+          "audit.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable",
+          "authentication.csrf.invalid"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/users/me/sessions/revoke-others": {
+      "post": {
+        "description": "Revokes every active Session belonging to the current User except the Session making the request, which stays signed in; its cookies and credentials are left in place. The response reports how many Sessions were revoked, which is zero when no other Session was active. A personal access token has no Session to keep and is refused.",
+        "operationId": "revokeOtherCurrentUserSessions",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OtherSessionsRevoked"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "csrfToken": [],
+            "sessionCookie": []
+          }
+        ],
+        "summary": "Sign out every other current-user session",
+        "tags": [
+          "Authentication"
+        ],
+        "x-codeSamples": [
+          {
+            "label": "Sign out every other Session",
+            "lang": "Shell",
+            "source": "curl --request POST \\\n  --header \"Authorization: Bearer $PROCTOR_TOKEN\" \\\n  https://proctor.example.edu/api/v1/users/me/sessions/revoke-others"
           }
         ],
         "x-proctor-auth": "session_required",
@@ -45040,6 +46401,68 @@
           "authentication.dpop.unavailable",
           "authentication.csrf.invalid",
           "authentication.reauthentication_required"
+        ],
+        "x-proctor-idempotency": "none"
+      }
+    },
+    "/api/v1/users/me/tokens/grantable-scopes": {
+      "get": {
+        "description": "Returns the Personal Access Token scopes the current User may grant right now, with a localized title and description for each. A scope with `institution_wide` set may be granted with no Academic Unit boundary or with any boundary. Otherwise it may be granted only with a boundary at one of its `academic_unit_ids` or at a unit below one of them. `academic_units` lists at most 50 of those delegable roots, ordered by display name; `academic_units_has_more` reports that more exist. Scopes the User cannot grant anywhere are omitted. Creation still rechecks current authority.",
+        "operationId": "listGrantablePersonalAccessTokenScopes",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PersonalAccessTokenGrantableScopesOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List grantable Personal Access Token scopes",
+        "tags": [
+          "Authentication"
+        ],
+        "x-codeSamples": [
+          {
+            "label": "List grantable Personal Access Token scopes",
+            "lang": "Shell",
+            "source": "curl --header \"Authorization: Bearer $PROCTOR_TOKEN\" \\\n  https://proctor.example.edu/api/v1/users/me/tokens/grantable-scopes"
+          }
+        ],
+        "x-proctor-auth": "session_required",
+        "x-proctor-error-codes": [
+          "personal_access_token.unavailable",
+          "authentication.reauthentication_required",
+          "authentication.session_required",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
         ],
         "x-proctor-idempotency": "none"
       }
@@ -46672,6 +48095,10 @@
     {
       "description": "User directory profiles, settings, account administration, and profile pictures.",
       "name": "Users"
+    },
+    {
+      "description": "One bounded lookup across the Exams, Classes, and Users the caller may already list.",
+      "name": "Search"
     },
     {
       "description": "The Institution, Academic Units, Programmes, Programme Levels, Academic Periods, and Classes.",

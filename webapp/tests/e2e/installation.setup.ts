@@ -12,8 +12,8 @@ test("first-run setup establishes the Institution and first administrator", asyn
   expect(await before.json()).toEqual({ initialized: false });
 
   await page.goto("/login");
-  await expect(page.getByRole("heading", { name: "Setup is required" })).toBeVisible();
-  await page.getByRole("link", { name: "Open setup" }).click();
+  await expect(page.getByRole("heading", { name: "Proctor isn’t set up yet" })).toBeVisible();
+  await page.getByRole("link", { name: "Set up Proctor" }).click();
   await expect(page).toHaveURL(/\/setup$/);
 
   const administrator = {
@@ -23,16 +23,16 @@ test("first-run setup establishes the Institution and first administrator", asyn
   };
   const institutionName = unique("e2e-institution");
   await page.locator("#bootstrap-secret").fill(bootstrapSecret());
-  await page.getByLabel("Institution name").fill(institutionName);
+  await page.locator("#institution-name").fill(institutionName);
   await page.locator("#institution-display-name").fill("End-to-end University");
-  await page.getByLabel("Email address").fill(administrator.email);
+  await page.getByLabel("Your email").fill(administrator.email);
   await page.getByLabel("Username").fill(administrator.username);
   await page.locator("#administrator-password").fill(administrator.password);
   const created = page.waitForResponse((response) =>
     response.url() === `${serverURL}/api/v1/bootstrap` && response.request().method() === "POST");
-  await page.getByRole("button", { name: "Create installation" }).click();
+  await page.getByRole("button", { name: "Create institution" }).click();
   expect((await created).status()).toBe(201);
-  await expect(page.getByRole("link", { name: "Continue to sign in" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
 
   // Authoritative state: the server is initialized, discovery names the new
   // Institution, and the administrator can authenticate.
@@ -47,7 +47,7 @@ test("first-run setup establishes the Institution and first administrator", asyn
   await anonymous.dispose();
 
   await page.goto("/setup");
-  await expect(page.getByRole("heading", { name: "Setup is complete" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Proctor is already set up" })).toBeVisible();
   await expect(page.locator("#bootstrap-secret")).toHaveCount(0);
 
   const admin = await cliSession(administrator.username, administrator.password);

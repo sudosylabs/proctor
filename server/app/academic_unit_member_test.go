@@ -67,7 +67,8 @@ func TestAcademicUnitMemberCreateUsesAuthorizationWithoutGrantingPermission(t *t
 	effects := &academicUnitMemberEffectsFake{}
 	mail := &relationshipMailPreparerTestFake{}
 	clockCalls := 0
-	service := newAcademicUnitMemberService(academicUnitMemberServiceDependencies{Store: persistence, Users: relationshipUserStoreTestFake{}, Authorization: &programmeAuthorizerFake{events: &events}, Audit: &institutionAuditorFake{events: &events, beginID: model.NewID()}, Mail: mail, Effects: effects, Now: func() time.Time {
+	auditor := &institutionAuditorFake{events: &events, beginID: model.NewID()}
+	service := newAcademicUnitMemberService(academicUnitMemberServiceDependencies{Store: persistence, Users: relationshipUserStoreTestFake{}, Authorization: &programmeAuthorizerFake{events: &events}, Audit: auditor, Mail: mail, Effects: effects, Now: func() time.Time {
 		clockCalls++
 		return time.UnixMilli(500)
 	}, NewID: model.NewID})
@@ -80,6 +81,7 @@ func TestAcademicUnitMemberCreateUsesAuthorizationWithoutGrantingPermission(t *t
 	require.Equal(t, 1, clockCalls, "clock calls/creation/audit time")
 	require.True(t, model.TimeUTC(created.CreatedAt).Equal(persistence.createInput.AuditAt), "clock calls/creation/audit time")
 	require.Equal(t, []model.UserID{model.UserID(userID)}, effects.users)
+	require.Equal(t, []model.UserID{model.UserID(userID)}, auditor.subjects, "the membership names the member as its subject")
 	require.NotNil(t, persistence.createInput.Notice, "creation mail = %#v", persistence.createInput)
 	require.Equal(t, int64(1), persistence.createInput.ExpectedRecipientRevision, "creation mail = %#v", persistence.createInput)
 	require.Len(t, mail.requests, 1, "creation mail = %#v", persistence.createInput)

@@ -139,11 +139,13 @@ type Sessions interface {
 	ListSessions(context.Context, invocation.Invocation, app.ListSessionsQuery) ([]*model.Session, error)
 	RevokeSession(context.Context, invocation.Invocation, app.RevokeSessionCommand) error
 	RevokeAllSessions(context.Context, invocation.Invocation, app.RevokeAllSessionsCommand) error
+	RevokeOtherSessions(context.Context, invocation.Invocation, app.RevokeOtherSessionsCommand) (*app.RevokeOtherSessionsResult, error)
 }
 
 type PersonalAccessTokens interface {
 	CreatePersonalAccessToken(context.Context, invocation.Invocation, app.CreatePersonalAccessTokenCommand) (*model.PersonalAccessTokenCreation, error)
 	ListPersonalAccessTokens(context.Context, invocation.Invocation, app.ListPersonalAccessTokensQuery) ([]*model.PersonalAccessToken, error)
+	ListGrantablePersonalAccessTokenScopes(context.Context, invocation.Invocation, app.ListGrantablePersonalAccessTokenScopesQuery) (*app.PersonalAccessTokenGrantableScopes, error)
 	RevokePersonalAccessToken(context.Context, invocation.Invocation, app.RevokePersonalAccessTokenCommand) (*model.PersonalAccessToken, error)
 	SetPersonalAccessTokenDisabled(context.Context, invocation.Invocation, app.SetPersonalAccessTokenDisabledCommand) (*model.PersonalAccessToken, error)
 }
@@ -159,6 +161,7 @@ type MFA interface {
 
 type AuditListingApplication interface {
 	ListAuditEvents(context.Context, invocation.Invocation, app.ListAuditEventsQuery) (app.Page[*model.AuditEvent], error)
+	ListSelfAuditEvents(context.Context, invocation.Invocation, app.ListSelfAuditEventsQuery) (app.Page[app.SelfAuditEvent], error)
 }
 
 type BootstrapApplication interface {
@@ -202,6 +205,7 @@ type RoleBindingApplication interface {
 // an unrelated service locator.
 type Application interface {
 	Authenticator
+	SearchApplication
 	authenticationEntryApplication
 	DesktopAuthorization
 	DesktopRegistrations
@@ -229,6 +233,12 @@ type Application interface {
 	ExamStarterWorkspaceApplication
 	ExamAttemptApplication
 	ExamIntegrityReviewApplication
+}
+
+// SearchApplication finds Exams, Classes and Users within the caller's own
+// list visibility for each type.
+type SearchApplication interface {
+	Search(context.Context, invocation.Invocation, app.SearchQuery) (app.SearchResult, error)
 }
 
 type MailApplication interface {

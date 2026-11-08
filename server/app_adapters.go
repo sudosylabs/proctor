@@ -81,6 +81,7 @@ func applicationDependencies(
 		DesktopBuildCatalog:     desktopBuilds,
 		NodeID:                  capabilities.nodeID,
 		PublicURL:               cfg.Server.PublicURL,
+		SupportAddress:          cfg.Mail.SupportAddress,
 		LoopbackHTTPDevelopment: explicitLoopbackHTTPDevelopment(cfg.Server.PublicURL),
 		Password:                passwordPolicyFromConfig(auth),
 		Sessions:                sessionPolicyFromConfig(auth),

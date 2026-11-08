@@ -8,247 +8,42 @@
   }
 
   .page,
-  .form,
-  .section,
-  .routeState,
-  .routeStateCopy,
-  .context,
-  .sectionIntro,
-  .stepCopy,
-  .submission {
+  .form {
     display: flex;
+    min-inline-size: 0;
     flex-direction: column;
   }
 
   .page {
-    inline-size: 100%;
-    max-inline-size: var(--proctor-measure-content);
-  }
-
-  .routeState {
     gap: var(--proctor-space-6);
-    max-inline-size: var(--proctor-measure-content);
-  }
-
-  .routeStateCopy {
-    gap: var(--proctor-space-3);
-  }
-
-  .routeState h2 {
-    font-family: var(--proctor-font-family-display);
-    font-size: var(--proctor-font-size-display);
-    font-weight: var(--proctor-font-weight-semibold);
-    line-height: var(--proctor-line-height-display);
-    letter-spacing: var(--proctor-letter-spacing-display);
-    text-wrap: balance;
-  }
-
-  .routeStateCopy p,
-  .routeState > p {
-    color: var(--proctor-color-foreground-muted);
-    font-size: var(--proctor-font-size-body-large);
-    line-height: var(--proctor-line-height-body-large);
-  }
-
-  .context {
-    gap: var(--proctor-space-0);
-    max-inline-size: 24rem;
-  }
-
-  .eyebrow {
-    color: var(--proctor-color-foreground-link);
-    font-size: var(--proctor-font-size-label);
-    font-weight: var(--proctor-font-weight-semibold);
-    letter-spacing: var(--proctor-letter-spacing-label);
-    text-transform: uppercase;
-  }
-
-  .contextHeading {
-    margin-block-start: var(--proctor-space-4);
-    font-family: var(--proctor-font-family-display);
-    font-size: var(--proctor-font-size-heading-large);
-    font-weight: var(--proctor-font-weight-semibold);
-    line-height: var(--proctor-line-height-heading-large);
-    letter-spacing: var(--proctor-letter-spacing-display);
-    text-wrap: balance;
-  }
-
-  .contextBody {
-    margin-block-start: var(--proctor-space-5);
-    color: var(--proctor-color-foreground-muted);
-  }
-
-  .stepCopy span,
-  .sectionHelp {
-    color: var(--proctor-color-foreground-muted);
-  }
-
-  .proofRail {
-    display: flex;
-    flex-direction: column;
-    padding: var(--proctor-space-0);
-    margin-block: calc(var(--proctor-space-7) + var(--proctor-space-1))
-      var(--proctor-space-7);
-    list-style: none;
-  }
-
-  .proofRail li {
-    position: relative;
-    display: grid;
-    grid-template-columns: var(--proctor-space-7) minmax(0, 1fr);
-    grid-template-rows: auto auto;
-    align-content: start;
-    column-gap: var(--proctor-space-2);
-    row-gap: var(--proctor-space-1);
-    min-block-size: 8rem;
-  }
-
-  .proofRail li:last-child {
-    min-block-size: var(--proctor-space-0);
-  }
-
-  .proofRail li::before {
-    position: absolute;
-    inset-block-start: var(--proctor-space-1);
-    inset-inline-start: var(--proctor-space-2);
-    inline-size: var(--proctor-space-3);
-    block-size: var(--proctor-space-3);
-    border: 0;
-    border-radius: var(--proctor-radius-round);
-    background: var(--proctor-color-foreground-disabled);
-    content: "";
-  }
-
-  .proofRail li:first-child::before {
-    background: var(--proctor-color-action-primary);
-  }
-
-  .proofRail li:not(:last-child)::after {
-    position: absolute;
-    inset-block-start: var(--proctor-space-4);
-    inset-block-end: calc(var(--proctor-space-2) * -1);
-    inset-inline-start: calc(
-      var(--proctor-space-3) + var(--proctor-border-width-hairline)
-    );
-    inline-size: var(--proctor-border-width-strong);
-    background: var(--proctor-color-border-default);
-    content: "";
-  }
-
-  .stepNumber {
-    grid-column: 2;
-    color: var(--proctor-color-foreground-muted);
-    font-family: var(--proctor-font-family-mono);
-    font-size: var(--proctor-font-size-label);
-    font-weight: var(--proctor-font-weight-semibold);
-    line-height: var(--proctor-line-height-heading-small);
-  }
-
-  .proofRail li:first-child .stepNumber::before {
-    position: absolute;
-    z-index: 1;
-    inset-block-start: var(--proctor-space-4);
-    inset-inline-start: calc(
-      var(--proctor-space-3) + var(--proctor-border-width-hairline)
-    );
-    inline-size: var(--proctor-border-width-strong);
-    block-size: calc(var(--proctor-space-9) - var(--proctor-space-2));
-    background: var(--proctor-color-action-primary);
-    content: "";
-  }
-
-  .proofRail li:first-child .stepNumber {
-    color: var(--proctor-color-foreground-link);
-  }
-
-  .stepCopy {
-    grid-column: 2;
-    gap: var(--proctor-space-1);
-    margin-block-start: var(--proctor-space-1);
-  }
-
-  .stepCopy strong {
-    font-size: var(--proctor-font-size-body);
-    font-weight: var(--proctor-font-weight-semibold);
-  }
-
-  .stepCopy span {
-    font-size: var(--proctor-font-size-body-small);
-    line-height: var(--proctor-line-height-body-small);
-  }
-
-  .contextNote {
-    max-inline-size: 23.5rem;
+    max-inline-size: var(--proctor-measure-form);
   }
 
   .form {
-    gap: var(--proctor-space-0);
-  }
-
-  .section {
-    position: relative;
     gap: var(--proctor-space-5);
-    min-inline-size: 0;
-    padding: var(--proctor-space-0);
-    border: 0;
   }
 
-  .section + .section {
-    margin-block-start: calc(
-      var(--proctor-space-5) + var(--proctor-space-4)
-    );
-    padding-block-start: var(--proctor-space-6);
+  /* Codes and identifiers read in the data face; masked dots stay as-is. */
+  .form .secret {
+    font-family: var(--proctor-font-family-mono);
+    letter-spacing: 0.04em;
   }
 
-  .section + .section::before {
-    position: absolute;
-    inset-block-start: var(--proctor-space-0);
-    inset-inline: var(--proctor-space-0);
-    border-block-start: var(--proctor-border-width-hairline) solid
-      var(--proctor-color-border-default);
-    content: "";
+  .form code {
+    overflow-wrap: anywhere;
   }
 
-  .section h2 {
-    font-size: var(--proctor-font-size-heading-small);
-    font-weight: var(--proctor-font-weight-semibold);
-    line-height: var(--proctor-line-height-heading-small);
-  }
-
-  .operatorSection {
-    gap: var(--proctor-space-4);
-  }
-
-  .sectionIntro {
-    gap: var(--proctor-space-3);
-  }
-
-  .operatorField {
-    max-inline-size: 33.5rem;
-  }
-
-  .administratorSection {
-    gap: var(--proctor-space-4);
-  }
-
-  .fieldGrid {
-    display: grid;
-    gap: var(--proctor-space-4) var(--proctor-space-6);
-  }
-
-  .caution {
-    margin-block-start: var(--proctor-space-5);
-  }
-
+  /* The action row and its feedback stack in block flow: no gap, so an
+     empty feedback region adds no space after the action. */
   .submission {
-    gap: var(--proctor-space-2);
-    margin-block-start: calc(var(--proctor-space-5) - var(--proctor-space-1));
+    display: block;
+    min-inline-size: 0;
   }
 
   .actions {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--proctor-space-4) var(--proctor-space-5);
+    gap: var(--proctor-space-3) var(--proctor-space-5);
     align-items: center;
   }
 
@@ -264,21 +59,14 @@
     white-space: nowrap;
   }
 
-  @media (min-width: 48rem) {
-    .fieldGrid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-
-  @media (forced-colors: active) {
-    .proofRail li::before,
-    .proofRail li::after {
-      background: CanvasText;
+  @media (max-width: 30rem) {
+    .actions {
+      align-items: stretch;
+      flex-direction: column;
     }
 
-    .proofRail li:first-child::before,
-    .proofRail li:first-child .stepNumber::before {
-      background: Highlight;
+    .actions > * {
+      inline-size: 100%;
     }
   }
 }

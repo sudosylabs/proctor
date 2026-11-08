@@ -129,9 +129,10 @@ func (s SQLBrowserAuthenticationStore) GetDesktopAuthorizationContext(ctx contex
 		State      string         `db:"state"`
 		UserID     sql.NullString `db:"user_id"`
 		DeviceName string         `db:"device_name"`
+		CreatedAt  time.Time      `db:"created_at"`
 		ExpiresAt  time.Time      `db:"expires_at"`
 	}
-	if err := s.GetMaster().Get(ctx, &row, `SELECT id,state,user_id,device_name,expires_at
+	if err := s.GetMaster().Get(ctx, &row, `SELECT id,state,user_id,device_name,created_at,expires_at
 	  FROM browser_authentication_transactions
 	 WHERE purpose='desktop_authorization' AND state IN ('bound','authenticated') AND browser_proof_hash=?
 	   AND created_at<=clock_timestamp() AND expires_at>clock_timestamp()`, bindingHash); err != nil {
@@ -141,7 +142,8 @@ func (s SQLBrowserAuthenticationStore) GetDesktopAuthorizationContext(ctx contex
 	if err != nil {
 		return nil, store.NewErrInvalidInput("browser_authentication_transaction", "id", row.ID)
 	}
-	result := &store.DesktopAuthorizationContext{ID: id, State: model.BrowserAuthenticationState(row.State), DeviceName: row.DeviceName, ExpiresAt: row.ExpiresAt.UTC()}
+	result := &store.DesktopAuthorizationContext{ID: id, State: model.BrowserAuthenticationState(row.State), DeviceName: row.DeviceName,
+		CreatedAt: row.CreatedAt.UTC(), ExpiresAt: row.ExpiresAt.UTC()}
 	if row.UserID.Valid {
 		userID, err := model.ParseUserID(row.UserID.String)
 		if err != nil {

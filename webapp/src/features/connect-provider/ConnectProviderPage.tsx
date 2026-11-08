@@ -13,12 +13,15 @@ export function ConnectProviderPage() {
     requestProviderConnectionContext,
     { kind: "unavailable" },
   );
+  const name =
+    contextResource.value.kind === "ready"
+      ? contextResource.value.context.signedInName
+      : undefined;
 
   return (
     <AccessPageShell
-      mainSize="content"
       skipLabel={message("webapp.connect_provider.skip_to_main")}
-      variant="single"
+      signedIn={name === undefined ? undefined : { name }}
     >
       <ProviderConnectionContent
         loading={contextResource.loading}

@@ -13,7 +13,7 @@ test("a mailed password-reset link replaces the password and revokes Sessions", 
   await page.goto("/login");
   await page.getByRole("link", { name: "Forgot password?" }).click();
   await expect(page).toHaveURL(/\/account\/forgot-password$/);
-  await page.getByLabel("Email address").fill(account.email);
+  await page.locator("#password-reset-email").fill(account.email);
   await page.getByRole("button", { name: "Send reset link" }).click();
   await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible();
 
@@ -24,7 +24,7 @@ test("a mailed password-reset link replaces the password and revokes Sessions", 
   const replacement = randomPassword();
   await page.locator("#new-password").fill(replacement);
   await page.locator("#confirm-new-password").fill(replacement);
-  await page.getByRole("button", { name: "Set new password" }).click();
+  await page.getByRole("button", { name: "Save password" }).click();
   await expect(page.getByRole("heading", { name: "Your password was changed" })).toBeVisible();
 
   // Authoritative state: the earlier Session is revoked, the old password is
@@ -32,7 +32,7 @@ test("a mailed password-reset link replaces the password and revokes Sessions", 
   expect((await existing.get("/api/v1/users/me")).status()).toBe(401);
   await existing.dispose();
   await submitCredentials(page, account.username, account.password);
-  await expect(page.getByText("The email, username, or password wasn’t accepted.")).toBeVisible();
+  await expect(page.locator("#password-error")).toHaveText("That email or password isn’t right. Check both and try again.");
   await submitCredentials(page, account.username, replacement);
   await expectSignedIn(page);
   expect(await currentUser(page)).toEqual({ status: 200, username: account.username });
@@ -43,6 +43,6 @@ test("a mailed password-reset link replaces the password and revokes Sessions", 
   await page.locator("#new-password").fill(randomPassword());
   const another = await page.locator("#new-password").inputValue();
   await page.locator("#confirm-new-password").fill(another);
-  await page.getByRole("button", { name: "Set new password" }).click();
-  await expect(page.getByRole("heading", { name: "This reset link can’t be used" })).toBeVisible();
+  await page.getByRole("button", { name: "Save password" }).click();
+  await expect(page.getByRole("heading", { name: "This reset link has expired" })).toBeVisible();
 });

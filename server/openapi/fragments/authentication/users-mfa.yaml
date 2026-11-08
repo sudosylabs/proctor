@@ -11,7 +11,7 @@ paths:
       operationId: getMFAStatus
       summary: Get current-user MFA status
       description: >-
-        Returns whether MFA is active, whether a setup is pending, and the count of unused recovery codes for the current User. TOTP secrets and recovery-code values are never returned by this status view.
+        Returns whether MFA is active, whether a setup is pending, and the count of unused recovery codes out of the configured set size for the current User, when the User's own password last changed, and the recent-authentication window: its configured length and, while this Session is recently authenticated, when it ends. TOTP secrets, recovery-code values, and password material are never returned by this status view.
       tags:
         - Authentication
       x-proctor-auth: mfa_recovery_session_required
@@ -461,6 +461,8 @@ components:
         - enabled
         - pending
         - recovery_codes_remaining
+        - recovery_codes_total
+        - recent_authentication_minutes
       properties:
         service_enabled:
           type: boolean
@@ -486,6 +488,35 @@ components:
         pending_expires_at:
           type: string
           format: date-time
+        method:
+          type: string
+          enum: [authenticator_app]
+          description: The second factor in use. Present while two-step verification is enabled or pending; more methods may be added later.
+        enabled_at:
+          type: string
+          format: date-time
+          description: When two-step verification was turned on. Present only while enabled.
         recovery_codes_remaining:
           type: integer
           minimum: 0
+          description: Unused codes in the live recovery-code set; 0 unless enabled.
+        recovery_codes_total:
+          type: integer
+          minimum: 0
+          description: Size of the live recovery-code set the User was given, used codes included, so it stays true if the configured count later changes; 0 unless enabled.
+        recovery_codes_generated_at:
+          type: string
+          format: date-time
+          description: When the live recovery-code set was issued. Omitted when there is none.
+        password_changed_at:
+          type: string
+          format: date-time
+          description: When the User's active password credential was last set or changed. Omitted for an account without a password credential.
+        recent_authentication_minutes:
+          type: integer
+          minimum: 1
+          description: Configured recent-authentication window (`Authentication.RecentAuthenticationTTL`) in whole minutes, rounded down.
+        recently_authenticated_until:
+          type: string
+          format: date-time
+          description: When this Session's recent-authentication window ends. Present only while `recently_authenticated` is true.

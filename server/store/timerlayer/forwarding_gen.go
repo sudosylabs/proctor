@@ -2144,6 +2144,12 @@ func (s *timedClassStore) SearchByAcademicUnit(arg0 context.Context, arg1 model.
 	})
 }
 
+func (s *timedClassStore) SearchVisible(arg0 context.Context, arg1 store.ClassSearchOptions) ([]*model.Class, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateClass, methodSearchVisible), func(callCtx context.Context) ([]*model.Class, error) {
+		return s.next.SearchVisible(callCtx, arg1)
+	})
+}
+
 func (s *timedClassStore) GetAcademicUnitID(arg0 context.Context, arg1 model.ClassID) (model.AcademicUnitID, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateClass, methodGetAcademicUnitID), func(callCtx context.Context) (model.AcademicUnitID, error) {
 		return s.next.GetAcademicUnitID(callCtx, arg1)
@@ -3038,6 +3044,12 @@ func (s *timedMFAStore) CountRecoveryCodes(arg0 context.Context, arg1 model.User
 	})
 }
 
+func (s *timedMFAStore) SummarizeRecoveryCodes(arg0 context.Context, arg1 model.UserID) (*store.MFARecoveryCodeSummary, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateMFA, methodSummarizeRecoveryCodes), func(callCtx context.Context) (*store.MFARecoveryCodeSummary, error) {
+		return s.next.SummarizeRecoveryCodes(callCtx, arg1)
+	})
+}
+
 func (s *timedMFAStore) InspectKeyState(arg0 context.Context) (*store.MFAKeyState, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateMFA, methodInspectKeyState), func(callCtx context.Context) (*store.MFAKeyState, error) {
 		return s.next.InspectKeyState(callCtx)
@@ -3467,6 +3479,12 @@ func (s *timedAuditStore) Complete(arg0 context.Context, arg1 *store.AuditComple
 func (s *timedAuditStore) List(arg0 context.Context, arg1 store.AuditListOptions) ([]*model.AuditEvent, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAudit, methodList), func(callCtx context.Context) ([]*model.AuditEvent, error) {
 		return s.next.List(callCtx, arg1)
+	})
+}
+
+func (s *timedAuditStore) ListSelf(arg0 context.Context, arg1 store.AuditSelfListOptions) ([]*store.AuditSelfEntry, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAudit, methodListSelf), func(callCtx context.Context) ([]*store.AuditSelfEntry, error) {
+		return s.next.ListSelf(callCtx, arg1)
 	})
 }
 

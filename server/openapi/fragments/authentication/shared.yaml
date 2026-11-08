@@ -165,6 +165,7 @@ components:
             - refresh_replay
             - user_all_sessions
             - user_logout
+            - user_other_sessions
             - user_session
         revocation_reason:
           type: string

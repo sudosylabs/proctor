@@ -122,6 +122,13 @@ func TestRetentionStore(t *testing.T, ss store.Store, probe RetentionSQLProbe) {
 	notices, err := ss.Retention().ListNotices(ctx, principal.UserID, "", 100)
 	require.NoError(t, err)
 	require.Len(t, notices, 2, "manager/operator notices")
+	revision, err := ss.ExamRevision().GetSummary(ctx, f.sitting.ExamID, f.sitting.ExamRevisionID)
+	require.NoError(t, err)
+	for _, n := range notices {
+		require.Equal(t, revision.Title, n.ExamTitle, "notice exam title")
+		require.True(t, f.sitting.ScheduledStartAt.Equal(n.SittingStartAt), "notice sitting start = %s", n.SittingStartAt)
+		require.True(t, f.sitting.ScheduledEndAt.Equal(n.SittingEndAt), "notice sitting end = %s", n.SittingEndAt)
+	}
 	candidateNotices, err := ss.Retention().ListNotices(ctx, f.candidate.ID, "", 100)
 	require.NoError(t, err)
 	require.Empty(t, candidateNotices, "candidate notices enabled by default")

@@ -654,7 +654,12 @@ func planUserSessionsRevocation(input *store.UserSessionsRevocation) (userSessio
 		return userSessionsRevocationPlan{}, store.NewErrInvalidInput("session", "revocation_reason", nil)
 	}
 	plan.mailUnprepared = input.Occurrence == nil && input.Delivery == nil && input.DeliveryJob == nil
-	plan.selfRevocation = plan.reason == model.SessionRevocationUserAllSessions
+	plan.selfRevocation = plan.reason == model.SessionRevocationUserAllSessions ||
+		plan.reason == model.SessionRevocationUserOtherSessions
+	if (plan.reason == model.SessionRevocationUserOtherSessions) != (input.KeepSessionID != "") ||
+		(input.KeepSessionID != "" && !input.KeepSessionID.IsValid()) {
+		return userSessionsRevocationPlan{}, store.NewErrInvalidInput("session", "keep_session_id", nil)
+	}
 	if plan.selfRevocation && (!plan.mailUnprepared || input.Command != nil) {
 		return userSessionsRevocationPlan{}, store.NewErrInvalidInput("session", "self_revocation_notice", nil)
 	}
@@ -681,8 +686,13 @@ func revokeUserSessions(ctx context.Context, tx *sqlxTxWrapper, input *store.Use
 	if err := lockUserSessions(ctx, tx, input.UserID.String()); err != nil {
 		return nil, err
 	}
-	rows, hashes, err := revokeAllUserSessions(
-		ctx, tx, input.UserID.String(), input.RevokedAt, plan.reason,
+	if input.KeepSessionID != "" {
+		if err := requireLiveUserSession(ctx, tx, input.UserID, input.KeepSessionID, input.RevokedAt); err != nil {
+			return nil, err
+		}
+	}
+	rows, hashes, err := revokeUserSessionsExceptAt(
+		ctx, tx, input.UserID.String(), input.KeepSessionID, input.RevokedAt, plan.reason,
 	)
 	if err != nil {
 		return nil, err
@@ -699,10 +709,14 @@ func revokeUserSessions(ctx context.Context, tx *sqlxTxWrapper, input *store.Use
 			return nil, err
 		}
 	}
-	encoded, appErr := model.EncodeAuditData(map[string]any{
+	result := map[string]any{
 		"user_id":               input.UserID,
 		"revoked_session_count": len(sessions),
-	})
+	}
+	if input.KeepSessionID != "" {
+		result["kept_session_id"] = input.KeepSessionID
+	}
+	encoded, appErr := model.EncodeAuditData(result)
 	if appErr != nil {
 		return nil, appErr
 	}
@@ -953,6 +967,23 @@ func revokedSessionModelsAt(
 		sessions = append(sessions, session)
 	}
 	return sessions, nil
+}
+
+// requireLiveUserSession confirms under the per-User Session lock that id is
+// an unrevoked, unexpired Session of the User at the UTC instant at.
+func requireLiveUserSession(ctx context.Context, executor sqlxExecutor, userID model.UserID, id model.SessionID, at time.Time) error {
+	at = model.TimeUTC(at)
+	var matched string
+	if err := executor.Get(ctx, &matched, `
+		SELECT id
+		  FROM sessions
+		 WHERE id = ? AND user_id = ? AND archived_at IS NULL AND revoked_at IS NULL
+		   AND idle_expires_at > ? AND expires_at > ?`,
+		id.String(), userID.String(), at, at,
+	); err != nil {
+		return translateError("session", id.String(), err)
+	}
+	return nil
 }
 
 func lockUserSessions(

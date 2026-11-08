@@ -278,7 +278,7 @@ paths:
       operationId: revokeAllCurrentUserSessions
       summary: Revoke all current-user sessions
       description: >-
-        Revokes every active Session belonging to the current User, including the Session making the request. Clients must discard cached credentials and require a new authentication flow afterward.
+        Revokes every active Session belonging to the current User, including the Session making the request, so the caller is signed out too. Clients must discard cached credentials and require a new authentication flow afterward. To stay signed in on this device, use revokeOtherCurrentUserSessions instead.
       x-codeSamples:
         - lang: Shell
           label: Revoke all current-user Sessions
@@ -319,6 +319,52 @@ paths:
           $ref: '#/components/responses/InternalError'
         "503":
           $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/users/me/sessions/revoke-others:
+    post:
+      operationId: revokeOtherCurrentUserSessions
+      summary: Sign out every other current-user session
+      description: >-
+        Revokes every active Session belonging to the current User except the Session making the request, which stays signed in; its cookies and credentials are left in place. The response reports how many Sessions were revoked, which is zero when no other Session was active. A personal access token has no Session to keep and is refused.
+      x-codeSamples:
+        - lang: Shell
+          label: Sign out every other Session
+          source: |-
+            curl --request POST \
+              --header "Authorization: Bearer $PROCTOR_TOKEN" \
+              https://proctor.example.edu/api/v1/users/me/sessions/revoke-others
+      tags:
+        - Authentication
+      x-proctor-auth: session_required
+      x-proctor-error-codes:
+        - authentication.internal
+        - audit.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+        - authentication.csrf.invalid
+      x-proctor-idempotency: none
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+          csrfToken: []
+      responses:
+        "200":
+          $ref: '#/components/responses/OtherSessionsRevoked'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "500":
+          $ref: '#/components/responses/InternalError'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
 components:
   parameters:
     SessionID:
@@ -347,6 +393,17 @@ components:
             $ref: '#/components/schemas/SessionAdministrationListResponse'
     SessionAdministrationRevoked:
       description: Session(s) revoked
+    OtherSessionsRevoked:
+      description: Every other current-user Session was revoked
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RevokeOtherSessionsResponse'
+          example:
+            revoked_session_count: 3
     SessionListOK:
       description: Current-user session collection
       headers:
@@ -457,6 +514,7 @@ components:
             - refresh_replay
             - user_all_sessions
             - user_logout
+            - user_other_sessions
             - user_session
         revocation_reason:
           type: string
@@ -476,6 +534,120 @@ components:
         next_cursor:
           type: string
           description: Opaque continuation for the next page, omitted after the final page.
+    CurrentUserSessionResponse:
+      description: One of the current User's Sessions, marked when it is the Session that made the request.
+      type: object
+      additionalProperties: false
+      required:
+        - current
+        - id
+        - created_at
+        - updated_at
+        - user_id
+        - client_type
+        - authentication_method
+        - authentication_strength
+        - mfa_recovery_required
+        - authenticated_at
+        - last_activity_at
+        - idle_expires_at
+        - expires_at
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        archived_at:
+          type: string
+          format: date-time
+        user_id:
+          $ref: '#/components/schemas/ID'
+        client_type:
+          type: string
+          enum:
+            - desktop
+            - cli
+            - web
+        desktop_registration_id:
+          $ref: '#/components/schemas/ID'
+        desktop_release:
+          type: string
+        desktop_build_id:
+          type: string
+        desktop_platform:
+          type: string
+          enum: [darwin, win32, linux]
+        desktop_architecture:
+          type: string
+          enum: [arm64, x64]
+        desktop_realtime_protocol:
+          type: integer
+          minimum: 1
+        device_id:
+          type: string
+        device_name:
+          type: string
+        authentication_method:
+          type: string
+        authentication_strength:
+          type: string
+        authenticated_at:
+          type: string
+          format: date-time
+        mfa_recovery_required:
+          type: boolean
+          description: Ordinary access remains unavailable until a new local authenticator is activated.
+        reauthenticated_at:
+          type: string
+          format: date-time
+          description: Most recent verified fresh primary proof for the original Session method; does not replace initial authentication or MFA history.
+        mfa_completed_at:
+          type: string
+          format: date-time
+        last_activity_at:
+          type: string
+          format: date-time
+        idle_expires_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        revoked_at:
+          type: string
+          format: date-time
+        revocation_reason_code:
+          type: string
+          enum:
+            - mfa_reset
+            - account_disabled
+            - access_policy_changed
+            - administrator_all_sessions
+            - administrator_session
+            - authentication_audit_failed
+            - desktop_authorization_failed
+            - desktop_registration_revoked
+            - email_change_undone
+            - external_identity_unlinked
+            - inactive_user
+            - password_changed
+            - password_removed
+            - password_reset
+            - refresh_replay
+            - user_all_sessions
+            - user_logout
+            - user_other_sessions
+            - user_session
+        revocation_reason:
+          type: string
+          description: Localized presentation of revocation_reason_code.
+        current:
+          type: boolean
+          description: True for the Session that made the request.
     SessionListResponse:
       description: One page of the collection in its stable order.
       type: object
@@ -486,9 +658,19 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/SessionResponse'
+            $ref: '#/components/schemas/CurrentUserSessionResponse'
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
+    RevokeOtherSessionsResponse:
+      description: How many of the current User's other Sessions this request revoked.
+      type: object
+      additionalProperties: false
+      required:
+        - revoked_session_count
+      properties:
+        revoked_session_count:
+          type: integer
+          minimum: 0
     RevokeSessionRequest:
       type: object
       additionalProperties: false

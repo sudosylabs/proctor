@@ -84,6 +84,9 @@ type Dependencies struct {
 
 	NodeID    string
 	PublicURL string
+	// SupportAddress is the operator-configured help mailbox that public
+	// discovery publishes for hosted pages; empty publishes none.
+	SupportAddress string
 	// LoopbackHTTPDevelopment is the immutable composition-owned projection of
 	// explicit local development. It never relaxes non-loopback issuer rules.
 	LoopbackHTTPDevelopment bool

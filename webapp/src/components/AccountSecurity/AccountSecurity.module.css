@@ -12,31 +12,105 @@
     gap: var(--proctor-space-6);
   }
 
-  .summary {
-    margin: var(--proctor-space-0);
-    border-block: var(--proctor-border-width-hairline) solid var(--proctor-color-border-default);
+  .hint {
+    color: var(--proctor-color-foreground-muted);
+    font-size: var(--proctor-font-size-body-small);
+    line-height: var(--proctor-line-height-body-small);
   }
 
-  .summary > div {
+  .hint:empty {
+    display: none;
+  }
+
+  .followUp {
+    align-self: flex-start;
+  }
+
+  /* A related decision further down the page: a hairline and a small
+     heading, never a panel. */
+  .section {
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+    gap: var(--proctor-space-4);
+    margin-block-start: var(--proctor-space-3);
+    padding-block-start: var(--proctor-space-5);
+    border-block-start: var(--proctor-border-width-hairline) solid
+      var(--proctor-color-border-default);
+  }
+
+  /* The fact list already closes with a hairline. */
+  [data-proctor-fact-list] + .section {
+    padding-block-start: var(--proctor-space-3);
+    border-block-start: 0;
+  }
+
+  .section h2 {
+    margin-block-end: calc(var(--proctor-space-1) - var(--proctor-space-4));
+    font-size: var(--proctor-font-size-body-large);
+    font-weight: var(--proctor-font-weight-semibold);
+    line-height: var(--proctor-line-height-body-large);
+  }
+
+  .section > p {
+    max-inline-size: 34rem;
+    color: var(--proctor-color-foreground-subtle);
+  }
+
+  .state {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--proctor-space-2);
+    font-weight: var(--proctor-font-weight-medium);
+  }
+
+  .stateMarker {
+    inline-size: var(--proctor-space-2);
+    block-size: var(--proctor-space-2);
+    flex: none;
+    border-radius: calc(var(--proctor-radius-control) / 3);
+    background: currentColor;
+  }
+
+  .success { color: var(--proctor-color-state-success); }
+  .warning { color: var(--proctor-color-state-warning); }
+  .off { color: var(--proctor-color-foreground-muted); }
+
+  .sessionValue {
     display: flex;
     flex-wrap: wrap;
-    justify-content: space-between;
-    gap: var(--proctor-space-2) var(--proctor-space-5);
-    padding-block: var(--proctor-space-4);
+    align-items: baseline;
+    gap: var(--proctor-space-1) var(--proctor-space-4);
   }
 
-  .summary dt { color: var(--proctor-color-foreground-muted); }
-  .summary dd { margin: var(--proctor-space-0); font-weight: var(--proctor-font-weight-semibold); }
+  .sessionValue button {
+    min-block-size: auto;
+    padding-block: var(--proctor-space-0);
+  }
 
   .codes {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--proctor-space-3) var(--proctor-space-5);
-    padding: var(--proctor-space-5);
+    gap: var(--proctor-space-2) var(--proctor-space-5);
+    padding-block: var(--proctor-space-4);
     margin: var(--proctor-space-0);
-    border: var(--proctor-border-width-hairline) solid var(--proctor-color-border-strong);
+    border-block: var(--proctor-border-width-hairline) solid
+      var(--proctor-color-border-default);
     list-style: none;
+    font-family: var(--proctor-font-family-mono);
+    font-size: var(--proctor-font-size-body);
+    letter-spacing: 0.06em;
     overflow-wrap: anywhere;
+  }
+
+  .codes code {
+    font: inherit;
+  }
+
+  .saveActions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--proctor-space-2);
   }
 
   .acknowledgement {
@@ -55,25 +129,33 @@
     accent-color: var(--proctor-color-action-primary);
   }
 
-  .footer {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--proctor-space-3) var(--proctor-space-5);
-    justify-content: space-between;
-    align-items: center;
+  /* The footer's quiet sign-out matches its muted label-size line. */
+  .signOut {
+    min-block-size: auto;
+    padding: var(--proctor-space-0);
+    color: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    line-height: inherit;
   }
 
-  .footer a {
-    display: inline-flex;
-    align-items: center;
-    min-block-size: var(--proctor-control-size-default);
+  .signOutFailure {
+    color: var(--proctor-color-state-danger);
   }
 
-  @media (max-width: 30rem) {
-    .codes { grid-template-columns: minmax(0, 1fr); }
+  .signOutFailure:empty {
+    display: none;
   }
 
   @media (forced-colors: active) {
-    .codes, .summary { border-color: CanvasText; }
+    .codes,
+    .section {
+      border-color: CanvasText;
+    }
+
+    .stateMarker {
+      forced-color-adjust: none;
+      background: CanvasText;
+    }
   }
 }

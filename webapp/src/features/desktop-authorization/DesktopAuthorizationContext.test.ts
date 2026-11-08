@@ -7,6 +7,7 @@ import { approveDesktopAuthorization, authenticateDesktopAuthorizationLocally, r
 
 const discovery: PublicAccessDiscovery = {
   discovery_version: 1,
+  password_minimum_length: 12,
   canonical_origin: "https://proctor.example",
   initialized: true,
   capabilities: {
@@ -40,8 +41,10 @@ describe("requestDesktopAuthorizationContext", () => {
             id: "user-1",
             username: "student.one",
             display_name: "Student One",
+            email: "student.one@example.edu",
           },
           device_name: "Exam laptop",
+          requested_at: "1970-01-01T00:00:00Z",
           expires_at: "1970-01-01T00:00:01Z",
           local_login_enabled: false,
           external_providers: [],
@@ -60,9 +63,11 @@ describe("requestDesktopAuthorizationContext", () => {
           id: "user-1",
           username: "student.one",
           display_name: "Student One",
+          email: "student.one@example.edu",
         },
         deviceName: "Exam laptop",
         expiresAt: "1970-01-01T00:00:01Z",
+        requestedAt: "1970-01-01T00:00:00Z",
         externalProviders: [],
         installation: "Example University",
         localLoginEnabled: false,
@@ -90,6 +95,7 @@ describe("requestDesktopAuthorizationContext", () => {
         data: {
           state: "bound",
           device_name: "",
+          requested_at: "1970-01-01T00:00:00Z",
           expires_at: "1970-01-01T00:00:01Z",
           local_login_enabled: true,
           external_providers: [],
@@ -117,9 +123,13 @@ describe("requestDesktopAuthorizationContext", () => {
     { device_name: "x".repeat(129) },
     { account: { id: "unexpected", username: "student", display_name: "Student" } },
     { state: "authenticated", account: { id: "user", username: "", display_name: "Student" } },
+    { state: "authenticated", account: { id: "user", username: "student", display_name: "Student" } },
+    { state: "authenticated", account: { id: "user", username: "student", display_name: "Student", email: " " } },
+    { requested_at: undefined },
+    { requested_at: "not-a-time" },
   ])("rejects malformed context before presentation: %j", async (override) => {
     vi.spyOn(apiClient, "GET").mockResolvedValue(apiResult(200, { data: {
-      state: "bound", device_name: "Laptop", expires_at: "1970-01-01T00:00:01Z", local_login_enabled: true,
+      state: "bound", device_name: "Laptop", requested_at: "1970-01-01T00:00:00Z", expires_at: "1970-01-01T00:00:01Z", local_login_enabled: true,
       external_providers: [], ...override,
     } }));
     await expect(requestDesktopAuthorizationContext("https://proctor.example", async () => ({ kind: "ready", discovery })))
@@ -128,7 +138,7 @@ describe("requestDesktopAuthorizationContext", () => {
 
   it("requires authentication success to carry an authenticated context", async () => {
     vi.spyOn(apiClient, "POST").mockResolvedValue(apiResult(200, { data: {
-      state: "bound", device_name: "Laptop", expires_at: "1970-01-01T00:00:01Z", local_login_enabled: true, external_providers: [],
+      state: "bound", device_name: "Laptop", requested_at: "1970-01-01T00:00:00Z", expires_at: "1970-01-01T00:00:01Z", local_login_enabled: true, external_providers: [],
     } }));
     await expect(authenticateDesktopAuthorizationLocally("Example University", { loginID: "student", password: "private" }))
       .resolves.toEqual({ kind: "unavailable" });

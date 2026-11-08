@@ -555,6 +555,27 @@ func IsPersonalAccessTokenAction(action string) bool {
 		!definition.PersonalAccessTokenForbidden
 }
 
+// PersonalAccessTokenActions returns, in stable order, every registered action
+// that may appear in a Personal Access Token scope.
+func PersonalAccessTokenActions() []string {
+	actions := make([]string, 0, len(actionDefinitions))
+	for action := range actionDefinitions {
+		if IsPersonalAccessTokenAction(string(action)) {
+			actions = append(actions, string(action))
+		}
+	}
+	sort.Strings(actions)
+	return actions
+}
+
+// ResourceTypes returns, in stable order, every resource type the action may
+// authorize: its own resource type and each compatible owning scope.
+func (d ActionDefinition) ResourceTypes() []ResourceType {
+	types := append([]ResourceType{d.ResourceType}, d.CompatibleResourceTypes...)
+	slices.Sort(types)
+	return slices.Compact(types)
+}
+
 // Validate checks that the resource identifies a supported authorization target.
 func (r Resource) Validate() error {
 	const where = "Resource.Validate"

@@ -39,7 +39,7 @@ func TestRetentionOpenAPIAgreesWithRuntime(t *testing.T) {
 			{Name: "RetentionRecordsResponse", DTO: reflect.TypeOf(retentionRecordsResponse{}), Required: []string{"policy_revision", "as_of", "items"}},
 			{Name: "RetentionRecord", DTO: reflect.TypeOf(retentionRecordResponse{}), Required: []string{"exam_id", "exam_sitting_id", "submission_id", "category", "completion_revision", "completion_current", "has_integrity", "held", "shared_published_objects", "blocker"}},
 			{Name: "RetentionRetirement", DTO: reflect.TypeOf(retirementResponse{}), Required: []string{"id", "state", "policy_revision", "control_revision", "completion_revision", "scheduled_at", "retire_after", "purge_pending", "purge_verified"}},
-			{Name: "RetentionNoticeResponse", DTO: reflect.TypeOf(retentionNoticeResponse{}), Required: []string{"retirement_id", "exam_id", "exam_sitting_id", "submission_id", "category", "state", "created_at", "retire_after", "delivery_state"}},
+			{Name: "RetentionNoticeResponse", DTO: reflect.TypeOf(retentionNoticeResponse{}), Required: []string{"retirement_id", "exam_id", "exam_sitting_id", "submission_id", "exam_title", "sitting_start_at", "sitting_end_at", "category", "state", "created_at", "retire_after", "delivery_state"}},
 			{Name: "RetentionNoticesResponse", DTO: reflect.TypeOf(retentionNoticesResponse{}), Required: []string{"items"}},
 		},
 		OperationSelector: func(_ string, path string) bool {

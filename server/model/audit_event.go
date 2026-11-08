@@ -40,29 +40,35 @@ const AuditErrorAttemptAbandoned = "audit.attempt_abandoned"
 // authorization decisions are inserted directly with their terminal result.
 //
 // ActorID and SessionID are optional typed identifiers (zero means absent).
-// ScopeID remains a plain string because the target depends on ScopeType.
+// SubjectUserID names the User whose account the event concerns, when there
+// is one: a User resource is always its own subject, and writers whose
+// resource is a scope, Class, or the Institution name the affected User
+// explicitly. ScopeID remains a plain string because the target depends on
+// ScopeType.
 // Create/update times use UTC time.Time; public list DTOs still project millis.
 type AuditEvent struct {
-	ID         AuditEventID
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
-	ActorID    UserID
-	SessionID  SessionID
-	Action     string
-	Resource   Resource
-	ScopeType  RoleScopeType
-	ScopeID    string
-	Status     AuditStatus
-	RequestID  string
-	NodeID     string
-	ClientType string
-	AuthMethod string
-	IPAddress  string
-	UserAgent  string
-	ErrorCode  string
-	Parameters json.RawMessage
-	PriorState json.RawMessage
-	Result     json.RawMessage
+	ID        AuditEventID
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	ActorID   UserID
+	SessionID SessionID
+	// SubjectUserID is the User the event is about; see AuditEvent.
+	SubjectUserID UserID
+	Action        string
+	Resource      Resource
+	ScopeType     RoleScopeType
+	ScopeID       string
+	Status        AuditStatus
+	RequestID     string
+	NodeID        string
+	ClientType    string
+	AuthMethod    string
+	IPAddress     string
+	UserAgent     string
+	ErrorCode     string
+	Parameters    json.RawMessage
+	PriorState    json.RawMessage
+	Result        json.RawMessage
 }
 
 // AuditQuery is the application/store listing filter for audit events.
@@ -104,6 +110,9 @@ func (ae *AuditEvent) normalize() {
 		return
 	}
 	ae.Action = strings.TrimSpace(ae.Action)
+	if ae.SubjectUserID.IsZero() && ae.Resource.Type == ResourceUser {
+		ae.SubjectUserID = UserID(ae.Resource.ID)
+	}
 	ae.RequestID = boundedString(strings.TrimSpace(ae.RequestID), 128)
 	ae.NodeID = boundedString(strings.TrimSpace(ae.NodeID), 128)
 	ae.ClientType = boundedString(strings.TrimSpace(ae.ClientType), 32)
@@ -137,6 +146,12 @@ func (ae *AuditEvent) Validate() error {
 	}
 	if !ae.SessionID.IsZero() && !ae.SessionID.IsValid() {
 		return invalidModelError(where, "audit_event", "session_id", "must be empty or a valid identifier", details)
+	}
+	if !ae.SubjectUserID.IsZero() && !ae.SubjectUserID.IsValid() {
+		return invalidModelError(where, "audit_event", "subject_user_id", "must be empty or a valid identifier", details)
+	}
+	if ae.Resource.Type == ResourceUser && ae.SubjectUserID.String() != ae.Resource.ID {
+		return invalidModelError(where, "audit_event", "subject_user_id", "must name the User resource", details)
 	}
 	if len(ae.Action) == 0 || len(ae.Action) > RolePermissionMaxLength || !validPermission.MatchString(ae.Action) {
 		return invalidModelError(where, "audit_event", "action", "must be a valid action", details)

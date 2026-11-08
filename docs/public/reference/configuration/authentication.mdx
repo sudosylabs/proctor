@@ -30,7 +30,7 @@ bootstrap secret through protected configuration.
 | Path and default | Meaning and accepted value |
 | --- | --- |
 | `Authentication.Password.MaximumConcurrentOperations`<br />Default: `2` | Per-node semaphore for expensive password hashing and verification. Must be greater than zero. Size against CPU and memory because each operation consumes the configured Argon2 resources. |
-| `Authentication.Password.MinimumLength`<br />Default: `12` | Minimum accepted password length. Must be between `8` and `128`. |
+| `Authentication.Password.MinimumLength`<br />Default: `12` | Minimum accepted password length. Must be between `8` and `128`. Public discovery publishes it so hosted password forms state the requirement. |
 | `Authentication.Password.MaximumLength`<br />Default: `128` | Maximum accepted password length and input-work bound. Must be at least `MinimumLength` and no more than `1024`. |
 | `Authentication.Password.ArgonMemoryKiB`<br />Default: `65536` | Argon2 memory cost per operation in KiB. Must be between `19456` and `1048576`. Multiply by maximum concurrent operations and application-node count when planning capacity. |
 | `Authentication.Password.ArgonIterations`<br />Default: `3` | Argon2 time cost. Must be between `1` and `20`. |

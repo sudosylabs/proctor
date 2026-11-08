@@ -1,5 +1,429 @@
 [
   {
+    "id": "access.action.academic.progression.manage.description",
+    "translation": "Move students from one class to the next at the end of an academic period."
+  },
+  {
+    "id": "access.action.academic.progression.manage.title",
+    "translation": "Manage academic progression"
+  },
+  {
+    "id": "access.action.academic_audit.view.description",
+    "translation": "Read the audit history of academic structure, membership and role changes."
+  },
+  {
+    "id": "access.action.academic_audit.view.title",
+    "translation": "View academic audit history"
+  },
+  {
+    "id": "access.action.academic_period.manage.description",
+    "translation": "Create, update and archive academic periods."
+  },
+  {
+    "id": "access.action.academic_period.manage.title",
+    "translation": "Manage academic periods"
+  },
+  {
+    "id": "access.action.academic_period.view.description",
+    "translation": "Read academic periods and their dates."
+  },
+  {
+    "id": "access.action.academic_period.view.title",
+    "translation": "View academic periods"
+  },
+  {
+    "id": "access.action.academic_unit.manage.description",
+    "translation": "Create, update and archive academic units."
+  },
+  {
+    "id": "access.action.academic_unit.manage.title",
+    "translation": "Manage academic units"
+  },
+  {
+    "id": "access.action.academic_unit.members.manage.description",
+    "translation": "Add and remove academic unit members."
+  },
+  {
+    "id": "access.action.academic_unit.members.manage.title",
+    "translation": "Manage academic unit members"
+  },
+  {
+    "id": "access.action.academic_unit.members.view.description",
+    "translation": "Read the members of academic units."
+  },
+  {
+    "id": "access.action.academic_unit.members.view.title",
+    "translation": "View academic unit members"
+  },
+  {
+    "id": "access.action.academic_unit.view.description",
+    "translation": "Read academic units and their hierarchy."
+  },
+  {
+    "id": "access.action.academic_unit.view.title",
+    "translation": "View academic units"
+  },
+  {
+    "id": "access.action.audit.view.description",
+    "translation": "Read the installation's audit history."
+  },
+  {
+    "id": "access.action.audit.view.title",
+    "translation": "View audit history"
+  },
+  {
+    "id": "access.action.class.manage.description",
+    "translation": "Create, update and archive classes."
+  },
+  {
+    "id": "access.action.class.manage.title",
+    "translation": "Manage classes"
+  },
+  {
+    "id": "access.action.class.members.manage.description",
+    "translation": "Enrol, transfer and remove class members."
+  },
+  {
+    "id": "access.action.class.members.manage.title",
+    "translation": "Manage class members"
+  },
+  {
+    "id": "access.action.class.members.view.description",
+    "translation": "Read class rosters."
+  },
+  {
+    "id": "access.action.class.members.view.title",
+    "translation": "View class members"
+  },
+  {
+    "id": "access.action.class.view.description",
+    "translation": "Read classes and their details."
+  },
+  {
+    "id": "access.action.class.view.title",
+    "translation": "View classes"
+  },
+  {
+    "id": "access.action.exam.attempt.browser_activity.view.description",
+    "translation": "Read candidates' browser activity in sittings of exams you manage."
+  },
+  {
+    "id": "access.action.exam.attempt.browser_activity.view.title",
+    "translation": "View browser activity"
+  },
+  {
+    "id": "access.action.exam.create.description",
+    "translation": "Create new exams."
+  },
+  {
+    "id": "access.action.exam.create.override.description",
+    "translation": "Create exams through the audited administrator path."
+  },
+  {
+    "id": "access.action.exam.create.override.title",
+    "translation": "Create exams as administrator"
+  },
+  {
+    "id": "access.action.exam.create.title",
+    "translation": "Create exams"
+  },
+  {
+    "id": "access.action.exam.manage.description",
+    "translation": "Edit the drafts, resources and settings of exams you manage."
+  },
+  {
+    "id": "access.action.exam.manage.override.description",
+    "translation": "Edit exams without being an exam manager, through the audited administrator path."
+  },
+  {
+    "id": "access.action.exam.manage.override.title",
+    "translation": "Manage any exam"
+  },
+  {
+    "id": "access.action.exam.manage.title",
+    "translation": "Manage exams"
+  },
+  {
+    "id": "access.action.exam.publish.description",
+    "translation": "Publish new revisions of exams you manage."
+  },
+  {
+    "id": "access.action.exam.publish.override.description",
+    "translation": "Publish exam revisions without being an exam manager, through the audited administrator path."
+  },
+  {
+    "id": "access.action.exam.publish.override.title",
+    "translation": "Publish any exam"
+  },
+  {
+    "id": "access.action.exam.publish.title",
+    "translation": "Publish exams"
+  },
+  {
+    "id": "access.action.exam.sitting.create.description",
+    "translation": "Schedule sittings of exams you manage."
+  },
+  {
+    "id": "access.action.exam.sitting.create.override.description",
+    "translation": "Schedule exam sittings without being an exam manager, through the audited administrator path."
+  },
+  {
+    "id": "access.action.exam.sitting.create.override.title",
+    "translation": "Schedule sittings of any exam"
+  },
+  {
+    "id": "access.action.exam.sitting.create.title",
+    "translation": "Schedule exam sittings"
+  },
+  {
+    "id": "access.action.exam.sitting.manage.description",
+    "translation": "Reschedule and cancel sittings of exams you manage."
+  },
+  {
+    "id": "access.action.exam.sitting.manage.override.description",
+    "translation": "Reschedule and cancel exam sittings without being an exam manager, through the audited administrator path."
+  },
+  {
+    "id": "access.action.exam.sitting.manage.override.title",
+    "translation": "Manage any exam sitting"
+  },
+  {
+    "id": "access.action.exam.sitting.manage.title",
+    "translation": "Manage exam sittings"
+  },
+  {
+    "id": "access.action.exam.sitting.view.description",
+    "translation": "Read sittings of exams you manage."
+  },
+  {
+    "id": "access.action.exam.sitting.view.override.description",
+    "translation": "Read exam sittings without being an exam manager, through the audited administrator path."
+  },
+  {
+    "id": "access.action.exam.sitting.view.override.title",
+    "translation": "View any exam sitting"
+  },
+  {
+    "id": "access.action.exam.sitting.view.title",
+    "translation": "View exam sittings"
+  },
+  {
+    "id": "access.action.exam.view.description",
+    "translation": "Read exams you manage, including drafts and revisions."
+  },
+  {
+    "id": "access.action.exam.view.override.description",
+    "translation": "Read exams without being an exam manager, through the audited administrator path."
+  },
+  {
+    "id": "access.action.exam.view.override.title",
+    "translation": "View any exam"
+  },
+  {
+    "id": "access.action.exam.view.title",
+    "translation": "View exams"
+  },
+  {
+    "id": "access.action.institution.manage.description",
+    "translation": "Update the institution's settings."
+  },
+  {
+    "id": "access.action.institution.manage.title",
+    "translation": "Manage the institution"
+  },
+  {
+    "id": "access.action.invitation.create.description",
+    "translation": "Invite people to create an account."
+  },
+  {
+    "id": "access.action.invitation.create.title",
+    "translation": "Create invitations"
+  },
+  {
+    "id": "access.action.invitation.manage.description",
+    "translation": "Resend and revoke invitations."
+  },
+  {
+    "id": "access.action.invitation.manage.title",
+    "translation": "Manage invitations"
+  },
+  {
+    "id": "access.action.invitation.view.description",
+    "translation": "Read invitations and their status."
+  },
+  {
+    "id": "access.action.invitation.view.title",
+    "translation": "View invitations"
+  },
+  {
+    "id": "access.action.job.manage.description",
+    "translation": "Retry and cancel background jobs."
+  },
+  {
+    "id": "access.action.job.manage.title",
+    "translation": "Manage background jobs"
+  },
+  {
+    "id": "access.action.job.view.description",
+    "translation": "Read background jobs and their progress."
+  },
+  {
+    "id": "access.action.job.view.title",
+    "translation": "View background jobs"
+  },
+  {
+    "id": "access.action.mail.manage.description",
+    "translation": "Retry, cancel and suppress outgoing mail."
+  },
+  {
+    "id": "access.action.mail.manage.title",
+    "translation": "Manage mail delivery"
+  },
+  {
+    "id": "access.action.mail.view.description",
+    "translation": "Read the delivery status of outgoing mail."
+  },
+  {
+    "id": "access.action.mail.view.title",
+    "translation": "View mail delivery"
+  },
+  {
+    "id": "access.action.onboarding_batch.manage.description",
+    "translation": "Import and run batches that add users in bulk."
+  },
+  {
+    "id": "access.action.onboarding_batch.manage.title",
+    "translation": "Manage onboarding batches"
+  },
+  {
+    "id": "access.action.onboarding_batch.view.description",
+    "translation": "Read onboarding batches and their results."
+  },
+  {
+    "id": "access.action.onboarding_batch.view.title",
+    "translation": "View onboarding batches"
+  },
+  {
+    "id": "access.action.programme.manage.description",
+    "translation": "Create, update and archive programmes."
+  },
+  {
+    "id": "access.action.programme.manage.title",
+    "translation": "Manage programmes"
+  },
+  {
+    "id": "access.action.programme.view.description",
+    "translation": "Read programmes and their details."
+  },
+  {
+    "id": "access.action.programme.view.title",
+    "translation": "View programmes"
+  },
+  {
+    "id": "access.action.programme_level.manage.description",
+    "translation": "Create, update and archive programme levels."
+  },
+  {
+    "id": "access.action.programme_level.manage.title",
+    "translation": "Manage programme levels"
+  },
+  {
+    "id": "access.action.programme_level.view.description",
+    "translation": "Read programme levels and their details."
+  },
+  {
+    "id": "access.action.programme_level.view.title",
+    "translation": "View programme levels"
+  },
+  {
+    "id": "access.action.session.manage.description",
+    "translation": "Sign users out of their sessions."
+  },
+  {
+    "id": "access.action.session.manage.title",
+    "translation": "Manage user sessions"
+  },
+  {
+    "id": "access.action.session.view.description",
+    "translation": "Read users' active sessions."
+  },
+  {
+    "id": "access.action.session.view.title",
+    "translation": "View user sessions"
+  },
+  {
+    "id": "access.action.submission.release.description",
+    "translation": "Release review results to candidates for exams you manage."
+  },
+  {
+    "id": "access.action.submission.release.override.description",
+    "translation": "Release review results without being an exam manager, through the audited administrator path."
+  },
+  {
+    "id": "access.action.submission.release.override.title",
+    "translation": "Release results for any exam"
+  },
+  {
+    "id": "access.action.submission.release.title",
+    "translation": "Release results"
+  },
+  {
+    "id": "access.action.submission.review.description",
+    "translation": "Record integrity decisions and remarks on submissions for exams you manage."
+  },
+  {
+    "id": "access.action.submission.review.override.description",
+    "translation": "Review submissions without being an exam manager, through the audited administrator path."
+  },
+  {
+    "id": "access.action.submission.review.override.title",
+    "translation": "Review any submission"
+  },
+  {
+    "id": "access.action.submission.review.title",
+    "translation": "Review submissions"
+  },
+  {
+    "id": "access.action.submission.view.description",
+    "translation": "Read submissions for exams you manage."
+  },
+  {
+    "id": "access.action.submission.view.override.description",
+    "translation": "Read submissions without being an exam manager, through the audited administrator path."
+  },
+  {
+    "id": "access.action.submission.view.override.title",
+    "translation": "View any submission"
+  },
+  {
+    "id": "access.action.submission.view.title",
+    "translation": "View submissions"
+  },
+  {
+    "id": "access.action.user.manage.description",
+    "translation": "Update, disable and enable user accounts."
+  },
+  {
+    "id": "access.action.user.manage.title",
+    "translation": "Manage users"
+  },
+  {
+    "id": "access.action.user.profile_picture.manage.description",
+    "translation": "Change and remove users' profile pictures."
+  },
+  {
+    "id": "access.action.user.profile_picture.manage.title",
+    "translation": "Manage profile pictures"
+  },
+  {
+    "id": "access.action.user.view.description",
+    "translation": "Read user profiles."
+  },
+  {
+    "id": "access.action.user.view.title",
+    "translation": "View users"
+  },
+  {
     "id": "authorization.role.system_admin.description",
     "translation": "Protected administrator role for this Proctor installation."
   },
@@ -2122,12 +2546,16 @@
     "translation": "Signed out by the user."
   },
   {
+    "id": "session.revocation.user_other_sessions",
+    "translation": "Signed out from another session by the user."
+  },
+  {
     "id": "session.revocation.user_session",
     "translation": "Revoked by the user."
   },
   {
     "id": "webapp.authorization_complete.checking.body",
-    "translation": "Proctor is checking for an active Session in this browser."
+    "translation": "Checking for an active Session in this browser…"
   },
   {
     "id": "webapp.authorization_complete.checking.heading",
@@ -2135,7 +2563,11 @@
   },
   {
     "id": "webapp.authorization_complete.checking.label",
-    "translation": "Confirming Session"
+    "translation": "Sign-in status"
+  },
+  {
+    "id": "webapp.authorization_complete.connect",
+    "translation": "Add a sign-in method"
   },
   {
     "id": "webapp.authorization_complete.document_title",
@@ -2151,7 +2583,11 @@
   },
   {
     "id": "webapp.authorization_complete.no_session.label",
-    "translation": "No active Session"
+    "translation": "Sign-in status"
+  },
+  {
+    "id": "webapp.authorization_complete.security",
+    "translation": "Go to account security"
   },
   {
     "id": "webapp.authorization_complete.sign_in",
@@ -2159,7 +2595,7 @@
   },
   {
     "id": "webapp.authorization_complete.signed_in.body",
-    "translation": "This browser has an active Proctor Session. You can close this page."
+    "translation": "This browser has an active Proctor Session. You can close this page, or manage how you sign in."
   },
   {
     "id": "webapp.authorization_complete.signed_in.heading",
@@ -2167,7 +2603,7 @@
   },
   {
     "id": "webapp.authorization_complete.signed_in.label",
-    "translation": "Session confirmed"
+    "translation": "Sign-in confirmed"
   },
   {
     "id": "webapp.authorization_complete.skip_to_main",
@@ -2175,7 +2611,7 @@
   },
   {
     "id": "webapp.authorization_complete.unavailable.body",
-    "translation": "Proctor couldn’t confirm whether this browser has an active Session. Try again or start a new sign-in."
+    "translation": "We couldn’t confirm whether this browser has an active Session. Try again, or sign in again."
   },
   {
     "id": "webapp.authorization_complete.unavailable.heading",
@@ -2183,99 +2619,99 @@
   },
   {
     "id": "webapp.authorization_complete.unavailable.label",
-    "translation": "Confirmation unavailable"
+    "translation": "Sign-in status"
   },
   {
     "id": "webapp.authorization_complete.unavailable.retry",
     "translation": "Try again"
   },
   {
-    "id": "webapp.connect_provider.connect",
-    "translation": "Connect {{.Provider}}"
+    "id": "webapp.connect_provider.cancel",
+    "translation": "Cancel"
   },
   {
     "id": "webapp.connect_provider.connecting",
-    "translation": "Connecting provider…"
+    "translation": "Connecting…"
   },
   {
-    "id": "webapp.connect_provider.context.body",
-    "translation": "Connect an external identity without replacing your current password."
-  },
-  {
-    "id": "webapp.connect_provider.context.eyebrow",
-    "translation": "Account security"
-  },
-  {
-    "id": "webapp.connect_provider.context.heading",
-    "translation": "Add another sign-in method"
-  },
-  {
-    "id": "webapp.connect_provider.context.note",
-    "translation": "Provider email is never used to merge accounts."
+    "id": "webapp.connect_provider.continue",
+    "translation": "Continue to {{.Provider}}"
   },
   {
     "id": "webapp.connect_provider.document_title",
-    "translation": "Connect a provider · Proctor"
+    "translation": "Sign-in methods · Proctor"
   },
   {
     "id": "webapp.connect_provider.empty.body",
-    "translation": "This installation currently has no external provider available to connect."
+    "translation": "Your institution hasn’t set up any other way to sign in."
   },
   {
     "id": "webapp.connect_provider.empty.heading",
-    "translation": "No provider is available"
+    "translation": "There’s nothing to connect"
+  },
+  {
+    "id": "webapp.connect_provider.empty.return",
+    "translation": "Back to account security"
   },
   {
     "id": "webapp.connect_provider.error.reauthentication",
-    "translation": "This connection requires a recent strong sign-in. Sign in again, then return to this page."
+    "translation": "This needs a recent sign-in. Confirm it’s you, then try again."
   },
   {
     "id": "webapp.connect_provider.error.unavailable",
-    "translation": "Proctor couldn’t start this provider connection. Try again."
-  },
-  {
-    "id": "webapp.connect_provider.evidence",
-    "translation": "Your password and Proctor profile stay unchanged."
+    "translation": "We couldn’t start connecting {{.Provider}}. Try again."
   },
   {
     "id": "webapp.connect_provider.group",
-    "translation": "Available external providers"
+    "translation": "Sign-in methods you can add"
   },
   {
-    "id": "webapp.connect_provider.heading",
-    "translation": "Connect a provider"
-  },
-  {
-    "id": "webapp.connect_provider.lede",
-    "translation": "Choose the provider you want to connect to this Proctor account."
+    "id": "webapp.connect_provider.kind",
+    "translation": "Sign-in methods"
   },
   {
     "id": "webapp.connect_provider.loading.body",
-    "translation": "Proctor is checking this User and the providers currently available."
+    "translation": "Checking which sign-in methods you can add…"
   },
   {
     "id": "webapp.connect_provider.loading.heading",
-    "translation": "Checking connection options"
+    "translation": "Checking sign-in methods"
+  },
+  {
+    "id": "webapp.connect_provider.multiple.body",
+    "translation": "Choose the account you want to sign in with, as well as the way you sign in now."
+  },
+  {
+    "id": "webapp.connect_provider.multiple.heading",
+    "translation": "Add a sign-in method"
   },
   {
     "id": "webapp.connect_provider.no_session.body",
-    "translation": "Sign in with an existing method before connecting another provider."
+    "translation": "Sign in the way you usually do, then come back to add another sign-in method."
   },
   {
     "id": "webapp.connect_provider.no_session.heading",
-    "translation": "Sign in to connect a provider"
+    "translation": "Sign in to add a sign-in method"
   },
   {
     "id": "webapp.connect_provider.no_session.sign_in",
     "translation": "Sign in"
   },
   {
-    "id": "webapp.connect_provider.return",
-    "translation": "Return to sign-in status"
+    "id": "webapp.connect_provider.note",
+    "translation": "Your password and Proctor profile stay the same, and email addresses are never used to merge accounts."
+  },
+  {
+    "id": "webapp.connect_provider.single.body",
+    "translation": "After this, you can sign in with {{.Provider}} as well as the way you sign in now."
+  },
+  {
+    "id": "webapp.connect_provider.single.heading",
+    "translation": "Connect {{.Provider}}"
   },
   {
     "id": "webapp.connect_provider.skip_to_main",
-    "translation": "Skip to provider connection"
+    "translation": "Skip to sign-in methods"
   },
   {
     "id": "webapp.connect_provider.type.cas",
@@ -2291,11 +2727,11 @@
   },
   {
     "id": "webapp.connect_provider.unavailable.body",
-    "translation": "Proctor couldn’t load this User’s provider connection options."
+    "translation": "We couldn’t load the sign-in methods you can add. Try again in a moment."
   },
   {
     "id": "webapp.connect_provider.unavailable.heading",
-    "translation": "Provider connection is unavailable"
+    "translation": "We couldn’t load sign-in methods"
   },
   {
     "id": "webapp.connect_provider.unavailable.retry",
@@ -2307,119 +2743,111 @@
   },
   {
     "id": "webapp.desktop_authorization.approve",
-    "translation": "Continue to desktop"
+    "translation": "Allow"
   },
   {
     "id": "webapp.desktop_authorization.approved.body",
-    "translation": "This browser is returning the approved request to Proctor Desktop."
+    "translation": "You can close this tab and go back to the app."
   },
   {
     "id": "webapp.desktop_authorization.approved.heading",
-    "translation": "Returning to Proctor Desktop"
+    "translation": "You’re signed in to Proctor Desktop"
   },
   {
-    "id": "webapp.desktop_authorization.approved.label",
-    "translation": "Request approved"
+    "id": "webapp.desktop_authorization.approved.returning",
+    "translation": "Returning to Proctor Desktop…"
   },
   {
     "id": "webapp.desktop_authorization.approving",
-    "translation": "Approving request…"
+    "translation": "Allowing…"
   },
   {
     "id": "webapp.desktop_authorization.authentication.body",
-    "translation": "Choose an account here. This signs in only for this Desktop request and does not create a browser Session."
+    "translation": "Use your {{.Institution}} account. This signs in Proctor Desktop only, not this browser."
   },
   {
     "id": "webapp.desktop_authorization.authentication.heading",
-    "translation": "Sign in to continue in Proctor Desktop"
+    "translation": "Sign in to Proctor Desktop"
   },
   {
     "id": "webapp.desktop_authorization.cancel",
-    "translation": "Cancel request"
+    "translation": "Cancel sign-in"
   },
   {
     "id": "webapp.desktop_authorization.canceled.body",
-    "translation": "This Desktop request can no longer be approved. You can close this page."
+    "translation": "Proctor Desktop wasn’t signed in. You can close this page."
   },
   {
     "id": "webapp.desktop_authorization.canceled.heading",
-    "translation": "The request was canceled"
-  },
-  {
-    "id": "webapp.desktop_authorization.canceled.label",
-    "translation": "Request canceled"
+    "translation": "Sign-in canceled"
   },
   {
     "id": "webapp.desktop_authorization.canceling",
-    "translation": "Canceling request…"
-  },
-  {
-    "id": "webapp.desktop_authorization.caution",
-    "translation": "Only continue if you started this request in Proctor Desktop."
+    "translation": "Canceling…"
   },
   {
     "id": "webapp.desktop_authorization.checking.body",
-    "translation": "Proctor is checking this browser Session and the installation that received the request."
+    "translation": "Checking the request from Proctor Desktop…"
   },
   {
     "id": "webapp.desktop_authorization.checking.heading",
-    "translation": "Checking this request"
+    "translation": "Checking this sign-in request"
   },
   {
-    "id": "webapp.desktop_authorization.details",
-    "translation": "Authorization details"
+    "id": "webapp.desktop_authorization.device",
+    "translation": "Device"
+  },
+  {
+    "id": "webapp.desktop_authorization.device_fallback",
+    "translation": "Proctor Desktop"
   },
   {
     "id": "webapp.desktop_authorization.document_title",
-    "translation": "Continue in Proctor Desktop · Proctor"
+    "translation": "Desktop sign-in · Proctor"
   },
   {
     "id": "webapp.desktop_authorization.error.unavailable",
-    "translation": "Proctor couldn’t complete this Desktop request. Try again."
+    "translation": "Something went wrong. Try again."
   },
   {
-    "id": "webapp.desktop_authorization.expiry",
-    "translation": "This approval is single-use and expires shortly."
+    "id": "webapp.desktop_authorization.facts.label",
+    "translation": "Sign-in request"
   },
   {
     "id": "webapp.desktop_authorization.heading",
-    "translation": "Continue in Proctor Desktop"
-  },
-  {
-    "id": "webapp.desktop_authorization.installation",
-    "translation": "Installation"
+    "translation": "Sign in to Proctor Desktop?"
   },
   {
     "id": "webapp.desktop_authorization.invalid.body",
-    "translation": "It may have expired, been canceled, or already been used. Start another request from Proctor Desktop."
+    "translation": "It may have expired, been canceled, or already been used. Start again from Proctor Desktop."
   },
   {
     "id": "webapp.desktop_authorization.invalid.heading",
-    "translation": "This Desktop request can’t be used"
+    "translation": "This sign-in link doesn’t work"
   },
   {
-    "id": "webapp.desktop_authorization.invalid.label",
-    "translation": "Request unavailable"
-  },
-  {
-    "id": "webapp.desktop_authorization.label",
-    "translation": "Desktop authorization"
+    "id": "webapp.desktop_authorization.kind",
+    "translation": "Desktop sign-in"
   },
   {
     "id": "webapp.desktop_authorization.lede",
-    "translation": "Proctor Desktop requested access to this account."
+    "translation": "Proctor Desktop on this computer is asking to use your {{.Institution}} account."
   },
   {
     "id": "webapp.desktop_authorization.locked.body",
-    "translation": "This account is already taking an Exam. Continue using the Desktop Session that owns that Attempt."
+    "translation": "This account is taking an exam in Proctor Desktop right now. Go back to that window to continue."
   },
   {
     "id": "webapp.desktop_authorization.locked.heading",
-    "translation": "This account is already active in an Exam"
+    "translation": "You’re already in an exam"
   },
   {
-    "id": "webapp.desktop_authorization.locked.label",
-    "translation": "Account unavailable"
+    "id": "webapp.desktop_authorization.note.body",
+    "translation": "Close this page. Nothing happens unless you choose Allow."
+  },
+  {
+    "id": "webapp.desktop_authorization.note.lead",
+    "translation": "Didn’t start this?"
   },
   {
     "id": "webapp.desktop_authorization.provider.continue",
@@ -2427,19 +2855,15 @@
   },
   {
     "id": "webapp.desktop_authorization.provider.group",
-    "translation": "External sign-in methods"
+    "translation": "Other ways to sign in"
   },
   {
-    "id": "webapp.desktop_authorization.request",
-    "translation": "Request"
-  },
-  {
-    "id": "webapp.desktop_authorization.request_value",
-    "translation": "Proctor Desktop"
+    "id": "webapp.desktop_authorization.requested",
+    "translation": "Requested"
   },
   {
     "id": "webapp.desktop_authorization.resetting",
-    "translation": "Changing account…"
+    "translation": "Switching account…"
   },
   {
     "id": "webapp.desktop_authorization.return_to_sign_in",
@@ -2447,15 +2871,15 @@
   },
   {
     "id": "webapp.desktop_authorization.skip_to_main",
-    "translation": "Skip to Desktop authorization"
+    "translation": "Skip to Desktop sign-in"
   },
   {
     "id": "webapp.desktop_authorization.unavailable.body",
-    "translation": "Proctor couldn’t confirm this browser Session or installation."
+    "translation": "Something went wrong on our side. Try again in a moment."
   },
   {
     "id": "webapp.desktop_authorization.unavailable.heading",
-    "translation": "The request can’t be checked"
+    "translation": "We couldn’t check this request"
   },
   {
     "id": "webapp.desktop_authorization.unavailable.retry",
@@ -2463,39 +2887,35 @@
   },
   {
     "id": "webapp.desktop_authorization.use_another_account",
-    "translation": "Use another account"
+    "translation": "Use a different account"
   },
   {
     "id": "webapp.forgot_password.accepted.body",
-    "translation": "If an eligible local account exists, Proctor will send a password-reset message."
+    "translation": "If an account uses {{.Email}}, a reset link is on its way. It works once, for 1 hour."
   },
   {
     "id": "webapp.forgot_password.accepted.heading",
     "translation": "Check your email"
   },
   {
-    "id": "webapp.forgot_password.accepted.label",
-    "translation": "Request accepted"
+    "id": "webapp.forgot_password.accepted.note",
+    "translation": "Check your spam folder, then {{.Action}}."
   },
   {
-    "id": "webapp.forgot_password.accepted.note",
-    "translation": "Use the newest reset message. Earlier links stop working when another request is accepted."
+    "id": "webapp.forgot_password.accepted.note_lead",
+    "translation": "Nothing arrived?"
+  },
+  {
+    "id": "webapp.forgot_password.accepted.resend",
+    "translation": "send it again"
   },
   {
     "id": "webapp.forgot_password.context.body",
-    "translation": "Request a single-use link for your local Proctor account."
-  },
-  {
-    "id": "webapp.forgot_password.context.eyebrow",
-    "translation": "Account recovery"
+    "translation": "Enter the email on your Proctor account and we’ll send a reset link. It works for 1 hour."
   },
   {
     "id": "webapp.forgot_password.context.heading",
     "translation": "Reset your password"
-  },
-  {
-    "id": "webapp.forgot_password.context.note",
-    "translation": "If an eligible local account exists, we’ll send a reset link."
   },
   {
     "id": "webapp.forgot_password.document_title",
@@ -2503,7 +2923,7 @@
   },
   {
     "id": "webapp.forgot_password.form.email",
-    "translation": "Email address"
+    "translation": "Email"
   },
   {
     "id": "webapp.forgot_password.form.error.email_invalid",
@@ -2511,7 +2931,7 @@
   },
   {
     "id": "webapp.forgot_password.form.error.email_required",
-    "translation": "Enter the email address linked to your account."
+    "translation": "Enter the email on your Proctor account."
   },
   {
     "id": "webapp.forgot_password.form.error.rate_limited",
@@ -2530,16 +2950,12 @@
     "translation": "Sending reset link…"
   },
   {
-    "id": "webapp.forgot_password.heading",
-    "translation": "Request reset link"
-  },
-  {
-    "id": "webapp.forgot_password.lede",
-    "translation": "Enter the email address linked to your local account."
+    "id": "webapp.forgot_password.kind",
+    "translation": "Reset password"
   },
   {
     "id": "webapp.forgot_password.sign_in",
-    "translation": "Return to sign in"
+    "translation": "Back to sign in"
   },
   {
     "id": "webapp.forgot_password.skip_to_main",
@@ -2578,56 +2994,100 @@
     "translation": "Use a recovery code instead"
   },
   {
-    "id": "webapp.join.accepted.body",
-    "translation": "The Invitation package was applied in one transaction. You can continue to sign in."
+    "id": "webapp.join.accepted.body.account.academic_unit_role",
+    "translation": "Your account is ready and your academic unit role is now active. Sign in to get started."
   },
   {
-    "id": "webapp.join.accepted.heading",
-    "translation": "Your Invitation is accepted"
+    "id": "webapp.join.accepted.body.account.institution_role",
+    "translation": "Your account is ready and your institution role is now active. Sign in to get started."
   },
   {
-    "id": "webapp.join.accepted.label",
-    "translation": "Invitation accepted"
+    "id": "webapp.join.accepted.body.account.student_class",
+    "translation": "Your account is ready and you’ve joined your class. Exams scheduled for your class will appear when you sign in to Proctor Desktop."
   },
   {
-    "id": "webapp.join.context.body_account",
-    "translation": "Create the local account that will receive this Invitation."
+    "id": "webapp.join.accepted.body.account.teacher_academic_unit",
+    "translation": "Your account is ready and you’ve joined your academic unit as a teacher. Sign in to work with its classes and exams."
   },
   {
-    "id": "webapp.join.context.body_session",
-    "translation": "Use your current Proctor User to receive this Invitation."
+    "id": "webapp.join.accepted.body.session.academic_unit_role",
+    "translation": "Your academic unit role is now active on your account."
   },
   {
-    "id": "webapp.join.context.eyebrow",
-    "translation": "Invitation"
+    "id": "webapp.join.accepted.body.session.institution_role",
+    "translation": "Your institution role is now active on your account."
   },
   {
-    "id": "webapp.join.context.heading",
-    "translation": "Join {{.Institution}}"
+    "id": "webapp.join.accepted.body.session.student_class",
+    "translation": "You’ve joined your class. Exams scheduled for your class will appear in Proctor Desktop."
   },
   {
-    "id": "webapp.join.context.heading_fallback",
-    "translation": "Join your Institution"
+    "id": "webapp.join.accepted.body.session.teacher_academic_unit",
+    "translation": "You’ve joined your academic unit as a teacher. Its classes and exams are now available to you."
   },
   {
-    "id": "webapp.join.context.note_account",
-    "translation": "Acceptance creates your User and applies the Invitation package in one transaction."
+    "id": "webapp.join.accepted.heading.account",
+    "translation": "Welcome to Proctor"
   },
   {
-    "id": "webapp.join.context.note_session",
-    "translation": "Acceptance applies the Invitation package only to the current User."
+    "id": "webapp.join.accepted.heading.session",
+    "translation": "You’ve accepted the invitation"
   },
   {
     "id": "webapp.join.document_title",
-    "translation": "Accept Invitation · Proctor"
+    "translation": "Invitation · Proctor"
+  },
+  {
+    "id": "webapp.join.facts.class",
+    "translation": "Class"
+  },
+  {
+    "id": "webapp.join.facts.expires",
+    "translation": "Expires"
+  },
+  {
+    "id": "webapp.join.facts.invited_as",
+    "translation": "Invited as"
+  },
+  {
+    "id": "webapp.join.facts.label",
+    "translation": "Invitation details"
+  },
+  {
+    "id": "webapp.join.facts.purpose.academic_unit_role",
+    "translation": "Academic unit role"
+  },
+  {
+    "id": "webapp.join.facts.purpose.institution_role",
+    "translation": "Institution role"
+  },
+  {
+    "id": "webapp.join.facts.purpose.student_class",
+    "translation": "Student"
+  },
+  {
+    "id": "webapp.join.facts.purpose.teacher_academic_unit",
+    "translation": "Teacher"
+  },
+  {
+    "id": "webapp.join.facts.sent_to",
+    "translation": "Sent to"
+  },
+  {
+    "id": "webapp.join.form.email",
+    "translation": "Email"
+  },
+  {
+    "id": "webapp.join.form.email_help",
+    "translation": "From your invitation. You can’t change it here."
   },
   {
     "id": "webapp.join.form.error.details_invalid",
-    "translation": "Those account details or this Invitation can’t be accepted. Review the form or ask the inviter for a current link."
+    "translation": "We couldn’t create your account with these details. Check them, or ask the person who invited you for a new link."
   },
   {
     "id": "webapp.join.form.error.password_invalid",
-    "translation": "That password doesn’t meet this installation’s requirements."
+    "translation": "That password doesn’t meet your institution’s requirements."
   },
   {
     "id": "webapp.join.form.error.password_required",
@@ -2635,11 +3095,11 @@
   },
   {
     "id": "webapp.join.form.error.rate_limited",
-    "translation": "Too many Invitation attempts were made. Try again later."
+    "translation": "Too many attempts. Wait a few minutes, then try again."
   },
   {
     "id": "webapp.join.form.error.unavailable",
-    "translation": "Proctor couldn’t accept this Invitation. No account or Invitation changes were applied. Try again."
+    "translation": "We couldn’t accept the invitation and nothing was changed. Try again."
   },
   {
     "id": "webapp.join.form.error.username_required",
@@ -2659,15 +3119,19 @@
   },
   {
     "id": "webapp.join.form.password_help",
-    "translation": "Use a unique, policy-compliant password."
+    "translation": "At least {{.Count}} characters. Use a password you don’t use anywhere else."
+  },
+  {
+    "id": "webapp.join.form.password_help_unsized",
+    "translation": "Use a password you don’t use anywhere else."
   },
   {
     "id": "webapp.join.form.submit",
-    "translation": "Accept invitation"
+    "translation": "Accept and create account"
   },
   {
     "id": "webapp.join.form.submitting",
-    "translation": "Accepting invitation…"
+    "translation": "Creating your account…"
   },
   {
     "id": "webapp.join.form.username",
@@ -2675,51 +3139,75 @@
   },
   {
     "id": "webapp.join.heading",
-    "translation": "Create your invited account"
+    "translation": "Join {{.Institution}} on Proctor"
+  },
+  {
+    "id": "webapp.join.heading_fallback",
+    "translation": "Join your institution on Proctor"
   },
   {
     "id": "webapp.join.invalid.body",
-    "translation": "It may have expired, been replaced, been revoked, or already been accepted. Ask the inviter for a current link."
+    "translation": "It may have expired, been withdrawn or replaced, or already been used. Ask the person who invited you to send a new one."
+  },
+  {
+    "id": "webapp.join.invalid.contact_support",
+    "translation": "Contact support"
   },
   {
     "id": "webapp.join.invalid.heading",
-    "translation": "This Invitation can’t be used"
+    "translation": "This invitation link doesn’t work"
   },
   {
-    "id": "webapp.join.invalid.label",
-    "translation": "Invitation unavailable"
+    "id": "webapp.join.kind",
+    "translation": "Invitation"
   },
   {
-    "id": "webapp.join.lede",
-    "translation": "Set the details you’ll use to sign in."
+    "id": "webapp.join.lede.account.academic_unit_role",
+    "translation": "You’ve been invited to a role in an academic unit. Create your account to accept it."
+  },
+  {
+    "id": "webapp.join.lede.account.institution_role",
+    "translation": "You’ve been invited to a role at your institution. Create your account to accept it."
+  },
+  {
+    "id": "webapp.join.lede.account.student_class",
+    "translation": "You’ve been invited as a student. Create your account to see your exams."
+  },
+  {
+    "id": "webapp.join.lede.account.teacher_academic_unit",
+    "translation": "You’ve been invited as a teacher. Create your account to work with your academic unit’s classes and exams."
+  },
+  {
+    "id": "webapp.join.lede.session.academic_unit_role",
+    "translation": "You’ve been invited to a role in an academic unit. Accept it with the account you’re signed in with."
+  },
+  {
+    "id": "webapp.join.lede.session.institution_role",
+    "translation": "You’ve been invited to a role at your institution. Accept it with the account you’re signed in with."
+  },
+  {
+    "id": "webapp.join.lede.session.student_class",
+    "translation": "You’ve been invited as a student. Accept with the account you’re signed in with to see your exams."
+  },
+  {
+    "id": "webapp.join.lede.session.teacher_academic_unit",
+    "translation": "You’ve been invited as a teacher. Accept with the account you’re signed in with to work with your academic unit’s classes and exams."
   },
   {
     "id": "webapp.join.loading.body",
-    "translation": "Proctor is checking the one-time Invitation and its acceptance requirements."
+    "translation": "Checking your invitation link…"
   },
   {
     "id": "webapp.join.loading.heading",
-    "translation": "Checking your Invitation"
+    "translation": "Checking your invitation"
   },
   {
     "id": "webapp.join.session.error.sign_in",
-    "translation": "This browser needs an active Session. Open sign in in another tab, then try acceptance again here."
+    "translation": "You need to be signed in first. Sign in opens in a new tab; when you’re done, come back here and choose Accept invitation."
   },
   {
     "id": "webapp.join.session.error.unavailable",
-    "translation": "Proctor couldn’t apply this Invitation to the current User. Try again."
-  },
-  {
-    "id": "webapp.join.session.heading",
-    "translation": "Accept with this account"
-  },
-  {
-    "id": "webapp.join.session.lede",
-    "translation": "Apply this Invitation package to the User signed in to this browser."
-  },
-  {
-    "id": "webapp.join.session.open_sign_in",
-    "translation": "Open sign in"
+    "translation": "We couldn’t accept the invitation and nothing was changed. Try again."
   },
   {
     "id": "webapp.join.session.submit",
@@ -2731,23 +3219,19 @@
   },
   {
     "id": "webapp.join.sign_in",
-    "translation": "Return to sign in"
+    "translation": "Sign in"
   },
   {
     "id": "webapp.join.skip_to_main",
-    "translation": "Skip to Invitation acceptance"
+    "translation": "Skip to invitation"
   },
   {
     "id": "webapp.join.unavailable.body",
-    "translation": "Proctor couldn’t check this Invitation. Try the link again."
+    "translation": "Something went wrong on our side. Try the link again in a moment."
   },
   {
     "id": "webapp.join.unavailable.heading",
-    "translation": "The Invitation can’t be checked"
-  },
-  {
-    "id": "webapp.join.unavailable.label",
-    "translation": "Invitation check unavailable"
+    "translation": "We couldn’t check this invitation"
   },
   {
     "id": "webapp.join.unavailable.retry",
@@ -2755,11 +3239,11 @@
   },
   {
     "id": "webapp.login.discovery_failure.body",
-    "translation": "Proctor couldn’t load the sign-in methods for this installation."
+    "translation": "Proctor couldn’t load the ways to sign in. Check your connection and try again."
   },
   {
     "id": "webapp.login.discovery_failure.heading",
-    "translation": "Sign-in methods are unavailable"
+    "translation": "Sign-in options didn’t load"
   },
   {
     "id": "webapp.login.document_title",
@@ -2767,15 +3251,27 @@
   },
   {
     "id": "webapp.login.external_failure",
-    "translation": "External sign-in wasn’t completed. Choose a method to try again."
+    "translation": "Signing in with your institution wasn’t completed. Choose how to sign in and try again."
   },
   {
     "id": "webapp.login.form.email_or_username",
     "translation": "Email or username"
   },
   {
+    "id": "webapp.login.form.error.code_rejected",
+    "translation": "That code didn’t work. Check your app and enter the current code."
+  },
+  {
+    "id": "webapp.login.form.error.code_required",
+    "translation": "Enter the code from your authenticator app, or a recovery code."
+  },
+  {
+    "id": "webapp.login.form.error.credentials_rejected",
+    "translation": "That email or password isn’t right. Check both and try again."
+  },
+  {
     "id": "webapp.login.form.error.generic",
-    "translation": "Proctor couldn’t sign you in. Check your details and try again."
+    "translation": "Something went wrong and you weren’t signed in. Try again."
   },
   {
     "id": "webapp.login.form.error.invalid_credentials",
@@ -2787,7 +3283,7 @@
   },
   {
     "id": "webapp.login.form.error.mfa_unavailable",
-    "translation": "Proctor can’t verify an authentication code right now. Try again."
+    "translation": "Proctor can’t check codes right now. Try again in a few minutes."
   },
   {
     "id": "webapp.login.form.error.password_required",
@@ -2799,7 +3295,7 @@
   },
   {
     "id": "webapp.login.form.error.sessions_maximum",
-    "translation": "You already have the maximum number of active Sessions. Resolve another Session before signing in."
+    "translation": "You’re signed in on as many devices as Proctor allows. Sign out on another device, then try again."
   },
   {
     "id": "webapp.login.form.error.username_required",
@@ -2811,15 +3307,7 @@
   },
   {
     "id": "webapp.login.form.mfa_back",
-    "translation": "Use a different password"
-  },
-  {
-    "id": "webapp.login.form.mfa_heading",
-    "translation": "Confirm it’s you"
-  },
-  {
-    "id": "webapp.login.form.mfa_help",
-    "translation": "Enter a current authenticator code or an unused recovery code."
+    "translation": "Use a different account"
   },
   {
     "id": "webapp.login.form.password",
@@ -2834,36 +3322,48 @@
     "translation": "Signing in…"
   },
   {
+    "id": "webapp.login.form.verify",
+    "translation": "Verify"
+  },
+  {
+    "id": "webapp.login.form.verifying",
+    "translation": "Verifying…"
+  },
+  {
     "id": "webapp.login.heading",
-    "translation": "Sign in"
-  },
-  {
-    "id": "webapp.login.institution.body",
-    "translation": "Your institution controls which sign-in methods are available."
-  },
-  {
-    "id": "webapp.login.institution.fallback",
-    "translation": "Institution access"
-  },
-  {
-    "id": "webapp.login.institution.label",
-    "translation": "Institution"
+    "translation": "Sign in to Proctor"
   },
   {
     "id": "webapp.login.lede",
-    "translation": "Use your institution account to continue."
+    "translation": "Use your {{.Institution}} account."
+  },
+  {
+    "id": "webapp.login.lede_unnamed",
+    "translation": "Use your institution account."
   },
   {
     "id": "webapp.login.loading",
-    "translation": "Checking available sign-in methods…"
+    "translation": "Checking how you can sign in…"
   },
   {
     "id": "webapp.login.method_separator",
     "translation": "or"
   },
   {
+    "id": "webapp.login.mfa.heading",
+    "translation": "Enter your code"
+  },
+  {
+    "id": "webapp.login.mfa.kind",
+    "translation": "Sign in"
+  },
+  {
+    "id": "webapp.login.mfa.lede",
+    "translation": "Open your authenticator app and enter the 6-digit code for Proctor."
+  },
+  {
     "id": "webapp.login.origin_mismatch.body",
-    "translation": "This page doesn’t match the Proctor origin configured for this installation. Reload from the address provided by your institution."
+    "translation": "This page isn’t at the address Proctor expects. Open Proctor from the link your institution gave you."
   },
   {
     "id": "webapp.login.origin_mismatch.heading",
@@ -2875,11 +3375,23 @@
   },
   {
     "id": "webapp.login.provider.group",
-    "translation": "Institution sign-in methods"
+    "translation": "Sign in with your institution"
   },
   {
     "id": "webapp.login.registration.action",
     "translation": "Create an account"
+  },
+  {
+    "id": "webapp.login.registration.invitation",
+    "translation": "Students and staff join through an invitation from {{.Institution}}."
+  },
+  {
+    "id": "webapp.login.registration.invitation_unnamed",
+    "translation": "Students and staff join through an invitation from their institution."
+  },
+  {
+    "id": "webapp.login.registration.open",
+    "translation": "{{.Link}} if your institution allows it."
   },
   {
     "id": "webapp.login.registration.prompt",
@@ -2895,15 +3407,15 @@
   },
   {
     "id": "webapp.login.setup.body",
-    "translation": "Finish setting up this Proctor installation before signing in."
+    "translation": "Proctor needs to be set up before anyone can sign in."
   },
   {
     "id": "webapp.login.setup.heading",
-    "translation": "Setup is required"
+    "translation": "Proctor isn’t set up yet"
   },
   {
     "id": "webapp.login.setup.open",
-    "translation": "Open setup"
+    "translation": "Set up Proctor"
   },
   {
     "id": "webapp.login.skip_to_main",
@@ -2911,11 +3423,11 @@
   },
   {
     "id": "webapp.login.unavailable.body",
-    "translation": "This installation currently has no available sign-in method."
+    "translation": "No way to sign in is turned on here yet. Contact your institution."
   },
   {
     "id": "webapp.login.unavailable.heading",
-    "translation": "Sign in is unavailable"
+    "translation": "Sign-in isn’t available"
   },
   {
     "id": "webapp.password_policy.common",
@@ -2935,79 +3447,103 @@
   },
   {
     "id": "webapp.reauthenticate.action",
-    "translation": "Confirm your sign-in"
-  },
-  {
-    "id": "webapp.reauthenticate.body",
-    "translation": "Provide fresh proof for this session. You’ll return to your task to review and submit the action yourself."
+    "translation": "Confirm it’s you"
   },
   {
     "id": "webapp.reauthenticate.cancel",
-    "translation": "Cancel and return"
-  },
-  {
-    "id": "webapp.reauthenticate.challenge.help",
-    "translation": "Your primary sign-in is recent. Verify this session with your authenticator or an unused recovery code."
+    "translation": "Cancel"
   },
   {
     "id": "webapp.reauthenticate.complete.body",
-    "translation": "Return to your task and choose the action again. The server will check your proof when you submit it."
+    "translation": "Go back and choose what you wanted to do again. You won’t be asked to confirm again for {{.Duration}}."
+  },
+  {
+    "id": "webapp.reauthenticate.complete.connect",
+    "translation": "Back to sign-in methods"
   },
   {
     "id": "webapp.reauthenticate.complete.heading",
-    "translation": "Your proof is ready"
+    "translation": "You’re confirmed"
   },
   {
-    "id": "webapp.reauthenticate.continue",
-    "translation": "Return to your task"
+    "id": "webapp.reauthenticate.complete.security",
+    "translation": "Back to account security"
   },
   {
     "id": "webapp.reauthenticate.document_title",
-    "translation": "Confirm your sign-in · Proctor"
+    "translation": "Confirm it’s you · Proctor"
   },
   {
     "id": "webapp.reauthenticate.external.action",
-    "translation": "Continue with your original provider"
+    "translation": "Continue with {{.Provider}}"
+  },
+  {
+    "id": "webapp.reauthenticate.external.action_unnamed",
+    "translation": "Continue to your sign-in provider"
   },
   {
     "id": "webapp.reauthenticate.external.failed",
-    "translation": "Your provider sign-in could not be confirmed. You can try again; no security action has been performed."
+    "translation": "{{.Provider}} couldn’t confirm it’s you. Nothing was changed. Try again."
+  },
+  {
+    "id": "webapp.reauthenticate.external.failed_unnamed",
+    "translation": "Your sign-in provider couldn’t confirm it’s you. Nothing was changed. Try again."
   },
   {
     "id": "webapp.reauthenticate.external.help",
-    "translation": "Continue with the provider that established this session. Use the same provider account; a different account cannot refresh this session."
+    "translation": "Use the same account you signed in with. A different account can’t confirm this session."
   },
   {
     "id": "webapp.reauthenticate.heading",
-    "translation": "Confirm your sign-in"
+    "translation": "Confirm it’s you"
+  },
+  {
+    "id": "webapp.reauthenticate.kind",
+    "translation": "Security check"
+  },
+  {
+    "id": "webapp.reauthenticate.lede.connect",
+    "translation": "Confirm it’s you before you connect a sign-in method. You won’t be asked again for {{.Duration}}."
+  },
+  {
+    "id": "webapp.reauthenticate.lede.security",
+    "translation": "Confirm it’s you before you change security settings. You won’t be asked again for {{.Duration}}."
+  },
+  {
+    "id": "webapp.reauthenticate.lede.strong",
+    "translation": "Enter a code from your authenticator app or one of your recovery codes to finish confirming it’s you."
   },
   {
     "id": "webapp.reauthenticate.method_required",
-    "translation": "This proof method does not match the current session. Check the current status to continue with the correct method."
+    "translation": "This session was started a different way. Check the current status to continue with the right method."
   },
   {
     "id": "webapp.reauthenticate.password.action",
-    "translation": "Confirm password"
+    "translation": "Continue"
   },
   {
     "id": "webapp.reauthenticate.password.invalid",
-    "translation": "That password could not be verified. Try again."
+    "translation": "That password isn’t right. Try again."
   },
   {
     "id": "webapp.reauthenticate.password.label",
-    "translation": "Current password"
+    "translation": "Password"
   },
   {
     "id": "webapp.reauthenticate.password.required",
-    "translation": "Enter your current password."
+    "translation": "Enter your password."
   },
   {
     "id": "webapp.reauthenticate.setup_required",
-    "translation": "This task needs a verified session. Set up an authenticator in account security, then return to connect your provider."
+    "translation": "Connecting a sign-in method needs two-step verification. Turn it on in account security, then come back."
+  },
+  {
+    "id": "webapp.reauthenticate.setup_required.action",
+    "translation": "Go to account security"
   },
   {
     "id": "webapp.register.accepted.body",
-    "translation": "Proctor accepted your registration request. A verification message will follow; verify your email before signing in."
+    "translation": "If Proctor can create your account, you’ll get an email with a link to confirm your address. Confirm it, then sign in."
   },
   {
     "id": "webapp.register.accepted.heading",
@@ -3015,31 +3551,15 @@
   },
   {
     "id": "webapp.register.accepted.label",
-    "translation": "Registration accepted"
-  },
-  {
-    "id": "webapp.register.context.body",
-    "translation": "Public registration is available for this installation."
-  },
-  {
-    "id": "webapp.register.context.fallback",
-    "translation": "Institution access"
-  },
-  {
-    "id": "webapp.register.context.heading",
-    "translation": "Create a local account"
-  },
-  {
-    "id": "webapp.register.context.note",
-    "translation": "Registration creates an unverified User. Membership, roles, and Exam access are assigned separately."
+    "translation": "Request received"
   },
   {
     "id": "webapp.register.discovery_failure.body",
-    "translation": "Proctor couldn’t load the registration policy for this installation."
+    "translation": "Proctor couldn’t check whether you can create an account. Try again."
   },
   {
     "id": "webapp.register.discovery_failure.heading",
-    "translation": "Registration status is unavailable"
+    "translation": "This page didn’t load"
   },
   {
     "id": "webapp.register.document_title",
@@ -3047,19 +3567,19 @@
   },
   {
     "id": "webapp.register.form.acknowledgment",
-    "translation": "I understand that registration does not grant institutional access."
+    "translation": "I understand that an account doesn’t by itself give me access to any classes or exams."
   },
   {
     "id": "webapp.register.form.email",
-    "translation": "Email address"
+    "translation": "Email"
   },
   {
     "id": "webapp.register.form.error.acknowledgment_required",
-    "translation": "Confirm that registration does not grant institutional access."
+    "translation": "Tick the box to confirm you understand."
   },
   {
     "id": "webapp.register.form.error.details_invalid",
-    "translation": "Those registration details weren’t accepted. Review them and try again."
+    "translation": "Some of those details weren’t accepted. Check them and try again."
   },
   {
     "id": "webapp.register.form.error.email_invalid",
@@ -3075,7 +3595,7 @@
   },
   {
     "id": "webapp.register.form.error.generic",
-    "translation": "Proctor couldn’t accept your registration request. Try again."
+    "translation": "Something went wrong and your account wasn’t created. Try again."
   },
   {
     "id": "webapp.register.form.error.last_name_required",
@@ -3087,15 +3607,15 @@
   },
   {
     "id": "webapp.register.form.error.password_required",
-    "translation": "Enter a password."
+    "translation": "Choose a password."
   },
   {
     "id": "webapp.register.form.error.rate_limited",
-    "translation": "Too many registration attempts were made. Try again later."
+    "translation": "Too many attempts. Wait a few minutes, then try again."
   },
   {
     "id": "webapp.register.form.error.username_required",
-    "translation": "Enter a username."
+    "translation": "Choose a username."
   },
   {
     "id": "webapp.register.form.first_name",
@@ -3106,16 +3626,16 @@
     "translation": "Last name"
   },
   {
-    "id": "webapp.register.form.mail_note",
-    "translation": "We’ll send a verification message after your request is accepted."
-  },
-  {
     "id": "webapp.register.form.password",
     "translation": "Password"
   },
   {
     "id": "webapp.register.form.password_help",
-    "translation": "Use a unique, policy-compliant password."
+    "translation": "At least {{.Count}} characters. Use a password you don’t use anywhere else."
+  },
+  {
+    "id": "webapp.register.form.password_help_unsized",
+    "translation": "Use a password you don’t use anywhere else."
   },
   {
     "id": "webapp.register.form.submit",
@@ -3130,44 +3650,52 @@
     "translation": "Username"
   },
   {
+    "id": "webapp.register.form.username_help",
+    "translation": "Lowercase letters, numbers, dots, hyphens and underscores."
+  },
+  {
     "id": "webapp.register.heading",
-    "translation": "Create your account"
+    "translation": "Create your Proctor account"
   },
   {
     "id": "webapp.register.invitation_required.body",
-    "translation": "This Institution accepts new Users through an Invitation. Use the private link sent by the Institution."
+    "translation": "{{.Institution}} adds people to Proctor by invitation. Look for an email from Proctor with an invitation link, or ask your department to send one."
+  },
+  {
+    "id": "webapp.register.invitation_required.body_unnamed",
+    "translation": "Your institution adds people to Proctor by invitation. Look for an email from Proctor with an invitation link, or ask your department to send one."
+  },
+  {
+    "id": "webapp.register.invitation_required.contact",
+    "translation": "Contact support"
   },
   {
     "id": "webapp.register.invitation_required.heading",
-    "translation": "An Invitation is required"
+    "translation": "You need an invitation"
+  },
+  {
+    "id": "webapp.register.kind",
+    "translation": "Create an account"
   },
   {
     "id": "webapp.register.lede",
-    "translation": "Enter your name and local account details to register."
+    "translation": "For {{.Institution}}. You’ll confirm your email before you can sign in."
+  },
+  {
+    "id": "webapp.register.lede_unnamed",
+    "translation": "You’ll confirm your email before you can sign in."
   },
   {
     "id": "webapp.register.loading",
-    "translation": "Checking whether public registration is available…"
+    "translation": "Checking whether you can create an account…"
   },
   {
     "id": "webapp.register.origin_mismatch.body",
-    "translation": "This page doesn’t match the Proctor origin configured for this installation. Reload from the address provided by your Institution."
+    "translation": "This page isn’t at the address Proctor expects. Open Proctor from the link your institution gave you."
   },
   {
     "id": "webapp.register.origin_mismatch.heading",
     "translation": "This registration page can’t be used"
-  },
-  {
-    "id": "webapp.register.proof.access",
-    "translation": "Institutional access is assigned separately"
-  },
-  {
-    "id": "webapp.register.proof.credentials",
-    "translation": "Credentials stay with this installation"
-  },
-  {
-    "id": "webapp.register.proof.verification",
-    "translation": "Email verification required"
   },
   {
     "id": "webapp.register.reload",
@@ -3179,19 +3707,23 @@
   },
   {
     "id": "webapp.register.setup.body",
-    "translation": "Finish setting up this Proctor installation before creating an account."
+    "translation": "Proctor needs to be set up before anyone can create an account."
   },
   {
     "id": "webapp.register.setup.heading",
-    "translation": "Setup is required"
+    "translation": "Proctor isn’t set up yet"
   },
   {
     "id": "webapp.register.setup.open",
-    "translation": "Open setup"
+    "translation": "Set up Proctor"
   },
   {
     "id": "webapp.register.sign_in.action",
     "translation": "Sign in"
+  },
+  {
+    "id": "webapp.register.sign_in.instead",
+    "translation": "{{.Link}} instead."
   },
   {
     "id": "webapp.register.sign_in.prompt",
@@ -3199,39 +3731,31 @@
   },
   {
     "id": "webapp.register.skip_to_main",
-    "translation": "Skip to account registration"
+    "translation": "Skip to create an account"
   },
   {
     "id": "webapp.register.unavailable.body",
-    "translation": "Proctor can’t accept public registration requests right now."
+    "translation": "Proctor can’t create new accounts right now. Try again later."
   },
   {
     "id": "webapp.register.unavailable.heading",
-    "translation": "Registration is unavailable"
+    "translation": "Account creation is unavailable"
+  },
+  {
+    "id": "webapp.reset_password.complete.action",
+    "translation": "Sign in"
   },
   {
     "id": "webapp.reset_password.complete.body",
-    "translation": "Your new password is ready to use."
+    "translation": "You’ve been signed out of other devices. Sign in with your new password."
   },
   {
     "id": "webapp.reset_password.complete.heading",
     "translation": "Your password was changed"
   },
   {
-    "id": "webapp.reset_password.complete.label",
-    "translation": "Password changed"
-  },
-  {
-    "id": "webapp.reset_password.complete.note",
-    "translation": "Existing Sessions for this account were signed out."
-  },
-  {
     "id": "webapp.reset_password.context.body",
-    "translation": "Use the single-use link from your most recent password reset message."
-  },
-  {
-    "id": "webapp.reset_password.context.eyebrow",
-    "translation": "Account recovery"
+    "translation": "You’ll be signed out of other devices."
   },
   {
     "id": "webapp.reset_password.context.heading",
@@ -3239,7 +3763,7 @@
   },
   {
     "id": "webapp.reset_password.document_title",
-    "translation": "Set a new password · Proctor"
+    "translation": "Choose a new password · Proctor"
   },
   {
     "id": "webapp.reset_password.form.confirmation",
@@ -3275,59 +3799,51 @@
   },
   {
     "id": "webapp.reset_password.form.password_help",
-    "translation": "Use a unique, policy-compliant password."
+    "translation": "At least {{.Count}} characters. You can’t reuse a recent password."
   },
   {
-    "id": "webapp.reset_password.form.session_note",
-    "translation": "Changing the password signs out existing Sessions for this account."
+    "id": "webapp.reset_password.form.password_help_unsized",
+    "translation": "You can’t reuse a recent password."
   },
   {
     "id": "webapp.reset_password.form.submit",
-    "translation": "Set new password"
+    "translation": "Save password"
   },
   {
     "id": "webapp.reset_password.form.submitting",
-    "translation": "Setting new password…"
+    "translation": "Saving password…"
   },
   {
-    "id": "webapp.reset_password.heading",
-    "translation": "Set a new password"
+    "id": "webapp.reset_password.invalid.action",
+    "translation": "Send a new link"
   },
   {
     "id": "webapp.reset_password.invalid.body",
-    "translation": "It may have expired, already been used, or been replaced by a newer reset request."
+    "translation": "Reset links work once, for 1 hour. Request a new one to continue."
   },
   {
     "id": "webapp.reset_password.invalid.heading",
-    "translation": "This reset link can’t be used"
+    "translation": "This reset link has expired"
   },
   {
-    "id": "webapp.reset_password.invalid.label",
-    "translation": "Reset link unavailable"
-  },
-  {
-    "id": "webapp.reset_password.invalid.note",
-    "translation": "Request another password-reset message to receive a current link."
-  },
-  {
-    "id": "webapp.reset_password.lede",
-    "translation": "Enter and confirm the password you want to use."
+    "id": "webapp.reset_password.kind",
+    "translation": "Reset password"
   },
   {
     "id": "webapp.reset_password.sign_in",
-    "translation": "Return to sign in"
+    "translation": "Back to sign in"
   },
   {
     "id": "webapp.reset_password.skip_to_main",
     "translation": "Skip to new password"
   },
   {
-    "id": "webapp.security.back",
-    "translation": "Back to account security"
+    "id": "webapp.security.body",
+    "translation": "Check how your account is protected and change it here."
   },
   {
-    "id": "webapp.security.body",
-    "translation": "Manage the authenticator and recovery codes that protect your account."
+    "id": "webapp.security.cancel",
+    "translation": "Cancel"
   },
   {
     "id": "webapp.security.challenge.action",
@@ -3335,7 +3851,7 @@
   },
   {
     "id": "webapp.security.challenge.body",
-    "translation": "Confirm access to your authenticator before managing sensitive security settings. This does not refresh your password or provider sign-in."
+    "translation": "Enter a code from your authenticator app or one of your recovery codes. This doesn’t change your password or how you signed in."
   },
   {
     "id": "webapp.security.challenge.heading",
@@ -3343,11 +3859,11 @@
   },
   {
     "id": "webapp.security.challenge.success",
-    "translation": "This session has been verified. Choose the security action you want to take."
+    "translation": "This session is verified."
   },
   {
     "id": "webapp.security.challenge.verify",
-    "translation": "Verify code"
+    "translation": "Verify"
   },
   {
     "id": "webapp.security.code.authenticator",
@@ -3359,19 +3875,31 @@
   },
   {
     "id": "webapp.security.codes.acknowledge",
-    "translation": "I have saved these recovery codes in a secure place."
+    "translation": "I’ve saved these codes somewhere safe"
   },
   {
     "id": "webapp.security.codes.body",
-    "translation": "Keep these codes somewhere secure that you can access without your authenticator. Each code can sign you in once."
+    "translation": "Each code signs you in once if you lose your phone. This is the only time you’ll see them."
+  },
+  {
+    "id": "webapp.security.codes.copied",
+    "translation": "Recovery codes copied."
+  },
+  {
+    "id": "webapp.security.codes.copy",
+    "translation": "Copy codes"
+  },
+  {
+    "id": "webapp.security.codes.copy_failed",
+    "translation": "Couldn’t copy the codes. Download them or write them down instead."
   },
   {
     "id": "webapp.security.codes.done",
-    "translation": "Finish and hide codes"
+    "translation": "Done"
   },
   {
     "id": "webapp.security.codes.download",
-    "translation": "Download recovery codes"
+    "translation": "Download codes"
   },
   {
     "id": "webapp.security.codes.heading",
@@ -3386,32 +3914,40 @@
     "translation": "Your recovery codes are now hidden."
   },
   {
-    "id": "webapp.security.codes.warning",
-    "translation": "These codes are shown only now. Download them or save them manually before continuing. Refreshing or closing this page can lose this view."
-  },
-  {
     "id": "webapp.security.disable.action",
-    "translation": "Disable or replace authenticator"
+    "translation": "Turn off"
   },
   {
     "id": "webapp.security.disable.body",
-    "translation": "This removes your authenticator and invalidates all its recovery codes."
+    "translation": "Signing in will need only your password, and your recovery codes will stop working."
   },
   {
     "id": "webapp.security.disable.confirm",
-    "translation": "Disable authenticator"
+    "translation": "Turn off"
   },
   {
     "id": "webapp.security.disable.heading",
-    "translation": "Disable your authenticator?"
+    "translation": "Turn off two-step verification?"
+  },
+  {
+    "id": "webapp.security.disable.keep",
+    "translation": "Keep it on"
+  },
+  {
+    "id": "webapp.security.disable.section.body",
+    "translation": "Signing in will no longer ask for a code from your app."
+  },
+  {
+    "id": "webapp.security.disable.section.heading",
+    "translation": "Turn off two-step verification"
   },
   {
     "id": "webapp.security.disable.success",
-    "translation": "Your authenticator is disabled. You can now explicitly set up another authenticator."
+    "translation": "Two-step verification is off. You can set it up again at any time."
   },
   {
     "id": "webapp.security.disable.warning",
-    "translation": "Your account will have no local MFA after this action. To replace your authenticator, disable it here, then explicitly start a new setup. Protection resumes after the new setup is activated."
+    "translation": "Moving to a new phone? Turn it off here, then set it up again on the new phone. Your account has no second step until you finish."
   },
   {
     "id": "webapp.security.document_title",
@@ -3419,31 +3955,31 @@
   },
   {
     "id": "webapp.security.error.conflict",
-    "translation": "Your security settings have changed or setup has expired. Check the current status before continuing."
+    "translation": "Your settings changed or this setup expired. Check the current status before you continue."
   },
   {
     "id": "webapp.security.error.disabled",
-    "translation": "Authenticator management is disabled. Check the current status and contact your administrator if you need access restored."
+    "translation": "Your institution has turned off two-step verification. Check the current status, or contact your institution for help."
   },
   {
     "id": "webapp.security.error.invalid_code",
-    "translation": "That code could not be verified. Check the code and try again."
+    "translation": "That code isn’t right. Check it and try again."
   },
   {
     "id": "webapp.security.error.no_session",
-    "translation": "Your session is no longer available. Sign in again to continue."
+    "translation": "You’ve been signed out. Sign in again to continue."
   },
   {
     "id": "webapp.security.error.primary_required",
-    "translation": "Confirm your password or original provider sign-in, then return here and choose the action again."
+    "translation": "Confirm it’s you, then come back and try again."
   },
   {
     "id": "webapp.security.error.rate_limited",
-    "translation": "Too many attempts. Wait before trying again."
+    "translation": "Too many attempts. Wait a moment before you try again."
   },
   {
     "id": "webapp.security.error.strong_required",
-    "translation": "Verify this session before continuing. You may also need fresh password or provider proof."
+    "translation": "Verify this session with a two-step code first. You may also need to confirm your password."
   },
   {
     "id": "webapp.security.error.unavailable",
@@ -3458,8 +3994,12 @@
     "translation": "Account security"
   },
   {
+    "id": "webapp.security.kind.two_step",
+    "translation": "Two-step verification"
+  },
+  {
     "id": "webapp.security.loading.body",
-    "translation": "We’re checking the security settings for this session."
+    "translation": "Checking your security settings…"
   },
   {
     "id": "webapp.security.loading.heading",
@@ -3467,7 +4007,7 @@
   },
   {
     "id": "webapp.security.no_session.body",
-    "translation": "This browser needs an active session before you can manage an authenticator."
+    "translation": "Sign in to manage two-step verification for your account."
   },
   {
     "id": "webapp.security.no_session.heading",
@@ -3475,7 +4015,15 @@
   },
   {
     "id": "webapp.security.recovery_required",
-    "translation": "Your institution requires you to set up a new authenticator before you can use your account. Complete setup here to restore access."
+    "translation": "Your institution needs you to set up two-step verification again before you can use your account."
+  },
+  {
+    "id": "webapp.security.recovery_required.lead",
+    "translation": "Set up two-step verification to continue."
+  },
+  {
+    "id": "webapp.security.recovery_unavailable",
+    "translation": "Setup is turned off right now, so you can’t finish this yet. Contact your institution for help, or sign out and try again later."
   },
   {
     "id": "webapp.security.refresh",
@@ -3483,55 +4031,59 @@
   },
   {
     "id": "webapp.security.regenerate.action",
-    "translation": "Generate new recovery codes"
+    "translation": "Make new codes"
   },
   {
     "id": "webapp.security.regenerate.body",
-    "translation": "A new set replaces all your remaining recovery codes. You’ll need to save the new codes before leaving the next step."
+    "translation": "Your old codes stop working as soon as the new ones are made. You’ll save the new set on the next step."
   },
   {
     "id": "webapp.security.regenerate.confirm",
-    "translation": "Replace recovery codes"
+    "translation": "Replace my codes"
   },
   {
     "id": "webapp.security.regenerate.heading",
-    "translation": "Replace your recovery codes?"
+    "translation": "Make new recovery codes?"
   },
   {
-    "id": "webapp.security.regenerate.warning",
-    "translation": "Every old recovery code stops working when the new set is generated. This requires fresh sign-in proof and a verified session."
+    "id": "webapp.security.regenerate.section.body",
+    "translation": "Make a new set if you’ve used several or think they’ve been seen. Your old codes stop working."
+  },
+  {
+    "id": "webapp.security.regenerate.section.heading",
+    "translation": "Recovery codes"
   },
   {
     "id": "webapp.security.restore_access",
     "translation": "Restore account access"
   },
   {
-    "id": "webapp.security.return",
-    "translation": "Back to sign-in status"
-  },
-  {
     "id": "webapp.security.service_disabled",
-    "translation": "Authenticator management is currently disabled by your institution. Contact your administrator for help. A recovery restriction remains in place until setup can be completed."
+    "translation": "Two-step verification isn’t available right now because your institution has turned it off."
   },
   {
     "id": "webapp.security.setup.action",
-    "translation": "Set up an authenticator"
+    "translation": "Set up two-step verification"
   },
   {
     "id": "webapp.security.setup.activate",
-    "translation": "Activate authenticator"
+    "translation": "Verify and turn on"
   },
   {
     "id": "webapp.security.setup.body",
-    "translation": "Scan this QR code with your authenticator app, then enter the six-digit code it generates."
+    "translation": "Use an authenticator app such as Google Authenticator, Microsoft Authenticator or 1Password."
+  },
+  {
+    "id": "webapp.security.setup.expired",
+    "translation": "This setup has expired. Cancel and start again."
   },
   {
     "id": "webapp.security.setup.expires",
-    "translation": "Complete setup before {{.Time}}. If it expires, return to account security and restart setup."
+    "translation": "Finish within {{.Duration}}."
   },
   {
     "id": "webapp.security.setup.heading",
-    "translation": "Add your authenticator"
+    "translation": "Scan this code"
   },
   {
     "id": "webapp.security.setup.key",
@@ -3539,27 +4091,31 @@
   },
   {
     "id": "webapp.security.setup.manual",
-    "translation": "Can’t scan the code?"
-  },
-  {
-    "id": "webapp.security.setup.manual_help",
-    "translation": "Add an account manually in your authenticator app, choose a time-based code, and enter this key."
+    "translation": "Can’t scan it? Enter this setup key in your app instead."
   },
   {
     "id": "webapp.security.setup.pending",
-    "translation": "A setup is pending. Restarting replaces its setup key; the old key will no longer activate MFA."
+    "translation": "You started setting this up but didn’t finish. Starting again gives you a new code, and the old one stops working."
   },
   {
     "id": "webapp.security.setup.private",
-    "translation": "Keep this QR code and setup key private. Anyone with either can generate your authenticator codes."
+    "translation": "Keep this code and key private. Anyone who has them can make your sign-in codes."
   },
   {
     "id": "webapp.security.setup.qr_label",
-    "translation": "QR code for authenticator setup"
+    "translation": "QR code for two-step verification setup"
   },
   {
     "id": "webapp.security.setup.restart",
-    "translation": "Restart authenticator setup"
+    "translation": "Start setup again"
+  },
+  {
+    "id": "webapp.security.setup.section.body",
+    "translation": "Add a code from an authenticator app when you sign in, so a stolen password isn’t enough."
+  },
+  {
+    "id": "webapp.security.setup.section.heading",
+    "translation": "Turn on two-step verification"
   },
   {
     "id": "webapp.security.sign_in",
@@ -3570,32 +4126,76 @@
     "translation": "Sign out"
   },
   {
+    "id": "webapp.security.sign_out_failed",
+    "translation": "Couldn’t sign out. Try again."
+  },
+  {
     "id": "webapp.security.skip_to_main",
     "translation": "Skip to account security"
   },
   {
-    "id": "webapp.security.status.authenticator",
-    "translation": "Authenticator"
-  },
-  {
     "id": "webapp.security.status.codes",
-    "translation": "Recovery codes remaining"
+    "translation": "Recovery codes"
   },
   {
-    "id": "webapp.security.status.disabled",
-    "translation": "Not enabled"
+    "id": "webapp.security.status.codes_left",
+    "translation": "{{.Count}} of {{.Total}} left"
   },
   {
-    "id": "webapp.security.status.enabled",
-    "translation": "Enabled"
+    "id": "webapp.security.status.codes_none",
+    "translation": "None left"
   },
   {
     "id": "webapp.security.status.no_codes",
-    "translation": "You have no unused recovery codes. Verify this session with your authenticator, then generate a new set."
+    "translation": "You have no recovery codes left. Make a new set so you can still sign in if you lose your phone."
+  },
+  {
+    "id": "webapp.security.status.off",
+    "translation": "Off"
+  },
+  {
+    "id": "webapp.security.status.on",
+    "translation": "On"
+  },
+  {
+    "id": "webapp.security.status.password",
+    "translation": "Password"
+  },
+  {
+    "id": "webapp.security.status.password_changed",
+    "translation": "Changed {{.Date}}"
+  },
+  {
+    "id": "webapp.security.status.pending",
+    "translation": "Setup not finished"
+  },
+  {
+    "id": "webapp.security.status.session",
+    "translation": "This session"
+  },
+  {
+    "id": "webapp.security.status.session_external",
+    "translation": "Signed in with {{.Provider}}"
+  },
+  {
+    "id": "webapp.security.status.session_external_unnamed",
+    "translation": "Signed in with your institution’s sign-in"
+  },
+  {
+    "id": "webapp.security.status.session_password",
+    "translation": "Signed in with password"
+  },
+  {
+    "id": "webapp.security.status.session_strong",
+    "translation": "Verified with two-step"
+  },
+  {
+    "id": "webapp.security.status.two_step",
+    "translation": "Two-step verification"
   },
   {
     "id": "webapp.security.unavailable.body",
-    "translation": "Your security settings couldn’t be loaded. Try again to check their current state."
+    "translation": "Your security settings couldn’t be loaded. Try again to see where things stand."
   },
   {
     "id": "webapp.security.unavailable.heading",
@@ -3603,15 +4203,15 @@
   },
   {
     "id": "webapp.security.uncertain.body",
-    "translation": "We didn’t receive a usable confirmation. The change may already have completed, so check the current status before choosing another action."
+    "translation": "We didn’t get a clear answer, so the change may already have happened. Check the current status before you try again."
   },
   {
     "id": "webapp.security.uncertain.guidance",
-    "translation": "If your authenticator is active but you didn’t receive recovery codes, verify this session with that authenticator, then explicitly generate and save a new set. Codes cannot be recovered from the status page."
+    "translation": "If two-step verification is now on but you didn’t see your recovery codes, make a new set from account security. Codes can’t be shown again."
   },
   {
     "id": "webapp.security.uncertain.heading",
-    "translation": "Check whether the change completed"
+    "translation": "Check whether the change worked"
   },
   {
     "id": "webapp.security.working",
@@ -3619,51 +4219,35 @@
   },
   {
     "id": "webapp.setup.already_initialized.body",
-    "translation": "This Proctor installation has already established its Institution and first administrator."
+    "translation": "This installation already has an institution and an administrator, so setup can’t run again."
   },
   {
     "id": "webapp.setup.already_initialized.heading",
-    "translation": "Setup is complete"
+    "translation": "Proctor is already set up"
   },
   {
-    "id": "webapp.setup.context.administrator.body",
-    "translation": "First system administrator"
-  },
-  {
-    "id": "webapp.setup.context.administrator.label",
+    "id": "webapp.setup.created.administrator",
     "translation": "Administrator"
   },
   {
-    "id": "webapp.setup.context.body",
-    "translation": "Create the Institution and first administrator for this Proctor installation."
+    "id": "webapp.setup.created.administrator_value",
+    "translation": "{{.Name}} · {{.Email}}"
   },
   {
-    "id": "webapp.setup.context.eyebrow",
-    "translation": "Installation setup"
+    "id": "webapp.setup.created.body",
+    "translation": "Your institution and administrator account were created. Sign in to add academic units, classes and staff."
   },
   {
-    "id": "webapp.setup.context.heading",
-    "translation": "Establish this installation"
+    "id": "webapp.setup.created.facts",
+    "translation": "What setup created"
   },
   {
-    "id": "webapp.setup.context.institution.body",
-    "translation": "Canonical and display identity"
+    "id": "webapp.setup.created.heading",
+    "translation": "{{.Institution}} is ready"
   },
   {
-    "id": "webapp.setup.context.institution.label",
+    "id": "webapp.setup.created.institution",
     "translation": "Institution"
-  },
-  {
-    "id": "webapp.setup.context.note",
-    "translation": "One installation represents one Institution."
-  },
-  {
-    "id": "webapp.setup.context.operator.body",
-    "translation": "One-time bootstrap secret"
-  },
-  {
-    "id": "webapp.setup.context.operator.label",
-    "translation": "Operator authority"
   },
   {
     "id": "webapp.setup.document_title",
@@ -3671,15 +4255,11 @@
   },
   {
     "id": "webapp.setup.form.administrator.display_name",
-    "translation": "Display name (optional)"
+    "translation": "Your full name (optional)"
   },
   {
     "id": "webapp.setup.form.administrator.email",
-    "translation": "Email address"
-  },
-  {
-    "id": "webapp.setup.form.administrator.heading",
-    "translation": "First administrator"
+    "translation": "Your email"
   },
   {
     "id": "webapp.setup.form.administrator.password",
@@ -3690,36 +4270,36 @@
     "translation": "Username"
   },
   {
-    "id": "webapp.setup.form.caution",
-    "translation": "This action creates the Institution, first administrator, protected Role Binding, and initial Access Policy in one transaction."
+    "id": "webapp.setup.form.administrator.username_help",
+    "translation": "Lowercase letters, numbers, dots, hyphens and underscores."
   },
   {
     "id": "webapp.setup.form.error.bootstrap_denied",
-    "translation": "That bootstrap secret wasn’t accepted. Check the value provided by the server operator."
+    "translation": "That setup key isn’t right. Check it with whoever runs the server."
   },
   {
     "id": "webapp.setup.form.error.bootstrap_secret_required",
-    "translation": "Enter the one-time bootstrap secret."
+    "translation": "Enter the setup key."
   },
   {
     "id": "webapp.setup.form.error.email_invalid",
-    "translation": "Enter a valid administrator email address."
+    "translation": "Enter a valid email address."
   },
   {
     "id": "webapp.setup.form.error.email_required",
-    "translation": "Enter the administrator email address."
+    "translation": "Enter your email address."
   },
   {
     "id": "webapp.setup.form.error.generic",
-    "translation": "Proctor couldn’t create the installation. No setup changes were applied. Review the details and try again."
+    "translation": "Proctor couldn’t create the institution, and nothing was changed. Check the details and try again."
   },
   {
     "id": "webapp.setup.form.error.institution_display_name_required",
-    "translation": "Enter the Institution display name."
+    "translation": "Enter the institution’s name."
   },
   {
     "id": "webapp.setup.form.error.institution_name_required",
-    "translation": "Enter the canonical Institution name."
+    "translation": "Enter a short name."
   },
   {
     "id": "webapp.setup.form.error.password_invalid",
@@ -3727,15 +4307,15 @@
   },
   {
     "id": "webapp.setup.form.error.password_required",
-    "translation": "Enter the first administrator password."
+    "translation": "Choose a password."
   },
   {
     "id": "webapp.setup.form.error.rate_limited",
-    "translation": "Too many setup attempts were made. Try again later."
+    "translation": "Too many attempts. Wait a few minutes, then try again."
   },
   {
     "id": "webapp.setup.form.error.username_required",
-    "translation": "Enter the first administrator username."
+    "translation": "Choose a username."
   },
   {
     "id": "webapp.setup.form.institution.description",
@@ -3743,63 +4323,67 @@
   },
   {
     "id": "webapp.setup.form.institution.display_name",
-    "translation": "Display name"
-  },
-  {
-    "id": "webapp.setup.form.institution.heading",
-    "translation": "Institution"
-  },
-  {
-    "id": "webapp.setup.form.institution.name",
     "translation": "Institution name"
   },
   {
-    "id": "webapp.setup.form.operator.body",
-    "translation": "Enter the one-time secret provided by the server operator."
+    "id": "webapp.setup.form.institution.name",
+    "translation": "Short name"
   },
   {
-    "id": "webapp.setup.form.operator.heading",
-    "translation": "Operator verification"
+    "id": "webapp.setup.form.institution.name_help",
+    "translation": "A short identifier for the institution. Lowercase letters, numbers, hyphens and underscores."
   },
   {
     "id": "webapp.setup.form.operator.secret",
-    "translation": "Bootstrap secret"
+    "translation": "Setup key"
+  },
+  {
+    "id": "webapp.setup.form.operator.secret_help",
+    "translation": "The secret whoever runs the server set in {{.Setting}}."
   },
   {
     "id": "webapp.setup.form.password_help",
-    "translation": "Use a unique, policy-compliant password."
+    "translation": "At least {{.Count}} characters. Use a password you don’t use anywhere else."
+  },
+  {
+    "id": "webapp.setup.form.password_help_unsized",
+    "translation": "Use a password you don’t use anywhere else."
   },
   {
     "id": "webapp.setup.form.secret_hide",
-    "translation": "Hide bootstrap secret"
+    "translation": "Hide setup key"
   },
   {
     "id": "webapp.setup.form.secret_show",
-    "translation": "Show bootstrap secret"
+    "translation": "Show setup key"
   },
   {
     "id": "webapp.setup.form.submit",
-    "translation": "Create installation"
+    "translation": "Create institution"
   },
   {
     "id": "webapp.setup.form.submitting",
-    "translation": "Creating installation…"
+    "translation": "Creating institution…"
   },
   {
     "id": "webapp.setup.heading",
+    "translation": "Set up your institution"
+  },
+  {
+    "id": "webapp.setup.kind",
     "translation": "Set up Proctor"
   },
   {
-    "id": "webapp.setup.loading",
-    "translation": "Checking this installation’s setup status…"
+    "id": "webapp.setup.lede",
+    "translation": "This runs once. You’ll create the institution and the first administrator account."
   },
   {
-    "id": "webapp.setup.return_to_sign_in",
-    "translation": "Return to sign in"
+    "id": "webapp.setup.loading",
+    "translation": "Checking whether Proctor is set up…"
   },
   {
     "id": "webapp.setup.sign_in",
-    "translation": "Continue to sign in"
+    "translation": "Sign in"
   },
   {
     "id": "webapp.setup.skip_to_main",
@@ -3807,51 +4391,67 @@
   },
   {
     "id": "webapp.setup.status_failure.body",
-    "translation": "Proctor couldn’t confirm whether this installation still needs setup."
+    "translation": "Proctor couldn’t check whether setup is still needed. Try again."
   },
   {
     "id": "webapp.setup.status_failure.heading",
-    "translation": "Setup status is unavailable"
+    "translation": "Setup status didn’t load"
   },
   {
     "id": "webapp.setup.status_failure.retry",
     "translation": "Try again"
   },
   {
+    "id": "webapp.shell.help.institution",
+    "translation": "Need help? Contact {{.Institution}}."
+  },
+  {
+    "id": "webapp.shell.help.unnamed",
+    "translation": "Need help? Contact your institution."
+  },
+  {
+    "id": "webapp.shell.signed_in",
+    "translation": "Signed in as {{.Name}}"
+  },
+  {
     "id": "webapp.undo_email_change.conflict.body",
-    "translation": "Proctor could not restore your previous email address because another account now uses it."
+    "translation": "Another account now uses that address, so Proctor couldn’t restore it. Contact your institution so an administrator can review the change."
   },
   {
     "id": "webapp.undo_email_change.conflict.heading",
-    "translation": "Previous address is in use"
-  },
-  {
-    "id": "webapp.undo_email_change.conflict.label",
-    "translation": "Not restored"
-  },
-  {
-    "id": "webapp.undo_email_change.conflict.notice",
-    "translation": "Contact your institution so an administrator can review the change. This link can no longer be used."
+    "translation": "Your previous address is in use"
   },
   {
     "id": "webapp.undo_email_change.document_title",
     "translation": "Undo email change · Proctor"
   },
   {
+    "id": "webapp.undo_email_change.facts.changed",
+    "translation": "Changed"
+  },
+  {
+    "id": "webapp.undo_email_change.facts.label",
+    "translation": "Email change"
+  },
+  {
+    "id": "webapp.undo_email_change.facts.replaces",
+    "translation": "New address"
+  },
+  {
+    "id": "webapp.undo_email_change.facts.restores",
+    "translation": "Previous address"
+  },
+  {
     "id": "webapp.undo_email_change.invalid.body",
-    "translation": "This undo link is missing, already used, expired, or replaced by a newer one."
+    "translation": "Undo links work once, for 72 hours after the change. If you still don’t recognize the change, contact your institution."
   },
   {
     "id": "webapp.undo_email_change.invalid.heading",
-    "translation": "Undo link unavailable"
+    "translation": "This undo link can’t be used"
   },
   {
-    "id": "webapp.undo_email_change.invalid.label",
-    "translation": "Link unavailable"
-  },
-  {
-    "id": "webapp.undo_email_change.invalid.notice",
-    "translation": "If you still don’t recognize the email change, contact your institution."
+    "id": "webapp.undo_email_change.kind",
+    "translation": "Security"
   },
   {
     "id": "webapp.undo_email_change.rate_limited.body",
@@ -3859,191 +4459,143 @@
   },
   {
     "id": "webapp.undo_email_change.ready.action",
-    "translation": "Restore previous email"
+    "translation": "Undo change"
   },
   {
     "id": "webapp.undo_email_change.ready.body",
-    "translation": "If you didn’t ask to change the email address on your Proctor account, restore the previous address. Every device signed in to the account will be signed out."
+    "translation": "This puts your previous email address back on your account and signs out every device."
   },
   {
     "id": "webapp.undo_email_change.ready.heading",
-    "translation": "Undo the email change"
+    "translation": "Undo the email change?"
   },
   {
-    "id": "webapp.undo_email_change.ready.label",
-    "translation": "Email change"
+    "id": "webapp.undo_email_change.ready.keep",
+    "translation": "Keep the new address"
   },
   {
-    "id": "webapp.undo_email_change.ready.notice",
-    "translation": "This link works once and only for a limited time after the change."
+    "id": "webapp.undo_email_change.ready.pending",
+    "translation": "Undoing change…"
   },
   {
-    "id": "webapp.undo_email_change.restored.body",
-    "translation": "Your previous email address is back on the account, and every session was signed out."
+    "id": "webapp.undo_email_change.ready.pending_announcement",
+    "translation": "Undoing the email change…"
   },
   {
-    "id": "webapp.undo_email_change.restored.heading",
-    "translation": "Previous email restored"
-  },
-  {
-    "id": "webapp.undo_email_change.restored.label",
-    "translation": "Restored"
-  },
-  {
-    "id": "webapp.undo_email_change.restored.notice",
-    "translation": "Sign in again. If you don’t know your password, reset it from the sign-in page, and tell your institution about the unexpected change."
-  },
-  {
-    "id": "webapp.undo_email_change.sign_in",
+    "id": "webapp.undo_email_change.restored.action",
     "translation": "Sign in"
   },
   {
+    "id": "webapp.undo_email_change.restored.body",
+    "translation": "Your previous email address is back on your account, and every device was signed out."
+  },
+  {
+    "id": "webapp.undo_email_change.restored.heading",
+    "translation": "Your previous email is back"
+  },
+  {
+    "id": "webapp.undo_email_change.restored.note",
+    "translation": "Reset your password from the sign-in page and tell your institution."
+  },
+  {
+    "id": "webapp.undo_email_change.restored.note_lead",
+    "translation": "Didn’t make this change?"
+  },
+  {
+    "id": "webapp.undo_email_change.sign_in",
+    "translation": "Back to sign in"
+  },
+  {
     "id": "webapp.undo_email_change.skip_to_main",
-    "translation": "Skip to main content"
+    "translation": "Skip to undo email change"
   },
   {
     "id": "webapp.undo_email_change.unavailable.body",
-    "translation": "Proctor couldn’t restore the address right now. Your link has not been used; try again."
+    "translation": "Proctor couldn’t restore the address right now. Your link hasn’t been used, so you can try again."
   },
   {
     "id": "webapp.undo_email_change.unavailable.heading",
-    "translation": "Undo unavailable"
-  },
-  {
-    "id": "webapp.undo_email_change.unavailable.label",
-    "translation": "Try again"
-  },
-  {
-    "id": "webapp.undo_email_change.unavailable.notice",
-    "translation": "If this keeps happening, contact your institution."
+    "translation": "The email change wasn’t undone"
   },
   {
     "id": "webapp.undo_email_change.unavailable.retry",
     "translation": "Try again"
   },
   {
-    "id": "webapp.undo_email_change.undoing.action",
-    "translation": "Restoring"
-  },
-  {
-    "id": "webapp.undo_email_change.undoing.body",
-    "translation": "Restoring your previous email address."
-  },
-  {
-    "id": "webapp.undo_email_change.undoing.heading",
-    "translation": "Restoring previous email"
-  },
-  {
-    "id": "webapp.undo_email_change.undoing.label",
-    "translation": "Working"
-  },
-  {
-    "id": "webapp.undo_email_change.undoing.notice",
-    "translation": "Keep this page open until it finishes."
-  },
-  {
     "id": "webapp.verify_email.document_title",
-    "translation": "Verify email · Proctor"
+    "translation": "Confirm email · Proctor"
+  },
+  {
+    "id": "webapp.verify_email.invalid.action",
+    "translation": "Sign in"
   },
   {
     "id": "webapp.verify_email.invalid.body",
-    "translation": "This verification link is no longer available."
+    "translation": "Confirmation links work once, for 24 hours. Sign in to request a new one."
   },
   {
     "id": "webapp.verify_email.invalid.heading",
-    "translation": "This verification link can’t be used"
+    "translation": "This confirmation link can’t be used"
   },
   {
-    "id": "webapp.verify_email.invalid.label",
-    "translation": "Link unavailable"
-  },
-  {
-    "id": "webapp.verify_email.invalid.notice",
-    "translation": "It may have expired or already been used. Sign in to request another verification message."
+    "id": "webapp.verify_email.kind",
+    "translation": "Confirm email"
   },
   {
     "id": "webapp.verify_email.ready.action",
-    "translation": "Verify email"
+    "translation": "Confirm email address"
   },
   {
     "id": "webapp.verify_email.ready.body",
-    "translation": "Verify the email address linked to this one-time message."
+    "translation": "Confirm the address this link was sent to. The link works once, for 24 hours."
+  },
+  {
+    "id": "webapp.verify_email.ready.body_address",
+    "translation": "Confirm {{.Email}} as your account’s email address. The link works once, for 24 hours."
   },
   {
     "id": "webapp.verify_email.ready.heading",
-    "translation": "Confirm your email"
+    "translation": "Confirm your email address"
   },
   {
-    "id": "webapp.verify_email.ready.label",
-    "translation": "Email verification"
+    "id": "webapp.verify_email.ready.pending",
+    "translation": "Confirming…"
   },
   {
-    "id": "webapp.verify_email.ready.notice",
-    "translation": "This link can only be used once."
+    "id": "webapp.verify_email.ready.pending_announcement",
+    "translation": "Confirming your email address…"
   },
   {
     "id": "webapp.verify_email.sign_in",
-    "translation": "Return to sign in"
+    "translation": "Back to sign in"
   },
   {
     "id": "webapp.verify_email.skip_to_main",
-    "translation": "Skip to email verification"
+    "translation": "Skip to email confirmation"
   },
   {
     "id": "webapp.verify_email.unavailable.body",
-    "translation": "Proctor couldn’t confirm the result."
+    "translation": "Proctor couldn’t finish the check. Try again, or sign in if your email is already confirmed."
   },
   {
     "id": "webapp.verify_email.unavailable.heading",
-    "translation": "We couldn’t verify your email"
-  },
-  {
-    "id": "webapp.verify_email.unavailable.label",
-    "translation": "Verification unavailable"
-  },
-  {
-    "id": "webapp.verify_email.unavailable.notice",
-    "translation": "Try the link again, or sign in if it has already been used."
+    "translation": "We couldn’t confirm your email"
   },
   {
     "id": "webapp.verify_email.unavailable.retry",
     "translation": "Try again"
   },
   {
+    "id": "webapp.verify_email.verified.action",
+    "translation": "Sign in"
+  },
+  {
     "id": "webapp.verify_email.verified.body",
-    "translation": "This email address is now verified."
+    "translation": "You can now sign in to Proctor."
   },
   {
     "id": "webapp.verify_email.verified.heading",
-    "translation": "Your email is verified"
-  },
-  {
-    "id": "webapp.verify_email.verified.label",
-    "translation": "Email verified"
-  },
-  {
-    "id": "webapp.verify_email.verified.notice",
-    "translation": "You can continue to sign in."
-  },
-  {
-    "id": "webapp.verify_email.verifying.action",
-    "translation": "Verifying…"
-  },
-  {
-    "id": "webapp.verify_email.verifying.body",
-    "translation": "Keep this page open while Proctor checks the one-time link."
-  },
-  {
-    "id": "webapp.verify_email.verifying.heading",
-    "translation": "Verifying your email"
-  },
-  {
-    "id": "webapp.verify_email.verifying.label",
-    "translation": "Verification in progress"
-  },
-  {
-    "id": "webapp.verify_email.verifying.notice",
-    "translation": "The page will update when the check finishes."
+    "translation": "Your email is confirmed"
   },
   {
     "id": "websocket.close.authorization_changed",

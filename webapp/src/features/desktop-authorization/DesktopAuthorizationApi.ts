@@ -15,10 +15,19 @@ export interface DesktopAuthorizationContext {
   account?: components["schemas"]["DesktopAuthorizationAccountResponse"];
   deviceName: string;
   expiresAt: string;
+  /** When Proctor Desktop started this request. */
+  requestedAt: string;
   externalProviders: DesktopAuthorizationProvider[];
   installation: string;
   localLoginEnabled: boolean;
   state: "bound" | "authenticated";
+}
+
+export type DesktopAuthorizationAccount = NonNullable<DesktopAuthorizationContext["account"]>;
+
+/** The account's display name, or its username when no display name is set. */
+export function desktopAccountName(account: DesktopAuthorizationAccount): string {
+  return account.display_name.trim() === "" ? account.username : account.display_name;
 }
 
 export type DesktopContextResult =
@@ -239,6 +248,7 @@ function projectContext(
     installation,
     deviceName: value.device_name,
     expiresAt: value.expires_at,
+    requestedAt: value.requested_at,
     localLoginEnabled: value.local_login_enabled,
     externalProviders: value.external_providers,
     ...(value.account === undefined ? {} : { account: value.account }),
@@ -255,6 +265,7 @@ function validServerContext(value: unknown): value is ServerContext {
   if (
     !boundedString(value.device_name, 128) ||
     !isWireTimestamp(value.expires_at) ||
+    !isWireTimestamp(value.requested_at) ||
     typeof value.local_login_enabled !== "boolean" ||
     !Array.isArray(value.external_providers) || value.external_providers.length > 64 ||
     !value.external_providers.every(validProvider) ||
@@ -267,7 +278,8 @@ function validServerContext(value: unknown): value is ServerContext {
       isRecord(value.account) &&
       boundedString(value.account.id, 64, true) &&
       boundedString(value.account.username, 128, true) &&
-      boundedString(value.account.display_name, 256)
+      boundedString(value.account.display_name, 256) &&
+      boundedString(value.account.email, 254, true)
     );
   }
   return value.account === undefined;

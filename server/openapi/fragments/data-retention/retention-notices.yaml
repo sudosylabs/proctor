@@ -15,7 +15,9 @@ paths:
         Returns the current Session User’s own durable grace notices, including cancellation and delivery
         status. The notice grants no examination record access. Reading it neither acknowledges delivery nor
         changes cleanup. Candidate notices are optional; responsible Exam Managers and institution operators
-        receive them by default. Pending dates are invalidated when grace is canceled.
+        receive them by default. Pending dates are invalidated when grace is canceled. Each notice names the
+        Exam title and the Sitting's scheduled times so the recipient can tell which records it covers; no
+        candidate, answer, or evidence content is included.
       x-proctor-auth: session_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -88,6 +90,9 @@ components:
         - exam_id
         - exam_sitting_id
         - submission_id
+        - exam_title
+        - sitting_start_at
+        - sitting_end_at
         - category
         - state
         - created_at
@@ -102,6 +107,21 @@ components:
           $ref: '#/components/schemas/ID'
         submission_id:
           $ref: '#/components/schemas/ID'
+        exam_title:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: >-
+            Immutable title of the Exam Revision the Sitting delivered. Shown to every recipient of the notice,
+            even one who no longer has access to the Exam.
+        sitting_start_at:
+          type: string
+          format: date-time
+          description: Scheduled start of the Sitting whose records the notice covers.
+        sitting_end_at:
+          type: string
+          format: date-time
+          description: Scheduled end of the Sitting whose records the notice covers.
         category:
           type: string
           enum:

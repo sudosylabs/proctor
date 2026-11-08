@@ -103,7 +103,7 @@ func accessPolicyFixture(t *testing.T) (*accessPolicyService, *accessPolicyStore
 	}}
 	effects := &accessPolicyEffectsFake{}
 	audit := &accessPolicyAuditFake{beginID: model.NewID()}
-	service, err := newAccessPolicyService(accessPolicyServiceDependencies{Policies: persistence, Institutions: &accessPolicyInstitutionFake{institution}, Authorization: &accessPolicyAuthorizationFake{}, Capabilities: capabilities, Audit: audit, Effects: effects, EffectFailures: accessPolicyEffectFailuresFake{}, CanonicalOrigin: "https://proctor.example.edu", RecentAuthenticationTTL: time.Minute, Now: func() time.Time { return at.Add(time.Minute) }})
+	service, err := newAccessPolicyService(accessPolicyServiceDependencies{Policies: persistence, Institutions: &accessPolicyInstitutionFake{institution}, Authorization: &accessPolicyAuthorizationFake{}, Capabilities: capabilities, Audit: audit, Effects: effects, EffectFailures: accessPolicyEffectFailuresFake{}, CanonicalOrigin: "https://proctor.example.edu", SupportAddress: " Help@Example.edu ", PasswordMinimumLength: 12, RecentAuthenticationTTL: time.Minute, Now: func() time.Time { return at.Add(time.Minute) }})
 	require.NoError(t, err)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
@@ -424,4 +424,49 @@ func TestPublicAccessDiscoveryFiltersUnavailableProvidersAndRestoresByStableID(t
 	require.NoError(t, err, "restored-provider discovery = %#v", discovery)
 	require.Len(t, discovery.Providers, 1, "restored-provider discovery = %#v", discovery)
 	require.Equal(t, "campus-oidc", discovery.Providers[0].ID, "restored-provider discovery = %#v", discovery)
+}
+
+func TestPublicAccessDiscoveryPublishesOperatorPresentationBeforeInitialization(t *testing.T) {
+	t.Parallel()
+	service, _, _, _, _, _ := accessPolicyFixture(t)
+	discovery, err := service.DiscoverAccess(context.Background(), invocation.Invocation{})
+	require.NoError(t, err)
+	require.Equal(t, "help@example.edu", discovery.SupportAddress)
+	require.Equal(t, 12, discovery.PasswordMinimumLength)
+
+	service.deps.Institutions = &accessPolicyInstitutionNotFoundFake{}
+	discovery, err = service.DiscoverAccess(context.Background(), invocation.Invocation{})
+	require.NoError(t, err)
+	require.False(t, discovery.Initialized)
+	require.Equal(t, "help@example.edu", discovery.SupportAddress)
+	require.Equal(t, 12, discovery.PasswordMinimumLength)
+}
+
+func TestAccessPolicyServiceRejectsInvalidPublicPresentation(t *testing.T) {
+	t.Parallel()
+	service, _, _, _, _, _ := accessPolicyFixture(t)
+	for name, mutate := range map[string]func(*accessPolicyServiceDependencies){
+		"support address":         func(deps *accessPolicyServiceDependencies) { deps.SupportAddress = "not an address" },
+		"password minimum length": func(deps *accessPolicyServiceDependencies) { deps.PasswordMinimumLength = 0 },
+	} {
+		t.Run(name, func(t *testing.T) {
+			deps := service.deps
+			mutate(&deps)
+			_, err := newAccessPolicyService(deps)
+			require.Error(t, err)
+		})
+	}
+	deps := service.deps
+	deps.SupportAddress = ""
+	empty, err := newAccessPolicyService(deps)
+	require.NoError(t, err)
+	discovery, err := empty.DiscoverAccess(context.Background(), invocation.Invocation{})
+	require.NoError(t, err)
+	require.Empty(t, discovery.SupportAddress)
+}
+
+type accessPolicyInstitutionNotFoundFake struct{}
+
+func (accessPolicyInstitutionNotFoundFake) GetSingleton(context.Context) (*model.Institution, error) {
+	return nil, store.NewErrNotFound("institution", "singleton")
 }

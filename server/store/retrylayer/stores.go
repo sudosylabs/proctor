@@ -615,6 +615,9 @@ func (s *classStore) SearchByAcademicUnit(ctx context.Context, academicUnitID mo
 		return s.ClassStore.SearchByAcademicUnit(ctx, academicUnitID, options)
 	})
 }
+func (s *classStore) SearchVisible(ctx context.Context, options store.ClassSearchOptions) ([]*model.Class, error) {
+	return retryCall1(ctx, s.layer, func() ([]*model.Class, error) { return s.ClassStore.SearchVisible(ctx, options) })
+}
 func (s *classStore) GetAcademicUnitID(ctx context.Context, id model.ClassID) (model.AcademicUnitID, error) {
 	return retryCall1(ctx, s.layer, func() (model.AcademicUnitID, error) { return s.ClassStore.GetAcademicUnitID(ctx, id) })
 }
@@ -679,6 +682,11 @@ func (s *mfaStore) GetByUser(ctx context.Context, userID model.UserID) (*model.M
 }
 func (s *mfaStore) CountRecoveryCodes(ctx context.Context, userID model.UserID) (int, error) {
 	return retryCall1(ctx, s.layer, func() (int, error) { return s.MFAStore.CountRecoveryCodes(ctx, userID) })
+}
+func (s *mfaStore) SummarizeRecoveryCodes(ctx context.Context, userID model.UserID) (*store.MFARecoveryCodeSummary, error) {
+	return retryCall1(ctx, s.layer, func() (*store.MFARecoveryCodeSummary, error) {
+		return s.MFAStore.SummarizeRecoveryCodes(ctx, userID)
+	})
 }
 
 func (s *affiliationStore) Get(ctx context.Context, id model.AffiliationID) (*model.Affiliation, error) {
@@ -795,6 +803,9 @@ func (s *auditStore) Get(ctx context.Context, id model.AuditEventID) (*model.Aud
 }
 func (s *auditStore) List(ctx context.Context, options store.AuditListOptions) ([]*model.AuditEvent, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.AuditEvent, error) { return s.AuditStore.List(ctx, options) })
+}
+func (s *auditStore) ListSelf(ctx context.Context, options store.AuditSelfListOptions) ([]*store.AuditSelfEntry, error) {
+	return retryCall1(ctx, s.layer, func() ([]*store.AuditSelfEntry, error) { return s.AuditStore.ListSelf(ctx, options) })
 }
 
 func (s *installationStore) Get(ctx context.Context) (*model.InstallationState, error) {

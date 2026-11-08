@@ -41,6 +41,7 @@ type auditRow struct {
 	UpdatedAt    time.Time           `db:"updated_at"`
 	ActorID      sql.NullString      `db:"actor_id"`
 	SessionID    sql.NullString      `db:"session_id"`
+	SubjectID    sql.NullString      `db:"subject_user_id"`
 	Action       string              `db:"action"`
 	ResourceType model.ResourceType  `db:"resource_type"`
 	ResourceID   string              `db:"resource_id"`
@@ -62,7 +63,7 @@ type auditRow struct {
 func auditSliceColumns() []string {
 	return []string{
 		"audit_events.id", "audit_events.created_at", "audit_events.updated_at",
-		"audit_events.actor_id", "audit_events.session_id", "audit_events.action",
+		"audit_events.actor_id", "audit_events.session_id", "audit_events.subject_user_id", "audit_events.action",
 		"audit_events.resource_type", "audit_events.resource_id",
 		"audit_events.scope_type", "audit_events.scope_id", "audit_events.status",
 		"audit_events.request_id", "audit_events.node_id", "audit_events.client_type",
@@ -127,12 +128,12 @@ func insertAuditEventBetween(
 	row := newAuditRow(candidate)
 	if _, err := executor.NamedExec(ctx, `
 		INSERT INTO audit_events (
-			id, created_at, updated_at, actor_id, session_id, action,
+			id, created_at, updated_at, actor_id, session_id, subject_user_id, action,
 			resource_type, resource_id, scope_type, scope_id, status,
 			request_id, node_id, client_type, authentication_method,
 			ip_address, user_agent, error_code, parameters, prior_state, result
 		) VALUES (
-			:id, :created_at, :updated_at, :actor_id, :session_id, :action,
+			:id, :created_at, :updated_at, :actor_id, :session_id, :subject_user_id, :action,
 			:resource_type, :resource_id, :scope_type, :scope_id, :status,
 			:request_id, :node_id, :client_type, :authentication_method,
 			:ip_address, :user_agent, :error_code, :parameters, :prior_state, :result
@@ -188,7 +189,7 @@ func completeAuditEvent(
 		UPDATE audit_events
 		   SET updated_at = GREATEST(updated_at, ?), status = ?, error_code = ?, result = ?
 		 WHERE id = ? AND status = 'attempt'
-		RETURNING id, created_at, updated_at, actor_id, session_id, action,
+		RETURNING id, created_at, updated_at, actor_id, session_id, subject_user_id, action,
 		          resource_type, resource_id, scope_type, scope_id, status,
 		          request_id, node_id, client_type, authentication_method,
 		          ip_address, user_agent, error_code, parameters, prior_state, result`,
@@ -319,6 +320,176 @@ func (s SQLAuditStore) List(
 	return events, nil
 }
 
+// auditSelfRow is the bounded self-history projection of audit_events.
+type auditSelfRow struct {
+	ID              string             `db:"id"`
+	CreatedAt       time.Time          `db:"created_at"`
+	ActorID         sql.NullString     `db:"actor_id"`
+	SubjectID       sql.NullString     `db:"subject_user_id"`
+	Action          string             `db:"action"`
+	Operation       string             `db:"operation"`
+	Status          model.AuditStatus  `db:"status"`
+	ResourceType    model.ResourceType `db:"resource_type"`
+	ResourceID      string             `db:"resource_id"`
+	ResourceRelated bool               `db:"resource_related"`
+	ClientType      string             `db:"client_type"`
+	IPAddress       string             `db:"ip_address"`
+	UserAgent       string             `db:"user_agent"`
+	ErrorCode       string             `db:"error_code"`
+}
+
+// ListSelf reads the subject and actor relations through their own partial
+// indexes, each bounded by the page keyset and limit, and merges them. A
+// self action is about the User's own account, so the actor relation keeps
+// only events whose subject is someone or nothing else and no row is read
+// twice.
+func (s SQLAuditStore) ListSelf(ctx context.Context, options store.AuditSelfListOptions) ([]*store.AuditSelfEntry, error) {
+	if err := validateAuditSelfListOptions(options); err != nil {
+		return nil, err
+	}
+	actions := make([]string, 0, len(options.Events))
+	operations := make([]string, 0, len(options.Events))
+	statuses := make([]string, 0, len(options.Events))
+	for _, key := range options.Events {
+		actions = append(actions, key.Action)
+		operations = append(operations, key.Operation)
+		statuses = append(statuses, string(key.Status))
+	}
+	userID := options.UserID.String()
+	common := `e.status <> 'attempt'
+		AND (e.action, COALESCE(e.parameters->>'operation', ''), e.status::text) IN (SELECT action, operation, status FROM self_event_keys)`
+	var commonArgs []any
+	if !options.Since.IsZero() {
+		common += ` AND e.created_at >= ?`
+		commonArgs = append(commonArgs, model.TimeUTC(options.Since))
+	}
+	if !options.Until.IsZero() {
+		common += ` AND e.created_at < ?`
+		commonArgs = append(commonArgs, model.TimeUTC(options.Until))
+	}
+	if !options.BeforeCreatedAt.IsZero() {
+		common += ` AND (e.created_at, e.id) < (?, ?)`
+		commonArgs = append(commonArgs, model.TimeUTC(options.BeforeCreatedAt), options.BeforeID.String())
+	}
+	branches := make([]string, 0, 2)
+	args := []any{pq.Array(actions), pq.Array(operations), pq.Array(statuses)}
+	if options.Relation != store.AuditSelfRelationActor {
+		branches = append(branches, `(SELECT e.id, e.created_at FROM audit_events e
+			WHERE e.subject_user_id = ? AND `+common+`
+			ORDER BY e.created_at DESC, e.id DESC LIMIT ?)`)
+		args = append(append(append(args, userID), commonArgs...), options.Limit)
+	}
+	if options.Relation != store.AuditSelfRelationSubject {
+		branches = append(branches, `(SELECT e.id, e.created_at FROM audit_events e
+			WHERE e.actor_id = ? AND e.subject_user_id IS DISTINCT FROM ? AND `+common+`
+			ORDER BY e.created_at DESC, e.id DESC LIMIT ?)`)
+		args = append(append(append(args, userID, userID), commonArgs...), options.Limit)
+	}
+	args = append(args, userID, userID, userID, userID, userID, options.Limit)
+	query := `WITH self_event_keys(action, operation, status) AS (
+			SELECT * FROM unnest(?::text[], ?::text[], ?::text[])
+		), candidates AS (` + strings.Join(branches, " UNION ALL ") + `)
+		SELECT e.id, e.created_at, e.actor_id, e.subject_user_id, e.action,
+		       COALESCE(e.parameters->>'operation', '') AS operation, e.status,
+		       e.resource_type, e.resource_id, e.client_type, e.ip_address,
+		       e.user_agent, e.error_code,
+		       CASE e.resource_type
+		           WHEN 'user' THEN e.resource_id = ?
+		           WHEN 'institution' THEN TRUE
+		           WHEN 'academic_unit' THEN EXISTS (
+		               SELECT 1 FROM academic_unit_members m
+		                WHERE m.user_id = ? AND m.academic_unit_id = e.resource_id AND m.archived_at IS NULL
+		           ) OR EXISTS (
+		               SELECT 1 FROM role_bindings rb
+		                WHERE rb.user_id = ? AND rb.scope_type = 'academic_unit' AND rb.scope_id = e.resource_id AND rb.archived_at IS NULL
+		           )
+		           WHEN 'class' THEN EXISTS (
+		               SELECT 1 FROM class_members m
+		                WHERE m.user_id = ? AND m.class_id = e.resource_id AND m.archived_at IS NULL
+		           ) OR EXISTS (
+		               SELECT 1 FROM role_bindings rb
+		                WHERE rb.user_id = ? AND rb.scope_type = 'class' AND rb.scope_id = e.resource_id AND rb.archived_at IS NULL
+		           )
+		           ELSE FALSE
+		       END AS resource_related
+		  FROM candidates c
+		  JOIN audit_events e ON e.id = c.id
+		 ORDER BY e.created_at DESC, e.id DESC
+		 LIMIT ?`
+	rows := []auditSelfRow{}
+	if err := s.GetMaster().Select(ctx, &rows, query, args...); err != nil {
+		return nil, fmt.Errorf("list self audit events: %w", err)
+	}
+	entries := make([]*store.AuditSelfEntry, 0, len(rows))
+	for _, row := range rows {
+		entry, err := row.entry()
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, entry)
+	}
+	return entries, nil
+}
+
+func validateAuditSelfListOptions(options store.AuditSelfListOptions) error {
+	if !options.UserID.IsValid() {
+		return store.NewErrInvalidInput("audit_event", "user_id", nil)
+	}
+	if options.Limit < 1 || options.Limit > 201 {
+		return store.NewErrInvalidInput("audit_event", "limit", options.Limit)
+	}
+	switch options.Relation {
+	case "", store.AuditSelfRelationSubject, store.AuditSelfRelationActor:
+	default:
+		return store.NewErrInvalidInput("audit_event", "relation", options.Relation)
+	}
+	if len(options.Events) == 0 || len(options.Events) > store.MaximumAuditSelfEventKeys {
+		return store.NewErrInvalidInput("audit_event", "events", len(options.Events))
+	}
+	for _, key := range options.Events {
+		if strings.TrimSpace(key.Action) == "" || len(key.Action) > 128 || len(key.Operation) > 128 ||
+			(key.Status != model.AuditStatusSuccess && key.Status != model.AuditStatusFail) {
+			return store.NewErrInvalidInput("audit_event", "event_key", key.Action)
+		}
+	}
+	if !options.Since.IsZero() && !options.Until.IsZero() && !options.Since.Before(options.Until) {
+		return store.NewErrInvalidInput("audit_event", "range", nil)
+	}
+	if options.BeforeCreatedAt.IsZero() != options.BeforeID.IsZero() ||
+		(!options.BeforeID.IsZero() && !options.BeforeID.IsValid()) {
+		return store.NewErrInvalidInput("audit_event", "cursor", nil)
+	}
+	return nil
+}
+
+func (row auditSelfRow) entry() (*store.AuditSelfEntry, error) {
+	id, err := parsePersistedID("audit_event", "id", row.ID, model.ParseAuditEventID)
+	if err != nil {
+		return nil, err
+	}
+	actorID, err := parseNullablePersistedID("audit_event", "actor_id", row.ActorID, model.ParseUserID)
+	if err != nil {
+		return nil, err
+	}
+	subjectID, err := parseNullablePersistedID("audit_event", "subject_user_id", row.SubjectID, model.ParseUserID)
+	if err != nil {
+		return nil, err
+	}
+	if err := validatePersistedResourceID(row.ResourceType, row.ResourceID); err != nil {
+		return nil, err
+	}
+	if row.Status != model.AuditStatusSuccess && row.Status != model.AuditStatusFail {
+		return nil, invalidPersistedState("audit_event", "status", fmt.Errorf("unexpected status %q", row.Status))
+	}
+	return &store.AuditSelfEntry{
+		ID: id, CreatedAt: row.CreatedAt.UTC(), ActorID: actorID, SubjectUserID: subjectID,
+		Action: row.Action, Operation: row.Operation, Status: row.Status,
+		Resource:        model.Resource{Type: row.ResourceType, ID: row.ResourceID},
+		ResourceRelated: row.ResourceRelated, ClientType: row.ClientType,
+		IPAddress: row.IPAddress, UserAgent: row.UserAgent, ErrorCode: row.ErrorCode,
+	}, nil
+}
+
 func newAuditRow(event *model.AuditEvent) auditRow {
 	createdAt := model.TimeUTC(event.CreatedAt)
 	updatedAt := model.TimeUTC(event.UpdatedAt)
@@ -326,7 +497,8 @@ func newAuditRow(event *model.AuditEvent) auditRow {
 		ID: event.ID.String(), CreatedAt: createdAt,
 		UpdatedAt: updatedAt,
 		ActorID:   nullableAuditString(event.ActorID.String()), SessionID: nullableAuditString(event.SessionID.String()),
-		Action: event.Action, ResourceType: event.Resource.Type, ResourceID: event.Resource.ID,
+		SubjectID: nullableAuditString(event.SubjectUserID.String()),
+		Action:    event.Action, ResourceType: event.Resource.Type, ResourceID: event.Resource.ID,
 		ScopeType: event.ScopeType, ScopeID: event.ScopeID, Status: event.Status,
 		RequestID: event.RequestID, NodeID: event.NodeID, ClientType: event.ClientType,
 		AuthMethod: event.AuthMethod, IPAddress: event.IPAddress, UserAgent: event.UserAgent,
@@ -348,6 +520,10 @@ func (row auditRow) model() (*model.AuditEvent, error) {
 	if err != nil {
 		return nil, err
 	}
+	subjectID, err := parseNullablePersistedID("audit_event", "subject_user_id", row.SubjectID, model.ParseUserID)
+	if err != nil {
+		return nil, err
+	}
 	if err := validatePersistedResourceID(row.ResourceType, row.ResourceID); err != nil {
 		return nil, err
 	}
@@ -357,7 +533,7 @@ func (row auditRow) model() (*model.AuditEvent, error) {
 	value := &model.AuditEvent{
 		ID: id, CreatedAt: row.CreatedAt.UTC(),
 		UpdatedAt: row.UpdatedAt.UTC(),
-		ActorID:   actorID, SessionID: sessionID,
+		ActorID:   actorID, SessionID: sessionID, SubjectUserID: subjectID,
 		Action:    row.Action,
 		Resource:  model.Resource{Type: row.ResourceType, ID: row.ResourceID},
 		ScopeType: row.ScopeType, ScopeID: row.ScopeID, Status: row.Status,

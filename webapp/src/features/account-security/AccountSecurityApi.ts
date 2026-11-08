@@ -7,6 +7,14 @@ export interface SecurityContext {
   pending: boolean;
   pendingExpiresAt?: string;
   recoveryCodesRemaining: number;
+  /** Configured size of a recovery-code set. */
+  recoveryCodesTotal: number;
+  /** When the account's password last changed; absent without a password. */
+  passwordChangedAt?: string;
+  /** The server's configured recent-authentication window, in whole minutes. */
+  recentAuthenticationMinutes: number;
+  /** When this Session's recent authentication ends; present only while recent. */
+  recentlyAuthenticatedUntil?: string;
   serviceEnabled: boolean;
   recoveryRequired: boolean;
   authenticationMethod: string;
@@ -146,6 +154,10 @@ function recoveryCodesResult(data: unknown, error: unknown, status: number): Rec
 function readSecurityContext(value: unknown): SecurityContext | undefined {
   if (!isRecord(value) || typeof value.enabled !== "boolean" || typeof value.pending !== "boolean" ||
     !nonnegativeInteger(value.recovery_codes_remaining) ||
+    !nonnegativeInteger(value.recovery_codes_total) ||
+    !positiveInteger(value.recent_authentication_minutes) ||
+    (value.password_changed_at !== undefined && !isWireTimestamp(value.password_changed_at)) ||
+    (value.recently_authenticated_until !== undefined && !isWireTimestamp(value.recently_authenticated_until)) ||
     typeof value.service_enabled !== "boolean" || typeof value.mfa_recovery_required !== "boolean" ||
     !boundedText(value.authentication_method, 128) || !boundedText(value.authentication_strength, 128) ||
     typeof value.recently_authenticated !== "boolean" ||
@@ -156,11 +168,15 @@ function readSecurityContext(value: unknown): SecurityContext | undefined {
   return {
     enabled: value.enabled, pending: value.pending,
     recoveryCodesRemaining: value.recovery_codes_remaining,
+    recoveryCodesTotal: value.recovery_codes_total,
+    recentAuthenticationMinutes: value.recent_authentication_minutes,
     serviceEnabled: value.service_enabled, recoveryRequired: value.mfa_recovery_required,
     authenticationMethod: value.authentication_method,
     authenticationStrength: value.authentication_strength,
     recentlyAuthenticated: value.recently_authenticated,
     ...(value.pending_expires_at === undefined ? {} : { pendingExpiresAt: value.pending_expires_at as string }),
+    ...(value.password_changed_at === undefined ? {} : { passwordChangedAt: value.password_changed_at as string }),
+    ...(value.recently_authenticated_until === undefined ? {} : { recentlyAuthenticatedUntil: value.recently_authenticated_until as string }),
     ...(value.authentication_provider_id === undefined ? {} : { authenticationProviderID: value.authentication_provider_id as string }),
   };
 }
@@ -173,4 +189,7 @@ export function boundedText(value: unknown, maximum: number): value is string {
 }
 function nonnegativeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+function positiveInteger(value: unknown): value is number {
+  return nonnegativeInteger(value) && value > 0;
 }

@@ -237,7 +237,9 @@ A versioned same-origin public discovery document returns only:
 - safe Institution name and branding;
 - Access Policy revision and available authentication capabilities;
 - enabled providers with ID, display name, and type;
-- supported desktop-authorization protocol and compatibility bounds.
+- supported desktop-authorization protocol and compatibility bounds;
+- the operator-configured support mailbox, when set, and the minimum password
+  length, which hosted pages present before and after initialization.
 
 The v1 public document is `GET /api/v1/discovery`. Administrative policy read,
 preflight, and revision-fenced replacement are respectively
@@ -327,6 +329,10 @@ credential on load. It requires an explicit person-initiated confirmation so a
 mail scanner, link preview, or browser preload cannot spend the token. The
 page sends no email or User input and presents expired, superseded, consumed,
 malformed, and concurrent-loser tokens as one bounded unusable-link state.
+It and the email-change undo page may call a read-only, rate-accounted
+inspection with the same token to name the address involved; inspection never
+consumes or extends the token, and its failure never blocks the explicit
+action.
 
 Purpose-specific `BrowserAuthenticationTransaction` records own the hosted
 handoffs that exchange a browser credential or issue a later client code:

@@ -17,11 +17,20 @@ authentication navigates the same tab and returns to
 `/authorize/desktop?state=...`; the existing browser cookie resumes the
 transaction without the original proof.
 
-The confirmation state shows only the safe public Institution presentation,
-the authenticated User's canonical username, and the bounded Desktop device
-label. Approval is always explicit and posts only the exact state; successful
-approval navigates only to the server-returned loopback redirect. “Use another
-account” clears only the transaction's authenticated account and returns to
+The confirmation state shows only the safe public Institution presentation
+(in the lede) and three facts: “Account” — the authenticated User's display
+name (or the untranslated username when none is set) and the account's own
+email, untranslated, after a muted separator; “Device” — the bounded Desktop
+device label; and “Requested” — when Desktop started the request, formatted
+with `Intl` in the viewer's locale and time zone inside a `time` element. A
+neutral note that closing the page is safe follows. The context names the
+account only after this browser authenticated as it for the transaction. While
+confirming and after approval the journey snapshot exposes that account, and
+the page passes its display name (or username when none is set) to the shell's
+signed-in footer; no sign-out control is offered because the transaction
+authentication is not a Web Session. Approval is always explicit and posts
+only the exact state; successful approval navigates only to the
+server-returned loopback redirect. “Use a different account” clears only the transaction's authenticated account and returns to
 method selection. Choosing it immediately removes the old confirmation, even
 if the reset response is lost. A failed context reload shows recoverable
 unavailability; retry reads current transaction state and never automatically
@@ -37,7 +46,11 @@ move focus or silently authenticate or approve. Explicit retry or account
 replacement may focus the new task heading when it removes the invoking control.
 
 The journey uses one centered task column. Checking and terminal states use
-the shared `TaskState` hierarchy and persistent polite announcements.
+the shared `TaskState` hierarchy and persistent polite announcements. The
+approved state confirms success and shows a returning indicator before the
+loopback hand-off, so the page is not blank if Proctor Desktop does not open.
+Kind-line tones mark only real outcomes: success after approval, warning for
+an active-Exam lock or unavailable check, danger for an unusable request.
 Authentication and confirmation use `AccessTaskIntro`, document-order controls,
 and persistent `FormFeedback`. Action-caused terminal transitions focus their
 replacement heading; initial invalid state and background checks do not.

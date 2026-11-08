@@ -15,6 +15,7 @@ package httpapi
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/model"
@@ -48,7 +49,16 @@ type mfaStatusResponse struct {
 	Enabled                  bool   `json:"enabled"`
 	Pending                  bool   `json:"pending"`
 	PendingExpiresAt         string `json:"pending_expires_at,omitempty"`
+	Method                   string `json:"method,omitempty"`
+	EnabledAt                string `json:"enabled_at,omitempty"`
 	RecoveryCodesRemaining   int    `json:"recovery_codes_remaining"`
+	RecoveryCodesTotal       int    `json:"recovery_codes_total"`
+	RecoveryCodesGeneratedAt string `json:"recovery_codes_generated_at,omitempty"`
+	PasswordChangedAt        string `json:"password_changed_at,omitempty"`
+	// RecentAuthenticationMinutes is the configured window in whole minutes,
+	// rounded down so clients never promise more time than the server allows.
+	RecentAuthenticationMinutes int    `json:"recent_authentication_minutes"`
+	RecentlyAuthenticatedUntil  string `json:"recently_authenticated_until,omitempty"`
 }
 
 type mfaResourceModule struct {
@@ -82,10 +92,17 @@ func (m mfaResourceModule) status(request operationRequest) (operationResult, er
 		ServiceEnabled: status.ServiceEnabled, MFARecoveryRequired: status.MFARecoveryRequired,
 		AuthenticationMethod: status.AuthenticationMethod, AuthenticationProviderID: status.AuthenticationProviderID,
 		AuthenticationStrength: string(status.AuthenticationStrength), RecentlyAuthenticated: status.RecentlyAuthenticated,
-		Enabled:                status.Enabled,
-		Pending:                status.Pending,
-		PendingExpiresAt:       status.PendingExpiresAt.FormatRFC3339(),
-		RecoveryCodesRemaining: status.RecoveryCodesRemaining,
+		Enabled:                     status.Enabled,
+		Pending:                     status.Pending,
+		PendingExpiresAt:            status.PendingExpiresAt.FormatRFC3339(),
+		Method:                      status.Method,
+		EnabledAt:                   status.EnabledAt.FormatRFC3339(),
+		RecoveryCodesRemaining:      status.RecoveryCodesRemaining,
+		RecoveryCodesTotal:          status.RecoveryCodesTotal,
+		RecoveryCodesGeneratedAt:    status.RecoveryCodesGeneratedAt.FormatRFC3339(),
+		PasswordChangedAt:           status.PasswordChangedAt.FormatRFC3339(),
+		RecentAuthenticationMinutes: max(1, int(status.RecentAuthenticationTTL/time.Minute)),
+		RecentlyAuthenticatedUntil:  status.RecentlyAuthenticatedUntil.FormatRFC3339(),
 	}).withHeaders(noStoreHeaders()), nil
 }
 

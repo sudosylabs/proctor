@@ -40,7 +40,8 @@ var problemPresentationNames = []string{
 // LocalizationDefinitions returns the closed set of messages currently owned
 // by the HTTP presentation boundary.
 func LocalizationDefinitions() []localization.Definition {
-	definitions := make([]localization.Definition, 0, len(problemPresentationNames)*2+len(model.AllSessionRevocationReasons())+2)
+	definitions := make([]localization.Definition, 0, len(problemPresentationNames)*2+len(model.AllSessionRevocationReasons())+
+		len(model.PersonalAccessTokenActions())*2+2)
 	for _, name := range problemPresentationNames {
 		for _, field := range []string{"detail", "title"} {
 			definitions = append(definitions, localization.Definition{
@@ -55,6 +56,12 @@ func LocalizationDefinitions() []localization.Definition {
 			Origin: localizationOrigin,
 		})
 	}
+	for _, action := range model.PersonalAccessTokenActions() {
+		definitions = append(definitions,
+			localization.Definition{ID: accessActionTitleLocalizationID(model.Action(action)), Origin: localizationOrigin},
+			localization.Definition{ID: accessActionDescriptionLocalizationID(model.Action(action)), Origin: localizationOrigin},
+		)
+	}
 	definitions = append(definitions,
 		localization.Definition{ID: systemAdministratorRoleNameID, Origin: localizationOrigin},
 		localization.Definition{ID: systemAdministratorRoleDescriptionID, Origin: localizationOrigin},
@@ -64,6 +71,18 @@ func LocalizationDefinitions() []localization.Definition {
 
 func sessionRevocationLocalizationID(reason model.SessionRevocationReason) string {
 	return "session.revocation." + string(reason)
+}
+
+// accessActionTitleLocalizationID names the short human title of an Action
+// offered as a Personal Access Token scope.
+func accessActionTitleLocalizationID(action model.Action) string {
+	return "access.action." + string(action) + ".title"
+}
+
+// accessActionDescriptionLocalizationID names the one-sentence explanation of
+// an Action offered as a Personal Access Token scope.
+func accessActionDescriptionLocalizationID(action model.Action) string {
+	return "access.action." + string(action) + ".description"
 }
 
 func translatedRequestText(request *http.Request, id, fallback string) string {

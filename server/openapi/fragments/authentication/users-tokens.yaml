@@ -98,6 +98,50 @@ paths:
           $ref: '#/components/responses/InternalError'
         "503":
           $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/users/me/tokens/grantable-scopes:
+    get:
+      operationId: listGrantablePersonalAccessTokenScopes
+      summary: List grantable Personal Access Token scopes
+      description: >-
+        Returns the Personal Access Token scopes the current User may grant right now, with a localized title and description for each. A scope with `institution_wide` set may be granted with no Academic Unit boundary or with any boundary. Otherwise it may be granted only with a boundary at one of its `academic_unit_ids` or at a unit below one of them. `academic_units` lists at most 50 of those delegable roots, ordered by display name; `academic_units_has_more` reports that more exist. Scopes the User cannot grant anywhere are omitted. Creation still rechecks current authority.
+      x-codeSamples:
+        - lang: Shell
+          label: List grantable Personal Access Token scopes
+          source: |-
+            curl --header "Authorization: Bearer $PROCTOR_TOKEN" \
+              https://proctor.example.edu/api/v1/users/me/tokens/grantable-scopes
+      tags:
+        - Authentication
+      x-proctor-auth: session_required
+      x-proctor-error-codes:
+        - personal_access_token.unavailable
+        - authentication.reauthentication_required
+        - authentication.session_required
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      x-proctor-idempotency: none
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      responses:
+        "200":
+          $ref: '#/components/responses/PersonalAccessTokenGrantableScopesOK'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "500":
+          $ref: '#/components/responses/InternalError'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
   /api/v1/users/me/tokens/{personal_access_token_id}/disable:
     parameters:
       - $ref: '#/components/parameters/PersonalAccessTokenID'
@@ -284,9 +328,9 @@ components:
           schema:
             $ref: '#/components/schemas/CreatePersonalAccessTokenRequest'
           example:
-            description: Read examination schedules from the registrar tool
+            description: Read exams from the registrar tool
             scopes:
-              - examinations:read
+              - exam.view
             academic_unit_id: ybndrfg8ejkmcpqxot1uwisza3
             expires_at: '2027-01-01T00:00:00Z'
   responses:
@@ -308,6 +352,37 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/PersonalAccessTokenCreationResponse'
+    PersonalAccessTokenGrantableScopesOK:
+      description: Grantable Personal Access Token scopes
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PersonalAccessTokenGrantableScopesResponse'
+          example:
+            scopes:
+              - name: audit.view
+                title: View audit history
+                description: Read the installation's audit history.
+                resource_types:
+                  - institution
+                institution_wide: true
+                academic_unit_ids:
+                  - ybndrfg8ejkmcpqxot1uwisza3
+              - name: exam.view
+                title: View exams
+                description: Read exams you manage, including drafts and revisions.
+                resource_types:
+                  - exam
+                institution_wide: false
+                academic_unit_ids:
+                  - ybndrfg8ejkmcpqxot1uwisza3
+            academic_units:
+              - id: ybndrfg8ejkmcpqxot1uwisza3
+                display_name: School of Computing
+            academic_units_has_more: false
     PersonalAccessTokenListOK:
       description: Personal Access Token collection
       headers:
@@ -331,12 +406,143 @@ components:
         scopes:
           type: array
           items:
-            type: string
+            $ref: '#/components/schemas/PersonalAccessTokenScope'
         academic_unit_id:
           $ref: '#/components/schemas/ID'
         expires_at:
           type: string
           format: date-time
+    PersonalAccessTokenScope:
+      description: An action a Personal Access Token may carry. The grantable-scopes operation reports which of them the current User may grant.
+      type: string
+      enum:
+        - academic.progression.manage
+        - academic_audit.view
+        - academic_period.manage
+        - academic_period.view
+        - academic_unit.manage
+        - academic_unit.members.manage
+        - academic_unit.members.view
+        - academic_unit.view
+        - audit.view
+        - class.manage
+        - class.members.manage
+        - class.members.view
+        - class.view
+        - exam.attempt.browser_activity.view
+        - exam.create
+        - exam.create.override
+        - exam.manage
+        - exam.manage.override
+        - exam.publish
+        - exam.publish.override
+        - exam.sitting.create
+        - exam.sitting.create.override
+        - exam.sitting.manage
+        - exam.sitting.manage.override
+        - exam.sitting.view
+        - exam.sitting.view.override
+        - exam.view
+        - exam.view.override
+        - institution.manage
+        - invitation.create
+        - invitation.manage
+        - invitation.view
+        - job.manage
+        - job.view
+        - mail.manage
+        - mail.view
+        - onboarding_batch.manage
+        - onboarding_batch.view
+        - programme.manage
+        - programme.view
+        - programme_level.manage
+        - programme_level.view
+        - session.manage
+        - session.view
+        - submission.release
+        - submission.release.override
+        - submission.review
+        - submission.review.override
+        - submission.view
+        - submission.view.override
+        - user.manage
+        - user.profile_picture.manage
+        - user.view
+    PersonalAccessTokenGrantableScopesResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - scopes
+        - academic_units
+        - academic_units_has_more
+      properties:
+        scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonalAccessTokenGrantableScope'
+        academic_units:
+          description: At most 50 Academic Unit roots at which at least one scope is grantable, ordered by display name.
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonalAccessTokenGrantableAcademicUnit'
+        academic_units_has_more:
+          description: True when more grantable roots exist than are listed.
+          type: boolean
+    PersonalAccessTokenGrantableScope:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - title
+        - description
+        - resource_types
+        - institution_wide
+        - academic_unit_ids
+      properties:
+        name:
+          $ref: '#/components/schemas/PersonalAccessTokenScope'
+        title:
+          description: Short localized title.
+          type: string
+        description:
+          description: One localized sentence explaining what the scope allows.
+          type: string
+        resource_types:
+          description: The resource types the action applies to.
+          type: array
+          items:
+            type: string
+            enum:
+              - academic_period
+              - academic_unit
+              - class
+              - exam
+              - exam_sitting
+              - institution
+              - programme
+              - programme_level
+              - submission
+              - user
+        institution_wide:
+          description: True when the scope may be granted without an Academic Unit boundary, or with any boundary.
+          type: boolean
+        academic_unit_ids:
+          description: The listed `academic_units` at which the scope is grantable; it is also grantable at any unit below them.
+          type: array
+          items:
+            $ref: '#/components/schemas/ID'
+    PersonalAccessTokenGrantableAcademicUnit:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - display_name
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        display_name:
+          type: string
     PersonalAccessTokenResponse:
       type: object
       additionalProperties: false

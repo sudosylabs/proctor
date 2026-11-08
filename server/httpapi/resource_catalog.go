@@ -70,6 +70,7 @@ func productionResources(
 		roleResource(applications.roles),
 		roleBindingResource(applications.roleBindings),
 		auditResource(applications.audit),
+		searchResource(applications.search),
 		jobResource(applications.jobs),
 		mailResource(applications.mail),
 		webSocketResource(webSocket),

@@ -712,6 +712,8 @@ codes:
   - code: route.not_found
     description: "No route matches the request path."
     problem: true
+  - code: search.query.invalid
+    description: "A search parameter is invalid; `fields` names the rejected `q`, `types`, or `limit`."
   - code: server.internal
     description: "An unexpected server fault; record the `request_id` for support."
     problem: true

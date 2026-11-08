@@ -24,7 +24,11 @@ transport payload.
 
 Both fields accept `className` for their outer layout and `inputClassName` for
 a justified local input seam. They own control height, padding, border,
-typography, theme, hover, disabled, error, focus, and forced-colors behavior.
+typography, theme, hover, read-only, disabled, error, focus, and forced-colors
+behavior. A native `readOnly` field (first used for the Invitation's address on
+`/join`) keeps default-contrast text, stays focusable and selectable, and uses
+the subtle background with a default border and no hover change; its
+description says why the value cannot be edited.
 They do not own multiline text, selection controls, date/time controls, or
 feature-specific state.
 

@@ -105,9 +105,48 @@ func TestEmailTransitionsUseRealServerGraphAndFrozenRecipients(t *testing.T) {
 	})
 	require.NotContains(t, helper.Logs.String(), credentialFromDelivery(t, secondUndo), "second email-change undo token appeared in logs")
 
+	// Inspection names the addresses from authoritative state without
+	// consuming either token, so the consuming operations still succeed.
+	inspectedVerification := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/auth/email-verification/inspect",
+		map[string]any{"token": verificationToken}, "")
+	require.Equal(t, http.StatusOK, inspectedVerification.Code, "verification inspection = %d: %s", inspectedVerification.Code, inspectedVerification.Body.String())
+	require.Equal(t, "no-store", inspectedVerification.Header().Get("Cache-Control"))
+	require.JSONEq(t, `{"email":"first-new@example.edu"}`, inspectedVerification.Body.String())
+	undoToken := credentialFromDelivery(t, firstUndo)
+	inspectedUndo := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/auth/email-change/undo/inspect",
+		map[string]any{"token": undoToken}, "")
+	require.Equal(t, http.StatusOK, inspectedUndo.Code, "undo inspection = %d: %s", inspectedUndo.Code, inspectedUndo.Body.String())
+	var undoFacts struct {
+		RestoredEmail      string    `json:"restored_email"`
+		MaskedCurrentEmail string    `json:"masked_current_email"`
+		ChangedAt          time.Time `json:"changed_at"`
+	}
+	require.NoError(t, json.Unmarshal(inspectedUndo.Body.Bytes(), &undoFacts))
+	require.Equal(t, "first-old@example.edu", undoFacts.RestoredEmail)
+	require.Equal(t, "f***@example.edu", undoFacts.MaskedCurrentEmail)
+	require.False(t, undoFacts.ChangedAt.IsZero())
+	require.False(t, undoFacts.ChangedAt.After(time.Now()), "the change time is in the future")
+	require.NotContains(t, helper.Logs.String(), undoToken, "inspected undo token appeared in logs")
+	unknown := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/auth/email-change/undo/inspect",
+		map[string]any{"token": model.NewCredentialToken()}, "")
+	require.Equal(t, http.StatusBadRequest, unknown.Code, "unknown undo inspection = %d: %s", unknown.Code, unknown.Body.String())
+	require.Contains(t, unknown.Body.String(), "authentication.account_token.invalid")
+
 	completed := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/auth/email-verification/complete",
 		map[string]any{"token": verificationToken}, "")
 	require.Equal(t, http.StatusNoContent, completed.Code, "email-change verification completion status = %d: %s", completed.Code, completed.Body.String())
+	consumed := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/auth/email-verification/inspect",
+		map[string]any{"token": verificationToken}, "")
+	require.Equal(t, http.StatusBadRequest, consumed.Code, "consumed verification inspection = %d: %s", consumed.Code, consumed.Body.String())
+	require.Contains(t, consumed.Body.String(), "authentication.account_token.invalid")
+	problemOf := func(body []byte) map[string]any {
+		var problem map[string]any
+		require.NoError(t, json.Unmarshal(body, &problem))
+		delete(problem, "instance")
+		delete(problem, "request_id")
+		return problem
+	}
+	require.Equal(t, problemOf(unknown.Body.Bytes()), problemOf(consumed.Body.Bytes()), "a consumed token was distinguishable from an unknown one")
 	for _, expected := range []struct {
 		id       model.UserID
 		email    string

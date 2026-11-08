@@ -5,11 +5,7 @@ import { requestPasswordReset } from "./ForgotPasswordApi";
 
 export function ForgotPasswordPage() {
   return (
-    <AccessPageShell
-      mainSize="content"
-      skipLabel={message("webapp.forgot_password.skip_to_main")}
-      variant="single"
-    >
+    <AccessPageShell skipLabel={message("webapp.forgot_password.skip_to_main")}>
       <ForgotPasswordContent requestReset={requestPasswordReset} />
     </AccessPageShell>
   );

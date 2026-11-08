@@ -52,21 +52,25 @@ type SessionExpiryEnforcementResult struct {
 
 // UserSessionsRevocation is the complete durable input for revoking every
 // active session belonging to one user under an already-persisted audit
-// attempt. UserAllSessions forbids administrative mail and command idempotency;
-// other reasons retain the administrative notice contract. An empty set completes
-// a successful audit with zero revoked sessions and no notice or transient effect.
+// attempt. UserAllSessions and UserOtherSessions forbid administrative mail and
+// command idempotency; other reasons retain the administrative notice contract.
+// KeepSessionID is required with UserOtherSessions and forbidden otherwise: it
+// must name a live Session of the User at RevokedAt (ErrNotFound when it does
+// not), and that Session stays live. An empty set completes a successful audit
+// with zero revoked sessions and no notice or transient effect.
 type UserSessionsRevocation struct {
-	UserID       model.UserID
-	Occurrence   *model.MailOccurrence
-	Delivery     *model.MailDelivery
-	DeliveryJob  *model.Job
-	RevokedAt    time.Time
-	Reason       model.SessionRevocationReason
-	AuditEventID model.AuditEventID
-	AuditAt      time.Time
-	Command      *CommandIdempotency
-	Replayed     bool
-	NoOp         bool
+	UserID        model.UserID
+	KeepSessionID model.SessionID
+	Occurrence    *model.MailOccurrence
+	Delivery      *model.MailDelivery
+	DeliveryJob   *model.Job
+	RevokedAt     time.Time
+	Reason        model.SessionRevocationReason
+	AuditEventID  model.AuditEventID
+	AuditAt       time.Time
+	Command       *CommandIdempotency
+	Replayed      bool
+	NoOp          bool
 }
 
 // UserSessionsRevocationResult contains the revoked sessions and token hashes

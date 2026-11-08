@@ -14,19 +14,25 @@ that connection neither replaces the User's password nor changes the Proctor
 profile, and provider email never merges Users.
 
 No-Session, no-provider, loading, retryable failure, and reauthentication
-states remain distinct. Several providers form one accessible radio group;
-one provider retains the same explicit Continue action and never redirects on
-page load.
+states remain distinct. Several providers form one accessible radio group
+followed by one Continue action naming the selected provider. With exactly one
+provider there is nothing to choose: no radio group, a heading and action that
+name the provider, and still an explicit Continue that never redirects on page
+load.
 
 A fresh-proof failure exposes the bounded
 `/account/reauthenticate?task=connect-provider` journey. Returning refreshes the
 chooser and requires explicit provider selection and Continue again; the page
 never replays a provider-connection mutation after proof.
 
-The ready chooser uses one centered task column and a visible native radio
-indicator. Two compact shared `Notice` instances keep the password/profile and
-email non-merge guarantees together without introducing a progress rail or
-provider artwork.
+The ready view uses the shell task column: a “Sign-in methods” kind line, the
+heading, a one-sentence lede about the result, the radio group when there is a
+choice, one compact `Notice` that keeps the password/profile and email
+non-merge guarantees together, and one action row (Continue and a quiet Cancel
+link to `/account/security`). Start failures stay beside that row; the
+reauthentication follow-up is a plain link there, never a second primary
+button. The current User's display name appears only in the shell footer. No
+progress rail or provider artwork is introduced.
 
 Loading, signed-out, unavailable, and empty-provider states use the shared
 `TaskState` hierarchy and persistent polite announcement. Initial context

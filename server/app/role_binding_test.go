@@ -97,7 +97,8 @@ func TestRoleBindingCreateCommitsBeforeInvalidation(t *testing.T) {
 	userID := model.NewID()
 	created := &model.RoleBinding{ID: model.NewRoleBindingID(), UserID: model.UserID(userID), RoleID: model.NewRoleID()}
 	mail := &relationshipMailPreparerTestFake{}
-	service := newRoleBindingService(roleBindingServiceDependencies{Bindings: &roleBindingStoreFake{events: &events, createResult: created}, Roles: &roleBindingRoleStoreFake{events: &events, role: &model.Role{ID: created.RoleID, Name: "teacher"}}, Users: relationshipUserStoreTestFake{}, Authorization: &roleAuthorizerFake{events: &events, resource: model.Resource{Type: model.ResourceInstitution, ID: model.NewID()}}, Capabilities: &accessPolicyCapabilitiesFake{}, Audit: &institutionAuditorFake{events: &events, beginID: model.NewID()}, Mail: mail, Effects: &roleBindingEffectsFake{events: &events}, Now: func() time.Time { return time.UnixMilli(500) }})
+	auditor := &institutionAuditorFake{events: &events, beginID: model.NewID()}
+	service := newRoleBindingService(roleBindingServiceDependencies{Bindings: &roleBindingStoreFake{events: &events, createResult: created}, Roles: &roleBindingRoleStoreFake{events: &events, role: &model.Role{ID: created.RoleID, Name: "teacher"}}, Users: relationshipUserStoreTestFake{}, Authorization: &roleAuthorizerFake{events: &events, resource: model.Resource{Type: model.ResourceInstitution, ID: model.NewID()}}, Capabilities: &accessPolicyCapabilitiesFake{}, Audit: auditor, Mail: mail, Effects: &roleBindingEffectsFake{events: &events}, Now: func() time.Time { return time.UnixMilli(500) }})
 	got, err := service.CreateRoleBinding(context.Background(), invocation.Invocation{}, CreateRoleBindingCommand{
 		UserID: model.UserID(userID), RoleID: created.RoleID, ScopeType: model.RoleScopeInstitution,
 		ScopeID: model.NewID(), StartAt: 100,
@@ -110,6 +111,7 @@ func TestRoleBindingCreateCommitsBeforeInvalidation(t *testing.T) {
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
 	require.Equal(t, []string{"authorize-binding-scope", "get-role", "authorize-delegation", "audit-begin", "store-create", "invalidate-authorization"}, events)
+	require.Equal(t, []model.UserID{model.UserID(userID)}, auditor.subjects, "the grant names the bound User as its subject")
 }
 
 func TestRoleBindingCreateRejectsSystemAdminOutsideInstitution(t *testing.T) {
@@ -150,13 +152,14 @@ func TestRoleBindingEndFailurePublishesNoInvalidation(t *testing.T) {
 	events := []string{}
 	binding := &model.RoleBinding{ID: model.NewRoleBindingID(), UserID: model.NewUserID(), ScopeType: model.RoleScopeClass, ScopeID: model.NewID()}
 	mail := &relationshipMailPreparerTestFake{}
+	endAuditor := &institutionAuditorFake{events: &events, beginID: model.NewID()}
 	persistence := &roleBindingStoreFake{
 		events: &events, binding: binding,
 		endErr: store.NewErrConflict("role_binding", "role_bindings_last_system_admin", errors.New("last")),
 	}
 	service := newRoleBindingService(roleBindingServiceDependencies{Bindings: persistence, Roles: &roleBindingRoleStoreFake{events: &events}, Users: relationshipUserStoreTestFake{}, Authorization: &roleAuthorizerFake{events: &events, resource: model.Resource{Type: model.ResourceInstitution, ID: model.NewID()}}, Capabilities: &accessPolicyCapabilitiesFake{snapshot: AccessPolicyCapabilitySnapshot{Providers: []AccessPolicyProviderCapability{{
 		Descriptor: model.ExternalAuthenticationProvider{ID: "campus", Type: "oidc"},
-	}}}}, Audit: &institutionAuditorFake{events: &events, beginID: model.NewID()}, Mail: mail, Effects: &roleBindingEffectsFake{events: &events}, Now: time.Now})
+	}}}}, Audit: endAuditor, Mail: mail, Effects: &roleBindingEffectsFake{events: &events}, Now: time.Now})
 	_, err := service.EndRoleBinding(context.Background(), invocation.Invocation{}, EndRoleBindingCommand{ID: binding.ID})
 	require.True(t, apperror.Is(err, "role_binding.last_system_admin"), "error = %v", err)
 	_, available := persistence.endInput.Capabilities.Providers["campus"]
@@ -167,6 +170,7 @@ func TestRoleBindingEndFailurePublishesNoInvalidation(t *testing.T) {
 	// Contract (guardrail 8): authorization precedes the audit, the audit begins
 	// before the durable write, and the audit outcome follows the write.
 	require.Equal(t, []string{"authorize-binding-preflight", "get-binding", "authorize-binding-scope", "audit-begin", "store-end", "audit-fail"}, events)
+	require.Equal(t, []model.UserID{binding.UserID}, endAuditor.subjects, "the end names the bound User as its subject")
 }
 
 func TestRoleBindingListByUserAuthorizesThenReads(t *testing.T) {

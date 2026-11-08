@@ -14,6 +14,12 @@ describe("FormFeedback", () => {
     expect(markup).not.toContain("data-proctor-notice");
   });
 
+  it("renders no children while empty so it reserves no space", () => {
+    const markup = renderToStaticMarkup(<FormFeedback />);
+
+    expect(markup).toMatch(/^<div [^>]*><\/div>$/);
+  });
+
   it("presents a failure with the shared danger evidence treatment", () => {
     const markup = renderToStaticMarkup(
       <FormFeedback message="Review the details and try again." />,

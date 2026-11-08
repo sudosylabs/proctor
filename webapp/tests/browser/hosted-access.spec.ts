@@ -23,6 +23,7 @@ const desktopAuthorizationDocumentationFragment = new URLSearchParams(
 
 const defaultDiscovery = {
   discovery_version: 1,
+  password_minimum_length: 14,
   canonical_origin: canonicalOrigin,
   initialized: true,
   capabilities: {
@@ -70,7 +71,9 @@ const defaultDesktopAuthorization = {
       desktopAuthorizationDocumentationFixture.synthetic_context.username,
     display_name:
       desktopAuthorizationDocumentationFixture.synthetic_context.display_name,
+    email: "student.one@example.edu",
   },
+  requestedAt: "2026-08-18T11:58:00.000Z",
   deviceName:
     desktopAuthorizationDocumentationFixture.synthetic_context.device_name,
 };
@@ -144,6 +147,7 @@ async function mockDesktopAuthorization(
         }
       : {}),
     device_name: request.deviceName,
+    requested_at: request.requestedAt,
     expires_at: new Date(Date.now() + 300_000).toISOString(),
     local_login_enabled: !authenticated,
     external_providers: authenticated ? [] : defaultDiscovery.providers,
@@ -210,6 +214,9 @@ async function mockDesktopAuthorization(
   };
 }
 
+const registrationAcknowledgment =
+  "I understand that an account doesn’t by itself give me access to any classes or exams.";
+
 async function submissionGeometry(page: Page, firstControl: string) {
   return page.evaluate((selector) => {
     const control = document.querySelector<HTMLElement>(selector)!;
@@ -246,9 +253,13 @@ async function expectPersistentSubmissionFailure(
   await expect(feedback).not.toBeFocused();
 
   const after = await submissionGeometry(page, firstControl);
-  expect(after.controlTop).toBe(before.controlTop);
-  expect(after.buttonTop).toBe(before.buttonTop);
-  expect(after.feedbackHeight).toBe(before.feedbackHeight);
+  // Firefox can re-round fractional layout by a few hundred-thousandths of a
+  // pixel when the region below opens; any visible shift is far larger.
+  expect(after.controlTop).toBeCloseTo(before.controlTop, 1);
+  expect(after.buttonTop).toBeCloseTo(before.buttonTop, 1);
+  // The empty region reserves no space; it opens only for the message.
+  expect(before.feedbackHeight).toBe(0);
+  expect(after.feedbackHeight).toBeGreaterThan(0);
   expect(
     await feedback.evaluate((element) => {
       const button = element.parentElement?.querySelector('button[type="submit"]');
@@ -286,11 +297,20 @@ for (const colorScheme of ["light", "dark"] as const) {
 
     const lockup = page.getByRole("img", { name: "Proctor" });
     await expect(lockup).toBeVisible();
-    expect(
-      await lockup.evaluate(
-        (image) => image.closest("header")?.children.length,
-      ),
-    ).toBe(1);
+    const masthead = await lockup.evaluate((image) => {
+      const header = image.closest("header");
+      return {
+        first: header?.firstElementChild === image,
+        children: Array.from(header?.children ?? []).map((child) =>
+          child === image ? "lockup" : child.textContent,
+        ),
+      };
+    });
+    expect(masthead.first).toBe(true);
+    expect(masthead.children).toEqual([
+      "lockup",
+      defaultDiscovery.institution.display_name,
+    ]);
     const currentSource = await lockup.evaluate(
       (image: HTMLImageElement) => image.currentSrc,
     );
@@ -348,30 +368,43 @@ test("setup validates and atomically submits the installation", async ({
   await expect(
     page.getByRole("heading", {
       level: 1,
-      name: "Establish this installation",
+      name: "Set up your institution",
     }),
   ).toBeVisible();
+  await expect(page.getByText("Set up Proctor", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Create installation" }).click();
-  await expect(page.locator("#bootstrap-secret")).toBeFocused();
-  await expect(page.getByText("Enter the one-time bootstrap secret.")).toBeVisible();
+  await page.getByRole("button", { name: "Create institution" }).click();
+  await expect(page.locator("#institution-display-name")).toBeFocused();
+  await expect(page.getByText("Enter the institution’s name.")).toBeVisible();
+  await expect(page.getByText("Enter the setup key.")).toBeVisible();
 
-  await page.locator("#bootstrap-secret").fill("operator-secret");
-  await page.getByLabel("Institution name").fill("northbridge-university");
-  await page.locator("#institution-display-name").fill("Northbridge University");
+  await page.getByLabel("Institution name").fill("Northbridge University");
+  await page.getByLabel("Short name").fill("northbridge-university");
   await page.getByLabel("Description (optional)").fill("Examination services");
-  await page.getByLabel("Email address").fill("initial-admin@example.edu");
-  await page.getByLabel("Username").fill("initial-admin");
   await page
-    .getByLabel("Display name (optional)")
+    .getByLabel("Your full name (optional)")
     .fill("Initial Administrator");
+  await page.getByLabel("Your email").fill("initial-admin@example.edu");
+  await page.getByLabel("Username").fill("initial-admin");
   await page.locator("#administrator-password").fill("private-bootstrap-password");
-  await page.getByRole("button", { name: "Create installation" }).click();
+  await page.getByRole("textbox", { name: "Setup key" }).fill("operator-secret");
+  await page.getByRole("button", { name: "Create institution" }).click();
 
-  await expect(
-    page.getByRole("heading", { level: 2, name: "Setup is complete" }),
-  ).toBeVisible();
-  await expect(page.getByRole("link", { name: "Continue to sign in" })).toHaveAttribute(
+  const done = page.getByRole("heading", {
+    level: 1,
+    name: "Northbridge University is ready",
+  });
+  await expect(done).toBeVisible();
+  await expect(done).toBeFocused();
+  await expect(page.locator("body")).not.toContainText("already");
+  const facts = page.getByRole("main").locator("[data-proctor-fact-list]");
+  await expect(facts).toHaveAttribute("aria-label", "What setup created");
+  await expect(facts.locator("dt")).toHaveText(["Institution", "Administrator"]);
+  await expect(facts.locator("dd")).toHaveText([
+    "Northbridge University",
+    "Initial Administrator · initial-admin@example.edu",
+  ]);
+  await expect(page.getByRole("link", { name: "Sign in" })).toHaveAttribute(
     "href",
     "/login",
   );
@@ -384,9 +417,10 @@ test("setup refuses to replace an initialized installation", async ({ page }) =>
   await page.goto("/setup");
 
   await expect(
-    page.getByRole("heading", { level: 2, name: "Setup is complete" }),
+    page.getByRole("heading", { level: 1, name: "Proctor is already set up" }),
   ).toBeVisible();
-  await expect(page.getByLabel("Bootstrap secret")).toHaveCount(0);
+  await expect(page.getByLabel("Setup key")).toHaveCount(0);
+  await expect(page.locator("[data-proctor-fact-list]")).toHaveCount(0);
 });
 
 test("public registration submits only account input and enters verification", async ({
@@ -407,34 +441,48 @@ test("public registration submits only account input and enters verification", a
   await page.goto("/register#unexpected=private");
   await expect(page).toHaveURL(`${canonicalOrigin}/register`);
   await expect(page).toHaveTitle("Create an account · Proctor");
-  await expect(page.getByText("Northbridge Institute")).toBeVisible();
+  await expect(
+    page.getByRole("banner").getByText("Northbridge Institute", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("contentinfo")).toContainText(
+    "Need help? Contact Northbridge Institute.",
+  );
+
+  await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Create your Proctor account" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "For Northbridge Institute. You’ll confirm your email before you can sign in.",
+    ),
+  ).toBeVisible();
+  // Password rules are read before the person types.
+  await expect(page.locator("#registration-password")).toHaveAccessibleDescription(
+    "At least 14 characters. Use a password you don’t use anywhere else.",
+  );
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Already have an account?" }),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByLabel("First name")).toBeFocused();
 
   await page.getByLabel("First name").fill("Ada");
   await page.getByLabel("Last name").fill("Okafor");
-  await page.getByLabel("Email address").fill("student.one@example.edu");
+  await page.getByRole("textbox", { name: "Email", exact: true }).fill("student.one@example.edu");
   await page.getByLabel("Username").fill("student.one");
   await page.locator("#registration-password").fill("private-registration-password");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(
-    page.getByLabel(
-      "I understand that registration does not grant institutional access.",
-    ),
-  ).toBeFocused();
+  await expect(page.getByLabel(registrationAcknowledgment)).toBeFocused();
 
-  await page
-    .getByLabel(
-      "I understand that registration does not grant institutional access.",
-    )
-    .check();
+  await page.getByLabel(registrationAcknowledgment).check();
   await page.getByRole("button", { name: "Create account" }).click();
 
-  await expect(
-    page.getByRole("heading", { level: 1, name: "Check your email" }),
-  ).toBeVisible();
-  await expect(page.getByText("Registration accepted")).toBeVisible();
+  const accepted = page.getByRole("heading", { level: 1, name: "Check your email" });
+  await expect(accepted).toBeVisible();
+  await expect(accepted).toBeFocused();
+  await expect(page.getByText("Request received")).toBeVisible();
   await expect(page.locator("body")).not.toContainText(
     "private-registration-password",
   );
@@ -453,9 +501,20 @@ test("registration explains Invitation admission without accepting account input
   await page.goto("/register");
 
   await expect(
-    page.getByRole("heading", { level: 1, name: "An Invitation is required" }),
+    page.getByRole("heading", { level: 1, name: "You need an invitation" }),
   ).toBeVisible();
-  await expect(page.getByLabel("Email address")).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+  await expect(page.getByRole("main")).toContainText(
+    "Northbridge Institute adds people to Proctor by invitation.",
+  );
+  // Nothing on the page may suggest that public registration is open.
+  await expect(page.getByRole("main")).not.toContainText("Create your Proctor account");
+  await expect(page.getByRole("button", { name: "Create account" })).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "Email", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+    "href",
+    "/login",
+  );
 });
 
 test("login presents the admitted methods and sanitizes provider failure state", async ({
@@ -466,8 +525,16 @@ test("login presents the admitted methods and sanitizes provider failure state",
 
   await expect(page).toHaveURL(`${canonicalOrigin}/login`);
   await expect(page).toHaveTitle("Sign in · Proctor");
-  await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
-  await expect(page.getByText("Northbridge Institute")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Sign in to Proctor" }),
+  ).toBeVisible();
+  await expect(page.getByText("Use your Northbridge Institute account.")).toBeVisible();
+  await expect(
+    page.getByRole("banner").getByText("Northbridge Institute", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("contentinfo")).toContainText(
+    "Need help? Contact Northbridge Institute.",
+  );
   await expect(page.getByLabel("Email or username")).toBeVisible();
   await expect(page.locator("#password")).toHaveAttribute(
     "autocomplete",
@@ -475,7 +542,7 @@ test("login presents the admitted methods and sanitizes provider failure state",
   );
   await expect(
     page.getByText(
-      "External sign-in wasn’t completed. Choose a method to try again.",
+      "Signing in with your institution wasn’t completed. Choose how to sign in and try again.",
     ),
   ).toBeVisible();
   await expect(
@@ -484,7 +551,45 @@ test("login presents the admitted methods and sanitizes provider failure state",
   await expect(
     page.getByRole("button", { name: "Continue with University SSO" }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "Create an account" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 2, name: "New to Proctor?" }),
+  ).toBeVisible();
+  await expect(page.getByRole("main")).toContainText(
+    "Students and staff join through an invitation from Northbridge Institute. Create an account if your institution allows it.",
+  );
+  await expect(page.getByRole("link", { name: "Create an account" })).toHaveAttribute(
+    "href",
+    "/register",
+  );
+
+  // No empty feedback lane separates the primary action from the other method.
+  const gap = await page.evaluate(() => {
+    const button = document.querySelector('button[type="submit"]')!;
+    const separator = button.closest("form")!.nextElementSibling!;
+    return (
+      separator.getBoundingClientRect().top -
+      button.getBoundingClientRect().bottom
+    );
+  });
+  expect(gap).toBeLessThanOrEqual(24.5);
+});
+
+test("login offers account creation only while public registration is open", async ({
+  page,
+}) => {
+  await mockDiscovery(page, {
+    ...defaultDiscovery,
+    capabilities: {
+      ...defaultDiscovery.capabilities,
+      public_registration: false,
+    },
+  });
+  await page.goto("/login");
+
+  await expect(page.getByRole("main")).toContainText(
+    "Students and staff join through an invitation from Northbridge Institute.",
+  );
+  await expect(page.getByRole("link", { name: "Create an account" })).toHaveCount(0);
 });
 
 test("local validation focuses the first invalid field", async ({ page }) => {
@@ -498,6 +603,37 @@ test("local validation focuses the first invalid field", async ({ page }) => {
 });
 
 test("login failure stays beside the action without moving the credentials", async ({
+  page,
+}) => {
+  await mockDiscovery(page, { ...defaultDiscovery, providers: [] });
+  await page.route("**/api/v1/auth/login", async (route) => {
+    await route.fulfill({
+      status: 500,
+      contentType: "application/problem+json",
+      body: JSON.stringify({
+        type: "/problems/internal",
+        title: "Internal failure",
+        status: 500,
+        code: "authentication.internal",
+      }),
+    });
+  });
+  await page.goto("/login");
+  await page.getByLabel("Email or username").fill("student@example.edu");
+  await page.locator("#password").fill("private-password");
+
+  const before = await submissionGeometry(page, "#login-id");
+  await page.getByRole("button", { name: "Sign in" }).click();
+
+  await expectPersistentSubmissionFailure(
+    page,
+    "Something went wrong and you weren’t signed in. Try again.",
+    before,
+    "#login-id",
+  );
+});
+
+test("rejected credentials sit under the password and keep both values", async ({
   page,
 }) => {
   await mockDiscovery(page, { ...defaultDiscovery, providers: [] });
@@ -520,12 +656,22 @@ test("login failure stays beside the action without moving the credentials", asy
   const before = await submissionGeometry(page, "#login-id");
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expectPersistentSubmissionFailure(
-    page,
-    "The email, username, or password wasn’t accepted.",
-    before,
-    "#login-id",
+  const password = page.locator("#password");
+  const message = "That email or password isn’t right. Check both and try again.";
+  await expect(password).toHaveAttribute("aria-invalid", "true");
+  await expect(password).toHaveAccessibleDescription(message);
+  await expect(password).toBeFocused();
+  await expect(password).toHaveValue("private-password");
+  await expect(page.getByLabel("Email or username")).toHaveValue(
+    "student@example.edu",
   );
+  await expect(page.locator("[data-proctor-form-feedback]")).toBeEmpty();
+  const after = await submissionGeometry(page, "#login-id");
+  expect(after.controlTop).toBe(before.controlTop);
+  expect(after.feedbackHeight).toBe(0);
+
+  await password.fill("another-password");
+  await expect(password).not.toHaveAttribute("aria-invalid", "true");
 });
 
 test("setup failure stays below the action without moving the atomic form", async ({
@@ -551,22 +697,60 @@ test("setup failure stays below the action without moving the atomic form", asyn
     });
   });
   await page.goto("/setup");
-  await page.locator("#bootstrap-secret").fill("operator-secret");
-  await page.getByLabel("Institution name").fill("northbridge-university");
-  await page.locator("#institution-display-name").fill("Northbridge University");
-  await page.getByLabel("Email address").fill("initial-admin@example.edu");
+  await page.getByLabel("Institution name").fill("Northbridge University");
+  await page.getByLabel("Short name").fill("northbridge-university");
+  await page.getByLabel("Your email").fill("initial-admin@example.edu");
   await page.getByLabel("Username").fill("initial-admin");
   await page.locator("#administrator-password").fill("private-password");
+  await page.getByRole("textbox", { name: "Setup key" }).fill("operator-secret");
 
-  const before = await submissionGeometry(page, "#bootstrap-secret");
-  await page.getByRole("button", { name: "Create installation" }).click();
+  const before = await submissionGeometry(page, "#institution-display-name");
+  await page.getByRole("button", { name: "Create institution" }).click();
 
   await expectPersistentSubmissionFailure(
     page,
-    "Proctor couldn’t create the installation. No setup changes were applied. Review the details and try again.",
+    "Proctor couldn’t create the institution, and nothing was changed. Check the details and try again.",
     before,
-    "#bootstrap-secret",
+    "#institution-display-name",
   );
+});
+
+test("a rejected setup key sits under the setup key field", async ({ page }) => {
+  await page.route("**/api/v1/bootstrap", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ initialized: false }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 403,
+      contentType: "application/problem+json",
+      body: JSON.stringify({
+        type: "/problems/bootstrap-denied",
+        title: "Bootstrap denied",
+        status: 403,
+        code: "installation.bootstrap_denied",
+      }),
+    });
+  });
+  await page.goto("/setup");
+  await page.getByLabel("Institution name").fill("Northbridge University");
+  await page.getByLabel("Short name").fill("northbridge-university");
+  await page.getByLabel("Your email").fill("initial-admin@example.edu");
+  await page.getByLabel("Username").fill("initial-admin");
+  await page.locator("#administrator-password").fill("private-password");
+  await page.getByRole("textbox", { name: "Setup key" }).fill("wrong-secret");
+  await page.getByRole("button", { name: "Create institution" }).click();
+
+  const secret = page.locator("#bootstrap-secret");
+  await expect(secret).toBeFocused();
+  await expect(secret).toHaveAttribute("aria-invalid", "true");
+  await expect(page.locator("#bootstrap-secret-error")).toHaveText(
+    "That setup key isn’t right. Check it with whoever runs the server.",
+  );
+  await expect(page.locator("[data-proctor-form-feedback]")).toBeEmpty();
 });
 
 test("registration failure stays below the action without moving account input", async ({
@@ -588,21 +772,17 @@ test("registration failure stays below the action without moving account input",
   await page.goto("/register");
   await page.getByLabel("First name").fill("Ada");
   await page.getByLabel("Last name").fill("Okafor");
-  await page.getByLabel("Email address").fill("student.one@example.edu");
+  await page.getByRole("textbox", { name: "Email", exact: true }).fill("student.one@example.edu");
   await page.getByLabel("Username").fill("student.one");
   await page.locator("#registration-password").fill("private-password");
-  await page
-    .getByLabel(
-      "I understand that registration does not grant institutional access.",
-    )
-    .check();
+  await page.getByLabel(registrationAcknowledgment).check();
 
   const before = await submissionGeometry(page, "#registration-first-name");
   await page.getByRole("button", { name: "Create account" }).click();
 
   await expectPersistentSubmissionFailure(
     page,
-    "Proctor couldn’t accept your registration request. Try again.",
+    "Something went wrong and your account wasn’t created. Try again.",
     before,
     "#registration-first-name",
   );
@@ -628,12 +808,33 @@ test("local login enters MFA without placing credentials in the URL", async ({ p
   await page.getByRole("button", { name: "Sign in" }).click();
 
   await expect(page.getByLabel("Authenticator code")).toBeFocused();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Enter your code" }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+  await expect(page.getByText("Sign in", { exact: true })).toBeVisible();
+  await expect(page.locator("#login-id")).toHaveCount(0);
+  await expect(page.locator("#password")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Verify" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Use a recovery code instead" }),
+  ).toBeVisible();
   await expect(page.locator("#mfa-code")).toHaveAttribute("required", "");
   await expect(
     page.locator('label[for="mfa-code"] [data-required-indicator]'),
   ).toHaveText("*");
   await expect(page).toHaveURL(`${canonicalOrigin}/login`);
   await expect(page.locator("body")).not.toContainText("private-password");
+
+  await page.getByRole("button", { name: "Use a different account" }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Sign in to Proctor" }),
+  ).toBeVisible();
+  await expect(page.locator("#password")).toBeFocused();
+  await expect(page.locator("#password")).toHaveValue("");
+  await expect(page.getByLabel("Email or username")).toHaveValue(
+    "student@example.edu",
+  );
 });
 
 test("successful local login replaces the form with Session confirmation", async ({
@@ -672,7 +873,7 @@ test("successful local login replaces the form with Session confirmation", async
   await expect(
     page.getByRole("heading", { level: 1, name: "You’re signed in" }),
   ).toBeVisible();
-  await expect(page.getByText("Session confirmed")).toBeVisible();
+  await expect(page.getByText("Sign-in confirmed")).toBeVisible();
   await expect(page.locator("body")).not.toContainText("Student");
 });
 
@@ -724,7 +925,9 @@ test("Session confirmation distinguishes 401 from a retryable failure", async ({
 });
 
 test("password recovery keeps its accepted response generic", async ({ page }) => {
+  let requests = 0;
   await page.route("**/api/v1/auth/password-reset/request", async (route) => {
+    requests += 1;
     expect(await route.request().postDataJSON()).toEqual({
       email: "student.one@example.edu",
     });
@@ -736,10 +939,13 @@ test("password recovery keeps its accepted response generic", async ({ page }) =
   await expect(
     page.getByRole("heading", { level: 1, name: "Reset your password" }),
   ).toBeVisible();
+  await expect(page.getByRole("heading")).toHaveCount(1);
   await expect(
-    page.getByRole("heading", { level: 2, name: "Request reset link" }),
+    page.getByText(
+      "Enter the email on your Proctor account and we’ll send a reset link. It works for 1 hour.",
+    ),
   ).toBeVisible();
-  await page.getByLabel("Email address").fill("student.one@example.edu");
+  await page.getByLabel("Email").fill("student.one@example.edu");
   await page.getByRole("button", { name: "Send reset link" }).click();
 
   await expect(
@@ -747,14 +953,36 @@ test("password recovery keeps its accepted response generic", async ({ page }) =
   ).toBeFocused();
   await expect(page.getByRole("status")).toContainText("Check your email");
   await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
-  await expect(page.getByText("Request accepted")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Return to sign in" })).toBeVisible();
-  await expect(page.locator("body")).not.toContainText("student.one@example.edu");
+  await expect(page.getByText("Reset password", { exact: true })).toHaveCSS(
+    "color",
+    "rgb(11, 118, 110)",
+  );
+  // The typed address is echoed from page memory inside the same generic
+  // sentence for every address; it never claims that an account exists.
+  await expect(page.locator("main")).toContainText(
+    "If an account uses student.one@example.edu, a reset link is on its way. It works once, for 1 hour.",
+  );
+  await expect(page.getByRole("status")).not.toContainText("student.one@example.edu");
+  await expect(page).toHaveURL(`${canonicalOrigin}/account/forgot-password`);
+  await expect(page.getByRole("link", { name: "Back to sign in" })).toHaveAttribute(
+    "href",
+    "/login",
+  );
+
+  await page.getByRole("button", { name: "send it again" }).click();
+  const email = page.getByLabel("Email");
+  await expect(email).toBeFocused();
+  await expect(email).toHaveValue("student.one@example.edu");
+  expect(requests).toBe(1);
 });
 
 test("password reset consumes only the sanitized fragment credential", async ({
   page,
 }) => {
+  await mockDiscovery(page, {
+    ...defaultDiscovery,
+    support_address: "help@northbridge.example",
+  });
   await page.route("**/api/v1/auth/password-reset/complete", async (route) => {
     expect(await route.request().postDataJSON()).toEqual({
       token: "private-reset-token",
@@ -765,14 +993,34 @@ test("password reset consumes only the sanitized fragment credential", async ({
   await page.goto("/account/reset-password#token=private-reset-token");
 
   await expect(page).toHaveURL(`${canonicalOrigin}/account/reset-password`);
-  await expect(page).toHaveTitle("Set a new password · Proctor");
+  await expect(page).toHaveTitle("Choose a new password · Proctor");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Choose a new password" }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading")).toHaveCount(1);
+  await expect(page.locator("#new-password")).toHaveAccessibleDescription(
+    "At least 14 characters. You can’t reuse a recent password.",
+  );
+  // A published support address turns the Institution name into a contact.
+  await expect(
+    page.getByRole("contentinfo").getByRole("link", { name: defaultDiscovery.institution.display_name }),
+  ).toHaveAttribute("href", "mailto:help@northbridge.example");
+  await expect(page.locator("#confirm-new-password")).not.toHaveAttribute(
+    "aria-describedby",
+    /.+/,
+  );
+  await expect(page.locator("main")).not.toContainText("single-use link");
   await page.locator("#new-password").fill("new-private-password");
   await page.locator("#confirm-new-password").fill("new-private-password");
-  await page.getByRole("button", { name: "Set new password" }).click();
+  await page.getByRole("button", { name: "Save password" }).click();
 
   await expect(
     page.getByRole("heading", { name: "Your password was changed" }),
   ).toBeFocused();
+  await expect(page.getByRole("link", { name: "Sign in", exact: true })).toHaveAttribute(
+    "href",
+    "/login",
+  );
   await expect(page.getByRole("status")).toContainText(
     "Your password was changed",
   );
@@ -799,15 +1047,27 @@ test("password reset announces an unusable link returned after submission", asyn
   await page.locator("#new-password").fill("new-private-password");
   await page.locator("#confirm-new-password").fill("new-private-password");
 
-  await page.getByRole("button", { name: "Set new password" }).click();
+  await page.getByRole("button", { name: "Save password" }).click();
 
   const heading = page.getByRole("heading", {
     level: 1,
-    name: "This reset link can’t be used",
+    name: "This reset link has expired",
   });
   await expect(heading).toBeFocused();
   await expect(page.getByRole("status")).toContainText(
-    "This reset link can’t be used",
+    "This reset link has expired",
+  );
+  await expect(page.getByText("Reset password", { exact: true })).toHaveCSS(
+    "color",
+    "rgb(180, 35, 60)",
+  );
+  await expect(page.getByRole("link", { name: "Send a new link" })).toHaveAttribute(
+    "href",
+    "/account/forgot-password",
+  );
+  await expect(page.getByRole("link", { name: "Back to sign in" })).toHaveAttribute(
+    "href",
+    "/login",
   );
   await expect(page.locator("body")).not.toContainText("private-reset-token");
   await expect(page.locator("body")).not.toContainText("new-private-password");
@@ -829,6 +1089,8 @@ test("Invitation acceptance exchanges the claim before account creation", async 
         purpose: "student_class",
         requirement: "account",
         expires_at: new Date(Date.now() + 300_000).toISOString(),
+        email: "ada.okafor@example.edu",
+        class_display_name: "Biology 101",
       }),
     });
   });
@@ -852,7 +1114,46 @@ test("Invitation acceptance exchanges the claim before account creation", async 
   await page.goto("/join#token=private-invitation-claim");
 
   await expect(page).toHaveURL(`${canonicalOrigin}/join`);
-  await expect(page.getByText("Join Northbridge Institute")).toBeVisible();
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "Join Northbridge Institute on Proctor",
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole("main")).toContainText(
+    "You’ve been invited as a student. Create your account to see your exams.",
+  );
+  const details = page.getByRole("definition");
+  await expect(page.getByRole("term")).toHaveText(["Invited as", "Class", "Expires"]);
+  await expect(details.first()).toHaveText("Student");
+  await expect(details.nth(1)).toHaveText("Biology 101");
+  const expiry = details.nth(2).locator("time");
+  const expiresAt = await expiry.getAttribute("datetime");
+  expect(Date.parse(expiresAt ?? "")).not.toBeNaN();
+  await expect(expiry).not.toHaveText(expiresAt ?? "");
+  await expect(expiry).toHaveText(
+    await page.evaluate(
+      (value) =>
+        new Intl.DateTimeFormat(undefined, {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+          timeZoneName: "short",
+        }).format(new Date(value)),
+      expiresAt ?? "",
+    ),
+  );
+  // The invited address is shown but cannot be edited or submitted.
+  const email = page.getByLabel("Email");
+  await expect(email).toHaveValue("ada.okafor@example.edu");
+  await expect(email).toHaveAttribute("readonly", "");
+  await expect(email).not.toHaveAttribute("name", /.*/);
+  await expect(email).toHaveAccessibleDescription(
+    "From your invitation. You can’t change it here.",
+  );
   const firstNameBox = await page
     .locator("#invitation-first-name")
     .boundingBox();
@@ -866,15 +1167,22 @@ test("Invitation acceptance exchanges the claim before account creation", async 
   await page.getByLabel("Last name (optional)").fill("Okafor");
   await page.getByLabel("Username").fill("ada.okafor");
   await page.locator("#invitation-password").fill("private-invitation-password");
-  await page.getByRole("button", { name: "Accept invitation" }).click();
+  await page.getByRole("button", { name: "Accept and create account" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Your Invitation is accepted" }),
+    page.getByRole("heading", { name: "Welcome to Proctor" }),
   ).toBeFocused();
-  await expect(page.getByRole("status")).toContainText(
-    "Your Invitation is accepted",
+  await expect(page.getByRole("status")).toContainText("Welcome to Proctor");
+  await expect(page.getByRole("main")).toContainText(
+    "Your account is ready and you’ve joined your class.",
   );
-  await expect(page.getByRole("button", { name: "Accept invitation" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+    "href",
+    "/login",
+  );
+  await expect(
+    page.getByRole("button", { name: "Accept and create account" }),
+  ).toHaveCount(0);
   await expect(page.locator("body")).not.toContainText("private-invitation-claim");
   await expect(page.locator("body")).not.toContainText("private-browser-handle");
   await expect(page.locator("body")).not.toContainText(
@@ -910,6 +1218,8 @@ test("Invitation retry preserves the live claim after a temporary exchange failu
         purpose: "student_class",
         requirement: "account",
         expires_at: new Date(Date.now() + 300_000).toISOString(),
+        email: "ada.okafor@example.edu",
+        class_display_name: "Biology 101",
       }),
     });
   });
@@ -931,7 +1241,7 @@ test("Invitation retry preserves the live claim after a temporary exchange failu
   await page.goto("/join#token=private-invitation-claim");
 
   const unavailableHeading = page.getByRole("heading", {
-    name: "The Invitation can’t be checked",
+    name: "We couldn’t check this invitation",
   });
   await expect(unavailableHeading).toBeVisible();
   await expect(unavailableHeading).not.toBeFocused();
@@ -941,17 +1251,17 @@ test("Invitation retry preserves the live claim after a temporary exchange failu
   await page.getByRole("button", { name: "Try again" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Join Northbridge Institute" }),
+    page.getByRole("heading", { name: "Join Northbridge Institute on Proctor" }),
   ).toBeFocused();
   await expect(page).toHaveURL(`${canonicalOrigin}/join`);
   expect(exchanges).toBe(2);
   expect(documents).toBe(1);
   await page.getByLabel("Username").fill("ada.okafor");
   await page.locator("#invitation-password").fill("private-invitation-password");
-  await page.getByRole("button", { name: "Accept invitation" }).click();
+  await page.getByRole("button", { name: "Accept and create account" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Your Invitation is accepted" }),
+    page.getByRole("heading", { name: "Welcome to Proctor" }),
   ).toBeFocused();
   await expect(page).toHaveURL(`${canonicalOrigin}/join`);
   await expect(page.locator("body")).not.toContainText("private-invitation-claim");
@@ -972,6 +1282,7 @@ test("Session Invitation preserves its handle while warning about new-tab sign i
         purpose: "student_class",
         requirement: "session",
         expires_at: new Date(Date.now() + 300_000).toISOString(),
+        email: "ada.okafor@example.edu",
       }),
     });
   });
@@ -995,14 +1306,24 @@ test("Session Invitation preserves its handle while warning about new-tab sign i
   );
   await page.goto("/join#token=private-invitation-claim");
 
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Join Northbridge Institute on Proctor" }),
+  ).toBeVisible();
+  await expect(page.getByRole("main")).toContainText(
+    "You’ve been invited as a student. Accept with the account you’re signed in with to see your exams.",
+  );
+  await expect(page.getByRole("term")).toHaveText(["Invited as", "Sent to", "Expires"]);
+  await expect(page.getByRole("definition").nth(1)).toHaveText("ada.okafor@example.edu");
+  await expect(page.getByRole("textbox")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Sign in" })).toHaveCount(0);
   await page.getByRole("button", { name: "Accept invitation" }).click();
 
-  const signInLink = page.getByRole("link", { name: "Open sign in" });
+  const signInLink = page.getByRole("link", { name: "Sign in", exact: true });
   await expect(signInLink).toBeVisible();
   await expect(signInLink).toHaveAttribute("target", "_blank");
   await expect(signInLink).toHaveAttribute("rel", "noopener noreferrer");
   await expect(signInLink).toHaveAccessibleDescription(
-    "This browser needs an active Session. Open sign in in another tab, then try acceptance again here.",
+    "You need to be signed in first. Sign in opens in a new tab; when you’re done, come back here and choose Accept invitation.",
   );
 });
 
@@ -1054,18 +1375,35 @@ test("Desktop authorization approves the exact sanitized request", async ({
     }),
   ).toBeVisible();
   expect(desktop.bindingCount()).toBe(1);
-  await expect(
-    page.getByText(
-      desktopAuthorizationDocumentationFixture.synthetic_context.institution,
+  await expect(page.getByRole("main")).toContainText(
+    `Proctor Desktop on this computer is asking to use your ${desktopAuthorizationDocumentationFixture.synthetic_context.institution} account.`,
+  );
+  const requestDetails = page.getByRole("main").locator("[data-proctor-fact-list]");
+  await expect(requestDetails.getByRole("term")).toHaveText(["Account", "Device", "Requested"]);
+  await expect(requestDetails.getByRole("definition")).toHaveText([
+    `${desktopAuthorizationDocumentationFixture.synthetic_context.display_name} · ${defaultDesktopAuthorization.account.email}`,
+    desktopAuthorizationDocumentationFixture.synthetic_context.device_name,
+    await page.evaluate(
+      (value) =>
+        new Intl.DateTimeFormat(undefined, {
+          weekday: "long", day: "numeric", month: "long", year: "numeric",
+          hour: "numeric", minute: "2-digit", timeZoneName: "short",
+        }).format(new Date(value)),
+      defaultDesktopAuthorization.requestedAt,
     ),
-  ).toBeVisible();
+  ]);
+  await expect(requestDetails.locator("time")).toHaveAttribute("datetime", defaultDesktopAuthorization.requestedAt);
   await expect(
-    page.getByText(
-      desktopAuthorizationDocumentationFixture.synthetic_context.username,
-    ),
+    page.getByText(defaultDesktopAuthorization.account.email, { exact: true }),
   ).toHaveAttribute(
     "translate",
     "no",
+  );
+  await expect(page.getByRole("note")).toHaveText(
+    "Didn’t start this? Close this page. Nothing happens unless you choose Allow.",
+  );
+  await expect(page.getByRole("contentinfo")).toContainText(
+    `Signed in as ${desktopAuthorizationDocumentationFixture.synthetic_context.display_name}`,
   );
   const documentationCapture =
     process.env.PROCTOR_DOCS_DESKTOP_AUTHORIZATION_SCREENSHOT;
@@ -1089,13 +1427,65 @@ test("Desktop authorization approves the exact sanitized request", async ({
       fullPage: false,
     });
   }
-  await page.getByRole("button", { name: "Continue to desktop" }).click();
+  await page.getByRole("button", { name: "Allow", exact: true }).click();
 
   await expect(page).toHaveURL(browserRedirect);
   await expect(
     page.getByRole("heading", { name: "Desktop authorization received" }),
   ).toBeVisible();
   await expect(page.locator("body")).not.toContainText("private-browser-proof");
+});
+
+test("Desktop approval confirms success before handing off", async ({
+  page,
+}) => {
+  const redirect = `http://127.0.0.1:55000/${"A".repeat(43)}?code=${"B".repeat(43)}&state=desktop-state`;
+  let handoffs = 0;
+  // A 204 response leaves the current document in place, so the approved
+  // state stays observable as it would if Proctor Desktop did not open.
+  await page.route(redirect, async (route) => {
+    handoffs += 1;
+    await route.fulfill({ status: 204 });
+  });
+  await mockDiscovery(page);
+  await mockDesktopAuthorization(page);
+  await page.route(
+    "**/api/v1/auth/desktop/authorizations/approve",
+    async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          redirect_url: redirect,
+          expires_at: new Date(Date.now() + 60_000).toISOString(),
+        }),
+      });
+    },
+  );
+  await page.goto(
+    "/authorize/desktop?request=desktop-handle&state=desktop-state#proof=private-browser-proof",
+  );
+
+  await page.getByRole("button", { name: "Allow", exact: true }).click();
+
+  const heading = page.getByRole("heading", {
+    level: 1,
+    name: "You’re signed in to Proctor Desktop",
+  });
+  await expect(heading).toBeFocused();
+  await expect(page.getByRole("status")).toContainText(
+    "You’re signed in to Proctor Desktop",
+  );
+  await expect(page.getByRole("main")).toContainText(
+    "You can close this tab and go back to the app.",
+  );
+  await expect(page.getByRole("main")).toContainText(
+    "Returning to Proctor Desktop…",
+  );
+  await expect(page.getByRole("contentinfo")).toContainText(
+    `Signed in as ${defaultDesktopAuthorization.account.display_name}`,
+  );
+  await expect(page.getByRole("button", { name: "Allow", exact: true })).toHaveCount(0);
+  expect(handoffs).toBe(1);
 });
 
 test("Desktop cancellation announces and focuses the replacement task", async ({
@@ -1114,18 +1504,18 @@ test("Desktop cancellation announces and focuses the replacement task", async ({
     "/authorize/desktop?request=desktop-handle&state=desktop-state#proof=private-browser-proof",
   );
 
-  await page.getByRole("button", { name: "Cancel request" }).click();
+  await page.getByRole("button", { name: "Cancel sign-in" }).click();
 
   const heading = page.getByRole("heading", {
     level: 1,
-    name: "The request was canceled",
+    name: "Sign-in canceled",
   });
   await expect(heading).toBeFocused();
   await expect(page.getByRole("status")).toContainText(
-    "The request was canceled",
+    "Sign-in canceled",
   );
   await expect(
-    page.getByRole("button", { name: "Continue to desktop" }),
+    page.getByRole("button", { name: "Allow", exact: true }),
   ).toHaveCount(0);
 });
 
@@ -1152,8 +1542,10 @@ test("Desktop local authentication remains in the same tab and creates no browse
             id: "user-1",
             username: "student.one",
             display_name: "Student One",
+            email: "student.one@example.edu",
           },
           device_name: "Exam laptop",
+          requested_at: new Date(Date.now() - 60_000).toISOString(),
           expires_at: new Date(Date.now() + 300_000).toISOString(),
           local_login_enabled: false,
           external_providers: [],
@@ -1171,14 +1563,14 @@ test("Desktop local authentication remains in the same tab and creates no browse
   );
 
   await expect(
-    page.getByRole("heading", { name: "Sign in to continue in Proctor Desktop" }),
+    page.getByRole("heading", { name: "Sign in to Proctor Desktop", exact: true }),
   ).toBeVisible();
   await page.getByLabel("Email or username").fill("student.one");
   await page.locator("#desktop-password").fill("private-password");
   await page.getByRole("button", { name: "Sign in" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Continue in Proctor Desktop" }),
+    page.getByRole("heading", { name: "Sign in to Proctor Desktop?", exact: true }),
   ).toBeVisible();
   expect(page.url()).toBe(`${canonicalOrigin}/authorize/desktop?state=desktop-state`);
 });
@@ -1213,7 +1605,7 @@ test("Desktop provider authentication leaves and returns in the same tab", async
     `${canonicalOrigin}/authorize/desktop?state=desktop-state`,
   );
   await expect(
-    page.getByRole("heading", { name: "Continue in Proctor Desktop" }),
+    page.getByRole("heading", { name: "Sign in to Proctor Desktop?", exact: true }),
   ).toBeVisible();
 });
 
@@ -1231,10 +1623,10 @@ test("Desktop confirmation can return to account selection", async ({ page }) =>
     "/authorize/desktop?request=desktop-handle&state=desktop-state#proof=private-browser-proof",
   );
 
-  await page.getByRole("button", { name: "Use another account" }).click();
+  await page.getByRole("button", { name: "Use a different account" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Sign in to continue in Proctor Desktop" }),
+    page.getByRole("heading", { name: "Sign in to Proctor Desktop", exact: true }),
   ).toBeVisible();
   await expect(page.getByLabel("Email or username")).toBeVisible();
 });
@@ -1254,12 +1646,12 @@ test("Desktop reset recovery removes the old account and does not reuse the Web 
     await route.fulfill({ status: 204 });
   });
   await page.goto("/authorize/desktop?request=desktop-handle&state=desktop-state#proof=private-browser-proof");
-  await page.getByRole("button", { name: "Use another account" }).click();
-  await expect(page.getByRole("heading", { name: "The request can’t be checked" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Continue to desktop" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Use a different account" }).click();
+  await expect(page.getByRole("heading", { name: "We couldn’t check this request" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Allow", exact: true })).toHaveCount(0);
   await expect(page.getByText(defaultDesktopAuthorization.account.username, { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Try again" }).click();
-  await expect(page.getByRole("heading", { name: "Sign in to continue in Proctor Desktop" })).toBeFocused();
+  await expect(page.getByRole("heading", { name: "Sign in to Proctor Desktop", exact: true })).toBeFocused();
   expect(desktop.sessionProofCount()).toBe(1);
   expect(desktop.bindingCount()).toBe(1);
 });
@@ -1276,17 +1668,17 @@ test("Desktop local authentication disables competing actions until completion",
     desktop.authenticate();
     await route.fulfill({ contentType: "application/json", body: JSON.stringify({
       state: "authenticated", account: defaultDesktopAuthorization.account, device_name: "Exam laptop",
-      expires_at: new Date(Date.now() + 300_000).toISOString(), local_login_enabled: false, external_providers: [],
+      requested_at: new Date(Date.now() - 60_000).toISOString(), expires_at: new Date(Date.now() + 300_000).toISOString(), local_login_enabled: false, external_providers: [],
     }) });
   });
   await page.goto("/authorize/desktop?request=desktop-handle&state=desktop-state#proof=private-browser-proof");
   await page.getByLabel("Email or username").fill("student");
   await page.locator("#desktop-password").fill("private-password");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Cancel request", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Cancel sign-in", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: /Continue with/ })).toBeDisabled();
   release();
-  await expect(page.getByRole("heading", { name: "Continue in Proctor Desktop" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sign in to Proctor Desktop?", exact: true })).toBeVisible();
   expect(submissions).toBe(1);
 });
 
@@ -1319,7 +1711,7 @@ test("Desktop authentication reports an active Exam Session lock safely", async 
 
   await expect(
     page.getByRole("heading", {
-      name: "This account is already active in an Exam",
+      name: "You’re already in an exam",
     }),
   ).toBeFocused();
   await expect(page.locator("body")).not.toContainText("private-password");
@@ -1349,15 +1741,15 @@ test("Desktop rejection announces and focuses the unusable request", async ({
     "/authorize/desktop?request=desktop-handle&state=desktop-state#proof=private-browser-proof",
   );
 
-  await page.getByRole("button", { name: "Cancel request" }).click();
+  await page.getByRole("button", { name: "Cancel sign-in" }).click();
 
   const heading = page.getByRole("heading", {
     level: 1,
-    name: "This Desktop request can’t be used",
+    name: "This sign-in link doesn’t work",
   });
   await expect(heading).toBeFocused();
   await expect(page.getByRole("status")).toContainText(
-    "This Desktop request can’t be used",
+    "This sign-in link doesn’t work",
   );
   await expect(
     page.getByRole("link", { name: "Return to sign in" }),
@@ -1387,13 +1779,23 @@ test("provider connection requires an explicit provider selection action", async
   );
   await page.goto("/account/connect-provider");
 
-  await expect(page).toHaveTitle("Connect a provider · Proctor");
-  await expect(page.getByText("University SSO", { exact: true })).toBeVisible();
-  await expect(page.getByText("OpenID Connect")).toHaveAttribute(
-    "translate",
-    "no",
+  await expect(page).toHaveTitle("Sign-in methods · Proctor");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Connect University SSO" }),
+  ).toBeVisible();
+  // One provider leaves nothing to choose: no radio group, one named action.
+  await expect(page.getByRole("radio")).toHaveCount(0);
+  await expect(page.getByRole("main").getByRole("button")).toHaveText([
+    "Continue to University SSO",
+  ]);
+  await expect(page.getByRole("link", { name: "Cancel" })).toHaveAttribute(
+    "href",
+    "/account/security",
   );
-  await page.getByRole("button", { name: "Connect University SSO" }).click();
+  await expect(page.getByRole("contentinfo")).toContainText(
+    `Signed in as ${defaultDesktopAuthorization.account.display_name}`,
+  );
+  await page.getByRole("button", { name: "Continue to University SSO" }).click();
 
   await expect(page).toHaveURL(`${canonicalOrigin}/authorization/complete`);
   await expect(
@@ -1404,12 +1806,14 @@ test("provider connection requires an explicit provider selection action", async
 for (const pageCase of [
   {
     route: "/account/reset-password",
-    heading: "This reset link can’t be used",
+    heading: "This reset link has expired",
+    signIn: "Back to sign in",
   },
-  { route: "/join", heading: "This Invitation can’t be used" },
+  { route: "/join", heading: "This invitation link doesn’t work", signIn: "Sign in" },
   {
     route: "/authorize/desktop",
-    heading: "This desktop request can’t be used",
+    heading: "This sign-in link doesn’t work",
+    signIn: "Return to sign in",
   },
 ] as const) {
   test(`${pageCase.route} rejects a missing one-time credential`, async ({
@@ -1420,9 +1824,67 @@ for (const pageCase of [
     await expect(
       page.getByRole("heading", { level: 1, name: pageCase.heading }),
     ).toBeVisible();
-    await expect(page.getByRole("link", { name: "Return to sign in" })).toBeVisible();
+    await expect(page.getByRole("link", { name: pageCase.signIn })).toBeVisible();
   });
 }
+
+test("several providers keep an explicit chooser with one action and adjacent errors", async ({
+  page,
+}) => {
+  await mockCurrentUser(page);
+  await page.route("**/api/v1/auth/providers", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: [
+          ...defaultDiscovery.providers,
+          { id: "campus-cas", display_name: "Campus CAS", type: "cas" },
+        ],
+      }),
+    });
+  });
+  const attempts: string[] = [];
+  await page.route(
+    "**/api/v1/authentication-methods/providers/*/connect",
+    async (route) => {
+      attempts.push(new URL(route.request().url()).pathname);
+      await route.fulfill({
+        status: 403,
+        contentType: "application/problem+json",
+        body: JSON.stringify({
+          type: "about:blank",
+          title: "Private server detail",
+          status: 403,
+          code: "authentication.strong_required",
+        }),
+      });
+    },
+  );
+  await page.goto("/account/connect-provider");
+
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Add a sign-in method" }),
+  ).toBeVisible();
+  await expect(page.getByRole("radio")).toHaveCount(2);
+  await expect(page.getByText("OpenID Connect")).toHaveAttribute(
+    "translate",
+    "no",
+  );
+  await page.getByRole("radio", { name: /Campus CAS/ }).check();
+  await page.getByRole("button", { name: "Continue to Campus CAS" }).click();
+  await expect(
+    page.getByText("This needs a recent sign-in. Confirm it’s you, then try again."),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Confirm it’s you" }),
+  ).toHaveAttribute("href", "/account/reauthenticate?task=connect-provider");
+  // The reauthentication follow-up is a link beside the error, not a second primary action.
+  await expect(page.getByRole("main").getByRole("button")).toHaveCount(1);
+  await expect(page.getByText("Private server detail")).toHaveCount(0);
+  expect(attempts).toEqual([
+    "/api/v1/authentication-methods/providers/campus-cas/connect",
+  ]);
+});
 
 test("provider connection presents a signed-out state without shifting into a chooser", async ({
   page,
@@ -1444,7 +1906,7 @@ test("provider connection presents a signed-out state without shifting into a ch
   await expect(
     page.getByRole("heading", {
       level: 1,
-      name: "Sign in to connect a provider",
+      name: "Sign in to add a sign-in method",
     }),
   ).toBeVisible();
   await expect(page.getByRole("link", { name: "Sign in" })).toHaveAttribute(
@@ -1483,7 +1945,7 @@ test("provider retry announces and focuses the resulting task", async ({
 
   const unavailableHeading = page.getByRole("heading", {
     level: 1,
-    name: "Provider connection is unavailable",
+    name: "We couldn’t load sign-in methods",
   });
   await expect(unavailableHeading).toBeVisible();
   await expect(unavailableHeading).not.toBeFocused();
@@ -1492,33 +1954,39 @@ test("provider retry announces and focuses the resulting task", async ({
   await expect(
     page.getByRole("heading", {
       level: 1,
-      name: "Add another sign-in method",
+      name: "Connect University SSO",
     }),
   ).toBeFocused();
   await expect(page.getByRole("status").first()).toContainText(
-    "Connect a provider",
+    "Connect University SSO",
   );
   expect(providerAttempt).toBe(2);
 });
 
 for (const pageCase of [
-  { route: "/account/forgot-password", heading: "Reset your password" },
+  {
+    route: "/account/forgot-password",
+    heading: "Reset your password",
+    notice: false,
+  },
   {
     route: "/account/reset-password#token=private-reset-token",
     heading: "Choose a new password",
+    notice: false,
   },
   {
     route: "/join#token=private-invitation-claim",
-    heading: "Join Northbridge Institute",
+    heading: "Join Northbridge Institute on Proctor",
+    evidence: "[data-proctor-fact-list]",
   },
   {
     route:
       "/authorize/desktop?request=desktop-handle&state=desktop-state#proof=private-browser-proof",
-    heading: "Continue in Proctor Desktop",
+    heading: "Sign in to Proctor Desktop?",
   },
   {
     route: "/account/connect-provider",
-    heading: "Add another sign-in method",
+    heading: "Connect University SSO",
   },
 ] as const) {
   test(`${pageCase.route} follows dark mode and stays one-dimensional when narrow`, async ({
@@ -1538,6 +2006,8 @@ for (const pageCase of [
             purpose: "student_class",
             requirement: "account",
             expires_at: new Date(Date.now() + 300_000).toISOString(),
+            email: "ada.okafor@example.edu",
+            class_display_name: "Biology 101",
           }),
         });
       });
@@ -1555,7 +2025,17 @@ for (const pageCase of [
     ).toBeVisible();
     await expect(page.locator("aside")).toHaveCount(0);
     await expect(page.locator("main ol")).toHaveCount(0);
-    await expect(page.locator("[data-proctor-notice]").first()).toBeVisible();
+    if ("notice" in pageCase && !pageCase.notice) {
+      // Password recovery states its evidence in the lede and field hint.
+      await expect(page.locator("[data-proctor-notice]")).toHaveCount(0);
+      await expect(page.locator("main input").first()).toBeVisible();
+    } else {
+      await expect(
+        page
+          .locator("evidence" in pageCase ? pageCase.evidence : "[data-proctor-notice]")
+          .first(),
+      ).toBeVisible();
+    }
     await expect(page.locator("[data-proctor-evidence-note]")).toHaveCount(0);
 
     const theme = await page.evaluate(() => ({
@@ -1597,9 +2077,12 @@ for (const colorScheme of ["light", "dark"] as const) {
       onPrimary: getComputedStyle(document.documentElement)
         .getPropertyValue("--proctor-color-action-on-primary")
         .trim(),
+      noticeMarker: getComputedStyle(
+        document.querySelector<HTMLElement>("[data-proctor-notice] > [aria-hidden='true']")!,
+      ).backgroundColor,
       noticeRule: getComputedStyle(
         document.querySelector<HTMLElement>("[data-proctor-notice]")!,
-      ).borderInlineStartColor,
+      ).borderInlineStartWidth,
       noticeBackground: getComputedStyle(
         document.querySelector<HTMLElement>("[data-proctor-notice]")!,
       ).backgroundColor,
@@ -1615,7 +2098,8 @@ for (const colorScheme of ["light", "dark"] as const) {
     expect(colors.primaryText).toBe(
       colorToRGB(colors.onPrimary),
     );
-    expect(colors.noticeRule).toBe(colorToRGB(colors.warningToken));
+    expect(colors.noticeMarker).toBe(colorToRGB(colors.warningToken));
+    expect(colors.noticeRule).toBe("0px");
     expect(colors.noticeBackground).toBe("rgba(0, 0, 0, 0)");
     expect(colors.noticeRadius).toBe("0px");
   });
@@ -1641,32 +2125,29 @@ test("shared notices and password disclosure controls keep their contracts", asy
   await mockSetupStatus(page);
   await page.goto("/setup");
 
-  await expect(page.locator("[data-proctor-notice]")).toHaveCount(2);
-  await expect(
-    page.locator('[data-proctor-notice-tone="information"]'),
-  ).toBeVisible();
-  await expect(
-    page.locator('[data-proctor-notice-tone="warning"]'),
-  ).toBeVisible();
+  // Setup carries no standing caution; amber is reserved for real state.
+  await expect(page.locator("[data-proctor-notice]")).toHaveCount(0);
+  await expect(page.locator("#bootstrap-secret")).toHaveAccessibleDescription(
+    "The secret whoever runs the server set in PROCTOR_AUTHENTICATION_BOOTSTRAP_SECRET.",
+  );
 
   const secretToggle = page.locator('button[aria-controls="bootstrap-secret"]');
-  await expect(secretToggle).toHaveAccessibleName("Show bootstrap secret");
-  await expect(secretToggle).toHaveAttribute("title", "Show bootstrap secret");
+  await expect(secretToggle).toHaveAccessibleName("Show setup key");
+  await expect(secretToggle).toHaveAttribute("title", "Show setup key");
   await expect(secretToggle).toHaveText("");
   await expect(
     secretToggle.locator('[data-proctor-icon="showPassword"]'),
   ).toBeVisible();
   await secretToggle.click();
-  await expect(secretToggle).toHaveAccessibleName("Hide bootstrap secret");
+  await expect(secretToggle).toHaveAccessibleName("Hide setup key");
   await expect(
     secretToggle.locator('[data-proctor-icon="hidePassword"]'),
   ).toBeVisible();
 
   await mockDiscovery(page);
   await page.goto("/register");
-  await expect(
-    page.locator('[data-proctor-notice-tone="information"]'),
-  ).toBeVisible();
+  // The lede already says email confirmation follows; no separate notice.
+  await expect(page.locator("[data-proctor-notice]")).toHaveCount(0);
   const passwordToggle = page.locator(
     'button[aria-controls="registration-password"]',
   );
@@ -1771,8 +2252,8 @@ test("required controls are marked and compound controls stay optically aligned"
 });
 
 for (const pageCase of [
-  { route: "/setup", heading: "Establish this installation" },
-  { route: "/register", heading: "Create your account" },
+  { route: "/setup", heading: "Set up your institution" },
+  { route: "/register", heading: "Create your Proctor account" },
 ] as const) {
   test(`${pageCase.route} follows dark mode and stays one-dimensional when narrow`, async ({
     page,

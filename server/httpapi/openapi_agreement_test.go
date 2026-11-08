@@ -96,7 +96,7 @@ func TestIdentityAndSystemOpenAPIOperationDTOsAgreeWithRuntime(t *testing.T) {
 	_, exists := websocket.Responses["101"]
 	assert.True(t, exists, "GET /api/v1/websocket has no 101 response")
 	for name, item := range map[string]string{
-		"SessionListResponse":                        "#/components/schemas/SessionResponse",
+		"SessionListResponse":                        "#/components/schemas/CurrentUserSessionResponse",
 		"PersonalAccessTokenListResponse":            "#/components/schemas/PersonalAccessTokenResponse",
 		"ExternalAuthenticationProviderListResponse": "#/components/schemas/ExternalAuthenticationProviderResponse",
 	} {
@@ -134,6 +134,8 @@ func identityAndSystemOpenAPIAgreementSuite() openAPIAgreementSuite {
 		operation("POST /api/v1/auth/email-verification/request", AuthSessionRequired, "", "", "202", "#/components/responses/SensitiveAccepted", ""),
 		operation("POST /api/v1/auth/email-verification/complete", AuthPublic, "#/components/requestBodies/CompleteEmailVerification", "EmailVerificationCompletionRequest", "204", "#/components/responses/SensitiveNoContent", ""),
 		operation("POST /api/v1/auth/email-change/undo", AuthPublic, "#/components/requestBodies/UndoEmailChange", "EmailChangeUndoRequest", "204", "#/components/responses/SensitiveNoContent", ""),
+		operation("POST /api/v1/auth/email-verification/inspect", AuthPublic, "#/components/requestBodies/InspectEmailVerification", "AccountTokenInspectionRequest", "200", "#/components/responses/EmailVerificationInspected", "EmailVerificationInspectionResponse"),
+		operation("POST /api/v1/auth/email-change/undo/inspect", AuthPublic, "#/components/requestBodies/InspectEmailChangeUndo", "AccountTokenInspectionRequest", "200", "#/components/responses/EmailChangeUndoInspected", "EmailChangeUndoInspectionResponse"),
 		operation("POST /api/v1/auth/password-reset/request", AuthPublic, "#/components/requestBodies/RequestPasswordReset", "PasswordResetRequest", "202", "#/components/responses/SensitiveAccepted", ""),
 		operation("POST /api/v1/auth/password-reset/complete", AuthPublic, "#/components/requestBodies/CompletePasswordReset", "PasswordResetCompletionRequest", "204", "#/components/responses/SensitiveNoContent", ""),
 		operation("GET /api/v1/auth/providers", AuthPublic, "", "", "200", "#/components/responses/ExternalAuthenticationProviderListOK", "ExternalAuthenticationProviderListResponse"),
@@ -145,6 +147,7 @@ func identityAndSystemOpenAPIAgreementSuite() openAPIAgreementSuite {
 		operation("DELETE /api/v1/users/me/desktop-registrations/{desktop_registration_id}", AuthStrongRecentSessionRequired, "", "", "204", "#/components/responses/SensitiveNoContent", ""),
 		operation("POST /api/v1/users/me/sessions/revoke", AuthSessionRequired, "#/components/requestBodies/RevokeSession", "RevokeSessionRequest", "204", "#/components/responses/SensitiveNoContent", ""),
 		operation("POST /api/v1/users/me/sessions/revoke-all", AuthSessionRequired, "", "", "204", "#/components/responses/SensitiveNoContent", ""),
+		operation("POST /api/v1/users/me/sessions/revoke-others", AuthSessionRequired, "", "", "200", "#/components/responses/OtherSessionsRevoked", "RevokeOtherSessionsResponse"),
 		operation("GET /api/v1/users/me/mfa", AuthMFARecoverySessionRequired, "", "", "200", "#/components/responses/MFAStatusOK", "MFAStatusResponse"),
 		operation("POST /api/v1/users/me/mfa/setup", AuthRecentMFARecoverySessionRequired, "", "", "201", "#/components/responses/MFASetupCreated", "MFASetupResponse"),
 		operation("POST /api/v1/users/me/mfa/activate", AuthRecentMFARecoverySessionRequired, "#/components/requestBodies/MFACode", "MFACodeRequest", "200", "#/components/responses/MFAActivationOK", "MFAActivationResponse"),
@@ -152,6 +155,7 @@ func identityAndSystemOpenAPIAgreementSuite() openAPIAgreementSuite {
 		operation("POST /api/v1/users/me/mfa/recovery-codes/regenerate", AuthStrongRecentSessionRequired, "", "", "200", "#/components/responses/MFARecoveryCodesOK", "MFARecoveryCodesResponse"),
 		operation("POST /api/v1/users/me/mfa/disable", AuthStrongRecentSessionRequired, "", "", "204", "#/components/responses/SensitiveNoContent", ""),
 		operation("GET /api/v1/users/me/tokens", AuthSessionRequired, "", "", "200", "#/components/responses/PersonalAccessTokenListOK", "PersonalAccessTokenListResponse"),
+		operation("GET /api/v1/users/me/tokens/grantable-scopes", AuthSessionRequired, "", "", "200", "#/components/responses/PersonalAccessTokenGrantableScopesOK", "PersonalAccessTokenGrantableScopesResponse"),
 		operation("POST /api/v1/users/me/tokens", AuthRecentSessionRequired, "#/components/requestBodies/CreatePersonalAccessToken", "CreatePersonalAccessTokenRequest", "201", "#/components/responses/PersonalAccessTokenCreated", "PersonalAccessTokenCreationResponse"),
 		operation("POST /api/v1/users/me/tokens/{personal_access_token_id}/disable", AuthSessionRequired, "", "", "200", "#/components/responses/PersonalAccessTokenOK", "PersonalAccessTokenResponse"),
 		operation("POST /api/v1/users/me/tokens/{personal_access_token_id}/enable", AuthRecentSessionRequired, "", "", "200", "#/components/responses/PersonalAccessTokenOK", "PersonalAccessTokenResponse"),
@@ -169,7 +173,7 @@ func identityAndSystemOpenAPIAgreementSuite() openAPIAgreementSuite {
 			{Name: "BrowserInvitationStartRequest", DTO: reflect.TypeOf(browserInvitationStartRequest{}), Required: []string{"claim"}},
 			{Name: "BrowserInvitationAcceptanceRequest", DTO: reflect.TypeOf(browserInvitationAcceptanceRequest{}), Required: []string{"handle", "password", "username"}},
 			{Name: "BrowserInvitationSessionAcceptanceRequest", DTO: reflect.TypeOf(browserInvitationSessionAcceptanceRequest{}), Required: []string{"handle"}},
-			{Name: "BrowserInvitationStartResponse", DTO: reflect.TypeOf(browserInvitationStartResponse{}), Required: []string{"handle", "purpose", "requirement", "expires_at"}},
+			{Name: "BrowserInvitationStartResponse", DTO: reflect.TypeOf(browserInvitationStartResponse{}), Required: []string{"handle", "purpose", "requirement", "expires_at", "email"}},
 			{Name: "InvitationAcceptanceResponse", DTO: reflect.TypeOf(invitationAcceptanceResponse{}), Required: []string{"user_id", "invitation_id", "replayed"}},
 			{Name: "DesktopAuthorizationStartRequest", DTO: reflect.TypeOf(desktopAuthorizationStartRequest{}), Required: []string{"callback_url", "state", "code_challenge", "public_jwk", "desktop_release", "desktop_build_id", "platform", "architecture", "realtime_protocol"}},
 			{Name: "DesktopAuthorizationProofRequest", DTO: reflect.TypeOf(desktopAuthorizationProofRequest{}), Required: []string{"handle", "browser_proof", "state"}},
@@ -178,24 +182,32 @@ func identityAndSystemOpenAPIAgreementSuite() openAPIAgreementSuite {
 			{Name: "DesktopAuthorizationExchangeRequest", DTO: reflect.TypeOf(desktopAuthorizationExchangeRequest{}), Required: []string{"code", "state", "code_verifier", "public_jwk", "desktop_release", "desktop_build_id", "platform", "architecture", "realtime_protocol"}},
 			{Name: "DesktopAuthorizationStartResponse", DTO: reflect.TypeOf(desktopAuthorizationStartResponse{}), Required: []string{"authorization_url", "expires_at"}},
 			{Name: "DesktopAuthorizationApprovalResponse", DTO: reflect.TypeOf(desktopAuthorizationApprovalResponse{}), Required: []string{"redirect_url", "expires_at"}},
-			{Name: "DesktopAuthorizationAccountResponse", DTO: reflect.TypeOf(desktopAuthorizationAccountResponse{}), Required: []string{"id", "username", "display_name"}},
-			{Name: "DesktopAuthorizationContextResponse", DTO: reflect.TypeOf(desktopAuthorizationContextResponse{}), Required: []string{"state", "local_login_enabled", "external_providers", "device_name", "expires_at"}},
+			{Name: "DesktopAuthorizationAccountResponse", DTO: reflect.TypeOf(desktopAuthorizationAccountResponse{}), Required: []string{"id", "username", "display_name", "email"}},
+			{Name: "DesktopAuthorizationContextResponse", DTO: reflect.TypeOf(desktopAuthorizationContextResponse{}), Required: []string{"state", "local_login_enabled", "external_providers", "device_name", "requested_at", "expires_at"}},
 			{Name: "PasswordResetRequest", DTO: reflect.TypeOf(passwordResetRequest{}), Required: []string{"email"}},
 			{Name: "PasswordResetCompletionRequest", DTO: reflect.TypeOf(passwordResetCompletion{}), Required: []string{"token", "password"}},
 			{Name: "EmailVerificationCompletionRequest", DTO: reflect.TypeOf(emailVerificationCompletion{}), Required: []string{"token"}},
 			{Name: "EmailChangeUndoRequest", DTO: reflect.TypeOf(emailChangeUndoCompletion{}), Required: []string{"token"}},
+			{Name: "AccountTokenInspectionRequest", DTO: reflect.TypeOf(accountTokenInspectionRequest{}), Required: []string{"token"}},
+			{Name: "EmailVerificationInspectionResponse", DTO: reflect.TypeOf(emailVerificationInspectionResponse{}), Required: []string{"email"}},
+			{Name: "EmailChangeUndoInspectionResponse", DTO: reflect.TypeOf(emailChangeUndoInspectionResponse{}), Required: []string{"restored_email", "masked_current_email", "changed_at"}},
 			{Name: "AuthenticationResponse", DTO: reflect.TypeOf(authenticationResponse{}), Required: []string{"session"}},
 			{Name: "SessionResponse", DTO: reflect.TypeOf(sessionResponse{}), Required: []string{"id", "created_at", "updated_at", "user_id", "client_type", "authentication_method", "authentication_strength", "mfa_recovery_required", "authenticated_at", "last_activity_at", "idle_expires_at", "expires_at"}},
 			{Name: "AuthenticationTokensResponse", DTO: reflect.TypeOf(authenticationTokensResponse{}), Required: []string{"token_type", "access_token", "refresh_token", "access_expires_at", "refresh_expires_at"}},
+			{Name: "CurrentUserSessionResponse", DTO: reflect.TypeOf(currentUserSessionResponse{}), Required: []string{"id", "created_at", "updated_at", "user_id", "client_type", "authentication_method", "authentication_strength", "mfa_recovery_required", "authenticated_at", "last_activity_at", "idle_expires_at", "expires_at", "current"}},
 			{Name: "RevokeSessionRequest", DTO: reflect.TypeOf(revokeSessionRequest{}), Required: []string{"session_id"}},
+			{Name: "RevokeOtherSessionsResponse", DTO: reflect.TypeOf(revokeOtherSessionsResponse{}), Required: []string{"revoked_session_count"}},
 			{Name: "MFACodeRequest", DTO: reflect.TypeOf(mfaCodeRequest{}), Required: []string{"code"}},
 			{Name: "MFARecoveryCodesResponse", DTO: reflect.TypeOf(mfaRecoveryCodesResponse{}), Required: []string{"recovery_codes"}},
 			{Name: "MFASetupResponse", DTO: reflect.TypeOf(mfaSetupResponse{}), Required: []string{"secret", "provisioning_uri", "expires_at"}},
 			{Name: "MFAActivationResponse", DTO: reflect.TypeOf(mfaActivationResponse{}), Required: []string{"recovery_codes"}},
-			{Name: "MFAStatusResponse", DTO: reflect.TypeOf(mfaStatusResponse{}), Required: []string{"service_enabled", "mfa_recovery_required", "authentication_method", "authentication_strength", "recently_authenticated", "enabled", "pending", "recovery_codes_remaining"}},
+			{Name: "MFAStatusResponse", DTO: reflect.TypeOf(mfaStatusResponse{}), Required: []string{"service_enabled", "mfa_recovery_required", "authentication_method", "authentication_strength", "recently_authenticated", "enabled", "pending", "recovery_codes_remaining", "recovery_codes_total", "recent_authentication_minutes"}},
 			{Name: "CreatePersonalAccessTokenRequest", DTO: reflect.TypeOf(createPersonalAccessTokenRequest{}), Required: []string{"description", "scopes", "expires_at"}},
 			{Name: "PersonalAccessTokenResponse", DTO: reflect.TypeOf(personalAccessTokenResponse{}), Required: []string{"id", "created_at", "updated_at", "user_id", "description", "scopes", "expires_at"}},
 			{Name: "PersonalAccessTokenCreationResponse", DTO: reflect.TypeOf(personalAccessTokenCreationResponse{}), Required: []string{"token", "credential"}},
+			{Name: "PersonalAccessTokenGrantableScopesResponse", DTO: reflect.TypeOf(personalAccessTokenGrantableScopesResponse{}), Required: []string{"scopes", "academic_units", "academic_units_has_more"}},
+			{Name: "PersonalAccessTokenGrantableScope", DTO: reflect.TypeOf(personalAccessTokenGrantableScopeResponse{}), Required: []string{"name", "title", "description", "resource_types", "institution_wide", "academic_unit_ids"}},
+			{Name: "PersonalAccessTokenGrantableAcademicUnit", DTO: reflect.TypeOf(personalAccessTokenAcademicUnitResponse{}), Required: []string{"id", "display_name"}},
 			{Name: "ExternalAuthenticationProviderResponse", DTO: reflect.TypeOf(externalAuthenticationProviderResponse{}), Required: []string{"id", "display_name", "type"}},
 			{Name: "ExternalAuthenticationStartRequest", DTO: reflect.TypeOf(externalAuthenticationStartRequest{}), Required: []string{"invitation_claim"}},
 		},
@@ -209,7 +221,8 @@ func identityAndSystemOperation(_ string, path string) bool {
 		strings.HasPrefix(path, "/api/v1/users/me/desktop-registrations") ||
 		strings.HasPrefix(path, "/api/v1/users/me/sessions") ||
 		strings.HasPrefix(path, "/api/v1/users/me/mfa") ||
-		strings.HasPrefix(path, "/api/v1/users/me/tokens")
+		strings.HasPrefix(path, "/api/v1/users/me/tokens") ||
+		strings.HasPrefix(path, "/api/v1/users/me/personal-access-tokens/")
 }
 
 func identityAndSystemErrorContracts() map[string][]string {
@@ -236,6 +249,8 @@ func identityAndSystemErrorContracts() map[string][]string {
 		"POST /api/v1/auth/email-verification/request":                                       sessionMutationErrorCodes("authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.account_recovery.unavailable"),
 		"POST /api/v1/auth/email-verification/complete":                                      {"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.account_token.invalid", "authentication.account_recovery.unavailable"},
 		"POST /api/v1/auth/email-change/undo":                                                {"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.account_token.invalid", "authentication.account_recovery.unavailable", "authentication.email_change_undo.conflict"},
+		"POST /api/v1/auth/email-verification/inspect":                                       {"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.account_token.invalid", "authentication.account_recovery.unavailable"},
+		"POST /api/v1/auth/email-change/undo/inspect":                                        {"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.account_token.invalid", "authentication.account_recovery.unavailable"},
 		"POST /api/v1/auth/password-reset/request":                                           {"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.account_recovery.unavailable"},
 		"POST /api/v1/auth/password-reset/complete":                                          {"request.invalid", "authentication.password.invalid", "authentication.password.pattern_invalid", "authentication.password.common_invalid", "authentication.password.identity_invalid", "authentication.password.reused", "service.busy", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.account_token.invalid", "authentication.account_recovery.unavailable"},
 		"GET /api/v1/auth/providers":                                                         {"authentication.internal", "request.invalid"},
@@ -247,6 +262,7 @@ func identityAndSystemErrorContracts() map[string][]string {
 		"DELETE /api/v1/users/me/desktop-registrations/{desktop_registration_id}":            {"desktop_registration.unavailable", "request.invalid", "resource.not_found", "audit.unavailable", "authentication.session_required"},
 		"POST /api/v1/users/me/sessions/revoke":                                              {"request.invalid", "session.id.invalid", "session.not_found", "authentication.internal", "audit.unavailable"},
 		"POST /api/v1/users/me/sessions/revoke-all":                                          {"authentication.internal", "audit.unavailable"},
+		"POST /api/v1/users/me/sessions/revoke-others":                                       {"authentication.internal", "audit.unavailable"},
 		"GET /api/v1/users/me/mfa":                                                           {"authentication.mfa.unavailable", "authentication.reauthentication_required", "authentication.session_required"},
 		"POST /api/v1/users/me/mfa/setup":                                                    {"authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.session_required"},
 		"POST /api/v1/users/me/mfa/activate":                                                 {"request.invalid", "authentication.mfa.code_invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.session_required"},
@@ -254,6 +270,7 @@ func identityAndSystemErrorContracts() map[string][]string {
 		"POST /api/v1/users/me/mfa/recovery-codes/regenerate":                                {"authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.session_required"},
 		"POST /api/v1/users/me/mfa/disable":                                                  {"authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "audit.unavailable", "authentication.session_required"},
 		"GET /api/v1/users/me/tokens":                                                        {"personal_access_token.unavailable", "authentication.reauthentication_required", "authentication.session_required", "request.invalid"},
+		"GET /api/v1/users/me/tokens/grantable-scopes":                                       {"personal_access_token.unavailable", "authentication.reauthentication_required", "authentication.session_required"},
 		"POST /api/v1/users/me/tokens":                                                       {"request.invalid", "resource.not_found", "personal_access_token.invalid", "personal_access_token.maximum_reached", "personal_access_token.unavailable", "audit.unavailable", "authentication.session_required"},
 		"POST /api/v1/users/me/tokens/{personal_access_token_id}/disable":                    {"request.invalid", "resource.not_found", "personal_access_token.unavailable", "audit.unavailable", "authentication.reauthentication_required", "authentication.session_required", "personal_access_token.invalid"},
 		"POST /api/v1/users/me/tokens/{personal_access_token_id}/enable":                     {"request.invalid", "resource.not_found", "personal_access_token.maximum_reached", "personal_access_token.unavailable", "audit.unavailable", "authentication.session_required", "personal_access_token.invalid"},

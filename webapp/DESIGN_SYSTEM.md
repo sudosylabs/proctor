@@ -32,13 +32,13 @@ This foundation owns:
 - automated token generation, contrast checks, and authored-style guards.
 
 Page composition and component APIs remain feature-owned or governed beside a
-component proven by real consumers. The first such component is the narrow
-[`AccessPageShell`](./src/components/AccessPageShell/CONTRACT.md) shared by
-the complete ten-route hosted access family; it does not establish a general
-authenticated application shell. The focused single-column task introductions
-shared by password recovery, Invitation acceptance, and provider connection
-use the narrow
-[`AccessTaskIntro`](./src/components/AccessTaskIntro/CONTRACT.md) contract.
+component proven by real consumers. The first such component is
+[`AccessPageShell`](./src/components/AccessPageShell/CONTRACT.md), the one
+frame shared by every hosted route; it does not establish a general
+authenticated application shell or navigation. Focused task introductions use
+the [`AccessTaskIntro`](./src/components/AccessTaskIntro/CONTRACT.md)
+contract, and labelled facts a person checks before or after an action use
+[`FactList`](./src/components/FactList/CONTRACT.md).
 Their loading, unavailable, terminal, and context-replacement states use the
 narrow [`TaskState`](./src/components/TaskState/CONTRACT.md) contract for a
 consistent hierarchy, responsive action rhythm, live announcement, and
@@ -191,8 +191,10 @@ surfaces and interaction variants derive from them.
 | Coral | `#B4233C` | Invalid, denied, destructive, or unavailable state |
 
 Purple is the only general focal accent. Teal, amber, and coral are state
-colors, not card decoration or product-area identifiers. Every state also has
-a word, icon, shape, or position cue. Links remain distinguishable outside
+colors, not card decoration or product-area identifiers. The confirming
+action of an explicit destructive confirmation is the one place coral fills a
+control: the `danger` Button variant takes the primary position on that view.
+Every state also has a word, icon, shape, or position cue. Links remain distinguishable outside
 color alone when surrounded by prose.
 
 The initial theme surfaces are intentionally close to the established Proctor
@@ -215,6 +217,11 @@ violet for interaction. Its governed accent roles are primary `#A855F7`, hover
 Success uses `#3ECF8E` on `#0F241C`, warning uses `#F5B942` on `#2A2110`, and
 danger uses `#F87171` on `#2A1218`. These state surfaces are reserved for
 actual state evidence rather than general section tinting.
+
+A destructive or irreversible primary action uses the danger action roles in
+place of purple: coral `#B4233C` with hover `#961C31` and a paper label in
+light, and `#F87171` with hover `#FCA5A5` and a `#0A0A0A` label in dark. The
+audit holds the label to `4.5:1` on every danger action state.
 
 The audit verifies standard foreground/surface pairs at `4.5:1`, state text on
 its state surface at `4.5:1`, and focus rings at `3:1` against their adjacent
@@ -252,7 +259,7 @@ The tracked scale is:
 | Small heading | `1.25rem` | `1.35` |
 | Medium heading | `1.5rem` | `1.25` |
 | Large heading | `2rem` | `1.15` |
-| Display | `clamp(2.25rem, 1.8rem + 1.5vw, 3.5rem)` | `1.02` |
+| Display | `clamp(1.875rem, 1.6rem + 1vw, 2.25rem)` | `1.08` |
 
 Body copy uses a maximum `74ch` measure. Headings use balanced wrapping when
 supported. Data columns use tabular numerals. A viewport may change layout and
@@ -335,7 +342,7 @@ The initial measures are `36rem` for focused forms, `74ch` for prose, `72rem`
 for content, and `90rem` for the complete application frame. They are bounds,
 not instructions to fill every viewport.
 
-The initial access-page family gives the governed Proctor lockup clear space
+The hosted page shell gives the governed Proctor lockup clear space
 without an adjacent decorative rule. An effective light-scheme product theme
 uses the flat purple-mark, ink-wordmark lockup; an effective dark-scheme product
 theme uses the flat purple-mark, white-wordmark lockup. The transparent 2.5D
@@ -344,39 +351,52 @@ preference: purple for system light and ivory with lilac for system dark. An
 explicit product theme does not rewrite that favicon choice. The black mark is
 not a product-webapp asset.
 
-On wide viewports, `/login` and `/register` separate safe Institution context
-from a focused form; `/setup` gives its one-time atomic form the wider content
-measure. The regions return to one-dimensional document flow when that
-separation no longer fits. `/account/verify-email` and
-`/authorization/complete` reduce the same frame to bounded status tasks.
-Session confirmation uses a local state rail, while email verification uses a
-compact purpose and outcome marker; neither is global decoration or a demand
-that unrelated hosted routes reuse the pattern.
-
-Password recovery, Invitation acceptance, provider connection, and Desktop
-authorization use one centered task column. Their purpose label, page heading,
-supporting copy, controls, evidence, and actions follow document order without
-an explanatory step rail. The form widths remain feature-owned, while the
-shell keeps their starting position and page rhythm consistent. Stable
-pre-action evidence uses `Notice`; action-adjacent submission failures remain
-owned by `FormFeedback`. Unavailable, terminal, and user-triggered
-context-replacement states use the same display-scale heading, supporting-copy
-measure, and action rhythm through `TaskState`. Pending task content uses a
-bounded spinner and supporting message, retaining an accessible heading and
-any available purpose label. Feature modules continue to own copy, state
-choice, evidence, actions, and maximum width. Under `30rem`,
-task-state actions stack in document order and fill the available inline size.
-The live status region remains mounted across task replacement. It announces
-bounded localized state copy, while heading focus moves only when a
-user-triggered replacement removes the invoking control and orientation would
-otherwise be lost. Initial loading and ordinary status updates never steal
-focus; validation continues to focus the first invalid field.
-
 Layer tokens progress from base (`0`) through sticky (`10`), popover (`20`),
 overlay (`30`), dialog (`40`), and notification (`50`). Components do not
 invent larger numbers. Prefer native dialog and popover top-layer behavior
 where it satisfies the interaction contract; otherwise one application-owned
 portal preserves stacking and focus ownership.
+
+### Hosted page shell
+
+Every hosted route uses one shell; there are no split, single, or status
+variants. From top to bottom:
+
+1. **Masthead.** The theme-aware lockup at the inline start and the
+   Institution display name at the inline end, muted and small. The name is
+   omitted until public discovery supplies it and is hidden below `30rem`.
+2. **Task column.** One centred `main` landmark bounded by the `36rem` form
+   measure, with a consistent block start so the kind line and heading land
+   in the same place on every route. Wider grouped forms, Institution
+   context, and terminal outcomes all live in this column in document order;
+   nothing sits beside it, and short content is not vertically centred.
+3. **Footer.** A hairline rule over the column's width, then muted
+   label-size text: “Signed in as {name} · Sign out” when the page has a
+   confirmed identity, and a help line that names the Institution.
+
+Hierarchy inside the column comes from type, spacing, and hairline rules
+only: no cards, tinted callout boxes, pill badges, uppercase eyebrows, accent
+rails, or decorative icons. A task opens with a quiet sentence-case **kind
+line** (muted; teal, amber, or coral only when it reports that real terminal
+outcome), the condensed display **heading**, and a **lede** in the subtle
+foreground. Facts the person must check use the hairline `FactList`. Stable
+evidence uses the unboxed `Notice`: supporting text with an optional bold
+lead and, for success, warning, or danger, a small square state marker.
+Related decisions further down a page are separated by a hairline rule and a
+small heading rather than a panel. Purple appears only on the view's one
+primary action and on links; teal, amber, and coral only for real state. When
+that one action is destructive or irreversible it uses the `danger` button
+instead, so the view then carries no purple action.
+
+The live status region of a task remains mounted across task replacement. It
+announces bounded localized state copy, while heading focus moves only when a
+user-triggered replacement removes the invoking control and orientation would
+otherwise be lost. Initial loading and ordinary status updates never steal
+focus; validation continues to focus the first invalid field. Pending task
+content uses a bounded spinner and supporting message, retaining an
+accessible heading and any available kind line. Under `30rem`, task-state
+actions stack in document order and fill the available inline size.
+Action-adjacent submission failures remain owned by `FormFeedback`.
 
 ## Interaction and motion
 

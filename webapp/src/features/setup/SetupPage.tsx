@@ -1,10 +1,12 @@
+import { useState } from "react";
+
 import { useAsyncResource } from "../../app/AsyncResource";
 import { AccessPageShell } from "../../components/AccessPageShell/AccessPageShell";
 import { SetupContent } from "../../components/Setup/SetupContent";
-import { SetupContext } from "../../components/Setup/SetupContext";
 import { message } from "../../i18n/messages";
 import {
   requestInstallationStatus,
+  type SetupCreated,
   type SetupStatus,
   submitInstallation,
 } from "./SetupApi";
@@ -17,19 +19,18 @@ export function SetupPage() {
   const status: SetupStatus = statusResource.loading
     ? { kind: "loading" }
     : statusResource.value;
+  const [created, setCreated] = useState<SetupCreated>();
 
   return (
-    <AccessPageShell
-      aside={<SetupContext />}
-      asideLabel={message("webapp.setup.context.eyebrow")}
-      mainSize="content"
-      skipLabel={message("webapp.setup.skip_to_main")}
-      variant="split"
-    >
+    <AccessPageShell skipLabel={message("webapp.setup.skip_to_main")}>
       <SetupContent
+        created={created}
         status={status}
         submitSetup={submitInstallation}
-        onComplete={() => statusResource.replace({ kind: "complete" })}
+        onComplete={(result) => {
+          setCreated(result);
+          statusResource.replace({ kind: "complete" });
+        }}
         onRetry={statusResource.retry}
       />
     </AccessPageShell>

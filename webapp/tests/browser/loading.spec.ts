@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const discovery = {
   discovery_version: 1,
+  password_minimum_length: 12,
   canonical_origin: "http://127.0.0.1:5173",
   initialized: true,
   capabilities: { local_login: true, public_registration: false, invitation_admission: true, desktop_authorization: true },
@@ -46,16 +47,17 @@ for (const colorScheme of ["light", "dark"] as const) {
         await page.evaluate(() => document.fonts.ready);
         const main = page.getByRole("main");
         const loader = main.locator("[data-proctor-loading]");
-        const heading = page.getByRole("heading", { name: "Sign in", exact: true });
-        const aside = page.getByRole("complementary");
+        const heading = page.getByRole("heading", { name: "Sign in to Proctor", exact: true });
+        const masthead = page.getByRole("banner");
+        const institution = masthead.locator("[data-proctor-shell-institution]");
         await expect(loader).toBeVisible();
         await expect(loader).toHaveAttribute("role", "status");
-        await expect(loader).toContainText("Checking available sign-in methods…");
+        await expect(loader).toContainText("Checking how you can sign in…");
         await expect(heading).toBeVisible();
-        await expect(aside).toContainText("Your institution controls which sign-in methods are available.");
+        await expect(institution).toHaveCount(0);
         await expect(page.getByRole("img", { name: "Proctor" })).toBeVisible();
         const headingBefore = await box(heading);
-        const asideBefore = await box(aside);
+        const mastheadBefore = await box(masthead);
         const loaderBox = await box(loader);
         const mainBox = await box(main);
         const iconBox = await box(loader.locator("svg"));
@@ -71,7 +73,12 @@ for (const colorScheme of ["light", "dark"] as const) {
         await expect(page.getByLabel("Email or username")).toBeVisible();
         await expect(loader).toHaveCount(0);
         expect(await box(heading)).toEqual(headingBefore);
-        expect(await box(aside)).toEqual(asideBefore);
+        expect(await box(masthead)).toEqual(mastheadBefore);
+        if (width >= 480) {
+          await expect(institution).toHaveText(discovery.institution.display_name);
+        } else {
+          await expect(institution).toBeHidden();
+        }
         await expect(page.locator(".proctor-skip-link")).toBeFocused();
         await noOverflow(page);
       } finally { release(); }
@@ -151,11 +158,11 @@ test("a discovery retry uses the reserved area and leaves focus alone while pend
   });
   try {
     await page.goto("/login");
-    const heading = page.getByRole("heading", { name: "Sign in", exact: true });
+    const heading = page.getByRole("heading", { name: "Sign in to Proctor", exact: true });
     await page.evaluate(() => document.fonts.ready);
     const before = await box(heading);
     await page.getByRole("button", { name: "Try again" }).click();
-    await expect(page.getByRole("status")).toContainText("Checking available sign-in methods…");
+    await expect(page.getByRole("status")).toContainText("Checking how you can sign in…");
     await expect(heading).not.toBeFocused();
     expect(await box(heading)).toEqual(before);
     release();

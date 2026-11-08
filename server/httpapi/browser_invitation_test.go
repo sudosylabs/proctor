@@ -33,7 +33,7 @@ func (a *browserInvitationHTTPApplication) StartBrowserInvitation(_ context.Cont
 	return &app.BrowserInvitationStart{
 		Handle: model.NewCredentialToken(), BrowserProof: model.NewCredentialToken(),
 		Purpose: model.InvitationPurposeStudentClass, Requirement: app.BrowserInvitationRequirementAccount,
-		ExpiresAt: time.Now().Add(time.Minute).UnixMilli(),
+		ExpiresAt: time.Now().Add(time.Minute).UnixMilli(), Email: "student.one@example.edu", ClassDisplayName: "Biology 101",
 	}, nil
 }
 
@@ -68,6 +68,8 @@ func TestBrowserInvitationHTTPKeepsSecondProofInHttpOnlyCookie(t *testing.T) {
 	require.True(t, proofCookies[0].Secure)
 	require.Equal(t, "/api/v1/auth/browser/invitations", proofCookies[0].Path)
 	require.NotContains(t, started.Body.String(), proofCookies[0].Value, "browser proof was disclosed in the JSON response")
+	require.Contains(t, started.Body.String(), `"email":"student.one@example.edu"`)
+	require.Contains(t, started.Body.String(), `"class_display_name":"Biology 101"`)
 
 	accept := httptest.NewRequest(http.MethodPost, "/api/v1/auth/browser/invitations/accept", strings.NewReader(`{"handle":"`+model.NewCredentialToken()+`","password":"correct horse battery staple","username":"student"}`))
 	accept.Header.Set("Content-Type", "application/json")

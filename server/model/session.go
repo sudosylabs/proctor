@@ -34,6 +34,7 @@ const (
 	SessionRevocationUserLogout                 SessionRevocationReason = "user_logout"
 	SessionRevocationUserSession                SessionRevocationReason = "user_session"
 	SessionRevocationUserAllSessions            SessionRevocationReason = "user_all_sessions"
+	SessionRevocationUserOtherSessions          SessionRevocationReason = "user_other_sessions"
 	SessionRevocationAdministratorSession       SessionRevocationReason = "administrator_session"
 	SessionRevocationAdministratorAllSessions   SessionRevocationReason = "administrator_all_sessions"
 	SessionRevocationAccountDisabled            SessionRevocationReason = "account_disabled"
@@ -58,6 +59,7 @@ func (r SessionRevocationReason) IsValid() bool {
 	case SessionRevocationUserLogout,
 		SessionRevocationUserSession,
 		SessionRevocationUserAllSessions,
+		SessionRevocationUserOtherSessions,
 		SessionRevocationAdministratorSession,
 		SessionRevocationAdministratorAllSessions,
 		SessionRevocationAccountDisabled,
@@ -115,6 +117,7 @@ func AllSessionRevocationReasons() []SessionRevocationReason {
 		SessionRevocationRefreshReplay,
 		SessionRevocationUserAllSessions,
 		SessionRevocationUserLogout,
+		SessionRevocationUserOtherSessions,
 		SessionRevocationUserSession,
 	}
 }

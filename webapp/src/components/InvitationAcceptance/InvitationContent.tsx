@@ -1,25 +1,80 @@
 import { type FormEvent, useRef, useState } from "react";
+import { formatPasswordLength, usePasswordMinimumLength } from "../../auth/passwordPolicy";
 
+import { useHostedInstitution } from "../../auth/HostedInstitution";
+import { passwordRejectionMessage } from "../../auth/passwordRejection";
 import type {
   InvitationAccountAcceptanceResult,
   InvitationAccountSubmission,
   InvitationSessionAcceptanceResult,
   InvitationStartResult,
+  InvitationTransaction,
 } from "../../features/join/InvitationApi";
-import { message } from "../../i18n/messages";
+import { formatDateTime } from "../../i18n/dateTime";
+import { message, type MessageID } from "../../i18n/messages";
 import { AccessTaskIntro } from "../AccessTaskIntro/AccessTaskIntro";
 import { Button, ButtonLink } from "../Button/Button";
+import { Fact, FactList } from "../FactList/FactList";
 import { FormFeedback } from "../FormFeedback/FormFeedback";
 import { InputField } from "../InputField/InputField";
 import { PasswordField } from "../InputField/PasswordField";
-import { Notice } from "../Notice/Notice";
 import {
   TaskState,
   TaskStateActions,
   TaskStateAnnouncement,
 } from "../TaskState/TaskState";
 import styles from "./InvitationAcceptance.module.css";
-import { passwordRejectionMessage } from "../../auth/passwordRejection";
+
+type InvitationPurpose = InvitationTransaction["purpose"];
+type InvitationRequirement = InvitationTransaction["requirement"];
+
+const purposeLabels: Readonly<Record<InvitationPurpose, MessageID>> = {
+  student_class: "webapp.join.facts.purpose.student_class",
+  teacher_academic_unit: "webapp.join.facts.purpose.teacher_academic_unit",
+  academic_unit_role: "webapp.join.facts.purpose.academic_unit_role",
+  institution_role: "webapp.join.facts.purpose.institution_role",
+};
+
+const ledes: Readonly<
+  Record<InvitationRequirement, Readonly<Record<InvitationPurpose, MessageID>>>
+> = {
+  account: {
+    student_class: "webapp.join.lede.account.student_class",
+    teacher_academic_unit: "webapp.join.lede.account.teacher_academic_unit",
+    academic_unit_role: "webapp.join.lede.account.academic_unit_role",
+    institution_role: "webapp.join.lede.account.institution_role",
+  },
+  session: {
+    student_class: "webapp.join.lede.session.student_class",
+    teacher_academic_unit: "webapp.join.lede.session.teacher_academic_unit",
+    academic_unit_role: "webapp.join.lede.session.academic_unit_role",
+    institution_role: "webapp.join.lede.session.institution_role",
+  },
+};
+
+const acceptedBodies: Readonly<
+  Record<InvitationRequirement, Readonly<Record<InvitationPurpose, MessageID>>>
+> = {
+  account: {
+    student_class: "webapp.join.accepted.body.account.student_class",
+    teacher_academic_unit:
+      "webapp.join.accepted.body.account.teacher_academic_unit",
+    academic_unit_role: "webapp.join.accepted.body.account.academic_unit_role",
+    institution_role: "webapp.join.accepted.body.account.institution_role",
+  },
+  session: {
+    student_class: "webapp.join.accepted.body.session.student_class",
+    teacher_academic_unit:
+      "webapp.join.accepted.body.session.teacher_academic_unit",
+    academic_unit_role: "webapp.join.accepted.body.session.academic_unit_role",
+    institution_role: "webapp.join.accepted.body.session.institution_role",
+  },
+};
+
+const acceptedHeadings: Readonly<Record<InvitationRequirement, MessageID>> = {
+  account: "webapp.join.accepted.heading.account",
+  session: "webapp.join.accepted.heading.session",
+};
 
 export interface InvitationContentProps {
   acceptAccount(
@@ -40,23 +95,27 @@ export function InvitationContent({
   onRetry,
   state,
 }: InvitationContentProps) {
-  const [accepted, setAccepted] = useState(false);
+  const [accepted, setAccepted] = useState<InvitationTransaction>();
   const [retryRequested, setRetryRequested] = useState(false);
+  const { supportAddress } = useHostedInstitution();
 
   function retry() {
     setRetryRequested(true);
     onRetry();
   }
 
-  if (accepted) {
+  if (accepted !== undefined) {
+    const heading = message(acceptedHeadings[accepted.requirement]);
     return (
       <>
-        <TaskStateAnnouncement message={message("webapp.join.accepted.heading")} />
+        <TaskStateAnnouncement message={heading} />
         <InvitationRouteState
           focusHeading
-          label={message("webapp.join.accepted.label")}
-          heading={message("webapp.join.accepted.heading")}
-          body={message("webapp.join.accepted.body")}
+          labelTone="success"
+          heading={heading}
+          body={message(
+            acceptedBodies[accepted.requirement][accepted.purpose],
+          )}
         >
           <TaskStateActions>
             <ButtonLink href="/login">
@@ -85,14 +144,19 @@ export function InvitationContent({
         <TaskStateAnnouncement message={message("webapp.join.invalid.heading")} />
         <InvitationRouteState
           focusHeading={retryRequested}
-          label={message("webapp.join.invalid.label")}
+          labelTone="danger"
           heading={message("webapp.join.invalid.heading")}
           body={message("webapp.join.invalid.body")}
         >
           <TaskStateActions>
-            <ButtonLink href="/login" variant="secondary">
+            <ButtonLink href="/login">
               {message("webapp.join.sign_in")}
             </ButtonLink>
+            {supportAddress === undefined ? null : (
+              <ButtonLink href={`mailto:${supportAddress}`} variant="secondary">
+                {message("webapp.join.invalid.contact_support")}
+              </ButtonLink>
+            )}
           </TaskStateActions>
         </InvitationRouteState>
       </>
@@ -106,7 +170,7 @@ export function InvitationContent({
         />
         <InvitationRouteState
           focusHeading={retryRequested}
-          label={message("webapp.join.unavailable.label")}
+          labelTone="warning"
           heading={message("webapp.join.unavailable.heading")}
           body={message("webapp.join.unavailable.body")}
         >
@@ -119,49 +183,85 @@ export function InvitationContent({
       </>
     );
   }
-  if (state.transaction.requirement === "session") {
-    return (
-      <>
-        <TaskStateAnnouncement message={message("webapp.join.session.heading")} />
-        <SessionInvitation
-          focusHeading={retryRequested}
-          handle={state.transaction.handle}
-          institutionName={institutionName}
-          acceptSession={acceptSession}
-          onAccepted={() => setAccepted(true)}
-        />
-      </>
-    );
-  }
+  const transaction = state.transaction;
+  const onAccepted = () => setAccepted(transaction);
   return (
     <>
-      <TaskStateAnnouncement message={message("webapp.join.heading")} />
-      <InvitationAccountForm
-        focusHeading={retryRequested}
-        handle={state.transaction.handle}
-        institutionName={institutionName}
-        acceptAccount={acceptAccount}
-        onAccepted={() => setAccepted(true)}
-      />
+      <TaskStateAnnouncement message={invitationHeading(institutionName)} />
+      <section className={styles.page} aria-labelledby="join-heading">
+        <AccessTaskIntro
+          kind={message("webapp.join.kind")}
+          focusHeading={retryRequested}
+          heading={invitationHeading(institutionName)}
+          body={message(ledes[transaction.requirement][transaction.purpose])}
+          headingID="join-heading"
+        />
+        <InvitationFacts transaction={transaction} />
+        {transaction.requirement === "session" ? (
+          <SessionInvitation
+            handle={transaction.handle}
+            acceptSession={acceptSession}
+            onAccepted={onAccepted}
+          />
+        ) : (
+          <InvitationAccountForm
+            email={transaction.email}
+            handle={transaction.handle}
+            acceptAccount={acceptAccount}
+            onAccepted={onAccepted}
+          />
+        )}
+      </section>
     </>
+  );
+}
+
+function invitationHeading(institutionName: string | undefined) {
+  return institutionName === undefined
+    ? message("webapp.join.heading_fallback")
+    : message("webapp.join.heading", { Institution: institutionName });
+}
+
+function InvitationFacts({ transaction }: { transaction: InvitationTransaction }) {
+  // The projection names a Class only for student Class Invitations; Academic
+  // Unit and Role names are deliberately never sent, so none is shown. An
+  // account form shows the address itself, so only Session acceptance lists it.
+  const className = transaction.class_display_name?.trim();
+  return (
+    <FactList aria-label={message("webapp.join.facts.label")}>
+      <Fact label={message("webapp.join.facts.invited_as")}>
+        {message(purposeLabels[transaction.purpose])}
+      </Fact>
+      {className === undefined || className === "" ? null : (
+        <Fact label={message("webapp.join.facts.class")}>{className}</Fact>
+      )}
+      {transaction.requirement === "session" ? (
+        <Fact label={message("webapp.join.facts.sent_to")}>{transaction.email}</Fact>
+      ) : null}
+      <Fact label={message("webapp.join.facts.expires")}>
+        <time dateTime={transaction.expires_at}>
+          {formatDateTime(transaction.expires_at)}
+        </time>
+      </Fact>
+    </FactList>
   );
 }
 
 function InvitationAccountForm({
   acceptAccount,
-  focusHeading,
+  email,
   handle,
-  institutionName,
   onAccepted,
 }: {
   acceptAccount(
     submission: InvitationAccountSubmission,
   ): Promise<InvitationAccountAcceptanceResult>;
-  focusHeading: boolean;
+  /** The Invitation's address; acceptance never sends it, so it stays read-only. */
+  email: string;
   handle: string;
-  institutionName?: string;
   onAccepted(): void;
 }) {
+  const minimumPasswordLength = usePasswordMinimumLength();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [username, setUsername] = useState("");
@@ -225,110 +325,97 @@ function InvitationAccountForm({
   }
 
   return (
-    <section className={styles.page} aria-labelledby="join-heading">
-      <InvitationIntro
-        focusHeading={focusHeading}
-        headingID="join-heading"
-        institutionName={institutionName}
-        requirement="account"
+    <form className={styles.form} onSubmit={submit} aria-busy={pending} noValidate>
+      <InputField
+        id="invitation-email"
+        label={message("webapp.join.form.email")}
+        description={message("webapp.join.form.email_help")}
+        type="email"
+        autoComplete="email"
+        value={email}
+        readOnly
       />
-      <header className={styles.headingGroup}>
-        <h2>{message("webapp.join.heading")}</h2>
-        <p>{message("webapp.join.lede")}</p>
-      </header>
-      <form className={styles.form} onSubmit={submit} aria-busy={pending} noValidate>
-        <div className={styles.nameFields}>
-          <InputField
-            id="invitation-first-name"
-            name="first_name"
-            label={message("webapp.join.form.first_name")}
-            autoComplete="given-name"
-            value={firstName}
-            onChange={(event) => {
-              setFirstName(event.currentTarget.value);
-              setFormError(undefined);
-            }}
-          />
-          <InputField
-            id="invitation-last-name"
-            name="last_name"
-            label={message("webapp.join.form.last_name")}
-            autoComplete="family-name"
-            value={lastName}
-            onChange={(event) => {
-              setLastName(event.currentTarget.value);
-              setFormError(undefined);
-            }}
-          />
-        </div>
-        <InputField
-          ref={usernameRef}
-          id="invitation-username"
-          name="username"
-          label={message("webapp.join.form.username")}
-          autoCapitalize="none"
-          autoComplete="username"
-          spellCheck={false}
-          value={username}
-          errorMessage={usernameError}
-          required
-          onChange={(event) => {
-            setUsername(event.currentTarget.value);
-            setUsernameError(undefined);
-            setFormError(undefined);
-          }}
-        />
-        <PasswordField
-          ref={passwordRef}
-          id="invitation-password"
-          name="password"
-          label={message("webapp.join.form.password")}
-          description={message("webapp.join.form.password_help")}
-          autoComplete="new-password"
-          value={password}
-          errorMessage={passwordError}
-          hidePasswordLabel={message("webapp.form.password_hide")}
-          showPasswordLabel={message("webapp.form.password_show")}
-          toggleDisabled={pending}
-          required
-          onChange={(event) => {
-            setPassword(event.currentTarget.value);
-            setPasswordError(undefined);
-            setFormError(undefined);
-          }}
-        />
-        <Notice role="note">
-          {message("webapp.join.context.note_account")}
-        </Notice>
-        <div className={styles.actionRow}>
-          <Button
-            type="submit"
-            isLoading={pending}
-            loadingLabel={message("webapp.join.form.submitting")}
-          >
-            {message("webapp.join.form.submit")}
-          </Button>
-          <a className={styles.signInLink} href="/login">
-            {message("webapp.join.sign_in")}
-          </a>
-        </div>
-        <FormFeedback message={formError} />
-      </form>
-    </section>
+      <InputField
+        id="invitation-first-name"
+        name="first_name"
+        label={message("webapp.join.form.first_name")}
+        autoComplete="given-name"
+        value={firstName}
+        onChange={(event) => {
+          setFirstName(event.currentTarget.value);
+          setFormError(undefined);
+        }}
+      />
+      <InputField
+        id="invitation-last-name"
+        name="last_name"
+        label={message("webapp.join.form.last_name")}
+        autoComplete="family-name"
+        value={lastName}
+        onChange={(event) => {
+          setLastName(event.currentTarget.value);
+          setFormError(undefined);
+        }}
+      />
+      <InputField
+        ref={usernameRef}
+        id="invitation-username"
+        name="username"
+        label={message("webapp.join.form.username")}
+        autoCapitalize="none"
+        autoComplete="username"
+        spellCheck={false}
+        value={username}
+        errorMessage={usernameError}
+        required
+        onChange={(event) => {
+          setUsername(event.currentTarget.value);
+          setUsernameError(undefined);
+          setFormError(undefined);
+        }}
+      />
+      <PasswordField
+        ref={passwordRef}
+        id="invitation-password"
+        name="password"
+        label={message("webapp.join.form.password")}
+        description={minimumPasswordLength === undefined
+            ? message("webapp.join.form.password_help_unsized")
+            : message("webapp.join.form.password_help", { Count: formatPasswordLength(minimumPasswordLength) })}
+        autoComplete="new-password"
+        value={password}
+        errorMessage={passwordError}
+        hidePasswordLabel={message("webapp.form.password_hide")}
+        showPasswordLabel={message("webapp.form.password_show")}
+        toggleDisabled={pending}
+        required
+        onChange={(event) => {
+          setPassword(event.currentTarget.value);
+          setPasswordError(undefined);
+          setFormError(undefined);
+        }}
+      />
+      <div className={styles.actions}>
+        <Button
+          type="submit"
+          isLoading={pending}
+          loadingLabel={message("webapp.join.form.submitting")}
+        >
+          {message("webapp.join.form.submit")}
+        </Button>
+      </div>
+      <FormFeedback message={formError} />
+    </form>
   );
 }
 
 function SessionInvitation({
   acceptSession,
-  focusHeading,
   handle,
-  institutionName,
   onAccepted,
 }: {
   acceptSession(handle: string): Promise<InvitationSessionAcceptanceResult>;
-  focusHeading: boolean;
   handle: string;
-  institutionName?: string;
   onAccepted(): void;
 }) {
   const [pending, setPending] = useState(false);
@@ -354,21 +441,8 @@ function SessionInvitation({
   }
 
   return (
-    <section className={styles.page} aria-labelledby="join-heading">
-      <InvitationIntro
-        focusHeading={focusHeading}
-        headingID="join-heading"
-        institutionName={institutionName}
-        requirement="session"
-      />
-      <header className={styles.headingGroup}>
-        <h2>{message("webapp.join.session.heading")}</h2>
-        <p>{message("webapp.join.session.lede")}</p>
-      </header>
-      <Notice role="note">
-        {message("webapp.join.context.note_session")}
-      </Notice>
-      <div className={styles.sessionActions}>
+    <div className={styles.form}>
+      <div className={styles.actions}>
         <Button
           isLoading={pending}
           loadingLabel={message("webapp.join.session.submitting")}
@@ -384,48 +458,12 @@ function SessionInvitation({
             rel="noopener noreferrer"
             target="_blank"
           >
-            {message("webapp.join.session.open_sign_in")}
-          </a>
-        ) : (
-          <a className={styles.signInLink} href="/login">
             {message("webapp.join.sign_in")}
           </a>
-        )}
+        ) : null}
       </div>
       <FormFeedback id="join-session-feedback" message={formError} />
-    </section>
-  );
-}
-
-function InvitationIntro({
-  focusHeading,
-  headingID,
-  institutionName,
-  requirement,
-}: {
-  focusHeading: boolean;
-  headingID: string;
-  institutionName?: string;
-  requirement: "account" | "session";
-}) {
-  return (
-    <AccessTaskIntro
-      eyebrow={message("webapp.join.context.eyebrow")}
-      focusHeading={focusHeading}
-      heading={
-        institutionName === undefined
-          ? message("webapp.join.context.heading_fallback")
-          : message("webapp.join.context.heading", {
-              Institution: institutionName,
-            })
-      }
-      body={message(
-        requirement === "account"
-          ? "webapp.join.context.body_account"
-          : "webapp.join.context.body_session",
-      )}
-      headingID={headingID}
-    />
+    </div>
   );
 }
 
@@ -435,24 +473,24 @@ function InvitationRouteState({
   children,
   focusHeading = false,
   heading,
-  label,
+  labelTone,
 }: {
   body: string;
   busy?: boolean;
   children?: React.ReactNode;
   focusHeading?: boolean;
   heading: string;
-  label?: string;
+  labelTone?: "success" | "warning" | "danger";
 }) {
   return (
     <TaskState
       body={body}
       busy={busy}
-      className={styles.taskState}
       focusHeading={focusHeading}
       heading={heading}
       headingID="join-heading"
-      label={label}
+      label={message("webapp.join.kind")}
+      labelTone={labelTone}
     >
       {children}
     </TaskState>

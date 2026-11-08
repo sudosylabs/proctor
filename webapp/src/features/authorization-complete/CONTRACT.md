@@ -7,9 +7,9 @@ the existing local or external login flow creates a Web Session.
 presentation and interaction rules; the authentication and Session contracts
 remain authoritative for server behavior.
 
-The narrow shared
-[`AccessPageShell`](../../components/AccessPageShell/CONTRACT.md) is proven
-by this route and `/login`. It owns only their structural frame. This feature
+The shared
+[`AccessPageShell`](../../components/AccessPageShell/CONTRACT.md) owns the
+structural frame of this and every other hosted route. This feature
 creates no general authenticated shell, shared result component, notice, or
 button.
 
@@ -21,9 +21,12 @@ authenticate credentials, consume a result token, resolve a provider response,
 create or repair a Session, accept an Invitation, authorize Desktop, connect
 an identity, or choose an authenticated product destination.
 
-Success confirms sign-in and says that the page may be closed. Its one optional
-destination is the declared `/account/security` MFA lifecycle surface. There is
-no dashboard or generic authenticated root to infer.
+Success confirms sign-in and says that the page may be closed. Its two
+optional destinations are the declared `/account/security` MFA lifecycle
+surface (primary) and `/account/connect-provider` (secondary). There is no
+dashboard or generic authenticated root to infer. Provider connection also
+returns here, but the page receives no input saying which flow finished, so it
+never claims that a particular provider was connected.
 
 External-provider failures do not arrive here. Once the server can safely bind
 one to the ordinary hosted-login flow, it returns the browser to the fixed
@@ -65,7 +68,7 @@ The visible structure contains:
 
 There is no autofocus. Initial loading and successful background transitions
 do not move focus. An explicit Retry retains focus on the activated control
-until the new result is available; an error summary receives programmatic
+until the new result is available; the task heading receives programmatic
 focus only after a user-triggered retry fails.
 
 Authored copy uses `webapp.authorization_complete.*` and the bounded recovery
@@ -81,7 +84,7 @@ The feature owns these mutually exclusive states:
 | State | Entry | Available action |
 | --- | --- | --- |
 | Confirming Session | The initial or user-triggered `GET /api/v1/users/me` is pending | None; announce bounded progress |
-| Signed in | A valid User response returns `200` | Explain that the page may be closed; offer account security |
+| Signed in | A valid User response returns `200` | Explain that the page may be closed; offer account security and adding a sign-in method |
 | Recovery required | An invalid-token rejection followed by a validated recovery-required MFA status | Restore access through `/account/security` |
 | No active Session | The request returns `401` | Normal same-origin link to `/login` |
 | Confirmation unavailable | Network failure, malformed success data, or `5xx` | Retry Session confirmation and a normal same-origin link to `/login` |
@@ -91,8 +94,10 @@ call, or provider restart. It never uses animation as the only indication of
 pending work.
 
 Initial confirmation uses the shared Loading indicator and supporting message
-within the existing bounded status area. The status label and rail remain
-visible, and the page heading remains accessible without taking focus. The
+within the shared `TaskState` in the shell task column. The kind line remains
+visible, and the page heading remains accessible without taking focus. There
+is no centred card, coloured rail, or icon; the kind line turns teal for a
+confirmed sign-in and amber for a recovery restriction. The
 existing page-owned live region announces progress. An explicit retry keeps
 its current result in place and shows the spinner inside the retry button.
 
@@ -110,7 +115,8 @@ same deterministic Session check.
 ## Content and action contract
 
 Signed in uses the heading intent “You’re signed in” and supporting copy that
-the page may be closed. It offers account security without exposing User fields
+the page may be closed. It offers account security and adding a sign-in method
+without exposing User fields (the shell footer carries no signed-in name here)
 or adding a general authenticated navigation shell. A recovery-required response
 instead explains reenrollment and offers the same bounded security destination.
 

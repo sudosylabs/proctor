@@ -36,7 +36,7 @@ func TestAccessPolicyOpenAPIAgreesWithRuntime(t *testing.T) {
 			{Name: "PublicInstitutionPresentationResponse", DTO: reflect.TypeOf(publicInstitutionPresentationResponse{}), Required: []string{"id", "name", "display_name"}},
 			{Name: "PublicAccessCapabilitiesResponse", DTO: reflect.TypeOf(publicAccessCapabilitiesResponse{}), Required: []string{"local_login", "public_registration", "invitation_admission", "desktop_authorization"}},
 			{Name: "DesktopAuthorizationCompatibilityResponse", DTO: reflect.TypeOf(desktopAuthorizationCompatibilityResponse{}), Required: []string{"protocol", "minimum_version", "maximum_version"}},
-			{Name: "PublicAccessDiscoveryResponse", DTO: reflect.TypeOf(publicAccessDiscoveryResponse{}), Required: []string{"discovery_version", "canonical_origin", "initialized", "capabilities", "providers", "desktop_authorization"}},
+			{Name: "PublicAccessDiscoveryResponse", DTO: reflect.TypeOf(publicAccessDiscoveryResponse{}), Required: []string{"discovery_version", "canonical_origin", "initialized", "capabilities", "providers", "desktop_authorization", "password_minimum_length"}},
 		},
 	}
 	runtimeAPI := newRoutingTestAPI(model.APIURLSuffix)

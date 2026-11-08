@@ -37,6 +37,16 @@ type RevokeSessionCommand struct {
 // RevokeAllSessionsCommand revokes every active session for the caller.
 type RevokeAllSessionsCommand struct{}
 
+// RevokeOtherSessionsCommand revokes every active session for the caller
+// except the Session making the request.
+type RevokeOtherSessionsCommand struct{}
+
+// RevokeOtherSessionsResult reports how many of the caller's other Sessions
+// this request revoked.
+type RevokeOtherSessionsResult struct {
+	RevokedSessionCount int
+}
+
 // DPoPRequestProof carries the HTTP proof inputs that must be verified for a
 // Desktop-bound credential. A nil value means the credential was not
 // presented with the DPoP authorization scheme.
@@ -165,6 +175,45 @@ func (s *selfSessionService) RevokeAllSessions(
 		},
 		authenticationUnavailable, nil,
 	)
+}
+
+// RevokeOtherSessions revokes every live Session of the caller except the
+// one making the request, which stays signed in. The principal must hold a
+// Session; the kept Session is recorded in the audit result.
+func (s *selfSessionService) RevokeOtherSessions(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	_ RevokeOtherSessionsCommand,
+) (*RevokeOtherSessionsResult, error) {
+	principal := invocation.Principal()
+	if principal.Validate() != nil || !principal.SessionID.IsValid() {
+		return nil, invalidTokenAppError()
+	}
+	revocations := sessionRevocationCoordinator{sessions: s.deps.Sessions, audit: s.deps.Audit, effects: s.deps.Effects, now: s.deps.Now}
+	count, err := revocations.revokeAllCounted(ctx,
+		mutationAttempt{
+			Invocation: invocation, Action: model.ActionSessionManage,
+			Resource:  model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
+			Operation: "revoke_other_sessions",
+			Value:     map[string]any{"kept_session_id": principal.SessionID.String()},
+		},
+		&store.UserSessionsRevocation{
+			UserID: principal.UserID, KeepSessionID: principal.SessionID,
+			Reason: model.SessionRevocationUserOtherSessions,
+		},
+		selfOtherSessionsRevocationStoreErrors.Translate, nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &RevokeOtherSessionsResult{RevokedSessionCount: count}, nil
+}
+
+// A kept Session that is no longer live means the caller's own credential
+// stopped being valid during the request.
+var selfOtherSessionsRevocationStoreErrors = apperror.StoreTable{
+	NotFound:    "authentication.token_invalid",
+	Unavailable: "authentication.internal",
 }
 
 var selfSessionRevocationStoreErrors = apperror.StoreTable{

@@ -531,7 +531,9 @@ the affected notice dates in the same transaction as grace cancellation.
 Delivery start shares the retirement fence and suppresses a queued stale notice;
 an SMTP operation already started may finish. Delivery state changes update the
 notice projection atomically. Listing a User's own notices grants no record
-access and records no read acknowledgement. Notice delivery, failure, and expiry
+access and records no read acknowledgement. Notices show their recipients the
+Exam title and the Sitting's scheduled time, even a recipient who has since
+lost access to the Exam. Notice delivery, failure, and expiry
 never extend retention or create a cleanup prerequisite.
 
 ## Operations, authorization, and retention

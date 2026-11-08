@@ -121,3 +121,24 @@ func TestDesktopAuthorizationAuthenticationClock(t *testing.T) {
 		})
 	}
 }
+
+func TestDesktopAuthorizationContextReportsAuthoritativeRequestTime(t *testing.T) {
+	ctx := context.Background()
+	persistence := openTestStore(t)
+	resetPristineTestStore(t, persistence)
+	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "desktop-requested", DisplayName: "Desktop Requested"})
+	require.NoError(t, err)
+	transaction, handle, proof, state, _ := desktopAuthorizationTransactionForSQLTest(model.NowUTC(), institution.ID)
+	created, err := persistence.BrowserAuthentication().CreateDesktopAuthorization(ctx, transaction)
+	require.NoError(t, err)
+	binding, err := bindDesktopAuthorizationForSQLTest(ctx, persistence, handle, proof, state)
+	require.NoError(t, err)
+	var createdAt time.Time
+	require.NoError(t, persistence.GetMaster().Get(ctx, &createdAt, `SELECT created_at FROM browser_authentication_transactions WHERE id=?`, created.ID.String()))
+
+	current, err := persistence.BrowserAuthentication().GetDesktopAuthorizationContext(ctx, model.HashToken(binding))
+	require.NoError(t, err)
+	require.True(t, current.CreatedAt.Equal(createdAt.UTC()), "context request time = %s, want %s", current.CreatedAt, createdAt)
+	require.Equal(t, time.UTC, current.CreatedAt.Location())
+	require.False(t, current.ExpiresAt.Before(current.CreatedAt), "context expiry precedes the request")
+}

@@ -80,6 +80,7 @@ type desktopAuthorizationAccountResponse struct {
 	ID          string `json:"id"`
 	Username    string `json:"username"`
 	DisplayName string `json:"display_name"`
+	Email       string `json:"email"`
 }
 
 type desktopAuthorizationContextResponse struct {
@@ -88,6 +89,7 @@ type desktopAuthorizationContextResponse struct {
 	LocalLoginEnabled bool                                     `json:"local_login_enabled"`
 	ExternalProviders []externalAuthenticationProviderResponse `json:"external_providers"`
 	DeviceName        string                                   `json:"device_name"`
+	RequestedAt       string                                   `json:"requested_at"`
 	ExpiresAt         string                                   `json:"expires_at"`
 }
 
@@ -277,10 +279,11 @@ func desktopAuthorizationContextResponseFromApplication(value *app.DesktopAuthor
 	result := desktopAuthorizationContextResponse{
 		State: string(value.State), LocalLoginEnabled: value.LocalLoginEnabled,
 		ExternalProviders: externalAuthenticationProviderResponses(value.ExternalProviders),
-		DeviceName:        value.DeviceName, ExpiresAt: wireTimeFromMillis(value.ExpiresAt),
+		DeviceName:        value.DeviceName, RequestedAt: wireTimeFromMillis(value.RequestedAt), ExpiresAt: wireTimeFromMillis(value.ExpiresAt),
 	}
 	if value.Account != nil {
-		result.Account = &desktopAuthorizationAccountResponse{ID: value.Account.ID.String(), Username: value.Account.Username, DisplayName: value.Account.DisplayName}
+		result.Account = &desktopAuthorizationAccountResponse{ID: value.Account.ID.String(), Username: value.Account.Username,
+			DisplayName: value.Account.DisplayName, Email: value.Account.Email}
 	}
 	return result
 }

@@ -662,12 +662,12 @@ func insertInstallationAudit(
 	row := newAuditRow(event)
 	if _, err := executor.NamedExec(ctx, `
 		INSERT INTO audit_events (
-			id, created_at, updated_at, actor_id, session_id, action,
+			id, created_at, updated_at, actor_id, session_id, subject_user_id, action,
 			resource_type, resource_id, scope_type, scope_id, status,
 			request_id, node_id, client_type, authentication_method,
 			ip_address, user_agent, error_code, parameters, prior_state, result
 		) VALUES (
-			:id, :created_at, :updated_at, :actor_id, :session_id, :action,
+			:id, :created_at, :updated_at, :actor_id, :session_id, :subject_user_id, :action,
 			:resource_type, :resource_id, :scope_type, :scope_id, :status,
 			:request_id, :node_id, :client_type, :authentication_method,
 			:ip_address, :user_agent, :error_code, :parameters, :prior_state, :result

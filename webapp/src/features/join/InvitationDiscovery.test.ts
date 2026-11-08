@@ -5,6 +5,7 @@ import { resolveInvitationInstitutionName } from "./InvitationApi";
 
 const discovery: PublicAccessDiscovery = {
   discovery_version: 1,
+  password_minimum_length: 12,
   canonical_origin: "https://proctor.example",
   initialized: true,
   capabilities: {

@@ -30,6 +30,8 @@ export interface DesktopJourneySnapshot {
   view:
     | { kind: "checking" | "unavailable" | DesktopTerminalState }
     | { kind: "authentication" | "confirmation"; context: DesktopAuthorizationContext };
+  /** The account this request authenticated, while confirming or after approval. */
+  account?: NonNullable<DesktopAuthorizationContext["account"]>;
   pending?: PendingAction;
   feedback?: "unavailable";
   focusHeading: boolean;
@@ -137,7 +139,10 @@ export function createDesktopAuthorizationJourney(
   }
 
   function publish() {
-    snapshot = { view: currentView(), pending, feedback, focusHeading };
+    const view = currentView();
+    const account = view.kind === "confirmation" || view.kind === "approved"
+      ? currentContext("authenticated")?.account : undefined;
+    snapshot = { view, ...(account === undefined ? {} : { account }), pending, feedback, focusHeading };
     for (const listener of listeners) listener();
   }
   resource.subscribe(publish);

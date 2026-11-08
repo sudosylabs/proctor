@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -94,14 +95,18 @@ type accessPolicyEffectFailures interface {
 // accessPolicyServiceDependencies are the collaborators of accessPolicyService;
 // newAccessPolicyService validates them once and accessPolicyService keeps them in deps.
 type accessPolicyServiceDependencies struct {
-	Policies                store.AccessPolicyStore
-	Institutions            accessPolicyInstitutionStore
-	Authorization           resourceAuthorizer
-	Capabilities            accessPolicyCapabilitySource
-	Audit                   mutationAuditor
-	Effects                 accessPolicyEffects
-	EffectFailures          accessPolicyEffectFailures
-	CanonicalOrigin         string
+	Policies        store.AccessPolicyStore
+	Institutions    accessPolicyInstitutionStore
+	Authorization   resourceAuthorizer
+	Capabilities    accessPolicyCapabilitySource
+	Audit           mutationAuditor
+	Effects         accessPolicyEffects
+	EffectFailures  accessPolicyEffectFailures
+	CanonicalOrigin string
+	// SupportAddress and PasswordMinimumLength are operator-owned public
+	// presentation facts that discovery publishes unchanged.
+	SupportAddress          string
+	PasswordMinimumLength   int
 	RecentAuthenticationTTL time.Duration
 	Now                     func() time.Time
 }
@@ -112,6 +117,10 @@ type accessPolicyService struct {
 
 func newAccessPolicyService(deps accessPolicyServiceDependencies) (*accessPolicyService, error) {
 	parsed, err := url.Parse(deps.CanonicalOrigin)
+	deps.SupportAddress = strings.ToLower(strings.TrimSpace(deps.SupportAddress))
+	if deps.PasswordMinimumLength < 1 || (deps.SupportAddress != "" && !model.IsValidEmail(deps.SupportAddress)) {
+		return nil, errors.New("access policy public presentation is invalid")
+	}
 	if deps.Policies == nil || deps.Institutions == nil || deps.Authorization == nil || deps.Capabilities == nil || deps.Audit == nil ||
 		deps.Effects == nil || deps.EffectFailures == nil || deps.Now == nil || deps.RecentAuthenticationTTL <= 0 || err != nil || parsed.Scheme == "" ||
 		parsed.Host == "" || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
@@ -317,19 +326,23 @@ type DesktopAuthorizationCompatibility struct {
 	MinimumVersion, MaximumVersion int
 }
 type PublicAccessDiscovery struct {
-	DiscoveryVersion     int
-	CanonicalOrigin      string
-	InstallationID       string
-	Initialized          bool
-	Institution          *PublicInstitutionPresentation
-	PolicyRevision       int64
-	Capabilities         PublicAccessCapabilities
-	Providers            []model.ExternalAuthenticationProvider
-	DesktopAuthorization DesktopAuthorizationCompatibility
+	DiscoveryVersion int
+	CanonicalOrigin  string
+	// SupportAddress is empty when the operator configured none.
+	SupportAddress        string
+	PasswordMinimumLength int
+	InstallationID        string
+	Initialized           bool
+	Institution           *PublicInstitutionPresentation
+	PolicyRevision        int64
+	Capabilities          PublicAccessCapabilities
+	Providers             []model.ExternalAuthenticationProvider
+	DesktopAuthorization  DesktopAuthorizationCompatibility
 }
 
 func (s *accessPolicyService) DiscoverAccess(ctx context.Context, _ invocation.Invocation) (PublicAccessDiscovery, error) {
 	result := PublicAccessDiscovery{DiscoveryVersion: accessDiscoveryVersion, CanonicalOrigin: s.deps.CanonicalOrigin,
+		SupportAddress: s.deps.SupportAddress, PasswordMinimumLength: s.deps.PasswordMinimumLength,
 		DesktopAuthorization: DesktopAuthorizationCompatibility{Protocol: "proctor-desktop-authorization", MinimumVersion: desktopAuthorizationProtocolMin, MaximumVersion: desktopAuthorizationProtocolMax}}
 	institution, err := s.deps.Institutions.GetSingleton(ctx)
 	if store.IsNotFound(err) {

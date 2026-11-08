@@ -4,6 +4,7 @@
     {"tag": "System", "page": "docs/api/recipes/bootstrap-installation.mdx"},
     {"tag": "Authentication", "page": "docs/api/guides/authentication.mdx"},
     {"tag": "Users", "page": "docs/api/recipes/invite-and-link-users.mdx"},
+    {"tag": "Search", "page": "docs/api/guides/pagination.mdx"},
     {"tag": "Academic structure", "page": "docs/api/recipes/academic-structure.mdx"},
     {"tag": "Membership and progression", "page": "docs/api/recipes/onboarding-imports-and-progression.mdx"},
     {"tag": "Invitations and onboarding", "page": "docs/api/recipes/invite-and-link-users.mdx"},

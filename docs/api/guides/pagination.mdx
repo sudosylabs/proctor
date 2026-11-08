@@ -51,3 +51,10 @@ Keyset pagination is designed for collections that may change during
 traversal. It does not promise a transactionally frozen snapshot unless the
 individual endpoint explicitly says so. Consumers that reconcile durable
 state should make their processing idempotent.
+
+## Search Is One Bounded Page
+
+`GET /api/v1/search` uses the same `items` envelope but never continues. It
+returns at most `limit` matches of each requested type, so `next_cursor` is
+always absent and a `cursor` parameter is rejected. To see more results of one
+type, use that type's own list operation with its filters and cursor.

@@ -63,7 +63,9 @@ type DesktopAuthorizationContext struct {
 	State      model.BrowserAuthenticationState
 	UserID     model.UserID
 	DeviceName string
-	ExpiresAt  time.Time
+	// CreatedAt is the authoritative instant Desktop started the request.
+	CreatedAt time.Time
+	ExpiresAt time.Time
 }
 
 // DesktopAuthorizationAuthentication binds one proved identity to the exact

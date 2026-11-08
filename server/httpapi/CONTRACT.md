@@ -303,10 +303,14 @@ their own connection lifetime.
 discovery document. It returns only the canonical origin, installation and
 Institution presentation, current policy revision, enabled public capability
 flags, safe provider descriptors selected by both live deployment configuration
-and Access Policy, and the supported desktop-authorization protocol range. It
-never returns provider admission rules, local-invitation credential policy,
-mail capability, secrets, redirect URIs, claim rules, or recipient data. The
-response is `no-store`.
+and Access Policy, the supported desktop-authorization protocol range, the
+optional operator-configured `support_address` (`Mail.SupportAddress`), and
+`password_minimum_length` (`Authentication.Password.MinimumLength`). The last
+two are deployment presentation facts and are present even before
+initialization. It never returns provider admission rules, local-invitation
+credential policy, mail capability, secrets, redirect URIs, claim rules, or
+recipient data; the support mailbox is an operator contact, not a recipient or
+a mail-health signal. The response is `no-store`.
 
 `GET /api/v1/system/ping` separately owns product availability and
 request-specific Desktop compatibility. It requires bounded Desktop release,
@@ -373,7 +377,14 @@ clients may query the bounded MFA status to distinguish mandatory reenrollment
 from a signed-out browser. Restricted Sessions retain normal cookie/CSRF rules.
 MFA status projects the original password/oidc/cas method, optional provider ID,
 strength, recency, service availability and recovery restriction without requiring
-ordinary User-profile access. Every security response is `Cache-Control: no-store`.
+ordinary User-profile access. It also reports the caller's own facts a security
+page states: the second-factor `method` and `enabled_at`, remaining and issued
+(`recovery_codes_total`, the live set including used codes) recovery codes
+with `recovery_codes_generated_at`,
+`password_changed_at` (omitted without a password credential),
+`recent_authentication_minutes` (the configured window rounded down), and
+`recently_authenticated_until` while the Session is recent. Every security
+response is `Cache-Control: no-store`.
 
 `POST /api/v1/auth/reauthenticate/password` accepts only the current User's password.
 The external counterpart accepts the closed task `security` or `connect-provider`,
@@ -417,7 +428,9 @@ proof, validate a local password specifically for the transaction, or navigate
 through a purpose-bound external-provider state. Local and provider paths do
 not create a Web Session. Provider return resumes at
 `/authorize/desktop?state=...` through the browser binding cookie. The User
-must confirm the safe account/device projection and explicitly approve; “Use
+must confirm the safe account/device projection (after transaction
+authentication, the account's display name, username, and own email; always the
+device name and the request's start and expiry times) and explicitly approve; “Use
 another account” clears only the transaction authentication and returns to
 method selection.
 
@@ -598,6 +611,25 @@ Affiliation, membership, or Role Binding. The packaged runtime owns `/register`,
 whose hosted form consumes this API without acquiring any additional account
 or authorization semantics.
 
+## Account-token inspection
+
+`POST /api/v1/auth/email-verification/inspect` and `POST
+/api/v1/auth/email-change/undo/inspect` let the hosted `/account/verify-email`
+and `/account/undo-email-change` pages name the address involved before the
+person acts. Each is public, takes only `{ "token": … }` in a strict JSON body
+so the fragment credential never enters a URL or access log, and returns a
+`no-store` `200`: the address a verification token would confirm, or the
+previous address an undo token would restore, the current address masked as
+in the warning mail, and when the change was applied. Inspection never
+consumes, extends, reissues, or echoes the token, records no audit event (as
+with other reads and with rejected completions), and is rate-accounted by
+token-derived identity and source under the completion policy with its own
+counters, so reading the page cannot exhaust the confirmation budget. Unknown,
+malformed, expired, superseded, consumed, and mismatched tokens share the
+completion's `authentication.account_token.invalid` outcome. The result is
+presentation only; completion rechecks every fact against authoritative
+PostgreSQL time and alone decides an undo conflict.
+
 ## Student Class Invitations
 
 `POST /api/v1/classes/{class_id}/invitations/student` requires an authenticated
@@ -676,7 +708,12 @@ unexpired Invitation with an unexpired intended relationship and maps its
 closed purpose to either the `account` or `session` acceptance requirement.
 
 The `201` response contains a random public `handle`, the Invitation `purpose`,
-the closed `requirement`, and `expires_at`. A distinct random browser proof is
+the closed `requirement`, `expires_at`, the Invitation's normalized target
+`email` (the mailbox the claim was delivered to, which no acceptance operation
+takes from the browser), and, for a student Class Invitation only,
+`class_display_name`. It never names an Academic Unit or Role, for the same
+reason their notices do not: a projection must not identify privileged
+accounts. A distinct random browser proof is
 set as a host-only, HttpOnly, SameSite=Lax cookie scoped to
 `/api/v1/auth/browser/invitations`; it is Secure outside the explicit loopback
 HTTP development mode. The named creation aggregate locks and rechecks the

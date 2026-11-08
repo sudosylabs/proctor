@@ -9,7 +9,7 @@ test("local login creates a cookie Session and sign out revokes it", async ({ pa
   expect(await currentUser(page)).toEqual({ status: 401 });
 
   await submitCredentials(page, account.username, randomPassword());
-  await expect(page.getByText("The email, username, or password wasn’t accepted.")).toBeVisible();
+  await expect(page.locator("#password-error")).toHaveText("That email or password isn’t right. Check both and try again.");
   expect(await currentUser(page)).toEqual({ status: 401 });
 
   await submitCredentials(page, account.email, account.password);

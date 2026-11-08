@@ -17,6 +17,16 @@ module when a change is not server-only. No module has been released yet.
 
 ### Changed
 
+- Server: `CreatePersonalAccessTokenRequest.scopes` now lists the accepted
+  action names as an `enum`, and its example uses the real scope `exam.view`
+  instead of the invalid `examinations:read`.
+- Server: audit events record the User they concern in `subject_user_id`: a
+  User resource is always its own subject, and Role Binding, Class and Academic
+  Unit membership, Invitation acceptance, self-service two-step verification,
+  and Personal Access Token events name the affected User. Existing
+  development databases must be recreated.
+- Server: the account disable and enable audit records the operation
+  `disable_account` or `enable_account` instead of `set_disabled`.
 - Server and `packages/vfs`: move `golang.org/x/net` to v0.62.0 to clear
   CVE-2026-78661 (HIGH), with `golang.org/x/crypto` v0.58.0, `x/sys` v0.49.0,
   `x/text` v0.43.0, `x/sync` v0.24.0 and `x/tools` v0.51.0. Exception to the
@@ -194,6 +204,40 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: `POST /api/v1/users/me/sessions/revoke-others` signs the caller out
+  of every other Session while the requesting Session stays signed in, and
+  returns `revoked_session_count`. Revoked Sessions record the new reason
+  `user_other_sessions`, and items in the caller's own Session list carry
+  `current`, true for the Session that made the request. Existing development
+  databases must be recreated.
+- Server: `GET /api/v1/users/me/mfa` reports `method` (`authenticator_app`,
+  while two-step verification is enabled or pending), `enabled_at`, and
+  `recovery_codes_generated_at`. `recovery_codes_total` is the size of the
+  recovery-code set the User was actually given, used codes included, and is
+  0 unless two-step verification is enabled.
+- Server: each retention notice from `GET /api/v1/users/me/retention-notices`
+  names the `exam_title` of the Exam Revision its Sitting delivered and the
+  Sitting's `sitting_start_at` and `sitting_end_at`, for every recipient.
+- Server: `GET /api/v1/search` finds Exams by Draft title, Classes by name,
+  and Users by directory fields in one request, returning typed `exam`,
+  `class` and `user` items (never an email address), at most `limit` (1–20,
+  default 5) of each. Each type is scoped and audited exactly as its own list,
+  a type the caller cannot list returns nothing, and the request is denied
+  only when no requested type is listable. Invalid search input is
+  `search.query.invalid`; the operation is under the new Search API tag.
+- Server: `GET /api/v1/users/me/tokens/grantable-scopes` lists
+  the Personal Access Token scopes the signed-in User may grant now, each with
+  a localized title and description, its resource types, and where it may be
+  granted: institution-wide or at up to 50 listed Academic Unit roots.
+- Server: `GET /api/v1/users/me/audits` lists the signed-in User's own
+  account history: sign-ins, sign-outs, password, two-step verification,
+  Session, Personal Access Token, profile, email, account state, Role, and
+  membership events, whoever performed them, plus the account events the User
+  performed on others. Each item has a stable `event` name from a closed
+  catalogue, an `actor.kind` of `self`, `administrator`, or `system` that never
+  names another person, and the IP address and user agent only for the User's
+  own actions. It filters by `created_after`, `created_before`, repeated
+  `event`, `status`, and `relation`, and refuses Personal Access Tokens.
 - Server: `Mail.SupportAddress` names a help address in every message
   footer, and `Mail.DisplayTimezone` sets the time zone used for message times
   when a recipient has not chosen one.

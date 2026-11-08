@@ -233,6 +233,26 @@ type ClassArchive struct {
 	AuditAt                time.Time
 }
 
+// ClassVisibilityScope is the persistence-ready class.view authority of a
+// cross-scope Class search: every Class Institution-wide, the Classes under
+// the named Academic Unit subtrees, and the named Classes.
+type ClassVisibilityScope struct {
+	InstitutionWide     bool
+	AcademicUnitRootIDs []model.AcademicUnitID
+	ClassIDs            []model.ClassID
+}
+
+// ClassSearchOptions selects up to Limit (1..201) unarchived Classes under
+// unarchived Programme Levels and Programmes whose name or display name
+// contains Term as a literal, case-insensitive substring, restricted to
+// Visibility and ordered by name then identity. An empty Visibility matches
+// nothing.
+type ClassSearchOptions struct {
+	Term       string
+	Limit      int
+	Visibility ClassVisibilityScope
+}
+
 type ClassStore interface {
 	Create(context.Context, *ClassCreation) (*model.Class, error)
 	Update(context.Context, *ClassUpdate) (*model.Class, error)
@@ -242,6 +262,7 @@ type ClassStore interface {
 	ListByProgrammeLevel(context.Context, model.ProgrammeLevelID, AcademicNameListOptions) ([]*model.Class, error)
 	ListByAcademicPeriod(context.Context, model.AcademicPeriodID) ([]*model.Class, error)
 	SearchByAcademicUnit(context.Context, model.AcademicUnitID, AcademicNameListOptions) ([]*model.Class, error)
+	SearchVisible(context.Context, ClassSearchOptions) ([]*model.Class, error)
 	GetAcademicUnitID(context.Context, model.ClassID) (model.AcademicUnitID, error)
 }
 

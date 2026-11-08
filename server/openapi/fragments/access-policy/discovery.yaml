@@ -13,7 +13,7 @@ paths:
       tags:
         - Access policy
       description: >-
-        Returns the same-origin, unauthenticated capability document a client uses before choosing a registration or authentication flow. The response contains only safe presentation and compatibility data, is never a substitute for authorization, and is returned with Cache-Control: no-store.
+        Returns the same-origin, unauthenticated capability document a client uses before choosing a registration or authentication flow. The response contains only safe presentation and compatibility data, is never a substitute for authorization, and is returned with Cache-Control: no-store. It also carries two operator-configured presentation facts that apply before and after installation setup: the optional support mailbox hosted pages offer as a contact, and the minimum password length new passwords must meet.
       x-codeSamples:
         - lang: Shell
           source: |-
@@ -109,6 +109,7 @@ components:
         - capabilities
         - providers
         - desktop_authorization
+        - password_minimum_length
       properties:
         discovery_version:
           type: integer
@@ -138,3 +139,13 @@ components:
             $ref: '#/components/schemas/ExternalAuthenticationProviderResponse'
         desktop_authorization:
           $ref: '#/components/schemas/DesktopAuthorizationCompatibilityResponse'
+        support_address:
+          type: string
+          format: email
+          maxLength: 254
+          description: Operator-configured help mailbox (`Mail.SupportAddress`) that hosted pages offer as a contact. Omitted when none is configured.
+        password_minimum_length:
+          type: integer
+          minimum: 8
+          maximum: 128
+          description: Minimum number of characters a new local password must contain (`Authentication.Password.MinimumLength`). Other password rules still apply and are reported when a password is rejected.

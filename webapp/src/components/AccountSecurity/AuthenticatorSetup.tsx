@@ -2,8 +2,8 @@
 import { QRCodeSVG } from "qrcode.react";
 
 import type { AuthenticatorSetup as Setup } from "../../features/account-security/AccountSecurityApi";
+import { groupSetupKey } from "../../features/account-security/presentation";
 import { message } from "../../i18n/messages";
-import { InputField } from "../InputField/InputField";
 import styles from "./AuthenticatorSetup.module.css";
 
 export function AuthenticatorSetup({ setup }: { setup: Setup }) {
@@ -12,18 +12,13 @@ export function AuthenticatorSetup({ setup }: { setup: Setup }) {
       size={240} level="M" marginSize={4}
       bgColor="var(--proctor-color-machine-readable-background)"
       fgColor="var(--proctor-color-machine-readable-foreground)"
-      role="img" aria-label={message("webapp.security.setup.qr_label")}
-      aria-describedby="authenticator-setup-expiry" />
-    <details className={styles.manual}>
-      <summary>{message("webapp.security.setup.manual")}</summary>
-      <div className={styles.manualContent}>
-        <InputField id="authenticator-secret" label={message("webapp.security.setup.key")}
-          inputClassName={styles.secret} readOnly value={setup.secret} autoComplete="off"
-          spellCheck={false} translate="no" description={message("webapp.security.setup.manual_help")} />
-      </div>
-    </details>
-    <p className={styles.expiry} id="authenticator-setup-expiry">
-      {message("webapp.security.setup.expires", { Time: new Date(setup.expiresAt).toLocaleString() })}
-    </p>
+      role="img" aria-label={message("webapp.security.setup.qr_label")} />
+    <div className={styles.manual}>
+      <p className={styles.manualHelp} id="authenticator-secret-label">{message("webapp.security.setup.manual")}</p>
+      <p className={styles.key}>
+        <span className={styles.visuallyHidden}>{message("webapp.security.setup.key")}</span>
+        <code id="authenticator-secret" translate="no">{groupSetupKey(setup.secret)}</code>
+      </p>
+    </div>
   </div>;
 }

@@ -8,129 +8,15 @@
   }
 
   .page,
-  .headingGroup,
-  .form,
-  .routeState,
-  .routeStateCopy,
-  .context,
-  .submission {
+  .form {
     display: flex;
+    min-inline-size: 0;
     flex-direction: column;
   }
 
-  .page,
-  .routeState {
+  .page {
     gap: var(--proctor-space-6);
     max-inline-size: var(--proctor-measure-form);
-  }
-
-  .headingGroup,
-  .routeStateCopy {
-    gap: var(--proctor-space-3);
-  }
-
-  .headingGroup h1,
-  .routeState h1 {
-    font-family: var(--proctor-font-family-display);
-    font-size: var(--proctor-font-size-display);
-    font-weight: var(--proctor-font-weight-semibold);
-    line-height: var(--proctor-line-height-display);
-    letter-spacing: var(--proctor-letter-spacing-display);
-    text-wrap: balance;
-  }
-
-  .headingGroup p,
-  .routeStateCopy p,
-  .routeState > p {
-    color: var(--proctor-color-foreground-muted);
-    font-size: var(--proctor-font-size-body-large);
-    line-height: var(--proctor-line-height-body-large);
-  }
-
-  .context {
-    gap: var(--proctor-space-4);
-    max-inline-size: 30rem;
-  }
-
-  .eyebrow,
-  .stateLabel {
-    color: var(--proctor-color-foreground-link);
-    font-size: var(--proctor-font-size-label);
-    font-weight: var(--proctor-font-weight-semibold);
-    letter-spacing: var(--proctor-letter-spacing-label);
-    text-transform: uppercase;
-  }
-
-  .contextHeading {
-    font-family: var(--proctor-font-family-display);
-    font-size: var(--proctor-font-size-display);
-    font-weight: var(--proctor-font-weight-semibold);
-    line-height: var(--proctor-line-height-display);
-    letter-spacing: var(--proctor-letter-spacing-display);
-    text-wrap: balance;
-  }
-
-  .contextBody,
-  .contextNote {
-    color: var(--proctor-color-foreground-muted);
-  }
-
-  .proofRail {
-    display: flex;
-    flex-direction: column;
-    gap: var(--proctor-space-0);
-    padding: var(--proctor-space-0);
-    margin-block: var(--proctor-space-4);
-    list-style: none;
-  }
-
-  .proofRail li {
-    position: relative;
-    display: grid;
-    grid-template-columns: var(--proctor-control-size-default) minmax(0, 1fr);
-    gap: var(--proctor-space-3);
-    min-block-size: var(--proctor-space-8);
-    align-items: start;
-  }
-
-  .proofRail li:not(:last-child)::after {
-    position: absolute;
-    inset-block-start: var(--proctor-space-5);
-    inset-block-end: var(--proctor-space-0);
-    inset-inline-start: calc(var(--proctor-control-size-default) / 2);
-    inline-size: var(--proctor-border-width-strong);
-    background: var(--proctor-color-border-default);
-    content: "";
-  }
-
-  .proofMark {
-    display: block;
-    inline-size: var(--proctor-icon-size-default);
-    block-size: var(--proctor-icon-size-default);
-    margin-block-start: var(--proctor-space-1);
-    margin-inline: auto;
-    border: var(--proctor-border-width-strong) solid
-      var(--proctor-color-border-interactive);
-    border-radius: var(--proctor-radius-round);
-    background: var(--proctor-color-background-canvas);
-  }
-
-  .proofMark::after {
-    display: block;
-    inline-size: var(--proctor-space-2);
-    block-size: var(--proctor-space-2);
-    margin: var(--proctor-space-1);
-    border-radius: var(--proctor-radius-round);
-    background: var(--proctor-color-action-primary);
-    content: "";
-  }
-
-  .contextNote {
-    padding-block-start: var(--proctor-space-5);
-    border-block-start: var(--proctor-border-width-hairline) solid
-      var(--proctor-color-border-default);
-    font-size: var(--proctor-font-size-body-small);
-    line-height: var(--proctor-line-height-body-small);
   }
 
   .form {
@@ -143,8 +29,18 @@
     gap: var(--proctor-space-5);
   }
 
+  /* The action row and its feedback stack in block flow: no gap, so an
+     empty feedback region adds no space after the action. */
   .submission {
-    gap: var(--proctor-space-2);
+    display: block;
+    min-inline-size: 0;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--proctor-space-3) var(--proctor-space-5);
+    align-items: center;
   }
 
   .acknowledgment {
@@ -186,10 +82,22 @@
 
   .signIn {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: var(--proctor-space-2);
-    justify-content: center;
-    color: var(--proctor-color-foreground-muted);
+    margin-block-start: var(--proctor-space-2);
+    padding-block-start: var(--proctor-space-5);
+    border-block-start: var(--proctor-border-width-hairline) solid
+      var(--proctor-color-border-default);
+  }
+
+  .signIn h2 {
+    font-size: var(--proctor-font-size-body);
+    font-weight: var(--proctor-font-weight-semibold);
+    line-height: var(--proctor-line-height-heading-small);
+  }
+
+  .signIn p {
+    color: var(--proctor-color-foreground-subtle);
     font-size: var(--proctor-font-size-body-small);
     line-height: var(--proctor-line-height-body-small);
   }
@@ -206,20 +114,26 @@
     white-space: nowrap;
   }
 
-  @media (forced-colors: active) {
-    .proofRail li::after,
-    .proofMark::after {
-      background: CanvasText;
-    }
-
-    .proofMark {
-      border-color: ButtonText;
-    }
-  }
-
   @media (min-width: 30rem) {
     .nameFields {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 30rem) {
+    .actions {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .actions > * {
+      inline-size: 100%;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .signIn {
+      border-block-start-color: CanvasText;
     }
   }
 }

@@ -43,6 +43,65 @@ export function createPublicAccessDiscoveryLoader(
 export const requestPublicAccessDiscovery =
   createPublicAccessDiscoveryLoader(httpTransport);
 
+/**
+ * One page-lifetime discovery request shared by the hosted shell and any
+ * route that only needs the same initial document. A settled `unavailable`
+ * result is not retained, so the next load (for example a route retry)
+ * performs a fresh request and republishes its result to subscribers.
+ */
+export interface SharedPublicAccessDiscovery {
+  current(): PublicAccessDiscoveryResult | undefined;
+  load(servingOrigin: string): Promise<PublicAccessDiscoveryResult>;
+  subscribe(listener: () => void): () => void;
+}
+
+export function createSharedPublicAccessDiscovery(
+  loader: PublicAccessDiscoveryLoader,
+): SharedPublicAccessDiscovery {
+  let request:
+    | { servingOrigin: string; promise: Promise<PublicAccessDiscoveryResult> }
+    | undefined;
+  let latest: PublicAccessDiscoveryResult | undefined;
+  const listeners = new Set<() => void>();
+
+  return {
+    current() {
+      return latest;
+    },
+    load(servingOrigin) {
+      if (request?.servingOrigin === servingOrigin) {
+        return request.promise;
+      }
+      const promise = loader(servingOrigin)
+        .catch((): PublicAccessDiscoveryResult => ({ kind: "unavailable" }))
+        .then((result) => {
+          if (request?.promise === promise) {
+            if (result.kind === "unavailable") {
+              request = undefined;
+            }
+            latest = result;
+            for (const listener of listeners) {
+              listener();
+            }
+          }
+          return result;
+        });
+      request = { servingOrigin, promise };
+      return promise;
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+}
+
+export const sharedPublicAccessDiscovery = createSharedPublicAccessDiscovery(
+  requestPublicAccessDiscovery,
+);
+
 export function resolvePublicAccessDiscovery(
   value: unknown,
   servingOrigin: string,
@@ -78,7 +137,11 @@ function isPublicAccessDiscovery(
     (value.installation_id !== undefined &&
       typeof value.installation_id !== "string") ||
     (value.policy_revision !== undefined &&
-      typeof value.policy_revision !== "number")
+      typeof value.policy_revision !== "number") ||
+    (value.support_address !== undefined &&
+      typeof value.support_address !== "string") ||
+    (value.password_minimum_length !== undefined &&
+      !isPasswordMinimumLength(value.password_minimum_length))
   ) {
     return false;
   }
@@ -121,6 +184,15 @@ function isProvider(value: unknown): boolean {
     typeof value.display_name === "string" &&
     value.display_name !== "" &&
     typeof value.type === "string"
+  );
+}
+
+function isPasswordMinimumLength(value: unknown): boolean {
+  return (
+    typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= 1 &&
+    value <= 1024
   );
 }
 

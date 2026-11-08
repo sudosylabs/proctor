@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import {
   createPublicAccessDiscoveryLoader,
+  createSharedPublicAccessDiscovery,
   resolvePublicAccessDiscovery,
+  type PublicAccessDiscovery,
+  type PublicAccessDiscoveryResult,
   type PublicAccessDiscoveryTransport,
 } from "./PublicAccessDiscovery";
 
 const discovery = {
   discovery_version: 1,
+  password_minimum_length: 12,
   canonical_origin: "https://proctor.example",
   initialized: true,
   capabilities: {
@@ -39,6 +43,13 @@ describe("resolvePublicAccessDiscovery", () => {
     ).toEqual({ kind: "ready", discovery });
   });
 
+  it("accepts the optional support address and the password minimum", () => {
+    const withSupport = { ...discovery, support_address: "help@example.edu" };
+    expect(
+      resolvePublicAccessDiscovery(withSupport, "https://proctor.example"),
+    ).toEqual({ kind: "ready", discovery: withSupport });
+  });
+
   it("fails closed for invalid and mismatched canonical origins", () => {
     expect(
       resolvePublicAccessDiscovery(
@@ -57,6 +68,10 @@ describe("resolvePublicAccessDiscovery", () => {
     [{ ...discovery, providers: [{}] }],
     [{ ...discovery, institution: { display_name: "Incomplete" } }],
     [{ ...discovery, discovery_version: 2 }],
+    [{ ...discovery, support_address: 42 }],
+    [{ ...discovery, password_minimum_length: "12" }],
+    [{ ...discovery, password_minimum_length: 0 }],
+    [{ ...discovery, password_minimum_length: 12.5 }],
   ])("rejects malformed documents", (value) => {
     expect(
       resolvePublicAccessDiscovery(value, "https://proctor.example"),
@@ -90,5 +105,50 @@ describe("createPublicAccessDiscoveryLoader", () => {
     await expect(rejected("https://proctor.example")).resolves.toEqual({
       kind: "unavailable",
     });
+  });
+});
+
+const sharedDiscovery = discovery as unknown as PublicAccessDiscovery;
+
+describe("createSharedPublicAccessDiscovery", () => {
+  it("shares one request and publishes its result", async () => {
+    let requests = 0;
+    const shared = createSharedPublicAccessDiscovery(async () => {
+      requests += 1;
+      return { kind: "ready", discovery: sharedDiscovery } as const;
+    });
+    let notifications = 0;
+    shared.subscribe(() => {
+      notifications += 1;
+    });
+
+    const [first, second] = await Promise.all([
+      shared.load("https://proctor.example"),
+      shared.load("https://proctor.example"),
+    ]);
+
+    expect(requests).toBe(1);
+    expect(first).toBe(second);
+    expect(shared.current()).toEqual({ kind: "ready", discovery });
+    expect(notifications).toBe(1);
+    await shared.load("https://proctor.example");
+    expect(requests).toBe(1);
+  });
+
+  it("does not retain unavailability, so a retry requests again", async () => {
+    const results: PublicAccessDiscoveryResult[] = [
+      { kind: "unavailable" },
+      { kind: "ready", discovery: sharedDiscovery },
+    ];
+    let requests = 0;
+    const shared = createSharedPublicAccessDiscovery(async () => {
+      requests += 1;
+      return results.shift() ?? { kind: "unavailable" };
+    });
+
+    expect(await shared.load("https://proctor.example")).toEqual({ kind: "unavailable" });
+    expect(await shared.load("https://proctor.example")).toEqual({ kind: "ready", discovery });
+    expect(requests).toBe(2);
+    expect(shared.current()).toEqual({ kind: "ready", discovery });
   });
 });

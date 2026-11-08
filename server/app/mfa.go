@@ -101,6 +101,9 @@ type MFAActivation struct {
 	RecoveryCodes []string
 }
 
+// MFAMethodAuthenticatorApp is the only second factor: a TOTP authenticator app.
+const MFAMethodAuthenticatorApp = "authenticator_app"
+
 // MFAStatus is the caller's enrollment status.
 type MFAStatus struct {
 	ServiceEnabled           bool
@@ -113,6 +116,24 @@ type MFAStatus struct {
 	Pending                  bool
 	PendingExpiresAt         model.OptionalTime
 	RecoveryCodesRemaining   int
+	// Method is MFAMethodAuthenticatorApp while MFA is enabled or pending and
+	// empty otherwise.
+	Method string
+	// EnabledAt is when the credential was activated; unset unless enabled.
+	EnabledAt model.OptionalTime
+	// RecoveryCodesTotal is the size of the live issued recovery-code set,
+	// consumed codes included; zero unless enabled.
+	RecoveryCodesTotal int
+	// RecoveryCodesGeneratedAt is when the live set was issued; unset when
+	// there is none.
+	RecoveryCodesGeneratedAt model.OptionalTime
+	// PasswordChangedAt is unset for an account without a password credential.
+	PasswordChangedAt model.OptionalTime
+	// RecentAuthenticationTTL is the configured recent-authentication window;
+	// RecentlyAuthenticatedUntil is when it ends for this Session, set only
+	// while the Session is recently authenticated.
+	RecentAuthenticationTTL    time.Duration
+	RecentlyAuthenticatedUntil model.OptionalTime
 }
 
 func (s *mfaMechanics) consumeSecondFactor(

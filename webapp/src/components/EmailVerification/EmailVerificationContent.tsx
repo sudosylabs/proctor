@@ -1,33 +1,37 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { EmailVerificationResult } from "../../features/verify-email/VerifyEmailApi";
-import { message } from "../../i18n/messages";
-import { Button } from "../Button/Button";
-import { Notice, type NoticeTone } from "../Notice/Notice";
+import { message, type MessageID } from "../../i18n/messages";
+import { richMessage } from "../../i18n/richMessage";
+import { Button, ButtonLink } from "../Button/Button";
+import {
+  TaskState,
+  TaskStateActions,
+  TaskStateAnnouncement,
+} from "../TaskState/TaskState";
 import styles from "./EmailVerificationContent.module.css";
 
-type VerificationState =
-  | "ready"
-  | "verifying"
-  | "verified"
-  | "invalid"
-  | "unavailable";
+type VerificationState = "ready" | "verified" | "invalid" | "unavailable";
 
 export interface EmailVerificationContentProps {
+  /** The address the token would confirm, once the read-only lookup names it. */
+  address?: string;
   token?: string;
   verifyEmail(token: string): Promise<EmailVerificationResult>;
 }
 
 export function EmailVerificationContent({
+  address,
   token,
   verifyEmail,
 }: EmailVerificationContentProps) {
   const tokenRef = useRef(token);
   const activeRef = useRef(true);
-  const headingRef = useRef<HTMLHeadingElement>(null);
   const [state, setState] = useState<VerificationState>(
     token === undefined ? "invalid" : "ready",
   );
+  const [pending, setPending] = useState(false);
+  const [transitioned, setTransitioned] = useState(false);
   const [liveMessage, setLiveMessage] = useState("");
 
   useEffect(() => {
@@ -39,12 +43,12 @@ export function EmailVerificationContent({
 
   async function submit() {
     const currentToken = tokenRef.current;
-    if (state === "verifying" || currentToken === undefined) {
+    if (pending || currentToken === undefined) {
       return;
     }
 
-    setState("verifying");
-    setLiveMessage(message("webapp.verify_email.verifying.body"));
+    setPending(true);
+    setLiveMessage(message("webapp.verify_email.ready.pending_announcement"));
     const result = await verifyEmail(currentToken);
     if (!activeRef.current) {
       return;
@@ -54,130 +58,122 @@ export function EmailVerificationContent({
     if (nextState === "verified" || nextState === "invalid") {
       tokenRef.current = undefined;
     }
+    setPending(false);
     setState(nextState);
-    setLiveMessage(copyFor(nextState).body);
-    requestAnimationFrame(() => headingRef.current?.focus({ preventScroll: true }));
+    setTransitioned(true);
+    setLiveMessage(message(copyFor(nextState).heading));
   }
 
   const copy = copyFor(state);
+  const body =
+    state === "ready" && address !== undefined
+      ? richMessage("webapp.verify_email.ready.body_address", {
+          Email: <strong translate="no">{address}</strong>,
+        })
+      : message(copy.body);
 
   return (
-    <section
-      className={`${styles.status} ${styles[state]}`}
-      aria-labelledby="verify-email-heading"
-    >
-      <div className={styles.visuallyHidden} aria-live="polite" aria-atomic="true">
-        {liveMessage}
-      </div>
-      <p className={styles.label}>{copy.label}</p>
-      <h1 id="verify-email-heading" ref={headingRef} tabIndex={-1}>
-        {copy.heading}
-      </h1>
-      <p className={styles.body}>{copy.body}</p>
-      <Notice className={styles.notice} tone={noticeToneFor(state)}>
-        <p>{copy.notice}</p>
-      </Notice>
-      <VerificationActions state={state} onSubmit={submit} />
-    </section>
+    <>
+      <TaskStateAnnouncement message={liveMessage} />
+      <TaskState
+        // A new state remounts the heading so a completed action can focus it.
+        key={state}
+        body={body}
+        focusHeading={transitioned}
+        heading={message(copy.heading)}
+        headingID="verify-email-heading"
+        label={message("webapp.verify_email.kind")}
+        labelTone={copy.tone}
+      >
+        <TaskStateActions className={styles.actions}>
+          <VerificationActions
+            pending={pending}
+            state={state}
+            onSubmit={submit}
+          />
+        </TaskStateActions>
+      </TaskState>
+    </>
   );
 }
 
 function VerificationActions({
   onSubmit,
+  pending,
   state,
 }: {
   onSubmit(): void;
+  pending: boolean;
   state: VerificationState;
 }) {
-  if (state === "ready" || state === "verifying") {
-    return (
-      <div className={styles.actions}>
-        <Button
-          isLoading={state === "verifying"}
-          loadingLabel={message("webapp.verify_email.verifying.action")}
-          onClick={onSubmit}
-        >
-          {message("webapp.verify_email.ready.action")}
-        </Button>
-        <SignInLink />
-      </div>
-    );
-  }
-  if (state === "unavailable") {
-    return (
-      <div className={styles.actions}>
-        <Button onClick={onSubmit}>
-          {message("webapp.verify_email.unavailable.retry")}
-        </Button>
-        <SignInLink />
-      </div>
-    );
-  }
-  return (
-    <div className={styles.actions}>
-      <SignInLink />
-    </div>
-  );
-}
-
-function SignInLink() {
-  return (
-    <a className={styles.signInLink} href="/login">
-      {message("webapp.verify_email.sign_in")}
-    </a>
-  );
-}
-
-function noticeToneFor(state: VerificationState): NoticeTone {
   switch (state) {
     case "ready":
-    case "verifying":
-      return "accent";
-    case "verified":
-      return "success";
-    case "invalid":
-      return "danger";
     case "unavailable":
-      return "warning";
+      return (
+        <>
+          <Button
+            isLoading={pending}
+            loadingLabel={message("webapp.verify_email.ready.pending")}
+            onClick={onSubmit}
+          >
+            {message(
+              state === "ready"
+                ? "webapp.verify_email.ready.action"
+                : "webapp.verify_email.unavailable.retry",
+            )}
+          </Button>
+          <a className={styles.quietLink} href="/login">
+            {message("webapp.verify_email.sign_in")}
+          </a>
+        </>
+      );
+    case "verified":
+      return (
+        <ButtonLink href="/login">
+          {message("webapp.verify_email.verified.action")}
+        </ButtonLink>
+      );
+    case "invalid":
+      return (
+        <ButtonLink href="/login">
+          {message("webapp.verify_email.invalid.action")}
+        </ButtonLink>
+      );
   }
 }
 
-function copyFor(state: VerificationState) {
+interface VerificationCopy {
+  body: MessageID;
+  heading: MessageID;
+  tone?: "success" | "warning" | "danger";
+}
+
+function copyFor(state: VerificationState): VerificationCopy {
   switch (state) {
     case "ready":
+      // When the read-only lookup names the address, the ready body is
+      // replaced by its address-bearing variant.
       return {
-        label: message("webapp.verify_email.ready.label"),
-        heading: message("webapp.verify_email.ready.heading"),
-        body: message("webapp.verify_email.ready.body"),
-        notice: message("webapp.verify_email.ready.notice"),
-      };
-    case "verifying":
-      return {
-        label: message("webapp.verify_email.verifying.label"),
-        heading: message("webapp.verify_email.verifying.heading"),
-        body: message("webapp.verify_email.verifying.body"),
-        notice: message("webapp.verify_email.verifying.notice"),
+        heading: "webapp.verify_email.ready.heading",
+        body: "webapp.verify_email.ready.body",
       };
     case "verified":
       return {
-        label: message("webapp.verify_email.verified.label"),
-        heading: message("webapp.verify_email.verified.heading"),
-        body: message("webapp.verify_email.verified.body"),
-        notice: message("webapp.verify_email.verified.notice"),
+        heading: "webapp.verify_email.verified.heading",
+        body: "webapp.verify_email.verified.body",
+        tone: "success",
       };
     case "invalid":
       return {
-        label: message("webapp.verify_email.invalid.label"),
-        heading: message("webapp.verify_email.invalid.heading"),
-        body: message("webapp.verify_email.invalid.body"),
-        notice: message("webapp.verify_email.invalid.notice"),
+        heading: "webapp.verify_email.invalid.heading",
+        body: "webapp.verify_email.invalid.body",
+        tone: "danger",
       };
     case "unavailable":
       return {
-        label: message("webapp.verify_email.unavailable.label"),
-        heading: message("webapp.verify_email.unavailable.heading"),
-        body: message("webapp.verify_email.unavailable.body"),
-        notice: message("webapp.verify_email.unavailable.notice"),
+        heading: "webapp.verify_email.unavailable.heading",
+        body: "webapp.verify_email.unavailable.body",
+        tone: "warning",
       };
   }
 }

@@ -5,6 +5,7 @@ import { apiResult } from "../../test/ApiClientTestAdapter";
 import {
   acceptInvitationAccount,
   acceptInvitationSession,
+  startInvitation,
   type InvitationAccountSubmission,
 } from "./InvitationApi";
 
@@ -107,5 +108,33 @@ describe("acceptInvitationSession", () => {
     await expect(acceptInvitationSession("handle")).resolves.toEqual({
       kind: "unavailable",
     });
+  });
+});
+
+describe("startInvitation", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const started = {
+    handle: "transaction-handle",
+    purpose: "student_class",
+    requirement: "account",
+    expires_at: "2026-08-01T00:00:00Z",
+    email: "ada@example.edu",
+    class_display_name: "Biology 101",
+  };
+
+  it("accepts the invited address and a student Class name", async () => {
+    vi.spyOn(apiClient, "POST").mockResolvedValue(apiResult(201, { data: started }));
+    await expect(startInvitation("claim")).resolves.toEqual({ kind: "ready", transaction: started });
+  });
+
+  it.each([
+    [{ ...started, email: undefined }],
+    [{ ...started, email: " " }],
+    [{ ...started, class_display_name: 42 }],
+    [{ ...started, purpose: "teacher_academic_unit" }],
+  ])("treats an incomplete or mismatched projection as unavailable", async (data) => {
+    vi.spyOn(apiClient, "POST").mockResolvedValue(apiResult(201, { data }));
+    await expect(startInvitation("claim")).resolves.toEqual({ kind: "unavailable" });
   });
 });

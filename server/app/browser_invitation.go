@@ -54,6 +54,13 @@ type BrowserInvitationStart struct {
 	Purpose      model.InvitationPurpose
 	Requirement  BrowserInvitationRequirement
 	ExpiresAt    int64
+	// Email is the Invitation's normalized target address, the mailbox the
+	// claim was delivered to. Acceptance never takes an address from the browser.
+	Email string
+	// ClassDisplayName names the Class of a student Class Invitation and is
+	// empty for every other purpose. Academic Unit and Role names are never
+	// presented, matching the Invitation and membership mail.
+	ClassDisplayName string
 }
 
 type BrowserInvitationAcceptanceCommand struct {
@@ -96,6 +103,17 @@ func (s *browserInvitationService) StartBrowserInvitation(ctx context.Context, _
 	default:
 		return nil, apperror.New("invitation.invalid")
 	}
+	var classDisplayName string
+	if invitation.Purpose == model.InvitationPurposeStudentClass {
+		class, classErr := s.deps.Invitations.deps.Classes.Get(ctx, invitation.ClassID)
+		if classErr != nil && !store.IsNotFound(classErr) {
+			return nil, apperror.New("invitation.unavailable").Wrap(classErr)
+		}
+		if class == nil {
+			return nil, invalidInvitationError(classErr)
+		}
+		classDisplayName = class.DisplayName
+	}
 	institution, err := s.deps.Institutions.GetSingleton(ctx)
 	if err != nil || institution == nil || !institution.ID.IsValid() {
 		return nil, apperror.New("invitation.unavailable").Wrap(err)
@@ -120,6 +138,7 @@ func (s *browserInvitationService) StartBrowserInvitation(ctx context.Context, _
 	return &BrowserInvitationStart{
 		Handle: handle, BrowserProof: proof, Purpose: invitation.Purpose,
 		Requirement: requirement, ExpiresAt: saved.ExpiresAt.UnixMilli(),
+		Email: invitation.TargetEmail, ClassDisplayName: classDisplayName,
 	}, nil
 }
 

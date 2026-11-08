@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "../../api/client";
 import { apiResult } from "../../test/ApiClientTestAdapter";
 import {
+  inspectEmailChangeUndo,
   resolveEmailChangeUndoResult,
   undoEmailChange,
 } from "./UndoEmailChangeApi";
@@ -54,5 +55,34 @@ describe("undoEmailChange", () => {
     await expect(undoEmailChange("token-value")).resolves.toEqual({
       kind: "unavailable",
     });
+  });
+});
+
+describe("inspectEmailChangeUndo", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const facts = { restored_email: "ada.old@example.edu", masked_current_email: "a***@example.org", changed_at: "2026-08-18T10:00:00Z" };
+
+  it("posts only the token and names the change", async () => {
+    const post = vi.spyOn(apiClient, "POST").mockResolvedValue(apiResult(200, { data: facts }));
+    await expect(inspectEmailChangeUndo("fragment-token")).resolves.toEqual({
+      kind: "known", restoredEmail: "ada.old@example.edu", maskedCurrentEmail: "a***@example.org", changedAt: "2026-08-18T10:00:00Z",
+    });
+    expect(post).toHaveBeenCalledWith("/api/v1/auth/email-change/undo/inspect", { body: { token: "fragment-token" } });
+  });
+
+  it("treats failures and malformed bodies as unknown", async () => {
+    const post = vi.spyOn(apiClient, "POST");
+    for (const result of [
+      apiResult(200, { data: { ...facts, restored_email: "nope" } }),
+      apiResult(200, { data: { ...facts, masked_current_email: "ada.new@example.org" } }),
+      apiResult(200, { data: { ...facts, changed_at: "yesterday" } }),
+      apiResult(400, { problemCode: "authentication.account_token.invalid" }),
+    ]) {
+      post.mockResolvedValue(result);
+      await expect(inspectEmailChangeUndo("fragment-token")).resolves.toEqual({ kind: "unknown" });
+    }
+    post.mockRejectedValue(new Error("offline"));
+    await expect(inspectEmailChangeUndo("fragment-token")).resolves.toEqual({ kind: "unknown" });
   });
 });

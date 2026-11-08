@@ -26,5 +26,31 @@ to a closed reason. Every page that sets a password reports the reason on its
 password field; length keeps the page's own wording and the other reasons
 share one explanation each, so the pages never disagree about the policy.
 
+`sharedPublicAccessDiscovery` wraps the same loader in one page-lifetime
+request. Concurrent and later loads for the same origin reuse it; a settled
+`unavailable` result is not retained, so a route retry requests again and
+republishes the result to subscribers. Only the hosted-page Institution
+provider and login use it, because they need the same initial document;
+routes that must observe current policy (registration after a rejection,
+Desktop authorization, Invitation acceptance) keep requesting directly.
+
+`HostedInstitution.tsx` mounts once around every hosted page (in `App`). It
+starts the shared discovery request without blocking rendering and exposes
+`useHostedInstitution(): { displayName?: string; supportAddress?: string }`
+for page chrome. Fields stay empty while loading, after failure or origin
+mismatch, and when discovery omits them. `supportAddress` is discovery's
+operator-configured `support_address`, exposed only when it is a plain mailbox
+that needs no escaping in a `mailto:` link (an unusual value is dropped rather
+than failing discovery); it is never derived from other values and does not
+depend on the Institution name. The context default is empty, so chrome
+rendered outside the provider omits the Institution rather than failing.
+
+`passwordPolicy.ts` reads discovery's `password_minimum_length` from the same
+shared result (`usePasswordMinimumLength()`) for pages that set a new password.
+Those pages state “At least {n} characters.” in the password field's
+description and drop only the length sentence while discovery is loading or
+unavailable; the server remains the authority and still reports rejections
+through `passwordRejection.ts`.
+
 Fragment extraction, CSRF behavior, and navigation remain separately owned by
 their narrow modules in this directory.

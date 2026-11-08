@@ -1,17 +1,22 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import type {
   AuthenticatorSetup, SecurityActions, SecurityContext, SecurityContextResult, SecurityFailure,
 } from "../../features/account-security/AccountSecurityApi";
+import { formatMinutes, minutesUntil, useProviderName } from "../../features/account-security/presentation";
+import { formatDate } from "../../i18n/dateTime";
 import { message } from "../../i18n/messages";
-import { AccessTaskIntro } from "../AccessTaskIntro/AccessTaskIntro";
+import { richMessage } from "../../i18n/richMessage";
+import { AccessTaskIntro, type AccessTaskKindTone } from "../AccessTaskIntro/AccessTaskIntro";
 import { Button, ButtonLink } from "../Button/Button";
+import { Fact, FactList } from "../FactList/FactList";
 import { Notice } from "../Notice/Notice";
 import { TaskState, TaskStateActions, TaskStateAnnouncement } from "../TaskState/TaskState";
 import { RecoveryCodes } from "./RecoveryCodes";
 import { AuthenticatorSetup as AuthenticatorSetupContent } from "./AuthenticatorSetup";
 import { SecurityCodeForm } from "./SecurityCodeForm";
 import { SecurityFeedback } from "./SecurityFeedback";
+import { SecuritySignOut } from "./SecuritySignOut";
 import styles from "./AccountSecurity.module.css";
 
 type Task =
@@ -35,6 +40,7 @@ export function AccountSecurityContent({ actions, loading, onRefresh, state }: {
   const [focusHeading, setFocusHeading] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const viewGeneration = useRef(0);
+  const providerName = useProviderName(state.kind === "ready" ? state.context.authenticationProviderID : undefined);
 
   useEffect(() => {
     function discardSensitiveView() {
@@ -129,23 +135,13 @@ export function AccountSecurityContent({ actions, loading, onRefresh, state }: {
     setPending(false);
   }
 
-  async function signOut() {
-    if (pending) return;
-    setPending(true); setFailure(undefined);
-    const generation = viewGeneration.current;
-    const result = await actions.signOut();
-    if (generation !== viewGeneration.current) return;
-    if (result.kind === "success" || result.kind === "no_session") window.location.replace("/login");
-    else failed(result);
-    setPending(false);
-  }
-
   if (loading || (state.kind !== "ready" && task.kind === "status")) {
     const noSession = !loading && state.kind === "no_session";
     const heading = message(loading ? "webapp.security.loading.heading" : noSession ? "webapp.security.no_session.heading" : "webapp.security.unavailable.heading");
     return <>
       <TaskStateAnnouncement message={heading} />
       <TaskState heading={heading} headingID="security-heading" focusHeading={focusHeading} busy={loading}
+        label={message("webapp.security.eyebrow")}
         body={message(loading ? "webapp.security.loading.body" : noSession ? "webapp.security.no_session.body" : "webapp.security.unavailable.body")}>
         {!loading ? <TaskStateActions>{noSession
           ? <ButtonLink href="/login">{message("webapp.security.sign_in")}</ButtonLink>
@@ -157,73 +153,206 @@ export function AccountSecurityContent({ actions, loading, onRefresh, state }: {
 
   const context = state.kind === "ready" ? state.context : undefined;
   const content = taskCopy(task);
+  const feedback = <>
+    <SecurityFeedback failure={failure} />
+    {failure?.kind === "conflict" || failure?.kind === "disabled"
+      ? <TaskStateActions><Button variant="secondary" onClick={() => refresh()}>{message("webapp.security.refresh")}</Button></TaskStateActions>
+      : null}
+  </>;
+  const cancel = <Button variant="text" disabled={pending} onClick={() => refresh()}>{message("webapp.security.cancel")}</Button>;
+
   return (
     <section className={styles.page} aria-labelledby="security-heading">
       <TaskStateAnnouncement message={pending ? message("webapp.security.working") : announcement} />
       <AccessTaskIntro key={task.kind} headingID="security-heading" focusHeading={focusHeading}
-        eyebrow={message("webapp.security.eyebrow")} heading={content.heading} body={content.body} />
-      {task.kind === "status" && context !== undefined ? <>
-        <StatusSummary context={context} />
-        {!context.serviceEnabled ? <Notice tone="warning">{message("webapp.security.service_disabled")}</Notice> : <>
-          {context.enabled ? <div className={styles.stack}>
-            <Button disabled={pending} onClick={() => changeTask({ kind: "challenge" })}>{message("webapp.security.challenge.action")}</Button>
-            <Button disabled={pending} variant="secondary" onClick={() => changeTask({ kind: "confirm_regenerate" })}>{message("webapp.security.regenerate.action")}</Button>
-            {!context.recoveryRequired ? <Button disabled={pending} variant="text" onClick={() => changeTask({ kind: "confirm_disable" })}>{message("webapp.security.disable.action")}</Button> : null}
-          </div> : <Button isLoading={pending} loadingLabel={message("webapp.security.working")} onClick={setup}>
-            {message(context.pending ? "webapp.security.setup.restart" : "webapp.security.setup.action")}
-          </Button>}
-          {context.pending ? <Notice>{message("webapp.security.setup.pending")}</Notice> : null}
-        </>}
-      </> : null}
+        kind={content.kind} kindTone={content.tone} heading={content.heading} body={content.body} />
+      {task.kind === "status" && context !== undefined ? <StatusSummary context={context} providerName={providerName}
+        verify={<Button variant="text" disabled={pending} onClick={() => changeTask({ kind: "challenge" })}>
+          {message("webapp.security.challenge.action")}
+        </Button>} /> : null}
+      {task.kind === "status" && context !== undefined ? <StatusSections context={context} pending={pending} feedback={feedback}
+        onSetup={setup} onRefresh={() => refresh()} signOut={actions.signOut}
+        onRegenerate={() => changeTask({ kind: "confirm_regenerate" })}
+        onDisable={() => changeTask({ kind: "confirm_disable" })} /> : null}
       {task.kind === "setup" ? <>
-        <Notice tone="warning">{message("webapp.security.setup.private")}</Notice>
         <AuthenticatorSetupContent setup={task.setup} />
-        <SecurityCodeForm pending={pending} onSubmit={activate} enrollment />
+        <Notice>{message("webapp.security.setup.private")}</Notice>
+        <SecurityCodeForm pending={pending} onSubmit={activate} enrollment cancel={cancel}
+          describedBy="authenticator-setup-expiry" deadline={setupDeadline(task.setup.expiresAt)} />
+        {feedback}
       </> : null}
       {task.kind === "codes" ? <RecoveryCodes codes={task.codes} onDone={() => refresh(message("webapp.security.codes.saved"))} /> : null}
-      {task.kind === "challenge" ? <SecurityCodeForm pending={pending} onSubmit={challenge} /> : null}
+      {task.kind === "challenge" ? <>
+        <SecurityCodeForm pending={pending} onSubmit={challenge} cancel={cancel} />
+        {feedback}
+      </> : null}
       {task.kind === "confirm_disable" ? <>
-        <Notice tone="warning">{message("webapp.security.disable.warning")}</Notice>
-        <Button isLoading={pending} loadingLabel={message("webapp.security.working")} onClick={disable}>{message("webapp.security.disable.confirm")}</Button>
+        <Notice>{message("webapp.security.disable.warning")}</Notice>
+        <TaskStateActions>
+          <Button variant="danger" isLoading={pending} loadingLabel={message("webapp.security.working")} onClick={disable}>{message("webapp.security.disable.confirm")}</Button>
+          <Button variant="secondary" disabled={pending} onClick={() => refresh()}>{message("webapp.security.disable.keep")}</Button>
+        </TaskStateActions>
+        {feedback}
       </> : null}
       {task.kind === "confirm_regenerate" ? <>
-        <Notice tone="warning">{message("webapp.security.regenerate.warning")}</Notice>
-        <Button isLoading={pending} loadingLabel={message("webapp.security.working")} onClick={regenerate}>{message("webapp.security.regenerate.confirm")}</Button>
+        <TaskStateActions>
+          <Button isLoading={pending} loadingLabel={message("webapp.security.working")} onClick={regenerate}>{message("webapp.security.regenerate.confirm")}</Button>
+          {cancel}
+        </TaskStateActions>
+        {feedback}
       </> : null}
       {task.kind === "uncertain" ? <>
         <Notice tone="warning">{message("webapp.security.uncertain.guidance")}</Notice>
-        <Button onClick={() => refresh()}>{message("webapp.security.refresh")}</Button>
+        <TaskStateActions><Button onClick={() => refresh()}>{message("webapp.security.refresh")}</Button></TaskStateActions>
       </> : null}
-      <SecurityFeedback failure={failure} />
-      {failure?.kind === "conflict" || failure?.kind === "disabled" ? <Button variant="secondary" onClick={() => refresh()}>{message("webapp.security.refresh")}</Button> : null}
-      {task.kind !== "status" && task.kind !== "codes" && task.kind !== "uncertain" ? <Button variant="text" disabled={pending} onClick={() => refresh()}>{message("webapp.security.back")}</Button> : null}
-      {task.kind === "status" ? <div className={styles.footer}>
-        {!context?.recoveryRequired ? <a href="/authorization/complete">{message("webapp.security.return")}</a> : null}
-        <Button variant="text" disabled={pending} onClick={signOut}>{message("webapp.security.sign_out")}</Button>
-      </div> : null}
     </section>
   );
 }
 
-function StatusSummary({ context }: { context: SecurityContext }) {
+function setupDeadline(expiresAt: string): string {
+  const minutes = minutesUntil(expiresAt);
+  return minutes === 0
+    ? message("webapp.security.setup.expired")
+    : message("webapp.security.setup.expires", { Duration: formatMinutes(minutes) });
+}
+
+/** The current state of this account and Session, one hairline fact per row. */
+function StatusSummary({ context, providerName, verify }: {
+  context: SecurityContext;
+  providerName?: string;
+  verify: ReactNode;
+}) {
+  const strong = context.authenticationStrength === "multi_factor";
+  const canVerify = context.enabled && context.serviceEnabled && !context.recoveryRequired && !strong;
+  return (
+    <FactList>
+      {context.passwordChangedAt === undefined ? null : <Fact label={message("webapp.security.status.password")}>
+        {richMessage("webapp.security.status.password_changed", {
+          Date: <time dateTime={context.passwordChangedAt}>{formatDate(context.passwordChangedAt)}</time>,
+        })}
+      </Fact>}
+      <Fact label={message("webapp.security.status.two_step")}>
+        <StateValue tone={context.enabled ? "success" : context.pending ? "warning" : "off"}>
+          {message(context.enabled ? "webapp.security.status.on" : context.pending ? "webapp.security.status.pending" : "webapp.security.status.off")}
+        </StateValue>
+      </Fact>
+      {context.enabled ? <Fact label={message("webapp.security.status.codes")}>
+        {context.recoveryCodesRemaining > 0
+          ? message("webapp.security.status.codes_left", {
+            Count: new Intl.NumberFormat().format(context.recoveryCodesRemaining),
+            Total: new Intl.NumberFormat().format(Math.max(context.recoveryCodesTotal, context.recoveryCodesRemaining)),
+          })
+          : <StateValue tone="warning">{message("webapp.security.status.codes_none")}</StateValue>}
+      </Fact> : null}
+      <Fact label={message("webapp.security.status.session")}>
+        <span className={styles.sessionValue}>
+          <span>{sessionDescription(context, providerName)}</span>
+          {canVerify ? verify : null}
+        </span>
+      </Fact>
+    </FactList>
+  );
+}
+
+function sessionDescription(context: SecurityContext, providerName?: string): string {
+  if (context.authenticationStrength === "multi_factor") return message("webapp.security.status.session_strong");
+  if (context.authenticationMethod === "password") return message("webapp.security.status.session_password");
+  return providerName === undefined
+    ? message("webapp.security.status.session_external_unnamed")
+    : message("webapp.security.status.session_external", { Provider: providerName });
+}
+
+function StateValue({ children, tone }: { children: ReactNode; tone: "success" | "warning" | "off" }) {
+  return <span className={`${styles.state} ${styles[tone]}`} data-proctor-state={tone}>
+    <span className={styles.stateMarker} aria-hidden="true" />{children}
+  </span>;
+}
+
+/** One decision per section: its own small heading, sentence, and action. */
+function SecuritySection({ body, children, heading, id }: { body: ReactNode; children?: ReactNode; heading: ReactNode; id: string }) {
+  return (
+    <section className={styles.section} aria-labelledby={id}>
+      <h2 id={id}>{heading}</h2>
+      <p>{body}</p>
+      {children}
+    </section>
+  );
+}
+
+function StatusSections({ context, feedback, onDisable, onRefresh, onRegenerate, onSetup, pending, signOut }: {
+  context: SecurityContext;
+  feedback: ReactNode;
+  onDisable(): void;
+  onRefresh(): void;
+  onRegenerate(): void;
+  onSetup(): void;
+  pending: boolean;
+  signOut: SecurityActions["signOut"];
+}) {
+  const setupAction = <TaskStateActions>
+    <Button isLoading={pending} loadingLabel={message("webapp.security.working")} onClick={onSetup}>
+      {message(context.pending ? "webapp.security.setup.restart" : "webapp.security.setup.action")}
+    </Button>
+  </TaskStateActions>;
+
+  if (context.recoveryRequired) {
+    // A restricted Session has no confirmed name for the footer, so its
+    // sign-out lives here, next to the only other things it can do.
+    return <>
+      <Notice tone="warning" lead={message("webapp.security.recovery_required.lead")}>
+        {message("webapp.security.recovery_required")}
+      </Notice>
+      {context.serviceEnabled ? <>
+        {context.pending ? <Notice>{message("webapp.security.setup.pending")}</Notice> : null}
+        {setupAction}
+        {feedback}
+        <TaskStateActions><SecuritySignOut signOut={signOut} /></TaskStateActions>
+      </> : <>
+        <Notice>{message("webapp.security.recovery_unavailable")}</Notice>
+        <TaskStateActions>
+          <Button variant="secondary" onClick={onRefresh}>{message("webapp.security.refresh")}</Button>
+          <SecuritySignOut signOut={signOut} variant="secondary" />
+        </TaskStateActions>
+      </>}
+    </>;
+  }
+  if (!context.serviceEnabled) {
+    return <Notice tone="warning">{message("webapp.security.service_disabled")}</Notice>;
+  }
+  if (!context.enabled) {
+    return <SecuritySection id="security-setup-heading" heading={message("webapp.security.setup.section.heading")}
+      body={message("webapp.security.setup.section.body")}>
+      {context.pending ? <Notice>{message("webapp.security.setup.pending")}</Notice> : null}
+      {setupAction}
+      {feedback}
+    </SecuritySection>;
+  }
   return <>
-    {context.recoveryRequired ? <Notice tone="warning">{message("webapp.security.recovery_required")}</Notice> : null}
-    <dl className={styles.summary}>
-      <div><dt>{message("webapp.security.status.authenticator")}</dt><dd>{message(context.enabled ? "webapp.security.status.enabled" : "webapp.security.status.disabled")}</dd></div>
-      {context.enabled ? <div><dt>{message("webapp.security.status.codes")}</dt><dd>{context.recoveryCodesRemaining}</dd></div> : null}
-    </dl>
-    {context.enabled && context.recoveryCodesRemaining === 0 ? <Notice tone="warning">{message("webapp.security.status.no_codes")}</Notice> : null}
+    <SecuritySection id="security-codes-heading" heading={message("webapp.security.regenerate.section.heading")}
+      body={message("webapp.security.regenerate.section.body")}>
+      {context.recoveryCodesRemaining === 0 ? <Notice tone="warning">{message("webapp.security.status.no_codes")}</Notice> : null}
+      <TaskStateActions>
+        <Button variant="secondary" disabled={pending} onClick={onRegenerate}>{message("webapp.security.regenerate.action")}</Button>
+      </TaskStateActions>
+    </SecuritySection>
+    <SecuritySection id="security-disable-heading" heading={message("webapp.security.disable.section.heading")}
+      body={message("webapp.security.disable.section.body")}>
+      <TaskStateActions>
+        <Button variant="secondary" disabled={pending} onClick={onDisable}>{message("webapp.security.disable.action")}</Button>
+      </TaskStateActions>
+    </SecuritySection>
   </>;
 }
 
-function taskCopy(task: Task) {
+function taskCopy(task: Task): { kind: string; tone?: AccessTaskKindTone; heading: string; body: string } {
+  const twoStep = message("webapp.security.kind.two_step");
   switch (task.kind) {
-    case "status": return { heading: message("webapp.security.heading"), body: message("webapp.security.body") };
-    case "setup": return { heading: message("webapp.security.setup.heading"), body: message("webapp.security.setup.body") };
-    case "codes": return { heading: message("webapp.security.codes.heading"), body: message("webapp.security.codes.body") };
-    case "challenge": return { heading: message("webapp.security.challenge.heading"), body: message("webapp.security.challenge.body") };
-    case "confirm_disable": return { heading: message("webapp.security.disable.heading"), body: message("webapp.security.disable.body") };
-    case "confirm_regenerate": return { heading: message("webapp.security.regenerate.heading"), body: message("webapp.security.regenerate.body") };
-    case "uncertain": return { heading: message("webapp.security.uncertain.heading"), body: message("webapp.security.uncertain.body") };
+    case "status": return { kind: message("webapp.security.eyebrow"), heading: message("webapp.security.heading"), body: message("webapp.security.body") };
+    case "setup": return { kind: twoStep, heading: message("webapp.security.setup.heading"), body: message("webapp.security.setup.body") };
+    case "codes": return { kind: twoStep, tone: "success", heading: message("webapp.security.codes.heading"), body: message("webapp.security.codes.body") };
+    case "challenge": return { kind: twoStep, heading: message("webapp.security.challenge.heading"), body: message("webapp.security.challenge.body") };
+    case "confirm_disable": return { kind: twoStep, tone: "danger", heading: message("webapp.security.disable.heading"), body: message("webapp.security.disable.body") };
+    case "confirm_regenerate": return { kind: message("webapp.security.regenerate.section.heading"), heading: message("webapp.security.regenerate.heading"), body: message("webapp.security.regenerate.body") };
+    case "uncertain": return { kind: message("webapp.security.eyebrow"), heading: message("webapp.security.uncertain.heading"), body: message("webapp.security.uncertain.body") };
   }
 }

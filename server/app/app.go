@@ -89,6 +89,7 @@ type App struct {
 	*auditListingService
 	*bootstrapService
 	*academicAdministrationBatchService
+	*searchService
 	*realtimeService
 	*realtimeAdmissionService
 	jobs *job.Engine
@@ -146,6 +147,10 @@ func New(deps Dependencies) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	administration.search = newSearchService(searchServiceDependencies{
+		Exams: examinations.authoring, Users: profiles.userProfiles,
+		ClassAuthorization: access.authorization, Classes: deps.Store.Class(),
+	})
 	return assembleApplication(deps, foundation, identity, access, examinations, profiles, jobs, administration), nil
 }
 

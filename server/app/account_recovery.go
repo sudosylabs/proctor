@@ -36,6 +36,8 @@ const (
 	accountRecoveryAttemptPasswordResetComplete
 	accountRecoveryAttemptEmailChangeNotice
 	accountRecoveryAttemptEmailChangeUndoComplete
+	accountRecoveryAttemptEmailVerificationInspect
+	accountRecoveryAttemptEmailChangeUndoInspect
 )
 
 func (o accountRecoveryAttemptOperation) qualifier() (string, bool) {
@@ -52,6 +54,10 @@ func (o accountRecoveryAttemptOperation) qualifier() (string, bool) {
 		return "email-change-notice", true
 	case accountRecoveryAttemptEmailChangeUndoComplete:
 		return "email-change-undo-complete", true
+	case accountRecoveryAttemptEmailVerificationInspect:
+		return "email-verification-inspect", true
+	case accountRecoveryAttemptEmailChangeUndoInspect:
+		return "email-change-undo-inspect", true
 	default:
 		return "", false
 	}

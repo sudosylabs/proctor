@@ -19,8 +19,19 @@ export interface SetupSubmission {
   password: string;
 }
 
+/**
+ * What the operator just created, taken only from the submitted form values
+ * so the completion state can name it. The response body is never read.
+ */
+export interface SetupCreated {
+  institutionDisplayName: string;
+  administratorName: string;
+  administratorEmail: string;
+}
+
 export type SetupSubmissionResult =
   | { kind: "complete" }
+  | { kind: "already_initialized" }
   | { kind: "bootstrap_denied" }
   | { kind: "password_rejected"; reason: PasswordRejection }
   | { kind: "rate_limited" }
@@ -82,7 +93,7 @@ export async function submitInstallation(
     }
     switch (code) {
       case "installation.already_initialized":
-        return { kind: "complete" };
+        return { kind: "already_initialized" };
       case "installation.bootstrap_denied":
         return { kind: "bootstrap_denied" };
       case "authentication.rate_limited":

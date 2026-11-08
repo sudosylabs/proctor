@@ -17,6 +17,8 @@ export interface TaskStateProps {
   heading: ReactNode;
   headingID: string;
   label?: ReactNode;
+  /** Colours the purpose label only when it reports a true state outcome. */
+  labelTone?: "success" | "warning" | "danger";
 }
 
 export function TaskState({
@@ -28,6 +30,7 @@ export function TaskState({
   heading,
   headingID,
   label,
+  labelTone,
 }: TaskStateProps) {
   return (
     <section
@@ -35,7 +38,9 @@ export function TaskState({
       aria-labelledby={headingID}
       className={classes(styles.state, className)}
     >
-      {label === undefined ? null : <p className={styles.label}>{label}</p>}
+      {label === undefined ? null : (
+        <p className={classes(styles.label, labelTone === undefined ? undefined : styles[labelTone])}>{label}</p>
+      )}
       <TaskHeading className={busy ? styles.visuallyHidden : undefined} focus={focusHeading && !busy} id={headingID}>
         {heading}
       </TaskHeading>

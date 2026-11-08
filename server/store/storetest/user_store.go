@@ -923,7 +923,13 @@ func testUserStoreUpdate(t *testing.T, ss store.Store) {
 	})
 	require.True(t, store.IsConflict(err), "stale UpdateProfile() error")
 	missingID := model.UserID(model.NewID())
-	missingAttempt := saveUserProfileAuditAttempt(t, ctx, ss, missingID.String())
+	// An attempt cannot name a User that does not exist as its subject, so
+	// this fixture records the missing target against the Institution.
+	missingAttempt, err := ss.Audit().Save(ctx, &model.AuditEvent{
+		Action: string(model.ActionUserManage), Resource: model.Resource{Type: model.ResourceInstitution, ID: model.NewID()},
+		ScopeType: model.RoleScopeInstitution, ScopeID: model.NewID(), Status: model.AuditStatusAttempt, NodeID: "test-node",
+	})
+	require.NoError(t, err)
 	_, err = ss.User().UpdateProfile(ctx, &store.UserProfileUpdate{
 		UserID: missingID, Changes: model.UserProfileChanges{DisplayName: &displayName}, ExpectedRevision: updated.Revision,
 		AuditEventID: missingAttempt.ID, AuditAt: model.NowUTC(),

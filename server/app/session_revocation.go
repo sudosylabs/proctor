@@ -65,6 +65,19 @@ func (c sessionRevocationCoordinator) revokeAll(
 	mapError func(error) error,
 	unchanged *bool,
 ) error {
+	_, err := c.revokeAllCounted(ctx, attempt, input, mapError, unchanged)
+	return err
+}
+
+// revokeAllCounted is revokeAll that also reports how many Sessions this call
+// newly revoked; a replayed or no-op revocation reports zero.
+func (c sessionRevocationCoordinator) revokeAllCounted(
+	ctx context.Context,
+	attempt mutationAttempt,
+	input *store.UserSessionsRevocation,
+	mapError func(error) error,
+	unchanged *bool,
+) (int, error) {
 	result, err := runAuditedMutation(ctx, c.audit, attempt, c.now,
 		func(ctx context.Context, reference mutationAttemptReference) (*store.UserSessionsRevocationResult, error) {
 			input.RevokedAt = reference.MutationAt
@@ -78,12 +91,13 @@ func (c sessionRevocationCoordinator) revokeAll(
 			return value, err
 		}, mapError)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	if result != nil && !input.Replayed && !input.NoOp {
-		c.publish(ctx, input.UserID.String(), result.Sessions, result.TokenHashes)
+	if result == nil || input.Replayed || input.NoOp {
+		return 0, nil
 	}
-	return nil
+	c.publish(ctx, input.UserID.String(), result.Sessions, result.TokenHashes)
+	return len(result.Sessions), nil
 }
 
 func (c sessionRevocationCoordinator) publish(

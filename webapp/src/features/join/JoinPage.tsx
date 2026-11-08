@@ -42,11 +42,7 @@ export function JoinPage({ claim }: JoinPageProps) {
   );
 
   return (
-    <AccessPageShell
-      mainSize="content"
-      skipLabel={message("webapp.join.skip_to_main")}
-      variant="single"
-    >
+    <AccessPageShell skipLabel={message("webapp.join.skip_to_main")}>
       <InvitationContent
         institutionName={initialResource.value.institutionName}
         loading={initialResource.loading}

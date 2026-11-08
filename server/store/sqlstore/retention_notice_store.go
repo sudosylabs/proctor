@@ -23,6 +23,9 @@ type retentionNoticeRow struct {
 	ExamID        string       `db:"exam_id"`
 	SittingID     string       `db:"exam_sitting_id"`
 	SubmissionID  string       `db:"submission_id"`
+	ExamTitle     string       `db:"exam_title"`
+	StartsAt      time.Time    `db:"scheduled_start_at"`
+	EndsAt        time.Time    `db:"scheduled_end_at"`
 	Category      string       `db:"category"`
 	State         string       `db:"state"`
 	CreatedAt     time.Time    `db:"created_at"`
@@ -32,8 +35,14 @@ type retentionNoticeRow struct {
 	DeliveryCode  string       `db:"delivery_error_code"`
 }
 
+// retentionNoticeSelect joins the Sitting and the Exam Revision it delivered;
+// retention never removes either, and the foreign keys guarantee both exist.
 const retentionNoticeSelect = `SELECT n.retirement_id,n.recipient_user_id,r.exam_id,r.exam_sitting_id,r.submission_id,r.category,r.state,
-	n.created_at,r.retire_after,n.canceled_at,n.delivery_state,n.delivery_error_code FROM retention_notices n JOIN retention_retirements r ON r.id=n.retirement_id`
+	n.created_at,r.retire_after,n.canceled_at,n.delivery_state,n.delivery_error_code,
+	v.title AS exam_title,s.scheduled_start_at,s.scheduled_end_at
+	FROM retention_notices n JOIN retention_retirements r ON r.id=n.retirement_id
+	JOIN exam_sittings s ON s.id=r.exam_sitting_id
+	JOIN exam_revisions v ON v.exam_id=s.exam_id AND v.id=s.exam_revision_id`
 
 func listRetentionNotices(ctx context.Context, executor sqlxExecutor, query string, args ...any) ([]model.RetentionNotice, error) {
 	var rows []retentionNoticeRow
@@ -42,8 +51,9 @@ func listRetentionNotices(ctx context.Context, executor sqlxExecutor, query stri
 	}
 	items := make([]model.RetentionNotice, 0, len(rows))
 	for _, row := range rows {
-		n := model.RetentionNotice{RetirementID: model.RetentionRetirementID(row.RetirementID), RecipientUserID: model.UserID(row.RecipientID), Scope: model.RetentionHoldScope{ExamID: model.ExamID(row.ExamID), SittingID: model.ExamSittingID(row.SittingID), SubmissionID: model.SubmissionID(row.SubmissionID)}, Category: model.RetentionCategory(row.Category), State: model.RetentionRetirementState(row.State), CreatedAt: model.TimeUTC(row.CreatedAt), RetireAfter: model.TimeUTC(row.RetireAfter), CanceledAt: optionalTime(row.CanceledAt), DeliveryState: row.DeliveryState, DeliveryErrorCode: row.DeliveryCode}
-		if !n.RetirementID.IsValid() || !n.RecipientUserID.IsValid() || n.Scope.Validate() != nil || !n.Category.IsValid() {
+		n := model.RetentionNotice{RetirementID: model.RetentionRetirementID(row.RetirementID), RecipientUserID: model.UserID(row.RecipientID), Scope: model.RetentionHoldScope{ExamID: model.ExamID(row.ExamID), SittingID: model.ExamSittingID(row.SittingID), SubmissionID: model.SubmissionID(row.SubmissionID)}, ExamTitle: row.ExamTitle, SittingStartAt: model.TimeUTC(row.StartsAt), SittingEndAt: model.TimeUTC(row.EndsAt), Category: model.RetentionCategory(row.Category), State: model.RetentionRetirementState(row.State), CreatedAt: model.TimeUTC(row.CreatedAt), RetireAfter: model.TimeUTC(row.RetireAfter), CanceledAt: optionalTime(row.CanceledAt), DeliveryState: row.DeliveryState, DeliveryErrorCode: row.DeliveryCode}
+		if !n.RetirementID.IsValid() || !n.RecipientUserID.IsValid() || n.Scope.Validate() != nil || !n.Category.IsValid() ||
+			n.ExamTitle == "" || !n.SittingEndAt.After(n.SittingStartAt) {
 			return nil, invalidPersistedState("retention_notice", "identity", errors.New("invalid notice"))
 		}
 		items = append(items, n)

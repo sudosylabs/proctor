@@ -105,8 +105,8 @@ export function ProviderConnectionContent({
           body={message("webapp.connect_provider.empty.body")}
         >
           <TaskStateActions>
-            <a className={styles.returnLink} href="/authorization/complete">
-              {message("webapp.connect_provider.return")}
+            <a className={styles.returnLink} href="/account/security">
+              {message("webapp.connect_provider.empty.return")}
             </a>
           </TaskStateActions>
         </ProviderRouteState>
@@ -115,7 +115,7 @@ export function ProviderConnectionContent({
   }
   return (
     <>
-      <TaskStateAnnouncement message={message("webapp.connect_provider.heading")} />
+      <TaskStateAnnouncement message={chooserHeading(state.context.providers)} />
       <ProviderChooser
         focusHeading={retryRequested}
         providers={state.context.providers}
@@ -142,6 +142,8 @@ function ProviderChooser({
   const [feedback, setFeedback] = useState<string>();
   const [reauthenticationRequired, setReauthenticationRequired] = useState(false);
   const selected = providers.find((provider) => provider.id === selectedID);
+  const single = providers.length === 1 ? providers[0] : undefined;
+  const heading = chooserHeading(providers);
 
   useEffect(() => {
     if (!providers.some((provider) => provider.id === selectedID)) {
@@ -162,11 +164,11 @@ function ProviderChooser({
       return;
     }
     setFeedback(
-      message(
-        result.kind === "reauthentication_required"
-          ? "webapp.connect_provider.error.reauthentication"
-          : "webapp.connect_provider.error.unavailable",
-      ),
+      result.kind === "reauthentication_required"
+        ? message("webapp.connect_provider.error.reauthentication")
+        : message("webapp.connect_provider.error.unavailable", {
+            Provider: selected.display_name,
+          }),
     );
     setReauthenticationRequired(result.kind === "reauthentication_required");
     setPending(false);
@@ -175,69 +177,84 @@ function ProviderChooser({
   return (
     <section className={styles.page} aria-labelledby="connect-provider-heading">
       <AccessTaskIntro
-        eyebrow={message("webapp.connect_provider.context.eyebrow")}
-        heading={message("webapp.connect_provider.context.heading")}
-        body={message("webapp.connect_provider.context.body")}
+        kind={message("webapp.connect_provider.kind")}
+        heading={heading}
+        body={
+          single === undefined
+            ? message("webapp.connect_provider.multiple.body")
+            : message("webapp.connect_provider.single.body", {
+                Provider: single.display_name,
+              })
+        }
         focusHeading={focusHeading}
         headingID="connect-provider-heading"
       />
-      <header className={styles.headingGroup}>
-        <h2>{message("webapp.connect_provider.heading")}</h2>
-        <p>{message("webapp.connect_provider.lede")}</p>
-      </header>
-      <fieldset className={styles.providerList}>
-        <legend className={styles.visuallyHidden}>
-          {message("webapp.connect_provider.group")}
-        </legend>
-        {providers.map((provider) => (
-          <label
-            key={provider.id}
-            className={provider.id === selectedID ? styles.selected : undefined}
+      {single === undefined ? (
+        <fieldset className={styles.providerList}>
+          <legend className={styles.visuallyHidden}>
+            {message("webapp.connect_provider.group")}
+          </legend>
+          {providers.map((provider) => (
+            <label
+              key={provider.id}
+              className={provider.id === selectedID ? styles.selected : undefined}
+            >
+              <input
+                type="radio"
+                name="provider"
+                value={provider.id}
+                checked={provider.id === selectedID}
+                onChange={() => {
+                  setSelectedID(provider.id);
+                  setFeedback(undefined);
+                  setReauthenticationRequired(false);
+                }}
+              />
+              <span className={styles.providerName}>{provider.display_name}</span>
+              <span className={styles.providerType} translate="no">
+                {providerType(provider.type)}
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      ) : null}
+      <Notice role="note">{message("webapp.connect_provider.note")}</Notice>
+      <div className={styles.actionGroup}>
+        <TaskStateActions>
+          <Button
+            isLoading={pending}
+            loadingLabel={message("webapp.connect_provider.connecting")}
+            onClick={connect}
           >
-            <input
-              type="radio"
-              name="provider"
-              value={provider.id}
-              checked={provider.id === selectedID}
-              onChange={() => {
-                setSelectedID(provider.id);
-                setFeedback(undefined);
-              }}
-            />
-            <span className={styles.providerName}>{provider.display_name}</span>
-            <span className={styles.providerType} translate="no">
-              {providerType(provider.type)}
-            </span>
-          </label>
-        ))}
-      </fieldset>
-      <Button
-        className={styles.connectButton}
-        isLoading={pending}
-        loadingLabel={message("webapp.connect_provider.connecting")}
-        onClick={connect}
-      >
-        {message("webapp.connect_provider.connect", {
-          Provider: selected?.display_name ?? "",
-        })}
-      </Button>
-      <div className={styles.noticeGroup}>
-        <Notice role="note">
-          {message("webapp.connect_provider.evidence")}
-        </Notice>
-        <Notice role="note">
-          {message("webapp.connect_provider.context.note")}
-        </Notice>
+            {message("webapp.connect_provider.continue", {
+              Provider: selected?.display_name ?? "",
+            })}
+          </Button>
+          <a className={styles.returnLink} href="/account/security">
+            {message("webapp.connect_provider.cancel")}
+          </a>
+        </TaskStateActions>
+        <FormFeedback message={feedback} />
+        {reauthenticationRequired ? (
+          <a
+            className={styles.returnLink}
+            href="/account/reauthenticate?task=connect-provider"
+          >
+            {message("webapp.reauthenticate.action")}
+          </a>
+        ) : null}
       </div>
-      <a className={styles.returnLink} href="/authorization/complete">
-        {message("webapp.connect_provider.return")}
-      </a>
-      <FormFeedback message={feedback} />
-      {reauthenticationRequired ? <ButtonLink href="/account/reauthenticate?task=connect-provider">
-        {message("webapp.reauthenticate.action")}
-      </ButtonLink> : null}
     </section>
   );
+}
+
+/** One provider needs no chooser, so the heading names it. */
+function chooserHeading(providers: Provider[]): string {
+  return providers.length === 1 && providers[0] !== undefined
+    ? message("webapp.connect_provider.single.heading", {
+        Provider: providers[0].display_name,
+      })
+    : message("webapp.connect_provider.multiple.heading");
 }
 
 function providerType(type: string): string {
@@ -268,10 +285,10 @@ function ProviderRouteState({
     <TaskState
       body={body}
       busy={busy}
-      className={styles.taskState}
       focusHeading={focusHeading}
       heading={heading}
       headingID="connect-provider-heading"
+      label={message("webapp.connect_provider.kind")}
     >
       {children}
     </TaskState>

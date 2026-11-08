@@ -39,6 +39,10 @@ const requiredColorTokens = [
   'action-secondary-hover',
   'action-secondary-active',
   'action-on-secondary',
+  'action-danger',
+  'action-danger-hover',
+  'action-danger-active',
+  'action-on-danger',
   'state-info',
   'state-info-surface',
   'state-success',
@@ -331,6 +335,15 @@ export function auditTokenContract(tokens = designTokens) {
         failures,
         `${id} secondary action label on ${action}`,
         color['action-on-secondary'],
+        color[action],
+        4.5,
+      );
+    }
+    for (const action of ['action-danger', 'action-danger-hover', 'action-danger-active']) {
+      checkContrast(
+        failures,
+        `${id} danger action label on ${action}`,
+        color['action-on-danger'],
         color[action],
         4.5,
       );

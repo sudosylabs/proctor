@@ -110,6 +110,10 @@ type publicAccessDiscoveryResponse struct {
 	Capabilities         publicAccessCapabilitiesResponse          `json:"capabilities"`
 	Providers            []externalAuthenticationProviderResponse  `json:"providers"`
 	DesktopAuthorization desktopAuthorizationCompatibilityResponse `json:"desktop_authorization"`
+	// SupportAddress and PasswordMinimumLength are operator-configured
+	// presentation facts for hosted pages.
+	SupportAddress        string `json:"support_address,omitempty"`
+	PasswordMinimumLength int    `json:"password_minimum_length"`
 }
 
 type accessPolicyResourceModule struct{ application AccessPolicyApplication }
@@ -255,7 +259,8 @@ func publicAccessDiscoveryResponseFromView(view app.PublicAccessDiscovery) publi
 		Capabilities: publicAccessCapabilitiesResponse{LocalLogin: view.Capabilities.LocalLogin, PublicRegistration: view.Capabilities.PublicRegistration,
 			InvitationAdmission: view.Capabilities.InvitationAdmission, DesktopAuthorization: view.Capabilities.DesktopAuthorization},
 		Providers: []externalAuthenticationProviderResponse{}, DesktopAuthorization: desktopAuthorizationCompatibilityResponse{
-			Protocol: view.DesktopAuthorization.Protocol, MinimumVersion: view.DesktopAuthorization.MinimumVersion, MaximumVersion: view.DesktopAuthorization.MaximumVersion}}
+			Protocol: view.DesktopAuthorization.Protocol, MinimumVersion: view.DesktopAuthorization.MinimumVersion, MaximumVersion: view.DesktopAuthorization.MaximumVersion},
+		SupportAddress: view.SupportAddress, PasswordMinimumLength: view.PasswordMinimumLength}
 	if view.Institution != nil {
 		response.Institution = &publicInstitutionPresentationResponse{ID: view.Institution.ID.String(), Name: view.Institution.Name, DisplayName: view.Institution.DisplayName}
 	}

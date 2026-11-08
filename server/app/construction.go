@@ -110,6 +110,9 @@ type administrationConstruction struct {
 	auditListings                 *auditListingService
 	bootstrap                     *bootstrapService
 	academicAdministrationBatches *academicAdministrationBatchService
+	// search spans Exams, Users and Classes, so it is built once every one of
+	// those services exists.
+	search *searchService
 }
 
 func validateApplicationDependencies(deps Dependencies) error {
@@ -256,6 +259,7 @@ func assembleApplication(
 		bootstrapService:                         administration.bootstrap,
 		academicAdministrationBatchService:       administration.academicAdministrationBatches,
 		realtimeService:                          foundation.realtime,
+		searchService:                            administration.search,
 		realtimeAdmissionService: &realtimeAdmissionService{
 			principals: identity.authentication, exams: examinations.authoring, sittings: examinations.sittings,
 			authorization: access.authorization, operational: deps.OperationalRecorder,

@@ -35,8 +35,11 @@ func TestUserSettingsChangedEventIsAContentFreeUserTargetedHint(t *testing.T) {
 	var fields map[string]any
 	require.NoError(t, json.Unmarshal(event.Data, &fields))
 	require.Len(t, fields, 3)
-	for _, forbidden := range []string{"source", "key", "value", "comment", "diagnostic", "idempotency", "session", "client"} {
-		require.NotContains(t, strings.ToLower(string(event.Data)), forbidden, "event data contains forbidden %q: %s", forbidden, event.Data)
+	// Field names, not values: the random revision can spell short words.
+	for name := range fields {
+		for _, forbidden := range []string{"source", "key", "value", "comment", "diagnostic", "idempotency", "session", "client"} {
+			require.NotContains(t, name, forbidden, "event field %q names forbidden material", name)
+		}
 	}
 }
 

@@ -246,7 +246,8 @@ func TestDesktopReauthenticationDeniesAndAuditsAnotherAccount(t *testing.T) {
 func TestDesktopReauthenticationCompletesFromTheSameDesktopSession(t *testing.T) {
 	harness := newDesktopReauthenticationTestHarness(t)
 	desktop := desktopReauthenticationPrincipal(harness.user.ID, model.SessionClientDesktop)
-	reauthenticatedAt := time.Now().UTC()
+	// Stored instants carry microseconds; Linux clocks also report nanoseconds.
+	reauthenticatedAt := model.TimeUTC(time.Now())
 	harness.transactions.completed = &store.SessionReauthenticationResult{Session: &model.Session{ID: desktop.SessionID,
 		AuthenticatedAt: desktop.AuthenticatedAt, ReauthenticatedAt: model.OptionalTimeFrom(reauthenticatedAt)}}
 	command := CompleteDesktopReauthenticationCommand{Code: model.NewCredentialToken(), CodeVerifier: model.NewCredentialToken(),

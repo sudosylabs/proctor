@@ -168,10 +168,15 @@ func TestExamAttemptSubmittedEventsSeparateManagerAndCandidateTargetsWithSafeRec
 	require.Equal(t, string(model.ExamSubmissionManagerEndedAttempt), managerData["provenance"], "manager")
 	require.Len(t, candidateData, 8, "manager")
 	require.Equal(t, string(model.ExamSubmissionManagerEndedAttempt), candidateData["provenance"], "manager")
-	for _, event := range []RealtimeEvent{manager, candidate} {
-		for _, forbidden := range []string{"path", "content", "source", "evidence", "gap", "sequence", "credential", "session", "private", "remark"} {
-			require.NotContains(t, strings.ToLower(string(event.Data)), forbidden, "submitted event contains %q: %s", forbidden, event.Data)
+	// Field names, not values: the event's random identifiers can spell short words.
+	for _, data := range []map[string]any{managerData, candidateData} {
+		for name := range data {
+			for _, forbidden := range []string{"path", "content", "source", "evidence", "gap", "sequence", "credential", "session", "private", "remark"} {
+				require.NotContains(t, name, forbidden, "submitted event field %q names private material", name)
+			}
 		}
+	}
+	for _, event := range []RealtimeEvent{manager, candidate} {
 		err = event.ValidateForPublish()
 		require.NoError(t, err)
 	}
@@ -209,10 +214,15 @@ func TestFocusLossEventsSeparateNeutralCandidateWarningFromBoundedManagerFlag(t 
 	require.Equal(t, float64(17), managerData["evidence_overflow_count"], "manager data")
 	require.Equal(t, true, managerData["evidence_available"], "manager data")
 	require.Len(t, managerData, 10, "manager data")
-	for _, event := range []RealtimeEvent{warning, flagged} {
-		for _, forbidden := range []string{"duration", "source", "sequence", "threshold", "credential", "hash", "session", "private", "severity", "guilt"} {
-			require.NotContains(t, strings.ToLower(string(event.Data)), forbidden, "Focus Loss event contains %q: %s", forbidden, event.Data)
+	// Field names, not values: the event's random identifiers can spell short words.
+	for _, data := range []map[string]any{warningData, managerData} {
+		for name := range data {
+			for _, forbidden := range []string{"duration", "source", "sequence", "threshold", "credential", "hash", "session", "private", "severity", "guilt"} {
+				require.NotContains(t, name, forbidden, "Focus Loss event field %q names private material", name)
+			}
 		}
+	}
+	for _, event := range []RealtimeEvent{warning, flagged} {
 		err = event.ValidateForPublish()
 		require.NoError(t, err)
 	}

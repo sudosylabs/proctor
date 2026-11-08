@@ -11,13 +11,13 @@ test("a mailed Invitation link admits a new local account", async ({ page }) => 
 
   await page.goto(issued.link);
   await expect(page).toHaveURL(`${serverURL}/join`);
-  await expect(page.getByRole("heading", { name: "Create your invited account" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Join .+ on Proctor$/ })).toBeVisible();
   const username = unique("joined");
   const password = randomPassword();
   await page.getByLabel("Username").fill(username);
   await page.locator("#invitation-password").fill(password);
-  await page.getByRole("button", { name: "Accept invitation" }).click();
-  await expect(page.getByRole("heading", { name: "Your Invitation is accepted" })).toBeFocused();
+  await page.getByRole("button", { name: "Accept and create account" }).click();
+  await expect(page.getByRole("heading", { name: "Welcome to Proctor" })).toBeFocused();
 
   // Authoritative state: the Invitation names the User it created.
   const accepted = await invitation(issued.id);
@@ -27,7 +27,7 @@ test("a mailed Invitation link admits a new local account", async ({ page }) => 
   // differs from the link only by its fragment, which would not reload.
   await page.goto("about:blank");
   await page.goto(issued.link);
-  await expect(page.getByRole("heading", { name: "This Invitation can’t be used" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "This invitation link doesn’t work" })).toBeVisible();
 
   await submitCredentials(page, issued.email, password);
   await expectSignedIn(page);

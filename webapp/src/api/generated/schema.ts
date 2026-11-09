@@ -5705,7 +5705,7 @@ export interface components {
             user_id?: components["schemas"]["ID"];
         };
         AcademicAdministrationBatchItemResponse: {
-            error_code?: components["schemas"]["AcademicAdministrationBatchErrorCode"];
+            error_code?: string | components["schemas"]["AcademicAdministrationBatchErrorCode"];
             index: number;
             resource_id?: components["schemas"]["ID"];
             /** @enum {string} */
@@ -6092,7 +6092,7 @@ export interface components {
         /** @description Safe durable audit fact visible to the authorized caller. */
         AuditEventResponse: {
             /** @description Stable permission-style name of the attempted action. */
-            action: components["schemas"]["AuditAction"];
+            action: string | components["schemas"]["AuditAction"];
             /** @description User that initiated the action, omitted for actor-less system transitions. */
             actor_id?: string;
             authentication_method?: string;
@@ -6114,7 +6114,7 @@ export interface components {
             resource: {
                 id: components["schemas"]["ID"];
                 /** @description Stable resource type acted upon. */
-                type: components["schemas"]["ResourceType"];
+                type: string | components["schemas"]["ResourceType"];
             };
             /** @description Authorization scope identity, when the action has a scoped owner. */
             scope_id?: string;
@@ -8658,7 +8658,7 @@ export interface components {
             suggested_username?: string;
         };
         InvitationBatchItemResponse: {
-            error_code?: components["schemas"]["InvitationBatchErrorCode"];
+            error_code?: string | components["schemas"]["InvitationBatchErrorCode"];
             index: number;
             invitation_id?: components["schemas"]["ID"];
             /** @enum {string} */
@@ -8688,7 +8688,7 @@ export interface components {
             /** Format: date-time */
             deadline: string;
             masked_recipient: string;
-            public_failure_code?: components["schemas"]["MailFailureCode"];
+            public_failure_code?: string | components["schemas"]["MailFailureCode"];
             /** @enum {string} */
             state: "queued" | "sending" | "accepted" | "failed" | "suppressed" | "canceled";
             template_key: string;
@@ -8788,7 +8788,7 @@ export interface components {
             /** @description Monotonic attempt number within the parent Job. */
             number: number;
             /** @description Stable safe failure category for a failed terminal Attempt; internal error detail is never returned. */
-            public_error_code?: components["schemas"]["JobErrorCode"];
+            public_error_code?: string | components["schemas"]["JobErrorCode"];
             /**
              * Format: date-time
              * @description Time when execution started.
@@ -8824,7 +8824,7 @@ export interface components {
              */
             current: number;
             /** @description Stable safe name of the current processing stage. */
-            stage: components["schemas"]["JobStage"];
+            stage: string | components["schemas"]["JobStage"];
             /**
              * Format: int64
              * @description Total work units expected in the current stage.
@@ -8859,7 +8859,7 @@ export interface components {
             maximum_attempts: number;
             progress?: components["schemas"]["JobProgressResponse"];
             /** @description Stable safe failure category; private worker and infrastructure errors are never exposed. */
-            public_error_code?: components["schemas"]["JobErrorCode"];
+            public_error_code?: string | components["schemas"]["JobErrorCode"];
             /**
              * Format: int64
              * @description Monotonic durable Job revision for concurrency-aware consumers.
@@ -8874,7 +8874,7 @@ export interface components {
             /** @description What the Job is about, for the Job types that say: an Examination Export build names the title of the Exam revision its Sitting runs. Omitted for every other type. */
             subject?: string;
             /** @description Stable allowlisted Job type. */
-            type: components["schemas"]["JobType"];
+            type: string | components["schemas"]["JobType"];
             /**
              * Format: date-time
              * @description Time of the latest durable Job change.
@@ -9099,7 +9099,7 @@ export interface components {
              */
             processing_latency_millis: number;
             state: components["schemas"]["MailDeliveryState"];
-            template_key: components["schemas"]["MailTemplateKey"];
+            template_key: string | components["schemas"]["MailTemplateKey"];
         };
         /** @description Safe durable mail delivery metadata with the recipient masked and content omitted. */
         MailDeliveryResponse: {
@@ -9136,12 +9136,15 @@ export interface components {
             message_id: string;
             occurrence_id: components["schemas"]["ID"];
             /** @description Stable safe failure category; raw SMTP or infrastructure errors are never exposed. */
-            public_failure_code?: components["schemas"]["MailFailureCode"];
+            public_failure_code?: string | components["schemas"]["MailFailureCode"];
             state: components["schemas"]["MailDeliveryState"];
-            target_user_id: components["schemas"]["ID"];
+            /** @description Invitation the mail is addressed to, present instead of target_user_id for Invitation mail. */
+            target_invitation_id?: components["schemas"]["ID"];
+            /** @description User the mail is addressed to. Exactly one of target_user_id and target_invitation_id is present; an Invitation mail goes to an invitee who has no account yet. */
+            target_user_id?: components["schemas"]["ID"];
             /** @description SHA-256 digest of the exact rendered template revision, encoded as lowercase hexadecimal. */
             template_digest: string;
-            template_key: components["schemas"]["MailTemplateKey"];
+            template_key: string | components["schemas"]["MailTemplateKey"];
             /**
              * Format: date-time
              * @description Time of the latest durable state change.
@@ -9203,7 +9206,7 @@ export interface components {
             oldest_age_millis: number;
             outcome_code: string;
             state: components["schemas"]["MailDeliveryState"];
-            template_key: components["schemas"]["MailTemplateKey"];
+            template_key: string | components["schemas"]["MailTemplateKey"];
             /** @description True when the bounded scan did not include every matching delivery. */
             truncated: boolean;
         };
@@ -9616,7 +9619,7 @@ export interface components {
             /** Format: date-time */
             expires_at: string;
             failed_rows: number;
-            failure_code?: components["schemas"]["OnboardingImportFailureCode"];
+            failure_code?: string | components["schemas"]["OnboardingImportFailureCode"];
             /** @description Base name of the uploaded file as the uploader gave it, omitted when none was given and for student progressions. */
             file_name?: string;
             id: components["schemas"]["ID"];
@@ -9656,8 +9659,8 @@ export interface components {
             invitation_id?: components["schemas"]["ID"];
             /** @enum {string} */
             operation: "student_class.create" | "teacher_academic_unit.create" | "academic_unit_role.create" | "institution_role.create" | "affiliation.add" | "affiliation.end" | "academic_unit_member.add" | "academic_unit_member.end" | "class.enroll" | "class.end" | "class.transfer" | "role_binding.create" | "role_binding.end" | "user.enable" | "user.disable" | "user_sessions.revoke";
-            preview_code?: components["schemas"]["OnboardingImportPreviewCode"];
-            public_code?: components["schemas"]["OnboardingImportRowCode"];
+            preview_code?: string | components["schemas"]["OnboardingImportPreviewCode"];
+            public_code?: string | components["schemas"]["OnboardingImportRowCode"];
             reference: string;
             resource_id?: components["schemas"]["ID"];
             row: number;
@@ -9691,7 +9694,7 @@ export interface components {
             description: string;
             /** @description True when the scope may be granted without an Academic Unit boundary, or with any boundary. */
             institution_wide: boolean;
-            name: components["schemas"]["PersonalAccessTokenScope"];
+            name: string | components["schemas"]["PersonalAccessTokenScope"];
             /** @description The resource types the action applies to. */
             resource_types: ("academic_period" | "academic_unit" | "class" | "exam" | "exam_sitting" | "institution" | "programme" | "programme_level" | "submission" | "user")[];
             /** @description Short localized title. */
@@ -9742,7 +9745,7 @@ export interface components {
             source_manifest_digest: string;
         };
         ProblemDetails: {
-            code: components["schemas"]["ErrorCode"];
+            code: string | components["schemas"]["ErrorCode"];
             /**
              * Format: int64
              * @description Present only on an exam.delivery.metadata_capacity refusal.
@@ -10519,7 +10522,7 @@ export interface components {
             created_at: string;
             /** @description Stable safe failure category of a failed event. */
             error_code?: string;
-            event: components["schemas"]["SelfAuditEvent"];
+            event: string | components["schemas"]["SelfAuditEvent"];
             id: components["schemas"]["ID"];
             /** @description Network address of the User's own action; omitted for anyone else's. */
             ip_address?: string;

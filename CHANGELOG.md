@@ -467,6 +467,15 @@ module when a change is not server-only. No module has been released yet.
 
 ### Fixed
 
+- Server: mail deliveries required `target_user_id`, but Invitation mail goes
+  to an invitee with no account, so a page holding one failed the contract.
+  Exactly one of `target_user_id` and the new `target_invitation_id` is now
+  present.
+- Server: response members that carry a growing catalogue (error codes, Job
+  types and stages, audit actions, resource types, mail, onboarding and batch
+  codes, self-audit events, token scopes) accept any string beside the listed
+  values, so a client built against an older contract keeps working when a
+  value is added. Requests still accept only listed values.
 - Server: a User's `last_activity_at` follows their Session activity instead
   of only their sign-ins. Recording Session use or a refresh also advances it,
   at the existing activity throttle and never backwards; `last_login_at`

@@ -6088,7 +6088,15 @@
         "additionalProperties": false,
         "properties": {
           "error_code": {
-            "$ref": "#/components/schemas/AcademicAdministrationBatchErrorCode"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AcademicAdministrationBatchErrorCode"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "string"
           },
           "index": {
             "maximum": 199,
@@ -7475,8 +7483,16 @@
         "description": "Safe durable audit fact visible to the authorized caller.",
         "properties": {
           "action": {
-            "$ref": "#/components/schemas/AuditAction",
-            "description": "Stable permission-style name of the attempted action."
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuditAction"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "description": "Stable permission-style name of the attempted action.",
+            "type": "string"
           },
           "actor_id": {
             "description": "User that initiated the action, omitted for actor-less system transitions.",
@@ -7522,8 +7538,16 @@
                 "$ref": "#/components/schemas/ID"
               },
               "type": {
-                "$ref": "#/components/schemas/ResourceType",
-                "description": "Stable resource type acted upon."
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ResourceType"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "description": "Stable resource type acted upon.",
+                "type": "string"
               }
             },
             "required": [
@@ -17382,7 +17406,15 @@
         "additionalProperties": false,
         "properties": {
           "error_code": {
-            "$ref": "#/components/schemas/InvitationBatchErrorCode"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InvitationBatchErrorCode"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "string"
           },
           "index": {
             "maximum": 199,
@@ -17515,7 +17547,15 @@
             "type": "string"
           },
           "public_failure_code": {
-            "$ref": "#/components/schemas/MailFailureCode"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MailFailureCode"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "string"
           },
           "state": {
             "enum": [
@@ -17819,8 +17859,16 @@
             "type": "integer"
           },
           "public_error_code": {
-            "$ref": "#/components/schemas/JobErrorCode",
-            "description": "Stable safe failure category for a failed terminal Attempt; internal error detail is never returned."
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobErrorCode"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "description": "Stable safe failure category for a failed terminal Attempt; internal error detail is never returned.",
+            "type": "string"
           },
           "started_at": {
             "description": "Time when execution started.",
@@ -17942,8 +17990,16 @@
             "type": "integer"
           },
           "stage": {
-            "$ref": "#/components/schemas/JobStage",
-            "description": "Stable safe name of the current processing stage."
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobStage"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "description": "Stable safe name of the current processing stage.",
+            "type": "string"
           },
           "total": {
             "description": "Total work units expected in the current stage.",
@@ -18005,8 +18061,16 @@
             "$ref": "#/components/schemas/JobProgressResponse"
           },
           "public_error_code": {
-            "$ref": "#/components/schemas/JobErrorCode",
-            "description": "Stable safe failure category; private worker and infrastructure errors are never exposed."
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobErrorCode"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "description": "Stable safe failure category; private worker and infrastructure errors are never exposed.",
+            "type": "string"
           },
           "revision": {
             "description": "Monotonic durable Job revision for concurrency-aware consumers.",
@@ -18029,8 +18093,16 @@
             "type": "string"
           },
           "type": {
-            "$ref": "#/components/schemas/JobType",
-            "description": "Stable allowlisted Job type."
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobType"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "description": "Stable allowlisted Job type.",
+            "type": "string"
           },
           "updated_at": {
             "description": "Time of the latest durable Job change.",
@@ -18613,7 +18685,15 @@
             "$ref": "#/components/schemas/MailDeliveryState"
           },
           "template_key": {
-            "$ref": "#/components/schemas/MailTemplateKey"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MailTemplateKey"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "string"
           }
         },
         "required": [
@@ -18678,14 +18758,27 @@
             "$ref": "#/components/schemas/ID"
           },
           "public_failure_code": {
-            "$ref": "#/components/schemas/MailFailureCode",
-            "description": "Stable safe failure category; raw SMTP or infrastructure errors are never exposed."
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MailFailureCode"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "description": "Stable safe failure category; raw SMTP or infrastructure errors are never exposed.",
+            "type": "string"
           },
           "state": {
             "$ref": "#/components/schemas/MailDeliveryState"
           },
+          "target_invitation_id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "Invitation the mail is addressed to, present instead of target_user_id for Invitation mail."
+          },
           "target_user_id": {
-            "$ref": "#/components/schemas/ID"
+            "$ref": "#/components/schemas/ID",
+            "description": "User the mail is addressed to. Exactly one of target_user_id and target_invitation_id is present; an Invitation mail goes to an invitee who has no account yet."
           },
           "template_digest": {
             "description": "SHA-256 digest of the exact rendered template revision, encoded as lowercase hexadecimal.",
@@ -18693,7 +18786,15 @@
             "type": "string"
           },
           "template_key": {
-            "$ref": "#/components/schemas/MailTemplateKey"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MailTemplateKey"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "string"
           },
           "updated_at": {
             "description": "Time of the latest durable state change.",
@@ -18704,7 +18805,6 @@
         "required": [
           "id",
           "occurrence_id",
-          "target_user_id",
           "template_key",
           "template_digest",
           "masked_recipient",
@@ -18869,7 +18969,15 @@
             "$ref": "#/components/schemas/MailDeliveryState"
           },
           "template_key": {
-            "$ref": "#/components/schemas/MailTemplateKey"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MailTemplateKey"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "string"
           },
           "truncated": {
             "description": "True when the bounded scan did not include every matching delivery.",
@@ -21211,7 +21319,15 @@
             "type": "integer"
           },
           "failure_code": {
-            "$ref": "#/components/schemas/OnboardingImportFailureCode"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OnboardingImportFailureCode"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "string"
           },
           "file_name": {
             "description": "Base name of the uploaded file as the uploader gave it, omitted when none was given and for student progressions.",
@@ -21425,10 +21541,26 @@
             "type": "string"
           },
           "preview_code": {
-            "$ref": "#/components/schemas/OnboardingImportPreviewCode"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OnboardingImportPreviewCode"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "string"
           },
           "public_code": {
-            "$ref": "#/components/schemas/OnboardingImportRowCode"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OnboardingImportRowCode"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "string"
           },
           "reference": {
             "maxLength": 128,
@@ -21560,7 +21692,15 @@
             "type": "boolean"
           },
           "name": {
-            "$ref": "#/components/schemas/PersonalAccessTokenScope"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PersonalAccessTokenScope"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "string"
           },
           "resource_types": {
             "description": "The resource types the action applies to.",
@@ -21796,7 +21936,15 @@
         "additionalProperties": false,
         "properties": {
           "code": {
-            "$ref": "#/components/schemas/ErrorCode"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorCode"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "string"
           },
           "control_metadata_bytes": {
             "description": "Present only on an exam.delivery.metadata_capacity refusal.",
@@ -24216,7 +24364,15 @@
             "type": "string"
           },
           "event": {
-            "$ref": "#/components/schemas/SelfAuditEvent"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SelfAuditEvent"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "string"
           },
           "id": {
             "$ref": "#/components/schemas/ID"

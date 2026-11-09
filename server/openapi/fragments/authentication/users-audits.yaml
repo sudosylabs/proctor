@@ -221,7 +221,10 @@ components:
           format: date-time
           description: Time the event began.
         event:
-          $ref: '#/components/schemas/SelfAuditEvent'
+          type: string
+          anyOf:
+            - $ref: '#/components/schemas/SelfAuditEvent'
+            - type: string
         status:
           type: string
           enum:

@@ -29,6 +29,15 @@ description: Add or change Proctor HTTP operations, schemas, examples, product-a
    checks from `docs/site`. Completion: source, runtime agreement, artifact,
    and rendered reference agree.
 
+A closed server catalogue that may grow (error codes, Job types and stages,
+audit actions, mail template keys, failure and batch codes) is one component
+enum pinned by a test to its Go source. Requests reference it directly and stay
+closed. A response member wraps it as `type: string` plus
+`anyOf: [{$ref: <catalogue>}, {type: string}]`, so a client built against an
+older contract still accepts a reply carrying a newer value;
+`TestResponseCataloguesStayOpenForOlderClients` enforces this, and a new
+catalogue joins its `responseCatalogues` set.
+
 Never edit generated `server/openapi.json` or `docs/api/reference/` output by
 hand. The generator owns discovery, collision checks, reference resolution,
 schema validation, and deterministic serialization. Docusaurus adapters may

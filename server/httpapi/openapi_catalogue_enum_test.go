@@ -10,6 +10,7 @@ package httpapi
 import (
 	"encoding/json"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -102,4 +103,82 @@ func TestOnboardingImportCodeEnumsMatchTheCatalogues(t *testing.T) {
 	for _, code := range model.StudentProgressionPreviewCodes() {
 		require.Contains(t, app.OnboardingImportPreviewCodes(), code, "a progression row outcome is a preview_code")
 	}
+}
+
+// responseCatalogues are the closed server catalogues that may grow. A
+// response member that names one must stay open (the catalogue or any other
+// string) so a client built against an older contract still accepts a reply
+// carrying a newer value. Requests reference them directly and stay closed.
+var responseCatalogues = map[string]bool{
+	"AcademicAdministrationBatchErrorCode": true, "AuditAction": true, "ErrorCode": true,
+	"InvitationBatchErrorCode": true, "JobErrorCode": true, "JobStage": true, "JobType": true,
+	"MailFailureCode": true, "MailTemplateKey": true, "OnboardingImportFailureCode": true,
+	"OnboardingImportPreviewCode": true, "OnboardingImportRowCode": true,
+	"PersonalAccessTokenScope": true, "ResourceType": true, "SelfAuditEvent": true,
+}
+
+func TestResponseCataloguesStayOpenForOlderClients(t *testing.T) {
+	t.Parallel()
+	encoded, err := readOpenAPIDocumentFile()
+	require.NoError(t, err)
+	var document map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &document))
+	schemas, _ := document["components"].(map[string]any)["schemas"].(map[string]any)
+	for name := range responseCatalogues {
+		require.Contains(t, schemas, name, "catalogue component %s is missing", name)
+	}
+	var violations []string
+	visited := map[string]bool{}
+	var walk func(node any, where string, open bool)
+	walk = func(node any, where string, open bool) {
+		switch value := node.(type) {
+		case map[string]any:
+			if ref, ok := value["$ref"].(string); ok {
+				name := strings.TrimPrefix(ref, "#/components/schemas/")
+				if responseCatalogues[name] && !open {
+					violations = append(violations, where+" references "+name+" without an open string alternative")
+				}
+				if name != ref && !visited[name] {
+					visited[name] = true
+					walk(schemas[name], name, false)
+				}
+			}
+			for key, child := range value {
+				if key == "anyOf" {
+					alternatives, _ := child.([]any)
+					openAlternative := false
+					for _, alternative := range alternatives {
+						if typed, ok := alternative.(map[string]any); ok && typed["type"] == "string" && typed["enum"] == nil && typed["$ref"] == nil {
+							openAlternative = true
+						}
+					}
+					for _, alternative := range alternatives {
+						walk(alternative, where, openAlternative)
+					}
+					continue
+				}
+				walk(child, where+"."+key, false)
+			}
+		case []any:
+			for _, child := range value {
+				walk(child, where, false)
+			}
+		}
+	}
+	for path, item := range document["paths"].(map[string]any) {
+		for method, operation := range item.(map[string]any) {
+			typed, isOperation := operation.(map[string]any)
+			if !isOperation {
+				continue
+			}
+			if responses, ok := typed["responses"]; ok {
+				walk(responses, method+" "+path, false)
+			}
+		}
+	}
+	if responses, ok := document["components"].(map[string]any)["responses"]; ok {
+		walk(responses, "components.responses", false)
+	}
+	sort.Strings(violations)
+	require.Empty(t, violations)
 }

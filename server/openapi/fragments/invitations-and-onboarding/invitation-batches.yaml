@@ -207,7 +207,10 @@ components:
         invitation_id:
           $ref: '#/components/schemas/ID'
         error_code:
-          $ref: '#/components/schemas/InvitationBatchErrorCode'
+          type: string
+          anyOf:
+            - $ref: '#/components/schemas/InvitationBatchErrorCode'
+            - type: string
     InvitationBatchResponse:
       type: object
       additionalProperties: false

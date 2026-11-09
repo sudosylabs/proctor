@@ -242,3 +242,24 @@ func TestMailRekeyStatusProjectsSafeProgressAndFinalProof(t *testing.T) {
 		require.False(t, bytes.Contains(encoded, []byte(forbidden)), "rekey status leaked %q: %s", forbidden, encoded)
 	}
 }
+
+func TestMailDeliveryResponseNamesExactlyOneTarget(t *testing.T) {
+	t.Parallel()
+	invitation := model.NewInvitationID()
+	encoded, err := json.Marshal(mailResponse(app.MailDeliveryView{ID: model.NewMailDeliveryID(), OccurrenceID: model.NewMailOccurrenceID(),
+		TargetInvitationID: invitation, TemplateKey: model.MailTemplateAccessStudentClassInvitation}))
+	require.NoError(t, err)
+	var wire map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(encoded, &wire))
+	require.NotContains(t, wire, "target_user_id", "an invitee has no account")
+	require.JSONEq(t, `"`+invitation.String()+`"`, string(wire["target_invitation_id"]))
+
+	user := model.NewUserID()
+	encoded, err = json.Marshal(mailResponse(app.MailDeliveryView{ID: model.NewMailDeliveryID(), OccurrenceID: model.NewMailOccurrenceID(),
+		TargetUserID: user, TemplateKey: model.MailTemplateSystemTest}))
+	require.NoError(t, err)
+	wire = nil
+	require.NoError(t, json.Unmarshal(encoded, &wire))
+	require.NotContains(t, wire, "target_invitation_id")
+	require.JSONEq(t, `"`+user.String()+`"`, string(wire["target_user_id"]))
+}

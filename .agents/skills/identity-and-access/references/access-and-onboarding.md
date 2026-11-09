@@ -792,7 +792,11 @@ of the same type executes against one target scope at a time. Cancellation
 stops new rows, lets an already committing row finish, and never rolls back
 committed work. Compensation uses explicit inverse use cases.
 
-Detailed previews and reports retain for seven days. Reports preserve source
+Detailed previews and reports retain for seven days. The administrative
+listing shows unexpired imports newest first through one recorded
+`onboarding_batch.view` scope decision turned into a Store predicate, so it
+lists exactly what a single read would allow; student progressions authorize
+through Class progression authority and are not listed. Reports preserve source
 row, safe reference, normalized operation, status, created IDs, and public
 error code; downloads reauthorize and escape spreadsheet formulas. Audit,
 logs, metrics, and generic Job projections contain only safe IDs, counts,

@@ -21,6 +21,9 @@ const (
 	OnboardingImportMaximumColumns = 64
 	OnboardingImportMaximumField   = 16 * 1024
 	OnboardingImportPageSize       = 200
+	// OnboardingImportListMaximum bounds one listing read: a 200-item page
+	// plus the probe item that reports whether another page follows.
+	OnboardingImportListMaximum = 201
 )
 
 // OnboardingImport is the safe aggregate projection. Recipient data and the
@@ -152,6 +155,31 @@ type OnboardingImportRowCompletion struct {
 	At           time.Time
 }
 
+// OnboardingImportVisibilityScope is the persistence-ready
+// onboarding_batch.view authority of an administrative import listing: every
+// import Institution-wide, the Academic Unit and Class imports under the named
+// Academic Unit subtrees, and the imports scoped to the named Classes.
+type OnboardingImportVisibilityScope struct {
+	InstitutionWide     bool
+	AcademicUnitRootIDs []model.AcademicUnitID
+	ClassIDs            []model.ClassID
+}
+
+// OnboardingImportListOptions selects up to Limit (1..OnboardingImportListMaximum)
+// unexpired administrative imports inside Visibility, newest first by creation
+// instant then identity. Student progression aggregates are never listed: they
+// authorize through Class progression authority, not onboarding_batch.view.
+// An empty States matches every state; BeforeCreatedAt and BeforeID are the
+// keyset of the previous page's last item, both set or both zero. An empty
+// Visibility is invalid input.
+type OnboardingImportListOptions struct {
+	Visibility      OnboardingImportVisibilityScope
+	States          []model.OnboardingImportState
+	BeforeCreatedAt time.Time
+	BeforeID        model.OnboardingImportID
+	Limit           int
+}
+
 type OnboardingImportPage struct {
 	Rows []OnboardingImportRow
 	More bool
@@ -162,6 +190,7 @@ type OnboardingImportPage struct {
 type OnboardingImportStore interface {
 	CreateOnboardingImport(context.Context, *OnboardingImportCreation) (*OnboardingImport, error)
 	GetOnboardingImport(context.Context, model.OnboardingImportID) (*OnboardingImport, error)
+	ListOnboardingImports(context.Context, OnboardingImportListOptions) ([]*OnboardingImport, error)
 	ListStudentProgressionRoster(context.Context, model.ClassID, time.Time, int) ([]*model.ClassMember, error)
 	CompleteOnboardingImportPreview(context.Context, *OnboardingImportPreviewCompletion) (*OnboardingImport, error)
 	CommitOnboardingImport(context.Context, *OnboardingImportCommit) (*OnboardingImport, error)

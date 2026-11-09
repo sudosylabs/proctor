@@ -30,6 +30,10 @@ row has changed application state.
 
 Poll <Link to="/api/reference/get-onboarding-import">Get Onboarding Import</Link>
 or observe the generic Job without reading domain rows from the Job payload.
+<Link to="/api/reference/list-onboarding-imports">List Onboarding Imports</Link>
+finds imports again, newest first and filtered by repeated `state` values; it
+shows exactly the imports a single read would allow and returns summaries
+without rows. Student progressions are not listed there.
 When validation completes, retain the preview digest and review normalized
 outcomes. Unknown headers, duplicate package rows, unresolved canonical names,
 scope escapes, and invalid Unicode are review failures, not warnings to hide.

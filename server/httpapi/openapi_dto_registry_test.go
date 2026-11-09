@@ -281,6 +281,7 @@ var openAPIDTOs = map[string]reflect.Type{
 	"NativeSourceGap":                                reflect.TypeOf(model.NativeSourceGap{}),
 	"NativeSourceReset":                              reflect.TypeOf(model.NativeSourceReset{}),
 	"OnboardingImportCommitRequest":                  reflect.TypeOf(onboardingImportCommitRequest{}),
+	"OnboardingImportListResponse":                   reflect.TypeOf(listResponse[onboardingImportResponse]{}),
 	"OnboardingImportResponse":                       reflect.TypeOf(onboardingImportResponse{}),
 	"OnboardingImportRowResponse":                    reflect.TypeOf(onboardingImportRowResponse{}),
 	"PasswordReauthenticationRequest":                reflect.TypeOf(passwordReauthenticationRequest{}),

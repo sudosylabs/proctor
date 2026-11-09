@@ -25,7 +25,15 @@ import (
 )
 
 type recordingOnboardingImportApplication struct {
-	getID string
+	getID     string
+	listQuery *app.ListOnboardingImportsQuery
+	listPage  app.Page[app.OnboardingImportView]
+	listErr   error
+}
+
+func (c *recordingOnboardingImportApplication) ListOnboardingImports(_ context.Context, _ invocation.Invocation, query app.ListOnboardingImportsQuery) (app.Page[app.OnboardingImportView], error) {
+	c.listQuery = &query
+	return c.listPage, c.listErr
 }
 
 func (*recordingOnboardingImportApplication) UploadOnboardingImport(context.Context, invocation.Invocation, app.UploadOnboardingImportCommand) (app.OnboardingImportView, error) {

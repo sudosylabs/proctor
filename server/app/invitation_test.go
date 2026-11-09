@@ -247,6 +247,7 @@ type invitationAuthorizerFake struct {
 	delegatedScopeType model.RoleScopeType
 	delegatedScopeID   string
 	actionErrors       map[model.Action]error
+	visibility         *store.InvitationVisibilityScope
 	err                error
 }
 
@@ -324,6 +325,9 @@ func (f *invitationAuthorizerFake) AuthorizeActionDelegation(_ context.Context, 
 }
 func (f *invitationAuthorizerFake) Visibility(_ context.Context, _ invocation.Invocation, action model.Action) (store.InvitationVisibilityScope, error) {
 	f.actions = append(f.actions, action)
+	if f.visibility != nil {
+		return *f.visibility, f.err
+	}
 	return store.InvitationVisibilityScope{InstitutionWide: true}, f.err
 }
 

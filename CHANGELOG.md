@@ -231,6 +231,12 @@ module when a change is not server-only. No module has been released yet.
   shows it as `reason` on the disable event to Institution-wide readers, while
   Academic Unit readers and the self audit history never receive it. A request
   without a body behaves as before.
+- Server: `GET /api/v1/onboarding-imports` lists the unexpired onboarding
+  imports the caller could read one by one, newest first, filtered by
+  repeated `state` values and paged by `limit` and `cursor`. Items are
+  summaries without rows; student progressions are not listed. A new
+  `onboarding_imports (created_at DESC, id DESC)` index backs it, so existing
+  development databases must be recreated.
 - Server: `GET /api/v1/users/me/audits` takes `order=asc` to read oldest
   first, and its first page reports `total`, the events the filters match,
   exact below 10,000 and flagged by `total_is_lower_bound` at that bound.

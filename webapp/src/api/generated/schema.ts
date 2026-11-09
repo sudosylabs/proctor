@@ -4009,7 +4009,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List onboarding imports within the caller's authorized scope
+         * @description Lists the unexpired administrative onboarding imports the caller could read one by one through its current Institution, Academic Unit, or Class onboarding authority, newest first. Items are summary projections without rows; read one import for its preview or report rows. Student progressions are listed through their own resource and never appear here.
+         */
+        get: operations["listOnboardingImports"];
         put?: never;
         /**
          * Upload a bounded onboarding CSV for asynchronous validation
@@ -9466,6 +9470,10 @@ export interface components {
             policy: "require_all_valid" | "valid_rows_only";
             preview_digest: string;
         };
+        OnboardingImportListResponse: {
+            items: components["schemas"]["OnboardingImportResponse"][];
+            next_cursor?: string;
+        };
         OnboardingImportResponse: {
             /** @enum {string} */
             commit_policy?: "require_all_valid" | "valid_rows_only";
@@ -12746,6 +12754,21 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["OnboardingImportResponse"];
+            };
+        };
+        /** @description Bounded authorized onboarding import page */
+        OnboardingImportListOK: {
+            headers: {
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "items": []
+                 *     }
+                 */
+                "application/json": components["schemas"]["OnboardingImportListResponse"];
             };
         };
         /** @description Authorized safe onboarding preview or report projection */
@@ -20471,6 +20494,31 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["MFARekeyStatusOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    listOnboardingImports: {
+        parameters: {
+            query?: {
+                /** @description Return only imports in these lifecycle states. Repeat the parameter to select several; omit it for all. */
+                state?: ("uploading" | "parsing" | "preview_ready" | "executing" | "completed" | "completed_with_errors" | "canceled" | "failed")[];
+                /** @description Continue from the opaque cursor returned by the preceding page. */
+                cursor?: string;
+                /** @description Maximum number of onboarding imports to return in this page. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OnboardingImportListOK"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

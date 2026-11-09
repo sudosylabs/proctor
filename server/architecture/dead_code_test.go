@@ -109,6 +109,7 @@ var reachableOnlyFromTests = map[string]string{
 	"httpapi.unavailableInvitationApplication.RunInvitationBatch":                              "httpapi test null object",
 	"httpapi.unavailableOnboardingImportApplication.UploadOnboardingImport":                    "httpapi test null object",
 	"httpapi.unavailableOnboardingImportApplication.GetOnboardingImport":                       "httpapi test null object",
+	"httpapi.unavailableOnboardingImportApplication.ListOnboardingImports":                     "httpapi test null object",
 	"httpapi.unavailableOnboardingImportApplication.CommitOnboardingImport":                    "httpapi test null object",
 	"httpapi.unavailableOnboardingImportApplication.CancelOnboardingImport":                    "httpapi test null object",
 	"httpapi.unavailableOnboardingImportApplication.OnboardingImportReport":                    "httpapi test null object",

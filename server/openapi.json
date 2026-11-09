@@ -4899,6 +4899,24 @@
           }
         }
       },
+      "OnboardingImportListOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "items": []
+            },
+            "schema": {
+              "$ref": "#/components/schemas/OnboardingImportListResponse"
+            }
+          }
+        },
+        "description": "Bounded authorized onboarding import page",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
       "OnboardingImportOK": {
         "content": {
           "application/json": {
@@ -20759,6 +20777,25 @@
           "expected_revision",
           "preview_digest",
           "policy"
+        ],
+        "type": "object"
+      },
+      "OnboardingImportListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OnboardingImportResponse"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
         ],
         "type": "object"
       },
@@ -42270,6 +42307,122 @@
       ]
     },
     "/api/v1/onboarding-imports": {
+      "get": {
+        "description": "Lists the unexpired administrative onboarding imports the caller could read one by one through its current Institution, Academic Unit, or Class onboarding authority, newest first. Items are summary projections without rows; read one import for its preview or report rows. Student progressions are listed through their own resource and never appear here.",
+        "operationId": "listOnboardingImports",
+        "parameters": [
+          {
+            "description": "Return only imports in these lifecycle states. Repeat the parameter to select several; omit it for all.",
+            "explode": true,
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "items": {
+                "enum": [
+                  "uploading",
+                  "parsing",
+                  "preview_ready",
+                  "executing",
+                  "completed",
+                  "completed_with_errors",
+                  "canceled",
+                  "failed"
+                ],
+                "type": "string"
+              },
+              "maxItems": 8,
+              "type": "array"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Continue from the opaque cursor returned by the preceding page.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 512,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Maximum number of onboarding imports to return in this page.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OnboardingImportListOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List onboarding imports within the caller's authorized scope",
+        "tags": [
+          "Invitations and onboarding"
+        ],
+        "x-codeSamples": [
+          {
+            "label": "List imports awaiting review",
+            "lang": "Shell",
+            "source": "curl --header \"Authorization: Bearer $PROCTOR_TOKEN\" \\\n  \"https://proctor.example.edu/api/v1/onboarding-imports?state=preview_ready\u0026limit=20\""
+          }
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "onboarding_import.unavailable",
+          "invitation.unavailable",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
       "post": {
         "description": "Stores one bounded formula-safe CSV source and creates a durable validation Job for the explicit mode and authorization scope. Upload performs no account, membership, or Role mutation; the resulting immutable preview must be reviewed and committed separately.",
         "operationId": "uploadOnboardingImport",

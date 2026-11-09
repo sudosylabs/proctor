@@ -231,6 +231,65 @@ func (s *onboardingImportService) get(ctx context.Context, invocation invocation
 	return onboardingImportView(value), rows, nil
 }
 
+// ListOnboardingImportsQuery selects one page of administrative imports,
+// newest first. States is an optional closed-state filter; BeforeCreatedAt
+// and BeforeID continue after the previous page's last item, both set or both
+// zero.
+type ListOnboardingImportsQuery struct {
+	States          []model.OnboardingImportState
+	BeforeCreatedAt time.Time
+	BeforeID        model.OnboardingImportID
+	Limit           int
+}
+
+// ListOnboardingImports lists the unexpired administrative imports the caller
+// could read one by one: the onboarding_batch.view authority is resolved once
+// into a scope and recorded as one authorization decision, as the Invitation
+// listing does. Student progression aggregates authorize through Class
+// progression authority and stay on their own surface, so they are never
+// listed here. Items carry the summary projection without rows.
+func (s *onboardingImportService) ListOnboardingImports(ctx context.Context, invocation invocation.Invocation, query ListOnboardingImportsQuery) (Page[OnboardingImportView], error) {
+	limit, probe, err := resolvePageLimit(query.Limit, "limit")
+	if err != nil {
+		return Page[OnboardingImportView]{}, err
+	}
+	if len(query.States) > 8 {
+		return Page[OnboardingImportView]{}, apperror.Invalid("request.invalid", "state")
+	}
+	states := make([]model.OnboardingImportState, 0, len(query.States))
+	for _, state := range query.States {
+		if !state.IsValid() {
+			return Page[OnboardingImportView]{}, apperror.Invalid("request.invalid", "state")
+		}
+		if !slices.Contains(states, state) {
+			states = append(states, state)
+		}
+	}
+	if (!query.BeforeID.IsZero() || !query.BeforeCreatedAt.IsZero()) && (!query.BeforeID.IsValid() || query.BeforeCreatedAt.IsZero()) {
+		return Page[OnboardingImportView]{}, apperror.Invalid("request.invalid", "cursor")
+	}
+	scope, err := s.deps.Authorization.Visibility(ctx, invocation, model.ActionOnboardingBatchView)
+	if err != nil {
+		return Page[OnboardingImportView]{}, err
+	}
+	options := store.OnboardingImportListOptions{Visibility: store.OnboardingImportVisibilityScope(scope), States: states, Limit: probe}
+	if query.BeforeID.IsValid() {
+		options.BeforeCreatedAt, options.BeforeID = model.TimeUTC(query.BeforeCreatedAt), query.BeforeID
+	}
+	values, err := s.deps.Imports.ListOnboardingImports(ctx, options)
+	if err != nil {
+		return Page[OnboardingImportView]{}, onboardingImportStoreErrors.Translate(err)
+	}
+	if len(values) > probe {
+		return Page[OnboardingImportView]{}, apperror.New("onboarding_import.unavailable")
+	}
+	items := make([]OnboardingImportView, 0, len(values))
+	for _, value := range values {
+		items = append(items, onboardingImportView(value))
+	}
+	return newPage(items, limit), nil
+}
+
 func (s *onboardingImportService) CommitOnboardingImport(ctx context.Context, invocation invocation.Invocation, command CommitOnboardingImportCommand) (OnboardingImportView, error) {
 	return s.commit(ctx, invocation, command, "")
 }

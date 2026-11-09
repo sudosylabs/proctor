@@ -10,6 +10,7 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 
@@ -22,6 +23,7 @@ import (
 type OnboardingImportApplication interface {
 	UploadOnboardingImport(context.Context, invocation.Invocation, app.UploadOnboardingImportCommand) (app.OnboardingImportView, error)
 	GetOnboardingImport(context.Context, invocation.Invocation, model.OnboardingImportID) (app.OnboardingImportView, []app.OnboardingImportRowView, error)
+	ListOnboardingImports(context.Context, invocation.Invocation, app.ListOnboardingImportsQuery) (app.Page[app.OnboardingImportView], error)
 	CommitOnboardingImport(context.Context, invocation.Invocation, app.CommitOnboardingImportCommand) (app.OnboardingImportView, error)
 	CancelOnboardingImport(context.Context, invocation.Invocation, model.OnboardingImportID) (app.OnboardingImportView, error)
 	OnboardingImportReport(context.Context, invocation.Invocation, model.OnboardingImportID, io.Writer) error
@@ -67,6 +69,27 @@ type onboardingImportResponse struct {
 	FailureCode         string                        `json:"failure_code,omitempty"`
 }
 
+// onboardingImportCursor is the keyset of the last listed import: newest
+// first by creation instant, then identity.
+type onboardingImportCursor struct {
+	CreatedAt string `json:"created_at"`
+	ID        string `json:"id"`
+}
+
+func onboardingImportCursorSpec() opaqueCursorSpec[onboardingImportCursor] {
+	return opaqueCursorSpec[onboardingImportCursor]{
+		label: "onboarding import", maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
+		members: []string{"created_at", "id"},
+		validate: func(cursor onboardingImportCursor) error {
+			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
+			if err != nil || createdAt.IsZero() || !model.OnboardingImportID(cursor.ID).IsValid() {
+				return errors.New("invalid onboarding import keyset")
+			}
+			return nil
+		},
+	}
+}
+
 type onboardingImportRowResponse struct {
 	RowNumber    int    `json:"row"`
 	Reference    string `json:"reference"`
@@ -83,6 +106,8 @@ func onboardingImportResource(imports OnboardingImportApplication) apiResource {
 	return newResource("onboarding-imports",
 		idempotentProtocolRoute(IdempotencyNone, store.OnboardingImportMaximumBytes, "onboarding-import-csv", RouteProtocolStreamingUpload, AuthPrincipalRequired,
 			http.MethodPost, apiPath(literal("onboarding-imports")), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "onboarding_import.conflict", "onboarding_import.file_invalid", "onboarding_import.unavailable", "administration.unavailable", "authentication.mfa.unavailable", "invitation.role_not_delegable", "invitation.unavailable", "student_progression.conflict", "student_progression.unavailable"}, module.upload),
+		principalRoute(http.MethodGet, apiPath(literal("onboarding-imports")),
+			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "onboarding_import.unavailable", "invitation.unavailable"}, module.list),
 		principalRoute(http.MethodGet, apiPath(literal("onboarding-imports"), canonicalID("onboarding_import_id")),
 			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "onboarding_import.unavailable", "invitation.unavailable"}, module.get),
 		idempotentPrincipalRoute(IdempotencyRequired, http.MethodPost, apiPath(literal("onboarding-imports"), canonicalID("onboarding_import_id"), literal("commit")),
@@ -102,6 +127,50 @@ func (m onboardingImportModule) upload(request operationRequest) (protocolResult
 		return protocolResult{}, err
 	}
 	return streamingUploadProtocolResult(http.StatusAccepted, onboardingImportResponseFromView(view, nil)).withHeaders(noStoreHeaders()), nil
+}
+
+func (m onboardingImportModule) list(request operationRequest) (operationResult, error) {
+	page, err := request.pageRequest()
+	if err != nil {
+		return operationResult{}, err
+	}
+	values := request.request.URL.Query()
+	for key := range values {
+		if key != "state" && key != "limit" && key != "cursor" {
+			return operationResult{}, invalidRequestError(errors.New("unknown onboarding import query parameter"))
+		}
+	}
+	query := app.ListOnboardingImportsQuery{Limit: page.Limit}
+	for _, raw := range values["state"] {
+		if raw == "" {
+			return operationResult{}, invalidRequestError(errors.New("state must be non-empty"))
+		}
+		query.States = append(query.States, model.OnboardingImportState(raw))
+	}
+	cursor, continued, err := decodePageCursor(page, onboardingImportCursorSpec())
+	if err != nil {
+		return operationResult{}, err
+	}
+	if continued {
+		query.BeforeCreatedAt, _ = model.ParseRFC3339(cursor.CreatedAt)
+		query.BeforeID = model.OnboardingImportID(cursor.ID)
+	}
+	result, err := m.imports.ListOnboardingImports(request.context, request.invocation(), query)
+	if err != nil {
+		return operationResult{}, err
+	}
+	if len(result.Items) > query.Limit {
+		return operationResult{}, errUnpresentableResult
+	}
+	response, err := newListResponse(result.Items, result.HasMore, func(view app.OnboardingImportView) onboardingImportResponse {
+		return onboardingImportResponseFromView(view, nil)
+	}, func(last app.OnboardingImportView) (string, error) {
+		return encodeOpaqueCursor(onboardingImportCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String()}, onboardingImportCursorSpec())
+	})
+	if err != nil {
+		return operationResult{}, err
+	}
+	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
 func (m onboardingImportModule) get(request operationRequest) (operationResult, error) {
@@ -186,6 +255,9 @@ func (unavailableOnboardingImportApplication) UploadOnboardingImport(context.Con
 }
 func (unavailableOnboardingImportApplication) GetOnboardingImport(context.Context, invocation.Invocation, model.OnboardingImportID) (app.OnboardingImportView, []app.OnboardingImportRowView, error) {
 	return app.OnboardingImportView{}, nil, errUnpresentableResult
+}
+func (unavailableOnboardingImportApplication) ListOnboardingImports(context.Context, invocation.Invocation, app.ListOnboardingImportsQuery) (app.Page[app.OnboardingImportView], error) {
+	return app.Page[app.OnboardingImportView]{}, errUnpresentableResult
 }
 func (unavailableOnboardingImportApplication) CommitOnboardingImport(context.Context, invocation.Invocation, app.CommitOnboardingImportCommand) (app.OnboardingImportView, error) {
 	return app.OnboardingImportView{}, errUnpresentableResult

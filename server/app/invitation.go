@@ -377,7 +377,7 @@ func (a invitationAuthorizationAdapter) AuthorizeActionDelegation(ctx context.Co
 }
 
 func (a invitationAuthorizationAdapter) Visibility(ctx context.Context, invocation invocation.Invocation, action model.Action) (store.InvitationVisibilityScope, error) {
-	if a.authorization == nil || (action != model.ActionInvitationView && action != model.ActionInvitationManage) {
+	if a.authorization == nil || (action != model.ActionInvitationView && action != model.ActionInvitationManage && action != model.ActionOnboardingBatchView) {
 		return store.InvitationVisibilityScope{}, apperror.New("invitation.unavailable")
 	}
 	constraint, err := a.authorization.authorizedScopes(ctx, invocation.Principal(), action, model.ResourceInstitution)

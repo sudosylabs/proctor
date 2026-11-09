@@ -518,6 +518,7 @@ CREATE UNIQUE INDEX onboarding_imports_active_progression_source_idx
     ON onboarding_imports (source_class_id)
     WHERE mode = 'student_progression' AND state = 'executing';
 CREATE INDEX onboarding_imports_expiry_idx ON onboarding_imports (expires_at, id);
+CREATE INDEX onboarding_imports_created_at_id_idx ON onboarding_imports (created_at DESC, id DESC);
 
 CREATE TABLE onboarding_import_rows (
     import_id varchar(26) NOT NULL REFERENCES onboarding_imports(id) ON DELETE CASCADE,

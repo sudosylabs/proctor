@@ -7,6 +7,92 @@
 
 paths:
   /api/v1/onboarding-imports:
+    get:
+      operationId: listOnboardingImports
+      summary: List onboarding imports within the caller's authorized scope
+      description: >-
+        Lists the unexpired administrative onboarding imports the caller could read one by one through its current Institution, Academic Unit, or Class onboarding authority, newest first. Items are summary projections without rows; read one import for its preview or report rows. Student progressions are listed through their own resource and never appear here.
+      tags:
+        - Invitations and onboarding
+      x-proctor-auth: principal_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - request.invalid
+        - resource.not_found
+        - onboarding_import.unavailable
+        - invitation.unavailable
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      parameters:
+        - name: state
+          in: query
+          required: false
+          description: Return only imports in these lifecycle states. Repeat the parameter to select several; omit it for all.
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 8
+            items:
+              type: string
+              enum:
+                - uploading
+                - parsing
+                - preview_ready
+                - executing
+                - completed
+                - completed_with_errors
+                - canceled
+                - failed
+        - name: cursor
+          in: query
+          required: false
+          description: Continue from the opaque cursor returned by the preceding page.
+          schema:
+            type: string
+            maxLength: 512
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of onboarding imports to return in this page.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      x-codeSamples:
+        - lang: Shell
+          label: List imports awaiting review
+          source: |-
+            curl --header "Authorization: Bearer $PROCTOR_TOKEN" \
+              "https://proctor.example.edu/api/v1/onboarding-imports?state=preview_ready&limit=20"
+      responses:
+        "200":
+          $ref: '#/components/responses/OnboardingImportListOK'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "500":
+          $ref: '#/components/responses/InternalError'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
     post:
       operationId: uploadOnboardingImport
       summary: Upload a bounded onboarding CSV for asynchronous validation
@@ -160,3 +246,30 @@ paths:
           $ref: '#/components/responses/InternalError'
         "503":
           $ref: '#/components/responses/ServiceUnavailable'
+components:
+  responses:
+    OnboardingImportListOK:
+      description: Bounded authorized onboarding import page
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/OnboardingImportListResponse'
+          example:
+            items: []
+  schemas:
+    OnboardingImportListResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/OnboardingImportResponse'
+        next_cursor:
+          type: string

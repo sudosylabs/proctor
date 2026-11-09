@@ -196,6 +196,75 @@ func (s SQLInvitationStore) GetOnboardingImport(ctx context.Context, id model.On
 	return row.value()
 }
 
+// ListOnboardingImports returns one keyset page of unexpired administrative
+// imports inside the visibility scope, newest first. The scope predicate
+// matches the single-import onboarding_batch.view decision: Institution-scoped
+// imports need Institution-wide authority, Academic Unit imports lie in a
+// named subtree, and Class imports are named exactly or lie under a named
+// subtree through their Programme.
+func (s SQLInvitationStore) ListOnboardingImports(ctx context.Context, options store.OnboardingImportListOptions) ([]*store.OnboardingImport, error) {
+	visibility := options.Visibility
+	states := make([]string, 0, len(options.States))
+	for _, state := range options.States {
+		if !state.IsValid() {
+			return nil, store.NewErrInvalidInput("onboarding_import", "list_options", nil)
+		}
+		states = append(states, string(state))
+	}
+	if options.Limit < 1 || options.Limit > store.OnboardingImportListMaximum || len(states) > 8 ||
+		len(visibility.AcademicUnitRootIDs) > 256 || len(visibility.ClassIDs) > 256 ||
+		(!visibility.InstitutionWide && len(visibility.AcademicUnitRootIDs) == 0 && len(visibility.ClassIDs) == 0) ||
+		!validVisibilityIDs(visibility.AcademicUnitRootIDs) || !validVisibilityIDs(visibility.ClassIDs) ||
+		(options.BeforeID.IsValid() != !options.BeforeCreatedAt.IsZero()) || (!options.BeforeID.IsZero() && !options.BeforeID.IsValid()) {
+		return nil, store.NewErrInvalidInput("onboarding_import", "list_options", nil)
+	}
+	conditions := []string{"oi.mode<>'student_progression'", "oi.expires_at>CURRENT_TIMESTAMP"}
+	args := []any{}
+	if !visibility.InstitutionWide {
+		parts := []string{}
+		if len(visibility.AcademicUnitRootIDs) > 0 {
+			parts = append(parts, `(oi.scope_type IN ('academic_unit','class') AND EXISTS (
+				WITH RECURSIVE descendants AS (
+					SELECT id FROM academic_units WHERE id=ANY(?)
+					UNION ALL SELECT child.id FROM academic_units child JOIN descendants parent ON child.parent_id=parent.id
+				) SELECT 1 FROM descendants d WHERE (oi.scope_type='academic_unit' AND d.id=oi.scope_id) OR (oi.scope_type='class' AND d.id=(
+					SELECT p.academic_unit_id FROM classes c JOIN programme_levels pl ON pl.id=c.programme_level_id
+					JOIN programmes p ON p.id=pl.programme_id WHERE c.id=oi.scope_id))
+			))`)
+			args = append(args, pq.Array(idStrings(visibility.AcademicUnitRootIDs)))
+		}
+		if len(visibility.ClassIDs) > 0 {
+			parts = append(parts, `(oi.scope_type='class' AND oi.scope_id=ANY(?))`)
+			args = append(args, pq.Array(idStrings(visibility.ClassIDs)))
+		}
+		conditions = append(conditions, "("+strings.Join(parts, " OR ")+")")
+	}
+	if len(states) > 0 {
+		conditions = append(conditions, "oi.state=ANY(?)")
+		args = append(args, pq.Array(states))
+	}
+	if options.BeforeID.IsValid() {
+		before := model.TimeUTC(options.BeforeCreatedAt)
+		conditions = append(conditions, "(oi.created_at<? OR (oi.created_at=? AND oi.id<?))")
+		args = append(args, before, before, options.BeforeID.String())
+	}
+	args = append(args, options.Limit)
+	rows := []onboardingImportRow{}
+	if err := s.GetMaster().Select(ctx, &rows, `SELECT `+onboardingImportColumns+` FROM onboarding_imports oi WHERE `+
+		strings.Join(conditions, " AND ")+` ORDER BY oi.created_at DESC,oi.id DESC LIMIT ?`, args...); err != nil {
+		return nil, fmt.Errorf("list onboarding imports: %w", err)
+	}
+	values := make([]*store.OnboardingImport, 0, len(rows))
+	for _, row := range rows {
+		value, err := row.value()
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, value)
+	}
+	return values, nil
+}
+
 func (s SQLInvitationStore) ListStudentProgressionRoster(ctx context.Context, classID model.ClassID, at time.Time, limit int) ([]*model.ClassMember, error) {
 	if !classID.IsValid() || at.IsZero() || limit < 1 || limit > store.OnboardingImportMaximumRows+1 {
 		return nil, store.NewErrInvalidInput("student_progression", "roster", nil)

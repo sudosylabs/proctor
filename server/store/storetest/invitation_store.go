@@ -89,6 +89,9 @@ func TestInvitationStore(t *testing.T, ss store.Store, probes ...InvitationSQLPr
 	t.Run("OnboardingImportLifecycle", func(t *testing.T) {
 		testOnboardingImportLifecycle(t, ss)
 	})
+	t.Run("OnboardingImportListing", func(t *testing.T) {
+		testOnboardingImportListing(t, ss)
+	})
 	t.Run("OnboardingImportTeacherAndRoleNoOps", func(t *testing.T) {
 		testOnboardingImportTeacherAndRoleNoOps(t, ss)
 	})

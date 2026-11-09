@@ -169,7 +169,7 @@ paths:
         Verifies a current TOTP code or one unused recovery code and upgrades the exact current interactive Session to MFA assurance. A recovery code is consumed atomically and cannot be replayed.
       tags:
         - Authentication
-      x-proctor-auth: session_required
+      x-proctor-auth: mfa_enrollment_session_required
       x-proctor-error-codes:
         - request.invalid
         - authentication.mfa.code_invalid
@@ -297,6 +297,7 @@ paths:
         - Authentication
       x-proctor-auth: strong_recent_session_required
       x-proctor-error-codes:
+        - mfa.required_by_policy
         - authentication.mfa.disabled
         - authentication.mfa.not_found
         - authentication.mfa.conflict
@@ -455,6 +456,7 @@ components:
       required:
         - service_enabled
         - mfa_recovery_required
+        - mfa_enrollment_required
         - authentication_method
         - authentication_strength
         - recently_authenticated
@@ -470,6 +472,10 @@ components:
         mfa_recovery_required:
           type: boolean
           description: Whether this Session is restricted to fresh primary proof and local authenticator enrollment after an assisted reset.
+        mfa_enrollment_required:
+          type: boolean
+          description: >-
+            Whether the Access Policy restricts this Web Session until its User sets up or completes two-step verification. Only setting up two-step verification, the second-factor challenge, reauthentication, the security status and sign-out accept it.
         authentication_method:
           type: string
           enum: [password, oidc, cas]

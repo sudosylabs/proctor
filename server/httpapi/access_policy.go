@@ -49,6 +49,7 @@ type accessPolicySettingsRequest struct {
 	InvitationLocalCredentialEnabled Optional[bool]                                   `json:"invitation_local_credential_enabled"`
 	DesktopAuthorizationEnabled      Optional[bool]                                   `json:"desktop_authorization_enabled"`
 	ProviderAdmissions               Optional[map[string]model.ProviderAdmissionMode] `json:"provider_admissions"`
+	RoleHolderMFARequired            Optional[bool]                                   `json:"role_holder_mfa_required"`
 }
 
 type accessPolicyResponse struct {
@@ -62,6 +63,8 @@ type accessPolicyResponse struct {
 	InvitationLocalCredentialEnabled bool                                     `json:"invitation_local_credential_enabled"`
 	DesktopAuthorizationEnabled      bool                                     `json:"desktop_authorization_enabled"`
 	ProviderAdmissions               map[string]model.ProviderAdmissionMode   `json:"provider_admissions"`
+	RoleHolderMFARequired            bool                                     `json:"role_holder_mfa_required"`
+	RoleHolderMFAEnforced            bool                                     `json:"role_holder_mfa_enforced"`
 	History                          []accessPolicyTransitionResponse         `json:"history"`
 	AvailableProviders               []externalAuthenticationProviderResponse `json:"available_providers"`
 	DurableMail                      bool                                     `json:"durable_mail"`
@@ -81,7 +84,9 @@ type accessPolicyBlockerResponse struct {
 	ProviderID string `json:"provider_id,omitempty"`
 }
 type accessPolicyPreflightResponse struct {
-	Blockers []accessPolicyBlockerResponse `json:"blockers"`
+	Blockers                           []accessPolicyBlockerResponse `json:"blockers"`
+	RoleHoldersWithoutMFACount         int                           `json:"role_holders_without_mfa_count"`
+	RoleHolderSingleFactorSessionCount int                           `json:"role_holder_single_factor_session_count"`
 }
 
 type publicInstitutionPresentationResponse struct {
@@ -153,7 +158,8 @@ func (m accessPolicyResourceModule) preflight(request operationRequest) (operati
 	if err != nil {
 		return operationResult{}, err
 	}
-	response := accessPolicyPreflightResponse{Blockers: make([]accessPolicyBlockerResponse, 0, len(result.Blockers))}
+	response := accessPolicyPreflightResponse{Blockers: make([]accessPolicyBlockerResponse, 0, len(result.Blockers)),
+		RoleHoldersWithoutMFACount: result.RoleHoldersWithoutMFACount, RoleHolderSingleFactorSessionCount: result.RoleHolderSingleFactorSessionCount}
 	for _, blocker := range result.Blockers {
 		response.Blockers = append(response.Blockers, accessPolicyBlockerResponse{Code: string(blocker.Code), ProviderID: blocker.ProviderID})
 	}
@@ -214,10 +220,15 @@ func requiredAccessPolicySettings(body accessPolicySettingsRequest) (model.Acces
 	if providerAdmissions == nil {
 		return model.AccessPolicySettings{}, false, apperror.New("request.invalid").WithField("field", "provider_admissions")
 	}
+	roleHolderMFARequired, err := requiredBoolean("role_holder_mfa_required", body.RoleHolderMFARequired)
+	if err != nil {
+		return model.AccessPolicySettings{}, false, err
+	}
 	return model.AccessPolicySettings{
 		LocalLoginEnabled: localLogin, PublicRegistrationEnabled: publicRegistration,
 		InvitationAdmissionEnabled: invitationAdmission, InvitationLocalCredentialEnabled: invitationLocalCredential,
 		DesktopAuthorizationEnabled: desktopAuthorization, ProviderAdmissions: *providerAdmissions,
+		RoleHolderMFARequired: roleHolderMFARequired,
 	}, revoke, nil
 }
 
@@ -239,6 +250,7 @@ func accessPolicyResponseFromView(view app.AccessPolicyView) accessPolicyRespons
 	response.LocalLoginEnabled, response.PublicRegistrationEnabled = p.LocalLoginEnabled, p.PublicRegistrationEnabled
 	response.InvitationAdmissionEnabled, response.InvitationLocalCredentialEnabled = p.InvitationAdmissionEnabled, p.InvitationLocalCredentialEnabled
 	response.DesktopAuthorizationEnabled, response.ProviderAdmissions = p.DesktopAuthorizationEnabled, p.Settings().ProviderAdmissions
+	response.RoleHolderMFARequired, response.RoleHolderMFAEnforced = p.RoleHolderMFARequired, view.RoleHolderMFAEnforced
 	response.DurableMail = view.DurableMail
 	for _, transition := range view.History {
 		if transition != nil {

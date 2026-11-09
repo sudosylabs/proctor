@@ -39,6 +39,9 @@ type AccessPolicyProviderCapability struct {
 type AccessPolicyCapabilitySnapshot struct {
 	Providers   []AccessPolicyProviderCapability
 	DurableMail bool
+	// MFA reports whether the server configuration enables two-step
+	// verification, so role holders could enroll a second factor.
+	MFA bool
 }
 
 type accessPolicyCapabilitySource interface {
@@ -48,14 +51,15 @@ type accessPolicyCapabilitySource interface {
 // deploymentAccessPolicyCapabilities projects only safe process capabilities
 // from the live registry and mail transport. Secrets never enter policy code.
 type deploymentAccessPolicyCapabilities struct {
-	providers externalProviderSource
-	mail      mail.Sender
-	health    interface{ Code() string }
+	providers  externalProviderSource
+	mail       mail.Sender
+	health     interface{ Code() string }
+	mfaEnabled bool
 }
 
 func (c deploymentAccessPolicyCapabilities) Snapshot() AccessPolicyCapabilitySnapshot {
 	durableMail := c.mail != nil && c.mail.Enabled() && c.health != nil && c.health.Code() == MailHealthHealthy
-	result := AccessPolicyCapabilitySnapshot{DurableMail: durableMail}
+	result := AccessPolicyCapabilitySnapshot{DurableMail: durableMail, MFA: c.mfaEnabled}
 	if c.providers == nil {
 		return result
 	}
@@ -134,6 +138,9 @@ type AccessPolicyView struct {
 	History            []*model.AccessPolicyTransition
 	AvailableProviders []model.ExternalAuthenticationProvider
 	DurableMail        bool
+	// RoleHolderMFAEnforced is true only while the policy requires two-step
+	// verification of role holders and the deployment enables it.
+	RoleHolderMFAEnforced bool
 }
 
 type PreflightAccessPolicyCommand struct {
@@ -142,7 +149,13 @@ type PreflightAccessPolicyCommand struct {
 	RevokeExistingSessions bool
 }
 
-type AccessPolicyPreflightResult struct{ Blockers []store.AccessPolicyBlocker }
+// AccessPolicyPreflightResult reports the blockers of a proposed replacement
+// and the role holder two-step verification counts an administrator weighs.
+type AccessPolicyPreflightResult struct {
+	Blockers                           []store.AccessPolicyBlocker
+	RoleHoldersWithoutMFACount         int
+	RoleHolderSingleFactorSessionCount int
+}
 
 type ReplaceAccessPolicyCommand struct {
 	ExpectedRevision       int64
@@ -176,11 +189,13 @@ func (s *accessPolicyService) PreflightAccessPolicy(ctx context.Context, invocat
 	if err != nil {
 		return AccessPolicyPreflightResult{}, err
 	}
-	blockers, err := s.deps.Policies.Preflight(ctx, input)
-	if err != nil {
+	preflight, err := s.deps.Policies.Preflight(ctx, input)
+	if err != nil || preflight == nil {
 		return AccessPolicyPreflightResult{}, accessPolicyError(err)
 	}
-	return AccessPolicyPreflightResult{Blockers: append([]store.AccessPolicyBlocker(nil), blockers...)}, nil
+	return AccessPolicyPreflightResult{Blockers: append([]store.AccessPolicyBlocker(nil), preflight.Blockers...),
+		RoleHoldersWithoutMFACount:         preflight.RoleHoldersWithoutMFACount,
+		RoleHolderSingleFactorSessionCount: preflight.RoleHolderSingleFactorSessionCount}, nil
 }
 
 func (s *accessPolicyService) ReplaceAccessPolicy(ctx context.Context, invocation invocation.Invocation, command ReplaceAccessPolicyCommand) (AccessPolicyView, error) {
@@ -242,6 +257,7 @@ func accessPolicyReplacementAuditValue(command ReplaceAccessPolicyCommand) map[s
 		"invitation_local_credential_enabled": settings.InvitationLocalCredentialEnabled,
 		"desktop_authorization_enabled":       settings.DesktopAuthorizationEnabled,
 		"provider_admissions":                 settings.ProviderAdmissions,
+		"role_holder_mfa_required":            settings.RoleHolderMFARequired,
 	}
 }
 
@@ -298,7 +314,7 @@ func accessDeploymentCapabilities(snapshot AccessPolicyCapabilitySnapshot) store
 			providers[provider.Descriptor.ID] = store.AccessProviderCapability{AutoProvision: provider.AutoProvision}
 		}
 	}
-	return store.AccessDeploymentCapabilities{Providers: providers, DurableMail: snapshot.DurableMail}
+	return store.AccessDeploymentCapabilities{Providers: providers, DurableMail: snapshot.DurableMail, MFA: snapshot.MFA}
 }
 
 func (s *accessPolicyService) view(snapshot *store.AccessPolicySnapshot) AccessPolicyView {
@@ -311,7 +327,8 @@ func (s *accessPolicyService) view(snapshot *store.AccessPolicySnapshot) AccessP
 		providers = append(providers, provider.Descriptor)
 	}
 	return AccessPolicyView{Policy: snapshot.Policy.Clone(), History: cloneAccessPolicyHistory(snapshot.History),
-		AvailableProviders: providers, DurableMail: capabilities.DurableMail}
+		AvailableProviders: providers, DurableMail: capabilities.DurableMail,
+		RoleHolderMFAEnforced: snapshot.Policy.RoleHolderMFARequired && capabilities.MFA}
 }
 
 type PublicInstitutionPresentation struct {

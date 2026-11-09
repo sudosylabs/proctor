@@ -76,7 +76,7 @@ paths:
               --header 'X-Proctor-CSRF-Token: <csrf-proof>'
       tags: [Authentication]
       x-proctor-auth: session_required
-      x-proctor-error-codes: [authentication.desktop_authorization.invalid, authentication.desktop_authorization.rejected, authentication.desktop_authorization.unavailable, authentication.desktop_authorization.account_session_locked, authentication.required, authentication.token_invalid, authentication.credential_ambiguous, authentication.dpop.invalid, authentication.dpop.replayed, authentication.dpop.use_nonce, authentication.dpop.unavailable, authentication.csrf.invalid]
+      x-proctor-error-codes: [authentication.mfa.enrollment_required, authentication.desktop_authorization.invalid, authentication.desktop_authorization.rejected, authentication.desktop_authorization.unavailable, authentication.desktop_authorization.account_session_locked, authentication.required, authentication.token_invalid, authentication.credential_ambiguous, authentication.dpop.invalid, authentication.dpop.replayed, authentication.dpop.use_nonce, authentication.dpop.unavailable, authentication.csrf.invalid]
       x-proctor-idempotency: none
       security:
         - bearerAuth: []
@@ -98,7 +98,7 @@ paths:
       description: Validates local credentials and any required MFA code only for the browser-bound Desktop transaction, without creating a Web Session or approving the Desktop request.
       tags: [Authentication]
       x-proctor-auth: public
-      x-proctor-error-codes: [request.invalid, authentication.desktop_authorization.invalid, authentication.desktop_authorization.rejected, authentication.desktop_authorization.unavailable, authentication.desktop_authorization.account_session_locked, service.busy, authentication.credentials_invalid, authentication.mfa.required, authentication.mfa.code_invalid, authentication.mfa.unavailable, authentication.rate_limited, authentication.rate_limit_unavailable, authentication.credential_ambiguous]
+      x-proctor-error-codes: [authentication.mfa.enrollment_required, request.invalid, authentication.desktop_authorization.invalid, authentication.desktop_authorization.rejected, authentication.desktop_authorization.unavailable, authentication.desktop_authorization.account_session_locked, service.busy, authentication.credentials_invalid, authentication.mfa.required, authentication.mfa.code_invalid, authentication.mfa.unavailable, authentication.rate_limited, authentication.rate_limit_unavailable, authentication.credential_ambiguous]
       x-proctor-idempotency: none
       security: []
       requestBody: {$ref: '#/components/requestBodies/DesktopAuthorizationLocalAuthentication'}
@@ -207,7 +207,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/DPoPProof'
       x-proctor-auth: public
-      x-proctor-error-codes: [request.invalid, authentication.rate_limited, authentication.rate_limit_unavailable, authentication.desktop_authorization.invalid, authentication.desktop_authorization.rejected, authentication.desktop_authorization.unavailable, authentication.desktop_authorization.incompatible, authentication.desktop_authorization.account_session_locked, authentication.sessions.maximum_reached, authentication.dpop.invalid, authentication.dpop.replayed, authentication.dpop.use_nonce, authentication.dpop.unavailable, audit.unavailable]
+      x-proctor-error-codes: [authentication.mfa.enrollment_required, request.invalid, authentication.rate_limited, authentication.rate_limit_unavailable, authentication.desktop_authorization.invalid, authentication.desktop_authorization.rejected, authentication.desktop_authorization.unavailable, authentication.desktop_authorization.incompatible, authentication.desktop_authorization.account_session_locked, authentication.sessions.maximum_reached, authentication.dpop.invalid, authentication.dpop.replayed, authentication.dpop.use_nonce, authentication.dpop.unavailable, audit.unavailable]
       x-proctor-idempotency: none
       security: []
       requestBody: {$ref: '#/components/requestBodies/DesktopAuthorizationExchange'}

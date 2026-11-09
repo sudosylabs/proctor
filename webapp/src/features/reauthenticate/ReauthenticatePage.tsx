@@ -15,7 +15,7 @@ export function ReauthenticatePage({ task = "security", externalProofFailed = fa
 }) {
   const resource = useAsyncResource<SecurityContextResult>(requestSecurityContext, { kind: "unavailable" });
   const context = resource.value.kind === "ready" ? resource.value.context : undefined;
-  const name = useSignedInName(context !== undefined && !context.recoveryRequired);
+  const name = useSignedInName(context !== undefined && !context.recoveryRequired && !context.enrollmentRequired);
   const providerName = useProviderName(context?.authenticationProviderID);
   return (
     <AccessPageShell skipLabel={message("webapp.security.skip_to_main")} signedIn={name === undefined ? undefined : { name }}>

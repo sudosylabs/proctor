@@ -182,6 +182,8 @@ codes:
     status: 501
     reason: "Multi-factor authentication is not implemented by this installation."
     description: "Multi-factor authentication is not available on this installation."
+  - code: authentication.mfa.enrollment_required
+    description: "The Access Policy requires this account to use two-step verification; set it up in the browser, then sign in again."
   - code: authentication.mfa.not_found
     description: "No multi-factor enrollment exists for the account."
   - code: authentication.mfa.rekey.conflict
@@ -644,6 +646,8 @@ codes:
     description: "Too many test mails; wait before sending another."
   - code: mail.unavailable
     description: "Mail processing failed; retry later."
+  - code: mfa.required_by_policy
+    description: "The Access Policy requires this account to keep two-step verification, so it cannot be turned off."
   - code: onboarding_batch.duplicate
     description: "The batch item repeats an earlier item in the same batch."
   - code: onboarding_import.conflict

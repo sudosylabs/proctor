@@ -47,16 +47,19 @@ type mfaPasswordCredentialReader interface {
 }
 
 type mfaApplicationServiceDependencies struct {
-	Users                   store.UserStore
-	Credentials             store.MFAStore
-	Passwords               mfaPasswordCredentialReader
-	Sessions                store.SessionStore
-	Institutions            store.InstitutionStore
-	Audit                   mfaAudit
-	Effects                 mfaEffects
-	Mail                    mfaNoticeMailPreparer
-	Mechanics               *mfaMechanics
-	Security                mfaSecurityDependencies
+	Users        store.UserStore
+	Credentials  store.MFAStore
+	Passwords    mfaPasswordCredentialReader
+	Sessions     store.SessionStore
+	Institutions store.InstitutionStore
+	Audit        mfaAudit
+	Effects      mfaEffects
+	Mail         mfaNoticeMailPreparer
+	Mechanics    *mfaMechanics
+	Security     mfaSecurityDependencies
+	// RoleHolderMFA refuses disabling the second factor of a User the Access
+	// Policy requires to use two-step verification.
+	RoleHolderMFA           roleHolderMFARequirement
 	RecentAuthenticationTTL time.Duration
 	Now                     func() time.Time
 }
@@ -91,6 +94,8 @@ func newMFAApplicationService(deps mfaApplicationServiceDependencies) (*mfaAppli
 		return nil, errors.New("MFA security dependencies are required")
 	case deps.Security.rateLimit.MaximumAttempts <= 0 || deps.Security.rateLimit.MaximumSourceAttempts <= 0 || deps.Security.rateLimit.Window <= 0:
 		return nil, errors.New("MFA attempt policy is required")
+	case deps.RoleHolderMFA == nil:
+		return nil, errors.New("MFA role holder policy is required")
 	case deps.RecentAuthenticationTTL <= 0:
 		return nil, errors.New("MFA recent authentication TTL must be positive")
 	case deps.Now == nil:
@@ -110,7 +115,8 @@ func (s *mfaApplicationService) GetMFAStatus(
 	}
 	now := s.deps.Now()
 	status := &MFAStatus{ServiceEnabled: s.deps.Mechanics.deps.Settings.Enabled, MFARecoveryRequired: principal.MFARecoveryRequired,
-		AuthenticationMethod: principal.AuthenticationMethod, AuthenticationProviderID: principal.AuthenticationProviderID,
+		MFAEnrollmentRequired: principal.MFAEnrollmentRequired,
+		AuthenticationMethod:  principal.AuthenticationMethod, AuthenticationProviderID: principal.AuthenticationProviderID,
 		AuthenticationStrength: principal.AuthenticationStrength, RecentlyAuthenticated: principal.IsRecentlyAuthenticated(now, s.deps.RecentAuthenticationTTL),
 		RecentAuthenticationTTL: s.deps.RecentAuthenticationTTL}
 	if status.RecentlyAuthenticated {
@@ -283,7 +289,13 @@ func (s *mfaApplicationService) ChallengeMFA(
 	command ChallengeMFACommand,
 ) (*model.Session, error) {
 	principal := invocation.Principal()
-	if err := s.requireInteractiveSession(principal, false); err != nil {
+	// A Session the Access Policy restricts to MFA enrollment may satisfy the
+	// policy with a challenge, for example after an external sign-in by a
+	// User who already has a local second factor. Assisted recovery may not.
+	if principal.MFARecoveryRequired {
+		return nil, apperror.New("authentication.session_required")
+	}
+	if err := s.requireRecoverySession(principal, false); err != nil {
 		return nil, err
 	}
 	if err := s.requireEnabled(); err != nil {
@@ -402,6 +414,17 @@ func (s *mfaApplicationService) DisableMFA(
 	auditID, appErr := s.deps.Audit.Begin(ctx, invocation, model.ActionMFADisable, resource, nil)
 	if appErr != nil {
 		return appErr
+	}
+	required, err := s.deps.RoleHolderMFA.RequiresMFA(ctx, principal.UserID)
+	if err != nil {
+		return s.failMutation(ctx, auditID, err)
+	}
+	if required {
+		refused := apperror.New("mfa.required_by_policy")
+		if auditErr := s.deps.Audit.Complete(ctx, auditID, model.AuditStatusFail, refused.Code(), nil); auditErr != nil {
+			return errors.Join(refused, auditErr)
+		}
+		return refused
 	}
 	result, err := s.deps.Credentials.Disable(ctx, &store.MFADisablement{
 		Principal: principal, RecentAuthenticationTTL: s.deps.RecentAuthenticationTTL,

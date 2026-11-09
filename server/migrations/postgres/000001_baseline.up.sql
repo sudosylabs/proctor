@@ -1645,6 +1645,10 @@ CREATE TABLE sessions (
     authenticated_at timestamptz NOT NULL,
     reauthenticated_at timestamptz,
     mfa_recovery_required boolean NOT NULL DEFAULT false,
+    -- A Web Session of a User the Access Policy requires to use two-step
+    -- verification, issued before that User has a second factor: it may only
+    -- set up two-step verification, complete a challenge, or sign out.
+    mfa_enrollment_required boolean NOT NULL DEFAULT false,
     authentication_generation bigint NOT NULL DEFAULT 0 CHECK (authentication_generation >= 0),
     mfa_completed_at timestamptz,
     last_activity_at timestamptz NOT NULL,
@@ -1653,6 +1657,9 @@ CREATE TABLE sessions (
     revoked_at timestamptz,
     revocation_reason varchar(1024) NOT NULL DEFAULT '',
     CONSTRAINT sessions_lifecycle_check CHECK (updated_at >= created_at),
+    CONSTRAINT sessions_mfa_enrollment_required_check CHECK (
+        NOT mfa_enrollment_required OR (client_type = 'web' AND authentication_strength = 'single_factor')
+    ),
     CONSTRAINT sessions_reauthentication_check CHECK (reauthenticated_at IS NULL OR
         (reauthenticated_at >= authenticated_at AND reauthenticated_at <= updated_at)),
 	CONSTRAINT sessions_revocation_check CHECK (
@@ -3684,6 +3691,8 @@ CREATE TABLE access_policies (
     invitation_local_credential_enabled boolean NOT NULL,
     desktop_authorization_enabled boolean NOT NULL,
     provider_admissions jsonb NOT NULL DEFAULT '{}'::jsonb,
+    -- A role holder is any User with a current Role Binding at any scope.
+    role_holder_mfa_required boolean NOT NULL DEFAULT false,
     CONSTRAINT access_policies_lifecycle_check CHECK (updated_at >= created_at),
     CONSTRAINT access_policies_provider_admissions_check CHECK (
         jsonb_typeof(provider_admissions) = 'object' AND
@@ -3742,12 +3751,12 @@ CREATE TABLE access_policy_transitions (
     PRIMARY KEY (access_policy_id, to_revision),
     UNIQUE (access_policy_id, from_revision),
     CONSTRAINT access_policy_transitions_changed_fields_check CHECK (
-        cardinality(changed_fields) BETWEEN 1 AND 7 AND
+        cardinality(changed_fields) BETWEEN 1 AND 8 AND
         changed_fields <@ ARRAY[
             'local_login_enabled', 'public_registration_enabled',
             'invitation_admission_enabled', 'invitation_local_credential_enabled',
             'desktop_authorization_enabled', 'provider_admissions',
-            'revoke_existing_sessions'
+            'role_holder_mfa_required', 'revoke_existing_sessions'
         ]::text[]
     ),
     CONSTRAINT access_policy_transitions_access_policy_id_canonical_check

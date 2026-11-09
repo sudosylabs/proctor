@@ -244,37 +244,40 @@ func TestMFAApplicationServiceRequiresFocusedDependencies(t *testing.T) {
 		build func() (*mfaApplicationService, error)
 	}{
 		{"user store", func() (*mfaApplicationService, error) {
-			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: nil, Credentials: persistence, Passwords: mfaPasswordCredentialsFake{}, Sessions: sessions, Institutions: institutions, Audit: audit, Effects: effects, Mail: mail, Mechanics: mechanics, Security: testMFASecurity(), RecentAuthenticationTTL: time.Minute, Now: now})
+			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: nil, Credentials: persistence, Passwords: mfaPasswordCredentialsFake{}, Sessions: sessions, Institutions: institutions, Audit: audit, Effects: effects, Mail: mail, Mechanics: mechanics, Security: testMFASecurity(), RoleHolderMFA: allowAllAuthenticationAccessPolicy(), RecentAuthenticationTTL: time.Minute, Now: now})
 		}},
 		{"password credential reader", func() (*mfaApplicationService, error) {
-			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: users, Credentials: persistence, Sessions: sessions, Institutions: institutions, Audit: audit, Effects: effects, Mail: mail, Mechanics: mechanics, Security: testMFASecurity(), RecentAuthenticationTTL: time.Minute, Now: now})
+			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: users, Credentials: persistence, Sessions: sessions, Institutions: institutions, Audit: audit, Effects: effects, Mail: mail, Mechanics: mechanics, Security: testMFASecurity(), RoleHolderMFA: allowAllAuthenticationAccessPolicy(), RecentAuthenticationTTL: time.Minute, Now: now})
 		}},
 		{"MFA store", func() (*mfaApplicationService, error) {
-			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: users, Credentials: nil, Passwords: mfaPasswordCredentialsFake{}, Sessions: sessions, Institutions: institutions, Audit: audit, Effects: effects, Mail: mail, Mechanics: mechanics, Security: testMFASecurity(), RecentAuthenticationTTL: time.Minute, Now: now})
+			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: users, Credentials: nil, Passwords: mfaPasswordCredentialsFake{}, Sessions: sessions, Institutions: institutions, Audit: audit, Effects: effects, Mail: mail, Mechanics: mechanics, Security: testMFASecurity(), RoleHolderMFA: allowAllAuthenticationAccessPolicy(), RecentAuthenticationTTL: time.Minute, Now: now})
 		}},
 		{"session store", func() (*mfaApplicationService, error) {
-			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: users, Credentials: persistence, Passwords: mfaPasswordCredentialsFake{}, Sessions: nil, Institutions: institutions, Audit: audit, Effects: effects, Mail: mail, Mechanics: mechanics, Security: testMFASecurity(), RecentAuthenticationTTL: time.Minute, Now: now})
+			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: users, Credentials: persistence, Passwords: mfaPasswordCredentialsFake{}, Sessions: nil, Institutions: institutions, Audit: audit, Effects: effects, Mail: mail, Mechanics: mechanics, Security: testMFASecurity(), RoleHolderMFA: allowAllAuthenticationAccessPolicy(), RecentAuthenticationTTL: time.Minute, Now: now})
 		}},
 		{"institution store", func() (*mfaApplicationService, error) {
-			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: users, Credentials: persistence, Passwords: mfaPasswordCredentialsFake{}, Sessions: sessions, Institutions: nil, Audit: audit, Effects: effects, Mail: mail, Mechanics: mechanics, Security: testMFASecurity(), RecentAuthenticationTTL: time.Minute, Now: now})
+			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: users, Credentials: persistence, Passwords: mfaPasswordCredentialsFake{}, Sessions: sessions, Institutions: nil, Audit: audit, Effects: effects, Mail: mail, Mechanics: mechanics, Security: testMFASecurity(), RoleHolderMFA: allowAllAuthenticationAccessPolicy(), RecentAuthenticationTTL: time.Minute, Now: now})
 		}},
 		{"audit", func() (*mfaApplicationService, error) {
-			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: users, Credentials: persistence, Passwords: mfaPasswordCredentialsFake{}, Sessions: sessions, Institutions: institutions, Audit: nil, Effects: effects, Mail: mail, Mechanics: mechanics, Security: testMFASecurity(), RecentAuthenticationTTL: time.Minute, Now: now})
+			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: users, Credentials: persistence, Passwords: mfaPasswordCredentialsFake{}, Sessions: sessions, Institutions: institutions, Audit: nil, Effects: effects, Mail: mail, Mechanics: mechanics, Security: testMFASecurity(), RoleHolderMFA: allowAllAuthenticationAccessPolicy(), RecentAuthenticationTTL: time.Minute, Now: now})
 		}},
 		{"effects", func() (*mfaApplicationService, error) {
-			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: users, Credentials: persistence, Passwords: mfaPasswordCredentialsFake{}, Sessions: sessions, Institutions: institutions, Audit: audit, Effects: nil, Mail: mail, Mechanics: mechanics, Security: testMFASecurity(), RecentAuthenticationTTL: time.Minute, Now: now})
+			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: users, Credentials: persistence, Passwords: mfaPasswordCredentialsFake{}, Sessions: sessions, Institutions: institutions, Audit: audit, Effects: nil, Mail: mail, Mechanics: mechanics, Security: testMFASecurity(), RoleHolderMFA: allowAllAuthenticationAccessPolicy(), RecentAuthenticationTTL: time.Minute, Now: now})
 		}},
 		{"mail", func() (*mfaApplicationService, error) {
-			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: users, Credentials: persistence, Passwords: mfaPasswordCredentialsFake{}, Sessions: sessions, Institutions: institutions, Audit: audit, Effects: effects, Mail: nil, Mechanics: mechanics, Security: testMFASecurity(), RecentAuthenticationTTL: time.Minute, Now: now})
+			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: users, Credentials: persistence, Passwords: mfaPasswordCredentialsFake{}, Sessions: sessions, Institutions: institutions, Audit: audit, Effects: effects, Mail: nil, Mechanics: mechanics, Security: testMFASecurity(), RoleHolderMFA: allowAllAuthenticationAccessPolicy(), RecentAuthenticationTTL: time.Minute, Now: now})
 		}},
 		{"mechanics", func() (*mfaApplicationService, error) {
-			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: users, Credentials: persistence, Passwords: mfaPasswordCredentialsFake{}, Sessions: sessions, Institutions: institutions, Audit: audit, Effects: effects, Mail: mail, Mechanics: nil, Security: testMFASecurity(), RecentAuthenticationTTL: time.Minute, Now: now})
+			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: users, Credentials: persistence, Passwords: mfaPasswordCredentialsFake{}, Sessions: sessions, Institutions: institutions, Audit: audit, Effects: effects, Mail: mail, Mechanics: nil, Security: testMFASecurity(), RoleHolderMFA: allowAllAuthenticationAccessPolicy(), RecentAuthenticationTTL: time.Minute, Now: now})
+		}},
+		{"role holder MFA policy", func() (*mfaApplicationService, error) {
+			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: users, Credentials: persistence, Passwords: mfaPasswordCredentialsFake{}, Sessions: sessions, Institutions: institutions, Audit: audit, Effects: effects, Mail: mail, Mechanics: mechanics, Security: testMFASecurity(), RecentAuthenticationTTL: time.Minute, Now: now})
 		}},
 		{"recent authentication TTL", func() (*mfaApplicationService, error) {
-			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: users, Credentials: persistence, Passwords: mfaPasswordCredentialsFake{}, Sessions: sessions, Institutions: institutions, Audit: audit, Effects: effects, Mail: mail, Mechanics: mechanics, Security: testMFASecurity(), RecentAuthenticationTTL: 0, Now: now})
+			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: users, Credentials: persistence, Passwords: mfaPasswordCredentialsFake{}, Sessions: sessions, Institutions: institutions, Audit: audit, Effects: effects, Mail: mail, Mechanics: mechanics, Security: testMFASecurity(), RoleHolderMFA: allowAllAuthenticationAccessPolicy(), RecentAuthenticationTTL: 0, Now: now})
 		}},
 		{"clock", func() (*mfaApplicationService, error) {
-			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: users, Credentials: persistence, Passwords: mfaPasswordCredentialsFake{}, Sessions: sessions, Institutions: institutions, Audit: audit, Effects: effects, Mail: mail, Mechanics: mechanics, Security: testMFASecurity(), RecentAuthenticationTTL: time.Minute, Now: nil})
+			return newMFAApplicationService(mfaApplicationServiceDependencies{Users: users, Credentials: persistence, Passwords: mfaPasswordCredentialsFake{}, Sessions: sessions, Institutions: institutions, Audit: audit, Effects: effects, Mail: mail, Mechanics: mechanics, Security: testMFASecurity(), RoleHolderMFA: allowAllAuthenticationAccessPolicy(), RecentAuthenticationTTL: time.Minute, Now: nil})
 		}},
 	}
 	for _, test := range tests {
@@ -294,7 +297,7 @@ func newTestMFAApplicationService(
 	now time.Time,
 ) *mfaApplicationService {
 	t.Helper()
-	service, err := newMFAApplicationService(mfaApplicationServiceDependencies{Users: mfaApplicationUserStoreFake{}, Credentials: persistence, Passwords: mfaPasswordCredentialsFake{}, Sessions: mfaApplicationSessionStoreFake{persistence: persistence}, Institutions: mfaApplicationInstitutionStoreFake{persistence: persistence}, Audit: audit, Effects: effects, Mail: &mfaSecurityNoticeMailPreparerFake{}, Mechanics: mustTestMFAMechanics(t), Security: testMFASecurity(), RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return now }})
+	service, err := newMFAApplicationService(mfaApplicationServiceDependencies{Users: mfaApplicationUserStoreFake{}, Credentials: persistence, Passwords: mfaPasswordCredentialsFake{}, Sessions: mfaApplicationSessionStoreFake{persistence: persistence}, Institutions: mfaApplicationInstitutionStoreFake{persistence: persistence}, Audit: audit, Effects: effects, Mail: &mfaSecurityNoticeMailPreparerFake{}, Mechanics: mustTestMFAMechanics(t), Security: testMFASecurity(), RoleHolderMFA: allowAllAuthenticationAccessPolicy(), RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return now }})
 	require.NoError(t, err)
 	return service
 }

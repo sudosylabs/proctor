@@ -124,7 +124,7 @@ func requireMFARecoveryPATSource(ctx context.Context, executor sqlxExecutor, use
 		return nil
 	}
 	var active bool
-	if err := executor.Get(ctx, &active, `SELECT true FROM sessions WHERE id=? AND user_id=? AND authentication_generation=? AND NOT mfa_recovery_required AND archived_at IS NULL AND revoked_at IS NULL AND idle_expires_at>? AND expires_at>? FOR SHARE`, sessionID, userID, state.Generation, at, at); err != nil {
+	if err := executor.Get(ctx, &active, `SELECT true FROM sessions WHERE id=? AND user_id=? AND authentication_generation=? AND NOT mfa_recovery_required AND NOT mfa_enrollment_required AND archived_at IS NULL AND revoked_at IS NULL AND idle_expires_at>? AND expires_at>? FOR SHARE`, sessionID, userID, state.Generation, at, at); err != nil {
 		return translateError("session", "pat_preparation", err)
 	}
 	return nil

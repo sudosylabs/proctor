@@ -426,6 +426,7 @@ components:
         - authentication_method
         - authentication_strength
         - mfa_recovery_required
+        - mfa_enrollment_required
         - authenticated_at
         - last_activity_at
         - idle_expires_at
@@ -475,6 +476,10 @@ components:
         mfa_recovery_required:
           type: boolean
           description: Whether this Session is restricted to MFA reenrollment after an assisted reset.
+        mfa_enrollment_required:
+          type: boolean
+          description: >-
+            Whether the Access Policy restricts this Web Session until its User sets up or completes two-step verification. Only setting up two-step verification, the second-factor challenge, reauthentication, the security status and sign-out accept it.
         reauthenticated_at:
           type: string
           format: date-time
@@ -548,6 +553,7 @@ components:
         - authentication_method
         - authentication_strength
         - mfa_recovery_required
+        - mfa_enrollment_required
         - authenticated_at
         - last_activity_at
         - idle_expires_at
@@ -601,6 +607,10 @@ components:
         mfa_recovery_required:
           type: boolean
           description: Ordinary access remains unavailable until a new local authenticator is activated.
+        mfa_enrollment_required:
+          type: boolean
+          description: >-
+            Whether the Access Policy restricts this Web Session until its User sets up or completes two-step verification. Only setting up two-step verification, the second-factor challenge, reauthentication, the security status and sign-out accept it.
         reauthenticated_at:
           type: string
           format: date-time

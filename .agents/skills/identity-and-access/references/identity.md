@@ -407,6 +407,18 @@ survive activation, so pre-reset password proofs and unknown-User provider/brows
 transactions cannot regain authority afterwards. Required recovery persists when
 MFA or the provider is disabled; online reset refuses when enrollment is unavailable.
 
+The Access Policy enrollment restriction (`mfa_enrollment_required`) is a
+second, independent restriction on a single-factor Web Session of a role holder
+when the policy requires two-step verification of role holders; see
+[access and onboarding](access-and-onboarding.md#access-policy-and-deployment-configuration).
+Ordinary principal validation rejects it and it shares the recovery routes'
+gate, but unlike recovery it also reaches the second-factor challenge, because
+an external sign-in by a User who already has a local factor satisfies the
+policy by proving it. Activation and a successful challenge both make the
+Session multi-factor and clear the flag in the same transition; nothing else
+clears it. It never changes the recovery generation, and Desktop and CLI
+Sessions cannot carry it, so those clients are refused instead.
+
 An external-only User retains the exact existing provider identity. Ordinary SSO
 resolves the account but cannot satisfy assisted recovery: a separate bound flow
 requires verified fresh primary proof from that provider. No email match, Invitation

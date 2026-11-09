@@ -96,7 +96,7 @@ func kernelErrorCodes(auth AuthRequirement, method string) []string {
 			codes = append(codes, "authentication.csrf.invalid")
 		}
 		return codes
-	case AuthMFARecoverySessionRequired, AuthRecentMFARecoverySessionRequired, AuthPrincipalRequired, AuthSessionRequired,
+	case AuthMFARecoverySessionRequired, AuthRecentMFARecoverySessionRequired, AuthMFAEnrollmentSessionRequired, AuthPrincipalRequired, AuthSessionRequired,
 		AuthStrongSessionRequired, AuthRecentSessionRequired, AuthStrongRecentSessionRequired:
 		codes := []string{
 			"authentication.required",
@@ -204,6 +204,10 @@ func newResource(name string, routes ...routeDefinition) apiResource {
 
 type protocolOperation func(operationRequest) (protocolResult, error)
 type upgradeOperation func(http.ResponseWriter, operationRequest) error
+
+func mfaEnrollmentSessionRoute(method string, path routePath, codes []string, operation operation) routeDefinition {
+	return route(AuthMFAEnrollmentSessionRequired, method, path, codes, operation)
+}
 
 func mfaRecoverySessionRoute(method string, path routePath, codes []string, operation operation) routeDefinition {
 	return route(AuthMFARecoverySessionRequired, method, path, codes, operation)

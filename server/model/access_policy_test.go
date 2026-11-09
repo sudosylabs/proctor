@@ -90,3 +90,30 @@ func TestAccessPolicyReplaceRejectsStaleAndIncoherentSettings(t *testing.T) {
 	_, err = policy.Replace(1, settings, NewUserID(), time.UnixMilli(200))
 	require.Error(t, err, "Replace accepted registration without local login")
 }
+
+func TestAccessPolicyRoleHolderMFARequirementIsATransitionField(t *testing.T) {
+	t.Parallel()
+
+	at := time.UnixMilli(100)
+	policy := NewInitialAccessPolicy(NewAccessPolicyID(), at)
+	require.False(t, policy.RoleHolderMFARequired, "the initial policy does not require two-step verification of role holders")
+	settings := policy.Settings()
+	settings.RoleHolderMFARequired = true
+	transition, err := policy.Replace(1, settings, NewUserID(), at.Add(time.Second))
+	require.NoError(t, err)
+	require.True(t, policy.RoleHolderMFARequired)
+	require.True(t, policy.Settings().RoleHolderMFARequired)
+	require.Equal(t, []string{"role_holder_mfa_required"}, transition.ChangedFields)
+	require.NoError(t, transition.Validate())
+
+	every := &AccessPolicyTransition{PolicyID: policy.ID, FromRevision: 2, ToRevision: 3, ActorID: NewUserID(), ChangedAt: at,
+		Outcome: AccessPolicyTransitionApplied, ChangedFields: []string{
+			"desktop_authorization_enabled", "invitation_admission_enabled", "invitation_local_credential_enabled",
+			"local_login_enabled", "provider_admissions", "public_registration_enabled", "revoke_existing_sessions",
+			"role_holder_mfa_required",
+		}}
+	require.Len(t, every.ChangedFields, AccessPolicyTransitionFieldMaxCount)
+	require.NoError(t, every.Validate(), "every replaceable field and the revocation choice fit one transition")
+	every.ChangedFields = append(every.ChangedFields, "unknown_setting")
+	require.ErrorIs(t, every.Validate(), ErrAccessPolicyInvalidTransition)
+}

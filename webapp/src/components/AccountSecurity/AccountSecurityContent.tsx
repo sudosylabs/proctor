@@ -316,6 +316,31 @@ function StatusSections({ context, feedback, onDisable, onRefresh, onRegenerate,
       </>}
     </>;
   }
+  if (context.enrollmentRequired) {
+    // Like recovery, this Session has no confirmed name for the footer. A
+    // User who already has a second factor confirms it from the status above.
+    return <>
+      <Notice tone="warning" lead={message(context.enabled
+        ? "webapp.security.enrollment_required.verify_lead"
+        : "webapp.security.enrollment_required.lead")}>
+        {message(context.enabled ? "webapp.security.enrollment_required.verify" : "webapp.security.enrollment_required")}
+      </Notice>
+      {context.serviceEnabled ? <>
+        {context.enabled ? null : <>
+          {context.pending ? <Notice>{message("webapp.security.setup.pending")}</Notice> : null}
+          {setupAction}
+        </>}
+        {feedback}
+        <TaskStateActions><SecuritySignOut signOut={signOut} /></TaskStateActions>
+      </> : <>
+        <Notice>{message("webapp.security.recovery_unavailable")}</Notice>
+        <TaskStateActions>
+          <Button variant="secondary" onClick={onRefresh}>{message("webapp.security.refresh")}</Button>
+          <SecuritySignOut signOut={signOut} variant="secondary" />
+        </TaskStateActions>
+      </>}
+    </>;
+  }
   if (!context.serviceEnabled) {
     return <Notice tone="warning">{message("webapp.security.service_disabled")}</Notice>;
   }

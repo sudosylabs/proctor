@@ -10,7 +10,7 @@ import { message } from "../../i18n/messages";
 import { requestSecurityContext } from "../account-security/AccountSecurityApi";
 import styles from "./AuthorizationCompletePage.module.css";
 
-type ConfirmationState = "checking" | "signed_in" | "no_session" | "unavailable" | "recovery_required";
+type ConfirmationState = "checking" | "signed_in" | "no_session" | "unavailable" | "recovery_required" | "enrollment_required";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -36,6 +36,7 @@ async function confirmSession(): Promise<ConfirmationState> {
       if (readProblemValue(error)?.code === "authentication.token_invalid") {
         const security = await requestSecurityContext();
         if (security.kind === "ready" && security.context.recoveryRequired) return "recovery_required";
+        if (security.kind === "ready" && security.context.enrollmentRequired) return "enrollment_required";
       }
       return "no_session";
     }
@@ -133,6 +134,14 @@ function StatusActions({
           </ButtonLink>
         </TaskStateActions>
       );
+    case "enrollment_required":
+      return (
+        <TaskStateActions>
+          <ButtonLink href="/account/security">
+            {message("webapp.security.enrollment_required.action")}
+          </ButtonLink>
+        </TaskStateActions>
+      );
     case "no_session":
       return (
         <TaskStateActions>
@@ -172,6 +181,13 @@ function statusContent(state: ConfirmationState): {
         tone: "warning",
         heading: message("webapp.security.restore_access"),
         body: message("webapp.security.recovery_required"),
+      };
+    case "enrollment_required":
+      return {
+        label: message("webapp.security.eyebrow"),
+        tone: "warning",
+        heading: message("webapp.security.enrollment_required.heading"),
+        body: message("webapp.security.enrollment_required"),
       };
     case "checking":
       return {

@@ -149,6 +149,12 @@ func requireDesktopExchangeAuthentication(ctx context.Context, tx *sqlxTxWrapper
 	if recovery.ResetAt.Valid && transaction.CreatedAt.Before(recovery.ResetAt.Time) {
 		return nil, store.ErrAuthenticationGenerationChanged
 	}
+	// A Desktop Session cannot carry the MFA enrollment restriction, so a
+	// User the Access Policy requires to use two-step verification must
+	// have proved a second factor in the browser.
+	if input.MFARequiredByPolicy && transaction.AuthenticationStrength != model.AuthenticationMultiFactor {
+		return nil, store.ErrMFAEnrollmentRequired
+	}
 	if transaction.AuthenticationMethod == "password" {
 		if err := requireCurrentPasswordProof(ctx, tx, transaction.UserID, store.PasswordCredentialProof{ID: transaction.PasswordCredentialID, Revision: transaction.PasswordCredentialRevision}); err != nil {
 			return nil, err

@@ -17,6 +17,10 @@ module when a change is not server-only. No module has been released yet.
 
 ### Changed
 
+- Server: the baseline adds `access_policies.role_holder_mfa_required` and
+  `sessions.mfa_enrollment_required`, and admits `role_holder_mfa_required`
+  among the recorded Access Policy transition fields. Existing development
+  databases must be recreated.
 - Server: the baseline adds indexes for the User directory affiliation filter,
   the onboarding import list, failed Jobs and Invitations by state, bounds
   `invitations.expires_at` between one and thirty days after creation, and
@@ -219,6 +223,21 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: the Access Policy can require two-step verification of role
+  holders, every User with a current Role Binding at any scope, with
+  `role_holder_mfa_required` on `GET`, `PUT` and preflight; `GET` also
+  reports the read-only `role_holder_mfa_enforced`. A role holder without a
+  second factor signs in on the web to a Session marked
+  `mfa_enrollment_required` that only reaches two-step setup, the challenge,
+  reauthentication and sign-out; CLI and Desktop sign-in, Desktop code exchange
+  and Desktop refresh fail with `authentication.mfa.enrollment_required`, a Web
+  refresh restricts the Session, and turning two-step verification off fails
+  with `mfa.required_by_policy`. Preflight adds the `mfa_unavailable` blocker
+  and the `role_holders_without_mfa_count` and
+  `role_holder_single_factor_session_count` counts, and
+  `revoke_existing_sessions` signs out role holders' Sessions that have not
+  proved a second factor when the rule is turned on. The rule pauses, with one
+  logged warning, while the deployment disables MFA.
 - Server: the contract publishes three closed code catalogues as components:
   `MailFailureCode` for `public_failure_code` on Mail Deliveries and
   Invitation deliveries, and `AcademicAdministrationBatchErrorCode` and

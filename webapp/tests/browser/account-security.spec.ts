@@ -6,7 +6,7 @@ import { PNG } from "pngjs";
 const baseContext = {
   enabled: false, pending: false, recovery_codes_remaining: 0, recovery_codes_total: 10,
   recent_authentication_minutes: 20, password_changed_at: "2026-07-01T09:30:00Z",
-  service_enabled: true, mfa_recovery_required: false,
+  service_enabled: true, mfa_recovery_required: false, mfa_enrollment_required: false,
   authentication_method: "password", authentication_strength: "single_factor",
   recently_authenticated: true,
 };
@@ -51,6 +51,7 @@ async function mockSecurity(page: Page, context = baseContext) {
       if (request.postDataJSON().code !== "123456") return problem("authentication.mfa.code_invalid");
       state.context.enabled = true; state.context.pending = false;
       state.context.mfa_recovery_required = false;
+      state.context.mfa_enrollment_required = false;
       state.context.recovery_codes_remaining = recoveryCodes.length;
       state.context.authentication_strength = "multi_factor";
       return json(state.lostActivation ? {} : { recovery_codes: recoveryCodes });
@@ -503,6 +504,31 @@ test("restricted password login goes directly to reenrollment", async ({ page })
   expect(state.requests.some(({ path }) => path === "/api/v1/users/me")).toBe(false);
 });
 
+test("password login restricted by the institution goes directly to two-step setup", async ({ page }) => {
+  const state = await mockSecurity(page, { ...baseContext, mfa_enrollment_required: true });
+  await page.route("**/api/v1/discovery", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(discovery) }));
+  await page.route("**/api/v1/auth/login", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ session: { id: "restricted", client_type: "web", mfa_enrollment_required: true } }) }));
+  await page.goto("/login");
+  await page.getByLabel("Email or username").fill("person");
+  await page.locator("#password").fill("current-password");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/account\/security$/);
+  await expect(page.getByText("Your institution requires two-step verification for accounts that hold a role.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Your institution needs you to set up two-step verification again", { exact: false })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Set up two-step verification", exact: true })).toBeVisible();
+  await expect(page.getByRole("main").getByRole("button", { name: "Sign out" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Turn off two-step verification" })).toHaveCount(0);
+  expect(state.requests.some(({ path }) => path === "/api/v1/users/me")).toBe(false);
+});
+
+test("an institution-restricted Session with a second factor confirms it instead of setting up", async ({ page }) => {
+  await mockSecurity(page, { ...baseContext, enabled: true, recovery_codes_remaining: 4, mfa_enrollment_required: true, authentication_method: "oidc" });
+  await page.goto("/account/security");
+  await expect(page.getByText("Confirm this sign-in with your authenticator app", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Set up two-step verification", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("main").getByRole("button", { name: "Sign out" })).toBeVisible();
+});
+
 test("sign-in status offers the bounded security destination for ordinary and restricted Sessions", async ({ page }) => {
   const state = await mockSecurity(page);
   await page.goto("/authorization/complete");
@@ -517,6 +543,11 @@ test("sign-in status offers the bounded security destination for ordinary and re
   await expect(page.getByRole("heading", { name: "Restore account access" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Restore account access" })).toHaveAttribute("href", "/account/security");
   await expect(page.getByText("Private recovery detail")).toHaveCount(0);
+  state.context.mfa_recovery_required = false;
+  state.context.mfa_enrollment_required = true;
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Two-step verification required" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Set up two-step verification" })).toHaveAttribute("href", "/account/security");
 });
 
 test("fresh proof remains usable with expanded copy, dark mode, and 200 percent zoom", { tag: "@cross-browser" }, async ({ browserName, page }, testInfo) => {

@@ -375,7 +375,12 @@ not create an ordinary Web Session or leave a relationship-free User behind.
 The security context, setup and activation routes explicitly accept
 `mfa_recovery_session_required` or `recent_mfa_recovery_session_required`.
 Password and original-provider reauthentication and logout also accept the
-restricted Session context. Ordinary routes fail with `authentication.token_invalid`;
+restricted Session context. A Web Session the Access Policy restricts with
+`mfa_enrollment_required` reaches the same routes and, through
+`mfa_enrollment_session_required`, the second-factor challenge, which can
+satisfy the policy for a User who already has a second factor; an
+assisted-recovery Session never reaches the challenge. Ordinary routes fail
+with `authentication.token_invalid`;
 clients may query the bounded MFA status to distinguish mandatory reenrollment
 from a signed-out browser. Restricted Sessions retain normal cookie/CSRF rules.
 MFA status projects the original password/oidc/cas method, optional provider ID,

@@ -38,6 +38,12 @@ func TestAccessPolicyStore(t *testing.T) {
 	})
 }
 
+func TestAccessPolicyRoleHolderMFAStore(t *testing.T) {
+	persistence := openTestStore(t)
+	resetPristineTestStore(t, persistence)
+	storetest.TestAccessPolicyRoleHolderMFAStore(t, persistence)
+}
+
 // leadSessionDatabaseClock moves one Session's and its credentials' node-clock
 // instants a minute after PostgreSQL time, as a creating node whose clock leads
 // the database does.

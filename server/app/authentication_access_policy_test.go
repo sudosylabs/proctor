@@ -23,7 +23,7 @@ func TestCurrentAuthenticationAccessPolicyReturnsExactExternalProviderAdmission(
 	policy.ProviderAdmissions["campus"] = model.ProviderAdmissionInvitationRequired
 	reader, err := newCurrentAuthenticationAccessPolicy(currentAuthenticationAccessPolicyDependencies{Policies: &accessPolicyStoreFake{
 		snapshot: &store.AccessPolicySnapshot{Policy: policy},
-	}})
+	}, Diagnostics: &securityEffectsDiagnosticsFake{}, Now: time.Now})
 	require.NoError(t, err)
 
 	admission, err := reader.ExternalProviderAdmission(context.Background(), " CAMPUS ")
@@ -36,12 +36,50 @@ func TestCurrentAuthenticationAccessPolicyReturnsExactExternalProviderAdmission(
 	require.True(t, admission.InvitationAdmissionEnabled, "ExternalProviderAdmission(removed) = %#v", admission)
 }
 
+// While the deployment disables two-step verification the role holder
+// requirement pauses: nobody is restricted, and the node warns once.
+func TestCurrentAuthenticationAccessPolicyPausesRoleHolderMFAWithoutMFA(t *testing.T) {
+	policy := model.NewInitialAccessPolicy(model.NewAccessPolicyID(), time.UnixMilli(1_000))
+	policy.RoleHolderMFARequired = true
+	userID := model.NewUserID()
+	policies := &accessPolicyStoreFake{snapshot: &store.AccessPolicySnapshot{Policy: policy}, roleHolderMFAUsers: map[model.UserID]bool{userID: true}}
+	for _, test := range []struct {
+		name       string
+		mfaEnabled bool
+		want       bool
+		warnings   int
+	}{
+		{name: "enforced while MFA is enabled", mfaEnabled: true, want: true},
+		{name: "paused while MFA is disabled", mfaEnabled: false, want: false, warnings: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			diagnostics := &securityEffectsDiagnosticsFake{}
+			reader, err := newCurrentAuthenticationAccessPolicy(currentAuthenticationAccessPolicyDependencies{Policies: policies,
+				MFAEnabled: test.mfaEnabled, Diagnostics: diagnostics, Now: time.Now})
+			require.NoError(t, err)
+			for range 3 {
+				required, requireErr := reader.RequiresMFA(context.Background(), userID)
+				require.NoError(t, requireErr)
+				require.Equal(t, test.want, required)
+			}
+			require.Len(t, diagnostics.messages, test.warnings, "the paused rule warns once, not per request")
+		})
+	}
+}
+
 type authenticationAccessPolicyFake struct {
 	local                       bool
 	providers                   map[string]bool
 	providerModes               map[string]model.ProviderAdmissionMode
 	invitationAdmissionDisabled bool
-	err                         error
+	// roleHolderMFA lists the Users the policy requires to use two-step
+	// verification.
+	roleHolderMFA map[model.UserID]bool
+	err           error
+}
+
+func (p authenticationAccessPolicyFake) RequiresMFA(_ context.Context, userID model.UserID) (bool, error) {
+	return p.roleHolderMFA[userID], p.err
 }
 
 func allowAllAuthenticationAccessPolicy() authenticationAccessPolicy {

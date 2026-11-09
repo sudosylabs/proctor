@@ -208,6 +208,9 @@ type SessionRefreshRotation struct {
 	Refresh       *model.SessionCredential
 	Now           time.Time
 	IdleExpiresAt time.Time
+	// MFARequiredByPolicy restricts a single-factor Web Session to MFA
+	// enrollment as it rotates; a multi-factor Session is unchanged.
+	MFARequiredByPolicy bool
 }
 
 // SessionExpiryEnforcement is the input to SessionStore.EnforceExpiry.

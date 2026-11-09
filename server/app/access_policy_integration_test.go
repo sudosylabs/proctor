@@ -157,6 +157,7 @@ func TestAccessPolicyTwoNodePostgreSQLFenceAndSafeRevisionFanout(t *testing.T) {
 		"invitation_admission_enabled":        settings.InvitationAdmissionEnabled,
 		"invitation_local_credential_enabled": settings.InvitationLocalCredentialEnabled,
 		"desktop_authorization_enabled":       settings.DesktopAuthorizationEnabled, "provider_admissions": settings.ProviderAdmissions,
+		"role_holder_mfa_required": settings.RoleHolderMFARequired,
 	}
 	request := func(candidate map[string]any) *httptest.ResponseRecorder {
 		encoded, encodeErr := json.Marshal(candidate)

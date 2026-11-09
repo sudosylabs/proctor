@@ -735,6 +735,9 @@ func resolveDesktopAuthenticationProof(ctx context.Context, executor sqlxExecuto
 		if session.MFARecoveryRequired {
 			return nil, store.ErrMFAReenrollmentRequired
 		}
+		if session.MFAEnrollmentRequired {
+			return nil, store.ErrMFAEnrollmentRequired
+		}
 		source = session
 		input.AuthenticationMethod = session.AuthenticationMethod
 		input.AuthenticationProviderID = session.AuthenticationProviderID

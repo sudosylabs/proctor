@@ -39,6 +39,7 @@ type sessionRow struct {
 	UserID                   string         `db:"user_id"`
 	AuthenticationGeneration int64          `db:"authentication_generation"`
 	MFARecoveryRequired      bool           `db:"mfa_recovery_required"`
+	MFAEnrollmentRequired    bool           `db:"mfa_enrollment_required"`
 	ClientType               string         `db:"client_type"`
 	DesktopRegistrationID    sql.NullString `db:"desktop_registration_id"`
 	DPoPKeyThumbprint        sql.NullString `db:"dpop_key_thumbprint"`
@@ -77,6 +78,7 @@ func sessionSliceColumns() []string {
 		"sessions.user_id",
 		"sessions.authentication_generation",
 		"sessions.mfa_recovery_required",
+		"sessions.mfa_enrollment_required",
 		"sessions.client_type",
 		"sessions.desktop_registration_id",
 		"sessions.dpop_key_thumbprint",
@@ -296,7 +298,7 @@ func insertSession(ctx context.Context, executor sqlxExecutor, session *model.Se
 	row := newSessionRow(session)
 	if _, err := executor.NamedExec(ctx, `
 		INSERT INTO sessions (
-			id, created_at, updated_at, archived_at, user_id, authentication_generation, mfa_recovery_required, client_type,
+			id, created_at, updated_at, archived_at, user_id, authentication_generation, mfa_recovery_required, mfa_enrollment_required, client_type,
 			desktop_registration_id, dpop_key_thumbprint, desktop_release, desktop_build_id,
 			desktop_platform, desktop_architecture, desktop_realtime_protocol,
 			device_id, device_name, authentication_method, authentication_provider_id, external_identity_id,
@@ -304,7 +306,7 @@ func insertSession(ctx context.Context, executor sqlxExecutor, session *model.Se
 			last_activity_at, idle_expires_at, expires_at, revoked_at,
 			revocation_reason
 		) VALUES (
-			:id, :created_at, :updated_at, :archived_at, :user_id, :authentication_generation, :mfa_recovery_required, :client_type,
+			:id, :created_at, :updated_at, :archived_at, :user_id, :authentication_generation, :mfa_recovery_required, :mfa_enrollment_required, :client_type,
 			:desktop_registration_id, :dpop_key_thumbprint, :desktop_release, :desktop_build_id,
 			:desktop_platform, :desktop_architecture, :desktop_realtime_protocol,
 			:device_id, :device_name, :authentication_method, :authentication_provider_id, :external_identity_id,
@@ -484,7 +486,7 @@ func (s SQLSessionStore) EnforceExpiry(ctx context.Context, input *store.Session
 		}
 		var row sessionRow
 		if err := tx.Get(ctx, &row, `
-		SELECT id, created_at, updated_at, archived_at, user_id, authentication_generation, mfa_recovery_required, client_type,
+		SELECT id, created_at, updated_at, archived_at, user_id, authentication_generation, mfa_recovery_required, mfa_enrollment_required, client_type,
 		       desktop_registration_id, dpop_key_thumbprint, desktop_release, desktop_build_id,
 		       desktop_platform, desktop_architecture, desktop_realtime_protocol,
 		       device_id, device_name, authentication_method, authentication_provider_id, external_identity_id,
@@ -561,7 +563,7 @@ func (s SQLSessionStore) Revoke(
 		}
 		var row sessionRow
 		if err := tx.Get(ctx, &row, `
-		SELECT id, created_at, updated_at, archived_at, user_id, authentication_generation, mfa_recovery_required, client_type,
+		SELECT id, created_at, updated_at, archived_at, user_id, authentication_generation, mfa_recovery_required, mfa_enrollment_required, client_type,
 		       desktop_registration_id, dpop_key_thumbprint, desktop_release, desktop_build_id,
 		       desktop_platform, desktop_architecture, desktop_realtime_protocol,
 		       device_id, device_name, authentication_method, authentication_provider_id, external_identity_id,
@@ -904,7 +906,7 @@ func revokeUserSessionsExceptAt(
 	}
 	rows := []sessionRow{}
 	if err := executor.Select(ctx, &rows, `
-		SELECT id, created_at, updated_at, archived_at, user_id, authentication_generation, mfa_recovery_required, client_type,
+		SELECT id, created_at, updated_at, archived_at, user_id, authentication_generation, mfa_recovery_required, mfa_enrollment_required, client_type,
 		       desktop_registration_id, dpop_key_thumbprint, desktop_release, desktop_build_id,
 		       desktop_platform, desktop_architecture, desktop_realtime_protocol,
 		       device_id, device_name, authentication_method, authentication_provider_id, external_identity_id,
@@ -1038,6 +1040,7 @@ func newSessionRow(session *model.Session) sessionRow {
 		UserID:                   session.UserID.String(),
 		AuthenticationGeneration: session.AuthenticationGeneration,
 		MFARecoveryRequired:      session.MFARecoveryRequired,
+		MFAEnrollmentRequired:    session.MFAEnrollmentRequired,
 		ClientType:               string(session.ClientType),
 		DesktopRegistrationID:    sql.NullString{String: session.DesktopRegistrationID.String(), Valid: !session.DesktopRegistrationID.IsZero()},
 		DPoPKeyThumbprint:        sql.NullString{String: session.DPoPKeyThumbprint, Valid: session.DPoPKeyThumbprint != ""},
@@ -1080,6 +1083,7 @@ func (row sessionRow) model() (*model.Session, error) {
 		UserID:                   userID,
 		AuthenticationGeneration: row.AuthenticationGeneration,
 		MFARecoveryRequired:      row.MFARecoveryRequired,
+		MFAEnrollmentRequired:    row.MFAEnrollmentRequired,
 		ClientType:               model.SessionClientType(row.ClientType),
 		DPoPKeyThumbprint:        row.DPoPKeyThumbprint.String,
 		DesktopRelease:           row.DesktopRelease.String,

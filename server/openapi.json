@@ -1706,7 +1706,8 @@
                 "university_oidc": "invitation_required"
               },
               "public_registration_enabled": false,
-              "revoke_existing_sessions": true
+              "revoke_existing_sessions": true,
+              "role_holder_mfa_required": true
             },
             "schema": {
               "$ref": "#/components/schemas/AccessPolicySettingsRequest"
@@ -1869,7 +1870,8 @@
                 "university_oidc": "invitation_required"
               },
               "public_registration_enabled": false,
-              "revoke_existing_sessions": true
+              "revoke_existing_sessions": true,
+              "role_holder_mfa_required": true
             },
             "schema": {
               "$ref": "#/components/schemas/AccessPolicySettingsRequest"
@@ -2582,6 +2584,8 @@
               "provider_admissions": {},
               "public_registration_enabled": false,
               "revision": 4,
+              "role_holder_mfa_enforced": false,
+              "role_holder_mfa_required": false,
               "updated_at": "2027-01-01T01:00:00Z"
             },
             "schema": {
@@ -2599,6 +2603,11 @@
       "AccessPolicyPreflightOK": {
         "content": {
           "application/json": {
+            "example": {
+              "blockers": [],
+              "role_holder_single_factor_session_count": 5,
+              "role_holders_without_mfa_count": 3
+            },
             "schema": {
               "$ref": "#/components/schemas/AccessPolicyPreflightResponse"
             }
@@ -6599,11 +6608,13 @@
         "description": "Safe reason the proposed policy cannot currently be applied.",
         "properties": {
           "code": {
+            "description": "`mfa_unavailable` means the proposal starts requiring two-step verification of role holders while the server configuration disables two-step verification.",
             "enum": [
               "provider_unavailable",
               "provider_admission_unsupported",
               "invitation_delivery_unavailable",
-              "last_system_administrator_path"
+              "last_system_administrator_path",
+              "mfa_unavailable"
             ],
             "type": "string"
           },
@@ -6619,7 +6630,7 @@
       },
       "AccessPolicyPreflightResponse": {
         "additionalProperties": false,
-        "description": "Current safe blockers for a proposed Access Policy replacement.",
+        "description": "Current safe blockers and role holder two-step verification counts for a proposed Access Policy replacement.",
         "properties": {
           "blockers": {
             "description": "Empty when no blocker is currently observed; replacement still repeats all checks.",
@@ -6628,10 +6639,22 @@
             },
             "maxItems": 66,
             "type": "array"
+          },
+          "role_holder_single_factor_session_count": {
+            "description": "Live Sessions of active role holders that have not proved a second factor: the Sessions `revoke_existing_sessions` signs out when the proposal starts requiring two-step verification of role holders.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "role_holders_without_mfa_count": {
+            "description": "Active role holders, those holding a current Role Binding at any scope, who have no active second factor.",
+            "minimum": 0,
+            "type": "integer"
           }
         },
         "required": [
-          "blockers"
+          "blockers",
+          "role_holders_without_mfa_count",
+          "role_holder_single_factor_session_count"
         ],
         "type": "object"
       },
@@ -6696,6 +6719,15 @@
             "minimum": 1,
             "type": "integer"
           },
+          "role_holder_mfa_enforced": {
+            "description": "Whether the role holder two-step verification requirement is in force: true only while `role_holder_mfa_required` is on and the server configuration enables two-step verification. While it is false with the setting on, the requirement is paused and nobody is restricted or refused.",
+            "readOnly": true,
+            "type": "boolean"
+          },
+          "role_holder_mfa_required": {
+            "description": "Whether every role holder, a User with a current Role Binding at any scope, must use two-step verification. Clients may label it \"Two-step required for staff\".",
+            "type": "boolean"
+          },
           "updated_at": {
             "format": "date-time",
             "type": "string"
@@ -6712,6 +6744,8 @@
           "invitation_local_credential_enabled",
           "desktop_authorization_enabled",
           "provider_admissions",
+          "role_holder_mfa_required",
+          "role_holder_mfa_enforced",
           "history",
           "available_providers",
           "durable_mail"
@@ -6759,7 +6793,11 @@
             "type": "boolean"
           },
           "revoke_existing_sessions": {
-            "description": "One-shot choice to revoke active Sessions authenticated by methods newly disabled by this transition.",
+            "description": "One-shot choice to revoke active Sessions authenticated by methods newly disabled by this transition and, when this transition starts requiring two-step verification of role holders, the live role holders' Sessions that have not proved a second factor.",
+            "type": "boolean"
+          },
+          "role_holder_mfa_required": {
+            "description": "Whether every role holder must use two-step verification. A role holder is any User with a current Role Binding at any scope, system administrators included. A role holder without a second factor signs in on the web to a Session restricted to setting up two-step verification, completing a challenge, or signing out; Proctor Desktop refuses that sign-in with `authentication.mfa.enrollment_required`. The requirement pauses, restricting and refusing nothing, while the server configuration disables two-step verification. Clients may label this switch \"Two-step required for staff\"; it is unrelated to the staff member Affiliation.",
             "type": "boolean"
           }
         },
@@ -6771,7 +6809,8 @@
           "invitation_admission_enabled",
           "invitation_local_credential_enabled",
           "desktop_authorization_enabled",
-          "provider_admissions"
+          "provider_admissions",
+          "role_holder_mfa_required"
         ],
         "type": "object"
       },
@@ -6796,6 +6835,7 @@
                 "invitation_local_credential_enabled",
                 "desktop_authorization_enabled",
                 "provider_admissions",
+                "role_holder_mfa_required",
                 "revoke_existing_sessions"
               ],
               "type": "string"
@@ -11086,6 +11126,10 @@
             "format": "date-time",
             "type": "string"
           },
+          "mfa_enrollment_required": {
+            "description": "Whether the Access Policy restricts this Web Session until its User sets up or completes two-step verification. Only setting up two-step verification, the second-factor challenge, reauthentication, the security status and sign-out accept it.",
+            "type": "boolean"
+          },
           "mfa_recovery_required": {
             "description": "Ordinary access remains unavailable until a new local authenticator is activated.",
             "type": "boolean"
@@ -11145,6 +11189,7 @@
           "authentication_method",
           "authentication_strength",
           "mfa_recovery_required",
+          "mfa_enrollment_required",
           "authenticated_at",
           "last_activity_at",
           "idle_expires_at",
@@ -13607,6 +13652,7 @@
           "authentication.mfa.code_invalid",
           "authentication.mfa.conflict",
           "authentication.mfa.disabled",
+          "authentication.mfa.enrollment_required",
           "authentication.mfa.not_found",
           "authentication.mfa.rekey.conflict",
           "authentication.mfa.rekey.invalid",
@@ -13815,6 +13861,7 @@
           "mail.rekey.invalid",
           "mail.test.rate_limited",
           "mail.unavailable",
+          "mfa.required_by_policy",
           "onboarding_batch.duplicate",
           "onboarding_import.conflict",
           "onboarding_import.file_invalid",
@@ -18483,6 +18530,10 @@
             ],
             "type": "string"
           },
+          "mfa_enrollment_required": {
+            "description": "Whether the Access Policy restricts this Web Session until its User sets up or completes two-step verification. Only setting up two-step verification, the second-factor challenge, reauthentication, the security status and sign-out accept it.",
+            "type": "boolean"
+          },
           "mfa_recovery_required": {
             "description": "Whether this Session is restricted to fresh primary proof and local authenticator enrollment after an assisted reset.",
             "type": "boolean"
@@ -18535,6 +18586,7 @@
         "required": [
           "service_enabled",
           "mfa_recovery_required",
+          "mfa_enrollment_required",
           "authentication_method",
           "authentication_strength",
           "recently_authenticated",
@@ -24427,6 +24479,10 @@
             "format": "date-time",
             "type": "string"
           },
+          "mfa_enrollment_required": {
+            "description": "Whether the Access Policy restricts this Web Session until its User sets up or completes two-step verification. Only setting up two-step verification, the second-factor challenge, reauthentication, the security status and sign-out accept it.",
+            "type": "boolean"
+          },
           "mfa_recovery_required": {
             "description": "Whether this Session is restricted to MFA reenrollment after an assisted reset.",
             "type": "boolean"
@@ -24485,6 +24541,7 @@
           "authentication_method",
           "authentication_strength",
           "mfa_recovery_required",
+          "mfa_enrollment_required",
           "authenticated_at",
           "last_activity_at",
           "idle_expires_at",
@@ -24593,6 +24650,10 @@
             "format": "date-time",
             "type": "string"
           },
+          "mfa_enrollment_required": {
+            "description": "Whether the Access Policy restricts this Web Session until its User sets up or completes two-step verification. Only setting up two-step verification, the second-factor challenge, reauthentication, the security status and sign-out accept it.",
+            "type": "boolean"
+          },
           "mfa_recovery_required": {
             "description": "Ordinary access remains unavailable until a new local authenticator is activated.",
             "type": "boolean"
@@ -24651,6 +24712,7 @@
           "authentication_method",
           "authentication_strength",
           "mfa_recovery_required",
+          "mfa_enrollment_required",
           "authenticated_at",
           "last_activity_at",
           "idle_expires_at",
@@ -28052,7 +28114,7 @@
         "x-proctor-idempotency": "none"
       },
       "put": {
-        "description": "Replaces the complete installation Access Policy under an optimistic revision fence. Proctor repeats deployment-capability and last-administrator-path checks in the authoritative transaction, can revoke Sessions affected by newly disabled methods, and requires both a strong recent interactive Session and an Idempotency-Key.",
+        "description": "Replaces the complete installation Access Policy under an optimistic revision fence. Proctor repeats deployment-capability and last-administrator-path checks in the authoritative transaction, can revoke Sessions affected by newly disabled methods or, when two-step verification becomes required for role holders, the role holders' Sessions that have not proved a second factor, and requires both a strong recent interactive Session and an Idempotency-Key.",
         "operationId": "replaceAccessPolicy",
         "parameters": [
           {
@@ -28107,7 +28169,7 @@
         "x-codeSamples": [
           {
             "lang": "Shell",
-            "source": "curl --fail-with-body \\\n  --request PUT \\\n  --url 'https://proctor.example.edu/api/v1/access-policy' \\\n  --header 'Authorization: Bearer \u003cinteractive-session-access-token\u003e' \\\n  --header 'Content-Type: application/json' \\\n  --header 'Idempotency-Key: docs-access-policy-008' \\\n  --data '{\"expected_revision\":7,\"revoke_existing_sessions\":true,\"local_login_enabled\":true,\"public_registration_enabled\":false,\"invitation_admission_enabled\":true,\"invitation_local_credential_enabled\":true,\"desktop_authorization_enabled\":true,\"provider_admissions\":{\"university_oidc\":\"invitation_required\"}}'"
+            "source": "curl --fail-with-body \\\n  --request PUT \\\n  --url 'https://proctor.example.edu/api/v1/access-policy' \\\n  --header 'Authorization: Bearer \u003cinteractive-session-access-token\u003e' \\\n  --header 'Content-Type: application/json' \\\n  --header 'Idempotency-Key: docs-access-policy-008' \\\n  --data '{\"expected_revision\":7,\"revoke_existing_sessions\":true,\"local_login_enabled\":true,\"public_registration_enabled\":false,\"invitation_admission_enabled\":true,\"invitation_local_credential_enabled\":true,\"desktop_authorization_enabled\":true,\"provider_admissions\":{\"university_oidc\":\"invitation_required\"},\"role_holder_mfa_required\":true}'"
           }
         ],
         "x-proctor-auth": "strong_recent_session_required",
@@ -28142,7 +28204,7 @@
     },
     "/api/v1/access-policy/preflight": {
       "post": {
-        "description": "Evaluates the complete proposed replacement against the current revision, configured provider capabilities, invitation delivery, and last-administrator access paths. Preflight makes no durable change and does not reserve the revision, so replacement repeats every check in its authoritative transaction.",
+        "description": "Evaluates the complete proposed replacement against the current revision, configured provider capabilities, invitation delivery, two-step verification availability, and last-administrator access paths, and counts the role holders without two-step verification and their Sessions that have not proved it. Preflight makes no durable change and does not reserve the revision, so replacement repeats every check in its authoritative transaction.",
         "operationId": "preflightAccessPolicy",
         "requestBody": {
           "$ref": "#/components/requestBodies/PreflightAccessPolicy"
@@ -28818,6 +28880,7 @@
         ],
         "x-proctor-auth": "public",
         "x-proctor-error-codes": [
+          "authentication.mfa.enrollment_required",
           "request.invalid",
           "authentication.desktop_authorization.invalid",
           "authentication.desktop_authorization.rejected",
@@ -28961,6 +29024,7 @@
         ],
         "x-proctor-auth": "session_required",
         "x-proctor-error-codes": [
+          "authentication.mfa.enrollment_required",
           "authentication.desktop_authorization.invalid",
           "authentication.desktop_authorization.rejected",
           "authentication.desktop_authorization.unavailable",
@@ -29542,6 +29606,7 @@
         ],
         "x-proctor-auth": "public",
         "x-proctor-error-codes": [
+          "authentication.mfa.enrollment_required",
           "request.invalid",
           "authentication.rate_limited",
           "authentication.rate_limit_unavailable",
@@ -29819,6 +29884,7 @@
         ],
         "x-proctor-auth": "public",
         "x-proctor-error-codes": [
+          "authentication.mfa.enrollment_required",
           "request.invalid",
           "authentication.client_type.invalid",
           "authentication.password.invalid",
@@ -30060,6 +30126,7 @@
         ],
         "x-proctor-auth": "public",
         "x-proctor-error-codes": [
+          "authentication.mfa.enrollment_required",
           "authentication.credentials_invalid",
           "request.invalid",
           "authentication.external.invalid",
@@ -30386,6 +30453,9 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
           "500": {
             "$ref": "#/components/responses/InternalError"
           },
@@ -30418,6 +30488,7 @@
         ],
         "x-proctor-auth": "refresh_credential_required",
         "x-proctor-error-codes": [
+          "authentication.mfa.enrollment_required",
           "authentication.token_invalid",
           "authentication.internal",
           "authentication.dpop.invalid",
@@ -47951,7 +48022,7 @@
         "tags": [
           "Authentication"
         ],
-        "x-proctor-auth": "session_required",
+        "x-proctor-auth": "mfa_enrollment_session_required",
         "x-proctor-error-codes": [
           "request.invalid",
           "authentication.mfa.code_invalid",
@@ -48035,6 +48106,7 @@
         ],
         "x-proctor-auth": "strong_recent_session_required",
         "x-proctor-error-codes": [
+          "mfa.required_by_policy",
           "authentication.mfa.disabled",
           "authentication.mfa.not_found",
           "authentication.mfa.conflict",

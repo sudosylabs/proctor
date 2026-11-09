@@ -23,19 +23,23 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 type replayingAccessPolicyHTTPApplication struct {
 	command     *app.ReplaceAccessPolicyCommand
 	view        app.AccessPolicyView
+	preflight   app.AccessPolicyPreflightResult
+	preflighted *app.PreflightAccessPolicyCommand
 	discoveries int
 }
 
 func (a *replayingAccessPolicyHTTPApplication) GetAccessPolicy(context.Context, invocation.Invocation) (app.AccessPolicyView, error) {
 	return a.view, nil
 }
-func (a *replayingAccessPolicyHTTPApplication) PreflightAccessPolicy(context.Context, invocation.Invocation, app.PreflightAccessPolicyCommand) (app.AccessPolicyPreflightResult, error) {
-	return app.AccessPolicyPreflightResult{}, nil
+func (a *replayingAccessPolicyHTTPApplication) PreflightAccessPolicy(_ context.Context, _ invocation.Invocation, command app.PreflightAccessPolicyCommand) (app.AccessPolicyPreflightResult, error) {
+	a.preflighted = &command
+	return a.preflight, nil
 }
 func (a *replayingAccessPolicyHTTPApplication) DiscoverAccess(context.Context, invocation.Invocation) (app.PublicAccessDiscovery, error) {
 	a.discoveries++
@@ -90,7 +94,7 @@ func TestAccessPolicyHTTPRetriesLostResponseAndRejectsConflictingKeyReuse(t *tes
 	policy.Revision = 2
 	application := &replayingAccessPolicyHTTPApplication{view: app.AccessPolicyView{Policy: policy, History: []*model.AccessPolicyTransition{}, AvailableProviders: []model.ExternalAuthenticationProvider{}}}
 	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, accessPolicyResource(application))
-	body := `{"expected_revision":1,"revoke_existing_sessions":true,"local_login_enabled":true,"public_registration_enabled":false,"invitation_admission_enabled":true,"invitation_local_credential_enabled":true,"desktop_authorization_enabled":false,"provider_admissions":{}}`
+	body := `{"expected_revision":1,"revoke_existing_sessions":true,"local_login_enabled":true,"public_registration_enabled":false,"invitation_admission_enabled":true,"invitation_local_credential_enabled":true,"desktop_authorization_enabled":false,"provider_admissions":{},"role_holder_mfa_required":false}`
 	do := func(candidate string) *httptest.ResponseRecorder {
 		request := httptest.NewRequest(http.MethodPut, "/api/v1/access-policy", strings.NewReader(candidate))
 		request.Header.Set("Authorization", "Bearer session")
@@ -110,6 +114,36 @@ func TestAccessPolicyHTTPRetriesLostResponseAndRejectsConflictingKeyReuse(t *tes
 	require.Contains(t, response.Body.String(), `"code":"idempotency.conflict"`, "conflict")
 }
 
+func TestAccessPolicyHTTPCarriesRoleHolderMFARequirementAndPreflightCounts(t *testing.T) {
+	t.Parallel()
+	logger, _ := newTestLogger(t)
+	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
+		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
+		AuthenticatedAt: time.Now(), MFACompletedAt: model.OptionalTimeFrom(time.Now()), ClientType: model.SessionClientWeb}
+	policy := model.NewInitialAccessPolicy(model.NewAccessPolicyID(), time.Now())
+	policy.RoleHolderMFARequired = true
+	application := &replayingAccessPolicyHTTPApplication{view: app.AccessPolicyView{Policy: policy},
+		preflight: app.AccessPolicyPreflightResult{Blockers: []store.AccessPolicyBlocker{{Code: store.AccessPolicyBlockerMFAUnavailable}},
+			RoleHoldersWithoutMFACount: 3, RoleHolderSingleFactorSessionCount: 5}}
+	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, accessPolicyResource(application))
+	do := func(method, path, body string) *httptest.ResponseRecorder {
+		request := httptest.NewRequestWithContext(t.Context(), method, path, strings.NewReader(body))
+		request.Header.Set("Authorization", "Bearer session")
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		return response
+	}
+	read := do(http.MethodGet, "/api/v1/access-policy", "")
+	require.Equal(t, http.StatusOK, read.Code, read.Body.String())
+	require.Contains(t, read.Body.String(), `"role_holder_mfa_required":true`)
+	require.Contains(t, read.Body.String(), `"role_holder_mfa_enforced":false`, "a setting the deployment cannot enforce reads as paused")
+	preflight := do(http.MethodPost, "/api/v1/access-policy/preflight", `{"expected_revision":1,"revoke_existing_sessions":true,"local_login_enabled":true,"public_registration_enabled":false,"invitation_admission_enabled":true,"invitation_local_credential_enabled":true,"desktop_authorization_enabled":true,"provider_admissions":{},"role_holder_mfa_required":true}`)
+	require.Equal(t, http.StatusOK, preflight.Code, preflight.Body.String())
+	require.JSONEq(t, `{"blockers":[{"code":"mfa_unavailable"}],"role_holders_without_mfa_count":3,"role_holder_single_factor_session_count":5}`, preflight.Body.String())
+	require.True(t, application.preflighted.Settings.RoleHolderMFARequired)
+}
+
 func TestAccessPolicyHTTPRequiresExplicitSessionRevocationChoice(t *testing.T) {
 	t.Parallel()
 	logger, _ := newTestLogger(t)
@@ -119,8 +153,8 @@ func TestAccessPolicyHTTPRequiresExplicitSessionRevocationChoice(t *testing.T) {
 	application := &replayingAccessPolicyHTTPApplication{}
 	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, accessPolicyResource(application))
 	for _, candidate := range []string{
-		`{"expected_revision":1,"local_login_enabled":true,"public_registration_enabled":false,"invitation_admission_enabled":true,"invitation_local_credential_enabled":true,"desktop_authorization_enabled":false,"provider_admissions":{}}`,
-		`{"expected_revision":1,"revoke_existing_sessions":null,"local_login_enabled":true,"public_registration_enabled":false,"invitation_admission_enabled":true,"invitation_local_credential_enabled":true,"desktop_authorization_enabled":false,"provider_admissions":{}}`,
+		`{"expected_revision":1,"local_login_enabled":true,"public_registration_enabled":false,"invitation_admission_enabled":true,"invitation_local_credential_enabled":true,"desktop_authorization_enabled":false,"provider_admissions":{},"role_holder_mfa_required":false}`,
+		`{"expected_revision":1,"revoke_existing_sessions":null,"local_login_enabled":true,"public_registration_enabled":false,"invitation_admission_enabled":true,"invitation_local_credential_enabled":true,"desktop_authorization_enabled":false,"provider_admissions":{},"role_holder_mfa_required":false}`,
 	} {
 		request := httptest.NewRequest(http.MethodPut, "/api/v1/access-policy", strings.NewReader(candidate))
 		request.Header.Set("Authorization", "Bearer session")
@@ -147,10 +181,11 @@ func TestAccessPolicyHTTPRequiresEveryCompleteReplacementSetting(t *testing.T) {
 		"invitation_admission_enabled": true, "invitation_local_credential_enabled": true,
 		"desktop_authorization_enabled": true,
 		"provider_admissions":           map[string]any{},
+		"role_holder_mfa_required":      false,
 	}
 	for _, field := range []string{
 		"local_login_enabled", "public_registration_enabled", "invitation_admission_enabled",
-		"invitation_local_credential_enabled", "desktop_authorization_enabled", "provider_admissions",
+		"invitation_local_credential_enabled", "desktop_authorization_enabled", "provider_admissions", "role_holder_mfa_required",
 	} {
 		field := field
 		for _, mutation := range []struct {

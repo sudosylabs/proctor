@@ -261,7 +261,7 @@ func (s *authenticationService) validatePrincipal(ctx context.Context, principal
 	if recoveryErr != nil {
 		return recoveryErr
 	}
-	if recovery.ReenrollmentRequired || principal.AuthenticationGeneration != recovery.Generation || session.AuthenticationGeneration != recovery.Generation || session.MFARecoveryRequired {
+	if recovery.ReenrollmentRequired || principal.AuthenticationGeneration != recovery.Generation || session.AuthenticationGeneration != recovery.Generation || session.MFARecoveryRequired || session.MFAEnrollmentRequired {
 		return invalidTokenAppError()
 	}
 
@@ -665,6 +665,10 @@ func (s *authenticationService) createSession(
 	} else {
 		mfaCompletedAt = 0
 	}
+	enrollmentRequired, err := s.mfaEnrollmentRequired(ctx, user.ID, clientType, strength)
+	if err != nil {
+		return nil, nil, err
+	}
 	settings := s.deps.SessionPolicy
 	absoluteExpiresAt := model.TimeUTC(now.Add(settings.AbsoluteTTL))
 	accessExpiresAt := sessionDeadline(now, settings.AccessTTL, absoluteExpiresAt)
@@ -673,6 +677,7 @@ func (s *authenticationService) createSession(
 		UserID:                   user.ID,
 		AuthenticationGeneration: command.AuthenticationGeneration,
 		MFARecoveryRequired:      command.MFARecoveryRequired,
+		MFAEnrollmentRequired:    enrollmentRequired,
 		ClientType:               clientType,
 		DeviceID:                 command.DeviceID,
 		DeviceName:               command.DeviceName,
@@ -721,6 +726,24 @@ func (s *authenticationService) createSession(
 		AccessExpiresAt:  accessExpiresAt,
 		RefreshExpiresAt: refreshExpiresAt,
 	}, nil
+}
+
+// mfaEnrollmentRequired decides whether a new single-factor Session of the
+// User must be restricted to MFA enrollment because the Access Policy
+// requires role holders to use two-step verification. Only a Web Session can carry
+// the restriction; any other client is refused and sent to the browser.
+func (s *authenticationService) mfaEnrollmentRequired(ctx context.Context, userID model.UserID, clientType model.SessionClientType, strength model.AuthenticationStrength) (bool, error) {
+	if strength == model.AuthenticationMultiFactor {
+		return false, nil
+	}
+	required, err := s.deps.AccessPolicy.RequiresMFA(ctx, userID)
+	if err != nil {
+		return false, authenticationUnavailable(err)
+	}
+	if required && clientType != model.SessionClientWeb {
+		return false, mfaEnrollmentRequiredAppError()
+	}
+	return required, nil
 }
 
 // sessionCreationError maps a Session persistence failure to the public authentication error.
@@ -878,6 +901,7 @@ func (s *authenticationService) authenticateAccess(
 		UserID:                   resolved.User.ID,
 		AuthenticationGeneration: resolved.Session.AuthenticationGeneration,
 		MFARecoveryRequired:      resolved.Session.MFARecoveryRequired,
+		MFAEnrollmentRequired:    resolved.Session.MFAEnrollmentRequired,
 		SessionID:                resolved.Session.ID,
 		CredentialID:             model.PrincipalCredentialID(resolved.Credential.ID),
 		CredentialType:           model.CredentialSessionAccess,
@@ -972,6 +996,18 @@ func (s *authenticationService) RefreshSession(
 		return nil, nil, invalidTokenAppError()
 	}
 	now := model.TimeUTC(s.deps.Now())
+	mfaRequired := false
+	if session.AuthenticationStrength != model.AuthenticationMultiFactor {
+		// A User who became a role holder mid-Session, or whose Session predates the
+		// policy, is restricted here; a Desktop Session is refused instead.
+		mfaRequired, err = s.deps.AccessPolicy.RequiresMFA(ctx, session.UserID)
+		if err != nil {
+			return nil, nil, authenticationUnavailable(err)
+		}
+		if mfaRequired && session.ClientType != model.SessionClientWeb {
+			return nil, nil, mfaEnrollmentRequiredAppError()
+		}
+	}
 	settings := s.deps.SessionPolicy
 	accessToken := s.deps.NewCredential()
 	refreshToken := s.deps.NewCredential()
@@ -983,9 +1019,12 @@ func (s *authenticationService) RefreshSession(
 		}, Refresh: &model.SessionCredential{
 			TokenHash: model.HashToken(refreshToken),
 			ExpiresAt: model.TimeUTC(now.Add(settings.RefreshTTL)),
-		}, Now: now, IdleExpiresAt: model.TimeUTC(now.Add(settings.IdleTTL))},
+		}, Now: now, IdleExpiresAt: model.TimeUTC(now.Add(settings.IdleTTL)), MFARequiredByPolicy: mfaRequired},
 	)
 	if err != nil {
+		if errors.Is(err, store.ErrMFAEnrollmentRequired) {
+			return nil, nil, mfaEnrollmentRequiredAppError()
+		}
 		var conflict *store.ErrConflict
 		if store.IsNotFound(err) || errors.As(err, &conflict) || errors.Is(err, store.ErrAuthenticationGenerationChanged) || errors.Is(err, store.ErrMFAReenrollmentRequired) {
 			return nil, nil, invalidTokenAppError()
@@ -1132,6 +1171,12 @@ func validRawCredential(token string) bool {
 
 func invalidCredentialsAppError() error {
 	return apperror.New("authentication.credentials_invalid")
+}
+
+// mfaEnrollmentRequiredAppError refuses a sign-in or refresh that cannot
+// continue until the User sets up two-step verification in the browser.
+func mfaEnrollmentRequiredAppError() error {
+	return apperror.New("authentication.mfa.enrollment_required")
 }
 
 func invalidTokenAppError() error {

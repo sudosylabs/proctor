@@ -9,7 +9,7 @@ import {
 
 const context = {
   enabled: false, pending: false, recovery_codes_remaining: 0, recovery_codes_total: 10, recent_authentication_minutes: 15,
-  service_enabled: true, mfa_recovery_required: false,
+  service_enabled: true, mfa_recovery_required: false, mfa_enrollment_required: false,
   authentication_method: "password", authentication_strength: "single_factor", recently_authenticated: true,
 };
 
@@ -26,10 +26,18 @@ describe("bounded account security context", () => {
     expect(get).toHaveBeenCalledWith("/api/v1/users/me/mfa");
   });
 
+  it("reads the institution's two-step requirement as its own restriction", async () => {
+    vi.spyOn(apiClient, "GET").mockResolvedValue(apiResult(200, { data: { ...context, mfa_enrollment_required: true } }));
+    await expect(requestSecurityContext()).resolves.toMatchObject({
+      kind: "ready", context: { recoveryRequired: false, enrollmentRequired: true },
+    });
+  });
+
   it("fails closed for incomplete and malformed status projections", async () => {
     const get = vi.spyOn(apiClient, "GET");
     for (const data of [undefined, {}, { ...context, service_enabled: undefined },
-      { ...context, mfa_recovery_required: "false" }, { ...context, recovery_codes_remaining: -1 },
+      { ...context, mfa_recovery_required: "false" }, { ...context, mfa_enrollment_required: undefined },
+      { ...context, recovery_codes_remaining: -1 },
       { ...context, pending_expires_at: Infinity }, { ...context, authentication_method: "" }]) {
       get.mockResolvedValue(apiResult(200, { data }));
       await expect(requestSecurityContext()).resolves.toEqual({ kind: "unavailable" });

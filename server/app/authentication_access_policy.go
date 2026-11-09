@@ -11,6 +11,8 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -21,9 +23,18 @@ import (
 // operations independently recheck the authoritative policy in their
 // transaction.
 type authenticationAccessPolicy interface {
+	roleHolderMFARequirement
 	AllowsLocalLogin(context.Context) (bool, error)
 	ExternalProviderAdmission(context.Context, string) (externalProviderAdmissionPolicy, error)
 	AvailableExternalProviders(context.Context, []model.ExternalAuthenticationProvider) ([]model.ExternalAuthenticationProvider, error)
+}
+
+// roleHolderMFARequirement answers whether the current Access Policy requires the
+// User to use two-step verification because the User is a role holder: the User holds
+// a current Role Binding at any scope. Every sign-in, refresh and Desktop
+// handoff that would otherwise grant single-factor authority asks it.
+type roleHolderMFARequirement interface {
+	RequiresMFA(context.Context, model.UserID) (bool, error)
 }
 
 type externalProviderAdmissionPolicy struct {
@@ -35,15 +46,30 @@ type externalProviderAdmissionPolicy struct {
 // newCurrentAuthenticationAccessPolicy validates them once and currentAuthenticationAccessPolicy keeps them in deps.
 type currentAuthenticationAccessPolicyDependencies struct {
 	Policies store.AccessPolicyStore
+	// MFAEnabled reports whether the deployment configuration enables
+	// two-step verification. While it is false the role holder requirement
+	// pauses instead of restricting everyone it covers.
+	MFAEnabled  bool
+	Diagnostics authenticationDiagnostics
+	Now         func() time.Time
 }
 
 type currentAuthenticationAccessPolicy struct {
 	deps currentAuthenticationAccessPolicyDependencies
+	// pausedWarning reports the paused role holder requirement once per
+	// process rather than on every sign-in.
+	pausedWarning sync.Once
 }
 
 func newCurrentAuthenticationAccessPolicy(deps currentAuthenticationAccessPolicyDependencies) (*currentAuthenticationAccessPolicy, error) {
 	if deps.Policies == nil {
 		return nil, errors.New("authentication access policy store is required")
+	}
+	if deps.Now == nil {
+		return nil, errors.New("authentication access policy clock is required")
+	}
+	if deps.Diagnostics == nil {
+		return nil, errors.New("authentication access policy diagnostics are required")
 	}
 	return &currentAuthenticationAccessPolicy{deps: deps}, nil
 }
@@ -101,6 +127,29 @@ func (p *currentAuthenticationAccessPolicy) AvailableExternalProviders(
 		}
 	}
 	return available, nil
+}
+
+// RequiresMFA reads the authoritative policy and Role Bindings on every call;
+// nothing is cached, so a newly granted role or a policy change applies to the
+// next sign-in or refresh. While the deployment disables two-step
+// verification the requirement pauses: nobody could satisfy it, and
+// restricting every role holder would leave no administrator able to change
+// the policy.
+func (p *currentAuthenticationAccessPolicy) RequiresMFA(ctx context.Context, userID model.UserID) (bool, error) {
+	if !p.deps.MFAEnabled {
+		policy, err := p.current(ctx)
+		if err != nil {
+			return false, err
+		}
+		if policy.RoleHolderMFARequired {
+			p.pausedWarning.Do(func() {
+				p.deps.Diagnostics.WarnContext(ctx, "role holder two-step verification is paused",
+					errors.New("the access policy requires two-step verification of role holders, but the deployment configuration disables MFA"))
+			})
+		}
+		return false, nil
+	}
+	return p.deps.Policies.HasRoleHolderMFARequirement(ctx, userID, model.TimeUTC(p.deps.Now()))
 }
 
 func (p *currentAuthenticationAccessPolicy) current(ctx context.Context) (*model.AccessPolicy, error) {

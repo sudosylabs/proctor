@@ -47,7 +47,7 @@ func TestAccessPolicyStore(t *testing.T, ss store.Store, probes ...AccessPolicyS
 	blocked, err := ss.AccessPolicy().Preflight(ctx, &store.AccessPolicyPreflight{ExpectedRevision: 1, Settings: settings,
 		Capabilities: store.AccessDeploymentCapabilities{Providers: map[string]store.AccessProviderCapability{}}, CheckedAt: model.NowUTC()})
 	require.NoError(t, err)
-	require.True(t, hasAccessPolicyBlocker(blocked, store.AccessPolicyBlockerLastAdministratorPath, ""), "local lockout blockers = %#v", blocked)
+	require.True(t, hasAccessPolicyBlocker(blocked.Blockers, store.AccessPolicyBlockerLastAdministratorPath, ""), "local lockout blockers = %#v", blocked)
 
 	_, err = ss.ExternalIdentity().Save(ctx, &model.ExternalIdentity{UserID: bootstrap.Administrator.ID,
 		Provider: "campus", Subject: "admin-subject", LastSeenAt: model.OptionalTimeFrom(model.NowUTC())})
@@ -65,7 +65,7 @@ func TestAccessPolicyStore(t *testing.T, ss store.Store, probes ...AccessPolicyS
 	blocked, err = ss.AccessPolicy().Preflight(ctx, &store.AccessPolicyPreflight{ExpectedRevision: 1, Settings: settings,
 		Capabilities: capabilities, CheckedAt: model.NowUTC()})
 	require.NoError(t, err)
-	require.Empty(t, blocked)
+	require.Empty(t, blocked.Blockers)
 	passwordSession, _, _ := saveSession(t, ctx, ss, bootstrap.Administrator.ID.String(), 10)
 
 	command := &store.CommandIdempotency{UserID: bootstrap.Administrator.ID, Operation: "access_policy.replace",
@@ -210,17 +210,17 @@ func TestAccessPolicyStore(t *testing.T, ss store.Store, probes ...AccessPolicyS
 	blocked, err = ss.AccessPolicy().Preflight(ctx, &store.AccessPolicyPreflight{ExpectedRevision: result.Snapshot.Policy.Revision, Settings: removed,
 		Capabilities: store.AccessDeploymentCapabilities{Providers: map[string]store.AccessProviderCapability{}}, CheckedAt: model.NowUTC()})
 	require.NoError(t, err)
-	require.True(t, hasAccessPolicyBlocker(blocked, store.AccessPolicyBlockerProviderUnavailable, "campus"), "removed provider blockers = %#v", blocked)
+	require.True(t, hasAccessPolicyBlocker(blocked.Blockers, store.AccessPolicyBlockerProviderUnavailable, "campus"), "removed provider blockers = %#v", blocked)
 	removed.ProviderAdmissions["campus"] = model.ProviderAdmissionAutoProvision
 	blocked, err = ss.AccessPolicy().Preflight(ctx, &store.AccessPolicyPreflight{ExpectedRevision: result.Snapshot.Policy.Revision, Settings: removed,
 		Capabilities: store.AccessDeploymentCapabilities{Providers: map[string]store.AccessProviderCapability{"campus": {}}, DurableMail: true}, CheckedAt: model.NowUTC()})
 	require.NoError(t, err)
-	require.True(t, hasAccessPolicyBlocker(blocked, store.AccessPolicyBlockerProviderAdmissionUnsupported, "campus"), "unsupported admission blockers = %#v", blocked)
+	require.True(t, hasAccessPolicyBlocker(blocked.Blockers, store.AccessPolicyBlockerProviderAdmissionUnsupported, "campus"), "unsupported admission blockers = %#v", blocked)
 	removed.ProviderAdmissions["campus"] = model.ProviderAdmissionInvitationRequired
 	blocked, err = ss.AccessPolicy().Preflight(ctx, &store.AccessPolicyPreflight{ExpectedRevision: result.Snapshot.Policy.Revision, Settings: removed,
 		Capabilities: store.AccessDeploymentCapabilities{Providers: map[string]store.AccessProviderCapability{"campus": {}}, DurableMail: false}, CheckedAt: model.NowUTC()})
 	require.NoError(t, err)
-	require.True(t, hasAccessPolicyBlocker(blocked, store.AccessPolicyBlockerInvitationMailUnavailable, "campus"), "invitation delivery blockers = %#v", blocked)
+	require.True(t, hasAccessPolicyBlocker(blocked.Blockers, store.AccessPolicyBlockerInvitationMailUnavailable, "campus"), "invitation delivery blockers = %#v", blocked)
 
 	current := result.Snapshot.Policy
 	for i := 0; i < model.AccessPolicyTransitionHistoryLimit+1; i++ {

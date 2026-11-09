@@ -29,6 +29,9 @@ const (
 const (
 	AccessPolicyProviderMaxCount       = identityprovider.MaximumCount
 	AccessPolicyTransitionHistoryLimit = 100
+	// AccessPolicyTransitionFieldMaxCount bounds the changed field names one
+	// transition records: every replaceable setting and revoke_existing_sessions.
+	AccessPolicyTransitionFieldMaxCount = 8
 )
 
 var (
@@ -50,6 +53,10 @@ type AccessPolicy struct {
 	InvitationLocalCredentialEnabled bool
 	DesktopAuthorizationEnabled      bool
 	ProviderAdmissions               map[string]ProviderAdmissionMode
+	// RoleHolderMFARequired requires two-step verification of every role holder:
+	// a User holding a current Role Binding at any scope, system
+	// administrators included.
+	RoleHolderMFARequired bool
 }
 
 // AccessPolicySettings is the complete replaceable portion of AccessPolicy.
@@ -61,6 +68,7 @@ type AccessPolicySettings struct {
 	InvitationLocalCredentialEnabled bool
 	DesktopAuthorizationEnabled      bool
 	ProviderAdmissions               map[string]ProviderAdmissionMode
+	RoleHolderMFARequired            bool
 }
 
 type AccessPolicyTransitionOutcome string
@@ -161,6 +169,7 @@ func (p *AccessPolicy) Settings() AccessPolicySettings {
 		InvitationLocalCredentialEnabled: p.InvitationLocalCredentialEnabled,
 		DesktopAuthorizationEnabled:      p.DesktopAuthorizationEnabled,
 		ProviderAdmissions:               cloneProviderAdmissions(p.ProviderAdmissions),
+		RoleHolderMFARequired:            p.RoleHolderMFARequired,
 	}
 }
 
@@ -188,6 +197,7 @@ func (p *AccessPolicy) Replace(expectedRevision int64, settings AccessPolicySett
 	p.InvitationLocalCredentialEnabled = settings.InvitationLocalCredentialEnabled
 	p.DesktopAuthorizationEnabled = settings.DesktopAuthorizationEnabled
 	p.ProviderAdmissions = cloneProviderAdmissions(settings.ProviderAdmissions)
+	p.RoleHolderMFARequired = settings.RoleHolderMFARequired
 	p.Revision++
 	p.UpdatedAt = at
 	if err := p.Validate(); err != nil {
@@ -204,18 +214,12 @@ func (t *AccessPolicyTransition) Validate() error {
 	if t == nil || !t.PolicyID.IsValid() || t.FromRevision < 1 ||
 		t.ToRevision != t.FromRevision+1 || !t.ActorID.IsValid() ||
 		t.ChangedAt.IsZero() || t.Outcome != AccessPolicyTransitionApplied ||
-		len(t.ChangedFields) == 0 || len(t.ChangedFields) > 7 {
+		len(t.ChangedFields) == 0 || len(t.ChangedFields) > AccessPolicyTransitionFieldMaxCount {
 		return ErrAccessPolicyInvalidTransition
-	}
-	valid := map[string]bool{
-		"local_login_enabled": true, "public_registration_enabled": true,
-		"invitation_admission_enabled": true, "invitation_local_credential_enabled": true,
-		"desktop_authorization_enabled": true, "provider_admissions": true,
-		"revoke_existing_sessions": true,
 	}
 	previous := ""
 	for _, field := range t.ChangedFields {
-		if !valid[field] || field <= previous {
+		if !slices.Contains(accessPolicyTransitionFields, field) || field <= previous {
 			return ErrAccessPolicyInvalidTransition
 		}
 		previous = field
@@ -223,8 +227,16 @@ func (t *AccessPolicyTransition) Validate() error {
 	return nil
 }
 
+// accessPolicyTransitionFields are the only names a transition may record:
+// each replaceable setting, plus the one-shot revoke_existing_sessions choice.
+var accessPolicyTransitionFields = []string{
+	"desktop_authorization_enabled", "invitation_admission_enabled", "invitation_local_credential_enabled",
+	"local_login_enabled", "provider_admissions", "public_registration_enabled", "revoke_existing_sessions",
+	"role_holder_mfa_required",
+}
+
 func changedAccessPolicyFields(current, next AccessPolicySettings) []string {
-	changed := make([]string, 0, 6)
+	changed := make([]string, 0, len(accessPolicyTransitionFields))
 	if current.LocalLoginEnabled != next.LocalLoginEnabled {
 		changed = append(changed, "local_login_enabled")
 	}
@@ -242,6 +254,9 @@ func changedAccessPolicyFields(current, next AccessPolicySettings) []string {
 	}
 	if !providerAdmissionsEqual(current.ProviderAdmissions, next.ProviderAdmissions) {
 		changed = append(changed, "provider_admissions")
+	}
+	if current.RoleHolderMFARequired != next.RoleHolderMFARequired {
+		changed = append(changed, "role_holder_mfa_required")
 	}
 	slices.Sort(changed)
 	return changed
@@ -288,6 +303,7 @@ func (p *AccessPolicy) Auditable() map[string]any {
 		"invitation_local_credential_enabled":   p.InvitationLocalCredentialEnabled,
 		"desktop_authorization_enabled":         p.DesktopAuthorizationEnabled,
 		"configured_provider_admission_entries": len(p.ProviderAdmissions),
+		"role_holder_mfa_required":              p.RoleHolderMFARequired,
 	}
 }
 

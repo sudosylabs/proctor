@@ -405,7 +405,7 @@ var openAPIDTOExceptions = map[string]dtoSchemaException{
 	// handler can name it, and every member must be supplied and non-null.
 	"AccessPolicySettingsRequest": {Required: []string{
 		"revoke_existing_sessions", "local_login_enabled", "public_registration_enabled", "invitation_admission_enabled",
-		"invitation_local_credential_enabled", "desktop_authorization_enabled", "provider_admissions",
+		"invitation_local_credential_enabled", "desktop_authorization_enabled", "provider_admissions", "role_holder_mfa_required",
 	}},
 	"DesktopCompatibilityPolicyRequest": {
 		Required:    []string{"minimum_desktop_release", "revoked_desktop_build_ids", "administrator_message", "availability"},

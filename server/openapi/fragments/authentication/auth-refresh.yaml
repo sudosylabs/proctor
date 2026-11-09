@@ -24,6 +24,7 @@ paths:
         - Authentication
       x-proctor-auth: refresh_credential_required
       x-proctor-error-codes:
+        - authentication.mfa.enrollment_required
         - authentication.token_invalid
         - authentication.internal
         - authentication.dpop.invalid
@@ -48,6 +49,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         "403":
           $ref: '#/components/responses/Forbidden'
+        "409":
+          $ref: '#/components/responses/Conflict'
         "500":
           $ref: '#/components/responses/InternalError'
         "503":

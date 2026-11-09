@@ -179,10 +179,12 @@ func (constructionCatalogWithJobs) Session() store.SessionStore { return nil }
 func (constructionCatalogWithJobs) SessionCredential() store.SessionCredentialStore {
 	return nil
 }
-func (constructionCatalogWithJobs) Retention() store.RetentionStore   { return nil }
-func (constructionCatalogWithJobs) ExamExport() store.ExamExportStore { return nil }
-func (c constructionCatalogWithJobs) User() store.UserStore           { return c.users }
-func (c constructionCatalogWithJobs) File() store.FileStore           { return c.files }
+func (constructionCatalogWithJobs) Retention() store.RetentionStore { return nil }
+func (constructionCatalogWithJobs) ExamExport() store.ExamExportStore {
+	return constructionExamExportStoreStub{}
+}
+func (c constructionCatalogWithJobs) User() store.UserStore { return c.users }
+func (c constructionCatalogWithJobs) File() store.FileStore { return c.files }
 func (constructionCatalogWithJobs) ExamStarterWorkspace() store.ExamStarterWorkspaceStore {
 	return nil
 }
@@ -214,6 +216,7 @@ func (c constructionCatalogWithJobs) CommandOutcome() store.CommandOutcomeStore 
 
 type constructionJobStoreStub struct{ store.JobStore }
 type constructionUserStoreStub struct{ store.UserStore }
+type constructionExamExportStoreStub struct{ store.ExamExportStore }
 type constructionFileStoreStub struct{ store.FileStore }
 type constructionInstitutionStoreStub struct{ store.InstitutionStore }
 type constructionInvitationStoreStub struct{ store.InvitationStore }

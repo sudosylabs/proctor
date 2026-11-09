@@ -634,10 +634,24 @@ func (s *userStore) GetByEmail(ctx context.Context, email string) (*model.User, 
 func (s *userStore) List(ctx context.Context, options store.UserListOptions) ([]*model.User, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.User, error) { return s.UserStore.List(ctx, options) })
 }
+func (s *userStore) Count(ctx context.Context, options store.UserListOptions, maximum int) (int, error) {
+	return retryCall1(ctx, s.layer, func() (int, error) { return s.UserStore.Count(ctx, options, maximum) })
+}
+func (s *userStore) ListDirectorySummaries(ctx context.Context, options store.UserDirectorySummaryOptions) ([]store.UserDirectorySummary, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.UserDirectorySummary, error) {
+		return s.UserStore.ListDirectorySummaries(ctx, options)
+	})
+}
+func (s *userStore) ListIdentities(ctx context.Context, ids []model.UserID) ([]store.UserIdentity, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.UserIdentity, error) { return s.UserStore.ListIdentities(ctx, ids) })
+}
 func (s *userStore) MatchVisibility(ctx context.Context, userID model.UserID, visibility store.UserVisibilityScope) (store.UserVisibilityMatch, error) {
 	return retryCall1(ctx, s.layer, func() (store.UserVisibilityMatch, error) {
 		return s.UserStore.MatchVisibility(ctx, userID, visibility)
 	})
+}
+func (s *userStore) ListDisplayNames(ctx context.Context, userIDs []model.UserID) ([]store.UserDisplayName, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.UserDisplayName, error) { return s.UserStore.ListDisplayNames(ctx, userIDs) })
 }
 
 func (s *externalIdentityStore) Get(ctx context.Context, id model.ExternalIdentityID) (*model.ExternalIdentity, error) {
@@ -787,6 +801,11 @@ func (s *roleBindingStore) ListVisibleByUser(ctx context.Context, userID model.U
 		return s.RoleBindingStore.ListVisibleByUser(ctx, userID, visibility)
 	})
 }
+func (s *roleBindingStore) ListVisibleSummariesByUsers(ctx context.Context, options store.RoleBindingSummaryOptions) ([]store.UserRoleBindingSummary, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.UserRoleBindingSummary, error) {
+		return s.RoleBindingStore.ListVisibleSummariesByUsers(ctx, options)
+	})
+}
 func (s *roleBindingStore) ListByScope(ctx context.Context, scopeType model.RoleScopeType, scopeID string) ([]*model.RoleBinding, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.RoleBinding, error) {
 		return s.RoleBindingStore.ListByScope(ctx, scopeType, scopeID)
@@ -803,6 +822,9 @@ func (s *auditStore) Get(ctx context.Context, id model.AuditEventID) (*model.Aud
 }
 func (s *auditStore) List(ctx context.Context, options store.AuditListOptions) ([]*model.AuditEvent, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.AuditEvent, error) { return s.AuditStore.List(ctx, options) })
+}
+func (s *auditStore) Count(ctx context.Context, options store.AuditListOptions, maximum int) (int, error) {
+	return retryCall1(ctx, s.layer, func() (int, error) { return s.AuditStore.Count(ctx, options, maximum) })
 }
 func (s *auditStore) ListSelf(ctx context.Context, options store.AuditSelfListOptions) ([]*store.AuditSelfEntry, error) {
 	return retryCall1(ctx, s.layer, func() ([]*store.AuditSelfEntry, error) { return s.AuditStore.ListSelf(ctx, options) })

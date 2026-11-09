@@ -8,7 +8,10 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -20,14 +23,22 @@ import (
 )
 
 type auditListingStoreFake struct {
-	events     *[]string
-	list       []*model.AuditEvent
-	input      store.AuditListOptions
-	self       []*store.AuditSelfEntry
-	selfInput  store.AuditSelfListOptions
-	count      int
-	countInput store.AuditSelfListOptions
-	err        error
+	events         *[]string
+	list           []*model.AuditEvent
+	input          store.AuditListOptions
+	self           []*store.AuditSelfEntry
+	selfInput      store.AuditSelfListOptions
+	count          int
+	countInput     store.AuditSelfListOptions
+	listCount      int
+	listCountInput store.AuditListOptions
+	err            error
+}
+
+func (s *auditListingStoreFake) Count(_ context.Context, options store.AuditListOptions, maximum int) (int, error) {
+	*s.events = append(*s.events, "count-audits")
+	s.listCountInput = options
+	return min(max(s.listCount, len(s.list)), maximum), s.err
 }
 
 func (s *auditListingStoreFake) ListSelf(_ context.Context, options store.AuditSelfListOptions) ([]*store.AuditSelfEntry, error) {
@@ -134,8 +145,9 @@ func TestAuditListingAuthorizesOnceThenReads(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got.Items, 1, "result/input = %#v / %#v", got, persistence.input)
 	require.Equal(t, 11, persistence.input.Limit, "the read probes one past the page; result/input = %#v / %#v", got, persistence.input)
-	// Contract: authorization precedes the read.
-	require.Equal(t, []string{"authorize-view", "list-audits"}, events)
+	// Contract: authorization precedes the read, and the first page then counts.
+	require.Equal(t, []string{"authorize-view", "list-audits", "count-audits"}, events)
+	require.Equal(t, PageTotal{Counted: true, Total: 1}, got.PageTotal)
 }
 
 func TestAuditListingFailsClosedWhenAuthorizationReturnsZeroVisibility(t *testing.T) {
@@ -185,4 +197,74 @@ func TestAuditListingReportsMoreOnlyWhenTheProbeRowExists(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, rows[:2], more.Items)
 	require.True(t, more.HasMore)
+}
+
+func TestAuditListingPassesCreatedRangeAndRejectsAnEmptyOne(t *testing.T) {
+	t.Parallel()
+	since, until := model.TimeFromMillis(100), model.TimeFromMillis(200)
+	events := []string{}
+	persistence := &auditListingStoreFake{events: &events}
+	service := newAuditListingService(auditListingServiceDependencies{Audits: persistence, Authorization: &auditListingAuthorizerFake{
+		events: &events, scope: store.AuditVisibilityScope{InstitutionWide: true},
+	}})
+	_, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{Limit: 10, Since: since, Until: until})
+	require.NoError(t, err)
+	require.True(t, since.Equal(persistence.input.Since), "Since = %v", persistence.input.Since)
+	require.True(t, until.Equal(persistence.input.Until), "Until = %v", persistence.input.Until)
+
+	for name, query := range map[string]ListAuditEventsQuery{
+		"equal":    {Limit: 10, Since: since, Until: since},
+		"reversed": {Limit: 10, Since: until, Until: since},
+	} {
+		t.Run(name, func(t *testing.T) {
+			events = events[:0]
+			_, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, query)
+			require.True(t, apperror.Is(err, "audit.query.invalid"), "error = %v", err)
+			require.Equal(t, []string{"authorize-view"}, events, "an empty range must not read")
+		})
+	}
+}
+
+// TestAccountDisableReasonReachesOnlyInstitutionAuditReaders proves the
+// optional disable reason, kept only in audit parameters, stays with
+// institution-wide readers: the Academic Unit projection drops parameters,
+// and the self history carries none at all.
+func TestAccountDisableReasonReachesOnlyInstitutionAuditReaders(t *testing.T) {
+	t.Parallel()
+	rootID := model.NewAcademicUnitID()
+	parameters := json.RawMessage(`{"operation":"disable_account","value":{"user_id":"u","disabled":true,"reason":"Left the institution"}}`)
+	event := &model.AuditEvent{
+		ID: model.NewAuditEventID(), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100),
+		Action: string(model.ActionUserManage), Resource: model.Resource{Type: model.ResourceUser, ID: model.NewUserID().String()},
+		ScopeType: model.RoleScopeAcademicUnit, ScopeID: rootID.String(), Status: model.AuditStatusSuccess,
+		Parameters: parameters,
+	}
+	for name, test := range map[string]struct {
+		scope      store.AuditVisibilityScope
+		wantReason bool
+	}{
+		"institution": {scope: store.AuditVisibilityScope{InstitutionWide: true}, wantReason: true},
+		"academic unit": {scope: store.AuditVisibilityScope{
+			AcademicUnitRootIDs: []model.AcademicUnitID{rootID}, AllowedActions: []string{string(model.ActionUserManage)},
+		}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			events := []string{}
+			service := newAuditListingService(auditListingServiceDependencies{
+				Audits:        &auditListingStoreFake{events: &events, list: []*model.AuditEvent{event}},
+				Authorization: &auditListingAuthorizerFake{events: &events, scope: test.scope},
+			})
+			got, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{Limit: 10})
+			require.NoError(t, err)
+			require.Len(t, got.Items, 1)
+			require.Equal(t, test.wantReason, bytes.Contains(got.Items[0].Parameters, []byte(`"reason"`)), "parameters = %s", got.Items[0].Parameters)
+			require.JSONEq(t, string(parameters), string(event.Parameters), "the projection mutated the stored event")
+		})
+	}
+	for _, shape := range []reflect.Type{reflect.TypeFor[SelfAuditEvent](), reflect.TypeFor[store.AuditSelfEntry]()} {
+		for field := range shape.Fields() {
+			require.NotContains(t, []string{"Parameters", "Reason"}, field.Name, "%s carries audit parameters", shape)
+		}
+	}
 }

@@ -49,10 +49,20 @@ type jobResponse struct {
 	MaximumAttempts int                  `json:"maximum_attempts"`
 	Progress        *jobProgressResponse `json:"progress,omitempty"`
 	Revision        int64                `json:"revision"`
+	// CreatedByUserID and CreatedByDisplayName name the operator who started
+	// the Job; both are omitted for recurring and system work.
+	CreatedByUserID      string `json:"created_by_user_id,omitempty"`
+	CreatedByDisplayName string `json:"created_by_display_name,omitempty"`
+	Subject              string `json:"subject,omitempty"`
 }
+
+// jobListResponse is the collection envelope; the first page also carries the
+// total (see countedListResponse).
 type jobListResponse struct {
-	Items      []jobResponse `json:"items"`
-	NextCursor string        `json:"next_cursor,omitempty"`
+	Items             []jobResponse `json:"items"`
+	NextCursor        string        `json:"next_cursor,omitempty"`
+	Total             *int          `json:"total,omitempty"`
+	TotalIsLowerBound *bool         `json:"total_is_lower_bound,omitempty"`
 }
 type jobAttemptResponse struct {
 	ID              string                 `json:"id"`
@@ -119,6 +129,10 @@ func (m jobResourceModule) list(request operationRequest) (operationResult, erro
 		if err != nil {
 			return operationResult{}, unpresentableResult(err)
 		}
+	}
+	total := app.PageTotal{Counted: page.Counted, Total: page.Total, TotalIsLowerBound: page.TotalIsLowerBound}
+	if response.Total, response.TotalIsLowerBound, err = pageTotalMembers(total, !query.BeforeID.IsZero()); err != nil {
+		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, response), nil
 }
@@ -263,7 +277,8 @@ func jobAttemptCursorSpec() opaqueCursorSpec[jobAttemptCursor] {
 	}
 }
 func jobResponseFromApplication(view job.View) jobResponse {
-	response := jobResponse{ID: view.ID.String(), Type: view.Type, Status: view.Status, CreatedAt: model.FormatRFC3339(view.CreatedAt), UpdatedAt: model.FormatRFC3339(view.UpdatedAt), AvailableAt: model.FormatRFC3339(view.AvailableAt), PublicErrorCode: view.PublicErrorCode, AttemptCount: view.AttemptCount, MaximumAttempts: view.MaximumAttempts, Revision: view.Revision}
+	response := jobResponse{ID: view.ID.String(), Type: view.Type, Status: view.Status, CreatedAt: model.FormatRFC3339(view.CreatedAt), UpdatedAt: model.FormatRFC3339(view.UpdatedAt), AvailableAt: model.FormatRFC3339(view.AvailableAt), PublicErrorCode: view.PublicErrorCode, AttemptCount: view.AttemptCount, MaximumAttempts: view.MaximumAttempts, Revision: view.Revision,
+		CreatedByUserID: view.CreatedByUserID.String(), CreatedByDisplayName: view.CreatedByDisplayName, Subject: view.Subject}
 	if view.StartedAt.Valid {
 		response.StartedAt = model.FormatRFC3339(view.StartedAt.Time)
 	}

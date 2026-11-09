@@ -14,6 +14,8 @@ paths:
         - Users
       description: >-
         Searches only User profiles visible through the caller's current Institution or scoped relationships, ordered by canonical username and identity. Disabled Users remain concealed unless an Institution-wide user viewer explicitly requests them.
+        Each item carries a `summary`: the User's current Affiliations with the current Academic Units the caller can see, and, for a caller holding role_binding.view, the current Role Bindings inside that authority's scopes, each list bounded and followed by a count of the rest.
+        The first page, read without a cursor, also reports `total`: the Users the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -49,6 +51,31 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: affiliation
+          in: query
+          required: false
+          description: >-
+            Keeps Users holding a current Affiliation of any listed kind. Repeat the parameter to accept several kinds; a kind may appear once. The filter narrows the caller's visibility and never widens it.
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            maxItems: 4
+            items:
+              type: string
+              enum:
+                - student
+                - teacher
+                - staff
+                - external
+        - name: academic_unit_id
+          in: query
+          required: false
+          description: >-
+            Keeps Users with a current membership in this Academic Unit or one of its descendants. A unit outside the caller's user.view scope answers an empty page rather than an error.
+          schema:
+            $ref: '#/components/schemas/ID'
         - $ref: '#/components/parameters/PageLimit'
         - $ref: '#/components/parameters/PageCursor'
       responses:
@@ -272,6 +299,8 @@ components:
             $ref: '#/components/schemas/UserProfileListResponse'
           example:
             items: []
+            total: 0
+            total_is_lower_bound: false
   schemas:
     CurrentUserContextResponse:
       type: object
@@ -386,9 +415,182 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/UserProfileResponse'
+            $ref: '#/components/schemas/UserDirectoryEntryResponse'
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
+        total:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            Users matching the filters and the caller's visibility across every page, present only on the
+            first page. At 10,000 counting stops and `total_is_lower_bound` is true.
+        total_is_lower_bound:
+          type: boolean
+          description: True when `total` reached the 10,000 bound and there may be more. Present with `total`.
+    UserDirectoryEntryResponse:
+      type: object
+      additionalProperties: false
+      description: >-
+        One User directory item: the User profile projection the caller may read, with the same field rules as
+        UserProfileResponse, and a bounded summary of who the User is in the Institution.
+      required:
+        - id
+        - created_at
+        - updated_at
+        - username
+        - display_name
+        - first_name
+        - last_name
+        - profile_picture_url
+        - profile_picture_kind
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        archived_at:
+          type: string
+          format: date-time
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        email_verified:
+          type: boolean
+        display_name:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        locale:
+          type: string
+        timezone:
+          type: string
+        last_login_at:
+          type: string
+          format: date-time
+        last_activity_at:
+          type: string
+          format: date-time
+        disabled_at:
+          type: string
+          format: date-time
+        profile_picture_url:
+          type: string
+        profile_picture_changed_at:
+          type: string
+          format: date-time
+          description: >-
+            Time of the latest upload or removal. It is not a sign that a custom picture exists; use
+            profile_picture_kind.
+        profile_picture_kind:
+          $ref: '#/components/schemas/ProfilePictureKind'
+        summary:
+          $ref: '#/components/schemas/UserDirectorySummary'
+    UserDirectorySummary:
+      type: object
+      additionalProperties: false
+      description: >-
+        Who the User is, read at the same instant as the page. `affiliations` lists at most three current
+        Affiliations, oldest first. `roles` and `roles_more` are present only when the caller holds
+        role_binding.view somewhere; they list at most three current Role Bindings inside the caller's
+        role_binding.view scopes, oldest first, and a binding outside those scopes is neither listed nor counted.
+      required:
+        - affiliations
+        - affiliations_more
+      properties:
+        affiliations:
+          type: array
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/UserDirectoryAffiliation'
+        affiliations_more:
+          type: integer
+          minimum: 0
+          description: Current Affiliations past the three listed.
+        roles:
+          type: array
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/UserDirectoryRole'
+        roles_more:
+          type: integer
+          minimum: 0
+          description: Visible current Role Bindings past the three listed. Present with `roles`.
+    UserDirectoryAffiliation:
+      type: object
+      additionalProperties: false
+      description: >-
+        One current Affiliation with the User's current Academic Units. A membership is not tied to an
+        Affiliation kind, so every Affiliation carries the same units: at most two, ordered by name, from units the
+        caller's user.view reaches (every unit for Institution-wide user.view).
+      required:
+        - kind
+        - academic_units
+        - academic_units_more
+      properties:
+        kind:
+          type: string
+          enum:
+            - student
+            - teacher
+            - staff
+            - external
+        academic_units:
+          type: array
+          maxItems: 2
+          items:
+            $ref: '#/components/schemas/UserDirectoryAcademicUnit'
+        academic_units_more:
+          type: integer
+          minimum: 0
+          description: Visible current Academic Units past the two listed.
+    UserDirectoryAcademicUnit:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        name:
+          type: string
+          description: The Academic Unit's display name.
+    UserDirectoryRole:
+      type: object
+      additionalProperties: false
+      description: One current Role Binding, named by its Role and the Institution, Academic Unit or Class it is scoped to.
+      required:
+        - role_id
+        - display_name
+        - scope_type
+        - scope_id
+        - scope_name
+      properties:
+        role_id:
+          $ref: '#/components/schemas/ID'
+        display_name:
+          type: string
+          description: The Role's display name.
+        scope_type:
+          type: string
+          enum:
+            - institution
+            - academic_unit
+            - class
+        scope_id:
+          $ref: '#/components/schemas/ID'
+        scope_name:
+          type: string
+          description: The display name of the binding's Institution, Academic Unit or Class.
     UpdateUserProfileRequest:
       description: Partial User presentation update; omitted and explicit null values leave a field unchanged.
       type: object

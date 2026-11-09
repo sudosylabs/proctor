@@ -189,6 +189,29 @@ User-search decision against the Institution; it is not a permission action.
 Authority is derived from current `user.view` and `class.members.view` grants
 before persistence applies the resulting constraints.
 
+Each User directory item carries a bounded summary read at the page's own
+visibility instant. Its current Affiliations need no authority beyond the
+row's visibility, as `GET /users/{id}/affiliations` already shows them; the
+Academic Units beside them are only current memberships inside the caller's
+`user.view` subtrees (every unit Institution-wide, none for Class-roster
+visibility). Its Role summary lists current Role Bindings only inside the
+caller's `role_binding.view` scopes, derived without a separate decision
+record because the collection decision is already audited; a binding outside
+those scopes is neither listed nor counted, and a caller holding
+`role_binding.view` nowhere receives no Role summary. A scoped
+`role_binding.view` holder deliberately sees the display names of the Roles
+bound inside its scope, even Roles `role.view` would not list for it: the
+name says what access the binding grants where the holder already governs.
+
+An Academic Unit's membership listing (`academic_unit.members.view`) names
+each member by display name and username: seeing a unit's members shows who
+they are. The member's email appears only for a caller holding
+Institution-wide `user.view`, the same determination that shows email in the
+User directory. The member's current Role Bindings scoped exactly to the unit
+appear only when the caller holds `role_binding.view` on that unit. Both are
+unaudited predicates that shape the projection; the listing's own
+authorization remains the recorded decision.
+
 Profile-picture mutation uses the narrow `user.profile_picture.manage` action.
 Users have intrinsic access to that action on themselves, subject to their
 credential ceiling; `user.manage` authorizes administrative mutation of

@@ -12,6 +12,7 @@ paths:
       summary: List Invitations within the caller's authorized scope
       description: >-
         Lists bounded safe Invitation metadata visible through the caller's current Institution, Academic Unit, or Class authority. Claims, delivery payloads, recipient secrets, provider state, and acceptance credentials are never returned.
+        The first page, read without a cursor, also reports `total`: the Invitations the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
       tags:
         - Invitations and onboarding
       x-proctor-auth: principal_required
@@ -387,6 +388,8 @@ components:
             $ref: '#/components/schemas/InvitationAdministrationListResponse'
           example:
             items: []
+            total: 0
+            total_is_lower_bound: false
   schemas:
     AcceptStudentClassInvitationRequest:
       type: object
@@ -444,3 +447,13 @@ components:
             $ref: '#/components/schemas/InvitationAdministrationResponse'
         next_cursor:
           type: string
+        total:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            Invitations matching the filters and the caller's visibility across every page, present only on the
+            first page. At 10,000 counting stops and `total_is_lower_bound` is true.
+        total_is_lower_bound:
+          type: boolean
+          description: True when `total` reached the 10,000 bound and there may be more. Present with `total`.

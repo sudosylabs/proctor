@@ -46,8 +46,12 @@ type auditEventResponse struct {
 	IPAddress  string                `json:"ip_address,omitempty"`
 	UserAgent  string                `json:"user_agent,omitempty"`
 	ErrorCode  string                `json:"error_code,omitempty"`
-	// Parameters, prior_state, and result remain application/operator-only and
-	// are intentionally omitted from the public audit list projection.
+	// Reason is the optional account disable reason. Institution-wide readers
+	// receive it; academic-scoped readers never do because their projection
+	// drops parameters.
+	Reason string `json:"reason,omitempty"`
+	// Other parameters, prior_state, and result remain application/operator-only
+	// and are intentionally omitted from the public audit list projection.
 }
 
 type auditResourceResponse struct {
@@ -65,6 +69,7 @@ func auditEventResponseFromModel(event *model.AuditEvent) auditEventResponse {
 		Status: event.Status, RequestID: event.RequestID, NodeID: event.NodeID,
 		ClientType: event.ClientType, AuthMethod: event.AuthMethod,
 		IPAddress: event.IPAddress, UserAgent: event.UserAgent, ErrorCode: event.ErrorCode,
+		Reason: event.AccountDisableReason(),
 	}
 }
 
@@ -96,9 +101,13 @@ func (m auditResourceModule) list(request operationRequest) (operationResult, er
 	if listErr != nil {
 		return operationResult{}, listErr
 	}
-	response, err := newListResponse(page.Items, page.HasMore, auditEventResponseFromModel, func(last *model.AuditEvent) (string, error) {
+	envelope, err := newListResponse(page.Items, page.HasMore, auditEventResponseFromModel, func(last *model.AuditEvent) (string, error) {
 		return encodeAuditCursor(auditCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String()})
 	})
+	if err != nil {
+		return operationResult{}, err
+	}
+	response, err := withPageTotal(envelope, page.PageTotal, !query.BeforeID.IsZero())
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -123,6 +132,18 @@ func auditQueryFromRequest(request *http.Request) (app.ListAuditEventsQuery, err
 		createdAt, _ := model.ParseRFC3339(cursor.CreatedAt)
 		query.BeforeCreatedAt = createdAt
 		query.BeforeID = model.AuditEventID(cursor.ID)
+	}
+	for _, name := range []string{"created_after", "created_before"} {
+		if entries, present := values[name]; present && (len(entries) != 1 || entries[0] == "") {
+			return query, errAuditQuery(name)
+		}
+	}
+	var err error
+	if query.Since, err = optionalAuditTime(values, "created_after"); err != nil {
+		return query, err
+	}
+	if query.Until, err = optionalAuditTime(values, "created_before"); err != nil {
+		return query, err
 	}
 	query.ActorID = model.UserID(values.Get("actor_id"))
 	query.Action = values.Get("action")

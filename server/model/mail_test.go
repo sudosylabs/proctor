@@ -9,6 +9,7 @@ package model
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -129,6 +130,20 @@ func TestMailDeliveryLifecyclePreservesStableRoutingAndDestroysAcceptedPayload(t
 	require.Empty(t, accepted.EncryptedPayload)
 	require.Equal(t, queued.MessageID, accepted.MessageID)
 	require.Equal(t, 2, accepted.AttemptCount)
+}
+
+func TestMailDeliveryFailureCodesAreClosed(t *testing.T) {
+	at := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
+	sending, err := queuedMailDeliveryFixture(at).Start(at.Add(time.Second))
+	require.NoError(t, err)
+	codes := MailPublicFailureCodes()
+	require.True(t, slices.IsSorted(codes), "the catalogue is published sorted")
+	for _, code := range codes {
+		_, err = sending.Fail(code, at.Add(2*time.Second))
+		require.NoError(t, err, "catalogued code %s", code)
+	}
+	_, err = sending.Fail("smtp.550.mailbox_unavailable", at.Add(2*time.Second))
+	require.Error(t, err, "an uncatalogued failure code was recorded")
 }
 
 func TestMailDeliveryExpiryTerminatesQueuedOrSendingAndDestroysPayload(t *testing.T) {

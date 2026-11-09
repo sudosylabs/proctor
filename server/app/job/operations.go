@@ -38,6 +38,13 @@ type View struct {
 	MaximumAttempts int
 	Progress        *model.JobProgress
 	Revision        int64
+	// CreatedByUserID names the operator who started the Job; it is zero for
+	// recurring and system work.
+	CreatedByUserID model.UserID
+	// CreatedByDisplayName and Subject are presentation the application adds
+	// for operators; the engine leaves them empty.
+	CreatedByDisplayName string
+	Subject              string
 }
 
 // AttemptView is the canonical safe Job Attempt projection. Claim ownership,
@@ -54,10 +61,15 @@ type AttemptView struct {
 }
 
 // Page is one page of operator-visible Jobs; HasMore reports that another
-// page follows the last item.
+// page follows the last item. The first page, read without a keyset, sets
+// Counted and carries Total: every operator-visible Job the status filter
+// matches, stopped at store.MaximumListCount, where TotalIsLowerBound is set.
 type Page struct {
-	Items   []View
-	HasMore bool
+	Items             []View
+	HasMore           bool
+	Counted           bool
+	Total             int
+	TotalIsLowerBound bool
 }
 
 // AttemptPage is one page of a Job's attempts; HasMore reports that another
@@ -116,7 +128,8 @@ func (r *Engine) List(ctx context.Context, query ListQuery) (Page, error) {
 			return Page{}, ErrQueryInvalid
 		}
 	}
-	records, err := r.deps.Store.List(ctx, store.JobListOptions{Types: r.operatorTypes(), Statuses: query.Statuses, BeforeCreatedAt: query.BeforeCreatedAt, BeforeID: query.BeforeID, Limit: query.Limit + 1})
+	options := store.JobListOptions{Types: r.operatorTypes(), Statuses: query.Statuses, BeforeCreatedAt: query.BeforeCreatedAt, BeforeID: query.BeforeID, Limit: query.Limit + 1}
+	records, err := r.deps.Store.List(ctx, options)
 	if err != nil {
 		return Page{}, err
 	}
@@ -131,7 +144,27 @@ func (r *Engine) List(ctx context.Context, query ListQuery) (Page, error) {
 			page.Items = append(page.Items, project(record))
 		}
 	}
+	if !query.BeforeID.IsZero() {
+		return page, nil
+	}
+	if page.Total, err = r.deps.Store.Count(ctx, options, store.MaximumListCount); err != nil {
+		return Page{}, err
+	}
+	if page.Total < len(page.Items) || page.Total > store.MaximumListCount {
+		return Page{}, errors.New("job store count contradicts its page")
+	}
+	page.Counted, page.TotalIsLowerBound = true, page.Total == store.MaximumListCount
 	return page, nil
+}
+
+// CountRecentFailures counts the operator-visible failed Jobs last updated
+// within the given span before PostgreSQL time, stopping at maximum.
+func (r *Engine) CountRecentFailures(ctx context.Context, within time.Duration, maximum int) (int, error) {
+	if within <= 0 || maximum < 1 || maximum > store.MaximumListCount {
+		return 0, ErrQueryInvalid
+	}
+	return r.deps.Store.Count(ctx, store.JobListOptions{Types: r.operatorTypes(), Statuses: []model.JobStatus{model.JobStatusFailed},
+		UpdatedWithin: within, Limit: 1}, maximum)
 }
 
 func (r *Engine) Get(ctx context.Context, id model.JobID) (View, error) {
@@ -238,7 +271,7 @@ func (r *Engine) operatorVisible(jobType model.JobType) bool {
 }
 
 func project(record *model.Job) View {
-	view := View{ID: record.ID, Type: record.Type, Status: record.Status, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt, AvailableAt: record.AvailableAt, StartedAt: record.StartedAt, CompletedAt: record.CompletedAt, PublicErrorCode: record.PublicErrorCode, AttemptCount: record.AttemptCount, MaximumAttempts: record.MaximumAttempts, Revision: record.Revision}
+	view := View{ID: record.ID, Type: record.Type, Status: record.Status, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt, AvailableAt: record.AvailableAt, StartedAt: record.StartedAt, CompletedAt: record.CompletedAt, PublicErrorCode: record.PublicErrorCode, AttemptCount: record.AttemptCount, MaximumAttempts: record.MaximumAttempts, Revision: record.Revision, CreatedByUserID: record.CreatedByUserID}
 	if record.Progress != nil {
 		progress := *record.Progress
 		view.Progress = &progress

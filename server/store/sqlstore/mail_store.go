@@ -114,10 +114,10 @@ func insertPreparedMailJob(ctx context.Context, executor sqlxExecutor, job *mode
 	if job.Status != model.JobStatusCanceled || !job.CompletedAt.Valid {
 		return store.NewErrInvalidInput("job", "prepared_mail", nil)
 	}
-	_, err := executor.Exec(ctx, `INSERT INTO jobs (`+jobColumns+`) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?)`,
+	_, err := executor.Exec(ctx, `INSERT INTO jobs (`+jobColumns+`) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)`,
 		job.ID.String(), string(job.Type), string(job.Status), job.CreatedAt, job.UpdatedAt, job.AvailableAt,
 		job.CompletedAt.Time, job.Command, job.PublicErrorCode, job.DedupeKey,
-		string(job.DedupePolicy), job.AttemptCount, job.MaximumAttempts, job.WorkReserved, job.Revision)
+		string(job.DedupePolicy), job.AttemptCount, job.MaximumAttempts, job.WorkReserved, job.Revision, jobInitiator(job))
 	return err
 }
 
@@ -170,53 +170,13 @@ func (s SQLMailStore) GetDelivery(ctx context.Context, id model.MailDeliveryID) 
 }
 
 func (s SQLMailStore) ListDeliveries(ctx context.Context, options store.MailDeliveryListOptions) ([]*model.MailDelivery, error) {
-	if options.Limit < 1 || options.Limit > 201 || len(options.States) > 6 || len(options.TemplateKeys) > 64 ||
-		(options.BeforeCreatedAt.IsZero() != options.BeforeID.IsZero()) ||
-		(!options.BeforeID.IsZero() && !options.BeforeID.IsValid()) ||
-		(!options.CreatedAfter.IsZero() && !options.CreatedBefore.IsZero() && !options.CreatedAfter.Before(options.CreatedBefore)) {
+	if options.Limit < 1 || options.Limit > 201 || (options.BeforeCreatedAt.IsZero() != options.BeforeID.IsZero()) ||
+		(!options.BeforeID.IsZero() && !options.BeforeID.IsValid()) {
 		return nil, store.NewErrInvalidInput("mail_delivery", "list", nil)
 	}
-	conditions := make([]string, 0, 5)
-	arguments := make([]any, 0, len(options.States)+len(options.TemplateKeys)+8)
-	if len(options.States) > 0 {
-		placeholders := make([]string, 0, len(options.States))
-		seen := make(map[model.MailDeliveryState]struct{}, len(options.States))
-		for _, state := range options.States {
-			if !state.IsValid() {
-				return nil, store.NewErrInvalidInput("mail_delivery", "state", nil)
-			}
-			if _, duplicate := seen[state]; duplicate {
-				continue
-			}
-			seen[state] = struct{}{}
-			placeholders = append(placeholders, "?")
-			arguments = append(arguments, string(state))
-		}
-		conditions = append(conditions, "state IN ("+strings.Join(placeholders, ", ")+")")
-	}
-	if len(options.TemplateKeys) > 0 {
-		placeholders := make([]string, 0, len(options.TemplateKeys))
-		seen := make(map[model.MailTemplateKey]struct{}, len(options.TemplateKeys))
-		for _, key := range options.TemplateKeys {
-			if !key.IsValid() {
-				return nil, store.NewErrInvalidInput("mail_delivery", "template_key", nil)
-			}
-			if _, duplicate := seen[key]; duplicate {
-				continue
-			}
-			seen[key] = struct{}{}
-			placeholders = append(placeholders, "?")
-			arguments = append(arguments, string(key))
-		}
-		conditions = append(conditions, "template_key IN ("+strings.Join(placeholders, ", ")+")")
-	}
-	if !options.CreatedAfter.IsZero() {
-		conditions = append(conditions, "created_at >= ?")
-		arguments = append(arguments, model.TimeUTC(options.CreatedAfter))
-	}
-	if !options.CreatedBefore.IsZero() {
-		conditions = append(conditions, "created_at < ?")
-		arguments = append(arguments, model.TimeUTC(options.CreatedBefore))
+	conditions, arguments, err := mailDeliveryListConditions(options)
+	if err != nil {
+		return nil, err
 	}
 	if !options.BeforeCreatedAt.IsZero() {
 		conditions = append(conditions, "(created_at < ? OR (created_at = ? AND id < ?))")
@@ -241,6 +201,76 @@ func (s SQLMailStore) ListDeliveries(ctx context.Context, options store.MailDeli
 		result = append(result, delivery)
 	}
 	return result, nil
+}
+
+// CountDeliveries counts through the same filter as ListDeliveries, without
+// its keyset, order, or limit, reading at most one row past maximum.
+func (s SQLMailStore) CountDeliveries(ctx context.Context, options store.MailDeliveryListOptions, maximum int) (int, error) {
+	if !store.ValidCountMaximum(maximum) {
+		return 0, store.NewErrInvalidInput("mail_delivery", "count", nil)
+	}
+	conditions, arguments, err := mailDeliveryListConditions(options)
+	if err != nil {
+		return 0, err
+	}
+	query := `SELECT 1 FROM mail_deliveries`
+	if len(conditions) > 0 {
+		query += ` WHERE ` + strings.Join(conditions, ` AND `)
+	}
+	return countBoundedSQL(ctx, s.GetMaster(), query, arguments, maximum, "mail deliveries")
+}
+
+// mailDeliveryListConditions validates and builds every ListDeliveries filter
+// but the keyset: states, templates, and the creation range. ListDeliveries
+// and CountDeliveries share it so a total always counts the listed rows.
+func mailDeliveryListConditions(options store.MailDeliveryListOptions) ([]string, []any, error) {
+	if len(options.States) > 6 || len(options.TemplateKeys) > 64 ||
+		(!options.CreatedAfter.IsZero() && !options.CreatedBefore.IsZero() && !options.CreatedAfter.Before(options.CreatedBefore)) {
+		return nil, nil, store.NewErrInvalidInput("mail_delivery", "list", nil)
+	}
+	conditions := make([]string, 0, 5)
+	arguments := make([]any, 0, len(options.States)+len(options.TemplateKeys)+8)
+	if len(options.States) > 0 {
+		placeholders := make([]string, 0, len(options.States))
+		seen := make(map[model.MailDeliveryState]struct{}, len(options.States))
+		for _, state := range options.States {
+			if !state.IsValid() {
+				return nil, nil, store.NewErrInvalidInput("mail_delivery", "state", nil)
+			}
+			if _, duplicate := seen[state]; duplicate {
+				continue
+			}
+			seen[state] = struct{}{}
+			placeholders = append(placeholders, "?")
+			arguments = append(arguments, string(state))
+		}
+		conditions = append(conditions, "state IN ("+strings.Join(placeholders, ", ")+")")
+	}
+	if len(options.TemplateKeys) > 0 {
+		placeholders := make([]string, 0, len(options.TemplateKeys))
+		seen := make(map[model.MailTemplateKey]struct{}, len(options.TemplateKeys))
+		for _, key := range options.TemplateKeys {
+			if !key.IsValid() {
+				return nil, nil, store.NewErrInvalidInput("mail_delivery", "template_key", nil)
+			}
+			if _, duplicate := seen[key]; duplicate {
+				continue
+			}
+			seen[key] = struct{}{}
+			placeholders = append(placeholders, "?")
+			arguments = append(arguments, string(key))
+		}
+		conditions = append(conditions, "template_key IN ("+strings.Join(placeholders, ", ")+")")
+	}
+	if !options.CreatedAfter.IsZero() {
+		conditions = append(conditions, "created_at >= ?")
+		arguments = append(arguments, model.TimeUTC(options.CreatedAfter))
+	}
+	if !options.CreatedBefore.IsZero() {
+		conditions = append(conditions, "created_at < ?")
+		arguments = append(arguments, model.TimeUTC(options.CreatedBefore))
+	}
+	return conditions, arguments, nil
 }
 
 // StartDelivery moves a queued delivery at the expected revision to sending at the input instant.

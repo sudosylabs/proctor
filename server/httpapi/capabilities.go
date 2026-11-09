@@ -40,7 +40,7 @@ type SessionAdministrationApplication interface {
 type UserProfileApplication interface {
 	GetCurrentUserContext(context.Context, invocation.Invocation) (*app.CurrentUserContextView, error)
 	ListCandidateExamActivity(context.Context, invocation.Invocation, attempt.CandidateActivityQuery) (attempt.CandidateActivityPage, error)
-	SearchUsers(context.Context, invocation.Invocation, app.SearchUsersQuery) (app.Page[*model.User], error)
+	SearchUsers(context.Context, invocation.Invocation, app.SearchUsersQuery) (app.CountedPage[app.UserDirectoryEntry], error)
 	GetUserProfile(context.Context, invocation.Invocation, app.GetUserProfileQuery) (*model.User, error)
 	UpdateUserProfile(context.Context, invocation.Invocation, app.UpdateUserProfileCommand) (*model.User, error)
 	ChangeUserEmail(context.Context, invocation.Invocation, app.ChangeUserEmailCommand) (*app.UserEmailState, error)
@@ -160,7 +160,7 @@ type MFA interface {
 }
 
 type AuditListingApplication interface {
-	ListAuditEvents(context.Context, invocation.Invocation, app.ListAuditEventsQuery) (app.Page[*model.AuditEvent], error)
+	ListAuditEvents(context.Context, invocation.Invocation, app.ListAuditEventsQuery) (app.CountedPage[*model.AuditEvent], error)
 	ListSelfAuditEvents(context.Context, invocation.Invocation, app.ListSelfAuditEventsQuery) (app.SelfAuditPage, error)
 }
 
@@ -206,6 +206,7 @@ type RoleBindingApplication interface {
 type Application interface {
 	Authenticator
 	SearchApplication
+	AdministrationCountsApplication
 	authenticationEntryApplication
 	DesktopAuthorization
 	DesktopReauthentication

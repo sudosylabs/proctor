@@ -91,6 +91,7 @@ type App struct {
 	*bootstrapService
 	*academicAdministrationBatchService
 	*searchService
+	*administrationCountsService
 	*realtimeService
 	*realtimeAdmissionService
 	jobs *job.Engine
@@ -152,7 +153,28 @@ func New(deps Dependencies) (*App, error) {
 		Exams: examinations.authoring, Users: profiles.userProfiles,
 		ClassAuthorization: access.authorization, Classes: deps.Store.Class(),
 	})
+	administration.counts = newAdministrationCountsService(administrationCountsDependencies(identity, jobs))
 	return assembleApplication(deps, foundation, identity, access, examinations, profiles, jobs, administration), nil
+}
+
+// administrationCountsDependencies projects the summary's counters from the
+// services that exist; a reduced lifecycle test graph may lack some, and
+// their counts are then left out.
+func administrationCountsDependencies(identity identityConstruction, jobs jobConstruction) administrationCountsServiceDependencies {
+	var deps administrationCountsServiceDependencies
+	if identity.invitations != nil {
+		deps.Invitations = identity.invitations
+	}
+	if identity.onboardingImports != nil {
+		deps.Imports = identity.onboardingImports
+	}
+	if jobs.operations != nil {
+		deps.Jobs = jobs.operations
+	}
+	if jobs.mail != nil {
+		deps.Mail = jobs.mail
+	}
+	return deps
 }
 
 // ErrAuthenticationCacheMiss and ErrAuthenticationCacheNotStored are the

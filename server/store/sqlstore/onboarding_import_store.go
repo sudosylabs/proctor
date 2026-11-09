@@ -61,13 +61,14 @@ type onboardingImportRow struct {
 	ParseJobID                string         `db:"parse_job_id"`
 	ExecutionJobID            sql.NullString `db:"execution_job_id"`
 	FailureCode               string         `db:"failure_code"`
+	FileName                  sql.NullString `db:"file_name"`
 	CreatedAt                 time.Time      `db:"created_at"`
 	UpdatedAt                 time.Time      `db:"updated_at"`
 	ExpiresAt                 time.Time      `db:"expires_at"`
 	Revision                  int64          `db:"revision"`
 }
 
-const onboardingImportColumns = `id,mode,state,scope_type,scope_id,role_id,source_period_id,source_class_id,destination_period_id,destination_class_id,source_period_revision,source_class_revision,destination_period_revision,destination_class_revision,effective_at,actor_user_id,principal,preview_digest,ignored_headers,total_rows,valid_rows,invalid_rows,succeeded_rows,no_op_rows,failed_rows,skipped_rows,commit_policy,commit_expected_revision,commit_at,commit_key_digest,parse_job_id,execution_job_id,failure_code,created_at,updated_at,expires_at,revision`
+const onboardingImportColumns = `id,mode,state,scope_type,scope_id,role_id,source_period_id,source_class_id,destination_period_id,destination_class_id,source_period_revision,source_class_revision,destination_period_revision,destination_class_revision,effective_at,actor_user_id,principal,preview_digest,ignored_headers,total_rows,valid_rows,invalid_rows,succeeded_rows,no_op_rows,failed_rows,skipped_rows,commit_policy,commit_expected_revision,commit_at,commit_key_digest,parse_job_id,execution_job_id,failure_code,file_name,created_at,updated_at,expires_at,revision`
 
 type onboardingImportDetailRow struct {
 	ImportID                        string                          `db:"import_id"`
@@ -137,11 +138,11 @@ func (s SQLInvitationStore) CreateOnboardingImport(ctx context.Context, input *s
 		if _, err := insertQueuedJob(ctx, tx, input.ParseJob, false); err != nil {
 			return nil, translateError("job", input.ParseJob.ID.String(), err)
 		}
-		_, err := tx.Exec(ctx, `INSERT INTO onboarding_imports (`+onboardingImportColumns+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'{}',0,0,0,0,0,0,0,NULL,NULL,NULL,NULL,?,NULL,'',?,?,?,1)`,
+		_, err := tx.Exec(ctx, `INSERT INTO onboarding_imports (`+onboardingImportColumns+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'{}',0,0,0,0,0,0,0,NULL,NULL,NULL,NULL,?,NULL,'',?,?,?,?,1)`,
 			value.ID.String(), string(value.Mode), string(value.State), string(value.ScopeType), value.ScopeID, nullableID(value.RoleID.String()),
 			nullableID(value.SourcePeriodID.String()), nullableID(value.SourceClassID.String()), nullableID(value.DestinationPeriodID.String()), nullableID(value.DestinationClassID.String()),
 			value.SourcePeriodRevision, value.SourceClassRevision, value.DestinationPeriodRevision, value.DestinationClassRevision, effectiveAt,
-			value.ActorUserID.String(), principal, "", value.ParseJobID.String(), value.CreatedAt, value.UpdatedAt, value.ExpiresAt)
+			value.ActorUserID.String(), principal, "", value.ParseJobID.String(), sql.NullString{String: value.FileName, Valid: value.FileName != ""}, value.CreatedAt, value.UpdatedAt, value.ExpiresAt)
 		if err != nil {
 			return nil, translateError("onboarding_import", value.ID.String(), err)
 		}
@@ -167,7 +168,9 @@ func validOnboardingImport(value *store.OnboardingImport) bool {
 		model.ValidateOnboardingImportScope(value.Mode, value.ScopeType, value.ScopeID) == nil && value.ParseJobID.IsValid() &&
 		!value.CreatedAt.IsZero() && value.UpdatedAt.Equal(value.CreatedAt) && value.ExpiresAt.Equal(value.CreatedAt.Add(onboardingImportRetention)) && value.Revision == 1 &&
 		((value.Mode == model.OnboardingImportTeacherAcademicUnit && value.RoleID.IsValid()) || (value.Mode != model.OnboardingImportTeacherAcademicUnit && value.RoleID.IsZero())) &&
-		validOnboardingImportProgressionPackage(value)
+		validOnboardingImportProgressionPackage(value) &&
+		((value.Mode == model.OnboardingImportStudentProgression && value.FileName == "") ||
+			(value.Mode != model.OnboardingImportStudentProgression && (value.FileName == "" || model.ValidOnboardingImportFileName(value.FileName))))
 }
 
 func validOnboardingImportProgressionPackage(value *store.OnboardingImport) bool {
@@ -194,6 +197,116 @@ func (s SQLInvitationStore) GetOnboardingImport(ctx context.Context, id model.On
 		return nil, translateError("onboarding_import", id.String(), err)
 	}
 	return row.value()
+}
+
+// ListOnboardingImports returns one keyset page of unexpired administrative
+// imports inside the visibility scope, newest first. The scope predicate
+// matches the single-import onboarding_batch.view decision: Institution-scoped
+// imports need Institution-wide authority, Academic Unit imports lie in a
+// named subtree, and Class imports are named exactly or lie under a named
+// subtree through their Programme.
+func (s SQLInvitationStore) ListOnboardingImports(ctx context.Context, options store.OnboardingImportListOptions) ([]*store.OnboardingImport, error) {
+	visibility := options.Visibility
+	states := make([]string, 0, len(options.States))
+	for _, state := range options.States {
+		if !state.IsValid() {
+			return nil, store.NewErrInvalidInput("onboarding_import", "list_options", nil)
+		}
+		states = append(states, string(state))
+	}
+	if options.Limit < 1 || options.Limit > store.OnboardingImportListMaximum || len(states) > 8 ||
+		len(visibility.AcademicUnitRootIDs) > 256 || len(visibility.ClassIDs) > 256 ||
+		(!visibility.InstitutionWide && len(visibility.AcademicUnitRootIDs) == 0 && len(visibility.ClassIDs) == 0) ||
+		!validVisibilityIDs(visibility.AcademicUnitRootIDs) || !validVisibilityIDs(visibility.ClassIDs) ||
+		(options.BeforeID.IsValid() != !options.BeforeCreatedAt.IsZero()) || (!options.BeforeID.IsZero() && !options.BeforeID.IsValid()) {
+		return nil, store.NewErrInvalidInput("onboarding_import", "list_options", nil)
+	}
+	conditions := []string{"oi.mode<>'student_progression'", "oi.expires_at>CURRENT_TIMESTAMP"}
+	args := []any{}
+	if !visibility.InstitutionWide {
+		parts := []string{}
+		if len(visibility.AcademicUnitRootIDs) > 0 {
+			parts = append(parts, `(oi.scope_type IN ('academic_unit','class') AND EXISTS (
+				WITH RECURSIVE descendants AS (
+					SELECT id FROM academic_units WHERE id=ANY(?)
+					UNION ALL SELECT child.id FROM academic_units child JOIN descendants parent ON child.parent_id=parent.id
+				) SELECT 1 FROM descendants d WHERE (oi.scope_type='academic_unit' AND d.id=oi.scope_id) OR (oi.scope_type='class' AND d.id=(
+					SELECT p.academic_unit_id FROM classes c JOIN programme_levels pl ON pl.id=c.programme_level_id
+					JOIN programmes p ON p.id=pl.programme_id WHERE c.id=oi.scope_id))
+			))`)
+			args = append(args, pq.Array(idStrings(visibility.AcademicUnitRootIDs)))
+		}
+		if len(visibility.ClassIDs) > 0 {
+			parts = append(parts, `(oi.scope_type='class' AND oi.scope_id=ANY(?))`)
+			args = append(args, pq.Array(idStrings(visibility.ClassIDs)))
+		}
+		conditions = append(conditions, "("+strings.Join(parts, " OR ")+")")
+	}
+	if len(states) > 0 {
+		conditions = append(conditions, "oi.state=ANY(?)")
+		args = append(args, pq.Array(states))
+	}
+	if options.BeforeID.IsValid() {
+		before := model.TimeUTC(options.BeforeCreatedAt)
+		conditions = append(conditions, "(oi.created_at<? OR (oi.created_at=? AND oi.id<?))")
+		args = append(args, before, before, options.BeforeID.String())
+	}
+	args = append(args, options.Limit)
+	rows := []onboardingImportRow{}
+	if err := s.GetMaster().Select(ctx, &rows, `SELECT `+onboardingImportColumns+` FROM onboarding_imports oi WHERE `+
+		strings.Join(conditions, " AND ")+` ORDER BY oi.created_at DESC,oi.id DESC LIMIT ?`, args...); err != nil {
+		return nil, fmt.Errorf("list onboarding imports: %w", err)
+	}
+	values := make([]*store.OnboardingImport, 0, len(rows))
+	for _, row := range rows {
+		value, err := row.value()
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, value)
+	}
+	return values, nil
+}
+
+// CountOpenOnboardingImports counts unexpired, non-terminal administrative
+// imports within the visibility, reading at most one row past maximum. The
+// expiry test matches GetOnboardingImport, so a counted import can be read.
+func (s SQLInvitationStore) CountOpenOnboardingImports(ctx context.Context, visibility store.OnboardingImportVisibilityScope, maximum int) (int, error) {
+	if !store.ValidCountMaximum(maximum) || len(visibility.AcademicUnitRootIDs) > 256 || len(visibility.ClassIDs) > 256 ||
+		!validVisibilityIDs(visibility.AcademicUnitRootIDs) || !validVisibilityIDs(visibility.ClassIDs) {
+		return 0, store.NewErrInvalidInput("onboarding_import", "count", nil)
+	}
+	conditions := []string{
+		`mode<>'student_progression'`,
+		`state IN ('uploading','parsing','preview_ready','executing')`,
+		`expires_at>CURRENT_TIMESTAMP`,
+	}
+	args := []any{}
+	if !visibility.InstitutionWide {
+		parts := []string{"FALSE"}
+		if len(visibility.AcademicUnitRootIDs) > 0 {
+			parts = append(parts, `(scope_type='academic_unit' AND EXISTS (
+				WITH RECURSIVE descendants AS (
+					SELECT id FROM academic_units WHERE id=ANY(?)
+					UNION ALL SELECT child.id FROM academic_units child JOIN descendants parent ON child.parent_id=parent.id
+				) SELECT 1 FROM descendants WHERE id=scope_id
+			))`, `(scope_type='class' AND EXISTS (
+				WITH RECURSIVE descendants AS (
+					SELECT id FROM academic_units WHERE id=ANY(?)
+					UNION ALL SELECT child.id FROM academic_units child JOIN descendants parent ON child.parent_id=parent.id
+				) SELECT 1 FROM classes c JOIN programme_levels pl ON pl.id=c.programme_level_id
+				JOIN programmes p ON p.id=pl.programme_id WHERE c.id=scope_id AND p.academic_unit_id IN (SELECT id FROM descendants)
+			))`)
+			roots := pq.Array(idStrings(visibility.AcademicUnitRootIDs))
+			args = append(args, roots, roots)
+		}
+		if len(visibility.ClassIDs) > 0 {
+			parts = append(parts, `(scope_type='class' AND scope_id=ANY(?))`)
+			args = append(args, pq.Array(idStrings(visibility.ClassIDs)))
+		}
+		conditions = append(conditions, "("+strings.Join(parts, " OR ")+")")
+	}
+	return countBoundedSQL(ctx, s.GetMaster(), `SELECT 1 FROM onboarding_imports WHERE `+strings.Join(conditions, " AND "), args, maximum, "onboarding imports")
 }
 
 func (s SQLInvitationStore) ListStudentProgressionRoster(ctx context.Context, classID model.ClassID, at time.Time, limit int) ([]*model.ClassMember, error) {
@@ -253,6 +366,9 @@ func (row onboardingImportRow) value() (*store.OnboardingImport, error) {
 	}
 	if row.ExecutionJobID.Valid {
 		value.ExecutionJobID = model.JobID(row.ExecutionJobID.String)
+	}
+	if row.FileName.Valid {
+		value.FileName = row.FileName.String
 	}
 	return value, nil
 }

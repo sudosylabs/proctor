@@ -15,7 +15,7 @@ paths:
       tags:
         - Membership and progression
       description: >-
-        Lists authorized current or historical organizational memberships for one Academic Unit at the requested effective instant. Membership describes a relationship only and is never presented as an unrestricted permission grant. Bounded pages use immutable (user_id, id) ordering. The next_cursor freezes the effective instant or history filter, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests.
+        Lists authorized current or historical organizational memberships for one Academic Unit at the requested effective instant. Membership describes a relationship only and is never presented as an unrestricted permission grant. Bounded pages use immutable (user_id, id) ordering. The next_cursor freezes the effective instant or history filter, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests. Each item names the member in `user`, with email only for Institution-wide user.view, and, for a caller holding role_binding.view on this unit, lists the member's current Role Bindings scoped exactly to it in `roles_here`.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -156,9 +156,86 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/AcademicUnitMemberResponse'
+            $ref: '#/components/schemas/AcademicUnitMemberListItemResponse'
         next_cursor:
           $ref: '#/components/schemas/NextCursor'
+    AcademicUnitMemberListItemResponse:
+      type: object
+      additionalProperties: false
+      description: >-
+        One membership with who the member is. `roles_here` and `roles_here_more` are present only when the caller
+        holds role_binding.view on this Academic Unit.
+      required:
+        - id
+        - created_at
+        - updated_at
+        - academic_unit_id
+        - user_id
+        - start_at
+        - user
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        archived_at:
+          type: string
+          format: date-time
+        academic_unit_id:
+          $ref: '#/components/schemas/ID'
+        user_id:
+          $ref: '#/components/schemas/ID'
+        start_at:
+          type: string
+          format: date-time
+        end_at:
+          type: string
+          format: date-time
+        user:
+          $ref: '#/components/schemas/AcademicUnitMemberUser'
+        roles_here:
+          type: array
+          maxItems: 5
+          description: The member's current Role Bindings scoped exactly to this Academic Unit, oldest first.
+          items:
+            $ref: '#/components/schemas/AcademicUnitMemberRole'
+        roles_here_more:
+          type: integer
+          minimum: 0
+          description: Current Role Bindings on this Academic Unit past the five listed. Present with `roles_here`.
+    AcademicUnitMemberUser:
+      type: object
+      additionalProperties: false
+      description: >-
+        Who the member is. Seeing a unit's members shows their display name and username; email is present only for
+        a caller holding Institution-wide user.view.
+      required:
+        - display_name
+        - username
+      properties:
+        display_name:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+    AcademicUnitMemberRole:
+      type: object
+      additionalProperties: false
+      required:
+        - role_id
+        - display_name
+      properties:
+        role_id:
+          $ref: '#/components/schemas/ID'
+        display_name:
+          type: string
+          description: The Role's display name.
     CreateAcademicUnitMemberRequest:
       type: object
       additionalProperties: false

@@ -299,21 +299,10 @@ func (s SQLUserStore) List(
 	if !validUserListOptions(options) {
 		return nil, store.NewErrInvalidInput("user", "list_options", nil)
 	}
-	query := s.usersQuery.Where(sq.Eq{"users.archived_at": nil})
-	if options.ID != "" {
-		query = query.Where(sq.Eq{"users.id": options.ID})
-	}
-	query, err := filterUserListVisibility(query, options.Visibility)
+	query, err := filterUserList(s.usersQuery, options)
 	if err != nil {
 		return nil, err
 	}
-	if !options.IncludeDisabled || !options.Visibility.InstitutionWide {
-		query = query.Where(sq.Eq{"users.disabled_at": nil})
-	}
-	if options.MissingDefaultProfilePicture {
-		query = query.Where(sq.Eq{"users.default_profile_picture_file_id": nil})
-	}
-	query = filterUserListSearch(query, options)
 	if options.AfterUsername != "" {
 		query = query.Where(
 			"(users.username > ? OR (users.username = ? AND users.id > ?))",
@@ -338,17 +327,125 @@ func (s SQLUserStore) List(
 	return users, nil
 }
 
+// Count counts through the same filter as List, without its keyset, order,
+// or limit, reading at most one row past maximum.
+func (s SQLUserStore) Count(ctx context.Context, options store.UserListOptions, maximum int) (int, error) {
+	options.AfterUsername, options.AfterID, options.Limit = "", "", 1
+	if !validUserListOptions(options) || !store.ValidCountMaximum(maximum) {
+		return 0, store.NewErrInvalidInput("user", "count_options", nil)
+	}
+	query, err := filterUserList(sq.Select("users.id").From("users"), options)
+	if err != nil {
+		return 0, err
+	}
+	return countBounded(ctx, s.GetMaster(), query, maximum, "users")
+}
+
+// filterUserList applies every List filter but the keyset: archived and
+// disabled Users, the exact ID, visibility, search, Affiliation, and Academic
+// Unit. List and Count share it so a total always counts the listed rows.
+func filterUserList(query sq.SelectBuilder, options store.UserListOptions) (sq.SelectBuilder, error) {
+	query = query.Where(sq.Eq{"users.archived_at": nil})
+	if options.ID != "" {
+		query = query.Where(sq.Eq{"users.id": options.ID})
+	}
+	query, err := filterUserListVisibility(query, options.Visibility)
+	if err != nil {
+		return query, err
+	}
+	if !options.IncludeDisabled || !options.Visibility.InstitutionWide {
+		query = query.Where(sq.Eq{"users.disabled_at": nil})
+	}
+	if options.MissingDefaultProfilePicture {
+		query = query.Where(sq.Eq{"users.default_profile_picture_file_id": nil})
+	}
+	query = filterUserListSearch(query, options)
+	query = filterUserListAffiliations(query, options)
+	return filterUserListAcademicUnit(query, options), nil
+}
+
 // validUserListOptions reports whether the list page size, cursor and visibility bounds are acceptable.
 func validUserListOptions(options store.UserListOptions) bool {
 	return !(options.Limit < 1 || options.Limit > 201 ||
 		(options.ID != "" && !options.ID.IsValid()) ||
 		(options.AfterUsername == "") != (options.AfterID == "") ||
 		(options.AfterID != "" && !options.AfterID.IsValid()) ||
+		!validUserListMembershipFilters(options) ||
 		len(options.Visibility.ClassIDs)+len(options.Visibility.AcademicUnitRootIDs)+
 			len(options.Visibility.ClassMemberAcademicUnitRootIDs) > 256 ||
 		!validVisibilityIDs(options.Visibility.ClassIDs) ||
 		!validVisibilityIDs(options.Visibility.AcademicUnitRootIDs) ||
 		!validVisibilityIDs(options.Visibility.ClassMemberAcademicUnitRootIDs))
+}
+
+// validUserListMembershipFilters reports whether the Affiliation and Academic
+// Unit filters are canonical and carry the instant they are evaluated at.
+func validUserListMembershipFilters(options store.UserListOptions) bool {
+	if len(options.AffiliationKinds) == 0 && options.AcademicUnitID == "" {
+		return true
+	}
+	if options.Visibility.ActiveAt.IsZero() || len(options.AffiliationKinds) > 4 ||
+		(options.AcademicUnitID != "" && !options.AcademicUnitID.IsValid()) {
+		return false
+	}
+	for _, kind := range options.AffiliationKinds {
+		if !kind.IsValid() {
+			return false
+		}
+	}
+	return true
+}
+
+// filterUserListAffiliations keeps Users holding a current Affiliation of one
+// of the requested kinds.
+func filterUserListAffiliations(query sq.SelectBuilder, options store.UserListOptions) sq.SelectBuilder {
+	if len(options.AffiliationKinds) == 0 {
+		return query
+	}
+	kinds := make([]string, 0, len(options.AffiliationKinds))
+	for _, kind := range options.AffiliationKinds {
+		kinds = append(kinds, string(kind))
+	}
+	activeAt := model.TimeUTC(options.Visibility.ActiveAt)
+	return query.Where(`EXISTS (
+		SELECT 1 FROM affiliations af
+		WHERE af.user_id = users.id AND af.kind = ANY(?) AND af.archived_at IS NULL
+		AND af.start_at <= ? AND (af.end_at IS NULL OR af.end_at > ?)
+	)`, pq.Array(kinds), activeAt, activeAt)
+}
+
+// filterUserListAcademicUnit keeps Users with a current membership in the
+// requested Academic Unit or one of its unarchived descendants. A scoped
+// visibility first requires the unit inside its own user.view subtrees, so an
+// out-of-scope unit answers an empty page rather than its membership.
+func filterUserListAcademicUnit(query sq.SelectBuilder, options store.UserListOptions) sq.SelectBuilder {
+	if options.AcademicUnitID == "" {
+		return query
+	}
+	if !options.Visibility.InstitutionWide {
+		query = query.Where(`EXISTS (
+			WITH RECURSIVE filter_scope_units AS (
+				SELECT id FROM academic_units WHERE id = ANY(?) AND archived_at IS NULL
+				UNION ALL SELECT child.id FROM academic_units child
+				JOIN filter_scope_units parent ON child.parent_id = parent.id
+				WHERE child.archived_at IS NULL
+			) SELECT 1 FROM filter_scope_units WHERE id = ?
+		)`, pq.Array(idStrings(options.Visibility.AcademicUnitRootIDs)), options.AcademicUnitID)
+	}
+	activeAt := model.TimeUTC(options.Visibility.ActiveAt)
+	return query.Where(`EXISTS (
+		SELECT 1 FROM academic_unit_members filter_aum
+		WHERE filter_aum.user_id = users.id AND filter_aum.archived_at IS NULL
+		AND filter_aum.start_at <= ? AND (filter_aum.end_at IS NULL OR filter_aum.end_at > ?)
+		AND filter_aum.academic_unit_id IN (
+			WITH RECURSIVE filter_units AS (
+				SELECT id FROM academic_units WHERE id = ? AND archived_at IS NULL
+				UNION ALL SELECT child.id FROM academic_units child
+				JOIN filter_units parent ON child.parent_id = parent.id
+				WHERE child.archived_at IS NULL
+			) SELECT id FROM filter_units
+		)
+	)`, activeAt, activeAt, options.AcademicUnitID)
 }
 
 // filterUserListVisibility restricts a User listing to the Users visible through a scoped visibility.
@@ -933,6 +1030,34 @@ func (s SQLUserStore) UpdateLastLogin(ctx context.Context, input *store.UserLast
 		return fmt.Errorf("update user last login: %w", err)
 	}
 	return requireAffected(result, "user", id.String())
+}
+
+// ListDisplayNames reads the presentable name of each given unarchived User.
+func (s SQLUserStore) ListDisplayNames(ctx context.Context, userIDs []model.UserID) ([]store.UserDisplayName, error) {
+	ids, err := distinctIdentifiers(userIDs, store.MaximumUserDisplayNames)
+	if err != nil {
+		return nil, store.NewErrInvalidInput("user", "user_ids", err)
+	}
+	result := make([]store.UserDisplayName, 0, len(ids))
+	if len(ids) == 0 {
+		return result, nil
+	}
+	var rows []struct {
+		ID          string `db:"id"`
+		DisplayName string `db:"display_name"`
+	}
+	if err = s.GetMaster().Select(ctx, &rows, `SELECT id, COALESCE(NULLIF(display_name, ''), username) AS display_name
+		FROM users WHERE id = ANY(?) AND archived_at IS NULL ORDER BY id`, pq.Array(ids)); err != nil {
+		return nil, translateError("user", "display_names", err)
+	}
+	for _, row := range rows {
+		id, err := parsePersistedID("user", "id", row.ID, model.ParseUserID)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, store.UserDisplayName{UserID: id, DisplayName: row.DisplayName})
+	}
+	return result, nil
 }
 
 func newUserRow(user *model.User) userRow {

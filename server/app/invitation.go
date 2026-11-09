@@ -27,11 +27,14 @@ type IssueStudentClassInvitationCommand struct {
 	IntendedStartsAt, IntendedEndsAt                                          int64
 	SuggestedUsername, SuggestedDisplayName                                   string
 	SuggestedFirstName, SuggestedLastName, SuggestedLocale, SuggestedTimezone string
-	IdempotencyKey                                                            string
-	batchDuplicate                                                            bool
-	batchCanonicalKey                                                         string
-	onboardingImportID                                                        model.OnboardingImportID
-	onboardingImportRowNumber                                                 int
+	// ExpiresInDays is the inviter's optional whole-day lifetime; nil selects
+	// model.InvitationLifetime.
+	ExpiresInDays             *int
+	IdempotencyKey            string
+	batchDuplicate            bool
+	batchCanonicalKey         string
+	onboardingImportID        model.OnboardingImportID
+	onboardingImportRowNumber int
 }
 
 type AcceptStudentClassInvitationCommand struct {
@@ -46,11 +49,14 @@ type IssueTeacherAcademicUnitInvitationCommand struct {
 	IntendedStartsAt, IntendedEndsAt                                          int64
 	SuggestedUsername, SuggestedDisplayName                                   string
 	SuggestedFirstName, SuggestedLastName, SuggestedLocale, SuggestedTimezone string
-	IdempotencyKey                                                            string
-	batchDuplicate                                                            bool
-	batchCanonicalKey                                                         string
-	onboardingImportID                                                        model.OnboardingImportID
-	onboardingImportRowNumber                                                 int
+	// ExpiresInDays is the inviter's optional whole-day lifetime; nil selects
+	// model.InvitationLifetime.
+	ExpiresInDays             *int
+	IdempotencyKey            string
+	batchDuplicate            bool
+	batchCanonicalKey         string
+	onboardingImportID        model.OnboardingImportID
+	onboardingImportRowNumber int
 }
 
 type IssueAcademicUnitRoleInvitationCommand struct {
@@ -58,11 +64,14 @@ type IssueAcademicUnitRoleInvitationCommand struct {
 	AcademicUnitID                   model.AcademicUnitID
 	RoleID                           model.RoleID
 	IntendedStartsAt, IntendedEndsAt int64
-	IdempotencyKey                   string
-	batchDuplicate                   bool
-	batchCanonicalKey                string
-	onboardingImportID               model.OnboardingImportID
-	onboardingImportRowNumber        int
+	// ExpiresInDays is the inviter's optional whole-day lifetime; nil selects
+	// model.InvitationLifetime.
+	ExpiresInDays             *int
+	IdempotencyKey            string
+	batchDuplicate            bool
+	batchCanonicalKey         string
+	onboardingImportID        model.OnboardingImportID
+	onboardingImportRowNumber int
 }
 
 type IssueInstitutionRoleInvitationCommand struct {
@@ -70,11 +79,14 @@ type IssueInstitutionRoleInvitationCommand struct {
 	InstitutionID                    model.InstitutionID
 	RoleID                           model.RoleID
 	IntendedStartsAt, IntendedEndsAt int64
-	IdempotencyKey                   string
-	batchDuplicate                   bool
-	batchCanonicalKey                string
-	onboardingImportID               model.OnboardingImportID
-	onboardingImportRowNumber        int
+	// ExpiresInDays is the inviter's optional whole-day lifetime; nil selects
+	// model.InvitationLifetime.
+	ExpiresInDays             *int
+	IdempotencyKey            string
+	batchDuplicate            bool
+	batchCanonicalKey         string
+	onboardingImportID        model.OnboardingImportID
+	onboardingImportRowNumber int
 }
 
 // authorizedScopedRoleInvitationIssue is the scope-specific result of the
@@ -89,6 +101,7 @@ type authorizedScopedRoleInvitationIssue struct {
 	academicUnitID                   model.AcademicUnitID
 	role                             *model.Role
 	intendedStartsAt, intendedEndsAt int64
+	lifetime                         time.Duration
 	idempotency                      *store.CommandIdempotency
 	batchDuplicate                   bool
 	batchCanonicalKey                string
@@ -162,9 +175,12 @@ type InvitationAdministrationView struct {
 	Delivery       *InvitationDeliveryView
 }
 
+// InvitationAdministrationPage is one page of visible Invitations; the first
+// page also carries their total (see PageTotal).
 type InvitationAdministrationPage struct {
 	Items []InvitationAdministrationView
 	More  bool
+	PageTotal
 }
 
 type ListInvitationsQuery struct {
@@ -216,6 +232,9 @@ type ReplaceInvitationCommand struct {
 	ExpectedRevision, IntendedStartsAt, IntendedEndsAt                        int64
 	SuggestedUsername, SuggestedDisplayName                                   string
 	SuggestedFirstName, SuggestedLastName, SuggestedLocale, SuggestedTimezone string
+	// ExpiresInDays is the inviter's optional whole-day lifetime; nil keeps
+	// the replaced Invitation's lifetime in whole days.
+	ExpiresInDays *int
 }
 
 const MaximumInvitationBatchItems = 200
@@ -376,11 +395,24 @@ func (a invitationAuthorizationAdapter) AuthorizeActionDelegation(ctx context.Co
 	return nil
 }
 
+// Visibility resolves and records the caller's institution-family scopes for
+// invitation.view, invitation.manage, onboarding_batch.view, or
+// academic_progression.manage, which share one scope shape: the Institution,
+// Academic Unit subtrees, and Classes. Progression authority is a Class
+// action, so its scopes are resolved for Class resources.
 func (a invitationAuthorizationAdapter) Visibility(ctx context.Context, invocation invocation.Invocation, action model.Action) (store.InvitationVisibilityScope, error) {
-	if a.authorization == nil || (action != model.ActionInvitationView && action != model.ActionInvitationManage) {
+	resourceType := model.ResourceInstitution
+	switch action {
+	case model.ActionInvitationView, model.ActionInvitationManage, model.ActionOnboardingBatchView:
+	case model.ActionAcademicProgressionManage:
+		resourceType = model.ResourceClass
+	default:
 		return store.InvitationVisibilityScope{}, apperror.New("invitation.unavailable")
 	}
-	constraint, err := a.authorization.authorizedScopes(ctx, invocation.Principal(), action, model.ResourceInstitution)
+	if a.authorization == nil {
+		return store.InvitationVisibilityScope{}, apperror.New("invitation.unavailable")
+	}
+	constraint, err := a.authorization.authorizedScopes(ctx, invocation.Principal(), action, resourceType)
 	if err != nil {
 		return store.InvitationVisibilityScope{}, err
 	}

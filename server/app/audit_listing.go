@@ -22,6 +22,10 @@ type ListAuditEventsQuery struct {
 	ActorID  model.UserID
 	Action   string
 	Resource *model.Resource
+	// Since is inclusive and Until exclusive; when both are set Since must
+	// precede Until.
+	Since time.Time
+	Until time.Time
 	// BeforeCreatedAt and BeforeID continue a page at microsecond precision.
 	BeforeCreatedAt time.Time
 	BeforeID        model.AuditEventID
@@ -30,6 +34,7 @@ type ListAuditEventsQuery struct {
 
 type auditListingStore interface {
 	List(context.Context, store.AuditListOptions) ([]*model.AuditEvent, error)
+	Count(context.Context, store.AuditListOptions, int) (int, error)
 	ListSelf(context.Context, store.AuditSelfListOptions) ([]*store.AuditSelfEntry, error)
 	CountSelf(context.Context, store.AuditSelfListOptions) (int, error)
 }
@@ -53,16 +58,16 @@ func newAuditListingService(deps auditListingServiceDependencies) *auditListingS
 	return &auditListingService{deps: deps}
 }
 
-func (s *auditListingService) ListAuditEvents(ctx context.Context, invocation invocation.Invocation, query ListAuditEventsQuery) (Page[*model.AuditEvent], error) {
+func (s *auditListingService) ListAuditEvents(ctx context.Context, invocation invocation.Invocation, query ListAuditEventsQuery) (CountedPage[*model.AuditEvent], error) {
 	visibility, err := s.deps.Authorization.AuthorizeList(ctx, invocation)
 	if err != nil {
-		return Page[*model.AuditEvent]{}, err
+		return CountedPage[*model.AuditEvent]{}, err
 	}
 	validAcademicVisibility := len(visibility.AllowedActions) > 0 &&
 		((visibility.AcademicInstitutionWide && len(visibility.AcademicUnitRootIDs) == 0) ||
 			(!visibility.AcademicInstitutionWide && len(visibility.AcademicUnitRootIDs) > 0))
 	if !visibility.InstitutionWide && !validAcademicVisibility {
-		return Page[*model.AuditEvent]{}, authorizationDeniedError()
+		return CountedPage[*model.AuditEvent]{}, authorizationDeniedError()
 	}
 	if query.Limit == 0 {
 		query.Limit = 50
@@ -70,21 +75,30 @@ func (s *auditListingService) ListAuditEvents(ctx context.Context, invocation in
 	if query.Limit < 1 || query.Limit > 200 ||
 		(query.ActorID != "" && !model.UserID(query.ActorID).IsValid()) ||
 		(query.BeforeID != "" && !model.AuditEventID(query.BeforeID).IsValid()) ||
-		(query.Resource != nil && query.Resource.Validate() != nil) {
-		return Page[*model.AuditEvent]{}, apperror.New("audit.query.invalid")
+		(query.Resource != nil && query.Resource.Validate() != nil) ||
+		(!query.Since.IsZero() && !query.Until.IsZero() && !query.Since.Before(query.Until)) {
+		return CountedPage[*model.AuditEvent]{}, apperror.New("audit.query.invalid")
 	}
-	events, err := s.deps.Audits.List(ctx, store.AuditListOptions{
+	options := store.AuditListOptions{
 		ActorID: model.UserID(strings.TrimSpace(query.ActorID.String())), Action: strings.TrimSpace(query.Action),
-		Resource: query.Resource, BeforeCreatedAt: query.BeforeCreatedAt, BeforeID: query.BeforeID, Limit: query.Limit + 1,
+		Resource: query.Resource, Since: query.Since, Until: query.Until, BeforeCreatedAt: query.BeforeCreatedAt, BeforeID: query.BeforeID, Limit: query.Limit + 1,
 		Visibility: visibility,
-	})
-	if err != nil {
-		return Page[*model.AuditEvent]{}, auditListingError(err)
 	}
-	page := newPage(events, query.Limit)
+	events, err := s.deps.Audits.List(ctx, options)
+	if err != nil {
+		return CountedPage[*model.AuditEvent]{}, auditListingError(err)
+	}
+	page := CountedPage[*model.AuditEvent]{Page: newPage(events, query.Limit)}
 	if !visibility.InstitutionWide {
 		page.Items = academicAuditProjection(page.Items)
 	}
+	total, consistent, err := countFirstPage(query.BeforeID.IsZero() && query.BeforeCreatedAt.IsZero(), len(page.Items), func(maximum int) (int, error) {
+		return s.deps.Audits.Count(ctx, options, maximum)
+	})
+	if err != nil || !consistent {
+		return CountedPage[*model.AuditEvent]{}, auditListingError(err)
+	}
+	page.PageTotal = total
 	return page, nil
 }
 

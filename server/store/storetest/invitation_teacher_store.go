@@ -236,12 +236,33 @@ func testTeacherAcademicUnitInvitationIssue(t *testing.T, ss store.Store) {
 	protected.Invitation.TargetEmail = "protected-teacher@example.edu"
 	_, err = ss.Invitation().IssueTeacherAcademicUnit(ctx, protected)
 	require.Error(t, err, "IssueTeacherAcademicUnit() delegated a protected action at the same Academic Unit scope")
-	unboundedLifetime := teacherAcademicUnitInvitationIssueFixture(t, ss, inviter, unit, packageRole, issuedAt.Add(3*time.Second))
-	unboundedLifetime.Invitation.TargetEmail = "teacher-unbounded-lifetime@example.edu"
-	unboundedLifetime.Lifetime = model.InvitationLifetime + time.Hour
-	var invalidInput *store.ErrInvalidInput
-	_, err = ss.Invitation().IssueTeacherAcademicUnit(ctx, unboundedLifetime)
-	require.ErrorAs(t, err, &invalidInput)
+	for name, lifetime := range map[string]time.Duration{
+		"zero":             0,
+		"under one day":    model.MinimumInvitationLifetime - time.Hour,
+		"over thirty days": model.MaximumInvitationLifetime + 24*time.Hour,
+	} {
+		t.Run("RejectsLifetime/"+name, func(t *testing.T) {
+			unbounded := teacherAcademicUnitInvitationIssueFixture(t, ss, inviter, unit, packageRole, issuedAt.Add(3*time.Second))
+			unbounded.Invitation.TargetEmail = "teacher-unbounded-" + model.NewID() + "@example.edu"
+			unbounded.Lifetime = lifetime
+			var invalidInput *store.ErrInvalidInput
+			_, issueErr := ss.Invitation().IssueTeacherAcademicUnit(ctx, unbounded)
+			require.ErrorAs(t, issueErr, &invalidInput)
+		})
+	}
+	for name, lifetime := range map[string]time.Duration{"one day": model.MinimumInvitationLifetime, "thirty days": model.MaximumInvitationLifetime} {
+		t.Run("AcceptsLifetime/"+name, func(t *testing.T) {
+			bounded := teacherAcademicUnitInvitationIssueFixture(t, ss, inviter, unit, packageRole, issuedAt.Add(3*time.Second))
+			bounded.Invitation.TargetEmail = "teacher-bounded-" + model.NewID() + "@example.edu"
+			bounded.Lifetime = lifetime
+			persisted, issueErr := ss.Invitation().IssueTeacherAcademicUnit(ctx, bounded)
+			require.NoError(t, issueErr)
+			require.Equal(t, lifetime, persisted.ExpiresAt.Sub(persisted.CreatedAt))
+			delivery, deliveryErr := ss.Mail().GetDelivery(ctx, bounded.Delivery.ID)
+			require.NoError(t, deliveryErr)
+			require.True(t, delivery.Deadline.Equal(persisted.ExpiresAt), "delivery deadline %v, Invitation expiry %v", delivery.Deadline, persisted.ExpiresAt)
+		})
+	}
 
 	for _, skew := range []time.Duration{-2 * time.Hour, 2 * time.Hour} {
 		skewedAt := model.NowUTC().Add(skew)

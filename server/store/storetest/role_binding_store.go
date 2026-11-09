@@ -14,6 +14,7 @@ package storetest
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -26,6 +27,7 @@ import (
 
 func TestRoleBindingStore(t *testing.T, ss store.Store) {
 	t.Run("ActiveIntervalPrecision", func(t *testing.T) { testRoleBindingActiveIntervalPrecision(t, ss) })
+	t.Run("VisibleSummariesByUsers", func(t *testing.T) { testRoleBindingVisibleSummariesByUsers(t, ss) })
 	t.Run("AuditedMutations", func(t *testing.T) {
 		ctx := context.Background()
 		institution := saveInstitution(t, ctx, ss)
@@ -279,6 +281,97 @@ func testRoleBindingActiveIntervalPrecision(t *testing.T, ss store.Store) {
 			} else {
 				require.Empty(t, active, "active bindings at %v", test.at)
 			}
+		})
+	}
+}
+
+func testRoleBindingVisibleSummariesByUsers(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	token := model.NewID()[:12]
+	institution := saveInstitution(t, ctx, ss)
+	root := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "summary-root-"+token)
+	child := saveAcademicUnit(t, ctx, ss, institution.ID.String(), root.ID.String(), "summary-child-"+token)
+	sibling := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "summary-sibling-"+token)
+	programme := saveProgramme(t, ctx, ss, child.ID.String(), "summary-programme-"+token)
+	level := saveProgrammeLevel(t, ctx, ss, programme.ID.String(), "summary-level-"+token)
+	period := saveAcademicPeriod(t, ctx, ss, institution.ID.String(), "summary-period-"+token, 1_800_000_000_000)
+	class := saveClass(t, ctx, ss, level.ID.String(), period.ID.String(), "summary-class-"+token)
+	role := func(name string) *model.Role {
+		saved, err := SaveRole(ctx, ss, &model.Role{Name: "summary-" + strings.ToLower(name) + "-" + strings.ToLower(token), DisplayName: name, Permissions: []string{string(model.ActionClassView)}})
+		require.NoError(t, err)
+		return saved
+	}
+	reader, reviewer, marker := role("Reader"), role("Reviewer"), role("Marker")
+	user := saveUser(t, ctx, ss)
+	other := saveUser(t, ctx, ss)
+	start := model.NowUTC().Add(-time.Second)
+	offset := 0
+	bind := func(user *model.User, role *model.Role, scopeType model.RoleScopeType, scopeID string) *model.RoleBinding {
+		offset++
+		saved, err := SaveRoleBinding(ctx, ss, &model.RoleBinding{
+			UserID: user.ID, RoleID: role.ID, ScopeType: scopeType, ScopeID: scopeID,
+			StartsAt: model.TimeUTC(start.Add(time.Duration(offset) * time.Millisecond)),
+		})
+		require.NoError(t, err)
+		return saved
+	}
+	bind(user, reader, model.RoleScopeInstitution, institution.ID.String())
+	bind(user, reader, model.RoleScopeAcademicUnit, child.ID.String())
+	bind(user, reviewer, model.RoleScopeAcademicUnit, sibling.ID.String())
+	bind(user, reviewer, model.RoleScopeClass, class.ID.String())
+	bind(user, marker, model.RoleScopeAcademicUnit, child.ID.String())
+	endedBinding := bind(user, marker, model.RoleScopeAcademicUnit, root.ID.String())
+	_, err := EndRoleBinding(ctx, ss, endedBinding.ID, start.Add(100*time.Millisecond))
+	require.NoError(t, err)
+	activeAt := model.TimeUTC(start.Add(time.Second))
+	summary := func(role *model.Role, scopeType model.RoleScopeType, scopeID, scopeName string) store.RoleBindingSummary {
+		return store.RoleBindingSummary{RoleID: role.ID, DisplayName: role.DisplayName, ScopeType: scopeType, ScopeID: scopeID, ScopeName: scopeName}
+	}
+	read := func(visibility store.UserVisibilityScope, limit int) []store.UserRoleBindingSummary {
+		t.Helper()
+		visibility.ActiveAt = activeAt
+		summaries, readErr := ss.RoleBinding().ListVisibleSummariesByUsers(ctx, store.RoleBindingSummaryOptions{
+			UserIDs: []model.UserID{user.ID, other.ID}, Visibility: visibility, Limit: limit,
+		})
+		require.NoError(t, readErr)
+		return summaries
+	}
+
+	require.Equal(t, []store.UserRoleBindingSummary{{UserID: user.ID, More: 2, Bindings: []store.RoleBindingSummary{
+		summary(reader, model.RoleScopeInstitution, institution.ID.String(), institution.DisplayName),
+		summary(reader, model.RoleScopeAcademicUnit, child.ID.String(), child.DisplayName),
+		summary(reviewer, model.RoleScopeAcademicUnit, sibling.ID.String(), sibling.DisplayName),
+	}}}, read(store.UserVisibilityScope{InstitutionWide: true}, 3),
+		"Institution-wide: the oldest three of five current bindings, named; the ended binding and a User with none are absent")
+	require.Equal(t, []store.UserRoleBindingSummary{{UserID: user.ID, More: 1, Bindings: []store.RoleBindingSummary{
+		summary(reader, model.RoleScopeAcademicUnit, child.ID.String(), child.DisplayName),
+		summary(reviewer, model.RoleScopeClass, class.ID.String(), class.DisplayName),
+	}}}, read(store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{root.ID}}, 2),
+		"a unit scope lists and counts only bindings in its subtree and its Classes; the Institution and sibling bindings are not counted")
+	require.Equal(t, []store.UserRoleBindingSummary{{UserID: user.ID, Bindings: []store.RoleBindingSummary{
+		summary(reviewer, model.RoleScopeClass, class.ID.String(), class.DisplayName),
+	}}}, read(store.UserVisibilityScope{ClassIDs: []model.ClassID{class.ID}}, 3), "a Class scope reads its own bindings")
+	require.Empty(t, read(store.UserVisibilityScope{}, 3), "no scope reads nothing")
+	exact, err := ss.RoleBinding().ListVisibleSummariesByUsers(ctx, store.RoleBindingSummaryOptions{
+		UserIDs:    []model.UserID{user.ID, other.ID},
+		Visibility: store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{child.ID}, ActiveAt: activeAt},
+		ScopeType:  model.RoleScopeAcademicUnit, ScopeID: child.ID.String(), Limit: 1,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []store.UserRoleBindingSummary{{UserID: user.ID, More: 1, Bindings: []store.RoleBindingSummary{
+		summary(reader, model.RoleScopeAcademicUnit, child.ID.String(), child.DisplayName),
+	}}}, exact, "an exact scope keeps only the unit's own bindings, not its Classes'")
+
+	var invalid *store.ErrInvalidInput
+	for name, options := range map[string]store.RoleBindingSummaryOptions{
+		"missing clock": {UserIDs: []model.UserID{user.ID}, Visibility: store.UserVisibilityScope{InstitutionWide: true}, Limit: 3},
+		"zero limit":    {UserIDs: []model.UserID{user.ID}, Visibility: store.UserVisibilityScope{InstitutionWide: true, ActiveAt: activeAt}},
+		"invalid user":  {UserIDs: []model.UserID{"not-an-id"}, Visibility: store.UserVisibilityScope{InstitutionWide: true, ActiveAt: activeAt}, Limit: 3},
+		"partial scope": {UserIDs: []model.UserID{user.ID}, Visibility: store.UserVisibilityScope{InstitutionWide: true, ActiveAt: activeAt}, ScopeType: model.RoleScopeAcademicUnit, Limit: 3},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, readErr := ss.RoleBinding().ListVisibleSummariesByUsers(ctx, options)
+			require.ErrorAs(t, readErr, &invalid)
 		})
 	}
 }

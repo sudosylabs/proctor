@@ -37,6 +37,23 @@ func TestAuditResourceResponseWireShapeRemainsSnakeCase(t *testing.T) {
 	require.NotNil(t, wire.Resource["id"])
 }
 
+func TestAuditEventResponseCarriesOnlyTheDisableReason(t *testing.T) {
+	t.Parallel()
+	event := &model.AuditEvent{Action: string(model.ActionUserManage),
+		Resource:   model.Resource{Type: model.ResourceUser, ID: model.NewID()},
+		Parameters: json.RawMessage(`{"operation":"disable_account","value":{"user_id":"x","disabled":true,"reason":"Left the institution"}}`)}
+	encoded, err := json.Marshal(auditEventResponseFromModel(event))
+	require.NoError(t, err)
+	var wire map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(encoded, &wire))
+	require.JSONEq(t, `"Left the institution"`, string(wire["reason"]))
+	require.NotContains(t, wire, "parameters", "other parameters stay operator-only")
+	event.Parameters = nil
+	encoded, err = json.Marshal(auditEventResponseFromModel(event))
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "reason", "an academic projection drops parameters and so the reason")
+}
+
 func TestAuditCursorKeepsMicrosecondsSoSameMillisecondRowsAreNotSkipped(t *testing.T) {
 	t.Parallel()
 
@@ -48,6 +65,28 @@ func TestAuditCursorKeepsMicrosecondsSoSameMillisecondRowsAreNotSkipped(t *testi
 	require.NoError(t, err)
 	require.True(t, createdAt.Equal(query.BeforeCreatedAt), "cursor instant = %v", query.BeforeCreatedAt)
 	require.Equal(t, id, query.BeforeID)
+}
+
+func TestAuditQueryReadsCreatedRangeLikeSelfHistory(t *testing.T) {
+	t.Parallel()
+
+	after := time.Date(2026, 8, 12, 9, 0, 0, 0, time.UTC)
+	before := time.Date(2026, 8, 13, 9, 0, 0, 0, time.UTC)
+	query, err := auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), "GET",
+		"/api/v1/audits?created_after=2026-08-12T09:00:00Z&created_before=2026-08-13T11:00:00%2B02:00", nil))
+	require.NoError(t, err)
+	require.True(t, after.Equal(query.Since), "Since = %v", query.Since)
+	require.True(t, before.Equal(query.Until), "Until = %v", query.Until)
+
+	for _, raw := range []string{
+		"created_after=yesterday",
+		"created_before=2026-08-12",
+		"created_after=",
+		"created_after=2026-08-12T09:00:00Z&created_after=2026-08-13T09:00:00Z",
+	} {
+		_, err = auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), "GET", "/api/v1/audits?"+raw, nil))
+		require.Error(t, err, raw)
+	}
 }
 
 func TestAuditListingOpenAPIDocument(t *testing.T) {

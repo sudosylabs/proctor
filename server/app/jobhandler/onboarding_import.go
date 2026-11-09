@@ -130,8 +130,7 @@ func onboardingImportParseDescriptor(handler job.Handler) job.Descriptor {
 
 func studentProgressionPreviewDescriptor(handler job.Handler) job.Descriptor {
 	descriptor := onboardingImportDescriptor(model.JobTypeStudentProgressionPreview, handler, true)
-	descriptor.PublicErrorCodes = append(descriptor.PublicErrorCodes, "student_progression.authorization_lost", "student_progression.target_conflict",
-		"student_progression.lineage_conflict", "student_progression.effective_date_conflict", "student_progression.roster_too_large")
+	descriptor.PublicErrorCodes = append(descriptor.PublicErrorCodes, model.StudentProgressionFailureCodes()...)
 	return descriptor
 }
 

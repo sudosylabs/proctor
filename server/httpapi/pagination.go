@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -31,6 +32,40 @@ const (
 type listResponse[T any] struct {
 	Items      []T    `json:"items"`
 	NextCursor string `json:"next_cursor,omitempty"`
+}
+
+// countedListResponse is the collection envelope plus the first page's total.
+// The count runs through the list's own filters and visibility and stops at
+// store.MaximumListCount, so the total is exact below the bound and a lower
+// bound at it. Later pages carry neither member.
+type countedListResponse[T any] struct {
+	Items             []T    `json:"items"`
+	NextCursor        string `json:"next_cursor,omitempty"`
+	Total             *int   `json:"total,omitempty"`
+	TotalIsLowerBound *bool  `json:"total_is_lower_bound,omitempty"`
+}
+
+// pageTotalMembers presents an application first-page total: both members on
+// a counted page, neither on a later one. A page counted when it continued a
+// cursor, or not counted when it began one, is unpresentable.
+func pageTotalMembers(total app.PageTotal, continued bool) (*int, *bool, error) {
+	if total.Counted == continued {
+		return nil, nil, errUnpresentableResult
+	}
+	if !total.Counted {
+		return nil, nil, nil
+	}
+	count, lowerBound := total.Total, total.TotalIsLowerBound
+	return &count, &lowerBound, nil
+}
+
+// withPageTotal adds an application first-page total to an envelope.
+func withPageTotal[T any](envelope listResponse[T], total app.PageTotal, continued bool) (countedListResponse[T], error) {
+	count, lowerBound, err := pageTotalMembers(total, continued)
+	if err != nil {
+		return countedListResponse[T]{}, err
+	}
+	return countedListResponse[T]{Items: envelope.Items, NextCursor: envelope.NextCursor, Total: count, TotalIsLowerBound: lowerBound}, nil
 }
 
 // pageRequest is the parsed `limit` and raw `cursor` of a collection read.

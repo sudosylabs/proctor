@@ -20,7 +20,8 @@ execution, and retained report.
 
 POST `text/csv` to <Link to="/api/reference/upload-onboarding-import">Upload Onboarding Import</Link>
 with `mode`, `scope_type`, and `scope_id`; include `role_id` only for a mode that
-packages a Role. Enforce the 10 MiB and 50,000-row boundaries before upload,
+packages a Role. Pass the optional `file_name` to remember the uploaded file's
+base name; reads and listings return it as `file_name`. Enforce the 10 MiB and 50,000-row boundaries before upload,
 but still treat server validation as authoritative.
 
 The accepted response names the domain import and validation Job. It proves no
@@ -30,6 +31,10 @@ row has changed application state.
 
 Poll <Link to="/api/reference/get-onboarding-import">Get Onboarding Import</Link>
 or observe the generic Job without reading domain rows from the Job payload.
+<Link to="/api/reference/list-onboarding-imports">List Onboarding Imports</Link>
+finds imports again, newest first and filtered by repeated `state` values; it
+shows exactly the imports a single read would allow and returns summaries
+without rows. Student progressions are not listed there.
 When validation completes, retain the preview digest and review normalized
 outcomes. Unknown headers, duplicate package rows, unresolved canonical names,
 scope escapes, and invalid Unicode are review failures, not warnings to hide.
@@ -63,6 +68,12 @@ with exact source/destination Period and Class IDs plus `effective_at`. Review
 the immutable preview, then call
 <Link to="/api/reference/commit-student-progression">Commit Student Progression</Link>
 with the expected preview and idempotency inputs.
+
+<Link to="/api/reference/list-student-progressions">List Student Progressions</Link>
+finds progressions again, newest first, filtered by repeated `state` values and
+exact source or destination Period and Class IDs. It shows a progression only
+when your progression authority covers both its Classes, names both Classes,
+and reports a first-page `total`.
 
 Monitor <Link to="/api/reference/get-student-progression">Get Student Progression</Link>,
 use <Link to="/api/reference/cancel-student-progression">Cancel Student Progression</Link>

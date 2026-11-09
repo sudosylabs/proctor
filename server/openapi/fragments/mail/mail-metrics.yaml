@@ -74,9 +74,7 @@ components:
         - maximum_processing_latency_millis
       properties:
         template_key:
-          type: string
-          enum:
-            - system.mail_test
+          $ref: '#/components/schemas/MailTemplateKey'
         state:
           $ref: '#/components/schemas/MailDeliveryState'
         outcome_code:
@@ -117,9 +115,7 @@ components:
         - truncated
       properties:
         template_key:
-          type: string
-          enum:
-            - system.mail_test
+          $ref: '#/components/schemas/MailTemplateKey'
         state:
           $ref: '#/components/schemas/MailDeliveryState'
         outcome_code:

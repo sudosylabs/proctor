@@ -21,6 +21,9 @@ const (
 	OnboardingImportMaximumColumns = 64
 	OnboardingImportMaximumField   = 16 * 1024
 	OnboardingImportPageSize       = 200
+	// OnboardingImportListMaximum bounds one listing read: a 200-item page
+	// plus the probe item that reports whether another page follows.
+	OnboardingImportListMaximum = 201
 )
 
 // OnboardingImport is the safe aggregate projection. Recipient data and the
@@ -60,7 +63,10 @@ type OnboardingImport struct {
 	ExpiresAt                 time.Time
 	Revision                  int64
 	FailureCode               string
-	Principal                 model.Principal
+	// FileName is the uploaded file's base name as the uploader gave it, or
+	// empty when none was given; a student progression has none.
+	FileName  string
+	Principal model.Principal
 }
 
 // OnboardingImportRow is the detailed seven-day preview/report row. Command
@@ -152,6 +158,69 @@ type OnboardingImportRowCompletion struct {
 	At           time.Time
 }
 
+// OnboardingImportVisibilityScope is the persistence-ready
+// onboarding_batch.view authority of an administrative import listing: every
+// import Institution-wide, the Academic Unit and Class imports under the named
+// Academic Unit subtrees, and the imports scoped to the named Classes.
+type OnboardingImportVisibilityScope struct {
+	InstitutionWide     bool
+	AcademicUnitRootIDs []model.AcademicUnitID
+	ClassIDs            []model.ClassID
+}
+
+// OnboardingImportListOptions selects up to Limit (1..OnboardingImportListMaximum)
+// unexpired administrative imports inside Visibility, newest first by creation
+// instant then identity. Student progression aggregates are never listed: they
+// authorize through Class progression authority, not onboarding_batch.view.
+// An empty States matches every state; BeforeCreatedAt and BeforeID are the
+// keyset of the previous page's last item, both set or both zero. An empty
+// Visibility is invalid input.
+type OnboardingImportListOptions struct {
+	Visibility      OnboardingImportVisibilityScope
+	States          []model.OnboardingImportState
+	BeforeCreatedAt time.Time
+	BeforeID        model.OnboardingImportID
+	Limit           int
+}
+
+// StudentProgressionVisibilityScope is the persistence-ready
+// academic_progression.manage authority of a student progression listing:
+// every Class Institution-wide, the Classes whose Programme lies under a named
+// Academic Unit subtree, and the named Classes. A progression is visible only
+// when both its source and its destination Class lie inside the scope, as the
+// single read authorizes both.
+type StudentProgressionVisibilityScope struct {
+	InstitutionWide     bool
+	AcademicUnitRootIDs []model.AcademicUnitID
+	ClassIDs            []model.ClassID
+}
+
+// StudentProgressionListOptions selects up to Limit
+// (1..OnboardingImportListMaximum) unexpired student progressions inside
+// Visibility, newest first by creation instant then identity. An empty States
+// matches every state, and each zero Period or Class filter matches every
+// value. BeforeCreatedAt and BeforeID are the keyset of the previous page's
+// last item, both set or both zero. An empty Visibility is invalid input.
+type StudentProgressionListOptions struct {
+	Visibility          StudentProgressionVisibilityScope
+	States              []model.OnboardingImportState
+	SourcePeriodID      model.AcademicPeriodID
+	SourceClassID       model.ClassID
+	DestinationPeriodID model.AcademicPeriodID
+	DestinationClassID  model.ClassID
+	BeforeCreatedAt     time.Time
+	BeforeID            model.OnboardingImportID
+	Limit               int
+}
+
+// StudentProgressionSummary is one listed progression with the display names
+// of its source and destination Classes, read with it.
+type StudentProgressionSummary struct {
+	Progression          *OnboardingImport
+	SourceClassName      string
+	DestinationClassName string
+}
+
 type OnboardingImportPage struct {
 	Rows []OnboardingImportRow
 	More bool
@@ -162,6 +231,19 @@ type OnboardingImportPage struct {
 type OnboardingImportStore interface {
 	CreateOnboardingImport(context.Context, *OnboardingImportCreation) (*OnboardingImport, error)
 	GetOnboardingImport(context.Context, model.OnboardingImportID) (*OnboardingImport, error)
+	ListOnboardingImports(context.Context, OnboardingImportListOptions) ([]*OnboardingImport, error)
+	// CountOpenOnboardingImports counts the unexpired administrative imports,
+	// every mode but student progression, that are not yet in a terminal
+	// state (uploading, parsing, preview_ready, or executing) and whose
+	// scope lies within the visibility. It stops at maximum (see
+	// MaximumListCount).
+	CountOpenOnboardingImports(context.Context, OnboardingImportVisibilityScope, int) (int, error)
+	ListStudentProgressions(context.Context, StudentProgressionListOptions) ([]*StudentProgressionSummary, error)
+	// CountStudentProgressions counts the progressions ListStudentProgressions
+	// would return across every page for the same filters and visibility,
+	// ignoring the keyset and limit, and stops at maximum (see
+	// MaximumListCount).
+	CountStudentProgressions(context.Context, StudentProgressionListOptions, int) (int, error)
 	ListStudentProgressionRoster(context.Context, model.ClassID, time.Time, int) ([]*model.ClassMember, error)
 	CompleteOnboardingImportPreview(context.Context, *OnboardingImportPreviewCompletion) (*OnboardingImport, error)
 	CommitOnboardingImport(context.Context, *OnboardingImportCommit) (*OnboardingImport, error)

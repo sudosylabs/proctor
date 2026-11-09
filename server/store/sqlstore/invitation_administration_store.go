@@ -104,8 +104,40 @@ func validateInvitationListOptions(options store.InvitationListOptions) error {
 	return nil
 }
 
+// Count counts through the same filter as List, without its keyset, order,
+// or limit, reading at most one row past maximum.
+func (s SQLInvitationStore) Count(ctx context.Context, options store.InvitationListOptions, maximum int) (int, error) {
+	options.BeforeCreatedAt, options.BeforeID, options.Limit = time.Time{}, "", 1
+	if err := validateInvitationListOptions(options); err != nil {
+		return 0, err
+	}
+	if !store.ValidCountMaximum(maximum) {
+		return 0, store.NewErrInvalidInput("invitation", "count_maximum", nil)
+	}
+	conditions, args := invitationListConditions(options, "")
+	return countBoundedSQL(ctx, s.GetMaster(), `SELECT 1 FROM invitations WHERE `+conditions, args, maximum, "Invitations")
+}
+
 func (s SQLInvitationStore) listAdministrationRows(ctx context.Context, options store.InvitationListOptions, exactID model.InvitationID) ([]invitationRow, error) {
-	query := `SELECT ` + invitationColumns + ` FROM invitations WHERE `
+	conditions, args := invitationListConditions(options, exactID)
+	if !options.BeforeCreatedAt.IsZero() {
+		conditions += " AND (created_at<? OR (created_at=? AND id<?))"
+		before := model.TimeUTC(options.BeforeCreatedAt)
+		args = append(args, before, before, options.BeforeID.String())
+	}
+	query := `SELECT ` + invitationColumns + ` FROM invitations WHERE ` + conditions + " ORDER BY created_at DESC,id DESC LIMIT ?"
+	args = append(args, options.Limit+1)
+	rows := []invitationRow{}
+	if err := s.GetMaster().Select(ctx, &rows, query, args...); err != nil {
+		return nil, fmt.Errorf("list Invitations: %w", err)
+	}
+	return rows, nil
+}
+
+// invitationListConditions is every List filter but the keyset: visibility,
+// the exact ID, purpose, state, target, creation range, and expiry. List and
+// Count share it so a total always counts the listed rows.
+func invitationListConditions(options store.InvitationListOptions, exactID model.InvitationID) (string, []any) {
 	args := []any{}
 	conditions := []string{}
 	visibility := options.Visibility
@@ -162,21 +194,13 @@ func (s SQLInvitationStore) listAdministrationRows(ctx context.Context, options 
 		conditions = append(conditions, "created_at<?")
 		args = append(args, model.TimeUTC(options.CreatedBefore))
 	}
-	if !options.BeforeCreatedAt.IsZero() {
-		conditions = append(conditions, "(created_at<? OR (created_at=? AND id<?))")
-		before := model.TimeUTC(options.BeforeCreatedAt)
-		args = append(args, before, before, options.BeforeID.String())
+	if options.Unexpired {
+		conditions = append(conditions, "expires_at>statement_timestamp()")
 	}
 	if len(conditions) == 0 {
 		conditions = append(conditions, "TRUE")
 	}
-	query += strings.Join(conditions, " AND ") + " ORDER BY created_at DESC,id DESC LIMIT ?"
-	args = append(args, options.Limit+1)
-	rows := []invitationRow{}
-	if err := s.GetMaster().Select(ctx, &rows, query, args...); err != nil {
-		return nil, fmt.Errorf("list Invitations: %w", err)
-	}
-	return rows, nil
+	return strings.Join(conditions, " AND "), args
 }
 
 func (s SQLInvitationStore) administrationRecord(ctx context.Context, row invitationRow) (*store.InvitationAdministrationRecord, error) {
@@ -599,7 +623,7 @@ func validateInvitationRevocationNotice(prepared *store.PreparedMail, invitation
 
 func validateInvitationReplacement(input *store.InvitationReplacement) error {
 	if input == nil || !input.CurrentID.IsValid() || input.ExpectedRevision < 1 || input.Replacement == nil ||
-		input.Lifetime != model.InvitationLifetime || !input.ActorUserID.IsValid() ||
+		!model.IsValidInvitationLifetime(input.Lifetime) || !input.ActorUserID.IsValid() ||
 		input.Replacement.InviterUserID != input.ActorUserID || input.Replacement.ID == input.CurrentID ||
 		!input.CurrentAuditEventID.IsValid() || !input.ReplacementAuditEventID.IsValid() ||
 		input.CurrentAuditEventID == input.ReplacementAuditEventID || input.AuditAt.IsZero() ||

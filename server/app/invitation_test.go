@@ -34,6 +34,9 @@ type invitationStoreFake struct {
 	scopedAccepted   *store.ScopedRoleInvitationAcceptance
 	scopedAcceptErr  error
 	listOptions      store.InvitationListOptions
+	countOptions     store.InvitationListOptions
+	countMaximum     int
+	countTotal       int
 	resent           *store.InvitationResend
 	revoked          *store.InvitationRevocation
 	replaced         *store.InvitationReplacement
@@ -179,6 +182,10 @@ func (f *invitationStoreFake) List(_ context.Context, options store.InvitationLi
 	f.listOptions = options
 	return &store.InvitationPage{Items: []*store.InvitationAdministrationRecord{{Invitation: f.invitation}}}, nil
 }
+func (f *invitationStoreFake) Count(_ context.Context, options store.InvitationListOptions, maximum int) (int, error) {
+	f.countOptions, f.countMaximum = options, maximum
+	return min(max(f.countTotal, 1), maximum), nil
+}
 func (f *invitationStoreFake) GetForAdministration(context.Context, model.InvitationID, store.InvitationVisibilityScope) (*store.InvitationAdministrationRecord, error) {
 	return &store.InvitationAdministrationRecord{Invitation: f.invitation}, nil
 }
@@ -247,6 +254,7 @@ type invitationAuthorizerFake struct {
 	delegatedScopeType model.RoleScopeType
 	delegatedScopeID   string
 	actionErrors       map[model.Action]error
+	visibility         *store.InvitationVisibilityScope
 	err                error
 }
 
@@ -324,6 +332,9 @@ func (f *invitationAuthorizerFake) AuthorizeActionDelegation(_ context.Context, 
 }
 func (f *invitationAuthorizerFake) Visibility(_ context.Context, _ invocation.Invocation, action model.Action) (store.InvitationVisibilityScope, error) {
 	f.actions = append(f.actions, action)
+	if f.visibility != nil {
+		return *f.visibility, f.err
+	}
 	return store.InvitationVisibilityScope{InstitutionWide: true}, f.err
 }
 

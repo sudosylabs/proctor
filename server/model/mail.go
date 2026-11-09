@@ -10,6 +10,7 @@ package model
 import (
 	"encoding/json"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -144,7 +145,34 @@ const (
 	MailDeliveryObsoleteCode            = "mail.delivery.obsolete"
 	MailDeliveryCanceledCode            = "mail.delivery.canceled"
 	MailDeliveryOperatorRetryCode       = "mail.operator.retry"
+
+	MailTransportPermanentCode           = "mail.transport.permanent"
+	MailTransportAcceptanceUncertainCode = "mail.transport.acceptance_uncertain"
+	MailTransportTemporaryCode           = "mail.transport.temporary"
+	MailTransportUnknownCode             = "mail.transport.unknown"
+	MailMessageInvalidCode               = "mail.message.invalid"
+	MailPayloadUnavailableCode           = "mail.payload.unavailable"
 )
+
+// MailPublicFailureCodes is the closed, sorted catalogue of safe failure
+// categories a Mail Delivery may record. A Delivery with any other failure
+// code is invalid.
+func MailPublicFailureCodes() []string {
+	return []string{
+		MailDeliveryCanceledCode,
+		MailDeliveryExpiredCode,
+		MailDeliveryObsoleteCode,
+		MailDeliveryRecipientIneligibleCode,
+		MailDeliveryDisabledCode,
+		MailMessageInvalidCode,
+		MailDeliveryOperatorRetryCode,
+		MailPayloadUnavailableCode,
+		MailTransportAcceptanceUncertainCode,
+		MailTransportPermanentCode,
+		MailTransportTemporaryCode,
+		MailTransportUnknownCode,
+	}
+}
 
 var mailTemplateKeys = []MailTemplateKey{
 	MailTemplateSystemTest,
@@ -211,10 +239,9 @@ func AllMailTemplateKeys() []MailTemplateKey {
 }
 
 var (
-	mailDigestPattern     = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	mailMessageIDPattern  = regexp.MustCompile(`^<[A-Za-z0-9.!#$%&'*+/=?^_` + "`" + `{|}~-]+@[A-Za-z0-9.-]+>$`)
-	mailPublicCodePattern = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,127}$`)
-	mailMaskedPattern     = regexp.MustCompile(`^(?:\*{3}|[^*@\s]\*{1,3})@[^*@\s]+$`)
+	mailDigestPattern    = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	mailMessageIDPattern = regexp.MustCompile(`^<[A-Za-z0-9.!#$%&'*+/=?^_` + "`" + `{|}~-]+@[A-Za-z0-9.-]+>$`)
+	mailMaskedPattern    = regexp.MustCompile(`^(?:\*{3}|[^*@\s]\*{1,3})@[^*@\s]+$`)
 )
 
 // MailOccurrence is the immutable durable identity of one logical notification.
@@ -493,7 +520,7 @@ func validMailDeliveryState(state MailDeliveryState) bool {
 }
 
 func validMailPublicCode(code string) bool {
-	return code == "" || (len(code) <= 128 && code == strings.TrimSpace(code) && mailPublicCodePattern.MatchString(code))
+	return code == "" || slices.Contains(MailPublicFailureCodes(), code)
 }
 func validRequiredMailPublicCode(code string) bool { return code != "" && validMailPublicCode(code) }
 

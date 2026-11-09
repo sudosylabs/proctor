@@ -21,6 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 type academicUnitMemberHTTPApplication struct {
@@ -102,6 +103,51 @@ func TestAcademicUnitMemberResourceRunsThroughRoutingKernel(t *testing.T) {
 	require.JSONEq(t, `{"items":[]}`, listed.Body.String(), "empty collection envelope")
 }
 
+func TestAcademicUnitMemberListNamesMembersAndTheirRolesHere(t *testing.T) {
+	t.Parallel()
+	logger, _ := newTestLogger(t)
+	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
+	unitID, userID, roleID := model.NewAcademicUnitID(), model.NewUserID(), model.NewRoleID()
+	member := &model.AcademicUnitMember{ID: model.NewAcademicUnitMemberID(), AcademicUnitID: unitID, UserID: userID, CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100), StartsAt: model.TimeFromMillis(100)}
+	identity := store.UserIdentity{ID: userID, Username: "amina", DisplayName: "Amina Diallo"}
+	members := &academicUnitMemberHTTPApplication{}
+	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, academicUnitMemberResource(members))
+	list := func() map[string]json.RawMessage {
+		t.Helper()
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+unitID.String()+"/members", nil)
+		request.Header.Set("Authorization", "Bearer credential")
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
+		var body struct {
+			Items []map[string]json.RawMessage `json:"items"`
+		}
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+		require.Len(t, body.Items, 1)
+		return body.Items[0]
+	}
+
+	members.pageResult = &app.AcademicUnitMemberPage{Members: []*model.AcademicUnitMember{member}, Users: map[model.UserID]store.UserIdentity{userID: identity}}
+	item := list()
+	require.JSONEq(t, `{"display_name":"Amina Diallo","username":"amina"}`, string(item["user"]), "no email without Institution-wide user.view")
+	_, rolesShown := item["roles_here"]
+	require.False(t, rolesShown, "no roles_here without role_binding.view on the unit")
+	_, moreShown := item["roles_here_more"]
+	require.False(t, moreShown, "no roles_here_more without role_binding.view on the unit")
+
+	identity.Email = "amina@example.edu"
+	members.pageResult = &app.AcademicUnitMemberPage{
+		Members: []*model.AcademicUnitMember{member}, Users: map[model.UserID]store.UserIdentity{userID: identity},
+		RolesHere: map[model.UserID]store.UserRoleBindingSummary{userID: {UserID: userID, More: 2, Bindings: []store.RoleBindingSummary{{
+			RoleID: roleID, DisplayName: "Reviewer", ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String(),
+		}}}},
+	}
+	item = list()
+	require.JSONEq(t, `{"display_name":"Amina Diallo","username":"amina","email":"amina@example.edu"}`, string(item["user"]))
+	require.JSONEq(t, `[{"role_id":"`+roleID.String()+`","display_name":"Reviewer"}]`, string(item["roles_here"]))
+	require.JSONEq(t, `2`, string(item["roles_here_more"]))
+}
+
 func TestAcademicUnitMemberResourceRejectsInvalidQueryAndMissingPrincipal(t *testing.T) {
 	t.Parallel()
 	logger, _ := newTestLogger(t)
@@ -152,5 +198,5 @@ func TestAcademicUnitMemberOpenAPIDocument(t *testing.T) {
 
 	// This v1 relationship collection remains a legacy bare array.
 	list := document.Components.Schemas["AcademicUnitMemberListResponse"]
-	requireOpenAPIListEnvelope(t, list, "#/components/schemas/AcademicUnitMemberResponse")
+	requireOpenAPIListEnvelope(t, list, "#/components/schemas/AcademicUnitMemberListItemResponse")
 }

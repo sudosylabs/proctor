@@ -76,7 +76,11 @@ func (m *recordingMailAPI) GetMailDelivery(_ context.Context, _ invocation.Invoc
 func (m *recordingMailAPI) ListMailDeliveries(_ context.Context, _ invocation.Invocation, query app.ListMailDeliveriesQuery) (app.MailDeliveryPage, error) {
 	m.lists++
 	m.listQuery = query
-	return app.MailDeliveryPage{Items: []app.MailDeliveryView{m.view}}, nil
+	page := app.MailDeliveryPage{Items: []app.MailDeliveryView{m.view}}
+	if query.BeforeID.IsZero() {
+		page.PageTotal = app.PageTotal{Counted: true, Total: 1}
+	}
+	return page, nil
 }
 func (m *recordingMailAPI) CancelMailDelivery(_ context.Context, _ invocation.Invocation, id model.MailDeliveryID) (app.MailDeliveryView, error) {
 	m.ids = append(m.ids, id)

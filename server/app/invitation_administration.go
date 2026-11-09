@@ -33,9 +33,10 @@ func (s *invitationService) ListInvitations(ctx context.Context, invocation invo
 		(query.BeforeID.IsValid() != !query.BeforeCreatedAt.IsZero()) {
 		return InvitationAdministrationPage{}, apperror.New("invitation.query.invalid")
 	}
-	page, err := s.deps.Store.List(ctx, store.InvitationListOptions{Visibility: visibility, Purpose: query.Purpose, State: query.State,
+	options := store.InvitationListOptions{Visibility: visibility, Purpose: query.Purpose, State: query.State,
 		TargetEmail: targetEmail, TargetID: strings.TrimSpace(query.TargetID), CreatedAfter: query.CreatedAfter,
-		CreatedBefore: query.CreatedBefore, BeforeCreatedAt: query.BeforeCreatedAt, BeforeID: query.BeforeID, Limit: query.Limit})
+		CreatedBefore: query.CreatedBefore, BeforeCreatedAt: query.BeforeCreatedAt, BeforeID: query.BeforeID, Limit: query.Limit}
+	page, err := s.deps.Store.List(ctx, options)
 	if err != nil {
 		return InvitationAdministrationPage{}, invitationStoreErrors.Translate(err)
 	}
@@ -43,7 +44,32 @@ func (s *invitationService) ListInvitations(ctx context.Context, invocation invo
 	for _, item := range page.Items {
 		result.Items = append(result.Items, invitationAdministrationView(item))
 	}
+	total, consistent, err := countFirstPage(!query.BeforeID.IsValid(), len(result.Items), func(maximum int) (int, error) {
+		return s.deps.Store.Count(ctx, options, maximum)
+	})
+	if err != nil {
+		return InvitationAdministrationPage{}, invitationStoreErrors.Translate(err)
+	}
+	if !consistent {
+		return InvitationAdministrationPage{}, apperror.New("invitation.unavailable")
+	}
+	result.PageTotal = total
 	return result, nil
+}
+
+// countPendingInvitations counts the unexpired pending Invitations within the
+// caller's invitation.view visibility, authorized and audited exactly as
+// ListInvitations is, stopping at maximum.
+func (s *invitationService) countPendingInvitations(ctx context.Context, invocation invocation.Invocation, maximum int) (int, error) {
+	visibility, err := s.deps.Authorization.Visibility(ctx, invocation, model.ActionInvitationView)
+	if err != nil {
+		return 0, err
+	}
+	total, err := s.deps.Store.Count(ctx, store.InvitationListOptions{Visibility: visibility, State: model.InvitationPending, Unexpired: true, Limit: 1}, maximum)
+	if err != nil {
+		return 0, invitationStoreErrors.Translate(err)
+	}
+	return total, nil
 }
 
 func (s *invitationService) GetInvitation(ctx context.Context, invocation invocation.Invocation, id model.InvitationID) (InvitationAdministrationView, error) {

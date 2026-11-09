@@ -28,12 +28,19 @@ type operatorStoreFake struct {
 	mutation       *store.JobMutation
 	listOptions    store.JobListOptions
 	attemptOptions store.JobAttemptListOptions
+	total          int
+	countOptions   store.JobListOptions
+	countMaximum   int
 }
 
 func (f *operatorStoreFake) Get(context.Context, model.JobID) (*model.Job, error) { return f.job, nil }
 func (f *operatorStoreFake) List(_ context.Context, options store.JobListOptions) ([]*model.Job, error) {
 	f.listOptions = options
 	return f.list, nil
+}
+func (f *operatorStoreFake) Count(_ context.Context, options store.JobListOptions, maximum int) (int, error) {
+	f.countOptions, f.countMaximum = options, maximum
+	return min(max(f.total, len(f.list)), maximum), nil
 }
 func (f *operatorStoreFake) ListAttemptsPage(_ context.Context, options store.JobAttemptListOptions) ([]model.JobAttempt, error) {
 	f.attemptOptions = options
@@ -53,6 +60,7 @@ func TestEngineProjectsOnlySafeOperatorFields(t *testing.T) {
 	at := time.Date(2026, time.August, 11, 8, 0, 0, 0, time.UTC)
 	record, err := model.NewJob(model.NewJobID(), model.JobTypeProfilePictureGenerateDefault, json.RawMessage(`{"secret":"must-not-leak"}`), "private-dedupe", at, at, 8)
 	require.NoError(t, err)
+	record.CreatedByUserID = model.NewUserID()
 	persistence := &operatorStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: record, list: []*model.Job{record}}
 	engine, err := New(Dependencies{
 		Store: persistence, Descriptors: []Descriptor{testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))},
@@ -63,6 +71,7 @@ func TestEngineProjectsOnlySafeOperatorFields(t *testing.T) {
 	require.NoError(t, err, "List() = %#v", page)
 	require.Len(t, page.Items, 1, "List() = %#v", page)
 	require.Equal(t, record.ID, page.Items[0].ID, "List() = %#v", page)
+	require.Equal(t, record.CreatedByUserID, page.Items[0].CreatedByUserID, "the initiator is projected")
 	encoded, err := json.Marshal(page)
 	require.NoError(t, err)
 	for _, forbidden := range []string{"must-not-leak", "private-dedupe", "command", "checkpoint", "result", "claim_token"} {
@@ -84,6 +93,48 @@ func TestEngineProjectsOnlySafeOperatorFields(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, page.Items, 1)
 	require.True(t, page.HasMore)
+}
+
+func TestEngineCountsTheFirstPageOfOperatorVisibleJobs(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, time.August, 11, 8, 0, 0, 0, time.UTC)
+	record, err := model.NewJob(model.NewJobID(), model.JobTypeProfilePictureGenerateDefault, json.RawMessage(`{}`), "counted", at, at, 8)
+	require.NoError(t, err)
+	persistence := &operatorStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: record, list: []*model.Job{record}, total: store.MaximumListCount}
+	engine, err := New(Dependencies{Store: persistence, Descriptors: []Descriptor{testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))},
+		NodeID: "node-a", Diagnostics: &jobDiagnosticsFake{}, Policy: Policy{PollInterval: time.Second}})
+	require.NoError(t, err)
+
+	page, err := engine.List(context.Background(), ListQuery{Statuses: []model.JobStatus{model.JobStatusFailed}, Limit: 20})
+	require.NoError(t, err)
+	require.True(t, page.Counted)
+	require.Equal(t, store.MaximumListCount, page.Total)
+	require.True(t, page.TotalIsLowerBound)
+	require.Equal(t, persistence.listOptions, persistence.countOptions, "the count reads the list's types and statuses")
+	require.Equal(t, store.MaximumListCount, persistence.countMaximum)
+
+	persistence.countMaximum = 0
+	later, err := engine.List(context.Background(), ListQuery{BeforeCreatedAt: at, BeforeID: record.ID, Limit: 20})
+	require.NoError(t, err)
+	require.False(t, later.Counted)
+	require.Zero(t, persistence.countMaximum, "a later page is not counted")
+
+	persistence.total = 3
+	failures, err := engine.CountRecentFailures(context.Background(), 7*24*time.Hour, 1000)
+	require.NoError(t, err)
+	require.Equal(t, 3, failures)
+	require.Equal(t, store.JobListOptions{Types: []model.JobType{record.Type}, Statuses: []model.JobStatus{model.JobStatusFailed},
+		UpdatedWithin: 7 * 24 * time.Hour, Limit: 1}, persistence.countOptions)
+	require.Equal(t, 1000, persistence.countMaximum)
+	for name, query := range map[string]struct {
+		within  time.Duration
+		maximum int
+	}{"no window": {0, 10}, "zero bound": {time.Hour, 0}, "bound above the maximum": {time.Hour, store.MaximumListCount + 1}} {
+		t.Run(name, func(t *testing.T) {
+			_, countErr := engine.CountRecentFailures(context.Background(), query.within, query.maximum)
+			require.ErrorIs(t, countErr, ErrQueryInvalid)
+		})
+	}
 }
 
 func TestEngineProjectsSafeAttemptsAndPreservesCursor(t *testing.T) {

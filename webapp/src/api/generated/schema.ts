@@ -265,7 +265,7 @@ export interface paths {
         };
         /**
          * List effective-dated organizational members
-         * @description Lists authorized current or historical organizational memberships for one Academic Unit at the requested effective instant. Membership describes a relationship only and is never presented as an unrestricted permission grant. Bounded pages use immutable (user_id, id) ordering. The next_cursor freezes the effective instant or history filter, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests.
+         * @description Lists authorized current or historical organizational memberships for one Academic Unit at the requested effective instant. Membership describes a relationship only and is never presented as an unrestricted permission grant. Bounded pages use immutable (user_id, id) ordering. The next_cursor freezes the effective instant or history filter, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests. Each item names the member in `user`, with email only for Institution-wide user.view, and, for a caller holding role_binding.view on this unit, lists the member's current Role Bindings scoped exactly to it in `roles_here`.
          */
         get: operations["listAcademicUnitMembers"];
         put?: never;
@@ -351,6 +351,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/administration/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Summarise administration work waiting on the caller
+         * @description Returns bounded counts for administration navigation badges. `pending_invitations` counts pending Invitations that have not expired; `failed_jobs` counts operator-visible Jobs that failed in the last seven days; `failed_mail_deliveries` counts mail deliveries in the `failed` terminal state (suppressed and canceled deliveries are not failures); `open_onboarding_imports` counts unexpired administrative onboarding imports still uploading, parsing, awaiting commit, or executing, excluding student progressions. Each count runs the authorization and visibility of its resource's own list, which records its authorization decision as that list does, so it counts only what the caller could list. A count the caller may not list is omitted together with its `_is_lower_bound` flag; an unavailable count fails the request rather than reading as zero. Counting stops at 1,000, where the count is 1,000 and its flag is true. Only an interactive Session may read the summary.
+         */
+        get: operations["getAdministrationCounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/affiliations/{affiliation_id}": {
         parameters: {
             query?: never;
@@ -383,7 +403,7 @@ export interface paths {
         };
         /**
          * List authorized institution or Academic Unit audit history
-         * @description Lists bounded durable audit facts visible through the caller's Institution or Academic Unit authority. The projection omits raw parameters, prior state, result payloads, credentials, protected content, and unsafe internal failures.
+         * @description Lists bounded durable audit facts visible through the caller's Institution or Academic Unit authority. The projection omits raw parameters, prior state, result payloads, credentials, protected content, and unsafe internal failures. The first page, read without a cursor, also reports `total`: the audit Events the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
          */
         get: operations["listAuditEvents"];
         put?: never;
@@ -3452,7 +3472,7 @@ export interface paths {
         };
         /**
          * List Invitations within the caller's authorized scope
-         * @description Lists bounded safe Invitation metadata visible through the caller's current Institution, Academic Unit, or Class authority. Claims, delivery payloads, recipient secrets, provider state, and acceptance credentials are never returned.
+         * @description Lists bounded safe Invitation metadata visible through the caller's current Institution, Academic Unit, or Class authority. Claims, delivery payloads, recipient secrets, provider state, and acceptance credentials are never returned. The first page, read without a cursor, also reports `total`: the Invitations the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
          */
         get: operations["listInvitations"];
         put?: never;
@@ -3644,7 +3664,7 @@ export interface paths {
         };
         /**
          * List allowlisted durable Jobs
-         * @description Lists only Job types deliberately exposed through the public administration contract and authorized for the current principal. Private payloads, claims, worker identities, and infrastructure errors are omitted from every projection.
+         * @description Lists only Job types deliberately exposed through the public administration contract and authorized for the current principal. Private payloads, claims, worker identities, and infrastructure errors are omitted from every projection. The first page, read without a cursor, also reports `total`: the Jobs the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
          */
         get: operations["listJobs"];
         put?: never;
@@ -3756,7 +3776,7 @@ export interface paths {
         };
         /**
          * List safe mail delivery metadata
-         * @description Lists authorized durable delivery metadata for the allowlisted template and filters. Recipient addresses remain masked and the response never exposes encrypted payloads, rendered message bodies, SMTP credentials, or provider diagnostics.
+         * @description Lists authorized durable delivery metadata for the allowlisted template and filters. Recipient addresses remain masked and the response never exposes encrypted payloads, rendered message bodies, SMTP credentials, or provider diagnostics. The first page, read without a cursor, also reports `total`: the mail deliveries the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
          */
         get: operations["listMailDeliveries"];
         put?: never;
@@ -4009,7 +4029,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List onboarding imports within the caller's authorized scope
+         * @description Lists the unexpired administrative onboarding imports the caller could read one by one through its current Institution, Academic Unit, or Class onboarding authority, newest first. Items are summary projections without rows; read one import for its preview or report rows. Student progressions are listed through their own resource and never appear here.
+         */
+        get: operations["listOnboardingImports"];
         put?: never;
         /**
          * Upload a bounded onboarding CSV for asynchronous validation
@@ -4490,7 +4514,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List student progressions within the caller's progression authority
+         * @description Lists the unexpired student progressions the caller could read one by one, newest first. A single read requires progression authority on both the source and the destination Class, so a progression appears only when the caller's current Institution, Academic Unit, or Class progression authority covers both. Items are summary projections without rows, each naming its source and destination Classes; read one progression for its preview or result rows. The first page, read without a cursor, also reports `total`: the progressions the filters and the caller's authority match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
+         */
+        get: operations["listStudentProgressions"];
         put?: never;
         /**
          * Create an asynchronous dry-run for one exact student progression
@@ -4836,7 +4864,7 @@ export interface paths {
         };
         /**
          * Search the authorized User directory
-         * @description Searches only User profiles visible through the caller's current Institution or scoped relationships, ordered by canonical username and identity. Disabled Users remain concealed unless an Institution-wide user viewer explicitly requests them.
+         * @description Searches only User profiles visible through the caller's current Institution or scoped relationships, ordered by canonical username and identity. Disabled Users remain concealed unless an Institution-wide user viewer explicitly requests them. Each item carries a `summary`: the User's current Affiliations with the current Academic Units the caller can see, and, for a caller holding role_binding.view, the current Role Bindings inside that authority's scopes, each list bounded and followed by a count of the rest. The first page, read without a cursor, also reports `total`: the Users the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
          */
         get: operations["searchUsers"];
         put?: never;
@@ -5392,7 +5420,7 @@ export interface paths {
         put?: never;
         /**
          * Disable a User account and revoke its active sessions
-         * @description Disables the target User and atomically revokes active Sessions after checking current authority and last-system-administrator safety. Historical affiliations, memberships, Role Bindings, attempts, submissions, and audit records are retained.
+         * @description Disables the target User and atomically revokes active Sessions after checking current authority and last-system-administrator safety. Historical affiliations, memberships, Role Bindings, attempts, submissions, and audit records are retained. An optional `reason` is recorded only in the operator audit record; it is not stored on the User and Academic Unit audit readers never receive it.
          */
         post: operations["disableUser"];
         delete?: never;
@@ -5659,6 +5687,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description Stable safe failure code of one academic administration batch item. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+         * @enum {string}
+         */
+        AcademicAdministrationBatchErrorCode: "request.invalid" | "resource.not_found" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "audit.unavailable" | "administration.unavailable" | "mail.unavailable" | "authentication.token_invalid" | "authentication.strong_required" | "authentication.reauthentication_required" | "affiliation.invalid" | "affiliation.conflict" | "affiliation.student_has_active_enrollment" | "academic_unit_member.invalid" | "academic_unit_member.conflict" | "class_member.invalid" | "class_member.student_affiliation_required" | "class.enrollment_conflict" | "role_binding.invalid" | "role_binding.conflict" | "role_binding.last_system_admin" | "role_binding.system_admin_scope_invalid" | "user.invalid" | "user.conflict" | "user.last_system_admin" | "session.not_found" | "idempotency.conflict" | "idempotency.in_progress" | "onboarding_batch.duplicate";
         AcademicAdministrationBatchItemRequest: {
             /** @enum {string} */
             affiliation_kind?: "student" | "teacher" | "staff";
@@ -5672,8 +5705,7 @@ export interface components {
             user_id?: components["schemas"]["ID"];
         };
         AcademicAdministrationBatchItemResponse: {
-            /** @enum {string} */
-            error_code?: "request.invalid" | "resource.not_found" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "audit.unavailable" | "administration.unavailable" | "mail.unavailable" | "authentication.token_invalid" | "authentication.strong_required" | "authentication.reauthentication_required" | "affiliation.invalid" | "affiliation.conflict" | "affiliation.student_has_active_enrollment" | "academic_unit_member.invalid" | "academic_unit_member.conflict" | "class_member.invalid" | "class_member.student_affiliation_required" | "class.enrollment_conflict" | "role_binding.invalid" | "role_binding.conflict" | "role_binding.last_system_admin" | "role_binding.system_admin_scope_invalid" | "user.invalid" | "user.conflict" | "user.last_system_admin" | "session.not_found" | "idempotency.conflict" | "idempotency.in_progress" | "onboarding_batch.duplicate";
+            error_code?: components["schemas"]["AcademicAdministrationBatchErrorCode"];
             index: number;
             resource_id?: components["schemas"]["ID"];
             /** @enum {string} */
@@ -5735,9 +5767,30 @@ export interface components {
             items: components["schemas"]["AcademicUnitResponse"][];
             next_cursor?: components["schemas"]["NextCursor"];
         };
+        /** @description One membership with who the member is. `roles_here` and `roles_here_more` are present only when the caller holds role_binding.view on this Academic Unit. */
+        AcademicUnitMemberListItemResponse: {
+            academic_unit_id: components["schemas"]["ID"];
+            /** Format: date-time */
+            archived_at?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            end_at?: string;
+            id: components["schemas"]["ID"];
+            /** @description The member's current Role Bindings scoped exactly to this Academic Unit, oldest first. */
+            roles_here?: components["schemas"]["AcademicUnitMemberRole"][];
+            /** @description Current Role Bindings on this Academic Unit past the five listed. Present with `roles_here`. */
+            roles_here_more?: number;
+            /** Format: date-time */
+            start_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            user: components["schemas"]["AcademicUnitMemberUser"];
+            user_id: components["schemas"]["ID"];
+        };
         /** @description One page of the collection in its stable order. */
         AcademicUnitMemberListResponse: {
-            items: components["schemas"]["AcademicUnitMemberResponse"][];
+            items: components["schemas"]["AcademicUnitMemberListItemResponse"][];
             next_cursor?: components["schemas"]["NextCursor"];
         };
         AcademicUnitMemberResponse: {
@@ -5754,6 +5807,18 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
             user_id: components["schemas"]["ID"];
+        };
+        AcademicUnitMemberRole: {
+            /** @description The Role's display name. */
+            display_name: string;
+            role_id: components["schemas"]["ID"];
+        };
+        /** @description Who the member is. Seeing a unit's members shows their display name and username; email is present only for a caller holding Institution-wide user.view. */
+        AcademicUnitMemberUser: {
+            display_name: string;
+            /** Format: email */
+            email?: string;
+            username: string;
         };
         AcademicUnitResponse: {
             /** Format: date-time */
@@ -5888,6 +5953,25 @@ export interface components {
             expected_revision: number;
             user_id: components["schemas"]["ID"];
         };
+        /** @description Counts for administration navigation. Each count is present only when the caller may list its resource, always with its lower-bound flag. */
+        AdministrationCountsResponse: {
+            /** @description Operator-visible Jobs that failed and were last updated in the last seven days. */
+            failed_jobs?: number;
+            /** @description True when `failed_jobs` reached the 1,000 bound. Present with `failed_jobs`. */
+            failed_jobs_is_lower_bound?: boolean;
+            /** @description Mail deliveries in the `failed` terminal state. */
+            failed_mail_deliveries?: number;
+            /** @description True when `failed_mail_deliveries` reached the 1,000 bound. Present with `failed_mail_deliveries`. */
+            failed_mail_deliveries_is_lower_bound?: boolean;
+            /** @description Unexpired administrative onboarding imports not yet completed, canceled, or failed, within the caller's onboarding import visibility. Student progressions are not counted. */
+            open_onboarding_imports?: number;
+            /** @description True when `open_onboarding_imports` reached the 1,000 bound. Present with `open_onboarding_imports`. */
+            open_onboarding_imports_is_lower_bound?: boolean;
+            /** @description Pending, unexpired Invitations within the caller's Invitation visibility. */
+            pending_invitations?: number;
+            /** @description True when `pending_invitations` reached the 1,000 bound. Present with `pending_invitations`. */
+            pending_invitations_is_lower_bound?: boolean;
+        };
         AdmittedSecurity: {
             delivery_stream_id: string;
             /** Format: int64 */
@@ -6000,10 +6084,15 @@ export interface components {
         AttemptParticipationEndReason: "interrupted" | "lease_expired" | "kicked" | "submitted" | "sitting_closed";
         /** @enum {string} */
         AttemptParticipationState: "active" | "ended";
+        /**
+         * @description Stable name of an audited action. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+         * @enum {string}
+         */
+        AuditAction: "academic.progression.manage" | "academic_audit.view" | "academic_period.manage" | "academic_period.view" | "academic_unit.manage" | "academic_unit.members.manage" | "academic_unit.members.view" | "academic_unit.view" | "access_policy.manage" | "access_policy.view" | "audit.view" | "authentication.administrator_mfa_reset" | "authentication.administrator_recovery" | "authentication.desktop_authorization" | "authentication.desktop_session_issue" | "authentication.email_change.undo" | "authentication.email_verification.complete" | "authentication.email_verification.request" | "authentication.external_login" | "authentication.external_provision" | "authentication.login" | "authentication.password_reset.complete" | "authentication.password_reset.request" | "authentication.public_registration" | "authentication.reauthenticate" | "class.manage" | "class.members.manage" | "class.members.view" | "class.view" | "desktop_compatibility_policy.manage" | "desktop_registration.revoke" | "exam.attempt.browser_activity.view" | "exam.create" | "exam.create.override" | "exam.manage" | "exam.manage.override" | "exam.publish" | "exam.publish.override" | "exam.records.complete" | "exam.records.complete.override" | "exam.records.export" | "exam.records.export.override" | "exam.records.hold" | "exam.records.hold.override" | "exam.sitting.create" | "exam.sitting.create.override" | "exam.sitting.manage" | "exam.sitting.manage.override" | "exam.sitting.participate" | "exam.sitting.view" | "exam.sitting.view.override" | "exam.view" | "exam.view.override" | "external_identity.manage" | "installation.bootstrap" | "institution.manage" | "invitation.accept" | "invitation.create" | "invitation.manage" | "invitation.view" | "job.manage" | "job.view" | "mail.manage" | "mail.rekey" | "mail.view" | "mfa.activate" | "mfa.challenge" | "mfa.disable" | "mfa.recovery_codes.regenerate" | "mfa.rekey" | "mfa.setup" | "onboarding_batch.manage" | "onboarding_batch.view" | "personal_access_token.create" | "personal_access_token.disable" | "personal_access_token.enable" | "personal_access_token.revoke" | "programme.manage" | "programme.view" | "programme_level.manage" | "programme_level.view" | "retention_cleanup.manage" | "retention_hold.release" | "retention_policy.manage" | "retention_policy.view" | "role.manage" | "role.system_admin.reconcile" | "role.view" | "role_binding.manage" | "role_binding.view" | "session.manage" | "session.view" | "submission.release" | "submission.release.override" | "submission.review" | "submission.review.override" | "submission.view" | "submission.view.override" | "user.manage" | "user.mfa.reset" | "user.profile_picture.manage" | "user.search" | "user.settings.replace" | "user.view";
         /** @description Safe durable audit fact visible to the authorized caller. */
         AuditEventResponse: {
             /** @description Stable permission-style name of the attempted action. */
-            action: string;
+            action: components["schemas"]["AuditAction"];
             /** @description User that initiated the action, omitted for actor-less system transitions. */
             actor_id?: string;
             authentication_method?: string;
@@ -6018,12 +6107,14 @@ export interface components {
             id: components["schemas"]["ID"];
             ip_address?: string;
             node_id?: string;
+            /** @description Reason recorded when an account was disabled, present only on that event, only when one was given, and only for Institution-wide audit readers. */
+            reason?: string;
             /** @description Safe request correlation value when the action originated over a request transport. */
             request_id?: string;
             resource: {
                 id: components["schemas"]["ID"];
                 /** @description Stable resource type acted upon. */
-                type: string;
+                type: components["schemas"]["ResourceType"];
             };
             /** @description Authorization scope identity, when the action has a scoped owner. */
             scope_id?: string;
@@ -6045,6 +6136,10 @@ export interface components {
             items: components["schemas"]["AuditEventResponse"][];
             /** @description Opaque continuation for the next page, omitted after the final page. */
             next_cursor?: string;
+            /** @description Audit Events matching the filters and the caller's visibility across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true. */
+            total?: number;
+            /** @description True when `total` reached the 10,000 bound and there may be more. Present with `total`. */
+            total_is_lower_bound?: boolean;
         };
         AuthenticationMethodResponse: {
             password: boolean;
@@ -7331,6 +7426,10 @@ export interface components {
             /** @enum {string} */
             status: "active" | "revoked";
         };
+        DisableUserRequest: {
+            /** @description Why the account is disabled, trimmed of surrounding white space: up to 500 characters with no control characters, and not only white space. An empty string means no reason. It is kept only in the audit record, where Institution-wide audit readers see it on the disable event. */
+            reason?: string;
+        };
         EditExamDraftTextRequest: {
             /** Format: int64 */
             expected_revision: number;
@@ -7481,6 +7580,11 @@ export interface components {
         EnrollPasswordRequest: {
             password: string;
         };
+        /**
+         * @description Stable public problem code. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+         * @enum {string}
+         */
+        ErrorCode: "academic_period.conflict" | "academic_period.invalid" | "academic_unit.conflict" | "academic_unit.invalid" | "academic_unit_member.conflict" | "academic_unit_member.invalid" | "access_policy.blocked" | "access_policy.invalid" | "access_policy.revision_conflict" | "access_policy.unavailable" | "administration.unavailable" | "administrator_recovery.invalid" | "administrator_recovery.unavailable" | "affiliation.conflict" | "affiliation.invalid" | "affiliation.student_has_active_enrollment" | "audit.internal" | "audit.query.invalid" | "audit.unavailable" | "authentication.account_recovery.unavailable" | "authentication.account_token.invalid" | "authentication.client_type.invalid" | "authentication.credential_ambiguous" | "authentication.credentials_invalid" | "authentication.csrf.invalid" | "authentication.desktop_authorization.account_session_locked" | "authentication.desktop_authorization.disabled" | "authentication.desktop_authorization.incompatible" | "authentication.desktop_authorization.invalid" | "authentication.desktop_authorization.rejected" | "authentication.desktop_authorization.unavailable" | "authentication.desktop_reauthentication.denied" | "authentication.desktop_reauthentication.invalid" | "authentication.dpop.invalid" | "authentication.dpop.replayed" | "authentication.dpop.unavailable" | "authentication.dpop.use_nonce" | "authentication.email_change_undo.conflict" | "authentication.external.account_conflict" | "authentication.external.account_not_linked" | "authentication.external.invalid" | "authentication.external.provider_not_found" | "authentication.external.rejected" | "authentication.external.request.invalid" | "authentication.external.unavailable" | "authentication.internal" | "authentication.method.conflict" | "authentication.method.disabled" | "authentication.method.last_usable" | "authentication.method.not_found" | "authentication.method.provider_conflict" | "authentication.method.unavailable" | "authentication.mfa.code_invalid" | "authentication.mfa.conflict" | "authentication.mfa.disabled" | "authentication.mfa.not_found" | "authentication.mfa.rekey.conflict" | "authentication.mfa.rekey.invalid" | "authentication.mfa.required" | "authentication.mfa.reset_invalid" | "authentication.mfa.unavailable" | "authentication.password.common_invalid" | "authentication.password.identity_invalid" | "authentication.password.invalid" | "authentication.password.pattern_invalid" | "authentication.password.reused" | "authentication.rate_limit_unavailable" | "authentication.rate_limited" | "authentication.reauthentication_method_required" | "authentication.reauthentication_required" | "authentication.registration.invalid" | "authentication.registration.invitation_required" | "authentication.registration.unavailable" | "authentication.required" | "authentication.session.invalid" | "authentication.session_required" | "authentication.sessions.maximum_reached" | "authentication.strong_required" | "authentication.token_invalid" | "authentication.user.conflict" | "authentication.user.invalid" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "class.conflict" | "class.enrollment_conflict" | "class.invalid" | "class_member.invalid" | "class_member.student_affiliation_required" | "desktop_compatibility_policy.invalid" | "desktop_compatibility_policy.revision_conflict" | "desktop_compatibility_policy.unavailable" | "desktop_registration.unavailable" | "exam.archived" | "exam.attempt.already_connected" | "exam.attempt.browser_activity_conflict" | "exam.attempt.configuration_frozen" | "exam.attempt.configuration_required" | "exam.attempt.configuration_stale" | "exam.attempt.configuration_unsupported" | "exam.attempt.conflict" | "exam.attempt.connection_closed" | "exam.attempt.connection_lost" | "exam.attempt.continuity_invalid" | "exam.attempt.correction_conflict" | "exam.attempt.desktop_incompatible" | "exam.attempt.focus_loss_conflict" | "exam.attempt.invalid" | "exam.attempt.management_authority_conflict" | "exam.attempt.not_found" | "exam.attempt.registered_desktop_required" | "exam.attempt.renewal_conflict" | "exam.attempt.revision_conflict" | "exam.attempt.sitting_not_open" | "exam.attempt.state_conflict" | "exam.attempt.suspension_conflict" | "exam.attempt.unavailable" | "exam.attempt.workspace.content_conflict" | "exam.attempt.workspace.cursor_conflict" | "exam.attempt.workspace.directory_not_empty" | "exam.attempt.workspace.entry_conflict" | "exam.attempt.workspace.entry_limit" | "exam.attempt.workspace.object_conflict" | "exam.attempt.workspace.path_conflict" | "exam.attempt.workspace.size_limit" | "exam.browser.source_budget_exhausted" | "exam.conflict" | "exam.delivery.append_rate_limited" | "exam.delivery.batch_conflict" | "exam.delivery.control_rate_limited" | "exam.delivery.declaration_conflict" | "exam.delivery.detail_budget_exhausted" | "exam.delivery.metadata_capacity" | "exam.delivery.pending_capacity" | "exam.delivery.replay_window_exceeded" | "exam.delivery.sequence_limit" | "exam.delivery.summary_rate_limited" | "exam.delivery.upload_expired" | "exam.draft.no_changes" | "exam.draft.revision_conflict" | "exam.export.claim_lost" | "exam.export.conflict" | "exam.export.expired" | "exam.export.limit" | "exam.export.not_found" | "exam.export.not_ready" | "exam.export.policy_unconfigured" | "exam.export.scope_changed" | "exam.export.source_retired" | "exam.export.unavailable" | "exam.integrity_review.incomplete" | "exam.integrity_review.invalid" | "exam.integrity_review.not_found" | "exam.integrity_review.revision_conflict" | "exam.integrity_review.state_conflict" | "exam.integrity_review.too_large" | "exam.integrity_review.unavailable" | "exam.invalid" | "exam.manager.candidate_conflict" | "exam.manager.exists" | "exam.manager.ineligible" | "exam.manager.not_found" | "exam.manager.owner_protected" | "exam.not_found" | "exam.owner.no_changes" | "exam.resource.conflict" | "exam.resource.content_invalid" | "exam.resource.invalid" | "exam.resource.limit" | "exam.resource.no_changes" | "exam.resource.not_found" | "exam.resource.order_invalid" | "exam.resource.revision_conflict" | "exam.resource.unavailable" | "exam.resource.upload_invalid" | "exam.revision.capacity_exceeded" | "exam.revision.no_changes" | "exam.revision_conflict" | "exam.security.attempt_not_ready" | "exam.security.catalog_missing" | "exam.security.configuration_unsupported" | "exam.security.control_conflict" | "exam.security.policy_changed" | "exam.security.posture_blocked" | "exam.security.preflight_consumed" | "exam.security.preflight_expired" | "exam.security.preflight_rate_limited" | "exam.security.preflight_report_changed" | "exam.security.preflight_required" | "exam.security.preflight_superseded" | "exam.security.resume_required" | "exam.security.session_changed" | "exam.security.unsupported_capability" | "exam.sitting.class_ineligible" | "exam.sitting.conflict" | "exam.sitting.correction.conflict" | "exam.sitting.correction.content_invalid" | "exam.sitting.correction.invalid" | "exam.sitting.correction.limit" | "exam.sitting.correction.manifest_conflict" | "exam.sitting.correction.no_changes" | "exam.sitting.correction.not_found" | "exam.sitting.correction.stage_conflict" | "exam.sitting.correction.unavailable" | "exam.sitting.deadline_reached" | "exam.sitting.extension_not_later" | "exam.sitting.invalid" | "exam.sitting.no_changes" | "exam.sitting.not_found" | "exam.sitting.revision_conflict" | "exam.sitting.schedule_not_future" | "exam.sitting.schedule_outside_period" | "exam.sitting.state_conflict" | "exam.sitting.unavailable" | "exam.starter_workspace.conflict" | "exam.starter_workspace.content_conflict" | "exam.starter_workspace.directory_not_empty" | "exam.starter_workspace.entry_kind" | "exam.starter_workspace.entry_limit" | "exam.starter_workspace.invalid" | "exam.starter_workspace.move_conflict" | "exam.starter_workspace.no_changes" | "exam.starter_workspace.not_found" | "exam.starter_workspace.object_conflict" | "exam.starter_workspace.parent_not_found" | "exam.starter_workspace.path_conflict" | "exam.starter_workspace.total_size_limit" | "exam.starter_workspace.unavailable" | "exam.starter_workspace.upload_expired" | "exam.unavailable" | "health.not_live" | "health.not_ready" | "idempotency.conflict" | "idempotency.in_progress" | "idempotency.key_invalid" | "idempotency.key_required" | "idempotency.not_supported" | "installation.already_initialized" | "installation.bootstrap_denied" | "installation.unavailable" | "institution.conflict" | "institution.invalid" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.invalid" | "invitation.mail_unavailable" | "invitation.query.invalid" | "invitation.role_not_delegable" | "invitation.unavailable" | "invitation.user_invalid" | "job.cancel.unsupported" | "job.conflict" | "job.query.invalid" | "job.retry.unsupported" | "job.unavailable" | "mail.conflict" | "mail.query.invalid" | "mail.recipient_ineligible" | "mail.recipient_unverified" | "mail.rekey.conflict" | "mail.rekey.invalid" | "mail.test.rate_limited" | "mail.unavailable" | "onboarding_batch.duplicate" | "onboarding_import.conflict" | "onboarding_import.file_invalid" | "onboarding_import.unavailable" | "personal_access_token.invalid" | "personal_access_token.maximum_reached" | "personal_access_token.unavailable" | "profile_picture.invalid" | "profile_picture.unavailable" | "programme.conflict" | "programme.invalid" | "programme_level.conflict" | "programme_level.invalid" | "request.invalid" | "request.too_large" | "resource.not_found" | "retention.conflict" | "retention.invalid" | "retention.unavailable" | "retention_policy.invalid" | "retention_policy.revision_conflict" | "retention_policy.unavailable" | "role.built_in.protected" | "role.conflict" | "role.invalid" | "role.permission.invalid" | "role_binding.conflict" | "role_binding.invalid" | "role_binding.last_system_admin" | "role_binding.system_admin_scope_invalid" | "route.method_not_allowed" | "route.not_found" | "search.query.invalid" | "server.internal" | "service.busy" | "session.id.invalid" | "session.not_found" | "student_progression.conflict" | "student_progression.effective_date_conflict" | "student_progression.lineage_conflict" | "student_progression.roster_too_large" | "student_progression.target_conflict" | "student_progression.unavailable" | "user.conflict" | "user.invalid" | "user.last_system_admin" | "user_settings.format_unsupported" | "user_settings.invalid" | "user_settings.revision_conflict" | "user_settings.unavailable" | "websocket.action.unknown" | "websocket.internal" | "websocket.origin.invalid" | "websocket.rate_limited" | "websocket.request.invalid" | "websocket.subscription.invalid" | "websocket.subscription.limit" | "websocket.unavailable";
         ExamAttemptConnectionResponse: {
             close_reason?: components["schemas"]["AttemptConnectionCloseReason"];
             /** Format: date-time */
@@ -8495,6 +8599,10 @@ export interface components {
         InvitationAdministrationListResponse: {
             items: components["schemas"]["InvitationAdministrationResponse"][];
             next_cursor?: string;
+            /** @description Invitations matching the filters and the caller's visibility across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true. */
+            total?: number;
+            /** @description True when `total` reached the 10,000 bound and there may be more. Present with `total`. */
+            total_is_lower_bound?: boolean;
         };
         InvitationAdministrationResponse: {
             academic_period_id?: components["schemas"]["ID"];
@@ -8525,6 +8633,11 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /**
+         * @description Stable safe failure code of one Invitation batch item. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+         * @enum {string}
+         */
+        InvitationBatchErrorCode: "request.invalid" | "resource.not_found" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "audit.unavailable" | "administration.unavailable" | "authentication.token_invalid" | "authentication.strong_required" | "authentication.reauthentication_required" | "invitation.invalid" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.role_not_delegable" | "invitation.mail_unavailable" | "invitation.unavailable" | "idempotency.conflict" | "idempotency.in_progress" | "onboarding_batch.duplicate";
         InvitationBatchItemRequest: {
             /** Format: email */
             email?: string;
@@ -8545,8 +8658,7 @@ export interface components {
             suggested_username?: string;
         };
         InvitationBatchItemResponse: {
-            /** @enum {string} */
-            error_code?: "request.invalid" | "resource.not_found" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "audit.unavailable" | "administration.unavailable" | "authentication.token_invalid" | "authentication.strong_required" | "authentication.reauthentication_required" | "invitation.invalid" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.role_not_delegable" | "invitation.mail_unavailable" | "invitation.unavailable" | "idempotency.conflict" | "idempotency.in_progress" | "onboarding_batch.duplicate";
+            error_code?: components["schemas"]["InvitationBatchErrorCode"];
             index: number;
             invitation_id?: components["schemas"]["ID"];
             /** @enum {string} */
@@ -8576,7 +8688,7 @@ export interface components {
             /** Format: date-time */
             deadline: string;
             masked_recipient: string;
-            public_failure_code?: string;
+            public_failure_code?: components["schemas"]["MailFailureCode"];
             /** @enum {string} */
             state: "queued" | "sending" | "accepted" | "failed" | "suppressed" | "canceled";
             template_key: string;
@@ -8610,6 +8722,8 @@ export interface components {
             email: string;
             /** Format: date-time */
             end_at?: string;
+            /** @description Whole days until the claim expires, from 1 to 30. Omitted or null selects 7. A value outside the range is rejected with invitation.invalid. */
+            expires_in_days?: number | null;
             role_id: components["schemas"]["ID"];
             /** Format: date-time */
             start_at?: string;
@@ -8619,6 +8733,8 @@ export interface components {
             email: string;
             /** Format: date-time */
             end_at?: string;
+            /** @description Whole days until the claim expires, from 1 to 30. Omitted or null selects 7. A value outside the range is rejected with invitation.invalid. */
+            expires_in_days?: number | null;
             /** Format: date-time */
             start_at?: string;
             suggested_display_name?: string;
@@ -8633,6 +8749,8 @@ export interface components {
             email: string;
             /** Format: date-time */
             end_at?: string;
+            /** @description Whole days until the claim expires, from 1 to 30. Omitted or null selects 7. A value outside the range is rejected with invitation.invalid. */
+            expires_in_days?: number | null;
             role_id: components["schemas"]["ID"];
             /** Format: date-time */
             start_at?: string;
@@ -8670,7 +8788,7 @@ export interface components {
             /** @description Monotonic attempt number within the parent Job. */
             number: number;
             /** @description Stable safe failure category for a failed terminal Attempt; internal error detail is never returned. */
-            public_error_code?: string;
+            public_error_code?: components["schemas"]["JobErrorCode"];
             /**
              * Format: date-time
              * @description Time when execution started.
@@ -8683,11 +8801,20 @@ export interface components {
          * @enum {string}
          */
         JobAttemptStatus: "running" | "succeeded" | "failed" | "canceled" | "lease_expired" | "incompatible";
+        /**
+         * @description Stable safe failure category of a Job or Job Attempt. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+         * @enum {string}
+         */
+        JobErrorCode: "database.unavailable" | "dependency.unavailable" | "exam.export.expired" | "exam.export.unavailable" | "file.backend_unavailable" | "job.canceled" | "job.checkpoint.invalid" | "job.command.invalid" | "job.invariant_failed" | "mail.delivery.conflict" | "mail.delivery.failed" | "mail.delivery.not_found" | "mail.delivery.unavailable" | "mail.message.invalid" | "mail.payload.unavailable" | "mail.rekey.fenced" | "mail.rekey.incomplete" | "mail.rekey.invariant_failed" | "mail.rekey.payload_unavailable" | "mail.rekey.primary_mismatch" | "mail.sitting.bundle_unavailable" | "mail.sitting.invalid" | "mail.sitting.recipient_unavailable" | "mail.sitting.unavailable" | "mail.transport.acceptance_uncertain" | "mail.transport.permanent" | "mail.transport.temporary" | "mail.transport.unknown" | "mfa.rekey.fenced" | "mfa.rekey.incomplete" | "mfa.rekey.invariant_failed" | "mfa.rekey.primary_mismatch" | "mfa.rekey.secret_unavailable" | "onboarding_import.authorization_lost" | "onboarding_import.file_invalid" | "retention.unavailable" | "student_progression.authorization_lost" | "student_progression.effective_date_conflict" | "student_progression.lineage_conflict" | "student_progression.roster_too_large" | "student_progression.target_conflict" | "user.not_found";
         /** @description One bounded page of safe durable Job projections. */
         JobListResponse: {
             items: components["schemas"]["JobResponse"][];
             /** @description Opaque continuation for the next page, omitted after the final page. */
             next_cursor?: string;
+            /** @description Jobs matching the filters and the caller's visibility across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true. */
+            total?: number;
+            /** @description True when `total` reached the 10,000 bound and there may be more. Present with `total`. */
+            total_is_lower_bound?: boolean;
         };
         /** @description Bounded coarse progress reported by a Job implementation. */
         JobProgressResponse: {
@@ -8697,7 +8824,7 @@ export interface components {
              */
             current: number;
             /** @description Stable safe name of the current processing stage. */
-            stage: string;
+            stage: components["schemas"]["JobStage"];
             /**
              * Format: int64
              * @description Total work units expected in the current stage.
@@ -8723,12 +8850,16 @@ export interface components {
              * @description Time when the Job was created.
              */
             created_at: string;
+            /** @description Display name of the User who started the Job, or their username when they have none. Omitted with created_by_user_id, and while that User is archived. */
+            created_by_display_name?: string;
+            /** @description User whose request started the Job. Omitted for recurring and system work, and after that User is deleted. */
+            created_by_user_id?: components["schemas"]["ID"];
             id: components["schemas"]["ID"];
             /** @description Maximum execution Attempts allowed by this Job's retry policy. */
             maximum_attempts: number;
             progress?: components["schemas"]["JobProgressResponse"];
             /** @description Stable safe failure category; private worker and infrastructure errors are never exposed. */
-            public_error_code?: string;
+            public_error_code?: components["schemas"]["JobErrorCode"];
             /**
              * Format: int64
              * @description Monotonic durable Job revision for concurrency-aware consumers.
@@ -8740,16 +8871,28 @@ export interface components {
              */
             started_at?: string;
             status: components["schemas"]["JobStatus"];
+            /** @description What the Job is about, for the Job types that say: an Examination Export build names the title of the Exam revision its Sitting runs. Omitted for every other type. */
+            subject?: string;
             /** @description Stable allowlisted Job type. */
-            type: string;
+            type: components["schemas"]["JobType"];
             /**
              * Format: date-time
              * @description Time of the latest durable Job change.
              */
             updated_at: string;
         };
+        /**
+         * @description Stable name of a Job processing stage. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+         * @enum {string}
+         */
+        JobStage: "completed" | "executing" | "expanding" | "purging" | "reconciling" | "reencrypting" | "resealing" | "sealing";
         /** @enum {string} */
         JobStatus: "queued" | "running" | "cancel_requested" | "succeeded" | "failed" | "canceled";
+        /**
+         * @description Stable type of a background Job. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+         * @enum {string}
+         */
+        JobType: "audit.attempt_sweep" | "command_outcome.cleanup" | "exam_export.build" | "exam_export.cleanup" | "exam_sitting.lifecycle" | "exam_sitting.lifecycle_recovery" | "exam_sitting.sealing" | "file.purge_expired_content" | "invitation.maintenance" | "job.cleanup" | "mail.cleanup" | "mail.deliver" | "mail.deliver_credential" | "mail.expand_sitting" | "mail.rekey" | "mfa.rekey" | "onboarding_import.execute" | "onboarding_import.parse" | "profile_picture.generate_default" | "profile_picture.reconcile_defaults" | "retention.expire" | "retention.notices" | "retention.purge" | "retention.reconcile" | "session.purge_retired" | "student_progression.preview";
         LoginRequest: {
             /**
              * @description The client family for the Session being created.
@@ -8926,6 +9069,10 @@ export interface components {
             items: components["schemas"]["MailDeliveryResponse"][];
             /** @description Opaque continuation for the next page, omitted after the final page. */
             next_cursor?: string;
+            /** @description Mail deliveries matching the filters and the caller's visibility across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true. */
+            total?: number;
+            /** @description True when `total` reached the 10,000 bound and there may be more. Present with `total`. */
+            total_is_lower_bound?: boolean;
         };
         /** @description Aggregate delivery outcome and processing latency for one bounded metric bucket. */
         MailDeliveryMetricResponse: {
@@ -8952,8 +9099,7 @@ export interface components {
              */
             processing_latency_millis: number;
             state: components["schemas"]["MailDeliveryState"];
-            /** @enum {string} */
-            template_key: "system.mail_test";
+            template_key: components["schemas"]["MailTemplateKey"];
         };
         /** @description Safe durable mail delivery metadata with the recipient masked and content omitted. */
         MailDeliveryResponse: {
@@ -8990,13 +9136,12 @@ export interface components {
             message_id: string;
             occurrence_id: components["schemas"]["ID"];
             /** @description Stable safe failure category; raw SMTP or infrastructure errors are never exposed. */
-            public_failure_code?: string;
+            public_failure_code?: components["schemas"]["MailFailureCode"];
             state: components["schemas"]["MailDeliveryState"];
             target_user_id: components["schemas"]["ID"];
             /** @description SHA-256 digest of the exact rendered template revision, encoded as lowercase hexadecimal. */
             template_digest: string;
-            /** @enum {string} */
-            template_key: "system.mail_test";
+            template_key: components["schemas"]["MailTemplateKey"];
             /**
              * Format: date-time
              * @description Time of the latest durable state change.
@@ -9008,6 +9153,11 @@ export interface components {
          * @enum {string}
          */
         MailDeliveryState: "queued" | "sending" | "accepted" | "failed" | "suppressed" | "canceled";
+        /**
+         * @description Stable safe failure category of a Mail Delivery: why it failed, was suppressed or canceled, or was retried by an operator. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+         * @enum {string}
+         */
+        MailFailureCode: "mail.delivery.canceled" | "mail.delivery.expired" | "mail.delivery.obsolete" | "mail.delivery.recipient_ineligible" | "mail.delivery.suppressed_disabled" | "mail.message.invalid" | "mail.operator.retry" | "mail.payload.unavailable" | "mail.transport.acceptance_uncertain" | "mail.transport.permanent" | "mail.transport.temporary" | "mail.transport.unknown";
         /** @description Safe key identities and references used to govern mail payload rotation. */
         MailKeyStateResponse: {
             /** @description Bounded keys with at least one active encrypted-payload reference. */
@@ -9053,8 +9203,7 @@ export interface components {
             oldest_age_millis: number;
             outcome_code: string;
             state: components["schemas"]["MailDeliveryState"];
-            /** @enum {string} */
-            template_key: "system.mail_test";
+            template_key: components["schemas"]["MailTemplateKey"];
             /** @description True when the bounded scan did not include every matching delivery. */
             truncated: boolean;
         };
@@ -9126,6 +9275,11 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /**
+         * @description Stable key of one server-owned transactional mail template. The catalogue is closed and may grow; clients own the labels and should present an unknown key generically.
+         * @enum {string}
+         */
+        MailTemplateKey: "academic.academic_unit_assigned" | "academic.academic_unit_assignment_ended" | "academic.class_enrolled" | "academic.class_enrollment_ended" | "academic.class_transferred" | "access.academic_unit_role_invitation" | "access.institution_role_invitation" | "access.invitation_accepted" | "access.invitation_revoked" | "access.student_class_invitation" | "access.teacher_academic_unit_invitation" | "authorization.institution_role_assigned" | "authorization.institution_role_ended" | "authorization.scoped_role_assigned" | "authorization.scoped_role_ended" | "exam.manager_added" | "exam.manager_removed" | "exam.ownership_transferred_from_you" | "exam.ownership_transferred_to_you" | "exam.result_released" | "exam.retention_scheduled" | "exam.sitting_assignment_removed" | "exam.sitting_canceled" | "exam.sitting_rescheduled" | "exam.sitting_scheduled" | "exam.submission_automatically_sealed" | "exam.submission_manager_ended" | "exam.submission_received" | "identity.account_disabled" | "identity.account_enabled" | "identity.email_change_verify_new" | "identity.email_change_warning_old" | "identity.email_verified_by_admin" | "identity.mfa_disabled" | "identity.mfa_enabled" | "identity.mfa_recovery_codes_regenerated" | "identity.mfa_reset" | "identity.password_changed" | "identity.password_reset" | "identity.personal_access_token_created" | "identity.personal_access_token_disabled" | "identity.personal_access_token_enabled" | "identity.personal_access_token_revoked" | "identity.sessions_revoked_by_admin" | "identity.verify_email" | "system.mail_test";
         MoveCandidateWorkspaceEntryRequest: {
             destination_path: components["schemas"]["StarterWorkspacePath"];
             expected_path: components["schemas"]["StarterWorkspacePath"];
@@ -9433,12 +9587,28 @@ export interface components {
             policy: "require_all_valid" | "valid_rows_only";
             preview_digest: string;
         };
+        /**
+         * @description Why a failed onboarding import or student progression failed: a lost credential or authority, an unreadable file, a target that no longer validates, or a progression preview failure. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+         * @enum {string}
+         */
+        OnboardingImportFailureCode: "administration.unavailable" | "audit.unavailable" | "authentication.reauthentication_required" | "authentication.strong_required" | "authentication.token_invalid" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "idempotency.conflict" | "idempotency.in_progress" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.invalid" | "invitation.mail_unavailable" | "invitation.role_not_delegable" | "invitation.unavailable" | "onboarding_batch.duplicate" | "onboarding_import.file_invalid" | "request.invalid" | "resource.not_found" | "student_progression.authorization_lost" | "student_progression.conflict" | "student_progression.effective_date_conflict" | "student_progression.lineage_conflict" | "student_progression.roster_too_large" | "student_progression.target_conflict";
+        OnboardingImportListResponse: {
+            items: components["schemas"]["OnboardingImportResponse"][];
+            next_cursor?: string;
+        };
+        /**
+         * @description Why a preview row is invalid, duplicate, or annotated: a malformed or duplicate CSV row, a target that does not resolve, or a student progression outcome such as an ineligible student or an existing destination enrollment. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+         * @enum {string}
+         */
+        OnboardingImportPreviewCode: "administration.unavailable" | "audit.unavailable" | "authentication.reauthentication_required" | "authentication.strong_required" | "authentication.token_invalid" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "idempotency.conflict" | "idempotency.in_progress" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.invalid" | "invitation.mail_unavailable" | "invitation.role_not_delegable" | "invitation.unavailable" | "onboarding_batch.duplicate" | "request.invalid" | "resource.not_found" | "student_progression.conflict" | "student_progression.destination_conflict" | "student_progression.destination_exists" | "student_progression.effective_date_conflict" | "student_progression.ineligible_target" | "student_progression.target_conflict";
         OnboardingImportResponse: {
             /** @enum {string} */
             commit_policy?: "require_all_valid" | "valid_rows_only";
             /** Format: date-time */
             created_at: string;
             destination_class_id?: components["schemas"]["ID"];
+            /** @description Display name of the destination Class, present only on student progression reads and listings. */
+            destination_class_name?: string;
             destination_period_id?: components["schemas"]["ID"];
             /** Format: date-time */
             effective_at?: string;
@@ -9446,7 +9616,9 @@ export interface components {
             /** Format: date-time */
             expires_at: string;
             failed_rows: number;
-            failure_code?: string;
+            failure_code?: components["schemas"]["OnboardingImportFailureCode"];
+            /** @description Base name of the uploaded file as the uploader gave it, omitted when none was given and for student progressions. */
+            file_name?: string;
             id: components["schemas"]["ID"];
             ignored_headers?: string[];
             invalid_rows: number;
@@ -9464,6 +9636,8 @@ export interface components {
             scope_type: "class" | "academic_unit" | "institution";
             skipped_rows: number;
             source_class_id?: components["schemas"]["ID"];
+            /** @description Display name of the source Class, present only on student progression reads and listings. */
+            source_class_name?: string;
             source_period_id?: components["schemas"]["ID"];
             /** @enum {string} */
             state: "uploading" | "parsing" | "preview_ready" | "executing" | "completed" | "completed_with_errors" | "canceled" | "failed";
@@ -9473,12 +9647,17 @@ export interface components {
             updated_at: string;
             valid_rows: number;
         };
+        /**
+         * @description Why an executed onboarding import or student progression row failed, as the Invitation or academic administration operation that ran it reported. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+         * @enum {string}
+         */
+        OnboardingImportRowCode: "academic_unit_member.conflict" | "academic_unit_member.invalid" | "administration.unavailable" | "affiliation.conflict" | "affiliation.invalid" | "affiliation.student_has_active_enrollment" | "audit.unavailable" | "authentication.reauthentication_required" | "authentication.strong_required" | "authentication.token_invalid" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "class.enrollment_conflict" | "class_member.invalid" | "class_member.student_affiliation_required" | "idempotency.conflict" | "idempotency.in_progress" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.invalid" | "invitation.mail_unavailable" | "invitation.role_not_delegable" | "invitation.unavailable" | "mail.unavailable" | "onboarding_batch.duplicate" | "request.invalid" | "resource.not_found" | "role_binding.conflict" | "role_binding.invalid" | "role_binding.last_system_admin" | "role_binding.system_admin_scope_invalid" | "session.not_found" | "student_progression.conflict" | "student_progression.target_conflict" | "user.conflict" | "user.invalid" | "user.last_system_admin";
         OnboardingImportRowResponse: {
             invitation_id?: components["schemas"]["ID"];
             /** @enum {string} */
             operation: "student_class.create" | "teacher_academic_unit.create" | "academic_unit_role.create" | "institution_role.create" | "affiliation.add" | "affiliation.end" | "academic_unit_member.add" | "academic_unit_member.end" | "class.enroll" | "class.end" | "class.transfer" | "role_binding.create" | "role_binding.end" | "user.enable" | "user.disable" | "user_sessions.revoke";
-            preview_code?: string;
-            public_code?: string;
+            preview_code?: components["schemas"]["OnboardingImportPreviewCode"];
+            public_code?: components["schemas"]["OnboardingImportRowCode"];
             reference: string;
             resource_id?: components["schemas"]["ID"];
             row: number;
@@ -9563,7 +9742,7 @@ export interface components {
             source_manifest_digest: string;
         };
         ProblemDetails: {
-            code: string;
+            code: components["schemas"]["ErrorCode"];
             /**
              * Format: int64
              * @description Present only on an exam.delivery.metadata_capacity refusal.
@@ -9796,6 +9975,8 @@ export interface components {
             end_at?: string;
             /** Format: int64 */
             expected_revision: number;
+            /** @description Whole days until the replacement's claim expires, from 1 to 30. Omitted or null keeps the replaced Invitation's own lifetime, rounded to whole days. A value outside the range is rejected with invitation.invalid. */
+            expires_in_days?: number | null;
             institution_id?: components["schemas"]["ID"];
             /** @enum {string} */
             purpose: "student_class" | "teacher_academic_unit" | "academic_unit_role" | "institution_role";
@@ -9820,6 +10001,11 @@ export interface components {
             /** @description Reference to the institution's verification record; do not include the verification evidence itself. */
             verification_reference: string;
         };
+        /**
+         * @description Stable type of an authorization or audit resource. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+         * @enum {string}
+         */
+        ResourceType: "academic_period" | "academic_unit" | "class" | "exam" | "exam_sitting" | "institution" | "mail_delivery" | "programme" | "programme_level" | "submission" | "user";
         RetentionControlRequest: {
             /** Format: int64 */
             expected_policy_revision: number;
@@ -10569,6 +10755,16 @@ export interface components {
             source_class_id: components["schemas"]["ID"];
             source_period_id: components["schemas"]["ID"];
         };
+        /** @description Student progression summaries newest first, without rows. */
+        StudentProgressionListResponse: {
+            items: components["schemas"]["OnboardingImportResponse"][];
+            /** @description Opaque continuation for the next page, omitted after the final page. */
+            next_cursor?: string;
+            /** @description Student progressions matching the filters and the caller's authority across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true. */
+            total?: number;
+            /** @description True when `total` reached the 10,000 bound and there may be more. Present with `total`. */
+            total_is_lower_bound?: boolean;
+        };
         SubmissionReviewWaiverEnvelope: {
             waiver: components["schemas"]["SubmissionReviewWaiverResponse"] | null;
         };
@@ -10837,19 +11033,21 @@ export interface components {
             /** @description Omitted or null leaves the canonical username unchanged. */
             username?: string | null;
         };
-        /** @description Narrow identity and verification state after an email-security transition. */
-        UserEmailStateResponse: {
-            /** @description Whether the target User's current email has completed verification. */
-            email_verified: boolean;
+        UserDirectoryAcademicUnit: {
             id: components["schemas"]["ID"];
+            /** @description The Academic Unit's display name. */
+            name: string;
         };
-        /** @description Visible User profiles ordered by canonical username and identity. */
-        UserProfileListResponse: {
-            items: components["schemas"]["UserProfileResponse"][];
-            next_cursor?: components["schemas"]["NextCursor"];
+        /** @description One current Affiliation with the User's current Academic Units. A membership is not tied to an Affiliation kind, so every Affiliation carries the same units: at most two, ordered by name, from units the caller's user.view reaches (every unit for Institution-wide user.view). */
+        UserDirectoryAffiliation: {
+            academic_units: components["schemas"]["UserDirectoryAcademicUnit"][];
+            /** @description Visible current Academic Units past the two listed. */
+            academic_units_more: number;
+            /** @enum {string} */
+            kind: "student" | "teacher" | "staff" | "external";
         };
-        /** @description User directory projection. Email, verification, locale, timezone, activity, and disabled state are present only for self or institution-wide user.view authority. */
-        UserProfileResponse: {
+        /** @description One User directory item: the User profile projection the caller may read, with the same field rules as UserProfileResponse, and a bounded summary of who the User is in the Institution. */
+        UserDirectoryEntryResponse: {
             /** Format: date-time */
             archived_at?: string;
             /** Format: date-time */
@@ -10865,6 +11063,80 @@ export interface components {
             /** Format: date-time */
             last_activity_at?: string;
             /** Format: date-time */
+            last_login_at?: string;
+            last_name: string;
+            locale?: string;
+            /**
+             * Format: date-time
+             * @description Time of the latest upload or removal. It is not a sign that a custom picture exists; use profile_picture_kind.
+             */
+            profile_picture_changed_at?: string;
+            profile_picture_kind: components["schemas"]["ProfilePictureKind"];
+            profile_picture_url: string;
+            summary?: components["schemas"]["UserDirectorySummary"];
+            timezone?: string;
+            /** Format: date-time */
+            updated_at: string;
+            username: string;
+        };
+        /** @description One current Role Binding, named by its Role and the Institution, Academic Unit or Class it is scoped to. */
+        UserDirectoryRole: {
+            /** @description The Role's display name. */
+            display_name: string;
+            role_id: components["schemas"]["ID"];
+            scope_id: components["schemas"]["ID"];
+            /** @description The display name of the binding's Institution, Academic Unit or Class. */
+            scope_name: string;
+            /** @enum {string} */
+            scope_type: "institution" | "academic_unit" | "class";
+        };
+        /** @description Who the User is, read at the same instant as the page. `affiliations` lists at most three current Affiliations, oldest first. `roles` and `roles_more` are present only when the caller holds role_binding.view somewhere; they list at most three current Role Bindings inside the caller's role_binding.view scopes, oldest first, and a binding outside those scopes is neither listed nor counted. */
+        UserDirectorySummary: {
+            affiliations: components["schemas"]["UserDirectoryAffiliation"][];
+            /** @description Current Affiliations past the three listed. */
+            affiliations_more: number;
+            roles?: components["schemas"]["UserDirectoryRole"][];
+            /** @description Visible current Role Bindings past the three listed. Present with `roles`. */
+            roles_more?: number;
+        };
+        /** @description Narrow identity and verification state after an email-security transition. */
+        UserEmailStateResponse: {
+            /** @description Whether the target User's current email has completed verification. */
+            email_verified: boolean;
+            id: components["schemas"]["ID"];
+        };
+        /** @description Visible User profiles ordered by canonical username and identity. */
+        UserProfileListResponse: {
+            items: components["schemas"]["UserDirectoryEntryResponse"][];
+            next_cursor?: components["schemas"]["NextCursor"];
+            /** @description Users matching the filters and the caller's visibility across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true. */
+            total?: number;
+            /** @description True when `total` reached the 10,000 bound and there may be more. Present with `total`. */
+            total_is_lower_bound?: boolean;
+        };
+        /** @description User directory projection. Email, verification, locale, timezone, activity, and disabled state are present only for self or institution-wide user.view authority. */
+        UserProfileResponse: {
+            /** Format: date-time */
+            archived_at?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            disabled_at?: string;
+            display_name: string;
+            /** Format: email */
+            email?: string;
+            email_verified?: boolean;
+            first_name: string;
+            id: components["schemas"]["ID"];
+            /**
+             * Format: date-time
+             * @description Time the User was last active in any Session: a sign-in, or authenticated use or refresh of a Session. Use is recorded at most once per Session per activity update interval (five minutes by default), so it can trail the latest request by up to that interval. It never moves backwards.
+             */
+            last_activity_at?: string;
+            /**
+             * Format: date-time
+             * @description Time the User last signed in.
+             */
             last_login_at?: string;
             last_name: string;
             locale?: string;
@@ -11086,6 +11358,26 @@ export interface components {
                 "application/json": components["schemas"]["AccessPolicyPreflightResponse"];
             };
         };
+        /** @description Bounded administration counts the caller may see */
+        AdministrationCountsOK: {
+            headers: {
+                "Cache-Control": components["headers"]["PrivateNoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "failed_jobs": 0,
+                 *       "failed_jobs_is_lower_bound": false,
+                 *       "failed_mail_deliveries": 1000,
+                 *       "failed_mail_deliveries_is_lower_bound": true,
+                 *       "pending_invitations": 12,
+                 *       "pending_invitations_is_lower_bound": false
+                 *     }
+                 */
+                "application/json": components["schemas"]["AdministrationCountsResponse"];
+            };
+        };
         /** @description Affiliation created */
         AffiliationCreated: {
             headers: {
@@ -11127,7 +11419,9 @@ export interface components {
             content: {
                 /**
                  * @example {
-                 *       "items": []
+                 *       "items": [],
+                 *       "total": 0,
+                 *       "total_is_lower_bound": false
                  *     }
                  */
                 "application/json": components["schemas"]["AuditListResponse"];
@@ -12402,7 +12696,9 @@ export interface components {
             content: {
                 /**
                  * @example {
-                 *       "items": []
+                 *       "items": [],
+                 *       "total": 0,
+                 *       "total_is_lower_bound": false
                  *     }
                  */
                 "application/json": components["schemas"]["InvitationAdministrationListResponse"];
@@ -12445,7 +12741,9 @@ export interface components {
             content: {
                 /**
                  * @example {
-                 *       "items": []
+                 *       "items": [],
+                 *       "total": 0,
+                 *       "total_is_lower_bound": false
                  *     }
                  */
                 "application/json": components["schemas"]["JobListResponse"];
@@ -12549,7 +12847,9 @@ export interface components {
             content: {
                 /**
                  * @example {
-                 *       "items": []
+                 *       "items": [],
+                 *       "total": 0,
+                 *       "total_is_lower_bound": false
                  *     }
                  */
                 "application/json": components["schemas"]["MailDeliveryListResponse"];
@@ -12708,6 +13008,21 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["OnboardingImportResponse"];
+            };
+        };
+        /** @description Bounded authorized onboarding import page */
+        OnboardingImportListOK: {
+            headers: {
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "items": []
+                 *     }
+                 */
+                "application/json": components["schemas"]["OnboardingImportListResponse"];
             };
         };
         /** @description Authorized safe onboarding preview or report projection */
@@ -13430,6 +13745,23 @@ export interface components {
                 "application/json": components["schemas"]["OnboardingImportResponse"];
             };
         };
+        /** @description Bounded authorized student progression page */
+        StudentProgressionListOK: {
+            headers: {
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "items": [],
+                 *       "total": 0,
+                 *       "total_is_lower_bound": false
+                 *     }
+                 */
+                "application/json": components["schemas"]["StudentProgressionListResponse"];
+            };
+        };
         /** @description Authorized safe student progression preview or result */
         StudentProgressionOK: {
             headers: {
@@ -13543,7 +13875,9 @@ export interface components {
             content: {
                 /**
                  * @example {
-                 *       "items": []
+                 *       "items": [],
+                 *       "total": 0,
+                 *       "total_is_lower_bound": false
                  *     }
                  */
                 "application/json": components["schemas"]["UserProfileListResponse"];
@@ -15882,6 +16216,24 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    getAdministrationCounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AdministrationCountsOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     endAffiliation: {
         parameters: {
             query?: never;
@@ -15914,11 +16266,15 @@ export interface operations {
                 /** @description Return only Events attributed to this actor User. */
                 actor_id?: components["schemas"]["ID"];
                 /** @description Return only Events with this exact stable action. */
-                action?: string;
+                action?: components["schemas"]["AuditAction"];
                 /** @description Exact resource type to filter; resource_id is required when present. */
-                resource_type?: string;
+                resource_type?: components["schemas"]["ResourceType"];
                 /** @description Exact resource identity to filter; resource_type is required when present. */
                 resource_id?: components["schemas"]["ID"];
+                /** @description Return only Events recorded at or after this RFC 3339 instant. */
+                created_after?: string;
+                /** @description Return only Events recorded before this RFC 3339 instant; it must be later than `created_after`. */
+                created_before?: string;
             };
             header?: never;
             path?: never;
@@ -20196,8 +20552,8 @@ export interface operations {
                 cursor?: string;
                 /** @description Optional set of durable delivery states to include. */
                 state?: components["schemas"]["MailDeliveryState"][];
-                /** @description Optional set of public allowlisted template keys to include. */
-                template_key?: "system.mail_test"[];
+                /** @description Optional set of template keys to include. */
+                template_key?: components["schemas"]["MailTemplateKey"][];
                 /** @description Include deliveries created at or after this RFC 3339 instant. */
                 created_after?: string;
                 /** @description Include deliveries created before this RFC 3339 instant. */
@@ -20437,6 +20793,31 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    listOnboardingImports: {
+        parameters: {
+            query?: {
+                /** @description Return only imports in these lifecycle states. Repeat the parameter to select several; omit it for all. */
+                state?: ("uploading" | "parsing" | "preview_ready" | "executing" | "completed" | "completed_with_errors" | "canceled" | "failed")[];
+                /** @description Continue from the opaque cursor returned by the preceding page. */
+                cursor?: string;
+                /** @description Maximum number of onboarding imports to return in this page. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["OnboardingImportListOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     uploadOnboardingImport: {
         parameters: {
             query: {
@@ -20448,6 +20829,8 @@ export interface operations {
                 scope_id: components["schemas"]["ID"];
                 /** @description Role to package into applicable teacher or institution Invitation rows; rejected for modes that do not use Roles. */
                 role_id?: components["schemas"]["ID"];
+                /** @description Name of the uploaded file, remembered so the import can be recognised later and returned as `file_name`. Surrounding whitespace is trimmed; the result must be a base name of 1 to 255 characters without `/`, `\`, or control characters, and not `.` or `..`. Omit it to remember no name. */
+                file_name?: string;
             };
             header?: never;
             path?: never;
@@ -21169,6 +21552,40 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    listStudentProgressions: {
+        parameters: {
+            query?: {
+                /** @description Return only progressions in these lifecycle states. Repeat the parameter to select several; omit it for all. */
+                state?: ("uploading" | "parsing" | "preview_ready" | "executing" | "completed" | "completed_with_errors" | "canceled" | "failed")[];
+                /** @description Return only progressions from this exact source Academic Period. */
+                source_period_id?: components["schemas"]["ID"];
+                /** @description Return only progressions from this exact source Class. */
+                source_class_id?: components["schemas"]["ID"];
+                /** @description Return only progressions into this exact destination Academic Period. */
+                destination_period_id?: components["schemas"]["ID"];
+                /** @description Return only progressions into this exact destination Class. */
+                destination_class_id?: components["schemas"]["ID"];
+                /** @description Continue from the opaque cursor returned by the preceding page. */
+                cursor?: string;
+                /** @description Maximum number of student progressions to return in this page. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["StudentProgressionListOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     dryRunStudentProgression: {
         parameters: {
             query?: never;
@@ -21553,6 +21970,10 @@ export interface operations {
                 q?: string;
                 /** @description Honored only for institution-wide user.view; scoped visibility always excludes disabled Users. */
                 include_disabled?: boolean;
+                /** @description Keeps Users holding a current Affiliation of any listed kind. Repeat the parameter to accept several kinds; a kind may appear once. The filter narrows the caller's visibility and never widens it. */
+                affiliation?: ("student" | "teacher" | "staff" | "external")[];
+                /** @description Keeps Users with a current membership in this Academic Unit or one of its descendants. A unit outside the caller's user.view scope answers an empty page rather than an error. */
+                academic_unit_id?: components["schemas"]["ID"];
                 /** @description Maximum number of items in the page. */
                 limit?: components["parameters"]["PageLimit"];
                 /** @description Opaque next_cursor from the previous page, returned unchanged; omit it for the first page. */
@@ -22180,7 +22601,17 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        /** @description Optional reason for the audit record. A request without a body disables without a reason. */
+        requestBody?: {
+            content: {
+                /**
+                 * @example {
+                 *       "reason": "Left the institution"
+                 *     }
+                 */
+                "application/json": components["schemas"]["DisableUserRequest"];
+            };
+        };
         responses: {
             200: components["responses"]["UserProfileOK"];
             400: components["responses"]["BadRequest"];

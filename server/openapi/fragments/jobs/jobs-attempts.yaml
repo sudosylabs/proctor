@@ -127,7 +127,7 @@ components:
           format: date-time
           description: Time when the Attempt reached a terminal state, when complete.
         public_error_code:
-          type: string
+          $ref: '#/components/schemas/JobErrorCode'
           description: Stable safe failure category for a failed terminal Attempt; internal error detail is never returned.
     JobAttemptListResponse:
       description: One bounded page of Job execution Attempts.

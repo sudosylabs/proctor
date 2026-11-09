@@ -407,27 +407,125 @@ func (s SQLRoleBindingStore) ListVisibleByUser(ctx context.Context, userID model
 		"role_bindings.user_id": userID, "role_bindings.archived_at": nil,
 	})
 	if !visibility.InstitutionWide {
-		if len(visibility.AcademicUnitRootIDs) == 0 && len(visibility.ClassIDs) == 0 {
-			query = query.Where("FALSE")
-		} else {
-			query = query.Prefix(`WITH RECURSIVE allowed_units AS (
-				SELECT id FROM academic_units WHERE id = ANY(?)
-				UNION ALL SELECT child.id FROM academic_units child
-				JOIN allowed_units parent ON child.parent_id = parent.id
-			)`, pq.Array(idStrings(visibility.AcademicUnitRootIDs))).Where(`(
-				(role_bindings.scope_type = 'academic_unit' AND role_bindings.scope_id IN (SELECT id FROM allowed_units))
-				OR (role_bindings.scope_type = 'class' AND (
-					role_bindings.scope_id = ANY(?) OR EXISTS (
-						SELECT 1 FROM classes c
-						JOIN programme_levels pl ON pl.id = c.programme_level_id
-						JOIN programmes p ON p.id = pl.programme_id
-						WHERE c.id = role_bindings.scope_id AND p.academic_unit_id IN (SELECT id FROM allowed_units)
-					)
-				))
-			)`, pq.Array(idStrings(visibility.ClassIDs)))
+		units, unitArgs, predicate, predicateArgs := roleBindingVisibilityPredicate(visibility)
+		if units != "" {
+			query = query.Prefix("WITH RECURSIVE "+units, unitArgs...)
 		}
+		query = query.Where(predicate, predicateArgs...)
 	}
 	return s.selectBindings(ctx, query.OrderBy("role_bindings.start_at", "role_bindings.id"), "list visible role bindings by user")
+}
+
+// roleBindingVisibilityPredicate restricts role_bindings rows to the scopes a
+// non-institution-wide visibility reaches: bindings on its Academic Unit
+// subtrees, on its Classes, and on Classes inside those subtrees. units is the
+// allowed_units CTE the predicate reads, empty with a predicate that matches
+// nothing when the visibility lists no scope.
+func roleBindingVisibilityPredicate(visibility store.UserVisibilityScope) (units string, unitArgs []any, predicate string, predicateArgs []any) {
+	if len(visibility.AcademicUnitRootIDs) == 0 && len(visibility.ClassIDs) == 0 {
+		return "", nil, "FALSE", nil
+	}
+	return `allowed_units AS (
+		SELECT id FROM academic_units WHERE id = ANY(?)
+		UNION ALL SELECT child.id FROM academic_units child
+		JOIN allowed_units parent ON child.parent_id = parent.id
+	)`, []any{pq.Array(idStrings(visibility.AcademicUnitRootIDs))}, `(
+		(role_bindings.scope_type = 'academic_unit' AND role_bindings.scope_id IN (SELECT id FROM allowed_units))
+		OR (role_bindings.scope_type = 'class' AND (
+			role_bindings.scope_id = ANY(?) OR EXISTS (
+				SELECT 1 FROM classes c
+				JOIN programme_levels pl ON pl.id = c.programme_level_id
+				JOIN programmes p ON p.id = pl.programme_id
+				WHERE c.id = role_bindings.scope_id AND p.academic_unit_id IN (SELECT id FROM allowed_units)
+			)
+		))
+	)`, []any{pq.Array(idStrings(visibility.ClassIDs))}
+}
+
+// ListVisibleSummariesByUsers returns, for each listed User with any, the
+// current Role Bindings inside visibility, at most Limit each, with their
+// Role and scope display names and the count of further visible bindings.
+func (s SQLRoleBindingStore) ListVisibleSummariesByUsers(ctx context.Context, options store.RoleBindingSummaryOptions) ([]store.UserRoleBindingSummary, error) {
+	visibility := options.Visibility
+	if !validSummaryUserIDs(options.UserIDs) || options.Limit < 1 || options.Limit > 10 || visibility.ActiveAt.IsZero() ||
+		len(visibility.AcademicUnitRootIDs)+len(visibility.ClassIDs) > 256 ||
+		!validVisibilityIDs(visibility.AcademicUnitRootIDs) || !validVisibilityIDs(visibility.ClassIDs) ||
+		(options.ScopeType != "" || options.ScopeID != "") && (!options.ScopeType.IsValid() || !model.IsValidOpaqueID(options.ScopeID)) {
+		return nil, store.NewErrInvalidInput("role_binding", "summary_options", nil)
+	}
+	if len(options.UserIDs) == 0 {
+		return []store.UserRoleBindingSummary{}, nil
+	}
+	activeAt := model.TimeUTC(visibility.ActiveAt)
+	units, unitArgs, predicate, predicateArgs := "", []any(nil), "TRUE", []any(nil)
+	if !visibility.InstitutionWide {
+		units, unitArgs, predicate, predicateArgs = roleBindingVisibilityPredicate(visibility)
+	}
+	prefix := "WITH RECURSIVE "
+	if units != "" {
+		prefix += units + ", "
+	}
+	args := append([]any(nil), unitArgs...)
+	args = append(args, pq.Array(idStrings(options.UserIDs)), activeAt, activeAt)
+	args = append(args, predicateArgs...)
+	args = append(args, string(options.ScopeType), string(options.ScopeType), options.ScopeID, options.Limit)
+	type summaryRow struct {
+		UserID      string `db:"user_id"`
+		RoleID      string `db:"role_id"`
+		DisplayName string `db:"display_name"`
+		ScopeType   string `db:"scope_type"`
+		ScopeID     string `db:"scope_id"`
+		ScopeName   string `db:"scope_name"`
+		Total       int    `db:"total"`
+	}
+	rows := []summaryRow{}
+	if err := s.GetMaster().Select(ctx, &rows, prefix+`visible_bindings AS (
+		SELECT role_bindings.user_id, role_bindings.role_id, roles.display_name,
+			role_bindings.scope_type, role_bindings.scope_id,
+			COALESCE(scope_institution.display_name, scope_unit.display_name, scope_class.display_name) AS scope_name,
+			row_number() OVER (PARTITION BY role_bindings.user_id ORDER BY role_bindings.start_at, role_bindings.id) AS position,
+			count(*) OVER (PARTITION BY role_bindings.user_id) AS total
+		FROM role_bindings
+		JOIN roles ON roles.id = role_bindings.role_id AND roles.archived_at IS NULL
+		LEFT JOIN institutions scope_institution ON role_bindings.scope_type = 'institution'
+			AND scope_institution.id = role_bindings.scope_id AND scope_institution.archived_at IS NULL
+		LEFT JOIN academic_units scope_unit ON role_bindings.scope_type = 'academic_unit'
+			AND scope_unit.id = role_bindings.scope_id AND scope_unit.archived_at IS NULL
+		LEFT JOIN classes scope_class ON role_bindings.scope_type = 'class'
+			AND scope_class.id = role_bindings.scope_id AND scope_class.archived_at IS NULL
+		WHERE role_bindings.user_id = ANY(?) AND role_bindings.archived_at IS NULL
+		AND role_bindings.start_at <= ? AND (role_bindings.end_at IS NULL OR role_bindings.end_at > ?)
+		AND COALESCE(scope_institution.id, scope_unit.id, scope_class.id) IS NOT NULL
+		AND `+predicate+`
+		AND (?::text = '' OR (role_bindings.scope_type = ? AND role_bindings.scope_id = ?))
+	)
+	SELECT user_id, role_id, display_name, scope_type, scope_id, scope_name, total
+	FROM visible_bindings WHERE position <= ? ORDER BY user_id, position`, args...); err != nil {
+		return nil, fmt.Errorf("list visible role binding summaries: %w", err)
+	}
+	summaries := []store.UserRoleBindingSummary{}
+	for _, row := range rows {
+		userID, err := model.ParseUserID(row.UserID)
+		if err != nil {
+			return nil, invalidPersistedState("role_binding", "user_id", err)
+		}
+		roleID, err := model.ParseRoleID(row.RoleID)
+		if err != nil {
+			return nil, invalidPersistedState("role_binding", "role_id", err)
+		}
+		scopeType := model.RoleScopeType(row.ScopeType)
+		if !scopeType.IsValid() || !model.IsValidOpaqueID(row.ScopeID) {
+			return nil, invalidPersistedState("role_binding", "scope", errors.New("invalid Role Binding scope"))
+		}
+		if len(summaries) == 0 || summaries[len(summaries)-1].UserID != userID {
+			summaries = append(summaries, store.UserRoleBindingSummary{UserID: userID, More: max(row.Total-options.Limit, 0)})
+		}
+		last := &summaries[len(summaries)-1]
+		last.Bindings = append(last.Bindings, store.RoleBindingSummary{
+			RoleID: roleID, DisplayName: row.DisplayName, ScopeType: scopeType, ScopeID: row.ScopeID, ScopeName: row.ScopeName,
+		})
+	}
+	return summaries, nil
 }
 
 func (s SQLRoleBindingStore) ListByScope(

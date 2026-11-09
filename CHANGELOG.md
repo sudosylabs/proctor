@@ -17,6 +17,16 @@ module when a change is not server-only. No module has been released yet.
 
 ### Changed
 
+- Server: the baseline adds indexes for the User directory affiliation filter,
+  the onboarding import list, failed Jobs and Invitations by state, bounds
+  `invitations.expires_at` between one and thirty days after creation, and
+  adds `jobs.created_by_user_id`. Existing development databases must be
+  recreated.
+  the onboarding import list, the student progression list by source and by
+  destination Class, failed Jobs and Invitations by state, adds the nullable
+  `onboarding_imports.file_name` column, and bounds
+  `invitations.expires_at` between one and thirty days after creation.
+  Existing development databases must be recreated.
 - Server: recent authentication now counts primary proof only. An MFA
   challenge no longer refreshes recency; it still makes a Session strong.
 - Server: Desktop Authorization that reuses a recently reauthenticated Web
@@ -209,6 +219,91 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: the contract publishes three closed code catalogues as components:
+  `MailFailureCode` for `public_failure_code` on Mail Deliveries and
+  Invitation deliveries, and `AcademicAdministrationBatchErrorCode` and
+  `InvitationBatchErrorCode` for batch item `error_code`. A Mail Delivery now
+  refuses a failure code outside its catalogue.
+- Server: `JobResponse` names who started a Job and what it is about:
+  `created_by_user_id` and `created_by_display_name` for an Examination
+  Export build, mail rekey or MFA rekey an operator started (omitted for
+  recurring and system work), and `subject`, the Exam title, for an
+  Examination Export build. `GET /api/v1/jobs` reads them once per page.
+- Server: the first page of `GET /api/v1/users`, `GET /api/v1/invitations`,
+  `GET /api/v1/jobs`, `GET /api/v1/audits`, and `GET /api/v1/mail/deliveries`
+  reports `total` with `total_is_lower_bound`: the items the same filters and
+  the caller's visibility match across every page, exact below 10,000 and
+  flagged at that bound. Later pages carry neither member; there is still no
+  offset paging.
+- Server: `GET /api/v1/administration/counts` returns bounded navigation
+  counts for an interactive Session: `pending_invitations`, `failed_jobs`
+  (failed in the last seven days), `failed_mail_deliveries` (the `failed`
+  state), and `open_onboarding_imports`, each stopped at 1,000 with a
+  `<name>_is_lower_bound` flag. A count the caller may not list is omitted.
+  The baseline gains `jobs_failed_updated_at_idx` and
+  `invitations_state_created_at_idx` for these reads.
+- Server: the contract publishes the closed server catalogues as enums:
+  `JobType`, `JobStage` and `JobErrorCode` on Jobs and Job Attempts,
+  `AuditAction` and `ResourceType` on audit events and their filters, and
+  `ErrorCode` on every problem response. Tests keep each enum equal to the
+  server's catalogue; clients own the labels.
+- Server: each `GET /api/v1/academic-units/{academic_unit_id}/members` item
+  names the member in `user` (`display_name`, `username`, and `email` only for
+  Institution-wide `user.view`) and, for a caller holding `role_binding.view`
+  on the unit, lists up to five of the member's current Role Bindings scoped
+  exactly to it in `roles_here` with `roles_here_more`.
+- Server: each `GET /api/v1/users` item carries a `summary` of who the User
+  is: up to three current Affiliations, each with up to two of the User's
+  current Academic Units the caller's `user.view` reaches, and, for a caller
+  holding `role_binding.view`, up to three current Role Bindings inside that
+  authority's scopes with Role and scope names. Each list is followed by a
+  count of the rest; bindings outside the caller's scopes are not counted.
+  The summary is read in two batched queries per page.
+- Server: `GET /api/v1/users` filters the directory by current Affiliation
+  with the repeatable `affiliation` parameter (`student`, `teacher`, `staff`,
+  `external`) and by current Academic Unit membership, descendants included,
+  with `academic_unit_id`. Both narrow the caller's visibility; a unit outside
+  a scoped caller's reach answers an empty page.
+- Server: `GET /api/v1/audits` takes `created_after` (inclusive) and
+  `created_before` (exclusive) RFC 3339 bounds, validated like the self audit
+  history's.
+- Server: `POST /api/v1/users/{user_id}/disable` accepts an optional JSON body
+  `{"reason": "..."}`, trimmed, at most 500 characters and without control
+  characters. The reason is kept only in the audit record; `GET /api/v1/audits`
+  shows it as `reason` on the disable event to Institution-wide readers, while
+  Academic Unit readers and the self audit history never receive it. A request
+  without a body behaves as before.
+- Server: the four Invitation create bodies and the replacement body take an
+  optional `expires_in_days` from 1 to 30. Issuing defaults to 7 days; a
+  replacement keeps the replaced Invitation's lifetime in whole days; a value
+  outside the range is `invitation.invalid`. Resend keeps the original
+  expiry, and batch and onboarding import Invitations stay at 7 days. The
+  baseline bounds `invitations.expires_at` between one and thirty days after
+  creation.
+- Server: `GET /api/v1/onboarding-imports` lists the unexpired onboarding
+  imports the caller could read one by one, newest first, filtered by
+  repeated `state` values and paged by `limit` and `cursor`. Items are
+  summaries without rows; student progressions are not listed. A new
+  `onboarding_imports (created_at DESC, id DESC)` index backs it.
+- Server: `GET /api/v1/student-progressions` lists the unexpired student
+  progressions newest first, filtered by repeated `state` values and by
+  `source_class_id`, `destination_class_id`, `source_period_id`, and
+  `destination_period_id`, and paged by `limit` and `cursor`; the first page
+  reports `total` and `total_is_lower_bound`. A progression is listed only
+  when the caller's `academic_progression.manage` authority covers both its
+  source and destination Class, as a single read requires. Items and
+  `GET /api/v1/student-progressions/{id}` now carry `source_class_name` and
+  `destination_class_name`.
+- Server: `POST /api/v1/onboarding-imports` takes an optional `file_name`
+  query parameter, trimmed and accepted as a base name of 1 to 255
+  characters without path separators or control characters, and import reads
+  and list items return it as `file_name` when given.
+- Server: the OpenAPI contract publishes the closed onboarding import and
+  student progression code catalogues as `OnboardingImportFailureCode`
+  (`failure_code`), `OnboardingImportPreviewCode` (row `preview_code`), and
+  `OnboardingImportRowCode` (row `public_code`), each kept equal to the
+  server's catalogue by a test. The server refuses to record a code outside
+  its catalogue.
 - Server: `GET /api/v1/users/me/audits` takes `order=asc` to read oldest
   first, and its first page reports `total`, the events the filters match,
   exact below 10,000 and flagged by `total_is_lower_bound` at that bound.
@@ -372,6 +467,14 @@ module when a change is not server-only. No module has been released yet.
 
 ### Fixed
 
+- Server: a User's `last_activity_at` follows their Session activity instead
+  of only their sign-ins. Recording Session use or a refresh also advances it,
+  at the existing activity throttle and never backwards; `last_login_at`
+  still changes only at sign-in.
+- Server: the contract declared mail `template_key` as the single value
+  `system.mail_test`, so clients validating responses rejected real mail
+  deliveries and metrics. A shared `MailTemplateKey` enum now lists every
+  template key, and a test keeps it equal to the server's catalogue.
 - Server: password history refused reuse only by change time, so when the
   database clock trailed the server that stamped a previous change, two history
   entries could share a time and a recent password could be accepted again.

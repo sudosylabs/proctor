@@ -1,0 +1,125 @@
+# ---------------------------------------------------------------------------------------------
+# Copyright (c) 2026 Sudosy Labs. All rights reserved.
+# Licensed under the GNU Affero General Public License, version 3 only.
+# See LICENSE in the server module root for license information.
+# SPDX-License-Identifier: AGPL-3.0-only
+# ---------------------------------------------------------------------------------------------
+
+paths:
+  /api/v1/administration/counts:
+    get:
+      operationId: getAdministrationCounts
+      summary: Summarise administration work waiting on the caller
+      tags:
+        - Administration
+      description: >-
+        Returns bounded counts for administration navigation badges. `pending_invitations` counts pending
+        Invitations that have not expired; `failed_jobs` counts operator-visible Jobs that failed in the last seven
+        days; `failed_mail_deliveries` counts mail deliveries in the `failed` terminal state (suppressed and
+        canceled deliveries are not failures); `open_onboarding_imports` counts unexpired administrative onboarding
+        imports still uploading, parsing, awaiting commit, or executing, excluding student progressions. Each count
+        runs the authorization and visibility of its resource's own list, which records its authorization decision
+        as that list does, so it counts only what the caller could list. A count the caller may not list is omitted
+        together with its `_is_lower_bound` flag; an unavailable count fails the request rather than reading as
+        zero. Counting stops at 1,000, where the count is 1,000 and its flag is true. Only an interactive Session may
+        read the summary.
+      x-proctor-auth: session_required
+      x-proctor-idempotency: none
+      x-proctor-error-codes:
+        - administration.unavailable
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - invitation.unavailable
+        - job.query.invalid
+        - job.unavailable
+        - mail.unavailable
+        - onboarding_import.unavailable
+        - request.invalid
+        - resource.not_found
+        - authentication.required
+        - authentication.token_invalid
+        - authentication.credential_ambiguous
+        - authentication.dpop.invalid
+        - authentication.dpop.replayed
+        - authentication.dpop.use_nonce
+        - authentication.dpop.unavailable
+      security:
+        - bearerAuth: []
+        - dpopAuth: []
+        - sessionCookie: []
+      responses:
+        "200":
+          $ref: '#/components/responses/AdministrationCountsOK'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          $ref: '#/components/responses/Forbidden'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "500":
+          $ref: '#/components/responses/InternalError'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+components:
+  responses:
+    AdministrationCountsOK:
+      description: Bounded administration counts the caller may see
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/PrivateNoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AdministrationCountsResponse'
+          example:
+            pending_invitations: 12
+            pending_invitations_is_lower_bound: false
+            failed_jobs: 0
+            failed_jobs_is_lower_bound: false
+            failed_mail_deliveries: 1000
+            failed_mail_deliveries_is_lower_bound: true
+  schemas:
+    AdministrationCountsResponse:
+      description: >-
+        Counts for administration navigation. Each count is present only when the caller may list its resource,
+        always with its lower-bound flag.
+      type: object
+      additionalProperties: false
+      properties:
+        pending_invitations:
+          type: integer
+          minimum: 0
+          maximum: 1000
+          description: Pending, unexpired Invitations within the caller's Invitation visibility.
+        pending_invitations_is_lower_bound:
+          type: boolean
+          description: True when `pending_invitations` reached the 1,000 bound. Present with `pending_invitations`.
+        failed_jobs:
+          type: integer
+          minimum: 0
+          maximum: 1000
+          description: Operator-visible Jobs that failed and were last updated in the last seven days.
+        failed_jobs_is_lower_bound:
+          type: boolean
+          description: True when `failed_jobs` reached the 1,000 bound. Present with `failed_jobs`.
+        failed_mail_deliveries:
+          type: integer
+          minimum: 0
+          maximum: 1000
+          description: Mail deliveries in the `failed` terminal state.
+        failed_mail_deliveries_is_lower_bound:
+          type: boolean
+          description: True when `failed_mail_deliveries` reached the 1,000 bound. Present with `failed_mail_deliveries`.
+        open_onboarding_imports:
+          type: integer
+          minimum: 0
+          maximum: 1000
+          description: >-
+            Unexpired administrative onboarding imports not yet completed, canceled, or failed, within the caller's
+            onboarding import visibility. Student progressions are not counted.
+        open_onboarding_imports_is_lower_bound:
+          type: boolean
+          description: True when `open_onboarding_imports` reached the 1,000 bound. Present with `open_onboarding_imports`.

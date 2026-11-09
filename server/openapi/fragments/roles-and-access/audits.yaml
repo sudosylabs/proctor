@@ -14,6 +14,7 @@ paths:
         - Roles and access
       description: >-
         Lists bounded durable audit facts visible through the caller's Institution or Academic Unit authority. The projection omits raw parameters, prior state, result payloads, credentials, protected content, and unsafe internal failures.
+        The first page, read without a cursor, also reports `total`: the audit Events the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -57,18 +58,32 @@ paths:
         - name: action
           in: query
           schema:
-            type: string
+            $ref: '#/components/schemas/AuditAction'
           description: Return only Events with this exact stable action.
         - name: resource_type
           in: query
           schema:
-            type: string
+            $ref: '#/components/schemas/ResourceType'
           description: Exact resource type to filter; resource_id is required when present.
         - name: resource_id
           in: query
           schema:
             $ref: '#/components/schemas/ID'
           description: Exact resource identity to filter; resource_type is required when present.
+        - name: created_after
+          in: query
+          required: false
+          description: Return only Events recorded at or after this RFC 3339 instant.
+          schema:
+            type: string
+            format: date-time
+        - name: created_before
+          in: query
+          required: false
+          description: Return only Events recorded before this RFC 3339 instant; it must be later than `created_after`.
+          schema:
+            type: string
+            format: date-time
       responses:
         "200":
           $ref: '#/components/responses/AuditListOK'
@@ -94,6 +109,8 @@ components:
             $ref: '#/components/schemas/AuditListResponse'
           example:
             items: []
+            total: 0
+            total_is_lower_bound: false
   schemas:
     AuditEventResponse:
       description: Safe durable audit fact visible to the authorized caller.
@@ -124,7 +141,7 @@ components:
           type: string
           description: Safe Session identity associated with the action when retained; never a credential.
         action:
-          type: string
+          $ref: '#/components/schemas/AuditAction'
           description: Stable permission-style name of the attempted action.
         resource:
           type: object
@@ -134,7 +151,7 @@ components:
             - id
           properties:
             type:
-              type: string
+              $ref: '#/components/schemas/ResourceType'
               description: Stable resource type acted upon.
             id:
               $ref: '#/components/schemas/ID'
@@ -163,6 +180,12 @@ components:
         error_code:
           type: string
           description: Stable safe failure category for an unsuccessful action; internal detail is omitted.
+        reason:
+          type: string
+          maxLength: 500
+          description: >-
+            Reason recorded when an account was disabled, present only on that event, only when one was given, and
+            only for Institution-wide audit readers.
     AuditListResponse:
       description: One bounded page of authorized audit Events.
       type: object
@@ -177,3 +200,13 @@ components:
         next_cursor:
           type: string
           description: Opaque continuation for the next page, omitted after the final page.
+        total:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            Audit Events matching the filters and the caller's visibility across every page, present only on the
+            first page. At 10,000 counting stops and `total_is_lower_bound` is true.
+        total_is_lower_bound:
+          type: boolean
+          description: True when `total` reached the 10,000 bound and there may be more. Present with `total`.

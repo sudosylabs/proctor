@@ -17,7 +17,28 @@ import (
 	"unicode/utf8"
 )
 
-const InvitationLifetime = 7 * 24 * time.Hour
+// Invitation lifetimes are whole days chosen by the inviter within bounds.
+// InvitationLifetime is the default when none is chosen, and the fixed
+// lifetime of batch and onboarding import Invitations.
+const (
+	InvitationLifetime        = 7 * 24 * time.Hour
+	MinimumInvitationLifetime = 24 * time.Hour
+	MaximumInvitationLifetime = 30 * 24 * time.Hour
+)
+
+// IsValidInvitationLifetime reports whether lifetime lies within the
+// inclusive Invitation lifetime bounds.
+func IsValidInvitationLifetime(lifetime time.Duration) bool {
+	return lifetime >= MinimumInvitationLifetime && lifetime <= MaximumInvitationLifetime
+}
+
+// invitationLifetimeOrDefault selects the default lifetime for a zero input.
+func invitationLifetimeOrDefault(lifetime time.Duration) time.Duration {
+	if lifetime == 0 {
+		return InvitationLifetime
+	}
+	return lifetime
+}
 
 const invitationClaimHashDomain = "proctor.invitation_claim\x00"
 
@@ -103,6 +124,8 @@ type StudentClassInvitationInput struct {
 	ScopeID          string
 	ClaimHash        string
 	IssuedAt         time.Time
+	// Lifetime bounds the claim; zero selects InvitationLifetime.
+	Lifetime time.Duration
 }
 
 // TeacherAcademicUnitInvitationInput freezes the exact organizational and
@@ -121,6 +144,8 @@ type TeacherAcademicUnitInvitationInput struct {
 	ScopeID          string
 	ClaimHash        string
 	IssuedAt         time.Time
+	// Lifetime bounds the claim; zero selects InvitationLifetime.
+	Lifetime time.Duration
 }
 
 // ScopedRoleInvitationInput freezes one Role assignment for an existing User
@@ -139,11 +164,13 @@ type ScopedRoleInvitationInput struct {
 	ScopeID          string
 	ClaimHash        string
 	IssuedAt         time.Time
+	// Lifetime bounds the claim; zero selects InvitationLifetime.
+	Lifetime time.Duration
 }
 
 // NewStudentClassInvitation constructs the one exact package implemented by
-// the first Invitation slice. Expiry is fixed here so callers cannot widen the
-// credential lifetime accidentally.
+// the first Invitation slice. Expiry is derived here from the bounded lifetime
+// so callers cannot widen the credential lifetime accidentally.
 func NewStudentClassInvitation(input StudentClassInvitationInput) (*Invitation, error) {
 	issuedAt := TimeUTC(input.IssuedAt)
 	invitation := &Invitation{
@@ -156,7 +183,7 @@ func NewStudentClassInvitation(input StudentClassInvitationInput) (*Invitation, 
 		Suggestions:      normalizeInvitationSuggestions(input.Suggestions),
 		InviterUserID:    input.InviterUserID, ScopeType: input.ScopeType,
 		ScopeID: input.ScopeID, ClaimHash: input.ClaimHash,
-		ExpiresAt: issuedAt.Add(InvitationLifetime),
+		ExpiresAt: issuedAt.Add(invitationLifetimeOrDefault(input.Lifetime)),
 	}
 	if err := invitation.Validate(); err != nil {
 		return nil, err
@@ -179,7 +206,7 @@ func NewTeacherAcademicUnitInvitation(input TeacherAcademicUnitInvitationInput) 
 		Suggestions:      normalizeInvitationSuggestions(input.Suggestions),
 		InviterUserID:    input.InviterUserID, ScopeType: input.ScopeType,
 		ScopeID: input.ScopeID, ClaimHash: input.ClaimHash,
-		ExpiresAt: issuedAt.Add(InvitationLifetime),
+		ExpiresAt: issuedAt.Add(invitationLifetimeOrDefault(input.Lifetime)),
 	}
 	if err := invitation.Validate(); err != nil {
 		return nil, err
@@ -200,7 +227,7 @@ func NewScopedRoleInvitation(input ScopedRoleInvitationInput) (*Invitation, erro
 		IntendedStartsAt: TimeUTC(input.IntendedStartsAt),
 		IntendedEndsAt:   normalizeOptionalInvitationTime(input.IntendedEndsAt),
 		InviterUserID:    input.InviterUserID, ScopeType: input.ScopeType, ScopeID: input.ScopeID,
-		ClaimHash: input.ClaimHash, ExpiresAt: issuedAt.Add(InvitationLifetime),
+		ClaimHash: input.ClaimHash, ExpiresAt: issuedAt.Add(invitationLifetimeOrDefault(input.Lifetime)),
 	}
 	if err := invitation.Validate(); err != nil {
 		return nil, err
@@ -249,8 +276,8 @@ func (i *Invitation) Validate() error {
 	if !IsValidTokenHash(i.ClaimHash) {
 		return invalidModelError(where, "invitation", "claim_hash", "has an invalid format", details)
 	}
-	if !i.ExpiresAt.Equal(i.CreatedAt.Add(InvitationLifetime)) {
-		return invalidModelError(where, "invitation", "expires_at", "must be exactly seven days after creation", details)
+	if !IsValidInvitationLifetime(i.ExpiresAt.Sub(i.CreatedAt)) {
+		return invalidModelError(where, "invitation", "expires_at", "must be between one and thirty days after creation", details)
 	}
 	if err := validateInvitationSuggestions(i.Suggestions); err != nil {
 		return invalidModelError(where, "invitation", "suggestions", err.Error(), details)

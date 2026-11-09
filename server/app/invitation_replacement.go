@@ -23,6 +23,9 @@ func (s *invitationService) ReplaceInvitation(ctx context.Context, invocation in
 	if !id.IsValid() || command.ExpectedRevision < 1 {
 		return InvitationAdministrationView{}, apperror.New("request.invalid").WithField("field", "invitation_id")
 	}
+	if _, err := invitationLifetime(command.ExpiresInDays, model.InvitationLifetime); err != nil {
+		return InvitationAdministrationView{}, err
+	}
 	visibility, err := s.deps.Authorization.Visibility(ctx, invocation, model.ActionInvitationManage)
 	if err != nil {
 		return InvitationAdministrationView{}, err
@@ -34,7 +37,11 @@ func (s *invitationService) ReplaceInvitation(ctx context.Context, invocation in
 	if !s.deps.Mail.Enabled() {
 		return InvitationAdministrationView{}, apperror.New("invitation.mail_unavailable")
 	}
-	replacement, rawClaim, err := s.prepareReplacement(ctx, invocation, command)
+	lifetime, err := invitationLifetime(command.ExpiresInDays, replacedInvitationLifetime(current.Invitation))
+	if err != nil {
+		return InvitationAdministrationView{}, err
+	}
+	replacement, rawClaim, err := s.prepareReplacement(ctx, invocation, command, lifetime)
 	if err != nil {
 		return InvitationAdministrationView{}, err
 	}
@@ -58,7 +65,7 @@ func (s *invitationService) ReplaceInvitation(ctx context.Context, invocation in
 				func() time.Time { return model.TimeUTC(currentReference.MutationAt) },
 				func(ctx context.Context, replacementReference mutationAttemptReference) (*store.InvitationAdministrationRecord, error) {
 					return s.deps.Store.Replace(ctx, &store.InvitationReplacement{CurrentID: id, ExpectedRevision: command.ExpectedRevision,
-						Replacement: replacement, Lifetime: model.InvitationLifetime, Occurrence: prepared.Occurrence,
+						Replacement: replacement, Lifetime: lifetime, Occurrence: prepared.Occurrence,
 						Delivery: prepared.Delivery, DeliveryJob: prepared.Job, ActorUserID: invocation.Principal().UserID,
 						CurrentAuditEventID: currentReference.ID, ReplacementAuditEventID: replacementReference.ID,
 						AuditAt: currentReference.MutationAt})
@@ -70,7 +77,7 @@ func (s *invitationService) ReplaceInvitation(ctx context.Context, invocation in
 	return invitationAdministrationView(result), nil
 }
 
-func (s *invitationService) prepareReplacement(ctx context.Context, invocation invocation.Invocation, command ReplaceInvitationCommand) (*model.Invitation, string, error) {
+func (s *invitationService) prepareReplacement(ctx context.Context, invocation invocation.Invocation, command ReplaceInvitationCommand, lifetime time.Duration) (*model.Invitation, string, error) {
 	purpose := model.InvitationPurpose(strings.TrimSpace(command.Purpose))
 	if !purpose.IsValid() {
 		return nil, "", apperror.New("request.invalid").WithField("field", "purpose")
@@ -82,7 +89,7 @@ func (s *invitationService) prepareReplacement(ctx context.Context, invocation i
 	}
 	draft := invitationReplacementDraft{purpose: purpose, at: at, rawClaim: rawClaim,
 		startsAt: model.TimeFromMillis(command.IntendedStartsAt), endsAt: model.OptionalTimeFromMillis(command.IntendedEndsAt),
-		actor: invocation.Principal().UserID}
+		actor: invocation.Principal().UserID, lifetime: lifetime}
 	var (
 		value *model.Invitation
 		err   error
@@ -111,6 +118,7 @@ type invitationReplacementDraft struct {
 	startsAt time.Time
 	endsAt   model.OptionalTime
 	actor    model.UserID
+	lifetime time.Duration
 }
 
 // prepareStudentClassReplacement authorizes the Class target and builds the replacement Student Class Invitation.
@@ -143,7 +151,7 @@ func (s *invitationService) prepareStudentClassReplacement(ctx context.Context, 
 		Suggestions: model.InvitationProfileSuggestions{Username: command.SuggestedUsername, DisplayName: command.SuggestedDisplayName,
 			FirstName: command.SuggestedFirstName, LastName: command.SuggestedLastName, Locale: command.SuggestedLocale, Timezone: command.SuggestedTimezone},
 		InviterUserID: draft.actor, ScopeType: model.RoleScopeClass, ScopeID: class.ID.String(),
-		ClaimHash: model.HashInvitationClaim(draft.rawClaim), IssuedAt: draft.at})
+		ClaimHash: model.HashInvitationClaim(draft.rawClaim), IssuedAt: draft.at, Lifetime: draft.lifetime})
 	if err != nil {
 		return nil, domainInvalid("invitation.invalid", err)
 	}
@@ -197,7 +205,7 @@ func (s *invitationService) prepareAcademicUnitReplacement(ctx context.Context, 
 			Suggestions: model.InvitationProfileSuggestions{Username: command.SuggestedUsername, DisplayName: command.SuggestedDisplayName,
 				FirstName: command.SuggestedFirstName, LastName: command.SuggestedLastName, Locale: command.SuggestedLocale, Timezone: command.SuggestedTimezone},
 			InviterUserID: draft.actor, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unit.ID.String(),
-			ClaimHash: model.HashInvitationClaim(draft.rawClaim), IssuedAt: draft.at})
+			ClaimHash: model.HashInvitationClaim(draft.rawClaim), IssuedAt: draft.at, Lifetime: draft.lifetime})
 		if modelErr != nil {
 			return nil, domainInvalid("invitation.invalid", modelErr)
 		}
@@ -206,7 +214,7 @@ func (s *invitationService) prepareAcademicUnitReplacement(ctx context.Context, 
 	value, modelErr := model.NewScopedRoleInvitation(model.ScopedRoleInvitationInput{ID: model.NewInvitationID(), Purpose: purpose,
 		TargetEmail: command.TargetEmail, AcademicUnitID: unit.ID, RoleID: role.ID, RoleActions: role.Permissions,
 		IntendedStartsAt: startsAt, IntendedEndsAt: draft.endsAt, InviterUserID: draft.actor,
-		ScopeType: model.RoleScopeAcademicUnit, ScopeID: unit.ID.String(), ClaimHash: model.HashInvitationClaim(draft.rawClaim), IssuedAt: draft.at})
+		ScopeType: model.RoleScopeAcademicUnit, ScopeID: unit.ID.String(), ClaimHash: model.HashInvitationClaim(draft.rawClaim), IssuedAt: draft.at, Lifetime: draft.lifetime})
 	if modelErr != nil {
 		return nil, domainInvalid("invitation.invalid", modelErr)
 	}
@@ -250,7 +258,7 @@ func (s *invitationService) prepareInstitutionRoleReplacement(ctx context.Contex
 	value, modelErr := model.NewScopedRoleInvitation(model.ScopedRoleInvitationInput{ID: model.NewInvitationID(), Purpose: draft.purpose,
 		TargetEmail: command.TargetEmail, RoleID: role.ID, RoleActions: role.Permissions, IntendedStartsAt: startsAt,
 		IntendedEndsAt: draft.endsAt, InviterUserID: draft.actor, ScopeType: model.RoleScopeInstitution, ScopeID: institutionID.String(),
-		ClaimHash: model.HashInvitationClaim(draft.rawClaim), IssuedAt: draft.at})
+		ClaimHash: model.HashInvitationClaim(draft.rawClaim), IssuedAt: draft.at, Lifetime: draft.lifetime})
 	if modelErr != nil {
 		return nil, domainInvalid("invitation.invalid", modelErr)
 	}

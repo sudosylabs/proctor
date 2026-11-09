@@ -242,13 +242,17 @@ type InvitationBatchDuplicate struct {
 }
 
 type InvitationListOptions struct {
-	Visibility      InvitationVisibilityScope
-	Purpose         model.InvitationPurpose
-	State           model.InvitationState
-	TargetEmail     string
-	TargetID        string
-	CreatedAfter    time.Time
-	CreatedBefore   time.Time
+	Visibility    InvitationVisibilityScope
+	Purpose       model.InvitationPurpose
+	State         model.InvitationState
+	TargetEmail   string
+	TargetID      string
+	CreatedAfter  time.Time
+	CreatedBefore time.Time
+	// Unexpired keeps only Invitations whose expires_at is after PostgreSQL
+	// time, so a pending Invitation that maintenance has not yet expired is
+	// not mistaken for an open one.
+	Unexpired       bool
 	BeforeCreatedAt time.Time
 	BeforeID        model.InvitationID
 	Limit           int
@@ -329,6 +333,10 @@ type InvitationStore interface {
 	AcceptScopedRole(context.Context, *ScopedRoleInvitationAcceptance) (*ScopedRoleInvitationAcceptanceResult, error)
 	AcceptExternalIdentity(context.Context, *ExternalIdentityInvitationAcceptance) (*ExternalIdentityInvitationAcceptanceResult, error)
 	List(context.Context, InvitationListOptions) (*InvitationPage, error)
+	// Count counts the Invitations List would return across every page for
+	// the same filters and visibility, ignoring the keyset and limit, and
+	// stops at maximum (see MaximumListCount).
+	Count(context.Context, InvitationListOptions, int) (int, error)
 	GetForAdministration(context.Context, model.InvitationID, InvitationVisibilityScope) (*InvitationAdministrationRecord, error)
 	Resend(context.Context, *InvitationResend) (*InvitationAdministrationRecord, error)
 	ResendIdempotently(context.Context, *InvitationResend, *CommandIdempotency) (*InvitationAdministrationCommandResult, error)

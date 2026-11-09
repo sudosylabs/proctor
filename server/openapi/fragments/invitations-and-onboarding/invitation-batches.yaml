@@ -163,6 +163,30 @@ components:
           maxItems: 200
           items:
             $ref: '#/components/schemas/InvitationBatchItemRequest'
+    InvitationBatchErrorCode:
+      type: string
+      description: >-
+        Stable safe failure code of one Invitation batch item. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+      enum:
+        - request.invalid
+        - resource.not_found
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - audit.unavailable
+        - administration.unavailable
+        - authentication.token_invalid
+        - authentication.strong_required
+        - authentication.reauthentication_required
+        - invitation.invalid
+        - invitation.class_period_conflict
+        - invitation.conflict
+        - invitation.role_not_delegable
+        - invitation.mail_unavailable
+        - invitation.unavailable
+        - idempotency.conflict
+        - idempotency.in_progress
+        - onboarding_batch.duplicate
     InvitationBatchItemResponse:
       type: object
       additionalProperties: false
@@ -183,27 +207,7 @@ components:
         invitation_id:
           $ref: '#/components/schemas/ID'
         error_code:
-          type: string
-          enum:
-            - request.invalid
-            - resource.not_found
-            - authorization.denied
-            - authorization.request.invalid
-            - authorization.unavailable
-            - audit.unavailable
-            - administration.unavailable
-            - authentication.token_invalid
-            - authentication.strong_required
-            - authentication.reauthentication_required
-            - invitation.invalid
-            - invitation.class_period_conflict
-            - invitation.conflict
-            - invitation.role_not_delegable
-            - invitation.mail_unavailable
-            - invitation.unavailable
-            - idempotency.conflict
-            - idempotency.in_progress
-            - onboarding_batch.duplicate
+          $ref: '#/components/schemas/InvitationBatchErrorCode'
     InvitationBatchResponse:
       type: object
       additionalProperties: false

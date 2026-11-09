@@ -33,6 +33,9 @@ type userProfileHTTPApplication struct {
 	contextResult      *app.CurrentUserContextView
 	contextCalls       int
 	values             []*model.User
+	entries            []app.UserDirectoryEntry
+	searchHasMore      bool
+	searchTotal        int
 	searchQuery        app.SearchUsersQuery
 	updateCommand      app.UpdateUserProfileCommand
 	changeEmailCommand app.ChangeUserEmailCommand
@@ -154,8 +157,9 @@ type auditListingHTTPApplication struct {
 	list []*model.AuditEvent
 }
 
-func (a *auditListingHTTPApplication) ListAuditEvents(context.Context, invocation.Invocation, app.ListAuditEventsQuery) (app.Page[*model.AuditEvent], error) {
-	return app.Page[*model.AuditEvent]{Items: a.list}, nil
+func (a *auditListingHTTPApplication) ListAuditEvents(_ context.Context, _ invocation.Invocation, query app.ListAuditEventsQuery) (app.CountedPage[*model.AuditEvent], error) {
+	return app.CountedPage[*model.AuditEvent]{Page: app.Page[*model.AuditEvent]{Items: a.list},
+		PageTotal: app.PageTotal{Counted: query.BeforeID.IsZero(), Total: len(a.list)}}, nil
 }
 
 type bootstrapHTTPApplication struct {
@@ -192,9 +196,20 @@ func (a *loginRevisionHTTPApplication) Login(
 	}, nil
 }
 
-func (a *userProfileHTTPApplication) SearchUsers(_ context.Context, _ invocation.Invocation, query app.SearchUsersQuery) (app.Page[*model.User], error) {
+func (a *userProfileHTTPApplication) SearchUsers(_ context.Context, _ invocation.Invocation, query app.SearchUsersQuery) (app.CountedPage[app.UserDirectoryEntry], error) {
 	a.searchQuery = query
-	return app.Page[*model.User]{Items: a.values}, nil
+	entries := a.entries
+	if entries == nil {
+		entries = []app.UserDirectoryEntry{}
+		for _, user := range a.values {
+			entries = append(entries, app.UserDirectoryEntry{User: user, Memberships: store.UserDirectorySummary{UserID: user.ID}})
+		}
+	}
+	page := app.CountedPage[app.UserDirectoryEntry]{Page: app.Page[app.UserDirectoryEntry]{Items: entries, HasMore: a.searchHasMore}}
+	if query.AfterID == "" {
+		page.PageTotal = app.PageTotal{Counted: true, Total: max(a.searchTotal, len(entries)), TotalIsLowerBound: a.searchTotal == store.MaximumListCount}
+	}
+	return page, nil
 }
 func (a *userProfileHTTPApplication) GetUserProfile(context.Context, invocation.Invocation, app.GetUserProfileQuery) (*model.User, error) {
 	return a.result, nil
@@ -402,6 +417,94 @@ func TestUserSearchTransportPreservesIncludeDisabledRequestForApplicationAuthori
 	}
 }
 
+func TestUserSearchTransportReadsAffiliationAndUnitFilters(t *testing.T) {
+	t.Parallel()
+	logger, _ := newTestLogger(t)
+	principal := model.Principal{
+		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
+		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
+		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
+		ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now(),
+	}
+	profiles := &userProfileHTTPApplication{}
+	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userProfileResource(profiles))
+	serve := func(query string) *httptest.ResponseRecorder {
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users"+query, nil)
+		request.Header.Set("Authorization", "Bearer credential")
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		return response
+	}
+	unitID := model.NewAcademicUnitID()
+	response := serve("?affiliation=teacher&affiliation=staff&academic_unit_id=" + unitID.String())
+	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
+	require.Equal(t, []model.AffiliationKind{model.AffiliationTeacher, model.AffiliationStaff}, profiles.searchQuery.Affiliations)
+	require.Equal(t, unitID, profiles.searchQuery.AcademicUnitID)
+
+	for _, query := range []string{
+		"?affiliation=alumni",
+		"?affiliation=",
+		"?affiliation=student&affiliation=student",
+		"?academic_unit_id=not-an-id",
+		"?academic_unit_id=",
+		"?academic_unit_id=" + unitID.String() + "&academic_unit_id=" + unitID.String(),
+	} {
+		response := serve(query)
+		require.Equal(t, http.StatusBadRequest, response.Code, "%s: status = %d: %s", query, response.Code, response.Body.String())
+		require.Contains(t, response.Body.String(), `"request.invalid"`, query)
+	}
+}
+
+func TestUserSearchTransportPresentsEachUsersSummary(t *testing.T) {
+	t.Parallel()
+	logger, _ := newTestLogger(t)
+	principal := model.Principal{
+		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
+		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
+		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
+		ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now(),
+	}
+	unitID, roleID := model.NewAcademicUnitID(), model.NewRoleID()
+	summarized := &model.User{ID: model.NewUserID(), Username: "summarized", DisplayName: "Summarized"}
+	plain := &model.User{ID: model.NewUserID(), Username: "plain", DisplayName: "Plain"}
+	profiles := &userProfileHTTPApplication{entries: []app.UserDirectoryEntry{
+		{User: summarized, Memberships: store.UserDirectorySummary{
+			UserID: summarized.ID, Affiliations: []model.AffiliationKind{model.AffiliationTeacher, model.AffiliationStaff}, AffiliationsMore: 1,
+			AcademicUnits: []store.UserDirectoryAcademicUnit{{ID: unitID, DisplayName: "Engineering"}}, AcademicUnitsMore: 2,
+		}, Roles: &store.UserRoleBindingSummary{UserID: summarized.ID, More: 4, Bindings: []store.RoleBindingSummary{{
+			RoleID: roleID, DisplayName: "Reviewer", ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String(), ScopeName: "Engineering",
+		}}}},
+		{User: plain, Memberships: store.UserDirectorySummary{UserID: plain.ID}},
+	}}
+	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userProfileResource(profiles))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users", nil)
+	request.Header.Set("Authorization", "Bearer credential")
+	response := httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, request)
+	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
+	var body struct {
+		Items []struct {
+			Username string          `json:"username"`
+			Summary  json.RawMessage `json:"summary"`
+		} `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	require.Len(t, body.Items, 2)
+	unit := `{"id":"` + unitID.String() + `","name":"Engineering"}`
+	require.JSONEq(t, `{
+		"affiliations": [
+			{"kind": "teacher", "academic_units": [`+unit+`], "academic_units_more": 2},
+			{"kind": "staff", "academic_units": [`+unit+`], "academic_units_more": 2}
+		],
+		"affiliations_more": 1,
+		"roles": [{"role_id": "`+roleID.String()+`", "display_name": "Reviewer", "scope_type": "academic_unit",
+			"scope_id": "`+unitID.String()+`", "scope_name": "Engineering"}],
+		"roles_more": 4
+	}`, string(body.Items[0].Summary))
+	require.JSONEq(t, `{"affiliations": [], "affiliations_more": 0}`, string(body.Items[1].Summary),
+		"a caller without role_binding.view reads no roles member")
+}
+
 func TestScopedUserProfileOmitsAccountAndSecurityFields(t *testing.T) {
 	t.Parallel()
 	encoded, err := json.Marshal(userProfileResponseFromModel(&model.User{
@@ -501,6 +604,47 @@ func TestAccountDisableUsesApplicationCommandAndAllowlistedResponse(t *testing.T
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
 	_, exposed := body["revision"]
 	require.False(t, exposed, "revision exposed: %#v", body)
+	require.Nil(t, accounts.command.Reason, "a request without a body carries no reason")
+}
+
+func TestAccountDisableReadsAnOptionalReasonBody(t *testing.T) {
+	t.Parallel()
+	logger, _ := newTestLogger(t)
+	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
+	userID := model.NewID()
+	serve := func(path, body string) (*httptest.ResponseRecorder, *accountStateHTTPApplication) {
+		accounts := &accountStateHTTPApplication{result: &model.User{ID: model.UserID(userID), Username: "student", DisabledAt: model.OptionalTimeFromMillis(500)}}
+		httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userAdministrationResource(accounts, &sessionAdministrationHTTPApplication{}))
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/users/"+userID+path, strings.NewReader(body))
+		request.Header.Set("Authorization", "Bearer credential")
+		if body != "" {
+			request.Header.Set("Content-Type", "application/json")
+		}
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		return response, accounts
+	}
+
+	response, accounts := serve("/disable", `{"reason":"  Left the institution "}`)
+	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
+	require.NotNil(t, accounts.command.Reason)
+	require.Equal(t, "  Left the institution ", *accounts.command.Reason, "the application owns trimming and bounds")
+
+	response, accounts = serve("/disable", `{}`)
+	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
+	require.Nil(t, accounts.command.Reason, "an empty object carries no reason")
+	response, accounts = serve("/disable", `{"reason":""}`)
+	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
+	require.Nil(t, accounts.command.Reason, "an empty reason is an omitted one")
+
+	for _, body := range []string{`{"reason":"x","note":"y"}`, `{"reason":42}`, `not json`} {
+		response, _ = serve("/disable", body)
+		require.Equal(t, http.StatusBadRequest, response.Code, "%s: status = %d: %s", body, response.Code, response.Body.String())
+	}
+
+	response, accounts = serve("/enable", `{"reason":"back"}`)
+	require.Equal(t, http.StatusOK, response.Code, "enable ignores a body as before: %s", response.Body.String())
+	require.Nil(t, accounts.command.Reason)
 }
 
 func TestUserProfileOpenAPIDocument(t *testing.T) {
@@ -533,7 +677,7 @@ func TestUserProfileOpenAPIDocument(t *testing.T) {
 	assertOpenAPIIfMatchForProfile(t, "DELETE "+picturePath, remove, true)
 
 	list := document.Components.Schemas["UserProfileListResponse"]
-	requireOpenAPIListEnvelope(t, list, "#/components/schemas/UserProfileResponse")
+	requireOpenAPIListEnvelope(t, list, "#/components/schemas/UserDirectoryEntryResponse")
 }
 
 func decodeOpenAPIOperationForProfile(

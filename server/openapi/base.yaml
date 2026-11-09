@@ -48,5 +48,7 @@ tags:
     description: Durable background Job status, Attempt history, cancellation, and retry.
   - name: Mail
     description: Durable mail operations, delivery inspection, key rotation, testing, and bounded metrics.
+  - name: Administration
+    description: Bounded summaries of the administration work waiting on the caller.
   - name: Realtime
     description: Authenticated WebSocket connection establishment and bounded replay resumption.

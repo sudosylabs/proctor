@@ -55,15 +55,32 @@ func userAdministrationMutationCodes(extra ...string) []string {
 	return append(codes, "administration.unavailable")
 }
 
+// disableUserRequest is the optional body of an account disable. A request
+// without a body, or without a reason, disables without a reason; the
+// application trims and bounds a supplied one.
+type disableUserRequest struct {
+	Reason string `json:"reason,omitempty"`
+}
+
 func (m userAdministrationResourceModule) disable(request operationRequest) (operationResult, error) {
-	return m.setEnabled(request, false)
+	var reason *string
+	if request.request.ContentLength != 0 || request.request.Header.Get("Content-Type") != "" {
+		var body disableUserRequest
+		if err := request.decodeJSON(&body); err != nil {
+			return operationResult{}, err
+		}
+		if body.Reason != "" {
+			reason = &body.Reason
+		}
+	}
+	return m.setEnabled(request, false, reason)
 }
 
 func (m userAdministrationResourceModule) enable(request operationRequest) (operationResult, error) {
-	return m.setEnabled(request, true)
+	return m.setEnabled(request, true, nil)
 }
 
-func (m userAdministrationResourceModule) setEnabled(request operationRequest, enabled bool) (operationResult, error) {
+func (m userAdministrationResourceModule) setEnabled(request operationRequest, enabled bool, reason *string) (operationResult, error) {
 	userID, err := request.params.RequireUserID()
 	if err != nil {
 		return operationResult{}, err
@@ -71,7 +88,7 @@ func (m userAdministrationResourceModule) setEnabled(request operationRequest, e
 	user, err := m.accounts.SetUserEnabled(
 		request.context,
 		request.invocation(),
-		app.SetUserEnabledCommand{ID: userID, Enabled: enabled},
+		app.SetUserEnabledCommand{ID: userID, Enabled: enabled, Reason: reason},
 	)
 	if err != nil {
 		return operationResult{}, err

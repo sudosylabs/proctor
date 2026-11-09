@@ -7,6 +7,75 @@
 
 components:
   schemas:
+    MailFailureCode:
+      type: string
+      description: >-
+        Stable safe failure category of a Mail Delivery: why it failed, was suppressed or canceled, or was retried by an operator. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+      enum:
+        - mail.delivery.canceled
+        - mail.delivery.expired
+        - mail.delivery.obsolete
+        - mail.delivery.recipient_ineligible
+        - mail.delivery.suppressed_disabled
+        - mail.message.invalid
+        - mail.operator.retry
+        - mail.payload.unavailable
+        - mail.transport.acceptance_uncertain
+        - mail.transport.permanent
+        - mail.transport.temporary
+        - mail.transport.unknown
+    MailTemplateKey:
+      type: string
+      description: >-
+        Stable key of one server-owned transactional mail template. The catalogue is closed and may grow; clients
+        own the labels and should present an unknown key generically.
+      enum:
+        - academic.academic_unit_assigned
+        - academic.academic_unit_assignment_ended
+        - academic.class_enrolled
+        - academic.class_enrollment_ended
+        - academic.class_transferred
+        - access.academic_unit_role_invitation
+        - access.institution_role_invitation
+        - access.invitation_accepted
+        - access.invitation_revoked
+        - access.student_class_invitation
+        - access.teacher_academic_unit_invitation
+        - authorization.institution_role_assigned
+        - authorization.institution_role_ended
+        - authorization.scoped_role_assigned
+        - authorization.scoped_role_ended
+        - exam.manager_added
+        - exam.manager_removed
+        - exam.ownership_transferred_from_you
+        - exam.ownership_transferred_to_you
+        - exam.result_released
+        - exam.retention_scheduled
+        - exam.sitting_assignment_removed
+        - exam.sitting_canceled
+        - exam.sitting_rescheduled
+        - exam.sitting_scheduled
+        - exam.submission_automatically_sealed
+        - exam.submission_manager_ended
+        - exam.submission_received
+        - identity.account_disabled
+        - identity.account_enabled
+        - identity.email_change_verify_new
+        - identity.email_change_warning_old
+        - identity.email_verified_by_admin
+        - identity.mfa_disabled
+        - identity.mfa_enabled
+        - identity.mfa_recovery_codes_regenerated
+        - identity.mfa_reset
+        - identity.password_changed
+        - identity.password_reset
+        - identity.personal_access_token_created
+        - identity.personal_access_token_disabled
+        - identity.personal_access_token_enabled
+        - identity.personal_access_token_revoked
+        - identity.sessions_revoked_by_admin
+        - identity.verify_email
+        - system.mail_test
     MailDeliveryState:
       description: Durable lifecycle state of one mail delivery occurrence.
       type: string
@@ -43,9 +112,7 @@ components:
         target_user_id:
           $ref: '#/components/schemas/ID'
         template_key:
-          type: string
-          enum:
-            - system.mail_test
+          $ref: '#/components/schemas/MailTemplateKey'
         template_digest:
           type: string
           pattern: ^[0-9a-f]{64}$
@@ -89,6 +156,5 @@ components:
           format: date-time
           description: Time when the delivery became terminally failed.
         public_failure_code:
-          type: string
-          maxLength: 128
+          $ref: '#/components/schemas/MailFailureCode'
           description: Stable safe failure category; raw SMTP or infrastructure errors are never exposed.

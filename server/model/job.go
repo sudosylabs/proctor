@@ -100,6 +100,9 @@ type Job struct {
 	WorkReserved    int
 	Progress        *JobProgress
 	Revision        int64
+	// CreatedByUserID names the operator whose request started the Job; it is
+	// zero for recurring and system work.
+	CreatedByUserID UserID
 }
 
 type JobAttempt struct {
@@ -134,6 +137,9 @@ func (j *Job) Validate() error {
 	}
 	if !validJobDocument(j.Checkpoint, true) || !validJobDocument(j.Result, true) || !validPublicJobCode(j.PublicErrorCode) || !validJobProgress(j.Progress) {
 		return invalidModelError("Job.Validate", "job", "", "invalid job result state", "")
+	}
+	if !j.CreatedByUserID.IsZero() && !j.CreatedByUserID.IsValid() {
+		return invalidModelError("Job.Validate", "job", "", "invalid job initiator", "")
 	}
 	terminal := j.Status == JobStatusSucceeded || j.Status == JobStatusFailed || j.Status == JobStatusCanceled
 	if terminal != j.CompletedAt.Valid || (j.Status == JobStatusRunning && j.AttemptCount == 0) {

@@ -12,6 +12,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -363,18 +364,36 @@ func invitationBatchAdministrationOutcome(view InvitationAdministrationView, err
 	return invitationBatchViewOutcome(view.InvitationView, err)
 }
 
+// InvitationBatchErrorCodes is the closed catalogue of safe failure codes an
+// Invitation batch item reports. Any other failure is reported as
+// invitation.unavailable.
+func InvitationBatchErrorCodes() []string {
+	return []string{
+		"request.invalid", "resource.not_found", "authorization.denied", "authorization.request.invalid",
+		"authorization.unavailable", "audit.unavailable", "administration.unavailable",
+		"authentication.token_invalid", "authentication.strong_required", "authentication.reauthentication_required",
+		"invitation.invalid", "invitation.class_period_conflict", "invitation.conflict",
+		"invitation.role_not_delegable", "invitation.mail_unavailable", "invitation.unavailable",
+		"idempotency.conflict", "idempotency.in_progress", "onboarding_batch.duplicate",
+	}
+}
+
+// invitationRowProgressionErrorCodes are the further codes an onboarding
+// import row keeps when its frozen progression target changed; Invitation use
+// cases never mint them, so a batch item cannot report them.
+var invitationRowProgressionErrorCodes = []string{"student_progression.conflict", "student_progression.target_conflict"}
+
+// invitationRowErrorCodes are the codes an onboarding import row of an
+// Invitation batch may record: the batch catalogue plus the progression
+// target codes.
+func invitationRowErrorCodes() []string {
+	return append(InvitationBatchErrorCodes(), invitationRowProgressionErrorCodes...)
+}
+
 func invitationBatchPublicErrorCode(err error) string {
-	if failure, ok := apperror.As(err); ok {
-		switch failure.Code() {
-		case "request.invalid", "resource.not_found", "authorization.denied", "authorization.request.invalid",
-			"authorization.unavailable", "audit.unavailable", "administration.unavailable",
-			"authentication.token_invalid", "authentication.strong_required", "authentication.reauthentication_required",
-			"invitation.invalid", "invitation.class_period_conflict", "invitation.conflict",
-			"invitation.role_not_delegable", "invitation.mail_unavailable", "invitation.unavailable",
-			"student_progression.conflict", "student_progression.target_conflict",
-			"idempotency.conflict", "idempotency.in_progress", "onboarding_batch.duplicate":
-			return failure.Code()
-		}
+	if failure, ok := apperror.As(err); ok &&
+		(slices.Contains(InvitationBatchErrorCodes(), failure.Code()) || slices.Contains(invitationRowProgressionErrorCodes, failure.Code())) {
+		return failure.Code()
 	}
 	return "invitation.unavailable"
 }

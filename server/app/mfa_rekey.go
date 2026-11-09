@@ -185,6 +185,7 @@ func (s *mfaKeyService) StartMFARekey(ctx context.Context, invocation invocation
 	if err != nil {
 		return MFARekeyView{}, apperror.New("authentication.mfa.unavailable").Wrap(err)
 	}
+	job.CreatedByUserID = invocation.Principal().UserID
 	operation, err := runAuditedMutation(ctx, s.deps.Audit, mutationAttempt{
 		Invocation: invocation, Action: model.ActionMFARekey, Resource: resource,
 		ScopeType: model.RoleScopeInstitution, ScopeID: resource.ID, Operation: "start_rekey",

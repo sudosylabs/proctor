@@ -88,7 +88,8 @@ func constructJobs(
 		}
 	}
 
-	operations, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: runtime, Authorization: jobOperationsAuthorization{authorization: access.authorization, institutions: deps.Store.Institution()}, Audit: mutationAuditAdapter{audit: foundation.audit}, Now: time.Now})
+	operations, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: runtime, Authorization: jobOperationsAuthorization{authorization: access.authorization, institutions: deps.Store.Institution()}, Audit: mutationAuditAdapter{audit: foundation.audit},
+		Users: deps.Store.User(), ExamExports: deps.Store.ExamExport(), Now: time.Now})
 	if err != nil {
 		return jobConstruction{}, err
 	}

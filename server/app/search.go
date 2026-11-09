@@ -61,7 +61,7 @@ type searchExamCatalog interface {
 }
 
 type searchUserDirectory interface {
-	SearchUsers(context.Context, invocation.Invocation, SearchUsersQuery) (Page[*model.User], error)
+	searchUserPage(context.Context, invocation.Invocation, SearchUsersQuery) (Page[*model.User], error)
 }
 
 type searchClassAuthorizer interface {
@@ -115,7 +115,7 @@ func (s *searchService) Search(ctx context.Context, invocation invocation.Invoca
 			result.Classes, searchErr = s.searchClasses(ctx, invocation, term, limit)
 		case SearchTypeUser:
 			var page Page[*model.User]
-			page, searchErr = s.deps.Users.SearchUsers(ctx, invocation, SearchUsersQuery{Query: term, Limit: limit})
+			page, searchErr = s.deps.Users.searchUserPage(ctx, invocation, SearchUsersQuery{Query: term, Limit: limit})
 			if searchErr == nil {
 				result.Users = page.Items
 			}

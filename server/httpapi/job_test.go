@@ -27,6 +27,25 @@ func TestJobResponseCannotExposePrivateExecutionDocuments(t *testing.T) {
 	}
 }
 
+func TestJobResponseNamesItsInitiatorAndSubjectOnlyWhenKnown(t *testing.T) {
+	at := time.Date(2026, time.November, 9, 10, 0, 0, 0, time.UTC)
+	operator := model.NewUserID()
+	started := job.View{ID: model.NewJobID(), Type: model.JobTypeExamExportBuild, Status: model.JobStatusQueued, CreatedAt: at, UpdatedAt: at, AvailableAt: at, MaximumAttempts: 3, Revision: 1,
+		CreatedByUserID: operator, CreatedByDisplayName: "Ada Operator", Subject: "Algorithms final"}
+	response := jobResponseFromApplication(started)
+	require.Equal(t, operator.String(), response.CreatedByUserID)
+	require.Equal(t, "Ada Operator", response.CreatedByDisplayName)
+	require.Equal(t, "Algorithms final", response.Subject)
+
+	system := started
+	system.CreatedByUserID, system.CreatedByDisplayName, system.Subject = "", "", ""
+	encoded, err := json.Marshal(jobResponseFromApplication(system))
+	require.NoError(t, err)
+	for _, member := range []string{"created_by_user_id", "created_by_display_name", "subject"} {
+		require.NotContains(t, string(encoded), member, "system work omits what it does not know")
+	}
+}
+
 func TestJobCursorIsOpaqueAndRejectsInvalidInput(t *testing.T) {
 	cursor := jobCursor{CreatedAt: "2026-01-02T03:04:05.123Z", ID: model.NewID()}
 	encoded, err := encodeJobCursor(cursor)

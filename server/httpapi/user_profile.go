@@ -12,10 +12,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -40,6 +43,47 @@ type userProfileResponse struct {
 	ProfilePictureURL       string  `json:"profile_picture_url"`
 	ProfilePictureChangedAt string  `json:"profile_picture_changed_at,omitempty"`
 	ProfilePictureKind      string  `json:"profile_picture_kind"`
+}
+
+// userDirectoryEntryResponse is one User directory item: the profile the
+// caller may read and its bounded summary.
+type userDirectoryEntryResponse struct {
+	userProfileResponse
+	Summary *userDirectorySummaryResponse `json:"summary,omitempty"`
+}
+
+// userDirectorySummaryResponse names a User's current Affiliations and, for
+// a caller holding role_binding.view, the visible current Role Bindings.
+type userDirectorySummaryResponse struct {
+	Affiliations     []userDirectoryAffiliationResponse `json:"affiliations"`
+	AffiliationsMore int                                `json:"affiliations_more"`
+	*userDirectoryRolesResponse
+}
+
+type userDirectoryAffiliationResponse struct {
+	Kind              string                              `json:"kind"`
+	AcademicUnits     []userDirectoryAcademicUnitResponse `json:"academic_units"`
+	AcademicUnitsMore int                                 `json:"academic_units_more"`
+}
+
+type userDirectoryAcademicUnitResponse struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// userDirectoryRolesResponse is present only when the caller holds
+// role_binding.view somewhere.
+type userDirectoryRolesResponse struct {
+	Roles     []userDirectoryRoleResponse `json:"roles"`
+	RolesMore int                         `json:"roles_more"`
+}
+
+type userDirectoryRoleResponse struct {
+	RoleID      string `json:"role_id"`
+	DisplayName string `json:"display_name"`
+	ScopeType   string `json:"scope_type"`
+	ScopeID     string `json:"scope_id"`
+	ScopeName   string `json:"scope_name"`
 }
 
 type updateUserProfileRequest struct {
@@ -446,6 +490,9 @@ func (m userProfileResourceModule) search(request operationRequest) (operationRe
 		return operationResult{}, invalidRequestError(err)
 	}
 	query := app.SearchUsersQuery{Query: request.request.URL.Query().Get("q"), Limit: paging.Limit, IncludeDisabled: includeDisabled}
+	if query.Affiliations, query.AcademicUnitID, err = userDirectoryFilters(request.request.URL.Query()); err != nil {
+		return operationResult{}, err
+	}
 	if present {
 		query.AfterUsername, query.AfterID = cursor.Username, model.UserID(cursor.ID)
 	}
@@ -453,13 +500,73 @@ func (m userProfileResourceModule) search(request operationRequest) (operationRe
 	if err != nil {
 		return operationResult{}, err
 	}
-	response, err := newListResponse(page.Items, page.HasMore, userProfileResponseFromModel, func(last *model.User) (string, error) {
-		return encodeOpaqueCursor(userDirectoryCursor{Username: last.Username, ID: last.ID.String()}, userDirectoryCursorSpec())
+	envelope, err := newListResponse(page.Items, page.HasMore, userDirectoryEntryResponseFromApplication, func(last app.UserDirectoryEntry) (string, error) {
+		return encodeOpaqueCursor(userDirectoryCursor{Username: last.User.Username, ID: last.User.ID.String()}, userDirectoryCursorSpec())
 	})
 	if err != nil {
 		return operationResult{}, err
 	}
+	response, err := withPageTotal(envelope, page.PageTotal, present)
+	if err != nil {
+		return operationResult{}, err
+	}
 	return jsonResult(http.StatusOK, response), nil
+}
+
+// userDirectoryEntryResponseFromApplication presents one directory row. Each
+// Affiliation carries the User's visible current Academic Units, since a
+// membership is not tied to one Affiliation kind.
+func userDirectoryEntryResponseFromApplication(entry app.UserDirectoryEntry) userDirectoryEntryResponse {
+	units := make([]userDirectoryAcademicUnitResponse, 0, len(entry.Memberships.AcademicUnits))
+	for _, unit := range entry.Memberships.AcademicUnits {
+		units = append(units, userDirectoryAcademicUnitResponse{ID: unit.ID.String(), Name: unit.DisplayName})
+	}
+	summary := &userDirectorySummaryResponse{
+		Affiliations:     make([]userDirectoryAffiliationResponse, 0, len(entry.Memberships.Affiliations)),
+		AffiliationsMore: entry.Memberships.AffiliationsMore,
+	}
+	for _, kind := range entry.Memberships.Affiliations {
+		summary.Affiliations = append(summary.Affiliations, userDirectoryAffiliationResponse{
+			Kind: string(kind), AcademicUnits: units, AcademicUnitsMore: entry.Memberships.AcademicUnitsMore,
+		})
+	}
+	if entry.Roles != nil {
+		summary.userDirectoryRolesResponse = &userDirectoryRolesResponse{
+			Roles: make([]userDirectoryRoleResponse, 0, len(entry.Roles.Bindings)), RolesMore: entry.Roles.More,
+		}
+		for _, binding := range entry.Roles.Bindings {
+			summary.Roles = append(summary.Roles, userDirectoryRoleResponse{
+				RoleID: binding.RoleID.String(), DisplayName: binding.DisplayName,
+				ScopeType: string(binding.ScopeType), ScopeID: binding.ScopeID, ScopeName: binding.ScopeName,
+			})
+		}
+	}
+	return userDirectoryEntryResponse{userProfileResponse: userProfileResponseFromModel(entry.User), Summary: summary}
+}
+
+// userDirectoryFilters reads the repeatable affiliation filter and the single
+// academic_unit_id filter of the User directory.
+func userDirectoryFilters(values url.Values) ([]model.AffiliationKind, model.AcademicUnitID, error) {
+	var kinds []model.AffiliationKind
+	for _, raw := range values["affiliation"] {
+		kind := model.AffiliationKind(raw)
+		if !kind.IsValid() || slices.Contains(kinds, kind) {
+			return nil, "", apperror.Invalid("request.invalid", "affiliation")
+		}
+		kinds = append(kinds, kind)
+	}
+	raw, present := values["academic_unit_id"]
+	if !present {
+		return kinds, "", nil
+	}
+	if len(raw) != 1 {
+		return nil, "", apperror.Invalid("request.invalid", "academic_unit_id")
+	}
+	unitID, err := model.ParseAcademicUnitID(raw[0])
+	if err != nil {
+		return nil, "", apperror.Invalid("request.invalid", "academic_unit_id")
+	}
+	return kinds, unitID, nil
 }
 
 // userDirectoryCursor continues the User directory ordered by username then

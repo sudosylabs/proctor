@@ -16,6 +16,14 @@ import (
 
 // UserListOptions is a bounded persistence query. IncludeDisabled is effective
 // only with an explicit InstitutionWide visibility scope.
+//
+// AffiliationKinds keeps Users holding at least one current Affiliation of a
+// listed kind; AcademicUnitID keeps Users with a current Academic Unit
+// membership in that unit or an unarchived descendant. Both narrow the
+// visibility result and are evaluated at Visibility.ActiveAt, which they
+// require. A scoped visibility answers no rows for an AcademicUnitID outside
+// its user.view subtrees (AcademicUnitRootIDs), so the filter never discloses
+// membership the scope could not read.
 type UserListOptions struct {
 	ID                           model.UserID
 	Query                        string
@@ -24,6 +32,8 @@ type UserListOptions struct {
 	Limit                        int
 	IncludeDisabled              bool
 	MissingDefaultProfilePicture bool
+	AffiliationKinds             []model.AffiliationKind
+	AcademicUnitID               model.AcademicUnitID
 	Visibility                   UserVisibilityScope
 }
 
@@ -45,6 +55,46 @@ type UserVisibilityScope struct {
 	// ActiveAt is the UTC microsecond decision time shared with current role
 	// authorization. Visibility anchors include their start and exclude their end.
 	ActiveAt time.Time
+}
+
+// UserDirectorySummaryOptions selects the bounded directory summary of one
+// page of Users. Every User's current Affiliations are read, at most
+// AffiliationLimit of them; Academic Units come from current memberships in
+// unarchived units, at most AcademicUnitLimit of them, and a scoped
+// Visibility reads only units inside its user.view subtrees
+// (AcademicUnitRootIDs), so the summary never names a relationship outside the
+// scope. Current means effective at Visibility.ActiveAt, which is required.
+type UserDirectorySummaryOptions struct {
+	UserIDs           []model.UserID
+	Visibility        UserVisibilityScope
+	AffiliationLimit  int
+	AcademicUnitLimit int
+}
+
+// UserDirectorySummary is one User's bounded directory summary. Affiliations
+// are ordered by start then kind and AcademicUnits by display name then ID;
+// each More counts the current entries past its limit.
+type UserDirectorySummary struct {
+	UserID            model.UserID
+	Affiliations      []model.AffiliationKind
+	AffiliationsMore  int
+	AcademicUnits     []UserDirectoryAcademicUnit
+	AcademicUnitsMore int
+}
+
+// UserDirectoryAcademicUnit names one Academic Unit in a directory summary.
+type UserDirectoryAcademicUnit struct {
+	ID          model.AcademicUnitID
+	DisplayName string
+}
+
+// UserIdentity names one User beside a relationship that already makes the
+// User visible, such as an Academic Unit membership listing.
+type UserIdentity struct {
+	ID          model.UserID
+	Username    string
+	DisplayName string
+	Email       string
 }
 
 // UserVisibilityMatch identifies the authorized scope through which one User
@@ -144,11 +194,36 @@ type UserStore interface {
 	GetByUsername(context.Context, string) (*model.User, error)
 	GetByEmail(context.Context, string) (*model.User, error)
 	List(context.Context, UserListOptions) ([]*model.User, error)
+	// Count counts the Users List would return across every page for the
+	// same filters and visibility, ignoring the keyset and limit, and stops
+	// at maximum (see MaximumListCount).
+	Count(context.Context, UserListOptions, int) (int, error)
+	// ListDirectorySummaries reads the summary of every listed User in one
+	// statement. A User with neither a current Affiliation nor a visible
+	// current Academic Unit has no entry.
+	ListDirectorySummaries(context.Context, UserDirectorySummaryOptions) ([]UserDirectorySummary, error)
+	// ListIdentities reads the identities of at most 200 listed Users in one
+	// statement, in no particular order; an unknown ID has no entry.
+	ListIdentities(context.Context, []model.UserID) ([]UserIdentity, error)
 	GetCurrentContext(context.Context, model.UserID, int) (*CurrentUserContext, error)
 	MatchVisibility(context.Context, model.UserID, UserVisibilityScope) (UserVisibilityMatch, error)
 	UpdateProfile(context.Context, *UserProfileUpdate) (*model.User, error)
 	SetDisabled(context.Context, *UserDisabledStateChange) (*UserDisabledStateResult, error)
 	UpdateLastLogin(context.Context, *UserLastLoginUpdate) error
+	// ListDisplayNames reads the presentable name of each given unarchived
+	// User: the display name, or the username when it is empty. At most
+	// MaximumUserDisplayNames distinct Users are read; an archived or missing
+	// User is absent from the result. It grants no authority.
+	ListDisplayNames(context.Context, []model.UserID) ([]UserDisplayName, error)
+}
+
+// MaximumUserDisplayNames bounds one UserStore.ListDisplayNames read.
+const MaximumUserDisplayNames = 200
+
+// UserDisplayName is one User's presentable name.
+type UserDisplayName struct {
+	UserID      model.UserID
+	DisplayName string
 }
 
 type CurrentUserProductArea string

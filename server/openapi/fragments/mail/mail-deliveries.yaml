@@ -14,6 +14,7 @@ paths:
         - Mail
       description: >-
         Lists authorized durable delivery metadata for the allowlisted template and filters. Recipient addresses remain masked and the response never exposes encrypted payloads, rendered message bodies, SMTP credentials, or provider diagnostics.
+        The first page, read without a cursor, also reports `total`: the mail deliveries the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
       x-proctor-auth: principal_required
       x-proctor-error-codes:
         - authorization.denied
@@ -61,10 +62,8 @@ paths:
           schema:
             type: array
             items:
-              type: string
-              enum:
-                - system.mail_test
-          description: Optional set of public allowlisted template keys to include.
+              $ref: '#/components/schemas/MailTemplateKey'
+          description: Optional set of template keys to include.
         - name: created_after
           in: query
           schema:
@@ -292,6 +291,8 @@ components:
             $ref: '#/components/schemas/MailDeliveryListResponse'
           example:
             items: []
+            total: 0
+            total_is_lower_bound: false
   schemas:
     MailDeliveryListResponse:
       description: One bounded page of safe mail delivery projections.
@@ -307,3 +308,13 @@ components:
         next_cursor:
           type: string
           description: Opaque continuation for the next page, omitted after the final page.
+        total:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            Mail deliveries matching the filters and the caller's visibility across every page, present only on the
+            first page. At 10,000 counting stops and `total_is_lower_bound` is true.
+        total_is_lower_bound:
+          type: boolean
+          description: True when `total` reached the 10,000 bound and there may be more. Present with `total`.

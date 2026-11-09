@@ -643,8 +643,12 @@ Invitation state is `pending`, `accepted`, `revoked`, `expired`, or
 `superseded`. It freezes normalized recipient email, purpose, targets, role,
 effective bounds, optional locale and profile suggestions, inviter, and
 authorization scope. A 256-bit random secret authenticates the claim; only its
-domain-separated hash is stored. Default lifetime is seven days under bounded
-Institution policy.
+domain-separated hash is stored. The inviter may choose a lifetime of one to
+thirty whole days; seven is the default, and batch and onboarding import
+Invitations always use it. The model, Store validation, and a baseline CHECK
+bound the stored expiry. Resend keeps the original expiry; a replacement keeps
+the replaced Invitation's lifetime in whole days unless the inviter chooses
+another.
 
 Resending an unchanged Invitation rotates the secret and invalidates every old
 link. Changing recipient, purpose, target, role, or effective dates creates a
@@ -792,7 +796,14 @@ of the same type executes against one target scope at a time. Cancellation
 stops new rows, lets an already committing row finish, and never rolls back
 committed work. Compensation uses explicit inverse use cases.
 
-Detailed previews and reports retain for seven days. Reports preserve source
+Detailed previews and reports retain for seven days. The administrative
+listing shows unexpired imports newest first through one recorded
+`onboarding_batch.view` scope decision turned into a Store predicate, so it
+lists exactly what a single read would allow; student progressions authorize
+through Class progression authority and are not listed there. The progression
+listing resolves `academic_progression.manage` once the same way and shows a
+progression only when its source and its destination Class both lie inside
+that scope, because the single read authorizes both. Reports preserve source
 row, safe reference, normalized operation, status, created IDs, and public
 error code; downloads reauthorize and escape spreadsheet formulas. Audit,
 logs, metrics, and generic Job projections contain only safe IDs, counts,

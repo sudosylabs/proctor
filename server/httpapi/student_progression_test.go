@@ -29,6 +29,14 @@ type studentProgressionApplicationFake struct {
 	rows    []app.OnboardingImportRowView
 	command app.DryRunStudentProgressionCommand
 	getID   string
+
+	listQuery *app.ListStudentProgressionsQuery
+	listPage  app.CountedPage[app.OnboardingImportView]
+}
+
+func (f *studentProgressionApplicationFake) ListStudentProgressions(_ context.Context, _ invocation.Invocation, query app.ListStudentProgressionsQuery) (app.CountedPage[app.OnboardingImportView], error) {
+	f.listQuery = &query
+	return f.listPage, nil
 }
 
 func (f *studentProgressionApplicationFake) DryRunStudentProgression(_ context.Context, _ invocation.Invocation, command app.DryRunStudentProgressionCommand) (app.OnboardingImportView, error) {
@@ -97,4 +105,108 @@ func TestStudentProgressionResponseExposesOnlySafeExactTargetsAndRows(t *testing
 		require.Contains(t, body, required, "response omits")
 	}
 	requireNoPrivateFieldNames(t, encoded, "email", "username", "recipient", "claim", "secret", "principal")
+}
+
+func TestStudentProgressionListParsesFiltersAndPagesTheCountedEnvelope(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
+	sourcePeriodID, sourceClassID := model.NewAcademicPeriodID(), model.NewClassID()
+	destinationPeriodID, destinationClassID := model.NewAcademicPeriodID(), model.NewClassID()
+	newest := app.OnboardingImportView{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportStudentProgression,
+		State: model.OnboardingImportPreviewReady, ScopeType: model.RoleScopeClass, ScopeID: destinationClassID.String(),
+		SourcePeriodID: sourcePeriodID, SourceClassID: sourceClassID, DestinationPeriodID: destinationPeriodID, DestinationClassID: destinationClassID,
+		SourceClassName: "Year 1 Blue", DestinationClassName: "Year 2 Blue", EffectiveAt: at.Add(24 * time.Hour),
+		ParseJobID: model.NewJobID(), CreatedAt: at, UpdatedAt: at, ExpiresAt: at.Add(7 * 24 * time.Hour), Revision: 2}
+	older := newest
+	older.ID, older.CreatedAt = model.NewOnboardingImportID(), at.Add(-time.Minute)
+	fake := &studentProgressionApplicationFake{listPage: app.CountedPage[app.OnboardingImportView]{
+		Page:      app.Page[app.OnboardingImportView]{Items: []app.OnboardingImportView{newest, older}, HasMore: true},
+		PageTotal: app.PageTotal{Counted: true, Total: 3}}}
+	httpAPI := studentProgressionListAPI(t, fake)
+
+	response := httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, authenticatedCatalogRequest(http.MethodGet, "/api/v1/student-progressions?state=preview_ready&state=failed&limit=2"+
+		"&source_period_id="+sourcePeriodID.String()+"&source_class_id="+sourceClassID.String()+
+		"&destination_period_id="+destinationPeriodID.String()+"&destination_class_id="+destinationClassID.String()))
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	require.Equal(t, app.ListStudentProgressionsQuery{States: []model.OnboardingImportState{model.OnboardingImportPreviewReady, model.OnboardingImportFailed},
+		SourcePeriodID: sourcePeriodID, SourceClassID: sourceClassID, DestinationPeriodID: destinationPeriodID, DestinationClassID: destinationClassID,
+		Limit: 2}, *fake.listQuery)
+	var page struct {
+		Items             []map[string]any `json:"items"`
+		NextCursor        string           `json:"next_cursor"`
+		Total             *int             `json:"total"`
+		TotalIsLowerBound *bool            `json:"total_is_lower_bound"`
+	}
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
+	require.Len(t, page.Items, 2)
+	require.Equal(t, newest.ID.String(), page.Items[0]["id"])
+	require.Equal(t, "Year 1 Blue", page.Items[0]["source_class_name"])
+	require.Equal(t, "Year 2 Blue", page.Items[0]["destination_class_name"])
+	require.NotContains(t, page.Items[0], "rows")
+	require.NotEmpty(t, page.NextCursor)
+	require.Equal(t, 3, *page.Total)
+	require.False(t, *page.TotalIsLowerBound)
+
+	fake.listPage = app.CountedPage[app.OnboardingImportView]{Page: app.Page[app.OnboardingImportView]{Items: []app.OnboardingImportView{}}}
+	response = httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, authenticatedCatalogRequest(http.MethodGet, "/api/v1/student-progressions?cursor="+page.NextCursor))
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.Equal(t, app.ListStudentProgressionsQuery{BeforeCreatedAt: older.CreatedAt, BeforeID: older.ID, Limit: 50}, *fake.listQuery)
+	require.JSONEq(t, `{"items":[]}`, response.Body.String(), "a later page carries no total")
+}
+
+func TestStudentProgressionListRejectsMalformedParameters(t *testing.T) {
+	t.Parallel()
+	classID := model.NewClassID().String()
+	for name, query := range map[string]string{
+		"zero limit":      "limit=0",
+		"large limit":     "limit=201",
+		"empty state":     "state=",
+		"unknown param":   "mode=student_progression",
+		"bad cursor":      "cursor=not-a-cursor",
+		"repeat limit":    "limit=1&limit=2",
+		"empty class":     "source_class_id=",
+		"repeated class":  "destination_class_id=" + classID + "&destination_class_id=" + classID,
+		"repeated period": "source_period_id=a&source_period_id=b",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			fake := &studentProgressionApplicationFake{}
+			response := httptest.NewRecorder()
+			studentProgressionListAPI(t, fake).ServeHTTP(response, authenticatedCatalogRequest(http.MethodGet, "/api/v1/student-progressions?"+query))
+			require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+			require.Nil(t, fake.listQuery)
+		})
+	}
+}
+
+func TestStudentProgressionReadNamesBothClasses(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
+	fake := &studentProgressionApplicationFake{view: app.OnboardingImportView{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportStudentProgression,
+		State: model.OnboardingImportPreviewReady, ScopeType: model.RoleScopeClass, ScopeID: model.NewClassID().String(),
+		SourceClassName: "Year 1 Blue", DestinationClassName: "Year 2 Blue", ParseJobID: model.NewJobID(),
+		CreatedAt: at, UpdatedAt: at, ExpiresAt: at.Add(7 * 24 * time.Hour), Revision: 2}}
+	response := httptest.NewRecorder()
+	studentProgressionListAPI(t, fake).ServeHTTP(response, authenticatedCatalogRequest(http.MethodGet, "/api/v1/student-progressions/"+fake.view.ID.String()))
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	require.Contains(t, response.Body.String(), `"source_class_name":"Year 1 Blue"`)
+	require.Contains(t, response.Body.String(), `"destination_class_name":"Year 2 Blue"`)
+}
+
+func studentProgressionListAPI(t *testing.T, fake *studentProgressionApplicationFake) *API {
+	t.Helper()
+	principal := model.Principal{
+		UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
+		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
+		AuthenticatedAt: time.Now().UTC(), MFACompletedAt: model.OptionalTimeFrom(time.Now().UTC()), ClientType: model.SessionClientWeb,
+	}
+	options := validHTTPOptions(t)
+	options.StudentProgressions = fake
+	options.Application.(*testHTTPApplication).principal = &principal
+	httpAPI, err := New(options)
+	require.NoError(t, err)
+	return httpAPI
 }

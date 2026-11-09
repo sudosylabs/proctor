@@ -1964,6 +1964,12 @@ func (s *timedExamExportStore) CompletePurge(arg0 context.Context, arg1 store.Ex
 	})
 }
 
+func (s *timedExamExportStore) ListBuildTitles(arg0 context.Context, arg1 []model.JobID) ([]store.ExamExportBuildTitle, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamExport, methodListBuildTitles), func(callCtx context.Context) ([]store.ExamExportBuildTitle, error) {
+		return s.next.ListBuildTitles(callCtx, arg1)
+	})
+}
+
 func (s *timedExamResourceStore) ReserveUpload(arg0 context.Context, arg1 *store.ExamResourceUploadReservation) (*store.FileUpload, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamResource, methodReserveUpload), func(callCtx context.Context) (*store.FileUpload, error) {
 		return s.next.ReserveUpload(callCtx, arg1)
@@ -2192,6 +2198,24 @@ func (s *timedUserStore) List(arg0 context.Context, arg1 store.UserListOptions) 
 	})
 }
 
+func (s *timedUserStore) Count(arg0 context.Context, arg1 store.UserListOptions, arg2 int) (int, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateUser, methodCount), func(callCtx context.Context) (int, error) {
+		return s.next.Count(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedUserStore) ListDirectorySummaries(arg0 context.Context, arg1 store.UserDirectorySummaryOptions) ([]store.UserDirectorySummary, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateUser, methodListDirectorySummaries), func(callCtx context.Context) ([]store.UserDirectorySummary, error) {
+		return s.next.ListDirectorySummaries(callCtx, arg1)
+	})
+}
+
+func (s *timedUserStore) ListIdentities(arg0 context.Context, arg1 []model.UserID) ([]store.UserIdentity, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateUser, methodListIdentities), func(callCtx context.Context) ([]store.UserIdentity, error) {
+		return s.next.ListIdentities(callCtx, arg1)
+	})
+}
+
 func (s *timedUserStore) GetCurrentContext(arg0 context.Context, arg1 model.UserID, arg2 int) (*store.CurrentUserContext, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateUser, methodGetCurrentContext), func(callCtx context.Context) (*store.CurrentUserContext, error) {
 		return s.next.GetCurrentContext(callCtx, arg1, arg2)
@@ -2219,6 +2243,12 @@ func (s *timedUserStore) SetDisabled(arg0 context.Context, arg1 *store.UserDisab
 func (s *timedUserStore) UpdateLastLogin(arg0 context.Context, arg1 *store.UserLastLoginUpdate) error {
 	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateUser, methodUpdateLastLogin), func(callCtx context.Context) error {
 		return s.next.UpdateLastLogin(callCtx, arg1)
+	})
+}
+
+func (s *timedUserStore) ListDisplayNames(arg0 context.Context, arg1 []model.UserID) ([]store.UserDisplayName, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateUser, methodListDisplayNames), func(callCtx context.Context) ([]store.UserDisplayName, error) {
+		return s.next.ListDisplayNames(callCtx, arg1)
 	})
 }
 
@@ -2360,6 +2390,12 @@ func (s *timedJobStore) List(arg0 context.Context, arg1 store.JobListOptions) ([
 	})
 }
 
+func (s *timedJobStore) Count(arg0 context.Context, arg1 store.JobListOptions, arg2 int) (int, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateJob, methodCount), func(callCtx context.Context) (int, error) {
+		return s.next.Count(callCtx, arg1, arg2)
+	})
+}
+
 func (s *timedJobStore) ListAttemptsPage(arg0 context.Context, arg1 store.JobAttemptListOptions) ([]model.JobAttempt, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateJob, methodListAttemptsPage), func(callCtx context.Context) ([]model.JobAttempt, error) {
 		return s.next.ListAttemptsPage(callCtx, arg1)
@@ -2405,6 +2441,12 @@ func (s *timedMailStore) GetDelivery(arg0 context.Context, arg1 model.MailDelive
 func (s *timedMailStore) ListDeliveries(arg0 context.Context, arg1 store.MailDeliveryListOptions) ([]*model.MailDelivery, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateMail, methodListDeliveries), func(callCtx context.Context) ([]*model.MailDelivery, error) {
 		return s.next.ListDeliveries(callCtx, arg1)
+	})
+}
+
+func (s *timedMailStore) CountDeliveries(arg0 context.Context, arg1 store.MailDeliveryListOptions, arg2 int) (int, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateMail, methodCountDeliveries), func(callCtx context.Context) (int, error) {
+		return s.next.CountDeliveries(callCtx, arg1, arg2)
 	})
 }
 
@@ -2858,6 +2900,12 @@ func (s *timedInvitationStore) List(arg0 context.Context, arg1 store.InvitationL
 	})
 }
 
+func (s *timedInvitationStore) Count(arg0 context.Context, arg1 store.InvitationListOptions, arg2 int) (int, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateInvitation, methodCount), func(callCtx context.Context) (int, error) {
+		return s.next.Count(callCtx, arg1, arg2)
+	})
+}
+
 func (s *timedInvitationStore) GetForAdministration(arg0 context.Context, arg1 model.InvitationID, arg2 store.InvitationVisibilityScope) (*store.InvitationAdministrationRecord, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateInvitation, methodGetForAdministration), func(callCtx context.Context) (*store.InvitationAdministrationRecord, error) {
 		return s.next.GetForAdministration(callCtx, arg1, arg2)
@@ -2909,6 +2957,30 @@ func (s *timedOnboardingImportStore) CreateOnboardingImport(arg0 context.Context
 func (s *timedOnboardingImportStore) GetOnboardingImport(arg0 context.Context, arg1 model.OnboardingImportID) (*store.OnboardingImport, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateOnboardingImport, methodGetOnboardingImport), func(callCtx context.Context) (*store.OnboardingImport, error) {
 		return s.next.GetOnboardingImport(callCtx, arg1)
+	})
+}
+
+func (s *timedOnboardingImportStore) ListOnboardingImports(arg0 context.Context, arg1 store.OnboardingImportListOptions) ([]*store.OnboardingImport, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateOnboardingImport, methodListOnboardingImports), func(callCtx context.Context) ([]*store.OnboardingImport, error) {
+		return s.next.ListOnboardingImports(callCtx, arg1)
+	})
+}
+
+func (s *timedOnboardingImportStore) CountOpenOnboardingImports(arg0 context.Context, arg1 store.OnboardingImportVisibilityScope, arg2 int) (int, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateOnboardingImport, methodCountOpenOnboardingImports), func(callCtx context.Context) (int, error) {
+		return s.next.CountOpenOnboardingImports(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedOnboardingImportStore) ListStudentProgressions(arg0 context.Context, arg1 store.StudentProgressionListOptions) ([]*store.StudentProgressionSummary, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateOnboardingImport, methodListStudentProgressions), func(callCtx context.Context) ([]*store.StudentProgressionSummary, error) {
+		return s.next.ListStudentProgressions(callCtx, arg1)
+	})
+}
+
+func (s *timedOnboardingImportStore) CountStudentProgressions(arg0 context.Context, arg1 store.StudentProgressionListOptions, arg2 int) (int, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateOnboardingImport, methodCountStudentProgressions), func(callCtx context.Context) (int, error) {
+		return s.next.CountStudentProgressions(callCtx, arg1, arg2)
 	})
 }
 
@@ -3482,6 +3554,12 @@ func (s *timedRoleBindingStore) ListVisibleByUser(arg0 context.Context, arg1 mod
 	})
 }
 
+func (s *timedRoleBindingStore) ListVisibleSummariesByUsers(arg0 context.Context, arg1 store.RoleBindingSummaryOptions) ([]store.UserRoleBindingSummary, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRoleBinding, methodListVisibleSummariesByUsers), func(callCtx context.Context) ([]store.UserRoleBindingSummary, error) {
+		return s.next.ListVisibleSummariesByUsers(callCtx, arg1)
+	})
+}
+
 func (s *timedRoleBindingStore) ListByScope(arg0 context.Context, arg1 model.RoleScopeType, arg2 string) ([]*model.RoleBinding, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRoleBinding, methodListByScope), func(callCtx context.Context) ([]*model.RoleBinding, error) {
 		return s.next.ListByScope(callCtx, arg1, arg2)
@@ -3521,6 +3599,12 @@ func (s *timedAuditStore) Complete(arg0 context.Context, arg1 *store.AuditComple
 func (s *timedAuditStore) List(arg0 context.Context, arg1 store.AuditListOptions) ([]*model.AuditEvent, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAudit, methodList), func(callCtx context.Context) ([]*model.AuditEvent, error) {
 		return s.next.List(callCtx, arg1)
+	})
+}
+
+func (s *timedAuditStore) Count(arg0 context.Context, arg1 store.AuditListOptions, arg2 int) (int, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAudit, methodCount), func(callCtx context.Context) (int, error) {
+		return s.next.Count(callCtx, arg1, arg2)
 	})
 }
 

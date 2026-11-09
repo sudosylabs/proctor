@@ -165,8 +165,92 @@ func TestAuditStore(t *testing.T, ss store.Store) {
 	})
 	require.ErrorAs(t, err, &invalid, "mixed academic audit visibility error")
 
+	// Count reads through List's filter and visibility, so each combination
+	// counts exactly the rows List pages to.
+	scopedVisibility := store.AuditVisibilityScope{
+		AcademicUnitRootIDs: []model.AcademicUnitID{fixture.programme.AcademicUnitID},
+		AllowedActions:      []string{string(model.ActionAcademicUnitMembersManage), string(model.ActionClassMembersManage)},
+	}
+	for name, options := range map[string]store.AuditListOptions{
+		"zero visibility":           {ActorID: user.ID},
+		"operator actor":            {ActorID: user.ID, Visibility: store.AuditVisibilityScope{InstitutionWide: true}},
+		"operator action":           {ActorID: user.ID, Action: string(model.ActionAuditView), Visibility: store.AuditVisibilityScope{InstitutionWide: true}},
+		"academic subtree":          {Visibility: scopedVisibility},
+		"academic Institution-wide": {Visibility: store.AuditVisibilityScope{AcademicInstitutionWide: true, AllowedActions: scopedVisibility.AllowedActions}},
+		"academic without actions":  {Visibility: store.AuditVisibilityScope{AcademicInstitutionWide: true}},
+	} {
+		t.Run("count "+name, func(t *testing.T) {
+			paged := 0
+			pageOptions := options
+			pageOptions.Limit = 1
+			for range 10 {
+				page, listErr := ss.Audit().List(ctx, pageOptions)
+				require.NoError(t, listErr)
+				if len(page) == 0 {
+					break
+				}
+				paged++
+				pageOptions.BeforeCreatedAt, pageOptions.BeforeID = page[0].CreatedAt, page[0].ID
+			}
+			total, countErr := ss.Audit().Count(ctx, pageOptions, store.MaximumListCount)
+			require.NoError(t, countErr)
+			require.Equal(t, paged, total, "the count ignores the keyset and equals every page together")
+		})
+	}
+	capped, err := ss.Audit().Count(ctx, store.AuditListOptions{Visibility: scopedVisibility}, 1)
+	require.NoError(t, err)
+	require.Equal(t, 1, capped, "two visible events stop at the bound")
+	_, err = ss.Audit().Count(ctx, store.AuditListOptions{Visibility: store.AuditVisibilityScope{InstitutionWide: true}}, 0)
+	require.ErrorAs(t, err, &invalid, "count bound")
+	_, err = ss.Audit().Count(ctx, store.AuditListOptions{Visibility: store.AuditVisibilityScope{InstitutionWide: true, AcademicInstitutionWide: true}}, 10)
+	require.ErrorAs(t, err, &invalid, "count visibility")
+
 	testAuditAbandonedAttempts(t, ctx, ss, institution.ID.String(), user.ID)
 	testAuditSelfHistory(t, ctx, ss, institution.ID.String())
+	testAuditListCreatedRange(t, ctx, ss, institution.ID.String())
+}
+
+// testAuditListCreatedRange proves the operator list's created_at range:
+// Since is inclusive, Until exclusive, keyset paging continues inside the
+// range, and an empty or reversed range is invalid input.
+func testAuditListCreatedRange(t *testing.T, ctx context.Context, ss store.Store, institutionID string) {
+	actor := saveUser(t, ctx, ss)
+	events := make([]*model.AuditEvent, 0, 4)
+	for range 4 {
+		time.Sleep(2 * time.Millisecond)
+		event, err := ss.Audit().Save(ctx, &model.AuditEvent{
+			ActorID: actor.ID, Action: string(model.ActionAuditView),
+			Resource:  model.Resource{Type: model.ResourceInstitution, ID: institutionID},
+			ScopeType: model.RoleScopeInstitution, ScopeID: institutionID,
+			Status: model.AuditStatusSuccess, NodeID: "test-node",
+		})
+		require.NoError(t, err)
+		events = append(events, event)
+	}
+	for index := 1; index < len(events); index++ {
+		require.True(t, events[index-1].CreatedAt.Before(events[index].CreatedAt), "fixture instants must be strictly ordered")
+	}
+	visibility := store.AuditVisibilityScope{InstitutionWide: true}
+	since, until := events[1].CreatedAt, events[3].CreatedAt
+	first, err := ss.Audit().List(ctx, store.AuditListOptions{ActorID: actor.ID, Since: since, Until: until, Limit: 1, Visibility: visibility})
+	require.NoError(t, err)
+	require.Len(t, first, 1)
+	require.Equal(t, events[2].ID, first[0].ID, "Until is exclusive, so the newest row in range is the third event")
+	rest, err := ss.Audit().List(ctx, store.AuditListOptions{
+		ActorID: actor.ID, Since: since, Until: until, Limit: 10, Visibility: visibility,
+		BeforeCreatedAt: first[0].CreatedAt, BeforeID: first[0].ID,
+	})
+	require.NoError(t, err)
+	require.Len(t, rest, 1, "Since is inclusive and bounds the continued page")
+	require.Equal(t, events[1].ID, rest[0].ID)
+	open, err := ss.Audit().List(ctx, store.AuditListOptions{ActorID: actor.ID, Since: since, Limit: 10, Visibility: visibility})
+	require.NoError(t, err)
+	require.Len(t, open, 3, "an open Until reads to the newest row")
+	var invalid *store.ErrInvalidInput
+	_, err = ss.Audit().List(ctx, store.AuditListOptions{ActorID: actor.ID, Since: since, Until: since, Limit: 10, Visibility: visibility})
+	require.ErrorAs(t, err, &invalid, "empty range")
+	_, err = ss.Audit().List(ctx, store.AuditListOptions{ActorID: actor.ID, Since: until, Until: since, Limit: 10, Visibility: visibility})
+	require.ErrorAs(t, err, &invalid, "reversed range")
 }
 
 // testAuditSelfHistory proves the self-history read: the subject and actor

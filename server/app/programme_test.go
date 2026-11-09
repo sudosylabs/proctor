@@ -69,6 +69,20 @@ type programmeAuthorizerFake struct {
 	scopeID      string
 	err          error
 	preflightErr error
+	// institutionUsers and roleBindings answer the unaudited membership
+	// listing predicates.
+	institutionUsers bool
+	roleBindings     bool
+}
+
+func (a *programmeAuthorizerFake) CanViewInstitutionUsers(context.Context, invocation.Invocation) (bool, error) {
+	*a.events = append(*a.events, "can-view-institution-users")
+	return a.institutionUsers, nil
+}
+
+func (a *programmeAuthorizerFake) CanViewRoleBindings(_ context.Context, _ invocation.Invocation, resource model.Resource) (bool, error) {
+	*a.events = append(*a.events, "can-view-role-bindings:"+string(resource.Type)+":"+resource.ID)
+	return a.roleBindings, nil
 }
 
 func (a *programmeAuthorizerFake) Authorize(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource) error {

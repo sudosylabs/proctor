@@ -30,6 +30,11 @@ type userProfileStoreFake struct {
 	currentContextLimit int
 	updateInput         *store.UserProfileUpdate
 	listOptions         store.UserListOptions
+	countOptions        store.UserListOptions
+	countMaximum        int
+	countTotal          int
+	summaryOptions      store.UserDirectorySummaryOptions
+	summaries           []store.UserDirectorySummary
 }
 
 func (s *userProfileStoreFake) Get(context.Context, model.UserID) (*model.User, error) {
@@ -40,6 +45,16 @@ func (s *userProfileStoreFake) List(_ context.Context, options store.UserListOpt
 	*s.events = append(*s.events, "list-users")
 	s.listOptions = options
 	return nil, nil
+}
+func (s *userProfileStoreFake) Count(_ context.Context, options store.UserListOptions, maximum int) (int, error) {
+	*s.events = append(*s.events, "count-users")
+	s.countOptions, s.countMaximum = options, maximum
+	return min(s.countTotal, maximum), nil
+}
+func (s *userProfileStoreFake) ListDirectorySummaries(_ context.Context, options store.UserDirectorySummaryOptions) ([]store.UserDirectorySummary, error) {
+	*s.events = append(*s.events, "summarize-users")
+	s.summaryOptions = options
+	return s.summaries, nil
 }
 func (s *userProfileStoreFake) GetCurrentContext(_ context.Context, _ model.UserID, limit int) (*store.CurrentUserContext, error) {
 	s.currentContextLimit = limit
@@ -63,6 +78,8 @@ func (s *userProfileStoreFake) UpdateProfile(_ context.Context, input *store.Use
 type userProfileAuthorizerFake struct {
 	events      *[]string
 	searchScope store.UserVisibilityScope
+	roleScope   store.UserVisibilityScope
+	roleScopeAt time.Time
 	fullRead    bool
 	readErr     error
 	writeErr    error
@@ -140,6 +157,11 @@ func (a *userProfileAuthorizerFake) AuthorizeSearch(context.Context, invocation.
 		return a.searchScope, nil
 	}
 	return store.UserVisibilityScope{ClassIDs: []model.ClassID{"class-a"}, ActiveAt: model.TimeFromMillis(100)}, nil
+}
+func (a *userProfileAuthorizerFake) RoleBindingViewScope(_ context.Context, _ invocation.Invocation, at time.Time) (store.UserVisibilityScope, error) {
+	*a.events = append(*a.events, "role-binding-view-scope")
+	a.roleScopeAt = at
+	return a.roleScope, nil
 }
 func (a *userProfileAuthorizerFake) AuthorizeProfileRead(context.Context, invocation.Invocation, model.UserID) (profileReadAuthorization, error) {
 	*a.events = append(*a.events, "authorize-read")
@@ -240,23 +262,24 @@ func TestScopedUserSearchReturnsOnlySafeDirectoryFields(t *testing.T) {
 		LastLoginAt: model.OptionalTimeFromMillis(100), LastActivityAt: model.OptionalTimeFromMillis(200),
 		DisabledAt: model.OptionalTimeFromMillis(300),
 	}
-	persistence := &userProfileStoreFake{events: &events, current: user}
+	persistence := &userProfileStoreFake{events: &events, current: user, countTotal: 1}
 	service := newUserProfileService(userProfileServiceDependencies{Users: &userProfileSearchStoreFake{userProfileStoreFake: persistence, values: []*model.User{user}}, Authorization: &userProfileAuthorizerFake{events: &events, searchScope: store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: model.TimeFromMillis(100)}}, Audit: &institutionAuditorFake{events: &events}, Now: time.Now})
 	users, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{Limit: 10})
 	require.NoError(t, err)
 	require.Len(t, users.Items, 1)
-	require.Equal(t, "student", users.Items[0].Username)
-	require.Equal(t, "Student", users.Items[0].DisplayName)
-	require.Empty(t, users.Items[0].Email)
-	require.False(t, users.Items[0].EmailVerified)
-	require.Empty(t, users.Items[0].Locale)
-	require.Empty(t, users.Items[0].Timezone)
-	require.False(t, users.Items[0].LastLoginAt.Valid)
-	require.False(t, users.Items[0].LastActivityAt.Valid)
-	require.False(t, users.Items[0].DisabledAt.Valid)
-	require.Empty(t, users.Items[0].DefaultProfilePictureSeed)
-	require.True(t, users.Items[0].DefaultProfilePictureFileID.IsZero())
-	require.True(t, users.Items[0].CustomProfilePictureFileID.IsZero())
+	projected := users.Items[0].User
+	require.Equal(t, "student", projected.Username)
+	require.Equal(t, "Student", projected.DisplayName)
+	require.Empty(t, projected.Email)
+	require.False(t, projected.EmailVerified)
+	require.Empty(t, projected.Locale)
+	require.Empty(t, projected.Timezone)
+	require.False(t, projected.LastLoginAt.Valid)
+	require.False(t, projected.LastActivityAt.Valid)
+	require.False(t, projected.DisabledAt.Valid)
+	require.Empty(t, projected.DefaultProfilePictureSeed)
+	require.True(t, projected.DefaultProfilePictureFileID.IsZero())
+	require.True(t, projected.CustomProfilePictureFileID.IsZero())
 	require.Equal(t, "private@example.edu", user.Email, "scoped projection mutated the persisted User")
 	require.True(t, user.EmailVerified, "scoped projection mutated the persisted User")
 }
@@ -272,6 +295,47 @@ func (s *userProfileSearchStoreFake) List(_ context.Context, options store.UserL
 	return s.values, nil
 }
 
+func TestUserSearchNarrowsTheCallerVisibilityByAffiliationAndUnit(t *testing.T) {
+	t.Parallel()
+	scope := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: model.TimeFromMillis(100)}
+	unitID := model.NewAcademicUnitID()
+	events := []string{}
+	persistence := &userProfileStoreFake{events: &events}
+	service := newUserProfileService(userProfileServiceDependencies{Users: persistence, Authorization: &userProfileAuthorizerFake{events: &events, searchScope: scope}, Audit: &institutionAuditorFake{events: &events}, Now: time.Now})
+	_, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{
+		Limit: 10, AcademicUnitID: unitID,
+		Affiliations: []model.AffiliationKind{model.AffiliationTeacher, model.AffiliationStaff, model.AffiliationTeacher},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []model.AffiliationKind{model.AffiliationTeacher, model.AffiliationStaff}, persistence.listOptions.AffiliationKinds)
+	require.Equal(t, unitID, persistence.listOptions.AcademicUnitID)
+	require.Equal(t, scope, persistence.listOptions.Visibility, "the filters must not replace the caller's visibility")
+}
+
+func TestUserSearchRejectsInvalidDirectoryFiltersBeforeAuthorization(t *testing.T) {
+	t.Parallel()
+	for name, test := range map[string]struct {
+		query SearchUsersQuery
+		field string
+	}{
+		"affiliation":      {query: SearchUsersQuery{Limit: 10, Affiliations: []model.AffiliationKind{"alumni"}}, field: "affiliation"},
+		"academic_unit_id": {query: SearchUsersQuery{Limit: 10, AcademicUnitID: "not-an-id"}, field: "academic_unit_id"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			events := []string{}
+			persistence := &userProfileStoreFake{events: &events}
+			service := newUserProfileService(userProfileServiceDependencies{Users: persistence, Authorization: &userProfileAuthorizerFake{events: &events}, Audit: &institutionAuditorFake{events: &events}, Now: time.Now})
+			_, err := service.SearchUsers(context.Background(), invocation.Invocation{}, test.query)
+			var appErr *apperror.Error
+			require.ErrorAs(t, err, &appErr)
+			require.Equal(t, "request.invalid", appErr.Code())
+			require.Equal(t, test.field, appErr.Fields()["field"])
+			require.Empty(t, events, "an invalid filter must not authorize or read")
+		})
+	}
+}
+
 func TestUserProfileUpdateRejectsControlCharacterNamesBeforeAudit(t *testing.T) {
 	t.Parallel()
 	events := []string{}
@@ -285,4 +349,82 @@ func TestUserProfileUpdateRejectsControlCharacterNamesBeforeAudit(t *testing.T) 
 	require.True(t, ok)
 	require.Equal(t, "user.invalid", failure.Code())
 	require.Equal(t, []string{"authorize-manage", "get-user"}, events)
+}
+
+type userDirectoryRoleBindingStoreFake struct {
+	events    *[]string
+	options   store.RoleBindingSummaryOptions
+	summaries []store.UserRoleBindingSummary
+}
+
+func (s *userDirectoryRoleBindingStoreFake) ListVisibleSummariesByUsers(_ context.Context, options store.RoleBindingSummaryOptions) ([]store.UserRoleBindingSummary, error) {
+	*s.events = append(*s.events, "summarize-role-bindings")
+	s.options = options
+	return s.summaries, nil
+}
+
+func TestUserSearchSummarizesThePageAtTheVisibilityInstant(t *testing.T) {
+	t.Parallel()
+	activeAt := model.TimeFromMillis(100)
+	unitRoot := model.NewAcademicUnitID()
+	first := &model.User{ID: model.NewUserID(), Username: "first"}
+	second := &model.User{ID: model.NewUserID(), Username: "second"}
+	memberships := store.UserDirectorySummary{
+		UserID: first.ID, Affiliations: []model.AffiliationKind{model.AffiliationTeacher},
+		AcademicUnits: []store.UserDirectoryAcademicUnit{{ID: unitRoot, DisplayName: "Engineering"}},
+	}
+	roles := store.UserRoleBindingSummary{UserID: second.ID, More: 2, Bindings: []store.RoleBindingSummary{{
+		RoleID: model.NewRoleID(), DisplayName: "Reviewer", ScopeType: model.RoleScopeAcademicUnit,
+		ScopeID: unitRoot.String(), ScopeName: "Engineering",
+	}}}
+	roleScope := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{unitRoot}}
+	events := []string{}
+	persistence := &userProfileStoreFake{events: &events, countTotal: 2, summaries: []store.UserDirectorySummary{memberships}}
+	bindings := &userDirectoryRoleBindingStoreFake{events: &events, summaries: []store.UserRoleBindingSummary{roles}}
+	authorization := &userProfileAuthorizerFake{events: &events, roleScope: roleScope, searchScope: store.UserVisibilityScope{
+		AcademicUnitRootIDs: []model.AcademicUnitID{unitRoot}, ActiveAt: activeAt,
+	}}
+	service := newUserProfileService(userProfileServiceDependencies{
+		Users:        &userProfileSearchStoreFake{userProfileStoreFake: persistence, values: []*model.User{first, second}},
+		RoleBindings: bindings, Authorization: authorization, Audit: &institutionAuditorFake{events: &events}, Now: time.Now,
+	})
+
+	page, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{Limit: 10})
+	require.NoError(t, err)
+	// Contract: the summary reads follow the counted page, with the Role
+	// Binding scope resolved once between them.
+	require.Equal(t, []string{"authorize-search", "list-users", "count-users", "summarize-users", "role-binding-view-scope", "summarize-role-bindings"}, events)
+	require.Equal(t, []model.UserID{first.ID, second.ID}, persistence.summaryOptions.UserIDs)
+	require.Equal(t, persistence.listOptions.Visibility, persistence.summaryOptions.Visibility, "the summary reads the page's visibility")
+	require.Equal(t, userDirectorySummaryAffiliations, persistence.summaryOptions.AffiliationLimit)
+	require.Equal(t, userDirectorySummaryAcademicUnits, persistence.summaryOptions.AcademicUnitLimit)
+	require.Equal(t, activeAt, authorization.roleScopeAt, "role_binding.view is resolved at the page's instant")
+	require.Equal(t, store.RoleBindingSummaryOptions{
+		UserIDs: []model.UserID{first.ID, second.ID}, Limit: userDirectorySummaryRoles,
+		Visibility: store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{unitRoot}, ActiveAt: activeAt},
+	}, bindings.options)
+	require.Equal(t, []UserDirectoryEntry{
+		{User: page.Items[0].User, Memberships: memberships, Roles: &store.UserRoleBindingSummary{UserID: first.ID}},
+		{User: page.Items[1].User, Memberships: store.UserDirectorySummary{UserID: second.ID}, Roles: &roles},
+	}, page.Items)
+}
+
+func TestUserSearchOmitsRolesWithoutRoleBindingView(t *testing.T) {
+	t.Parallel()
+	user := &model.User{ID: model.NewUserID(), Username: "first"}
+	events := []string{}
+	persistence := &userProfileStoreFake{events: &events, countTotal: 1}
+	service := newUserProfileService(userProfileServiceDependencies{
+		Users:         &userProfileSearchStoreFake{userProfileStoreFake: persistence, values: []*model.User{user}},
+		RoleBindings:  &userDirectoryRoleBindingStoreFake{events: &events},
+		Authorization: &userProfileAuthorizerFake{events: &events, searchScope: store.UserVisibilityScope{InstitutionWide: true, ActiveAt: model.TimeFromMillis(100)}},
+		Audit:         &institutionAuditorFake{events: &events}, Now: time.Now,
+	})
+
+	page, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{Limit: 10})
+	require.NoError(t, err)
+	require.Len(t, page.Items, 1)
+	require.Nil(t, page.Items[0].Roles, "a caller without role_binding.view reads no Role summary")
+	// Contract: without role_binding.view the Role Bindings are never read.
+	require.Equal(t, []string{"authorize-search", "list-users", "count-users", "summarize-users", "role-binding-view-scope"}, events)
 }

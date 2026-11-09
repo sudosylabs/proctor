@@ -405,35 +405,48 @@ func (s SQLSessionStore) ListActiveByUser(ctx context.Context, userID model.User
 }
 
 // UpdateActivity records activity on a live Session and moves its idle expiry
-// to idleExpiresAt, capped at the absolute expiry. An absent, revoked, or
-// already expired Session yields a not-found error.
+// to idleExpiresAt, capped at the absolute expiry. The same statement advances
+// the Session's User's last activity, never backwards; the User's sign-in time
+// is untouched. An absent, revoked, or already expired Session yields a
+// not-found error.
 func (s SQLSessionStore) UpdateActivity(ctx context.Context, input *store.SessionActivityUpdate) error {
 	id := input.ID
-	lastActivityAt := input.LastActivityAt
-	idleExpiresAt := input.IdleExpiresAt
-	activityAt := model.TimeUTC(lastActivityAt)
-	idleAt := model.TimeUTC(idleExpiresAt)
-	result, err := s.GetMaster().Exec(ctx, `
-		UPDATE sessions
-		   SET updated_at = GREATEST(updated_at, ?),
-		       last_activity_at = ?,
-		       idle_expires_at = LEAST(?, expires_at)
-		 WHERE id = ?
-		   AND archived_at IS NULL
-		   AND revoked_at IS NULL
-		   AND idle_expires_at > ?
-		   AND expires_at > ?`,
+	activityAt := model.TimeUTC(input.LastActivityAt)
+	idleAt := model.TimeUTC(input.IdleExpiresAt)
+	var touched int
+	err := s.GetMaster().Get(ctx, &touched, `
+		WITH touched AS (
+			UPDATE sessions
+			   SET updated_at = GREATEST(updated_at, ?),
+			       last_activity_at = ?,
+			       idle_expires_at = LEAST(?, expires_at)
+			 WHERE id = ?
+			   AND archived_at IS NULL
+			   AND revoked_at IS NULL
+			   AND idle_expires_at > ?
+			   AND expires_at > ?
+			RETURNING user_id
+		), advanced AS (
+			UPDATE users
+			   SET last_activity_at = GREATEST(last_activity_at, created_at, ?)
+			 WHERE id IN (SELECT user_id FROM touched) AND archived_at IS NULL
+		)
+		SELECT count(*) FROM touched`,
 		activityAt,
 		activityAt,
 		idleAt,
 		id,
 		activityAt,
 		activityAt,
+		activityAt,
 	)
 	if err != nil {
 		return fmt.Errorf("update session activity: %w", err)
 	}
-	return requireAffected(result, "session", id.String())
+	if touched != 1 {
+		return store.NewErrNotFound("session", id.String())
+	}
+	return nil
 }
 
 // Withdraw revokes one Session of the User for a system withdrawal reason and

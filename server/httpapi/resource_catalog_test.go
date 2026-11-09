@@ -25,11 +25,26 @@ import (
 )
 
 type recordingOnboardingImportApplication struct {
-	getID string
+	getID     string
+	listQuery *app.ListOnboardingImportsQuery
+	listPage  app.Page[app.OnboardingImportView]
+	listErr   error
+
+	uploadCommand *app.UploadOnboardingImportCommand
+	uploadView    app.OnboardingImportView
 }
 
-func (*recordingOnboardingImportApplication) UploadOnboardingImport(context.Context, invocation.Invocation, app.UploadOnboardingImportCommand) (app.OnboardingImportView, error) {
-	return app.OnboardingImportView{}, nil
+func (c *recordingOnboardingImportApplication) ListOnboardingImports(_ context.Context, _ invocation.Invocation, query app.ListOnboardingImportsQuery) (app.Page[app.OnboardingImportView], error) {
+	c.listQuery = &query
+	return c.listPage, c.listErr
+}
+
+func (c *recordingOnboardingImportApplication) UploadOnboardingImport(_ context.Context, _ invocation.Invocation, command app.UploadOnboardingImportCommand) (app.OnboardingImportView, error) {
+	if command.Body != nil {
+		_, _ = io.Copy(io.Discard, command.Body)
+	}
+	c.uploadCommand = &command
+	return c.uploadView, nil
 }
 
 func (c *recordingOnboardingImportApplication) GetOnboardingImport(_ context.Context, _ invocation.Invocation, id model.OnboardingImportID) (app.OnboardingImportView, []app.OnboardingImportRowView, error) {

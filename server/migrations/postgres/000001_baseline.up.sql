@@ -185,6 +185,9 @@ CREATE TABLE jobs (
     progress_total bigint,
     progress_stage varchar(64),
     revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0),
+    -- The operator who started the Job; NULL for recurring and system work.
+    -- The foreign key follows the users table.
+    created_by_user_id varchar(26),
     CONSTRAINT jobs_lifecycle_check CHECK (
         updated_at >= created_at AND attempt_count <= maximum_attempts AND
         ((status IN ('succeeded', 'failed', 'canceled')) = (completed_at IS NOT NULL)) AND
@@ -201,6 +204,8 @@ CREATE UNIQUE INDEX jobs_active_type_dedupe_key_idx ON jobs (type, dedupe_key)
     WHERE dedupe_policy = 'active' AND status IN ('queued', 'running', 'cancel_requested');
 CREATE UNIQUE INDEX jobs_permanent_type_dedupe_key_idx ON jobs (type, dedupe_key)
     WHERE dedupe_policy = 'permanent';
+-- The administration summary counts recent failures without scanning history.
+CREATE INDEX jobs_failed_updated_at_idx ON jobs (updated_at DESC) WHERE status = 'failed';
 
 -- Permanent occurrence keys deliberately outlive retained Job history. The
 -- referenced Job ID is informational rather than a foreign key so cleanup can
@@ -337,6 +342,11 @@ CREATE INDEX users_default_profile_picture_file_id_idx
 CREATE INDEX users_custom_profile_picture_file_id_idx
     ON users (custom_profile_picture_file_id) WHERE custom_profile_picture_file_id IS NOT NULL;
 CREATE UNIQUE INDEX users_email_key ON users (email) WHERE archived_at IS NULL;
+-- A Job keeps its history when the User who started it is deleted.
+ALTER TABLE jobs ADD CONSTRAINT jobs_created_by_user_id_fkey
+    FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL;
+CREATE INDEX jobs_created_by_user_id_idx
+    ON jobs (created_by_user_id) WHERE created_by_user_id IS NOT NULL;
 CREATE INDEX users_directory_search_idx
     ON users USING gin (
         username gin_trgm_ops,
@@ -359,7 +369,8 @@ CREATE TABLE user_settings_documents (
 
 -- An Invitation exists before its recipient has a User row. It freezes one
 -- exact relationship package and stores only a domain-separated
--- digest of the 256-bit claim delivered by mail.
+-- digest of the 256-bit claim delivered by mail. Its inviter chooses a
+-- lifetime of one to thirty days, written in hours like every fixed lifetime.
 CREATE TABLE invitations (
     id varchar(26) PRIMARY KEY,
     created_at timestamptz NOT NULL,
@@ -411,7 +422,7 @@ CREATE TABLE invitations (
         AND suggested_first_name !~ '[\x01-\x1f\x7f-\x9f]'
         AND suggested_last_name !~ '[\x01-\x1f\x7f-\x9f]'
     ),
-    CONSTRAINT invitations_lifetime_check CHECK (expires_at = created_at + interval '168 hours'),
+    CONSTRAINT invitations_lifetime_check CHECK (expires_at BETWEEN created_at + interval '24 hours' AND created_at + interval '720 hours'),
     CONSTRAINT invitations_lifecycle_check CHECK (
         updated_at >= created_at AND
         ((state = 'accepted') = (accepted_at IS NOT NULL AND accepted_user_id IS NOT NULL AND
@@ -440,6 +451,10 @@ CREATE UNIQUE INDEX invitations_pending_academic_unit_role_package_key
 CREATE UNIQUE INDEX invitations_pending_institution_role_package_key
     ON invitations (target_email, scope_id, role_id)
     WHERE state = 'pending' AND purpose = 'institution_role';
+
+-- The administration list filters by state newest first, and the summary
+-- counts pending Invitations; both read this instead of the whole table.
+CREATE INDEX invitations_state_created_at_idx ON invitations (state, created_at DESC, id DESC);
 
 -- Administrative imports and student progression retain only a seven-day
 -- private preview/report. Job commands contain the opaque aggregate ID;
@@ -478,6 +493,9 @@ CREATE TABLE onboarding_imports (
     parse_job_id varchar(26) NOT NULL UNIQUE REFERENCES jobs(id),
     execution_job_id varchar(26) UNIQUE REFERENCES jobs(id),
     failure_code varchar(128) NOT NULL DEFAULT '',
+    -- The uploaded file's base name as the uploader gave it; never set for a
+    -- student progression, which has no file.
+    file_name varchar(255) CHECK (file_name IS NULL OR (char_length(file_name) BETWEEN 1 AND 255 AND mode <> 'student_progression')),
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL,
     expires_at timestamptz NOT NULL,
@@ -518,6 +536,14 @@ CREATE UNIQUE INDEX onboarding_imports_active_progression_source_idx
     ON onboarding_imports (source_class_id)
     WHERE mode = 'student_progression' AND state = 'executing';
 CREATE INDEX onboarding_imports_expiry_idx ON onboarding_imports (expires_at, id);
+CREATE INDEX onboarding_imports_created_at_id_idx ON onboarding_imports (created_at DESC, id DESC);
+-- The student progression list filters by either Class newest first.
+CREATE INDEX onboarding_imports_progression_destination_idx
+    ON onboarding_imports (destination_class_id, created_at DESC, id DESC)
+    WHERE mode = 'student_progression';
+CREATE INDEX onboarding_imports_progression_source_idx
+    ON onboarding_imports (source_class_id, created_at DESC, id DESC)
+    WHERE mode = 'student_progression';
 
 CREATE TABLE onboarding_import_rows (
     import_id varchar(26) NOT NULL REFERENCES onboarding_imports(id) ON DELETE CASCADE,
@@ -823,6 +849,9 @@ CREATE TABLE affiliations (
 
 CREATE UNIQUE INDEX affiliations_user_id_kind_key
     ON affiliations (user_id, kind) WHERE archived_at IS NULL AND end_at IS NULL;
+-- The User directory's affiliation filter starts from the kind.
+CREATE INDEX affiliations_kind_user_id_idx
+    ON affiliations (kind, user_id) WHERE archived_at IS NULL AND end_at IS NULL;
 
 CREATE TABLE academic_unit_members (
     id varchar(26) PRIMARY KEY,
@@ -4313,7 +4342,9 @@ ALTER TABLE classes
 
 ALTER TABLE jobs
     ADD CONSTRAINT jobs_id_canonical_check
-    CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+    CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT jobs_created_by_user_id_canonical_check
+    CHECK (created_by_user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
 
 ALTER TABLE job_permanent_occurrences
     ADD CONSTRAINT job_permanent_occurrences_job_id_canonical_check

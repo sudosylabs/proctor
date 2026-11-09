@@ -18,6 +18,7 @@
     {"tag": "Integrity review", "page": "docs/api/recipes/review-and-release.mdx"},
     {"tag": "Jobs", "page": "docs/api/guides/durable-operations.mdx"},
     {"tag": "Mail", "page": "docs/api/guides/durable-operations.mdx"},
+    {"tag": "Administration", "page": "docs/api/guides/durable-operations.mdx"},
     {"tag": "Realtime", "page": "docs/api/guides/realtime.mdx"}
   ],
   "workflows": [

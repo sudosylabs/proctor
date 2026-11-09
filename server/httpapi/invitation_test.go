@@ -40,6 +40,7 @@ type invitationHTTPApplication struct {
 	replace               app.ReplaceInvitationCommand
 	list                  app.ListInvitationsQuery
 	listMore              bool
+	listTotal             int
 	listEmpty             bool
 	getID                 string
 	acceptance            *app.InvitationAcceptanceView
@@ -107,10 +108,14 @@ func (a *invitationHTTPApplication) AcceptStudentClassInvitation(_ context.Conte
 }
 func (a *invitationHTTPApplication) ListInvitations(_ context.Context, _ invocation.Invocation, query app.ListInvitationsQuery) (app.InvitationAdministrationPage, error) {
 	a.list = query
-	if a.listEmpty {
-		return app.InvitationAdministrationPage{More: a.listMore}, nil
+	var total app.PageTotal
+	if !query.BeforeID.IsValid() {
+		total = app.PageTotal{Counted: true, Total: a.listTotal}
 	}
-	return app.InvitationAdministrationPage{Items: []app.InvitationAdministrationView{a.administrationView()}, More: a.listMore}, nil
+	if a.listEmpty {
+		return app.InvitationAdministrationPage{More: a.listMore, PageTotal: total}, nil
+	}
+	return app.InvitationAdministrationPage{Items: []app.InvitationAdministrationView{a.administrationView()}, More: a.listMore, PageTotal: total}, nil
 }
 
 func TestInvitationAdministrationRejectsNoProgressPage(t *testing.T) {

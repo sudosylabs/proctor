@@ -74,6 +74,7 @@ func productionResources(
 		searchResource(applications.search),
 		jobResource(applications.jobs),
 		mailResource(applications.mail),
+		administrationCountsResource(applications.administrationCounts),
 		webSocketResource(webSocket),
 	}
 }

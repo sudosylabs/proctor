@@ -925,12 +925,25 @@ a Store keyset; a collection the application already bounds and returns whole
 (a User's Sessions, the configured providers, a Draft's Resources) is paged on
 the wire as keyset slices of its stable order. A collection may carry
 non-paging context members beside the envelope, such as a snapshot's
-`workspace_cursor`. A collection whose rows are bounded per User may also
-report `total` on its first page only, counted with a fixed bound and paired
-with `total_is_lower_bound`. The User's own account history counts this way
-and adds `order=asc` so the end of the history is one read away; a total
-never comes with offset paging. `TestOpenAPIListOperationsUseOneEnvelope` enforces the
+`workspace_cursor`. Any collection may also report `total` on its first page
+only, paired with `total_is_lower_bound`, when its count runs through the same
+visibility and filters as the list and stops at a fixed bound (10,000): the
+Store counts with the list's own filter builder, ignoring only the keyset,
+order, and limit, so a total can never count rows the caller could not page
+to. The User directory, Invitations, Jobs, audit Events, mail deliveries, and
+the User's own account history count this way; the account history also adds
+`order=asc` so the end of the history is one read away. A total never comes
+with offset paging. `TestOpenAPIListOperationsUseOneEnvelope` enforces the
 idiom over the reviewed OpenAPI document.
+
+`GET /api/v1/administration/counts` is not a collection. It answers bounded
+navigation counts (pending Invitations, recently failed Jobs, failed mail
+deliveries, open onboarding imports), each stopped at 1,000 and paired with an
+`<name>_is_lower_bound` flag. Each count runs its resource's own list
+authorization, recording the decision as that list does; a count the caller
+may not list is omitted with its flag, and any other failure fails the
+request so an outage never reads as an empty queue. It requires an interactive
+Session and answers `Cache-Control: private, no-store`.
 
 ## Ownership and extension workflow
 

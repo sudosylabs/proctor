@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -42,9 +43,13 @@ func TestUserStore(t *testing.T, ss store.Store, probes ...UserStoreSQLProbe) {
 	t.Run("NormalizedLookups", func(t *testing.T) { testUserStoreNormalizedLookups(t, ss) })
 	t.Run("Update", func(t *testing.T) { testUserStoreUpdate(t, ss) })
 	t.Run("UpdateLastLogin", func(t *testing.T) { testUserStoreUpdateLastLogin(t, ss) })
+	t.Run("ListDisplayNames", func(t *testing.T) { testUserStoreListDisplayNames(t, ss) })
 	t.Run("Uniqueness", func(t *testing.T) { testUserStoreUniqueness(t, ss) })
 	t.Run("ListAndDisable", func(t *testing.T) { testUserStoreListAndDisable(t, ss) })
 	t.Run("VisibilityIntervalPrecision", func(t *testing.T) { testUserVisibilityIntervalPrecision(t, ss) })
+	t.Run("AffiliationAndAcademicUnitFilters", func(t *testing.T) { testUserListAffiliationAndAcademicUnitFilters(t, ss) })
+	t.Run("DirectorySummaries", func(t *testing.T) { testUserDirectorySummaries(t, ss) })
+	t.Run("ListIdentities", func(t *testing.T) { testUserListIdentities(t, ss) })
 	t.Run("EnablementRevocationAndAuditAreAtomic", func(t *testing.T) {
 		testUserStoreEnablementRevocationAndAuditAreAtomic(t, ss)
 	})
@@ -644,6 +649,252 @@ func testUserStoreListAndDisable(t *testing.T, ss store.Store) {
 	require.True(t, seen, "disabled user missing from inclusive list: %#v", all)
 }
 
+// testUserListAffiliationAndAcademicUnitFilters proves the directory filters:
+// a current Affiliation of any listed kind, a current membership in the unit
+// or a descendant, both evaluated at the visibility instant and narrowing the
+// visibility rather than widening it.
+func testUserListAffiliationAndAcademicUnitFilters(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	token := strings.ToLower(model.NewID()[:12])
+	activeAt := model.TimeUTC(model.NowUTC().Add(100 * time.Millisecond))
+	before := model.TimeUTC(activeAt.Add(-20 * time.Millisecond))
+	ended := model.OptionalTimeFrom(activeAt.Add(-10 * time.Millisecond))
+	fixture := saveClassFixture(t, ctx, ss)
+	root := fixture.programme.AcademicUnitID
+	child := saveAcademicUnit(t, ctx, ss, fixture.institution.ID.String(), root.String(), "filter-child-"+token)
+	sibling := saveAcademicUnit(t, ctx, ss, fixture.institution.ID.String(), "", "filter-sibling-"+token)
+	rootClass := saveClass(t, ctx, ss, fixture.level.ID.String(), fixture.period.ID.String(), "filter-class-"+token)
+	named := func(name string) *model.User {
+		user := newUser()
+		user.Username = "flt-" + token + "-" + name
+		user, err := createUser(t, ctx, ss, user)
+		require.NoError(t, err)
+		return user
+	}
+	affiliate := func(user *model.User, kind model.AffiliationKind, endsAt model.OptionalTime) {
+		_, err := ss.Affiliation().Save(ctx, &model.Affiliation{UserID: user.ID, Kind: kind, StartsAt: before, EndsAt: endsAt})
+		require.NoError(t, err)
+	}
+	member := func(user *model.User, unitID model.AcademicUnitID, endsAt model.OptionalTime) {
+		_, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unitID, UserID: user.ID, StartsAt: before, EndsAt: endsAt})
+		require.NoError(t, err)
+	}
+	childTeacher := named("child-teacher")
+	affiliate(childTeacher, model.AffiliationTeacher, model.OptionalTime{})
+	member(childTeacher, child.ID, model.OptionalTime{})
+	rootStudent := named("root-student")
+	affiliate(rootStudent, model.AffiliationStudent, model.OptionalTime{})
+	member(rootStudent, root, model.OptionalTime{})
+	// siblingStaff is visible to the root scope only through its root Class
+	// enrollment, which requires a student Affiliation; its unit membership
+	// lies outside that scope.
+	siblingStaff := named("sibling-staff")
+	affiliate(siblingStaff, model.AffiliationStaff, model.OptionalTime{})
+	affiliate(siblingStaff, model.AffiliationStudent, model.OptionalTime{})
+	member(siblingStaff, sibling.ID, model.OptionalTime{})
+	_, err := ss.ClassMember().SeedEnroll(ctx, &model.ClassMember{ClassID: rootClass.ID, UserID: siblingStaff.ID, StartsAt: before})
+	require.NoError(t, err)
+	formerTeacher := named("former-teacher")
+	affiliate(formerTeacher, model.AffiliationTeacher, ended)
+	member(formerTeacher, root, ended)
+
+	list := func(options store.UserListOptions) []model.UserID {
+		t.Helper()
+		options.Query, options.Limit = "flt-"+token, 20
+		users, listErr := ss.User().List(ctx, options)
+		require.NoError(t, listErr)
+		ids := make([]model.UserID, 0, len(users))
+		for _, user := range users {
+			ids = append(ids, user.ID)
+		}
+		// Every filter combination counts exactly the rows it lists.
+		total, countErr := ss.User().Count(ctx, options, store.MaximumListCount)
+		require.NoError(t, countErr)
+		require.Len(t, ids, total, "Count agrees with List")
+		return ids
+	}
+	institution := store.UserVisibilityScope{InstitutionWide: true, ActiveAt: activeAt}
+	rootScope := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{root}, ActiveAt: activeAt}
+
+	require.Equal(t, []model.UserID{childTeacher.ID}, list(store.UserListOptions{
+		AffiliationKinds: []model.AffiliationKind{model.AffiliationTeacher}, Visibility: institution,
+	}), "an ended Affiliation is not current")
+	require.ElementsMatch(t, []model.UserID{childTeacher.ID, siblingStaff.ID}, list(store.UserListOptions{
+		AffiliationKinds: []model.AffiliationKind{model.AffiliationTeacher, model.AffiliationStaff}, Visibility: institution,
+	}), "kinds are alternatives")
+	require.ElementsMatch(t, []model.UserID{childTeacher.ID, rootStudent.ID}, list(store.UserListOptions{
+		AcademicUnitID: root, Visibility: institution,
+	}), "a unit includes current members of its descendants and excludes ended memberships")
+	require.Equal(t, []model.UserID{childTeacher.ID}, list(store.UserListOptions{
+		AcademicUnitID: child.ID, Visibility: institution,
+	}), "a descendant does not include its ancestor's members")
+	require.Equal(t, []model.UserID{rootStudent.ID}, list(store.UserListOptions{
+		AcademicUnitID: root, AffiliationKinds: []model.AffiliationKind{model.AffiliationStudent}, Visibility: institution,
+	}), "the filters combine")
+
+	require.ElementsMatch(t, []model.UserID{childTeacher.ID, rootStudent.ID, siblingStaff.ID}, list(store.UserListOptions{
+		Visibility: rootScope,
+	}), "fixture: the root scope sees the sibling member through its Class")
+	require.Equal(t, []model.UserID{siblingStaff.ID}, list(store.UserListOptions{
+		AffiliationKinds: []model.AffiliationKind{model.AffiliationStaff}, Visibility: rootScope,
+	}), "an affiliation filter stays inside the scope")
+	require.Empty(t, list(store.UserListOptions{AcademicUnitID: sibling.ID, Visibility: rootScope}),
+		"a unit outside the scope answers an empty page, not its members")
+	require.Empty(t, list(store.UserListOptions{
+		AffiliationKinds: []model.AffiliationKind{model.AffiliationTeacher},
+		Visibility:       store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{sibling.ID}, ActiveAt: activeAt},
+	}), "a filter never widens a scope that sees none of the matches")
+	require.Empty(t, list(store.UserListOptions{
+		AcademicUnitID: root,
+		Visibility:     store.UserVisibilityScope{ClassIDs: []model.ClassID{rootClass.ID}, ActiveAt: activeAt},
+	}), "a Class roster scope cannot read unit membership")
+	require.Equal(t, []model.UserID{childTeacher.ID}, list(store.UserListOptions{
+		AcademicUnitID: child.ID, Visibility: rootScope,
+	}), "a descendant of the scope is inside it")
+
+	paged := []model.UserID{}
+	pageOptions := store.UserListOptions{Query: "flt-" + token, Limit: 1, Visibility: rootScope}
+	for range 5 {
+		users, listErr := ss.User().List(ctx, pageOptions)
+		require.NoError(t, listErr)
+		if len(users) == 0 {
+			break
+		}
+		paged = append(paged, users[0].ID)
+		pageOptions.AfterUsername, pageOptions.AfterID = users[0].Username, users[0].ID
+	}
+	total, err := ss.User().Count(ctx, pageOptions, store.MaximumListCount)
+	require.NoError(t, err)
+	require.Len(t, paged, total, "the count ignores the keyset and equals every page together")
+	capped, err := ss.User().Count(ctx, store.UserListOptions{Query: "flt-" + token, Limit: 1, Visibility: rootScope}, 2)
+	require.NoError(t, err)
+	require.Equal(t, 2, capped, "three matches stop at the bound")
+
+	var invalid *store.ErrInvalidInput
+	for name, maximum := range map[string]int{"zero bound": 0, "bound above the maximum": store.MaximumListCount + 1} {
+		t.Run(name, func(t *testing.T) {
+			_, countErr := ss.User().Count(ctx, store.UserListOptions{Limit: 1, Visibility: institution}, maximum)
+			require.ErrorAs(t, countErr, &invalid)
+		})
+	}
+	for name, options := range map[string]store.UserListOptions{
+		"unknown kind":  {AffiliationKinds: []model.AffiliationKind{"alumni"}, Visibility: institution},
+		"invalid unit":  {AcademicUnitID: "not-an-id", Visibility: institution},
+		"missing clock": {AcademicUnitID: root, Visibility: store.UserVisibilityScope{InstitutionWide: true}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			options.Limit = 10
+			_, listErr := ss.User().List(ctx, options)
+			require.ErrorAs(t, listErr, &invalid)
+		})
+	}
+}
+
+func testUserDirectorySummaries(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	token := strings.ToLower(model.NewID()[:12])
+	activeAt := model.TimeUTC(model.NowUTC().Add(100 * time.Millisecond))
+	before := model.TimeUTC(activeAt.Add(-20 * time.Millisecond))
+	ended := model.OptionalTimeFrom(activeAt.Add(-10 * time.Millisecond))
+	institution := saveInstitution(t, ctx, ss)
+	root := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "b-root-"+token)
+	child := saveAcademicUnit(t, ctx, ss, institution.ID.String(), root.ID.String(), "a-child-"+token)
+	sibling := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "c-sibling-"+token)
+	former := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "d-former-"+token)
+	affiliate := func(user *model.User, kind model.AffiliationKind, startsAt time.Time, endsAt model.OptionalTime) {
+		_, err := ss.Affiliation().Save(ctx, &model.Affiliation{UserID: user.ID, Kind: kind, StartsAt: startsAt, EndsAt: endsAt})
+		require.NoError(t, err)
+	}
+	member := func(user *model.User, unitID model.AcademicUnitID, endsAt model.OptionalTime) {
+		_, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unitID, UserID: user.ID, StartsAt: before, EndsAt: endsAt})
+		require.NoError(t, err)
+	}
+	busy := saveUser(t, ctx, ss)
+	affiliate(busy, model.AffiliationTeacher, before.Add(-4*time.Millisecond), model.OptionalTime{})
+	affiliate(busy, model.AffiliationStaff, before.Add(-3*time.Millisecond), model.OptionalTime{})
+	affiliate(busy, model.AffiliationExternal, before.Add(-2*time.Millisecond), model.OptionalTime{})
+	affiliate(busy, model.AffiliationStudent, before.Add(-1*time.Millisecond), model.OptionalTime{})
+	member(busy, root.ID, model.OptionalTime{})
+	member(busy, child.ID, model.OptionalTime{})
+	member(busy, sibling.ID, model.OptionalTime{})
+	member(busy, former.ID, ended)
+	formerOnly := saveUser(t, ctx, ss)
+	affiliate(formerOnly, model.AffiliationStudent, before, ended)
+	member(formerOnly, root.ID, ended)
+	unrelated := saveUser(t, ctx, ss)
+	userIDs := []model.UserID{busy.ID, formerOnly.ID, unrelated.ID}
+	read := func(visibility store.UserVisibilityScope) []store.UserDirectorySummary {
+		t.Helper()
+		summaries, err := ss.User().ListDirectorySummaries(ctx, store.UserDirectorySummaryOptions{
+			UserIDs: userIDs, Visibility: visibility, AffiliationLimit: 3, AcademicUnitLimit: 2,
+		})
+		require.NoError(t, err)
+		return summaries
+	}
+	unit := func(value *model.AcademicUnit) store.UserDirectoryAcademicUnit {
+		return store.UserDirectoryAcademicUnit{ID: value.ID, DisplayName: value.DisplayName}
+	}
+	current := []model.AffiliationKind{model.AffiliationTeacher, model.AffiliationStaff, model.AffiliationExternal}
+
+	require.Equal(t, []store.UserDirectorySummary{{
+		UserID: busy.ID, Affiliations: current, AffiliationsMore: 1,
+		AcademicUnits: []store.UserDirectoryAcademicUnit{unit(child), unit(root)}, AcademicUnitsMore: 1,
+	}}, read(store.UserVisibilityScope{InstitutionWide: true, ActiveAt: activeAt}),
+		"Institution-wide: the oldest three of four current Affiliations and the first two of three current units by name; ended rows and Users with nothing current are absent")
+	require.Equal(t, []store.UserDirectorySummary{{
+		UserID: busy.ID, Affiliations: current, AffiliationsMore: 1,
+		AcademicUnits: []store.UserDirectoryAcademicUnit{unit(child), unit(root)},
+	}}, read(store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{root.ID}, ActiveAt: activeAt}),
+		"a unit scope names and counts only units in its subtree; Affiliations need no unit")
+	require.Equal(t, []store.UserDirectorySummary{{UserID: busy.ID, Affiliations: current, AffiliationsMore: 1}},
+		read(store.UserVisibilityScope{ClassIDs: []model.ClassID{model.NewClassID()}, ActiveAt: activeAt}),
+		"a Class roster scope names no Academic Unit")
+	earlier, err := ss.User().ListDirectorySummaries(ctx, store.UserDirectorySummaryOptions{
+		UserIDs:          []model.UserID{formerOnly.ID},
+		Visibility:       store.UserVisibilityScope{InstitutionWide: true, ActiveAt: model.TimeUTC(before.Add(time.Millisecond))},
+		AffiliationLimit: 3, AcademicUnitLimit: 2,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []store.UserDirectorySummary{{
+		UserID: formerOnly.ID, Affiliations: []model.AffiliationKind{model.AffiliationStudent},
+		AcademicUnits: []store.UserDirectoryAcademicUnit{unit(root)},
+	}}, earlier, "current is decided at the visibility instant")
+
+	empty, err := ss.User().ListDirectorySummaries(ctx, store.UserDirectorySummaryOptions{
+		Visibility: store.UserVisibilityScope{InstitutionWide: true, ActiveAt: activeAt}, AffiliationLimit: 3, AcademicUnitLimit: 2,
+	})
+	require.NoError(t, err)
+	require.Empty(t, empty)
+	var invalid *store.ErrInvalidInput
+	for name, options := range map[string]store.UserDirectorySummaryOptions{
+		"missing clock": {UserIDs: userIDs, Visibility: store.UserVisibilityScope{InstitutionWide: true}, AffiliationLimit: 3, AcademicUnitLimit: 2},
+		"invalid user":  {UserIDs: []model.UserID{"not-an-id"}, Visibility: store.UserVisibilityScope{InstitutionWide: true, ActiveAt: activeAt}, AffiliationLimit: 3, AcademicUnitLimit: 2},
+		"zero limit":    {UserIDs: userIDs, Visibility: store.UserVisibilityScope{InstitutionWide: true, ActiveAt: activeAt}, AcademicUnitLimit: 2},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, summaryErr := ss.User().ListDirectorySummaries(ctx, options)
+			require.ErrorAs(t, summaryErr, &invalid)
+		})
+	}
+}
+
+func testUserListIdentities(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	first, second := saveUser(t, ctx, ss), saveUser(t, ctx, ss)
+	identities, err := ss.User().ListIdentities(ctx, []model.UserID{first.ID, second.ID, model.NewUserID()})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []store.UserIdentity{
+		{ID: first.ID, Username: first.Username, DisplayName: first.DisplayName, Email: first.Email},
+		{ID: second.ID, Username: second.Username, DisplayName: second.DisplayName, Email: second.Email},
+	}, identities, "one batch names every known User and skips an unknown ID")
+	empty, err := ss.User().ListIdentities(ctx, nil)
+	require.NoError(t, err)
+	require.Empty(t, empty)
+	var invalid *store.ErrInvalidInput
+	_, err = ss.User().ListIdentities(ctx, []model.UserID{"not-an-id"})
+	require.ErrorAs(t, err, &invalid)
+}
+
 func testUserVisibilityIntervalPrecision(t *testing.T, ss store.Store) {
 	ctx := context.Background()
 	fixture := saveClassFixture(t, ctx, ss)
@@ -961,6 +1212,34 @@ func testUserStoreUpdateLastLogin(t *testing.T, ss store.Store) {
 	require.True(t, at.Equal(got.LastActivityAt.Time))
 	require.False(t, got.UpdatedAt.Before(at))
 	require.Equal(t, revision, got.Revision)
+}
+
+func testUserStoreListDisplayNames(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	named := saveUser(t, ctx, ss)
+	unnamed := newUser()
+	unnamed.DisplayName = ""
+	unnamed, err := createUser(t, ctx, ss, unnamed)
+	require.NoError(t, err)
+	names, err := ss.User().ListDisplayNames(ctx, []model.UserID{named.ID, unnamed.ID, named.ID, model.NewUserID()})
+	require.NoError(t, err)
+	expected := []store.UserDisplayName{{UserID: named.ID, DisplayName: named.DisplayName}, {UserID: unnamed.ID, DisplayName: unnamed.Username}}
+	slices.SortFunc(expected, func(a, b store.UserDisplayName) int { return strings.Compare(a.UserID.String(), b.UserID.String()) })
+	// A missing User is absent, a repeated one is read once, and a User with no
+	// display name is presented by username.
+	require.Equal(t, expected, names)
+	empty, err := ss.User().ListDisplayNames(ctx, nil)
+	require.NoError(t, err)
+	require.Empty(t, empty)
+	var invalid *store.ErrInvalidInput
+	_, err = ss.User().ListDisplayNames(ctx, []model.UserID{"invalid"})
+	require.ErrorAs(t, err, &invalid, "an invalid User ID")
+	tooMany := make([]model.UserID, store.MaximumUserDisplayNames+1)
+	for index := range tooMany {
+		tooMany[index] = model.NewUserID()
+	}
+	_, err = ss.User().ListDisplayNames(ctx, tooMany)
+	require.ErrorAs(t, err, &invalid, "more Users than one read allows")
 }
 
 func testUserStoreUniqueness(t *testing.T, ss store.Store) {

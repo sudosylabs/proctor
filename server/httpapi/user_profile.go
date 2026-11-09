@@ -45,6 +45,47 @@ type userProfileResponse struct {
 	ProfilePictureKind      string  `json:"profile_picture_kind"`
 }
 
+// userDirectoryEntryResponse is one User directory item: the profile the
+// caller may read and its bounded summary.
+type userDirectoryEntryResponse struct {
+	userProfileResponse
+	Summary *userDirectorySummaryResponse `json:"summary,omitempty"`
+}
+
+// userDirectorySummaryResponse names a User's current Affiliations and, for
+// a caller holding role_binding.view, the visible current Role Bindings.
+type userDirectorySummaryResponse struct {
+	Affiliations     []userDirectoryAffiliationResponse `json:"affiliations"`
+	AffiliationsMore int                                `json:"affiliations_more"`
+	*userDirectoryRolesResponse
+}
+
+type userDirectoryAffiliationResponse struct {
+	Kind              string                              `json:"kind"`
+	AcademicUnits     []userDirectoryAcademicUnitResponse `json:"academic_units"`
+	AcademicUnitsMore int                                 `json:"academic_units_more"`
+}
+
+type userDirectoryAcademicUnitResponse struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// userDirectoryRolesResponse is present only when the caller holds
+// role_binding.view somewhere.
+type userDirectoryRolesResponse struct {
+	Roles     []userDirectoryRoleResponse `json:"roles"`
+	RolesMore int                         `json:"roles_more"`
+}
+
+type userDirectoryRoleResponse struct {
+	RoleID      string `json:"role_id"`
+	DisplayName string `json:"display_name"`
+	ScopeType   string `json:"scope_type"`
+	ScopeID     string `json:"scope_id"`
+	ScopeName   string `json:"scope_name"`
+}
+
 type updateUserProfileRequest struct {
 	Username    *string `json:"username,omitempty"`
 	DisplayName *string `json:"display_name,omitempty"`
@@ -459,8 +500,8 @@ func (m userProfileResourceModule) search(request operationRequest) (operationRe
 	if err != nil {
 		return operationResult{}, err
 	}
-	envelope, err := newListResponse(page.Items, page.HasMore, userProfileResponseFromModel, func(last *model.User) (string, error) {
-		return encodeOpaqueCursor(userDirectoryCursor{Username: last.Username, ID: last.ID.String()}, userDirectoryCursorSpec())
+	envelope, err := newListResponse(page.Items, page.HasMore, userDirectoryEntryResponseFromApplication, func(last app.UserDirectoryEntry) (string, error) {
+		return encodeOpaqueCursor(userDirectoryCursor{Username: last.User.Username, ID: last.User.ID.String()}, userDirectoryCursorSpec())
 	})
 	if err != nil {
 		return operationResult{}, err
@@ -470,6 +511,37 @@ func (m userProfileResourceModule) search(request operationRequest) (operationRe
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, response), nil
+}
+
+// userDirectoryEntryResponseFromApplication presents one directory row. Each
+// Affiliation carries the User's visible current Academic Units, since a
+// membership is not tied to one Affiliation kind.
+func userDirectoryEntryResponseFromApplication(entry app.UserDirectoryEntry) userDirectoryEntryResponse {
+	units := make([]userDirectoryAcademicUnitResponse, 0, len(entry.Memberships.AcademicUnits))
+	for _, unit := range entry.Memberships.AcademicUnits {
+		units = append(units, userDirectoryAcademicUnitResponse{ID: unit.ID.String(), Name: unit.DisplayName})
+	}
+	summary := &userDirectorySummaryResponse{
+		Affiliations:     make([]userDirectoryAffiliationResponse, 0, len(entry.Memberships.Affiliations)),
+		AffiliationsMore: entry.Memberships.AffiliationsMore,
+	}
+	for _, kind := range entry.Memberships.Affiliations {
+		summary.Affiliations = append(summary.Affiliations, userDirectoryAffiliationResponse{
+			Kind: string(kind), AcademicUnits: units, AcademicUnitsMore: entry.Memberships.AcademicUnitsMore,
+		})
+	}
+	if entry.Roles != nil {
+		summary.userDirectoryRolesResponse = &userDirectoryRolesResponse{
+			Roles: make([]userDirectoryRoleResponse, 0, len(entry.Roles.Bindings)), RolesMore: entry.Roles.More,
+		}
+		for _, binding := range entry.Roles.Bindings {
+			summary.Roles = append(summary.Roles, userDirectoryRoleResponse{
+				RoleID: binding.RoleID.String(), DisplayName: binding.DisplayName,
+				ScopeType: string(binding.ScopeType), ScopeID: binding.ScopeID, ScopeName: binding.ScopeName,
+			})
+		}
+	}
+	return userDirectoryEntryResponse{userProfileResponse: userProfileResponseFromModel(entry.User), Summary: summary}
 }
 
 // userDirectoryFilters reads the repeatable affiliation filter and the single

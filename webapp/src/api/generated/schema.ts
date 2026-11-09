@@ -4860,7 +4860,7 @@ export interface paths {
         };
         /**
          * Search the authorized User directory
-         * @description Searches only User profiles visible through the caller's current Institution or scoped relationships, ordered by canonical username and identity. Disabled Users remain concealed unless an Institution-wide user viewer explicitly requests them. The first page, read without a cursor, also reports `total`: the Users the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
+         * @description Searches only User profiles visible through the caller's current Institution or scoped relationships, ordered by canonical username and identity. Disabled Users remain concealed unless an Institution-wide user viewer explicitly requests them. Each item carries a `summary`: the User's current Affiliations with the current Academic Units the caller can see, and, for a caller holding role_binding.view, the current Role Bindings inside that authority's scopes, each list bounded and followed by a count of the rest. The first page, read without a cursor, also reports `total`: the Users the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
          */
         get: operations["searchUsers"];
         put?: never;
@@ -10946,6 +10946,72 @@ export interface components {
             /** @description Omitted or null leaves the canonical username unchanged. */
             username?: string | null;
         };
+        UserDirectoryAcademicUnit: {
+            id: components["schemas"]["ID"];
+            /** @description The Academic Unit's display name. */
+            name: string;
+        };
+        /** @description One current Affiliation with the User's current Academic Units. A membership is not tied to an Affiliation kind, so every Affiliation carries the same units: at most two, ordered by name, from units the caller's user.view reaches (every unit for Institution-wide user.view). */
+        UserDirectoryAffiliation: {
+            academic_units: components["schemas"]["UserDirectoryAcademicUnit"][];
+            /** @description Visible current Academic Units past the two listed. */
+            academic_units_more: number;
+            /** @enum {string} */
+            kind: "student" | "teacher" | "staff" | "external";
+        };
+        /** @description One User directory item: the User profile projection the caller may read, with the same field rules as UserProfileResponse, and a bounded summary of who the User is in the Institution. */
+        UserDirectoryEntryResponse: {
+            /** Format: date-time */
+            archived_at?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            disabled_at?: string;
+            display_name: string;
+            /** Format: email */
+            email?: string;
+            email_verified?: boolean;
+            first_name: string;
+            id: components["schemas"]["ID"];
+            /** Format: date-time */
+            last_activity_at?: string;
+            /** Format: date-time */
+            last_login_at?: string;
+            last_name: string;
+            locale?: string;
+            /**
+             * Format: date-time
+             * @description Time of the latest upload or removal. It is not a sign that a custom picture exists; use profile_picture_kind.
+             */
+            profile_picture_changed_at?: string;
+            profile_picture_kind: components["schemas"]["ProfilePictureKind"];
+            profile_picture_url: string;
+            summary?: components["schemas"]["UserDirectorySummary"];
+            timezone?: string;
+            /** Format: date-time */
+            updated_at: string;
+            username: string;
+        };
+        /** @description One current Role Binding, named by its Role and the Institution, Academic Unit or Class it is scoped to. */
+        UserDirectoryRole: {
+            /** @description The Role's display name. */
+            display_name: string;
+            role_id: components["schemas"]["ID"];
+            scope_id: components["schemas"]["ID"];
+            /** @description The display name of the binding's Institution, Academic Unit or Class. */
+            scope_name: string;
+            /** @enum {string} */
+            scope_type: "institution" | "academic_unit" | "class";
+        };
+        /** @description Who the User is, read at the same instant as the page. `affiliations` lists at most three current Affiliations, oldest first. `roles` and `roles_more` are present only when the caller holds role_binding.view somewhere; they list at most three current Role Bindings inside the caller's role_binding.view scopes, oldest first, and a binding outside those scopes is neither listed nor counted. */
+        UserDirectorySummary: {
+            affiliations: components["schemas"]["UserDirectoryAffiliation"][];
+            /** @description Current Affiliations past the three listed. */
+            affiliations_more: number;
+            roles?: components["schemas"]["UserDirectoryRole"][];
+            /** @description Visible current Role Bindings past the three listed. Present with `roles`. */
+            roles_more?: number;
+        };
         /** @description Narrow identity and verification state after an email-security transition. */
         UserEmailStateResponse: {
             /** @description Whether the target User's current email has completed verification. */
@@ -10954,7 +11020,7 @@ export interface components {
         };
         /** @description Visible User profiles ordered by canonical username and identity. */
         UserProfileListResponse: {
-            items: components["schemas"]["UserProfileResponse"][];
+            items: components["schemas"]["UserDirectoryEntryResponse"][];
             next_cursor?: components["schemas"]["NextCursor"];
             /** @description Users matching the filters and the caller's visibility across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true. */
             total?: number;

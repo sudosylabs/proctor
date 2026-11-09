@@ -46,6 +46,7 @@ func TestUserStore(t *testing.T, ss store.Store, probes ...UserStoreSQLProbe) {
 	t.Run("ListAndDisable", func(t *testing.T) { testUserStoreListAndDisable(t, ss) })
 	t.Run("VisibilityIntervalPrecision", func(t *testing.T) { testUserVisibilityIntervalPrecision(t, ss) })
 	t.Run("AffiliationAndAcademicUnitFilters", func(t *testing.T) { testUserListAffiliationAndAcademicUnitFilters(t, ss) })
+	t.Run("DirectorySummaries", func(t *testing.T) { testUserDirectorySummaries(t, ss) })
 	t.Run("EnablementRevocationAndAuditAreAtomic", func(t *testing.T) {
 		testUserStoreEnablementRevocationAndAuditAreAtomic(t, ss)
 	})
@@ -782,6 +783,94 @@ func testUserListAffiliationAndAcademicUnitFilters(t *testing.T, ss store.Store)
 			options.Limit = 10
 			_, listErr := ss.User().List(ctx, options)
 			require.ErrorAs(t, listErr, &invalid)
+		})
+	}
+}
+
+func testUserDirectorySummaries(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	token := strings.ToLower(model.NewID()[:12])
+	activeAt := model.TimeUTC(model.NowUTC().Add(100 * time.Millisecond))
+	before := model.TimeUTC(activeAt.Add(-20 * time.Millisecond))
+	ended := model.OptionalTimeFrom(activeAt.Add(-10 * time.Millisecond))
+	institution := saveInstitution(t, ctx, ss)
+	root := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "b-root-"+token)
+	child := saveAcademicUnit(t, ctx, ss, institution.ID.String(), root.ID.String(), "a-child-"+token)
+	sibling := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "c-sibling-"+token)
+	former := saveAcademicUnit(t, ctx, ss, institution.ID.String(), "", "d-former-"+token)
+	affiliate := func(user *model.User, kind model.AffiliationKind, startsAt time.Time, endsAt model.OptionalTime) {
+		_, err := ss.Affiliation().Save(ctx, &model.Affiliation{UserID: user.ID, Kind: kind, StartsAt: startsAt, EndsAt: endsAt})
+		require.NoError(t, err)
+	}
+	member := func(user *model.User, unitID model.AcademicUnitID, endsAt model.OptionalTime) {
+		_, err := ss.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unitID, UserID: user.ID, StartsAt: before, EndsAt: endsAt})
+		require.NoError(t, err)
+	}
+	busy := saveUser(t, ctx, ss)
+	affiliate(busy, model.AffiliationTeacher, before.Add(-4*time.Millisecond), model.OptionalTime{})
+	affiliate(busy, model.AffiliationStaff, before.Add(-3*time.Millisecond), model.OptionalTime{})
+	affiliate(busy, model.AffiliationExternal, before.Add(-2*time.Millisecond), model.OptionalTime{})
+	affiliate(busy, model.AffiliationStudent, before.Add(-1*time.Millisecond), model.OptionalTime{})
+	member(busy, root.ID, model.OptionalTime{})
+	member(busy, child.ID, model.OptionalTime{})
+	member(busy, sibling.ID, model.OptionalTime{})
+	member(busy, former.ID, ended)
+	formerOnly := saveUser(t, ctx, ss)
+	affiliate(formerOnly, model.AffiliationStudent, before, ended)
+	member(formerOnly, root.ID, ended)
+	unrelated := saveUser(t, ctx, ss)
+	userIDs := []model.UserID{busy.ID, formerOnly.ID, unrelated.ID}
+	read := func(visibility store.UserVisibilityScope) []store.UserDirectorySummary {
+		t.Helper()
+		summaries, err := ss.User().ListDirectorySummaries(ctx, store.UserDirectorySummaryOptions{
+			UserIDs: userIDs, Visibility: visibility, AffiliationLimit: 3, AcademicUnitLimit: 2,
+		})
+		require.NoError(t, err)
+		return summaries
+	}
+	unit := func(value *model.AcademicUnit) store.UserDirectoryAcademicUnit {
+		return store.UserDirectoryAcademicUnit{ID: value.ID, DisplayName: value.DisplayName}
+	}
+	current := []model.AffiliationKind{model.AffiliationTeacher, model.AffiliationStaff, model.AffiliationExternal}
+
+	require.Equal(t, []store.UserDirectorySummary{{
+		UserID: busy.ID, Affiliations: current, AffiliationsMore: 1,
+		AcademicUnits: []store.UserDirectoryAcademicUnit{unit(child), unit(root)}, AcademicUnitsMore: 1,
+	}}, read(store.UserVisibilityScope{InstitutionWide: true, ActiveAt: activeAt}),
+		"Institution-wide: the oldest three of four current Affiliations and the first two of three current units by name; ended rows and Users with nothing current are absent")
+	require.Equal(t, []store.UserDirectorySummary{{
+		UserID: busy.ID, Affiliations: current, AffiliationsMore: 1,
+		AcademicUnits: []store.UserDirectoryAcademicUnit{unit(child), unit(root)},
+	}}, read(store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{root.ID}, ActiveAt: activeAt}),
+		"a unit scope names and counts only units in its subtree; Affiliations need no unit")
+	require.Equal(t, []store.UserDirectorySummary{{UserID: busy.ID, Affiliations: current, AffiliationsMore: 1}},
+		read(store.UserVisibilityScope{ClassIDs: []model.ClassID{model.NewClassID()}, ActiveAt: activeAt}),
+		"a Class roster scope names no Academic Unit")
+	earlier, err := ss.User().ListDirectorySummaries(ctx, store.UserDirectorySummaryOptions{
+		UserIDs:          []model.UserID{formerOnly.ID},
+		Visibility:       store.UserVisibilityScope{InstitutionWide: true, ActiveAt: model.TimeUTC(before.Add(time.Millisecond))},
+		AffiliationLimit: 3, AcademicUnitLimit: 2,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []store.UserDirectorySummary{{
+		UserID: formerOnly.ID, Affiliations: []model.AffiliationKind{model.AffiliationStudent},
+		AcademicUnits: []store.UserDirectoryAcademicUnit{unit(root)},
+	}}, earlier, "current is decided at the visibility instant")
+
+	empty, err := ss.User().ListDirectorySummaries(ctx, store.UserDirectorySummaryOptions{
+		Visibility: store.UserVisibilityScope{InstitutionWide: true, ActiveAt: activeAt}, AffiliationLimit: 3, AcademicUnitLimit: 2,
+	})
+	require.NoError(t, err)
+	require.Empty(t, empty)
+	var invalid *store.ErrInvalidInput
+	for name, options := range map[string]store.UserDirectorySummaryOptions{
+		"missing clock": {UserIDs: userIDs, Visibility: store.UserVisibilityScope{InstitutionWide: true}, AffiliationLimit: 3, AcademicUnitLimit: 2},
+		"invalid user":  {UserIDs: []model.UserID{"not-an-id"}, Visibility: store.UserVisibilityScope{InstitutionWide: true, ActiveAt: activeAt}, AffiliationLimit: 3, AcademicUnitLimit: 2},
+		"zero limit":    {UserIDs: userIDs, Visibility: store.UserVisibilityScope{InstitutionWide: true, ActiveAt: activeAt}, AcademicUnitLimit: 2},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, summaryErr := ss.User().ListDirectorySummaries(ctx, options)
+			require.ErrorAs(t, summaryErr, &invalid)
 		})
 	}
 }

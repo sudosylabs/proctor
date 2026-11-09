@@ -33,6 +33,7 @@ type userProfileHTTPApplication struct {
 	contextResult      *app.CurrentUserContextView
 	contextCalls       int
 	values             []*model.User
+	entries            []app.UserDirectoryEntry
 	searchHasMore      bool
 	searchTotal        int
 	searchQuery        app.SearchUsersQuery
@@ -195,11 +196,18 @@ func (a *loginRevisionHTTPApplication) Login(
 	}, nil
 }
 
-func (a *userProfileHTTPApplication) SearchUsers(_ context.Context, _ invocation.Invocation, query app.SearchUsersQuery) (app.CountedPage[*model.User], error) {
+func (a *userProfileHTTPApplication) SearchUsers(_ context.Context, _ invocation.Invocation, query app.SearchUsersQuery) (app.CountedPage[app.UserDirectoryEntry], error) {
 	a.searchQuery = query
-	page := app.CountedPage[*model.User]{Page: app.Page[*model.User]{Items: a.values, HasMore: a.searchHasMore}}
+	entries := a.entries
+	if entries == nil {
+		entries = []app.UserDirectoryEntry{}
+		for _, user := range a.values {
+			entries = append(entries, app.UserDirectoryEntry{User: user, Memberships: store.UserDirectorySummary{UserID: user.ID}})
+		}
+	}
+	page := app.CountedPage[app.UserDirectoryEntry]{Page: app.Page[app.UserDirectoryEntry]{Items: entries, HasMore: a.searchHasMore}}
 	if query.AfterID == "" {
-		page.PageTotal = app.PageTotal{Counted: true, Total: max(a.searchTotal, len(a.values)), TotalIsLowerBound: a.searchTotal == store.MaximumListCount}
+		page.PageTotal = app.PageTotal{Counted: true, Total: max(a.searchTotal, len(entries)), TotalIsLowerBound: a.searchTotal == store.MaximumListCount}
 	}
 	return page, nil
 }
@@ -447,6 +455,56 @@ func TestUserSearchTransportReadsAffiliationAndUnitFilters(t *testing.T) {
 	}
 }
 
+func TestUserSearchTransportPresentsEachUsersSummary(t *testing.T) {
+	t.Parallel()
+	logger, _ := newTestLogger(t)
+	principal := model.Principal{
+		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
+		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
+		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
+		ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now(),
+	}
+	unitID, roleID := model.NewAcademicUnitID(), model.NewRoleID()
+	summarized := &model.User{ID: model.NewUserID(), Username: "summarized", DisplayName: "Summarized"}
+	plain := &model.User{ID: model.NewUserID(), Username: "plain", DisplayName: "Plain"}
+	profiles := &userProfileHTTPApplication{entries: []app.UserDirectoryEntry{
+		{User: summarized, Memberships: store.UserDirectorySummary{
+			UserID: summarized.ID, Affiliations: []model.AffiliationKind{model.AffiliationTeacher, model.AffiliationStaff}, AffiliationsMore: 1,
+			AcademicUnits: []store.UserDirectoryAcademicUnit{{ID: unitID, DisplayName: "Engineering"}}, AcademicUnitsMore: 2,
+		}, Roles: &store.UserRoleBindingSummary{UserID: summarized.ID, More: 4, Bindings: []store.RoleBindingSummary{{
+			RoleID: roleID, DisplayName: "Reviewer", ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String(), ScopeName: "Engineering",
+		}}}},
+		{User: plain, Memberships: store.UserDirectorySummary{UserID: plain.ID}},
+	}}
+	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userProfileResource(profiles))
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users", nil)
+	request.Header.Set("Authorization", "Bearer credential")
+	response := httptest.NewRecorder()
+	httpAPI.ServeHTTP(response, request)
+	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
+	var body struct {
+		Items []struct {
+			Username string          `json:"username"`
+			Summary  json.RawMessage `json:"summary"`
+		} `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	require.Len(t, body.Items, 2)
+	unit := `{"id":"` + unitID.String() + `","name":"Engineering"}`
+	require.JSONEq(t, `{
+		"affiliations": [
+			{"kind": "teacher", "academic_units": [`+unit+`], "academic_units_more": 2},
+			{"kind": "staff", "academic_units": [`+unit+`], "academic_units_more": 2}
+		],
+		"affiliations_more": 1,
+		"roles": [{"role_id": "`+roleID.String()+`", "display_name": "Reviewer", "scope_type": "academic_unit",
+			"scope_id": "`+unitID.String()+`", "scope_name": "Engineering"}],
+		"roles_more": 4
+	}`, string(body.Items[0].Summary))
+	require.JSONEq(t, `{"affiliations": [], "affiliations_more": 0}`, string(body.Items[1].Summary),
+		"a caller without role_binding.view reads no roles member")
+}
+
 func TestScopedUserProfileOmitsAccountAndSecurityFields(t *testing.T) {
 	t.Parallel()
 	encoded, err := json.Marshal(userProfileResponseFromModel(&model.User{
@@ -619,7 +677,7 @@ func TestUserProfileOpenAPIDocument(t *testing.T) {
 	assertOpenAPIIfMatchForProfile(t, "DELETE "+picturePath, remove, true)
 
 	list := document.Components.Schemas["UserProfileListResponse"]
-	requireOpenAPIListEnvelope(t, list, "#/components/schemas/UserProfileResponse")
+	requireOpenAPIListEnvelope(t, list, "#/components/schemas/UserDirectoryEntryResponse")
 }
 
 func decodeOpenAPIOperationForProfile(

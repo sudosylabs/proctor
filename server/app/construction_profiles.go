@@ -23,7 +23,7 @@ func constructProfilesAndFiles(
 		return profileFileConstruction{}, err
 	}
 	return profileFileConstruction{
-		userProfiles:    newUserProfileService(userProfileServiceDependencies{Users: deps.Store.User(), Authorization: authorization, Audit: mutationAuditAdapter{audit: foundation.audit}, Now: time.Now}),
+		userProfiles:    newUserProfileService(userProfileServiceDependencies{Users: deps.Store.User(), RoleBindings: deps.Store.RoleBinding(), Authorization: authorization, Audit: mutationAuditAdapter{audit: foundation.audit}, Now: time.Now}),
 		profilePictures: newProfilePictureService(profilePictureServiceDependencies{Users: deps.Store.User(), Files: deps.Store.File(), Uploads: deps.FileContent, Reads: deps.FileContent, Fallback: deps.FileContent, Defaults: deps.FileContent, Authorization: authorization, Audit: mutationAuditAdapter{audit: foundation.audit}, Effects: profilePictureRealtimeEffects{realtime: foundation.realtime}, EffectFailures: profilePictureEffectReporter{realtime: foundation.realtime}, DefaultJobs: nil, Now: time.Now}),
 		userSettings:    userSettings,
 	}, nil

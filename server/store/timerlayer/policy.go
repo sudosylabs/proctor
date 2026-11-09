@@ -235,6 +235,8 @@ const (
 	methodListSelf                                  methodName = "list_self"
 	methodCountSelf                                 methodName = "count_self"
 	methodCount                                     methodName = "count"
+	methodListDirectorySummaries                    methodName = "list_directory_summaries"
+	methodListVisibleSummariesByUsers               methodName = "list_visible_summaries_by_users"
 	methodCountDeliveries                           methodName = "count_deliveries"
 	methodCountOpenOnboardingImports                methodName = "count_open_onboarding_imports"
 	methodListCandidateActivity                     methodName = "list_candidate_activity"

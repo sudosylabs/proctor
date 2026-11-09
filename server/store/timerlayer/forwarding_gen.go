@@ -2198,6 +2198,12 @@ func (s *timedUserStore) Count(arg0 context.Context, arg1 store.UserListOptions,
 	})
 }
 
+func (s *timedUserStore) ListDirectorySummaries(arg0 context.Context, arg1 store.UserDirectorySummaryOptions) ([]store.UserDirectorySummary, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateUser, methodListDirectorySummaries), func(callCtx context.Context) ([]store.UserDirectorySummary, error) {
+		return s.next.ListDirectorySummaries(callCtx, arg1)
+	})
+}
+
 func (s *timedUserStore) GetCurrentContext(arg0 context.Context, arg1 model.UserID, arg2 int) (*store.CurrentUserContext, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateUser, methodGetCurrentContext), func(callCtx context.Context) (*store.CurrentUserContext, error) {
 		return s.next.GetCurrentContext(callCtx, arg1, arg2)
@@ -3515,6 +3521,12 @@ func (s *timedRoleBindingStore) ListByUser(arg0 context.Context, arg1 model.User
 func (s *timedRoleBindingStore) ListVisibleByUser(arg0 context.Context, arg1 model.UserID, arg2 store.UserVisibilityScope) ([]*model.RoleBinding, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRoleBinding, methodListVisibleByUser), func(callCtx context.Context) ([]*model.RoleBinding, error) {
 		return s.next.ListVisibleByUser(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedRoleBindingStore) ListVisibleSummariesByUsers(arg0 context.Context, arg1 store.RoleBindingSummaryOptions) ([]store.UserRoleBindingSummary, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateRoleBinding, methodListVisibleSummariesByUsers), func(callCtx context.Context) ([]store.UserRoleBindingSummary, error) {
+		return s.next.ListVisibleSummariesByUsers(callCtx, arg1)
 	})
 }
 

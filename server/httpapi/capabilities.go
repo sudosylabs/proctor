@@ -40,7 +40,7 @@ type SessionAdministrationApplication interface {
 type UserProfileApplication interface {
 	GetCurrentUserContext(context.Context, invocation.Invocation) (*app.CurrentUserContextView, error)
 	ListCandidateExamActivity(context.Context, invocation.Invocation, attempt.CandidateActivityQuery) (attempt.CandidateActivityPage, error)
-	SearchUsers(context.Context, invocation.Invocation, app.SearchUsersQuery) (app.CountedPage[*model.User], error)
+	SearchUsers(context.Context, invocation.Invocation, app.SearchUsersQuery) (app.CountedPage[app.UserDirectoryEntry], error)
 	GetUserProfile(context.Context, invocation.Invocation, app.GetUserProfileQuery) (*model.User, error)
 	UpdateUserProfile(context.Context, invocation.Invocation, app.UpdateUserProfileCommand) (*model.User, error)
 	ChangeUserEmail(context.Context, invocation.Invocation, app.ChangeUserEmailCommand) (*app.UserEmailState, error)

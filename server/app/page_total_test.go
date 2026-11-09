@@ -75,8 +75,9 @@ func TestUserSearchCountsThroughTheListedOptions(t *testing.T) {
 	expected := persistence.listOptions
 	require.Equal(t, expected, persistence.countOptions, "the count reads the list's visibility and filters")
 	require.Equal(t, store.MaximumListCount, persistence.countMaximum)
-	// Contract: authorization precedes the read, and only the first page counts.
-	require.Equal(t, []string{"authorize-search", "list-users", "count-users"}, events)
+	// Contract: authorization precedes the read, only the first page counts,
+	// and the summary reads follow the count.
+	require.Equal(t, []string{"authorize-search", "list-users", "count-users", "summarize-users", "role-binding-view-scope"}, events)
 
 	events = events[:0]
 	later, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{Query: "count", Limit: 10,
@@ -84,7 +85,7 @@ func TestUserSearchCountsThroughTheListedOptions(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, PageTotal{}, later.PageTotal)
 	// Contract: a continued page authorizes and lists without counting.
-	require.Equal(t, []string{"authorize-search", "list-users"}, events)
+	require.Equal(t, []string{"authorize-search", "list-users", "summarize-users", "role-binding-view-scope"}, events)
 
 	events = events[:0]
 	page, err := service.searchUserPage(context.Background(), invocation.Invocation{}, SearchUsersQuery{Query: "count", Limit: 5})

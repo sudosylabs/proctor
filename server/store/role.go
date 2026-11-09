@@ -86,6 +86,35 @@ type RoleBindingEnd struct {
 	NoOp                      bool
 }
 
+// RoleBindingSummaryOptions selects the current Role Bindings of one page of
+// Users whose scope lies within Visibility, as ListVisibleByUser defines it,
+// at most Limit for each User. Current means effective at
+// Visibility.ActiveAt, which is required, with an unarchived Role and scope.
+// A binding outside Visibility is neither returned nor counted.
+type RoleBindingSummaryOptions struct {
+	UserIDs    []model.UserID
+	Visibility UserVisibilityScope
+	Limit      int
+}
+
+// UserRoleBindingSummary is one User's visible current Role Bindings ordered
+// by start then ID; More counts the visible bindings past the limit.
+type UserRoleBindingSummary struct {
+	UserID   model.UserID
+	Bindings []RoleBindingSummary
+	More     int
+}
+
+// RoleBindingSummary names one Role Binding: the Role's display name and the
+// display name of the Institution, Academic Unit or Class it is scoped to.
+type RoleBindingSummary struct {
+	RoleID      model.RoleID
+	DisplayName string
+	ScopeType   model.RoleScopeType
+	ScopeID     string
+	ScopeName   string
+}
+
 // RoleBindingStore persists time-bounded role assignments. Scope references
 // are validated transactionally because PostgreSQL cannot express a foreign
 // key whose target table depends on scope_type.
@@ -94,6 +123,9 @@ type RoleBindingStore interface {
 	Get(context.Context, model.RoleBindingID) (*model.RoleBinding, error)
 	ListByUser(context.Context, model.UserID) ([]*model.RoleBinding, error)
 	ListVisibleByUser(context.Context, model.UserID, UserVisibilityScope) ([]*model.RoleBinding, error)
+	// ListVisibleSummariesByUsers reads the visible current bindings of every
+	// listed User in one statement. A User with none has no entry.
+	ListVisibleSummariesByUsers(context.Context, RoleBindingSummaryOptions) ([]UserRoleBindingSummary, error)
 	ListByScope(context.Context, model.RoleScopeType, string) ([]*model.RoleBinding, error)
 	// ListActiveByUser uses UTC microsecond precision and the interval [start, end).
 	// Archived bindings are excluded; no active bindings is an empty list.

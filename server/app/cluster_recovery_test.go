@@ -410,6 +410,9 @@ func (recoveryRoleBindingStore) ListByUser(context.Context, model.UserID) ([]*mo
 func (recoveryRoleBindingStore) ListVisibleByUser(context.Context, model.UserID, store.UserVisibilityScope) ([]*model.RoleBinding, error) {
 	return nil, errors.New("unused")
 }
+func (recoveryRoleBindingStore) ListVisibleSummariesByUsers(context.Context, store.RoleBindingSummaryOptions) ([]store.UserRoleBindingSummary, error) {
+	return nil, errors.New("unused")
+}
 func (recoveryRoleBindingStore) ListByScope(context.Context, model.RoleScopeType, string) ([]*model.RoleBinding, error) {
 	return nil, errors.New("unused")
 }

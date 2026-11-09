@@ -57,6 +57,37 @@ type UserVisibilityScope struct {
 	ActiveAt time.Time
 }
 
+// UserDirectorySummaryOptions selects the bounded directory summary of one
+// page of Users. Every User's current Affiliations are read, at most
+// AffiliationLimit of them; Academic Units come from current memberships in
+// unarchived units, at most AcademicUnitLimit of them, and a scoped
+// Visibility reads only units inside its user.view subtrees
+// (AcademicUnitRootIDs), so the summary never names a relationship outside the
+// scope. Current means effective at Visibility.ActiveAt, which is required.
+type UserDirectorySummaryOptions struct {
+	UserIDs           []model.UserID
+	Visibility        UserVisibilityScope
+	AffiliationLimit  int
+	AcademicUnitLimit int
+}
+
+// UserDirectorySummary is one User's bounded directory summary. Affiliations
+// are ordered by start then kind and AcademicUnits by display name then ID;
+// each More counts the current entries past its limit.
+type UserDirectorySummary struct {
+	UserID            model.UserID
+	Affiliations      []model.AffiliationKind
+	AffiliationsMore  int
+	AcademicUnits     []UserDirectoryAcademicUnit
+	AcademicUnitsMore int
+}
+
+// UserDirectoryAcademicUnit names one Academic Unit in a directory summary.
+type UserDirectoryAcademicUnit struct {
+	ID          model.AcademicUnitID
+	DisplayName string
+}
+
 // UserVisibilityMatch identifies the authorized scope through which one User
 // is visible. It lets callers record the exact subtree/class decision without
 // assigning the target to an unrelated authorized scope when a principal has
@@ -158,6 +189,10 @@ type UserStore interface {
 	// same filters and visibility, ignoring the keyset and limit, and stops
 	// at maximum (see MaximumListCount).
 	Count(context.Context, UserListOptions, int) (int, error)
+	// ListDirectorySummaries reads the summary of every listed User in one
+	// statement. A User with neither a current Affiliation nor a visible
+	// current Academic Unit has no entry.
+	ListDirectorySummaries(context.Context, UserDirectorySummaryOptions) ([]UserDirectorySummary, error)
 	GetCurrentContext(context.Context, model.UserID, int) (*CurrentUserContext, error)
 	MatchVisibility(context.Context, model.UserID, UserVisibilityScope) (UserVisibilityMatch, error)
 	UpdateProfile(context.Context, *UserProfileUpdate) (*model.User, error)

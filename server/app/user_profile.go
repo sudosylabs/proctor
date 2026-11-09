@@ -51,6 +51,7 @@ type userProfileStore interface {
 	Get(context.Context, model.UserID) (*model.User, error)
 	List(context.Context, store.UserListOptions) ([]*model.User, error)
 	Count(context.Context, store.UserListOptions, int) (int, error)
+	ListDirectorySummaries(context.Context, store.UserDirectorySummaryOptions) ([]store.UserDirectorySummary, error)
 	GetCurrentContext(context.Context, model.UserID, int) (*store.CurrentUserContext, error)
 	UpdateProfile(context.Context, *store.UserProfileUpdate) (*model.User, error)
 }
@@ -102,8 +103,18 @@ func (s *userProfileService) GetCurrentUserContext(ctx context.Context, invocati
 	return view, nil
 }
 
+// userDirectoryRoleBindingStore reads the Role Binding half of the User
+// directory summary.
+type userDirectoryRoleBindingStore interface {
+	ListVisibleSummariesByUsers(context.Context, store.RoleBindingSummaryOptions) ([]store.UserRoleBindingSummary, error)
+}
+
 type userProfileAuthorizer interface {
 	AuthorizeSearch(context.Context, invocation.Invocation) (store.UserVisibilityScope, error)
+	// RoleBindingViewScope reports, without recording a decision, the scopes
+	// in which the caller holds role_binding.view at the instant. It narrows
+	// what a directory summary shows; it never admits a request.
+	RoleBindingViewScope(context.Context, invocation.Invocation, time.Time) (store.UserVisibilityScope, error)
 	// AuthorizeProfileRead reports fullProfile when the caller reads its own
 	// profile or holds institution-wide User visibility; a scoped grant reads
 	// the limited profile.
@@ -115,6 +126,7 @@ type userProfileAuthorizer interface {
 // newUserProfileService validates them once and userProfileService keeps them in deps.
 type userProfileServiceDependencies struct {
 	Users         userProfileStore
+	RoleBindings  userDirectoryRoleBindingStore
 	Authorization userProfileAuthorizer
 	Audit         mutationAuditor
 	Now           func() time.Time
@@ -128,24 +140,104 @@ func newUserProfileService(deps userProfileServiceDependencies) *userProfileServ
 	return &userProfileService{deps: deps}
 }
 
-// SearchUsers reads one page of the User directory. The first page, read
-// without a keyset, also counts every User the filters match within the same
-// visibility.
-func (s *userProfileService) SearchUsers(ctx context.Context, invocation invocation.Invocation, query SearchUsersQuery) (CountedPage[*model.User], error) {
+// User directory summaries show at most this many entries of each kind.
+const (
+	userDirectorySummaryAffiliations  = 3
+	userDirectorySummaryAcademicUnits = 2
+	userDirectorySummaryRoles         = 3
+)
+
+// UserDirectoryEntry is one User directory row: the profile the caller may
+// read and its bounded summary. Memberships holds the User's current
+// Affiliations and the current Academic Units the caller's visibility reaches.
+// Roles holds the current Role Bindings inside the caller's role_binding.view
+// scopes and is nil when the caller holds role_binding.view nowhere.
+type UserDirectoryEntry struct {
+	User        *model.User
+	Memberships store.UserDirectorySummary
+	Roles       *store.UserRoleBindingSummary
+}
+
+// SearchUsers reads one page of the User directory with each User's summary.
+// The first page, read without a keyset, also counts every User the filters
+// match within the same visibility.
+func (s *userProfileService) SearchUsers(ctx context.Context, invocation invocation.Invocation, query SearchUsersQuery) (CountedPage[UserDirectoryEntry], error) {
 	page, options, err := s.listUsers(ctx, invocation, query)
 	if err != nil {
-		return CountedPage[*model.User]{}, err
+		return CountedPage[UserDirectoryEntry]{}, err
 	}
 	total, consistent, err := countFirstPage(query.AfterID == "", len(page.Items), func(maximum int) (int, error) {
 		return s.deps.Users.Count(ctx, options, maximum)
 	})
 	if err != nil {
-		return CountedPage[*model.User]{}, userStoreErrors.Translate(err)
+		return CountedPage[UserDirectoryEntry]{}, userStoreErrors.Translate(err)
 	}
 	if !consistent {
-		return CountedPage[*model.User]{}, apperror.New("administration.unavailable").WithField("resource", "user")
+		return CountedPage[UserDirectoryEntry]{}, apperror.New("administration.unavailable").WithField("resource", "user")
 	}
-	return CountedPage[*model.User]{Page: page, PageTotal: total}, nil
+	entries, err := s.summarizeUsers(ctx, invocation, page.Items, options.Visibility)
+	if err != nil {
+		return CountedPage[UserDirectoryEntry]{}, err
+	}
+	return CountedPage[UserDirectoryEntry]{Page: Page[UserDirectoryEntry]{Items: entries, HasMore: page.HasMore}, PageTotal: total}, nil
+}
+
+// summarizeUsers attaches each listed User's summary, read in one batch per
+// half at the visibility's own instant so the summary and the page agree on
+// what is current. Role Bindings are read only within the caller's
+// role_binding.view scopes, resolved once for the page.
+func (s *userProfileService) summarizeUsers(ctx context.Context, invocation invocation.Invocation, users []*model.User, visibility store.UserVisibilityScope) ([]UserDirectoryEntry, error) {
+	entries := make([]UserDirectoryEntry, 0, len(users))
+	if len(users) == 0 {
+		return entries, nil
+	}
+	if visibility.ActiveAt.IsZero() {
+		visibility.ActiveAt = model.TimeUTC(s.deps.Now())
+	}
+	userIDs := make([]model.UserID, 0, len(users))
+	for _, user := range users {
+		userIDs = append(userIDs, user.ID)
+	}
+	memberships, err := s.deps.Users.ListDirectorySummaries(ctx, store.UserDirectorySummaryOptions{
+		UserIDs: userIDs, Visibility: visibility,
+		AffiliationLimit: userDirectorySummaryAffiliations, AcademicUnitLimit: userDirectorySummaryAcademicUnits,
+	})
+	if err != nil {
+		return nil, userStoreErrors.Translate(err)
+	}
+	membershipsByUser := make(map[model.UserID]store.UserDirectorySummary, len(memberships))
+	for _, summary := range memberships {
+		membershipsByUser[summary.UserID] = summary
+	}
+	roleScope, err := s.deps.Authorization.RoleBindingViewScope(ctx, invocation, visibility.ActiveAt)
+	if err != nil {
+		return nil, err
+	}
+	rolesVisible := roleScope.InstitutionWide || len(roleScope.AcademicUnitRootIDs) > 0 || len(roleScope.ClassIDs) > 0
+	rolesByUser := map[model.UserID]store.UserRoleBindingSummary{}
+	if rolesVisible {
+		roleScope.ActiveAt = visibility.ActiveAt
+		roles, roleErr := s.deps.RoleBindings.ListVisibleSummariesByUsers(ctx, store.RoleBindingSummaryOptions{
+			UserIDs: userIDs, Visibility: roleScope, Limit: userDirectorySummaryRoles,
+		})
+		if roleErr != nil {
+			return nil, userStoreErrors.Translate(roleErr)
+		}
+		for _, summary := range roles {
+			rolesByUser[summary.UserID] = summary
+		}
+	}
+	for _, user := range users {
+		entry := UserDirectoryEntry{User: user, Memberships: membershipsByUser[user.ID]}
+		entry.Memberships.UserID = user.ID
+		if rolesVisible {
+			roles := rolesByUser[user.ID]
+			roles.UserID = user.ID
+			entry.Roles = &roles
+		}
+		entries = append(entries, entry)
+	}
+	return entries, nil
 }
 
 // searchUserPage is the uncounted directory read that global search composes.
@@ -310,6 +402,21 @@ type userProfileAuthorization struct {
 
 func (a userProfileAuthorization) AuthorizeSearch(ctx context.Context, invocation invocation.Invocation) (store.UserVisibilityScope, error) {
 	return a.authorization.authorizeUserSearch(ctx, invocation)
+}
+
+// RoleBindingViewScope derives the caller's role_binding.view scopes at the
+// instant, as the Role Binding list does, without recording a decision.
+func (a userProfileAuthorization) RoleBindingViewScope(ctx context.Context, invocation invocation.Invocation, at time.Time) (store.UserVisibilityScope, error) {
+	constraint, err := a.authorization.authorizedScopesAt(ctx, invocation.Principal(), model.ActionRoleBindingView, model.ResourceInstitution, model.TimeUTC(at))
+	if err != nil {
+		return store.UserVisibilityScope{}, err
+	}
+	return store.UserVisibilityScope{
+		InstitutionWide:     constraint.InstitutionWide,
+		AcademicUnitRootIDs: append([]model.AcademicUnitID(nil), constraint.AcademicUnitRootIDs...),
+		ClassIDs:            append([]model.ClassID(nil), constraint.ClassIDs...),
+		ActiveAt:            model.TimeUTC(at),
+	}, nil
 }
 
 // profileReadAuthorization reports how much of a User profile the caller

@@ -637,6 +637,11 @@ func (s *userStore) List(ctx context.Context, options store.UserListOptions) ([]
 func (s *userStore) Count(ctx context.Context, options store.UserListOptions, maximum int) (int, error) {
 	return retryCall1(ctx, s.layer, func() (int, error) { return s.UserStore.Count(ctx, options, maximum) })
 }
+func (s *userStore) ListDirectorySummaries(ctx context.Context, options store.UserDirectorySummaryOptions) ([]store.UserDirectorySummary, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.UserDirectorySummary, error) {
+		return s.UserStore.ListDirectorySummaries(ctx, options)
+	})
+}
 func (s *userStore) MatchVisibility(ctx context.Context, userID model.UserID, visibility store.UserVisibilityScope) (store.UserVisibilityMatch, error) {
 	return retryCall1(ctx, s.layer, func() (store.UserVisibilityMatch, error) {
 		return s.UserStore.MatchVisibility(ctx, userID, visibility)
@@ -788,6 +793,11 @@ func (s *roleBindingStore) ListByUser(ctx context.Context, userID model.UserID) 
 func (s *roleBindingStore) ListVisibleByUser(ctx context.Context, userID model.UserID, visibility store.UserVisibilityScope) ([]*model.RoleBinding, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.RoleBinding, error) {
 		return s.RoleBindingStore.ListVisibleByUser(ctx, userID, visibility)
+	})
+}
+func (s *roleBindingStore) ListVisibleSummariesByUsers(ctx context.Context, options store.RoleBindingSummaryOptions) ([]store.UserRoleBindingSummary, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.UserRoleBindingSummary, error) {
+		return s.RoleBindingStore.ListVisibleSummariesByUsers(ctx, options)
 	})
 }
 func (s *roleBindingStore) ListByScope(ctx context.Context, scopeType model.RoleScopeType, scopeID string) ([]*model.RoleBinding, error) {

@@ -501,7 +501,10 @@ components:
         - academic_unit_ids
       properties:
         name:
-          $ref: '#/components/schemas/PersonalAccessTokenScope'
+          type: string
+          anyOf:
+            - $ref: '#/components/schemas/PersonalAccessTokenScope'
+            - type: string
         title:
           description: Short localized title.
           type: string

@@ -945,6 +945,17 @@ may not list is omitted with its flag, and any other failure fails the
 request so an outage never reads as an empty queue. It requires an interactive
 Session and answers `Cache-Control: private, no-store`.
 
+## Growing catalogues
+
+Error codes, Job types and stages, audit actions, resource types, mail template
+and failure keys, onboarding import codes, batch item codes, self-audit events,
+and Personal Access Token scopes are closed catalogues that grow. Each is one
+OpenAPI component enum kept equal to its Go source by a test. Request
+parameters and bodies reference the enum directly, so the server refuses an
+unknown value. Response members accept the enum or any other string, so a
+client generated from an older contract keeps working when a value is added;
+clients present an unknown value generically.
+
 ## Ownership and extension workflow
 
 `httpapi.New` is the production construction boundary. Its broad `Options` value

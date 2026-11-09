@@ -32,6 +32,7 @@ type MailDeliveryView struct {
 	ID                                          model.MailDeliveryID
 	OccurrenceID                                model.MailOccurrenceID
 	TargetUserID                                model.UserID
+	TargetInvitationID                          model.InvitationID
 	TemplateKey                                 model.MailTemplateKey
 	TemplateDigest                              string
 	MaskedRecipient                             string
@@ -432,7 +433,7 @@ func mailDeliveryView(delivery *model.MailDelivery) MailDeliveryView {
 	if delivery == nil {
 		return MailDeliveryView{}
 	}
-	return MailDeliveryView{ID: delivery.ID, OccurrenceID: delivery.OccurrenceID, TargetUserID: delivery.TargetUserID, TemplateKey: delivery.TemplateKey, TemplateDigest: delivery.TemplateDigest, MaskedRecipient: delivery.MaskedRecipient, State: delivery.State, CreatedAt: delivery.CreatedAt, UpdatedAt: delivery.UpdatedAt, MessageDate: delivery.MessageDate, Deadline: delivery.Deadline, MessageID: delivery.MessageID, AttemptCount: delivery.AttemptCount, AcceptedAt: delivery.AcceptedAt, FailedAt: delivery.FailedAt, PublicFailureCode: delivery.PublicFailureCode}
+	return MailDeliveryView{ID: delivery.ID, OccurrenceID: delivery.OccurrenceID, TargetUserID: delivery.TargetUserID, TargetInvitationID: delivery.TargetInvitationID, TemplateKey: delivery.TemplateKey, TemplateDigest: delivery.TemplateDigest, MaskedRecipient: delivery.MaskedRecipient, State: delivery.State, CreatedAt: delivery.CreatedAt, UpdatedAt: delivery.UpdatedAt, MessageDate: delivery.MessageDate, Deadline: delivery.Deadline, MessageID: delivery.MessageID, AttemptCount: delivery.AttemptCount, AcceptedAt: delivery.AcceptedAt, FailedAt: delivery.FailedAt, PublicFailureCode: delivery.PublicFailureCode}
 }
 
 var mailStoreErrors = apperror.StoreTable{

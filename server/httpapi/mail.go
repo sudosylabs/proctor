@@ -75,22 +75,23 @@ type mailKeyStateResponse struct {
 }
 
 type mailDeliveryResponse struct {
-	ID                string                  `json:"id"`
-	OccurrenceID      string                  `json:"occurrence_id"`
-	TargetUserID      string                  `json:"target_user_id"`
-	TemplateKey       model.MailTemplateKey   `json:"template_key"`
-	TemplateDigest    string                  `json:"template_digest"`
-	MaskedRecipient   string                  `json:"masked_recipient"`
-	State             model.MailDeliveryState `json:"state"`
-	CreatedAt         string                  `json:"created_at"`
-	UpdatedAt         string                  `json:"updated_at"`
-	MessageDate       string                  `json:"message_date"`
-	Deadline          string                  `json:"deadline"`
-	MessageID         string                  `json:"message_id"`
-	AttemptCount      int                     `json:"attempt_count"`
-	AcceptedAt        string                  `json:"accepted_at,omitempty"`
-	FailedAt          string                  `json:"failed_at,omitempty"`
-	PublicFailureCode string                  `json:"public_failure_code,omitempty"`
+	ID                 string                  `json:"id"`
+	OccurrenceID       string                  `json:"occurrence_id"`
+	TargetUserID       string                  `json:"target_user_id,omitempty"`
+	TargetInvitationID string                  `json:"target_invitation_id,omitempty"`
+	TemplateKey        model.MailTemplateKey   `json:"template_key"`
+	TemplateDigest     string                  `json:"template_digest"`
+	MaskedRecipient    string                  `json:"masked_recipient"`
+	State              model.MailDeliveryState `json:"state"`
+	CreatedAt          string                  `json:"created_at"`
+	UpdatedAt          string                  `json:"updated_at"`
+	MessageDate        string                  `json:"message_date"`
+	Deadline           string                  `json:"deadline"`
+	MessageID          string                  `json:"message_id"`
+	AttemptCount       int                     `json:"attempt_count"`
+	AcceptedAt         string                  `json:"accepted_at,omitempty"`
+	FailedAt           string                  `json:"failed_at,omitempty"`
+	PublicFailureCode  string                  `json:"public_failure_code,omitempty"`
 }
 
 // mailDeliveryListResponse is the collection envelope; the first page also
@@ -441,7 +442,7 @@ func mailDeliveryCursorSpec() opaqueCursorSpec[mailDeliveryCursor] {
 }
 
 func mailResponse(view app.MailDeliveryView) mailDeliveryResponse {
-	result := mailDeliveryResponse{ID: view.ID.String(), OccurrenceID: view.OccurrenceID.String(), TargetUserID: view.TargetUserID.String(), TemplateKey: view.TemplateKey, TemplateDigest: view.TemplateDigest, MaskedRecipient: view.MaskedRecipient, State: view.State, CreatedAt: model.FormatRFC3339(view.CreatedAt), UpdatedAt: model.FormatRFC3339(view.UpdatedAt), MessageDate: model.FormatRFC3339(view.MessageDate), Deadline: model.FormatRFC3339(view.Deadline), MessageID: view.MessageID, AttemptCount: view.AttemptCount, PublicFailureCode: view.PublicFailureCode}
+	result := mailDeliveryResponse{ID: view.ID.String(), OccurrenceID: view.OccurrenceID.String(), TargetUserID: view.TargetUserID.String(), TargetInvitationID: view.TargetInvitationID.String(), TemplateKey: view.TemplateKey, TemplateDigest: view.TemplateDigest, MaskedRecipient: view.MaskedRecipient, State: view.State, CreatedAt: model.FormatRFC3339(view.CreatedAt), UpdatedAt: model.FormatRFC3339(view.UpdatedAt), MessageDate: model.FormatRFC3339(view.MessageDate), Deadline: model.FormatRFC3339(view.Deadline), MessageID: view.MessageID, AttemptCount: view.AttemptCount, PublicFailureCode: view.PublicFailureCode}
 	if view.AcceptedAt.Valid {
 		result.AcceptedAt = view.AcceptedAt.FormatRFC3339()
 	}

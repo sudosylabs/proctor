@@ -141,7 +141,10 @@ components:
           type: string
           description: Safe Session identity associated with the action when retained; never a credential.
         action:
-          $ref: '#/components/schemas/AuditAction'
+          type: string
+          anyOf:
+            - $ref: '#/components/schemas/AuditAction'
+            - type: string
           description: Stable permission-style name of the attempted action.
         resource:
           type: object
@@ -151,7 +154,10 @@ components:
             - id
           properties:
             type:
-              $ref: '#/components/schemas/ResourceType'
+              type: string
+              anyOf:
+                - $ref: '#/components/schemas/ResourceType'
+                - type: string
               description: Stable resource type acted upon.
             id:
               $ref: '#/components/schemas/ID'

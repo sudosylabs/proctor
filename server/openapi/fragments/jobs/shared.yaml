@@ -125,7 +125,10 @@ components:
           minimum: 1
           description: Total work units expected in the current stage.
         stage:
-          $ref: '#/components/schemas/JobStage'
+          type: string
+          anyOf:
+            - $ref: '#/components/schemas/JobStage'
+            - type: string
           description: Stable safe name of the current processing stage.
     JobResponse:
       description: Safe durable state of an allowlisted background Job.
@@ -145,7 +148,10 @@ components:
         id:
           $ref: '#/components/schemas/ID'
         type:
-          $ref: '#/components/schemas/JobType'
+          type: string
+          anyOf:
+            - $ref: '#/components/schemas/JobType'
+            - type: string
           description: Stable allowlisted Job type.
         status:
           $ref: '#/components/schemas/JobStatus'
@@ -170,7 +176,10 @@ components:
           format: date-time
           description: Time when the Job reached a terminal state.
         public_error_code:
-          $ref: '#/components/schemas/JobErrorCode'
+          type: string
+          anyOf:
+            - $ref: '#/components/schemas/JobErrorCode'
+            - type: string
           description: Stable safe failure category; private worker and infrastructure errors are never exposed.
         attempt_count:
           type: integer

@@ -74,7 +74,10 @@ components:
         - maximum_processing_latency_millis
       properties:
         template_key:
-          $ref: '#/components/schemas/MailTemplateKey'
+          type: string
+          anyOf:
+            - $ref: '#/components/schemas/MailTemplateKey'
+            - type: string
         state:
           $ref: '#/components/schemas/MailDeliveryState'
         outcome_code:
@@ -115,7 +118,10 @@ components:
         - truncated
       properties:
         template_key:
-          $ref: '#/components/schemas/MailTemplateKey'
+          type: string
+          anyOf:
+            - $ref: '#/components/schemas/MailTemplateKey'
+            - type: string
         state:
           $ref: '#/components/schemas/MailDeliveryState'
         outcome_code:

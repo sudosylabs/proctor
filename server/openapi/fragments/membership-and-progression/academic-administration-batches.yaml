@@ -208,7 +208,10 @@ components:
         resource_id:
           $ref: '#/components/schemas/ID'
         error_code:
-          $ref: '#/components/schemas/AcademicAdministrationBatchErrorCode'
+          type: string
+          anyOf:
+            - $ref: '#/components/schemas/AcademicAdministrationBatchErrorCode'
+            - type: string
     AcademicAdministrationBatchResponse:
       type: object
       additionalProperties: false

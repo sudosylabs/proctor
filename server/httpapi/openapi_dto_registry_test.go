@@ -149,6 +149,7 @@ var openAPIDTOs = map[string]reflect.Type{
 	"DesktopReauthenticationStartRequest":            reflect.TypeOf(desktopReauthenticationStartRequest{}),
 	"DesktopCompatibilityPolicyRequest":              reflect.TypeOf(desktopCompatibilityPolicyRequest{}),
 	"DesktopCompatibilityPolicyResponse":             reflect.TypeOf(desktopCompatibilityPolicyResponse{}),
+	"DisableUserRequest":                             reflect.TypeOf(disableUserRequest{}),
 	"EditExamDraftTextRequest":                       reflect.TypeOf(editExamDraftTextRequest{}),
 	"EditExamResourceMetadataRequest":                reflect.TypeOf(editExamResourceMetadataRequest{}),
 	"EffectiveExamSecurityPolicy":                    reflect.TypeOf(model.EffectiveExamSecurityPolicy{}),

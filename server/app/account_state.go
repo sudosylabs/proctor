@@ -9,7 +9,10 @@ package app
 
 import (
 	"context"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
@@ -19,9 +22,14 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SetUserEnabledCommand enables or disables a User. Reason, accepted only
+// when disabling, is the administrator's optional note; it is trimmed, holds
+// 1 to MaximumAccountDisableReasonRunes runes without control characters,
+// and is kept only in the audit event's parameters.
 type SetUserEnabledCommand struct {
 	ID                        model.UserID
 	Enabled                   bool
+	Reason                    *string
 	IdempotencyKey            string
 	batchReplayed             *bool
 	batchAuthorization        *store.CommandAuthorization
@@ -29,6 +37,23 @@ type SetUserEnabledCommand struct {
 	batchRetainedOutcome      bool
 	onboardingImportID        model.OnboardingImportID
 	onboardingImportRowNumber int
+}
+
+// MaximumAccountDisableReasonRunes bounds the optional disable reason.
+const MaximumAccountDisableReasonRunes = 500
+
+// accountDisableReason validates the optional disable reason and returns it
+// trimmed; an absent reason is empty.
+func accountDisableReason(command SetUserEnabledCommand) (string, error) {
+	if command.Reason == nil {
+		return "", nil
+	}
+	reason := strings.TrimSpace(*command.Reason)
+	if command.Enabled || reason == "" || utf8.RuneCountInString(reason) > MaximumAccountDisableReasonRunes ||
+		!utf8.ValidString(reason) || strings.ContainsFunc(reason, unicode.IsControl) {
+		return "", apperror.Invalid("request.invalid", "reason")
+	}
+	return reason, nil
 }
 
 type accountStateStore interface {
@@ -69,6 +94,10 @@ func (s *accountStateService) SetUserEnabled(ctx context.Context, invocation inv
 	if !userID.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "user_id")
 	}
+	reason, err := accountDisableReason(command)
+	if err != nil {
+		return nil, err
+	}
 	if err := s.deps.Authorization.AuthorizeAccountStateManage(ctx, invocation, userID); err != nil {
 		return nil, err
 	}
@@ -83,7 +112,8 @@ func (s *accountStateService) SetUserEnabled(ctx context.Context, invocation inv
 	idempotency, err := idempotency.Prepare(invocation, "user.enabled_state", command.IdempotencyKey, struct {
 		UserID  string `json:"user_id"`
 		Enabled bool   `json:"enabled"`
-	}{userID.String(), command.Enabled})
+		Reason  string `json:"reason,omitempty"`
+	}{userID.String(), command.Enabled, reason})
 	if err != nil {
 		return nil, err
 	}
@@ -111,6 +141,10 @@ func (s *accountStateService) SetUserEnabled(ctx context.Context, invocation inv
 	if disabled {
 		operation = model.AuditOperationDisableAccount
 	}
+	parameters := map[string]any{"user_id": userID, "disabled": disabled}
+	if reason != "" {
+		parameters["reason"] = reason
+	}
 	result, err := runAuditedMutation(
 		ctx,
 		s.deps.Audit,
@@ -119,7 +153,7 @@ func (s *accountStateService) SetUserEnabled(ctx context.Context, invocation inv
 			Action:     model.ActionUserManage,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: userID.String()},
 			Operation:  operation,
-			Value:      map[string]any{"user_id": userID, "disabled": disabled},
+			Value:      parameters,
 			Prior:      current.Auditable(),
 		},
 		func() time.Time { return now },

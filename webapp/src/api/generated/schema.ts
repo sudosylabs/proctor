@@ -5392,7 +5392,7 @@ export interface paths {
         put?: never;
         /**
          * Disable a User account and revoke its active sessions
-         * @description Disables the target User and atomically revokes active Sessions after checking current authority and last-system-administrator safety. Historical affiliations, memberships, Role Bindings, attempts, submissions, and audit records are retained.
+         * @description Disables the target User and atomically revokes active Sessions after checking current authority and last-system-administrator safety. Historical affiliations, memberships, Role Bindings, attempts, submissions, and audit records are retained. An optional `reason` is recorded only in the operator audit record; it is not stored on the User and Academic Unit audit readers never receive it.
          */
         post: operations["disableUser"];
         delete?: never;
@@ -6023,6 +6023,8 @@ export interface components {
             id: components["schemas"]["ID"];
             ip_address?: string;
             node_id?: string;
+            /** @description Reason recorded when an account was disabled, present only on that event, only when one was given, and only for Institution-wide audit readers. */
+            reason?: string;
             /** @description Safe request correlation value when the action originated over a request transport. */
             request_id?: string;
             resource: {
@@ -7335,6 +7337,10 @@ export interface components {
             realtime_protocol: number;
             /** @enum {string} */
             status: "active" | "revoked";
+        };
+        DisableUserRequest: {
+            /** @description Why the account is disabled, trimmed of surrounding white space: up to 500 characters with no control characters, and not only white space. An empty string means no reason. It is kept only in the audit record, where Institution-wide audit readers see it on the disable event. */
+            reason?: string;
         };
         EditExamDraftTextRequest: {
             /** Format: int64 */
@@ -22220,7 +22226,17 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        /** @description Optional reason for the audit record. A request without a body disables without a reason. */
+        requestBody?: {
+            content: {
+                /**
+                 * @example {
+                 *       "reason": "Left the institution"
+                 *     }
+                 */
+                "application/json": components["schemas"]["DisableUserRequest"];
+            };
+        };
         responses: {
             200: components["responses"]["UserProfileOK"];
             400: components["responses"]["BadRequest"];

@@ -15,14 +15,16 @@ paths:
       tags:
         - Users
       description: >-
-        Disables the target User and atomically revokes active Sessions after checking current authority and last-system-administrator safety. Historical affiliations, memberships, Role Bindings, attempts, submissions, and audit records are retained.
+        Disables the target User and atomically revokes active Sessions after checking current authority and last-system-administrator safety. Historical affiliations, memberships, Role Bindings, attempts, submissions, and audit records are retained. An optional `reason` is recorded only in the operator audit record; it is not stored on the User and Academic Unit audit readers never receive it.
       x-codeSamples:
         - lang: Shell
           source: |-
             curl --request POST \
               --url 'https://proctor.example.edu/api/v1/users/<user-id>/disable' \
               --header 'Authorization: Bearer <token>' \
-              --header 'X-Proctor-CSRF-Token: <session-csrf-token>'
+              --header 'X-Proctor-CSRF-Token: <session-csrf-token>' \
+              --header 'Content-Type: application/json' \
+              --data '{"reason": "Left the institution"}'
       x-proctor-auth: principal_required
       x-proctor-idempotency: none
       x-proctor-error-codes:
@@ -49,6 +51,16 @@ paths:
         - dpopAuth: []
         - sessionCookie: []
           csrfToken: []
+      requestBody:
+        required: false
+        description: >-
+          Optional reason for the audit record. A request without a body disables without a reason.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisableUserRequest'
+            example:
+              reason: Left the institution
       responses:
         "200":
           $ref: '#/components/responses/UserProfileOK'
@@ -66,3 +78,16 @@ paths:
           $ref: '#/components/responses/InternalError'
         "503":
           $ref: '#/components/responses/ServiceUnavailable'
+components:
+  schemas:
+    DisableUserRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          description: >-
+            Why the account is disabled, trimmed of surrounding white space: up to 500 characters with no control
+            characters, and not only white space. An empty string means no reason. It is kept only in the audit
+            record, where Institution-wide audit readers see it on the disable event.

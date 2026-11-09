@@ -177,6 +177,12 @@ components:
         error_code:
           type: string
           description: Stable safe failure category for an unsuccessful action; internal detail is omitted.
+        reason:
+          type: string
+          maxLength: 500
+          description: >-
+            Reason recorded when an account was disabled, present only on that event, only when one was given, and
+            only for Institution-wide audit readers.
     AuditListResponse:
       description: One bounded page of authorized audit Events.
       type: object

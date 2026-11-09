@@ -539,6 +539,47 @@ func TestAccountDisableUsesApplicationCommandAndAllowlistedResponse(t *testing.T
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
 	_, exposed := body["revision"]
 	require.False(t, exposed, "revision exposed: %#v", body)
+	require.Nil(t, accounts.command.Reason, "a request without a body carries no reason")
+}
+
+func TestAccountDisableReadsAnOptionalReasonBody(t *testing.T) {
+	t.Parallel()
+	logger, _ := newTestLogger(t)
+	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
+	userID := model.NewID()
+	serve := func(path, body string) (*httptest.ResponseRecorder, *accountStateHTTPApplication) {
+		accounts := &accountStateHTTPApplication{result: &model.User{ID: model.UserID(userID), Username: "student", DisabledAt: model.OptionalTimeFromMillis(500)}}
+		httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userAdministrationResource(accounts, &sessionAdministrationHTTPApplication{}))
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/users/"+userID+path, strings.NewReader(body))
+		request.Header.Set("Authorization", "Bearer credential")
+		if body != "" {
+			request.Header.Set("Content-Type", "application/json")
+		}
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		return response, accounts
+	}
+
+	response, accounts := serve("/disable", `{"reason":"  Left the institution "}`)
+	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
+	require.NotNil(t, accounts.command.Reason)
+	require.Equal(t, "  Left the institution ", *accounts.command.Reason, "the application owns trimming and bounds")
+
+	response, accounts = serve("/disable", `{}`)
+	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
+	require.Nil(t, accounts.command.Reason, "an empty object carries no reason")
+	response, accounts = serve("/disable", `{"reason":""}`)
+	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
+	require.Nil(t, accounts.command.Reason, "an empty reason is an omitted one")
+
+	for _, body := range []string{`{"reason":"x","note":"y"}`, `{"reason":42}`, `not json`} {
+		response, _ = serve("/disable", body)
+		require.Equal(t, http.StatusBadRequest, response.Code, "%s: status = %d: %s", body, response.Code, response.Body.String())
+	}
+
+	response, accounts = serve("/enable", `{"reason":"back"}`)
+	require.Equal(t, http.StatusOK, response.Code, "enable ignores a body as before: %s", response.Body.String())
+	require.Nil(t, accounts.command.Reason)
 }
 
 func TestUserProfileOpenAPIDocument(t *testing.T) {

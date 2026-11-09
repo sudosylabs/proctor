@@ -46,8 +46,12 @@ type auditEventResponse struct {
 	IPAddress  string                `json:"ip_address,omitempty"`
 	UserAgent  string                `json:"user_agent,omitempty"`
 	ErrorCode  string                `json:"error_code,omitempty"`
-	// Parameters, prior_state, and result remain application/operator-only and
-	// are intentionally omitted from the public audit list projection.
+	// Reason is the optional account disable reason. Institution-wide readers
+	// receive it; academic-scoped readers never do because their projection
+	// drops parameters.
+	Reason string `json:"reason,omitempty"`
+	// Other parameters, prior_state, and result remain application/operator-only
+	// and are intentionally omitted from the public audit list projection.
 }
 
 type auditResourceResponse struct {
@@ -65,6 +69,7 @@ func auditEventResponseFromModel(event *model.AuditEvent) auditEventResponse {
 		Status: event.Status, RequestID: event.RequestID, NodeID: event.NodeID,
 		ClientType: event.ClientType, AuthMethod: event.AuthMethod,
 		IPAddress: event.IPAddress, UserAgent: event.UserAgent, ErrorCode: event.ErrorCode,
+		Reason: event.AccountDisableReason(),
 	}
 }
 

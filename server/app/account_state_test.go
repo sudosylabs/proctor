@@ -10,6 +10,7 @@ package app
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -113,6 +114,65 @@ func TestAccountDisableCommitsBeforePublishingRevocation(t *testing.T) {
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
 	require.Equal(t, []string{"authorize-manage", "get-user", "prepare-mail", "audit-begin", "store-set-disabled", "publish-revocation"}, events)
+}
+
+func TestAccountDisableRecordsTheTrimmedReasonOnlyInAuditParameters(t *testing.T) {
+	t.Parallel()
+	for name, test := range map[string]struct {
+		reason *string
+		want   any
+	}{
+		"absent":  {},
+		"trimmed": {reason: new("  Left the institution\t"), want: "Left the institution"},
+		"longest": {reason: new(strings.Repeat("é", MaximumAccountDisableReasonRunes)), want: strings.Repeat("é", MaximumAccountDisableReasonRunes)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			events := []string{}
+			user := &model.User{ID: model.NewUserID(), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100), Revision: 3, Username: "student", Locale: "en", Timezone: "UTC"}
+			updated := *user
+			updated.DisabledAt = model.OptionalTimeFromMillis(500)
+			persistence := &accountStateStoreFake{events: &events, user: user, result: &store.UserDisabledStateResult{User: &updated}}
+			auditor := &institutionAuditorFake{events: &events, beginID: model.NewID()}
+			service := newAccountStateService(accountStateServiceDependencies{Users: persistence, Authorization: &userProfileAuthorizerFake{events: &events}, Capabilities: &accessPolicyCapabilitiesFake{}, Audit: auditor, Mail: &securityNoticeMailerFake{events: &events}, Effects: &accountStateEffectsFake{events: &events}, Now: func() time.Time { return time.UnixMilli(500) }})
+			_, err := service.SetUserEnabled(context.Background(), invocation.Invocation{}, SetUserEnabledCommand{ID: user.ID, Reason: test.reason})
+			require.NoError(t, err)
+			require.Len(t, auditor.values, 1)
+			reason, present := auditor.values[0]["reason"]
+			require.Equal(t, test.want != nil, present, "parameters = %#v", auditor.values[0])
+			if present {
+				require.Equal(t, test.want, reason)
+			}
+			require.Equal(t, true, auditor.values[0]["disabled"])
+			require.Equal(t, user.ID, auditor.values[0]["user_id"])
+		})
+	}
+}
+
+func TestAccountDisableRejectsAnInvalidReasonBeforeAuthorization(t *testing.T) {
+	t.Parallel()
+	for name, test := range map[string]struct {
+		reason  string
+		enabled bool
+	}{
+		"blank":           {reason: " \t "},
+		"too long":        {reason: strings.Repeat("a", MaximumAccountDisableReasonRunes+1)},
+		"control":         {reason: "left\nthe institution"},
+		"C1 control":      {reason: "left\u0085the institution"},
+		"enable with one": {reason: "back", enabled: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			events := []string{}
+			service := newAccountStateService(accountStateServiceDependencies{Users: &accountStateStoreFake{events: &events}, Authorization: &userProfileAuthorizerFake{events: &events}, Capabilities: &accessPolicyCapabilitiesFake{}, Audit: &institutionAuditorFake{events: &events}, Mail: &securityNoticeMailerFake{events: &events}, Effects: &accountStateEffectsFake{events: &events}, Now: time.Now})
+			_, err := service.SetUserEnabled(context.Background(), invocation.Invocation{}, SetUserEnabledCommand{ID: model.NewUserID(), Enabled: test.enabled, Reason: &test.reason})
+			var appErr *apperror.Error
+			require.ErrorAs(t, err, &appErr)
+			require.Equal(t, "request.invalid", appErr.Code())
+			require.Equal(t, "reason", appErr.Fields()["field"])
+			require.Empty(t, events, "an invalid reason must not authorize, read, or audit")
+		})
+	}
 }
 
 func TestAccountDisableFailurePublishesNoRevocation(t *testing.T) {

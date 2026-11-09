@@ -8,7 +8,10 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -210,5 +213,49 @@ func TestAuditListingPassesCreatedRangeAndRejectsAnEmptyOne(t *testing.T) {
 			require.True(t, apperror.Is(err, "audit.query.invalid"), "error = %v", err)
 			require.Equal(t, []string{"authorize-view"}, events, "an empty range must not read")
 		})
+	}
+}
+
+// TestAccountDisableReasonReachesOnlyInstitutionAuditReaders proves the
+// optional disable reason, kept only in audit parameters, stays with
+// institution-wide readers: the Academic Unit projection drops parameters,
+// and the self history carries none at all.
+func TestAccountDisableReasonReachesOnlyInstitutionAuditReaders(t *testing.T) {
+	t.Parallel()
+	rootID := model.NewAcademicUnitID()
+	parameters := json.RawMessage(`{"operation":"disable_account","value":{"user_id":"u","disabled":true,"reason":"Left the institution"}}`)
+	event := &model.AuditEvent{
+		ID: model.NewAuditEventID(), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100),
+		Action: string(model.ActionUserManage), Resource: model.Resource{Type: model.ResourceUser, ID: model.NewUserID().String()},
+		ScopeType: model.RoleScopeAcademicUnit, ScopeID: rootID.String(), Status: model.AuditStatusSuccess,
+		Parameters: parameters,
+	}
+	for name, test := range map[string]struct {
+		scope      store.AuditVisibilityScope
+		wantReason bool
+	}{
+		"institution": {scope: store.AuditVisibilityScope{InstitutionWide: true}, wantReason: true},
+		"academic unit": {scope: store.AuditVisibilityScope{
+			AcademicUnitRootIDs: []model.AcademicUnitID{rootID}, AllowedActions: []string{string(model.ActionUserManage)},
+		}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			events := []string{}
+			service := newAuditListingService(auditListingServiceDependencies{
+				Audits:        &auditListingStoreFake{events: &events, list: []*model.AuditEvent{event}},
+				Authorization: &auditListingAuthorizerFake{events: &events, scope: test.scope},
+			})
+			got, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{Limit: 10})
+			require.NoError(t, err)
+			require.Len(t, got.Items, 1)
+			require.Equal(t, test.wantReason, bytes.Contains(got.Items[0].Parameters, []byte(`"reason"`)), "parameters = %s", got.Items[0].Parameters)
+			require.JSONEq(t, string(parameters), string(event.Parameters), "the projection mutated the stored event")
+		})
+	}
+	for _, shape := range []reflect.Type{reflect.TypeFor[SelfAuditEvent](), reflect.TypeFor[store.AuditSelfEntry]()} {
+		for field := range shape.Fields() {
+			require.NotContains(t, []string{"Parameters", "Reason"}, field.Name, "%s carries audit parameters", shape)
+		}
 	}
 }

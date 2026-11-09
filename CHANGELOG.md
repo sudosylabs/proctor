@@ -225,6 +225,12 @@ module when a change is not server-only. No module has been released yet.
 - Server: `GET /api/v1/audits` takes `created_after` (inclusive) and
   `created_before` (exclusive) RFC 3339 bounds, validated like the self audit
   history's.
+- Server: `POST /api/v1/users/{user_id}/disable` accepts an optional JSON body
+  `{"reason": "..."}`, trimmed, at most 500 characters and without control
+  characters. The reason is kept only in the audit record; `GET /api/v1/audits`
+  shows it as `reason` on the disable event to Institution-wide readers, while
+  Academic Unit readers and the self audit history never receive it. A request
+  without a body behaves as before.
 - Server: `GET /api/v1/users/me/audits` takes `order=asc` to read oldest
   first, and its first page reports `total`, the events the filters match,
   exact below 10,000 and flagged by `total_is_lower_bound` at that bound.

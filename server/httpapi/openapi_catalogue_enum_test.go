@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -68,6 +69,21 @@ func TestErrorCodeEnumMatchesTheCatalogue(t *testing.T) {
 	}
 	sort.Strings(codes)
 	require.Equal(t, codes, openAPIComponentEnum(t, "ErrorCode"))
+}
+
+func TestMailFailureCodeEnumMatchesTheCatalogue(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, model.MailPublicFailureCodes(), openAPIComponentEnum(t, "MailFailureCode"))
+}
+
+func TestAcademicAdministrationBatchErrorCodeEnumMatchesTheCatalogue(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, app.AcademicAdministrationBatchErrorCodes(), openAPIComponentEnum(t, "AcademicAdministrationBatchErrorCode"))
+}
+
+func TestInvitationBatchErrorCodeEnumMatchesTheCatalogue(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, app.InvitationBatchErrorCodes(), openAPIComponentEnum(t, "InvitationBatchErrorCode"))
 }
 
 func TestAuditActionEnumMatchesTheCatalogue(t *testing.T) {

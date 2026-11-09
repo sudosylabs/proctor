@@ -5683,6 +5683,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description Stable safe failure code of one academic administration batch item. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+         * @enum {string}
+         */
+        AcademicAdministrationBatchErrorCode: "request.invalid" | "resource.not_found" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "audit.unavailable" | "administration.unavailable" | "mail.unavailable" | "authentication.token_invalid" | "authentication.strong_required" | "authentication.reauthentication_required" | "affiliation.invalid" | "affiliation.conflict" | "affiliation.student_has_active_enrollment" | "academic_unit_member.invalid" | "academic_unit_member.conflict" | "class_member.invalid" | "class_member.student_affiliation_required" | "class.enrollment_conflict" | "role_binding.invalid" | "role_binding.conflict" | "role_binding.last_system_admin" | "role_binding.system_admin_scope_invalid" | "user.invalid" | "user.conflict" | "user.last_system_admin" | "session.not_found" | "idempotency.conflict" | "idempotency.in_progress" | "onboarding_batch.duplicate";
         AcademicAdministrationBatchItemRequest: {
             /** @enum {string} */
             affiliation_kind?: "student" | "teacher" | "staff";
@@ -5696,8 +5701,7 @@ export interface components {
             user_id?: components["schemas"]["ID"];
         };
         AcademicAdministrationBatchItemResponse: {
-            /** @enum {string} */
-            error_code?: "request.invalid" | "resource.not_found" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "audit.unavailable" | "administration.unavailable" | "mail.unavailable" | "authentication.token_invalid" | "authentication.strong_required" | "authentication.reauthentication_required" | "affiliation.invalid" | "affiliation.conflict" | "affiliation.student_has_active_enrollment" | "academic_unit_member.invalid" | "academic_unit_member.conflict" | "class_member.invalid" | "class_member.student_affiliation_required" | "class.enrollment_conflict" | "role_binding.invalid" | "role_binding.conflict" | "role_binding.last_system_admin" | "role_binding.system_admin_scope_invalid" | "user.invalid" | "user.conflict" | "user.last_system_admin" | "session.not_found" | "idempotency.conflict" | "idempotency.in_progress" | "onboarding_batch.duplicate";
+            error_code?: components["schemas"]["AcademicAdministrationBatchErrorCode"];
             index: number;
             resource_id?: components["schemas"]["ID"];
             /** @enum {string} */
@@ -8625,6 +8629,11 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /**
+         * @description Stable safe failure code of one Invitation batch item. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+         * @enum {string}
+         */
+        InvitationBatchErrorCode: "request.invalid" | "resource.not_found" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "audit.unavailable" | "administration.unavailable" | "authentication.token_invalid" | "authentication.strong_required" | "authentication.reauthentication_required" | "invitation.invalid" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.role_not_delegable" | "invitation.mail_unavailable" | "invitation.unavailable" | "idempotency.conflict" | "idempotency.in_progress" | "onboarding_batch.duplicate";
         InvitationBatchItemRequest: {
             /** Format: email */
             email?: string;
@@ -8645,8 +8654,7 @@ export interface components {
             suggested_username?: string;
         };
         InvitationBatchItemResponse: {
-            /** @enum {string} */
-            error_code?: "request.invalid" | "resource.not_found" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "audit.unavailable" | "administration.unavailable" | "authentication.token_invalid" | "authentication.strong_required" | "authentication.reauthentication_required" | "invitation.invalid" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.role_not_delegable" | "invitation.mail_unavailable" | "invitation.unavailable" | "idempotency.conflict" | "idempotency.in_progress" | "onboarding_batch.duplicate";
+            error_code?: components["schemas"]["InvitationBatchErrorCode"];
             index: number;
             invitation_id?: components["schemas"]["ID"];
             /** @enum {string} */
@@ -8676,7 +8684,7 @@ export interface components {
             /** Format: date-time */
             deadline: string;
             masked_recipient: string;
-            public_failure_code?: string;
+            public_failure_code?: components["schemas"]["MailFailureCode"];
             /** @enum {string} */
             state: "queued" | "sending" | "accepted" | "failed" | "suppressed" | "canceled";
             template_key: string;
@@ -9124,7 +9132,7 @@ export interface components {
             message_id: string;
             occurrence_id: components["schemas"]["ID"];
             /** @description Stable safe failure category; raw SMTP or infrastructure errors are never exposed. */
-            public_failure_code?: string;
+            public_failure_code?: components["schemas"]["MailFailureCode"];
             state: components["schemas"]["MailDeliveryState"];
             target_user_id: components["schemas"]["ID"];
             /** @description SHA-256 digest of the exact rendered template revision, encoded as lowercase hexadecimal. */
@@ -9141,6 +9149,11 @@ export interface components {
          * @enum {string}
          */
         MailDeliveryState: "queued" | "sending" | "accepted" | "failed" | "suppressed" | "canceled";
+        /**
+         * @description Stable safe failure category of a Mail Delivery: why it failed, was suppressed or canceled, or was retried by an operator. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+         * @enum {string}
+         */
+        MailFailureCode: "mail.delivery.canceled" | "mail.delivery.expired" | "mail.delivery.obsolete" | "mail.delivery.recipient_ineligible" | "mail.delivery.suppressed_disabled" | "mail.message.invalid" | "mail.operator.retry" | "mail.payload.unavailable" | "mail.transport.acceptance_uncertain" | "mail.transport.permanent" | "mail.transport.temporary" | "mail.transport.unknown";
         /** @description Safe key identities and references used to govern mail payload rotation. */
         MailKeyStateResponse: {
             /** @description Bounded keys with at least one active encrypted-payload reference. */

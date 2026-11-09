@@ -11,6 +11,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -565,20 +566,26 @@ func academicAdministrationModelOutcome(value any, replayed bool, metadata *stor
 	return id, status, nil
 }
 
+// AcademicAdministrationBatchErrorCodes is the closed catalogue of safe
+// failure codes an academic administration batch item reports. Any other
+// failure is reported as administration.unavailable.
+func AcademicAdministrationBatchErrorCodes() []string {
+	return []string{
+		"request.invalid", "resource.not_found", "authorization.denied", "authorization.request.invalid",
+		"authorization.unavailable", "audit.unavailable", "administration.unavailable", "mail.unavailable",
+		"authentication.token_invalid", "authentication.strong_required", "authentication.reauthentication_required",
+		"affiliation.invalid", "affiliation.conflict", "affiliation.student_has_active_enrollment",
+		"academic_unit_member.invalid", "academic_unit_member.conflict", "class_member.invalid",
+		"class_member.student_affiliation_required", "class.enrollment_conflict", "role_binding.invalid",
+		"role_binding.conflict", "role_binding.last_system_admin", "role_binding.system_admin_scope_invalid",
+		"user.invalid", "user.conflict", "user.last_system_admin", "session.not_found",
+		"idempotency.conflict", "idempotency.in_progress", "onboarding_batch.duplicate",
+	}
+}
+
 func academicAdministrationBatchPublicErrorCode(err error) string {
-	if failure, ok := apperror.As(err); ok {
-		switch failure.Code() {
-		case "request.invalid", "resource.not_found", "authorization.denied", "authorization.request.invalid",
-			"authorization.unavailable", "audit.unavailable", "administration.unavailable", "mail.unavailable",
-			"authentication.token_invalid", "authentication.strong_required", "authentication.reauthentication_required",
-			"affiliation.invalid", "affiliation.conflict", "affiliation.student_has_active_enrollment",
-			"academic_unit_member.invalid", "academic_unit_member.conflict", "class_member.invalid",
-			"class_member.student_affiliation_required", "class.enrollment_conflict", "role_binding.invalid",
-			"role_binding.conflict", "role_binding.last_system_admin", "role_binding.system_admin_scope_invalid",
-			"user.invalid", "user.conflict", "user.last_system_admin", "session.not_found",
-			"idempotency.conflict", "idempotency.in_progress", "onboarding_batch.duplicate":
-			return failure.Code()
-		}
+	if failure, ok := apperror.As(err); ok && slices.Contains(AcademicAdministrationBatchErrorCodes(), failure.Code()) {
+		return failure.Code()
 	}
 	return "administration.unavailable"
 }

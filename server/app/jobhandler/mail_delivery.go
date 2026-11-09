@@ -113,7 +113,7 @@ func (h mailDeliveryHandler) Run(ctx context.Context, execution job.Execution) j
 		// The last send attempt lost its worker mid-send. Its outcome is
 		// unknown and no attempt remains, so the delivery fails visibly for an
 		// operator instead of waiting Sending for its deadline.
-		return h.failAt(ctx, delivery, "mail.transport.acceptance_uncertain", errors.New("mail delivery attempts are exhausted"), now)
+		return h.failAt(ctx, delivery, model.MailTransportAcceptanceUncertainCode, errors.New("mail delivery attempts are exhausted"), now)
 	}
 	sending, err := h.deliveries.StartDelivery(ctx, &store.MailDeliveryStart{ID: delivery.ID, ExpectedRevision: delivery.Revision, At: now})
 	if err != nil {
@@ -152,9 +152,9 @@ func (h mailDeliveryHandler) send(ctx context.Context, execution job.Execution, 
 	message, err := mail.OpenDelivery(h.sealer, sending)
 	if err != nil {
 		if errors.Is(err, mail.ErrInvalidMessage) {
-			return h.fail(ctx, sending, "mail.message.invalid", err)
+			return h.fail(ctx, sending, model.MailMessageInvalidCode, err)
 		}
-		return h.fail(ctx, sending, "mail.payload.unavailable", err)
+		return h.fail(ctx, sending, model.MailPayloadUnavailableCode, err)
 	}
 	classification, err := h.sender.Send(ctx, message)
 	if err != nil {
@@ -290,13 +290,13 @@ func (h mailDeliveryHandler) recordAttempt(ctx context.Context, delivery *model.
 func mailTransportFailureCode(outcome mail.TransportOutcome) string {
 	switch outcome {
 	case mail.TransportPermanent:
-		return "mail.transport.permanent"
+		return model.MailTransportPermanentCode
 	case mail.TransportAcceptanceUncertain:
-		return "mail.transport.acceptance_uncertain"
+		return model.MailTransportAcceptanceUncertainCode
 	case mail.TransportTemporary:
-		return "mail.transport.temporary"
+		return model.MailTransportTemporaryCode
 	default:
-		return "mail.transport.unknown"
+		return model.MailTransportUnknownCode
 	}
 }
 
@@ -340,7 +340,7 @@ func mailCredentialDeliveryDescriptor(handler mailDeliveryHandler) job.Descripto
 }
 
 func newMailDeliveryDescriptor(jobType model.JobType, concurrency int, handler job.Handler) job.Descriptor {
-	return job.Descriptor{Type: jobType, PublicErrorCodes: []string{"mail.delivery.conflict", "mail.delivery.failed", "mail.delivery.not_found", "mail.delivery.unavailable", "mail.message.invalid", "mail.payload.unavailable", "mail.transport.acceptance_uncertain", "mail.transport.permanent", "mail.transport.temporary", "mail.transport.unknown"}, Timeout: time.Minute, Concurrency: concurrency, MaximumAttempts: model.MailMaximumAttempts, LeaseDuration: time.Minute, HeartbeatInterval: 15 * time.Second, BaseRetryDelay: 30 * time.Second, MaximumRetryDelay: 30 * time.Minute, Visibility: job.VisibilityOperator, SuccessRetention: 90 * 24 * time.Hour, FailureRetention: 180 * 24 * time.Hour, Handler: handler}
+	return job.Descriptor{Type: jobType, PublicErrorCodes: []string{"mail.delivery.conflict", "mail.delivery.failed", "mail.delivery.not_found", "mail.delivery.unavailable", model.MailMessageInvalidCode, model.MailPayloadUnavailableCode, model.MailTransportAcceptanceUncertainCode, model.MailTransportPermanentCode, model.MailTransportTemporaryCode, model.MailTransportUnknownCode}, Timeout: time.Minute, Concurrency: concurrency, MaximumAttempts: model.MailMaximumAttempts, LeaseDuration: time.Minute, HeartbeatInterval: 15 * time.Second, BaseRetryDelay: 30 * time.Second, MaximumRetryDelay: 30 * time.Minute, Visibility: job.VisibilityOperator, SuccessRetention: 90 * 24 * time.Hour, FailureRetention: 180 * 24 * time.Hour, Handler: handler}
 }
 
 // NewMailDeliveryDescriptor registers durable delivery of one frozen mail

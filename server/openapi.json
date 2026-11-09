@@ -5990,6 +5990,42 @@
       }
     },
     "schemas": {
+      "AcademicAdministrationBatchErrorCode": {
+        "description": "Stable safe failure code of one academic administration batch item. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
+        "enum": [
+          "request.invalid",
+          "resource.not_found",
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "administration.unavailable",
+          "mail.unavailable",
+          "authentication.token_invalid",
+          "authentication.strong_required",
+          "authentication.reauthentication_required",
+          "affiliation.invalid",
+          "affiliation.conflict",
+          "affiliation.student_has_active_enrollment",
+          "academic_unit_member.invalid",
+          "academic_unit_member.conflict",
+          "class_member.invalid",
+          "class_member.student_affiliation_required",
+          "class.enrollment_conflict",
+          "role_binding.invalid",
+          "role_binding.conflict",
+          "role_binding.last_system_admin",
+          "role_binding.system_admin_scope_invalid",
+          "user.invalid",
+          "user.conflict",
+          "user.last_system_admin",
+          "session.not_found",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "onboarding_batch.duplicate"
+        ],
+        "type": "string"
+      },
       "AcademicAdministrationBatchItemRequest": {
         "additionalProperties": false,
         "properties": {
@@ -6032,39 +6068,7 @@
         "additionalProperties": false,
         "properties": {
           "error_code": {
-            "enum": [
-              "request.invalid",
-              "resource.not_found",
-              "authorization.denied",
-              "authorization.request.invalid",
-              "authorization.unavailable",
-              "audit.unavailable",
-              "administration.unavailable",
-              "mail.unavailable",
-              "authentication.token_invalid",
-              "authentication.strong_required",
-              "authentication.reauthentication_required",
-              "affiliation.invalid",
-              "affiliation.conflict",
-              "affiliation.student_has_active_enrollment",
-              "academic_unit_member.invalid",
-              "academic_unit_member.conflict",
-              "class_member.invalid",
-              "class_member.student_affiliation_required",
-              "class.enrollment_conflict",
-              "role_binding.invalid",
-              "role_binding.conflict",
-              "role_binding.last_system_admin",
-              "role_binding.system_admin_scope_invalid",
-              "user.invalid",
-              "user.conflict",
-              "user.last_system_admin",
-              "session.not_found",
-              "idempotency.conflict",
-              "idempotency.in_progress",
-              "onboarding_batch.duplicate"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/AcademicAdministrationBatchErrorCode"
           },
           "index": {
             "maximum": 199,
@@ -17269,6 +17273,31 @@
         ],
         "type": "object"
       },
+      "InvitationBatchErrorCode": {
+        "description": "Stable safe failure code of one Invitation batch item. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
+        "enum": [
+          "request.invalid",
+          "resource.not_found",
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "audit.unavailable",
+          "administration.unavailable",
+          "authentication.token_invalid",
+          "authentication.strong_required",
+          "authentication.reauthentication_required",
+          "invitation.invalid",
+          "invitation.class_period_conflict",
+          "invitation.conflict",
+          "invitation.role_not_delegable",
+          "invitation.mail_unavailable",
+          "invitation.unavailable",
+          "idempotency.conflict",
+          "idempotency.in_progress",
+          "onboarding_batch.duplicate"
+        ],
+        "type": "string"
+      },
       "InvitationBatchItemRequest": {
         "additionalProperties": false,
         "properties": {
@@ -17333,28 +17362,7 @@
         "additionalProperties": false,
         "properties": {
           "error_code": {
-            "enum": [
-              "request.invalid",
-              "resource.not_found",
-              "authorization.denied",
-              "authorization.request.invalid",
-              "authorization.unavailable",
-              "audit.unavailable",
-              "administration.unavailable",
-              "authentication.token_invalid",
-              "authentication.strong_required",
-              "authentication.reauthentication_required",
-              "invitation.invalid",
-              "invitation.class_period_conflict",
-              "invitation.conflict",
-              "invitation.role_not_delegable",
-              "invitation.mail_unavailable",
-              "invitation.unavailable",
-              "idempotency.conflict",
-              "idempotency.in_progress",
-              "onboarding_batch.duplicate"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/InvitationBatchErrorCode"
           },
           "index": {
             "maximum": 199,
@@ -17487,7 +17495,7 @@
             "type": "string"
           },
           "public_failure_code": {
-            "type": "string"
+            "$ref": "#/components/schemas/MailFailureCode"
           },
           "state": {
             "enum": [
@@ -18650,9 +18658,8 @@
             "$ref": "#/components/schemas/ID"
           },
           "public_failure_code": {
-            "description": "Stable safe failure category; raw SMTP or infrastructure errors are never exposed.",
-            "maxLength": 128,
-            "type": "string"
+            "$ref": "#/components/schemas/MailFailureCode",
+            "description": "Stable safe failure category; raw SMTP or infrastructure errors are never exposed."
           },
           "state": {
             "$ref": "#/components/schemas/MailDeliveryState"
@@ -18700,6 +18707,24 @@
           "failed",
           "suppressed",
           "canceled"
+        ],
+        "type": "string"
+      },
+      "MailFailureCode": {
+        "description": "Stable safe failure category of a Mail Delivery: why it failed, was suppressed or canceled, or was retried by an operator. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.",
+        "enum": [
+          "mail.delivery.canceled",
+          "mail.delivery.expired",
+          "mail.delivery.obsolete",
+          "mail.delivery.recipient_ineligible",
+          "mail.delivery.suppressed_disabled",
+          "mail.message.invalid",
+          "mail.operator.retry",
+          "mail.payload.unavailable",
+          "mail.transport.acceptance_uncertain",
+          "mail.transport.permanent",
+          "mail.transport.temporary",
+          "mail.transport.unknown"
         ],
         "type": "string"
       },

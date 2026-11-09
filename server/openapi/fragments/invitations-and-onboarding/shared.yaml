@@ -133,7 +133,7 @@ components:
           type: string
           format: date-time
         public_failure_code:
-          type: string
+          $ref: '#/components/schemas/MailFailureCode'
     InvitationAdministrationResponse:
       type: object
       additionalProperties: false

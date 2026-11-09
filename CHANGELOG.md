@@ -214,6 +214,11 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: the contract publishes three closed code catalogues as components:
+  `MailFailureCode` for `public_failure_code` on Mail Deliveries and
+  Invitation deliveries, and `AcademicAdministrationBatchErrorCode` and
+  `InvitationBatchErrorCode` for batch item `error_code`. A Mail Delivery now
+  refuses a failure code outside its catalogue.
 - Server: `JobResponse` names who started a Job and what it is about:
   `created_by_user_id` and `created_by_display_name` for an Examination
   Export build, mail rekey or MFA rekey an operator started (omitted for

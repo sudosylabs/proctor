@@ -7,6 +7,23 @@
 
 components:
   schemas:
+    MailFailureCode:
+      type: string
+      description: >-
+        Stable safe failure category of a Mail Delivery: why it failed, was suppressed or canceled, or was retried by an operator. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+      enum:
+        - mail.delivery.canceled
+        - mail.delivery.expired
+        - mail.delivery.obsolete
+        - mail.delivery.recipient_ineligible
+        - mail.delivery.suppressed_disabled
+        - mail.message.invalid
+        - mail.operator.retry
+        - mail.payload.unavailable
+        - mail.transport.acceptance_uncertain
+        - mail.transport.permanent
+        - mail.transport.temporary
+        - mail.transport.unknown
     MailTemplateKey:
       type: string
       description: >-
@@ -139,6 +156,5 @@ components:
           format: date-time
           description: Time when the delivery became terminally failed.
         public_failure_code:
-          type: string
-          maxLength: 128
+          $ref: '#/components/schemas/MailFailureCode'
           description: Stable safe failure category; raw SMTP or infrastructure errors are never exposed.

@@ -153,6 +153,41 @@ components:
           maxItems: 200
           items:
             $ref: '#/components/schemas/AcademicAdministrationBatchItemRequest'
+    AcademicAdministrationBatchErrorCode:
+      type: string
+      description: >-
+        Stable safe failure code of one academic administration batch item. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+      enum:
+        - request.invalid
+        - resource.not_found
+        - authorization.denied
+        - authorization.request.invalid
+        - authorization.unavailable
+        - audit.unavailable
+        - administration.unavailable
+        - mail.unavailable
+        - authentication.token_invalid
+        - authentication.strong_required
+        - authentication.reauthentication_required
+        - affiliation.invalid
+        - affiliation.conflict
+        - affiliation.student_has_active_enrollment
+        - academic_unit_member.invalid
+        - academic_unit_member.conflict
+        - class_member.invalid
+        - class_member.student_affiliation_required
+        - class.enrollment_conflict
+        - role_binding.invalid
+        - role_binding.conflict
+        - role_binding.last_system_admin
+        - role_binding.system_admin_scope_invalid
+        - user.invalid
+        - user.conflict
+        - user.last_system_admin
+        - session.not_found
+        - idempotency.conflict
+        - idempotency.in_progress
+        - onboarding_batch.duplicate
     AcademicAdministrationBatchItemResponse:
       type: object
       additionalProperties: false
@@ -173,38 +208,7 @@ components:
         resource_id:
           $ref: '#/components/schemas/ID'
         error_code:
-          type: string
-          enum:
-            - request.invalid
-            - resource.not_found
-            - authorization.denied
-            - authorization.request.invalid
-            - authorization.unavailable
-            - audit.unavailable
-            - administration.unavailable
-            - mail.unavailable
-            - authentication.token_invalid
-            - authentication.strong_required
-            - authentication.reauthentication_required
-            - affiliation.invalid
-            - affiliation.conflict
-            - affiliation.student_has_active_enrollment
-            - academic_unit_member.invalid
-            - academic_unit_member.conflict
-            - class_member.invalid
-            - class_member.student_affiliation_required
-            - class.enrollment_conflict
-            - role_binding.invalid
-            - role_binding.conflict
-            - role_binding.last_system_admin
-            - role_binding.system_admin_scope_invalid
-            - user.invalid
-            - user.conflict
-            - user.last_system_admin
-            - session.not_found
-            - idempotency.conflict
-            - idempotency.in_progress
-            - onboarding_batch.duplicate
+          $ref: '#/components/schemas/AcademicAdministrationBatchErrorCode'
     AcademicAdministrationBatchResponse:
       type: object
       additionalProperties: false

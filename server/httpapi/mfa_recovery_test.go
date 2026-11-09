@@ -99,7 +99,8 @@ func TestMFAEnrollmentSessionReachesRecoveryRoutesAndChallenge(t *testing.T) {
 }
 
 func TestRestrictedPrincipalAssuranceByRoute(t *testing.T) {
-	now := time.Now()
+	// Stored instants carry microseconds; Linux clocks also report nanoseconds.
+	now := model.TimeUTC(time.Now())
 	base := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: now}

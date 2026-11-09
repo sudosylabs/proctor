@@ -16,6 +16,14 @@ import (
 
 // UserListOptions is a bounded persistence query. IncludeDisabled is effective
 // only with an explicit InstitutionWide visibility scope.
+//
+// AffiliationKinds keeps Users holding at least one current Affiliation of a
+// listed kind; AcademicUnitID keeps Users with a current Academic Unit
+// membership in that unit or an unarchived descendant. Both narrow the
+// visibility result and are evaluated at Visibility.ActiveAt, which they
+// require. A scoped visibility answers no rows for an AcademicUnitID outside
+// its user.view subtrees (AcademicUnitRootIDs), so the filter never discloses
+// membership the scope could not read.
 type UserListOptions struct {
 	ID                           model.UserID
 	Query                        string
@@ -24,6 +32,8 @@ type UserListOptions struct {
 	Limit                        int
 	IncludeDisabled              bool
 	MissingDefaultProfilePicture bool
+	AffiliationKinds             []model.AffiliationKind
+	AcademicUnitID               model.AcademicUnitID
 	Visibility                   UserVisibilityScope
 }
 

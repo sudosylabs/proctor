@@ -15951,6 +15951,10 @@ export interface operations {
                 resource_type?: components["schemas"]["ResourceType"];
                 /** @description Exact resource identity to filter; resource_type is required when present. */
                 resource_id?: components["schemas"]["ID"];
+                /** @description Return only Events recorded at or after this RFC 3339 instant. */
+                created_after?: string;
+                /** @description Return only Events recorded before this RFC 3339 instant; it must be later than `created_after`. */
+                created_before?: string;
             };
             header?: never;
             path?: never;
@@ -21585,6 +21589,10 @@ export interface operations {
                 q?: string;
                 /** @description Honored only for institution-wide user.view; scoped visibility always excludes disabled Users. */
                 include_disabled?: boolean;
+                /** @description Keeps Users holding a current Affiliation of any listed kind. Repeat the parameter to accept several kinds; a kind may appear once. The filter narrows the caller's visibility and never widens it. */
+                affiliation?: ("student" | "teacher" | "staff" | "external")[];
+                /** @description Keeps Users with a current membership in this Academic Unit or one of its descendants. A unit outside the caller's user.view scope answers an empty page rather than an error. */
+                academic_unit_id?: components["schemas"]["ID"];
                 /** @description Maximum number of items in the page. */
                 limit?: components["parameters"]["PageLimit"];
                 /** @description Opaque next_cursor from the previous page, returned unchanged; omit it for the first page. */

@@ -240,6 +240,9 @@ func (s SQLAuditStore) List(
 		(options.Visibility.AcademicInstitutionWide && len(options.Visibility.AcademicUnitRootIDs) > 0) {
 		return nil, store.NewErrInvalidInput("audit_event", "visibility", nil)
 	}
+	if !options.Since.IsZero() && !options.Until.IsZero() && !options.Since.Before(options.Until) {
+		return nil, store.NewErrInvalidInput("audit_event", "range", nil)
+	}
 	for _, action := range options.Visibility.AllowedActions {
 		if strings.TrimSpace(action) == "" || len(action) > 128 {
 			return nil, store.NewErrInvalidInput("audit_event", "visibility_action", action)
@@ -291,6 +294,12 @@ func (s SQLAuditStore) List(
 			"audit_events.resource_type": options.Resource.Type,
 			"audit_events.resource_id":   options.Resource.ID,
 		})
+	}
+	if !options.Since.IsZero() {
+		query = query.Where(sq.GtOrEq{"audit_events.created_at": model.TimeUTC(options.Since)})
+	}
+	if !options.Until.IsZero() {
+		query = query.Where(sq.Lt{"audit_events.created_at": model.TimeUTC(options.Until)})
 	}
 	if !options.BeforeCreatedAt.IsZero() {
 		beforeTime := model.TimeUTC(options.BeforeCreatedAt)

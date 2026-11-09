@@ -272,6 +272,47 @@ func (s *userProfileSearchStoreFake) List(_ context.Context, options store.UserL
 	return s.values, nil
 }
 
+func TestUserSearchNarrowsTheCallerVisibilityByAffiliationAndUnit(t *testing.T) {
+	t.Parallel()
+	scope := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: model.TimeFromMillis(100)}
+	unitID := model.NewAcademicUnitID()
+	events := []string{}
+	persistence := &userProfileStoreFake{events: &events}
+	service := newUserProfileService(userProfileServiceDependencies{Users: persistence, Authorization: &userProfileAuthorizerFake{events: &events, searchScope: scope}, Audit: &institutionAuditorFake{events: &events}, Now: time.Now})
+	_, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{
+		Limit: 10, AcademicUnitID: unitID,
+		Affiliations: []model.AffiliationKind{model.AffiliationTeacher, model.AffiliationStaff, model.AffiliationTeacher},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []model.AffiliationKind{model.AffiliationTeacher, model.AffiliationStaff}, persistence.listOptions.AffiliationKinds)
+	require.Equal(t, unitID, persistence.listOptions.AcademicUnitID)
+	require.Equal(t, scope, persistence.listOptions.Visibility, "the filters must not replace the caller's visibility")
+}
+
+func TestUserSearchRejectsInvalidDirectoryFiltersBeforeAuthorization(t *testing.T) {
+	t.Parallel()
+	for name, test := range map[string]struct {
+		query SearchUsersQuery
+		field string
+	}{
+		"affiliation":      {query: SearchUsersQuery{Limit: 10, Affiliations: []model.AffiliationKind{"alumni"}}, field: "affiliation"},
+		"academic_unit_id": {query: SearchUsersQuery{Limit: 10, AcademicUnitID: "not-an-id"}, field: "academic_unit_id"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			events := []string{}
+			persistence := &userProfileStoreFake{events: &events}
+			service := newUserProfileService(userProfileServiceDependencies{Users: persistence, Authorization: &userProfileAuthorizerFake{events: &events}, Audit: &institutionAuditorFake{events: &events}, Now: time.Now})
+			_, err := service.SearchUsers(context.Background(), invocation.Invocation{}, test.query)
+			var appErr *apperror.Error
+			require.ErrorAs(t, err, &appErr)
+			require.Equal(t, "request.invalid", appErr.Code())
+			require.Equal(t, test.field, appErr.Fields()["field"])
+			require.Empty(t, events, "an invalid filter must not authorize or read")
+		})
+	}
+}
+
 func TestUserProfileUpdateRejectsControlCharacterNamesBeforeAudit(t *testing.T) {
 	t.Parallel()
 	events := []string{}

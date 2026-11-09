@@ -18,6 +18,10 @@ type AuditListOptions struct {
 	ActorID  model.UserID
 	Action   string
 	Resource *model.Resource
+	// Since is an inclusive and Until an exclusive bound on created_at; a
+	// zero bound is open. When both are set Since precedes Until.
+	Since time.Time
+	Until time.Time
 	// BeforeCreatedAt and BeforeID continue a page at microsecond precision.
 	BeforeCreatedAt time.Time
 	BeforeID        model.AuditEventID

@@ -186,3 +186,29 @@ func TestAuditListingReportsMoreOnlyWhenTheProbeRowExists(t *testing.T) {
 	require.Equal(t, rows[:2], more.Items)
 	require.True(t, more.HasMore)
 }
+
+func TestAuditListingPassesCreatedRangeAndRejectsAnEmptyOne(t *testing.T) {
+	t.Parallel()
+	since, until := model.TimeFromMillis(100), model.TimeFromMillis(200)
+	events := []string{}
+	persistence := &auditListingStoreFake{events: &events}
+	service := newAuditListingService(auditListingServiceDependencies{Audits: persistence, Authorization: &auditListingAuthorizerFake{
+		events: &events, scope: store.AuditVisibilityScope{InstitutionWide: true},
+	}})
+	_, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{Limit: 10, Since: since, Until: until})
+	require.NoError(t, err)
+	require.True(t, since.Equal(persistence.input.Since), "Since = %v", persistence.input.Since)
+	require.True(t, until.Equal(persistence.input.Until), "Until = %v", persistence.input.Until)
+
+	for name, query := range map[string]ListAuditEventsQuery{
+		"equal":    {Limit: 10, Since: since, Until: since},
+		"reversed": {Limit: 10, Since: until, Until: since},
+	} {
+		t.Run(name, func(t *testing.T) {
+			events = events[:0]
+			_, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, query)
+			require.True(t, apperror.Is(err, "audit.query.invalid"), "error = %v", err)
+			require.Equal(t, []string{"authorize-view"}, events, "an empty range must not read")
+		})
+	}
+}

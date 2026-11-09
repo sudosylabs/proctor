@@ -49,6 +49,31 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: affiliation
+          in: query
+          required: false
+          description: >-
+            Keeps Users holding a current Affiliation of any listed kind. Repeat the parameter to accept several kinds; a kind may appear once. The filter narrows the caller's visibility and never widens it.
+          style: form
+          explode: true
+          schema:
+            type: array
+            uniqueItems: true
+            maxItems: 4
+            items:
+              type: string
+              enum:
+                - student
+                - teacher
+                - staff
+                - external
+        - name: academic_unit_id
+          in: query
+          required: false
+          description: >-
+            Keeps Users with a current membership in this Academic Unit or one of its descendants. A unit outside the caller's user.view scope answers an empty page rather than an error.
+          schema:
+            $ref: '#/components/schemas/ID'
         - $ref: '#/components/parameters/PageLimit'
         - $ref: '#/components/parameters/PageCursor'
       responses:

@@ -12,10 +12,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -446,6 +449,9 @@ func (m userProfileResourceModule) search(request operationRequest) (operationRe
 		return operationResult{}, invalidRequestError(err)
 	}
 	query := app.SearchUsersQuery{Query: request.request.URL.Query().Get("q"), Limit: paging.Limit, IncludeDisabled: includeDisabled}
+	if query.Affiliations, query.AcademicUnitID, err = userDirectoryFilters(request.request.URL.Query()); err != nil {
+		return operationResult{}, err
+	}
 	if present {
 		query.AfterUsername, query.AfterID = cursor.Username, model.UserID(cursor.ID)
 	}
@@ -460,6 +466,31 @@ func (m userProfileResourceModule) search(request operationRequest) (operationRe
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, response), nil
+}
+
+// userDirectoryFilters reads the repeatable affiliation filter and the single
+// academic_unit_id filter of the User directory.
+func userDirectoryFilters(values url.Values) ([]model.AffiliationKind, model.AcademicUnitID, error) {
+	var kinds []model.AffiliationKind
+	for _, raw := range values["affiliation"] {
+		kind := model.AffiliationKind(raw)
+		if !kind.IsValid() || slices.Contains(kinds, kind) {
+			return nil, "", apperror.Invalid("request.invalid", "affiliation")
+		}
+		kinds = append(kinds, kind)
+	}
+	raw, present := values["academic_unit_id"]
+	if !present {
+		return kinds, "", nil
+	}
+	if len(raw) != 1 {
+		return nil, "", apperror.Invalid("request.invalid", "academic_unit_id")
+	}
+	unitID, err := model.ParseAcademicUnitID(raw[0])
+	if err != nil {
+		return nil, "", apperror.Invalid("request.invalid", "academic_unit_id")
+	}
+	return kinds, unitID, nil
 }
 
 // userDirectoryCursor continues the User directory ordered by username then

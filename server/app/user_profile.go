@@ -10,6 +10,7 @@ package app
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -18,12 +19,18 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// SearchUsersQuery reads the User directory. Affiliations keeps Users holding
+// a current Affiliation of any listed kind and AcademicUnitID keeps current
+// members of that Academic Unit or its descendants; both narrow, never widen,
+// the caller's visibility.
 type SearchUsersQuery struct {
 	Query           string
 	AfterUsername   string
 	AfterID         model.UserID
 	Limit           int
 	IncludeDisabled bool
+	Affiliations    []model.AffiliationKind
+	AcademicUnitID  model.AcademicUnitID
 }
 
 type GetUserProfileQuery struct {
@@ -125,12 +132,26 @@ func (s *userProfileService) SearchUsers(ctx context.Context, invocation invocat
 	if err != nil {
 		return Page[*model.User]{}, err
 	}
+	affiliations, err := userDirectoryAffiliations(query.Affiliations)
+	if err != nil {
+		return Page[*model.User]{}, err
+	}
+	if query.AcademicUnitID != "" && !query.AcademicUnitID.IsValid() {
+		return Page[*model.User]{}, apperror.Invalid("request.invalid", "academic_unit_id")
+	}
 	visibility, err := s.deps.Authorization.AuthorizeSearch(ctx, invocation)
 	if err != nil {
 		return Page[*model.User]{}, err
 	}
 	includeDisabled := query.IncludeDisabled && visibility.InstitutionWide
-	users, err := s.deps.Users.List(ctx, store.UserListOptions{Query: query.Query, AfterUsername: query.AfterUsername, AfterID: query.AfterID, Limit: probe, IncludeDisabled: includeDisabled, Visibility: visibility})
+	if visibility.ActiveAt.IsZero() && (len(affiliations) > 0 || query.AcademicUnitID != "") {
+		visibility.ActiveAt = model.TimeUTC(s.deps.Now())
+	}
+	users, err := s.deps.Users.List(ctx, store.UserListOptions{
+		Query: query.Query, AfterUsername: query.AfterUsername, AfterID: query.AfterID, Limit: probe,
+		IncludeDisabled: includeDisabled, AffiliationKinds: affiliations, AcademicUnitID: query.AcademicUnitID,
+		Visibility: visibility,
+	})
 	if err != nil {
 		return Page[*model.User]{}, userStoreErrors.Translate(err)
 	}
@@ -159,6 +180,21 @@ func (s *userProfileService) GetUserProfile(ctx context.Context, invocation invo
 		return user, nil
 	}
 	return scopedUserProjection(user), nil
+}
+
+// userDirectoryAffiliations validates the requested Affiliation kinds and
+// drops repeats, so the filter is a set of known kinds.
+func userDirectoryAffiliations(kinds []model.AffiliationKind) ([]model.AffiliationKind, error) {
+	var result []model.AffiliationKind
+	for _, kind := range kinds {
+		if !kind.IsValid() {
+			return nil, apperror.Invalid("request.invalid", "affiliation")
+		}
+		if !slices.Contains(result, kind) {
+			result = append(result, kind)
+		}
+	}
+	return result, nil
 }
 
 func scopedUserDirectoryProjection(users []*model.User) []*model.User {

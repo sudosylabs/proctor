@@ -823,6 +823,9 @@ CREATE TABLE affiliations (
 
 CREATE UNIQUE INDEX affiliations_user_id_kind_key
     ON affiliations (user_id, kind) WHERE archived_at IS NULL AND end_at IS NULL;
+-- The User directory's affiliation filter starts from the kind.
+CREATE INDEX affiliations_kind_user_id_idx
+    ON affiliations (kind, user_id) WHERE archived_at IS NULL AND end_at IS NULL;
 
 CREATE TABLE academic_unit_members (
     id varchar(26) PRIMARY KEY,

@@ -22,6 +22,10 @@ type ListAuditEventsQuery struct {
 	ActorID  model.UserID
 	Action   string
 	Resource *model.Resource
+	// Since is inclusive and Until exclusive; when both are set Since must
+	// precede Until.
+	Since time.Time
+	Until time.Time
 	// BeforeCreatedAt and BeforeID continue a page at microsecond precision.
 	BeforeCreatedAt time.Time
 	BeforeID        model.AuditEventID
@@ -70,12 +74,13 @@ func (s *auditListingService) ListAuditEvents(ctx context.Context, invocation in
 	if query.Limit < 1 || query.Limit > 200 ||
 		(query.ActorID != "" && !model.UserID(query.ActorID).IsValid()) ||
 		(query.BeforeID != "" && !model.AuditEventID(query.BeforeID).IsValid()) ||
-		(query.Resource != nil && query.Resource.Validate() != nil) {
+		(query.Resource != nil && query.Resource.Validate() != nil) ||
+		(!query.Since.IsZero() && !query.Until.IsZero() && !query.Since.Before(query.Until)) {
 		return Page[*model.AuditEvent]{}, apperror.New("audit.query.invalid")
 	}
 	events, err := s.deps.Audits.List(ctx, store.AuditListOptions{
 		ActorID: model.UserID(strings.TrimSpace(query.ActorID.String())), Action: strings.TrimSpace(query.Action),
-		Resource: query.Resource, BeforeCreatedAt: query.BeforeCreatedAt, BeforeID: query.BeforeID, Limit: query.Limit + 1,
+		Resource: query.Resource, Since: query.Since, Until: query.Until, BeforeCreatedAt: query.BeforeCreatedAt, BeforeID: query.BeforeID, Limit: query.Limit + 1,
 		Visibility: visibility,
 	})
 	if err != nil {

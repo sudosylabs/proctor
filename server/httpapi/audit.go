@@ -124,6 +124,18 @@ func auditQueryFromRequest(request *http.Request) (app.ListAuditEventsQuery, err
 		query.BeforeCreatedAt = createdAt
 		query.BeforeID = model.AuditEventID(cursor.ID)
 	}
+	for _, name := range []string{"created_after", "created_before"} {
+		if entries, present := values[name]; present && (len(entries) != 1 || entries[0] == "") {
+			return query, errAuditQuery(name)
+		}
+	}
+	var err error
+	if query.Since, err = optionalAuditTime(values, "created_after"); err != nil {
+		return query, err
+	}
+	if query.Until, err = optionalAuditTime(values, "created_before"); err != nil {
+		return query, err
+	}
 	query.ActorID = model.UserID(values.Get("actor_id"))
 	query.Action = values.Get("action")
 	resourceType, resourceID := values.Get("resource_type"), values.Get("resource_id")

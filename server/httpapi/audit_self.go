@@ -138,10 +138,10 @@ func selfAuditQueryFromValues(values url.Values) (app.ListSelfAuditEventsQuery, 
 		}
 	}
 	var err error
-	if query.Since, err = optionalSelfAuditTime(values, "created_after"); err != nil {
+	if query.Since, err = optionalAuditTime(values, "created_after"); err != nil {
 		return query, err
 	}
-	if query.Until, err = optionalSelfAuditTime(values, "created_before"); err != nil {
+	if query.Until, err = optionalAuditTime(values, "created_before"); err != nil {
 		return query, err
 	}
 	// The application owns the closed event, status, and relation vocabulary
@@ -161,7 +161,7 @@ func selfAuditQueryFromValues(values url.Values) (app.ListSelfAuditEventsQuery, 
 	return query, nil
 }
 
-func optionalSelfAuditTime(values url.Values, name string) (time.Time, error) {
+func optionalAuditTime(values url.Values, name string) (time.Time, error) {
 	raw := values.Get(name)
 	if raw == "" {
 		return time.Time{}, nil

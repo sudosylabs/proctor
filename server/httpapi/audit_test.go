@@ -50,6 +50,28 @@ func TestAuditCursorKeepsMicrosecondsSoSameMillisecondRowsAreNotSkipped(t *testi
 	require.Equal(t, id, query.BeforeID)
 }
 
+func TestAuditQueryReadsCreatedRangeLikeSelfHistory(t *testing.T) {
+	t.Parallel()
+
+	after := time.Date(2026, 8, 12, 9, 0, 0, 0, time.UTC)
+	before := time.Date(2026, 8, 13, 9, 0, 0, 0, time.UTC)
+	query, err := auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), "GET",
+		"/api/v1/audits?created_after=2026-08-12T09:00:00Z&created_before=2026-08-13T11:00:00%2B02:00", nil))
+	require.NoError(t, err)
+	require.True(t, after.Equal(query.Since), "Since = %v", query.Since)
+	require.True(t, before.Equal(query.Until), "Until = %v", query.Until)
+
+	for _, raw := range []string{
+		"created_after=yesterday",
+		"created_before=2026-08-12",
+		"created_after=",
+		"created_after=2026-08-12T09:00:00Z&created_after=2026-08-13T09:00:00Z",
+	} {
+		_, err = auditQueryFromRequest(httptest.NewRequestWithContext(t.Context(), "GET", "/api/v1/audits?"+raw, nil))
+		require.Error(t, err, raw)
+	}
+}
+
 func TestAuditListingOpenAPIDocument(t *testing.T) {
 	t.Parallel()
 	document := readOpenAPIDocument(t)

@@ -17,6 +17,9 @@ module when a change is not server-only. No module has been released yet.
 
 ### Changed
 
+- Server: the baseline adds the `affiliations_kind_user_id_idx` index for the
+  User directory's affiliation filter. Existing development databases must be
+  recreated.
 - Server: recent authentication now counts primary proof only. An MFA
   challenge no longer refreshes recency; it still makes a Session strong.
 - Server: Desktop Authorization that reuses a recently reauthenticated Web
@@ -214,6 +217,14 @@ module when a change is not server-only. No module has been released yet.
   `AuditAction` and `ResourceType` on audit events and their filters, and
   `ErrorCode` on every problem response. Tests keep each enum equal to the
   server's catalogue; clients own the labels.
+- Server: `GET /api/v1/users` filters the directory by current Affiliation
+  with the repeatable `affiliation` parameter (`student`, `teacher`, `staff`,
+  `external`) and by current Academic Unit membership, descendants included,
+  with `academic_unit_id`. Both narrow the caller's visibility; a unit outside
+  a scoped caller's reach answers an empty page.
+- Server: `GET /api/v1/audits` takes `created_after` (inclusive) and
+  `created_before` (exclusive) RFC 3339 bounds, validated like the self audit
+  history's.
 - Server: `GET /api/v1/users/me/audits` takes `order=asc` to read oldest
   first, and its first page reports `total`, the events the filters match,
   exact below 10,000 and flagged by `total_is_lower_bound` at that bound.

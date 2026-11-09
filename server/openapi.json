@@ -27609,6 +27609,26 @@
             "schema": {
               "$ref": "#/components/schemas/ID"
             }
+          },
+          {
+            "description": "Return only Events recorded at or after this RFC 3339 instant.",
+            "in": "query",
+            "name": "created_after",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Return only Events recorded before this RFC 3339 instant; it must be later than `created_after`.",
+            "in": "query",
+            "name": "created_before",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -46090,6 +46110,37 @@
             "schema": {
               "default": false,
               "type": "boolean"
+            }
+          },
+          {
+            "description": "Keeps Users holding a current Affiliation of any listed kind. Repeat the parameter to accept several kinds; a kind may appear once. The filter narrows the caller's visibility and never widens it.",
+            "explode": true,
+            "in": "query",
+            "name": "affiliation",
+            "required": false,
+            "schema": {
+              "items": {
+                "enum": [
+                  "student",
+                  "teacher",
+                  "staff",
+                  "external"
+                ],
+                "type": "string"
+              },
+              "maxItems": 4,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "style": "form"
+          },
+          {
+            "description": "Keeps Users with a current membership in this Academic Unit or one of its descendants. A unit outside the caller's user.view scope answers an empty page rather than an error.",
+            "in": "query",
+            "name": "academic_unit_id",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ID"
             }
           },
           {

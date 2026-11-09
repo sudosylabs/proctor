@@ -402,6 +402,44 @@ func TestUserSearchTransportPreservesIncludeDisabledRequestForApplicationAuthori
 	}
 }
 
+func TestUserSearchTransportReadsAffiliationAndUnitFilters(t *testing.T) {
+	t.Parallel()
+	logger, _ := newTestLogger(t)
+	principal := model.Principal{
+		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
+		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
+		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
+		ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now(),
+	}
+	profiles := &userProfileHTTPApplication{}
+	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userProfileResource(profiles))
+	serve := func(query string) *httptest.ResponseRecorder {
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users"+query, nil)
+		request.Header.Set("Authorization", "Bearer credential")
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		return response
+	}
+	unitID := model.NewAcademicUnitID()
+	response := serve("?affiliation=teacher&affiliation=staff&academic_unit_id=" + unitID.String())
+	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())
+	require.Equal(t, []model.AffiliationKind{model.AffiliationTeacher, model.AffiliationStaff}, profiles.searchQuery.Affiliations)
+	require.Equal(t, unitID, profiles.searchQuery.AcademicUnitID)
+
+	for _, query := range []string{
+		"?affiliation=alumni",
+		"?affiliation=",
+		"?affiliation=student&affiliation=student",
+		"?academic_unit_id=not-an-id",
+		"?academic_unit_id=",
+		"?academic_unit_id=" + unitID.String() + "&academic_unit_id=" + unitID.String(),
+	} {
+		response := serve(query)
+		require.Equal(t, http.StatusBadRequest, response.Code, "%s: status = %d: %s", query, response.Code, response.Body.String())
+		require.Contains(t, response.Body.String(), `"request.invalid"`, query)
+	}
+}
+
 func TestScopedUserProfileOmitsAccountAndSecurityFields(t *testing.T) {
 	t.Parallel()
 	encoded, err := json.Marshal(userProfileResponseFromModel(&model.User{

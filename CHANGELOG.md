@@ -372,6 +372,10 @@ module when a change is not server-only. No module has been released yet.
 
 ### Fixed
 
+- Server: the contract declared mail `template_key` as the single value
+  `system.mail_test`, so clients validating responses rejected real mail
+  deliveries and metrics. A shared `MailTemplateKey` enum now lists every
+  template key, and a test keeps it equal to the server's catalogue.
 - Server: password history refused reuse only by change time, so when the
   database clock trailed the server that stamped a previous change, two history
   entries could share a time and a recent password could be accepted again.

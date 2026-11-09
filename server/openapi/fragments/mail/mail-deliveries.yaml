@@ -61,10 +61,8 @@ paths:
           schema:
             type: array
             items:
-              type: string
-              enum:
-                - system.mail_test
-          description: Optional set of public allowlisted template keys to include.
+              $ref: '#/components/schemas/MailTemplateKey'
+          description: Optional set of template keys to include.
         - name: created_after
           in: query
           schema:

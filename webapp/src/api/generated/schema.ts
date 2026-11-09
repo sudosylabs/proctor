@@ -8952,8 +8952,7 @@ export interface components {
              */
             processing_latency_millis: number;
             state: components["schemas"]["MailDeliveryState"];
-            /** @enum {string} */
-            template_key: "system.mail_test";
+            template_key: components["schemas"]["MailTemplateKey"];
         };
         /** @description Safe durable mail delivery metadata with the recipient masked and content omitted. */
         MailDeliveryResponse: {
@@ -8995,8 +8994,7 @@ export interface components {
             target_user_id: components["schemas"]["ID"];
             /** @description SHA-256 digest of the exact rendered template revision, encoded as lowercase hexadecimal. */
             template_digest: string;
-            /** @enum {string} */
-            template_key: "system.mail_test";
+            template_key: components["schemas"]["MailTemplateKey"];
             /**
              * Format: date-time
              * @description Time of the latest durable state change.
@@ -9053,8 +9051,7 @@ export interface components {
             oldest_age_millis: number;
             outcome_code: string;
             state: components["schemas"]["MailDeliveryState"];
-            /** @enum {string} */
-            template_key: "system.mail_test";
+            template_key: components["schemas"]["MailTemplateKey"];
             /** @description True when the bounded scan did not include every matching delivery. */
             truncated: boolean;
         };
@@ -9126,6 +9123,11 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /**
+         * @description Stable key of one server-owned transactional mail template. The catalogue is closed and may grow; clients own the labels and should present an unknown key generically.
+         * @enum {string}
+         */
+        MailTemplateKey: "academic.academic_unit_assigned" | "academic.academic_unit_assignment_ended" | "academic.class_enrolled" | "academic.class_enrollment_ended" | "academic.class_transferred" | "access.academic_unit_role_invitation" | "access.institution_role_invitation" | "access.invitation_accepted" | "access.invitation_revoked" | "access.student_class_invitation" | "access.teacher_academic_unit_invitation" | "authorization.institution_role_assigned" | "authorization.institution_role_ended" | "authorization.scoped_role_assigned" | "authorization.scoped_role_ended" | "exam.manager_added" | "exam.manager_removed" | "exam.ownership_transferred_from_you" | "exam.ownership_transferred_to_you" | "exam.result_released" | "exam.retention_scheduled" | "exam.sitting_assignment_removed" | "exam.sitting_canceled" | "exam.sitting_rescheduled" | "exam.sitting_scheduled" | "exam.submission_automatically_sealed" | "exam.submission_manager_ended" | "exam.submission_received" | "identity.account_disabled" | "identity.account_enabled" | "identity.email_change_verify_new" | "identity.email_change_warning_old" | "identity.email_verified_by_admin" | "identity.mfa_disabled" | "identity.mfa_enabled" | "identity.mfa_recovery_codes_regenerated" | "identity.mfa_reset" | "identity.password_changed" | "identity.password_reset" | "identity.personal_access_token_created" | "identity.personal_access_token_disabled" | "identity.personal_access_token_enabled" | "identity.personal_access_token_revoked" | "identity.sessions_revoked_by_admin" | "identity.verify_email" | "system.mail_test";
         MoveCandidateWorkspaceEntryRequest: {
             destination_path: components["schemas"]["StarterWorkspacePath"];
             expected_path: components["schemas"]["StarterWorkspacePath"];
@@ -20196,8 +20198,8 @@ export interface operations {
                 cursor?: string;
                 /** @description Optional set of durable delivery states to include. */
                 state?: components["schemas"]["MailDeliveryState"][];
-                /** @description Optional set of public allowlisted template keys to include. */
-                template_key?: "system.mail_test"[];
+                /** @description Optional set of template keys to include. */
+                template_key?: components["schemas"]["MailTemplateKey"][];
                 /** @description Include deliveries created at or after this RFC 3339 instant. */
                 created_after?: string;
                 /** @description Include deliveries created before this RFC 3339 instant. */

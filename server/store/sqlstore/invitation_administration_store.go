@@ -599,7 +599,7 @@ func validateInvitationRevocationNotice(prepared *store.PreparedMail, invitation
 
 func validateInvitationReplacement(input *store.InvitationReplacement) error {
 	if input == nil || !input.CurrentID.IsValid() || input.ExpectedRevision < 1 || input.Replacement == nil ||
-		input.Lifetime != model.InvitationLifetime || !input.ActorUserID.IsValid() ||
+		!model.IsValidInvitationLifetime(input.Lifetime) || !input.ActorUserID.IsValid() ||
 		input.Replacement.InviterUserID != input.ActorUserID || input.Replacement.ID == input.CurrentID ||
 		!input.CurrentAuditEventID.IsValid() || !input.ReplacementAuditEventID.IsValid() ||
 		input.CurrentAuditEventID == input.ReplacementAuditEventID || input.AuditAt.IsZero() ||

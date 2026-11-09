@@ -33,6 +33,10 @@ type InvitationSQLProbe struct {
 	ArchiveTeacherUnitBeforeAccept func(*testing.T, context.Context, *model.AcademicUnit, func() error) error
 	ArchiveTeacherUnitBeforeMail   func(*testing.T, context.Context, *model.AcademicUnit, func() error) error
 	MutateTeacherRoleBeforeMail    func(*testing.T, context.Context, *model.Role, func() error) error
+
+	// SetInvitationLifetime rewrites the stored expiry to created_at plus
+	// lifetime directly, so the schema itself must refuse an unbounded one.
+	SetInvitationLifetime func(*testing.T, context.Context, model.InvitationID, time.Duration) error
 }
 
 func TestInvitationStore(t *testing.T, ss store.Store, probes ...InvitationSQLProbe) {
@@ -41,6 +45,9 @@ func TestInvitationStore(t *testing.T, ss store.Store, probes ...InvitationSQLPr
 		probe = probes[0]
 	}
 	TestTeacherAcademicUnitInvitationStore(t, ss, probe)
+	t.Run("SchemaBoundsInvitationLifetime", func(t *testing.T) {
+		testInvitationSchemaBoundsLifetime(t, ss, probe)
+	})
 	t.Run("ScopedRoleExistingUserAtomicAndReplaySafe", func(t *testing.T) {
 		testScopedRoleInvitationExistingUserAtomicAndReplaySafe(t, ss)
 	})
@@ -2050,5 +2057,30 @@ func studentClassInvitationAcceptanceFixture(t *testing.T, invitation *model.Inv
 			NodeID: "invitation-store-test",
 		},
 		RequiredActions: []model.Action{model.ActionInvitationCreate, model.ActionClassMembersManage},
+	}
+}
+
+// testInvitationSchemaBoundsLifetime proves that the stored Invitation
+// lifetime is bounded by the schema, not only by Store validation: one and
+// thirty days are accepted, anything outside is refused.
+func testInvitationSchemaBoundsLifetime(t *testing.T, ss store.Store, probe InvitationSQLProbe) {
+	if probe.SetInvitationLifetime == nil {
+		t.Skip("requires a direct SQL lifetime probe")
+	}
+	ctx, _, _, issue := teacherInvitationMailFixture(t, ss, "lifetime-"+model.NewID())
+	id := issue.Invitation.ID
+	for name, lifetime := range map[string]time.Duration{"one day": model.MinimumInvitationLifetime, "thirty days": model.MaximumInvitationLifetime} {
+		t.Run("Accepts/"+name, func(t *testing.T) {
+			require.NoError(t, probe.SetInvitationLifetime(t, ctx, id, lifetime))
+		})
+	}
+	for name, lifetime := range map[string]time.Duration{
+		"zero":             0,
+		"under one day":    model.MinimumInvitationLifetime - time.Second,
+		"over thirty days": model.MaximumInvitationLifetime + time.Second,
+	} {
+		t.Run("Refuses/"+name, func(t *testing.T) {
+			require.Error(t, probe.SetInvitationLifetime(t, ctx, id, lifetime))
+		})
 	}
 }

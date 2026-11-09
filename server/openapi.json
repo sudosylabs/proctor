@@ -17409,6 +17409,15 @@
             "format": "date-time",
             "type": "string"
           },
+          "expires_in_days": {
+            "description": "Whole days until the claim expires, from 1 to 30. Omitted or null selects 7. A value outside the range is rejected with invitation.invalid.",
+            "maximum": 30,
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "role_id": {
             "$ref": "#/components/schemas/ID"
           },
@@ -17433,6 +17442,15 @@
           "end_at": {
             "format": "date-time",
             "type": "string"
+          },
+          "expires_in_days": {
+            "description": "Whole days until the claim expires, from 1 to 30. Omitted or null selects 7. A value outside the range is rejected with invitation.invalid.",
+            "maximum": 30,
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
+            ]
           },
           "start_at": {
             "format": "date-time",
@@ -17478,6 +17496,15 @@
           "end_at": {
             "format": "date-time",
             "type": "string"
+          },
+          "expires_in_days": {
+            "description": "Whole days until the claim expires, from 1 to 30. Omitted or null selects 7. A value outside the range is rejected with invitation.invalid.",
+            "maximum": 30,
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
+            ]
           },
           "role_id": {
             "$ref": "#/components/schemas/ID"
@@ -21996,6 +22023,15 @@
             "format": "int64",
             "minimum": 1,
             "type": "integer"
+          },
+          "expires_in_days": {
+            "description": "Whole days until the replacement's claim expires, from 1 to 30. Omitted or null keeps the replaced Invitation's own lifetime, rounded to whole days. A value outside the range is rejected with invitation.invalid.",
+            "maximum": 30,
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
+            ]
           },
           "institution_id": {
             "$ref": "#/components/schemas/ID"

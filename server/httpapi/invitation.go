@@ -47,6 +47,7 @@ type issueStudentClassInvitationRequest struct {
 	SuggestedLastName    string `json:"suggested_last_name,omitempty"`
 	SuggestedLocale      string `json:"suggested_locale,omitempty"`
 	SuggestedTimezone    string `json:"suggested_timezone,omitempty"`
+	ExpiresInDays        *int   `json:"expires_in_days,omitempty"`
 }
 
 type acceptStudentClassInvitationRequest struct {
@@ -71,15 +72,17 @@ type issueTeacherAcademicUnitInvitationRequest struct {
 	SuggestedLastName    string `json:"suggested_last_name,omitempty"`
 	SuggestedLocale      string `json:"suggested_locale,omitempty"`
 	SuggestedTimezone    string `json:"suggested_timezone,omitempty"`
+	ExpiresInDays        *int   `json:"expires_in_days,omitempty"`
 }
 
 type acceptTeacherAcademicUnitInvitationRequest acceptStudentClassInvitationRequest
 
 type issueScopedRoleInvitationRequest struct {
-	Email   string `json:"email"`
-	RoleID  string `json:"role_id"`
-	StartAt string `json:"start_at,omitempty"`
-	EndAt   string `json:"end_at,omitempty"`
+	Email         string `json:"email"`
+	RoleID        string `json:"role_id"`
+	StartAt       string `json:"start_at,omitempty"`
+	EndAt         string `json:"end_at,omitempty"`
+	ExpiresInDays *int   `json:"expires_in_days,omitempty"`
 }
 
 type acceptScopedRoleInvitationRequest struct {
@@ -130,6 +133,7 @@ type replaceInvitationRequest struct {
 	SuggestedLastName    string `json:"suggested_last_name,omitempty"`
 	SuggestedLocale      string `json:"suggested_locale,omitempty"`
 	SuggestedTimezone    string `json:"suggested_timezone,omitempty"`
+	ExpiresInDays        *int   `json:"expires_in_days,omitempty"`
 }
 
 type invitationBatchItemRequest struct {
@@ -418,6 +422,7 @@ func (m invitationResourceModule) replace(request operationRequest) (operationRe
 		IntendedStartsAt: startAt, IntendedEndsAt: endAt, SuggestedUsername: body.SuggestedUsername,
 		SuggestedDisplayName: body.SuggestedDisplayName, SuggestedFirstName: body.SuggestedFirstName,
 		SuggestedLastName: body.SuggestedLastName, SuggestedLocale: body.SuggestedLocale, SuggestedTimezone: body.SuggestedTimezone,
+		ExpiresInDays: body.ExpiresInDays,
 	})
 	if err != nil {
 		return operationResult{}, err
@@ -519,6 +524,7 @@ func (m invitationResourceModule) issueAcademicUnitRole(request operationRequest
 	}
 	created, err := m.invitations.IssueAcademicUnitRoleInvitation(request.context, request.invocation(), app.IssueAcademicUnitRoleInvitationCommand{
 		TargetEmail: body.Email, AcademicUnitID: unitID, RoleID: model.RoleID(body.RoleID), IntendedStartsAt: startAt, IntendedEndsAt: endAt,
+		ExpiresInDays: body.ExpiresInDays,
 	})
 	if err != nil {
 		return operationResult{}, err
@@ -541,6 +547,7 @@ func (m invitationResourceModule) issueInstitutionRole(request operationRequest)
 	}
 	created, err := m.invitations.IssueInstitutionRoleInvitation(request.context, request.invocation(), app.IssueInstitutionRoleInvitationCommand{
 		TargetEmail: body.Email, InstitutionID: institutionID, RoleID: model.RoleID(body.RoleID), IntendedStartsAt: startAt, IntendedEndsAt: endAt,
+		ExpiresInDays: body.ExpiresInDays,
 	})
 	if err != nil {
 		return operationResult{}, err
@@ -593,6 +600,7 @@ func (m invitationResourceModule) issueTeacherAcademicUnit(request operationRequ
 		TargetEmail: body.Email, AcademicUnitID: unitID, RoleID: model.RoleID(body.RoleID), IntendedStartsAt: startAt, IntendedEndsAt: endAt,
 		SuggestedUsername: body.SuggestedUsername, SuggestedDisplayName: body.SuggestedDisplayName,
 		SuggestedFirstName: body.SuggestedFirstName, SuggestedLastName: body.SuggestedLastName, SuggestedLocale: body.SuggestedLocale, SuggestedTimezone: body.SuggestedTimezone,
+		ExpiresInDays: body.ExpiresInDays,
 	})
 	if err != nil {
 		return operationResult{}, err
@@ -632,6 +640,7 @@ func (m invitationResourceModule) issueStudentClass(request operationRequest) (o
 		TargetEmail: body.Email, ClassID: classID, IntendedStartsAt: startAt, IntendedEndsAt: endAt,
 		SuggestedUsername: body.SuggestedUsername, SuggestedDisplayName: body.SuggestedDisplayName,
 		SuggestedFirstName: body.SuggestedFirstName, SuggestedLastName: body.SuggestedLastName, SuggestedLocale: body.SuggestedLocale, SuggestedTimezone: body.SuggestedTimezone,
+		ExpiresInDays: body.ExpiresInDays,
 	})
 	if err != nil {
 		return operationResult{}, err

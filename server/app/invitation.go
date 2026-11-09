@@ -27,11 +27,14 @@ type IssueStudentClassInvitationCommand struct {
 	IntendedStartsAt, IntendedEndsAt                                          int64
 	SuggestedUsername, SuggestedDisplayName                                   string
 	SuggestedFirstName, SuggestedLastName, SuggestedLocale, SuggestedTimezone string
-	IdempotencyKey                                                            string
-	batchDuplicate                                                            bool
-	batchCanonicalKey                                                         string
-	onboardingImportID                                                        model.OnboardingImportID
-	onboardingImportRowNumber                                                 int
+	// ExpiresInDays is the inviter's optional whole-day lifetime; nil selects
+	// model.InvitationLifetime.
+	ExpiresInDays             *int
+	IdempotencyKey            string
+	batchDuplicate            bool
+	batchCanonicalKey         string
+	onboardingImportID        model.OnboardingImportID
+	onboardingImportRowNumber int
 }
 
 type AcceptStudentClassInvitationCommand struct {
@@ -46,11 +49,14 @@ type IssueTeacherAcademicUnitInvitationCommand struct {
 	IntendedStartsAt, IntendedEndsAt                                          int64
 	SuggestedUsername, SuggestedDisplayName                                   string
 	SuggestedFirstName, SuggestedLastName, SuggestedLocale, SuggestedTimezone string
-	IdempotencyKey                                                            string
-	batchDuplicate                                                            bool
-	batchCanonicalKey                                                         string
-	onboardingImportID                                                        model.OnboardingImportID
-	onboardingImportRowNumber                                                 int
+	// ExpiresInDays is the inviter's optional whole-day lifetime; nil selects
+	// model.InvitationLifetime.
+	ExpiresInDays             *int
+	IdempotencyKey            string
+	batchDuplicate            bool
+	batchCanonicalKey         string
+	onboardingImportID        model.OnboardingImportID
+	onboardingImportRowNumber int
 }
 
 type IssueAcademicUnitRoleInvitationCommand struct {
@@ -58,11 +64,14 @@ type IssueAcademicUnitRoleInvitationCommand struct {
 	AcademicUnitID                   model.AcademicUnitID
 	RoleID                           model.RoleID
 	IntendedStartsAt, IntendedEndsAt int64
-	IdempotencyKey                   string
-	batchDuplicate                   bool
-	batchCanonicalKey                string
-	onboardingImportID               model.OnboardingImportID
-	onboardingImportRowNumber        int
+	// ExpiresInDays is the inviter's optional whole-day lifetime; nil selects
+	// model.InvitationLifetime.
+	ExpiresInDays             *int
+	IdempotencyKey            string
+	batchDuplicate            bool
+	batchCanonicalKey         string
+	onboardingImportID        model.OnboardingImportID
+	onboardingImportRowNumber int
 }
 
 type IssueInstitutionRoleInvitationCommand struct {
@@ -70,11 +79,14 @@ type IssueInstitutionRoleInvitationCommand struct {
 	InstitutionID                    model.InstitutionID
 	RoleID                           model.RoleID
 	IntendedStartsAt, IntendedEndsAt int64
-	IdempotencyKey                   string
-	batchDuplicate                   bool
-	batchCanonicalKey                string
-	onboardingImportID               model.OnboardingImportID
-	onboardingImportRowNumber        int
+	// ExpiresInDays is the inviter's optional whole-day lifetime; nil selects
+	// model.InvitationLifetime.
+	ExpiresInDays             *int
+	IdempotencyKey            string
+	batchDuplicate            bool
+	batchCanonicalKey         string
+	onboardingImportID        model.OnboardingImportID
+	onboardingImportRowNumber int
 }
 
 // authorizedScopedRoleInvitationIssue is the scope-specific result of the
@@ -89,6 +101,7 @@ type authorizedScopedRoleInvitationIssue struct {
 	academicUnitID                   model.AcademicUnitID
 	role                             *model.Role
 	intendedStartsAt, intendedEndsAt int64
+	lifetime                         time.Duration
 	idempotency                      *store.CommandIdempotency
 	batchDuplicate                   bool
 	batchCanonicalKey                string
@@ -216,6 +229,9 @@ type ReplaceInvitationCommand struct {
 	ExpectedRevision, IntendedStartsAt, IntendedEndsAt                        int64
 	SuggestedUsername, SuggestedDisplayName                                   string
 	SuggestedFirstName, SuggestedLastName, SuggestedLocale, SuggestedTimezone string
+	// ExpiresInDays is the inviter's optional whole-day lifetime; nil keeps
+	// the replaced Invitation's lifetime in whole days.
+	ExpiresInDays *int
 }
 
 const MaximumInvitationBatchItems = 200

@@ -397,3 +397,45 @@ func TestTeacherInvitationMailIsCredentialOccurrence(t *testing.T) {
 	require.True(t, MailTemplateAccessTeacherAcademicUnitInvitation.IsValid())
 	require.NoError(t, occurrence.Validate())
 }
+
+func TestInvitationLifetimeIsBoundedToOneThroughThirtyDays(t *testing.T) {
+	t.Parallel()
+	issuedAt := time.UnixMilli(1_800_000_000_000).UTC()
+	issue := func(lifetime time.Duration) (*Invitation, error) {
+		classID := NewClassID()
+		return NewStudentClassInvitation(StudentClassInvitationInput{
+			ID: NewInvitationID(), TargetEmail: "student@example.edu",
+			ClassID: classID, AcademicPeriodID: NewAcademicPeriodID(),
+			IntendedStartsAt: issuedAt, InviterUserID: NewUserID(),
+			ScopeType: RoleScopeClass, ScopeID: classID.String(),
+			ClaimHash: HashInvitationClaim(NewCredentialToken()), IssuedAt: issuedAt, Lifetime: lifetime,
+		})
+	}
+	for name, test := range map[string]struct {
+		lifetime time.Duration
+		expires  time.Duration
+	}{
+		"default":     {lifetime: 0, expires: 7 * 24 * time.Hour},
+		"one day":     {lifetime: MinimumInvitationLifetime, expires: 24 * time.Hour},
+		"thirty days": {lifetime: MaximumInvitationLifetime, expires: 30 * 24 * time.Hour},
+	} {
+		t.Run("Accepts/"+name, func(t *testing.T) {
+			t.Parallel()
+			invitation, err := issue(test.lifetime)
+			require.NoError(t, err)
+			require.Equal(t, test.expires, invitation.ExpiresAt.Sub(invitation.CreatedAt))
+		})
+	}
+	for name, lifetime := range map[string]time.Duration{
+		"under one day":    MinimumInvitationLifetime - time.Second,
+		"over thirty days": MaximumInvitationLifetime + time.Second,
+		"negative":         -24 * time.Hour,
+	} {
+		t.Run("Rejects/"+name, func(t *testing.T) {
+			t.Parallel()
+			require.False(t, IsValidInvitationLifetime(lifetime))
+			_, err := issue(lifetime)
+			require.Error(t, err)
+		})
+	}
+}

@@ -359,7 +359,8 @@ CREATE TABLE user_settings_documents (
 
 -- An Invitation exists before its recipient has a User row. It freezes one
 -- exact relationship package and stores only a domain-separated
--- digest of the 256-bit claim delivered by mail.
+-- digest of the 256-bit claim delivered by mail. Its inviter chooses a
+-- lifetime of one to thirty days, written in hours like every fixed lifetime.
 CREATE TABLE invitations (
     id varchar(26) PRIMARY KEY,
     created_at timestamptz NOT NULL,
@@ -411,7 +412,7 @@ CREATE TABLE invitations (
         AND suggested_first_name !~ '[\x01-\x1f\x7f-\x9f]'
         AND suggested_last_name !~ '[\x01-\x1f\x7f-\x9f]'
     ),
-    CONSTRAINT invitations_lifetime_check CHECK (expires_at = created_at + interval '168 hours'),
+    CONSTRAINT invitations_lifetime_check CHECK (expires_at BETWEEN created_at + interval '24 hours' AND created_at + interval '720 hours'),
     CONSTRAINT invitations_lifecycle_check CHECK (
         updated_at >= created_at AND
         ((state = 'accepted') = (accepted_at IS NOT NULL AND accepted_user_id IS NOT NULL AND

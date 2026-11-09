@@ -25,6 +25,10 @@ func (s *invitationService) IssueStudentClassInvitation(ctx context.Context, inv
 	if err != nil {
 		return InvitationView{}, apperror.New("request.invalid").WithField("field", "class_id").Wrap(err)
 	}
+	lifetime, err := invitationLifetime(command.ExpiresInDays, model.InvitationLifetime)
+	if err != nil {
+		return InvitationView{}, err
+	}
 	resource := model.Resource{Type: model.ResourceClass, ID: classID}
 	if err = s.deps.Authorization.Authorize(ctx, invocation, model.ActionInvitationCreate, resource); err != nil {
 		return InvitationView{}, err
@@ -63,7 +67,7 @@ func (s *invitationService) IssueStudentClassInvitation(ctx context.Context, inv
 	}
 	placeholderClaimHash := strings.Repeat("0", model.TokenHashLength)
 	if command.onboardingImportID.IsValid() && !command.batchDuplicate {
-		candidate, candidateErr := newStudentClassInvitationValue(invocation, command, class.ID, period.ID, startsAt, issuedAt, placeholderClaimHash)
+		candidate, candidateErr := newStudentClassInvitationValue(invocation, command, class.ID, period.ID, startsAt, issuedAt, lifetime, placeholderClaimHash)
 		if candidateErr != nil {
 			return InvitationView{}, candidateErr
 		}
@@ -75,7 +79,7 @@ func (s *invitationService) IssueStudentClassInvitation(ctx context.Context, inv
 		return InvitationView{}, apperror.New("invitation.mail_unavailable")
 	}
 	if command.batchDuplicate {
-		candidate, candidateErr := newStudentClassInvitationValue(invocation, command, class.ID, period.ID, startsAt, issuedAt, placeholderClaimHash)
+		candidate, candidateErr := newStudentClassInvitationValue(invocation, command, class.ID, period.ID, startsAt, issuedAt, lifetime, placeholderClaimHash)
 		if candidateErr != nil {
 			return InvitationView{}, candidateErr
 		}
@@ -87,7 +91,7 @@ func (s *invitationService) IssueStudentClassInvitation(ctx context.Context, inv
 	if !model.IsValidCredentialToken(rawClaim) {
 		return InvitationView{}, apperror.New("invitation.unavailable")
 	}
-	invitation, err := newStudentClassInvitationValue(invocation, command, class.ID, period.ID, startsAt, issuedAt, model.HashInvitationClaim(rawClaim))
+	invitation, err := newStudentClassInvitationValue(invocation, command, class.ID, period.ID, startsAt, issuedAt, lifetime, model.HashInvitationClaim(rawClaim))
 	if err != nil {
 		return InvitationView{}, err
 	}
@@ -112,14 +116,14 @@ func (s *invitationService) IssueStudentClassInvitation(ctx context.Context, inv
 
 // newStudentClassInvitationValue builds the Student Class Invitation for the command with the given claim hash.
 func newStudentClassInvitationValue(invocation invocation.Invocation, command IssueStudentClassInvitationCommand, classID model.ClassID,
-	periodID model.AcademicPeriodID, startsAt, issuedAt time.Time, claimHash string) (*model.Invitation, error) {
+	periodID model.AcademicPeriodID, startsAt, issuedAt time.Time, lifetime time.Duration, claimHash string) (*model.Invitation, error) {
 	value, err := model.NewStudentClassInvitation(model.StudentClassInvitationInput{
 		ID: model.NewInvitationID(), TargetEmail: command.TargetEmail, ClassID: classID, AcademicPeriodID: periodID,
 		IntendedStartsAt: startsAt, IntendedEndsAt: model.OptionalTimeFromMillis(command.IntendedEndsAt),
 		Suggestions: model.InvitationProfileSuggestions{Username: command.SuggestedUsername, DisplayName: command.SuggestedDisplayName,
 			FirstName: command.SuggestedFirstName, LastName: command.SuggestedLastName, Locale: command.SuggestedLocale, Timezone: command.SuggestedTimezone},
 		InviterUserID: invocation.Principal().UserID, ScopeType: model.RoleScopeClass, ScopeID: classID.String(),
-		ClaimHash: claimHash, IssuedAt: issuedAt,
+		ClaimHash: claimHash, IssuedAt: issuedAt, Lifetime: lifetime,
 	})
 	if err != nil {
 		return nil, domainInvalid("invitation.invalid", err)
@@ -151,6 +155,10 @@ func (s *invitationService) IssueTeacherAcademicUnitInvitation(ctx context.Conte
 	roleID, err := model.ParseRoleID(strings.TrimSpace(command.RoleID.String()))
 	if err != nil {
 		return InvitationView{}, apperror.New("request.invalid").WithField("field", "role_id").Wrap(err)
+	}
+	lifetime, err := invitationLifetime(command.ExpiresInDays, model.InvitationLifetime)
+	if err != nil {
+		return InvitationView{}, err
 	}
 	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()}
 	if err = s.deps.Authorization.Authorize(ctx, invocation, model.ActionInvitationCreate, resource); err != nil {
@@ -193,7 +201,7 @@ func (s *invitationService) IssueTeacherAcademicUnitInvitation(ctx context.Conte
 	}
 	placeholderClaimHash := strings.Repeat("0", model.TokenHashLength)
 	if command.onboardingImportID.IsValid() && !command.batchDuplicate {
-		candidate, candidateErr := newTeacherAcademicUnitInvitationValue(invocation, command, unit.ID, role, startsAt, issuedAt, placeholderClaimHash)
+		candidate, candidateErr := newTeacherAcademicUnitInvitationValue(invocation, command, unit.ID, role, startsAt, issuedAt, lifetime, placeholderClaimHash)
 		if candidateErr != nil {
 			return InvitationView{}, candidateErr
 		}
@@ -205,7 +213,7 @@ func (s *invitationService) IssueTeacherAcademicUnitInvitation(ctx context.Conte
 		return InvitationView{}, apperror.New("invitation.mail_unavailable")
 	}
 	if command.batchDuplicate {
-		candidate, candidateErr := newTeacherAcademicUnitInvitationValue(invocation, command, unit.ID, role, startsAt, issuedAt, placeholderClaimHash)
+		candidate, candidateErr := newTeacherAcademicUnitInvitationValue(invocation, command, unit.ID, role, startsAt, issuedAt, lifetime, placeholderClaimHash)
 		if candidateErr != nil {
 			return InvitationView{}, candidateErr
 		}
@@ -217,7 +225,7 @@ func (s *invitationService) IssueTeacherAcademicUnitInvitation(ctx context.Conte
 	if !model.IsValidCredentialToken(rawClaim) {
 		return InvitationView{}, apperror.New("invitation.unavailable")
 	}
-	invitation, err := newTeacherAcademicUnitInvitationValue(invocation, command, unit.ID, role, startsAt, issuedAt, model.HashInvitationClaim(rawClaim))
+	invitation, err := newTeacherAcademicUnitInvitationValue(invocation, command, unit.ID, role, startsAt, issuedAt, lifetime, model.HashInvitationClaim(rawClaim))
 	if err != nil {
 		return InvitationView{}, err
 	}
@@ -242,14 +250,14 @@ func (s *invitationService) IssueTeacherAcademicUnitInvitation(ctx context.Conte
 
 // newTeacherAcademicUnitInvitationValue builds the Teacher Academic Unit Invitation for the command with the given claim hash.
 func newTeacherAcademicUnitInvitationValue(invocation invocation.Invocation, command IssueTeacherAcademicUnitInvitationCommand, unitID model.AcademicUnitID,
-	role *model.Role, startsAt, issuedAt time.Time, claimHash string) (*model.Invitation, error) {
+	role *model.Role, startsAt, issuedAt time.Time, lifetime time.Duration, claimHash string) (*model.Invitation, error) {
 	value, err := model.NewTeacherAcademicUnitInvitation(model.TeacherAcademicUnitInvitationInput{
 		ID: model.NewInvitationID(), TargetEmail: command.TargetEmail, AcademicUnitID: unitID, RoleID: role.ID,
 		RoleActions: role.Permissions, IntendedStartsAt: startsAt, IntendedEndsAt: model.OptionalTimeFromMillis(command.IntendedEndsAt),
 		Suggestions: model.InvitationProfileSuggestions{Username: command.SuggestedUsername, DisplayName: command.SuggestedDisplayName,
 			FirstName: command.SuggestedFirstName, LastName: command.SuggestedLastName, Locale: command.SuggestedLocale, Timezone: command.SuggestedTimezone},
 		InviterUserID: invocation.Principal().UserID, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String(),
-		ClaimHash: claimHash, IssuedAt: issuedAt,
+		ClaimHash: claimHash, IssuedAt: issuedAt, Lifetime: lifetime,
 	})
 	if err != nil {
 		return nil, domainInvalid("invitation.invalid", err)
@@ -262,7 +270,7 @@ func newTeacherAcademicUnitInvitationValue(invocation invocation.Invocation, com
 func (s *invitationService) storeTeacherAcademicUnitInvitation(ctx context.Context, idempotency *store.CommandIdempotency, invitation *model.Invitation,
 	prepared *store.PreparedMail, reference mutationAttemptReference) (*store.InvitationCommandResult, error) {
 	input := &store.TeacherAcademicUnitInvitationIssue{Invitation: invitation,
-		Lifetime:   model.InvitationLifetime,
+		Lifetime:   invitation.ExpiresAt.Sub(invitation.CreatedAt),
 		Occurrence: prepared.Occurrence, Delivery: prepared.Delivery, DeliveryJob: prepared.Job,
 		AuditEventID: reference.ID, AuditAt: reference.MutationAt}
 	if idempotency != nil {
@@ -308,6 +316,10 @@ func (s *invitationService) IssueAcademicUnitRoleInvitation(ctx context.Context,
 	if err != nil {
 		return InvitationView{}, apperror.New("request.invalid").WithField("field", "role_id").Wrap(err)
 	}
+	lifetime, err := invitationLifetime(command.ExpiresInDays, model.InvitationLifetime)
+	if err != nil {
+		return InvitationView{}, err
+	}
 	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()}
 	for _, action := range []model.Action{model.ActionInvitationCreate, model.ActionRoleBindingManage} {
 		if err = s.deps.Authorization.Authorize(ctx, invocation, action, resource); err != nil {
@@ -339,7 +351,7 @@ func (s *invitationService) IssueAcademicUnitRoleInvitation(ctx context.Context,
 		targetEmail: command.TargetEmail, purpose: model.InvitationPurposeAcademicUnitRole,
 		resource: resource, scopeType: model.RoleScopeAcademicUnit, scopeID: unit.ID.String(), operation: "issue_academic_unit_role",
 		academicUnitID: unit.ID, role: role, intendedStartsAt: command.IntendedStartsAt, intendedEndsAt: command.IntendedEndsAt,
-		idempotency: idempotency, batchDuplicate: command.batchDuplicate, batchCanonicalKey: command.batchCanonicalKey,
+		lifetime: lifetime, idempotency: idempotency, batchDuplicate: command.batchDuplicate, batchCanonicalKey: command.batchCanonicalKey,
 		onboardingImportID: command.onboardingImportID, onboardingImportRowNumber: command.onboardingImportRowNumber,
 	})
 }
@@ -355,6 +367,10 @@ func (s *invitationService) IssueInstitutionRoleInvitation(ctx context.Context, 
 	roleID, err := model.ParseRoleID(strings.TrimSpace(command.RoleID.String()))
 	if err != nil {
 		return InvitationView{}, apperror.New("request.invalid").WithField("field", "role_id").Wrap(err)
+	}
+	lifetime, err := invitationLifetime(command.ExpiresInDays, model.InvitationLifetime)
+	if err != nil {
+		return InvitationView{}, err
 	}
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institutionID.String()}
 	for _, action := range []model.Action{model.ActionInvitationCreate, model.ActionRoleBindingManage} {
@@ -383,7 +399,7 @@ func (s *invitationService) IssueInstitutionRoleInvitation(ctx context.Context, 
 		targetEmail: command.TargetEmail, purpose: model.InvitationPurposeInstitutionRole,
 		resource: resource, scopeType: model.RoleScopeInstitution, scopeID: institutionID.String(), operation: "issue_institution_role",
 		role: role, intendedStartsAt: command.IntendedStartsAt, intendedEndsAt: command.IntendedEndsAt,
-		idempotency: idempotency, batchDuplicate: command.batchDuplicate, batchCanonicalKey: command.batchCanonicalKey,
+		lifetime: lifetime, idempotency: idempotency, batchDuplicate: command.batchDuplicate, batchCanonicalKey: command.batchCanonicalKey,
 		onboardingImportID: command.onboardingImportID, onboardingImportRowNumber: command.onboardingImportRowNumber,
 	})
 }
@@ -406,7 +422,7 @@ func (s *invitationService) issueAuthorizedScopedRole(ctx context.Context, invoc
 			TargetEmail: issue.targetEmail, AcademicUnitID: issue.academicUnitID, RoleID: issue.role.ID, RoleActions: issue.role.Permissions,
 			IntendedStartsAt: startsAt, IntendedEndsAt: model.OptionalTimeFromMillis(issue.intendedEndsAt),
 			InviterUserID: invocation.Principal().UserID, ScopeType: issue.scopeType, ScopeID: issue.scopeID,
-			ClaimHash: strings.Repeat("0", model.TokenHashLength), IssuedAt: issuedAt,
+			ClaimHash: strings.Repeat("0", model.TokenHashLength), IssuedAt: issuedAt, Lifetime: issue.lifetime,
 		})
 		if candidateErr != nil {
 			return InvitationView{}, domainInvalid("invitation.invalid", candidateErr)
@@ -428,7 +444,7 @@ func (s *invitationService) issueAuthorizedScopedRole(ctx context.Context, invoc
 			TargetEmail: issue.targetEmail, AcademicUnitID: issue.academicUnitID, RoleID: issue.role.ID, RoleActions: issue.role.Permissions,
 			IntendedStartsAt: startsAt, IntendedEndsAt: model.OptionalTimeFromMillis(issue.intendedEndsAt),
 			InviterUserID: invocation.Principal().UserID, ScopeType: issue.scopeType, ScopeID: issue.scopeID,
-			ClaimHash: strings.Repeat("0", model.TokenHashLength), IssuedAt: issuedAt,
+			ClaimHash: strings.Repeat("0", model.TokenHashLength), IssuedAt: issuedAt, Lifetime: issue.lifetime,
 		})
 		if candidateErr != nil {
 			return InvitationView{}, domainInvalid("invitation.invalid", candidateErr)
@@ -446,7 +462,7 @@ func (s *invitationService) issueAuthorizedScopedRole(ctx context.Context, invoc
 		TargetEmail: issue.targetEmail, AcademicUnitID: issue.academicUnitID, RoleID: issue.role.ID, RoleActions: issue.role.Permissions,
 		IntendedStartsAt: startsAt, IntendedEndsAt: model.OptionalTimeFromMillis(issue.intendedEndsAt),
 		InviterUserID: invocation.Principal().UserID, ScopeType: issue.scopeType, ScopeID: issue.scopeID,
-		ClaimHash: model.HashInvitationClaim(rawClaim), IssuedAt: issuedAt,
+		ClaimHash: model.HashInvitationClaim(rawClaim), IssuedAt: issuedAt, Lifetime: issue.lifetime,
 	})
 	if err != nil {
 		return InvitationView{}, domainInvalid("invitation.invalid", err)
@@ -462,7 +478,7 @@ func (s *invitationService) issueAuthorizedScopedRole(ctx context.Context, invoc
 	attempt.Value = invitation.Auditable()
 	created, err := runAuditedMutation(ctx, s.deps.Audit, attempt,
 		func() time.Time { return issuedAt }, func(ctx context.Context, reference mutationAttemptReference) (*store.InvitationCommandResult, error) {
-			input := &store.ScopedRoleInvitationIssue{Invitation: invitation, Lifetime: model.InvitationLifetime,
+			input := &store.ScopedRoleInvitationIssue{Invitation: invitation, Lifetime: issue.lifetime,
 				Occurrence: prepared.Occurrence, Delivery: prepared.Delivery, DeliveryJob: prepared.Job,
 				AuditEventID: reference.ID, AuditAt: reference.MutationAt}
 			if issue.idempotency != nil {
@@ -526,4 +542,29 @@ func validateInvitationDelegableRole(role *model.Role, scopeType model.RoleScope
 		}
 	}
 	return nil
+}
+
+// invitationLifetime resolves an inviter's optional whole-day Invitation
+// lifetime: nil selects fallback, and a day count outside the model bounds is
+// invitation.invalid on expires_in_days.
+func invitationLifetime(days *int, fallback time.Duration) (time.Duration, error) {
+	if days == nil {
+		return fallback, nil
+	}
+	const day = 24 * time.Hour
+	if *days < int(model.MinimumInvitationLifetime/day) || *days > int(model.MaximumInvitationLifetime/day) {
+		return 0, apperror.Invalid("invitation.invalid", "expires_in_days")
+	}
+	return time.Duration(*days) * day, nil
+}
+
+// replacedInvitationLifetime is the replaced Invitation's own lifetime in
+// whole days, clamped to the model bounds, which a replacement keeps by default.
+func replacedInvitationLifetime(current *model.Invitation) time.Duration {
+	const day = 24 * time.Hour
+	if current == nil {
+		return model.InvitationLifetime
+	}
+	lifetime := current.ExpiresAt.Sub(current.CreatedAt).Round(day)
+	return min(max(lifetime, model.MinimumInvitationLifetime), model.MaximumInvitationLifetime)
 }

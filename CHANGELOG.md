@@ -17,8 +17,9 @@ module when a change is not server-only. No module has been released yet.
 
 ### Changed
 
-- Server: the baseline adds the `affiliations_kind_user_id_idx` index for the
-  User directory's affiliation filter. Existing development databases must be
+- Server: the baseline adds indexes for the User directory affiliation filter
+  and the onboarding import list, and bounds `invitations.expires_at` between
+  one and thirty days after creation. Existing development databases must be
   recreated.
 - Server: recent authentication now counts primary proof only. An MFA
   challenge no longer refreshes recency; it still makes a Session strong.
@@ -231,12 +232,18 @@ module when a change is not server-only. No module has been released yet.
   shows it as `reason` on the disable event to Institution-wide readers, while
   Academic Unit readers and the self audit history never receive it. A request
   without a body behaves as before.
+- Server: the four Invitation create bodies and the replacement body take an
+  optional `expires_in_days` from 1 to 30. Issuing defaults to 7 days; a
+  replacement keeps the replaced Invitation's lifetime in whole days; a value
+  outside the range is `invitation.invalid`. Resend keeps the original
+  expiry, and batch and onboarding import Invitations stay at 7 days. The
+  baseline bounds `invitations.expires_at` between one and thirty days after
+  creation.
 - Server: `GET /api/v1/onboarding-imports` lists the unexpired onboarding
   imports the caller could read one by one, newest first, filtered by
   repeated `state` values and paged by `limit` and `cursor`. Items are
   summaries without rows; student progressions are not listed. A new
-  `onboarding_imports (created_at DESC, id DESC)` index backs it, so existing
-  development databases must be recreated.
+  `onboarding_imports (created_at DESC, id DESC)` index backs it.
 - Server: `GET /api/v1/users/me/audits` takes `order=asc` to read oldest
   first, and its first page reports `total`, the events the filters match,
   exact below 10,000 and flagged by `total_is_lower_bound` at that bound.

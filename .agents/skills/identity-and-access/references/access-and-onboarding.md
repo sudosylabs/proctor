@@ -643,8 +643,12 @@ Invitation state is `pending`, `accepted`, `revoked`, `expired`, or
 `superseded`. It freezes normalized recipient email, purpose, targets, role,
 effective bounds, optional locale and profile suggestions, inviter, and
 authorization scope. A 256-bit random secret authenticates the claim; only its
-domain-separated hash is stored. Default lifetime is seven days under bounded
-Institution policy.
+domain-separated hash is stored. The inviter may choose a lifetime of one to
+thirty whole days; seven is the default, and batch and onboarding import
+Invitations always use it. The model, Store validation, and a baseline CHECK
+bound the stored expiry. Resend keeps the original expiry; a replacement keeps
+the replaced Invitation's lifetime in whole days unless the inviter chooses
+another.
 
 Resending an unchanged Invitation rotates the secret and invalidates every old
 link. Changing recipient, purpose, target, role, or effective dates creates a

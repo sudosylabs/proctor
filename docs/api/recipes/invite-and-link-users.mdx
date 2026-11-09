@@ -38,6 +38,12 @@ with the Class ID in the path.
 The invitation claim is delivered through the configured mail path. Never
 expose that one-time claim in an administrator UI log or analytics event.
 
+Every create body, and the replacement body, takes an optional
+`expires_in_days` from 1 to 30. It defaults to 7 when issuing; a replacement
+keeps the replaced Invitation's lifetime in whole days. A value outside the
+range is rejected with `invitation.invalid`. Resending never extends expiry,
+and batch Invitations always last 7 days.
+
 ## Invite Staff to a Scope
 
 - Use <Link to="/api/reference/issue-teacher-academic-unit-invitation">Teacher Academic Unit invitation</Link>

@@ -8630,6 +8630,8 @@ export interface components {
             email: string;
             /** Format: date-time */
             end_at?: string;
+            /** @description Whole days until the claim expires, from 1 to 30. Omitted or null selects 7. A value outside the range is rejected with invitation.invalid. */
+            expires_in_days?: number | null;
             role_id: components["schemas"]["ID"];
             /** Format: date-time */
             start_at?: string;
@@ -8639,6 +8641,8 @@ export interface components {
             email: string;
             /** Format: date-time */
             end_at?: string;
+            /** @description Whole days until the claim expires, from 1 to 30. Omitted or null selects 7. A value outside the range is rejected with invitation.invalid. */
+            expires_in_days?: number | null;
             /** Format: date-time */
             start_at?: string;
             suggested_display_name?: string;
@@ -8653,6 +8657,8 @@ export interface components {
             email: string;
             /** Format: date-time */
             end_at?: string;
+            /** @description Whole days until the claim expires, from 1 to 30. Omitted or null selects 7. A value outside the range is rejected with invitation.invalid. */
+            expires_in_days?: number | null;
             role_id: components["schemas"]["ID"];
             /** Format: date-time */
             start_at?: string;
@@ -9837,6 +9843,8 @@ export interface components {
             end_at?: string;
             /** Format: int64 */
             expected_revision: number;
+            /** @description Whole days until the replacement's claim expires, from 1 to 30. Omitted or null keeps the replaced Invitation's own lifetime, rounded to whole days. A value outside the range is rejected with invitation.invalid. */
+            expires_in_days?: number | null;
             institution_id?: components["schemas"]["ID"];
             /** @enum {string} */
             purpose: "student_class" | "teacher_academic_unit" | "academic_unit_role" | "institution_role";

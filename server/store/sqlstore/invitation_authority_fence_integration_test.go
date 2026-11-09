@@ -41,6 +41,12 @@ func invitationAuthoritySQLProbe(t *testing.T, primary *SQLStore) storetest.Invi
 			require.NoError(t, affectedErr, "set Invitation expiry: affected")
 			require.Equal(t, int64(1), affected, "set Invitation expiry: affected")
 		},
+		SetInvitationLifetime: func(t *testing.T, ctx context.Context, id model.InvitationID, lifetime time.Duration) error {
+			t.Helper()
+			_, err := primary.GetMaster().Exec(ctx, `UPDATE invitations SET expires_at=created_at+make_interval(secs => ?) WHERE id=?`,
+				lifetime.Seconds(), id.String())
+			return err
+		},
 		SetInvitationIntendedEndsAt: func(t *testing.T, ctx context.Context, id model.InvitationID, intendedEnd time.Time) {
 			t.Helper()
 			result, err := primary.GetMaster().Exec(ctx, `UPDATE invitations SET intended_end_at=? WHERE id=?`, intendedEnd, id.String())

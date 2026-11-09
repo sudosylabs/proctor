@@ -65,7 +65,7 @@ func validateStudentClassInvitationIssueIdempotently(input *store.StudentClassIn
 
 func validateTeacherAcademicUnitInvitationIssue(input *store.TeacherAcademicUnitInvitationIssue) error {
 	if input == nil || input.Invitation == nil || input.Occurrence == nil || input.Delivery == nil || input.DeliveryJob == nil ||
-		input.Lifetime != model.InvitationLifetime || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+		!model.IsValidInvitationLifetime(input.Lifetime) || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
 		return store.NewErrInvalidInput("invitation", "issue", nil)
 	}
 	if err := input.Invitation.Validate(); err != nil {
@@ -96,7 +96,7 @@ func validateTeacherAcademicUnitInvitationIssue(input *store.TeacherAcademicUnit
 func validateTeacherAcademicUnitInvitationIssueIdempotently(input *store.TeacherAcademicUnitInvitationIssue, command *store.CommandIdempotency) error {
 	if command != nil && command.OnboardingImportID.IsValid() && input != nil && input.Invitation != nil &&
 		input.Occurrence == nil && input.Delivery == nil && input.DeliveryJob == nil {
-		if input.Lifetime != model.InvitationLifetime || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() ||
+		if !model.IsValidInvitationLifetime(input.Lifetime) || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() ||
 			input.Invitation.Purpose != model.InvitationPurposeTeacherAcademicUnit || input.Invitation.State != model.InvitationPending ||
 			input.Invitation.Validate() != nil {
 			return store.NewErrInvalidInput("invitation", "onboarding_no_op_issue", nil)
@@ -108,7 +108,7 @@ func validateTeacherAcademicUnitInvitationIssueIdempotently(input *store.Teacher
 
 func validateScopedRoleInvitationIssue(input *store.ScopedRoleInvitationIssue) error {
 	if input == nil || input.Invitation == nil || input.Occurrence == nil || input.Delivery == nil || input.DeliveryJob == nil ||
-		input.Lifetime != model.InvitationLifetime || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+		!model.IsValidInvitationLifetime(input.Lifetime) || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
 		return store.NewErrInvalidInput("invitation", "issue", nil)
 	}
 	if err := input.Invitation.Validate(); err != nil {
@@ -145,7 +145,7 @@ func validateScopedRoleInvitationIssueIdempotently(input *store.ScopedRoleInvita
 	if command != nil && command.OnboardingImportID.IsValid() && input != nil && input.Invitation != nil &&
 		input.Occurrence == nil && input.Delivery == nil && input.DeliveryJob == nil {
 		purpose := input.Invitation.Purpose
-		if input.Lifetime != model.InvitationLifetime || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() ||
+		if !model.IsValidInvitationLifetime(input.Lifetime) || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() ||
 			(purpose != model.InvitationPurposeAcademicUnitRole && purpose != model.InvitationPurposeInstitutionRole) ||
 			input.Invitation.State != model.InvitationPending || input.Invitation.Validate() != nil {
 			return store.NewErrInvalidInput("invitation", "onboarding_no_op_issue", nil)

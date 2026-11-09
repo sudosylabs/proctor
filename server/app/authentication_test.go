@@ -243,6 +243,9 @@ func (authenticationUserStore) ListIdentities(context.Context, []model.UserID) (
 func (authenticationUserStore) ListDirectorySummaries(context.Context, store.UserDirectorySummaryOptions) ([]store.UserDirectorySummary, error) {
 	return nil, errors.New("unused")
 }
+func (authenticationUserStore) ListDisplayNames(context.Context, []model.UserID) ([]store.UserDisplayName, error) {
+	return nil, errors.New("unused")
+}
 func (authenticationUserStore) MatchVisibility(context.Context, model.UserID, store.UserVisibilityScope) (store.UserVisibilityMatch, error) {
 	return store.UserVisibilityMatch{}, errors.New("unused")
 }

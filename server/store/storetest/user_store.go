@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -42,6 +43,7 @@ func TestUserStore(t *testing.T, ss store.Store, probes ...UserStoreSQLProbe) {
 	t.Run("NormalizedLookups", func(t *testing.T) { testUserStoreNormalizedLookups(t, ss) })
 	t.Run("Update", func(t *testing.T) { testUserStoreUpdate(t, ss) })
 	t.Run("UpdateLastLogin", func(t *testing.T) { testUserStoreUpdateLastLogin(t, ss) })
+	t.Run("ListDisplayNames", func(t *testing.T) { testUserStoreListDisplayNames(t, ss) })
 	t.Run("Uniqueness", func(t *testing.T) { testUserStoreUniqueness(t, ss) })
 	t.Run("ListAndDisable", func(t *testing.T) { testUserStoreListAndDisable(t, ss) })
 	t.Run("VisibilityIntervalPrecision", func(t *testing.T) { testUserVisibilityIntervalPrecision(t, ss) })
@@ -1210,6 +1212,34 @@ func testUserStoreUpdateLastLogin(t *testing.T, ss store.Store) {
 	require.True(t, at.Equal(got.LastActivityAt.Time))
 	require.False(t, got.UpdatedAt.Before(at))
 	require.Equal(t, revision, got.Revision)
+}
+
+func testUserStoreListDisplayNames(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	named := saveUser(t, ctx, ss)
+	unnamed := newUser()
+	unnamed.DisplayName = ""
+	unnamed, err := createUser(t, ctx, ss, unnamed)
+	require.NoError(t, err)
+	names, err := ss.User().ListDisplayNames(ctx, []model.UserID{named.ID, unnamed.ID, named.ID, model.NewUserID()})
+	require.NoError(t, err)
+	expected := []store.UserDisplayName{{UserID: named.ID, DisplayName: named.DisplayName}, {UserID: unnamed.ID, DisplayName: unnamed.Username}}
+	slices.SortFunc(expected, func(a, b store.UserDisplayName) int { return strings.Compare(a.UserID.String(), b.UserID.String()) })
+	// A missing User is absent, a repeated one is read once, and a User with no
+	// display name is presented by username.
+	require.Equal(t, expected, names)
+	empty, err := ss.User().ListDisplayNames(ctx, nil)
+	require.NoError(t, err)
+	require.Empty(t, empty)
+	var invalid *store.ErrInvalidInput
+	_, err = ss.User().ListDisplayNames(ctx, []model.UserID{"invalid"})
+	require.ErrorAs(t, err, &invalid, "an invalid User ID")
+	tooMany := make([]model.UserID, store.MaximumUserDisplayNames+1)
+	for index := range tooMany {
+		tooMany[index] = model.NewUserID()
+	}
+	_, err = ss.User().ListDisplayNames(ctx, tooMany)
+	require.ErrorAs(t, err, &invalid, "more Users than one read allows")
 }
 
 func testUserStoreUniqueness(t *testing.T, ss store.Store) {

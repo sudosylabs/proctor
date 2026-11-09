@@ -96,6 +96,8 @@ const (
 	methodReconcileSubmission                       methodName = "reconcile_submission"
 	methodBeginPurgeBatch                           methodName = "begin_purge_batch"
 	methodListScope                                 methodName = "list_scope"
+	methodListBuildTitles                           methodName = "list_build_titles"
+	methodListDisplayNames                          methodName = "list_display_names"
 	methodListCreationScope                         methodName = "list_creation_scope"
 	methodBeginBuild                                methodName = "begin_build"
 	methodFinishWriter                              methodName = "finish_writer"

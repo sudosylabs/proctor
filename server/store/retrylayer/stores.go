@@ -650,6 +650,9 @@ func (s *userStore) MatchVisibility(ctx context.Context, userID model.UserID, vi
 		return s.UserStore.MatchVisibility(ctx, userID, visibility)
 	})
 }
+func (s *userStore) ListDisplayNames(ctx context.Context, userIDs []model.UserID) ([]store.UserDisplayName, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.UserDisplayName, error) { return s.UserStore.ListDisplayNames(ctx, userIDs) })
+}
 
 func (s *externalIdentityStore) Get(ctx context.Context, id model.ExternalIdentityID) (*model.ExternalIdentity, error) {
 	return retryCall1(ctx, s.layer, func() (*model.ExternalIdentity, error) { return s.ExternalIdentityStore.Get(ctx, id) })

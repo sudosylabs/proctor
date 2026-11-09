@@ -1032,6 +1032,34 @@ func (s SQLUserStore) UpdateLastLogin(ctx context.Context, input *store.UserLast
 	return requireAffected(result, "user", id.String())
 }
 
+// ListDisplayNames reads the presentable name of each given unarchived User.
+func (s SQLUserStore) ListDisplayNames(ctx context.Context, userIDs []model.UserID) ([]store.UserDisplayName, error) {
+	ids, err := distinctIdentifiers(userIDs, store.MaximumUserDisplayNames)
+	if err != nil {
+		return nil, store.NewErrInvalidInput("user", "user_ids", err)
+	}
+	result := make([]store.UserDisplayName, 0, len(ids))
+	if len(ids) == 0 {
+		return result, nil
+	}
+	var rows []struct {
+		ID          string `db:"id"`
+		DisplayName string `db:"display_name"`
+	}
+	if err = s.GetMaster().Select(ctx, &rows, `SELECT id, COALESCE(NULLIF(display_name, ''), username) AS display_name
+		FROM users WHERE id = ANY(?) AND archived_at IS NULL ORDER BY id`, pq.Array(ids)); err != nil {
+		return nil, translateError("user", "display_names", err)
+	}
+	for _, row := range rows {
+		id, err := parsePersistedID("user", "id", row.ID, model.ParseUserID)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, store.UserDisplayName{UserID: id, DisplayName: row.DisplayName})
+	}
+	return result, nil
+}
+
 func newUserRow(user *model.User) userRow {
 	return userRow{
 		ID:                          user.ID.String(),

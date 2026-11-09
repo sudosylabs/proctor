@@ -100,6 +100,7 @@ func TestStartMFARekeyAuditsThenFencesAndWakesTheEngine(t *testing.T) {
 	require.Equal(t, []model.Action{model.ActionMFARekey}, fixture.authorizer.actions)
 	input := fixture.store.input
 	require.Equal(t, model.JobTypeMFARekey, input.Job.Type)
+	require.Equal(t, fixture.principal.UserID, input.Job.CreatedByUserID, "the rekey Job names the operator who started it")
 	require.Equal(t, fixture.sealer.PrimaryKeyID(), input.PrimaryKeyID)
 	require.Equal(t, fixture.retiringID, input.RetiringKeyID)
 	require.Equal(t, model.AuditEventID(fixture.auditor.beginID), input.AuditEventID)

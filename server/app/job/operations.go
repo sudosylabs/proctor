@@ -38,6 +38,13 @@ type View struct {
 	MaximumAttempts int
 	Progress        *model.JobProgress
 	Revision        int64
+	// CreatedByUserID names the operator who started the Job; it is zero for
+	// recurring and system work.
+	CreatedByUserID model.UserID
+	// CreatedByDisplayName and Subject are presentation the application adds
+	// for operators; the engine leaves them empty.
+	CreatedByDisplayName string
+	Subject              string
 }
 
 // AttemptView is the canonical safe Job Attempt projection. Claim ownership,
@@ -264,7 +271,7 @@ func (r *Engine) operatorVisible(jobType model.JobType) bool {
 }
 
 func project(record *model.Job) View {
-	view := View{ID: record.ID, Type: record.Type, Status: record.Status, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt, AvailableAt: record.AvailableAt, StartedAt: record.StartedAt, CompletedAt: record.CompletedAt, PublicErrorCode: record.PublicErrorCode, AttemptCount: record.AttemptCount, MaximumAttempts: record.MaximumAttempts, Revision: record.Revision}
+	view := View{ID: record.ID, Type: record.Type, Status: record.Status, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt, AvailableAt: record.AvailableAt, StartedAt: record.StartedAt, CompletedAt: record.CompletedAt, PublicErrorCode: record.PublicErrorCode, AttemptCount: record.AttemptCount, MaximumAttempts: record.MaximumAttempts, Revision: record.Revision, CreatedByUserID: record.CreatedByUserID}
 	if record.Progress != nil {
 		progress := *record.Progress
 		view.Progress = &progress

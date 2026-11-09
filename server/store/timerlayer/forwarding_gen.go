@@ -1964,6 +1964,12 @@ func (s *timedExamExportStore) CompletePurge(arg0 context.Context, arg1 store.Ex
 	})
 }
 
+func (s *timedExamExportStore) ListBuildTitles(arg0 context.Context, arg1 []model.JobID) ([]store.ExamExportBuildTitle, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamExport, methodListBuildTitles), func(callCtx context.Context) ([]store.ExamExportBuildTitle, error) {
+		return s.next.ListBuildTitles(callCtx, arg1)
+	})
+}
+
 func (s *timedExamResourceStore) ReserveUpload(arg0 context.Context, arg1 *store.ExamResourceUploadReservation) (*store.FileUpload, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateExamResource, methodReserveUpload), func(callCtx context.Context) (*store.FileUpload, error) {
 		return s.next.ReserveUpload(callCtx, arg1)
@@ -2237,6 +2243,12 @@ func (s *timedUserStore) SetDisabled(arg0 context.Context, arg1 *store.UserDisab
 func (s *timedUserStore) UpdateLastLogin(arg0 context.Context, arg1 *store.UserLastLoginUpdate) error {
 	return timeStoreCall0(arg0, s.layer, storeOperation(aggregateUser, methodUpdateLastLogin), func(callCtx context.Context) error {
 		return s.next.UpdateLastLogin(callCtx, arg1)
+	})
+}
+
+func (s *timedUserStore) ListDisplayNames(arg0 context.Context, arg1 []model.UserID) ([]store.UserDisplayName, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateUser, methodListDisplayNames), func(callCtx context.Context) ([]store.UserDisplayName, error) {
+		return s.next.ListDisplayNames(callCtx, arg1)
 	})
 }
 

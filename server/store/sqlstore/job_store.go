@@ -101,6 +101,7 @@ type jobRow struct {
 	ProgressTotal   sql.NullInt64  `db:"progress_total"`
 	ProgressStage   sql.NullString `db:"progress_stage"`
 	Revision        int64          `db:"revision"`
+	CreatedByUserID sql.NullString `db:"created_by_user_id"`
 }
 
 type jobAttemptRow struct {
@@ -117,7 +118,7 @@ type jobAttemptRow struct {
 	PublicErrorCode string       `db:"public_error_code"`
 }
 
-const jobColumns = `id, type, status, created_at, updated_at, available_at, started_at, completed_at, command, checkpoint, result, public_error_code, dedupe_key, dedupe_policy, attempt_count, maximum_attempts, work_reserved, progress_current, progress_total, progress_stage, revision`
+const jobColumns = `id, type, status, created_at, updated_at, available_at, started_at, completed_at, command, checkpoint, result, public_error_code, dedupe_key, dedupe_policy, attempt_count, maximum_attempts, work_reserved, progress_current, progress_total, progress_stage, revision, created_by_user_id`
 const jobAttemptColumns = `id, job_id, number, status, node_id, claim_token, started_at, heartbeat_at, lease_expires_at, completed_at, public_error_code`
 
 func newSQLJobStore(sqlStore *SQLStore) store.JobStore { return &SQLJobStore{SQLStore: sqlStore} }
@@ -206,7 +207,12 @@ func insertQueuedJob(ctx context.Context, executor sqlxExecutor, job *model.Job,
 			conflict = " ON CONFLICT (type, dedupe_key) WHERE dedupe_policy = 'permanent' DO NOTHING"
 		}
 	}
-	return executor.Exec(ctx, `INSERT INTO jobs (`+jobColumns+`) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, NULL, NULL, '', ?, ?, 0, ?, 0, NULL, NULL, NULL, ?)`+conflict, job.ID.String(), string(job.Type), string(job.Status), job.CreatedAt, job.UpdatedAt, job.AvailableAt, job.Command, job.DedupeKey, string(job.DedupePolicy), job.MaximumAttempts, job.Revision)
+	return executor.Exec(ctx, `INSERT INTO jobs (`+jobColumns+`) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, NULL, NULL, '', ?, ?, 0, ?, 0, NULL, NULL, NULL, ?, ?)`+conflict, job.ID.String(), string(job.Type), string(job.Status), job.CreatedAt, job.UpdatedAt, job.AvailableAt, job.Command, job.DedupeKey, string(job.DedupePolicy), job.MaximumAttempts, job.Revision, jobInitiator(job))
+}
+
+// jobInitiator is the persisted spelling of a Job's optional initiator.
+func jobInitiator(job *model.Job) sql.NullString {
+	return sql.NullString{String: job.CreatedByUserID.String(), Valid: !job.CreatedByUserID.IsZero()}
 }
 
 // leaseExpiryBackoff delays a Job whose attempt lost its lease, which usually
@@ -777,6 +783,9 @@ func (r jobRow) model() (*model.Job, error) {
 	}
 	if r.ProgressCurrent.Valid && r.ProgressTotal.Valid && r.ProgressStage.Valid {
 		job.Progress = &model.JobProgress{Current: r.ProgressCurrent.Int64, Total: r.ProgressTotal.Int64, Stage: r.ProgressStage.String}
+	}
+	if job.CreatedByUserID, err = parseNullablePersistedID("job", "created_by_user_id", r.CreatedByUserID, model.ParseUserID); err != nil {
+		return nil, err
 	}
 	if err := validatePersistedModel("job", job); err != nil {
 		return nil, err

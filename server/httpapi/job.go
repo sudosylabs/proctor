@@ -49,6 +49,11 @@ type jobResponse struct {
 	MaximumAttempts int                  `json:"maximum_attempts"`
 	Progress        *jobProgressResponse `json:"progress,omitempty"`
 	Revision        int64                `json:"revision"`
+	// CreatedByUserID and CreatedByDisplayName name the operator who started
+	// the Job; both are omitted for recurring and system work.
+	CreatedByUserID      string `json:"created_by_user_id,omitempty"`
+	CreatedByDisplayName string `json:"created_by_display_name,omitempty"`
+	Subject              string `json:"subject,omitempty"`
 }
 
 // jobListResponse is the collection envelope; the first page also carries the
@@ -272,7 +277,8 @@ func jobAttemptCursorSpec() opaqueCursorSpec[jobAttemptCursor] {
 	}
 }
 func jobResponseFromApplication(view job.View) jobResponse {
-	response := jobResponse{ID: view.ID.String(), Type: view.Type, Status: view.Status, CreatedAt: model.FormatRFC3339(view.CreatedAt), UpdatedAt: model.FormatRFC3339(view.UpdatedAt), AvailableAt: model.FormatRFC3339(view.AvailableAt), PublicErrorCode: view.PublicErrorCode, AttemptCount: view.AttemptCount, MaximumAttempts: view.MaximumAttempts, Revision: view.Revision}
+	response := jobResponse{ID: view.ID.String(), Type: view.Type, Status: view.Status, CreatedAt: model.FormatRFC3339(view.CreatedAt), UpdatedAt: model.FormatRFC3339(view.UpdatedAt), AvailableAt: model.FormatRFC3339(view.AvailableAt), PublicErrorCode: view.PublicErrorCode, AttemptCount: view.AttemptCount, MaximumAttempts: view.MaximumAttempts, Revision: view.Revision,
+		CreatedByUserID: view.CreatedByUserID.String(), CreatedByDisplayName: view.CreatedByDisplayName, Subject: view.Subject}
 	if view.StartedAt.Valid {
 		response.StartedAt = model.FormatRFC3339(view.StartedAt.Time)
 	}

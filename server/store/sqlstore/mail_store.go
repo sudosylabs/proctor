@@ -114,10 +114,10 @@ func insertPreparedMailJob(ctx context.Context, executor sqlxExecutor, job *mode
 	if job.Status != model.JobStatusCanceled || !job.CompletedAt.Valid {
 		return store.NewErrInvalidInput("job", "prepared_mail", nil)
 	}
-	_, err := executor.Exec(ctx, `INSERT INTO jobs (`+jobColumns+`) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?)`,
+	_, err := executor.Exec(ctx, `INSERT INTO jobs (`+jobColumns+`) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)`,
 		job.ID.String(), string(job.Type), string(job.Status), job.CreatedAt, job.UpdatedAt, job.AvailableAt,
 		job.CompletedAt.Time, job.Command, job.PublicErrorCode, job.DedupeKey,
-		string(job.DedupePolicy), job.AttemptCount, job.MaximumAttempts, job.WorkReserved, job.Revision)
+		string(job.DedupePolicy), job.AttemptCount, job.MaximumAttempts, job.WorkReserved, job.Revision, jobInitiator(job))
 	return err
 }
 

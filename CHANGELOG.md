@@ -18,9 +18,10 @@ module when a change is not server-only. No module has been released yet.
 ### Changed
 
 - Server: the baseline adds indexes for the User directory affiliation filter,
-  the onboarding import list, failed Jobs and Invitations by state, and bounds
-  `invitations.expires_at` between one and thirty days after creation.
-  Existing development databases must be recreated.
+  the onboarding import list, failed Jobs and Invitations by state, bounds
+  `invitations.expires_at` between one and thirty days after creation, and
+  adds `jobs.created_by_user_id`. Existing development databases must be
+  recreated.
 - Server: recent authentication now counts primary proof only. An MFA
   challenge no longer refreshes recency; it still makes a Session strong.
 - Server: Desktop Authorization that reuses a recently reauthenticated Web
@@ -213,6 +214,11 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: `JobResponse` names who started a Job and what it is about:
+  `created_by_user_id` and `created_by_display_name` for an Examination
+  Export build, mail rekey or MFA rekey an operator started (omitted for
+  recurring and system work), and `subject`, the Exam title, for an
+  Examination Export build. `GET /api/v1/jobs` reads them once per page.
 - Server: the first page of `GET /api/v1/users`, `GET /api/v1/invitations`,
   `GET /api/v1/jobs`, `GET /api/v1/audits`, and `GET /api/v1/mail/deliveries`
   reports `total` with `total_is_lower_bound`: the items the same filters and

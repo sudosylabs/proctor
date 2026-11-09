@@ -10,6 +10,8 @@ package app
 import (
 	"context"
 	"errors"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,11 +21,13 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 type jobOperatorEngineFake struct {
 	events       *[]string
 	view         job.View
+	page         []job.View
 	prepareErr   error
 	applyErr     error
 	listQuery    job.ListQuery
@@ -36,6 +40,9 @@ type jobOperatorEngineFake struct {
 func (f *jobOperatorEngineFake) List(_ context.Context, query job.ListQuery) (job.Page, error) {
 	*f.events = append(*f.events, "list")
 	f.listQuery = query
+	if f.page != nil {
+		return job.Page{Items: slices.Clone(f.page)}, nil
+	}
 	return job.Page{Items: []job.View{f.view}}, nil
 }
 func (f *jobOperatorEngineFake) CountRecentFailures(_ context.Context, within time.Duration, maximum int) (int, error) {
@@ -109,7 +116,7 @@ func TestJobOperationsAuthorizeBeforeEngineInspection(t *testing.T) {
 	view := job.View{ID: model.NewJobID(), Type: model.JobTypeProfilePictureGenerateDefault, Status: model.JobStatusQueued}
 	engine := &jobOperatorEngineFake{events: &events, view: view}
 	authorizer := &jobOperationsAuthorizerFake{events: &events, resource: model.Resource{Type: model.ResourceInstitution, ID: model.NewID()}}
-	service, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: engine, Authorization: authorizer, Audit: &jobOperationsAuditorFake{events: &events}, Now: time.Now})
+	service, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: engine, Authorization: authorizer, Audit: &jobOperationsAuditorFake{events: &events}, Users: &jobInitiatorNamesFake{}, ExamExports: &jobExamExportTitlesFake{}, Now: time.Now})
 	require.NoError(t, err)
 
 	page, appErr := service.ListJobs(context.Background(), invocation.Invocation{}, ListJobsQuery{Limit: 20})
@@ -135,7 +142,7 @@ func TestJobOperationsAuditAfterPreparationAndBeforeTransition(t *testing.T) {
 	engine := &jobOperatorEngineFake{events: &events, view: view}
 	authorizer := &jobOperationsAuthorizerFake{events: &events, resource: model.Resource{Type: model.ResourceInstitution, ID: model.NewID()}}
 	auditor := &jobOperationsAuditorFake{events: &events}
-	service, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: engine, Authorization: authorizer, Audit: auditor, Now: time.Now})
+	service, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: engine, Authorization: authorizer, Audit: auditor, Users: &jobInitiatorNamesFake{}, ExamExports: &jobExamExportTitlesFake{}, Now: time.Now})
 	require.NoError(t, err)
 
 	_, appErr := service.CancelJob(context.Background(), invocation.Invocation{}, CancelJobCommand{ID: view.ID})
@@ -173,7 +180,7 @@ func TestJobOperationsTranslateEnginePolicyErrors(t *testing.T) {
 	t.Parallel()
 	events := make([]string, 0, 2)
 	engine := &jobOperatorEngineFake{events: &events, prepareErr: job.ErrCancelUnsupported}
-	service, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: engine, Authorization: &jobOperationsAuthorizerFake{events: &events}, Audit: &jobOperationsAuditorFake{events: &events}, Now: time.Now})
+	service, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: engine, Authorization: &jobOperationsAuthorizerFake{events: &events}, Audit: &jobOperationsAuditorFake{events: &events}, Users: &jobInitiatorNamesFake{}, ExamExports: &jobExamExportTitlesFake{}, Now: time.Now})
 	require.NoError(t, err)
 	_, appErr := service.CancelJob(context.Background(), invocation.Invocation{}, CancelJobCommand{ID: model.NewJobID()})
 	require.True(t, apperror.Is(appErr, "job.cancel.unsupported"), "Cancel() error=%#v", appErr)
@@ -185,22 +192,90 @@ func TestJobOperationsRequireDependencies(t *testing.T) {
 	engine := &jobOperatorEngineFake{}
 	authorizer := &jobOperationsAuthorizerFake{}
 	auditor := &jobOperationsAuditorFake{events: &[]string{}}
+	users, exports := &jobInitiatorNamesFake{}, &jobExamExportTitlesFake{}
 	tests := []struct {
 		name          string
 		jobs          jobOperatorEngine
 		authorization institutionAuthorizer
 		audit         mutationAuditor
+		users         jobInitiatorNames
+		exports       jobExamExportTitles
 		now           func() time.Time
 	}{
-		{name: "engine", authorization: authorizer, audit: auditor, now: time.Now},
-		{name: "authorization", jobs: engine, audit: auditor, now: time.Now},
-		{name: "audit", jobs: engine, authorization: authorizer, now: time.Now},
-		{name: "clock", jobs: engine, authorization: authorizer, audit: auditor},
+		{name: "engine", authorization: authorizer, audit: auditor, users: users, exports: exports, now: time.Now},
+		{name: "authorization", jobs: engine, audit: auditor, users: users, exports: exports, now: time.Now},
+		{name: "audit", jobs: engine, authorization: authorizer, users: users, exports: exports, now: time.Now},
+		{name: "initiator names", jobs: engine, authorization: authorizer, audit: auditor, exports: exports, now: time.Now},
+		{name: "exam export titles", jobs: engine, authorization: authorizer, audit: auditor, users: users, now: time.Now},
+		{name: "clock", jobs: engine, authorization: authorizer, audit: auditor, users: users, exports: exports},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: test.jobs, Authorization: test.authorization, Audit: test.audit, Now: test.now})
+			_, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: test.jobs, Authorization: test.authorization, Audit: test.audit, Users: test.users, ExamExports: test.exports, Now: test.now})
 			require.Error(t, err, "nil %s dependency was accepted", test.name)
 		})
 	}
+}
+
+type jobInitiatorNamesFake struct {
+	names []store.UserDisplayName
+	calls [][]model.UserID
+	err   error
+}
+
+func (f *jobInitiatorNamesFake) ListDisplayNames(_ context.Context, ids []model.UserID) ([]store.UserDisplayName, error) {
+	f.calls = append(f.calls, slices.Clone(ids))
+	return f.names, f.err
+}
+
+type jobExamExportTitlesFake struct {
+	titles []store.ExamExportBuildTitle
+	calls  [][]model.JobID
+}
+
+func (f *jobExamExportTitlesFake) ListBuildTitles(_ context.Context, ids []model.JobID) ([]store.ExamExportBuildTitle, error) {
+	f.calls = append(f.calls, slices.Clone(ids))
+	return f.titles, nil
+}
+
+func TestJobOperationsPresentInitiatorsAndSubjectsOncePerPage(t *testing.T) {
+	t.Parallel()
+	events := make([]string, 0, 2)
+	operator := model.NewUserID()
+	firstExport, secondExport, rekey, system := model.NewJobID(), model.NewJobID(), model.NewJobID(), model.NewJobID()
+	engine := &jobOperatorEngineFake{events: &events, page: []job.View{
+		{ID: firstExport, Type: model.JobTypeExamExportBuild, CreatedByUserID: operator},
+		{ID: secondExport, Type: model.JobTypeExamExportBuild, CreatedByUserID: operator},
+		{ID: rekey, Type: model.JobTypeMailRekey, CreatedByUserID: operator},
+		{ID: system, Type: model.JobTypeCleanup},
+	}}
+	users := &jobInitiatorNamesFake{names: []store.UserDisplayName{{UserID: operator, DisplayName: "Ada Operator"}}}
+	exports := &jobExamExportTitlesFake{titles: []store.ExamExportBuildTitle{
+		{JobID: firstExport, Title: "Algorithms final"}, {JobID: secondExport, Title: strings.Repeat("é", 250)},
+	}}
+	service, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: engine, Authorization: &jobOperationsAuthorizerFake{events: &events},
+		Audit: &jobOperationsAuditorFake{events: &events}, Users: users, ExamExports: exports, Now: time.Now})
+	require.NoError(t, err)
+
+	page, err := service.ListJobs(context.Background(), invocation.Invocation{}, ListJobsQuery{Limit: 20})
+	require.NoError(t, err)
+	// Each fact is read once for the page, and only the export builds ask for a subject.
+	require.Equal(t, [][]model.UserID{{operator, operator, operator}}, users.calls)
+	require.Equal(t, [][]model.JobID{{firstExport, secondExport}}, exports.calls)
+	require.Equal(t, []string{"Ada Operator", "Ada Operator", "Ada Operator", ""}, []string{page.Items[0].CreatedByDisplayName, page.Items[1].CreatedByDisplayName, page.Items[2].CreatedByDisplayName, page.Items[3].CreatedByDisplayName})
+	require.Equal(t, "Algorithms final", page.Items[0].Subject)
+	require.Equal(t, strings.Repeat("é", maximumJobSubjectLength), page.Items[1].Subject, "a subject is bounded in characters")
+	require.Empty(t, page.Items[2].Subject, "a rekey has no subject")
+	require.True(t, page.Items[3].CreatedByUserID.IsZero(), "system work has no initiator")
+	require.Empty(t, page.Items[3].Subject)
+
+	engine.view = job.View{ID: system, Type: model.JobTypeCleanup}
+	single, err := service.GetJob(context.Background(), invocation.Invocation{}, GetJobQuery{ID: system})
+	require.NoError(t, err)
+	require.Empty(t, single.CreatedByDisplayName)
+	require.Len(t, users.calls, 1, "a Job with no initiator reads no names")
+
+	users.err = errors.New("users unavailable")
+	_, err = service.ListJobs(context.Background(), invocation.Invocation{}, ListJobsQuery{Limit: 20})
+	require.True(t, apperror.Is(err, "job.unavailable"), "ListJobs() error=%#v", err)
 }

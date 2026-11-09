@@ -10,6 +10,7 @@ package storetest
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"testing"
 	"time"
 
@@ -255,6 +256,40 @@ func TestJobStore(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	require.Equal(t, model.JobStatusQueued, requeued.Status, "Retry() = %#v, attempts %d ->", requeued, len(beforeAttempts))
 	require.Len(t, afterAttempts, len(beforeAttempts), "Retry() = %#v, attempts %d ->", requeued, len(beforeAttempts))
+	// Saving the operator enqueues their default picture, so this runs after
+	// every claim above.
+	testJobInitiator(t, ctx, ss, created, at)
+}
+
+// testJobInitiator proves a Job keeps the operator who started it, and that
+// system work has none.
+func testJobInitiator(t *testing.T, ctx context.Context, ss store.Store, system *model.Job, at time.Time) {
+	t.Helper()
+	stored, err := ss.Job().Get(ctx, system.ID)
+	require.NoError(t, err)
+	require.True(t, stored.CreatedByUserID.IsZero(), "system work names no initiator")
+	operator := saveUser(t, ctx, ss)
+	// A type no other step claims keeps these Jobs out of the claim sequence.
+	initiated := func(dedupe string, userID model.UserID) *model.Job {
+		job, jobErr := model.NewJob(model.NewJobID(), model.JobTypeMFARekey, json.RawMessage(`{}`), dedupe, at, at, 1)
+		require.NoError(t, jobErr)
+		job.CreatedByUserID = userID
+		return job
+	}
+	started := initiated("initiated:"+model.NewID(), operator.ID)
+	_, inserted, err := ss.Job().Enqueue(ctx, &store.JobEnqueue{Job: started})
+	require.NoError(t, err)
+	require.True(t, inserted)
+	stored, err = ss.Job().Get(ctx, started.ID)
+	require.NoError(t, err)
+	require.Equal(t, operator.ID, stored.CreatedByUserID)
+	listed, err := ss.Job().List(ctx, store.JobListOptions{Types: []model.JobType{started.Type}, Limit: 200})
+	require.NoError(t, err)
+	index := slices.IndexFunc(listed, func(job *model.Job) bool { return job.ID == started.ID })
+	require.GreaterOrEqual(t, index, 0, "the started Job is listed")
+	require.Equal(t, operator.ID, listed[index].CreatedByUserID)
+	_, _, err = ss.Job().Enqueue(ctx, &store.JobEnqueue{Job: initiated("unknown:"+model.NewID(), model.NewUserID())})
+	require.Error(t, err, "a Job named an initiator who is not a User")
 }
 
 func saveJobMutationAudit(t *testing.T, ctx context.Context, ss store.Store, jobID model.JobID, operation string) *model.AuditEvent {

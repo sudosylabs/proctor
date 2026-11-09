@@ -60,6 +60,7 @@ func TestEngineProjectsOnlySafeOperatorFields(t *testing.T) {
 	at := time.Date(2026, time.August, 11, 8, 0, 0, 0, time.UTC)
 	record, err := model.NewJob(model.NewJobID(), model.JobTypeProfilePictureGenerateDefault, json.RawMessage(`{"secret":"must-not-leak"}`), "private-dedupe", at, at, 8)
 	require.NoError(t, err)
+	record.CreatedByUserID = model.NewUserID()
 	persistence := &operatorStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: record, list: []*model.Job{record}}
 	engine, err := New(Dependencies{
 		Store: persistence, Descriptors: []Descriptor{testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))},
@@ -70,6 +71,7 @@ func TestEngineProjectsOnlySafeOperatorFields(t *testing.T) {
 	require.NoError(t, err, "List() = %#v", page)
 	require.Len(t, page.Items, 1, "List() = %#v", page)
 	require.Equal(t, record.ID, page.Items[0].ID, "List() = %#v", page)
+	require.Equal(t, record.CreatedByUserID, page.Items[0].CreatedByUserID, "the initiator is projected")
 	encoded, err := json.Marshal(page)
 	require.NoError(t, err)
 	for _, forbidden := range []string{"must-not-leak", "private-dedupe", "command", "checkpoint", "result", "claim_token"} {

@@ -100,4 +100,18 @@ type ExamExportStore interface {
 	// budget first, including when the result of this mutation is uncertain.
 	BeginPurgeBatch(context.Context, int) ([]ExamExportArtifact, error)
 	CompletePurge(context.Context, ExamExportArtifact) error
+	// ListBuildTitles reads, for each given build Job, the title of the sealed
+	// Exam revision its export's Sitting runs. At most MaximumExamExportBuildTitles
+	// Jobs are read; a Job with no export is absent from the result. It grants
+	// no authority.
+	ListBuildTitles(context.Context, []model.JobID) ([]ExamExportBuildTitle, error)
+}
+
+// MaximumExamExportBuildTitles bounds one ExamExportStore.ListBuildTitles read.
+const MaximumExamExportBuildTitles = 200
+
+// ExamExportBuildTitle is the Exam title of one export build Job.
+type ExamExportBuildTitle struct {
+	JobID model.JobID
+	Title string
 }

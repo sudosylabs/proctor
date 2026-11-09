@@ -24,6 +24,38 @@ import (
 
 type SQLExamExportStore struct{ *SQLStore }
 
+// ListBuildTitles reads the sealed Exam revision title behind each given
+// export build Job. The revision a Sitting runs is immutable, so the title
+// cannot change under an export.
+func (s *SQLExamExportStore) ListBuildTitles(ctx context.Context, jobIDs []model.JobID) ([]store.ExamExportBuildTitle, error) {
+	ids, err := distinctIdentifiers(jobIDs, store.MaximumExamExportBuildTitles)
+	if err != nil {
+		return nil, store.NewErrInvalidInput("exam_export", "job_ids", err)
+	}
+	result := make([]store.ExamExportBuildTitle, 0, len(ids))
+	if len(ids) == 0 {
+		return result, nil
+	}
+	var rows []struct {
+		JobID string `db:"job_id"`
+		Title string `db:"title"`
+	}
+	if err = s.GetMaster().Select(ctx, &rows, `SELECT e.job_id, r.title FROM exam_exports e
+		JOIN exam_sittings sitting ON sitting.id = e.exam_sitting_id
+		JOIN exam_revisions r ON r.id = sitting.exam_revision_id
+		WHERE e.job_id = ANY(?) ORDER BY e.job_id`, pq.Array(ids)); err != nil {
+		return nil, translateError("exam_export", "build_titles", err)
+	}
+	for _, row := range rows {
+		jobID, err := parsePersistedID("exam_export", "job_id", row.JobID, parseJobID)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, store.ExamExportBuildTitle{JobID: jobID, Title: row.Title})
+	}
+	return result, nil
+}
+
 // examExportOutcome is the persisted outcome of an Exam export creation: the
 // export a replay rehydrates.
 type examExportOutcome struct {
@@ -364,6 +396,7 @@ func createExamExport(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamE
 	if err != nil {
 		return nil, err
 	}
+	job.CreatedByUserID = e.RequesterUserID
 	if _, err = insertQueuedJob(ctx, tx, job, false); err != nil {
 		return nil, err
 	}

@@ -17955,6 +17955,16 @@
             "format": "date-time",
             "type": "string"
           },
+          "created_by_display_name": {
+            "description": "Display name of the User who started the Job, or their username when they have none. Omitted with created_by_user_id, and while that User is archived.",
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
+          "created_by_user_id": {
+            "$ref": "#/components/schemas/ID",
+            "description": "User whose request started the Job. Omitted for recurring and system work, and after that User is deleted."
+          },
           "id": {
             "$ref": "#/components/schemas/ID"
           },
@@ -17983,6 +17993,12 @@
           },
           "status": {
             "$ref": "#/components/schemas/JobStatus"
+          },
+          "subject": {
+            "description": "What the Job is about, for the Job types that say: an Examination Export build names the title of the Exam revision its Sitting runs. Omitted for every other type.",
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
           },
           "type": {
             "$ref": "#/components/schemas/JobType",

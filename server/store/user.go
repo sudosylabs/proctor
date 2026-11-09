@@ -210,6 +210,20 @@ type UserStore interface {
 	UpdateProfile(context.Context, *UserProfileUpdate) (*model.User, error)
 	SetDisabled(context.Context, *UserDisabledStateChange) (*UserDisabledStateResult, error)
 	UpdateLastLogin(context.Context, *UserLastLoginUpdate) error
+	// ListDisplayNames reads the presentable name of each given unarchived
+	// User: the display name, or the username when it is empty. At most
+	// MaximumUserDisplayNames distinct Users are read; an archived or missing
+	// User is absent from the result. It grants no authority.
+	ListDisplayNames(context.Context, []model.UserID) ([]UserDisplayName, error)
+}
+
+// MaximumUserDisplayNames bounds one UserStore.ListDisplayNames read.
+const MaximumUserDisplayNames = 200
+
+// UserDisplayName is one User's presentable name.
+type UserDisplayName struct {
+	UserID      model.UserID
+	DisplayName string
 }
 
 type CurrentUserProductArea string

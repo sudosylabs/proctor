@@ -185,6 +185,9 @@ CREATE TABLE jobs (
     progress_total bigint,
     progress_stage varchar(64),
     revision bigint NOT NULL DEFAULT 1 CHECK (revision > 0),
+    -- The operator who started the Job; NULL for recurring and system work.
+    -- The foreign key follows the users table.
+    created_by_user_id varchar(26),
     CONSTRAINT jobs_lifecycle_check CHECK (
         updated_at >= created_at AND attempt_count <= maximum_attempts AND
         ((status IN ('succeeded', 'failed', 'canceled')) = (completed_at IS NOT NULL)) AND
@@ -339,6 +342,11 @@ CREATE INDEX users_default_profile_picture_file_id_idx
 CREATE INDEX users_custom_profile_picture_file_id_idx
     ON users (custom_profile_picture_file_id) WHERE custom_profile_picture_file_id IS NOT NULL;
 CREATE UNIQUE INDEX users_email_key ON users (email) WHERE archived_at IS NULL;
+-- A Job keeps its history when the User who started it is deleted.
+ALTER TABLE jobs ADD CONSTRAINT jobs_created_by_user_id_fkey
+    FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL;
+CREATE INDEX jobs_created_by_user_id_idx
+    ON jobs (created_by_user_id) WHERE created_by_user_id IS NOT NULL;
 CREATE INDEX users_directory_search_idx
     ON users USING gin (
         username gin_trgm_ops,
@@ -4324,7 +4332,9 @@ ALTER TABLE classes
 
 ALTER TABLE jobs
     ADD CONSTRAINT jobs_id_canonical_check
-    CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
+    CHECK (id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$'),
+    ADD CONSTRAINT jobs_created_by_user_id_canonical_check
+    CHECK (created_by_user_id ~ '^[ybndrfg8ejkmcpqxot1uwisza345h769]{26}$');
 
 ALTER TABLE job_permanent_occurrences
     ADD CONSTRAINT job_permanent_occurrences_job_id_canonical_check

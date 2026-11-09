@@ -8838,6 +8838,10 @@ export interface components {
              * @description Time when the Job was created.
              */
             created_at: string;
+            /** @description Display name of the User who started the Job, or their username when they have none. Omitted with created_by_user_id, and while that User is archived. */
+            created_by_display_name?: string;
+            /** @description User whose request started the Job. Omitted for recurring and system work, and after that User is deleted. */
+            created_by_user_id?: components["schemas"]["ID"];
             id: components["schemas"]["ID"];
             /** @description Maximum execution Attempts allowed by this Job's retry policy. */
             maximum_attempts: number;
@@ -8855,6 +8859,8 @@ export interface components {
              */
             started_at?: string;
             status: components["schemas"]["JobStatus"];
+            /** @description What the Job is about, for the Job types that say: an Examination Export build names the title of the Exam revision its Sitting runs. Omitted for every other type. */
+            subject?: string;
             /** @description Stable allowlisted Job type. */
             type: components["schemas"]["JobType"];
             /**

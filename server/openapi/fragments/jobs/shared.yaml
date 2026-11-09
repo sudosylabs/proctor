@@ -187,3 +187,19 @@ components:
           format: int64
           minimum: 1
           description: Monotonic durable Job revision for concurrency-aware consumers.
+        created_by_user_id:
+          $ref: '#/components/schemas/ID'
+          description: >-
+            User whose request started the Job. Omitted for recurring and system work, and after that User is deleted.
+        created_by_display_name:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: >-
+            Display name of the User who started the Job, or their username when they have none. Omitted with created_by_user_id, and while that User is archived.
+        subject:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: >-
+            What the Job is about, for the Job types that say: an Examination Export build names the title of the Exam revision its Sitting runs. Omitted for every other type.

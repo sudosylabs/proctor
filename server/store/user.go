@@ -88,6 +88,15 @@ type UserDirectoryAcademicUnit struct {
 	DisplayName string
 }
 
+// UserIdentity names one User beside a relationship that already makes the
+// User visible, such as an Academic Unit membership listing.
+type UserIdentity struct {
+	ID          model.UserID
+	Username    string
+	DisplayName string
+	Email       string
+}
+
 // UserVisibilityMatch identifies the authorized scope through which one User
 // is visible. It lets callers record the exact subtree/class decision without
 // assigning the target to an unrelated authorized scope when a principal has
@@ -193,6 +202,9 @@ type UserStore interface {
 	// statement. A User with neither a current Affiliation nor a visible
 	// current Academic Unit has no entry.
 	ListDirectorySummaries(context.Context, UserDirectorySummaryOptions) ([]UserDirectorySummary, error)
+	// ListIdentities reads the identities of at most 200 listed Users in one
+	// statement, in no particular order; an unknown ID has no entry.
+	ListIdentities(context.Context, []model.UserID) ([]UserIdentity, error)
 	GetCurrentContext(context.Context, model.UserID, int) (*CurrentUserContext, error)
 	MatchVisibility(context.Context, model.UserID, UserVisibilityScope) (UserVisibilityMatch, error)
 	UpdateProfile(context.Context, *UserProfileUpdate) (*model.User, error)

@@ -25,6 +25,33 @@ type academicUnitMemberResponse struct {
 	EndAt          string `json:"end_at,omitempty"`
 }
 
+// academicUnitMemberListItemResponse is one listed membership with who the
+// member is and, for a caller holding role_binding.view on the unit, the
+// member's current Role Bindings scoped exactly to it.
+type academicUnitMemberListItemResponse struct {
+	academicUnitMemberResponse
+	User academicUnitMemberUserResponse `json:"user"`
+	*academicUnitMemberRolesHereResponse
+}
+
+// academicUnitMemberUserResponse names the member; email is present only for
+// Institution-wide user.view.
+type academicUnitMemberUserResponse struct {
+	DisplayName string `json:"display_name"`
+	Username    string `json:"username"`
+	Email       string `json:"email,omitempty"`
+}
+
+type academicUnitMemberRolesHereResponse struct {
+	RolesHere     []academicUnitMemberRoleResponse `json:"roles_here"`
+	RolesHereMore int                              `json:"roles_here_more"`
+}
+
+type academicUnitMemberRoleResponse struct {
+	RoleID      string `json:"role_id"`
+	DisplayName string `json:"display_name"`
+}
+
 type createAcademicUnitMemberRequest struct {
 	UserID  string `json:"user_id"`
 	StartAt string `json:"start_at"`
@@ -73,7 +100,10 @@ func (m academicUnitMemberResourceModule) list(request operationRequest) (operat
 	if err != nil {
 		return operationResult{}, err
 	}
-	return membershipListResult(scope, page.ActiveAt, page.Members, page.HasMore, academicUnitMemberResponseFromModel,
+	present := func(member *model.AcademicUnitMember) academicUnitMemberListItemResponse {
+		return academicUnitMemberListItemResponseFromPage(page, member)
+	}
+	return membershipListResult(scope, page.ActiveAt, page.Members, page.HasMore, present,
 		func(member *model.AcademicUnitMember) (string, string) {
 			return member.UserID.String(), member.ID.String()
 		})
@@ -125,4 +155,23 @@ func academicUnitMemberResponseFromModel(member *model.AcademicUnitMember) acade
 		StartAt:        model.FormatRFC3339(member.StartsAt),
 		EndAt:          member.EndsAt.FormatRFC3339(),
 	}
+}
+
+func academicUnitMemberListItemResponseFromPage(page *app.AcademicUnitMemberPage, member *model.AcademicUnitMember) academicUnitMemberListItemResponse {
+	identity := page.Users[member.UserID]
+	item := academicUnitMemberListItemResponse{
+		academicUnitMemberResponse: academicUnitMemberResponseFromModel(member),
+		User:                       academicUnitMemberUserResponse{DisplayName: identity.DisplayName, Username: identity.Username, Email: identity.Email},
+	}
+	if page.RolesHere == nil {
+		return item
+	}
+	roles := page.RolesHere[member.UserID]
+	item.academicUnitMemberRolesHereResponse = &academicUnitMemberRolesHereResponse{
+		RolesHere: make([]academicUnitMemberRoleResponse, 0, len(roles.Bindings)), RolesHereMore: roles.More,
+	}
+	for _, binding := range roles.Bindings {
+		item.RolesHere = append(item.RolesHere, academicUnitMemberRoleResponse{RoleID: binding.RoleID.String(), DisplayName: binding.DisplayName})
+	}
+	return item
 }

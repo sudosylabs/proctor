@@ -62,6 +62,23 @@ type membershipAuthorizer interface {
 
 type academicUnitMemberUserStore interface {
 	Get(context.Context, model.UserID) (*model.User, error)
+	ListIdentities(context.Context, []model.UserID) ([]store.UserIdentity, error)
+}
+
+type academicUnitMemberRoleBindingStore interface {
+	ListVisibleSummariesByUsers(context.Context, store.RoleBindingSummaryOptions) ([]store.UserRoleBindingSummary, error)
+}
+
+// academicUnitMemberAuthorizer adds the two unaudited predicates that decide
+// what a membership listing shows about each member. Neither admits a
+// request; the listing itself is authorized by academic_unit.members.view.
+type academicUnitMemberAuthorizer interface {
+	membershipAuthorizer
+	// CanViewInstitutionUsers reports Institution-wide user.view, the
+	// authority that shows a User's email in the User directory.
+	CanViewInstitutionUsers(context.Context, invocation.Invocation) (bool, error)
+	// CanViewRoleBindings reports role_binding.view on the Resource.
+	CanViewRoleBindings(context.Context, invocation.Invocation, model.Resource) (bool, error)
 }
 
 // academicUnitMemberServiceDependencies are the collaborators of academicUnitMemberService;
@@ -69,7 +86,8 @@ type academicUnitMemberUserStore interface {
 type academicUnitMemberServiceDependencies struct {
 	Store         academicUnitMemberStore
 	Users         academicUnitMemberUserStore
-	Authorization membershipAuthorizer
+	RoleBindings  academicUnitMemberRoleBindingStore
+	Authorization academicUnitMemberAuthorizer
 	Audit         mutationAuditor
 	Mail          relationshipTransitionMailPreparer
 	Effects       authorizationInvalidationEffects
@@ -281,18 +299,29 @@ type ListAcademicUnitMembersPageQuery struct {
 	MembershipPageQuery
 }
 
+// AcademicUnitMemberPage is one page of a unit's memberships. Users names
+// every listed member; its Email is set only for a caller holding
+// Institution-wide user.view. RolesHere holds each member's current Role
+// Bindings scoped exactly to the unit, at most academicUnitMemberRolesHere
+// each, and is nil when the caller lacks role_binding.view on the unit.
 type AcademicUnitMemberPage struct {
-	Members  []*model.AcademicUnitMember
-	HasMore  bool
-	ActiveAt int64
+	Members   []*model.AcademicUnitMember
+	HasMore   bool
+	ActiveAt  int64
+	Users     map[model.UserID]store.UserIdentity
+	RolesHere map[model.UserID]store.UserRoleBindingSummary
 }
+
+// academicUnitMemberRolesHere bounds the Role Bindings shown per member.
+const academicUnitMemberRolesHere = 5
 
 func (s *academicUnitMemberService) ListAcademicUnitMembersPage(ctx context.Context, invocation invocation.Invocation, query ListAcademicUnitMembersPageQuery) (*AcademicUnitMemberPage, error) {
 	resource, err := s.authorizeUnit(ctx, invocation, query.AcademicUnitID, model.ActionAcademicUnitMembersView)
 	if err != nil {
 		return nil, err
 	}
-	activeAt, limit, err := resolveMembershipPage(query.MembershipPageQuery, s.deps.Now())
+	now := model.TimeUTC(s.deps.Now())
+	activeAt, limit, err := resolveMembershipPage(query.MembershipPageQuery, now)
 	if err != nil {
 		return nil, err
 	}
@@ -313,5 +342,93 @@ func (s *academicUnitMemberService) ListAcademicUnitMembersPage(ctx context.Cont
 	if result.Members == nil {
 		result.Members = []*model.AcademicUnitMember{}
 	}
+	if err := s.describeMembers(ctx, invocation, resource, result, now); err != nil {
+		return nil, err
+	}
 	return result, nil
+}
+
+// describeMembers names the page's members in one read and, for a caller
+// holding role_binding.view on the unit, reads their current Role Bindings
+// scoped exactly to it in another. Seeing a unit's members shows who they
+// are; email stays with Institution-wide user.view, as in the User directory.
+func (s *academicUnitMemberService) describeMembers(ctx context.Context, invocation invocation.Invocation, unit model.Resource, page *AcademicUnitMemberPage, now time.Time) error {
+	page.Users = map[model.UserID]store.UserIdentity{}
+	if len(page.Members) == 0 {
+		return nil
+	}
+	userIDs := make([]model.UserID, 0, len(page.Members))
+	for _, member := range page.Members {
+		if _, seen := page.Users[member.UserID]; !seen {
+			page.Users[member.UserID] = store.UserIdentity{}
+			userIDs = append(userIDs, member.UserID)
+		}
+	}
+	identities, err := s.deps.Users.ListIdentities(ctx, userIDs)
+	if err != nil {
+		return academicUnitMemberStoreErrors.Translate(err)
+	}
+	showEmail, err := s.deps.Authorization.CanViewInstitutionUsers(ctx, invocation)
+	if err != nil {
+		return err
+	}
+	for _, identity := range identities {
+		if !showEmail {
+			identity.Email = ""
+		}
+		page.Users[identity.ID] = identity
+	}
+	for _, userID := range userIDs {
+		if page.Users[userID].ID != userID {
+			return apperror.New("administration.unavailable").WithField("resource", "academic_unit_member")
+		}
+	}
+	showRoles, err := s.deps.Authorization.CanViewRoleBindings(ctx, invocation, unit)
+	if err != nil || !showRoles {
+		return err
+	}
+	unitID := model.AcademicUnitID(unit.ID)
+	roles, err := s.deps.RoleBindings.ListVisibleSummariesByUsers(ctx, store.RoleBindingSummaryOptions{
+		UserIDs: userIDs, Limit: academicUnitMemberRolesHere,
+		Visibility: store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{unitID}, ActiveAt: now},
+		ScopeType:  model.RoleScopeAcademicUnit, ScopeID: unit.ID,
+	})
+	if err != nil {
+		return academicUnitMemberStoreErrors.Translate(err)
+	}
+	page.RolesHere = make(map[model.UserID]store.UserRoleBindingSummary, len(userIDs))
+	for _, userID := range userIDs {
+		page.RolesHere[userID] = store.UserRoleBindingSummary{UserID: userID}
+	}
+	for _, summary := range roles {
+		page.RolesHere[summary.UserID] = summary
+	}
+	return nil
+}
+
+// academicUnitMemberAuthorization adds the member-description predicates to
+// the access control service.
+type academicUnitMemberAuthorization struct {
+	authorization *accessControlService
+}
+
+func (a academicUnitMemberAuthorization) Authorize(ctx context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource) error {
+	return a.authorization.Authorize(ctx, invocation, action, resource)
+}
+
+func (a academicUnitMemberAuthorization) AuthorizePreflight(ctx context.Context, invocation invocation.Invocation, action model.Action, resourceType model.ResourceType) error {
+	return a.authorization.AuthorizePreflight(ctx, invocation, action, resourceType)
+}
+
+// CanViewInstitutionUsers derives Institution-wide user.view exactly as the
+// User directory does, without recording a decision.
+func (a academicUnitMemberAuthorization) CanViewInstitutionUsers(ctx context.Context, invocation invocation.Invocation) (bool, error) {
+	constraint, err := a.authorization.authorizedScopes(ctx, invocation.Principal(), model.ActionUserView, model.ResourceUser)
+	return constraint.InstitutionWide, err
+}
+
+// CanViewRoleBindings evaluates role_binding.view on the Resource without
+// recording a decision.
+func (a academicUnitMemberAuthorization) CanViewRoleBindings(ctx context.Context, invocation invocation.Invocation, resource model.Resource) (bool, error) {
+	return a.authorization.Can(ctx, invocation.Principal(), model.ActionRoleBindingView, resource)
 }

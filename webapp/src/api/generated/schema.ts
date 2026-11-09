@@ -265,7 +265,7 @@ export interface paths {
         };
         /**
          * List effective-dated organizational members
-         * @description Lists authorized current or historical organizational memberships for one Academic Unit at the requested effective instant. Membership describes a relationship only and is never presented as an unrestricted permission grant. Bounded pages use immutable (user_id, id) ordering. The next_cursor freezes the effective instant or history filter, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests.
+         * @description Lists authorized current or historical organizational memberships for one Academic Unit at the requested effective instant. Membership describes a relationship only and is never presented as an unrestricted permission grant. Bounded pages use immutable (user_id, id) ordering. The next_cursor freezes the effective instant or history filter, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests. Each item names the member in `user`, with email only for Institution-wide user.view, and, for a caller holding role_binding.view on this unit, lists the member's current Role Bindings scoped exactly to it in `roles_here`.
          */
         get: operations["listAcademicUnitMembers"];
         put?: never;
@@ -5759,9 +5759,30 @@ export interface components {
             items: components["schemas"]["AcademicUnitResponse"][];
             next_cursor?: components["schemas"]["NextCursor"];
         };
+        /** @description One membership with who the member is. `roles_here` and `roles_here_more` are present only when the caller holds role_binding.view on this Academic Unit. */
+        AcademicUnitMemberListItemResponse: {
+            academic_unit_id: components["schemas"]["ID"];
+            /** Format: date-time */
+            archived_at?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            end_at?: string;
+            id: components["schemas"]["ID"];
+            /** @description The member's current Role Bindings scoped exactly to this Academic Unit, oldest first. */
+            roles_here?: components["schemas"]["AcademicUnitMemberRole"][];
+            /** @description Current Role Bindings on this Academic Unit past the five listed. Present with `roles_here`. */
+            roles_here_more?: number;
+            /** Format: date-time */
+            start_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            user: components["schemas"]["AcademicUnitMemberUser"];
+            user_id: components["schemas"]["ID"];
+        };
         /** @description One page of the collection in its stable order. */
         AcademicUnitMemberListResponse: {
-            items: components["schemas"]["AcademicUnitMemberResponse"][];
+            items: components["schemas"]["AcademicUnitMemberListItemResponse"][];
             next_cursor?: components["schemas"]["NextCursor"];
         };
         AcademicUnitMemberResponse: {
@@ -5778,6 +5799,18 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
             user_id: components["schemas"]["ID"];
+        };
+        AcademicUnitMemberRole: {
+            /** @description The Role's display name. */
+            display_name: string;
+            role_id: components["schemas"]["ID"];
+        };
+        /** @description Who the member is. Seeing a unit's members shows their display name and username; email is present only for a caller holding Institution-wide user.view. */
+        AcademicUnitMemberUser: {
+            display_name: string;
+            /** Format: email */
+            email?: string;
+            username: string;
         };
         AcademicUnitResponse: {
             /** Format: date-time */

@@ -90,10 +90,13 @@ type RoleBindingEnd struct {
 // Users whose scope lies within Visibility, as ListVisibleByUser defines it,
 // at most Limit for each User. Current means effective at
 // Visibility.ActiveAt, which is required, with an unarchived Role and scope.
-// A binding outside Visibility is neither returned nor counted.
+// A binding outside Visibility is neither returned nor counted. A non-empty
+// ScopeType with ScopeID further keeps only bindings on exactly that scope.
 type RoleBindingSummaryOptions struct {
 	UserIDs    []model.UserID
 	Visibility UserVisibilityScope
+	ScopeType  model.RoleScopeType
+	ScopeID    string
 	Limit      int
 }
 

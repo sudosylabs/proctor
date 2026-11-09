@@ -2204,6 +2204,12 @@ func (s *timedUserStore) ListDirectorySummaries(arg0 context.Context, arg1 store
 	})
 }
 
+func (s *timedUserStore) ListIdentities(arg0 context.Context, arg1 []model.UserID) ([]store.UserIdentity, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateUser, methodListIdentities), func(callCtx context.Context) ([]store.UserIdentity, error) {
+		return s.next.ListIdentities(callCtx, arg1)
+	})
+}
+
 func (s *timedUserStore) GetCurrentContext(arg0 context.Context, arg1 model.UserID, arg2 int) (*store.CurrentUserContext, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateUser, methodGetCurrentContext), func(callCtx context.Context) (*store.CurrentUserContext, error) {
 		return s.next.GetCurrentContext(callCtx, arg1, arg2)

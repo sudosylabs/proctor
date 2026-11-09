@@ -449,7 +449,8 @@ func (s SQLRoleBindingStore) ListVisibleSummariesByUsers(ctx context.Context, op
 	visibility := options.Visibility
 	if !validSummaryUserIDs(options.UserIDs) || options.Limit < 1 || options.Limit > 10 || visibility.ActiveAt.IsZero() ||
 		len(visibility.AcademicUnitRootIDs)+len(visibility.ClassIDs) > 256 ||
-		!validVisibilityIDs(visibility.AcademicUnitRootIDs) || !validVisibilityIDs(visibility.ClassIDs) {
+		!validVisibilityIDs(visibility.AcademicUnitRootIDs) || !validVisibilityIDs(visibility.ClassIDs) ||
+		(options.ScopeType != "" || options.ScopeID != "") && (!options.ScopeType.IsValid() || !model.IsValidOpaqueID(options.ScopeID)) {
 		return nil, store.NewErrInvalidInput("role_binding", "summary_options", nil)
 	}
 	if len(options.UserIDs) == 0 {
@@ -467,7 +468,7 @@ func (s SQLRoleBindingStore) ListVisibleSummariesByUsers(ctx context.Context, op
 	args := append([]any(nil), unitArgs...)
 	args = append(args, pq.Array(idStrings(options.UserIDs)), activeAt, activeAt)
 	args = append(args, predicateArgs...)
-	args = append(args, options.Limit)
+	args = append(args, string(options.ScopeType), string(options.ScopeType), options.ScopeID, options.Limit)
 	type summaryRow struct {
 		UserID      string `db:"user_id"`
 		RoleID      string `db:"role_id"`
@@ -496,6 +497,7 @@ func (s SQLRoleBindingStore) ListVisibleSummariesByUsers(ctx context.Context, op
 		AND role_bindings.start_at <= ? AND (role_bindings.end_at IS NULL OR role_bindings.end_at > ?)
 		AND COALESCE(scope_institution.id, scope_unit.id, scope_class.id) IS NOT NULL
 		AND `+predicate+`
+		AND (?::text = '' OR (role_bindings.scope_type = ? AND role_bindings.scope_id = ?))
 	)
 	SELECT user_id, role_id, display_name, scope_type, scope_id, scope_name, total
 	FROM visible_bindings WHERE position <= ? ORDER BY user_id, position`, args...); err != nil {

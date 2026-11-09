@@ -6297,13 +6297,74 @@
         ],
         "type": "object"
       },
+      "AcademicUnitMemberListItemResponse": {
+        "additionalProperties": false,
+        "description": "One membership with who the member is. `roles_here` and `roles_here_more` are present only when the caller holds role_binding.view on this Academic Unit.",
+        "properties": {
+          "academic_unit_id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "archived_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "end_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/ID"
+          },
+          "roles_here": {
+            "description": "The member's current Role Bindings scoped exactly to this Academic Unit, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/AcademicUnitMemberRole"
+            },
+            "maxItems": 5,
+            "type": "array"
+          },
+          "roles_here_more": {
+            "description": "Current Role Bindings on this Academic Unit past the five listed. Present with `roles_here`.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/AcademicUnitMemberUser"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/ID"
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "updated_at",
+          "academic_unit_id",
+          "user_id",
+          "start_at",
+          "user"
+        ],
+        "type": "object"
+      },
       "AcademicUnitMemberListResponse": {
         "additionalProperties": false,
         "description": "One page of the collection in its stable order.",
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/AcademicUnitMemberResponse"
+              "$ref": "#/components/schemas/AcademicUnitMemberListItemResponse"
             },
             "type": "array"
           },
@@ -6356,6 +6417,44 @@
           "academic_unit_id",
           "user_id",
           "start_at"
+        ],
+        "type": "object"
+      },
+      "AcademicUnitMemberRole": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "description": "The Role's display name.",
+            "type": "string"
+          },
+          "role_id": {
+            "$ref": "#/components/schemas/ID"
+          }
+        },
+        "required": [
+          "role_id",
+          "display_name"
+        ],
+        "type": "object"
+      },
+      "AcademicUnitMemberUser": {
+        "additionalProperties": false,
+        "description": "Who the member is. Seeing a unit's members shows their display name and username; email is present only for a caller holding Institution-wide user.view.",
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "format": "email",
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name",
+          "username"
         ],
         "type": "object"
       },
@@ -27355,7 +27454,7 @@
     },
     "/api/v1/academic-units/{academic_unit_id}/members": {
       "get": {
-        "description": "Lists authorized current or historical organizational memberships for one Academic Unit at the requested effective instant. Membership describes a relationship only and is never presented as an unrestricted permission grant. Bounded pages use immutable (user_id, id) ordering. The next_cursor freezes the effective instant or history filter, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests.",
+        "description": "Lists authorized current or historical organizational memberships for one Academic Unit at the requested effective instant. Membership describes a relationship only and is never presented as an unrestricted permission grant. Bounded pages use immutable (user_id, id) ordering. The next_cursor freezes the effective instant or history filter, but pages are a live view: later membership edits and insertions can change later results; no database snapshot is retained across requests. Each item names the member in `user`, with email only for Institution-wide user.view, and, for a caller holding role_binding.view on this unit, lists the member's current Role Bindings scoped exactly to it in `roles_here`.",
         "operationId": "listAcademicUnitMembers",
         "parameters": [
           {

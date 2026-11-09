@@ -352,12 +352,22 @@ func testRoleBindingVisibleSummariesByUsers(t *testing.T, ss store.Store) {
 		summary(reviewer, model.RoleScopeClass, class.ID.String(), class.DisplayName),
 	}}}, read(store.UserVisibilityScope{ClassIDs: []model.ClassID{class.ID}}, 3), "a Class scope reads its own bindings")
 	require.Empty(t, read(store.UserVisibilityScope{}, 3), "no scope reads nothing")
+	exact, err := ss.RoleBinding().ListVisibleSummariesByUsers(ctx, store.RoleBindingSummaryOptions{
+		UserIDs:    []model.UserID{user.ID, other.ID},
+		Visibility: store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{child.ID}, ActiveAt: activeAt},
+		ScopeType:  model.RoleScopeAcademicUnit, ScopeID: child.ID.String(), Limit: 1,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []store.UserRoleBindingSummary{{UserID: user.ID, More: 1, Bindings: []store.RoleBindingSummary{
+		summary(reader, model.RoleScopeAcademicUnit, child.ID.String(), child.DisplayName),
+	}}}, exact, "an exact scope keeps only the unit's own bindings, not its Classes'")
 
 	var invalid *store.ErrInvalidInput
 	for name, options := range map[string]store.RoleBindingSummaryOptions{
 		"missing clock": {UserIDs: []model.UserID{user.ID}, Visibility: store.UserVisibilityScope{InstitutionWide: true}, Limit: 3},
 		"zero limit":    {UserIDs: []model.UserID{user.ID}, Visibility: store.UserVisibilityScope{InstitutionWide: true, ActiveAt: activeAt}},
 		"invalid user":  {UserIDs: []model.UserID{"not-an-id"}, Visibility: store.UserVisibilityScope{InstitutionWide: true, ActiveAt: activeAt}, Limit: 3},
+		"partial scope": {UserIDs: []model.UserID{user.ID}, Visibility: store.UserVisibilityScope{InstitutionWide: true, ActiveAt: activeAt}, ScopeType: model.RoleScopeAcademicUnit, Limit: 3},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, readErr := ss.RoleBinding().ListVisibleSummariesByUsers(ctx, options)

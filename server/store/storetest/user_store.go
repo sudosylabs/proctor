@@ -47,6 +47,7 @@ func TestUserStore(t *testing.T, ss store.Store, probes ...UserStoreSQLProbe) {
 	t.Run("VisibilityIntervalPrecision", func(t *testing.T) { testUserVisibilityIntervalPrecision(t, ss) })
 	t.Run("AffiliationAndAcademicUnitFilters", func(t *testing.T) { testUserListAffiliationAndAcademicUnitFilters(t, ss) })
 	t.Run("DirectorySummaries", func(t *testing.T) { testUserDirectorySummaries(t, ss) })
+	t.Run("ListIdentities", func(t *testing.T) { testUserListIdentities(t, ss) })
 	t.Run("EnablementRevocationAndAuditAreAtomic", func(t *testing.T) {
 		testUserStoreEnablementRevocationAndAuditAreAtomic(t, ss)
 	})
@@ -873,6 +874,23 @@ func testUserDirectorySummaries(t *testing.T, ss store.Store) {
 			require.ErrorAs(t, summaryErr, &invalid)
 		})
 	}
+}
+
+func testUserListIdentities(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	first, second := saveUser(t, ctx, ss), saveUser(t, ctx, ss)
+	identities, err := ss.User().ListIdentities(ctx, []model.UserID{first.ID, second.ID, model.NewUserID()})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []store.UserIdentity{
+		{ID: first.ID, Username: first.Username, DisplayName: first.DisplayName, Email: first.Email},
+		{ID: second.ID, Username: second.Username, DisplayName: second.DisplayName, Email: second.Email},
+	}, identities, "one batch names every known User and skips an unknown ID")
+	empty, err := ss.User().ListIdentities(ctx, nil)
+	require.NoError(t, err)
+	require.Empty(t, empty)
+	var invalid *store.ErrInvalidInput
+	_, err = ss.User().ListIdentities(ctx, []model.UserID{"not-an-id"})
+	require.ErrorAs(t, err, &invalid)
 }
 
 func testUserVisibilityIntervalPrecision(t *testing.T, ss store.Store) {

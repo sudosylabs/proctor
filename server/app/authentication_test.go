@@ -237,6 +237,9 @@ func (authenticationUserStore) List(context.Context, store.UserListOptions) ([]*
 func (authenticationUserStore) Count(context.Context, store.UserListOptions, int) (int, error) {
 	return 0, errors.New("unused")
 }
+func (authenticationUserStore) ListIdentities(context.Context, []model.UserID) ([]store.UserIdentity, error) {
+	return nil, errors.New("unused")
+}
 func (authenticationUserStore) ListDirectorySummaries(context.Context, store.UserDirectorySummaryOptions) ([]store.UserDirectorySummary, error) {
 	return nil, errors.New("unused")
 }

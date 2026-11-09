@@ -122,3 +122,34 @@ func (s SQLUserStore) ListDirectorySummaries(ctx context.Context, options store.
 	}
 	return summaries, nil
 }
+
+// ListIdentities returns the username, display name and email of each listed
+// User that exists.
+func (s SQLUserStore) ListIdentities(ctx context.Context, ids []model.UserID) ([]store.UserIdentity, error) {
+	if !validSummaryUserIDs(ids) {
+		return nil, store.NewErrInvalidInput("user", "identity_ids", nil)
+	}
+	if len(ids) == 0 {
+		return []store.UserIdentity{}, nil
+	}
+	type identityRow struct {
+		ID          string `db:"id"`
+		Username    string `db:"username"`
+		DisplayName string `db:"display_name"`
+		Email       string `db:"email"`
+	}
+	rows := []identityRow{}
+	if err := s.GetMaster().Select(ctx, &rows, `SELECT id, username, display_name, email FROM users WHERE id = ANY(?)`,
+		pq.Array(idStrings(ids))); err != nil {
+		return nil, fmt.Errorf("list User identities: %w", err)
+	}
+	identities := make([]store.UserIdentity, 0, len(rows))
+	for _, row := range rows {
+		id, err := model.ParseUserID(row.ID)
+		if err != nil {
+			return nil, invalidPersistedState("user", "id", err)
+		}
+		identities = append(identities, store.UserIdentity{ID: id, Username: row.Username, DisplayName: row.DisplayName, Email: row.Email})
+	}
+	return identities, nil
+}

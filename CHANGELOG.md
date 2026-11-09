@@ -231,6 +231,11 @@ module when a change is not server-only. No module has been released yet.
   `AuditAction` and `ResourceType` on audit events and their filters, and
   `ErrorCode` on every problem response. Tests keep each enum equal to the
   server's catalogue; clients own the labels.
+- Server: each `GET /api/v1/academic-units/{academic_unit_id}/members` item
+  names the member in `user` (`display_name`, `username`, and `email` only for
+  Institution-wide `user.view`) and, for a caller holding `role_binding.view`
+  on the unit, lists up to five of the member's current Role Bindings scoped
+  exactly to it in `roles_here` with `roles_here_more`.
 - Server: each `GET /api/v1/users` item carries a `summary` of who the User
   is: up to three current Affiliations, each with up to two of the User's
   current Academic Units the caller's `user.view` reaches, and, for a caller

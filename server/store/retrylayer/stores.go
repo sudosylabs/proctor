@@ -642,6 +642,9 @@ func (s *userStore) ListDirectorySummaries(ctx context.Context, options store.Us
 		return s.UserStore.ListDirectorySummaries(ctx, options)
 	})
 }
+func (s *userStore) ListIdentities(ctx context.Context, ids []model.UserID) ([]store.UserIdentity, error) {
+	return retryCall1(ctx, s.layer, func() ([]store.UserIdentity, error) { return s.UserStore.ListIdentities(ctx, ids) })
+}
 func (s *userStore) MatchVisibility(ctx context.Context, userID model.UserID, visibility store.UserVisibilityScope) (store.UserVisibilityMatch, error) {
 	return retryCall1(ctx, s.layer, func() (store.UserVisibilityMatch, error) {
 		return s.UserStore.MatchVisibility(ctx, userID, visibility)

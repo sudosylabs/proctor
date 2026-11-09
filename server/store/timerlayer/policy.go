@@ -236,6 +236,7 @@ const (
 	methodCountSelf                                 methodName = "count_self"
 	methodCount                                     methodName = "count"
 	methodListDirectorySummaries                    methodName = "list_directory_summaries"
+	methodListIdentities                            methodName = "list_identities"
 	methodListVisibleSummariesByUsers               methodName = "list_visible_summaries_by_users"
 	methodCountDeliveries                           methodName = "count_deliveries"
 	methodCountOpenOnboardingImports                methodName = "count_open_onboarding_imports"

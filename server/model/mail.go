@@ -239,9 +239,9 @@ func AllMailTemplateKeys() []MailTemplateKey {
 }
 
 var (
-	mailDigestPattern     = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	mailMessageIDPattern  = regexp.MustCompile(`^<[A-Za-z0-9.!#$%&'*+/=?^_` + "`" + `{|}~-]+@[A-Za-z0-9.-]+>$`)
-	mailMaskedPattern     = regexp.MustCompile(`^(?:\*{3}|[^*@\s]\*{1,3})@[^*@\s]+$`)
+	mailDigestPattern    = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	mailMessageIDPattern = regexp.MustCompile(`^<[A-Za-z0-9.!#$%&'*+/=?^_` + "`" + `{|}~-]+@[A-Za-z0-9.-]+>$`)
+	mailMaskedPattern    = regexp.MustCompile(`^(?:\*{3}|[^*@\s]\*{1,3})@[^*@\s]+$`)
 )
 
 // MailOccurrence is the immutable durable identity of one logical notification.

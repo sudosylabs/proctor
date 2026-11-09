@@ -154,6 +154,10 @@ type UserStore interface {
 	GetByUsername(context.Context, string) (*model.User, error)
 	GetByEmail(context.Context, string) (*model.User, error)
 	List(context.Context, UserListOptions) ([]*model.User, error)
+	// Count counts the Users List would return across every page for the
+	// same filters and visibility, ignoring the keyset and limit, and stops
+	// at maximum (see MaximumListCount).
+	Count(context.Context, UserListOptions, int) (int, error)
 	GetCurrentContext(context.Context, model.UserID, int) (*CurrentUserContext, error)
 	MatchVisibility(context.Context, model.UserID, UserVisibilityScope) (UserVisibilityMatch, error)
 	UpdateProfile(context.Context, *UserProfileUpdate) (*model.User, error)

@@ -457,24 +457,11 @@ func (s SQLJobStore) ListAttempts(ctx context.Context, jobID model.JobID) ([]mod
 }
 
 func (s SQLJobStore) List(ctx context.Context, options store.JobListOptions) ([]*model.Job, error) {
-	if options.Limit < 1 || options.Limit > 201 || len(options.Types) == 0 ||
-		(!options.BeforeID.IsZero() && (!options.BeforeID.IsValid() || options.BeforeCreatedAt.IsZero())) {
+	if !validJobListOptions(options) {
 		return nil, store.NewErrInvalidInput("job", "list", nil)
 	}
-	types := make([]string, len(options.Types))
-	for index, jobType := range options.Types {
-		types[index] = string(jobType)
-	}
-	arguments := []any{pq.Array(types)}
-	query := `SELECT ` + jobColumns + ` FROM jobs WHERE type = ANY(?)`
-	if len(options.Statuses) > 0 {
-		statuses := make([]string, len(options.Statuses))
-		for index, status := range options.Statuses {
-			statuses[index] = string(status)
-		}
-		query += ` AND status = ANY(?)`
-		arguments = append(arguments, pq.Array(statuses))
-	}
+	filter, arguments := jobListFilter(options)
+	query := `SELECT ` + jobColumns + ` FROM jobs WHERE ` + filter
 	if !options.BeforeID.IsZero() {
 		query += ` AND (created_at, id) < (?, ?)`
 		arguments = append(arguments, options.BeforeCreatedAt, options.BeforeID.String())
@@ -494,6 +481,47 @@ func (s SQLJobStore) List(ctx context.Context, options store.JobListOptions) ([]
 		result = append(result, job)
 	}
 	return result, nil
+}
+
+// Count counts through the same filter as List, without its keyset, order,
+// or limit, reading at most one row past maximum.
+func (s SQLJobStore) Count(ctx context.Context, options store.JobListOptions, maximum int) (int, error) {
+	options.BeforeCreatedAt, options.BeforeID, options.Limit = time.Time{}, "", 1
+	if !validJobListOptions(options) || !store.ValidCountMaximum(maximum) {
+		return 0, store.NewErrInvalidInput("job", "count", nil)
+	}
+	filter, arguments := jobListFilter(options)
+	return countBoundedSQL(ctx, s.GetMaster(), `SELECT 1 FROM jobs WHERE `+filter, arguments, maximum, "jobs")
+}
+
+func validJobListOptions(options store.JobListOptions) bool {
+	return options.Limit >= 1 && options.Limit <= 201 && len(options.Types) > 0 && options.UpdatedWithin >= 0 &&
+		(options.BeforeID.IsZero() || (options.BeforeID.IsValid() && !options.BeforeCreatedAt.IsZero()))
+}
+
+// jobListFilter is every List filter but the keyset: the allowed types, the
+// statuses, and the recent-update window. List and Count share it so a total
+// always counts the listed rows.
+func jobListFilter(options store.JobListOptions) (string, []any) {
+	types := make([]string, len(options.Types))
+	for index, jobType := range options.Types {
+		types[index] = string(jobType)
+	}
+	arguments := []any{pq.Array(types)}
+	filter := `type = ANY(?)`
+	if len(options.Statuses) > 0 {
+		statuses := make([]string, len(options.Statuses))
+		for index, status := range options.Statuses {
+			statuses[index] = string(status)
+		}
+		filter += ` AND status = ANY(?)`
+		arguments = append(arguments, pq.Array(statuses))
+	}
+	if options.UpdatedWithin > 0 {
+		filter += ` AND updated_at > statement_timestamp() - make_interval(secs => ?::double precision)`
+		arguments = append(arguments, options.UpdatedWithin.Seconds())
+	}
+	return filter, arguments
 }
 
 func (s SQLJobStore) ListAttemptsPage(ctx context.Context, options store.JobAttemptListOptions) ([]model.JobAttempt, error) {

@@ -36,6 +36,7 @@ type RetryJobCommand struct{ ID model.JobID }
 
 type jobOperatorEngine interface {
 	List(context.Context, job.ListQuery) (job.Page, error)
+	CountRecentFailures(context.Context, time.Duration, int) (int, error)
 	Get(context.Context, model.JobID) (job.View, error)
 	Attempts(context.Context, job.AttemptListQuery) (job.AttemptPage, error)
 	PrepareCancellation(context.Context, model.JobID) (job.ControlTarget, error)
@@ -105,6 +106,23 @@ func (s *jobOperationsService) ListJobs(ctx context.Context, invocation invocati
 		return job.Page{}, jobOperationsStoreErrors.Translate(err)
 	}
 	return page, nil
+}
+
+// countRecentJobFailures counts the operator-visible Jobs that failed within
+// the span, authorized and audited exactly as ListJobs is, stopping at
+// maximum.
+func (s *jobOperationsService) countRecentJobFailures(ctx context.Context, invocation invocation.Invocation, within time.Duration, maximum int) (int, error) {
+	if s == nil {
+		return 0, apperror.New("job.unavailable")
+	}
+	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionJobView); err != nil {
+		return 0, err
+	}
+	total, err := s.deps.Jobs.CountRecentFailures(ctx, within, maximum)
+	if err != nil {
+		return 0, jobOperationsStoreErrors.Translate(err)
+	}
+	return total, nil
 }
 
 func (s *jobOperationsService) GetJob(ctx context.Context, invocation invocation.Invocation, query GetJobQuery) (job.View, error) {

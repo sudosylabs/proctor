@@ -101,9 +101,13 @@ func (m auditResourceModule) list(request operationRequest) (operationResult, er
 	if listErr != nil {
 		return operationResult{}, listErr
 	}
-	response, err := newListResponse(page.Items, page.HasMore, auditEventResponseFromModel, func(last *model.AuditEvent) (string, error) {
+	envelope, err := newListResponse(page.Items, page.HasMore, auditEventResponseFromModel, func(last *model.AuditEvent) (string, error) {
 		return encodeAuditCursor(auditCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String()})
 	})
+	if err != nil {
+		return operationResult{}, err
+	}
+	response, err := withPageTotal(envelope, page.PageTotal, !query.BeforeID.IsZero())
 	if err != nil {
 		return operationResult{}, err
 	}

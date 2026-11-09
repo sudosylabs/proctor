@@ -14,6 +14,7 @@ paths:
         - Jobs
       description: >-
         Lists only Job types deliberately exposed through the public administration contract and authorized for the current principal. Private payloads, claims, worker identities, and infrastructure errors are omitted from every projection.
+        The first page, read without a cursor, also reports `total`: the Jobs the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
       x-proctor-auth: principal_required
       x-proctor-error-codes:
         - authorization.denied
@@ -131,6 +132,8 @@ components:
             $ref: '#/components/schemas/JobListResponse'
           example:
             items: []
+            total: 0
+            total_is_lower_bound: false
   schemas:
     JobListResponse:
       description: One bounded page of safe durable Job projections.
@@ -146,3 +149,13 @@ components:
         next_cursor:
           type: string
           description: Opaque continuation for the next page, omitted after the final page.
+        total:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: >-
+            Jobs matching the filters and the caller's visibility across every page, present only on the
+            first page. At 10,000 counting stops and `total_is_lower_bound` is true.
+        total_is_lower_bound:
+          type: boolean
+          description: True when `total` reached the 10,000 bound and there may be more. Present with `total`.

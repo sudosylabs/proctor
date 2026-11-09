@@ -703,6 +703,10 @@ func testUserListAffiliationAndAcademicUnitFilters(t *testing.T, ss store.Store)
 		for _, user := range users {
 			ids = append(ids, user.ID)
 		}
+		// Every filter combination counts exactly the rows it lists.
+		total, countErr := ss.User().Count(ctx, options, store.MaximumListCount)
+		require.NoError(t, countErr)
+		require.Len(t, ids, total, "Count agrees with List")
 		return ids
 	}
 	institution := store.UserVisibilityScope{InstitutionWide: true, ActiveAt: activeAt}
@@ -744,7 +748,31 @@ func testUserListAffiliationAndAcademicUnitFilters(t *testing.T, ss store.Store)
 		AcademicUnitID: child.ID, Visibility: rootScope,
 	}), "a descendant of the scope is inside it")
 
+	paged := []model.UserID{}
+	pageOptions := store.UserListOptions{Query: "flt-" + token, Limit: 1, Visibility: rootScope}
+	for range 5 {
+		users, listErr := ss.User().List(ctx, pageOptions)
+		require.NoError(t, listErr)
+		if len(users) == 0 {
+			break
+		}
+		paged = append(paged, users[0].ID)
+		pageOptions.AfterUsername, pageOptions.AfterID = users[0].Username, users[0].ID
+	}
+	total, err := ss.User().Count(ctx, pageOptions, store.MaximumListCount)
+	require.NoError(t, err)
+	require.Len(t, paged, total, "the count ignores the keyset and equals every page together")
+	capped, err := ss.User().Count(ctx, store.UserListOptions{Query: "flt-" + token, Limit: 1, Visibility: rootScope}, 2)
+	require.NoError(t, err)
+	require.Equal(t, 2, capped, "three matches stop at the bound")
+
 	var invalid *store.ErrInvalidInput
+	for name, maximum := range map[string]int{"zero bound": 0, "bound above the maximum": store.MaximumListCount + 1} {
+		t.Run(name, func(t *testing.T) {
+			_, countErr := ss.User().Count(ctx, store.UserListOptions{Limit: 1, Visibility: institution}, maximum)
+			require.ErrorAs(t, countErr, &invalid)
+		})
+	}
 	for name, options := range map[string]store.UserListOptions{
 		"unknown kind":  {AffiliationKinds: []model.AffiliationKind{"alumni"}, Visibility: institution},
 		"invalid unit":  {AcademicUnitID: "not-an-id", Visibility: institution},

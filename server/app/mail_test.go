@@ -29,16 +29,19 @@ import (
 )
 
 type mailStoreFake struct {
-	enqueue     *store.MailTestEnqueue
-	delivery    *model.MailDelivery
-	gets        int
-	lists       int
-	listLimit   int
-	listCopies  int
-	mutates     int
-	permit      func() *store.MailSendPermit
-	classes     []store.MailSendClass
-	completeErr error
+	enqueue      *store.MailTestEnqueue
+	delivery     *model.MailDelivery
+	gets         int
+	lists        int
+	listLimit    int
+	listCopies   int
+	counts       int
+	countTotal   int
+	countOptions store.MailDeliveryListOptions
+	mutates      int
+	permit       func() *store.MailSendPermit
+	classes      []store.MailSendClass
+	completeErr  error
 }
 
 func (s *mailStoreFake) EnqueueTest(_ context.Context, input *store.MailTestEnqueue) (*model.MailDelivery, error) {
@@ -64,6 +67,14 @@ func (s *mailStoreFake) ListDeliveries(_ context.Context, options store.MailDeli
 		deliveries = append(deliveries, s.delivery.Clone())
 	}
 	return deliveries, nil
+}
+func (s *mailStoreFake) CountDeliveries(_ context.Context, options store.MailDeliveryListOptions, maximum int) (int, error) {
+	s.counts++
+	s.countOptions = options
+	if s.delivery == nil {
+		return 0, nil
+	}
+	return min(max(s.countTotal, 1+s.listCopies), maximum), nil
 }
 func (s *mailStoreFake) CancelDelivery(_ context.Context, input *store.MailDeliveryMutation) (*model.MailDelivery, error) {
 	s.mutates++

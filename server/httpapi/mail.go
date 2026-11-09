@@ -93,9 +93,13 @@ type mailDeliveryResponse struct {
 	PublicFailureCode string                  `json:"public_failure_code,omitempty"`
 }
 
+// mailDeliveryListResponse is the collection envelope; the first page also
+// carries the total (see countedListResponse).
 type mailDeliveryListResponse struct {
-	Items      []mailDeliveryResponse `json:"items"`
-	NextCursor string                 `json:"next_cursor,omitempty"`
+	Items             []mailDeliveryResponse `json:"items"`
+	NextCursor        string                 `json:"next_cursor,omitempty"`
+	Total             *int                   `json:"total,omitempty"`
+	TotalIsLowerBound *bool                  `json:"total_is_lower_bound,omitempty"`
 }
 
 type mailDeliveryMetricResponse struct {
@@ -297,6 +301,9 @@ func (m mailResourceModule) listDeliveries(request operationRequest) (operationR
 		if err != nil {
 			return operationResult{}, unpresentableResult(err)
 		}
+	}
+	if response.Total, response.TotalIsLowerBound, err = pageTotalMembers(page.PageTotal, !query.BeforeID.IsZero()); err != nil {
+		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, response), nil
 }

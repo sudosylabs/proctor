@@ -206,9 +206,13 @@ type invitationAdministrationResponse struct {
 	Delivery         *invitationDeliveryResponse `json:"delivery,omitempty"`
 }
 
+// invitationListResponse is the collection envelope; the first page also
+// carries the total (see countedListResponse).
 type invitationListResponse struct {
-	Items      []invitationAdministrationResponse `json:"items"`
-	NextCursor string                             `json:"next_cursor,omitempty"`
+	Items             []invitationAdministrationResponse `json:"items"`
+	NextCursor        string                             `json:"next_cursor,omitempty"`
+	Total             *int                               `json:"total,omitempty"`
+	TotalIsLowerBound *bool                              `json:"total_is_lower_bound,omitempty"`
 }
 
 type invitationCursor struct {
@@ -353,6 +357,9 @@ func (m invitationResourceModule) list(request operationRequest) (operationResul
 		if err != nil {
 			return operationResult{}, unpresentableResult(err)
 		}
+	}
+	if response.Total, response.TotalIsLowerBound, err = pageTotalMembers(page.PageTotal, query.BeforeID.IsValid()); err != nil {
+		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }

@@ -99,6 +99,9 @@ func TestInvitationStore(t *testing.T, ss store.Store, probes ...InvitationSQLPr
 	t.Run("OnboardingImportListing", func(t *testing.T) {
 		testOnboardingImportListing(t, ss)
 	})
+	t.Run("OnboardingImportOpenCountIsScoped", func(t *testing.T) {
+		testOnboardingImportOpenCount(t, ss)
+	})
 	t.Run("OnboardingImportTeacherAndRoleNoOps", func(t *testing.T) {
 		testOnboardingImportTeacherAndRoleNoOps(t, ss)
 	})
@@ -594,6 +597,62 @@ func testOnboardingImportLifecycle(t *testing.T, ss store.Store) {
 	require.True(t, purged, "expired onboarding import was not purged")
 }
 
+// testOnboardingImportOpenCount proves the open import count: a parsing and
+// an executing import are open, a canceled one is not, and only imports
+// whose scope lies within the visibility count.
+func testOnboardingImportOpenCount(t *testing.T, ss store.Store) {
+	ctx := context.Background()
+	fixture, class, actor, _ := invitationAdministrationFixture(t, ctx, ss, "open-count")
+	_, otherClass, otherActor, _ := invitationAdministrationFixture(t, ctx, ss, "open-count-other")
+	at := model.TimeUTC(time.Now())
+	principalOf := func(user *model.User) model.Principal {
+		t.Helper()
+		session, credentials, _ := saveSession(t, ctx, ss, user.ID.String(), 10)
+		return model.Principal{UserID: user.ID, SessionID: session.ID, CredentialID: model.PrincipalCredentialID(credentials[0].ID),
+			CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
+			ClientType: session.ClientType, AuthenticatedAt: session.AuthenticatedAt}
+	}
+	principal, otherPrincipal := principalOf(actor), principalOf(otherActor)
+	parsing := func(owner *model.User, ownerPrincipal model.Principal, target *model.Class) model.OnboardingImportID {
+		t.Helper()
+		id := model.NewOnboardingImportID()
+		parseJob, err := model.NewJob(model.NewJobID(), model.JobTypeOnboardingImportParse, json.RawMessage(`{"import_id":"`+id.String()+`"}`), "parse:"+id.String(), at, at, 3)
+		require.NoError(t, err)
+		audit := saveOnboardingImportAuditAttempt(t, ctx, ss, owner.ID, model.RoleScopeClass, target.ID.String(), "onboarding_import.upload")
+		_, err = ss.OnboardingImport().CreateOnboardingImport(ctx, &store.OnboardingImportCreation{Import: &store.OnboardingImport{ID: id,
+			Mode: model.OnboardingImportStudentClass, State: model.OnboardingImportParsing, ScopeType: model.RoleScopeClass, ScopeID: target.ID.String(),
+			ActorUserID: owner.ID, Principal: ownerPrincipal, ParseJobID: parseJob.ID, CreatedAt: at, UpdatedAt: at, ExpiresAt: at.Add(7 * 24 * time.Hour), Revision: 1},
+			ParseJob: parseJob, AuditEventID: audit.ID, AuditAt: at})
+		require.NoError(t, err)
+		return id
+	}
+	parsing(actor, principal, class)
+	createExecutingStudentOnboardingImport(t, ctx, ss, actor, principal, class, at, "open-count-row@example.edu")
+	canceledID := parsing(actor, principal, class)
+	cancelAudit := saveOnboardingImportAuditAttempt(t, ctx, ss, actor.ID, model.RoleScopeClass, class.ID.String(), "onboarding_import.cancel")
+	_, err := ss.OnboardingImport().CancelOnboardingImport(ctx, &store.OnboardingImportCancellation{ID: canceledID, ActorUserID: actor.ID, Principal: principal,
+		At: at.Add(time.Second), AuditEventID: cancelAudit.ID, AuditAt: at.Add(time.Second)})
+	require.NoError(t, err)
+	parsing(otherActor, otherPrincipal, otherClass)
+
+	count := func(visibility store.OnboardingImportVisibilityScope, maximum int) int {
+		t.Helper()
+		total, countErr := ss.OnboardingImport().CountOpenOnboardingImports(ctx, visibility, maximum)
+		require.NoError(t, countErr)
+		return total
+	}
+	require.Equal(t, 2, count(store.OnboardingImportVisibilityScope{ClassIDs: []model.ClassID{class.ID}}, store.MaximumListCount),
+		"parsing and executing are open; canceled is not")
+	require.Equal(t, 2, count(store.OnboardingImportVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{fixture.programme.AcademicUnitID}}, store.MaximumListCount),
+		"a unit subtree reaches the Classes of its Programmes and nothing outside")
+	require.Equal(t, 1, count(store.OnboardingImportVisibilityScope{ClassIDs: []model.ClassID{otherClass.ID}}, store.MaximumListCount))
+	require.Zero(t, count(store.OnboardingImportVisibilityScope{}, store.MaximumListCount), "zero visibility matches nothing")
+	require.Equal(t, 1, count(store.OnboardingImportVisibilityScope{ClassIDs: []model.ClassID{class.ID}}, 1), "two open imports stop at the bound")
+	var invalid *store.ErrInvalidInput
+	_, err = ss.OnboardingImport().CountOpenOnboardingImports(ctx, store.OnboardingImportVisibilityScope{InstitutionWide: true}, 0)
+	require.ErrorAs(t, err, &invalid, "a zero bound")
+}
+
 func createExecutingStudentOnboardingImport(t *testing.T, ctx context.Context, ss store.Store, actor *model.User, principal model.Principal,
 	class *model.Class, at time.Time, email string,
 ) model.OnboardingImportID {
@@ -809,6 +868,47 @@ func testInvitationAdministrationPaginationIsStable(t *testing.T, ss store.Store
 		_, ok := seen[id]
 		require.True(t, ok, "Invitation %s skipped by pagination", id)
 	}
+
+	// Count reads List's filter and visibility: each combination counts
+	// exactly the rows every page lists together, and stops at its bound.
+	for name, options := range map[string]store.InvitationListOptions{
+		"class scope":        {Visibility: visibility},
+		"pending":            {Visibility: visibility, State: model.InvitationPending},
+		"pending unexpired":  {Visibility: visibility, State: model.InvitationPending, Unexpired: true},
+		"accepted":           {Visibility: visibility, State: model.InvitationAccepted},
+		"unit subtree":       {Visibility: store.InvitationVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{fixture.programme.AcademicUnitID}}},
+		"another class":      {Visibility: store.InvitationVisibilityScope{ClassIDs: []model.ClassID{model.NewClassID()}}},
+		"institution target": {Visibility: store.InvitationVisibilityScope{InstitutionWide: true}, TargetID: class.ID.String()},
+	} {
+		t.Run("count "+name, func(t *testing.T) {
+			var paged []model.InvitationID
+			options.Limit = 1
+			for range 50 {
+				page, listErr := ss.Invitation().List(ctx, options)
+				require.NoError(t, listErr)
+				if len(page.Items) == 0 {
+					break
+				}
+				last := page.Items[0].Invitation
+				paged = append(paged, last.ID)
+				options.BeforeCreatedAt, options.BeforeID = last.CreatedAt, last.ID
+			}
+			total, countErr := ss.Invitation().Count(ctx, options, store.MaximumListCount)
+			require.NoError(t, countErr)
+			require.Len(t, paged, total, "the count ignores the keyset and equals every page together")
+		})
+	}
+	total, err := ss.Invitation().Count(ctx, store.InvitationListOptions{Visibility: visibility, State: model.InvitationPending, Unexpired: true}, store.MaximumListCount)
+	require.NoError(t, err)
+	require.Equal(t, len(created), total, "fresh pending Invitations are open")
+	capped, err := ss.Invitation().Count(ctx, store.InvitationListOptions{Visibility: visibility}, 2)
+	require.NoError(t, err)
+	require.Equal(t, 2, capped, "three Invitations stop at the bound")
+	var invalid *store.ErrInvalidInput
+	_, err = ss.Invitation().Count(ctx, store.InvitationListOptions{}, 10)
+	require.ErrorAs(t, err, &invalid, "zero visibility is refused like List")
+	_, err = ss.Invitation().Count(ctx, store.InvitationListOptions{Visibility: visibility}, store.MaximumListCount+1)
+	require.ErrorAs(t, err, &invalid, "a bound above the maximum")
 }
 
 func testInvitationAdministrationRevokeAndReplaceAreRevisionFenced(t *testing.T, ss store.Store) {

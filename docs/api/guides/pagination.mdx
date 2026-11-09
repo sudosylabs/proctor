@@ -52,6 +52,17 @@ traversal. It does not promise a transactionally frozen snapshot unless the
 individual endpoint explicitly says so. Consumers that reconcile durable
 state should make their processing idempotent.
 
+## First-Page Totals
+
+Some collections also report `total` and `total_is_lower_bound` on the first
+page, the one read without a `cursor`: the User directory, Invitations, Jobs,
+audit Events, mail deliveries, and the current User's own audit history. The
+total counts every item the same filters and the caller's visibility match
+across all pages. It is exact below 10,000; at 10,000 counting stops and
+`total_is_lower_bound` is `true`. Later pages carry neither member, so keep the
+first page's values. A total is a size hint, not a position: there is no
+offset paging, and items may change while you traverse.
+
 ## Search Is One Bounded Page
 
 `GET /api/v1/search` uses the same `items` envelope but never continues. It

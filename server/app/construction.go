@@ -114,6 +114,9 @@ type administrationConstruction struct {
 	// search spans Exams, Users and Classes, so it is built once every one of
 	// those services exists.
 	search *searchService
+	// counts summarises Invitations, Jobs, mail, and onboarding imports, so
+	// it is built once every one of their services exists.
+	counts *administrationCountsService
 }
 
 func validateApplicationDependencies(deps Dependencies) error {
@@ -262,6 +265,7 @@ func assembleApplication(
 		academicAdministrationBatchService:       administration.academicAdministrationBatches,
 		realtimeService:                          foundation.realtime,
 		searchService:                            administration.search,
+		administrationCountsService:              administration.counts,
 		realtimeAdmissionService: &realtimeAdmissionService{
 			principals: identity.authentication, exams: examinations.authoring, sittings: examinations.sittings,
 			authorization: access.authorization, operational: deps.OperationalRecorder,

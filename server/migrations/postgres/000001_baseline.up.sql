@@ -201,6 +201,8 @@ CREATE UNIQUE INDEX jobs_active_type_dedupe_key_idx ON jobs (type, dedupe_key)
     WHERE dedupe_policy = 'active' AND status IN ('queued', 'running', 'cancel_requested');
 CREATE UNIQUE INDEX jobs_permanent_type_dedupe_key_idx ON jobs (type, dedupe_key)
     WHERE dedupe_policy = 'permanent';
+-- The administration summary counts recent failures without scanning history.
+CREATE INDEX jobs_failed_updated_at_idx ON jobs (updated_at DESC) WHERE status = 'failed';
 
 -- Permanent occurrence keys deliberately outlive retained Job history. The
 -- referenced Job ID is informational rather than a foreign key so cleanup can
@@ -441,6 +443,10 @@ CREATE UNIQUE INDEX invitations_pending_academic_unit_role_package_key
 CREATE UNIQUE INDEX invitations_pending_institution_role_package_key
     ON invitations (target_email, scope_id, role_id)
     WHERE state = 'pending' AND purpose = 'institution_role';
+
+-- The administration list filters by state newest first, and the summary
+-- counts pending Invitations; both read this instead of the whole table.
+CREATE INDEX invitations_state_created_at_idx ON invitations (state, created_at DESC, id DESC);
 
 -- Administrative imports and student progression retain only a seven-day
 -- private preview/report. Job commands contain the opaque aggregate ID;

@@ -7,7 +7,10 @@
 
 package app
 
-import "github.com/sudosylabs/proctor/server/app/apperror"
+import (
+	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/store"
+)
 
 // Collection pages hold at most MaximumPageLimit items; a zero limit selects
 // DefaultPageLimit.
@@ -29,6 +32,41 @@ type NamePageQuery struct {
 	AfterName string
 	AfterID   string
 	Limit     int
+}
+
+// PageTotal is a counted collection's first-page total. A page read without a
+// keyset sets Counted and carries Total: every item the filters and the
+// caller's visibility match across all pages, stopped at
+// store.MaximumListCount, where TotalIsLowerBound is set. Later pages leave
+// it zero and the client keeps the first page's total.
+type PageTotal struct {
+	Counted           bool
+	Total             int
+	TotalIsLowerBound bool
+}
+
+// CountedPage is a Page with its first-page total.
+type CountedPage[T any] struct {
+	Page[T]
+	PageTotal
+}
+
+// countFirstPage counts a collection for its first page and checks the count
+// against the page it accompanies. count reads the same filters and
+// visibility as the page, stopping at maximum. A later page is not counted.
+// It reports false when the Store answered a count the page contradicts.
+func countFirstPage(first bool, items int, count func(maximum int) (int, error)) (PageTotal, bool, error) {
+	if !first {
+		return PageTotal{}, true, nil
+	}
+	total, err := count(store.MaximumListCount)
+	if err != nil {
+		return PageTotal{}, true, err
+	}
+	if total < items || total > store.MaximumListCount {
+		return PageTotal{}, false, nil
+	}
+	return PageTotal{Counted: true, Total: total, TotalIsLowerBound: total == store.MaximumListCount}, true, nil
 }
 
 // resolvePageLimit validates a requested page size and returns it with the

@@ -265,6 +265,47 @@ func (s SQLInvitationStore) ListOnboardingImports(ctx context.Context, options s
 	return values, nil
 }
 
+// CountOpenOnboardingImports counts unexpired, non-terminal administrative
+// imports within the visibility, reading at most one row past maximum. The
+// expiry test matches GetOnboardingImport, so a counted import can be read.
+func (s SQLInvitationStore) CountOpenOnboardingImports(ctx context.Context, visibility store.OnboardingImportVisibilityScope, maximum int) (int, error) {
+	if !store.ValidCountMaximum(maximum) || len(visibility.AcademicUnitRootIDs) > 256 || len(visibility.ClassIDs) > 256 ||
+		!validVisibilityIDs(visibility.AcademicUnitRootIDs) || !validVisibilityIDs(visibility.ClassIDs) {
+		return 0, store.NewErrInvalidInput("onboarding_import", "count", nil)
+	}
+	conditions := []string{
+		`mode<>'student_progression'`,
+		`state IN ('uploading','parsing','preview_ready','executing')`,
+		`expires_at>CURRENT_TIMESTAMP`,
+	}
+	args := []any{}
+	if !visibility.InstitutionWide {
+		parts := []string{"FALSE"}
+		if len(visibility.AcademicUnitRootIDs) > 0 {
+			parts = append(parts, `(scope_type='academic_unit' AND EXISTS (
+				WITH RECURSIVE descendants AS (
+					SELECT id FROM academic_units WHERE id=ANY(?)
+					UNION ALL SELECT child.id FROM academic_units child JOIN descendants parent ON child.parent_id=parent.id
+				) SELECT 1 FROM descendants WHERE id=scope_id
+			))`, `(scope_type='class' AND EXISTS (
+				WITH RECURSIVE descendants AS (
+					SELECT id FROM academic_units WHERE id=ANY(?)
+					UNION ALL SELECT child.id FROM academic_units child JOIN descendants parent ON child.parent_id=parent.id
+				) SELECT 1 FROM classes c JOIN programme_levels pl ON pl.id=c.programme_level_id
+				JOIN programmes p ON p.id=pl.programme_id WHERE c.id=scope_id AND p.academic_unit_id IN (SELECT id FROM descendants)
+			))`)
+			roots := pq.Array(idStrings(visibility.AcademicUnitRootIDs))
+			args = append(args, roots, roots)
+		}
+		if len(visibility.ClassIDs) > 0 {
+			parts = append(parts, `(scope_type='class' AND scope_id=ANY(?))`)
+			args = append(args, pq.Array(idStrings(visibility.ClassIDs)))
+		}
+		conditions = append(conditions, "("+strings.Join(parts, " OR ")+")")
+	}
+	return countBoundedSQL(ctx, s.GetMaster(), `SELECT 1 FROM onboarding_imports WHERE `+strings.Join(conditions, " AND "), args, maximum, "onboarding imports")
+}
+
 func (s SQLInvitationStore) ListStudentProgressionRoster(ctx context.Context, classID model.ClassID, at time.Time, limit int) ([]*model.ClassMember, error) {
 	if !classID.IsValid() || at.IsZero() || limit < 1 || limit > store.OnboardingImportMaximumRows+1 {
 		return nil, store.NewErrInvalidInput("student_progression", "roster", nil)

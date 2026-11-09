@@ -76,8 +76,11 @@ type JobCompletion struct {
 }
 
 type JobListOptions struct {
-	Types           []model.JobType
-	Statuses        []model.JobStatus
+	Types    []model.JobType
+	Statuses []model.JobStatus
+	// UpdatedWithin, when positive, keeps Jobs updated less than that long
+	// before PostgreSQL time.
+	UpdatedWithin   time.Duration
 	BeforeCreatedAt time.Time
 	BeforeID        model.JobID
 	Limit           int
@@ -146,6 +149,10 @@ type JobStore interface {
 	Get(context.Context, model.JobID) (*model.Job, error)
 	ListAttempts(context.Context, model.JobID) ([]model.JobAttempt, error)
 	List(context.Context, JobListOptions) ([]*model.Job, error)
+	// Count counts the Jobs List would return across every page for the same
+	// filters, ignoring the keyset and limit, and stops at maximum (see
+	// MaximumListCount).
+	Count(context.Context, JobListOptions, int) (int, error)
 	ListAttemptsPage(context.Context, JobAttemptListOptions) ([]model.JobAttempt, error)
 	// CancellationRequested observes the durable cancellation bit only while the
 	// supplied Attempt still owns the live fence.

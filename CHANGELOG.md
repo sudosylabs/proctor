@@ -17,10 +17,10 @@ module when a change is not server-only. No module has been released yet.
 
 ### Changed
 
-- Server: the baseline adds indexes for the User directory affiliation filter
-  and the onboarding import list, and bounds `invitations.expires_at` between
-  one and thirty days after creation. Existing development databases must be
-  recreated.
+- Server: the baseline adds indexes for the User directory affiliation filter,
+  the onboarding import list, failed Jobs and Invitations by state, and bounds
+  `invitations.expires_at` between one and thirty days after creation.
+  Existing development databases must be recreated.
 - Server: recent authentication now counts primary proof only. An MFA
   challenge no longer refreshes recency; it still makes a Session strong.
 - Server: Desktop Authorization that reuses a recently reauthenticated Web
@@ -213,6 +213,19 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: the first page of `GET /api/v1/users`, `GET /api/v1/invitations`,
+  `GET /api/v1/jobs`, `GET /api/v1/audits`, and `GET /api/v1/mail/deliveries`
+  reports `total` with `total_is_lower_bound`: the items the same filters and
+  the caller's visibility match across every page, exact below 10,000 and
+  flagged at that bound. Later pages carry neither member; there is still no
+  offset paging.
+- Server: `GET /api/v1/administration/counts` returns bounded navigation
+  counts for an interactive Session: `pending_invitations`, `failed_jobs`
+  (failed in the last seven days), `failed_mail_deliveries` (the `failed`
+  state), and `open_onboarding_imports`, each stopped at 1,000 with a
+  `<name>_is_lower_bound` flag. A count the caller may not list is omitted.
+  The baseline gains `jobs_failed_updated_at_idx` and
+  `invitations_state_created_at_idx` for these reads.
 - Server: the contract publishes the closed server catalogues as enums:
   `JobType`, `JobStage` and `JobErrorCode` on Jobs and Job Attempts,
   `AuditAction` and `ResourceType` on audit events and their filters, and

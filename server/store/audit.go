@@ -79,7 +79,7 @@ type AuditSelfListOptions struct {
 
 // MaximumAuditSelfCount bounds CountSelf. A history at the bound reports the
 // bound, and the caller presents it as a lower bound.
-const MaximumAuditSelfCount = 10000
+const MaximumAuditSelfCount = MaximumListCount
 
 // AuditSelfEntry is the bounded projection of one self-history event. It
 // carries no parameters, prior state, or result beyond the recorded
@@ -109,6 +109,10 @@ type AuditStore interface {
 	Get(context.Context, model.AuditEventID) (*model.AuditEvent, error)
 	Complete(context.Context, *AuditCompletion) (*model.AuditEvent, error)
 	List(context.Context, AuditListOptions) ([]*model.AuditEvent, error)
+	// Count counts the events List would return across every page for the
+	// same filters and visibility, ignoring the keyset and limit, and stops
+	// at maximum (see MaximumListCount).
+	Count(context.Context, AuditListOptions, int) (int, error)
 	// ListSelf returns up to Limit entries of one User's own history, newest
 	// first by (created_at, id). It is the union of the subject and actor
 	// relations, each read through its own index.

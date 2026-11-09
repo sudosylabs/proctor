@@ -204,6 +204,7 @@ func TestJobStore(t *testing.T, ss store.Store) {
 		require.NotEqual(t, listed[0].ID, item.ID)
 		require.NotEqual(t, listed[1].ID, item.ID)
 	}
+	testJobListCount(t, ctx, ss, exhausted.ID)
 
 	control := mustJob(t, "user:control", model.NowUTC().Add(-time.Second))
 	_, _, err = ss.Job().Enqueue(ctx, &store.JobEnqueue{Job: control})
@@ -261,6 +262,56 @@ func saveJobMutationAudit(t *testing.T, ctx context.Context, ss store.Store, job
 	event, err := ss.Audit().Save(ctx, &model.AuditEvent{Action: string(model.ActionJobManage), Resource: model.Resource{Type: model.ResourceInstitution, ID: model.NewID()}, ScopeType: model.RoleScopeInstitution, ScopeID: model.NewID(), Status: model.AuditStatusAttempt, NodeID: "test-node", Parameters: []byte(`{"operation":"` + operation + `","job_id":"` + jobID.String() + `"}`)})
 	require.NoError(t, err)
 	return event
+}
+
+// testJobListCount proves Count reads List's filter: each combination of
+// types, statuses, and recent-update window counts exactly the rows every
+// page lists together, and stops at its bound.
+func testJobListCount(t *testing.T, ctx context.Context, ss store.Store, failedID model.JobID) {
+	profile := []model.JobType{model.JobTypeProfilePictureGenerateDefault}
+	failed := []model.JobStatus{model.JobStatusFailed}
+	cases := map[string]store.JobListOptions{
+		"one type":           {Types: profile},
+		"two types":          {Types: []model.JobType{model.JobTypeProfilePictureGenerateDefault, model.JobTypeCleanup}},
+		"failed":             {Types: profile, Statuses: failed},
+		"failed this week":   {Types: profile, Statuses: failed, UpdatedWithin: 7 * 24 * time.Hour},
+		"failed just now":    {Types: profile, Statuses: failed, UpdatedWithin: time.Microsecond},
+		"succeeded or later": {Types: profile, Statuses: []model.JobStatus{model.JobStatusSucceeded, model.JobStatusFailed}},
+	}
+	for name, options := range cases {
+		t.Run("count "+name, func(t *testing.T) {
+			var paged []model.JobID
+			options.Limit = 1
+			for range 50 {
+				page, err := ss.Job().List(ctx, options)
+				require.NoError(t, err)
+				if len(page) == 0 {
+					break
+				}
+				paged = append(paged, page[0].ID)
+				options.BeforeCreatedAt, options.BeforeID = page[0].CreatedAt, page[0].ID
+			}
+			total, err := ss.Job().Count(ctx, options, store.MaximumListCount)
+			require.NoError(t, err)
+			require.Len(t, paged, total, "the count ignores the keyset and equals every page together")
+			switch name {
+			case "failed this week":
+				require.Contains(t, paged, failedID, "a failure from a minute ago is inside the week")
+			case "failed just now":
+				require.Empty(t, paged, "the window excludes older failures")
+			}
+		})
+	}
+	capped, err := ss.Job().Count(ctx, store.JobListOptions{Types: profile, Limit: 1}, 1)
+	require.NoError(t, err)
+	require.Equal(t, 1, capped, "several Jobs stop at the bound")
+	var invalid *store.ErrInvalidInput
+	_, err = ss.Job().Count(ctx, store.JobListOptions{Limit: 1}, 10)
+	require.ErrorAs(t, err, &invalid, "types are required")
+	_, err = ss.Job().Count(ctx, store.JobListOptions{Types: profile, UpdatedWithin: -time.Second}, 10)
+	require.ErrorAs(t, err, &invalid, "a negative window")
+	_, err = ss.Job().Count(ctx, store.JobListOptions{Types: profile}, store.MaximumListCount+1)
+	require.ErrorAs(t, err, &invalid, "a bound above the maximum")
 }
 
 func mustJob(t *testing.T, dedupe string, at time.Time) *model.Job {

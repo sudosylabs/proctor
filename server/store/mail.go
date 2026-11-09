@@ -114,6 +114,10 @@ type MailStore interface {
 	EnqueueTest(context.Context, *MailTestEnqueue) (*model.MailDelivery, error)
 	GetDelivery(context.Context, model.MailDeliveryID) (*model.MailDelivery, error)
 	ListDeliveries(context.Context, MailDeliveryListOptions) ([]*model.MailDelivery, error)
+	// CountDeliveries counts the deliveries ListDeliveries would return
+	// across every page for the same filters, ignoring the keyset and limit,
+	// and stops at maximum (see MaximumListCount).
+	CountDeliveries(context.Context, MailDeliveryListOptions, int) (int, error)
 	StartDelivery(context.Context, *MailDeliveryStart) (*model.MailDelivery, error)
 	CompleteDelivery(context.Context, *MailDeliveryCompletion) (*model.MailDelivery, error)
 	CancelDelivery(context.Context, *MailDeliveryMutation) (*model.MailDelivery, error)

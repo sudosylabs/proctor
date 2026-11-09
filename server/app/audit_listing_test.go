@@ -23,14 +23,22 @@ import (
 )
 
 type auditListingStoreFake struct {
-	events     *[]string
-	list       []*model.AuditEvent
-	input      store.AuditListOptions
-	self       []*store.AuditSelfEntry
-	selfInput  store.AuditSelfListOptions
-	count      int
-	countInput store.AuditSelfListOptions
-	err        error
+	events         *[]string
+	list           []*model.AuditEvent
+	input          store.AuditListOptions
+	self           []*store.AuditSelfEntry
+	selfInput      store.AuditSelfListOptions
+	count          int
+	countInput     store.AuditSelfListOptions
+	listCount      int
+	listCountInput store.AuditListOptions
+	err            error
+}
+
+func (s *auditListingStoreFake) Count(_ context.Context, options store.AuditListOptions, maximum int) (int, error) {
+	*s.events = append(*s.events, "count-audits")
+	s.listCountInput = options
+	return min(max(s.listCount, len(s.list)), maximum), s.err
 }
 
 func (s *auditListingStoreFake) ListSelf(_ context.Context, options store.AuditSelfListOptions) ([]*store.AuditSelfEntry, error) {
@@ -137,8 +145,9 @@ func TestAuditListingAuthorizesOnceThenReads(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got.Items, 1, "result/input = %#v / %#v", got, persistence.input)
 	require.Equal(t, 11, persistence.input.Limit, "the read probes one past the page; result/input = %#v / %#v", got, persistence.input)
-	// Contract: authorization precedes the read.
-	require.Equal(t, []string{"authorize-view", "list-audits"}, events)
+	// Contract: authorization precedes the read, and the first page then counts.
+	require.Equal(t, []string{"authorize-view", "list-audits", "count-audits"}, events)
+	require.Equal(t, PageTotal{Counted: true, Total: 1}, got.PageTotal)
 }
 
 func TestAuditListingFailsClosedWhenAuthorizationReturnsZeroVisibility(t *testing.T) {

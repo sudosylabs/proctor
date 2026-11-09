@@ -33,6 +33,8 @@ type userProfileHTTPApplication struct {
 	contextResult      *app.CurrentUserContextView
 	contextCalls       int
 	values             []*model.User
+	searchHasMore      bool
+	searchTotal        int
 	searchQuery        app.SearchUsersQuery
 	updateCommand      app.UpdateUserProfileCommand
 	changeEmailCommand app.ChangeUserEmailCommand
@@ -154,8 +156,9 @@ type auditListingHTTPApplication struct {
 	list []*model.AuditEvent
 }
 
-func (a *auditListingHTTPApplication) ListAuditEvents(context.Context, invocation.Invocation, app.ListAuditEventsQuery) (app.Page[*model.AuditEvent], error) {
-	return app.Page[*model.AuditEvent]{Items: a.list}, nil
+func (a *auditListingHTTPApplication) ListAuditEvents(_ context.Context, _ invocation.Invocation, query app.ListAuditEventsQuery) (app.CountedPage[*model.AuditEvent], error) {
+	return app.CountedPage[*model.AuditEvent]{Page: app.Page[*model.AuditEvent]{Items: a.list},
+		PageTotal: app.PageTotal{Counted: query.BeforeID.IsZero(), Total: len(a.list)}}, nil
 }
 
 type bootstrapHTTPApplication struct {
@@ -192,9 +195,13 @@ func (a *loginRevisionHTTPApplication) Login(
 	}, nil
 }
 
-func (a *userProfileHTTPApplication) SearchUsers(_ context.Context, _ invocation.Invocation, query app.SearchUsersQuery) (app.Page[*model.User], error) {
+func (a *userProfileHTTPApplication) SearchUsers(_ context.Context, _ invocation.Invocation, query app.SearchUsersQuery) (app.CountedPage[*model.User], error) {
 	a.searchQuery = query
-	return app.Page[*model.User]{Items: a.values}, nil
+	page := app.CountedPage[*model.User]{Page: app.Page[*model.User]{Items: a.values, HasMore: a.searchHasMore}}
+	if query.AfterID == "" {
+		page.PageTotal = app.PageTotal{Counted: true, Total: max(a.searchTotal, len(a.values)), TotalIsLowerBound: a.searchTotal == store.MaximumListCount}
+	}
+	return page, nil
 }
 func (a *userProfileHTTPApplication) GetUserProfile(context.Context, invocation.Invocation, app.GetUserProfileQuery) (*model.User, error) {
 	return a.result, nil

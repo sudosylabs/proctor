@@ -175,9 +175,12 @@ type InvitationAdministrationView struct {
 	Delivery       *InvitationDeliveryView
 }
 
+// InvitationAdministrationPage is one page of visible Invitations; the first
+// page also carries their total (see PageTotal).
 type InvitationAdministrationPage struct {
 	Items []InvitationAdministrationView
 	More  bool
+	PageTotal
 }
 
 type ListInvitationsQuery struct {
@@ -392,6 +395,9 @@ func (a invitationAuthorizationAdapter) AuthorizeActionDelegation(ctx context.Co
 	return nil
 }
 
+// Visibility resolves and records the caller's institution-family scopes for
+// invitation.view, invitation.manage, or onboarding_batch.view, which share
+// one scope shape: the Institution, Academic Unit subtrees, and Classes.
 func (a invitationAuthorizationAdapter) Visibility(ctx context.Context, invocation invocation.Invocation, action model.Action) (store.InvitationVisibilityScope, error) {
 	if a.authorization == nil || (action != model.ActionInvitationView && action != model.ActionInvitationManage && action != model.ActionOnboardingBatchView) {
 		return store.InvitationVisibilityScope{}, apperror.New("invitation.unavailable")

@@ -34,6 +34,9 @@ type invitationStoreFake struct {
 	scopedAccepted   *store.ScopedRoleInvitationAcceptance
 	scopedAcceptErr  error
 	listOptions      store.InvitationListOptions
+	countOptions     store.InvitationListOptions
+	countMaximum     int
+	countTotal       int
 	resent           *store.InvitationResend
 	revoked          *store.InvitationRevocation
 	replaced         *store.InvitationReplacement
@@ -178,6 +181,10 @@ func (f *invitationStoreFake) Maintain(context.Context, int) (*store.InvitationM
 func (f *invitationStoreFake) List(_ context.Context, options store.InvitationListOptions) (*store.InvitationPage, error) {
 	f.listOptions = options
 	return &store.InvitationPage{Items: []*store.InvitationAdministrationRecord{{Invitation: f.invitation}}}, nil
+}
+func (f *invitationStoreFake) Count(_ context.Context, options store.InvitationListOptions, maximum int) (int, error) {
+	f.countOptions, f.countMaximum = options, maximum
+	return min(max(f.countTotal, 1), maximum), nil
 }
 func (f *invitationStoreFake) GetForAdministration(context.Context, model.InvitationID, store.InvitationVisibilityScope) (*store.InvitationAdministrationRecord, error) {
 	return &store.InvitationAdministrationRecord{Invitation: f.invitation}, nil

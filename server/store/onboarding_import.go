@@ -191,6 +191,12 @@ type OnboardingImportStore interface {
 	CreateOnboardingImport(context.Context, *OnboardingImportCreation) (*OnboardingImport, error)
 	GetOnboardingImport(context.Context, model.OnboardingImportID) (*OnboardingImport, error)
 	ListOnboardingImports(context.Context, OnboardingImportListOptions) ([]*OnboardingImport, error)
+	// CountOpenOnboardingImports counts the unexpired administrative imports,
+	// every mode but student progression, that are not yet in a terminal
+	// state (uploading, parsing, preview_ready, or executing) and whose
+	// scope lies within the visibility. It stops at maximum (see
+	// MaximumListCount).
+	CountOpenOnboardingImports(context.Context, OnboardingImportVisibilityScope, int) (int, error)
 	ListStudentProgressionRoster(context.Context, model.ClassID, time.Time, int) ([]*model.ClassMember, error)
 	CompleteOnboardingImportPreview(context.Context, *OnboardingImportPreviewCompletion) (*OnboardingImport, error)
 	CommitOnboardingImport(context.Context, *OnboardingImportCommit) (*OnboardingImport, error)

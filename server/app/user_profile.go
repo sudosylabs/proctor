@@ -50,6 +50,7 @@ type UpdateUserProfileCommand struct {
 type userProfileStore interface {
 	Get(context.Context, model.UserID) (*model.User, error)
 	List(context.Context, store.UserListOptions) ([]*model.User, error)
+	Count(context.Context, store.UserListOptions, int) (int, error)
 	GetCurrentContext(context.Context, model.UserID, int) (*store.CurrentUserContext, error)
 	UpdateProfile(context.Context, *store.UserProfileUpdate) (*model.User, error)
 }
@@ -127,39 +128,69 @@ func newUserProfileService(deps userProfileServiceDependencies) *userProfileServ
 	return &userProfileService{deps: deps}
 }
 
-func (s *userProfileService) SearchUsers(ctx context.Context, invocation invocation.Invocation, query SearchUsersQuery) (Page[*model.User], error) {
+// SearchUsers reads one page of the User directory. The first page, read
+// without a keyset, also counts every User the filters match within the same
+// visibility.
+func (s *userProfileService) SearchUsers(ctx context.Context, invocation invocation.Invocation, query SearchUsersQuery) (CountedPage[*model.User], error) {
+	page, options, err := s.listUsers(ctx, invocation, query)
+	if err != nil {
+		return CountedPage[*model.User]{}, err
+	}
+	total, consistent, err := countFirstPage(query.AfterID == "", len(page.Items), func(maximum int) (int, error) {
+		return s.deps.Users.Count(ctx, options, maximum)
+	})
+	if err != nil {
+		return CountedPage[*model.User]{}, userStoreErrors.Translate(err)
+	}
+	if !consistent {
+		return CountedPage[*model.User]{}, apperror.New("administration.unavailable").WithField("resource", "user")
+	}
+	return CountedPage[*model.User]{Page: page, PageTotal: total}, nil
+}
+
+// searchUserPage is the uncounted directory read that global search composes.
+func (s *userProfileService) searchUserPage(ctx context.Context, invocation invocation.Invocation, query SearchUsersQuery) (Page[*model.User], error) {
+	page, _, err := s.listUsers(ctx, invocation, query)
+	return page, err
+}
+
+// listUsers authorizes and reads one directory page, returning the Store
+// options it read with so a count runs through the same filters and
+// visibility.
+func (s *userProfileService) listUsers(ctx context.Context, invocation invocation.Invocation, query SearchUsersQuery) (Page[*model.User], store.UserListOptions, error) {
 	limit, probe, err := resolvePageLimit(query.Limit, "limit")
 	if err != nil {
-		return Page[*model.User]{}, err
+		return Page[*model.User]{}, store.UserListOptions{}, err
 	}
 	affiliations, err := userDirectoryAffiliations(query.Affiliations)
 	if err != nil {
-		return Page[*model.User]{}, err
+		return Page[*model.User]{}, store.UserListOptions{}, err
 	}
 	if query.AcademicUnitID != "" && !query.AcademicUnitID.IsValid() {
-		return Page[*model.User]{}, apperror.Invalid("request.invalid", "academic_unit_id")
+		return Page[*model.User]{}, store.UserListOptions{}, apperror.Invalid("request.invalid", "academic_unit_id")
 	}
 	visibility, err := s.deps.Authorization.AuthorizeSearch(ctx, invocation)
 	if err != nil {
-		return Page[*model.User]{}, err
+		return Page[*model.User]{}, store.UserListOptions{}, err
 	}
 	includeDisabled := query.IncludeDisabled && visibility.InstitutionWide
 	if visibility.ActiveAt.IsZero() && (len(affiliations) > 0 || query.AcademicUnitID != "") {
 		visibility.ActiveAt = model.TimeUTC(s.deps.Now())
 	}
-	users, err := s.deps.Users.List(ctx, store.UserListOptions{
+	options := store.UserListOptions{
 		Query: query.Query, AfterUsername: query.AfterUsername, AfterID: query.AfterID, Limit: probe,
 		IncludeDisabled: includeDisabled, AffiliationKinds: affiliations, AcademicUnitID: query.AcademicUnitID,
 		Visibility: visibility,
-	})
+	}
+	users, err := s.deps.Users.List(ctx, options)
 	if err != nil {
-		return Page[*model.User]{}, userStoreErrors.Translate(err)
+		return Page[*model.User]{}, store.UserListOptions{}, userStoreErrors.Translate(err)
 	}
 	page := newPage(users, limit)
 	if !visibility.InstitutionWide {
 		page.Items = scopedUserDirectoryProjection(page.Items)
 	}
-	return page, nil
+	return page, options, nil
 }
 
 func (s *userProfileService) GetUserProfile(ctx context.Context, invocation invocation.Invocation, query GetUserProfileQuery) (*model.User, error) {

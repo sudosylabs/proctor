@@ -299,23 +299,10 @@ func (s SQLUserStore) List(
 	if !validUserListOptions(options) {
 		return nil, store.NewErrInvalidInput("user", "list_options", nil)
 	}
-	query := s.usersQuery.Where(sq.Eq{"users.archived_at": nil})
-	if options.ID != "" {
-		query = query.Where(sq.Eq{"users.id": options.ID})
-	}
-	query, err := filterUserListVisibility(query, options.Visibility)
+	query, err := filterUserList(s.usersQuery, options)
 	if err != nil {
 		return nil, err
 	}
-	if !options.IncludeDisabled || !options.Visibility.InstitutionWide {
-		query = query.Where(sq.Eq{"users.disabled_at": nil})
-	}
-	if options.MissingDefaultProfilePicture {
-		query = query.Where(sq.Eq{"users.default_profile_picture_file_id": nil})
-	}
-	query = filterUserListSearch(query, options)
-	query = filterUserListAffiliations(query, options)
-	query = filterUserListAcademicUnit(query, options)
 	if options.AfterUsername != "" {
 		query = query.Where(
 			"(users.username > ? OR (users.username = ? AND users.id > ?))",
@@ -338,6 +325,43 @@ func (s SQLUserStore) List(
 		users = append(users, user)
 	}
 	return users, nil
+}
+
+// Count counts through the same filter as List, without its keyset, order,
+// or limit, reading at most one row past maximum.
+func (s SQLUserStore) Count(ctx context.Context, options store.UserListOptions, maximum int) (int, error) {
+	options.AfterUsername, options.AfterID, options.Limit = "", "", 1
+	if !validUserListOptions(options) || !store.ValidCountMaximum(maximum) {
+		return 0, store.NewErrInvalidInput("user", "count_options", nil)
+	}
+	query, err := filterUserList(sq.Select("users.id").From("users"), options)
+	if err != nil {
+		return 0, err
+	}
+	return countBounded(ctx, s.GetMaster(), query, maximum, "users")
+}
+
+// filterUserList applies every List filter but the keyset: archived and
+// disabled Users, the exact ID, visibility, search, Affiliation, and Academic
+// Unit. List and Count share it so a total always counts the listed rows.
+func filterUserList(query sq.SelectBuilder, options store.UserListOptions) (sq.SelectBuilder, error) {
+	query = query.Where(sq.Eq{"users.archived_at": nil})
+	if options.ID != "" {
+		query = query.Where(sq.Eq{"users.id": options.ID})
+	}
+	query, err := filterUserListVisibility(query, options.Visibility)
+	if err != nil {
+		return query, err
+	}
+	if !options.IncludeDisabled || !options.Visibility.InstitutionWide {
+		query = query.Where(sq.Eq{"users.disabled_at": nil})
+	}
+	if options.MissingDefaultProfilePicture {
+		query = query.Where(sq.Eq{"users.default_profile_picture_file_id": nil})
+	}
+	query = filterUserListSearch(query, options)
+	query = filterUserListAffiliations(query, options)
+	return filterUserListAcademicUnit(query, options), nil
 }
 
 // validUserListOptions reports whether the list page size, cursor and visibility bounds are acceptable.

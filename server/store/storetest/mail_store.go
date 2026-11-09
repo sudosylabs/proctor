@@ -224,6 +224,49 @@ func TestMailStore(t *testing.T, ss store.Store) {
 	testMailRekeyStore(t, ctx, ss, user, institution)
 }
 
+// testMailDeliveryCount proves CountDeliveries reads ListDeliveries' filter:
+// each combination counts exactly the rows every page lists together, and
+// stops at its bound.
+func testMailDeliveryCount(t *testing.T, ctx context.Context, ss store.Store, at time.Time, failedID model.MailDeliveryID) {
+	systemTest := []model.MailTemplateKey{model.MailTemplateSystemTest}
+	cases := map[string]store.MailDeliveryListOptions{
+		"everything":     {},
+		"failed":         {States: []model.MailDeliveryState{model.MailDeliveryFailed}},
+		"queued tests":   {States: []model.MailDeliveryState{model.MailDeliveryQueued}, TemplateKeys: systemTest},
+		"open or closed": {States: []model.MailDeliveryState{model.MailDeliveryQueued, model.MailDeliveryCanceled, model.MailDeliveryQueued}},
+		"created range":  {TemplateKeys: systemTest, CreatedAfter: at.Add(-time.Nanosecond), CreatedBefore: at.Add(1500 * time.Millisecond)},
+	}
+	for name, options := range cases {
+		t.Run("count "+name, func(t *testing.T) {
+			var paged []model.MailDeliveryID
+			options.Limit = 1
+			for range 500 {
+				page, err := ss.Mail().ListDeliveries(ctx, options)
+				require.NoError(t, err)
+				if len(page) == 0 {
+					break
+				}
+				paged = append(paged, page[0].ID)
+				options.BeforeCreatedAt, options.BeforeID = page[0].CreatedAt, page[0].ID
+			}
+			total, err := ss.Mail().CountDeliveries(ctx, options, store.MaximumListCount)
+			require.NoError(t, err)
+			require.Len(t, paged, total, "the count ignores the keyset and equals every page together")
+			if name == "failed" {
+				require.Contains(t, paged, failedID)
+			}
+		})
+	}
+	capped, err := ss.Mail().CountDeliveries(ctx, store.MailDeliveryListOptions{TemplateKeys: systemTest}, 1)
+	require.NoError(t, err)
+	require.Equal(t, 1, capped, "several deliveries stop at the bound")
+	var invalid *store.ErrInvalidInput
+	_, err = ss.Mail().CountDeliveries(ctx, store.MailDeliveryListOptions{States: []model.MailDeliveryState{"secret-state"}}, 10)
+	require.ErrorAs(t, err, &invalid, "an unknown state")
+	_, err = ss.Mail().CountDeliveries(ctx, store.MailDeliveryListOptions{}, 0)
+	require.ErrorAs(t, err, &invalid, "a zero bound")
+}
+
 func testMailOperatorStore(t *testing.T, ctx context.Context, ss store.Store, user *model.User, institution *model.Institution) {
 	at := model.NowUTC().Add(-5 * time.Second)
 	firstInput := mailTestEnqueueFixture(t, user, institution, at)
@@ -299,6 +342,7 @@ func testMailOperatorStore(t *testing.T, ctx context.Context, ss store.Store, us
 		break
 	}
 	require.NotNil(t, failed, "did not claim retry delivery Job")
+	testMailDeliveryCount(t, ctx, ss, at, failed.ID)
 	retryAudit := saveMailMutationAudit(t, ctx, ss, institution, failed, "retry")
 	retried, err := ss.Mail().RetryDelivery(ctx, &store.MailDeliveryMutation{ID: failed.ID, ExpectedRevision: failed.Revision, AuditEventID: retryAudit.ID, AuditAt: model.NowUTC()})
 	require.NoError(t, err)

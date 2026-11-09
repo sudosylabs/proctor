@@ -234,6 +234,9 @@ func (s authenticationUserStore) GetByEmail(_ context.Context, email string) (*m
 func (authenticationUserStore) List(context.Context, store.UserListOptions) ([]*model.User, error) {
 	return nil, errors.New("unused")
 }
+func (authenticationUserStore) Count(context.Context, store.UserListOptions, int) (int, error) {
+	return 0, errors.New("unused")
+}
 func (authenticationUserStore) MatchVisibility(context.Context, model.UserID, store.UserVisibilityScope) (store.UserVisibilityMatch, error) {
 	return store.UserVisibilityMatch{}, errors.New("unused")
 }

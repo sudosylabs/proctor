@@ -351,6 +351,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/administration/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Summarise administration work waiting on the caller
+         * @description Returns bounded counts for administration navigation badges. `pending_invitations` counts pending Invitations that have not expired; `failed_jobs` counts operator-visible Jobs that failed in the last seven days; `failed_mail_deliveries` counts mail deliveries in the `failed` terminal state (suppressed and canceled deliveries are not failures); `open_onboarding_imports` counts unexpired administrative onboarding imports still uploading, parsing, awaiting commit, or executing, excluding student progressions. Each count runs the authorization and visibility of its resource's own list, which records its authorization decision as that list does, so it counts only what the caller could list. A count the caller may not list is omitted together with its `_is_lower_bound` flag; an unavailable count fails the request rather than reading as zero. Counting stops at 1,000, where the count is 1,000 and its flag is true. Only an interactive Session may read the summary.
+         */
+        get: operations["getAdministrationCounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/affiliations/{affiliation_id}": {
         parameters: {
             query?: never;
@@ -383,7 +403,7 @@ export interface paths {
         };
         /**
          * List authorized institution or Academic Unit audit history
-         * @description Lists bounded durable audit facts visible through the caller's Institution or Academic Unit authority. The projection omits raw parameters, prior state, result payloads, credentials, protected content, and unsafe internal failures.
+         * @description Lists bounded durable audit facts visible through the caller's Institution or Academic Unit authority. The projection omits raw parameters, prior state, result payloads, credentials, protected content, and unsafe internal failures. The first page, read without a cursor, also reports `total`: the audit Events the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
          */
         get: operations["listAuditEvents"];
         put?: never;
@@ -3452,7 +3472,7 @@ export interface paths {
         };
         /**
          * List Invitations within the caller's authorized scope
-         * @description Lists bounded safe Invitation metadata visible through the caller's current Institution, Academic Unit, or Class authority. Claims, delivery payloads, recipient secrets, provider state, and acceptance credentials are never returned.
+         * @description Lists bounded safe Invitation metadata visible through the caller's current Institution, Academic Unit, or Class authority. Claims, delivery payloads, recipient secrets, provider state, and acceptance credentials are never returned. The first page, read without a cursor, also reports `total`: the Invitations the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
          */
         get: operations["listInvitations"];
         put?: never;
@@ -3644,7 +3664,7 @@ export interface paths {
         };
         /**
          * List allowlisted durable Jobs
-         * @description Lists only Job types deliberately exposed through the public administration contract and authorized for the current principal. Private payloads, claims, worker identities, and infrastructure errors are omitted from every projection.
+         * @description Lists only Job types deliberately exposed through the public administration contract and authorized for the current principal. Private payloads, claims, worker identities, and infrastructure errors are omitted from every projection. The first page, read without a cursor, also reports `total`: the Jobs the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
          */
         get: operations["listJobs"];
         put?: never;
@@ -3756,7 +3776,7 @@ export interface paths {
         };
         /**
          * List safe mail delivery metadata
-         * @description Lists authorized durable delivery metadata for the allowlisted template and filters. Recipient addresses remain masked and the response never exposes encrypted payloads, rendered message bodies, SMTP credentials, or provider diagnostics.
+         * @description Lists authorized durable delivery metadata for the allowlisted template and filters. Recipient addresses remain masked and the response never exposes encrypted payloads, rendered message bodies, SMTP credentials, or provider diagnostics. The first page, read without a cursor, also reports `total`: the mail deliveries the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
          */
         get: operations["listMailDeliveries"];
         put?: never;
@@ -4840,7 +4860,7 @@ export interface paths {
         };
         /**
          * Search the authorized User directory
-         * @description Searches only User profiles visible through the caller's current Institution or scoped relationships, ordered by canonical username and identity. Disabled Users remain concealed unless an Institution-wide user viewer explicitly requests them.
+         * @description Searches only User profiles visible through the caller's current Institution or scoped relationships, ordered by canonical username and identity. Disabled Users remain concealed unless an Institution-wide user viewer explicitly requests them. The first page, read without a cursor, also reports `total`: the Users the filters and the caller's visibility match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
          */
         get: operations["searchUsers"];
         put?: never;
@@ -5892,6 +5912,25 @@ export interface components {
             expected_revision: number;
             user_id: components["schemas"]["ID"];
         };
+        /** @description Counts for administration navigation. Each count is present only when the caller may list its resource, always with its lower-bound flag. */
+        AdministrationCountsResponse: {
+            /** @description Operator-visible Jobs that failed and were last updated in the last seven days. */
+            failed_jobs?: number;
+            /** @description True when `failed_jobs` reached the 1,000 bound. Present with `failed_jobs`. */
+            failed_jobs_is_lower_bound?: boolean;
+            /** @description Mail deliveries in the `failed` terminal state. */
+            failed_mail_deliveries?: number;
+            /** @description True when `failed_mail_deliveries` reached the 1,000 bound. Present with `failed_mail_deliveries`. */
+            failed_mail_deliveries_is_lower_bound?: boolean;
+            /** @description Unexpired administrative onboarding imports not yet completed, canceled, or failed, within the caller's onboarding import visibility. Student progressions are not counted. */
+            open_onboarding_imports?: number;
+            /** @description True when `open_onboarding_imports` reached the 1,000 bound. Present with `open_onboarding_imports`. */
+            open_onboarding_imports_is_lower_bound?: boolean;
+            /** @description Pending, unexpired Invitations within the caller's Invitation visibility. */
+            pending_invitations?: number;
+            /** @description True when `pending_invitations` reached the 1,000 bound. Present with `pending_invitations`. */
+            pending_invitations_is_lower_bound?: boolean;
+        };
         AdmittedSecurity: {
             delivery_stream_id: string;
             /** Format: int64 */
@@ -6056,6 +6095,10 @@ export interface components {
             items: components["schemas"]["AuditEventResponse"][];
             /** @description Opaque continuation for the next page, omitted after the final page. */
             next_cursor?: string;
+            /** @description Audit Events matching the filters and the caller's visibility across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true. */
+            total?: number;
+            /** @description True when `total` reached the 10,000 bound and there may be more. Present with `total`. */
+            total_is_lower_bound?: boolean;
         };
         AuthenticationMethodResponse: {
             password: boolean;
@@ -8515,6 +8558,10 @@ export interface components {
         InvitationAdministrationListResponse: {
             items: components["schemas"]["InvitationAdministrationResponse"][];
             next_cursor?: string;
+            /** @description Invitations matching the filters and the caller's visibility across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true. */
+            total?: number;
+            /** @description True when `total` reached the 10,000 bound and there may be more. Present with `total`. */
+            total_is_lower_bound?: boolean;
         };
         InvitationAdministrationResponse: {
             academic_period_id?: components["schemas"]["ID"];
@@ -8719,6 +8766,10 @@ export interface components {
             items: components["schemas"]["JobResponse"][];
             /** @description Opaque continuation for the next page, omitted after the final page. */
             next_cursor?: string;
+            /** @description Jobs matching the filters and the caller's visibility across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true. */
+            total?: number;
+            /** @description True when `total` reached the 10,000 bound and there may be more. Present with `total`. */
+            total_is_lower_bound?: boolean;
         };
         /** @description Bounded coarse progress reported by a Job implementation. */
         JobProgressResponse: {
@@ -8967,6 +9018,10 @@ export interface components {
             items: components["schemas"]["MailDeliveryResponse"][];
             /** @description Opaque continuation for the next page, omitted after the final page. */
             next_cursor?: string;
+            /** @description Mail deliveries matching the filters and the caller's visibility across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true. */
+            total?: number;
+            /** @description True when `total` reached the 10,000 bound and there may be more. Present with `total`. */
+            total_is_lower_bound?: boolean;
         };
         /** @description Aggregate delivery outcome and processing latency for one bounded metric bucket. */
         MailDeliveryMetricResponse: {
@@ -10901,6 +10956,10 @@ export interface components {
         UserProfileListResponse: {
             items: components["schemas"]["UserProfileResponse"][];
             next_cursor?: components["schemas"]["NextCursor"];
+            /** @description Users matching the filters and the caller's visibility across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true. */
+            total?: number;
+            /** @description True when `total` reached the 10,000 bound and there may be more. Present with `total`. */
+            total_is_lower_bound?: boolean;
         };
         /** @description User directory projection. Email, verification, locale, timezone, activity, and disabled state are present only for self or institution-wide user.view authority. */
         UserProfileResponse: {
@@ -11140,6 +11199,26 @@ export interface components {
                 "application/json": components["schemas"]["AccessPolicyPreflightResponse"];
             };
         };
+        /** @description Bounded administration counts the caller may see */
+        AdministrationCountsOK: {
+            headers: {
+                "Cache-Control": components["headers"]["PrivateNoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "failed_jobs": 0,
+                 *       "failed_jobs_is_lower_bound": false,
+                 *       "failed_mail_deliveries": 1000,
+                 *       "failed_mail_deliveries_is_lower_bound": true,
+                 *       "pending_invitations": 12,
+                 *       "pending_invitations_is_lower_bound": false
+                 *     }
+                 */
+                "application/json": components["schemas"]["AdministrationCountsResponse"];
+            };
+        };
         /** @description Affiliation created */
         AffiliationCreated: {
             headers: {
@@ -11181,7 +11260,9 @@ export interface components {
             content: {
                 /**
                  * @example {
-                 *       "items": []
+                 *       "items": [],
+                 *       "total": 0,
+                 *       "total_is_lower_bound": false
                  *     }
                  */
                 "application/json": components["schemas"]["AuditListResponse"];
@@ -12456,7 +12537,9 @@ export interface components {
             content: {
                 /**
                  * @example {
-                 *       "items": []
+                 *       "items": [],
+                 *       "total": 0,
+                 *       "total_is_lower_bound": false
                  *     }
                  */
                 "application/json": components["schemas"]["InvitationAdministrationListResponse"];
@@ -12499,7 +12582,9 @@ export interface components {
             content: {
                 /**
                  * @example {
-                 *       "items": []
+                 *       "items": [],
+                 *       "total": 0,
+                 *       "total_is_lower_bound": false
                  *     }
                  */
                 "application/json": components["schemas"]["JobListResponse"];
@@ -12603,7 +12688,9 @@ export interface components {
             content: {
                 /**
                  * @example {
-                 *       "items": []
+                 *       "items": [],
+                 *       "total": 0,
+                 *       "total_is_lower_bound": false
                  *     }
                  */
                 "application/json": components["schemas"]["MailDeliveryListResponse"];
@@ -13612,7 +13699,9 @@ export interface components {
             content: {
                 /**
                  * @example {
-                 *       "items": []
+                 *       "items": [],
+                 *       "total": 0,
+                 *       "total_is_lower_bound": false
                  *     }
                  */
                 "application/json": components["schemas"]["UserProfileListResponse"];
@@ -15947,6 +16036,24 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getAdministrationCounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AdministrationCountsOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };

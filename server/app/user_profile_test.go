@@ -30,6 +30,9 @@ type userProfileStoreFake struct {
 	currentContextLimit int
 	updateInput         *store.UserProfileUpdate
 	listOptions         store.UserListOptions
+	countOptions        store.UserListOptions
+	countMaximum        int
+	countTotal          int
 }
 
 func (s *userProfileStoreFake) Get(context.Context, model.UserID) (*model.User, error) {
@@ -40,6 +43,11 @@ func (s *userProfileStoreFake) List(_ context.Context, options store.UserListOpt
 	*s.events = append(*s.events, "list-users")
 	s.listOptions = options
 	return nil, nil
+}
+func (s *userProfileStoreFake) Count(_ context.Context, options store.UserListOptions, maximum int) (int, error) {
+	*s.events = append(*s.events, "count-users")
+	s.countOptions, s.countMaximum = options, maximum
+	return min(s.countTotal, maximum), nil
 }
 func (s *userProfileStoreFake) GetCurrentContext(_ context.Context, _ model.UserID, limit int) (*store.CurrentUserContext, error) {
 	s.currentContextLimit = limit
@@ -240,7 +248,7 @@ func TestScopedUserSearchReturnsOnlySafeDirectoryFields(t *testing.T) {
 		LastLoginAt: model.OptionalTimeFromMillis(100), LastActivityAt: model.OptionalTimeFromMillis(200),
 		DisabledAt: model.OptionalTimeFromMillis(300),
 	}
-	persistence := &userProfileStoreFake{events: &events, current: user}
+	persistence := &userProfileStoreFake{events: &events, current: user, countTotal: 1}
 	service := newUserProfileService(userProfileServiceDependencies{Users: &userProfileSearchStoreFake{userProfileStoreFake: persistence, values: []*model.User{user}}, Authorization: &userProfileAuthorizerFake{events: &events, searchScope: store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: model.TimeFromMillis(100)}}, Audit: &institutionAuditorFake{events: &events}, Now: time.Now})
 	users, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{Limit: 10})
 	require.NoError(t, err)

@@ -50,9 +50,14 @@ type jobResponse struct {
 	Progress        *jobProgressResponse `json:"progress,omitempty"`
 	Revision        int64                `json:"revision"`
 }
+
+// jobListResponse is the collection envelope; the first page also carries the
+// total (see countedListResponse).
 type jobListResponse struct {
-	Items      []jobResponse `json:"items"`
-	NextCursor string        `json:"next_cursor,omitempty"`
+	Items             []jobResponse `json:"items"`
+	NextCursor        string        `json:"next_cursor,omitempty"`
+	Total             *int          `json:"total,omitempty"`
+	TotalIsLowerBound *bool         `json:"total_is_lower_bound,omitempty"`
 }
 type jobAttemptResponse struct {
 	ID              string                 `json:"id"`
@@ -119,6 +124,10 @@ func (m jobResourceModule) list(request operationRequest) (operationResult, erro
 		if err != nil {
 			return operationResult{}, unpresentableResult(err)
 		}
+	}
+	total := app.PageTotal{Counted: page.Counted, Total: page.Total, TotalIsLowerBound: page.TotalIsLowerBound}
+	if response.Total, response.TotalIsLowerBound, err = pageTotalMembers(total, !query.BeforeID.IsZero()); err != nil {
+		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, response), nil
 }

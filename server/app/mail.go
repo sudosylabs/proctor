@@ -44,10 +44,12 @@ type MailDeliveryView struct {
 }
 
 // MailDeliveryPage is one page of mail deliveries; HasMore reports that
-// another page follows the last item.
+// another page follows the last item. The first page also carries their
+// total (see PageTotal).
 type MailDeliveryPage struct {
 	Items   []MailDeliveryView
 	HasMore bool
+	PageTotal
 }
 
 type ListMailDeliveriesQuery struct {
@@ -64,6 +66,7 @@ type mailStore interface {
 	EnqueueTest(context.Context, *store.MailTestEnqueue) (*model.MailDelivery, error)
 	GetDelivery(context.Context, model.MailDeliveryID) (*model.MailDelivery, error)
 	ListDeliveries(context.Context, store.MailDeliveryListOptions) ([]*model.MailDelivery, error)
+	CountDeliveries(context.Context, store.MailDeliveryListOptions, int) (int, error)
 	CancelDelivery(context.Context, *store.MailDeliveryMutation) (*model.MailDelivery, error)
 	RetryDelivery(context.Context, *store.MailDeliveryMutation) (*model.MailDelivery, error)
 }
@@ -297,17 +300,14 @@ func (s *mailService) ListMailDeliveries(ctx context.Context, invocation invocat
 	if query.Limit < 1 || query.Limit > MaximumPageLimit {
 		return MailDeliveryPage{}, apperror.New("mail.query.invalid")
 	}
-	deliveries, err := s.deps.Mail.ListDeliveries(ctx, store.MailDeliveryListOptions{
+	options := store.MailDeliveryListOptions{
 		States: query.States, TemplateKeys: query.TemplateKeys,
 		CreatedAfter: query.CreatedAfter, CreatedBefore: query.CreatedBefore,
 		BeforeCreatedAt: query.BeforeCreatedAt, BeforeID: query.BeforeID, Limit: query.Limit + 1,
-	})
+	}
+	deliveries, err := s.deps.Mail.ListDeliveries(ctx, options)
 	if err != nil {
-		var invalid *store.ErrInvalidInput
-		if errors.As(err, &invalid) {
-			return MailDeliveryPage{}, apperror.New("mail.query.invalid").Wrap(err)
-		}
-		return MailDeliveryPage{}, mailStoreErrors.Translate(err)
+		return MailDeliveryPage{}, mailListError(err)
 	}
 	page := MailDeliveryPage{HasMore: len(deliveries) > query.Limit}
 	deliveries = deliveries[:min(len(deliveries), query.Limit)]
@@ -315,7 +315,48 @@ func (s *mailService) ListMailDeliveries(ctx context.Context, invocation invocat
 	for _, delivery := range deliveries {
 		page.Items = append(page.Items, mailDeliveryView(delivery))
 	}
+	total, consistent, err := countFirstPage(query.BeforeID.IsZero(), len(page.Items), func(maximum int) (int, error) {
+		return s.deps.Mail.CountDeliveries(ctx, options, maximum)
+	})
+	if err != nil {
+		return MailDeliveryPage{}, mailListError(err)
+	}
+	if !consistent {
+		return MailDeliveryPage{}, apperror.New("mail.unavailable")
+	}
+	page.PageTotal = total
 	return page, nil
+}
+
+// countFailedMailDeliveries counts the deliveries in the failed terminal
+// state, authorized and audited exactly as ListMailDeliveries is, stopping
+// at maximum. Suppressed and canceled deliveries are policy and operator
+// outcomes rather than failures, so they are not counted.
+func (s *mailService) countFailedMailDeliveries(ctx context.Context, invocation invocation.Invocation, maximum int) (int, error) {
+	if s == nil {
+		return 0, apperror.New("mail.unavailable")
+	}
+	if invocation.Principal().Validate() != nil {
+		return 0, invalidTokenAppError()
+	}
+	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionMailView); err != nil {
+		return 0, err
+	}
+	total, err := s.deps.Mail.CountDeliveries(ctx, store.MailDeliveryListOptions{States: []model.MailDeliveryState{model.MailDeliveryFailed}}, maximum)
+	if err != nil {
+		return 0, mailStoreErrors.Translate(err)
+	}
+	return total, nil
+}
+
+// mailListError maps a delivery list or count failure: invalid filters are
+// the caller's query, anything else is the mail Store's.
+func mailListError(err error) error {
+	var invalid *store.ErrInvalidInput
+	if errors.As(err, &invalid) {
+		return apperror.New("mail.query.invalid").Wrap(err)
+	}
+	return mailStoreErrors.Translate(err)
 }
 
 func (s *mailService) CancelMailDelivery(ctx context.Context, invocation invocation.Invocation, id model.MailDeliveryID) (MailDeliveryView, error) {

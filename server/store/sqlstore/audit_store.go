@@ -233,24 +233,73 @@ func (s SQLAuditStore) List(
 	if options.Limit < 1 || options.Limit > 201 {
 		return nil, store.NewErrInvalidInput("audit_event", "limit", options.Limit)
 	}
+	query, err := filterAuditList(s.auditsQuery, options)
+	if err != nil {
+		return nil, err
+	}
+	query = query.OrderBy("audit_events.created_at DESC", "audit_events.id DESC").Limit(uint64(options.Limit))
+	if !options.BeforeCreatedAt.IsZero() {
+		beforeTime := model.TimeUTC(options.BeforeCreatedAt)
+		if options.BeforeID == "" {
+			query = query.Where(sq.Lt{"audit_events.created_at": beforeTime})
+		} else {
+			query = query.Where(sq.Or{
+				sq.Lt{"audit_events.created_at": beforeTime},
+				sq.And{
+					sq.Eq{"audit_events.created_at": beforeTime},
+					sq.Lt{"audit_events.id": options.BeforeID},
+				},
+			})
+		}
+	}
+	rows := []auditRow{}
+	if err := s.GetMaster().SelectBuilder(ctx, &rows, query); err != nil {
+		return nil, fmt.Errorf("list audit events: %w", err)
+	}
+	events := make([]*model.AuditEvent, 0, len(rows))
+	for _, row := range rows {
+		event, err := row.model()
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, event)
+	}
+	return events, nil
+}
+
+// Count counts through the same filter and visibility as List, without its
+// keyset, order, or limit, reading at most one row past maximum.
+func (s SQLAuditStore) Count(ctx context.Context, options store.AuditListOptions, maximum int) (int, error) {
+	if !store.ValidCountMaximum(maximum) {
+		return 0, store.NewErrInvalidInput("audit_event", "count_maximum", maximum)
+	}
+	query, err := filterAuditList(sq.Select("audit_events.id").From("audit_events"), options)
+	if err != nil {
+		return 0, err
+	}
+	return countBounded(ctx, s.GetMaster(), query, maximum, "audit events")
+}
+
+// filterAuditList validates and applies every List filter but the keyset:
+// the visibility (operator, academic Institution-wide, or academic subtrees
+// limited to the allowed actions), actor, action, resource, and creation
+// range. List and Count share it so a total always counts the listed rows.
+func filterAuditList(query sq.SelectBuilder, options store.AuditListOptions) (sq.SelectBuilder, error) {
 	if len(options.Visibility.AcademicUnitRootIDs) > 256 ||
 		len(options.Visibility.AllowedActions) > 256 ||
 		!validVisibilityIDs(options.Visibility.AcademicUnitRootIDs) ||
 		(options.Visibility.InstitutionWide && options.Visibility.AcademicInstitutionWide) ||
 		(options.Visibility.AcademicInstitutionWide && len(options.Visibility.AcademicUnitRootIDs) > 0) {
-		return nil, store.NewErrInvalidInput("audit_event", "visibility", nil)
+		return query, store.NewErrInvalidInput("audit_event", "visibility", nil)
 	}
 	if !options.Since.IsZero() && !options.Until.IsZero() && !options.Since.Before(options.Until) {
-		return nil, store.NewErrInvalidInput("audit_event", "range", nil)
+		return query, store.NewErrInvalidInput("audit_event", "range", nil)
 	}
 	for _, action := range options.Visibility.AllowedActions {
 		if strings.TrimSpace(action) == "" || len(action) > 128 {
-			return nil, store.NewErrInvalidInput("audit_event", "visibility_action", action)
+			return query, store.NewErrInvalidInput("audit_event", "visibility_action", action)
 		}
 	}
-	query := s.auditsQuery.
-		OrderBy("audit_events.created_at DESC", "audit_events.id DESC").
-		Limit(uint64(options.Limit))
 	if !options.Visibility.InstitutionWide {
 		if len(options.Visibility.AllowedActions) == 0 {
 			query = query.Where("FALSE")
@@ -301,33 +350,7 @@ func (s SQLAuditStore) List(
 	if !options.Until.IsZero() {
 		query = query.Where(sq.Lt{"audit_events.created_at": model.TimeUTC(options.Until)})
 	}
-	if !options.BeforeCreatedAt.IsZero() {
-		beforeTime := model.TimeUTC(options.BeforeCreatedAt)
-		if options.BeforeID == "" {
-			query = query.Where(sq.Lt{"audit_events.created_at": beforeTime})
-		} else {
-			query = query.Where(sq.Or{
-				sq.Lt{"audit_events.created_at": beforeTime},
-				sq.And{
-					sq.Eq{"audit_events.created_at": beforeTime},
-					sq.Lt{"audit_events.id": options.BeforeID},
-				},
-			})
-		}
-	}
-	rows := []auditRow{}
-	if err := s.GetMaster().SelectBuilder(ctx, &rows, query); err != nil {
-		return nil, fmt.Errorf("list audit events: %w", err)
-	}
-	events := make([]*model.AuditEvent, 0, len(rows))
-	for _, row := range rows {
-		event, err := row.model()
-		if err != nil {
-			return nil, err
-		}
-		events = append(events, event)
-	}
-	return events, nil
+	return query, nil
 }
 
 // auditSelfRow is the bounded self-history projection of audit_events.

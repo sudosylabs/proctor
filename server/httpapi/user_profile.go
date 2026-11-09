@@ -459,9 +459,13 @@ func (m userProfileResourceModule) search(request operationRequest) (operationRe
 	if err != nil {
 		return operationResult{}, err
 	}
-	response, err := newListResponse(page.Items, page.HasMore, userProfileResponseFromModel, func(last *model.User) (string, error) {
+	envelope, err := newListResponse(page.Items, page.HasMore, userProfileResponseFromModel, func(last *model.User) (string, error) {
 		return encodeOpaqueCursor(userDirectoryCursor{Username: last.Username, ID: last.ID.String()}, userDirectoryCursorSpec())
 	})
+	if err != nil {
+		return operationResult{}, err
+	}
+	response, err := withPageTotal(envelope, page.PageTotal, present)
 	if err != nil {
 		return operationResult{}, err
 	}

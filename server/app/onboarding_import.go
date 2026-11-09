@@ -203,6 +203,25 @@ func (s *onboardingImportService) GetOnboardingImport(ctx context.Context, invoc
 	return s.get(ctx, invocation, id, "")
 }
 
+// countOpenOnboardingImports counts the unexpired, unfinished administrative
+// imports within the caller's onboarding_batch.view scopes, the authority
+// GetOnboardingImport checks for those modes, stopping at maximum. Student
+// progressions are authorized per Class pair and are not counted.
+func (s *onboardingImportService) countOpenOnboardingImports(ctx context.Context, invocation invocation.Invocation, maximum int) (int, error) {
+	if s == nil {
+		return 0, apperror.New("onboarding_import.unavailable")
+	}
+	scope, err := s.deps.Authorization.Visibility(ctx, invocation, model.ActionOnboardingBatchView)
+	if err != nil {
+		return 0, err
+	}
+	total, err := s.deps.Imports.CountOpenOnboardingImports(ctx, store.OnboardingImportVisibilityScope(scope), maximum)
+	if err != nil {
+		return 0, onboardingImportStoreErrors.Translate(err)
+	}
+	return total, nil
+}
+
 func (s *onboardingImportService) get(ctx context.Context, invocation invocation.Invocation, id model.OnboardingImportID, expectedMode model.OnboardingImportMode) (OnboardingImportView, []OnboardingImportRowView, error) {
 	value, err := s.deps.Imports.GetOnboardingImport(ctx, id)
 	if err != nil {

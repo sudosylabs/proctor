@@ -133,3 +133,15 @@ In a multi-node installation, workers claim from shared PostgreSQL. Restarting
 or adding an application node does not transfer authority from the Job record,
 and killing a process is not cancellation. Lease expiry makes abandoned work
 claimable according to the descriptor.
+
+## Watch the Administration Summary
+
+`GET /api/v1/administration/counts` answers the counts behind administration
+navigation badges: `failed_jobs` (operator-visible Jobs that failed in the last
+seven days), `failed_mail_deliveries` (deliveries in the `failed` terminal
+state), `pending_invitations`, and `open_onboarding_imports`. Each count stops
+at 1,000 and comes with a `_is_lower_bound` flag. Each runs the authorization
+of its own list, so a count the caller may not list is absent rather than
+zero. Use it to decide when to open a list, then page that list: the first
+page of `GET /api/v1/jobs` and `GET /api/v1/mail/deliveries` reports a `total`
+for the same filters.

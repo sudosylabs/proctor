@@ -22,18 +22,26 @@ import (
 )
 
 type jobOperatorEngineFake struct {
-	events     *[]string
-	view       job.View
-	prepareErr error
-	applyErr   error
-	listQuery  job.ListQuery
-	applyCalls int
+	events       *[]string
+	view         job.View
+	prepareErr   error
+	applyErr     error
+	listQuery    job.ListQuery
+	applyCalls   int
+	failures     int
+	countWithin  time.Duration
+	countMaximum int
 }
 
 func (f *jobOperatorEngineFake) List(_ context.Context, query job.ListQuery) (job.Page, error) {
 	*f.events = append(*f.events, "list")
 	f.listQuery = query
 	return job.Page{Items: []job.View{f.view}}, nil
+}
+func (f *jobOperatorEngineFake) CountRecentFailures(_ context.Context, within time.Duration, maximum int) (int, error) {
+	*f.events = append(*f.events, "count-failures")
+	f.countWithin, f.countMaximum = within, maximum
+	return f.failures, nil
 }
 func (f *jobOperatorEngineFake) Get(context.Context, model.JobID) (job.View, error) {
 	*f.events = append(*f.events, "get")

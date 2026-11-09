@@ -165,6 +165,46 @@ func TestAuditStore(t *testing.T, ss store.Store) {
 	})
 	require.ErrorAs(t, err, &invalid, "mixed academic audit visibility error")
 
+	// Count reads through List's filter and visibility, so each combination
+	// counts exactly the rows List pages to.
+	scopedVisibility := store.AuditVisibilityScope{
+		AcademicUnitRootIDs: []model.AcademicUnitID{fixture.programme.AcademicUnitID},
+		AllowedActions:      []string{string(model.ActionAcademicUnitMembersManage), string(model.ActionClassMembersManage)},
+	}
+	for name, options := range map[string]store.AuditListOptions{
+		"zero visibility":           {ActorID: user.ID},
+		"operator actor":            {ActorID: user.ID, Visibility: store.AuditVisibilityScope{InstitutionWide: true}},
+		"operator action":           {ActorID: user.ID, Action: string(model.ActionAuditView), Visibility: store.AuditVisibilityScope{InstitutionWide: true}},
+		"academic subtree":          {Visibility: scopedVisibility},
+		"academic Institution-wide": {Visibility: store.AuditVisibilityScope{AcademicInstitutionWide: true, AllowedActions: scopedVisibility.AllowedActions}},
+		"academic without actions":  {Visibility: store.AuditVisibilityScope{AcademicInstitutionWide: true}},
+	} {
+		t.Run("count "+name, func(t *testing.T) {
+			paged := 0
+			pageOptions := options
+			pageOptions.Limit = 1
+			for range 10 {
+				page, listErr := ss.Audit().List(ctx, pageOptions)
+				require.NoError(t, listErr)
+				if len(page) == 0 {
+					break
+				}
+				paged++
+				pageOptions.BeforeCreatedAt, pageOptions.BeforeID = page[0].CreatedAt, page[0].ID
+			}
+			total, countErr := ss.Audit().Count(ctx, pageOptions, store.MaximumListCount)
+			require.NoError(t, countErr)
+			require.Equal(t, paged, total, "the count ignores the keyset and equals every page together")
+		})
+	}
+	capped, err := ss.Audit().Count(ctx, store.AuditListOptions{Visibility: scopedVisibility}, 1)
+	require.NoError(t, err)
+	require.Equal(t, 1, capped, "two visible events stop at the bound")
+	_, err = ss.Audit().Count(ctx, store.AuditListOptions{Visibility: store.AuditVisibilityScope{InstitutionWide: true}}, 0)
+	require.ErrorAs(t, err, &invalid, "count bound")
+	_, err = ss.Audit().Count(ctx, store.AuditListOptions{Visibility: store.AuditVisibilityScope{InstitutionWide: true, AcademicInstitutionWide: true}}, 10)
+	require.ErrorAs(t, err, &invalid, "count visibility")
+
 	testAuditAbandonedAttempts(t, ctx, ss, institution.ID.String(), user.ID)
 	testAuditSelfHistory(t, ctx, ss, institution.ID.String())
 	testAuditListCreatedRange(t, ctx, ss, institution.ID.String())

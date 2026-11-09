@@ -128,6 +128,7 @@ type focusedAuditApplication struct {
 	query     app.ListAuditEventsQuery
 	events    []*model.AuditEvent
 	hasMore   bool
+	total     int
 	err       error
 	selfQuery app.ListSelfAuditEventsQuery
 	self      []app.SelfAuditEvent
@@ -145,9 +146,13 @@ func (f *focusedAuditApplication) ListSelfAuditEvents(_ context.Context, _ invoc
 	return page, f.err
 }
 
-func (f *focusedAuditApplication) ListAuditEvents(_ context.Context, _ invocation.Invocation, query app.ListAuditEventsQuery) (app.Page[*model.AuditEvent], error) {
+func (f *focusedAuditApplication) ListAuditEvents(_ context.Context, _ invocation.Invocation, query app.ListAuditEventsQuery) (app.CountedPage[*model.AuditEvent], error) {
 	f.query = query
-	return app.Page[*model.AuditEvent]{Items: f.events, HasMore: f.hasMore}, f.err
+	page := app.CountedPage[*model.AuditEvent]{Page: app.Page[*model.AuditEvent]{Items: f.events, HasMore: f.hasMore}}
+	if query.BeforeID.IsZero() {
+		page.PageTotal = app.PageTotal{Counted: true, Total: max(f.total, len(f.events)), TotalIsLowerBound: f.total == store.MaximumListCount}
+	}
+	return page, f.err
 }
 
 func TestAuditResourcePreservesOpaqueCursorAndSafeErrors(t *testing.T) {
@@ -198,7 +203,7 @@ type focusedJobApplication struct {
 
 func (f *focusedJobApplication) ListJobs(_ context.Context, _ invocation.Invocation, query app.ListJobsQuery) (job.Page, error) {
 	f.listQuery = query
-	return job.Page{Items: []job.View{f.view}}, nil
+	return job.Page{Items: []job.View{f.view}, Counted: query.BeforeID.IsZero(), Total: 1}, nil
 }
 func (f *focusedJobApplication) GetJob(context.Context, invocation.Invocation, app.GetJobQuery) (job.View, error) {
 	return f.view, nil

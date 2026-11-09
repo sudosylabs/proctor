@@ -374,6 +374,22 @@ func touchRotatedSession(ctx context.Context, tx *sqlxTxWrapper, session *model.
 	); err != nil {
 		return fmt.Errorf("update rotated session: %w", err)
 	}
+	return advanceUserActivity(ctx, tx, session.UserID, session.LastActivityAt)
+}
+
+// advanceUserActivity moves a User's last activity forward to at, never
+// backwards. It is not a profile change, so it bumps neither updated_at nor
+// the revision.
+func advanceUserActivity(ctx context.Context, executor sqlxExecutor, userID model.UserID, at time.Time) error {
+	if _, err := executor.Exec(ctx, `
+		UPDATE users
+		   SET last_activity_at = GREATEST(last_activity_at, created_at, ?)
+		 WHERE id = ? AND archived_at IS NULL`,
+		model.TimeUTC(at),
+		userID.String(),
+	); err != nil {
+		return fmt.Errorf("advance user activity: %w", err)
+	}
 	return nil
 }
 

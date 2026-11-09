@@ -386,6 +386,9 @@ func testSessionUpdateActivity(t *testing.T, ss store.Store) {
 	ctx := context.Background()
 	user := saveUser(t, ctx, ss)
 	session, _, _ := saveSession(t, ctx, ss, user.ID.String(), 10)
+	other, _, _ := saveSession(t, ctx, ss, user.ID.String(), 10)
+	user, err := ss.User().Get(ctx, user.ID)
+	require.NoError(t, err)
 	at := session.LastActivityAt.Add(time.Second)
 	idle := at.Add(time.Hour)
 	require.NoError(t, ss.Session().UpdateActivity(ctx, &store.SessionActivityUpdate{ID: session.ID, LastActivityAt: at, IdleExpiresAt: idle}))
@@ -393,6 +396,23 @@ func testSessionUpdateActivity(t *testing.T, ss store.Store) {
 	require.NoError(t, err)
 	require.True(t, got.LastActivityAt.Equal(at))
 	require.True(t, got.IdleExpiresAt.Equal(idle))
+	signedIn, err := ss.User().Get(ctx, user.ID)
+	require.NoError(t, err)
+	require.True(t, at.Equal(signedIn.LastActivityAt.Time), "Session activity advances the User's last activity")
+	require.Equal(t, user.LastLoginAt, signedIn.LastLoginAt, "activity is not a sign-in")
+	require.Equal(t, user.Revision, signedIn.Revision, "activity is not a profile change")
+
+	// A second Session reporting older activity cannot move the User backwards.
+	earlier := other.LastActivityAt.Add(100 * time.Millisecond)
+	require.True(t, earlier.Before(at))
+	require.NoError(t, ss.Session().UpdateActivity(ctx, &store.SessionActivityUpdate{ID: other.ID, LastActivityAt: earlier, IdleExpiresAt: earlier.Add(time.Hour)}))
+	unmoved, err := ss.User().Get(ctx, user.ID)
+	require.NoError(t, err)
+	require.True(t, at.Equal(unmoved.LastActivityAt.Time), "older activity moved the User backwards")
+	require.Equal(t, user.LastLoginAt, unmoved.LastLoginAt)
+
+	err = ss.Session().UpdateActivity(ctx, &store.SessionActivityUpdate{ID: model.SessionID(model.NewID()), LastActivityAt: at, IdleExpiresAt: idle})
+	require.True(t, store.IsNotFound(err), "UpdateActivity(missing) error = %v", err)
 }
 
 func testSessionRevoke(t *testing.T, ss store.Store) {
@@ -666,6 +686,11 @@ func testSessionRotateAndDetectReplay(t *testing.T, ss store.Store) {
 	)
 	require.NoError(t, err)
 	require.False(t, rotation.ReplayDetected)
+	rotated, err := ss.Session().Get(ctx, session.ID)
+	require.NoError(t, err)
+	rotatedUser, err := ss.User().Get(ctx, user.ID)
+	require.NoError(t, err)
+	require.True(t, rotated.LastActivityAt.Equal(rotatedUser.LastActivityAt.Time), "rotation advances the User's last activity with the Session's")
 	require.Equal(t, model.SessionCredentialAccess, rotation.AccessCredential.Kind)
 	require.False(t, rotation.RefreshCredential.ParentID.IsZero())
 	require.Len(t, rotation.RevokedAccessHashes, 1)

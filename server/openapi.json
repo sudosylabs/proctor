@@ -25914,10 +25914,12 @@
             "$ref": "#/components/schemas/ID"
           },
           "last_activity_at": {
+            "description": "Time the User was last active in any Session: a sign-in, or authenticated use or refresh of a Session. Use is recorded at most once per Session per activity update interval (five minutes by default), so it can trail the latest request by up to that interval. It never moves backwards.",
             "format": "date-time",
             "type": "string"
           },
           "last_login_at": {
+            "description": "Time the User last signed in.",
             "format": "date-time",
             "type": "string"
           },

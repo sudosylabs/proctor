@@ -11093,9 +11093,15 @@ export interface components {
             email_verified?: boolean;
             first_name: string;
             id: components["schemas"]["ID"];
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Time the User was last active in any Session: a sign-in, or authenticated use or refresh of a Session. Use is recorded at most once per Session per activity update interval (five minutes by default), so it can trail the latest request by up to that interval. It never moves backwards.
+             */
             last_activity_at?: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Time the User last signed in.
+             */
             last_login_at?: string;
             last_name: string;
             locale?: string;

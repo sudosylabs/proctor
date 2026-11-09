@@ -443,6 +443,10 @@ module when a change is not server-only. No module has been released yet.
 
 ### Fixed
 
+- Server: a User's `last_activity_at` follows their Session activity instead
+  of only their sign-ins. Recording Session use or a refresh also advances it,
+  at the existing activity throttle and never backwards; `last_login_at`
+  still changes only at sign-in.
 - Server: the contract declared mail `template_key` as the single value
   `system.mail_test`, so clients validating responses rejected real mail
   deliveries and metrics. A shared `MailTemplateKey` enum now lists every

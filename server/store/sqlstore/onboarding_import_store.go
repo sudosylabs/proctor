@@ -61,13 +61,14 @@ type onboardingImportRow struct {
 	ParseJobID                string         `db:"parse_job_id"`
 	ExecutionJobID            sql.NullString `db:"execution_job_id"`
 	FailureCode               string         `db:"failure_code"`
+	FileName                  sql.NullString `db:"file_name"`
 	CreatedAt                 time.Time      `db:"created_at"`
 	UpdatedAt                 time.Time      `db:"updated_at"`
 	ExpiresAt                 time.Time      `db:"expires_at"`
 	Revision                  int64          `db:"revision"`
 }
 
-const onboardingImportColumns = `id,mode,state,scope_type,scope_id,role_id,source_period_id,source_class_id,destination_period_id,destination_class_id,source_period_revision,source_class_revision,destination_period_revision,destination_class_revision,effective_at,actor_user_id,principal,preview_digest,ignored_headers,total_rows,valid_rows,invalid_rows,succeeded_rows,no_op_rows,failed_rows,skipped_rows,commit_policy,commit_expected_revision,commit_at,commit_key_digest,parse_job_id,execution_job_id,failure_code,created_at,updated_at,expires_at,revision`
+const onboardingImportColumns = `id,mode,state,scope_type,scope_id,role_id,source_period_id,source_class_id,destination_period_id,destination_class_id,source_period_revision,source_class_revision,destination_period_revision,destination_class_revision,effective_at,actor_user_id,principal,preview_digest,ignored_headers,total_rows,valid_rows,invalid_rows,succeeded_rows,no_op_rows,failed_rows,skipped_rows,commit_policy,commit_expected_revision,commit_at,commit_key_digest,parse_job_id,execution_job_id,failure_code,file_name,created_at,updated_at,expires_at,revision`
 
 type onboardingImportDetailRow struct {
 	ImportID                        string                          `db:"import_id"`
@@ -137,11 +138,11 @@ func (s SQLInvitationStore) CreateOnboardingImport(ctx context.Context, input *s
 		if _, err := insertQueuedJob(ctx, tx, input.ParseJob, false); err != nil {
 			return nil, translateError("job", input.ParseJob.ID.String(), err)
 		}
-		_, err := tx.Exec(ctx, `INSERT INTO onboarding_imports (`+onboardingImportColumns+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'{}',0,0,0,0,0,0,0,NULL,NULL,NULL,NULL,?,NULL,'',?,?,?,1)`,
+		_, err := tx.Exec(ctx, `INSERT INTO onboarding_imports (`+onboardingImportColumns+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'{}',0,0,0,0,0,0,0,NULL,NULL,NULL,NULL,?,NULL,'',?,?,?,?,1)`,
 			value.ID.String(), string(value.Mode), string(value.State), string(value.ScopeType), value.ScopeID, nullableID(value.RoleID.String()),
 			nullableID(value.SourcePeriodID.String()), nullableID(value.SourceClassID.String()), nullableID(value.DestinationPeriodID.String()), nullableID(value.DestinationClassID.String()),
 			value.SourcePeriodRevision, value.SourceClassRevision, value.DestinationPeriodRevision, value.DestinationClassRevision, effectiveAt,
-			value.ActorUserID.String(), principal, "", value.ParseJobID.String(), value.CreatedAt, value.UpdatedAt, value.ExpiresAt)
+			value.ActorUserID.String(), principal, "", value.ParseJobID.String(), sql.NullString{String: value.FileName, Valid: value.FileName != ""}, value.CreatedAt, value.UpdatedAt, value.ExpiresAt)
 		if err != nil {
 			return nil, translateError("onboarding_import", value.ID.String(), err)
 		}
@@ -167,7 +168,9 @@ func validOnboardingImport(value *store.OnboardingImport) bool {
 		model.ValidateOnboardingImportScope(value.Mode, value.ScopeType, value.ScopeID) == nil && value.ParseJobID.IsValid() &&
 		!value.CreatedAt.IsZero() && value.UpdatedAt.Equal(value.CreatedAt) && value.ExpiresAt.Equal(value.CreatedAt.Add(onboardingImportRetention)) && value.Revision == 1 &&
 		((value.Mode == model.OnboardingImportTeacherAcademicUnit && value.RoleID.IsValid()) || (value.Mode != model.OnboardingImportTeacherAcademicUnit && value.RoleID.IsZero())) &&
-		validOnboardingImportProgressionPackage(value)
+		validOnboardingImportProgressionPackage(value) &&
+		((value.Mode == model.OnboardingImportStudentProgression && value.FileName == "") ||
+			(value.Mode != model.OnboardingImportStudentProgression && (value.FileName == "" || model.ValidOnboardingImportFileName(value.FileName))))
 }
 
 func validOnboardingImportProgressionPackage(value *store.OnboardingImport) bool {
@@ -363,6 +366,9 @@ func (row onboardingImportRow) value() (*store.OnboardingImport, error) {
 	}
 	if row.ExecutionJobID.Valid {
 		value.ExecutionJobID = model.JobID(row.ExecutionJobID.String)
+	}
+	if row.FileName.Valid {
+		value.FileName = row.FileName.String
 	}
 	return value, nil
 }

@@ -20,7 +20,8 @@ execution, and retained report.
 
 POST `text/csv` to <Link to="/api/reference/upload-onboarding-import">Upload Onboarding Import</Link>
 with `mode`, `scope_type`, and `scope_id`; include `role_id` only for a mode that
-packages a Role. Enforce the 10 MiB and 50,000-row boundaries before upload,
+packages a Role. Pass the optional `file_name` to remember the uploaded file's
+base name; reads and listings return it as `file_name`. Enforce the 10 MiB and 50,000-row boundaries before upload,
 but still treat server validation as authoritative.
 
 The accepted response names the domain import and validation Job. It proves no

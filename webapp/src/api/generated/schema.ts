@@ -9587,10 +9587,20 @@ export interface components {
             policy: "require_all_valid" | "valid_rows_only";
             preview_digest: string;
         };
+        /**
+         * @description Why a failed onboarding import or student progression failed: a lost credential or authority, an unreadable file, a target that no longer validates, or a progression preview failure. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+         * @enum {string}
+         */
+        OnboardingImportFailureCode: "administration.unavailable" | "audit.unavailable" | "authentication.reauthentication_required" | "authentication.strong_required" | "authentication.token_invalid" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "idempotency.conflict" | "idempotency.in_progress" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.invalid" | "invitation.mail_unavailable" | "invitation.role_not_delegable" | "invitation.unavailable" | "onboarding_batch.duplicate" | "onboarding_import.file_invalid" | "request.invalid" | "resource.not_found" | "student_progression.authorization_lost" | "student_progression.conflict" | "student_progression.effective_date_conflict" | "student_progression.lineage_conflict" | "student_progression.roster_too_large" | "student_progression.target_conflict";
         OnboardingImportListResponse: {
             items: components["schemas"]["OnboardingImportResponse"][];
             next_cursor?: string;
         };
+        /**
+         * @description Why a preview row is invalid, duplicate, or annotated: a malformed or duplicate CSV row, a target that does not resolve, or a student progression outcome such as an ineligible student or an existing destination enrollment. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+         * @enum {string}
+         */
+        OnboardingImportPreviewCode: "administration.unavailable" | "audit.unavailable" | "authentication.reauthentication_required" | "authentication.strong_required" | "authentication.token_invalid" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "idempotency.conflict" | "idempotency.in_progress" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.invalid" | "invitation.mail_unavailable" | "invitation.role_not_delegable" | "invitation.unavailable" | "onboarding_batch.duplicate" | "request.invalid" | "resource.not_found" | "student_progression.conflict" | "student_progression.destination_conflict" | "student_progression.destination_exists" | "student_progression.effective_date_conflict" | "student_progression.ineligible_target" | "student_progression.target_conflict";
         OnboardingImportResponse: {
             /** @enum {string} */
             commit_policy?: "require_all_valid" | "valid_rows_only";
@@ -9606,7 +9616,9 @@ export interface components {
             /** Format: date-time */
             expires_at: string;
             failed_rows: number;
-            failure_code?: string;
+            failure_code?: components["schemas"]["OnboardingImportFailureCode"];
+            /** @description Base name of the uploaded file as the uploader gave it, omitted when none was given and for student progressions. */
+            file_name?: string;
             id: components["schemas"]["ID"];
             ignored_headers?: string[];
             invalid_rows: number;
@@ -9635,12 +9647,17 @@ export interface components {
             updated_at: string;
             valid_rows: number;
         };
+        /**
+         * @description Why an executed onboarding import or student progression row failed, as the Invitation or academic administration operation that ran it reported. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
+         * @enum {string}
+         */
+        OnboardingImportRowCode: "academic_unit_member.conflict" | "academic_unit_member.invalid" | "administration.unavailable" | "affiliation.conflict" | "affiliation.invalid" | "affiliation.student_has_active_enrollment" | "audit.unavailable" | "authentication.reauthentication_required" | "authentication.strong_required" | "authentication.token_invalid" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "class.enrollment_conflict" | "class_member.invalid" | "class_member.student_affiliation_required" | "idempotency.conflict" | "idempotency.in_progress" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.invalid" | "invitation.mail_unavailable" | "invitation.role_not_delegable" | "invitation.unavailable" | "mail.unavailable" | "onboarding_batch.duplicate" | "request.invalid" | "resource.not_found" | "role_binding.conflict" | "role_binding.invalid" | "role_binding.last_system_admin" | "role_binding.system_admin_scope_invalid" | "session.not_found" | "student_progression.conflict" | "student_progression.target_conflict" | "user.conflict" | "user.invalid" | "user.last_system_admin";
         OnboardingImportRowResponse: {
             invitation_id?: components["schemas"]["ID"];
             /** @enum {string} */
             operation: "student_class.create" | "teacher_academic_unit.create" | "academic_unit_role.create" | "institution_role.create" | "affiliation.add" | "affiliation.end" | "academic_unit_member.add" | "academic_unit_member.end" | "class.enroll" | "class.end" | "class.transfer" | "role_binding.create" | "role_binding.end" | "user.enable" | "user.disable" | "user_sessions.revoke";
-            preview_code?: string;
-            public_code?: string;
+            preview_code?: components["schemas"]["OnboardingImportPreviewCode"];
+            public_code?: components["schemas"]["OnboardingImportRowCode"];
             reference: string;
             resource_id?: components["schemas"]["ID"];
             row: number;
@@ -20812,6 +20829,8 @@ export interface operations {
                 scope_id: components["schemas"]["ID"];
                 /** @description Role to package into applicable teacher or institution Invitation rows; rejected for modes that do not use Roles. */
                 role_id?: components["schemas"]["ID"];
+                /** @description Name of the uploaded file, remembered so the import can be recognised later and returned as `file_name`. Surrounding whitespace is trimmed; the result must be a base name of 1 to 255 characters without `/`, `\`, or control characters, and not `.` or `..`. Omit it to remember no name. */
+                file_name?: string;
             };
             header?: never;
             path?: never;

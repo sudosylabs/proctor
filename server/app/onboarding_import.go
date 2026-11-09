@@ -36,7 +36,10 @@ type UploadOnboardingImportCommand struct {
 	ScopeType model.RoleScopeType
 	ScopeID   string
 	RoleID    model.RoleID
-	Body      io.Reader
+	// FileName is the uploaded file's name when the uploader gave one: it is
+	// trimmed and must be a base name of 1 to 255 runes.
+	FileName *string
+	Body     io.Reader
 }
 
 type CommitOnboardingImportCommand struct {
@@ -80,6 +83,7 @@ type OnboardingImportView struct {
 	ExpiresAt            time.Time
 	Revision             int64
 	FailureCode          string
+	FileName             string
 }
 
 type OnboardingImportRowView struct {
@@ -147,6 +151,13 @@ func (s *onboardingImportService) UploadOnboardingImport(ctx context.Context, in
 		(command.Mode != model.OnboardingImportTeacherAcademicUnit && command.RoleID != "") {
 		return OnboardingImportView{}, apperror.New("request.invalid")
 	}
+	fileName := ""
+	if command.FileName != nil {
+		var valid bool
+		if fileName, valid = model.NormalizeOnboardingImportFileName(*command.FileName); !valid {
+			return OnboardingImportView{}, apperror.Invalid("request.invalid", "file_name")
+		}
+	}
 	resource := onboardingImportResource(command.ScopeType, command.ScopeID)
 	if err := s.deps.Authorization.Authorize(ctx, invocation, model.ActionOnboardingBatchManage, resource); err != nil {
 		return OnboardingImportView{}, err
@@ -176,7 +187,7 @@ func (s *onboardingImportService) UploadOnboardingImport(ctx context.Context, in
 				return nil, jobErr
 			}
 			value := &store.OnboardingImport{ID: id, Mode: command.Mode, State: model.OnboardingImportParsing, ScopeType: command.ScopeType, ScopeID: command.ScopeID,
-				ActorUserID: invocation.Principal().UserID, Principal: invocation.Principal(), ParseJobID: job.ID, CreatedAt: at, UpdatedAt: at, ExpiresAt: at.Add(onboardingImportRetention), Revision: 1}
+				ActorUserID: invocation.Principal().UserID, Principal: invocation.Principal(), ParseJobID: job.ID, CreatedAt: at, UpdatedAt: at, ExpiresAt: at.Add(onboardingImportRetention), Revision: 1, FileName: fileName}
 			if command.RoleID != "" {
 				value.RoleID = model.RoleID(command.RoleID)
 			}
@@ -511,7 +522,7 @@ func onboardingImportView(value *store.OnboardingImport) OnboardingImportView {
 		PreviewDigest: value.PreviewDigest, IgnoredHeaders: append([]string(nil), value.IgnoredHeaders...), TotalRows: value.TotalRows, ValidRows: value.ValidRows,
 		InvalidRows: value.InvalidRows, SucceededRows: value.SucceededRows, NoOpRows: value.NoOpRows, FailedRows: value.FailedRows, SkippedRows: value.SkippedRows,
 		CommitPolicy: value.CommitPolicy, ParseJobID: value.ParseJobID, ExecutionJobID: value.ExecutionJobID, CreatedAt: value.CreatedAt,
-		UpdatedAt: value.UpdatedAt, ExpiresAt: value.ExpiresAt, Revision: value.Revision, FailureCode: value.FailureCode}
+		UpdatedAt: value.UpdatedAt, ExpiresAt: value.ExpiresAt, Revision: value.Revision, FailureCode: value.FailureCode, FileName: value.FileName}
 }
 
 func safeOnboardingImportRow(row store.OnboardingImportRow) OnboardingImportRowView {
@@ -645,7 +656,7 @@ func (s *onboardingImportService) parse(ctx context.Context, id model.Onboarding
 		if onboardingImportRetryableError(err) {
 			return err
 		}
-		if _, failErr := s.deps.Imports.FailOnboardingImport(ctx, &store.OnboardingImportFailure{ID: id, Code: "authentication.token_invalid", At: model.TimeUTC(s.deps.Now())}); failErr != nil {
+		if _, failErr := s.failImport(ctx, id, "authentication.token_invalid"); failErr != nil {
 			return failErr
 		}
 		if removeErr := s.deps.Content.RemoveOnboardingImport(context.WithoutCancel(ctx), id); removeErr != nil {
@@ -657,7 +668,7 @@ func (s *onboardingImportService) parse(ctx context.Context, id model.Onboarding
 		if onboardingImportRetryableError(err) {
 			return err
 		}
-		if _, failErr := s.deps.Imports.FailOnboardingImport(ctx, &store.OnboardingImportFailure{ID: id, Code: invitationBatchPublicErrorCode(err), At: model.TimeUTC(s.deps.Now())}); failErr != nil {
+		if _, failErr := s.failImport(ctx, id, invitationBatchPublicErrorCode(err)); failErr != nil {
 			return failErr
 		}
 		if removeErr := s.deps.Content.RemoveOnboardingImport(context.WithoutCancel(ctx), id); removeErr != nil {
@@ -670,7 +681,7 @@ func (s *onboardingImportService) parse(ctx context.Context, id model.Onboarding
 			if onboardingImportRetryableError(err) {
 				return err
 			}
-			if _, failErr := s.deps.Imports.FailOnboardingImport(ctx, &store.OnboardingImportFailure{ID: id, Code: invitationBatchPublicErrorCode(err), At: model.TimeUTC(s.deps.Now())}); failErr != nil {
+			if _, failErr := s.failImport(ctx, id, invitationBatchPublicErrorCode(err)); failErr != nil {
 				return failErr
 			}
 			if removeErr := s.deps.Content.RemoveOnboardingImport(context.WithoutCancel(ctx), id); removeErr != nil {
@@ -689,12 +700,15 @@ func (s *onboardingImportService) parse(ctx context.Context, id model.Onboarding
 		if !errors.Is(err, errOnboardingImportInvalidFile) {
 			return err
 		}
-		if _, failErr := s.deps.Imports.FailOnboardingImport(ctx, &store.OnboardingImportFailure{ID: id, Code: "onboarding_import.file_invalid", At: model.TimeUTC(s.deps.Now())}); failErr != nil {
+		if _, failErr := s.failImport(ctx, id, "onboarding_import.file_invalid"); failErr != nil {
 			return failErr
 		}
 		if removeErr := s.deps.Content.RemoveOnboardingImport(context.WithoutCancel(ctx), id); removeErr != nil {
 			return removeErr
 		}
+		return err
+	}
+	if err = requireOnboardingImportPreviewCodes(rows); err != nil {
 		return err
 	}
 	_, err = s.deps.Imports.CompleteOnboardingImportPreview(ctx, &store.OnboardingImportPreviewCompletion{ID: id, ExpectedRevision: current.Revision,
@@ -983,6 +997,9 @@ func (s *onboardingImportService) execute(ctx context.Context, id model.Onboardi
 				return executeErr
 			}
 			if status == model.OnboardingImportRowFailed {
+				if err = requireOnboardingImportRowCode(code); err != nil {
+					return err
+				}
 				if _, err = s.deps.Imports.CompleteOnboardingImportRow(ctx, &store.OnboardingImportRowCompletion{ID: id, RowNumber: row.RowNumber, Status: status, InvitationID: invitationID, ResourceID: resourceID, PublicCode: code, At: model.TimeUTC(s.deps.Now())}); err != nil {
 					return err
 				}

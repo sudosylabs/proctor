@@ -23,7 +23,8 @@ module when a change is not server-only. No module has been released yet.
   adds `jobs.created_by_user_id`. Existing development databases must be
   recreated.
   the onboarding import list, the student progression list by source and by
-  destination Class, failed Jobs and Invitations by state, and bounds
+  destination Class, failed Jobs and Invitations by state, adds the nullable
+  `onboarding_imports.file_name` column, and bounds
   `invitations.expires_at` between one and thirty days after creation.
   Existing development databases must be recreated.
 - Server: recent authentication now counts primary proof only. An MFA
@@ -293,6 +294,16 @@ module when a change is not server-only. No module has been released yet.
   source and destination Class, as a single read requires. Items and
   `GET /api/v1/student-progressions/{id}` now carry `source_class_name` and
   `destination_class_name`.
+- Server: `POST /api/v1/onboarding-imports` takes an optional `file_name`
+  query parameter, trimmed and accepted as a base name of 1 to 255
+  characters without path separators or control characters, and import reads
+  and list items return it as `file_name` when given.
+- Server: the OpenAPI contract publishes the closed onboarding import and
+  student progression code catalogues as `OnboardingImportFailureCode`
+  (`failure_code`), `OnboardingImportPreviewCode` (row `preview_code`), and
+  `OnboardingImportRowCode` (row `public_code`), each kept equal to the
+  server's catalogue by a test. The server refuses to record a code outside
+  its catalogue.
 - Server: `GET /api/v1/users/me/audits` takes `order=asc` to read oldest
   first, and its first page reports `total`, the events the filters match,
   exact below 10,000 and flagged by `total_is_lower_bound` at that bound.

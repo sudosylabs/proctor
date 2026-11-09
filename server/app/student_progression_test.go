@@ -9,6 +9,8 @@ package app
 
 import (
 	"context"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -124,6 +126,58 @@ func TestStudentProgressionListingRefusesWithoutAuthorityOrValidQuery(t *testing
 			require.Empty(t, persistence.options)
 		})
 	}
+}
+
+func TestOnboardingImportUploadRefusesAnUnsafeFileNameBeforeAuthorizing(t *testing.T) {
+	t.Parallel()
+	for name, raw := range map[string]string{"blank": "  ", "path": "imports/roster.csv", "parent": "..", "control": "roster\x07.csv"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			authorizer := &invitationAuthorizerFake{}
+			service := &onboardingImportService{deps: onboardingImportServiceDependencies{Authorization: authorizer}}
+			_, err := service.UploadOnboardingImport(context.Background(), invocation.Invocation{}, UploadOnboardingImportCommand{
+				Mode: model.OnboardingImportStudentClass, ScopeType: model.RoleScopeClass, ScopeID: model.NewClassID().String(),
+				FileName: &raw, Body: strings.NewReader("email\n")})
+			failure, ok := apperror.As(err)
+			require.True(t, ok, "error = %v", err)
+			require.Equal(t, "request.invalid", failure.Code())
+			require.Equal(t, "file_name", failure.Fields()["field"])
+			require.Empty(t, authorizer.actions)
+		})
+	}
+}
+
+type onboardingImportFailureFake struct {
+	store.OnboardingImportStore
+	codes []string
+}
+
+func (f *onboardingImportFailureFake) FailOnboardingImport(_ context.Context, input *store.OnboardingImportFailure) (*store.OnboardingImport, error) {
+	f.codes = append(f.codes, input.Code)
+	return &store.OnboardingImport{ID: input.ID, State: model.OnboardingImportFailed, FailureCode: input.Code}, nil
+}
+
+func TestOnboardingImportCodesStayInsideTheirCatalogues(t *testing.T) {
+	t.Parallel()
+	persistence := &onboardingImportFailureFake{}
+	service := &onboardingImportService{deps: onboardingImportServiceDependencies{Imports: persistence, Now: time.Now}}
+	jobs := onboardingImportJobs{service: service}
+	id := model.NewOnboardingImportID()
+	for _, code := range model.StudentProgressionFailureCodes() {
+		require.NoError(t, jobs.Fail(context.Background(), id, code))
+	}
+	require.Error(t, jobs.Fail(context.Background(), id, "student_progression.unknown"), "an uncatalogued failure_code is never persisted")
+	require.Equal(t, model.StudentProgressionFailureCodes(), persistence.codes)
+
+	for _, code := range []string{"onboarding_batch.duplicate", "student_progression.destination_exists", ""} {
+		require.NoError(t, requireOnboardingImportPreviewCodes([]store.OnboardingImportRow{{PreviewCode: code}}))
+	}
+	require.Error(t, requireOnboardingImportPreviewCodes([]store.OnboardingImportRow{{PreviewCode: "student_progression.unknown"}}))
+	for _, code := range []string{"student_progression.conflict", "class.enrollment_conflict", "authentication.token_invalid"} {
+		require.NoError(t, requireOnboardingImportRowCode(code))
+	}
+	require.Error(t, requireOnboardingImportRowCode("student_progression.destination_exists"), "a preview code is not an execution code")
+	require.True(t, slices.IsSorted(OnboardingImportFailureCodes()))
 }
 
 type studentProgressionReadFake struct {

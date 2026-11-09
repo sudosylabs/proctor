@@ -63,7 +63,10 @@ type OnboardingImport struct {
 	ExpiresAt                 time.Time
 	Revision                  int64
 	FailureCode               string
-	Principal                 model.Principal
+	// FileName is the uploaded file's base name as the uploader gave it, or
+	// empty when none was given; a student progression has none.
+	FileName  string
+	Principal model.Principal
 }
 
 // OnboardingImportRow is the detailed seven-day preview/report row. Command

@@ -9,8 +9,11 @@ package httpapi
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -87,6 +90,41 @@ func TestOnboardingImportListRejectsMalformedParameters(t *testing.T) {
 			require.Nil(t, fake.listQuery)
 		})
 	}
+}
+
+func TestOnboardingImportUploadForwardsTheFileNameAndReturnsIt(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
+	classID := model.NewClassID().String()
+	fake := &recordingOnboardingImportApplication{uploadView: app.OnboardingImportView{ID: model.NewOnboardingImportID(), Mode: model.OnboardingImportStudentClass,
+		State: model.OnboardingImportParsing, ScopeType: model.RoleScopeClass, ScopeID: classID, ParseJobID: model.NewJobID(), FileName: "Year 1 roster.csv",
+		CreatedAt: at, UpdatedAt: at, ExpiresAt: at.Add(7 * 24 * time.Hour), Revision: 1}}
+	httpAPI := onboardingImportListAPI(t, fake)
+	upload := func(query string) *httptest.ResponseRecorder {
+		request := authenticatedCatalogRequest(http.MethodPost, "/api/v1/onboarding-imports?mode=student_class&scope_type=class&scope_id="+classID+query)
+		request.Body = io.NopCloser(strings.NewReader("email\nstudent@example.edu\n"))
+		request.Header.Set("Content-Type", "text/csv")
+		response := httptest.NewRecorder()
+		httpAPI.ServeHTTP(response, request)
+		return response
+	}
+
+	response := upload("&file_name=" + url.QueryEscape(" Year 1 roster.csv "))
+	require.Equal(t, http.StatusAccepted, response.Code, response.Body.String())
+	require.NotNil(t, fake.uploadCommand.FileName)
+	require.Equal(t, " Year 1 roster.csv ", *fake.uploadCommand.FileName, "the application trims and validates the name")
+	require.Contains(t, response.Body.String(), `"file_name":"Year 1 roster.csv"`)
+
+	fake.uploadCommand, fake.uploadView.FileName = nil, ""
+	response = upload("")
+	require.Equal(t, http.StatusAccepted, response.Code, response.Body.String())
+	require.Nil(t, fake.uploadCommand.FileName, "an omitted name stays absent")
+	require.NotContains(t, response.Body.String(), "file_name")
+
+	fake.uploadCommand = nil
+	response = upload("&file_name=a.csv&file_name=b.csv")
+	require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+	require.Nil(t, fake.uploadCommand)
 }
 
 func onboardingImportListAPI(t *testing.T, fake *recordingOnboardingImportApplication) *API {

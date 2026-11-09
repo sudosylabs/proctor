@@ -336,6 +336,9 @@ func (s *onboardingImportService) previewProgression(ctx context.Context, id mod
 	if err != nil {
 		return err
 	}
+	if err = requireOnboardingImportPreviewCodes(rows); err != nil {
+		return err
+	}
 	digest := sha256.Sum256(document)
 	_, err = s.deps.Imports.CompleteOnboardingImportPreview(ctx, &store.OnboardingImportPreviewCompletion{ID: id, ExpectedRevision: current.Revision,
 		Digest: hex.EncodeToString(digest[:]), Rows: rows, At: model.TimeUTC(s.deps.Now())})

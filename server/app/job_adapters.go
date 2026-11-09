@@ -10,6 +10,7 @@ package app
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -86,10 +87,10 @@ func (a onboardingImportJobs) PreviewProgression(ctx context.Context, id model.O
 		return "", nil
 	}
 	if failure, ok := apperror.As(err); ok {
-		switch failure.Code() {
-		case "authorization.denied", "authentication.token_invalid":
+		if code := failure.Code(); code == "authorization.denied" || code == "authentication.token_invalid" {
 			return "student_progression.authorization_lost", err
-		case "student_progression.target_conflict", "student_progression.lineage_conflict", "student_progression.effective_date_conflict", "student_progression.roster_too_large":
+		}
+		if slices.Contains(model.StudentProgressionFailureCodes(), failure.Code()) {
 			return failure.Code(), err
 		}
 	} else if store.IsNotFound(err) || store.IsConflict(err) {
@@ -123,7 +124,7 @@ func (a onboardingImportJobs) Execute(ctx context.Context, id model.OnboardingIm
 }
 
 func (a onboardingImportJobs) Fail(ctx context.Context, id model.OnboardingImportID, code string) error {
-	_, err := a.service.deps.Imports.FailOnboardingImport(ctx, &store.OnboardingImportFailure{ID: id, Code: code, At: model.TimeUTC(a.service.deps.Now())})
+	_, err := a.service.failImport(ctx, id, code)
 	return err
 }
 

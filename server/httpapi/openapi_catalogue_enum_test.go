@@ -90,3 +90,16 @@ func TestAuditActionEnumMatchesTheCatalogue(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, model.AuditActions(), openAPIComponentEnum(t, "AuditAction"))
 }
+
+func TestOnboardingImportCodeEnumsMatchTheCatalogues(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, app.OnboardingImportFailureCodes(), openAPIComponentEnum(t, "OnboardingImportFailureCode"))
+	require.Equal(t, app.OnboardingImportPreviewCodes(), openAPIComponentEnum(t, "OnboardingImportPreviewCode"))
+	require.Equal(t, app.OnboardingImportRowCodes(), openAPIComponentEnum(t, "OnboardingImportRowCode"))
+	for _, code := range model.StudentProgressionFailureCodes() {
+		require.Contains(t, app.OnboardingImportFailureCodes(), code, "a progression failure is an import failure_code")
+	}
+	for _, code := range model.StudentProgressionPreviewCodes() {
+		require.Contains(t, app.OnboardingImportPreviewCodes(), code, "a progression row outcome is a preview_code")
+	}
+}

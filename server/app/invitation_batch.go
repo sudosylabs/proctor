@@ -383,6 +383,13 @@ func InvitationBatchErrorCodes() []string {
 // cases never mint them, so a batch item cannot report them.
 var invitationRowProgressionErrorCodes = []string{"student_progression.conflict", "student_progression.target_conflict"}
 
+// invitationRowErrorCodes are the codes an onboarding import row of an
+// Invitation batch may record: the batch catalogue plus the progression
+// target codes.
+func invitationRowErrorCodes() []string {
+	return append(InvitationBatchErrorCodes(), invitationRowProgressionErrorCodes...)
+}
+
 func invitationBatchPublicErrorCode(err error) string {
 	if failure, ok := apperror.As(err); ok &&
 		(slices.Contains(InvitationBatchErrorCodes(), failure.Code()) || slices.Contains(invitationRowProgressionErrorCodes, failure.Code())) {

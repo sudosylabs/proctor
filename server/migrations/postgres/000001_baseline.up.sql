@@ -493,6 +493,9 @@ CREATE TABLE onboarding_imports (
     parse_job_id varchar(26) NOT NULL UNIQUE REFERENCES jobs(id),
     execution_job_id varchar(26) UNIQUE REFERENCES jobs(id),
     failure_code varchar(128) NOT NULL DEFAULT '',
+    -- The uploaded file's base name as the uploader gave it; never set for a
+    -- student progression, which has no file.
+    file_name varchar(255) CHECK (file_name IS NULL OR (char_length(file_name) BETWEEN 1 AND 255 AND mode <> 'student_progression')),
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL,
     expires_at timestamptz NOT NULL,

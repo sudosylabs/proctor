@@ -15,6 +15,7 @@ import (
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -71,6 +72,8 @@ type onboardingImportResponse struct {
 	ExpiresAt            string                        `json:"expires_at"`
 	Revision             int64                         `json:"revision"`
 	FailureCode          string                        `json:"failure_code,omitempty"`
+	// FileName is the uploaded file's base name, omitted when none was given.
+	FileName string `json:"file_name,omitempty"`
 }
 
 // onboardingImportCursor is the keyset of the last listed import: newest
@@ -124,9 +127,16 @@ func onboardingImportResource(imports OnboardingImportApplication) apiResource {
 
 func (m onboardingImportModule) upload(request operationRequest) (protocolResult, error) {
 	query := request.request.URL.Query()
-	view, err := m.imports.UploadOnboardingImport(request.context, request.invocation(), app.UploadOnboardingImportCommand{
+	command := app.UploadOnboardingImportCommand{
 		Mode: model.OnboardingImportMode(query.Get("mode")), ScopeType: model.RoleScopeType(query.Get("scope_type")), ScopeID: query.Get("scope_id"), RoleID: model.RoleID(query.Get("role_id")), Body: request.request.Body,
-	})
+	}
+	if names, given := query["file_name"]; given {
+		if len(names) != 1 {
+			return protocolResult{}, apperror.Invalid("request.invalid", "file_name")
+		}
+		command.FileName = &names[0]
+	}
+	view, err := m.imports.UploadOnboardingImport(request.context, request.invocation(), command)
 	if err != nil {
 		return protocolResult{}, err
 	}
@@ -240,7 +250,7 @@ func onboardingImportResponseFromView(view app.OnboardingImportView, rows []app.
 		PreviewDigest: view.PreviewDigest, IgnoredHeaders: append([]string(nil), view.IgnoredHeaders...), TotalRows: view.TotalRows, ValidRows: view.ValidRows,
 		InvalidRows: view.InvalidRows, SucceededRows: view.SucceededRows, NoOpRows: view.NoOpRows, FailedRows: view.FailedRows, SkippedRows: view.SkippedRows,
 		CommitPolicy: string(view.CommitPolicy), ParseJobID: view.ParseJobID.String(), ExecutionJobID: view.ExecutionJobID.String(), CreatedAt: model.FormatRFC3339(view.CreatedAt),
-		UpdatedAt: model.FormatRFC3339(view.UpdatedAt), ExpiresAt: model.FormatRFC3339(view.ExpiresAt), Revision: view.Revision, FailureCode: view.FailureCode}
+		UpdatedAt: model.FormatRFC3339(view.UpdatedAt), ExpiresAt: model.FormatRFC3339(view.ExpiresAt), Revision: view.Revision, FailureCode: view.FailureCode, FileName: view.FileName}
 	if !view.EffectiveAt.IsZero() {
 		response.EffectiveAt = model.FormatRFC3339(view.EffectiveAt)
 	}

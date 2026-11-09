@@ -126,6 +126,41 @@ func testOnboardingImportListing(t *testing.T, ss store.Store) {
 			Visibility: store.OnboardingImportVisibilityScope{ClassIDs: []model.ClassID{class.ID}}, Limit: store.OnboardingImportListMaximum}),
 			"a Class grant covers only its Class imports, and expired imports are never listed")
 	})
+	t.Run("RemembersTheUploadedFileName", func(t *testing.T) {
+		at := model.NowUTC().Add(-time.Minute)
+		creation := func(fileName string) *store.OnboardingImportCreation {
+			id := model.NewOnboardingImportID()
+			job, jobErr := model.NewJob(model.NewJobID(), model.JobTypeOnboardingImportParse, json.RawMessage(`{"import_id":"`+id.String()+`"}`), "parse:"+id.String(), at, at, 3)
+			require.NoError(t, jobErr)
+			audit := saveOnboardingImportAuditAttempt(t, ctx, ss, actor.ID, model.RoleScopeClass, class.ID.String(), "onboarding_import.upload")
+			return &store.OnboardingImportCreation{Import: &store.OnboardingImport{ID: id, Mode: model.OnboardingImportStudentClass,
+				State: model.OnboardingImportParsing, ScopeType: model.RoleScopeClass, ScopeID: class.ID.String(), ActorUserID: actor.ID, Principal: principal,
+				ParseJobID: job.ID, CreatedAt: at, UpdatedAt: at, ExpiresAt: at.Add(7 * 24 * time.Hour), Revision: 1, FileName: fileName}, ParseJob: job,
+				AuditEventID: audit.ID, AuditAt: model.NowUTC()}
+		}
+		named := creation("Year 1 roster.csv")
+		created, createErr := ss.OnboardingImport().CreateOnboardingImport(ctx, named)
+		require.NoError(t, createErr)
+		require.Equal(t, "Year 1 roster.csv", created.FileName)
+		read, getErr := ss.OnboardingImport().GetOnboardingImport(ctx, named.Import.ID)
+		require.NoError(t, getErr)
+		require.Equal(t, "Year 1 roster.csv", read.FileName)
+		values, listErr := ss.OnboardingImport().ListOnboardingImports(ctx, store.OnboardingImportListOptions{
+			Visibility: store.OnboardingImportVisibilityScope{ClassIDs: []model.ClassID{class.ID}}, Limit: store.OnboardingImportListMaximum})
+		require.NoError(t, listErr)
+		index := slices.IndexFunc(values, func(value *store.OnboardingImport) bool { return value.ID == named.Import.ID })
+		require.GreaterOrEqual(t, index, 0)
+		require.Equal(t, "Year 1 roster.csv", values[index].FileName)
+		require.Empty(t, values[slices.IndexFunc(values, func(value *store.OnboardingImport) bool { return value.ID == classImport })].FileName,
+			"an import uploaded without a name has none")
+		for name, fileName := range map[string]string{"path": "imports/roster.csv", "parent": "..", "untrimmed": " roster.csv", "control": "roster\x00.csv"} {
+			t.Run(name, func(t *testing.T) {
+				_, invalidErr := ss.OnboardingImport().CreateOnboardingImport(ctx, creation(fileName))
+				var invalid *store.ErrInvalidInput
+				require.ErrorAs(t, invalidErr, &invalid)
+			})
+		}
+	})
 	t.Run("RejectsInvalidOptions", func(t *testing.T) {
 		for name, options := range map[string]store.OnboardingImportListOptions{
 			"empty visibility": {Limit: 1},

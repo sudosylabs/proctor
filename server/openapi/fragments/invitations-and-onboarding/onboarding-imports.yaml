@@ -165,6 +165,15 @@ paths:
           description: Role to package into applicable teacher or institution Invitation rows; rejected for modes that do not use Roles.
           schema:
             $ref: '#/components/schemas/ID'
+        - name: file_name
+          in: query
+          required: false
+          description: >-
+            Name of the uploaded file, remembered so the import can be recognised later and returned as `file_name`. Surrounding whitespace is trimmed; the result must be a base name of 1 to 255 characters without `/`, `\`, or control characters, and not `.` or `..`. Omit it to remember no name.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 255
       requestBody:
         required: true
         description: Contains the bounded UTF-8 CSV source to validate; the upload creates only a preview and performs no account or membership mutations.

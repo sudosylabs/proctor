@@ -121,6 +121,14 @@ const (
 	ResourceMailDelivery   ResourceType = "mail_delivery"
 )
 
+// resourceTypes is the closed resource catalogue in lexical order; the
+// contract's ResourceType enum is kept equal to it.
+var resourceTypes = []ResourceType{
+	ResourceAcademicPeriod, ResourceAcademicUnit, ResourceClass, ResourceExam, ResourceExamSitting,
+	ResourceInstitution, ResourceMailDelivery, ResourceProgramme, ResourceProgrammeLevel, ResourceSubmission,
+	ResourceUser,
+}
+
 // Resource identifies the concrete object against which an action is checked.
 type Resource struct {
 	Type ResourceType
@@ -582,10 +590,8 @@ func (r Resource) Validate() error {
 	if !IsValidOpaqueID(r.ID) {
 		return invalidModelError(where, "resource", "id", "must be a valid identifier", "")
 	}
-	switch r.Type {
-	case ResourceInstitution, ResourceAcademicUnit, ResourceProgramme, ResourceProgrammeLevel, ResourceAcademicPeriod, ResourceClass, ResourceUser, ResourceExam, ResourceExamSitting, ResourceSubmission, ResourceMailDelivery:
-		return nil
-	default:
+	if !slices.Contains(resourceTypes, r.Type) {
 		return invalidModelError(where, "resource", "type", "has an unknown value", "id="+r.ID)
 	}
+	return nil
 }

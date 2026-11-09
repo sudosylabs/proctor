@@ -57,12 +57,12 @@ paths:
         - name: action
           in: query
           schema:
-            type: string
+            $ref: '#/components/schemas/AuditAction'
           description: Return only Events with this exact stable action.
         - name: resource_type
           in: query
           schema:
-            type: string
+            $ref: '#/components/schemas/ResourceType'
           description: Exact resource type to filter; resource_id is required when present.
         - name: resource_id
           in: query
@@ -124,7 +124,7 @@ components:
           type: string
           description: Safe Session identity associated with the action when retained; never a credential.
         action:
-          type: string
+          $ref: '#/components/schemas/AuditAction'
           description: Stable permission-style name of the attempted action.
         resource:
           type: object
@@ -134,7 +134,7 @@ components:
             - id
           properties:
             type:
-              type: string
+              $ref: '#/components/schemas/ResourceType'
               description: Stable resource type acted upon.
             id:
               $ref: '#/components/schemas/ID'

@@ -209,6 +209,11 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: the contract publishes the closed server catalogues as enums:
+  `JobType`, `JobStage` and `JobErrorCode` on Jobs and Job Attempts,
+  `AuditAction` and `ResourceType` on audit events and their filters, and
+  `ErrorCode` on every problem response. Tests keep each enum equal to the
+  server's catalogue; clients own the labels.
 - Server: `GET /api/v1/users/me/audits` takes `order=asc` to read oldest
   first, and its first page reports `total`, the events the filters match,
   exact below 10,000 and flagged by `total_is_lower_bound` at that bound.

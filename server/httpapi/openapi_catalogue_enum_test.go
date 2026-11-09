@@ -9,6 +9,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -50,4 +51,26 @@ func stringValues[T ~string](values []T) []string {
 func TestMailTemplateKeyEnumMatchesTheCatalogue(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, stringValues(model.AllMailTemplateKeys()), openAPIComponentEnum(t, "MailTemplateKey"))
+}
+
+func TestErrorCodeEnumMatchesTheCatalogue(t *testing.T) {
+	t.Parallel()
+	codes := make([]string, 0, len(applicationErrorMappings)+len(transportProblemCodes))
+	seen := map[string]bool{}
+	for code := range applicationErrorMappings {
+		seen[code] = true
+		codes = append(codes, code)
+	}
+	for code := range transportProblemCodes {
+		if !seen[code] {
+			codes = append(codes, code)
+		}
+	}
+	sort.Strings(codes)
+	require.Equal(t, codes, openAPIComponentEnum(t, "ErrorCode"))
+}
+
+func TestAuditActionEnumMatchesTheCatalogue(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, model.AuditActions(), openAPIComponentEnum(t, "AuditAction"))
 }

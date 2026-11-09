@@ -3693,6 +3693,14 @@ CREATE TABLE access_policies (
     provider_admissions jsonb NOT NULL DEFAULT '{}'::jsonb,
     -- A role holder is any User with a current Role Binding at any scope.
     role_holder_mfa_required boolean NOT NULL DEFAULT false,
+    -- Shorter idle and absolute Session lengths; NULL keeps the deployment
+    -- default, which is also the ceiling the application enforces.
+    session_idle_minutes integer CHECK (session_idle_minutes BETWEEN 1 AND 527040),
+    session_absolute_minutes integer CHECK (session_absolute_minutes BETWEEN 1 AND 527040),
+    CONSTRAINT access_policies_session_lengths_check CHECK (
+        session_idle_minutes IS NULL OR session_absolute_minutes IS NULL OR
+        session_idle_minutes <= session_absolute_minutes
+    ),
     CONSTRAINT access_policies_lifecycle_check CHECK (updated_at >= created_at),
     CONSTRAINT access_policies_provider_admissions_check CHECK (
         jsonb_typeof(provider_admissions) = 'object' AND
@@ -3751,12 +3759,13 @@ CREATE TABLE access_policy_transitions (
     PRIMARY KEY (access_policy_id, to_revision),
     UNIQUE (access_policy_id, from_revision),
     CONSTRAINT access_policy_transitions_changed_fields_check CHECK (
-        cardinality(changed_fields) BETWEEN 1 AND 8 AND
+        cardinality(changed_fields) BETWEEN 1 AND 10 AND
         changed_fields <@ ARRAY[
             'local_login_enabled', 'public_registration_enabled',
             'invitation_admission_enabled', 'invitation_local_credential_enabled',
             'desktop_authorization_enabled', 'provider_admissions',
-            'role_holder_mfa_required', 'revoke_existing_sessions'
+            'role_holder_mfa_required', 'session_idle_minutes', 'session_absolute_minutes',
+            'revoke_existing_sessions'
         ]::text[]
     ),
     CONSTRAINT access_policy_transitions_access_policy_id_canonical_check

@@ -109,11 +109,60 @@ func TestAccessPolicyRoleHolderMFARequirementIsATransitionField(t *testing.T) {
 	every := &AccessPolicyTransition{PolicyID: policy.ID, FromRevision: 2, ToRevision: 3, ActorID: NewUserID(), ChangedAt: at,
 		Outcome: AccessPolicyTransitionApplied, ChangedFields: []string{
 			"desktop_authorization_enabled", "invitation_admission_enabled", "invitation_local_credential_enabled",
-			"local_login_enabled", "provider_admissions", "public_registration_enabled", "revoke_existing_sessions",
-			"role_holder_mfa_required",
+			"local_login_enabled", "provider_admissions", "public_registration_enabled", "revoke_existing_sessions", "role_holder_mfa_required",
+			"session_absolute_minutes", "session_idle_minutes",
 		}}
 	require.Len(t, every.ChangedFields, AccessPolicyTransitionFieldMaxCount)
 	require.NoError(t, every.Validate(), "every replaceable field and the revocation choice fit one transition")
 	every.ChangedFields = append(every.ChangedFields, "unknown_setting")
 	require.ErrorIs(t, every.Validate(), ErrAccessPolicyInvalidTransition)
+}
+
+func TestAccessPolicySessionLengthsShortenWithinDeploymentBounds(t *testing.T) {
+	t.Parallel()
+
+	limits := SessionLengthLimits{IdleMinimumMinutes: 16, IdleDefaultMinutes: 120, IdleMaximumMinutes: 120,
+		AbsoluteMinimumMinutes: 30, AbsoluteDefaultMinutes: 1440, AbsoluteMaximumMinutes: 1440}
+	for _, test := range []struct {
+		name           string
+		idle, absolute int
+		field          string
+	}{
+		{name: "unset keeps the defaults"},
+		{name: "within bounds", idle: 60, absolute: 600},
+		{name: "idle below the minimum", idle: 15, field: "session_idle_minutes"},
+		{name: "idle above the ceiling", idle: 121, field: "session_idle_minutes"},
+		{name: "idle beyond the effective absolute length", idle: 100, absolute: 60, field: "session_idle_minutes"},
+		{name: "absolute below the minimum", absolute: 29, field: "session_absolute_minutes"},
+		{name: "absolute above the ceiling", absolute: 1441, field: "session_absolute_minutes"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			err := AccessPolicySettings{SessionIdleMinutes: test.idle, SessionAbsoluteMinutes: test.absolute}.ValidateSessionLengths(limits)
+			if test.field == "" {
+				require.NoError(t, err)
+				return
+			}
+			var invalid *ValidationError
+			require.ErrorAs(t, err, &invalid)
+			require.Equal(t, test.field, invalid.Field)
+		})
+	}
+	idle, absolute := AccessPolicySettings{SessionAbsoluteMinutes: 60}.EffectiveSessionMinutes(limits)
+	require.Equal(t, 60, idle, "the idle default never outlasts a shorter absolute length")
+	require.Equal(t, 60, absolute)
+	require.Error(t, AccessPolicySettings{SessionIdleMinutes: 60}.ValidateSessionLengths(SessionLengthLimits{}),
+		"a deployment the policy cannot express refuses explicit lengths")
+	require.NoError(t, AccessPolicySettings{}.ValidateSessionLengths(SessionLengthLimits{}))
+	require.Error(t, AccessPolicySettings{SessionIdleMinutes: 90, SessionAbsoluteMinutes: 60}.Validate(),
+		"a stored idle length never exceeds a stored absolute length")
+
+	policy := NewInitialAccessPolicy(NewAccessPolicyID(), time.UnixMilli(100))
+	settings := policy.Settings()
+	settings.SessionIdleMinutes, settings.SessionAbsoluteMinutes = 60, 600
+	transition, err := policy.Replace(1, settings, NewUserID(), time.UnixMilli(200))
+	require.NoError(t, err)
+	require.Equal(t, []string{"session_absolute_minutes", "session_idle_minutes"}, transition.ChangedFields)
+	require.Equal(t, 60, policy.SessionIdleMinutes)
+	require.Equal(t, 600, policy.Settings().SessionAbsoluteMinutes)
 }

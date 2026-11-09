@@ -435,6 +435,20 @@ the rule is on, the rule pauses rather than locking people out: nothing is
 restricted or refused, the node logs one warning, and `GET
 /api/v1/access-policy` reports `role_holder_mfa_enforced: false`.
 
+`Authentication.Sessions.IdleTTL` and `AbsoluteTTL` are the default Session
+lengths and also their ceiling. The Access Policy may shorten either with
+`session_idle_minutes` and `session_absolute_minutes` (null keeps the
+default); `GET /api/v1/access-policy` reports each default and the longest
+length the policy may set. An idle length must outlast `AccessTTL` and
+`ActivityUpdateInterval` by at least a minute and never exceed the effective
+absolute length; an absolute length must outlast
+`Authentication.RecentAuthenticationTTL` and the idle minimum. New Sessions,
+activity, Web and Desktop refresh, and the Desktop code exchange use the
+shortened lengths; access, refresh and activity-interval lifetimes stay in
+configuration. Shortening a length pulls the deadlines of live Sessions and
+their credentials in within the same replacement; lengthening one never
+extends a running Session.
+
 Validate a configuration without starting the server:
 
 ```sh

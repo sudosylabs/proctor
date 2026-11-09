@@ -321,7 +321,7 @@ export interface paths {
         get: operations["getAccessPolicy"];
         /**
          * Revision-fenced replacement of the installation Access Policy
-         * @description Replaces the complete installation Access Policy under an optimistic revision fence. Proctor repeats deployment-capability and last-administrator-path checks in the authoritative transaction, can revoke Sessions affected by newly disabled methods or, when two-step verification becomes required for role holders, the role holders' Sessions that have not proved a second factor, and requires both a strong recent interactive Session and an Idempotency-Key.
+         * @description Replaces the complete installation Access Policy under an optimistic revision fence. Proctor repeats deployment-capability and last-administrator-path checks in the authoritative transaction, can revoke Sessions affected by newly disabled methods or, when two-step verification becomes required for role holders, the role holders' Sessions that have not proved a second factor, pulls live Session deadlines in when a Session length becomes shorter, and requires both a strong recent interactive Session and an Idempotency-Key.
          */
         put: operations["replaceAccessPolicy"];
         post?: never;
@@ -5899,6 +5899,18 @@ export interface components {
             readonly role_holder_mfa_enforced: boolean;
             /** @description Whether every role holder, a User with a current Role Binding at any scope, must use two-step verification. Clients may label it "Two-step required for staff". */
             role_holder_mfa_required: boolean;
+            /** @description The absolute Session length the policy sets, in minutes; null while the deployment default applies. */
+            session_absolute_minutes: number | null;
+            /** @description The deployment absolute Session length in whole minutes, which applies while `session_absolute_minutes` is null. */
+            session_absolute_minutes_default: number;
+            /** @description The longest absolute Session length the policy may set, in minutes; the deployment configuration is the ceiling. */
+            session_absolute_minutes_maximum: number;
+            /** @description The idle Session length the policy sets, in minutes; null while the deployment default applies. */
+            session_idle_minutes: number | null;
+            /** @description The deployment idle Session length in whole minutes, which applies while `session_idle_minutes` is null. */
+            session_idle_minutes_default: number;
+            /** @description The longest idle Session length the policy may set, in minutes; the deployment configuration is the ceiling. */
+            session_idle_minutes_maximum: number;
             /** Format: date-time */
             updated_at: string;
         };
@@ -5926,6 +5938,10 @@ export interface components {
             revoke_existing_sessions: boolean;
             /** @description Whether every role holder must use two-step verification. A role holder is any User with a current Role Binding at any scope, system administrators included. A role holder without a second factor signs in on the web to a Session restricted to setting up two-step verification, completing a challenge, or signing out; Proctor Desktop refuses that sign-in with `authentication.mfa.enrollment_required`. The requirement pauses, restricting and refusing nothing, while the server configuration disables two-step verification. Clients may label this switch "Two-step required for staff"; it is unrelated to the staff member Affiliation. */
             role_holder_mfa_required: boolean;
+            /** @description How long a Session may last from sign-in, in minutes; null keeps the deployment default. It lies between the deployment minimum, which outlasts the recent-authentication window and the idle minimum, and `session_absolute_minutes_maximum`. Shortening it pulls live Sessions' deadlines and credentials in; lengthening it never extends a running Session. */
+            session_absolute_minutes: number | null;
+            /** @description How long a Session may stay unused before it ends, in minutes; null keeps the deployment default. It lies between the deployment minimum, which outlasts an access credential and the activity debounce, and `session_idle_minutes_maximum`, and never exceeds the effective absolute length. Shortening it pulls live Sessions' idle deadlines in; lengthening it never extends a running Session. */
+            session_idle_minutes: number | null;
         };
         /** @description Safe immutable summary of one applied Access Policy replacement. */
         AccessPolicyTransitionResponse: {
@@ -5935,7 +5951,7 @@ export interface components {
              * @description Time when the replacement committed.
              */
             changed_at: string;
-            changed_fields: ("local_login_enabled" | "public_registration_enabled" | "invitation_admission_enabled" | "invitation_local_credential_enabled" | "desktop_authorization_enabled" | "provider_admissions" | "role_holder_mfa_required" | "revoke_existing_sessions")[];
+            changed_fields: ("local_login_enabled" | "public_registration_enabled" | "invitation_admission_enabled" | "invitation_local_credential_enabled" | "desktop_authorization_enabled" | "provider_admissions" | "role_holder_mfa_required" | "session_idle_minutes" | "session_absolute_minutes" | "revoke_existing_sessions")[];
             /** Format: int64 */
             from_revision: number;
             /** @constant */
@@ -11365,6 +11381,12 @@ export interface components {
                  *       "revision": 4,
                  *       "role_holder_mfa_enforced": false,
                  *       "role_holder_mfa_required": false,
+                 *       "session_absolute_minutes": null,
+                 *       "session_absolute_minutes_default": 43200,
+                 *       "session_absolute_minutes_maximum": 43200,
+                 *       "session_idle_minutes": 480,
+                 *       "session_idle_minutes_default": 10080,
+                 *       "session_idle_minutes_maximum": 10080,
                  *       "updated_at": "2027-01-01T01:00:00Z"
                  *     }
                  */
@@ -15045,7 +15067,9 @@ export interface components {
                  *       },
                  *       "public_registration_enabled": false,
                  *       "revoke_existing_sessions": true,
-                 *       "role_holder_mfa_required": true
+                 *       "role_holder_mfa_required": true,
+                 *       "session_absolute_minutes": null,
+                 *       "session_idle_minutes": 480
                  *     }
                  */
                 "application/json": components["schemas"]["AccessPolicySettingsRequest"];
@@ -15179,7 +15203,9 @@ export interface components {
                  *       },
                  *       "public_registration_enabled": false,
                  *       "revoke_existing_sessions": true,
-                 *       "role_holder_mfa_required": true
+                 *       "role_holder_mfa_required": true,
+                 *       "session_absolute_minutes": null,
+                 *       "session_idle_minutes": 480
                  *     }
                  */
                 "application/json": components["schemas"]["AccessPolicySettingsRequest"];

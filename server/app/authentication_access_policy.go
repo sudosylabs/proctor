@@ -24,6 +24,7 @@ import (
 // transaction.
 type authenticationAccessPolicy interface {
 	roleHolderMFARequirement
+	sessionLengthPolicy
 	AllowsLocalLogin(context.Context) (bool, error)
 	ExternalProviderAdmission(context.Context, string) (externalProviderAdmissionPolicy, error)
 	AvailableExternalProviders(context.Context, []model.ExternalAuthenticationProvider) ([]model.ExternalAuthenticationProvider, error)
@@ -35,6 +36,34 @@ type authenticationAccessPolicy interface {
 // handoff that would otherwise grant single-factor authority asks it.
 type roleHolderMFARequirement interface {
 	RequiresMFA(context.Context, model.UserID) (bool, error)
+}
+
+// sessionLengthPolicy applies the Access Policy Session lengths to the
+// deployment lifetimes: a set length shortens its default, never lengthens it.
+// Session creation, activity, refresh and the Desktop exchange ask it.
+type sessionLengthPolicy interface {
+	SessionLifetimes(context.Context, SessionPolicy) (sessionLifetimes, error)
+}
+
+// sessionLifetimes are the effective idle and absolute lengths a Session gets
+// now.
+type sessionLifetimes struct {
+	Idle     time.Duration
+	Absolute time.Duration
+}
+
+// effectiveSessionLifetimes shortens the deployment defaults to the policy's
+// set lengths; the idle length never exceeds the absolute one.
+func effectiveSessionLifetimes(settings model.AccessPolicySettings, defaults SessionPolicy) sessionLifetimes {
+	result := sessionLifetimes{Idle: defaults.IdleTTL, Absolute: defaults.AbsoluteTTL}
+	if minutes := time.Duration(settings.SessionAbsoluteMinutes) * time.Minute; minutes > 0 && minutes < result.Absolute {
+		result.Absolute = minutes
+	}
+	if minutes := time.Duration(settings.SessionIdleMinutes) * time.Minute; minutes > 0 && minutes < result.Idle {
+		result.Idle = minutes
+	}
+	result.Idle = min(result.Idle, result.Absolute)
+	return result
 }
 
 type externalProviderAdmissionPolicy struct {
@@ -150,6 +179,16 @@ func (p *currentAuthenticationAccessPolicy) RequiresMFA(ctx context.Context, use
 		return false, nil
 	}
 	return p.deps.Policies.HasRoleHolderMFARequirement(ctx, userID, model.TimeUTC(p.deps.Now()))
+}
+
+// SessionLifetimes reads the current policy on every call. Activity reaches
+// it only after the activity debounce, so the read stays bounded.
+func (p *currentAuthenticationAccessPolicy) SessionLifetimes(ctx context.Context, defaults SessionPolicy) (sessionLifetimes, error) {
+	policy, err := p.current(ctx)
+	if err != nil {
+		return sessionLifetimes{}, err
+	}
+	return effectiveSessionLifetimes(policy.Settings(), defaults), nil
 }
 
 func (p *currentAuthenticationAccessPolicy) current(ctx context.Context) (*model.AccessPolicy, error) {

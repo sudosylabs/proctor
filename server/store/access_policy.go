@@ -55,7 +55,10 @@ type AccessPolicyPreflight struct {
 	Settings               model.AccessPolicySettings
 	RevokeExistingSessions bool
 	Capabilities           AccessDeploymentCapabilities
-	CheckedAt              time.Time
+	// SessionLimits are the deployment bounds the Session lengths must meet;
+	// replacement also uses them to pull live Session deadlines in.
+	SessionLimits model.SessionLengthLimits
+	CheckedAt     time.Time
 }
 
 // AccessPolicyPreflightResult reports the blockers of a proposed replacement
@@ -84,6 +87,18 @@ type AccessPolicyReplacementResult struct {
 	Changed            bool
 	Replayed           bool
 	SessionRevocations []AccessPolicySessionRevocation
+	// SessionDeadlineChanges name the live Sessions whose deadlines a shorter
+	// Session length pulled in, so cached authentication can be invalidated.
+	SessionDeadlineChanges []AccessPolicySessionDeadlineChange
+}
+
+// AccessPolicySessionDeadlineChange contains post-commit invalidation facts
+// for one User whose live Sessions now end sooner. Raw credentials never
+// leave persistence.
+type AccessPolicySessionDeadlineChange struct {
+	UserID            model.UserID
+	SessionIDs        []model.SessionID
+	AccessTokenHashes []string
 }
 
 // AccessPolicySessionRevocation contains post-commit invalidation facts for

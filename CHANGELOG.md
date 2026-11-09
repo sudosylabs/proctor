@@ -17,8 +17,9 @@ module when a change is not server-only. No module has been released yet.
 
 ### Changed
 
-- Server: the baseline adds `access_policies.role_holder_mfa_required` and
-  `sessions.mfa_enrollment_required`, and admits `role_holder_mfa_required`
+- Server: the baseline adds `access_policies.role_holder_mfa_required`,
+  `session_idle_minutes` and `session_absolute_minutes` and
+  `sessions.mfa_enrollment_required`, and admits those three policy fields
   among the recorded Access Policy transition fields. Existing development
   databases must be recreated.
 - Server: the baseline adds indexes for the User directory affiliation filter,
@@ -238,6 +239,15 @@ module when a change is not server-only. No module has been released yet.
   `revoke_existing_sessions` signs out role holders' Sessions that have not
   proved a second factor when the rule is turned on. The rule pauses, with one
   logged warning, while the deployment disables MFA.
+- Server: the Access Policy can shorten the idle and absolute Session lengths
+  with the nullable `session_idle_minutes` and `session_absolute_minutes`;
+  null keeps the deployment default, which stays the ceiling. `GET` also
+  returns `session_idle_minutes_default`, `session_idle_minutes_maximum`,
+  `session_absolute_minutes_default` and `session_absolute_minutes_maximum`.
+  A length outside the deployment bounds is refused as `access_policy.invalid`
+  naming the field. New Sessions, activity, refresh and the Desktop exchange
+  use the effective lengths, and shortening a length pulls running Sessions'
+  deadlines and credentials in without ever extending them.
 - Server: the contract publishes three closed code catalogues as components:
   `MailFailureCode` for `public_failure_code` on Mail Deliveries and
   Invitation deliveries, and `AcademicAdministrationBatchErrorCode` and

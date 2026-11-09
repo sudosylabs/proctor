@@ -83,9 +83,10 @@ type accessPolicyInstitutionStore interface {
 }
 
 type accessPolicyChanged struct {
-	InstitutionID      model.InstitutionID
-	Revision           int64
-	SessionRevocations []store.AccessPolicySessionRevocation
+	InstitutionID          model.InstitutionID
+	Revision               int64
+	SessionRevocations     []store.AccessPolicySessionRevocation
+	SessionDeadlineChanges []store.AccessPolicySessionDeadlineChange
 }
 
 type accessPolicyEffects interface {
@@ -112,11 +113,16 @@ type accessPolicyServiceDependencies struct {
 	SupportAddress          string
 	PasswordMinimumLength   int
 	RecentAuthenticationTTL time.Duration
-	Now                     func() time.Time
+	// Sessions are the deployment Session lifetimes: the defaults and the
+	// ceilings of the policy's Session lengths.
+	Sessions SessionPolicy
+	Now      func() time.Time
 }
 
 type accessPolicyService struct {
 	deps accessPolicyServiceDependencies
+	// sessionLimits are the Session length bounds derived from deps.
+	sessionLimits model.SessionLengthLimits
 }
 
 func newAccessPolicyService(deps accessPolicyServiceDependencies) (*accessPolicyService, error) {
@@ -130,7 +136,25 @@ func newAccessPolicyService(deps accessPolicyServiceDependencies) (*accessPolicy
 		parsed.Host == "" || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return nil, errors.New("access policy service dependencies are invalid")
 	}
-	return &accessPolicyService{deps: deps}, nil
+	return &accessPolicyService{deps: deps, sessionLimits: sessionLengthLimits(deps.Sessions, deps.RecentAuthenticationTTL)}, nil
+}
+
+// sessionLengthLimits derives the policy's Session length bounds from the
+// deployment lifetimes. The idle length outlasts an access credential and the
+// activity debounce; the absolute length outlasts both that floor and the
+// recent-authentication window; each default and ceiling is the configured
+// lifetime, which the policy can only shorten.
+func sessionLengthLimits(sessions SessionPolicy, recentAuthentication time.Duration) model.SessionLengthLimits {
+	wholeMinutesUp := func(duration time.Duration) int { return int((duration + time.Minute - 1) / time.Minute) }
+	idleMinimum := wholeMinutesUp(max(sessions.AccessTTL, sessions.ActivityUpdateInterval+time.Minute))
+	idleDefault, absoluteDefault := int(sessions.IdleTTL/time.Minute), int(sessions.AbsoluteTTL/time.Minute)
+	return model.SessionLengthLimits{
+		IdleMinimumMinutes: idleMinimum, IdleDefaultMinutes: idleDefault,
+		IdleMaximumMinutes:     min(idleDefault, model.AccessPolicySessionMinutesMaximum),
+		AbsoluteMinimumMinutes: max(wholeMinutesUp(recentAuthentication), idleMinimum),
+		AbsoluteDefaultMinutes: absoluteDefault,
+		AbsoluteMaximumMinutes: min(absoluteDefault, model.AccessPolicySessionMinutesMaximum),
+	}
 }
 
 type AccessPolicyView struct {
@@ -141,6 +165,9 @@ type AccessPolicyView struct {
 	// RoleHolderMFAEnforced is true only while the policy requires two-step
 	// verification of role holders and the deployment enables it.
 	RoleHolderMFAEnforced bool
+	// SessionLimits are the deployment defaults and bounds of the Session
+	// lengths.
+	SessionLimits model.SessionLengthLimits
 }
 
 type PreflightAccessPolicyCommand struct {
@@ -239,7 +266,8 @@ func (s *accessPolicyService) ReplaceAccessPolicy(ctx context.Context, invocatio
 	}
 	if stored.Changed && !stored.Replayed {
 		if effectErr := s.deps.Effects.Changed(ctx, accessPolicyChanged{InstitutionID: institution.ID,
-			Revision: stored.Snapshot.Policy.Revision, SessionRevocations: stored.SessionRevocations}); effectErr != nil {
+			Revision: stored.Snapshot.Policy.Revision, SessionRevocations: stored.SessionRevocations,
+			SessionDeadlineChanges: stored.SessionDeadlineChanges}); effectErr != nil {
 			s.deps.EffectFailures.Report(ctx, "access_policy_changed", effectErr)
 		}
 	}
@@ -258,6 +286,8 @@ func accessPolicyReplacementAuditValue(command ReplaceAccessPolicyCommand) map[s
 		"desktop_authorization_enabled":       settings.DesktopAuthorizationEnabled,
 		"provider_admissions":                 settings.ProviderAdmissions,
 		"role_holder_mfa_required":            settings.RoleHolderMFARequired,
+		"session_idle_minutes":                settings.SessionIdleMinutes,
+		"session_absolute_minutes":            settings.SessionAbsoluteMinutes,
 	}
 }
 
@@ -266,6 +296,11 @@ type accessPolicyRealtimeEffects struct{ realtime *realtimeService }
 func (e accessPolicyRealtimeEffects) Changed(ctx context.Context, change accessPolicyChanged) error {
 	for _, revocation := range change.SessionRevocations {
 		e.realtime.SessionsRevoked(ctx, revocation.UserID, revocation.SessionIDs, revocation.AccessTokenHashes)
+	}
+	// Shortened Sessions stay live, so cached authentication is dropped
+	// rather than the Sessions revoked.
+	for _, deadline := range change.SessionDeadlineChanges {
+		e.realtime.AuthenticationCacheInvalidated(ctx, deadline.UserID, deadline.AccessTokenHashes)
 	}
 	event, err := realtime.NewAccessPolicyChangedEvent(change.InstitutionID, change.Revision)
 	if err != nil {
@@ -297,14 +332,30 @@ func (s *accessPolicyService) requireStrongRecent(invocation invocation.Invocati
 }
 
 func (s *accessPolicyService) preflightInput(expected int64, settings model.AccessPolicySettings, revokeExistingSessions bool) (*store.AccessPolicyPreflight, error) {
-	if expected < 1 || settings.Validate() != nil {
+	if expected < 1 {
 		return nil, apperror.New("access_policy.invalid")
+	}
+	if err := settings.Validate(); err != nil {
+		return nil, invalidAccessPolicySettings(err)
+	}
+	if err := settings.ValidateSessionLengths(s.sessionLimits); err != nil {
+		return nil, invalidAccessPolicySettings(err)
 	}
 	capabilities := accessDeploymentCapabilities(s.deps.Capabilities.Snapshot())
 	return &store.AccessPolicyPreflight{ExpectedRevision: expected, Settings: settings,
 		RevokeExistingSessions: revokeExistingSessions,
-		Capabilities:           capabilities,
-		CheckedAt:              model.TimeUTC(s.deps.Now())}, nil
+		Capabilities:           capabilities, SessionLimits: s.sessionLimits,
+		CheckedAt: model.TimeUTC(s.deps.Now())}, nil
+}
+
+// invalidAccessPolicySettings refuses settings as access_policy.invalid,
+// naming the offending field when the model names one.
+func invalidAccessPolicySettings(err error) error {
+	var invalid *model.ValidationError
+	if errors.As(err, &invalid) && invalid.Field != "" {
+		return apperror.Invalid("access_policy.invalid", invalid.Field).Wrap(err)
+	}
+	return apperror.New("access_policy.invalid").Wrap(err)
 }
 
 func accessDeploymentCapabilities(snapshot AccessPolicyCapabilitySnapshot) store.AccessDeploymentCapabilities {
@@ -328,7 +379,7 @@ func (s *accessPolicyService) view(snapshot *store.AccessPolicySnapshot) AccessP
 	}
 	return AccessPolicyView{Policy: snapshot.Policy.Clone(), History: cloneAccessPolicyHistory(snapshot.History),
 		AvailableProviders: providers, DurableMail: capabilities.DurableMail,
-		RoleHolderMFAEnforced: snapshot.Policy.RoleHolderMFARequired && capabilities.MFA}
+		RoleHolderMFAEnforced: snapshot.Policy.RoleHolderMFARequired && capabilities.MFA, SessionLimits: s.sessionLimits}
 }
 
 type PublicInstitutionPresentation struct {

@@ -12,6 +12,7 @@ package sqlstore
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -42,6 +43,30 @@ func TestAccessPolicyRoleHolderMFAStore(t *testing.T) {
 	persistence := openTestStore(t)
 	resetPristineTestStore(t, persistence)
 	storetest.TestAccessPolicyRoleHolderMFAStore(t, persistence)
+}
+
+func TestAccessPolicySessionLengthStore(t *testing.T) {
+	persistence := openTestStore(t)
+	resetPristineTestStore(t, persistence)
+	storetest.TestAccessPolicySessionLengthStore(t, persistence, storetest.SessionLengthSQLProbe{
+		AgeSession: func(t *testing.T, ctx context.Context, id model.SessionID, by time.Duration) {
+			t.Helper()
+			ageSession(t, ctx, persistence, id, by)
+		},
+	})
+}
+
+// ageSession moves one Session's and its credentials' instants back, as if it
+// had been signed in by long ago.
+func ageSession(t *testing.T, ctx context.Context, persistence *SQLStore, id model.SessionID, by time.Duration) {
+	t.Helper()
+	_, err := persistence.GetMaster().Exec(ctx, `UPDATE sessions SET created_at=created_at-make_interval(secs => $2),
+		updated_at=updated_at-make_interval(secs => $2), authenticated_at=authenticated_at-make_interval(secs => $2),
+		last_activity_at=last_activity_at-make_interval(secs => $2) WHERE id=$1`, id.String(), by.Seconds())
+	require.NoError(t, err)
+	_, err = persistence.GetMaster().Exec(ctx, `UPDATE session_credentials SET created_at=created_at-make_interval(secs => $2),
+		updated_at=updated_at-make_interval(secs => $2) WHERE session_id=$1`, id.String(), by.Seconds())
+	require.NoError(t, err)
 }
 
 // leadSessionDatabaseClock moves one Session's and its credentials' node-clock

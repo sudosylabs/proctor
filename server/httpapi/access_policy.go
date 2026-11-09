@@ -50,24 +50,34 @@ type accessPolicySettingsRequest struct {
 	DesktopAuthorizationEnabled      Optional[bool]                                   `json:"desktop_authorization_enabled"`
 	ProviderAdmissions               Optional[map[string]model.ProviderAdmissionMode] `json:"provider_admissions"`
 	RoleHolderMFARequired            Optional[bool]                                   `json:"role_holder_mfa_required"`
+	SessionIdleMinutes               Optional[int]                                    `json:"session_idle_minutes"`
+	SessionAbsoluteMinutes           Optional[int]                                    `json:"session_absolute_minutes"`
 }
 
 type accessPolicyResponse struct {
-	ID                               string                                   `json:"id"`
-	Revision                         int64                                    `json:"revision"`
-	CreatedAt                        string                                   `json:"created_at"`
-	UpdatedAt                        string                                   `json:"updated_at"`
-	LocalLoginEnabled                bool                                     `json:"local_login_enabled"`
-	PublicRegistrationEnabled        bool                                     `json:"public_registration_enabled"`
-	InvitationAdmissionEnabled       bool                                     `json:"invitation_admission_enabled"`
-	InvitationLocalCredentialEnabled bool                                     `json:"invitation_local_credential_enabled"`
-	DesktopAuthorizationEnabled      bool                                     `json:"desktop_authorization_enabled"`
-	ProviderAdmissions               map[string]model.ProviderAdmissionMode   `json:"provider_admissions"`
-	RoleHolderMFARequired            bool                                     `json:"role_holder_mfa_required"`
-	RoleHolderMFAEnforced            bool                                     `json:"role_holder_mfa_enforced"`
-	History                          []accessPolicyTransitionResponse         `json:"history"`
-	AvailableProviders               []externalAuthenticationProviderResponse `json:"available_providers"`
-	DurableMail                      bool                                     `json:"durable_mail"`
+	ID                               string                                 `json:"id"`
+	Revision                         int64                                  `json:"revision"`
+	CreatedAt                        string                                 `json:"created_at"`
+	UpdatedAt                        string                                 `json:"updated_at"`
+	LocalLoginEnabled                bool                                   `json:"local_login_enabled"`
+	PublicRegistrationEnabled        bool                                   `json:"public_registration_enabled"`
+	InvitationAdmissionEnabled       bool                                   `json:"invitation_admission_enabled"`
+	InvitationLocalCredentialEnabled bool                                   `json:"invitation_local_credential_enabled"`
+	DesktopAuthorizationEnabled      bool                                   `json:"desktop_authorization_enabled"`
+	ProviderAdmissions               map[string]model.ProviderAdmissionMode `json:"provider_admissions"`
+	RoleHolderMFARequired            bool                                   `json:"role_holder_mfa_required"`
+	RoleHolderMFAEnforced            bool                                   `json:"role_holder_mfa_enforced"`
+	// SessionIdleMinutes and SessionAbsoluteMinutes are null while the
+	// deployment default applies.
+	SessionIdleMinutes            *int                                     `json:"session_idle_minutes"`
+	SessionAbsoluteMinutes        *int                                     `json:"session_absolute_minutes"`
+	SessionIdleMinutesDefault     int                                      `json:"session_idle_minutes_default"`
+	SessionIdleMinutesMaximum     int                                      `json:"session_idle_minutes_maximum"`
+	SessionAbsoluteMinutesDefault int                                      `json:"session_absolute_minutes_default"`
+	SessionAbsoluteMinutesMaximum int                                      `json:"session_absolute_minutes_maximum"`
+	History                       []accessPolicyTransitionResponse         `json:"history"`
+	AvailableProviders            []externalAuthenticationProviderResponse `json:"available_providers"`
+	DurableMail                   bool                                     `json:"durable_mail"`
 }
 
 type accessPolicyTransitionResponse struct {
@@ -224,11 +234,34 @@ func requiredAccessPolicySettings(body accessPolicySettingsRequest) (model.Acces
 	if err != nil {
 		return model.AccessPolicySettings{}, false, err
 	}
+	// A Session length is required but may be null, which keeps the
+	// deployment default; a length below one minute is malformed.
+	requiredMinutes := func(field string, value Optional[int]) (int, error) {
+		if !value.IsSet() {
+			return 0, apperror.New("request.invalid").WithField("field", field)
+		}
+		minutes := value.ValuePointer()
+		if minutes == nil {
+			return 0, nil
+		}
+		if *minutes < 1 {
+			return 0, apperror.New("request.invalid").WithField("field", field)
+		}
+		return *minutes, nil
+	}
+	idleMinutes, err := requiredMinutes("session_idle_minutes", body.SessionIdleMinutes)
+	if err != nil {
+		return model.AccessPolicySettings{}, false, err
+	}
+	absoluteMinutes, err := requiredMinutes("session_absolute_minutes", body.SessionAbsoluteMinutes)
+	if err != nil {
+		return model.AccessPolicySettings{}, false, err
+	}
 	return model.AccessPolicySettings{
 		LocalLoginEnabled: localLogin, PublicRegistrationEnabled: publicRegistration,
 		InvitationAdmissionEnabled: invitationAdmission, InvitationLocalCredentialEnabled: invitationLocalCredential,
 		DesktopAuthorizationEnabled: desktopAuthorization, ProviderAdmissions: *providerAdmissions,
-		RoleHolderMFARequired: roleHolderMFARequired,
+		RoleHolderMFARequired: roleHolderMFARequired, SessionIdleMinutes: idleMinutes, SessionAbsoluteMinutes: absoluteMinutes,
 	}, revoke, nil
 }
 
@@ -251,6 +284,9 @@ func accessPolicyResponseFromView(view app.AccessPolicyView) accessPolicyRespons
 	response.InvitationAdmissionEnabled, response.InvitationLocalCredentialEnabled = p.InvitationAdmissionEnabled, p.InvitationLocalCredentialEnabled
 	response.DesktopAuthorizationEnabled, response.ProviderAdmissions = p.DesktopAuthorizationEnabled, p.Settings().ProviderAdmissions
 	response.RoleHolderMFARequired, response.RoleHolderMFAEnforced = p.RoleHolderMFARequired, view.RoleHolderMFAEnforced
+	response.SessionIdleMinutes, response.SessionAbsoluteMinutes = optionalMinutes(p.SessionIdleMinutes), optionalMinutes(p.SessionAbsoluteMinutes)
+	response.SessionIdleMinutesDefault, response.SessionIdleMinutesMaximum = view.SessionLimits.IdleDefaultMinutes, view.SessionLimits.IdleMaximumMinutes
+	response.SessionAbsoluteMinutesDefault, response.SessionAbsoluteMinutesMaximum = view.SessionLimits.AbsoluteDefaultMinutes, view.SessionLimits.AbsoluteMaximumMinutes
 	response.DurableMail = view.DurableMail
 	for _, transition := range view.History {
 		if transition != nil {
@@ -263,6 +299,14 @@ func accessPolicyResponseFromView(view app.AccessPolicyView) accessPolicyRespons
 		response.AvailableProviders = append(response.AvailableProviders, externalAuthenticationProviderResponse{ID: provider.ID, DisplayName: provider.DisplayName, Type: provider.Type})
 	}
 	return response
+}
+
+// optionalMinutes presents an unset Session length as null.
+func optionalMinutes(minutes int) *int {
+	if minutes <= 0 {
+		return nil
+	}
+	return &minutes
 }
 
 func publicAccessDiscoveryResponseFromView(view app.PublicAccessDiscovery) publicAccessDiscoveryResponse {

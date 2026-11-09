@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -109,6 +110,72 @@ func TestRoleHolderMFAPolicyRestrictsSignInUntilEnrollment(t *testing.T) {
 	disabled := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/users/me/mfa/disable", nil, restricted.Tokens.AccessToken)
 	require.Equal(t, http.StatusConflict, disabled.Code, "disable=%s", disabled.Body.String())
 	require.Contains(t, disabled.Body.String(), `"code":"mfa.required_by_policy"`)
+}
+
+// Shortening the absolute Session length pulls a running Session in and gives
+// a new Session the shorter length; the deployment default stays the ceiling.
+func TestAccessPolicySessionLengthAppliesToRunningAndNewSessions(t *testing.T) {
+	ctx := context.Background()
+	persistence := openAuthenticationStore(t, requireAuthenticationDatabase(t))
+	helper := testlib.Setup(t, testlib.WithStore(persistence), testlib.WithConfig(func(cfg *config.Config) {
+		cfg.Server.ListenAddress = "127.0.0.1:0"
+		cfg.Authentication.MFA.Enabled = true
+		cfg.Authentication.MFA.EncryptionKey = base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{37}, 32))
+	}))
+	const adminPassword = "pebble lantern orchard quiet harbor"
+	bootstrap := performJSONRequest(helper.Handler(), http.MethodPost, "/api/v1/bootstrap", map[string]any{
+		"bootstrap_secret": testlib.BootstrapSecret,
+		"institution":      map[string]any{"name": "session-length", "display_name": "Session Length"},
+		"administrator":    map[string]any{"username": "session-length-admin", "email": "session-length-admin@example.edu"},
+		"password":         adminPassword,
+	}, "")
+	require.Equal(t, http.StatusCreated, bootstrap.Code, "bootstrap=%d %s", bootstrap.Code, bootstrap.Body.String())
+	admin, err := helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{LoginID: "session-length-admin", Password: adminPassword,
+		ClientType: model.SessionClientWeb, Source: "127.0.0.1:1"})
+	require.NoError(t, err)
+	strengthenRoleAdministratorSession(t, helper.Handler(), admin.Tokens.AccessToken)
+	adminPrincipal, err := helper.App.AuthenticateAccess(ctx, admin.Tokens.AccessToken)
+	require.NoError(t, err)
+	adminInvocation := invocation.New(*adminPrincipal, model.RequestMetadata{RequestID: "session-length-policy"})
+	const learnerPassword = "violet compass meadow sturdy kettle"
+	createIntegrationUser(t, helper, "session-length-learner", learnerPassword)
+	running, err := helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{LoginID: "session-length-learner", Password: learnerPassword,
+		ClientType: model.SessionClientWeb, Source: "127.0.0.1:2"})
+	require.NoError(t, err)
+
+	current, err := helper.App.GetAccessPolicy(ctx, adminInvocation)
+	require.NoError(t, err)
+	settings := current.Policy.Settings()
+	settings.SessionAbsoluteMinutes = 60
+	replaced, err := helper.App.ReplaceAccessPolicy(ctx, adminInvocation, app.ReplaceAccessPolicyCommand{
+		ExpectedRevision: current.Policy.Revision, Settings: settings, IdempotencyKey: "session-length-shorten",
+	})
+	require.NoError(t, err)
+	require.Equal(t, 60, replaced.Policy.SessionAbsoluteMinutes)
+	require.Equal(t, int(config.Default().Authentication.Sessions.AbsoluteTTL.Duration/time.Minute), replaced.SessionLimits.AbsoluteDefaultMinutes)
+
+	shortened, err := persistence.Session().Get(ctx, running.Session.ID)
+	require.NoError(t, err)
+	require.False(t, shortened.ExpiresAt.After(running.Session.CreatedAt.Add(time.Hour)), "running Session pulled in: %s", shortened.ExpiresAt)
+	still := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/me", nil, running.Tokens.AccessToken)
+	require.Equal(t, http.StatusOK, still.Code, "a shortened Session stays live: %s", still.Body.String())
+
+	fresh, err := helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{LoginID: "session-length-learner", Password: learnerPassword,
+		ClientType: model.SessionClientWeb, Source: "127.0.0.1:3"})
+	require.NoError(t, err)
+	lifetime := fresh.Session.ExpiresAt.Sub(fresh.Session.CreatedAt)
+	require.Greater(t, lifetime, 59*time.Minute, "new Session lasts the policy length")
+	require.LessOrEqual(t, lifetime, time.Hour, "new Session lasts the policy length")
+	require.False(t, fresh.Session.IdleExpiresAt.After(fresh.Session.ExpiresAt))
+
+	_, err = helper.App.ReplaceAccessPolicy(ctx, adminInvocation, app.ReplaceAccessPolicyCommand{
+		ExpectedRevision: replaced.Policy.Revision, Settings: func() model.AccessPolicySettings {
+			longer := replaced.Policy.Settings()
+			longer.SessionAbsoluteMinutes = replaced.SessionLimits.AbsoluteMaximumMinutes + 1
+			return longer
+		}(), IdempotencyKey: "session-length-beyond-ceiling",
+	})
+	require.True(t, apperror.Is(err, "access_policy.invalid"), "a length beyond the deployment ceiling is refused: %v", err)
 }
 
 // A deployment that disables MFA after the rule is on pauses the rule rather

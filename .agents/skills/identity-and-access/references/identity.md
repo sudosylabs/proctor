@@ -184,7 +184,15 @@ tests reject unclassified handlers.
 
 Interactive sessions use random opaque access and rotating refresh
 credentials whose hashes alone are persisted. Idle and absolute expiry are
-separate; activity writes are debounced; concurrency is bounded; users can
+separate. Deployment configuration sets their default lengths and ceiling; the
+Access Policy may only shorten them (`session_idle_minutes`,
+`session_absolute_minutes`, null keeping the default), and Session creation,
+activity, refresh rotation and the Desktop exchange stamp the effective
+lengths. Shortening a length pulls live Sessions' idle and absolute deadlines
+in with `LEAST` and caps their credentials in the replacement transaction,
+then invalidates cached authentication after commit; lengthening never extends
+a running Session. Activity writes are debounced; concurrency is bounded; users
+can
 list and revoke sessions; account and credential security changes can revoke
 all sessions. Authorization always resolves current role bindings.
 

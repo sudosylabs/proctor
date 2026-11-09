@@ -145,7 +145,10 @@ Policy is composable rather than a `local`, `external`, or `hybrid` enum:
 - provider admission may apply configured eligibility predicates, but those
   predicates grant no academic relationship or permission;
 - two-step verification of role holders is required or not
-  (`role_holder_mfa_required`).
+  (`role_holder_mfa_required`);
+- the idle and absolute Session lengths keep the deployment default or are
+  shortened within deployment bounds (`session_idle_minutes`,
+  `session_absolute_minutes`).
 
 Ordinary provider login resolves only the immutable `(provider ID, opaque
 subject)` link. `linked_only` therefore admits an existing link and otherwise

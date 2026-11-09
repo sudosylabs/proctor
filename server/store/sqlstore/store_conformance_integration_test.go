@@ -177,6 +177,9 @@ func runLayerConformance(
 			storetest.TestAccessPolicyStore(t, decorated)
 		}},
 		{"AccessPolicyRoleHolderMFA", storetest.TestAccessPolicyRoleHolderMFAStore},
+		{"AccessPolicySessionLength", func(t *testing.T, decorated store.Store) {
+			storetest.TestAccessPolicySessionLengthStore(t, decorated)
+		}},
 		{"DesktopCompatibilityPolicy", storetest.TestDesktopCompatibilityPolicyStore},
 		{"RetentionPolicy", storetest.TestRetentionPolicyStore},
 		{"CommandOutcome", storetest.TestCommandOutcomeStore},
@@ -184,7 +187,7 @@ func runLayerConformance(
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			switch test.name {
-			case "Installation", "AdministratorMFAReset", "AdministratorMFAResetExternal", "AccessPolicy", "AccessPolicyRoleHolderMFA", "DesktopCompatibilityPolicy", "RetentionPolicy", "RetentionExpiry", "RetentionCleanupAuditExpiry":
+			case "Installation", "AdministratorMFAReset", "AdministratorMFAResetExternal", "AccessPolicy", "AccessPolicyRoleHolderMFA", "AccessPolicySessionLength", "DesktopCompatibilityPolicy", "RetentionPolicy", "RetentionExpiry", "RetentionCleanupAuditExpiry":
 				resetPristineTestStore(t, sqlStore)
 			case "PasswordCredential":
 				resetPristineTestStore(t, sqlStore)

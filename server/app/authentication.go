@@ -670,7 +670,11 @@ func (s *authenticationService) createSession(
 		return nil, nil, err
 	}
 	settings := s.deps.SessionPolicy
-	absoluteExpiresAt := model.TimeUTC(now.Add(settings.AbsoluteTTL))
+	lifetimes, err := s.sessionLifetimes(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	absoluteExpiresAt := model.TimeUTC(now.Add(lifetimes.Absolute))
 	accessExpiresAt := sessionDeadline(now, settings.AccessTTL, absoluteExpiresAt)
 	refreshExpiresAt := sessionDeadline(now, settings.RefreshTTL, absoluteExpiresAt)
 	session := &model.Session{
@@ -688,7 +692,7 @@ func (s *authenticationService) createSession(
 		AuthenticatedAt:          model.TimeFromMillis(authenticatedAt),
 		MFACompletedAt:           model.OptionalTimeFromMillis(mfaCompletedAt),
 		LastActivityAt:           now,
-		IdleExpiresAt:            sessionDeadline(now, settings.IdleTTL, absoluteExpiresAt),
+		IdleExpiresAt:            sessionDeadline(now, lifetimes.Idle, absoluteExpiresAt),
 		ExpiresAt:                absoluteExpiresAt,
 	}
 	accessToken := s.deps.NewCredential()
@@ -726,6 +730,16 @@ func (s *authenticationService) createSession(
 		AccessExpiresAt:  accessExpiresAt,
 		RefreshExpiresAt: refreshExpiresAt,
 	}, nil
+}
+
+// sessionLifetimes returns the idle and absolute lengths a Session gets now:
+// the deployment lifetimes, shortened by the current Access Policy.
+func (s *authenticationService) sessionLifetimes(ctx context.Context) (sessionLifetimes, error) {
+	lifetimes, err := s.deps.AccessPolicy.SessionLifetimes(ctx, s.deps.SessionPolicy)
+	if err != nil {
+		return sessionLifetimes{}, authenticationUnavailable(err)
+	}
+	return lifetimes, nil
 }
 
 // mfaEnrollmentRequired decides whether a new single-factor Session of the
@@ -946,7 +960,11 @@ func (s *authenticationService) updateActivity(
 		s.warn(ctx, "session activity debounce cache failed", err)
 		return nil
 	}
-	idleExpiresAt := sessionDeadline(now, settings.IdleTTL, resolved.Session.ExpiresAt)
+	lifetimes, err := s.sessionLifetimes(ctx)
+	if err != nil {
+		return err
+	}
+	idleExpiresAt := sessionDeadline(now, lifetimes.Idle, resolved.Session.ExpiresAt)
 	if err := s.deps.Sessions.UpdateActivity(
 		ctx,
 		&store.SessionActivityUpdate{ID: resolved.Session.ID, LastActivityAt: now, IdleExpiresAt: idleExpiresAt},
@@ -1009,6 +1027,10 @@ func (s *authenticationService) RefreshSession(
 		}
 	}
 	settings := s.deps.SessionPolicy
+	lifetimes, err := s.sessionLifetimes(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
 	accessToken := s.deps.NewCredential()
 	refreshToken := s.deps.NewCredential()
 	rotation, err := s.deps.SessionCredentials.RotateRefresh(
@@ -1019,7 +1041,7 @@ func (s *authenticationService) RefreshSession(
 		}, Refresh: &model.SessionCredential{
 			TokenHash: model.HashToken(refreshToken),
 			ExpiresAt: model.TimeUTC(now.Add(settings.RefreshTTL)),
-		}, Now: now, IdleExpiresAt: model.TimeUTC(now.Add(settings.IdleTTL)), MFARequiredByPolicy: mfaRequired},
+		}, Now: now, IdleExpiresAt: model.TimeUTC(now.Add(lifetimes.Idle)), MFARequiredByPolicy: mfaRequired},
 	)
 	if err != nil {
 		if errors.Is(err, store.ErrMFAEnrollmentRequired) {

@@ -35,6 +35,7 @@ type desktopAuthorizationStore interface {
 
 type desktopAuthorizationAccessPolicy interface {
 	roleHolderMFARequirement
+	sessionLengthPolicy
 	AllowsLocalLogin(context.Context) (bool, error)
 	AllowsDesktopAuthorization(context.Context, string, string) (bool, error)
 }
@@ -592,6 +593,10 @@ func (s *desktopAuthorizationService) ExchangeDesktopAuthorization(ctx context.C
 	if err != nil {
 		return nil, apperror.New("authentication.desktop_authorization.unavailable").Wrap(err)
 	}
+	lifetimes, err := s.deps.AccessPolicy.SessionLifetimes(ctx, s.deps.SessionPolicy)
+	if err != nil {
+		return nil, apperror.New("authentication.desktop_authorization.unavailable").Wrap(err)
+	}
 	audit, err := s.deps.Audit.PrepareExchange(ctx, invocation, resolved.UserID, institution.ID)
 	if err != nil || audit == nil || !audit.ID.IsValid() {
 		return nil, apperror.New("audit.unavailable").Wrap(err)
@@ -610,8 +615,9 @@ func (s *desktopAuthorizationService) ExchangeDesktopAuthorization(ctx context.C
 		DesktopRealtimeProtocol:            command.RealtimeProtocol,
 		DesktopCompatibilityPolicyRevision: compatibility.PolicyRevision,
 		AccessTokenHash:                    model.HashToken(accessToken), RefreshTokenHash: model.HashToken(refreshToken),
-		AccessLifetime: s.deps.SessionPolicy.AccessTTL, RefreshLifetime: s.deps.SessionPolicy.RefreshTTL,
-		IdleLifetime: s.deps.SessionPolicy.IdleTTL, AbsoluteLifetime: s.deps.SessionPolicy.AbsoluteTTL,
+		AccessLifetime:  min(s.deps.SessionPolicy.AccessTTL, lifetimes.Idle),
+		RefreshLifetime: min(s.deps.SessionPolicy.RefreshTTL, lifetimes.Absolute),
+		IdleLifetime:    lifetimes.Idle, AbsoluteLifetime: lifetimes.Absolute,
 		MaximumActive: s.deps.SessionPolicy.MaximumPerUser, Capabilities: accessDeploymentCapabilities(s.deps.Capabilities.Snapshot()),
 		MFARequiredByPolicy: mfaRequired, AuditEventID: audit.ID, AuditAt: at,
 	})

@@ -75,7 +75,16 @@ type authenticationAccessPolicyFake struct {
 	// roleHolderMFA lists the Users the policy requires to use two-step
 	// verification.
 	roleHolderMFA map[model.UserID]bool
-	err           error
+	// lifetimes, when set, replace the deployment Session lifetimes.
+	lifetimes *sessionLifetimes
+	err       error
+}
+
+func (p authenticationAccessPolicyFake) SessionLifetimes(_ context.Context, defaults SessionPolicy) (sessionLifetimes, error) {
+	if p.lifetimes != nil {
+		return *p.lifetimes, p.err
+	}
+	return sessionLifetimes{Idle: defaults.IdleTTL, Absolute: defaults.AbsoluteTTL}, p.err
 }
 
 func (p authenticationAccessPolicyFake) RequiresMFA(_ context.Context, userID model.UserID) (bool, error) {

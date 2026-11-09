@@ -414,6 +414,8 @@ const (
 	methodCreateOnboardingImport               methodName = "create_onboarding_import"
 	methodGetOnboardingImport                  methodName = "get_onboarding_import"
 	methodListOnboardingImports                methodName = "list_onboarding_imports"
+	methodListStudentProgressions              methodName = "list_student_progressions"
+	methodCountStudentProgressions             methodName = "count_student_progressions"
 	methodListStudentProgressionRoster         methodName = "list_student_progression_roster"
 	methodCompleteOnboardingImportPreview      methodName = "complete_onboarding_import_preview"
 	methodCommitOnboardingImport               methodName = "commit_onboarding_import"

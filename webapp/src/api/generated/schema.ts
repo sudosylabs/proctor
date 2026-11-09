@@ -4514,7 +4514,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List student progressions within the caller's progression authority
+         * @description Lists the unexpired student progressions the caller could read one by one, newest first. A single read requires progression authority on both the source and the destination Class, so a progression appears only when the caller's current Institution, Academic Unit, or Class progression authority covers both. Items are summary projections without rows, each naming its source and destination Classes; read one progression for its preview or result rows. The first page, read without a cursor, also reports `total`: the progressions the filters and the caller's authority match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.
+         */
+        get: operations["listStudentProgressions"];
         put?: never;
         /**
          * Create an asynchronous dry-run for one exact student progression
@@ -9593,6 +9597,8 @@ export interface components {
             /** Format: date-time */
             created_at: string;
             destination_class_id?: components["schemas"]["ID"];
+            /** @description Display name of the destination Class, present only on student progression reads and listings. */
+            destination_class_name?: string;
             destination_period_id?: components["schemas"]["ID"];
             /** Format: date-time */
             effective_at?: string;
@@ -9618,6 +9624,8 @@ export interface components {
             scope_type: "class" | "academic_unit" | "institution";
             skipped_rows: number;
             source_class_id?: components["schemas"]["ID"];
+            /** @description Display name of the source Class, present only on student progression reads and listings. */
+            source_class_name?: string;
             source_period_id?: components["schemas"]["ID"];
             /** @enum {string} */
             state: "uploading" | "parsing" | "preview_ready" | "executing" | "completed" | "completed_with_errors" | "canceled" | "failed";
@@ -10729,6 +10737,16 @@ export interface components {
             effective_at: string;
             source_class_id: components["schemas"]["ID"];
             source_period_id: components["schemas"]["ID"];
+        };
+        /** @description Student progression summaries newest first, without rows. */
+        StudentProgressionListResponse: {
+            items: components["schemas"]["OnboardingImportResponse"][];
+            /** @description Opaque continuation for the next page, omitted after the final page. */
+            next_cursor?: string;
+            /** @description Student progressions matching the filters and the caller's authority across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true. */
+            total?: number;
+            /** @description True when `total` reached the 10,000 bound and there may be more. Present with `total`. */
+            total_is_lower_bound?: boolean;
         };
         SubmissionReviewWaiverEnvelope: {
             waiver: components["schemas"]["SubmissionReviewWaiverResponse"] | null;
@@ -13708,6 +13726,23 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["OnboardingImportResponse"];
+            };
+        };
+        /** @description Bounded authorized student progression page */
+        StudentProgressionListOK: {
+            headers: {
+                "Cache-Control": components["headers"]["NoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "items": [],
+                 *       "total": 0,
+                 *       "total_is_lower_bound": false
+                 *     }
+                 */
+                "application/json": components["schemas"]["StudentProgressionListResponse"];
             };
         };
         /** @description Authorized safe student progression preview or result */
@@ -21494,6 +21529,40 @@ export interface operations {
             409: components["responses"]["Conflict"];
             410: components["responses"]["Gone"];
             429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    listStudentProgressions: {
+        parameters: {
+            query?: {
+                /** @description Return only progressions in these lifecycle states. Repeat the parameter to select several; omit it for all. */
+                state?: ("uploading" | "parsing" | "preview_ready" | "executing" | "completed" | "completed_with_errors" | "canceled" | "failed")[];
+                /** @description Return only progressions from this exact source Academic Period. */
+                source_period_id?: components["schemas"]["ID"];
+                /** @description Return only progressions from this exact source Class. */
+                source_class_id?: components["schemas"]["ID"];
+                /** @description Return only progressions into this exact destination Academic Period. */
+                destination_period_id?: components["schemas"]["ID"];
+                /** @description Return only progressions into this exact destination Class. */
+                destination_class_id?: components["schemas"]["ID"];
+                /** @description Continue from the opaque cursor returned by the preceding page. */
+                cursor?: string;
+                /** @description Maximum number of student progressions to return in this page. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["StudentProgressionListOK"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };

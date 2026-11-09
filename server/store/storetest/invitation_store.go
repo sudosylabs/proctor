@@ -99,6 +99,9 @@ func TestInvitationStore(t *testing.T, ss store.Store, probes ...InvitationSQLPr
 	t.Run("OnboardingImportListing", func(t *testing.T) {
 		testOnboardingImportListing(t, ss)
 	})
+	t.Run("StudentProgressionListing", func(t *testing.T) {
+		testStudentProgressionListing(t, ss)
+	})
 	t.Run("OnboardingImportOpenCountIsScoped", func(t *testing.T) {
 		testOnboardingImportOpenCount(t, ss)
 	})

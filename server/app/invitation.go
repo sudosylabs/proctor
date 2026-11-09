@@ -396,13 +396,23 @@ func (a invitationAuthorizationAdapter) AuthorizeActionDelegation(ctx context.Co
 }
 
 // Visibility resolves and records the caller's institution-family scopes for
-// invitation.view, invitation.manage, or onboarding_batch.view, which share
-// one scope shape: the Institution, Academic Unit subtrees, and Classes.
+// invitation.view, invitation.manage, onboarding_batch.view, or
+// academic_progression.manage, which share one scope shape: the Institution,
+// Academic Unit subtrees, and Classes. Progression authority is a Class
+// action, so its scopes are resolved for Class resources.
 func (a invitationAuthorizationAdapter) Visibility(ctx context.Context, invocation invocation.Invocation, action model.Action) (store.InvitationVisibilityScope, error) {
-	if a.authorization == nil || (action != model.ActionInvitationView && action != model.ActionInvitationManage && action != model.ActionOnboardingBatchView) {
+	resourceType := model.ResourceInstitution
+	switch action {
+	case model.ActionInvitationView, model.ActionInvitationManage, model.ActionOnboardingBatchView:
+	case model.ActionAcademicProgressionManage:
+		resourceType = model.ResourceClass
+	default:
 		return store.InvitationVisibilityScope{}, apperror.New("invitation.unavailable")
 	}
-	constraint, err := a.authorization.authorizedScopes(ctx, invocation.Principal(), action, model.ResourceInstitution)
+	if a.authorization == nil {
+		return store.InvitationVisibilityScope{}, apperror.New("invitation.unavailable")
+	}
+	constraint, err := a.authorization.authorizedScopes(ctx, invocation.Principal(), action, resourceType)
 	if err != nil {
 		return store.InvitationVisibilityScope{}, err
 	}

@@ -800,7 +800,10 @@ Detailed previews and reports retain for seven days. The administrative
 listing shows unexpired imports newest first through one recorded
 `onboarding_batch.view` scope decision turned into a Store predicate, so it
 lists exactly what a single read would allow; student progressions authorize
-through Class progression authority and are not listed. Reports preserve source
+through Class progression authority and are not listed there. The progression
+listing resolves `academic_progression.manage` once the same way and shows a
+progression only when its source and its destination Class both lie inside
+that scope, because the single read authorizes both. Reports preserve source
 row, safe reference, normalized operation, status, created IDs, and public
 error code; downloads reauthorize and escape spreadsheet formulas. Audit,
 logs, metrics, and generic Job projections contain only safe IDs, counts,

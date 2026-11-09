@@ -58,24 +58,28 @@ type OnboardingImportView struct {
 	SourceClassID       model.ClassID
 	DestinationPeriodID model.AcademicPeriodID
 	DestinationClassID  model.ClassID
-	EffectiveAt         time.Time
-	PreviewDigest       string
-	IgnoredHeaders      []string
-	TotalRows           int
-	ValidRows           int
-	InvalidRows         int
-	SucceededRows       int
-	NoOpRows            int
-	FailedRows          int
-	SkippedRows         int
-	CommitPolicy        model.OnboardingImportCommitPolicy
-	ParseJobID          model.JobID
-	ExecutionJobID      model.JobID
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
-	ExpiresAt           time.Time
-	Revision            int64
-	FailureCode         string
+	// SourceClassName and DestinationClassName are the Classes' display
+	// names, set only on student progression reads and listings.
+	SourceClassName      string
+	DestinationClassName string
+	EffectiveAt          time.Time
+	PreviewDigest        string
+	IgnoredHeaders       []string
+	TotalRows            int
+	ValidRows            int
+	InvalidRows          int
+	SucceededRows        int
+	NoOpRows             int
+	FailedRows           int
+	SkippedRows          int
+	CommitPolicy         model.OnboardingImportCommitPolicy
+	ParseJobID           model.JobID
+	ExecutionJobID       model.JobID
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
+	ExpiresAt            time.Time
+	Revision             int64
+	FailureCode          string
 }
 
 type OnboardingImportRowView struct {

@@ -115,6 +115,7 @@ var reachableOnlyFromTests = map[string]string{
 	"httpapi.unavailableOnboardingImportApplication.OnboardingImportReport":                    "httpapi test null object",
 	"httpapi.unavailableStudentProgressionApplication.DryRunStudentProgression":                "httpapi test null object",
 	"httpapi.unavailableStudentProgressionApplication.GetStudentProgression":                   "httpapi test null object",
+	"httpapi.unavailableStudentProgressionApplication.ListStudentProgressions":                 "httpapi test null object",
 	"httpapi.unavailableStudentProgressionApplication.CommitStudentProgression":                "httpapi test null object",
 	"httpapi.unavailableStudentProgressionApplication.CancelStudentProgression":                "httpapi test null object",
 	"httpapi.unavailableStudentProgressionApplication.StudentProgressionReport":                "httpapi test null object",

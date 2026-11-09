@@ -180,6 +180,44 @@ type OnboardingImportListOptions struct {
 	Limit           int
 }
 
+// StudentProgressionVisibilityScope is the persistence-ready
+// academic_progression.manage authority of a student progression listing:
+// every Class Institution-wide, the Classes whose Programme lies under a named
+// Academic Unit subtree, and the named Classes. A progression is visible only
+// when both its source and its destination Class lie inside the scope, as the
+// single read authorizes both.
+type StudentProgressionVisibilityScope struct {
+	InstitutionWide     bool
+	AcademicUnitRootIDs []model.AcademicUnitID
+	ClassIDs            []model.ClassID
+}
+
+// StudentProgressionListOptions selects up to Limit
+// (1..OnboardingImportListMaximum) unexpired student progressions inside
+// Visibility, newest first by creation instant then identity. An empty States
+// matches every state, and each zero Period or Class filter matches every
+// value. BeforeCreatedAt and BeforeID are the keyset of the previous page's
+// last item, both set or both zero. An empty Visibility is invalid input.
+type StudentProgressionListOptions struct {
+	Visibility          StudentProgressionVisibilityScope
+	States              []model.OnboardingImportState
+	SourcePeriodID      model.AcademicPeriodID
+	SourceClassID       model.ClassID
+	DestinationPeriodID model.AcademicPeriodID
+	DestinationClassID  model.ClassID
+	BeforeCreatedAt     time.Time
+	BeforeID            model.OnboardingImportID
+	Limit               int
+}
+
+// StudentProgressionSummary is one listed progression with the display names
+// of its source and destination Classes, read with it.
+type StudentProgressionSummary struct {
+	Progression          *OnboardingImport
+	SourceClassName      string
+	DestinationClassName string
+}
+
 type OnboardingImportPage struct {
 	Rows []OnboardingImportRow
 	More bool
@@ -197,6 +235,12 @@ type OnboardingImportStore interface {
 	// scope lies within the visibility. It stops at maximum (see
 	// MaximumListCount).
 	CountOpenOnboardingImports(context.Context, OnboardingImportVisibilityScope, int) (int, error)
+	ListStudentProgressions(context.Context, StudentProgressionListOptions) ([]*StudentProgressionSummary, error)
+	// CountStudentProgressions counts the progressions ListStudentProgressions
+	// would return across every page for the same filters and visibility,
+	// ignoring the keyset and limit, and stops at maximum (see
+	// MaximumListCount).
+	CountStudentProgressions(context.Context, StudentProgressionListOptions, int) (int, error)
 	ListStudentProgressionRoster(context.Context, model.ClassID, time.Time, int) ([]*model.ClassMember, error)
 	CompleteOnboardingImportPreview(context.Context, *OnboardingImportPreviewCompletion) (*OnboardingImport, error)
 	CommitOnboardingImport(context.Context, *OnboardingImportCommit) (*OnboardingImport, error)

@@ -2972,6 +2972,18 @@ func (s *timedOnboardingImportStore) CountOpenOnboardingImports(arg0 context.Con
 	})
 }
 
+func (s *timedOnboardingImportStore) ListStudentProgressions(arg0 context.Context, arg1 store.StudentProgressionListOptions) ([]*store.StudentProgressionSummary, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateOnboardingImport, methodListStudentProgressions), func(callCtx context.Context) ([]*store.StudentProgressionSummary, error) {
+		return s.next.ListStudentProgressions(callCtx, arg1)
+	})
+}
+
+func (s *timedOnboardingImportStore) CountStudentProgressions(arg0 context.Context, arg1 store.StudentProgressionListOptions, arg2 int) (int, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateOnboardingImport, methodCountStudentProgressions), func(callCtx context.Context) (int, error) {
+		return s.next.CountStudentProgressions(callCtx, arg1, arg2)
+	})
+}
+
 func (s *timedOnboardingImportStore) ListStudentProgressionRoster(arg0 context.Context, arg1 model.ClassID, arg2 time.Time, arg3 int) ([]*model.ClassMember, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateOnboardingImport, methodListStudentProgressionRoster), func(callCtx context.Context) ([]*model.ClassMember, error) {
 		return s.next.ListStudentProgressionRoster(callCtx, arg1, arg2, arg3)

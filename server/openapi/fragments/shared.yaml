@@ -732,6 +732,14 @@ components:
           $ref: '#/components/schemas/ID'
         destination_class_id:
           $ref: '#/components/schemas/ID'
+        source_class_name:
+          type: string
+          maxLength: 512
+          description: Display name of the source Class, present only on student progression reads and listings.
+        destination_class_name:
+          type: string
+          maxLength: 512
+          description: Display name of the destination Class, present only on student progression reads and listings.
         effective_at:
           type: string
           format: date-time

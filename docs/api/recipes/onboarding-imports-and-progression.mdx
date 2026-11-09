@@ -68,6 +68,12 @@ the immutable preview, then call
 <Link to="/api/reference/commit-student-progression">Commit Student Progression</Link>
 with the expected preview and idempotency inputs.
 
+<Link to="/api/reference/list-student-progressions">List Student Progressions</Link>
+finds progressions again, newest first, filtered by repeated `state` values and
+exact source or destination Period and Class IDs. It shows a progression only
+when your progression authority covers both its Classes, names both Classes,
+and reports a first-page `total`.
+
 Monitor <Link to="/api/reference/get-student-progression">Get Student Progression</Link>,
 use <Link to="/api/reference/cancel-student-progression">Cancel Student Progression</Link>
 to stop new students, and retrieve the

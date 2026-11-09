@@ -13,6 +13,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"slices"
 	"strings"
 	"time"
 
@@ -42,7 +43,111 @@ func (s *onboardingImportService) GetStudentProgression(ctx context.Context, inv
 	if err != nil {
 		return OnboardingImportView{}, nil, studentProgressionError(err)
 	}
+	source, err := s.deps.Classes.Get(ctx, view.SourceClassID)
+	if err != nil {
+		return OnboardingImportView{}, nil, studentProgressionError(err)
+	}
+	destination, err := s.deps.Classes.Get(ctx, view.DestinationClassID)
+	if err != nil {
+		return OnboardingImportView{}, nil, studentProgressionError(err)
+	}
+	view.SourceClassName, view.DestinationClassName = source.DisplayName, destination.DisplayName
 	return view, rows, nil
+}
+
+// ListStudentProgressionsQuery selects one page of student progressions,
+// newest first. States is an optional closed-state filter and each Period or
+// Class filter is optional; BeforeCreatedAt and BeforeID continue after the
+// previous page's last item, both set or both zero.
+type ListStudentProgressionsQuery struct {
+	States              []model.OnboardingImportState
+	SourcePeriodID      model.AcademicPeriodID
+	SourceClassID       model.ClassID
+	DestinationPeriodID model.AcademicPeriodID
+	DestinationClassID  model.ClassID
+	BeforeCreatedAt     time.Time
+	BeforeID            model.OnboardingImportID
+	Limit               int
+}
+
+// ListStudentProgressions lists the unexpired student progressions the caller
+// could read one by one. The single read authorizes
+// academic_progression.manage on both the source and the destination Class,
+// so that authority is resolved once into a scope, recorded as one
+// authorization decision, and applied to both Classes as a Store predicate.
+// Items carry the summary projection without rows plus both Class names; the
+// first page also carries the total.
+func (s *onboardingImportService) ListStudentProgressions(ctx context.Context, invocation invocation.Invocation, query ListStudentProgressionsQuery) (CountedPage[OnboardingImportView], error) {
+	limit, probe, err := resolvePageLimit(query.Limit, "limit")
+	if err != nil {
+		return CountedPage[OnboardingImportView]{}, err
+	}
+	if len(query.States) > 8 {
+		return CountedPage[OnboardingImportView]{}, apperror.Invalid("request.invalid", "state")
+	}
+	states := make([]model.OnboardingImportState, 0, len(query.States))
+	for _, state := range query.States {
+		if !state.IsValid() {
+			return CountedPage[OnboardingImportView]{}, apperror.Invalid("request.invalid", "state")
+		}
+		if !slices.Contains(states, state) {
+			states = append(states, state)
+		}
+	}
+	for _, filter := range []struct {
+		field string
+		valid bool
+	}{
+		{"source_period_id", query.SourcePeriodID.IsZero() || query.SourcePeriodID.IsValid()},
+		{"source_class_id", query.SourceClassID.IsZero() || query.SourceClassID.IsValid()},
+		{"destination_period_id", query.DestinationPeriodID.IsZero() || query.DestinationPeriodID.IsValid()},
+		{"destination_class_id", query.DestinationClassID.IsZero() || query.DestinationClassID.IsValid()},
+	} {
+		if !filter.valid {
+			return CountedPage[OnboardingImportView]{}, apperror.Invalid("request.invalid", filter.field)
+		}
+	}
+	if (!query.BeforeID.IsZero() || !query.BeforeCreatedAt.IsZero()) && (!query.BeforeID.IsValid() || query.BeforeCreatedAt.IsZero()) {
+		return CountedPage[OnboardingImportView]{}, apperror.Invalid("request.invalid", "cursor")
+	}
+	scope, err := s.deps.Authorization.Visibility(ctx, invocation, model.ActionAcademicProgressionManage)
+	if err != nil {
+		return CountedPage[OnboardingImportView]{}, err
+	}
+	options := store.StudentProgressionListOptions{Visibility: store.StudentProgressionVisibilityScope(scope), States: states,
+		SourcePeriodID: query.SourcePeriodID, SourceClassID: query.SourceClassID, DestinationPeriodID: query.DestinationPeriodID,
+		DestinationClassID: query.DestinationClassID, Limit: probe}
+	if query.BeforeID.IsValid() {
+		options.BeforeCreatedAt, options.BeforeID = model.TimeUTC(query.BeforeCreatedAt), query.BeforeID
+	}
+	values, err := s.deps.Imports.ListStudentProgressions(ctx, options)
+	if err != nil {
+		return CountedPage[OnboardingImportView]{}, studentProgressionError(err)
+	}
+	if len(values) > probe {
+		return CountedPage[OnboardingImportView]{}, apperror.New("student_progression.unavailable")
+	}
+	items := make([]OnboardingImportView, 0, len(values))
+	for _, value := range values {
+		if value == nil || value.Progression == nil || value.Progression.Mode != model.OnboardingImportStudentProgression {
+			return CountedPage[OnboardingImportView]{}, apperror.New("student_progression.unavailable")
+		}
+		view := onboardingImportView(value.Progression)
+		view.SourceClassName, view.DestinationClassName = value.SourceClassName, value.DestinationClassName
+		items = append(items, view)
+	}
+	page := CountedPage[OnboardingImportView]{Page: newPage(items, limit)}
+	total, consistent, err := countFirstPage(!query.BeforeID.IsValid(), len(page.Items), func(maximum int) (int, error) {
+		return s.deps.Imports.CountStudentProgressions(ctx, options, maximum)
+	})
+	if err != nil {
+		return CountedPage[OnboardingImportView]{}, studentProgressionError(err)
+	}
+	if !consistent {
+		return CountedPage[OnboardingImportView]{}, apperror.New("student_progression.unavailable")
+	}
+	page.PageTotal = total
+	return page, nil
 }
 
 func (s *onboardingImportService) CommitStudentProgression(ctx context.Context, invocation invocation.Invocation, command CommitStudentProgressionCommand) (OnboardingImportView, error) {

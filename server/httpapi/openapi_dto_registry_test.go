@@ -359,6 +359,7 @@ var openAPIDTOs = map[string]reflect.Type{
 	"StopDeliveryDetailsResult":                      reflect.TypeOf(model.StopDeliveryDetailsResult{}),
 	"StudentExamResultResponse":                      reflect.TypeOf(studentExamResultResponse{}),
 	"StudentProgressionCommitRequest":                reflect.TypeOf(studentProgressionCommitRequest{}),
+	"StudentProgressionListResponse":                 reflect.TypeOf(countedListResponse[onboardingImportResponse]{}),
 	"StudentProgressionDryRunRequest":                reflect.TypeOf(studentProgressionDryRunRequest{}),
 	"SubmissionReviewWaiverEnvelope":                 reflect.TypeOf(submissionReviewWaiverEnvelope{}),
 	"SubmissionReviewWaiverResponse":                 reflect.TypeOf(submissionReviewWaiverResponse{}),

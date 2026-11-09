@@ -22,6 +22,10 @@ module when a change is not server-only. No module has been released yet.
   `invitations.expires_at` between one and thirty days after creation, and
   adds `jobs.created_by_user_id`. Existing development databases must be
   recreated.
+  the onboarding import list, the student progression list by source and by
+  destination Class, failed Jobs and Invitations by state, and bounds
+  `invitations.expires_at` between one and thirty days after creation.
+  Existing development databases must be recreated.
 - Server: recent authentication now counts primary proof only. An MFA
   challenge no longer refreshes recency; it still makes a Session strong.
 - Server: Desktop Authorization that reuses a recently reauthenticated Web
@@ -280,6 +284,15 @@ module when a change is not server-only. No module has been released yet.
   repeated `state` values and paged by `limit` and `cursor`. Items are
   summaries without rows; student progressions are not listed. A new
   `onboarding_imports (created_at DESC, id DESC)` index backs it.
+- Server: `GET /api/v1/student-progressions` lists the unexpired student
+  progressions newest first, filtered by repeated `state` values and by
+  `source_class_id`, `destination_class_id`, `source_period_id`, and
+  `destination_period_id`, and paged by `limit` and `cursor`; the first page
+  reports `total` and `total_is_lower_bound`. A progression is listed only
+  when the caller's `academic_progression.manage` authority covers both its
+  source and destination Class, as a single read requires. Items and
+  `GET /api/v1/student-progressions/{id}` now carry `source_class_name` and
+  `destination_class_name`.
 - Server: `GET /api/v1/users/me/audits` takes `order=asc` to read oldest
   first, and its first page reports `total`, the events the filters match,
   exact below 10,000 and flagged by `total_is_lower_bound` at that bound.

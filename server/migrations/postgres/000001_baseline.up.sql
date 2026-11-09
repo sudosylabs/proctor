@@ -534,6 +534,13 @@ CREATE UNIQUE INDEX onboarding_imports_active_progression_source_idx
     WHERE mode = 'student_progression' AND state = 'executing';
 CREATE INDEX onboarding_imports_expiry_idx ON onboarding_imports (expires_at, id);
 CREATE INDEX onboarding_imports_created_at_id_idx ON onboarding_imports (created_at DESC, id DESC);
+-- The student progression list filters by either Class newest first.
+CREATE INDEX onboarding_imports_progression_destination_idx
+    ON onboarding_imports (destination_class_id, created_at DESC, id DESC)
+    WHERE mode = 'student_progression';
+CREATE INDEX onboarding_imports_progression_source_idx
+    ON onboarding_imports (source_class_id, created_at DESC, id DESC)
+    WHERE mode = 'student_progression';
 
 CREATE TABLE onboarding_import_rows (
     import_id varchar(26) NOT NULL REFERENCES onboarding_imports(id) ON DELETE CASCADE,

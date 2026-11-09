@@ -5802,6 +5802,26 @@
           }
         }
       },
+      "StudentProgressionListOK": {
+        "content": {
+          "application/json": {
+            "example": {
+              "items": [],
+              "total": 0,
+              "total_is_lower_bound": false
+            },
+            "schema": {
+              "$ref": "#/components/schemas/StudentProgressionListResponse"
+            }
+          }
+        },
+        "description": "Bounded authorized student progression page",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/NoStore"
+          }
+        }
+      },
       "StudentProgressionOK": {
         "content": {
           "application/json": {
@@ -21103,6 +21123,11 @@
           "destination_class_id": {
             "$ref": "#/components/schemas/ID"
           },
+          "destination_class_name": {
+            "description": "Display name of the destination Class, present only on student progression reads and listings.",
+            "maxLength": 512,
+            "type": "string"
+          },
           "destination_period_id": {
             "$ref": "#/components/schemas/ID"
           },
@@ -21196,6 +21221,11 @@
           },
           "source_class_id": {
             "$ref": "#/components/schemas/ID"
+          },
+          "source_class_name": {
+            "description": "Display name of the source Class, present only on student progression reads and listings.",
+            "maxLength": 512,
+            "type": "string"
           },
           "source_period_id": {
             "$ref": "#/components/schemas/ID"
@@ -24874,6 +24904,37 @@
           "destination_period_id",
           "destination_class_id",
           "effective_at"
+        ],
+        "type": "object"
+      },
+      "StudentProgressionListResponse": {
+        "additionalProperties": false,
+        "description": "Student progression summaries newest first, without rows.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OnboardingImportResponse"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "next_cursor": {
+            "description": "Opaque continuation for the next page, omitted after the final page.",
+            "type": "string"
+          },
+          "total": {
+            "description": "Student progressions matching the filters and the caller's authority across every page, present only on the first page. At 10,000 counting stops and `total_is_lower_bound` is true.",
+            "maximum": 10000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_is_lower_bound": {
+            "description": "True when `total` reached the 10,000 bound and there may be more. Present with `total`.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
         ],
         "type": "object"
       },
@@ -45548,6 +45609,162 @@
       }
     },
     "/api/v1/student-progressions": {
+      "get": {
+        "description": "Lists the unexpired student progressions the caller could read one by one, newest first. A single read requires progression authority on both the source and the destination Class, so a progression appears only when the caller's current Institution, Academic Unit, or Class progression authority covers both. Items are summary projections without rows, each naming its source and destination Classes; read one progression for its preview or result rows. The first page, read without a cursor, also reports `total`: the progressions the filters and the caller's authority match across every page, exact below 10,000 and reported as 10,000 with `total_is_lower_bound` at that bound. Later pages carry no total; keep the first page's.",
+        "operationId": "listStudentProgressions",
+        "parameters": [
+          {
+            "description": "Return only progressions in these lifecycle states. Repeat the parameter to select several; omit it for all.",
+            "explode": true,
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "items": {
+                "enum": [
+                  "uploading",
+                  "parsing",
+                  "preview_ready",
+                  "executing",
+                  "completed",
+                  "completed_with_errors",
+                  "canceled",
+                  "failed"
+                ],
+                "type": "string"
+              },
+              "maxItems": 8,
+              "type": "array"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Return only progressions from this exact source Academic Period.",
+            "in": "query",
+            "name": "source_period_id",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ID"
+            }
+          },
+          {
+            "description": "Return only progressions from this exact source Class.",
+            "in": "query",
+            "name": "source_class_id",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ID"
+            }
+          },
+          {
+            "description": "Return only progressions into this exact destination Academic Period.",
+            "in": "query",
+            "name": "destination_period_id",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ID"
+            }
+          },
+          {
+            "description": "Return only progressions into this exact destination Class.",
+            "in": "query",
+            "name": "destination_class_id",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ID"
+            }
+          },
+          {
+            "description": "Continue from the opaque cursor returned by the preceding page.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 512,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Maximum number of student progressions to return in this page.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/StudentProgressionListOK"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "dpopAuth": []
+          },
+          {
+            "sessionCookie": []
+          }
+        ],
+        "summary": "List student progressions within the caller's progression authority",
+        "tags": [
+          "Membership and progression"
+        ],
+        "x-codeSamples": [
+          {
+            "label": "List progressions into one Class awaiting review",
+            "lang": "Shell",
+            "source": "curl --header \"Authorization: Bearer $PROCTOR_TOKEN\" \\\n  \"https://proctor.example.edu/api/v1/student-progressions?destination_class_id=ybndrfg8ejkmcpqxot1uwisza6\u0026state=preview_ready\""
+          }
+        ],
+        "x-proctor-auth": "principal_required",
+        "x-proctor-error-codes": [
+          "authorization.denied",
+          "authorization.request.invalid",
+          "authorization.unavailable",
+          "request.invalid",
+          "resource.not_found",
+          "student_progression.unavailable",
+          "invitation.unavailable",
+          "student_progression.conflict",
+          "authentication.required",
+          "authentication.token_invalid",
+          "authentication.credential_ambiguous",
+          "authentication.dpop.invalid",
+          "authentication.dpop.replayed",
+          "authentication.dpop.use_nonce",
+          "authentication.dpop.unavailable"
+        ],
+        "x-proctor-idempotency": "none"
+      },
       "post": {
         "description": "Creates a durable Job that validates the exact source and destination Classes and Academic Periods without changing enrollment. Its immutable preview and digest expose bounded row outcomes for review before commit.",
         "operationId": "dryRunStudentProgression",

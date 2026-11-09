@@ -30,14 +30,23 @@ type accessPolicyStoreFake struct {
 	result         *store.AccessPolicyReplacementResult
 	preflightErr   error
 	replaceErr     error
+	// roleHolderMFAUsers are the Users HasRoleHolderMFARequirement reports as covered.
+	roleHolderMFAUsers map[model.UserID]bool
+	roleHolderMFAErr   error
 }
 
 func (s *accessPolicyStoreFake) Get(context.Context, int) (*store.AccessPolicySnapshot, error) {
 	return s.snapshot, nil
 }
-func (s *accessPolicyStoreFake) Preflight(_ context.Context, input *store.AccessPolicyPreflight) ([]store.AccessPolicyBlocker, error) {
+func (s *accessPolicyStoreFake) Preflight(_ context.Context, input *store.AccessPolicyPreflight) (*store.AccessPolicyPreflightResult, error) {
 	s.preflightInput = input
-	return append([]store.AccessPolicyBlocker(nil), s.blockers...), s.preflightErr
+	if s.preflightErr != nil {
+		return nil, s.preflightErr
+	}
+	return &store.AccessPolicyPreflightResult{Blockers: append([]store.AccessPolicyBlocker(nil), s.blockers...)}, nil
+}
+func (s *accessPolicyStoreFake) HasRoleHolderMFARequirement(_ context.Context, userID model.UserID, _ time.Time) (bool, error) {
+	return s.roleHolderMFAUsers[userID], s.roleHolderMFAErr
 }
 func (s *accessPolicyStoreFake) Replace(_ context.Context, input *store.AccessPolicyReplacement, command *store.CommandIdempotency) (*store.AccessPolicyReplacementResult, error) {
 	s.replaceInput, s.command = input, command

@@ -321,7 +321,7 @@ export interface paths {
         get: operations["getAccessPolicy"];
         /**
          * Revision-fenced replacement of the installation Access Policy
-         * @description Replaces the complete installation Access Policy under an optimistic revision fence. Proctor repeats deployment-capability and last-administrator-path checks in the authoritative transaction, can revoke Sessions affected by newly disabled methods, and requires both a strong recent interactive Session and an Idempotency-Key.
+         * @description Replaces the complete installation Access Policy under an optimistic revision fence. Proctor repeats deployment-capability and last-administrator-path checks in the authoritative transaction, can revoke Sessions affected by newly disabled methods or, when two-step verification becomes required for role holders, the role holders' Sessions that have not proved a second factor, pulls live Session deadlines in when a Session length becomes shorter, and requires both a strong recent interactive Session and an Idempotency-Key.
          */
         put: operations["replaceAccessPolicy"];
         post?: never;
@@ -342,7 +342,7 @@ export interface paths {
         put?: never;
         /**
          * Evaluate an Access Policy replacement without mutating it
-         * @description Evaluates the complete proposed replacement against the current revision, configured provider capabilities, invitation delivery, and last-administrator access paths. Preflight makes no durable change and does not reserve the revision, so replacement repeats every check in its authoritative transaction.
+         * @description Evaluates the complete proposed replacement against the current revision, configured provider capabilities, invitation delivery, two-step verification availability, and last-administrator access paths, and counts the role holders without two-step verification and their Sessions that have not proved it. Preflight makes no durable change and does not reserve the revision, so replacement repeats every check in its authoritative transaction.
          */
         post: operations["preflightAccessPolicy"];
         delete?: never;
@@ -5855,15 +5855,22 @@ export interface components {
         AcceptTeacherAcademicUnitInvitationRequest: components["schemas"]["AcceptStudentClassInvitationRequest"];
         /** @description Safe reason the proposed policy cannot currently be applied. */
         AccessPolicyBlockerResponse: {
-            /** @enum {string} */
-            code: "provider_unavailable" | "provider_admission_unsupported" | "invitation_delivery_unavailable" | "last_system_administrator_path";
+            /**
+             * @description `mfa_unavailable` means the proposal starts requiring two-step verification of role holders while the server configuration disables two-step verification.
+             * @enum {string}
+             */
+            code: "provider_unavailable" | "provider_admission_unsupported" | "invitation_delivery_unavailable" | "last_system_administrator_path" | "mfa_unavailable";
             /** @description Configured provider associated with the blocker, when provider-specific. */
             provider_id?: string;
         };
-        /** @description Current safe blockers for a proposed Access Policy replacement. */
+        /** @description Current safe blockers and role holder two-step verification counts for a proposed Access Policy replacement. */
         AccessPolicyPreflightResponse: {
             /** @description Empty when no blocker is currently observed; replacement still repeats all checks. */
             blockers: components["schemas"]["AccessPolicyBlockerResponse"][];
+            /** @description Live Sessions of active role holders that have not proved a second factor: the Sessions `revoke_existing_sessions` signs out when the proposal starts requiring two-step verification of role holders. */
+            role_holder_single_factor_session_count: number;
+            /** @description Active role holders, those holding a current Role Binding at any scope, who have no active second factor. */
+            role_holders_without_mfa_count: number;
         };
         /** @description Current revisioned Access Policy plus bounded safe capabilities and transition history. */
         AccessPolicyResponse: {
@@ -5888,6 +5895,22 @@ export interface components {
              * @description Monotonic policy revision used for optimistic concurrency.
              */
             revision: number;
+            /** @description Whether the role holder two-step verification requirement is in force: true only while `role_holder_mfa_required` is on and the server configuration enables two-step verification. While it is false with the setting on, the requirement is paused and nobody is restricted or refused. */
+            readonly role_holder_mfa_enforced: boolean;
+            /** @description Whether every role holder, a User with a current Role Binding at any scope, must use two-step verification. Clients may label it "Two-step required for staff". */
+            role_holder_mfa_required: boolean;
+            /** @description The absolute Session length the policy sets, in minutes; null while the deployment default applies. */
+            session_absolute_minutes: number | null;
+            /** @description The deployment absolute Session length in whole minutes, which applies while `session_absolute_minutes` is null. */
+            session_absolute_minutes_default: number;
+            /** @description The longest absolute Session length the policy may set, in minutes; the deployment configuration is the ceiling. */
+            session_absolute_minutes_maximum: number;
+            /** @description The idle Session length the policy sets, in minutes; null while the deployment default applies. */
+            session_idle_minutes: number | null;
+            /** @description The deployment idle Session length in whole minutes, which applies while `session_idle_minutes` is null. */
+            session_idle_minutes_default: number;
+            /** @description The longest idle Session length the policy may set, in minutes; the deployment configuration is the ceiling. */
+            session_idle_minutes_maximum: number;
             /** Format: date-time */
             updated_at: string;
         };
@@ -5911,8 +5934,14 @@ export interface components {
             };
             /** @description Whether public local self-registration is admitted. */
             public_registration_enabled: boolean;
-            /** @description One-shot choice to revoke active Sessions authenticated by methods newly disabled by this transition. */
+            /** @description One-shot choice to revoke active Sessions authenticated by methods newly disabled by this transition and, when this transition starts requiring two-step verification of role holders, the live role holders' Sessions that have not proved a second factor. */
             revoke_existing_sessions: boolean;
+            /** @description Whether every role holder must use two-step verification. A role holder is any User with a current Role Binding at any scope, system administrators included. A role holder without a second factor signs in on the web to a Session restricted to setting up two-step verification, completing a challenge, or signing out; Proctor Desktop refuses that sign-in with `authentication.mfa.enrollment_required`. The requirement pauses, restricting and refusing nothing, while the server configuration disables two-step verification. Clients may label this switch "Two-step required for staff"; it is unrelated to the staff member Affiliation. */
+            role_holder_mfa_required: boolean;
+            /** @description How long a Session may last from sign-in, in minutes; null keeps the deployment default. It lies between the deployment minimum, which outlasts the recent-authentication window and the idle minimum, and `session_absolute_minutes_maximum`. Shortening it pulls live Sessions' deadlines and credentials in; lengthening it never extends a running Session. */
+            session_absolute_minutes: number | null;
+            /** @description How long a Session may stay unused before it ends, in minutes; null keeps the deployment default. It lies between the deployment minimum, which outlasts an access credential and the activity debounce, and `session_idle_minutes_maximum`, and never exceeds the effective absolute length. Shortening it pulls live Sessions' idle deadlines in; lengthening it never extends a running Session. */
+            session_idle_minutes: number | null;
         };
         /** @description Safe immutable summary of one applied Access Policy replacement. */
         AccessPolicyTransitionResponse: {
@@ -5922,7 +5951,7 @@ export interface components {
              * @description Time when the replacement committed.
              */
             changed_at: string;
-            changed_fields: ("local_login_enabled" | "public_registration_enabled" | "invitation_admission_enabled" | "invitation_local_credential_enabled" | "desktop_authorization_enabled" | "provider_admissions" | "revoke_existing_sessions")[];
+            changed_fields: ("local_login_enabled" | "public_registration_enabled" | "invitation_admission_enabled" | "invitation_local_credential_enabled" | "desktop_authorization_enabled" | "provider_admissions" | "role_holder_mfa_required" | "session_idle_minutes" | "session_absolute_minutes" | "revoke_existing_sessions")[];
             /** Format: int64 */
             from_revision: number;
             /** @constant */
@@ -7093,6 +7122,8 @@ export interface components {
             last_activity_at: string;
             /** Format: date-time */
             mfa_completed_at?: string;
+            /** @description Whether the Access Policy restricts this Web Session until its User sets up or completes two-step verification. Only setting up two-step verification, the second-factor challenge, reauthentication, the security status and sign-out accept it. */
+            mfa_enrollment_required: boolean;
             /** @description Ordinary access remains unavailable until a new local authenticator is activated. */
             mfa_recovery_required: boolean;
             /**
@@ -7584,7 +7615,7 @@ export interface components {
          * @description Stable public problem code. The catalogue is closed and may grow; clients own the labels and should present an unknown value generically.
          * @enum {string}
          */
-        ErrorCode: "academic_period.conflict" | "academic_period.invalid" | "academic_unit.conflict" | "academic_unit.invalid" | "academic_unit_member.conflict" | "academic_unit_member.invalid" | "access_policy.blocked" | "access_policy.invalid" | "access_policy.revision_conflict" | "access_policy.unavailable" | "administration.unavailable" | "administrator_recovery.invalid" | "administrator_recovery.unavailable" | "affiliation.conflict" | "affiliation.invalid" | "affiliation.student_has_active_enrollment" | "audit.internal" | "audit.query.invalid" | "audit.unavailable" | "authentication.account_recovery.unavailable" | "authentication.account_token.invalid" | "authentication.client_type.invalid" | "authentication.credential_ambiguous" | "authentication.credentials_invalid" | "authentication.csrf.invalid" | "authentication.desktop_authorization.account_session_locked" | "authentication.desktop_authorization.disabled" | "authentication.desktop_authorization.incompatible" | "authentication.desktop_authorization.invalid" | "authentication.desktop_authorization.rejected" | "authentication.desktop_authorization.unavailable" | "authentication.desktop_reauthentication.denied" | "authentication.desktop_reauthentication.invalid" | "authentication.dpop.invalid" | "authentication.dpop.replayed" | "authentication.dpop.unavailable" | "authentication.dpop.use_nonce" | "authentication.email_change_undo.conflict" | "authentication.external.account_conflict" | "authentication.external.account_not_linked" | "authentication.external.invalid" | "authentication.external.provider_not_found" | "authentication.external.rejected" | "authentication.external.request.invalid" | "authentication.external.unavailable" | "authentication.internal" | "authentication.method.conflict" | "authentication.method.disabled" | "authentication.method.last_usable" | "authentication.method.not_found" | "authentication.method.provider_conflict" | "authentication.method.unavailable" | "authentication.mfa.code_invalid" | "authentication.mfa.conflict" | "authentication.mfa.disabled" | "authentication.mfa.not_found" | "authentication.mfa.rekey.conflict" | "authentication.mfa.rekey.invalid" | "authentication.mfa.required" | "authentication.mfa.reset_invalid" | "authentication.mfa.unavailable" | "authentication.password.common_invalid" | "authentication.password.identity_invalid" | "authentication.password.invalid" | "authentication.password.pattern_invalid" | "authentication.password.reused" | "authentication.rate_limit_unavailable" | "authentication.rate_limited" | "authentication.reauthentication_method_required" | "authentication.reauthentication_required" | "authentication.registration.invalid" | "authentication.registration.invitation_required" | "authentication.registration.unavailable" | "authentication.required" | "authentication.session.invalid" | "authentication.session_required" | "authentication.sessions.maximum_reached" | "authentication.strong_required" | "authentication.token_invalid" | "authentication.user.conflict" | "authentication.user.invalid" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "class.conflict" | "class.enrollment_conflict" | "class.invalid" | "class_member.invalid" | "class_member.student_affiliation_required" | "desktop_compatibility_policy.invalid" | "desktop_compatibility_policy.revision_conflict" | "desktop_compatibility_policy.unavailable" | "desktop_registration.unavailable" | "exam.archived" | "exam.attempt.already_connected" | "exam.attempt.browser_activity_conflict" | "exam.attempt.configuration_frozen" | "exam.attempt.configuration_required" | "exam.attempt.configuration_stale" | "exam.attempt.configuration_unsupported" | "exam.attempt.conflict" | "exam.attempt.connection_closed" | "exam.attempt.connection_lost" | "exam.attempt.continuity_invalid" | "exam.attempt.correction_conflict" | "exam.attempt.desktop_incompatible" | "exam.attempt.focus_loss_conflict" | "exam.attempt.invalid" | "exam.attempt.management_authority_conflict" | "exam.attempt.not_found" | "exam.attempt.registered_desktop_required" | "exam.attempt.renewal_conflict" | "exam.attempt.revision_conflict" | "exam.attempt.sitting_not_open" | "exam.attempt.state_conflict" | "exam.attempt.suspension_conflict" | "exam.attempt.unavailable" | "exam.attempt.workspace.content_conflict" | "exam.attempt.workspace.cursor_conflict" | "exam.attempt.workspace.directory_not_empty" | "exam.attempt.workspace.entry_conflict" | "exam.attempt.workspace.entry_limit" | "exam.attempt.workspace.object_conflict" | "exam.attempt.workspace.path_conflict" | "exam.attempt.workspace.size_limit" | "exam.browser.source_budget_exhausted" | "exam.conflict" | "exam.delivery.append_rate_limited" | "exam.delivery.batch_conflict" | "exam.delivery.control_rate_limited" | "exam.delivery.declaration_conflict" | "exam.delivery.detail_budget_exhausted" | "exam.delivery.metadata_capacity" | "exam.delivery.pending_capacity" | "exam.delivery.replay_window_exceeded" | "exam.delivery.sequence_limit" | "exam.delivery.summary_rate_limited" | "exam.delivery.upload_expired" | "exam.draft.no_changes" | "exam.draft.revision_conflict" | "exam.export.claim_lost" | "exam.export.conflict" | "exam.export.expired" | "exam.export.limit" | "exam.export.not_found" | "exam.export.not_ready" | "exam.export.policy_unconfigured" | "exam.export.scope_changed" | "exam.export.source_retired" | "exam.export.unavailable" | "exam.integrity_review.incomplete" | "exam.integrity_review.invalid" | "exam.integrity_review.not_found" | "exam.integrity_review.revision_conflict" | "exam.integrity_review.state_conflict" | "exam.integrity_review.too_large" | "exam.integrity_review.unavailable" | "exam.invalid" | "exam.manager.candidate_conflict" | "exam.manager.exists" | "exam.manager.ineligible" | "exam.manager.not_found" | "exam.manager.owner_protected" | "exam.not_found" | "exam.owner.no_changes" | "exam.resource.conflict" | "exam.resource.content_invalid" | "exam.resource.invalid" | "exam.resource.limit" | "exam.resource.no_changes" | "exam.resource.not_found" | "exam.resource.order_invalid" | "exam.resource.revision_conflict" | "exam.resource.unavailable" | "exam.resource.upload_invalid" | "exam.revision.capacity_exceeded" | "exam.revision.no_changes" | "exam.revision_conflict" | "exam.security.attempt_not_ready" | "exam.security.catalog_missing" | "exam.security.configuration_unsupported" | "exam.security.control_conflict" | "exam.security.policy_changed" | "exam.security.posture_blocked" | "exam.security.preflight_consumed" | "exam.security.preflight_expired" | "exam.security.preflight_rate_limited" | "exam.security.preflight_report_changed" | "exam.security.preflight_required" | "exam.security.preflight_superseded" | "exam.security.resume_required" | "exam.security.session_changed" | "exam.security.unsupported_capability" | "exam.sitting.class_ineligible" | "exam.sitting.conflict" | "exam.sitting.correction.conflict" | "exam.sitting.correction.content_invalid" | "exam.sitting.correction.invalid" | "exam.sitting.correction.limit" | "exam.sitting.correction.manifest_conflict" | "exam.sitting.correction.no_changes" | "exam.sitting.correction.not_found" | "exam.sitting.correction.stage_conflict" | "exam.sitting.correction.unavailable" | "exam.sitting.deadline_reached" | "exam.sitting.extension_not_later" | "exam.sitting.invalid" | "exam.sitting.no_changes" | "exam.sitting.not_found" | "exam.sitting.revision_conflict" | "exam.sitting.schedule_not_future" | "exam.sitting.schedule_outside_period" | "exam.sitting.state_conflict" | "exam.sitting.unavailable" | "exam.starter_workspace.conflict" | "exam.starter_workspace.content_conflict" | "exam.starter_workspace.directory_not_empty" | "exam.starter_workspace.entry_kind" | "exam.starter_workspace.entry_limit" | "exam.starter_workspace.invalid" | "exam.starter_workspace.move_conflict" | "exam.starter_workspace.no_changes" | "exam.starter_workspace.not_found" | "exam.starter_workspace.object_conflict" | "exam.starter_workspace.parent_not_found" | "exam.starter_workspace.path_conflict" | "exam.starter_workspace.total_size_limit" | "exam.starter_workspace.unavailable" | "exam.starter_workspace.upload_expired" | "exam.unavailable" | "health.not_live" | "health.not_ready" | "idempotency.conflict" | "idempotency.in_progress" | "idempotency.key_invalid" | "idempotency.key_required" | "idempotency.not_supported" | "installation.already_initialized" | "installation.bootstrap_denied" | "installation.unavailable" | "institution.conflict" | "institution.invalid" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.invalid" | "invitation.mail_unavailable" | "invitation.query.invalid" | "invitation.role_not_delegable" | "invitation.unavailable" | "invitation.user_invalid" | "job.cancel.unsupported" | "job.conflict" | "job.query.invalid" | "job.retry.unsupported" | "job.unavailable" | "mail.conflict" | "mail.query.invalid" | "mail.recipient_ineligible" | "mail.recipient_unverified" | "mail.rekey.conflict" | "mail.rekey.invalid" | "mail.test.rate_limited" | "mail.unavailable" | "onboarding_batch.duplicate" | "onboarding_import.conflict" | "onboarding_import.file_invalid" | "onboarding_import.unavailable" | "personal_access_token.invalid" | "personal_access_token.maximum_reached" | "personal_access_token.unavailable" | "profile_picture.invalid" | "profile_picture.unavailable" | "programme.conflict" | "programme.invalid" | "programme_level.conflict" | "programme_level.invalid" | "request.invalid" | "request.too_large" | "resource.not_found" | "retention.conflict" | "retention.invalid" | "retention.unavailable" | "retention_policy.invalid" | "retention_policy.revision_conflict" | "retention_policy.unavailable" | "role.built_in.protected" | "role.conflict" | "role.invalid" | "role.permission.invalid" | "role_binding.conflict" | "role_binding.invalid" | "role_binding.last_system_admin" | "role_binding.system_admin_scope_invalid" | "route.method_not_allowed" | "route.not_found" | "search.query.invalid" | "server.internal" | "service.busy" | "session.id.invalid" | "session.not_found" | "student_progression.conflict" | "student_progression.effective_date_conflict" | "student_progression.lineage_conflict" | "student_progression.roster_too_large" | "student_progression.target_conflict" | "student_progression.unavailable" | "user.conflict" | "user.invalid" | "user.last_system_admin" | "user_settings.format_unsupported" | "user_settings.invalid" | "user_settings.revision_conflict" | "user_settings.unavailable" | "websocket.action.unknown" | "websocket.internal" | "websocket.origin.invalid" | "websocket.rate_limited" | "websocket.request.invalid" | "websocket.subscription.invalid" | "websocket.subscription.limit" | "websocket.unavailable";
+        ErrorCode: "academic_period.conflict" | "academic_period.invalid" | "academic_unit.conflict" | "academic_unit.invalid" | "academic_unit_member.conflict" | "academic_unit_member.invalid" | "access_policy.blocked" | "access_policy.invalid" | "access_policy.revision_conflict" | "access_policy.unavailable" | "administration.unavailable" | "administrator_recovery.invalid" | "administrator_recovery.unavailable" | "affiliation.conflict" | "affiliation.invalid" | "affiliation.student_has_active_enrollment" | "audit.internal" | "audit.query.invalid" | "audit.unavailable" | "authentication.account_recovery.unavailable" | "authentication.account_token.invalid" | "authentication.client_type.invalid" | "authentication.credential_ambiguous" | "authentication.credentials_invalid" | "authentication.csrf.invalid" | "authentication.desktop_authorization.account_session_locked" | "authentication.desktop_authorization.disabled" | "authentication.desktop_authorization.incompatible" | "authentication.desktop_authorization.invalid" | "authentication.desktop_authorization.rejected" | "authentication.desktop_authorization.unavailable" | "authentication.desktop_reauthentication.denied" | "authentication.desktop_reauthentication.invalid" | "authentication.dpop.invalid" | "authentication.dpop.replayed" | "authentication.dpop.unavailable" | "authentication.dpop.use_nonce" | "authentication.email_change_undo.conflict" | "authentication.external.account_conflict" | "authentication.external.account_not_linked" | "authentication.external.invalid" | "authentication.external.provider_not_found" | "authentication.external.rejected" | "authentication.external.request.invalid" | "authentication.external.unavailable" | "authentication.internal" | "authentication.method.conflict" | "authentication.method.disabled" | "authentication.method.last_usable" | "authentication.method.not_found" | "authentication.method.provider_conflict" | "authentication.method.unavailable" | "authentication.mfa.code_invalid" | "authentication.mfa.conflict" | "authentication.mfa.disabled" | "authentication.mfa.enrollment_required" | "authentication.mfa.not_found" | "authentication.mfa.rekey.conflict" | "authentication.mfa.rekey.invalid" | "authentication.mfa.required" | "authentication.mfa.reset_invalid" | "authentication.mfa.unavailable" | "authentication.password.common_invalid" | "authentication.password.identity_invalid" | "authentication.password.invalid" | "authentication.password.pattern_invalid" | "authentication.password.reused" | "authentication.rate_limit_unavailable" | "authentication.rate_limited" | "authentication.reauthentication_method_required" | "authentication.reauthentication_required" | "authentication.registration.invalid" | "authentication.registration.invitation_required" | "authentication.registration.unavailable" | "authentication.required" | "authentication.session.invalid" | "authentication.session_required" | "authentication.sessions.maximum_reached" | "authentication.strong_required" | "authentication.token_invalid" | "authentication.user.conflict" | "authentication.user.invalid" | "authorization.denied" | "authorization.request.invalid" | "authorization.unavailable" | "class.conflict" | "class.enrollment_conflict" | "class.invalid" | "class_member.invalid" | "class_member.student_affiliation_required" | "desktop_compatibility_policy.invalid" | "desktop_compatibility_policy.revision_conflict" | "desktop_compatibility_policy.unavailable" | "desktop_registration.unavailable" | "exam.archived" | "exam.attempt.already_connected" | "exam.attempt.browser_activity_conflict" | "exam.attempt.configuration_frozen" | "exam.attempt.configuration_required" | "exam.attempt.configuration_stale" | "exam.attempt.configuration_unsupported" | "exam.attempt.conflict" | "exam.attempt.connection_closed" | "exam.attempt.connection_lost" | "exam.attempt.continuity_invalid" | "exam.attempt.correction_conflict" | "exam.attempt.desktop_incompatible" | "exam.attempt.focus_loss_conflict" | "exam.attempt.invalid" | "exam.attempt.management_authority_conflict" | "exam.attempt.not_found" | "exam.attempt.registered_desktop_required" | "exam.attempt.renewal_conflict" | "exam.attempt.revision_conflict" | "exam.attempt.sitting_not_open" | "exam.attempt.state_conflict" | "exam.attempt.suspension_conflict" | "exam.attempt.unavailable" | "exam.attempt.workspace.content_conflict" | "exam.attempt.workspace.cursor_conflict" | "exam.attempt.workspace.directory_not_empty" | "exam.attempt.workspace.entry_conflict" | "exam.attempt.workspace.entry_limit" | "exam.attempt.workspace.object_conflict" | "exam.attempt.workspace.path_conflict" | "exam.attempt.workspace.size_limit" | "exam.browser.source_budget_exhausted" | "exam.conflict" | "exam.delivery.append_rate_limited" | "exam.delivery.batch_conflict" | "exam.delivery.control_rate_limited" | "exam.delivery.declaration_conflict" | "exam.delivery.detail_budget_exhausted" | "exam.delivery.metadata_capacity" | "exam.delivery.pending_capacity" | "exam.delivery.replay_window_exceeded" | "exam.delivery.sequence_limit" | "exam.delivery.summary_rate_limited" | "exam.delivery.upload_expired" | "exam.draft.no_changes" | "exam.draft.revision_conflict" | "exam.export.claim_lost" | "exam.export.conflict" | "exam.export.expired" | "exam.export.limit" | "exam.export.not_found" | "exam.export.not_ready" | "exam.export.policy_unconfigured" | "exam.export.scope_changed" | "exam.export.source_retired" | "exam.export.unavailable" | "exam.integrity_review.incomplete" | "exam.integrity_review.invalid" | "exam.integrity_review.not_found" | "exam.integrity_review.revision_conflict" | "exam.integrity_review.state_conflict" | "exam.integrity_review.too_large" | "exam.integrity_review.unavailable" | "exam.invalid" | "exam.manager.candidate_conflict" | "exam.manager.exists" | "exam.manager.ineligible" | "exam.manager.not_found" | "exam.manager.owner_protected" | "exam.not_found" | "exam.owner.no_changes" | "exam.resource.conflict" | "exam.resource.content_invalid" | "exam.resource.invalid" | "exam.resource.limit" | "exam.resource.no_changes" | "exam.resource.not_found" | "exam.resource.order_invalid" | "exam.resource.revision_conflict" | "exam.resource.unavailable" | "exam.resource.upload_invalid" | "exam.revision.capacity_exceeded" | "exam.revision.no_changes" | "exam.revision_conflict" | "exam.security.attempt_not_ready" | "exam.security.catalog_missing" | "exam.security.configuration_unsupported" | "exam.security.control_conflict" | "exam.security.policy_changed" | "exam.security.posture_blocked" | "exam.security.preflight_consumed" | "exam.security.preflight_expired" | "exam.security.preflight_rate_limited" | "exam.security.preflight_report_changed" | "exam.security.preflight_required" | "exam.security.preflight_superseded" | "exam.security.resume_required" | "exam.security.session_changed" | "exam.security.unsupported_capability" | "exam.sitting.class_ineligible" | "exam.sitting.conflict" | "exam.sitting.correction.conflict" | "exam.sitting.correction.content_invalid" | "exam.sitting.correction.invalid" | "exam.sitting.correction.limit" | "exam.sitting.correction.manifest_conflict" | "exam.sitting.correction.no_changes" | "exam.sitting.correction.not_found" | "exam.sitting.correction.stage_conflict" | "exam.sitting.correction.unavailable" | "exam.sitting.deadline_reached" | "exam.sitting.extension_not_later" | "exam.sitting.invalid" | "exam.sitting.no_changes" | "exam.sitting.not_found" | "exam.sitting.revision_conflict" | "exam.sitting.schedule_not_future" | "exam.sitting.schedule_outside_period" | "exam.sitting.state_conflict" | "exam.sitting.unavailable" | "exam.starter_workspace.conflict" | "exam.starter_workspace.content_conflict" | "exam.starter_workspace.directory_not_empty" | "exam.starter_workspace.entry_kind" | "exam.starter_workspace.entry_limit" | "exam.starter_workspace.invalid" | "exam.starter_workspace.move_conflict" | "exam.starter_workspace.no_changes" | "exam.starter_workspace.not_found" | "exam.starter_workspace.object_conflict" | "exam.starter_workspace.parent_not_found" | "exam.starter_workspace.path_conflict" | "exam.starter_workspace.total_size_limit" | "exam.starter_workspace.unavailable" | "exam.starter_workspace.upload_expired" | "exam.unavailable" | "health.not_live" | "health.not_ready" | "idempotency.conflict" | "idempotency.in_progress" | "idempotency.key_invalid" | "idempotency.key_required" | "idempotency.not_supported" | "installation.already_initialized" | "installation.bootstrap_denied" | "installation.unavailable" | "institution.conflict" | "institution.invalid" | "invitation.class_period_conflict" | "invitation.conflict" | "invitation.invalid" | "invitation.mail_unavailable" | "invitation.query.invalid" | "invitation.role_not_delegable" | "invitation.unavailable" | "invitation.user_invalid" | "job.cancel.unsupported" | "job.conflict" | "job.query.invalid" | "job.retry.unsupported" | "job.unavailable" | "mail.conflict" | "mail.query.invalid" | "mail.recipient_ineligible" | "mail.recipient_unverified" | "mail.rekey.conflict" | "mail.rekey.invalid" | "mail.test.rate_limited" | "mail.unavailable" | "mfa.required_by_policy" | "onboarding_batch.duplicate" | "onboarding_import.conflict" | "onboarding_import.file_invalid" | "onboarding_import.unavailable" | "personal_access_token.invalid" | "personal_access_token.maximum_reached" | "personal_access_token.unavailable" | "profile_picture.invalid" | "profile_picture.unavailable" | "programme.conflict" | "programme.invalid" | "programme_level.conflict" | "programme_level.invalid" | "request.invalid" | "request.too_large" | "resource.not_found" | "retention.conflict" | "retention.invalid" | "retention.unavailable" | "retention_policy.invalid" | "retention_policy.revision_conflict" | "retention_policy.unavailable" | "role.built_in.protected" | "role.conflict" | "role.invalid" | "role.permission.invalid" | "role_binding.conflict" | "role_binding.invalid" | "role_binding.last_system_admin" | "role_binding.system_admin_scope_invalid" | "route.method_not_allowed" | "route.not_found" | "search.query.invalid" | "server.internal" | "service.busy" | "session.id.invalid" | "session.not_found" | "student_progression.conflict" | "student_progression.effective_date_conflict" | "student_progression.lineage_conflict" | "student_progression.roster_too_large" | "student_progression.target_conflict" | "student_progression.unavailable" | "user.conflict" | "user.invalid" | "user.last_system_admin" | "user_settings.format_unsupported" | "user_settings.invalid" | "user_settings.revision_conflict" | "user_settings.unavailable" | "websocket.action.unknown" | "websocket.internal" | "websocket.origin.invalid" | "websocket.rate_limited" | "websocket.request.invalid" | "websocket.subscription.invalid" | "websocket.subscription.limit" | "websocket.unavailable";
         ExamAttemptConnectionResponse: {
             close_reason?: components["schemas"]["AttemptConnectionCloseReason"];
             /** Format: date-time */
@@ -9034,6 +9065,8 @@ export interface components {
              * @enum {string}
              */
             method?: "authenticator_app";
+            /** @description Whether the Access Policy restricts this Web Session until its User sets up or completes two-step verification. Only setting up two-step verification, the second-factor challenge, reauthentication, the security status and sign-out accept it. */
+            mfa_enrollment_required: boolean;
             /** @description Whether this Session is restricted to fresh primary proof and local authenticator enrollment after an assisted reset. */
             mfa_recovery_required: boolean;
             /**
@@ -10595,6 +10628,8 @@ export interface components {
             last_activity_at: string;
             /** Format: date-time */
             mfa_completed_at?: string;
+            /** @description Whether the Access Policy restricts this Web Session until its User sets up or completes two-step verification. Only setting up two-step verification, the second-factor challenge, reauthentication, the security status and sign-out accept it. */
+            mfa_enrollment_required: boolean;
             /** @description Whether this Session is restricted to MFA reenrollment after an assisted reset. */
             mfa_recovery_required: boolean;
             /**
@@ -10647,6 +10682,8 @@ export interface components {
             last_activity_at: string;
             /** Format: date-time */
             mfa_completed_at?: string;
+            /** @description Whether the Access Policy restricts this Web Session until its User sets up or completes two-step verification. Only setting up two-step verification, the second-factor challenge, reauthentication, the security status and sign-out accept it. */
+            mfa_enrollment_required: boolean;
             /** @description Ordinary access remains unavailable until a new local authenticator is activated. */
             mfa_recovery_required: boolean;
             /**
@@ -11345,6 +11382,14 @@ export interface components {
                  *       "provider_admissions": {},
                  *       "public_registration_enabled": false,
                  *       "revision": 4,
+                 *       "role_holder_mfa_enforced": false,
+                 *       "role_holder_mfa_required": false,
+                 *       "session_absolute_minutes": null,
+                 *       "session_absolute_minutes_default": 43200,
+                 *       "session_absolute_minutes_maximum": 43200,
+                 *       "session_idle_minutes": 480,
+                 *       "session_idle_minutes_default": 10080,
+                 *       "session_idle_minutes_maximum": 10080,
                  *       "updated_at": "2027-01-01T01:00:00Z"
                  *     }
                  */
@@ -11358,6 +11403,13 @@ export interface components {
                 [name: string]: unknown;
             };
             content: {
+                /**
+                 * @example {
+                 *       "blockers": [],
+                 *       "role_holder_single_factor_session_count": 5,
+                 *       "role_holders_without_mfa_count": 3
+                 *     }
+                 */
                 "application/json": components["schemas"]["AccessPolicyPreflightResponse"];
             };
         };
@@ -15017,7 +15069,10 @@ export interface components {
                  *         "university_oidc": "invitation_required"
                  *       },
                  *       "public_registration_enabled": false,
-                 *       "revoke_existing_sessions": true
+                 *       "revoke_existing_sessions": true,
+                 *       "role_holder_mfa_required": true,
+                 *       "session_absolute_minutes": null,
+                 *       "session_idle_minutes": 480
                  *     }
                  */
                 "application/json": components["schemas"]["AccessPolicySettingsRequest"];
@@ -15150,7 +15205,10 @@ export interface components {
                  *         "university_oidc": "invitation_required"
                  *       },
                  *       "public_registration_enabled": false,
-                 *       "revoke_existing_sessions": true
+                 *       "revoke_existing_sessions": true,
+                 *       "role_holder_mfa_required": true,
+                 *       "session_absolute_minutes": null,
+                 *       "session_idle_minutes": 480
                  *     }
                  */
                 "application/json": components["schemas"]["AccessPolicySettingsRequest"];
@@ -16964,6 +17022,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };

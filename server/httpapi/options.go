@@ -110,6 +110,11 @@ const (
 	AuthRefreshCredentialRequired        AuthRequirement = "refresh_credential_required"
 )
 
+// AuthMFAEnrollmentSessionRequired admits an ordinary Session or one the
+// Access Policy restricts to MFA enrollment, never an assisted-recovery
+// Session. Only the second-factor challenge declares it.
+const AuthMFAEnrollmentSessionRequired AuthRequirement = "mfa_enrollment_session_required"
+
 const (
 	IdempotencyNone     IdempotencyRequirement = "none"
 	IdempotencyOptional IdempotencyRequirement = "optional"

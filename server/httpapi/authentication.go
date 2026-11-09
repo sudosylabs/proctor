@@ -110,6 +110,7 @@ type sessionResponse struct {
 	ArchivedAt              string `json:"archived_at,omitempty"`
 	UserID                  string `json:"user_id"`
 	MFARecoveryRequired     bool   `json:"mfa_recovery_required"`
+	MFAEnrollmentRequired   bool   `json:"mfa_enrollment_required"`
 	ClientType              string `json:"client_type"`
 	DesktopRegistrationID   string `json:"desktop_registration_id,omitempty"`
 	DesktopRelease          string `json:"desktop_release,omitempty"`
@@ -151,6 +152,7 @@ func sessionResponseFromModel(request *http.Request, session *model.Session) *se
 		ArchivedAt:            session.ArchivedAt.FormatRFC3339(),
 		UserID:                session.UserID.String(),
 		MFARecoveryRequired:   session.MFARecoveryRequired,
+		MFAEnrollmentRequired: session.MFAEnrollmentRequired,
 		ClientType:            string(session.ClientType),
 		DesktopRegistrationID: session.DesktopRegistrationID.String(),
 		DesktopRelease:        session.DesktopRelease, DesktopBuildID: session.DesktopBuildID,
@@ -297,8 +299,8 @@ func authenticationResource(authentication authenticationEntryApplication, cooki
 			},
 			module.register,
 		),
-		publicRoute(http.MethodPost, apiPath(literal("auth"), literal("login")), []string{"request.invalid", "authentication.client_type.invalid", "authentication.password.invalid", "service.busy", "authentication.credentials_invalid", "authentication.mfa.required", "authentication.mfa.code_invalid", "authentication.mfa.unavailable", "authentication.sessions.maximum_reached", "authentication.desktop_authorization.account_session_locked", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.internal", "audit.unavailable", "authentication.external.invalid", "authentication.session.invalid"}, module.login),
-		refreshCredentialRoute(http.MethodPost, apiPath(literal("auth"), literal("refresh")), []string{"authentication.token_invalid", "authentication.internal", "authentication.dpop.invalid", "authentication.dpop.replayed", "authentication.dpop.use_nonce", "authentication.dpop.unavailable"}, module.refresh),
+		publicRoute(http.MethodPost, apiPath(literal("auth"), literal("login")), []string{"request.invalid", "authentication.mfa.enrollment_required", "authentication.client_type.invalid", "authentication.password.invalid", "service.busy", "authentication.credentials_invalid", "authentication.mfa.required", "authentication.mfa.code_invalid", "authentication.mfa.unavailable", "authentication.sessions.maximum_reached", "authentication.desktop_authorization.account_session_locked", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.internal", "audit.unavailable", "authentication.external.invalid", "authentication.session.invalid"}, module.login),
+		refreshCredentialRoute(http.MethodPost, apiPath(literal("auth"), literal("refresh")), []string{"authentication.token_invalid", "authentication.mfa.enrollment_required", "authentication.internal", "authentication.dpop.invalid", "authentication.dpop.replayed", "authentication.dpop.use_nonce", "authentication.dpop.unavailable"}, module.refresh),
 		mfaRecoverySessionRoute(http.MethodPost, apiPath(literal("auth"), literal("logout")), []string{"authentication.internal", "audit.unavailable"}, module.logout),
 		sessionRoute(
 			http.MethodPost,

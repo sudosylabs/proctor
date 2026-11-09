@@ -363,11 +363,12 @@ function LocalLoginForm({
         password,
         ...(mfaRequired ? { mfaCode: mfaCode.code } : {}),
       });
-      if (result.kind === "authenticated" || result.kind === "recovery_required") {
+      if (result.kind === "authenticated" || result.kind === "recovery_required" || result.kind === "enrollment_required") {
         setLoginID("");
         setPassword("");
         setMFACode({ kind: "authenticator", code: "" });
-        window.location.replace(result.kind === "recovery_required" ? "/account/security" : "/authorization/complete");
+        // A restricted Session can only set up two-step verification.
+        window.location.replace(result.kind === "authenticated" ? "/authorization/complete" : "/account/security");
         return;
       }
 

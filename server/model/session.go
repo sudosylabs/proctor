@@ -155,6 +155,10 @@ type Session struct {
 	UserID                   UserID
 	AuthenticationGeneration int64
 	MFARecoveryRequired      bool
+	// MFAEnrollmentRequired restricts a single-factor Web Session of a User
+	// the Access Policy requires to use two-step verification: it may only
+	// set up a second factor, complete a challenge, or sign out.
+	MFAEnrollmentRequired    bool
 	ClientType               SessionClientType
 	DesktopRegistrationID    DesktopRegistrationID
 	DPoPKeyThumbprint        string
@@ -249,6 +253,9 @@ func (s *Session) Validate() error {
 	}
 	if s.AuthenticationGeneration < 0 || (s.MFARecoveryRequired && (s.AuthenticationGeneration == 0 || s.ClientType != SessionClientWeb)) {
 		return invalidModelError(where, "session", "authentication_generation", "is inconsistent", details)
+	}
+	if s.MFAEnrollmentRequired && (s.ClientType != SessionClientWeb || s.AuthenticationStrength != AuthenticationSingleFactor) {
+		return invalidModelError(where, "session", "mfa_enrollment_required", "applies only to a single-factor Web Session", details)
 	}
 	if !s.UserID.IsValid() {
 		return invalidModelError(where, "session", "user_id", "must be a valid identifier", details)
@@ -419,6 +426,7 @@ func (s *Session) Auditable() map[string]any {
 		"user_id":                    s.UserID.String(),
 		"authentication_generation":  s.AuthenticationGeneration,
 		"mfa_recovery_required":      s.MFARecoveryRequired,
+		"mfa_enrollment_required":    s.MFAEnrollmentRequired,
 		"client_type":                s.ClientType,
 		"desktop_registration_id":    s.DesktopRegistrationID.String(),
 		"device_id":                  s.DeviceID,

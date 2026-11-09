@@ -40,6 +40,14 @@ describe("authenticateLocal", () => {
     await expect(authenticateLocal(submission)).resolves.toEqual({ kind: "unavailable" });
   });
 
+  it("directs a Web Session the institution restricts to two-step setup", async () => {
+    const post = vi.spyOn(apiClient, "POST");
+    post.mockResolvedValue(apiResult(200, { data: { session: { ...session, mfa_enrollment_required: true } } }));
+    await expect(authenticateLocal(submission)).resolves.toEqual({ kind: "enrollment_required" });
+    post.mockResolvedValue(apiResult(200, { data: { session: { ...session, mfa_enrollment_required: "true" } } }));
+    await expect(authenticateLocal(submission)).resolves.toEqual({ kind: "unavailable" });
+  });
+
   it.each([
     ["authentication.mfa.required", "mfa_required"],
     ["authentication.mfa.code_invalid", "mfa_invalid"],

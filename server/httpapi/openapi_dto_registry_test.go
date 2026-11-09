@@ -402,11 +402,13 @@ var openAPIDTOs = map[string]reflect.Type{
 // gets wrong, and say why.
 var openAPIDTOExceptions = map[string]dtoSchemaException{
 	// PUT-style replacements: Optional detects an omitted setting so the
-	// handler can name it, and every member must be supplied and non-null.
+	// handler can name it, and every member must be supplied and non-null,
+	// except a Session length, whose null keeps the deployment default.
 	"AccessPolicySettingsRequest": {Required: []string{
 		"revoke_existing_sessions", "local_login_enabled", "public_registration_enabled", "invitation_admission_enabled",
-		"invitation_local_credential_enabled", "desktop_authorization_enabled", "provider_admissions",
-	}},
+		"invitation_local_credential_enabled", "desktop_authorization_enabled", "provider_admissions", "role_holder_mfa_required",
+		"session_idle_minutes", "session_absolute_minutes",
+	}, Nullable: []string{"session_idle_minutes", "session_absolute_minutes"}},
 	"DesktopCompatibilityPolicyRequest": {
 		Required:    []string{"minimum_desktop_release", "revoked_desktop_build_ids", "administrator_message", "availability"},
 		NonNullable: []string{"retry_at"},

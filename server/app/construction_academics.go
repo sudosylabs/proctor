@@ -29,8 +29,9 @@ func constructAccessAndAcademics(
 	}
 	capabilities := deploymentAccessPolicyCapabilities{
 		providers: deps.Registry, mail: deps.MailDeliverySender, health: foundation.mailHealth,
+		mfaEnabled: deps.MFA.Enabled,
 	}
-	accessPolicies, err := newAccessPolicyService(accessPolicyServiceDependencies{Policies: deps.Store.AccessPolicy(), Institutions: deps.Store.Institution(), Authorization: authorization, Capabilities: capabilities, Audit: mutationAuditAdapter{audit: foundation.audit}, Effects: accessPolicyRealtimeEffects{realtime: foundation.realtime}, EffectFailures: accessPolicyEffectReporter{realtime: foundation.realtime}, CanonicalOrigin: deps.PublicURL, SupportAddress: deps.SupportAddress, PasswordMinimumLength: deps.Password.MinimumLength, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Now: time.Now})
+	accessPolicies, err := newAccessPolicyService(accessPolicyServiceDependencies{Policies: deps.Store.AccessPolicy(), Institutions: deps.Store.Institution(), Authorization: authorization, Capabilities: capabilities, Audit: mutationAuditAdapter{audit: foundation.audit}, Effects: accessPolicyRealtimeEffects{realtime: foundation.realtime}, EffectFailures: accessPolicyEffectReporter{realtime: foundation.realtime}, CanonicalOrigin: deps.PublicURL, SupportAddress: deps.SupportAddress, PasswordMinimumLength: deps.Password.MinimumLength, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Sessions: deps.Sessions, Now: time.Now})
 	if err != nil {
 		return accessAcademicConstruction{}, err
 	}

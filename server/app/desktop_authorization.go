@@ -34,6 +34,8 @@ type desktopAuthorizationStore interface {
 }
 
 type desktopAuthorizationAccessPolicy interface {
+	roleHolderMFARequirement
+	sessionLengthPolicy
 	AllowsLocalLogin(context.Context) (bool, error)
 	AllowsDesktopAuthorization(context.Context, string, string) (bool, error)
 }
@@ -336,6 +338,9 @@ func (s *desktopAuthorizationService) DesktopAuthorizationContext(ctx context.Co
 
 func (s *desktopAuthorizationService) AuthenticateDesktopAuthorizationSession(ctx context.Context, invocation invocation.Invocation, command AuthenticateDesktopAuthorizationCommand) (*DesktopAuthorizationBrowserContext, error) {
 	principal := invocation.Principal()
+	if principal.MFAEnrollmentRequired {
+		return nil, mfaEnrollmentRequiredAppError()
+	}
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess ||
 		principal.ClientType != model.SessionClientWeb || !model.IsValidCredentialToken(command.Binding) {
 		return nil, apperror.New("authentication.desktop_authorization.invalid")
@@ -382,6 +387,9 @@ func (s *desktopAuthorizationService) AuthenticateDesktopAuthorizationLocally(ct
 }
 
 func (s *desktopAuthorizationService) authenticate(ctx context.Context, binding string, input store.DesktopAuthorizationAuthentication) (*store.DesktopAuthorizationAuthenticationResult, error) {
+	if err := s.requireDesktopMFAByPolicy(ctx, input.UserID, input.AuthenticationStrength); err != nil {
+		return nil, err
+	}
 	input.BindingHash = model.HashToken(binding)
 	input.Capabilities = accessDeploymentCapabilities(s.deps.Capabilities.Snapshot())
 	result, err := s.deps.Transactions.AuthenticateDesktopAuthorization(ctx, &input)
@@ -395,6 +403,24 @@ func (s *desktopAuthorizationService) authenticate(ctx context.Context, binding 
 		return result, apperror.New("authentication.desktop_authorization.account_session_locked")
 	}
 	return result, nil
+}
+
+// requireDesktopMFAByPolicy refuses a single-factor Desktop sign-in of a
+// User the Access Policy requires to use two-step verification. A Desktop
+// Session cannot be restricted to enrollment, so the person sets up two-step
+// verification in the browser and signs in again.
+func (s *desktopAuthorizationService) requireDesktopMFAByPolicy(ctx context.Context, userID model.UserID, strength model.AuthenticationStrength) error {
+	if strength == model.AuthenticationMultiFactor {
+		return nil
+	}
+	required, err := s.deps.AccessPolicy.RequiresMFA(ctx, userID)
+	if err != nil {
+		return apperror.New("authentication.desktop_authorization.unavailable").Wrap(err)
+	}
+	if required {
+		return mfaEnrollmentRequiredAppError()
+	}
+	return nil
 }
 
 func (s *desktopAuthorizationService) resolveExternalAuthentication(ctx context.Context, binding, state string) (desktopExternalAuthenticationTarget, error) {
@@ -414,6 +440,9 @@ func (s *desktopAuthorizationService) authenticateExternal(ctx context.Context, 
 	if !transactionID.IsValid() || user == nil || !user.IsActive() || identity == nil ||
 		identity.UserID != user.ID || assertion == nil || assertion.ProviderID != identity.Provider {
 		return apperror.New("authentication.desktop_authorization.invalid")
+	}
+	if err := s.requireDesktopMFAByPolicy(ctx, user.ID, assertion.AuthenticationStrength); err != nil {
+		return err
 	}
 	authenticatedAt := model.TimeFromMillis(assertion.AuthenticatedAt)
 	var mfaCompletedAt model.OptionalTime
@@ -560,6 +589,14 @@ func (s *desktopAuthorizationService) ExchangeDesktopAuthorization(ctx context.C
 	if err != nil || institution == nil || !institution.ID.IsValid() {
 		return nil, apperror.New("authentication.desktop_authorization.unavailable").Wrap(err)
 	}
+	mfaRequired, err := s.deps.AccessPolicy.RequiresMFA(ctx, resolved.UserID)
+	if err != nil {
+		return nil, apperror.New("authentication.desktop_authorization.unavailable").Wrap(err)
+	}
+	lifetimes, err := s.deps.AccessPolicy.SessionLifetimes(ctx, s.deps.SessionPolicy)
+	if err != nil {
+		return nil, apperror.New("authentication.desktop_authorization.unavailable").Wrap(err)
+	}
 	audit, err := s.deps.Audit.PrepareExchange(ctx, invocation, resolved.UserID, institution.ID)
 	if err != nil || audit == nil || !audit.ID.IsValid() {
 		return nil, apperror.New("audit.unavailable").Wrap(err)
@@ -578,10 +615,11 @@ func (s *desktopAuthorizationService) ExchangeDesktopAuthorization(ctx context.C
 		DesktopRealtimeProtocol:            command.RealtimeProtocol,
 		DesktopCompatibilityPolicyRevision: compatibility.PolicyRevision,
 		AccessTokenHash:                    model.HashToken(accessToken), RefreshTokenHash: model.HashToken(refreshToken),
-		AccessLifetime: s.deps.SessionPolicy.AccessTTL, RefreshLifetime: s.deps.SessionPolicy.RefreshTTL,
-		IdleLifetime: s.deps.SessionPolicy.IdleTTL, AbsoluteLifetime: s.deps.SessionPolicy.AbsoluteTTL,
+		AccessLifetime:  min(s.deps.SessionPolicy.AccessTTL, lifetimes.Idle),
+		RefreshLifetime: min(s.deps.SessionPolicy.RefreshTTL, lifetimes.Absolute),
+		IdleLifetime:    lifetimes.Idle, AbsoluteLifetime: lifetimes.Absolute,
 		MaximumActive: s.deps.SessionPolicy.MaximumPerUser, Capabilities: accessDeploymentCapabilities(s.deps.Capabilities.Snapshot()),
-		AuditEventID: audit.ID, AuditAt: at,
+		MFARequiredByPolicy: mfaRequired, AuditEventID: audit.ID, AuditAt: at,
 	})
 	if err != nil {
 		failure := desktopAuthorizationStoreErrors.Translate(err)
@@ -719,6 +757,7 @@ var desktopAuthorizationStoreErrors = apperror.StoreTable{
 		{Kind: apperror.StoreSentinel, Sentinel: store.ErrPasswordCredentialChanged, Code: "authentication.desktop_authorization.rejected"},
 		{Kind: apperror.StoreSentinel, Sentinel: store.ErrAuthenticationGenerationChanged, Code: "authentication.desktop_authorization.rejected"},
 		{Kind: apperror.StoreSentinel, Sentinel: store.ErrMFAReenrollmentRequired, Code: "authentication.desktop_authorization.rejected"},
+		{Kind: apperror.StoreSentinel, Sentinel: store.ErrMFAEnrollmentRequired, Code: "authentication.mfa.enrollment_required"},
 		{Kind: apperror.StoreConflict, Constraint: "sessions_maximum_per_user", Code: "authentication.sessions.maximum_reached"},
 	},
 	NotFound:    "authentication.desktop_authorization.rejected",

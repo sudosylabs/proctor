@@ -17,6 +17,11 @@ import (
 var ErrAuthenticationGenerationChanged = errors.New("authentication generation changed")
 var ErrMFAReenrollmentRequired = errors.New("MFA reenrollment required")
 
+// ErrMFAEnrollmentRequired refuses a single-factor proof that cannot become a
+// restricted Web Session because the Access Policy requires its User to use
+// two-step verification.
+var ErrMFAEnrollmentRequired = errors.New("MFA enrollment required by access policy")
+
 // MFAPendingEnrollment supersedes pending setup only for the exact live
 // Session and generation. Setup and its required audit commit together.
 type MFAPendingEnrollment struct {

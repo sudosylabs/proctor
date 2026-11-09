@@ -134,6 +134,7 @@ paths:
         - Authentication
       x-proctor-auth: public
       x-proctor-error-codes:
+        - authentication.mfa.enrollment_required
         - authentication.credentials_invalid
         - request.invalid
         - authentication.external.invalid

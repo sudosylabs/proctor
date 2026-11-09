@@ -4074,6 +4074,30 @@
     "translation": "Account security · Proctor"
   },
   {
+    "id": "webapp.security.enrollment_required",
+    "translation": "Your institution requires two-step verification for accounts that hold a role. Set it up here before you use the rest of Proctor."
+  },
+  {
+    "id": "webapp.security.enrollment_required.action",
+    "translation": "Set up two-step verification"
+  },
+  {
+    "id": "webapp.security.enrollment_required.heading",
+    "translation": "Two-step verification required"
+  },
+  {
+    "id": "webapp.security.enrollment_required.lead",
+    "translation": "Set up two-step verification to continue."
+  },
+  {
+    "id": "webapp.security.enrollment_required.verify",
+    "translation": "Your institution requires two-step verification for accounts that hold a role. Confirm this sign-in with your authenticator app before you use the rest of Proctor."
+  },
+  {
+    "id": "webapp.security.enrollment_required.verify_lead",
+    "translation": "Confirm two-step verification to continue."
+  },
+  {
     "id": "webapp.security.error.conflict",
     "translation": "Your settings changed or this setup expired. Check the current status before you continue."
   },
@@ -4096,6 +4120,10 @@
   {
     "id": "webapp.security.error.rate_limited",
     "translation": "Too many attempts. Wait a moment before you try again."
+  },
+  {
+    "id": "webapp.security.error.required_by_policy",
+    "translation": "Your institution requires two-step verification for your account, so it can’t be turned off."
   },
   {
     "id": "webapp.security.error.strong_required",

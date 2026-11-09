@@ -108,6 +108,7 @@ const MFAMethodAuthenticatorApp = "authenticator_app"
 type MFAStatus struct {
 	ServiceEnabled           bool
 	MFARecoveryRequired      bool
+	MFAEnrollmentRequired    bool
 	AuthenticationMethod     string
 	AuthenticationProviderID string
 	AuthenticationStrength   model.AuthenticationStrength

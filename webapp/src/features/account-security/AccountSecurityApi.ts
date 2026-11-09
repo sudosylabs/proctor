@@ -17,6 +17,8 @@ export interface SecurityContext {
   recentlyAuthenticatedUntil?: string;
   serviceEnabled: boolean;
   recoveryRequired: boolean;
+  /** The institution requires two-step verification before ordinary use. */
+  enrollmentRequired: boolean;
   authenticationMethod: string;
   authenticationProviderID?: string;
   authenticationStrength: string;
@@ -32,6 +34,7 @@ export type SecurityFailure = {
     | "rate_limited"
     | "disabled"
     | "conflict"
+    | "required_by_policy"
     | "unavailable";
 };
 export type SecurityContextResult =
@@ -133,6 +136,7 @@ export function securityFailure(error: unknown, status: number): SecurityFailure
     case "authentication.mfa.disabled": return { kind: "disabled" };
     case "authentication.mfa.conflict":
     case "authentication.mfa.not_found": return { kind: "conflict" };
+    case "mfa.required_by_policy": return { kind: "required_by_policy" };
     default: return { kind: status === 429 ? "rate_limited" : "unavailable" };
   }
 }
@@ -159,6 +163,7 @@ function readSecurityContext(value: unknown): SecurityContext | undefined {
     (value.password_changed_at !== undefined && !isWireTimestamp(value.password_changed_at)) ||
     (value.recently_authenticated_until !== undefined && !isWireTimestamp(value.recently_authenticated_until)) ||
     typeof value.service_enabled !== "boolean" || typeof value.mfa_recovery_required !== "boolean" ||
+    typeof value.mfa_enrollment_required !== "boolean" ||
     !boundedText(value.authentication_method, 128) || !boundedText(value.authentication_strength, 128) ||
     typeof value.recently_authenticated !== "boolean" ||
     (value.pending_expires_at !== undefined && !isWireTimestamp(value.pending_expires_at)) ||
@@ -171,6 +176,7 @@ function readSecurityContext(value: unknown): SecurityContext | undefined {
     recoveryCodesTotal: value.recovery_codes_total,
     recentAuthenticationMinutes: value.recent_authentication_minutes,
     serviceEnabled: value.service_enabled, recoveryRequired: value.mfa_recovery_required,
+    enrollmentRequired: value.mfa_enrollment_required,
     authenticationMethod: value.authentication_method,
     authenticationStrength: value.authentication_strength,
     recentlyAuthenticated: value.recently_authenticated,

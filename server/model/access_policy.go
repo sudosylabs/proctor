@@ -29,6 +29,13 @@ const (
 const (
 	AccessPolicyProviderMaxCount       = identityprovider.MaximumCount
 	AccessPolicyTransitionHistoryLimit = 100
+	// AccessPolicyTransitionFieldMaxCount bounds the changed field names one
+	// transition records: every replaceable setting and revoke_existing_sessions.
+	AccessPolicyTransitionFieldMaxCount = 10
+	// AccessPolicySessionMinutesMaximum bounds a Session length the policy
+	// can store, a little over a year; deployment configuration bounds it
+	// further.
+	AccessPolicySessionMinutesMaximum = 527040
 )
 
 var (
@@ -50,6 +57,15 @@ type AccessPolicy struct {
 	InvitationLocalCredentialEnabled bool
 	DesktopAuthorizationEnabled      bool
 	ProviderAdmissions               map[string]ProviderAdmissionMode
+	// RoleHolderMFARequired requires two-step verification of every role holder:
+	// a User holding a current Role Binding at any scope, system
+	// administrators included.
+	RoleHolderMFARequired bool
+	// SessionIdleMinutes and SessionAbsoluteMinutes shorten the idle and
+	// absolute Session lifetimes; zero keeps the deployment default, which is
+	// also the ceiling.
+	SessionIdleMinutes     int
+	SessionAbsoluteMinutes int
 }
 
 // AccessPolicySettings is the complete replaceable portion of AccessPolicy.
@@ -61,6 +77,34 @@ type AccessPolicySettings struct {
 	InvitationLocalCredentialEnabled bool
 	DesktopAuthorizationEnabled      bool
 	ProviderAdmissions               map[string]ProviderAdmissionMode
+	RoleHolderMFARequired            bool
+	SessionIdleMinutes               int
+	SessionAbsoluteMinutes           int
+}
+
+// SessionLengthLimits are the deployment bounds of the Access Policy Session
+// lengths in whole minutes. A default is the length a Session gets when the
+// policy leaves it unset; the policy may only shorten it, down to the minimum.
+type SessionLengthLimits struct {
+	IdleMinimumMinutes     int
+	IdleDefaultMinutes     int
+	IdleMaximumMinutes     int
+	AbsoluteMinimumMinutes int
+	AbsoluteDefaultMinutes int
+	AbsoluteMaximumMinutes int
+}
+
+// Validate reports limits that cannot describe a deployment: every bound is
+// positive, a maximum never exceeds its default or the storable cap, and the
+// idle default never exceeds the absolute default.
+func (l SessionLengthLimits) Validate() error {
+	if l.IdleMinimumMinutes < 1 || l.AbsoluteMinimumMinutes < 1 || l.IdleDefaultMinutes < 1 ||
+		l.AbsoluteDefaultMinutes < l.IdleDefaultMinutes || l.IdleMaximumMinutes < 1 || l.AbsoluteMaximumMinutes < 1 ||
+		l.IdleMaximumMinutes > l.IdleDefaultMinutes || l.AbsoluteMaximumMinutes > l.AbsoluteDefaultMinutes ||
+		l.AbsoluteMaximumMinutes > AccessPolicySessionMinutesMaximum {
+		return invalidModelError("SessionLengthLimits.Validate", "session_length_limits", "", "are inconsistent", "")
+	}
+	return nil
 }
 
 type AccessPolicyTransitionOutcome string
@@ -133,6 +177,13 @@ func (s AccessPolicySettings) Validate() error {
 	if s.PublicRegistrationEnabled && !s.LocalLoginEnabled {
 		return invalidModelError("AccessPolicySettings.Validate", "access_policy_settings", "", "public registration requires local login", "")
 	}
+	if s.SessionIdleMinutes < 0 || s.SessionIdleMinutes > AccessPolicySessionMinutesMaximum ||
+		s.SessionAbsoluteMinutes < 0 || s.SessionAbsoluteMinutes > AccessPolicySessionMinutesMaximum {
+		return invalidModelError("AccessPolicySettings.Validate", "access_policy_settings", "", "session lengths are out of range", "")
+	}
+	if s.SessionIdleMinutes != 0 && s.SessionAbsoluteMinutes != 0 && s.SessionIdleMinutes > s.SessionAbsoluteMinutes {
+		return invalidModelError("AccessPolicySettings.Validate", "access_policy_settings", "session_idle_minutes", "exceeds the absolute session length", "")
+	}
 	if s.InvitationLocalCredentialEnabled &&
 		(!s.InvitationAdmissionEnabled || !s.LocalLoginEnabled) {
 		return invalidModelError("AccessPolicySettings.Validate", "access_policy_settings", "", "invitation local credentials require invitation admission and local login", "")
@@ -150,6 +201,45 @@ func (s AccessPolicySettings) Validate() error {
 	return nil
 }
 
+// ValidateSessionLengths checks the Session lengths against the deployment
+// limits. A set idle length lies within its bounds and within the effective
+// absolute length; a set absolute length lies within its bounds. The returned
+// ValidationError names the offending field.
+func (s AccessPolicySettings) ValidateSessionLengths(limits SessionLengthLimits) error {
+	const where = "AccessPolicySettings.ValidateSessionLengths"
+	if s.SessionIdleMinutes == 0 && s.SessionAbsoluteMinutes == 0 {
+		return nil
+	}
+	// A deployment whose own lifetimes the policy cannot express refuses
+	// every explicit length.
+	valid := limits.Validate() == nil
+	_, absolute := s.EffectiveSessionMinutes(limits)
+	if s.SessionAbsoluteMinutes != 0 && (!valid ||
+		s.SessionAbsoluteMinutes < limits.AbsoluteMinimumMinutes || s.SessionAbsoluteMinutes > limits.AbsoluteMaximumMinutes) {
+		return invalidModelError(where, "access_policy_settings", "session_absolute_minutes", "is outside the deployment bounds", "")
+	}
+	if s.SessionIdleMinutes != 0 && (!valid ||
+		s.SessionIdleMinutes < limits.IdleMinimumMinutes || s.SessionIdleMinutes > limits.IdleMaximumMinutes ||
+		s.SessionIdleMinutes > absolute) {
+		return invalidModelError(where, "access_policy_settings", "session_idle_minutes", "is outside the deployment bounds or the absolute length", "")
+	}
+	return nil
+}
+
+// EffectiveSessionMinutes returns the idle and absolute Session lengths a new
+// Session gets: each set length, otherwise its deployment default, with the
+// idle length never longer than the absolute one.
+func (s AccessPolicySettings) EffectiveSessionMinutes(limits SessionLengthLimits) (idle, absolute int) {
+	idle, absolute = limits.IdleDefaultMinutes, limits.AbsoluteDefaultMinutes
+	if s.SessionIdleMinutes != 0 && s.SessionIdleMinutes < idle {
+		idle = s.SessionIdleMinutes
+	}
+	if s.SessionAbsoluteMinutes != 0 && s.SessionAbsoluteMinutes < absolute {
+		absolute = s.SessionAbsoluteMinutes
+	}
+	return min(idle, absolute), absolute
+}
+
 func (p *AccessPolicy) Settings() AccessPolicySettings {
 	if p == nil {
 		return AccessPolicySettings{}
@@ -161,6 +251,9 @@ func (p *AccessPolicy) Settings() AccessPolicySettings {
 		InvitationLocalCredentialEnabled: p.InvitationLocalCredentialEnabled,
 		DesktopAuthorizationEnabled:      p.DesktopAuthorizationEnabled,
 		ProviderAdmissions:               cloneProviderAdmissions(p.ProviderAdmissions),
+		RoleHolderMFARequired:            p.RoleHolderMFARequired,
+		SessionIdleMinutes:               p.SessionIdleMinutes,
+		SessionAbsoluteMinutes:           p.SessionAbsoluteMinutes,
 	}
 }
 
@@ -188,6 +281,9 @@ func (p *AccessPolicy) Replace(expectedRevision int64, settings AccessPolicySett
 	p.InvitationLocalCredentialEnabled = settings.InvitationLocalCredentialEnabled
 	p.DesktopAuthorizationEnabled = settings.DesktopAuthorizationEnabled
 	p.ProviderAdmissions = cloneProviderAdmissions(settings.ProviderAdmissions)
+	p.RoleHolderMFARequired = settings.RoleHolderMFARequired
+	p.SessionIdleMinutes = settings.SessionIdleMinutes
+	p.SessionAbsoluteMinutes = settings.SessionAbsoluteMinutes
 	p.Revision++
 	p.UpdatedAt = at
 	if err := p.Validate(); err != nil {
@@ -204,18 +300,12 @@ func (t *AccessPolicyTransition) Validate() error {
 	if t == nil || !t.PolicyID.IsValid() || t.FromRevision < 1 ||
 		t.ToRevision != t.FromRevision+1 || !t.ActorID.IsValid() ||
 		t.ChangedAt.IsZero() || t.Outcome != AccessPolicyTransitionApplied ||
-		len(t.ChangedFields) == 0 || len(t.ChangedFields) > 7 {
+		len(t.ChangedFields) == 0 || len(t.ChangedFields) > AccessPolicyTransitionFieldMaxCount {
 		return ErrAccessPolicyInvalidTransition
-	}
-	valid := map[string]bool{
-		"local_login_enabled": true, "public_registration_enabled": true,
-		"invitation_admission_enabled": true, "invitation_local_credential_enabled": true,
-		"desktop_authorization_enabled": true, "provider_admissions": true,
-		"revoke_existing_sessions": true,
 	}
 	previous := ""
 	for _, field := range t.ChangedFields {
-		if !valid[field] || field <= previous {
+		if !slices.Contains(accessPolicyTransitionFields, field) || field <= previous {
 			return ErrAccessPolicyInvalidTransition
 		}
 		previous = field
@@ -223,8 +313,16 @@ func (t *AccessPolicyTransition) Validate() error {
 	return nil
 }
 
+// accessPolicyTransitionFields are the only names a transition may record:
+// each replaceable setting, plus the one-shot revoke_existing_sessions choice.
+var accessPolicyTransitionFields = []string{
+	"desktop_authorization_enabled", "invitation_admission_enabled", "invitation_local_credential_enabled",
+	"local_login_enabled", "provider_admissions", "public_registration_enabled", "revoke_existing_sessions", "role_holder_mfa_required",
+	"session_absolute_minutes", "session_idle_minutes",
+}
+
 func changedAccessPolicyFields(current, next AccessPolicySettings) []string {
-	changed := make([]string, 0, 6)
+	changed := make([]string, 0, len(accessPolicyTransitionFields))
 	if current.LocalLoginEnabled != next.LocalLoginEnabled {
 		changed = append(changed, "local_login_enabled")
 	}
@@ -242,6 +340,15 @@ func changedAccessPolicyFields(current, next AccessPolicySettings) []string {
 	}
 	if !providerAdmissionsEqual(current.ProviderAdmissions, next.ProviderAdmissions) {
 		changed = append(changed, "provider_admissions")
+	}
+	if current.RoleHolderMFARequired != next.RoleHolderMFARequired {
+		changed = append(changed, "role_holder_mfa_required")
+	}
+	if current.SessionIdleMinutes != next.SessionIdleMinutes {
+		changed = append(changed, "session_idle_minutes")
+	}
+	if current.SessionAbsoluteMinutes != next.SessionAbsoluteMinutes {
+		changed = append(changed, "session_absolute_minutes")
 	}
 	slices.Sort(changed)
 	return changed
@@ -288,6 +395,9 @@ func (p *AccessPolicy) Auditable() map[string]any {
 		"invitation_local_credential_enabled":   p.InvitationLocalCredentialEnabled,
 		"desktop_authorization_enabled":         p.DesktopAuthorizationEnabled,
 		"configured_provider_admission_entries": len(p.ProviderAdmissions),
+		"role_holder_mfa_required":              p.RoleHolderMFARequired,
+		"session_idle_minutes":                  p.SessionIdleMinutes,
+		"session_absolute_minutes":              p.SessionAbsoluteMinutes,
 	}
 }
 

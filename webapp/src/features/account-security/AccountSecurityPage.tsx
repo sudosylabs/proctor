@@ -16,7 +16,8 @@ const actions: SecurityActions = {
 
 export function AccountSecurityPage() {
   const resource = useAsyncResource<SecurityContextResult>(requestSecurityContext, { kind: "unavailable" });
-  const ordinarySession = resource.value.kind === "ready" && !resource.value.context.recoveryRequired;
+  const ordinarySession = resource.value.kind === "ready" &&
+    !resource.value.context.recoveryRequired && !resource.value.context.enrollmentRequired;
   const name = useSignedInName(ordinarySession);
   return (
     <AccessPageShell skipLabel={message("webapp.security.skip_to_main")}

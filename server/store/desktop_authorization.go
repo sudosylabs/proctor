@@ -88,8 +88,11 @@ type DesktopAuthorizationExchange struct {
 	AbsoluteLifetime                   time.Duration
 	MaximumActive                      int
 	Capabilities                       AccessDeploymentCapabilities
-	AuditEventID                       model.AuditEventID
-	AuditAt                            time.Time
+	// MFARequiredByPolicy refuses a single-factor authorization with
+	// ErrMFAEnrollmentRequired: a Desktop Session cannot carry the restriction.
+	MFARequiredByPolicy bool
+	AuditEventID        model.AuditEventID
+	AuditAt             time.Time
 }
 
 type DesktopAuthorizationExchangeResult struct {

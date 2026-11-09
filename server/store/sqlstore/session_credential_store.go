@@ -145,13 +145,16 @@ func (s SQLSessionCredentialStore) RotateRefresh(ctx context.Context, input *sto
 	}
 
 	return runSQLTransaction(ctx, s.GetMaster().Begin, "refresh rotation", func(ctx context.Context, tx *sqlxTxWrapper) (*store.SessionRotation, error) {
-		return rotateRefreshCredential(ctx, tx, input.TokenHash, access, refresh, now, idleExpiresAt)
+		return rotateRefreshCredential(ctx, tx, input.TokenHash, access, refresh, now, idleExpiresAt, input.MFARequiredByPolicy)
 	})
 }
 
 // rotateRefreshCredential performs the refresh rotation inside its transaction.
+// When the Access Policy requires the User to use two-step verification, a
+// single-factor Web Session becomes restricted to MFA enrollment and any other
+// single-factor Session is refused with store.ErrMFAEnrollmentRequired.
 func rotateRefreshCredential(ctx context.Context, tx *sqlxTxWrapper, tokenHash string, access, refresh *model.SessionCredential,
-	now, idleExpiresAt time.Time,
+	now, idleExpiresAt time.Time, mfaRequiredByPolicy bool,
 ) (*store.SessionRotation, error) {
 	current, session, err := lockRefreshCredentialSession(ctx, tx, tokenHash)
 	if err != nil {
@@ -180,6 +183,10 @@ func rotateRefreshCredential(ctx context.Context, tx *sqlxTxWrapper, tokenHash s
 	if current.IsExpiredAt(now) {
 		return nil, store.NewErrConflict("session_credential", "session_credentials_inactive", nil)
 	}
+	restrict := mfaRequiredByPolicy && session.AuthenticationStrength != model.AuthenticationMultiFactor
+	if restrict && session.ClientType != model.SessionClientWeb {
+		return nil, store.ErrMFAEnrollmentRequired
+	}
 	newAccess, newRefresh, err := prepareRotatedSessionCredentials(access, refresh, current, session, now)
 	if err != nil {
 		return nil, err
@@ -188,7 +195,7 @@ func rotateRefreshCredential(ctx context.Context, tx *sqlxTxWrapper, tokenHash s
 	if err != nil {
 		return nil, err
 	}
-	if err := touchRotatedSession(ctx, tx, session, idleExpiresAt, now); err != nil {
+	if err := touchRotatedSession(ctx, tx, session, idleExpiresAt, now, restrict); err != nil {
 		return nil, err
 	}
 	return &store.SessionRotation{
@@ -239,7 +246,7 @@ func lockRefreshCredentialSession(ctx context.Context, tx *sqlxTxWrapper, tokenH
 
 	var lockedSessionRow sessionRow
 	if err = tx.Get(ctx, &lockedSessionRow, `
-		SELECT id, created_at, updated_at, archived_at, user_id, authentication_generation, mfa_recovery_required, client_type,
+		SELECT id, created_at, updated_at, archived_at, user_id, authentication_generation, mfa_recovery_required, mfa_enrollment_required, client_type,
 		       desktop_registration_id, dpop_key_thumbprint, desktop_release, desktop_build_id,
 		       desktop_platform, desktop_architecture, desktop_realtime_protocol,
 		       device_id, device_name, authentication_method, authentication_provider_id, external_identity_id,
@@ -352,8 +359,10 @@ func replaceRefreshCredential(ctx context.Context, tx *sqlxTxWrapper, session *m
 	return revokedHashes, nil
 }
 
-// touchRotatedSession records the rotation as Session activity and extends its idle expiry within the absolute lifetime.
-func touchRotatedSession(ctx context.Context, tx *sqlxTxWrapper, session *model.Session, idleExpiresAt, now time.Time) error {
+// touchRotatedSession records the rotation as Session activity, extends its
+// idle expiry within the absolute lifetime, and, when restrict is set, limits
+// the Web Session to MFA enrollment. A restriction is never lifted here.
+func touchRotatedSession(ctx context.Context, tx *sqlxTxWrapper, session *model.Session, idleExpiresAt, now time.Time, restrict bool) error {
 	idleAt := idleExpiresAt
 	if idleAt.After(session.ExpiresAt) {
 		idleAt = session.ExpiresAt
@@ -363,13 +372,15 @@ func touchRotatedSession(ctx context.Context, tx *sqlxTxWrapper, session *model.
 	if session.UpdatedAt.Before(now) {
 		session.UpdatedAt = now
 	}
+	session.MFAEnrollmentRequired = session.MFAEnrollmentRequired || restrict
 	if _, err := tx.Exec(ctx, `
 		UPDATE sessions
-		   SET updated_at = ?, last_activity_at = ?, idle_expires_at = ?
+		   SET updated_at = ?, last_activity_at = ?, idle_expires_at = ?, mfa_enrollment_required = ?
 		 WHERE id = ? AND revoked_at IS NULL`,
 		session.UpdatedAt,
 		session.LastActivityAt,
 		session.IdleExpiresAt,
+		session.MFAEnrollmentRequired,
 		session.ID.String(),
 	); err != nil {
 		return fmt.Errorf("update rotated session: %w", err)

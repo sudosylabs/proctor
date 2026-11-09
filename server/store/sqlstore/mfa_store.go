@@ -603,6 +603,9 @@ func insertMFARecoveryCode(
 	return nil
 }
 
+// upgradeSessionAuthentication makes the live Session multi-factor. A proved
+// second factor satisfies the Access Policy, so it also lifts that Session's
+// MFA enrollment restriction; activation and challenge both reach it.
 func upgradeSessionAuthentication(
 	ctx context.Context,
 	executor sqlxExecutor,
@@ -616,10 +619,11 @@ func upgradeSessionAuthentication(
 		UPDATE sessions
 		   SET updated_at = GREATEST(updated_at, ?),
 		       authentication_strength = 'multi_factor',
+		       mfa_enrollment_required = false,
 		       mfa_completed_at = GREATEST(authenticated_at, ?)
 		 WHERE id = ? AND user_id = ? AND archived_at IS NULL AND revoked_at IS NULL
 		   AND idle_expires_at > ? AND expires_at > ?
-		 RETURNING id, created_at, updated_at, archived_at, user_id, authentication_generation, mfa_recovery_required, client_type,
+		 RETURNING id, created_at, updated_at, archived_at, user_id, authentication_generation, mfa_recovery_required, mfa_enrollment_required, client_type,
 		           desktop_registration_id, dpop_key_thumbprint, desktop_release, desktop_build_id,
 		           desktop_platform, desktop_architecture, desktop_realtime_protocol,
 		           device_id, device_name, authentication_method, authentication_provider_id,

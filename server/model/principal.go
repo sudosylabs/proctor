@@ -34,6 +34,9 @@ type Principal struct {
 	UserID                   UserID
 	AuthenticationGeneration int64
 	MFARecoveryRequired      bool
+	// MFAEnrollmentRequired marks a Web Session the Access Policy restricts
+	// until its User sets up or completes two-step verification.
+	MFAEnrollmentRequired    bool
 	SessionID                SessionID
 	CredentialID             PrincipalCredentialID
 	CredentialType           CredentialType
@@ -73,15 +76,23 @@ func (p Principal) Validate() error {
 	if p.MFARecoveryRequired {
 		return invalidModelError("Principal.Validate", "principal", "", "principal is restricted to MFA reenrollment", "")
 	}
+	if p.MFAEnrollmentRequired {
+		return invalidModelError("Principal.Validate", "principal", "", "principal is restricted to MFA enrollment", "")
+	}
 	return p.validateIdentity()
 }
 
-// ValidateMFARecovery accepts an ordinary principal or the narrow Web Session
-// established by fresh primary proof after assisted reset. Only the explicitly
-// bounded MFA recovery operations may call this instead of Validate.
+// ValidateMFARecovery accepts an ordinary principal or a narrow restricted Web
+// Session: the one established by fresh primary proof after assisted reset, or
+// the one the Access Policy restricts until two-step verification is set up.
+// Only the explicitly bounded MFA operations may call this instead of Validate.
 func (p Principal) ValidateMFARecovery() error {
 	if p.MFARecoveryRequired && (p.AuthenticationGeneration <= 0 || p.ClientType != SessionClientWeb || p.CredentialType != CredentialSessionAccess) {
 		return invalidModelError("Principal.ValidateMFARecovery", "principal", "", "MFA recovery principal is invalid", "")
+	}
+	if p.MFAEnrollmentRequired && (p.ClientType != SessionClientWeb || p.CredentialType != CredentialSessionAccess ||
+		p.AuthenticationStrength != AuthenticationSingleFactor) {
+		return invalidModelError("Principal.ValidateMFARecovery", "principal", "", "MFA enrollment principal is invalid", "")
 	}
 	return p.validateIdentity()
 }
@@ -124,7 +135,7 @@ func (p Principal) validateIdentity() error {
 		}
 		return nil
 	case CredentialPersonalAccessToken:
-		if !p.SessionID.IsZero() || p.AuthenticationStrength != "" || p.MFARecoveryRequired || p.AuthenticationGeneration != 0 ||
+		if !p.SessionID.IsZero() || p.AuthenticationStrength != "" || p.MFARecoveryRequired || p.MFAEnrollmentRequired || p.AuthenticationGeneration != 0 ||
 			p.AuthenticationProviderID != "" ||
 			!p.ExternalIdentityID.IsZero() ||
 			!p.AuthenticatedAt.IsZero() || p.ReauthenticatedAt.Valid || p.MFACompletedAt.Valid ||

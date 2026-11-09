@@ -416,6 +416,39 @@ method for its own User and never a browser Web Session, and the loopback code
 it returns is redeemed by that same Desktop Session and DPoP key. No Session
 is created and the Desktop Registration is unchanged.
 
+The Access Policy can require two-step verification of role holders
+(`role_holder_mfa_required`): a role holder is any User with a current Role
+Binding at any scope, system administrators included. Such a User without a
+second factor who signs in on the web gets a Session marked
+`mfa_enrollment_required`, which only reaches the MFA status, setup, activation
+and challenge routes, reauthentication, and logout until activation or a
+challenge makes it multi-factor. A CLI or Desktop sign-in, Desktop code
+exchange or refresh of a single-factor Session of such a User fails with
+`authentication.mfa.enrollment_required`; a Web refresh restricts the Session
+instead, so becoming a role holder mid-Session takes effect at the next
+refresh. While the policy applies, `POST /api/v1/users/me/mfa/disable` fails
+with `mfa.required_by_policy`. Turning the rule on with
+`revoke_existing_sessions` also revokes role holders' Sessions that have not
+proved a second factor; preflight refuses it with the `mfa_unavailable`
+blocker while `Authentication.MFA.Enabled` is false. If MFA is disabled after
+the rule is on, the rule pauses rather than locking people out: nothing is
+restricted or refused, the node logs one warning, and `GET
+/api/v1/access-policy` reports `role_holder_mfa_enforced: false`.
+
+`Authentication.Sessions.IdleTTL` and `AbsoluteTTL` are the default Session
+lengths and also their ceiling. The Access Policy may shorten either with
+`session_idle_minutes` and `session_absolute_minutes` (null keeps the
+default); `GET /api/v1/access-policy` reports each default and the longest
+length the policy may set. An idle length must outlast `AccessTTL` and
+`ActivityUpdateInterval` by at least a minute and never exceed the effective
+absolute length; an absolute length must outlast
+`Authentication.RecentAuthenticationTTL` and the idle minimum. New Sessions,
+activity, Web and Desktop refresh, and the Desktop code exchange use the
+shortened lengths; access, refresh and activity-interval lifetimes stay in
+configuration. Shortening a length pulls the deadlines of live Sessions and
+their credentials in within the same replacement; lengthening one never
+extends a running Session.
+
 Validate a configuration without starting the server:
 
 ```sh

@@ -143,7 +143,12 @@ Policy is composable rather than a `local`, `external`, or `hybrid` enum:
 - each configured provider is independently disabled, `linked_only`,
   `invitation_required`, or `auto_provision`;
 - provider admission may apply configured eligibility predicates, but those
-  predicates grant no academic relationship or permission.
+  predicates grant no academic relationship or permission;
+- two-step verification of role holders is required or not
+  (`role_holder_mfa_required`);
+- the idle and absolute Session lengths keep the deployment default or are
+  shortened within deployment bounds (`session_idle_minutes`,
+  `session_absolute_minutes`).
 
 Ordinary provider login resolves only the immutable `(provider ID, opaque
 subject)` link. `linked_only` therefore admits an existing link and otherwise
@@ -219,6 +224,49 @@ no released schema requiring an upgrade from provider-only external Sessions:
 the pre-release baseline is resettable, and development databases using an
 earlier shape must be recreated. Runtime policy and revocation never guess a
 provider or identity from `authentication_method`.
+
+A role holder is any User with a current Role Binding at any scope, system
+administrators included: at the deciding PostgreSQL or node instant the binding
+and its Role are unarchived, it has started and not ended, and its Academic
+Unit or Class scope is unarchived. Membership and affiliation never make a User
+a role holder; in particular the "staff member" Affiliation is unrelated.
+Clients may still present the switch as two-step verification for staff. When
+`role_holder_mfa_required` is on, every path that would grant a role holder
+single-factor authority asks the authoritative `HasRoleHolderMFARequirement`
+read, which caches nothing:
+
+- web sign-in without a proved second factor creates a Web Session marked
+  `mfa_enrollment_required` (see
+  [identity and authentication](identity.md#sessions-browser-transport-and-desktop-handoff));
+- CLI sign-in, Desktop Authorization browser proof, Desktop code exchange and
+  refresh of a single-factor CLI or Desktop Session fail with
+  `authentication.mfa.enrollment_required`, because only a Web Session can
+  carry the restriction; the exchange rechecks the proof's strength in its
+  transaction;
+- refresh rotation of a single-factor Web Session restricts it, so a User who
+  becomes a role holder mid-Session, or whose Session predates the rule, is
+  restricted at the next refresh;
+- self-service MFA disablement fails with the audited
+  `mfa.required_by_policy`; institution-assisted reset is unchanged because it
+  already forces reenrollment.
+
+Turning the rule on is blocked by `mfa_unavailable` while deployment
+configuration disables MFA, since role holders could never satisfy it.
+Preflight also reports `role_holders_without_mfa_count` and
+`role_holder_single_factor_session_count`. Without `revoke_existing_sessions`
+running Sessions are restricted at their next sign-in or refresh; with it, the
+transition also revokes every live role holder's Session that is not
+multi-factor with reason `access_policy_changed`, in the same transaction and
+with the same counted, audited, post-commit revocation effects as a disabled
+method.
+
+The rule pauses rather than locking people out. It is enforced only while the
+deployment configuration enables MFA; if MFA is later disabled with the rule
+on, no Session is restricted or refused, refresh restricts nothing, and the
+node logs one warning the first time it reads the paused rule. An
+administrator can therefore still sign in and change the policy. The read-only
+`role_holder_mfa_enforced` on `GET /api/v1/access-policy` is true only while
+the rule is on and MFA is available.
 
 Policy changes commit before cache invalidation and a content-free realtime
 event carrying only the new revision. PostgreSQL remains authoritative on every

@@ -3668,8 +3668,8 @@ func (s *timedAccessPolicyStore) Get(arg0 context.Context, arg1 int) (*store.Acc
 	})
 }
 
-func (s *timedAccessPolicyStore) Preflight(arg0 context.Context, arg1 *store.AccessPolicyPreflight) ([]store.AccessPolicyBlocker, error) {
-	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAccessPolicy, methodPreflight), func(callCtx context.Context) ([]store.AccessPolicyBlocker, error) {
+func (s *timedAccessPolicyStore) Preflight(arg0 context.Context, arg1 *store.AccessPolicyPreflight) (*store.AccessPolicyPreflightResult, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAccessPolicy, methodPreflight), func(callCtx context.Context) (*store.AccessPolicyPreflightResult, error) {
 		return s.next.Preflight(callCtx, arg1)
 	})
 }
@@ -3677,6 +3677,12 @@ func (s *timedAccessPolicyStore) Preflight(arg0 context.Context, arg1 *store.Acc
 func (s *timedAccessPolicyStore) Replace(arg0 context.Context, arg1 *store.AccessPolicyReplacement, arg2 *store.CommandIdempotency) (*store.AccessPolicyReplacementResult, error) {
 	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAccessPolicy, methodReplace), func(callCtx context.Context) (*store.AccessPolicyReplacementResult, error) {
 		return s.next.Replace(callCtx, arg1, arg2)
+	})
+}
+
+func (s *timedAccessPolicyStore) HasRoleHolderMFARequirement(arg0 context.Context, arg1 model.UserID, arg2 time.Time) (bool, error) {
+	return timeStoreCall1(arg0, s.layer, storeOperation(aggregateAccessPolicy, methodHasRoleHolderMFARequirement), func(callCtx context.Context) (bool, error) {
+		return s.next.HasRoleHolderMFARequirement(callCtx, arg1, arg2)
 	})
 }
 

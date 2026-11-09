@@ -184,7 +184,15 @@ tests reject unclassified handlers.
 
 Interactive sessions use random opaque access and rotating refresh
 credentials whose hashes alone are persisted. Idle and absolute expiry are
-separate; activity writes are debounced; concurrency is bounded; users can
+separate. Deployment configuration sets their default lengths and ceiling; the
+Access Policy may only shorten them (`session_idle_minutes`,
+`session_absolute_minutes`, null keeping the default), and Session creation,
+activity, refresh rotation and the Desktop exchange stamp the effective
+lengths. Shortening a length pulls live Sessions' idle and absolute deadlines
+in with `LEAST` and caps their credentials in the replacement transaction,
+then invalidates cached authentication after commit; lengthening never extends
+a running Session. Activity writes are debounced; concurrency is bounded; users
+can
 list and revoke sessions; account and credential security changes can revoke
 all sessions. Authorization always resolves current role bindings.
 
@@ -406,6 +414,18 @@ restricted Sessions do not acquire ordinary authority. Generation and reset time
 survive activation, so pre-reset password proofs and unknown-User provider/browser
 transactions cannot regain authority afterwards. Required recovery persists when
 MFA or the provider is disabled; online reset refuses when enrollment is unavailable.
+
+The Access Policy enrollment restriction (`mfa_enrollment_required`) is a
+second, independent restriction on a single-factor Web Session of a role holder
+when the policy requires two-step verification of role holders; see
+[access and onboarding](access-and-onboarding.md#access-policy-and-deployment-configuration).
+Ordinary principal validation rejects it and it shares the recovery routes'
+gate, but unlike recovery it also reaches the second-factor challenge, because
+an external sign-in by a User who already has a local factor satisfies the
+policy by proving it. Activation and a successful challenge both make the
+Session multi-factor and clear the flag in the same transition; nothing else
+clears it. It never changes the recovery generation, and Desktop and CLI
+Sessions cannot carry it, so those clients are refused instead.
 
 An external-only User retains the exact existing provider identity. Ordinary SSO
 resolves the account but cannot satisfy assisted recovery: a separate bound flow

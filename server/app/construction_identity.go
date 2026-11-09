@@ -49,12 +49,12 @@ func constructSessionAuthentication(
 	if err != nil {
 		return nil, err
 	}
-	authenticationAccess, err := newCurrentAuthenticationAccessPolicy(currentAuthenticationAccessPolicyDependencies{Policies: deps.Store.AccessPolicy()})
+	authenticationAccess, err := newCurrentAuthenticationAccessPolicy(currentAuthenticationAccessPolicyDependencies{Policies: deps.Store.AccessPolicy(), MFAEnabled: deps.MFA.Enabled, Diagnostics: deps.AuthenticationDiagnostics, Now: time.Now})
 	if err != nil {
 		return nil, err
 	}
 	accountMail := foundation.mail
-	mfaApplication, err := newMFAApplicationService(mfaApplicationServiceDependencies{Users: deps.Store.User(), Credentials: deps.Store.MFA(), Passwords: deps.Store.PasswordCredential(), Sessions: deps.Store.Session(), Institutions: deps.Store.Institution(), Audit: mfaAuditAdapter{audit: foundation.audit}, Effects: foundation.realtime, Mail: accountMail, Mechanics: foundation.mfa, Security: mfaSecurityDependencies{authorization: authorization, capabilities: capabilities, attempts: foundation.attempts, rateLimit: deps.LoginRateLimit}, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Now: time.Now})
+	mfaApplication, err := newMFAApplicationService(mfaApplicationServiceDependencies{Users: deps.Store.User(), Credentials: deps.Store.MFA(), Passwords: deps.Store.PasswordCredential(), Sessions: deps.Store.Session(), Institutions: deps.Store.Institution(), Audit: mfaAuditAdapter{audit: foundation.audit}, Effects: foundation.realtime, Mail: accountMail, Mechanics: foundation.mfa, Security: mfaSecurityDependencies{authorization: authorization, capabilities: capabilities, attempts: foundation.attempts, rateLimit: deps.LoginRateLimit}, RoleHolderMFA: authenticationAccess, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Now: time.Now})
 	if err != nil {
 		return nil, err
 	}

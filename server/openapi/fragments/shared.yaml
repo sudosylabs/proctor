@@ -1001,6 +1001,7 @@ components:
         - authentication.mfa.code_invalid
         - authentication.mfa.conflict
         - authentication.mfa.disabled
+        - authentication.mfa.enrollment_required
         - authentication.mfa.not_found
         - authentication.mfa.rekey.conflict
         - authentication.mfa.rekey.invalid
@@ -1209,6 +1210,7 @@ components:
         - mail.rekey.invalid
         - mail.test.rate_limited
         - mail.unavailable
+        - mfa.required_by_policy
         - onboarding_batch.duplicate
         - onboarding_import.conflict
         - onboarding_import.file_invalid

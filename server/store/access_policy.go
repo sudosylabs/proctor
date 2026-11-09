@@ -23,6 +23,9 @@ type AccessProviderCapability struct {
 type AccessDeploymentCapabilities struct {
 	Providers   map[string]AccessProviderCapability
 	DurableMail bool
+	// MFA reports whether the server configuration enables two-step
+	// verification.
+	MFA bool
 }
 
 type AccessPolicyBlockerCode string
@@ -32,6 +35,7 @@ const (
 	AccessPolicyBlockerProviderAdmissionUnsupported AccessPolicyBlockerCode = "provider_admission_unsupported"
 	AccessPolicyBlockerInvitationMailUnavailable    AccessPolicyBlockerCode = "invitation_delivery_unavailable"
 	AccessPolicyBlockerLastAdministratorPath        AccessPolicyBlockerCode = "last_system_administrator_path"
+	AccessPolicyBlockerMFAUnavailable               AccessPolicyBlockerCode = "mfa_unavailable"
 )
 
 // AccessPolicyBlocker contains only safe operator-facing facts. ProviderID is
@@ -51,7 +55,24 @@ type AccessPolicyPreflight struct {
 	Settings               model.AccessPolicySettings
 	RevokeExistingSessions bool
 	Capabilities           AccessDeploymentCapabilities
-	CheckedAt              time.Time
+	// SessionLimits are the deployment bounds the Session lengths must meet;
+	// replacement also uses them to pull live Session deadlines in.
+	SessionLimits model.SessionLengthLimits
+	CheckedAt     time.Time
+}
+
+// AccessPolicyPreflightResult reports the blockers of a proposed replacement
+// and the safe counts an administrator weighs before applying it.
+type AccessPolicyPreflightResult struct {
+	Blockers []AccessPolicyBlocker
+	// RoleHoldersWithoutMFACount counts active role holders, Users with a
+	// current Role Binding at any scope, who have no active second factor.
+	RoleHoldersWithoutMFACount int
+	// RoleHolderSingleFactorSessionCount counts the live Sessions of active
+	// role holders that are not multi-factor: those revoke_existing_sessions
+	// signs out when the replacement starts requiring two-step verification
+	// of role holders.
+	RoleHolderSingleFactorSessionCount int
 }
 
 type AccessPolicyReplacement struct {
@@ -66,6 +87,18 @@ type AccessPolicyReplacementResult struct {
 	Changed            bool
 	Replayed           bool
 	SessionRevocations []AccessPolicySessionRevocation
+	// SessionDeadlineChanges name the live Sessions whose deadlines a shorter
+	// Session length pulled in, so cached authentication can be invalidated.
+	SessionDeadlineChanges []AccessPolicySessionDeadlineChange
+}
+
+// AccessPolicySessionDeadlineChange contains post-commit invalidation facts
+// for one User whose live Sessions now end sooner. Raw credentials never
+// leave persistence.
+type AccessPolicySessionDeadlineChange struct {
+	UserID            model.UserID
+	SessionIDs        []model.SessionID
+	AccessTokenHashes []string
 }
 
 // AccessPolicySessionRevocation contains post-commit invalidation facts for
@@ -78,8 +111,13 @@ type AccessPolicySessionRevocation struct {
 
 type AccessPolicyStore interface {
 	Get(context.Context, int) (*AccessPolicySnapshot, error)
-	Preflight(context.Context, *AccessPolicyPreflight) ([]AccessPolicyBlocker, error)
+	Preflight(context.Context, *AccessPolicyPreflight) (*AccessPolicyPreflightResult, error)
 	Replace(context.Context, *AccessPolicyReplacement, *CommandIdempotency) (*AccessPolicyReplacementResult, error)
+	// HasRoleHolderMFARequirement reports whether the current Access Policy
+	// requires two-step verification of role holders and the active User holds, at
+	// the given instant, a current Role Binding of an unarchived Role whose
+	// scope is still live.
+	HasRoleHolderMFARequirement(context.Context, model.UserID, time.Time) (bool, error)
 }
 
 type ErrAccessPolicyRevisionConflict struct{ CurrentRevision int64 }

@@ -10,6 +10,7 @@ export interface LocalLoginSubmission {
 export type LocalLoginResult =
   | { kind: "authenticated" }
   | { kind: "recovery_required" }
+  | { kind: "enrollment_required" }
   | { kind: "mfa_required" }
   | { kind: "mfa_invalid" }
   | { kind: "invalid_credentials" }
@@ -41,10 +42,12 @@ export const authenticateLocal: AuthenticateLocal = async (submission) => {
       typeof data.session.id === "string" &&
       data.session.client_type === "web"
     ) {
-      if (data.session.mfa_recovery_required !== undefined && typeof data.session.mfa_recovery_required !== "boolean") {
+      if ((data.session.mfa_recovery_required !== undefined && typeof data.session.mfa_recovery_required !== "boolean") ||
+        (data.session.mfa_enrollment_required !== undefined && typeof data.session.mfa_enrollment_required !== "boolean")) {
         return { kind: "unavailable" };
       }
-      return { kind: data.session.mfa_recovery_required === true ? "recovery_required" : "authenticated" };
+      if (data.session.mfa_recovery_required === true) return { kind: "recovery_required" };
+      return { kind: data.session.mfa_enrollment_required === true ? "enrollment_required" : "authenticated" };
     }
 
     switch (readProblemValue(error)?.code) {

@@ -24,6 +24,7 @@ paths:
               --data '{"login_id":"ada@example.edu","password":"<redacted>","client_type":"cli","device_name":"Exam workstation"}'
       x-proctor-auth: public
       x-proctor-error-codes:
+        - authentication.mfa.enrollment_required
         - request.invalid
         - authentication.client_type.invalid
         - authentication.password.invalid

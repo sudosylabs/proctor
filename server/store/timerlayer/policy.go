@@ -392,6 +392,7 @@ const (
 	methodUpdateLastLogin                           methodName = "update_last_login"
 	methodUpdateProfile                             methodName = "update_profile"
 	methodUpgradeSession                            methodName = "upgrade_session"
+	methodHasRoleHolderMFARequirement               methodName = "has_role_holder_mfa_requirement"
 	methodUpsert                                    methodName = "upsert"
 	methodMarkObjectReclaimable                     methodName = "mark_object_reclaimable"
 	methodMarkObjectReady                           methodName = "mark_object_ready"

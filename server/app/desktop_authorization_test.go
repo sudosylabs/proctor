@@ -529,6 +529,22 @@ func (s desktopAuthorizationInstitutionStoreFake) GetSingleton(context.Context) 
 type desktopAuthorizationAccessPolicyFake struct {
 	enabled bool
 	err     error
+	// roleHolderMFA lists the Users the policy requires to use two-step
+	// verification.
+	roleHolderMFA map[model.UserID]bool
+	// lifetimes, when set, replace the deployment Session lifetimes.
+	lifetimes *sessionLifetimes
+}
+
+func (p desktopAuthorizationAccessPolicyFake) SessionLifetimes(_ context.Context, defaults SessionPolicy) (sessionLifetimes, error) {
+	if p.lifetimes != nil {
+		return *p.lifetimes, nil
+	}
+	return sessionLifetimes{Idle: defaults.IdleTTL, Absolute: defaults.AbsoluteTTL}, nil
+}
+
+func (p desktopAuthorizationAccessPolicyFake) RequiresMFA(_ context.Context, userID model.UserID) (bool, error) {
+	return p.roleHolderMFA[userID], nil
 }
 
 func (p desktopAuthorizationAccessPolicyFake) AllowsDesktopAuthorization(context.Context, string, string) (bool, error) {

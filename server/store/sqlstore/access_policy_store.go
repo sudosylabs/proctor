@@ -9,6 +9,7 @@ package sqlstore
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,16 +28,19 @@ func newSQLAccessPolicyStore(sqlStore *SQLStore) store.AccessPolicyStore {
 }
 
 type accessPolicyRow struct {
-	ID                               string    `db:"id"`
-	Revision                         int64     `db:"revision"`
-	CreatedAt                        time.Time `db:"created_at"`
-	UpdatedAt                        time.Time `db:"updated_at"`
-	LocalLoginEnabled                bool      `db:"local_login_enabled"`
-	PublicRegistrationEnabled        bool      `db:"public_registration_enabled"`
-	InvitationAdmissionEnabled       bool      `db:"invitation_admission_enabled"`
-	InvitationLocalCredentialEnabled bool      `db:"invitation_local_credential_enabled"`
-	DesktopAuthorizationEnabled      bool      `db:"desktop_authorization_enabled"`
-	ProviderAdmissions               jsonValue `db:"provider_admissions"`
+	ID                               string        `db:"id"`
+	Revision                         int64         `db:"revision"`
+	CreatedAt                        time.Time     `db:"created_at"`
+	UpdatedAt                        time.Time     `db:"updated_at"`
+	LocalLoginEnabled                bool          `db:"local_login_enabled"`
+	PublicRegistrationEnabled        bool          `db:"public_registration_enabled"`
+	InvitationAdmissionEnabled       bool          `db:"invitation_admission_enabled"`
+	InvitationLocalCredentialEnabled bool          `db:"invitation_local_credential_enabled"`
+	DesktopAuthorizationEnabled      bool          `db:"desktop_authorization_enabled"`
+	ProviderAdmissions               jsonValue     `db:"provider_admissions"`
+	RoleHolderMFARequired            bool          `db:"role_holder_mfa_required"`
+	SessionIdleMinutes               sql.NullInt64 `db:"session_idle_minutes"`
+	SessionAbsoluteMinutes           sql.NullInt64 `db:"session_absolute_minutes"`
 }
 
 type accessPolicyTransitionRow struct {
@@ -64,11 +68,14 @@ func (s SQLAccessPolicyStore) Get(ctx context.Context, historyLimit int) (*store
 	return &store.AccessPolicySnapshot{Policy: policy, History: history}, nil
 }
 
-func (s SQLAccessPolicyStore) Preflight(ctx context.Context, input *store.AccessPolicyPreflight) ([]store.AccessPolicyBlocker, error) {
+// Preflight reports the blockers of a proposed replacement at the expected
+// revision, with the role holder two-step verification counts, at one database
+// instant. It changes nothing.
+func (s SQLAccessPolicyStore) Preflight(ctx context.Context, input *store.AccessPolicyPreflight) (*store.AccessPolicyPreflightResult, error) {
 	if err := validateAccessPolicyPreflight(input); err != nil {
 		return nil, err
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "access policy preflight", func(ctx context.Context, tx *sqlxTxWrapper) ([]store.AccessPolicyBlocker, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "access policy preflight", func(ctx context.Context, tx *sqlxTxWrapper) (*store.AccessPolicyPreflightResult, error) {
 		current, err := getAccessPolicy(ctx, tx, "FOR SHARE")
 		if err != nil {
 			return nil, err
@@ -80,8 +87,54 @@ func (s SQLAccessPolicyStore) Preflight(ctx context.Context, input *store.Access
 		if err := tx.Get(ctx, &databaseNow, `SELECT clock_timestamp()`); err != nil {
 			return nil, fmt.Errorf("read access policy preflight time: %w", err)
 		}
-		return accessPolicyBlockers(ctx, tx, current, input.Settings, input.Capabilities, databaseNow)
+		blockers, err := accessPolicyBlockers(ctx, tx, current, input.Settings, input.Capabilities, databaseNow)
+		if err != nil {
+			return nil, err
+		}
+		result := &store.AccessPolicyPreflightResult{Blockers: blockers}
+		if err := tx.Get(ctx, &result.RoleHoldersWithoutMFACount, `SELECT COUNT(*) FROM users u
+			WHERE `+roleHolderUserPredicate+` AND NOT EXISTS (
+				SELECT 1 FROM mfa_credentials mc WHERE mc.user_id=u.id AND mc.archived_at IS NULL AND mc.state='active'
+			)`, databaseNow); err != nil {
+			return nil, fmt.Errorf("count role holders without MFA: %w", err)
+		}
+		if err := tx.Get(ctx, &result.RoleHolderSingleFactorSessionCount, `SELECT COUNT(*) FROM sessions s JOIN users u ON u.id=s.user_id
+			WHERE `+roleHolderSingleFactorSessionPredicate+` AND `+roleHolderUserPredicate, databaseNow); err != nil {
+			return nil, fmt.Errorf("count role holder single-factor sessions: %w", err)
+		}
+		return result, nil
 	})
+}
+
+// roleHolderUserPredicate selects an active User u holding, at the instant bound
+// to $1, a current Role Binding of an unarchived Role whose Academic Unit or
+// Class scope is not archived. A binding at any scope makes a User a role holder.
+const roleHolderUserPredicate = `u.archived_at IS NULL AND u.disabled_at IS NULL AND EXISTS (
+	SELECT 1 FROM role_bindings rb JOIN roles r ON r.id=rb.role_id
+	WHERE rb.user_id=u.id AND rb.archived_at IS NULL AND r.archived_at IS NULL
+	AND rb.start_at<=$1 AND (rb.end_at IS NULL OR rb.end_at>$1)
+	AND (rb.scope_type='institution'
+		OR (rb.scope_type='academic_unit' AND EXISTS (SELECT 1 FROM academic_units au WHERE au.id=rb.scope_id AND au.archived_at IS NULL))
+		OR (rb.scope_type='class' AND EXISTS (SELECT 1 FROM classes c WHERE c.id=rb.scope_id AND c.archived_at IS NULL))))`
+
+// roleHolderSingleFactorSessionPredicate selects the Sessions s that are live at
+// the instant bound to $1 and have not proved a second factor.
+const roleHolderSingleFactorSessionPredicate = `s.archived_at IS NULL AND s.revoked_at IS NULL
+	AND s.expires_at>$1 AND s.idle_expires_at>$1 AND s.authentication_strength<>'multi_factor'`
+
+// HasRoleHolderMFARequirement reports whether the current Access Policy requires
+// two-step verification of role holders and the User is a role holder at the given instant.
+func (s SQLAccessPolicyStore) HasRoleHolderMFARequirement(ctx context.Context, userID model.UserID, at time.Time) (bool, error) {
+	if !userID.IsValid() || at.IsZero() {
+		return false, store.NewErrInvalidInput("access_policy", "has_role_holder_mfa_requirement", nil)
+	}
+	var required bool
+	if err := s.GetMaster().Get(ctx, &required, `SELECT EXISTS (
+		SELECT 1 FROM access_policies p JOIN users u ON u.id=$2
+		WHERE p.singleton=1 AND p.role_holder_mfa_required AND `+roleHolderUserPredicate+`)`, model.TimeUTC(at), userID.String()); err != nil {
+		return false, fmt.Errorf("check access policy MFA requirement: %w", err)
+	}
+	return required, nil
 }
 
 // accessPolicyReplacementOutcome is the committed result of an Access Policy
@@ -118,6 +171,9 @@ type accessPolicyDocument struct {
 	InvitationLocalCredentialEnabled bool                                   `json:"invitation_local_credential_enabled"`
 	DesktopAuthorizationEnabled      bool                                   `json:"desktop_authorization_enabled"`
 	ProviderAdmissions               map[string]model.ProviderAdmissionMode `json:"provider_admissions"`
+	RoleHolderMFARequired            bool                                   `json:"role_holder_mfa_required"`
+	SessionIdleMinutes               int                                    `json:"session_idle_minutes"`
+	SessionAbsoluteMinutes           int                                    `json:"session_absolute_minutes"`
 }
 
 // accessPolicyTransitionDocument spells model.AccessPolicyTransition inside a
@@ -195,6 +251,7 @@ func replaceAccessPolicy(ctx context.Context, tx *sqlxTxWrapper, input *store.Ac
 	}
 	changed := transition != nil
 	revocations := []store.AccessPolicySessionRevocation{}
+	deadlineChanges := []store.AccessPolicySessionDeadlineChange{}
 	if changed && input.Preflight.RevokeExistingSessions {
 		transition.ChangedFields = append(transition.ChangedFields, "revoke_existing_sessions")
 		sort.Strings(transition.ChangedFields)
@@ -205,9 +262,20 @@ func replaceAccessPolicy(ctx context.Context, tx *sqlxTxWrapper, input *store.Ac
 		if err != nil {
 			return accessPolicyReplacementOutcome{}, err
 		}
+		if candidate.RoleHolderMFARequired && !current.RoleHolderMFARequired {
+			roleHolderRevocations, roleHolderErr := revokeRoleHolderSingleFactorSessions(ctx, tx, databaseNow)
+			if roleHolderErr != nil {
+				return accessPolicyReplacementOutcome{}, roleHolderErr
+			}
+			revocations = mergeAccessPolicySessionRevocations(revocations, roleHolderRevocations)
+		}
 	}
 	if changed {
 		if err = persistAccessPolicyReplacement(ctx, tx, current, candidate, transition); err != nil {
+			return accessPolicyReplacementOutcome{}, err
+		}
+		deadlineChanges, err = shortenLiveSessionDeadlines(ctx, tx, current, candidate, input.Preflight.SessionLimits, databaseNow)
+		if err != nil {
 			return accessPolicyReplacementOutcome{}, err
 		}
 	}
@@ -221,7 +289,7 @@ func replaceAccessPolicy(ctx context.Context, tx *sqlxTxWrapper, input *store.Ac
 	}
 	outcome := accessPolicyReplacementOutcome{Result: &store.AccessPolicyReplacementResult{
 		Snapshot: &store.AccessPolicySnapshot{Policy: candidate, History: history}, Changed: changed,
-		SessionRevocations: revocations,
+		SessionRevocations: revocations, SessionDeadlineChanges: deadlineChanges,
 	}, ChangedFields: changedFields, RevokedSessionCount: accessPolicyRevokedSessionCount(revocations)}
 	if err := completeAccessPolicyReplacementAudit(ctx, tx, outcome, input, false, ""); err != nil {
 		return accessPolicyReplacementOutcome{}, err
@@ -263,10 +331,12 @@ func persistAccessPolicyReplacement(ctx context.Context, tx *sqlxTxWrapper, curr
 	}
 	result, updateErr := tx.Exec(ctx, `UPDATE access_policies SET revision=?, updated_at=?, local_login_enabled=?,
 				public_registration_enabled=?, invitation_admission_enabled=?, invitation_local_credential_enabled=?,
-				desktop_authorization_enabled=?, provider_admissions=?::jsonb WHERE singleton=1 AND revision=?`,
+				desktop_authorization_enabled=?, provider_admissions=?::jsonb, role_holder_mfa_required=?,
+				session_idle_minutes=?, session_absolute_minutes=? WHERE singleton=1 AND revision=?`,
 		candidate.Revision, candidate.UpdatedAt, candidate.LocalLoginEnabled, candidate.PublicRegistrationEnabled,
 		candidate.InvitationAdmissionEnabled, candidate.InvitationLocalCredentialEnabled,
-		candidate.DesktopAuthorizationEnabled, providers, current.Revision)
+		candidate.DesktopAuthorizationEnabled, providers, candidate.RoleHolderMFARequired,
+		nullableMinutes(candidate.SessionIdleMinutes), nullableMinutes(candidate.SessionAbsoluteMinutes), current.Revision)
 	if updateErr != nil {
 		return fmt.Errorf("replace access policy: %w", translateError("access_policy", candidate.ID.String(), updateErr))
 	}
@@ -301,10 +371,11 @@ func decodeAccessPolicyReplacementOutcome(encoded []byte) (accessPolicyReplaceme
 	outcome := accessPolicyReplacementOutcome{
 		Result: &store.AccessPolicyReplacementResult{
 			Snapshot: snapshot, Changed: document.Changed, SessionRevocations: []store.AccessPolicySessionRevocation{},
+			SessionDeadlineChanges: []store.AccessPolicySessionDeadlineChange{},
 		},
 		ChangedFields: document.ChangedFields, RevokedSessionCount: document.RevokedSessionCount,
 	}
-	if outcome.Result.Snapshot.Policy.Validate() != nil || outcome.RevokedSessionCount < 0 || len(outcome.ChangedFields) > 7 {
+	if outcome.Result.Snapshot.Policy.Validate() != nil || outcome.RevokedSessionCount < 0 || len(outcome.ChangedFields) > model.AccessPolicyTransitionFieldMaxCount {
 		return accessPolicyReplacementOutcome{}, invalidPersistedState("command_outcome", "outcome", errors.New("invalid access policy outcome"))
 	}
 	for _, transition := range outcome.Result.Snapshot.History {
@@ -438,6 +509,189 @@ func revokeSessionsForDisabledAccessMethods(ctx context.Context, tx *sqlxTxWrapp
 	return result, nil
 }
 
+// revokeRoleHolderSingleFactorSessions revokes, with their credentials, the live
+// Sessions of role holders that have not proved a second factor. Replacement
+// calls it when the policy starts requiring two-step verification of role holders
+// and the administrator chose revoke_existing_sessions.
+func revokeRoleHolderSingleFactorSessions(ctx context.Context, tx *sqlxTxWrapper, at time.Time) ([]store.AccessPolicySessionRevocation, error) {
+	sessionRows := []struct {
+		UserID    string `db:"user_id"`
+		SessionID string `db:"session_id"`
+	}{}
+	if err := tx.Select(ctx, &sessionRows, `SELECT s.user_id, s.id AS session_id FROM sessions s JOIN users u ON u.id=s.user_id
+		WHERE `+roleHolderSingleFactorSessionPredicate+` AND `+roleHolderUserPredicate+`
+		ORDER BY s.user_id, s.id FOR UPDATE OF s`, at); err != nil {
+		return nil, fmt.Errorf("select role holder single-factor sessions for revocation: %w", err)
+	}
+	if len(sessionRows) == 0 {
+		return []store.AccessPolicySessionRevocation{}, nil
+	}
+	sessionIDs := make([]string, 0, len(sessionRows))
+	for _, row := range sessionRows {
+		sessionIDs = append(sessionIDs, row.SessionID)
+	}
+	credentialRows := []accessPolicySessionCredentialRow{}
+	if err := tx.Select(ctx, &credentialRows, `SELECT s.user_id, s.id AS session_id, c.token_hash
+		FROM sessions s JOIN session_credentials c ON c.session_id=s.id
+		WHERE s.id=ANY(?) AND c.kind='access' AND c.archived_at IS NULL AND c.revoked_at IS NULL
+		ORDER BY s.user_id, s.id`, pq.Array(sessionIDs)); err != nil {
+		return nil, fmt.Errorf("select role holder single-factor session credentials for revocation: %w", err)
+	}
+	// As in revokeSessionsForDisabledAccessMethods, a leading node clock must
+	// not produce a revocation that precedes the row's creation.
+	if _, err := tx.Exec(ctx, `UPDATE session_credentials SET updated_at=GREATEST(updated_at, ?), revoked_at=GREATEST(created_at, ?)
+		WHERE session_id=ANY(?) AND archived_at IS NULL AND revoked_at IS NULL`, at, at, pq.Array(sessionIDs)); err != nil {
+		return nil, fmt.Errorf("revoke role holder single-factor session credentials: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE sessions SET updated_at=GREATEST(updated_at, ?), revoked_at=GREATEST(created_at, ?), revocation_reason=?
+		WHERE id=ANY(?) AND revoked_at IS NULL`, at, at, string(model.SessionRevocationAccessPolicyChanged), pq.Array(sessionIDs)); err != nil {
+		return nil, fmt.Errorf("revoke role holder single-factor sessions: %w", err)
+	}
+	revocations := []store.AccessPolicySessionRevocation{}
+	byUser := map[string]int{}
+	for _, row := range sessionRows {
+		index, seen := byUser[row.UserID]
+		if !seen {
+			userID, err := model.ParseUserID(row.UserID)
+			if err != nil {
+				return nil, invalidPersistedState("session", "user_id", err)
+			}
+			index = len(revocations)
+			byUser[row.UserID] = index
+			revocations = append(revocations, store.AccessPolicySessionRevocation{UserID: userID, SessionIDs: []model.SessionID{}, AccessTokenHashes: []string{}})
+		}
+		sessionID, err := model.ParseSessionID(row.SessionID)
+		if err != nil {
+			return nil, invalidPersistedState("session", "id", err)
+		}
+		revocations[index].SessionIDs = append(revocations[index].SessionIDs, sessionID)
+	}
+	for _, row := range credentialRows {
+		if index, seen := byUser[row.UserID]; seen {
+			revocations[index].AccessTokenHashes = append(revocations[index].AccessTokenHashes, row.TokenHash)
+		}
+	}
+	return revocations, nil
+}
+
+// mergeAccessPolicySessionRevocations joins two per-User revocation lists in
+// User order. A Session appears in at most one list: the first revocation
+// already ended it before the second selected live Sessions.
+func mergeAccessPolicySessionRevocations(first, second []store.AccessPolicySessionRevocation) []store.AccessPolicySessionRevocation {
+	byUser := make(map[model.UserID]int, len(first)+len(second))
+	merged := make([]store.AccessPolicySessionRevocation, 0, len(first)+len(second))
+	for _, list := range [][]store.AccessPolicySessionRevocation{first, second} {
+		for _, revocation := range list {
+			index, seen := byUser[revocation.UserID]
+			if !seen {
+				index = len(merged)
+				byUser[revocation.UserID] = index
+				merged = append(merged, store.AccessPolicySessionRevocation{UserID: revocation.UserID,
+					SessionIDs: []model.SessionID{}, AccessTokenHashes: []string{}})
+			}
+			merged[index].SessionIDs = append(merged[index].SessionIDs, revocation.SessionIDs...)
+			merged[index].AccessTokenHashes = append(merged[index].AccessTokenHashes, revocation.AccessTokenHashes...)
+		}
+	}
+	sort.Slice(merged, func(i, j int) bool { return merged[i].UserID < merged[j].UserID })
+	return merged
+}
+
+// shortenLiveSessionDeadlines pulls the deadlines of every live Session in to
+// a shorter effective Session length, in the replacement transaction: idle
+// expiry to last activity plus the new idle length, absolute expiry to
+// creation plus the new absolute length, and each credential to its Session's
+// new absolute expiry. LEAST never extends a running Session, so a longer
+// length leaves it unchanged.
+func shortenLiveSessionDeadlines(ctx context.Context, tx *sqlxTxWrapper, current, candidate *model.AccessPolicy,
+	limits model.SessionLengthLimits, at time.Time,
+) ([]store.AccessPolicySessionDeadlineChange, error) {
+	currentIdle, currentAbsolute := current.Settings().EffectiveSessionMinutes(limits)
+	idle, absolute := candidate.Settings().EffectiveSessionMinutes(limits)
+	if idle >= currentIdle && absolute >= currentAbsolute {
+		return []store.AccessPolicySessionDeadlineChange{}, nil
+	}
+	rows := []struct {
+		UserID    string `db:"user_id"`
+		SessionID string `db:"session_id"`
+	}{}
+	// A Session older than the new absolute length ends one microsecond after
+	// its last activity, already in the past. The new deadlines therefore
+	// stay after last activity and creation, the idle deadline never passes
+	// the absolute one, and neither ever moves later, so every row keeps the
+	// Session invariants.
+	if err := tx.Select(ctx, &rows, `WITH shortened AS (
+		SELECT id, GREATEST(LEAST(expires_at, created_at + make_interval(mins => $2)),
+				last_activity_at + interval '1 microsecond') AS expires_at,
+			last_activity_at + make_interval(mins => $3) AS idle_at
+		FROM sessions
+		WHERE archived_at IS NULL AND revoked_at IS NULL AND expires_at>$1 AND idle_expires_at>$1
+		FOR UPDATE
+	)
+	UPDATE sessions s SET updated_at=GREATEST(s.updated_at, $1), expires_at=shortened.expires_at,
+		idle_expires_at=LEAST(s.idle_expires_at, shortened.idle_at, shortened.expires_at)
+	FROM shortened WHERE s.id=shortened.id
+		AND (shortened.expires_at<s.expires_at OR LEAST(shortened.idle_at, shortened.expires_at)<s.idle_expires_at)
+	RETURNING s.user_id, s.id AS session_id`, at, absolute, idle); err != nil {
+		return nil, fmt.Errorf("shorten live session deadlines: %w", err)
+	}
+	if len(rows) == 0 {
+		return []store.AccessPolicySessionDeadlineChange{}, nil
+	}
+	sessionIDs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		sessionIDs = append(sessionIDs, row.SessionID)
+	}
+	// A credential keeps expiring after its creation and any use, so one
+	// issued or used after the new absolute expiry ends just after that; its
+	// Session has already ended.
+	if _, err := tx.Exec(ctx, `UPDATE session_credentials c SET updated_at=GREATEST(c.updated_at, ?),
+		expires_at=GREATEST(s.expires_at, c.created_at + interval '1 microsecond',
+			COALESCE(c.used_at + interval '1 microsecond', c.created_at + interval '1 microsecond'))
+		FROM sessions s WHERE s.id=c.session_id AND s.id=ANY(?) AND c.archived_at IS NULL AND c.revoked_at IS NULL
+		AND c.expires_at>s.expires_at`, at, pq.Array(sessionIDs)); err != nil {
+		return nil, fmt.Errorf("cap shortened session credentials: %w", err)
+	}
+	credentialRows := []accessPolicySessionCredentialRow{}
+	if err := tx.Select(ctx, &credentialRows, `SELECT s.user_id, s.id AS session_id, c.token_hash
+		FROM sessions s JOIN session_credentials c ON c.session_id=s.id
+		WHERE s.id=ANY(?) AND c.kind='access' AND c.archived_at IS NULL AND c.revoked_at IS NULL
+		ORDER BY s.user_id, s.id`, pq.Array(sessionIDs)); err != nil {
+		return nil, fmt.Errorf("select shortened session credentials: %w", err)
+	}
+	changes := []store.AccessPolicySessionDeadlineChange{}
+	byUser := map[string]int{}
+	for _, row := range rows {
+		index, seen := byUser[row.UserID]
+		if !seen {
+			userID, err := model.ParseUserID(row.UserID)
+			if err != nil {
+				return nil, invalidPersistedState("session", "user_id", err)
+			}
+			index = len(changes)
+			byUser[row.UserID] = index
+			changes = append(changes, store.AccessPolicySessionDeadlineChange{UserID: userID, SessionIDs: []model.SessionID{}, AccessTokenHashes: []string{}})
+		}
+		sessionID, err := model.ParseSessionID(row.SessionID)
+		if err != nil {
+			return nil, invalidPersistedState("session", "id", err)
+		}
+		changes[index].SessionIDs = append(changes[index].SessionIDs, sessionID)
+	}
+	for _, row := range credentialRows {
+		if index, seen := byUser[row.UserID]; seen {
+			changes[index].AccessTokenHashes = append(changes[index].AccessTokenHashes, row.TokenHash)
+		}
+	}
+	sort.Slice(changes, func(i, j int) bool { return changes[i].UserID < changes[j].UserID })
+	return changes, nil
+}
+
+// nullableMinutes stores an unset Session length as NULL.
+func nullableMinutes(minutes int) sql.NullInt64 {
+	return sql.NullInt64{Int64: int64(minutes), Valid: minutes > 0}
+}
+
 func accessPolicyRevokedSessionCount(revocations []store.AccessPolicySessionRevocation) int {
 	total := 0
 	for _, revocation := range revocations {
@@ -449,8 +703,8 @@ func accessPolicyRevokedSessionCount(revocations []store.AccessPolicySessionRevo
 func getAccessPolicy(ctx context.Context, executor sqlxExecutor, lock string) (*model.AccessPolicy, error) {
 	var row accessPolicyRow
 	query := `SELECT id, revision, created_at, updated_at, local_login_enabled, public_registration_enabled,
-		invitation_admission_enabled, invitation_local_credential_enabled, desktop_authorization_enabled, provider_admissions
-		FROM access_policies WHERE singleton=1`
+		invitation_admission_enabled, invitation_local_credential_enabled, desktop_authorization_enabled, provider_admissions,
+		role_holder_mfa_required, session_idle_minutes, session_absolute_minutes FROM access_policies WHERE singleton=1`
 	if lock != "" {
 		query += " " + lock
 	}
@@ -472,7 +726,9 @@ func (row accessPolicyRow) model() (*model.AccessPolicy, error) {
 	policy := &model.AccessPolicy{ID: id, Revision: row.Revision, CreatedAt: model.TimeUTC(row.CreatedAt), UpdatedAt: model.TimeUTC(row.UpdatedAt),
 		LocalLoginEnabled: row.LocalLoginEnabled, PublicRegistrationEnabled: row.PublicRegistrationEnabled,
 		InvitationAdmissionEnabled: row.InvitationAdmissionEnabled, InvitationLocalCredentialEnabled: row.InvitationLocalCredentialEnabled,
-		DesktopAuthorizationEnabled: row.DesktopAuthorizationEnabled, ProviderAdmissions: providers}
+		DesktopAuthorizationEnabled: row.DesktopAuthorizationEnabled, ProviderAdmissions: providers,
+		RoleHolderMFARequired: row.RoleHolderMFARequired, SessionIdleMinutes: int(row.SessionIdleMinutes.Int64),
+		SessionAbsoluteMinutes: int(row.SessionAbsoluteMinutes.Int64)}
 	if err := validatePersistedModel("access_policy", policy); err != nil {
 		return nil, err
 	}
@@ -532,7 +788,7 @@ func insertAccessPolicyTransition(ctx context.Context, executor sqlxExecutor, tr
 
 func validateAccessPolicyPreflight(input *store.AccessPolicyPreflight) error {
 	if input == nil || input.ExpectedRevision < 1 || input.CheckedAt.IsZero() || input.Settings.Validate() != nil ||
-		!validAccessDeploymentCapabilities(input.Capabilities) {
+		input.Settings.ValidateSessionLengths(input.SessionLimits) != nil || !validAccessDeploymentCapabilities(input.Capabilities) {
 		return store.NewErrInvalidInput("access_policy", "preflight", nil)
 	}
 	return nil
@@ -566,6 +822,11 @@ func accessPolicyBlockers(ctx context.Context, executor sqlxExecutor, current *m
 	}
 	if settings.InvitationAdmissionEnabled && !current.InvitationAdmissionEnabled && !capabilities.DurableMail {
 		blockers = append(blockers, store.AccessPolicyBlocker{Code: store.AccessPolicyBlockerInvitationMailUnavailable})
+	}
+	// Requiring two-step verification of role holders while this server cannot enroll
+	// a second factor would leave every role holder restricted.
+	if settings.RoleHolderMFARequired && !current.RoleHolderMFARequired && !capabilities.MFA {
+		blockers = append(blockers, store.AccessPolicyBlocker{Code: store.AccessPolicyBlockerMFAUnavailable})
 	}
 	administratorHasPath, err := hasUsableSystemAdministratorAuthenticationPath(
 		ctx, executor, settings, capabilities, at, systemAdministratorAuthenticationPathScope{},

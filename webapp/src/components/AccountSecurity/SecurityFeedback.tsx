@@ -13,6 +13,7 @@ export function securityFailureMessage(failure: SecurityFailure): string {
     case "rate_limited": return message("webapp.security.error.rate_limited");
     case "disabled": return message("webapp.security.error.disabled");
     case "conflict": return message("webapp.security.error.conflict");
+    case "required_by_policy": return message("webapp.security.error.required_by_policy");
     case "unavailable": return message("webapp.security.error.unavailable");
   }
 }

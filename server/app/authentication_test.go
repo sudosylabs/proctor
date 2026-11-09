@@ -101,6 +101,7 @@ type authenticationStoreFake struct {
 	rotatedRefresh    *model.SessionCredential
 	rotatedAt         time.Time
 	rotatedIdleExpiry time.Time
+	rotationInput     *store.SessionRefreshRotation
 }
 
 type authenticationDesktopRegistrationLookupFake struct{}
@@ -502,6 +503,7 @@ func (s authenticationSessionCredentialStore) RotateRefresh(_ context.Context, i
 	s.root.rotatedRefresh = refresh
 	s.root.rotatedAt = at
 	s.root.rotatedIdleExpiry = idleExpiry
+	s.root.rotationInput = input
 	if s.root.rotation == nil {
 		return nil, errors.New("unused")
 	}

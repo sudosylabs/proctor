@@ -42,6 +42,7 @@ type mfaActivationResponse struct {
 type mfaStatusResponse struct {
 	ServiceEnabled           bool   `json:"service_enabled"`
 	MFARecoveryRequired      bool   `json:"mfa_recovery_required"`
+	MFAEnrollmentRequired    bool   `json:"mfa_enrollment_required"`
 	AuthenticationMethod     string `json:"authentication_method"`
 	AuthenticationProviderID string `json:"authentication_provider_id,omitempty"`
 	AuthenticationStrength   string `json:"authentication_strength"`
@@ -73,9 +74,9 @@ func mfaResource(mfa MFA) apiResource {
 		mfaRecoverySessionRoute(http.MethodGet, base, []string{"authentication.mfa.unavailable", "authentication.reauthentication_required", "authentication.session_required"}, module.status),
 		recentMFARecoverySessionRoute(http.MethodPost, appendRoutePath(base, literal("setup")), []string{"authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.session_required"}, module.setup),
 		recentMFARecoverySessionRoute(http.MethodPost, appendRoutePath(base, literal("activate")), []string{"request.invalid", "authentication.mfa.code_invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.session_required"}, module.activate),
-		sessionRoute(http.MethodPost, appendRoutePath(base, literal("challenge")), []string{"request.invalid", "authentication.mfa.code_invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.reauthentication_required", "authentication.session_required"}, module.challenge),
+		mfaEnrollmentSessionRoute(http.MethodPost, appendRoutePath(base, literal("challenge")), []string{"request.invalid", "authentication.mfa.code_invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.reauthentication_required", "authentication.session_required"}, module.challenge),
 		strongRecentSessionRoute(http.MethodPost, appendRoutePath(base, literal("recovery-codes"), literal("regenerate")), []string{"authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.session_required"}, module.regenerateRecoveryCodes),
-		strongRecentSessionRoute(http.MethodPost, appendRoutePath(base, literal("disable")), []string{"authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "audit.unavailable", "authentication.session_required"}, module.disable),
+		strongRecentSessionRoute(http.MethodPost, appendRoutePath(base, literal("disable")), []string{"mfa.required_by_policy", "authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "audit.unavailable", "authentication.session_required"}, module.disable),
 	)
 }
 
@@ -90,7 +91,8 @@ func (m mfaResourceModule) status(request operationRequest) (operationResult, er
 	}
 	return jsonResult(http.StatusOK, mfaStatusResponse{
 		ServiceEnabled: status.ServiceEnabled, MFARecoveryRequired: status.MFARecoveryRequired,
-		AuthenticationMethod: status.AuthenticationMethod, AuthenticationProviderID: status.AuthenticationProviderID,
+		MFAEnrollmentRequired: status.MFAEnrollmentRequired,
+		AuthenticationMethod:  status.AuthenticationMethod, AuthenticationProviderID: status.AuthenticationProviderID,
 		AuthenticationStrength: string(status.AuthenticationStrength), RecentlyAuthenticated: status.RecentlyAuthenticated,
 		Enabled:                     status.Enabled,
 		Pending:                     status.Pending,

@@ -69,7 +69,7 @@ func requireAuthentication(
 		return next
 	case AuthRefreshCredentialRequired:
 		return requireRefreshCredential(next, logger, cookies, errorPolicy)
-	case AuthMFARecoverySessionRequired, AuthRecentMFARecoverySessionRequired, AuthPrincipalRequired,
+	case AuthMFARecoverySessionRequired, AuthRecentMFARecoverySessionRequired, AuthMFAEnrollmentSessionRequired, AuthPrincipalRequired,
 		AuthSessionRequired,
 		AuthStrongSessionRequired,
 		AuthRecentSessionRequired,
@@ -221,7 +221,14 @@ func requirePrincipalAssurance(
 	if principal.ValidateMFARecovery() != nil {
 		return apperror.New("authentication.token_invalid")
 	}
-	if principal.MFARecoveryRequired && requirement != AuthMFARecoverySessionRequired && requirement != AuthRecentMFARecoverySessionRequired {
+	// A restricted Web Session reaches only the routes that declare the
+	// restriction. Both restrictions share the recovery routes; the Access
+	// Policy enrollment restriction also reaches the second-factor challenge.
+	recoveryRoute := requirement == AuthMFARecoverySessionRequired || requirement == AuthRecentMFARecoverySessionRequired
+	if principal.MFARecoveryRequired && !recoveryRoute {
+		return apperror.New("authentication.token_invalid")
+	}
+	if principal.MFAEnrollmentRequired && !recoveryRoute && requirement != AuthMFAEnrollmentSessionRequired {
 		return apperror.New("authentication.token_invalid")
 	}
 	strongRequired := requirement == AuthStrongSessionRequired ||

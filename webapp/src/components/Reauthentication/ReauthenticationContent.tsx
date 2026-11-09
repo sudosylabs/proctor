@@ -101,7 +101,9 @@ export function ReauthenticationContent({ actions, externalProofFailed, loading,
   }
 
   const context = state.context;
-  const requiresRecovery = context.recoveryRequired && task === "connect-provider";
+  // Neither restricted Session may connect a provider; each must first set
+  // up two-step verification.
+  const requiresRecovery = (context.recoveryRequired || context.enrollmentRequired) && task === "connect-provider";
   const needsPrimary = !context.recentlyAuthenticated;
   const needsStrong = !context.recoveryRequired && context.authenticationStrength !== "multi_factor" && (context.enabled || task === "connect-provider");
   const complete = !requiresRecovery && !needsPrimary && !needsStrong;
@@ -120,13 +122,16 @@ export function ReauthenticationContent({ actions, externalProofFailed, loading,
       <AccessTaskIntro key={step} headingID="reauthentication-heading" focusHeading={focusHeading}
         kind={message(requiresRecovery ? "webapp.security.eyebrow" : "webapp.reauthenticate.kind")}
         kindTone={requiresRecovery ? "warning" : complete ? "success" : undefined}
-        heading={message(requiresRecovery ? "webapp.security.restore_access" : complete ? "webapp.reauthenticate.complete.heading" : "webapp.reauthenticate.heading")}
-        body={stepBody(step, task, duration)} />
+        heading={message(requiresRecovery
+          ? context.recoveryRequired ? "webapp.security.restore_access" : "webapp.security.enrollment_required.heading"
+          : complete ? "webapp.reauthenticate.complete.heading" : "webapp.reauthenticate.heading")}
+        body={stepBody(step, task, duration, context.recoveryRequired)} />
       {showExternalFailure ? <Notice tone="warning">{providerName === undefined
         ? message("webapp.reauthenticate.external.failed_unnamed")
         : message("webapp.reauthenticate.external.failed", { Provider: providerName })}</Notice> : null}
       {requiresRecovery ? <TaskStateActions>
-        <ButtonLink href="/account/security">{message("webapp.security.restore_access")}</ButtonLink>
+        <ButtonLink href="/account/security">{message(context.recoveryRequired
+          ? "webapp.security.restore_access" : "webapp.security.enrollment_required.action")}</ButtonLink>
       </TaskStateActions> : needsPrimary ? <>
         {context.authenticationMethod === "password"
           ? <PasswordProofForm key={formGeneration} pending={pending} onSubmit={passwordProof} cancel={cancel} />
@@ -166,9 +171,9 @@ export function ReauthenticationContent({ actions, externalProofFailed, loading,
   );
 }
 
-function stepBody(step: "recovery" | "primary" | "strong" | "complete", task: ReauthenticationTask, duration: string): string {
+function stepBody(step: "recovery" | "primary" | "strong" | "complete", task: ReauthenticationTask, duration: string, recovery: boolean): string {
   switch (step) {
-    case "recovery": return message("webapp.security.recovery_required");
+    case "recovery": return message(recovery ? "webapp.security.recovery_required" : "webapp.security.enrollment_required");
     case "primary": return message(task === "connect-provider" ? "webapp.reauthenticate.lede.connect" : "webapp.reauthenticate.lede.security", { Duration: duration });
     case "strong": return message("webapp.reauthenticate.lede.strong");
     case "complete": return message("webapp.reauthenticate.complete.body", { Duration: duration });

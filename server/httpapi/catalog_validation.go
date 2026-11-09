@@ -128,7 +128,7 @@ func validateDeclaredKernelCodes(resources []apiResource) error {
 
 func idempotencyPrincipalAuth(requirement AuthRequirement) bool {
 	switch requirement {
-	case AuthMFARecoverySessionRequired, AuthRecentMFARecoverySessionRequired, AuthPrincipalRequired, AuthSessionRequired, AuthStrongSessionRequired, AuthRecentSessionRequired,
+	case AuthMFARecoverySessionRequired, AuthRecentMFARecoverySessionRequired, AuthMFAEnrollmentSessionRequired, AuthPrincipalRequired, AuthSessionRequired, AuthStrongSessionRequired, AuthRecentSessionRequired,
 		AuthStrongRecentSessionRequired:
 		return true
 	default:
@@ -168,7 +168,7 @@ func countTrue(values ...bool) int {
 
 func validAuthRequirement(requirement AuthRequirement) bool {
 	switch requirement {
-	case AuthPublic, AuthMFARecoverySessionRequired, AuthRecentMFARecoverySessionRequired,
+	case AuthPublic, AuthMFARecoverySessionRequired, AuthRecentMFARecoverySessionRequired, AuthMFAEnrollmentSessionRequired,
 		AuthPrincipalRequired,
 		AuthSessionRequired,
 		AuthStrongSessionRequired,

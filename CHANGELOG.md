@@ -17,6 +17,11 @@ module when a change is not server-only. No module has been released yet.
 
 ### Changed
 
+- Server: the baseline adds `access_policies.role_holder_mfa_required`,
+  `session_idle_minutes` and `session_absolute_minutes` and
+  `sessions.mfa_enrollment_required`, and admits those three policy fields
+  among the recorded Access Policy transition fields. Existing development
+  databases must be recreated.
 - Server: the baseline adds indexes for the User directory affiliation filter,
   the onboarding import list, failed Jobs and Invitations by state, bounds
   `invitations.expires_at` between one and thirty days after creation, and
@@ -219,6 +224,30 @@ module when a change is not server-only. No module has been released yet.
 
 ### Added
 
+- Server: the Access Policy can require two-step verification of role
+  holders, every User with a current Role Binding at any scope, with
+  `role_holder_mfa_required` on `GET`, `PUT` and preflight; `GET` also
+  reports the read-only `role_holder_mfa_enforced`. A role holder without a
+  second factor signs in on the web to a Session marked
+  `mfa_enrollment_required` that only reaches two-step setup, the challenge,
+  reauthentication and sign-out; CLI and Desktop sign-in, Desktop code exchange
+  and Desktop refresh fail with `authentication.mfa.enrollment_required`, a Web
+  refresh restricts the Session, and turning two-step verification off fails
+  with `mfa.required_by_policy`. Preflight adds the `mfa_unavailable` blocker
+  and the `role_holders_without_mfa_count` and
+  `role_holder_single_factor_session_count` counts, and
+  `revoke_existing_sessions` signs out role holders' Sessions that have not
+  proved a second factor when the rule is turned on. The rule pauses, with one
+  logged warning, while the deployment disables MFA.
+- Server: the Access Policy can shorten the idle and absolute Session lengths
+  with the nullable `session_idle_minutes` and `session_absolute_minutes`;
+  null keeps the deployment default, which stays the ceiling. `GET` also
+  returns `session_idle_minutes_default`, `session_idle_minutes_maximum`,
+  `session_absolute_minutes_default` and `session_absolute_minutes_maximum`.
+  A length outside the deployment bounds is refused as `access_policy.invalid`
+  naming the field. New Sessions, activity, refresh and the Desktop exchange
+  use the effective lengths, and shortening a length pulls running Sessions'
+  deadlines and credentials in without ever extending them.
 - Server: the contract publishes three closed code catalogues as components:
   `MailFailureCode` for `public_failure_code` on Mail Deliveries and
   Invitation deliveries, and `AcademicAdministrationBatchErrorCode` and

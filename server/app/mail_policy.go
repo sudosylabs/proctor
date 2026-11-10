@@ -189,15 +189,10 @@ func (h *MailHealth) set(code string) bool {
 	return false
 }
 
-type mailMaintenanceStore interface {
-	SuppressOutstanding(context.Context, *store.MailOutstandingSuppression) (*store.MailMaintenanceResult, error)
-	QueueSnapshot(context.Context) (*store.MailQueueSnapshot, error)
-}
-
 type mailDeliveryProber interface{ Probe(context.Context) error }
 
 type mailMaintenanceMonitor struct {
-	mail     mailMaintenanceStore
+	mail     store.MailStore
 	sender   mail.Sender
 	health   *MailHealth
 	recorder MailDeliveryRecorder

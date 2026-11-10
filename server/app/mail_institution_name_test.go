@@ -16,9 +16,11 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 type institutionNameStoreFake struct {
+	store.InstitutionStore
 	reads       int
 	institution *model.Institution
 	err         error
@@ -32,21 +34,21 @@ func (f *institutionNameStoreFake) GetSingleton(context.Context) (*model.Institu
 func TestInstitutionNameCacheBacksOffAfterAFailedRead(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 11, 7, 9, 0, 0, 0, time.UTC)
-	store := &institutionNameStoreFake{err: errors.New("unavailable")}
-	cache := &institutionNameCache{institutions: store, now: func() time.Time { return now }}
+	persistence := &institutionNameStoreFake{err: errors.New("unavailable")}
+	cache := &institutionNameCache{institutions: persistence, now: func() time.Time { return now }}
 
 	assert.Empty(t, cache.Name())
 	assert.Empty(t, cache.Name())
-	assert.Equal(t, 1, store.reads, "a failed read is retried only after the retry delay")
+	assert.Equal(t, 1, persistence.reads, "a failed read is retried only after the retry delay")
 
-	store.err, store.institution = nil, &model.Institution{DisplayName: " Lagoon City University "}
+	persistence.err, persistence.institution = nil, &model.Institution{DisplayName: " Lagoon City University "}
 	now = now.Add(institutionNameRetryDelay)
 	assert.Equal(t, "Lagoon City University", cache.Name())
 	now = now.Add(institutionNameCacheLifetime - time.Second)
 	assert.Equal(t, "Lagoon City University", cache.Name())
-	assert.Equal(t, 2, store.reads, "a read name is reused for the cache lifetime")
+	assert.Equal(t, 2, persistence.reads, "a read name is reused for the cache lifetime")
 
-	store.err = errors.New("unavailable")
+	persistence.err = errors.New("unavailable")
 	now = now.Add(time.Second)
 	assert.Equal(t, "Lagoon City University", cache.Name(), "a failed refresh keeps the last known name")
 }

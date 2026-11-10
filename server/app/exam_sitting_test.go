@@ -28,7 +28,7 @@ func TestExamSittingLifecycleEffectPublishesOnlySafeBoundedMetadata(t *testing.T
 	examID, sittingID := model.NewExamID(), model.NewExamSittingID()
 	candidateID := model.NewUserID()
 	collections := examCollectionInvalidationEffects{
-		sittings: &examCollectionInvalidationStoreFake{candidateIDs: []model.UserID{candidateID}},
+		sittings: &examSittingInvalidationStoreFake{candidateIDs: []model.UserID{candidateID}},
 		realtime: service,
 	}
 	at := time.Date(2026, time.August, 16, 9, 0, 0, 0, time.UTC)
@@ -52,12 +52,13 @@ func TestExamSittingLifecycleEffectPublishesOnlySafeBoundedMetadata(t *testing.T
 	require.Equal(t, candidateID, events[3].UserID)
 }
 
-type examCollectionInvalidationStoreFake struct {
+type examSittingInvalidationStoreFake struct {
+	store.ExamSittingStore
 	candidateIDs []model.UserID
 	targets      []store.ExamSittingInvalidationTarget
 }
 
-func (f *examCollectionInvalidationStoreFake) ListInvalidationTargetsByExam(
+func (f *examSittingInvalidationStoreFake) ListInvalidationTargetsByExam(
 	context.Context,
 	model.ExamID,
 	model.ExamSittingID,
@@ -66,7 +67,7 @@ func (f *examCollectionInvalidationStoreFake) ListInvalidationTargetsByExam(
 	return append([]store.ExamSittingInvalidationTarget(nil), f.targets...), nil
 }
 
-func (f *examCollectionInvalidationStoreFake) ListCandidateInvalidationTargetsBySitting(
+func (f *examSittingInvalidationStoreFake) ListCandidateInvalidationTargetsBySitting(
 	context.Context,
 	model.ExamSittingID,
 	model.UserID,

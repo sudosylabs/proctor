@@ -26,7 +26,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type mailRekeyStarterFake struct {
+type mailRekeyPersistenceFake struct {
+	store.MailStore
+	store.JobStore
 	input  *store.MailRekeyStart
 	state  *store.MailKeyState
 	job    *model.Job
@@ -34,11 +36,11 @@ type mailRekeyStarterFake struct {
 	events *[]string
 }
 
-func (f *mailRekeyStarterFake) InspectKeyState(context.Context) (*store.MailKeyState, error) {
+func (f *mailRekeyPersistenceFake) InspectKeyState(context.Context) (*store.MailKeyState, error) {
 	return f.state, nil
 }
 
-func (f *mailRekeyStarterFake) StartRekey(_ context.Context, input *store.MailRekeyStart) (*store.MailRekeyOperation, error) {
+func (f *mailRekeyPersistenceFake) StartRekey(_ context.Context, input *store.MailRekeyStart) (*store.MailRekeyOperation, error) {
 	if f.events != nil {
 		*f.events = append(*f.events, "store")
 	}
@@ -50,7 +52,7 @@ func (f *mailRekeyStarterFake) StartRekey(_ context.Context, input *store.MailRe
 		RetiringKeyID: input.RetiringKeyID, CreatedAt: input.Job.CreatedAt}, nil
 }
 
-func (f *mailRekeyStarterFake) Get(_ context.Context, id model.JobID) (*model.Job, error) {
+func (f *mailRekeyPersistenceFake) Get(_ context.Context, id model.JobID) (*model.Job, error) {
 	if f.job == nil || f.job.ID != id {
 		return nil, store.NewErrNotFound("job", id.String())
 	}
@@ -93,12 +95,12 @@ func TestStartMailRekeyRequiresStrongRecentSessionAndEnqueuesAuditedJob(t *testi
 	sealer, err := secretseal.New(secretseal.Settings{EncryptionKey: newKey, DecryptionKeys: []string{oldKey}, MaximumPlaintext: 1024})
 	require.NoError(t, err)
 	events := []string{}
-	persistence := &mailRekeyStarterFake{events: &events, state: &store.MailKeyState{Active: []store.MailPayloadKeyUsage{{
+	persistence := &mailRekeyPersistenceFake{events: &events, state: &store.MailKeyState{Active: []store.MailPayloadKeyUsage{{
 		KeyID: oldSealerKeyID(t, oldKey), ActiveReferences: 4,
 	}}}}
 	authorizer := &mailAuthorizerFake{}
 	auditor := &mailRekeyAuditFake{beginID: model.NewID(), events: &events}
-	service := &MailService{deps: mailServiceDependencies{Authorization: authorizer, Sealer: sealer, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return now }}, rekey: persistence, keyState: persistence, rekeyAudit: auditor}
+	service := &MailService{deps: mailServiceDependencies{Authorization: authorizer, Mail: persistence, Sealer: sealer, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return now }}, rekeyAudit: auditor}
 	woke := 0
 	service.wake = func() { woke++ }
 	// Authentication restores durable Session timestamps; the service clock
@@ -185,9 +187,9 @@ func TestStartMailRekeyCompletesConflictAndPersistenceFailureAudits(t *testing.T
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			persistence := &mailRekeyStarterFake{err: test.storeErr}
+			persistence := &mailRekeyPersistenceFake{err: test.storeErr}
 			auditor := &mailRekeyAuditFake{beginID: model.NewID(), failErr: test.failErr}
-			service := &MailService{deps: mailServiceDependencies{Authorization: &mailAuthorizerFake{}, Sealer: sealer, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return now }}, rekey: persistence, rekeyAudit: auditor, wake: func() { require.FailNow(t, "failed rekey woke workers") }}
+			service := &MailService{deps: mailServiceDependencies{Authorization: &mailAuthorizerFake{}, Mail: persistence, Sealer: sealer, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return now }}, rekeyAudit: auditor, wake: func() { require.FailNow(t, "failed rekey woke workers") }}
 			principal := mailTestPrincipal(model.TimeUTC(now))
 			principal.AuthenticationStrength = model.AuthenticationMultiFactor
 			principal.MFACompletedAt = model.OptionalTimeFrom(now)
@@ -219,7 +221,7 @@ func TestGetMailRekeyStatusProjectsOnlyTypedProgressAndRetirementProof(t *testin
 		Processed: 9, Reencrypted: 8, RetirementSafe: true})
 	succeeded, err := running.Succeed(result, now.Add(3*time.Second))
 	require.NoError(t, err)
-	persistence := &mailRekeyStarterFake{job: succeeded}
+	persistence := &mailRekeyPersistenceFake{job: succeeded}
 	authorizer := &mailAuthorizerFake{}
 	service := &MailService{deps: mailServiceDependencies{Authorization: authorizer, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return now.Add(4 * time.Second) }}, rekeyJobs: persistence}
 	principal := mailTestPrincipal(model.TimeUTC(now))
@@ -251,7 +253,7 @@ func TestGetMailRekeyStatusConcealsJobsOwnedByOtherDomains(t *testing.T) {
 	other, err := model.NewJob(model.NewJobID(), model.JobTypeProfilePictureGenerateDefault,
 		json.RawMessage(`{"user_id":"`+model.NewUserID().String()+`"}`), model.NewUserID().String(), now, now, 8)
 	require.NoError(t, err)
-	persistence := &mailRekeyStarterFake{job: other}
+	persistence := &mailRekeyPersistenceFake{job: other}
 	service := &MailService{deps: mailServiceDependencies{Authorization: &mailAuthorizerFake{}, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return now }}, rekeyJobs: persistence}
 	principal := mailTestPrincipal(model.TimeUTC(now))
 	principal.AuthenticationStrength = model.AuthenticationMultiFactor

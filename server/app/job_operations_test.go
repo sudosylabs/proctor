@@ -117,7 +117,7 @@ func TestJobOperationsAuthorizeBeforeEngineInspection(t *testing.T) {
 	view := job.View{ID: model.NewJobID(), Type: model.JobTypeProfilePictureGenerateDefault, Status: model.JobStatusQueued}
 	engine := &jobOperatorEngineFake{events: &events, view: view}
 	authorizer := &jobOperationsAuthorizerFake{events: &events, resource: model.Resource{Type: model.ResourceInstitution, ID: model.NewID()}}
-	service, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: engine, Authorization: authorizer, Audit: &jobOperationsAuditorFake{events: &events}, Users: &jobInitiatorNamesFake{}, ExamExports: &jobExamExportTitlesFake{}, Now: time.Now})
+	service, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: engine, Authorization: authorizer, Audit: &jobOperationsAuditorFake{events: &events}, Users: &jobUserStoreFake{}, ExamExports: &jobExamExportStoreFake{}, Now: time.Now})
 	require.NoError(t, err)
 
 	page, appErr := service.ListJobs(context.Background(), invocation.Invocation{}, ListJobsQuery{Limit: 20})
@@ -143,7 +143,7 @@ func TestJobOperationsAuditAfterPreparationAndBeforeTransition(t *testing.T) {
 	engine := &jobOperatorEngineFake{events: &events, view: view}
 	authorizer := &jobOperationsAuthorizerFake{events: &events, resource: model.Resource{Type: model.ResourceInstitution, ID: model.NewID()}}
 	auditor := &jobOperationsAuditorFake{events: &events}
-	service, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: engine, Authorization: authorizer, Audit: auditor, Users: &jobInitiatorNamesFake{}, ExamExports: &jobExamExportTitlesFake{}, Now: time.Now})
+	service, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: engine, Authorization: authorizer, Audit: auditor, Users: &jobUserStoreFake{}, ExamExports: &jobExamExportStoreFake{}, Now: time.Now})
 	require.NoError(t, err)
 
 	_, appErr := service.CancelJob(context.Background(), invocation.Invocation{}, CancelJobCommand{ID: view.ID})
@@ -181,7 +181,7 @@ func TestJobOperationsTranslateEnginePolicyErrors(t *testing.T) {
 	t.Parallel()
 	events := make([]string, 0, 2)
 	engine := &jobOperatorEngineFake{events: &events, prepareErr: job.ErrCancelUnsupported}
-	service, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: engine, Authorization: &jobOperationsAuthorizerFake{events: &events}, Audit: &jobOperationsAuditorFake{events: &events}, Users: &jobInitiatorNamesFake{}, ExamExports: &jobExamExportTitlesFake{}, Now: time.Now})
+	service, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: engine, Authorization: &jobOperationsAuthorizerFake{events: &events}, Audit: &jobOperationsAuditorFake{events: &events}, Users: &jobUserStoreFake{}, ExamExports: &jobExamExportStoreFake{}, Now: time.Now})
 	require.NoError(t, err)
 	_, appErr := service.CancelJob(context.Background(), invocation.Invocation{}, CancelJobCommand{ID: model.NewJobID()})
 	require.True(t, apperror.Is(appErr, "job.cancel.unsupported"), "Cancel() error=%#v", appErr)
@@ -193,14 +193,14 @@ func TestJobOperationsRequireDependencies(t *testing.T) {
 	engine := &jobOperatorEngineFake{}
 	authorizer := &jobOperationsAuthorizerFake{}
 	auditor := &jobOperationsAuditorFake{events: &[]string{}}
-	users, exports := &jobInitiatorNamesFake{}, &jobExamExportTitlesFake{}
+	users, exports := &jobUserStoreFake{}, &jobExamExportStoreFake{}
 	tests := []struct {
 		name          string
 		jobs          jobOperatorEngine
 		authorization institutionAuthorizer
 		audit         access.MutationAuditor
-		users         jobInitiatorNames
-		exports       jobExamExportTitles
+		users         store.UserStore
+		exports       store.ExamExportStore
 		now           func() time.Time
 	}{
 		{name: "engine", authorization: authorizer, audit: auditor, users: users, exports: exports, now: time.Now},
@@ -218,23 +218,25 @@ func TestJobOperationsRequireDependencies(t *testing.T) {
 	}
 }
 
-type jobInitiatorNamesFake struct {
+type jobUserStoreFake struct {
+	store.UserStore
 	names []store.UserDisplayName
 	calls [][]model.UserID
 	err   error
 }
 
-func (f *jobInitiatorNamesFake) ListDisplayNames(_ context.Context, ids []model.UserID) ([]store.UserDisplayName, error) {
+func (f *jobUserStoreFake) ListDisplayNames(_ context.Context, ids []model.UserID) ([]store.UserDisplayName, error) {
 	f.calls = append(f.calls, slices.Clone(ids))
 	return f.names, f.err
 }
 
-type jobExamExportTitlesFake struct {
+type jobExamExportStoreFake struct {
+	store.ExamExportStore
 	titles []store.ExamExportBuildTitle
 	calls  [][]model.JobID
 }
 
-func (f *jobExamExportTitlesFake) ListBuildTitles(_ context.Context, ids []model.JobID) ([]store.ExamExportBuildTitle, error) {
+func (f *jobExamExportStoreFake) ListBuildTitles(_ context.Context, ids []model.JobID) ([]store.ExamExportBuildTitle, error) {
 	f.calls = append(f.calls, slices.Clone(ids))
 	return f.titles, nil
 }
@@ -250,8 +252,8 @@ func TestJobOperationsPresentInitiatorsAndSubjectsOncePerPage(t *testing.T) {
 		{ID: rekey, Type: model.JobTypeMailRekey, CreatedByUserID: operator},
 		{ID: system, Type: model.JobTypeCleanup},
 	}}
-	users := &jobInitiatorNamesFake{names: []store.UserDisplayName{{UserID: operator, DisplayName: "Ada Operator"}}}
-	exports := &jobExamExportTitlesFake{titles: []store.ExamExportBuildTitle{
+	users := &jobUserStoreFake{names: []store.UserDisplayName{{UserID: operator, DisplayName: "Ada Operator"}}}
+	exports := &jobExamExportStoreFake{titles: []store.ExamExportBuildTitle{
 		{JobID: firstExport, Title: "Algorithms final"}, {JobID: secondExport, Title: strings.Repeat("é", 250)},
 	}}
 	service, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: engine, Authorization: &jobOperationsAuthorizerFake{events: &events},

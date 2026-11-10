@@ -96,11 +96,7 @@ func newJobRuntime(
 	return jobRuntime{engine: engine, operations: operations, mail: mailOperations}, nil
 }
 
-type activeMailPayloadKeyStore interface {
-	InspectKeyState(context.Context) (*store.MailKeyState, error)
-}
-
-func validateActiveMailPayloadKeys(ctx context.Context, persistence activeMailPayloadKeyStore, sealer interface {
+func validateActiveMailPayloadKeys(ctx context.Context, persistence store.MailStore, sealer interface {
 	HasKey(string) bool
 	PrimaryKeyID() string
 }) error {

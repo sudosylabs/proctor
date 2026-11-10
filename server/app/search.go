@@ -71,10 +71,6 @@ type searchClassAuthorizer interface {
 	AuthorizeClassSearch(context.Context, invocation.Invocation) (store.ClassVisibilityScope, error)
 }
 
-type searchClassStore interface {
-	SearchVisible(context.Context, store.ClassSearchOptions) ([]*model.Class, error)
-}
-
 // searchServiceDependencies are the collaborators of SearchService. Exams and
 // Users are the Exam catalog and User directory use cases themselves, so each
 // type is authorized, audited and scoped exactly as its own list is.
@@ -82,7 +78,7 @@ type searchServiceDependencies struct {
 	Exams              searchExamCatalog
 	Users              searchUserDirectory
 	ClassAuthorization searchClassAuthorizer
-	Classes            searchClassStore
+	Classes            store.ClassStore
 }
 
 // SearchService finds Exams, Classes and Users within the caller's own list

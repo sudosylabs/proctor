@@ -27,7 +27,7 @@ func TestExamArchiveInvalidatesEveryAffectedCollection(t *testing.T) {
 	require.NoError(t, realtime.AttachRealtimeClusterFanout(&recordingRealtimeCluster{}))
 	examID, sittingID, candidateID := model.NewExamID(), model.NewExamSittingID(), model.NewUserID()
 	collections := examCollectionInvalidationEffects{
-		sittings: &examCollectionInvalidationStoreFake{
+		sittings: &examSittingInvalidationStoreFake{
 			candidateIDs: []model.UserID{candidateID},
 			targets: []store.ExamSittingInvalidationTarget{{
 				ExamID: examID, SittingID: sittingID,

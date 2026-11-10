@@ -28,7 +28,7 @@ func TestCorrectionEffectPublishesManagerAndCandidateRefetchFacts(t *testing.T) 
 	examID, sittingID := model.NewExamID(), model.NewExamSittingID()
 	candidateID := model.NewUserID()
 	collections := examCollectionInvalidationEffects{
-		sittings: &examCollectionInvalidationStoreFake{candidateIDs: []model.UserID{candidateID}},
+		sittings: &examSittingInvalidationStoreFake{candidateIDs: []model.UserID{candidateID}},
 		realtime: service,
 	}
 	previousRevisionID, revisionID := model.NewExamRevisionID(), model.NewExamRevisionID()

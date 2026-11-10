@@ -18,13 +18,8 @@ import (
 
 const examCollectionInvalidationPageSize = 200
 
-type examCollectionInvalidationStore interface {
-	ListInvalidationTargetsByExam(context.Context, model.ExamID, model.ExamSittingID, int) ([]store.ExamSittingInvalidationTarget, error)
-	ListCandidateInvalidationTargetsBySitting(context.Context, model.ExamSittingID, model.UserID, int) ([]model.UserID, error)
-}
-
 type examCollectionInvalidationEffects struct {
-	sittings examCollectionInvalidationStore
+	sittings store.ExamSittingStore
 	realtime *RealtimeService
 }
 

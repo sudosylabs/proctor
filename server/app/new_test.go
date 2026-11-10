@@ -42,12 +42,13 @@ type constructionRegistryStub struct {
 }
 type constructionFileContentStub struct{ FileContent }
 
-type activeMailPayloadKeyStoreFake struct {
+type mailKeyStateStoreFake struct {
+	store.MailStore
 	state *store.MailKeyState
 	err   error
 }
 
-func (s activeMailPayloadKeyStoreFake) InspectKeyState(context.Context) (*store.MailKeyState, error) {
+func (s mailKeyStateStoreFake) InspectKeyState(context.Context) (*store.MailKeyState, error) {
 	return s.state, s.err
 }
 
@@ -66,21 +67,21 @@ func TestActiveMailPayloadKeysAreValidatedBeforeWorkersStart(t *testing.T) {
 	keyID := "0123456789abcdef0123456789abcdef"
 	validState := &store.MailKeyState{RequiredPrimaryKeyID: keyID,
 		Active: []store.MailPayloadKeyUsage{{KeyID: keyID, ActiveReferences: 7}}}
-	require.NoError(t, validateActiveMailPayloadKeys(context.Background(), activeMailPayloadKeyStoreFake{state: validState}, mailPayloadKeyRingFake{primary: keyID, keys: map[string]bool{keyID: true}}))
-	err := validateActiveMailPayloadKeys(context.Background(), activeMailPayloadKeyStoreFake{state: validState}, mailPayloadKeyRingFake{primary: keyID, keys: map[string]bool{}})
+	require.NoError(t, validateActiveMailPayloadKeys(context.Background(), mailKeyStateStoreFake{state: validState}, mailPayloadKeyRingFake{primary: keyID, keys: map[string]bool{keyID: true}}))
+	err := validateActiveMailPayloadKeys(context.Background(), mailKeyStateStoreFake{state: validState}, mailPayloadKeyRingFake{primary: keyID, keys: map[string]bool{}})
 	require.Error(t, err, "missing active key was accepted")
 	require.Contains(t, err.Error(), keyID, "missing active key was accepted")
 	require.Contains(t, err.Error(), "7", "missing active key was accepted")
-	require.Error(t, validateActiveMailPayloadKeys(context.Background(), activeMailPayloadKeyStoreFake{err: errors.New("database unavailable")}, mailPayloadKeyRingFake{}), "persistence failure was accepted")
+	require.Error(t, validateActiveMailPayloadKeys(context.Background(), mailKeyStateStoreFake{err: errors.New("database unavailable")}, mailPayloadKeyRingFake{}), "persistence failure was accepted")
 	otherPrimary := "11111111111111111111111111111111"
-	err = validateActiveMailPayloadKeys(context.Background(), activeMailPayloadKeyStoreFake{state: validState}, mailPayloadKeyRingFake{primary: otherPrimary, keys: map[string]bool{keyID: true, otherPrimary: true}})
+	err = validateActiveMailPayloadKeys(context.Background(), mailKeyStateStoreFake{state: validState}, mailPayloadKeyRingFake{primary: otherPrimary, keys: map[string]bool{keyID: true, otherPrimary: true}})
 	require.Error(t, err, "stale configured primary was accepted")
 	require.Contains(t, err.Error(), keyID, "stale configured primary was accepted")
 	require.Contains(t, err.Error(), otherPrimary, "stale configured primary was accepted")
 	promotable := *validState
 	promotable.PrimaryPromotionAllowed = true
-	require.NoError(t, validateActiveMailPayloadKeys(context.Background(), activeMailPayloadKeyStoreFake{state: &promotable}, mailPayloadKeyRingFake{primary: otherPrimary, keys: map[string]bool{keyID: true, otherPrimary: true}}))
-	require.Error(t, validateActiveMailPayloadKeys(context.Background(), activeMailPayloadKeyStoreFake{state: &promotable}, mailPayloadKeyRingFake{primary: otherPrimary, keys: map[string]bool{otherPrimary: true}}), "staged next-primary restart without the required fallback was accepted")
+	require.NoError(t, validateActiveMailPayloadKeys(context.Background(), mailKeyStateStoreFake{state: &promotable}, mailPayloadKeyRingFake{primary: otherPrimary, keys: map[string]bool{keyID: true, otherPrimary: true}}))
+	require.Error(t, validateActiveMailPayloadKeys(context.Background(), mailKeyStateStoreFake{state: &promotable}, mailPayloadKeyRingFake{primary: otherPrimary, keys: map[string]bool{otherPrimary: true}}), "staged next-primary restart without the required fallback was accepted")
 }
 
 func TestApplicationDependencyValidationIsFailFastAndOrdered(t *testing.T) {

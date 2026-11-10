@@ -22,13 +22,8 @@ const (
 	sittingMailReconciliationInterval     = time.Minute
 )
 
-type sittingMailReconciliationStore interface {
-	ListMailReconciliationDue(context.Context, store.ExamSittingMailReconciliationOptions) ([]store.ExamSittingMailReconciliationCandidate, error)
-	ReconcileMail(context.Context, *store.ExamSittingMailReconciliation) (*store.ExamSittingMailFanoutSnapshot, error)
-}
-
 type sittingMailReconciliationPeriodicRunner struct {
-	sittings sittingMailReconciliationStore
+	sittings store.ExamSittingStore
 	mail     sitting.ScheduleMailPreparer
 }
 

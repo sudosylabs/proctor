@@ -66,26 +66,9 @@ type ListMailDeliveriesQuery struct {
 	Limit           int
 }
 
-type mailStore interface {
-	EnqueueTest(context.Context, *store.MailTestEnqueue) (*model.MailDelivery, error)
-	GetDelivery(context.Context, model.MailDeliveryID) (*model.MailDelivery, error)
-	ListDeliveries(context.Context, store.MailDeliveryListOptions) ([]*model.MailDelivery, error)
-	CountDeliveries(context.Context, store.MailDeliveryListOptions, int) (int, error)
-	CancelDelivery(context.Context, *store.MailDeliveryMutation) (*model.MailDelivery, error)
-	RetryDelivery(context.Context, *store.MailDeliveryMutation) (*model.MailDelivery, error)
-}
-
-type mailUserStore interface {
-	Get(context.Context, model.UserID) (*model.User, error)
-}
-
-type mailInstitutionStore interface {
-	GetSingleton(context.Context) (*model.Institution, error)
-}
-
 type mailAuthorizationAdapter struct {
 	authorization *access.Authorizer
-	institutions  mailInstitutionStore
+	institutions  store.InstitutionStore
 }
 
 func (a mailAuthorizationAdapter) AuthorizeInstitution(ctx context.Context, invocation invocation.Invocation, action model.Action) (model.Resource, error) {
@@ -112,8 +95,8 @@ type mailAuditPreparer interface {
 // mailServiceDependencies are the collaborators of MailService;
 // newMailService validates them once and MailService keeps them in deps.
 type mailServiceDependencies struct {
-	Mail                    mailStore
-	Users                   mailUserStore
+	Mail                    store.MailStore
+	Users                   store.UserStore
 	Authorization           institutionAuthorizer
 	Audit                   mailAuditPreparer
 	Attempts                *identity.AttemptAccounting
@@ -133,9 +116,7 @@ type mailServiceDependencies struct {
 type MailService struct {
 	deps mailServiceDependencies
 
-	rekey      mailRekeyStarter
-	keyState   mailKeyInspector
-	rekeyJobs  mailRekeyJobReader
+	rekeyJobs  store.JobStore
 	rekeyAudit access.MutationAuditor
 
 	composer *mail.Composer
@@ -160,7 +141,7 @@ const institutionNameRetryDelay = 10 * time.Second
 // a failure keeps the last known name, and with none copy names "your
 // institution".
 type institutionNameCache struct {
-	institutions mailInstitutionStore
+	institutions store.InstitutionStore
 	now          func() time.Time
 
 	mu        sync.Mutex
@@ -205,9 +186,7 @@ func newMailService(deps mailServiceDependencies) (*MailService, error) {
 	if err != nil {
 		return nil, err
 	}
-	rekey, _ := deps.Mail.(mailRekeyStarter)
-	keyState, _ := deps.Mail.(mailKeyInspector)
-	return &MailService{deps: deps, rekey: rekey, keyState: keyState, composer: composer}, nil
+	return &MailService{deps: deps, composer: composer}, nil
 }
 
 // GetMailMetrics returns the current mail delivery metrics snapshot.

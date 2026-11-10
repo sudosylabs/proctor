@@ -40,14 +40,6 @@ type MailKeyStateView struct {
 	Active               []MailPayloadKeyUsageView
 }
 
-type mailRekeyStarter interface {
-	StartRekey(context.Context, *store.MailRekeyStart) (*store.MailRekeyOperation, error)
-}
-
-type mailKeyInspector interface {
-	InspectKeyState(context.Context) (*store.MailKeyState, error)
-}
-
 // GetMailKeyState reports the configured and required primary mail payload
 // keys and the keys still referenced by active payloads.
 func (s *MailService) GetMailKeyState(ctx context.Context, invocation invocation.Invocation) (MailKeyStateView, error) {
@@ -60,10 +52,10 @@ func (s *MailService) GetMailKeyState(ctx context.Context, invocation invocation
 	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionMailRekey); err != nil {
 		return MailKeyStateView{}, err
 	}
-	if s.keyState == nil || s.deps.Sealer == nil {
+	if s.deps.Mail == nil || s.deps.Sealer == nil {
 		return MailKeyStateView{}, apperror.New("mail.unavailable")
 	}
-	state, err := s.keyState.InspectKeyState(ctx)
+	state, err := s.deps.Mail.InspectKeyState(ctx)
 	if err != nil || state == nil {
 		return MailKeyStateView{}, apperror.New("mail.unavailable").Wrap(err)
 	}
@@ -91,7 +83,7 @@ func (s *MailService) StartMailRekey(ctx context.Context, invocation invocation.
 	if err != nil {
 		return MailRekeyView{}, err
 	}
-	if s.rekey == nil || s.rekeyAudit == nil || s.deps.Sealer == nil || s.wake == nil {
+	if s.deps.Mail == nil || s.rekeyAudit == nil || s.deps.Sealer == nil || s.wake == nil {
 		return MailRekeyView{}, apperror.New("mail.unavailable")
 	}
 	primaryKeyID := s.deps.Sealer.PrimaryKeyID()
@@ -114,7 +106,7 @@ func (s *MailService) StartMailRekey(ctx context.Context, invocation invocation.
 		ScopeType: model.RoleScopeInstitution, ScopeID: resource.ID, Operation: "start_rekey",
 		Value: map[string]any{"job_id": job.ID.String(), "primary_key_id": primaryKeyID, "retiring_key_id": retiringKeyID},
 	}, s.deps.Now, func(ctx context.Context, reference access.MutationReference) (*store.MailRekeyOperation, error) {
-		return s.rekey.StartRekey(ctx, &store.MailRekeyStart{PrimaryKeyID: primaryKeyID,
+		return s.deps.Mail.StartRekey(ctx, &store.MailRekeyStart{PrimaryKeyID: primaryKeyID,
 			RetiringKeyID: retiringKeyID, Job: job, AuditEventID: reference.ID, AuditAt: reference.MutationAt})
 	}, mailRekeyStoreErrors.Translate)
 	if err != nil {

@@ -49,24 +49,14 @@ type jobOperatorEngine interface {
 	Retry(context.Context, job.ControlTarget, job.AuditReference) (job.View, error)
 }
 
-// jobInitiatorNames reads the presentable names of the Users who started Jobs.
-type jobInitiatorNames interface {
-	ListDisplayNames(context.Context, []model.UserID) ([]store.UserDisplayName, error)
-}
-
-// jobExamExportTitles reads the Exam title behind export build Jobs.
-type jobExamExportTitles interface {
-	ListBuildTitles(context.Context, []model.JobID) ([]store.ExamExportBuildTitle, error)
-}
-
 // jobOperationsServiceDependencies are the collaborators of JobOperations;
 // newJobOperationsService validates them once and JobOperations keeps them in deps.
 type jobOperationsServiceDependencies struct {
 	Jobs          jobOperatorEngine
 	Authorization institutionAuthorizer
 	Audit         access.MutationAuditor
-	Users         jobInitiatorNames
-	ExamExports   jobExamExportTitles
+	Users         store.UserStore
+	ExamExports   store.ExamExportStore
 	Now           func() time.Time
 }
 

@@ -24,7 +24,7 @@ func TestSittingMailReconciliationPeriodicRunnerPreparesOneBoundedFanout(t *test
 	sitting, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(),
 		at.Add(time.Hour), at.Add(2*time.Hour), at)
 	require.NoError(t, err)
-	persistence := &sittingMailReconciliationStoreFake{candidates: []store.ExamSittingMailReconciliationCandidate{{
+	persistence := &sittingMailStoreFake{candidates: []store.ExamSittingMailReconciliationCandidate{{
 		Sitting: sitting, ActorUserID: model.NewUserID(),
 	}}}
 	mail := &sittingMailReconciliationPreparerFake{prepared: &store.ExamSittingMailFanout{}}
@@ -36,12 +36,13 @@ func TestSittingMailReconciliationPeriodicRunnerPreparesOneBoundedFanout(t *test
 	require.Equal(t, sitting.Revision, mail.request.SittingRevision, "reconciliation=%#v request=%#v", persistence.reconciled, mail.request)
 }
 
-type sittingMailReconciliationStoreFake struct {
+type sittingMailStoreFake struct {
+	store.ExamSittingStore
 	candidates []store.ExamSittingMailReconciliationCandidate
 	reconciled *store.ExamSittingMailReconciliation
 }
 
-func (f *sittingMailReconciliationStoreFake) ListMailReconciliationDue(context.Context,
+func (f *sittingMailStoreFake) ListMailReconciliationDue(context.Context,
 	store.ExamSittingMailReconciliationOptions,
 ) ([]store.ExamSittingMailReconciliationCandidate, error) {
 	result := f.candidates
@@ -49,7 +50,7 @@ func (f *sittingMailReconciliationStoreFake) ListMailReconciliationDue(context.C
 	return result, nil
 }
 
-func (f *sittingMailReconciliationStoreFake) ReconcileMail(_ context.Context,
+func (f *sittingMailStoreFake) ReconcileMail(_ context.Context,
 	input *store.ExamSittingMailReconciliation,
 ) (*store.ExamSittingMailFanoutSnapshot, error) {
 	f.reconciled = input

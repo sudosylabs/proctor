@@ -122,23 +122,28 @@ func parsePathTemplate(template string) ([]pathPart, error) {
 	if !strings.HasPrefix(template, "/") {
 		return nil, fmt.Errorf("route template %q must start with /", template)
 	}
+
 	segments := strings.Split(template[1:], "/")
 	parts := make([]pathPart, 0, len(segments))
 	for _, segment := range segments {
 		if segment == "" {
 			return nil, fmt.Errorf("route template %q has an empty segment", template)
 		}
+
 		if !strings.ContainsAny(segment, "{}") {
 			parts = append(parts, literal(segment))
 			continue
 		}
+
 		if !strings.HasPrefix(segment, "{") || !strings.HasSuffix(segment, "}") {
 			return nil, fmt.Errorf("route template %q has a malformed parameter %q", template, segment)
 		}
+
 		name, kind, hasKind := strings.Cut(segment[1:len(segment)-1], ":")
 		if strings.ContainsAny(name, "{}:") || strings.ContainsAny(kind, "{}:") {
 			return nil, fmt.Errorf("route template %q has a malformed parameter %q", template, segment)
 		}
+
 		switch {
 		case !hasKind:
 			parts = append(parts, canonicalID(name))
@@ -152,6 +157,7 @@ func parsePathTemplate(template string) ([]pathPart, error) {
 			return nil, fmt.Errorf("route template %q has unknown parameter kind %q", template, kind)
 		}
 	}
+
 	return parts, nil
 }
 

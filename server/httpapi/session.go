@@ -57,9 +57,24 @@ func sessionResource(sessions Sessions, cookies browserCookies) apiResource {
 	return newResource(
 		"sessions",
 		sessionRoute(http.MethodGet, base, []string{"authentication.internal", "request.invalid"}, module.list),
-		sessionRoute(http.MethodPost, path("/users/me/sessions/revoke"), []string{"request.invalid", "session.id.invalid", "session.not_found", "authentication.internal", "audit.unavailable"}, module.revoke),
-		sessionRoute(http.MethodPost, path("/users/me/sessions/revoke-all"), []string{"authentication.internal", "audit.unavailable"}, module.revokeAll),
-		sessionRoute(http.MethodPost, path("/users/me/sessions/revoke-others"), []string{"authentication.internal", "audit.unavailable"}, module.revokeOthers),
+		sessionRoute(
+			http.MethodPost,
+			path("/users/me/sessions/revoke"),
+			[]string{"request.invalid", "session.id.invalid", "session.not_found", "authentication.internal", "audit.unavailable"},
+			module.revoke,
+		),
+		sessionRoute(
+			http.MethodPost,
+			path("/users/me/sessions/revoke-all"),
+			[]string{"authentication.internal", "audit.unavailable"},
+			module.revokeAll,
+		),
+		sessionRoute(
+			http.MethodPost,
+			path("/users/me/sessions/revoke-others"),
+			[]string{"authentication.internal", "audit.unavailable"},
+			module.revokeOthers,
+		),
 	)
 }
 
@@ -72,13 +87,18 @@ func (m sessionResourceModule) list(request operationRequest) (operationResult, 
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	presentable := make([]*model.Session, 0, len(sessions))
 	for _, session := range sessions {
 		if sessionResponseFromModel(request.request, session) != nil {
 			presentable = append(presentable, session)
 		}
 	}
-	response, err := boundedListResult(request, "Session", presentable,
+
+	response, err := boundedListResult(
+		request,
+		"Session",
+		presentable,
 		func(session *model.Session) boundedPageKey {
 			return boundedPageKey{At: session.CreatedAt, ID: session.ID.String()}
 		},
@@ -87,10 +107,12 @@ func (m sessionResourceModule) list(request operationRequest) (operationResult, 
 				sessionResponse: *sessionResponseFromModel(request.request, session),
 				Current:         session.ID == request.principal.SessionID,
 			}
-		})
+		},
+	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, response), nil
 }
 
@@ -147,5 +169,9 @@ type Sessions interface {
 	ListSessions(context.Context, invocation.Invocation, identity.ListSessionsQuery) ([]*model.Session, error)
 	RevokeSession(context.Context, invocation.Invocation, identity.RevokeSessionCommand) error
 	RevokeAllSessions(context.Context, invocation.Invocation, identity.RevokeAllSessionsCommand) error
-	RevokeOtherSessions(context.Context, invocation.Invocation, identity.RevokeOtherSessionsCommand) (*identity.RevokeOtherSessionsResult, error)
+	RevokeOtherSessions(
+		context.Context,
+		invocation.Invocation,
+		identity.RevokeOtherSessionsCommand,
+	) (*identity.RevokeOtherSessionsResult, error)
 }

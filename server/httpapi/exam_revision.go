@@ -67,9 +67,56 @@ func examRevisionResource(application ExamRevisionApplication) apiResource {
 	member := path("/exams/{exam_id}/revisions/{exam_revision_id}")
 	return newResource(
 		"exam-revisions",
-		idempotentPrincipalRoute(IdempotencyRequired, http.MethodPost, collection, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.invalid", "exam.archived", "exam.conflict", "exam.draft.revision_conflict", "exam.revision.no_changes", "exam.revision.capacity_exceeded", "exam.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress"}, module.publish),
-		principalRoute(http.MethodGet, collection, []string{"authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "exam.invalid", "exam.unavailable"}, module.list),
-		principalRoute(http.MethodGet, member, []string{"authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "exam.invalid", "exam.unavailable"}, module.get),
+		idempotentPrincipalRoute(
+			IdempotencyRequired,
+			http.MethodPost,
+			collection,
+			[]string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.invalid",
+				"exam.archived",
+				"exam.conflict",
+				"exam.draft.revision_conflict",
+				"exam.revision.no_changes",
+				"exam.revision.capacity_exceeded",
+				"exam.unavailable",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+			},
+			module.publish,
+		),
+		principalRoute(
+			http.MethodGet,
+			collection,
+			[]string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.invalid",
+				"exam.unavailable",
+			},
+			module.list,
+		),
+		principalRoute(
+			http.MethodGet,
+			member,
+			[]string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.invalid",
+				"exam.unavailable",
+			},
+			module.get,
+		),
 	)
 }
 
@@ -78,6 +125,7 @@ func (m examRevisionHTTPModule) publish(request operationRequest) (operationResu
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body publishExamRevisionRequest
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
@@ -85,12 +133,16 @@ func (m examRevisionHTTPModule) publish(request operationRequest) (operationResu
 	if body.ExpectedDraftRevision < 1 {
 		return operationResult{}, invalidRequestError(errors.New("must be positive"))
 	}
+
 	summary, err := m.application.PublishExamRevision(request.context, request.invocation(), exam.PublishRevisionCommand{
-		ExamID: examID, ExpectedDraftRevision: body.ExpectedDraftRevision, IdempotencyKey: request.idempotencyKey,
+		ExamID:                examID,
+		ExpectedDraftRevision: body.ExpectedDraftRevision,
+		IdempotencyKey:        request.idempotencyKey,
 	})
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusCreated, examRevisionResponseFromSummary(summary)), nil
 }
 
@@ -99,10 +151,16 @@ func (m examRevisionHTTPModule) get(request operationRequest) (operationResult, 
 	if err != nil {
 		return operationResult{}, err
 	}
-	summary, err := m.application.GetExamRevision(request.context, request.invocation(), exam.GetRevisionQuery{ExamID: examID, RevisionID: revisionID})
+
+	summary, err := m.application.GetExamRevision(
+		request.context,
+		request.invocation(),
+		exam.GetRevisionQuery{ExamID: examID, RevisionID: revisionID},
+	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, examRevisionResponseFromSummary(summary)), nil
 }
 
@@ -111,6 +169,7 @@ func (m examRevisionHTTPModule) list(request operationRequest) (operationResult,
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	query := exam.ListRevisionsQuery{ExamID: examID, Limit: 50}
 	values := request.request.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
@@ -119,25 +178,31 @@ func (m examRevisionHTTPModule) list(request operationRequest) (operationResult,
 			return operationResult{}, invalidRequestError(errors.New("must be between 1 and 200"))
 		}
 	}
+
 	if raw := values.Get("cursor"); raw != "" {
 		cursor, decodeErr := decodeExamRevisionCursor(raw)
 		if decodeErr != nil {
 			return operationResult{}, invalidRequestError(decodeErr)
 		}
+
 		query.BeforeNumber = cursor.Number
 		query.BeforeRevisionID = model.ExamRevisionID(cursor.RevisionID)
 	}
+
 	page, err := m.application.ListExamRevisions(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	response := examRevisionListResponse{Items: make([]examRevisionResponse, 0, len(page.Items))}
 	for _, item := range page.Items {
 		response.Items = append(response.Items, examRevisionResponseFromSummary(item))
 	}
+
 	if page.HasMore && len(page.Items) == 0 {
 		return operationResult{}, unpresentableResult(errors.New("revision page made no progress"))
 	}
+
 	if page.HasMore {
 		last := page.Items[len(page.Items)-1]
 		response.NextCursor, err = encodeExamRevisionCursor(examRevisionCursor{Number: last.Number, RevisionID: last.ID.String()})
@@ -145,6 +210,7 @@ func (m examRevisionHTTPModule) list(request operationRequest) (operationResult,
 			return operationResult{}, unpresentableResult(err)
 		}
 	}
+
 	return jsonResult(http.StatusOK, response), nil
 }
 
@@ -170,15 +236,23 @@ func examRevisionIDs(request operationRequest) (model.ExamID, model.ExamRevision
 
 func examRevisionResponseFromSummary(summary store.ExamRevisionSummary) examRevisionResponse {
 	return examRevisionResponse{
-		ID: summary.ID.String(), ExamID: summary.ExamID.String(), Number: summary.Number,
-		SourceDraftRevision: summary.SourceDraftRevision, Title: summary.Title,
-		PolicySchemaVersion: summary.PolicySchemaVersion, PolicyDigest: summary.PolicyDigest,
-		Capacity:               examCapacityPolicyResponseFromModel(summary.Capacity),
-		StarterWorkspaceDigest: summary.StarterWorkspaceDigest, ContentDigest: summary.ContentDigest,
-		ResourceCount: summary.ResourceCount, StarterWorkspaceEntryCount: summary.StarterWorkspaceEntries,
-		StarterWorkspaceTotalBytes: summary.StarterWorkspaceBytes, PublishedByUserID: summary.PublishedByUserID.String(),
-		PublishedAt: model.FormatRFC3339(summary.PublishedAt), BaseRevisionID: summary.BaseRevisionID.String(),
-		PublicationKind: string(summary.Kind),
+		ID:                         summary.ID.String(),
+		ExamID:                     summary.ExamID.String(),
+		Number:                     summary.Number,
+		SourceDraftRevision:        summary.SourceDraftRevision,
+		Title:                      summary.Title,
+		PolicySchemaVersion:        summary.PolicySchemaVersion,
+		PolicyDigest:               summary.PolicyDigest,
+		Capacity:                   examCapacityPolicyResponseFromModel(summary.Capacity),
+		StarterWorkspaceDigest:     summary.StarterWorkspaceDigest,
+		ContentDigest:              summary.ContentDigest,
+		ResourceCount:              summary.ResourceCount,
+		StarterWorkspaceEntryCount: summary.StarterWorkspaceEntries,
+		StarterWorkspaceTotalBytes: summary.StarterWorkspaceBytes,
+		PublishedByUserID:          summary.PublishedByUserID.String(),
+		PublishedAt:                model.FormatRFC3339(summary.PublishedAt),
+		BaseRevisionID:             summary.BaseRevisionID.String(),
+		PublicationKind:            string(summary.Kind),
 	}
 }
 
@@ -192,12 +266,14 @@ func decodeExamRevisionCursor(raw string) (examRevisionCursor, error) {
 
 func examRevisionCursorSpec() opaqueCursorSpec[examRevisionCursor] {
 	return opaqueCursorSpec[examRevisionCursor]{
-		label: "Exam Revision", maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members: []string{"number", "revision_id"},
+		label:                "Exam Revision",
+		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
+		members:              []string{"number", "revision_id"},
 		validate: func(cursor examRevisionCursor) error {
 			if cursor.Number < 1 || !model.ExamRevisionID(cursor.RevisionID).IsValid() {
 				return errors.New("invalid Exam Revision keyset")
 			}
+
 			return nil
 		},
 	}

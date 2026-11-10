@@ -52,16 +52,23 @@ func roleResponseFromModel(request *http.Request, role *model.Role) roleResponse
 	if permissions == nil {
 		permissions = []string{}
 	}
+
 	displayName, description := role.DisplayName, role.Description
 	if role.BuiltIn && role.Name == model.SystemAdministratorRoleName {
 		displayName = translatedRequestText(request, systemAdministratorRoleNameID, displayName)
 		description = translatedRequestText(request, systemAdministratorRoleDescriptionID, description)
 	}
+
 	return roleResponse{
-		ID: role.ID.String(), CreatedAt: model.FormatRFC3339(role.CreatedAt),
-		UpdatedAt: model.FormatRFC3339(role.UpdatedAt), ArchivedAt: role.ArchivedAt.FormatRFC3339(),
-		Name: role.Name, DisplayName: displayName, Description: description,
-		Permissions: append([]string(nil), permissions...), BuiltIn: role.BuiltIn,
+		ID:          role.ID.String(),
+		CreatedAt:   model.FormatRFC3339(role.CreatedAt),
+		UpdatedAt:   model.FormatRFC3339(role.UpdatedAt),
+		ArchivedAt:  role.ArchivedAt.FormatRFC3339(),
+		Name:        role.Name,
+		DisplayName: displayName,
+		Description: description,
+		Permissions: append([]string(nil), permissions...),
+		BuiltIn:     role.BuiltIn,
 	}
 }
 
@@ -73,16 +80,68 @@ func roleResource(roles RoleApplication) apiResource {
 	module := roleResourceModule{roles: roles}
 	return newResource(
 		"roles",
-		principalRoute(http.MethodGet, path("/roles"),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "administration.unavailable", "request.invalid", "resource.not_found"}, module.list),
-		principalRoute(http.MethodPost, path("/roles"),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "role.invalid", "role.conflict", "role.permission.invalid", "administration.unavailable", "resource.not_found"}, module.create),
-		principalRoute(http.MethodGet, path("/roles/{role_id}"),
-			operatorReadErrorCodes("request.invalid", "resource.not_found", "administration.unavailable"), module.get),
-		principalRoute(http.MethodPatch, path("/roles/{role_id}"),
-			operatorMutationErrorCodes("request.invalid", "resource.not_found", "role.invalid", "role.conflict", "role.built_in.protected", "role.permission.invalid", "administration.unavailable"), module.patch),
-		principalRoute(http.MethodDelete, path("/roles/{role_id}"),
-			operatorMutationErrorCodes("request.invalid", "resource.not_found", "role.built_in.protected", "role.conflict", "administration.unavailable"), module.archive),
+		principalRoute(
+			http.MethodGet,
+			path("/roles"),
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"administration.unavailable",
+				"request.invalid",
+				"resource.not_found",
+			},
+			module.list,
+		),
+		principalRoute(
+			http.MethodPost,
+			path("/roles"),
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"role.invalid",
+				"role.conflict",
+				"role.permission.invalid",
+				"administration.unavailable",
+				"resource.not_found",
+			},
+			module.create,
+		),
+		principalRoute(
+			http.MethodGet,
+			path("/roles/{role_id}"),
+			operatorReadErrorCodes("request.invalid", "resource.not_found", "administration.unavailable"),
+			module.get,
+		),
+		principalRoute(
+			http.MethodPatch,
+			path("/roles/{role_id}"),
+			operatorMutationErrorCodes(
+				"request.invalid",
+				"resource.not_found",
+				"role.invalid",
+				"role.conflict",
+				"role.built_in.protected",
+				"role.permission.invalid",
+				"administration.unavailable",
+			),
+			module.patch,
+		),
+		principalRoute(
+			http.MethodDelete,
+			path("/roles/{role_id}"),
+			operatorMutationErrorCodes(
+				"request.invalid",
+				"resource.not_found",
+				"role.built_in.protected",
+				"role.conflict",
+				"administration.unavailable",
+			),
+			module.archive,
+		),
 	)
 }
 
@@ -109,12 +168,18 @@ func (m roleResourceModule) list(request operationRequest) (operationResult, err
 	if err != nil {
 		return operationResult{}, err
 	}
-	response, err := boundedListResult(request, "Role", roles,
+
+	response, err := boundedListResult(
+		request,
+		"Role",
+		roles,
 		func(role *model.Role) boundedPageKey { return boundedPageKey{Name: role.Name, ID: role.ID.String()} },
-		func(role *model.Role) roleResponse { return roleResponseFromModel(request.request, role) })
+		func(role *model.Role) roleResponse { return roleResponseFromModel(request.request, role) },
+	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, response), nil
 }
 
@@ -139,17 +204,21 @@ func (m roleResourceModule) create(request operationRequest) (operationResult, e
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
+
 	saved, err := m.roles.CreateRole(
 		request.context,
 		request.invocation(),
 		administration.CreateRoleCommand{
-			Name: input.Name, DisplayName: input.DisplayName,
-			Description: input.Description, Permissions: input.Permissions,
+			Name:        input.Name,
+			DisplayName: input.DisplayName,
+			Description: input.Description,
+			Permissions: input.Permissions,
 		},
 	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusCreated, roleResponseFromModel(request.request, saved)), nil
 }
 
@@ -158,21 +227,26 @@ func (m roleResourceModule) patch(request operationRequest) (operationResult, er
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var input updateRoleRequest
 	if err = request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
+
 	updated, err := m.roles.UpdateRole(
 		request.context,
 		request.invocation(),
 		administration.UpdateRoleCommand{
-			ID: roleID, DisplayName: input.DisplayName,
-			Description: input.Description, Permissions: input.Permissions,
+			ID:          roleID,
+			DisplayName: input.DisplayName,
+			Description: input.Description,
+			Permissions: input.Permissions,
 		},
 	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, roleResponseFromModel(request.request, updated)), nil
 }
 

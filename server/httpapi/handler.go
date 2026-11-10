@@ -70,7 +70,10 @@ func requireAuthentication(
 		return next
 	case AuthRefreshCredentialRequired:
 		return requireRefreshCredential(next, logger, cookies, errorPolicy)
-	case AuthMFARecoverySessionRequired, AuthRecentMFARecoverySessionRequired, AuthMFAEnrollmentSessionRequired, AuthPrincipalRequired,
+	case AuthMFARecoverySessionRequired,
+		AuthRecentMFARecoverySessionRequired,
+		AuthMFAEnrollmentSessionRequired,
+		AuthPrincipalRequired,
 		AuthSessionRequired,
 		AuthStrongSessionRequired,
 		AuthRecentSessionRequired,
@@ -81,6 +84,7 @@ func requireAuthentication(
 				writeRouteApplicationError(writer, request, logger, errorPolicy, appErr)
 				return
 			}
+
 			if credential.source == credentialSourceCookie &&
 				requiresCSRF(request.Method) {
 				if appErr := cookies.verifyCSRF(request); appErr != nil {
@@ -88,18 +92,22 @@ func requireAuthentication(
 					return
 				}
 			}
+
 			principal, authErr := authenticateAccessCredential(request, requirement, application, credential)
 			if authErr != nil {
 				if credential.source == credentialSourceCookie {
 					cookies.clear(writer)
 				}
+
 				if credential.source == credentialSourceDPoP {
 					writeDPoPApplicationError(writer, request, logger, errorPolicy, authErr)
 				} else {
 					writeRouteApplicationError(writer, request, logger, errorPolicy, authErr)
 				}
+
 				return
 			}
+
 			if appErr := requirePrincipalAssurance(
 				*principal,
 				requirement,
@@ -109,6 +117,7 @@ func requireAuthentication(
 				writeRouteApplicationError(writer, request, logger, errorPolicy, appErr)
 				return
 			}
+
 			ctx := context.WithValue(request.Context(), principalContextKey{}, *principal)
 			ctx = context.WithValue(ctx, credentialSourceContextKey{}, credential.source)
 			next.ServeHTTP(writer, request.WithContext(ctx))
@@ -199,13 +208,20 @@ func requestDPoPProof(request *http.Request) (string, error) {
 	return values[0], nil
 }
 
-func writeDPoPApplicationError(writer http.ResponseWriter, request *http.Request, logger *logging.Logger, policy routeErrorPolicy, err error) {
+func writeDPoPApplicationError(
+	writer http.ResponseWriter,
+	request *http.Request,
+	logger *logging.Logger,
+	policy routeErrorPolicy,
+	err error,
+) {
 	if nonce, ok := identity.DPoPChallengeNonce(err); ok {
 		writer.Header().Set("DPoP-Nonce", nonce)
 		writer.Header().Set("WWW-Authenticate", `DPoP error="use_dpop_nonce"`)
 	} else {
 		writer.Header().Set("WWW-Authenticate", `DPoP error="invalid_dpop_proof"`)
 	}
+
 	writeRouteApplicationError(writer, request, logger, policy, err)
 }
 
@@ -222,6 +238,7 @@ func requirePrincipalAssurance(
 	if principal.ValidateMFARecovery() != nil {
 		return apperror.New("authentication.token_invalid")
 	}
+
 	// A restricted Web Session reaches only the routes that declare the
 	// restriction. Both restrictions share the recovery routes; the Access
 	// Policy enrollment restriction also reaches the second-factor challenge.
@@ -232,17 +249,21 @@ func requirePrincipalAssurance(
 	if principal.MFAEnrollmentRequired && !recoveryRoute && requirement != AuthMFAEnrollmentSessionRequired {
 		return apperror.New("authentication.token_invalid")
 	}
+
 	strongRequired := requirement == AuthStrongSessionRequired ||
 		requirement == AuthStrongRecentSessionRequired
-	recentRequired := requirement == AuthRecentMFARecoverySessionRequired || requirement == AuthRecentSessionRequired ||
+	recentRequired := requirement == AuthRecentMFARecoverySessionRequired ||
+		requirement == AuthRecentSessionRequired ||
 		requirement == AuthStrongRecentSessionRequired
 	if strongRequired && !principal.HasStrongAuthentication() {
 		return apperror.New("authentication.strong_required")
 	}
+
 	if recentRequired &&
 		!principal.IsRecentlyAuthenticated(now, recentAuthenticationTTL) {
 		return apperror.New("authentication.reauthentication_required")
 	}
+
 	return nil
 }
 

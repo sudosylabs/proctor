@@ -68,11 +68,17 @@ func WriteError(writer http.ResponseWriter, request *http.Request, err error) {
 		writeRequestTooLarge(writer, request)
 		return
 	}
+
 	var failure applicationFailure
 	if errors.As(err, &failure) {
-		if failure.Code() == "service.busy" || failure.Code() == "exam.delivery.control_rate_limited" || failure.Code() == "exam.delivery.summary_rate_limited" || failure.Code() == "exam.delivery.append_rate_limited" || failure.Code() == "exam.delivery.pending_capacity" {
+		if failure.Code() == "service.busy" ||
+			failure.Code() == "exam.delivery.control_rate_limited" ||
+			failure.Code() == "exam.delivery.summary_rate_limited" ||
+			failure.Code() == "exam.delivery.append_rate_limited" ||
+			failure.Code() == "exam.delivery.pending_capacity" {
 			writer.Header().Set("Retry-After", "1")
 		}
+
 		problem := problemFromApplicationFailure(request, failure)
 		var capacity *model.DeliveryMetadataCapacity
 		if failure.Code() == "exam.delivery.metadata_capacity" && errors.As(err, &capacity) && capacity.Validate() == nil {
@@ -80,6 +86,7 @@ func WriteError(writer http.ResponseWriter, request *http.Request, err error) {
 			problem.DeliveryMetadataCapacity = &value
 			problem.Fields = nil
 		}
+
 		var recovery interface {
 			DeliveryRecovery() *model.DeliveryRecovery
 		}
@@ -88,9 +95,11 @@ func WriteError(writer http.ResponseWriter, request *http.Request, err error) {
 				problem.Delivery = value
 			}
 		}
+
 		WriteProblem(writer, problem)
 		return
 	}
+
 	WriteProblem(writer, internalProblem(request))
 }
 

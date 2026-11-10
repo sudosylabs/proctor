@@ -147,18 +147,21 @@ func sessionResponseFromModel(request *http.Request, session *model.Session) *se
 	if session == nil {
 		return nil
 	}
+
 	return &sessionResponse{
-		ID:                    session.ID.String(),
-		CreatedAt:             model.FormatRFC3339(session.CreatedAt),
-		UpdatedAt:             model.FormatRFC3339(session.UpdatedAt),
-		ArchivedAt:            session.ArchivedAt.FormatRFC3339(),
-		UserID:                session.UserID.String(),
-		MFARecoveryRequired:   session.MFARecoveryRequired,
-		MFAEnrollmentRequired: session.MFAEnrollmentRequired,
-		ClientType:            string(session.ClientType),
-		DesktopRegistrationID: session.DesktopRegistrationID.String(),
-		DesktopRelease:        session.DesktopRelease, DesktopBuildID: session.DesktopBuildID,
-		DesktopPlatform: string(session.DesktopPlatform), DesktopArchitecture: string(session.DesktopArchitecture),
+		ID:                      session.ID.String(),
+		CreatedAt:               model.FormatRFC3339(session.CreatedAt),
+		UpdatedAt:               model.FormatRFC3339(session.UpdatedAt),
+		ArchivedAt:              session.ArchivedAt.FormatRFC3339(),
+		UserID:                  session.UserID.String(),
+		MFARecoveryRequired:     session.MFARecoveryRequired,
+		MFAEnrollmentRequired:   session.MFAEnrollmentRequired,
+		ClientType:              string(session.ClientType),
+		DesktopRegistrationID:   session.DesktopRegistrationID.String(),
+		DesktopRelease:          session.DesktopRelease,
+		DesktopBuildID:          session.DesktopBuildID,
+		DesktopPlatform:         string(session.DesktopPlatform),
+		DesktopArchitecture:     string(session.DesktopArchitecture),
 		DesktopRealtimeProtocol: session.DesktopRealtimeProtocol,
 		DeviceID:                session.DeviceID,
 		DeviceName:              session.DeviceName,
@@ -282,8 +285,16 @@ type authenticationEntryApplication interface {
 	RequestEmailVerification(context.Context, invocation.Invocation, identity.RequestEmailVerificationCommand) error
 	CompleteEmailVerification(context.Context, invocation.Invocation, identity.CompleteEmailVerificationCommand) (*model.User, error)
 	CompleteEmailChangeUndo(context.Context, invocation.Invocation, identity.CompleteEmailChangeUndoCommand) error
-	InspectEmailVerification(context.Context, invocation.Invocation, identity.InspectAccountTokenCommand) (*identity.EmailVerificationInspection, error)
-	InspectEmailChangeUndo(context.Context, invocation.Invocation, identity.InspectAccountTokenCommand) (*identity.EmailChangeUndoInspection, error)
+	InspectEmailVerification(
+		context.Context,
+		invocation.Invocation,
+		identity.InspectAccountTokenCommand,
+	) (*identity.EmailVerificationInspection, error)
+	InspectEmailChangeUndo(
+		context.Context,
+		invocation.Invocation,
+		identity.InspectAccountTokenCommand,
+	) (*identity.EmailChangeUndoInspection, error)
 	RequestPasswordReset(context.Context, invocation.Invocation, identity.RequestPasswordResetCommand) error
 	CompletePasswordReset(context.Context, invocation.Invocation, identity.CompletePasswordResetCommand) (*model.User, error)
 }
@@ -294,27 +305,77 @@ type authenticationResourceModule struct {
 	cookies        browserCookies
 }
 
-func authenticationResource(registration RegistrationApplication, authentication authenticationEntryApplication, cookies browserCookies) apiResource {
+func authenticationResource(
+	registration RegistrationApplication,
+	authentication authenticationEntryApplication,
+	cookies browserCookies,
+) apiResource {
 	module := authenticationResourceModule{registration: registration, authentication: authentication, cookies: cookies}
 	return newResource(
 		"authentication",
 		publicRoute(
-			http.MethodPost, path("/auth/register"),
+			http.MethodPost,
+			path("/auth/register"),
 			[]string{
-				"request.invalid", "authentication.password.invalid", "authentication.password.pattern_invalid", "authentication.password.common_invalid", "authentication.password.identity_invalid", "service.busy", "authentication.registration.invalid",
-				"authentication.registration.invitation_required", "authentication.registration.unavailable",
-				"authentication.rate_limited", "authentication.rate_limit_unavailable",
+				"request.invalid",
+				"authentication.password.invalid",
+				"authentication.password.pattern_invalid",
+				"authentication.password.common_invalid",
+				"authentication.password.identity_invalid",
+				"service.busy",
+				"authentication.registration.invalid",
+				"authentication.registration.invitation_required",
+				"authentication.registration.unavailable",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
 			},
 			module.register,
 		),
-		publicRoute(http.MethodPost, path("/auth/login"), []string{"request.invalid", "authentication.mfa.enrollment_required", "authentication.client_type.invalid", "authentication.password.invalid", "service.busy", "authentication.credentials_invalid", "authentication.mfa.required", "authentication.mfa.code_invalid", "authentication.mfa.unavailable", "authentication.sessions.maximum_reached", "authentication.desktop_authorization.account_session_locked", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.internal", "audit.unavailable", "authentication.external.invalid", "authentication.session.invalid"}, module.login),
-		refreshCredentialRoute(http.MethodPost, path("/auth/refresh"), []string{"authentication.token_invalid", "authentication.mfa.enrollment_required", "authentication.internal", "authentication.dpop.invalid", "authentication.dpop.replayed", "authentication.dpop.use_nonce", "authentication.dpop.unavailable"}, module.refresh),
+		publicRoute(
+			http.MethodPost,
+			path("/auth/login"),
+			[]string{
+				"request.invalid",
+				"authentication.mfa.enrollment_required",
+				"authentication.client_type.invalid",
+				"authentication.password.invalid",
+				"service.busy",
+				"authentication.credentials_invalid",
+				"authentication.mfa.required",
+				"authentication.mfa.code_invalid",
+				"authentication.mfa.unavailable",
+				"authentication.sessions.maximum_reached",
+				"authentication.desktop_authorization.account_session_locked",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.internal",
+				"audit.unavailable",
+				"authentication.external.invalid",
+				"authentication.session.invalid",
+			},
+			module.login,
+		),
+		refreshCredentialRoute(
+			http.MethodPost,
+			path("/auth/refresh"),
+			[]string{
+				"authentication.token_invalid",
+				"authentication.mfa.enrollment_required",
+				"authentication.internal",
+				"authentication.dpop.invalid",
+				"authentication.dpop.replayed",
+				"authentication.dpop.use_nonce",
+				"authentication.dpop.unavailable",
+			},
+			module.refresh,
+		),
 		mfaRecoverySessionRoute(http.MethodPost, path("/auth/logout"), []string{"authentication.internal", "audit.unavailable"}, module.logout),
 		sessionRoute(
 			http.MethodPost,
 			path("/auth/email-verification/request"),
 			sessionAuthenticationMutationErrorCodes(
-				"authentication.rate_limited", "authentication.rate_limit_unavailable",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
 				"authentication.account_recovery.unavailable",
 			),
 			module.requestEmailVerification,
@@ -323,8 +384,11 @@ func authenticationResource(registration RegistrationApplication, authentication
 			http.MethodPost,
 			path("/auth/email-verification/complete"),
 			[]string{
-				"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable",
-				"authentication.account_token.invalid", "authentication.account_recovery.unavailable",
+				"request.invalid",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.account_token.invalid",
+				"authentication.account_recovery.unavailable",
 			},
 			module.completeEmailVerification,
 		),
@@ -332,8 +396,11 @@ func authenticationResource(registration RegistrationApplication, authentication
 			http.MethodPost,
 			path("/auth/email-verification/inspect"),
 			[]string{
-				"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable",
-				"authentication.account_token.invalid", "authentication.account_recovery.unavailable",
+				"request.invalid",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.account_token.invalid",
+				"authentication.account_recovery.unavailable",
 			},
 			module.inspectEmailVerification,
 		),
@@ -341,8 +408,11 @@ func authenticationResource(registration RegistrationApplication, authentication
 			http.MethodPost,
 			path("/auth/email-change/undo"),
 			[]string{
-				"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable",
-				"authentication.account_token.invalid", "authentication.account_recovery.unavailable",
+				"request.invalid",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.account_token.invalid",
+				"authentication.account_recovery.unavailable",
 				"authentication.email_change_undo.conflict",
 			},
 			module.completeEmailChangeUndo,
@@ -351,8 +421,11 @@ func authenticationResource(registration RegistrationApplication, authentication
 			http.MethodPost,
 			path("/auth/email-change/undo/inspect"),
 			[]string{
-				"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable",
-				"authentication.account_token.invalid", "authentication.account_recovery.unavailable",
+				"request.invalid",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.account_token.invalid",
+				"authentication.account_recovery.unavailable",
 			},
 			module.inspectEmailChangeUndo,
 		),
@@ -360,7 +433,9 @@ func authenticationResource(registration RegistrationApplication, authentication
 			http.MethodPost,
 			path("/auth/password-reset/request"),
 			[]string{
-				"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable",
+				"request.invalid",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
 				"authentication.account_recovery.unavailable",
 			},
 			module.requestPasswordReset,
@@ -369,8 +444,16 @@ func authenticationResource(registration RegistrationApplication, authentication
 			http.MethodPost,
 			path("/auth/password-reset/complete"),
 			[]string{
-				"request.invalid", "authentication.password.invalid", "authentication.password.pattern_invalid", "authentication.password.common_invalid", "authentication.password.identity_invalid", "authentication.password.reused", "service.busy", "authentication.rate_limited",
-				"authentication.rate_limit_unavailable", "authentication.account_token.invalid",
+				"request.invalid",
+				"authentication.password.invalid",
+				"authentication.password.pattern_invalid",
+				"authentication.password.common_invalid",
+				"authentication.password.identity_invalid",
+				"authentication.password.reused",
+				"service.busy",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.account_token.invalid",
 				"authentication.account_recovery.unavailable",
 			},
 			module.completePasswordReset,
@@ -383,17 +466,22 @@ func (m authenticationResourceModule) register(request operationRequest) (operat
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
+
 	if err := m.registration.RegisterLocalUser(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
 		onboarding.RegisterLocalUserCommand{
-			Username: input.Username, Email: input.Email, FirstName: input.FirstName,
-			LastName: input.LastName, Password: input.Password,
-			Source: request.metadata.IPAddress,
+			Username:  input.Username,
+			Email:     input.Email,
+			FirstName: input.FirstName,
+			LastName:  input.LastName,
+			Password:  input.Password,
+			Source:    request.metadata.IPAddress,
 		},
 	); err != nil {
 		return operationResult{}, err
 	}
+
 	return statusResult(http.StatusAccepted).withHeaders(http.Header{"Cache-Control": {"no-store"}}), nil
 }
 
@@ -406,18 +494,24 @@ func (m authenticationResourceModule) login(request operationRequest) (operation
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
+
 	result, err := m.authentication.Login(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
 		identity.LoginCommand{
-			LoginID: input.LoginID, Password: input.Password, ClientType: input.ClientType,
-			DeviceID: input.DeviceID, DeviceName: input.DeviceName, MFACode: input.MFACode,
-			Source: request.metadata.IPAddress,
+			LoginID:    input.LoginID,
+			Password:   input.Password,
+			ClientType: input.ClientType,
+			DeviceID:   input.DeviceID,
+			DeviceName: input.DeviceName,
+			MFACode:    input.MFACode,
+			Source:     request.metadata.IPAddress,
 		},
 	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	response := authenticationResponseFromLogin(request.request, result)
 	headers := http.Header{"Cache-Control": {"no-store"}}
 	if usesBrowserCookieTransport(input.ClientType) {
@@ -428,6 +522,7 @@ func (m authenticationResourceModule) login(request operationRequest) (operation
 		}))
 		response.Tokens = nil
 	}
+
 	return jsonResult(http.StatusOK, response).withHeaders(headers), nil
 }
 
@@ -436,16 +531,21 @@ func (m authenticationResourceModule) refresh(request operationRequest) (operati
 	if !ok {
 		return operationResult{}, authenticationRequiredError()
 	}
+
 	command := identity.RefreshSessionCommand{RefreshToken: credential.token}
 	if credential.source == credentialSourceDPoP {
 		proof, proofErr := requestDPoPProof(request.request)
 		if proofErr != nil {
 			return operationResult{}, errorWithHeaders(proofErr, dpopErrorHeaders(proofErr))
 		}
+
 		command.DPoP = &identity.DPoPRequestProof{
-			Proof: proof, Method: request.request.Method, Path: request.request.URL.EscapedPath(),
+			Proof:  proof,
+			Method: request.request.Method,
+			Path:   request.request.URL.EscapedPath(),
 		}
 	}
+
 	session, tokens, err := m.authentication.RefreshSession(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
@@ -456,11 +556,14 @@ func (m authenticationResourceModule) refresh(request operationRequest) (operati
 		if command.DPoP != nil {
 			headers = dpopErrorHeaders(err)
 		}
+
 		if credential.source == credentialSourceCookie {
 			headers = combineResponseHeaders(headers, captureResponseHeaders(m.cookies.clear))
 		}
+
 		return operationResult{}, errorWithHeaders(err, headers)
 	}
+
 	response := authenticationResponseFromRefresh(request.request, session, tokens)
 	headers := http.Header{"Cache-Control": {"no-store"}}
 	if credential.source == credentialSourceCookie {
@@ -469,6 +572,7 @@ func (m authenticationResourceModule) refresh(request operationRequest) (operati
 			m.cookies.attach(writer, tokens)
 		}))
 	}
+
 	return jsonResult(http.StatusOK, response).withHeaders(headers), nil
 }
 
@@ -494,12 +598,14 @@ func (m authenticationResourceModule) logout(request operationRequest) (operatio
 
 func (m authenticationResourceModule) requestEmailVerification(request operationRequest) (operationResult, error) {
 	err := m.authentication.RequestEmailVerification(
-		request.context, request.invocation(),
+		request.context,
+		request.invocation(),
 		identity.RequestEmailVerificationCommand{Source: request.metadata.IPAddress},
 	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return statusResult(http.StatusAccepted), nil
 }
 
@@ -524,10 +630,15 @@ func (m authenticationResourceModule) completeEmailChangeUndo(request operationR
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
-	if err := m.authentication.CompleteEmailChangeUndo(request.context, invocation.New(model.Principal{}, request.metadata),
-		identity.CompleteEmailChangeUndoCommand{Token: input.Token, Source: request.metadata.IPAddress}); err != nil {
+
+	if err := m.authentication.CompleteEmailChangeUndo(
+		request.context,
+		invocation.New(model.Principal{}, request.metadata),
+		identity.CompleteEmailChangeUndoCommand{Token: input.Token, Source: request.metadata.IPAddress},
+	); err != nil {
 		return operationResult{}, err
 	}
+
 	return noContentResult(), nil
 }
 
@@ -536,11 +647,16 @@ func (m authenticationResourceModule) inspectEmailVerification(request operation
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
-	inspected, err := m.authentication.InspectEmailVerification(request.context, invocation.New(model.Principal{}, request.metadata),
-		identity.InspectAccountTokenCommand{Token: input.Token, Source: request.metadata.IPAddress})
+
+	inspected, err := m.authentication.InspectEmailVerification(
+		request.context,
+		invocation.New(model.Principal{}, request.metadata),
+		identity.InspectAccountTokenCommand{Token: input.Token, Source: request.metadata.IPAddress},
+	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, emailVerificationInspectionResponse{Email: inspected.Email}).withHeaders(noStoreHeaders()), nil
 }
 
@@ -549,13 +665,21 @@ func (m authenticationResourceModule) inspectEmailChangeUndo(request operationRe
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
-	inspected, err := m.authentication.InspectEmailChangeUndo(request.context, invocation.New(model.Principal{}, request.metadata),
-		identity.InspectAccountTokenCommand{Token: input.Token, Source: request.metadata.IPAddress})
+
+	inspected, err := m.authentication.InspectEmailChangeUndo(
+		request.context,
+		invocation.New(model.Principal{}, request.metadata),
+		identity.InspectAccountTokenCommand{Token: input.Token, Source: request.metadata.IPAddress},
+	)
 	if err != nil {
 		return operationResult{}, err
 	}
-	return jsonResult(http.StatusOK, emailChangeUndoInspectionResponse{RestoredEmail: inspected.RestoredEmail,
-		MaskedCurrentEmail: inspected.MaskedCurrentEmail, ChangedAt: model.FormatRFC3339(inspected.ChangedAt)}).withHeaders(noStoreHeaders()), nil
+
+	return jsonResult(http.StatusOK, emailChangeUndoInspectionResponse{
+		RestoredEmail:      inspected.RestoredEmail,
+		MaskedCurrentEmail: inspected.MaskedCurrentEmail,
+		ChangedAt:          model.FormatRFC3339(inspected.ChangedAt),
+	}).withHeaders(noStoreHeaders()), nil
 }
 
 func (m authenticationResourceModule) requestPasswordReset(request operationRequest) (operationResult, error) {
@@ -578,16 +702,20 @@ func (m authenticationResourceModule) completePasswordReset(request operationReq
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
+
 	_, err := m.authentication.CompletePasswordReset(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
 		identity.CompletePasswordResetCommand{
-			Token: input.Token, Password: input.Password, Source: request.metadata.IPAddress,
+			Token:    input.Token,
+			Password: input.Password,
+			Source:   request.metadata.IPAddress,
 		},
 	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return noContentResult().withHeaders(captureResponseHeaders(m.cookies.clear)), nil
 }
 

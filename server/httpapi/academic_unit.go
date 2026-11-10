@@ -55,13 +55,83 @@ func academicUnitResource(academicUnits AcademicUnitApplication) apiResource {
 	children := path("/academic-units/{academic_unit_id}/children")
 	return newResource(
 		"academic-units",
-		principalRoute(http.MethodGet, collection, []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "request.invalid", "administration.unavailable", "resource.not_found"}, module.listRoot),
-		idempotentPrincipalRoute(IdempotencyOptional, http.MethodPost, collection, []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "academic_unit.invalid", "academic_unit.conflict", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "administration.unavailable", "resource.not_found"}, module.createRoot),
-		principalRoute(http.MethodGet, member, []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "resource.not_found", "administration.unavailable", "request.invalid"}, module.get),
-		principalRoute(http.MethodPatch, member, academicMutationErrorCodes("request.invalid", "resource.not_found", "academic_unit.invalid", "academic_unit.conflict"), module.patch),
-		principalRoute(http.MethodDelete, member, academicMutationErrorCodes("request.invalid", "resource.not_found", "academic_unit.conflict"), module.archive),
-		principalRoute(http.MethodGet, children, []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "resource.not_found", "administration.unavailable", "request.invalid"}, module.listChildren),
-		principalRoute(http.MethodPost, children, academicMutationErrorCodes("request.invalid", "resource.not_found", "academic_unit.invalid", "academic_unit.conflict"), module.createChild),
+		principalRoute(
+			http.MethodGet,
+			collection,
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"administration.unavailable",
+				"resource.not_found",
+			},
+			module.listRoot,
+		),
+		idempotentPrincipalRoute(
+			IdempotencyOptional,
+			http.MethodPost,
+			collection,
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"academic_unit.invalid",
+				"academic_unit.conflict",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"administration.unavailable",
+				"resource.not_found",
+			},
+			module.createRoot,
+		),
+		principalRoute(
+			http.MethodGet,
+			member,
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"resource.not_found",
+				"administration.unavailable",
+				"request.invalid",
+			},
+			module.get,
+		),
+		principalRoute(
+			http.MethodPatch,
+			member,
+			academicMutationErrorCodes("request.invalid", "resource.not_found", "academic_unit.invalid", "academic_unit.conflict"),
+			module.patch,
+		),
+		principalRoute(
+			http.MethodDelete,
+			member,
+			academicMutationErrorCodes("request.invalid", "resource.not_found", "academic_unit.conflict"),
+			module.archive,
+		),
+		principalRoute(
+			http.MethodGet,
+			children,
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"resource.not_found",
+				"administration.unavailable",
+				"request.invalid",
+			},
+			module.listChildren,
+		),
+		principalRoute(
+			http.MethodPost,
+			children,
+			academicMutationErrorCodes("request.invalid", "resource.not_found", "academic_unit.invalid", "academic_unit.conflict"),
+			module.createChild,
+		),
 	)
 }
 
@@ -95,17 +165,21 @@ func (m academicUnitResourceModule) createRoot(request operationRequest) (operat
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
+
 	saved, err := m.academicUnits.CreateAcademicUnit(
 		request.context,
 		request.invocation(),
 		academic.CreateAcademicUnitCommand{
-			Name: body.Name, DisplayName: body.DisplayName,
-			Description: body.Description, IdempotencyKey: request.idempotencyKey,
+			Name:           body.Name,
+			DisplayName:    body.DisplayName,
+			Description:    body.Description,
+			IdempotencyKey: request.idempotencyKey,
 		},
 	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusCreated, academicUnitResponseFromModel(saved)), nil
 }
 
@@ -130,6 +204,7 @@ func (m academicUnitResourceModule) patch(request operationRequest) (operationRe
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body updateAcademicUnitRequest
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
@@ -137,17 +212,23 @@ func (m academicUnitResourceModule) patch(request operationRequest) (operationRe
 	if err := validateAcademicRevision(body.ExpectedRevision); err != nil {
 		return operationResult{}, err
 	}
+
 	unit, err := m.academicUnits.UpdateAcademicUnit(
 		request.context,
 		request.invocation(),
-		academic.UpdateAcademicUnitCommand{ExpectedRevision: body.ExpectedRevision.ValuePointer(),
-			ID: id, ParentID: optionalIdentifier[model.AcademicUnitID](body.ParentID), Name: body.Name,
-			DisplayName: body.DisplayName, Description: body.Description,
+		academic.UpdateAcademicUnitCommand{
+			ExpectedRevision: body.ExpectedRevision.ValuePointer(),
+			ID:               id,
+			ParentID:         optionalIdentifier[model.AcademicUnitID](body.ParentID),
+			Name:             body.Name,
+			DisplayName:      body.DisplayName,
+			Description:      body.Description,
 		},
 	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, academicUnitResponseFromModel(unit)), nil
 }
 
@@ -198,21 +279,26 @@ func (m academicUnitResourceModule) createChild(request operationRequest) (opera
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body createAcademicUnitRequest
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
+
 	saved, err := m.academicUnits.CreateAcademicUnit(
 		request.context,
 		request.invocation(),
 		academic.CreateAcademicUnitCommand{
-			ParentID: id, Name: body.Name, DisplayName: body.DisplayName,
+			ParentID:    id,
+			Name:        body.Name,
+			DisplayName: body.DisplayName,
 			Description: body.Description,
 		},
 	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusCreated, academicUnitResponseFromModel(saved)), nil
 }
 
@@ -220,8 +306,10 @@ func academicUnitResponseFromModel(unit *model.AcademicUnit) academicUnitRespons
 	if unit == nil {
 		return academicUnitResponse{}
 	}
+
 	return academicUnitResponse{
-		Revision: unit.Revision, ID: unit.ID.String(),
+		Revision:      unit.Revision,
+		ID:            unit.ID.String(),
 		CreatedAt:     model.FormatRFC3339(unit.CreatedAt),
 		UpdatedAt:     model.FormatRFC3339(unit.UpdatedAt),
 		ArchivedAt:    unit.ArchivedAt.FormatRFC3339(),

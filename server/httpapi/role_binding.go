@@ -40,11 +40,16 @@ type roleBindingResponse struct {
 
 func roleBindingResponseFromModel(binding *model.RoleBinding) roleBindingResponse {
 	return roleBindingResponse{
-		ID: binding.ID.String(), CreatedAt: model.FormatRFC3339(binding.CreatedAt),
-		UpdatedAt: model.FormatRFC3339(binding.UpdatedAt), ArchivedAt: binding.ArchivedAt.FormatRFC3339(),
-		UserID: binding.UserID.String(), RoleID: binding.RoleID.String(),
-		ScopeType: binding.ScopeType, ScopeID: binding.ScopeID,
-		StartAt: model.FormatRFC3339(binding.StartsAt), EndAt: binding.EndsAt.FormatRFC3339(),
+		ID:         binding.ID.String(),
+		CreatedAt:  model.FormatRFC3339(binding.CreatedAt),
+		UpdatedAt:  model.FormatRFC3339(binding.UpdatedAt),
+		ArchivedAt: binding.ArchivedAt.FormatRFC3339(),
+		UserID:     binding.UserID.String(),
+		RoleID:     binding.RoleID.String(),
+		ScopeType:  binding.ScopeType,
+		ScopeID:    binding.ScopeID,
+		StartAt:    model.FormatRFC3339(binding.StartsAt),
+		EndAt:      binding.EndsAt.FormatRFC3339(),
 	}
 }
 
@@ -56,12 +61,54 @@ func roleBindingResource(bindings RoleBindingApplication) apiResource {
 	module := roleBindingResourceModule{bindings: bindings}
 	return newResource(
 		"role-bindings",
-		principalRoute(http.MethodGet, path("/role-bindings"),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "request.invalid", "administration.unavailable", "resource.not_found"}, module.list),
-		strongRecentSessionRoute(http.MethodPost, path("/role-bindings"),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "role_binding.invalid", "role_binding.conflict", "role_binding.system_admin_scope_invalid", "administration.unavailable", "mail.unavailable"}, module.create),
-		strongRecentSessionRoute(http.MethodDelete, path("/role-bindings/{role_binding_id}"),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "role_binding.conflict", "role_binding.last_system_admin", "administration.unavailable", "mail.unavailable"}, module.end),
+		principalRoute(
+			http.MethodGet,
+			path("/role-bindings"),
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"administration.unavailable",
+				"resource.not_found",
+			},
+			module.list,
+		),
+		strongRecentSessionRoute(
+			http.MethodPost,
+			path("/role-bindings"),
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"role_binding.invalid",
+				"role_binding.conflict",
+				"role_binding.system_admin_scope_invalid",
+				"administration.unavailable",
+				"mail.unavailable",
+			},
+			module.create,
+		),
+		strongRecentSessionRoute(
+			http.MethodDelete,
+			path("/role-bindings/{role_binding_id}"),
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"role_binding.conflict",
+				"role_binding.last_system_admin",
+				"administration.unavailable",
+				"mail.unavailable",
+			},
+			module.end,
+		),
 	)
 }
 
@@ -71,20 +118,28 @@ func (m roleBindingResourceModule) list(request operationRequest) (operationResu
 		request.context,
 		request.invocation(),
 		administration.ListRoleBindingsQuery{
-			UserID: model.UserID(values.Get("user_id")), ScopeType: model.RoleScopeType(values.Get("scope_type")),
-			ScopeID: values.Get("scope_id"),
+			UserID:    model.UserID(values.Get("user_id")),
+			ScopeType: model.RoleScopeType(values.Get("scope_type")),
+			ScopeID:   values.Get("scope_id"),
 		},
 	)
 	if err != nil {
 		return operationResult{}, err
 	}
-	response, err := boundedListResult(request, "Role Binding", bindings,
+
+	response, err := boundedListResult(
+		request,
+		"Role Binding",
+		bindings,
 		func(binding *model.RoleBinding) boundedPageKey {
 			return boundedPageKey{At: binding.CreatedAt, ID: binding.ID.String()}
-		}, roleBindingResponseFromModel)
+		},
+		roleBindingResponseFromModel,
+	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, response), nil
 }
 
@@ -93,21 +148,28 @@ func (m roleBindingResourceModule) create(request operationRequest) (operationRe
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
+
 	startAt, endAt, err := wireWindowMillis(input.StartAt, input.EndAt)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	saved, err := m.bindings.CreateRoleBinding(
 		request.context,
 		request.invocation(),
 		administration.CreateRoleBindingCommand{
-			UserID: model.UserID(input.UserID), RoleID: model.RoleID(input.RoleID), ScopeType: input.ScopeType,
-			ScopeID: input.ScopeID, StartAt: startAt, EndAt: endAt,
+			UserID:    model.UserID(input.UserID),
+			RoleID:    model.RoleID(input.RoleID),
+			ScopeType: input.ScopeType,
+			ScopeID:   input.ScopeID,
+			StartAt:   startAt,
+			EndAt:     endAt,
 		},
 	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusCreated, roleBindingResponseFromModel(saved)), nil
 }
 

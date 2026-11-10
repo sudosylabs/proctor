@@ -50,9 +50,16 @@ func userSettingsResource(settings UserSettingsApplication) apiResource {
 		http.MethodPut,
 		path,
 		userSettingsSessionMutationCodes(
-			"request.invalid", "user_settings.invalid", "user_settings.format_unsupported",
-			"user_settings.revision_conflict", "user_settings.unavailable", "audit.unavailable",
-			"idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress",
+			"request.invalid",
+			"user_settings.invalid",
+			"user_settings.format_unsupported",
+			"user_settings.revision_conflict",
+			"user_settings.unavailable",
+			"audit.unavailable",
+			"idempotency.key_required",
+			"idempotency.key_invalid",
+			"idempotency.conflict",
+			"idempotency.in_progress",
 		),
 		module.replace,
 	)
@@ -92,29 +99,40 @@ func (m userSettingsResourceModule) replace(request operationRequest) (operation
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
+
 	expectedRevision, err := model.ParseUserSettingsRevision(input.ExpectedRevision)
 	if err != nil {
 		return operationResult{}, invalidRequestError(err)
 	}
+
 	result, err := m.settings.ReplaceOwnUserSettings(
 		request.context,
 		request.invocation(),
 		user.ReplaceOwnUserSettingsCommand{
-			Source: input.Source, FormatVersion: input.FormatVersion,
-			ExpectedRevision: expectedRevision, IdempotencyKey: request.idempotencyKey,
+			Source:           input.Source,
+			FormatVersion:    input.FormatVersion,
+			ExpectedRevision: expectedRevision,
+			IdempotencyKey:   request.idempotencyKey,
 		},
 	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, userSettingsReplacementResponse{
-		Revision: result.Revision.String(), FormatVersion: result.FormatVersion,
-		UpdatedAt: model.FormatRFC3339(result.UpdatedAt), Changed: result.Changed,
+		Revision:      result.Revision.String(),
+		FormatVersion: result.FormatVersion,
+		UpdatedAt:     model.FormatRFC3339(result.UpdatedAt),
+		Changed:       result.Changed,
 	}).withHeaders(http.Header{"Cache-Control": []string{"private, no-store"}}), nil
 }
 
 // UserSettingsApplication is the application port its handlers call; it reads and replaces the caller's own settings document.
 type UserSettingsApplication interface {
 	ReadOwnUserSettings(context.Context, invocation.Invocation) (user.UserSettingsView, error)
-	ReplaceOwnUserSettings(context.Context, invocation.Invocation, user.ReplaceOwnUserSettingsCommand) (user.UserSettingsReplacementResult, error)
+	ReplaceOwnUserSettings(
+		context.Context,
+		invocation.Invocation,
+		user.ReplaceOwnUserSettingsCommand,
+	) (user.UserSettingsReplacementResult, error)
 }

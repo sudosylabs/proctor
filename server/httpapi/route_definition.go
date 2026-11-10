@@ -43,10 +43,15 @@ func upgradeRoute(
 	operation upgradeOperation,
 ) routeDefinition {
 	return routeDefinition{
-		method: method, path: path, auth: auth,
-		errorCodes: routeErrorCodes(auth, method, errorCodes), declaredErrorCodes: errorCodes,
-		protocolName: name, protocolKind: RouteProtocolUpgrade,
-		upgradeOperation: operation, idempotency: IdempotencyNone,
+		method:             method,
+		path:               path,
+		auth:               auth,
+		errorCodes:         routeErrorCodes(auth, method, errorCodes),
+		declaredErrorCodes: errorCodes,
+		protocolName:       name,
+		protocolKind:       RouteProtocolUpgrade,
+		upgradeOperation:   operation,
+		idempotency:        IdempotencyNone,
 	}
 }
 
@@ -58,9 +63,13 @@ func route(
 	operation operation,
 ) routeDefinition {
 	return routeDefinition{
-		method: method, path: path, auth: auth,
-		errorCodes: routeErrorCodes(auth, method, errorCodes), declaredErrorCodes: errorCodes, operation: operation,
-		idempotency: IdempotencyNone,
+		method:             method,
+		path:               path,
+		auth:               auth,
+		errorCodes:         routeErrorCodes(auth, method, errorCodes),
+		declaredErrorCodes: errorCodes,
+		operation:          operation,
+		idempotency:        IdempotencyNone,
 	}
 }
 
@@ -89,15 +98,23 @@ func kernelErrorCodes(auth AuthRequirement, method string) []string {
 		if unsafe {
 			return []string{"request.invalid"}
 		}
+
 		return nil
 	case AuthRefreshCredentialRequired:
 		codes := []string{"authentication.required", "authentication.credential_ambiguous"}
 		if unsafe {
 			codes = append(codes, "authentication.csrf.invalid")
 		}
+
 		return codes
-	case AuthMFARecoverySessionRequired, AuthRecentMFARecoverySessionRequired, AuthMFAEnrollmentSessionRequired, AuthPrincipalRequired, AuthSessionRequired,
-		AuthStrongSessionRequired, AuthRecentSessionRequired, AuthStrongRecentSessionRequired:
+	case AuthMFARecoverySessionRequired,
+		AuthRecentMFARecoverySessionRequired,
+		AuthMFAEnrollmentSessionRequired,
+		AuthPrincipalRequired,
+		AuthSessionRequired,
+		AuthStrongSessionRequired,
+		AuthRecentSessionRequired,
+		AuthStrongRecentSessionRequired:
 		codes := []string{
 			"authentication.required",
 			"authentication.token_invalid",
@@ -110,19 +127,28 @@ func kernelErrorCodes(auth AuthRequirement, method string) []string {
 		if unsafe {
 			codes = append(codes, "authentication.csrf.invalid")
 		}
+
 		if auth == AuthStrongSessionRequired || auth == AuthStrongRecentSessionRequired {
 			codes = append(codes, "authentication.strong_required")
 		}
+
 		if auth == AuthRecentMFARecoverySessionRequired || auth == AuthRecentSessionRequired || auth == AuthStrongRecentSessionRequired {
 			codes = append(codes, "authentication.reauthentication_required")
 		}
+
 		return codes
 	default:
 		return nil
 	}
 }
 
-func idempotentPrincipalRoute(requirement IdempotencyRequirement, method string, path routePath, errorCodes []string, operation operation) routeDefinition {
+func idempotentPrincipalRoute(
+	requirement IdempotencyRequirement,
+	method string,
+	path routePath,
+	errorCodes []string,
+	operation operation,
+) routeDefinition {
 	definition := principalRoute(method, path, errorCodes, operation)
 	definition.idempotency = requirement
 	return definition
@@ -186,10 +212,15 @@ func protocolRoute(
 	operation protocolOperation,
 ) routeDefinition {
 	return routeDefinition{
-		method: method, path: path, auth: auth,
-		errorCodes: routeErrorCodes(auth, method, errorCodes), declaredErrorCodes: errorCodes,
-		protocolName: name, protocolKind: kind, protocolOperation: operation,
-		idempotency: IdempotencyNone,
+		method:             method,
+		path:               path,
+		auth:               auth,
+		errorCodes:         routeErrorCodes(auth, method, errorCodes),
+		declaredErrorCodes: errorCodes,
+		protocolName:       name,
+		protocolKind:       kind,
+		protocolOperation:  operation,
+		idempotency:        IdempotencyNone,
 	}
 }
 

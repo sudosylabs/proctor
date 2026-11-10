@@ -81,9 +81,40 @@ type mfaKeyResourceModule struct{ application MFAKeyApplication }
 func mfaKeyResource(application MFAKeyApplication) apiResource {
 	module := mfaKeyResourceModule{application: application}
 	return newResource("mfa-keys",
-		strongRecentSessionRoute(http.MethodGet, path("/mfa/keys"), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "authentication.mfa.unavailable", "resource.not_found"}, module.getKeyState),
-		strongRecentSessionRoute(http.MethodPost, path("/mfa/rekey"), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "authentication.mfa.rekey.invalid", "authentication.mfa.rekey.conflict", "authentication.mfa.unavailable", "resource.not_found"}, module.startRekey),
-		strongRecentSessionRoute(http.MethodGet, path("/mfa/rekey/{job_id}"), operatorReadErrorCodes("request.invalid", "resource.not_found", "authentication.mfa.unavailable"), module.getRekeyStatus),
+		strongRecentSessionRoute(
+			http.MethodGet,
+			path("/mfa/keys"),
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"authentication.mfa.unavailable",
+				"resource.not_found",
+			},
+			module.getKeyState,
+		),
+		strongRecentSessionRoute(
+			http.MethodPost,
+			path("/mfa/rekey"),
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"authentication.mfa.rekey.invalid",
+				"authentication.mfa.rekey.conflict",
+				"authentication.mfa.unavailable",
+				"resource.not_found",
+			},
+			module.startRekey,
+		),
+		strongRecentSessionRoute(
+			http.MethodGet,
+			path("/mfa/rekey/{job_id}"),
+			operatorReadErrorCodes("request.invalid", "resource.not_found", "authentication.mfa.unavailable"),
+			module.getRekeyStatus,
+		),
 	)
 }
 
@@ -92,11 +123,21 @@ func (m mfaKeyResourceModule) getKeyState(request operationRequest) (operationRe
 	if err != nil {
 		return operationResult{}, err
 	}
-	response := mfaKeyStateResponse{PrimaryKeyID: view.PrimaryKeyID, RequiredPrimaryKeyID: view.RequiredPrimaryKeyID,
-		ActiveRekeyJobID: view.ActiveRekeyJobID.String(), Active: make([]mfaSecretKeyUsageResponse, 0, len(view.Active))}
-	for _, usage := range view.Active {
-		response.Active = append(response.Active, mfaSecretKeyUsageResponse{KeyID: usage.KeyID, Credentials: usage.Credentials, Configured: usage.Configured})
+
+	response := mfaKeyStateResponse{
+		PrimaryKeyID:         view.PrimaryKeyID,
+		RequiredPrimaryKeyID: view.RequiredPrimaryKeyID,
+		ActiveRekeyJobID:     view.ActiveRekeyJobID.String(),
+		Active:               make([]mfaSecretKeyUsageResponse, 0, len(view.Active)),
 	}
+	for _, usage := range view.Active {
+		response.Active = append(response.Active, mfaSecretKeyUsageResponse{
+			KeyID:       usage.KeyID,
+			Credentials: usage.Credentials,
+			Configured:  usage.Configured,
+		})
+	}
+
 	return jsonResult(http.StatusOK, response), nil
 }
 
@@ -105,12 +146,22 @@ func (m mfaKeyResourceModule) startRekey(request operationRequest) (operationRes
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
-	view, err := m.application.StartMFARekey(request.context, request.invocation(), identity.StartMFARekeyCommand{RetiringKeyID: body.RetiringKeyID})
+
+	view, err := m.application.StartMFARekey(
+		request.context,
+		request.invocation(),
+		identity.StartMFARekeyCommand{RetiringKeyID: body.RetiringKeyID},
+	)
 	if err != nil {
 		return operationResult{}, err
 	}
-	return jsonResult(http.StatusAccepted, mfaRekeyResponse{JobID: view.JobID.String(), PrimaryKeyID: view.PrimaryKeyID,
-		RetiringKeyID: view.RetiringKeyID, CreatedAt: model.FormatRFC3339(view.CreatedAt)}), nil
+
+	return jsonResult(http.StatusAccepted, mfaRekeyResponse{
+		JobID:         view.JobID.String(),
+		PrimaryKeyID:  view.PrimaryKeyID,
+		RetiringKeyID: view.RetiringKeyID,
+		CreatedAt:     model.FormatRFC3339(view.CreatedAt),
+	}), nil
 }
 
 func (m mfaKeyResourceModule) getRekeyStatus(request operationRequest) (operationResult, error) {
@@ -118,24 +169,40 @@ func (m mfaKeyResourceModule) getRekeyStatus(request operationRequest) (operatio
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	view, err := m.application.GetMFARekeyStatus(request.context, request.invocation(), identity.GetMFARekeyStatusQuery{JobID: jobID})
 	if err != nil {
 		return operationResult{}, err
 	}
-	response := mfaRekeyStatusResponse{JobID: view.JobID.String(), Status: view.Status,
-		PrimaryKeyID: view.PrimaryKeyID, RetiringKeyID: view.RetiringKeyID,
-		CreatedAt: model.FormatRFC3339(view.CreatedAt), UpdatedAt: model.FormatRFC3339(view.UpdatedAt),
-		PublicErrorCode: view.PublicErrorCode, AttemptCount: view.AttemptCount, MaximumAttempts: view.MaximumAttempts,
-		Processed: view.Processed, Resealed: view.Resealed}
+
+	response := mfaRekeyStatusResponse{
+		JobID:           view.JobID.String(),
+		Status:          view.Status,
+		PrimaryKeyID:    view.PrimaryKeyID,
+		RetiringKeyID:   view.RetiringKeyID,
+		CreatedAt:       model.FormatRFC3339(view.CreatedAt),
+		UpdatedAt:       model.FormatRFC3339(view.UpdatedAt),
+		PublicErrorCode: view.PublicErrorCode,
+		AttemptCount:    view.AttemptCount,
+		MaximumAttempts: view.MaximumAttempts,
+		Processed:       view.Processed,
+		Resealed:        view.Resealed,
+	}
 	if view.CompletedAt.Valid {
 		response.CompletedAt = view.CompletedAt.FormatRFC3339()
 	}
+
 	if view.Progress != nil {
 		response.Progress = &mfaRekeyProgressResponse{Current: view.Progress.Current, Total: view.Progress.Total, Stage: view.Progress.Stage}
 	}
+
 	if view.Proof != nil {
-		response.Proof = &mfaRekeyProofResponse{NonPrimaryReferences: view.Proof.NonPrimaryReferences,
-			RetiringReferences: view.Proof.RetiringReferences, RetirementSafe: view.Proof.RetirementSafe}
+		response.Proof = &mfaRekeyProofResponse{
+			NonPrimaryReferences: view.Proof.NonPrimaryReferences,
+			RetiringReferences:   view.Proof.RetiringReferences,
+			RetirementSafe:       view.Proof.RetirementSafe,
+		}
 	}
+
 	return jsonResult(http.StatusOK, response), nil
 }

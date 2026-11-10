@@ -20,6 +20,7 @@ func validateResourceCatalog(apiPrefix string, resources []apiResource) error {
 	if err := validateDeclaredKernelCodes(resources); err != nil {
 		return err
 	}
+
 	resourceNames := make(map[string]struct{}, len(resources))
 	routeShapes := make(map[string]string)
 	for _, resource := range resources {
@@ -29,10 +30,12 @@ func validateResourceCatalog(apiPrefix string, resources []apiResource) error {
 		if _, exists := resourceNames[resource.name]; exists {
 			return fmt.Errorf("resource name %q is duplicated", resource.name)
 		}
+
 		resourceNames[resource.name] = struct{}{}
 		if len(resource.routes) == 0 {
 			return fmt.Errorf("resource %q has no routes", resource.name)
 		}
+
 		for _, route := range resource.routes {
 			if !isHTTPMethod(route.method) || strings.ToUpper(route.method) != route.method {
 				return fmt.Errorf("resource %q HTTP method %q is invalid", resource.name, route.method)
@@ -46,10 +49,12 @@ func validateResourceCatalog(apiPrefix string, resources []apiResource) error {
 			if route.maxBodyBytes < 0 {
 				return fmt.Errorf("resource %q %s maximum body size must not be negative", resource.name, route.method)
 			}
+
 			if effectiveIdempotencyRequirement(route.idempotency) != IdempotencyNone &&
 				(!idempotencyPrincipalAuth(route.auth) || route.upgradeOperation != nil || route.operation == nil && route.protocolOperation == nil) {
 				return fmt.Errorf("resource %q %s idempotency requires a principal route", resource.name, route.method)
 			}
+
 			ordinary := route.operation != nil
 			protocol := route.protocolOperation != nil
 			upgrade := route.upgradeOperation != nil
@@ -71,21 +76,26 @@ func validateResourceCatalog(apiPrefix string, resources []apiResource) error {
 			if ordinary && (route.protocolName != "" || route.protocolKind != "") {
 				return fmt.Errorf("resource %q %s ordinary operation has protocol metadata", resource.name, route.method)
 			}
+
 			path, normalized, err := route.path.compile(apiPrefix)
 			if err != nil {
 				return fmt.Errorf("resource %q %s path: %w", resource.name, route.method, err)
 			}
-			if upgrade && (resource.name != webSocketResourceName ||
-				route.protocolName != webSocketProtocolName ||
-				route.auth != AuthSessionRequired ||
-				route.method != http.MethodGet ||
-				path != apiPrefix+"/"+webSocketPathLiteral) {
+
+			if upgrade &&
+				(resource.name != webSocketResourceName ||
+					route.protocolName != webSocketProtocolName ||
+					route.auth != AuthSessionRequired ||
+					route.method != http.MethodGet ||
+					path != apiPrefix+"/"+webSocketPathLiteral) {
 				return fmt.Errorf("resource %q %s %s is not the reserved WebSocket upgrade", resource.name, route.method, path)
 			}
+
 			key := route.method + " " + normalized
 			if prior, exists := routeShapes[key]; exists {
 				return fmt.Errorf("resource %q %s %s has duplicate route shape with %s", resource.name, route.method, path, prior)
 			}
+
 			routeShapes[key] = resource.name
 			seenErrors := make(map[string]struct{}, len(route.errorCodes))
 			for _, code := range route.errorCodes {
@@ -97,10 +107,12 @@ func validateResourceCatalog(apiPrefix string, resources []apiResource) error {
 				if _, exists := seenErrors[code]; exists {
 					return fmt.Errorf("resource %q %s %s public error code %q is duplicated", resource.name, route.method, path, code)
 				}
+
 				seenErrors[code] = struct{}{}
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -128,7 +140,13 @@ func validateDeclaredKernelCodes(resources []apiResource) error {
 
 func idempotencyPrincipalAuth(requirement AuthRequirement) bool {
 	switch requirement {
-	case AuthMFARecoverySessionRequired, AuthRecentMFARecoverySessionRequired, AuthMFAEnrollmentSessionRequired, AuthPrincipalRequired, AuthSessionRequired, AuthStrongSessionRequired, AuthRecentSessionRequired,
+	case AuthMFARecoverySessionRequired,
+		AuthRecentMFARecoverySessionRequired,
+		AuthMFAEnrollmentSessionRequired,
+		AuthPrincipalRequired,
+		AuthSessionRequired,
+		AuthStrongSessionRequired,
+		AuthRecentSessionRequired,
 		AuthStrongRecentSessionRequired:
 		return true
 	default:
@@ -168,7 +186,10 @@ func countTrue(values ...bool) int {
 
 func validAuthRequirement(requirement AuthRequirement) bool {
 	switch requirement {
-	case AuthPublic, AuthMFARecoverySessionRequired, AuthRecentMFARecoverySessionRequired, AuthMFAEnrollmentSessionRequired,
+	case AuthPublic,
+		AuthMFARecoverySessionRequired,
+		AuthRecentMFARecoverySessionRequired,
+		AuthMFAEnrollmentSessionRequired,
 		AuthPrincipalRequired,
 		AuthSessionRequired,
 		AuthStrongSessionRequired,
@@ -183,8 +204,14 @@ func validAuthRequirement(requirement AuthRequirement) bool {
 
 func isHTTPMethod(method string) bool {
 	switch method {
-	case http.MethodConnect, http.MethodDelete, http.MethodGet, http.MethodHead,
-		http.MethodOptions, http.MethodPatch, http.MethodPost, http.MethodPut,
+	case http.MethodConnect,
+		http.MethodDelete,
+		http.MethodGet,
+		http.MethodHead,
+		http.MethodOptions,
+		http.MethodPatch,
+		http.MethodPost,
+		http.MethodPut,
 		http.MethodTrace:
 		return true
 	default:

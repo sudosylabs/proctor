@@ -258,8 +258,10 @@ func classResponseFromModel(class *model.Class) classResponse {
 	if class == nil {
 		return classResponse{}
 	}
+
 	return classResponse{
-		Revision: class.Revision, ID: class.ID.String(),
+		Revision:         class.Revision,
+		ID:               class.ID.String(),
 		CreatedAt:        model.FormatRFC3339(class.CreatedAt),
 		UpdatedAt:        model.FormatRFC3339(class.UpdatedAt),
 		ArchivedAt:       class.ArchivedAt.FormatRFC3339(),

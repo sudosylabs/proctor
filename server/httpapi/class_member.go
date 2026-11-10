@@ -56,7 +56,12 @@ func classMemberResource(members ClassMemberApplication) apiResource {
 		principalRoute(
 			http.MethodPost,
 			path("/classes/{class_id}/members"),
-			academicRelationshipMutationErrorCodes("class_member.invalid", "class_member.student_affiliation_required", "class.enrollment_conflict", "mail.unavailable"),
+			academicRelationshipMutationErrorCodes(
+				"class_member.invalid",
+				"class_member.student_affiliation_required",
+				"class.enrollment_conflict",
+				"mail.unavailable",
+			),
 			module.enroll,
 		),
 		principalRoute(
@@ -73,17 +78,31 @@ func (m classMemberResourceModule) list(request operationRequest) (operationResu
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	scope := model.Resource{Type: model.ResourceClass, ID: classID.String()}
 	query, after, err := membershipPageQuery(request.request, scope)
 	if err != nil {
 		return operationResult{}, err
 	}
-	page, err := m.members.ListClassMembersPage(request.context, request.invocation(), academic.ListClassMembersPageQuery{ClassID: classID, MembershipPageQuery: query, AfterUserID: model.UserID(after.AfterUserID), AfterID: model.ClassMemberID(after.AfterID)})
+
+	page, err := m.members.ListClassMembersPage(request.context, request.invocation(), academic.ListClassMembersPageQuery{
+		ClassID:             classID,
+		MembershipPageQuery: query,
+		AfterUserID:         model.UserID(after.AfterUserID),
+		AfterID:             model.ClassMemberID(after.AfterID),
+	})
 	if err != nil {
 		return operationResult{}, err
 	}
-	return membershipListResult(scope, page.ActiveAt, page.Members, page.HasMore, classMemberResponseFromModel,
-		func(member *model.ClassMember) (string, string) { return member.UserID.String(), member.ID.String() })
+
+	return membershipListResult(
+		scope,
+		page.ActiveAt,
+		page.Members,
+		page.HasMore,
+		classMemberResponseFromModel,
+		func(member *model.ClassMember) (string, string) { return member.UserID.String(), member.ID.String() },
+	)
 }
 
 func (m classMemberResourceModule) enroll(request operationRequest) (operationResult, error) {
@@ -91,22 +110,32 @@ func (m classMemberResourceModule) enroll(request operationRequest) (operationRe
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body enrollClassMemberRequest
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
+
 	startAt, err := wireTimeMillis("start_at", body.StartAt)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	endAt, err := wireTimeMillis("end_at", body.EndAt)
 	if err != nil {
 		return operationResult{}, err
 	}
-	enrollment, err := m.members.EnrollClassMember(request.context, request.invocation(), academic.EnrollClassMemberCommand{ClassID: classID, UserID: model.UserID(body.UserID), StartAt: startAt, EndAt: endAt})
+
+	enrollment, err := m.members.EnrollClassMember(request.context, request.invocation(), academic.EnrollClassMemberCommand{
+		ClassID: classID,
+		UserID:  model.UserID(body.UserID),
+		StartAt: startAt,
+		EndAt:   endAt,
+	})
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusCreated, classEnrollmentResponseFromModel(enrollment)), nil
 }
 

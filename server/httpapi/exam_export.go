@@ -37,17 +37,84 @@ func examExportsResource(application ExamExportsApplication) apiResource {
 		if submission {
 			base += "/submissions/{submission_id}"
 		}
+
 		collection := path(base + "/exports")
 		member := path(base + "/exports/{exam_export_id}")
 		content := path(base + "/exports/{exam_export_id}/content")
-		create := sessionRoute(http.MethodPost, collection, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.invalid", "exam.unavailable", "exam.export.not_found", "exam.export.conflict", "exam.export.unavailable", "exam.export.policy_unconfigured", "exam.export.limit", "exam.export.source_retired", "exam.export.scope_changed", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress"}, m.create)
+		create := sessionRoute(
+			http.MethodPost,
+			collection,
+			[]string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.invalid",
+				"exam.unavailable",
+				"exam.export.not_found",
+				"exam.export.conflict",
+				"exam.export.unavailable",
+				"exam.export.policy_unconfigured",
+				"exam.export.limit",
+				"exam.export.source_retired",
+				"exam.export.scope_changed",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+			},
+			m.create,
+		)
 		create.idempotency = IdempotencyRequired
 		protocol := "sitting-export-content"
 		if submission {
 			protocol = "submission-export-content"
 		}
-		routes = append(routes, create, sessionRoute(http.MethodGet, member, []string{"authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "exam.invalid", "exam.unavailable", "exam.export.not_found", "exam.export.conflict", "exam.export.unavailable"}, m.get), protocolRoute(protocol, RouteProtocolBinaryDownload, AuthSessionRequired, http.MethodGet, content, []string{"authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "exam.invalid", "exam.unavailable", "exam.export.not_found", "exam.export.conflict", "exam.export.unavailable", "exam.export.expired", "exam.export.not_ready"}, m.open))
+
+		routes = append(
+			routes,
+			create,
+			sessionRoute(
+				http.MethodGet,
+				member,
+				[]string{
+					"authorization.request.invalid",
+					"authorization.unavailable",
+					"request.invalid",
+					"resource.not_found",
+					"exam.invalid",
+					"exam.unavailable",
+					"exam.export.not_found",
+					"exam.export.conflict",
+					"exam.export.unavailable",
+				},
+				m.get,
+			),
+			protocolRoute(
+				protocol,
+				RouteProtocolBinaryDownload,
+				AuthSessionRequired,
+				http.MethodGet,
+				content,
+				[]string{
+					"authorization.request.invalid",
+					"authorization.unavailable",
+					"request.invalid",
+					"resource.not_found",
+					"exam.invalid",
+					"exam.unavailable",
+					"exam.export.not_found",
+					"exam.export.conflict",
+					"exam.export.unavailable",
+					"exam.export.expired",
+					"exam.export.not_ready",
+				},
+				m.open,
+			),
+		)
 	}
+
 	return newResource("exam-exports", routes...)
 }
 
@@ -85,11 +152,27 @@ type examExportResponse struct {
 }
 
 func exportResponse(e *model.ExamExport) examExportResponse {
-	r := examExportResponse{ID: e.ID.String(), ExamID: e.Scope.ExamID.String(), SittingID: e.Scope.SittingID.String(), SubmissionID: e.Scope.SubmissionID.String(), Categories: slices.Clone(e.Categories), State: e.State, PolicyRevision: e.PolicyRevision,
-		CreatedAt: model.FormatRFC3339(e.CreatedAt), ExpiresAt: model.FormatRFC3339(e.ExpiresAt), ConstructionDeadline: model.FormatRFC3339(e.SourceExpiresAt), SubmissionCount: e.SubmissionCount, FileCount: e.FileCount, SourceBytes: e.SourceBytes, ArchiveSizeBytes: e.ArchiveSizeBytes, ArchiveSHA256: e.ArchiveSHA256}
+	r := examExportResponse{
+		ID:                   e.ID.String(),
+		ExamID:               e.Scope.ExamID.String(),
+		SittingID:            e.Scope.SittingID.String(),
+		SubmissionID:         e.Scope.SubmissionID.String(),
+		Categories:           slices.Clone(e.Categories),
+		State:                e.State,
+		PolicyRevision:       e.PolicyRevision,
+		CreatedAt:            model.FormatRFC3339(e.CreatedAt),
+		ExpiresAt:            model.FormatRFC3339(e.ExpiresAt),
+		ConstructionDeadline: model.FormatRFC3339(e.SourceExpiresAt),
+		SubmissionCount:      e.SubmissionCount,
+		FileCount:            e.FileCount,
+		SourceBytes:          e.SourceBytes,
+		ArchiveSizeBytes:     e.ArchiveSizeBytes,
+		ArchiveSHA256:        e.ArchiveSHA256,
+	}
 	if e.ReadyAt.Valid {
 		r.ReadyAt = model.FormatRFC3339(e.ReadyAt.Time)
 	}
+
 	return r
 }
 
@@ -118,24 +201,33 @@ func (m examExportsHTTPModule) create(request operationRequest) (operationResult
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body createExamExportRequest
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
+
 	categories := slices.Clone(body.Categories)
 	if len(categories) == 2 && categories[0] == model.RetentionCategoryIntegrity && categories[1] == model.RetentionCategoryWork {
 		categories[0], categories[1] = categories[1], categories[0]
 	}
+
 	if !model.ValidExamExportCategories(categories) {
 		return operationResult{}, invalidRequestError(errors.New("select distinct work and/or integrity categories"))
 	}
-	value, err := m.application.CreateExamExport(request.context, request.invocation(), exam.CreateExportCommand{Scope: scope, Categories: categories, IdempotencyKey: request.idempotencyKey})
+
+	value, err := m.application.CreateExamExport(request.context, request.invocation(), exam.CreateExportCommand{
+		Scope:          scope,
+		Categories:     categories,
+		IdempotencyKey: request.idempotencyKey,
+	})
 	if err != nil {
 		return operationResult{}, err
 	}
 	if value.Validate() != nil || value.Scope != scope {
 		return operationResult{}, errUnpresentableResult
 	}
+
 	return jsonResult(http.StatusAccepted, exportResponse(value)).withHeaders(privateNoStoreHeaders()), nil
 }
 
@@ -159,6 +251,7 @@ func (m examExportsHTTPModule) open(request operationRequest) (protocolResult, e
 	if err != nil {
 		return protocolResult{}, err
 	}
+
 	opened, err := m.application.OpenExamExport(request.context, request.invocation(), query)
 	if err != nil {
 		return protocolResult{}, err
@@ -166,12 +259,19 @@ func (m examExportsHTTPModule) open(request operationRequest) (protocolResult, e
 	if opened == nil {
 		return protocolResult{}, errUnpresentableResult
 	}
-	if opened.Export.Validate() != nil || opened.Export.State != model.ExamExportReady || opened.Export.ID != query.ExportID || opened.Export.Scope != query.Scope || opened.Body == nil {
+
+	if opened.Export.Validate() != nil ||
+		opened.Export.State != model.ExamExportReady ||
+		opened.Export.ID != query.ExportID ||
+		opened.Export.Scope != query.Scope ||
+		opened.Body == nil {
 		if opened.Body != nil {
 			_ = opened.Body.Close()
 		}
+
 		return protocolResult{}, errUnpresentableResult
 	}
+
 	headers := privateNoStoreHeaders()
 	headers.Set("Content-Type", "application/zip")
 	headers.Set("Content-Disposition", `attachment; filename="exam-export-`+query.ExportID.String()+`.zip"`)

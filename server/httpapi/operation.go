@@ -103,25 +103,31 @@ func (a *API) upgradeOperationHandler(
 			writeRouteApplicationError(writer, request, a.logger, errorPolicy, authenticationRequiredError())
 			return
 		}
+
 		params, ok := RequestParams(request.Context())
 		if !ok {
 			writeRouteApplicationError(writer, request, a.logger, errorPolicy, invalidRequestError(nil))
 			return
 		}
+
 		err := definition.upgradeOperation(writer, operationRequest{
-			context: request.Context(), principal: principal,
-			metadata: RequestMetadata(request.Context()), params: params,
-			request: request,
+			context:   request.Context(),
+			principal: principal,
+			metadata:  RequestMetadata(request.Context()),
+			params:    params,
+			request:   request,
 		})
 		if err == nil {
 			return
 		}
+
 		cause, headers := responseErrorParts(err)
 		if validateResponseHeaders(headers) != nil || !routeErrorAllowed(errorPolicy, cause) {
 			a.logInvalidRouteError(request, cause)
 			WriteProblem(writer, internalProblem(request))
 			return
 		}
+
 		applyResponseHeaders(writer, headers)
 		writeApplicationError(writer, request, a.logger, cause)
 	})
@@ -214,23 +220,34 @@ func (a *API) operationHandler(
 		principal, hasPrincipal := Principal(request.Context())
 		if authRequiresPrincipal(definition.auth) && !hasPrincipal {
 			writeRouteApplicationError(
-				writer, request, a.logger, errorPolicy,
+				writer,
+				request,
+				a.logger,
+				errorPolicy,
 				authenticationRequiredError(),
 			)
 			return
 		}
+
 		params, ok := RequestParams(request.Context())
 		if !ok {
 			writeRouteApplicationError(
-				writer, request, a.logger, errorPolicy,
+				writer,
+				request,
+				a.logger,
+				errorPolicy,
 				invalidRequestError(nil),
 			)
 			return
 		}
+
 		result, err := definition.operation(operationRequest{
-			context: request.Context(), principal: principal,
-			metadata: RequestMetadata(request.Context()), params: params,
-			request: request, idempotencyKey: idempotencyKeyFromContext(request.Context()),
+			context:        request.Context(),
+			principal:      principal,
+			metadata:       RequestMetadata(request.Context()),
+			params:         params,
+			request:        request,
+			idempotencyKey: idempotencyKeyFromContext(request.Context()),
 		})
 		if err != nil {
 			cause, headers := responseErrorParts(err)
@@ -238,34 +255,42 @@ func (a *API) operationHandler(
 				if headers == nil {
 					headers = make(http.Header)
 				}
+
 				headers.Set("Retry-After", "1")
 			}
+
 			if validateResponseHeaders(headers) != nil || !routeErrorAllowed(errorPolicy, cause) {
 				a.logInvalidRouteError(request, cause)
 				WriteProblem(writer, internalProblem(request))
 				return
 			}
+
 			applyResponseHeaders(writer, headers)
 			writeApplicationError(writer, request, a.logger, cause)
 			return
 		}
+
 		if err := validateOperationResult(result, errorPolicy); err != nil {
 			a.logger.ErrorContext(request.Context(), "route returned an invalid operation result", logging.Err(err))
 			WriteProblem(writer, internalProblem(request))
 			return
 		}
+
 		applyResponseHeaders(writer, result.headers)
 		if result.problem != nil {
 			WriteProblem(writer, *result.problem)
 			return
 		}
+
 		if result.noContent {
 			if result.status == http.StatusNoContent {
 				writer.Header().Set("Cache-Control", "no-store")
 			}
+
 			writer.WriteHeader(result.status)
 			return
 		}
+
 		writeJSON(writer, result.status, result.body)
 	})
 }
@@ -274,22 +299,31 @@ func validateOperationResult(result operationResult, errorPolicy routeErrorPolic
 	if err := validateResponseHeaders(result.headers); err != nil {
 		return err
 	}
+
 	if result.problem != nil {
-		if result.status < 400 || result.status > 599 || result.problem.Status != result.status ||
-			result.body != nil || result.noContent || result.problem.Code == "" {
+		if result.status < 400 ||
+			result.status > 599 ||
+			result.problem.Status != result.status ||
+			result.body != nil ||
+			result.noContent ||
+			result.problem.Code == "" {
 			return errors.New("problem result shape is invalid")
 		}
+
 		if _, allowed := errorPolicy[result.problem.Code]; !allowed {
 			return fmt.Errorf("problem code %q is undeclared", result.problem.Code)
 		}
+
 		return nil
 	}
+
 	if result.status < 200 || result.status > 299 {
 		return fmt.Errorf("success status %d is invalid", result.status)
 	}
 	if result.noContent && result.body != nil {
 		return errors.New("empty result contains a body")
 	}
+
 	return nil
 }
 
@@ -303,20 +337,26 @@ func (a *API) protocolOperationHandler(
 			writeRouteApplicationError(writer, request, a.logger, errorPolicy, authenticationRequiredError())
 			return
 		}
+
 		params, ok := RequestParams(request.Context())
 		if !ok {
 			writeRouteApplicationError(writer, request, a.logger, errorPolicy, invalidRequestError(nil))
 			return
 		}
+
 		if definition.protocolKind == RouteProtocolStreamingUpload {
 			if err := a.transferDeadlines.extendForUpload(writer, request.ContentLength, definition.maxBodyBytes); err != nil {
 				a.logger.ErrorContext(request.Context(), "extend upload transfer deadline", logging.Err(err))
 			}
 		}
+
 		result, err := definition.protocolOperation(operationRequest{
-			context: request.Context(), principal: principal,
-			metadata: RequestMetadata(request.Context()), params: params,
-			request: request, idempotencyKey: idempotencyKeyFromContext(request.Context()),
+			context:        request.Context(),
+			principal:      principal,
+			metadata:       RequestMetadata(request.Context()),
+			params:         params,
+			request:        request,
+			idempotencyKey: idempotencyKeyFromContext(request.Context()),
 		})
 		if result.body != nil {
 			defer func() {
@@ -325,28 +365,34 @@ func (a *API) protocolOperationHandler(
 				}
 			}()
 		}
+
 		if err != nil {
 			cause, headers := responseErrorParts(err)
 			if failure, ok := cause.(applicationFailure); ok && failure.Code() == "idempotency.in_progress" {
 				if headers == nil {
 					headers = make(http.Header)
 				}
+
 				headers.Set("Retry-After", "1")
 			}
+
 			if validateResponseHeaders(headers) != nil || !routeErrorAllowed(errorPolicy, cause) {
 				a.logInvalidRouteError(request, cause)
 				WriteProblem(writer, internalProblem(request))
 				return
 			}
+
 			applyResponseHeaders(writer, headers)
 			writeApplicationError(writer, request, a.logger, cause)
 			return
 		}
+
 		if err := validateProtocolResult(definition.protocolKind, result); err != nil {
 			a.logger.ErrorContext(request.Context(), "route returned an invalid protocol result", logging.Err(err))
 			WriteProblem(writer, internalProblem(request))
 			return
 		}
+
 		applyResponseHeaders(writer, result.headers)
 		switch result.kind {
 		case RouteProtocolRedirect:
@@ -357,9 +403,11 @@ func (a *API) protocolOperationHandler(
 				writer.WriteHeader(result.status)
 				return
 			}
+
 			if err := a.transferDeadlines.extendForDownload(writer, result.contentLength); err != nil {
 				a.logger.ErrorContext(request.Context(), "extend download transfer deadline", logging.Err(err))
 			}
+
 			writer.Header().Set("Content-Length", strconv.FormatInt(result.contentLength, 10))
 			writer.WriteHeader(result.status)
 			written, copyErr := io.CopyN(writer, result.body, result.contentLength)
@@ -382,12 +430,18 @@ func validateProtocolResult(expected RouteProtocolKind, result protocolResult) e
 	if result.headers.Get("Location") != "" || result.headers.Get("Content-Length") != "" {
 		return errors.New("protocol-owned headers cannot be supplied by an operation")
 	}
+
 	switch result.kind {
 	case RouteProtocolRedirect:
-		if result.status != http.StatusSeeOther || result.location == "" || strings.ContainsAny(result.location, "\r\n") ||
-			result.body != nil || result.contentLength != 0 || result.jsonBody != nil {
+		if result.status != http.StatusSeeOther ||
+			result.location == "" ||
+			strings.ContainsAny(result.location, "\r\n") ||
+			result.body != nil ||
+			result.contentLength != 0 ||
+			result.jsonBody != nil {
 			return errors.New("redirect protocol result is invalid")
 		}
+
 		if _, err := url.Parse(result.location); err != nil {
 			return fmt.Errorf("redirect location: %w", err)
 		}
@@ -395,6 +449,7 @@ func validateProtocolResult(expected RouteProtocolKind, result protocolResult) e
 		if result.location != "" || result.jsonBody != nil {
 			return errors.New("binary protocol result contains incompatible fields")
 		}
+
 		if result.status == http.StatusNotModified {
 			if result.body != nil || result.contentLength < 0 {
 				return errors.New("not-modified binary result contains a body")
@@ -409,6 +464,7 @@ func validateProtocolResult(expected RouteProtocolKind, result protocolResult) e
 	default:
 		return fmt.Errorf("protocol result kind %q is unsupported", result.kind)
 	}
+
 	return nil
 }
 
@@ -457,7 +513,10 @@ func (a *API) logInvalidRouteError(request *http.Request, err error) {
 
 func authRequiresPrincipal(requirement AuthRequirement) bool {
 	switch requirement {
-	case AuthMFARecoverySessionRequired, AuthRecentMFARecoverySessionRequired, AuthMFAEnrollmentSessionRequired, AuthPrincipalRequired,
+	case AuthMFARecoverySessionRequired,
+		AuthRecentMFARecoverySessionRequired,
+		AuthMFAEnrollmentSessionRequired,
+		AuthPrincipalRequired,
 		AuthSessionRequired,
 		AuthStrongSessionRequired,
 		AuthRecentSessionRequired,

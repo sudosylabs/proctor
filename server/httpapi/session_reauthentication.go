@@ -18,7 +18,11 @@ import (
 
 type SessionReauthentication interface {
 	ReauthenticatePassword(context.Context, invocation.Invocation, identity.ReauthenticatePasswordCommand) (*model.Session, error)
-	BeginExternalReauthentication(context.Context, invocation.Invocation, identity.BeginExternalReauthenticationCommand) (*model.ExternalAuthenticationStart, error)
+	BeginExternalReauthentication(
+		context.Context,
+		invocation.Invocation,
+		identity.BeginExternalReauthenticationCommand,
+	) (*model.ExternalAuthenticationStart, error)
 }
 
 type sessionReauthenticationResourceModule struct {
@@ -41,9 +45,40 @@ type externalReauthenticationResponse struct {
 func sessionReauthenticationResource(authentication SessionReauthentication, cookies browserCookies) apiResource {
 	module := sessionReauthenticationResourceModule{authentication: authentication, cookies: cookies}
 	return newResource("session-reauthentication",
-		mfaRecoverySessionRoute(http.MethodPost, path("/auth/reauthenticate/external"), []string{"request.invalid", "authentication.reauthentication_method_required", "authentication.external.request.invalid", "authentication.external.provider_not_found", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.external.unavailable", "authentication.external.rejected", "authentication.internal", "audit.unavailable", "authentication.desktop_authorization.invalid", "authentication.external.account_not_linked"}, module.external),
-		mfaRecoverySessionRoute(http.MethodPost, path("/auth/reauthenticate/password"),
-			personalAccessTokenSessionMutationCodes("service.busy", "request.invalid", "authentication.credentials_invalid", "authentication.reauthentication_method_required", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.internal", "audit.unavailable"), module.password),
+		mfaRecoverySessionRoute(
+			http.MethodPost,
+			path("/auth/reauthenticate/external"),
+			[]string{
+				"request.invalid",
+				"authentication.reauthentication_method_required",
+				"authentication.external.request.invalid",
+				"authentication.external.provider_not_found",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.external.unavailable",
+				"authentication.external.rejected",
+				"authentication.internal",
+				"audit.unavailable",
+				"authentication.desktop_authorization.invalid",
+				"authentication.external.account_not_linked",
+			},
+			module.external,
+		),
+		mfaRecoverySessionRoute(
+			http.MethodPost,
+			path("/auth/reauthenticate/password"),
+			personalAccessTokenSessionMutationCodes(
+				"service.busy",
+				"request.invalid",
+				"authentication.credentials_invalid",
+				"authentication.reauthentication_method_required",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.internal",
+				"audit.unavailable",
+			),
+			module.password,
+		),
 	)
 }
 
@@ -52,12 +87,15 @@ func (m sessionReauthenticationResourceModule) password(request operationRequest
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
+
 	session, err := m.authentication.ReauthenticatePassword(request.context, request.invocation(), identity.ReauthenticatePasswordCommand{
-		Password: input.Password, Source: request.metadata.IPAddress,
+		Password: input.Password,
+		Source:   request.metadata.IPAddress,
 	})
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, sessionResponseFromModel(request.request, session)).withHeaders(noStoreHeaders()), nil
 }
 
@@ -66,12 +104,21 @@ func (m sessionReauthenticationResourceModule) external(request operationRequest
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
-	start, err := m.authentication.BeginExternalReauthentication(request.context, request.invocation(), identity.BeginExternalReauthenticationCommand{Task: input.Task, Source: request.metadata.IPAddress})
+
+	start, err := m.authentication.BeginExternalReauthentication(
+		request.context,
+		request.invocation(),
+		identity.BeginExternalReauthenticationCommand{Task: input.Task, Source: request.metadata.IPAddress},
+	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	headers := captureResponseHeaders(func(writer http.ResponseWriter) {
 		m.cookies.attachExternalLoginBinding(writer, start.Binding, start.ExpiresAt)
 	})
-	return jsonResult(http.StatusOK, externalReauthenticationResponse{RedirectURL: start.RedirectURL}).withHeaders(combineResponseHeaders(headers, noStoreHeaders())), nil
+	return jsonResult(
+		http.StatusOK,
+		externalReauthenticationResponse{RedirectURL: start.RedirectURL},
+	).withHeaders(combineResponseHeaders(headers, noStoreHeaders())), nil
 }

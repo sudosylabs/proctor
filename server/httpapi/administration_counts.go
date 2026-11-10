@@ -43,8 +43,17 @@ func administrationCountsResource(application AdministrationCountsApplication) a
 	return newResource(
 		"administration-counts",
 		sessionRoute(http.MethodGet, path("/administration/counts"), []string{
-			"administration.unavailable", "authorization.denied", "authorization.request.invalid", "authorization.unavailable", "invitation.unavailable", "job.query.invalid",
-			"job.unavailable", "mail.unavailable", "onboarding_import.unavailable", "request.invalid", "resource.not_found",
+			"administration.unavailable",
+			"authorization.denied",
+			"authorization.request.invalid",
+			"authorization.unavailable",
+			"invitation.unavailable",
+			"job.query.invalid",
+			"job.unavailable",
+			"mail.unavailable",
+			"onboarding_import.unavailable",
+			"request.invalid",
+			"resource.not_found",
 		}, module.get),
 	)
 }

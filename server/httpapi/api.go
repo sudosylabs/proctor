@@ -57,12 +57,15 @@ func New(application *app.App, settings Settings) (*API, error) {
 	if err := requireApplication(application); err != nil {
 		return nil, err
 	}
+
 	cookies, err := newBrowserCookies(settings.PublicURL)
 	if err != nil {
 		return nil, fmt.Errorf("configure browser cookies: %w", err)
 	}
+
 	return newAPI(
-		settings, application.Identity,
+		settings,
+		application.Identity,
 		productionResources(application, settings.Health, settings.BuildInfo, cookies, settings.WebSocket)...,
 	)
 }
@@ -75,6 +78,7 @@ func requireApplication(application *app.App) error {
 	if application == nil {
 		return errors.New("application is required")
 	}
+
 	required := []struct {
 		missing bool
 		message string
@@ -102,6 +106,7 @@ func requireApplication(application *app.App) error {
 			return errors.New(service.message)
 		}
 	}
+
 	return nil
 }
 
@@ -178,8 +183,10 @@ func (a *API) localize(request *http.Request) *http.Request {
 	if a.localizer == nil {
 		return request
 	}
+
 	return request.WithContext(withRequestLocalization(
-		request.Context(), a.localizer,
+		request.Context(),
+		a.localizer,
 		localization.PreferredLocale(request.Header.Get("Accept-Language"), a.localizer.SupportedLocales()),
 	))
 }
@@ -242,8 +249,15 @@ func (a *API) serveRoutes(writer http.ResponseWriter, request *http.Request) {
 
 func boundedHTTPMethod(method string) string {
 	switch method {
-	case http.MethodConnect, http.MethodDelete, http.MethodGet, http.MethodHead,
-		http.MethodOptions, http.MethodPatch, http.MethodPost, http.MethodPut, http.MethodTrace:
+	case http.MethodConnect,
+		http.MethodDelete,
+		http.MethodGet,
+		http.MethodHead,
+		http.MethodOptions,
+		http.MethodPatch,
+		http.MethodPost,
+		http.MethodPut,
+		http.MethodTrace:
 		return method
 	default:
 		return "OTHER"

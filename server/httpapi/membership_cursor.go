@@ -25,14 +25,19 @@ type membershipPageCursor struct {
 
 func membershipPageCursorSpec() opaqueCursorSpec[membershipPageCursor] {
 	return opaqueCursorSpec[membershipPageCursor]{
-		label: "membership", maximumEncodedLength: 1024,
-		members: []string{"scope_type", "scope_id", "active_at", "after_user_id", "after_id"},
+		label:                "membership",
+		maximumEncodedLength: 1024,
+		members:              []string{"scope_type", "scope_id", "active_at", "after_user_id", "after_id"},
 		validate: func(cursor membershipPageCursor) error {
 			if (cursor.ScopeType != model.ResourceAcademicUnit && cursor.ScopeType != model.ResourceClass) ||
-				!model.IsValidOpaqueID(cursor.ScopeID) || cursor.ActiveAt == nil || *cursor.ActiveAt < 0 ||
-				!model.UserID(cursor.AfterUserID).IsValid() || !model.IsValidOpaqueID(cursor.AfterID) {
+				!model.IsValidOpaqueID(cursor.ScopeID) ||
+				cursor.ActiveAt == nil ||
+				*cursor.ActiveAt < 0 ||
+				!model.UserID(cursor.AfterUserID).IsValid() ||
+				!model.IsValidOpaqueID(cursor.AfterID) {
 				return errors.New("invalid membership keyset")
 			}
+
 			return nil
 		},
 	}

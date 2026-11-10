@@ -53,31 +53,42 @@ func programmeLevelResource(programmeLevels ProgrammeLevelApplication) apiResour
 	return newResource(
 		"programme-levels",
 		principalRoute(
-			http.MethodGet, collection,
-			academicReadErrorCodes("request.invalid", "resource.not_found"), module.list,
+			http.MethodGet,
+			collection,
+			academicReadErrorCodes("request.invalid", "resource.not_found"),
+			module.list,
 		),
 		principalRoute(
-			http.MethodPost, collection,
+			http.MethodPost,
+			collection,
 			academicMutationErrorCodes(
-				"request.invalid", "resource.not_found", "programme_level.invalid",
+				"request.invalid",
+				"resource.not_found",
+				"programme_level.invalid",
 				"programme_level.conflict",
 			),
 			module.create,
 		),
 		principalRoute(
-			http.MethodGet, member,
-			academicReadErrorCodes("request.invalid", "resource.not_found"), module.get,
+			http.MethodGet,
+			member,
+			academicReadErrorCodes("request.invalid", "resource.not_found"),
+			module.get,
 		),
 		principalRoute(
-			http.MethodPatch, member,
+			http.MethodPatch,
+			member,
 			academicMutationErrorCodes(
-				"request.invalid", "resource.not_found", "programme_level.invalid",
+				"request.invalid",
+				"resource.not_found",
+				"programme_level.invalid",
 				"programme_level.conflict",
 			),
 			module.patch,
 		),
 		principalRoute(
-			http.MethodDelete, member,
+			http.MethodDelete,
+			member,
 			academicMutationErrorCodes(
 				"request.invalid", "resource.not_found", "programme_level.conflict",
 			),
@@ -201,8 +212,10 @@ func programmeLevelResponseFromModel(level *model.ProgrammeLevel) programmeLevel
 	if level == nil {
 		return programmeLevelResponse{}
 	}
+
 	return programmeLevelResponse{
-		Revision: level.Revision, ID: level.ID.String(),
+		Revision:    level.Revision,
+		ID:          level.ID.String(),
 		CreatedAt:   model.FormatRFC3339(level.CreatedAt),
 		UpdatedAt:   model.FormatRFC3339(level.UpdatedAt),
 		ArchivedAt:  level.ArchivedAt.FormatRFC3339(),

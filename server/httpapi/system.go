@@ -44,7 +44,12 @@ func systemResourceWithApplication(
 		"system",
 		publicRoute(http.MethodGet, rootPath("/health/live"), []string{healthNotLiveCode}, module.liveness),
 		publicRoute(http.MethodGet, rootPath("/health/ready"), []string{healthNotReadyCode}, module.readiness),
-		publicRoute(http.MethodGet, path("/system/ping"), []string{"request.invalid", "desktop_compatibility_policy.revision_conflict", "desktop_compatibility_policy.unavailable"}, module.ping),
+		publicRoute(
+			http.MethodGet,
+			path("/system/ping"),
+			[]string{"request.invalid", "desktop_compatibility_policy.revision_conflict", "desktop_compatibility_policy.unavailable"},
+			module.ping,
+		),
 		publicRoute(http.MethodGet, path("/system/version"), nil, module.version),
 	)
 }
@@ -105,6 +110,7 @@ func (m systemResourceModule) ping(request operationRequest) (operationResult, e
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	result, evaluationErr := m.desktopCompatibility.EvaluateDesktopCompatibility(
 		request.context,
 		request.invocation(),
@@ -113,6 +119,7 @@ func (m systemResourceModule) ping(request operationRequest) (operationResult, e
 	if apperror.Is(evaluationErr, "request.invalid") {
 		return operationResult{}, evaluationErr
 	}
+
 	responseTime := model.TimeUTC(m.now())
 	ready := m.health.Ready() && evaluationErr == nil
 	response := systemPingResponse{
@@ -135,10 +142,12 @@ func (m systemResourceModule) ping(request operationRequest) (operationResult, e
 			response.RetryAt = model.FormatRFC3339(result.RetryAt.Time)
 		}
 	}
+
 	if ready {
 		response.Availability = string(result.Availability)
 		response.Reason = string(result.Availability)
 	}
+
 	return jsonResult(http.StatusOK, response).withHeaders(http.Header{
 		"Cache-Control": {"no-store"},
 	}), nil
@@ -159,33 +168,40 @@ func desktopCompatibilityQuery(request *http.Request) (identity.DesktopCompatibi
 			return identity.DesktopCompatibilityQuery{}, apperror.New("request.invalid").WithField("field", key)
 		}
 	}
+
 	selector := func(key string) (string, error) {
 		candidates := values[key]
 		if len(candidates) != 1 || candidates[0] == "" || len(candidates[0]) > allowed[key] {
 			return "", apperror.New("request.invalid").WithField("field", key)
 		}
+
 		return candidates[0], nil
 	}
 	desktopRelease, err := selector("desktop_release")
 	if err != nil {
 		return identity.DesktopCompatibilityQuery{}, err
 	}
+
 	desktopBuildID, err := selector("desktop_build_id")
 	if err != nil {
 		return identity.DesktopCompatibilityQuery{}, err
 	}
+
 	platform, err := selector("platform")
 	if err != nil {
 		return identity.DesktopCompatibilityQuery{}, err
 	}
+
 	architecture, err := selector("architecture")
 	if err != nil {
 		return identity.DesktopCompatibilityQuery{}, err
 	}
+
 	realtimeText, err := selector("realtime_protocol")
 	if err != nil {
 		return identity.DesktopCompatibilityQuery{}, err
 	}
+
 	realtimeProtocol, parseErr := strconv.Atoi(realtimeText)
 	if parseErr != nil || realtimeProtocol < 1 {
 		return identity.DesktopCompatibilityQuery{}, apperror.New("request.invalid").WithField(
@@ -193,6 +209,7 @@ func desktopCompatibilityQuery(request *http.Request) (identity.DesktopCompatibi
 			"realtime_protocol",
 		)
 	}
+
 	return identity.DesktopCompatibilityQuery{
 		DesktopRelease:   desktopRelease,
 		DesktopBuildID:   desktopBuildID,

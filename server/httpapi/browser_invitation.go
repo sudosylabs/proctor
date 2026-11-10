@@ -16,9 +16,21 @@ import (
 )
 
 type BrowserInvitationApplication interface {
-	StartBrowserInvitation(context.Context, invocation.Invocation, onboarding.StartBrowserInvitationCommand) (*onboarding.BrowserInvitationStart, error)
-	AcceptBrowserInvitation(context.Context, invocation.Invocation, onboarding.BrowserInvitationAcceptanceCommand) (*onboarding.InvitationAcceptanceView, error)
-	AcceptBrowserInvitationWithSession(context.Context, invocation.Invocation, onboarding.BrowserInvitationSessionAcceptanceCommand) (*onboarding.InvitationAcceptanceView, error)
+	StartBrowserInvitation(
+		context.Context,
+		invocation.Invocation,
+		onboarding.StartBrowserInvitationCommand,
+	) (*onboarding.BrowserInvitationStart, error)
+	AcceptBrowserInvitation(
+		context.Context,
+		invocation.Invocation,
+		onboarding.BrowserInvitationAcceptanceCommand,
+	) (*onboarding.InvitationAcceptanceView, error)
+	AcceptBrowserInvitationWithSession(
+		context.Context,
+		invocation.Invocation,
+		onboarding.BrowserInvitationSessionAcceptanceCommand,
+	) (*onboarding.InvitationAcceptanceView, error)
 }
 
 type browserInvitationStartRequest struct {
@@ -62,8 +74,11 @@ func browserInvitationResource(application BrowserInvitationApplication, cookies
 			http.MethodPost,
 			path("/auth/browser/invitations"),
 			[]string{
-				"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable",
-				"invitation.invalid", "invitation.unavailable",
+				"request.invalid",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"invitation.invalid",
+				"invitation.unavailable",
 			},
 			module.start,
 		),
@@ -71,16 +86,32 @@ func browserInvitationResource(application BrowserInvitationApplication, cookies
 			http.MethodPost,
 			path("/auth/browser/invitations/accept"),
 			[]string{
-				"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable",
-				"invitation.invalid", "invitation.user_invalid", "invitation.mail_unavailable",
-				"invitation.unavailable", "authentication.password.invalid", "authentication.password.pattern_invalid", "authentication.password.common_invalid", "authentication.password.identity_invalid", "service.busy",
+				"request.invalid",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"invitation.invalid",
+				"invitation.user_invalid",
+				"invitation.mail_unavailable",
+				"invitation.unavailable",
+				"authentication.password.invalid",
+				"authentication.password.pattern_invalid",
+				"authentication.password.common_invalid",
+				"authentication.password.identity_invalid",
+				"service.busy",
 			},
 			module.accept,
 		),
 		sessionRoute(
 			http.MethodPost,
 			path("/auth/browser/invitations/accept-session"),
-			[]string{"authentication.rate_limited", "authentication.rate_limit_unavailable", "invitation.invalid", "invitation.unavailable", "audit.unavailable", "request.invalid"},
+			[]string{
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"invitation.invalid",
+				"invitation.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+			},
 			module.acceptWithSession,
 		),
 	)
@@ -91,6 +122,7 @@ func (m browserInvitationResourceModule) start(request operationRequest) (operat
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
+
 	started, err := m.application.StartBrowserInvitation(
 		request.context,
 		request.invocation(),
@@ -99,13 +131,18 @@ func (m browserInvitationResourceModule) start(request operationRequest) (operat
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	headers := captureResponseHeaders(func(writer http.ResponseWriter) {
 		m.cookies.attachInvitationProof(writer, started.BrowserProof, started.ExpiresAt)
 	})
 	headers.Set("Cache-Control", "no-store")
 	return jsonResult(http.StatusCreated, browserInvitationStartResponse{
-		Handle: started.Handle, Purpose: string(started.Purpose), Requirement: string(started.Requirement),
-		ExpiresAt: wireTimeFromMillis(started.ExpiresAt), Email: started.Email, ClassDisplayName: started.ClassDisplayName,
+		Handle:           started.Handle,
+		Purpose:          string(started.Purpose),
+		Requirement:      string(started.Requirement),
+		ExpiresAt:        wireTimeFromMillis(started.ExpiresAt),
+		Email:            started.Email,
+		ClassDisplayName: started.ClassDisplayName,
 	}).withHeaders(headers), nil
 }
 
@@ -114,19 +151,28 @@ func (m browserInvitationResourceModule) accept(request operationRequest) (opera
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
+
 	proof := m.proof(request.request)
 	accepted, err := m.application.AcceptBrowserInvitation(
 		request.context,
 		request.invocation(),
 		onboarding.BrowserInvitationAcceptanceCommand{
-			Handle: body.Handle, BrowserProof: proof, Password: body.Password, Username: body.Username,
-			DisplayName: body.DisplayName, FirstName: body.FirstName, LastName: body.LastName,
-			Locale: body.Locale, Timezone: body.Timezone, Source: request.metadata.IPAddress,
+			Handle:       body.Handle,
+			BrowserProof: proof,
+			Password:     body.Password,
+			Username:     body.Username,
+			DisplayName:  body.DisplayName,
+			FirstName:    body.FirstName,
+			LastName:     body.LastName,
+			Locale:       body.Locale,
+			Timezone:     body.Timezone,
+			Source:       request.metadata.IPAddress,
 		},
 	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, invitationAcceptanceResponseFromView(accepted)).withHeaders(m.successHeaders()), nil
 }
 
@@ -135,17 +181,21 @@ func (m browserInvitationResourceModule) acceptWithSession(request operationRequ
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
+
 	proof := m.proof(request.request)
 	accepted, err := m.application.AcceptBrowserInvitationWithSession(
 		request.context,
 		request.invocation(),
 		onboarding.BrowserInvitationSessionAcceptanceCommand{
-			Handle: body.Handle, BrowserProof: proof, Source: request.metadata.IPAddress,
+			Handle:       body.Handle,
+			BrowserProof: proof,
+			Source:       request.metadata.IPAddress,
 		},
 	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, invitationAcceptanceResponseFromView(accepted)).withHeaders(m.successHeaders()), nil
 }
 

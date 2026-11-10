@@ -48,19 +48,88 @@ func authenticationMethodResource(application *identity.Service, cookies browser
 	password := path("/authentication-methods/password")
 	return newResource("authentication-method",
 		sessionRoute(http.MethodGet, base, nil, m.list),
-		strongRecentSessionRoute(http.MethodPut, password, strongRecentAuthenticationMethodCodes("request.invalid", "authentication.password.invalid", "authentication.password.pattern_invalid", "authentication.password.common_invalid", "authentication.password.identity_invalid", "authentication.password.reused", "service.busy", "authentication.method.disabled", "authentication.method.conflict", "authentication.method.unavailable", "audit.unavailable"), m.enrollPassword),
-		strongRecentSessionRoute(http.MethodPost, path("/authentication-methods/password/change"), strongRecentAuthenticationMethodCodes(newPasswordErrorCodes("request.invalid", "service.busy", "authentication.password.reused", "authentication.method.not_found", "authentication.method.disabled", "authentication.method.conflict", "authentication.method.unavailable", "audit.unavailable")...), m.changePassword),
-		strongRecentSessionRoute(http.MethodDelete, password, []string{"authentication.method.last_usable", "authentication.method.not_found", "authentication.method.conflict", "authentication.method.unavailable", "audit.unavailable"}, m.removePassword),
-		strongRecentSessionRoute(http.MethodPost, path("/authentication-methods/providers/{provider_id:provider}/connect"), []string{"request.invalid", "authentication.external.provider_not_found", "authentication.external.unavailable", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.internal", "audit.unavailable", "authentication.desktop_authorization.invalid", "authentication.external.account_not_linked", "authentication.external.rejected", "authentication.external.request.invalid"}, m.connect),
-		strongRecentSessionRoute(http.MethodDelete, path("/authentication-methods/providers/{external_identity_id}"), authenticationMethodRemovalCodes(), m.unlink),
+		strongRecentSessionRoute(
+			http.MethodPut,
+			password,
+			strongRecentAuthenticationMethodCodes(
+				"request.invalid",
+				"authentication.password.invalid",
+				"authentication.password.pattern_invalid",
+				"authentication.password.common_invalid",
+				"authentication.password.identity_invalid",
+				"authentication.password.reused",
+				"service.busy",
+				"authentication.method.disabled",
+				"authentication.method.conflict",
+				"authentication.method.unavailable",
+				"audit.unavailable",
+			),
+			m.enrollPassword,
+		),
+		strongRecentSessionRoute(
+			http.MethodPost,
+			path("/authentication-methods/password/change"),
+			strongRecentAuthenticationMethodCodes(newPasswordErrorCodes(
+				"request.invalid",
+				"service.busy",
+				"authentication.password.reused",
+				"authentication.method.not_found",
+				"authentication.method.disabled",
+				"authentication.method.conflict",
+				"authentication.method.unavailable",
+				"audit.unavailable",
+			)...),
+			m.changePassword,
+		),
+		strongRecentSessionRoute(
+			http.MethodDelete,
+			password,
+			[]string{
+				"authentication.method.last_usable",
+				"authentication.method.not_found",
+				"authentication.method.conflict",
+				"authentication.method.unavailable",
+				"audit.unavailable",
+			},
+			m.removePassword,
+		),
+		strongRecentSessionRoute(
+			http.MethodPost,
+			path("/authentication-methods/providers/{provider_id:provider}/connect"),
+			[]string{
+				"request.invalid",
+				"authentication.external.provider_not_found",
+				"authentication.external.unavailable",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.internal",
+				"audit.unavailable",
+				"authentication.desktop_authorization.invalid",
+				"authentication.external.account_not_linked",
+				"authentication.external.rejected",
+				"authentication.external.request.invalid",
+			},
+			m.connect,
+		),
+		strongRecentSessionRoute(
+			http.MethodDelete,
+			path("/authentication-methods/providers/{external_identity_id}"),
+			authenticationMethodRemovalCodes(),
+			m.unlink,
+		),
 	)
 }
 
 // newPasswordErrorCodes appends the password-policy rejections every route
 // that sets a new password can return.
 func newPasswordErrorCodes(extra ...string) []string {
-	return append(extra, "authentication.password.invalid", "authentication.password.pattern_invalid",
-		"authentication.password.common_invalid", "authentication.password.identity_invalid")
+	return append(
+		extra,
+		"authentication.password.invalid",
+		"authentication.password.pattern_invalid",
+		"authentication.password.common_invalid",
+		"authentication.password.identity_invalid",
+	)
 }
 
 func strongRecentAuthenticationMethodCodes(extra ...string) []string {
@@ -68,7 +137,14 @@ func strongRecentAuthenticationMethodCodes(extra ...string) []string {
 }
 
 func authenticationMethodRemovalCodes() []string {
-	return strongRecentAuthenticationMethodCodes("request.invalid", "authentication.method.last_usable", "authentication.method.not_found", "authentication.method.conflict", "authentication.method.unavailable", "audit.unavailable")
+	return strongRecentAuthenticationMethodCodes(
+		"request.invalid",
+		"authentication.method.last_usable",
+		"authentication.method.not_found",
+		"authentication.method.conflict",
+		"authentication.method.unavailable",
+		"audit.unavailable",
+	)
 }
 
 func (m authenticationMethodResourceModule) list(request operationRequest) (operationResult, error) {
@@ -76,10 +152,17 @@ func (m authenticationMethodResourceModule) list(request operationRequest) (oper
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	providers := make([]authenticationProviderMethodResponse, 0, len(view.Providers))
 	for _, provider := range view.Providers {
-		providers = append(providers, authenticationProviderMethodResponse{ID: provider.IdentityID.String(), ProviderID: provider.ProviderID, DisplayName: provider.DisplayName, Type: provider.Type})
+		providers = append(providers, authenticationProviderMethodResponse{
+			ID:          provider.IdentityID.String(),
+			ProviderID:  provider.ProviderID,
+			DisplayName: provider.DisplayName,
+			Type:        provider.Type,
+		})
 	}
+
 	return jsonResult(http.StatusOK, authenticationMethodResponse{Password: view.Password, Providers: providers}), nil
 }
 
@@ -99,9 +182,15 @@ func (m authenticationMethodResourceModule) changePassword(request operationRequ
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
-	if err := m.application.ChangePassword(request.context, request.invocation(), identity.ChangePasswordCommand{Password: body.Password}); err != nil {
+
+	if err := m.application.ChangePassword(
+		request.context,
+		request.invocation(),
+		identity.ChangePasswordCommand{Password: body.Password},
+	); err != nil {
 		return operationResult{}, err
 	}
+
 	return noContentResult(), nil
 }
 
@@ -117,19 +206,29 @@ func (m authenticationMethodResourceModule) connect(request operationRequest) (o
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body beginProviderConnectionRequest
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
-	start, err := m.application.BeginProviderConnection(request.context, request.invocation(), identity.BeginProviderConnectionCommand{ProviderID: providerID, ReturnTo: body.ReturnTo, Source: request.metadata.IPAddress})
+
+	start, err := m.application.BeginProviderConnection(request.context, request.invocation(), identity.BeginProviderConnectionCommand{
+		ProviderID: providerID,
+		ReturnTo:   body.ReturnTo,
+		Source:     request.metadata.IPAddress,
+	})
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	headers := captureResponseHeaders(func(writer http.ResponseWriter) {
 		m.cookies.attachExternalLoginBinding(writer, start.Binding, start.ExpiresAt)
 	})
 	headers.Set("Cache-Control", "no-store")
-	return jsonResult(http.StatusCreated, providerConnectionResponse{RedirectURL: start.RedirectURL, ExpiresAt: wireTimeFromMillis(start.ExpiresAt)}).withHeaders(headers), nil
+	return jsonResult(
+		http.StatusCreated,
+		providerConnectionResponse{RedirectURL: start.RedirectURL, ExpiresAt: wireTimeFromMillis(start.ExpiresAt)},
+	).withHeaders(headers), nil
 }
 
 func (m authenticationMethodResourceModule) unlink(request operationRequest) (operationResult, error) {

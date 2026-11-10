@@ -33,7 +33,9 @@ type candidateWorkspaceCursorWire struct {
 
 func encodeCandidateWorkspaceCursor(cursor candidateWorkspaceCursor) (string, error) {
 	wire := candidateWorkspaceCursorWire{
-		ExpectedCursor: cursor.ExpectedCursor, ID: cursor.ID.String()}
+		ExpectedCursor: cursor.ExpectedCursor,
+		ID:             cursor.ID.String(),
+	}
 	return encodeOpaqueCursor(wire, candidateWorkspaceCursorSpec())
 }
 
@@ -51,12 +53,14 @@ func decodeCandidateWorkspaceCursor(raw string) (candidateWorkspaceCursor, error
 
 func candidateWorkspaceCursorSpec() opaqueCursorSpec[candidateWorkspaceCursorWire] {
 	return opaqueCursorSpec[candidateWorkspaceCursorWire]{
-		label: "candidate Workspace", maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members: []string{"workspace_cursor", "after_entry_id"},
+		label:                "candidate Workspace",
+		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
+		members:              []string{"workspace_cursor", "after_entry_id"},
 		validate: func(cursor candidateWorkspaceCursorWire) error {
 			if cursor.ExpectedCursor < 0 || cursor.ID != "" && !model.AttemptWorkspaceEntryID(cursor.ID).IsValid() {
 				return errors.New("invalid candidate Workspace keyset")
 			}
+
 			return nil
 		},
 	}
@@ -161,12 +165,14 @@ type candidateWorkspaceJournalCursor struct {
 
 func candidateWorkspaceJournalCursorSpec() opaqueCursorSpec[candidateWorkspaceJournalCursor] {
 	return opaqueCursorSpec[candidateWorkspaceJournalCursor]{
-		label: "Workspace journal", maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members: []string{"after_workspace_cursor"},
+		label:                "Workspace journal",
+		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
+		members:              []string{"after_workspace_cursor"},
 		validate: func(cursor candidateWorkspaceJournalCursor) error {
 			if cursor.After < 1 {
 				return errors.New("invalid Workspace journal keyset")
 			}
+
 			return nil
 		},
 	}
@@ -177,6 +183,7 @@ func (m examAttemptHTTPModule) workspace(request operationRequest) (operationRes
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	query := attempt.WorkspaceQuery{Access: access, ExpectedCursor: -1, Limit: 50}
 	values := request.request.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
@@ -185,38 +192,56 @@ func (m examAttemptHTTPModule) workspace(request operationRequest) (operationRes
 			return operationResult{}, invalidRequestError(errors.New("must be between 1 and 200"))
 		}
 	}
+
 	if raw := values.Get("cursor"); raw != "" {
 		cursor, decodeErr := decodeCandidateWorkspaceCursor(raw)
 		if decodeErr != nil {
 			return operationResult{}, invalidRequestError(decodeErr)
 		}
+
 		query.ExpectedCursor, query.AfterEntryID = cursor.ExpectedCursor, cursor.ID
 	}
+
 	page, err := m.application.ListCandidateExamWorkspace(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
-	response := candidateExamWorkspaceListResponse{WorkspaceID: page.WorkspaceID.String(), WorkspaceCursor: page.Cursor,
-		Items: make([]candidateExamWorkspaceItemResponse, 0, len(page.Items)), RefreshRequired: page.RefreshRequired}
+
+	response := candidateExamWorkspaceListResponse{
+		WorkspaceID:     page.WorkspaceID.String(),
+		WorkspaceCursor: page.Cursor,
+		Items:           make([]candidateExamWorkspaceItemResponse, 0, len(page.Items)),
+		RefreshRequired: page.RefreshRequired,
+	}
 	for _, item := range page.Items {
-		mapped := candidateExamWorkspaceItemResponse{ID: item.EntryID.String(), Kind: string(item.Kind), Path: item.Path,
-			ContentVersion: item.ContentVersion.String(), MediaType: item.MediaType, SHA256: item.SHA256}
+		mapped := candidateExamWorkspaceItemResponse{
+			ID:             item.EntryID.String(),
+			Kind:           string(item.Kind),
+			Path:           item.Path,
+			ContentVersion: item.ContentVersion.String(),
+			MediaType:      item.MediaType,
+			SHA256:         item.SHA256,
+		}
 		if item.Kind == model.StarterWorkspaceEntryFile {
 			size := item.SizeBytes
 			mapped.Size = &size
 		}
+
 		response.Items = append(response.Items, mapped)
 	}
+
 	if page.HasMore {
 		if len(page.Items) == 0 {
 			return operationResult{}, errors.New("Exam Attempt application returned an invalid Workspace page")
 		}
+
 		last := page.Items[len(page.Items)-1]
 		response.NextCursor, err = encodeCandidateWorkspaceCursor(candidateWorkspaceCursor{ExpectedCursor: page.Cursor, ID: last.EntryID})
 		if err != nil {
 			return operationResult{}, unpresentableResult(err)
 		}
 	}
+
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
@@ -225,6 +250,7 @@ func (m examAttemptHTTPModule) workspaceChanges(request operationRequest) (opera
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	paging, err := request.pageRequest()
 	if err != nil {
 		return operationResult{}, err
@@ -232,12 +258,14 @@ func (m examAttemptHTTPModule) workspaceChanges(request operationRequest) (opera
 	if paging.Limit > model.AttemptWorkspaceJournalReadMaximum {
 		return operationResult{}, invalidRequestError(errors.New("must be between 1 and 200"))
 	}
+
 	query := attempt.WorkspaceJournalQuery{Access: access, Limit: paging.Limit}
 	values := request.request.URL.Query()
 	cursor, continued, err := decodePageCursor(paging, candidateWorkspaceJournalCursorSpec())
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	switch raw := values.Get("workspace_cursor"); {
 	case continued && values.Has("workspace_cursor"):
 		return operationResult{}, invalidRequestError(errors.New("workspace_cursor starts a listing that cursor continues"))
@@ -249,27 +277,43 @@ func (m examAttemptHTTPModule) workspaceChanges(request operationRequest) (opera
 			return operationResult{}, invalidRequestError(errors.New("must be nonnegative"))
 		}
 	}
+
 	page, err := m.application.ListCandidateExamWorkspaceJournal(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
-	response := candidateWorkspaceJournalResponse{WorkspaceID: page.WorkspaceID.String(), CurrentCursor: page.CurrentCursor,
-		Items: make([]candidateWorkspaceJournalEntryResponse, 0, len(page.Entries)), RefreshRequired: page.RefreshRequired}
+
+	response := candidateWorkspaceJournalResponse{
+		WorkspaceID:     page.WorkspaceID.String(),
+		CurrentCursor:   page.CurrentCursor,
+		Items:           make([]candidateWorkspaceJournalEntryResponse, 0, len(page.Entries)),
+		RefreshRequired: page.RefreshRequired,
+	}
 	if page.HasMore {
 		if len(page.Entries) == 0 {
 			return operationResult{}, unpresentableResult(errors.New("Workspace journal page made no progress"))
 		}
+
 		next := candidateWorkspaceJournalCursor{After: page.Entries[len(page.Entries)-1].Cursor}
 		if response.NextCursor, err = encodeOpaqueCursor(next, candidateWorkspaceJournalCursorSpec()); err != nil {
 			return operationResult{}, unpresentableResult(err)
 		}
 	}
+
 	for _, entry := range page.Entries {
-		response.Items = append(response.Items, candidateWorkspaceJournalEntryResponse{Cursor: entry.Cursor,
-			EntryID: entry.EntryID.String(), Kind: string(entry.EntryKind), Operation: string(entry.Operation), OldPath: entry.OldPath,
-			NewPath: entry.NewPath, ContentVersion: entry.ContentVersion.String(),
-			ChangedAt: model.FormatRFC3339(entry.ChangedAt), Recursive: entry.Recursive})
+		response.Items = append(response.Items, candidateWorkspaceJournalEntryResponse{
+			Cursor:         entry.Cursor,
+			EntryID:        entry.EntryID.String(),
+			Kind:           string(entry.EntryKind),
+			Operation:      string(entry.Operation),
+			OldPath:        entry.OldPath,
+			NewPath:        entry.NewPath,
+			ContentVersion: entry.ContentVersion.String(),
+			ChangedAt:      model.FormatRFC3339(entry.ChangedAt),
+			Recursive:      entry.Recursive,
+		})
 	}
+
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
@@ -278,20 +322,33 @@ func (m examAttemptHTTPModule) createWorkspaceDirectory(request operationRequest
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body createCandidateWorkspaceDirectoryRequest
 	if err = decodeCandidateWorkspaceJSON(request, &body); err != nil {
 		return operationResult{}, err
 	}
-	mutationAccess, err := candidateWorkspaceMutationAccess(access, candidateWorkspaceMutationAccessRequest{ParticipationID: body.ParticipationID, Generation: body.Generation})
+
+	mutationAccess, err := candidateWorkspaceMutationAccess(
+		access,
+		candidateWorkspaceMutationAccessRequest{ParticipationID: body.ParticipationID, Generation: body.Generation},
+	)
 	if err != nil {
 		return operationResult{}, err
 	}
-	result, err := m.application.CreateCandidateExamWorkspaceDirectory(request.context, request.invocation(),
-		attempt.CreateWorkspaceDirectoryCommand{Access: mutationAccess, Path: body.Path,
-			IdempotencyKey: request.idempotencyKey})
+
+	result, err := m.application.CreateCandidateExamWorkspaceDirectory(
+		request.context,
+		request.invocation(),
+		attempt.CreateWorkspaceDirectoryCommand{
+			Access:         mutationAccess,
+			Path:           body.Path,
+			IdempotencyKey: request.idempotencyKey,
+		},
+	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusCreated, candidateWorkspaceMutationResult(result)).withHeaders(noStoreHeaders()), nil
 }
 
@@ -300,21 +357,38 @@ func (m examAttemptHTTPModule) createWorkspaceFile(request operationRequest) (pr
 	if err != nil {
 		return protocolResult{}, err
 	}
+
 	var metadata candidateWorkspaceFileUploadMetadata
 	content, err := decodeExamResourceMultipart(request.request, &metadata)
 	if err != nil || metadata.Size == nil {
 		return protocolResult{}, invalidRequestError(errors.New("valid metadata and size are required"))
 	}
-	mutationAccess, err := candidateWorkspaceMutationAccess(access, candidateWorkspaceMutationAccessRequest{ParticipationID: metadata.ParticipationID, Generation: metadata.Generation})
+
+	mutationAccess, err := candidateWorkspaceMutationAccess(
+		access,
+		candidateWorkspaceMutationAccessRequest{ParticipationID: metadata.ParticipationID, Generation: metadata.Generation},
+	)
 	if err != nil {
 		return protocolResult{}, err
 	}
-	result, err := m.application.CreateCandidateExamWorkspaceFile(request.context, request.invocation(),
-		attempt.CreateWorkspaceFileCommand{Access: mutationAccess, Path: metadata.Path, MediaType: metadata.MediaType,
-			ExpectedSHA256: metadata.SHA256, Body: content, Size: *metadata.Size, IdempotencyKey: request.idempotencyKey})
+
+	result, err := m.application.CreateCandidateExamWorkspaceFile(
+		request.context,
+		request.invocation(),
+		attempt.CreateWorkspaceFileCommand{
+			Access:         mutationAccess,
+			Path:           metadata.Path,
+			MediaType:      metadata.MediaType,
+			ExpectedSHA256: metadata.SHA256,
+			Body:           content,
+			Size:           *metadata.Size,
+			IdempotencyKey: request.idempotencyKey,
+		},
+	)
 	if err != nil {
 		return protocolResult{}, err
 	}
+
 	return streamingUploadProtocolResult(http.StatusCreated, candidateWorkspaceMutationResult(result)).withHeaders(noStoreHeaders()), nil
 }
 
@@ -323,20 +397,35 @@ func (m examAttemptHTTPModule) moveWorkspaceEntry(request operationRequest) (ope
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body moveCandidateWorkspaceEntryRequest
 	if err = decodeCandidateWorkspaceJSON(request, &body); err != nil {
 		return operationResult{}, err
 	}
-	mutationAccess, err := candidateWorkspaceMutationAccess(access, candidateWorkspaceMutationAccessRequest{ParticipationID: body.ParticipationID, Generation: body.Generation})
+
+	mutationAccess, err := candidateWorkspaceMutationAccess(
+		access,
+		candidateWorkspaceMutationAccessRequest{ParticipationID: body.ParticipationID, Generation: body.Generation},
+	)
 	if err != nil {
 		return operationResult{}, err
 	}
-	result, err := m.application.MoveCandidateExamWorkspaceEntry(request.context, request.invocation(),
-		attempt.MoveWorkspaceEntryCommand{Access: mutationAccess, EntryID: entryID,
-			ExpectedPath: body.ExpectedPath, DestinationPath: body.DestinationPath, IdempotencyKey: request.idempotencyKey})
+
+	result, err := m.application.MoveCandidateExamWorkspaceEntry(
+		request.context,
+		request.invocation(),
+		attempt.MoveWorkspaceEntryCommand{
+			Access:          mutationAccess,
+			EntryID:         entryID,
+			ExpectedPath:    body.ExpectedPath,
+			DestinationPath: body.DestinationPath,
+			IdempotencyKey:  request.idempotencyKey,
+		},
+	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, candidateWorkspaceMutationResult(result)).withHeaders(noStoreHeaders()), nil
 }
 
@@ -345,26 +434,45 @@ func (m examAttemptHTTPModule) replaceWorkspaceFile(request operationRequest) (p
 	if err != nil {
 		return protocolResult{}, err
 	}
+
 	var metadata replaceCandidateWorkspaceFileMetadata
 	content, err := decodeExamResourceMultipart(request.request, &metadata)
 	if err != nil || metadata.Size == nil {
 		return protocolResult{}, invalidRequestError(errors.New("valid metadata and size are required"))
 	}
-	mutationAccess, err := candidateWorkspaceMutationAccess(access, candidateWorkspaceMutationAccessRequest{ParticipationID: metadata.ParticipationID, Generation: metadata.Generation})
+
+	mutationAccess, err := candidateWorkspaceMutationAccess(
+		access,
+		candidateWorkspaceMutationAccessRequest{ParticipationID: metadata.ParticipationID, Generation: metadata.Generation},
+	)
 	if err != nil {
 		return protocolResult{}, err
 	}
+
 	version, err := model.ParseWorkspaceContentVersion(metadata.ExpectedContentVersion)
 	if err != nil {
 		return protocolResult{}, invalidRequestError(err)
 	}
-	result, err := m.application.ReplaceCandidateExamWorkspaceFile(request.context, request.invocation(),
-		attempt.ReplaceWorkspaceFileCommand{Access: mutationAccess, EntryID: entryID,
-			ExpectedPath: metadata.ExpectedPath, ExpectedContentVersion: version, MediaType: metadata.MediaType,
-			ExpectedSHA256: metadata.SHA256, Body: content, Size: *metadata.Size, IdempotencyKey: request.idempotencyKey})
+
+	result, err := m.application.ReplaceCandidateExamWorkspaceFile(
+		request.context,
+		request.invocation(),
+		attempt.ReplaceWorkspaceFileCommand{
+			Access:                 mutationAccess,
+			EntryID:                entryID,
+			ExpectedPath:           metadata.ExpectedPath,
+			ExpectedContentVersion: version,
+			MediaType:              metadata.MediaType,
+			ExpectedSHA256:         metadata.SHA256,
+			Body:                   content,
+			Size:                   *metadata.Size,
+			IdempotencyKey:         request.idempotencyKey,
+		},
+	)
 	if err != nil {
 		return protocolResult{}, err
 	}
+
 	return streamingUploadProtocolResult(http.StatusOK, candidateWorkspaceMutationResult(result)).withHeaders(noStoreHeaders()), nil
 }
 
@@ -373,19 +481,29 @@ func (m examAttemptHTTPModule) deleteWorkspaceEntry(request operationRequest) (o
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body deleteCandidateWorkspaceEntryRequest
 	if err = decodeCandidateWorkspaceJSON(request, &body); err != nil {
 		return operationResult{}, err
 	}
+
 	cursor := body.ExpectedWorkspaceCursor.ValuePointer()
-	if body.ExpectedWorkspaceCursor.IsNull() || (body.Recursive && (cursor == nil || *cursor < 0 || body.ExpectedContentVersion != "")) ||
+	if body.ExpectedWorkspaceCursor.IsNull() ||
+		(body.Recursive && (cursor == nil || *cursor < 0 || body.ExpectedContentVersion != "")) ||
 		(!body.Recursive && cursor != nil) {
-		return operationResult{}, invalidRequestError(errors.New("recursive directory deletion requires expected_workspace_cursor and no content version"))
+		return operationResult{}, invalidRequestError(
+			errors.New("recursive directory deletion requires expected_workspace_cursor and no content version"),
+		)
 	}
-	mutationAccess, err := candidateWorkspaceMutationAccess(access, candidateWorkspaceMutationAccessRequest{ParticipationID: body.ParticipationID, Generation: body.Generation})
+
+	mutationAccess, err := candidateWorkspaceMutationAccess(
+		access,
+		candidateWorkspaceMutationAccessRequest{ParticipationID: body.ParticipationID, Generation: body.Generation},
+	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var version model.WorkspaceContentVersion
 	if body.ExpectedContentVersion != "" {
 		version, err = model.ParseWorkspaceContentVersion(body.ExpectedContentVersion)
@@ -393,13 +511,24 @@ func (m examAttemptHTTPModule) deleteWorkspaceEntry(request operationRequest) (o
 			return operationResult{}, invalidRequestError(err)
 		}
 	}
-	result, err := m.application.DeleteCandidateExamWorkspaceEntry(request.context, request.invocation(),
-		attempt.DeleteWorkspaceEntryCommand{Access: mutationAccess, EntryID: entryID,
-			ExpectedPath: body.ExpectedPath, ExpectedContentVersion: version, Recursive: body.Recursive,
-			ExpectedWorkspaceCursor: cursor, IdempotencyKey: request.idempotencyKey})
+
+	result, err := m.application.DeleteCandidateExamWorkspaceEntry(
+		request.context,
+		request.invocation(),
+		attempt.DeleteWorkspaceEntryCommand{
+			Access:                  mutationAccess,
+			EntryID:                 entryID,
+			ExpectedPath:            body.ExpectedPath,
+			ExpectedContentVersion:  version,
+			Recursive:               body.Recursive,
+			ExpectedWorkspaceCursor: cursor,
+			IdempotencyKey:          request.idempotencyKey,
+		},
+	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, candidateWorkspaceMutationResult(result)).withHeaders(noStoreHeaders()), nil
 }
 
@@ -410,8 +539,12 @@ func candidateWorkspaceMutationAccess(access attempt.CandidateAccess,
 	if err != nil || wire.Generation < 1 {
 		return attempt.WorkspaceMutationAccess{}, invalidRequestError(errors.New("valid participation_id and generation are required"))
 	}
-	return attempt.WorkspaceMutationAccess{CandidateAccess: access, ParticipationID: participationID,
-		Generation: wire.Generation}, nil
+
+	return attempt.WorkspaceMutationAccess{
+		CandidateAccess: access,
+		ParticipationID: participationID,
+		Generation:      wire.Generation,
+	}, nil
 }
 
 func decodeCandidateWorkspaceJSON(request operationRequest, target any) error {
@@ -450,18 +583,28 @@ func candidateWorkspaceEntryAccess(request operationRequest) (attempt.CandidateA
 }
 
 func candidateWorkspaceMutationResult(result attempt.WorkspaceMutationResult) candidateWorkspaceMutationResponse {
-	response := candidateWorkspaceMutationResponse{WorkspaceID: result.WorkspaceID.String(), WorkspaceCursor: result.Change.Cursor,
-		Operation: string(result.Change.Operation)}
+	response := candidateWorkspaceMutationResponse{
+		WorkspaceID:     result.WorkspaceID.String(),
+		WorkspaceCursor: result.Change.Cursor,
+		Operation:       string(result.Change.Operation),
+	}
 	if result.Entry != nil {
-		entry := candidateExamWorkspaceItemResponse{ID: result.Entry.EntryID.String(), Kind: string(result.Entry.Kind),
-			Path: result.Entry.Path, ContentVersion: result.Entry.ContentVersion.String(), MediaType: result.Entry.MediaType,
-			SHA256: result.Entry.SHA256}
+		entry := candidateExamWorkspaceItemResponse{
+			ID:             result.Entry.EntryID.String(),
+			Kind:           string(result.Entry.Kind),
+			Path:           result.Entry.Path,
+			ContentVersion: result.Entry.ContentVersion.String(),
+			MediaType:      result.Entry.MediaType,
+			SHA256:         result.Entry.SHA256,
+		}
 		if result.Entry.Kind == model.StarterWorkspaceEntryFile {
 			size := result.Entry.SizeBytes
 			entry.Size = &size
 		}
+
 		response.Entry = &entry
 	}
+
 	return response
 }
 
@@ -470,14 +613,21 @@ func (m examAttemptHTTPModule) openWorkspaceFile(request operationRequest) (prot
 	if err != nil {
 		return protocolResult{}, err
 	}
+
 	entryID, err := request.params.RequireAttemptWorkspaceEntryID()
 	if err != nil {
 		return protocolResult{}, err
 	}
-	opened, err := m.application.OpenCandidateExamWorkspaceFile(request.context, request.invocation(), attempt.OpenWorkspaceFileQuery{Access: access, EntryID: entryID})
+
+	opened, err := m.application.OpenCandidateExamWorkspaceFile(
+		request.context,
+		request.invocation(),
+		attempt.OpenWorkspaceFileQuery{Access: access, EntryID: entryID},
+	)
 	if err != nil {
 		return protocolResult{}, err
 	}
+
 	return candidateAttemptContentResult(request, opened, `"`+opened.ContentVersion.String()+`"`, untrustedWorkspaceContentHeaders)
 }
 
@@ -499,9 +649,13 @@ func passiveWorkspaceMediaType(mediaType string) string {
 	if err != nil {
 		return "application/octet-stream"
 	}
+
 	switch {
-	case parsed == "text/html", parsed == "text/xml", parsed == "text/xsl",
-		parsed == "application/xml", strings.HasSuffix(parsed, "+xml"):
+	case parsed == "text/html",
+		parsed == "text/xml",
+		parsed == "text/xsl",
+		parsed == "application/xml",
+		strings.HasSuffix(parsed, "+xml"):
 		return "text/plain; charset=utf-8"
 	default:
 		return mediaType

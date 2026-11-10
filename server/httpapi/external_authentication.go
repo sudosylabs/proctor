@@ -37,16 +37,27 @@ func externalAuthenticationProviderResponses(
 	responses := make([]externalAuthenticationProviderResponse, 0, len(providers))
 	for _, provider := range providers {
 		responses = append(responses, externalAuthenticationProviderResponse{
-			ID: provider.ID, DisplayName: provider.DisplayName, Type: provider.Type,
+			ID:          provider.ID,
+			DisplayName: provider.DisplayName,
+			Type:        provider.Type,
 		})
 	}
+
 	return responses
 }
 
 type externalAuthenticationEntryApplication interface {
 	ExternalAuthenticationProviders(context.Context, invocation.Invocation) ([]model.ExternalAuthenticationProvider, error)
-	BeginExternalAuthentication(context.Context, invocation.Invocation, identity.BeginExternalAuthenticationCommand) (*model.ExternalAuthenticationStart, error)
-	CompleteExternalAuthentication(context.Context, invocation.Invocation, identity.CompleteExternalAuthenticationCommand) (*model.ExternalAuthenticationCompletion, error)
+	BeginExternalAuthentication(
+		context.Context,
+		invocation.Invocation,
+		identity.BeginExternalAuthenticationCommand,
+	) (*model.ExternalAuthenticationStart, error)
+	CompleteExternalAuthentication(
+		context.Context,
+		invocation.Invocation,
+		identity.CompleteExternalAuthenticationCommand,
+	) (*model.ExternalAuthenticationCompletion, error)
 }
 
 type externalAuthenticationResourceModule struct {
@@ -73,7 +84,19 @@ func externalAuthenticationResource(
 			AuthPublic,
 			http.MethodGet,
 			path("/auth/providers/{provider_id:provider}/login"),
-			[]string{"request.invalid", "authentication.external.request.invalid", "authentication.external.provider_not_found", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.external.unavailable", "authentication.external.rejected", "authentication.internal", "authentication.desktop_authorization.invalid", "authentication.external.account_not_linked", "authentication.token_invalid"},
+			[]string{
+				"request.invalid",
+				"authentication.external.request.invalid",
+				"authentication.external.provider_not_found",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.external.unavailable",
+				"authentication.external.rejected",
+				"authentication.internal",
+				"authentication.desktop_authorization.invalid",
+				"authentication.external.account_not_linked",
+				"authentication.token_invalid",
+			},
 			module.begin,
 		),
 		protocolRoute(
@@ -82,7 +105,19 @@ func externalAuthenticationResource(
 			AuthPublic,
 			http.MethodPost,
 			path("/auth/providers/{provider_id:provider}/login"),
-			[]string{"request.invalid", "authentication.external.request.invalid", "authentication.external.provider_not_found", "authentication.external.account_not_linked", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.external.unavailable", "authentication.external.rejected", "authentication.internal", "authentication.desktop_authorization.invalid", "authentication.token_invalid"},
+			[]string{
+				"request.invalid",
+				"authentication.external.request.invalid",
+				"authentication.external.provider_not_found",
+				"authentication.external.account_not_linked",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.external.unavailable",
+				"authentication.external.rejected",
+				"authentication.internal",
+				"authentication.desktop_authorization.invalid",
+				"authentication.token_invalid",
+			},
 			module.beginFromBody,
 		),
 		protocolRoute(
@@ -92,13 +127,24 @@ func externalAuthenticationResource(
 			http.MethodGet,
 			path("/auth/providers/{provider_id:provider}/callback"),
 			[]string{
-				"request.invalid", "authentication.external.invalid", "authentication.external.provider_not_found",
-				"authentication.external.rejected", "authentication.external.unavailable",
-				"authentication.external.account_conflict", "authentication.external.account_not_linked",
-				"authentication.method.disabled", "authentication.method.last_usable", "authentication.method.not_found",
-				"authentication.method.provider_conflict", "authentication.method.conflict", "authentication.method.unavailable",
-				"authentication.sessions.maximum_reached", "authentication.internal", "audit.unavailable",
-				"authentication.desktop_authorization.account_session_locked", "authentication.credentials_invalid",
+				"request.invalid",
+				"authentication.external.invalid",
+				"authentication.external.provider_not_found",
+				"authentication.external.rejected",
+				"authentication.external.unavailable",
+				"authentication.external.account_conflict",
+				"authentication.external.account_not_linked",
+				"authentication.method.disabled",
+				"authentication.method.last_usable",
+				"authentication.method.not_found",
+				"authentication.method.provider_conflict",
+				"authentication.method.conflict",
+				"authentication.method.unavailable",
+				"authentication.sessions.maximum_reached",
+				"authentication.internal",
+				"audit.unavailable",
+				"authentication.desktop_authorization.account_session_locked",
+				"authentication.credentials_invalid",
 				"authentication.mfa.enrollment_required",
 			},
 			module.complete,
@@ -111,6 +157,7 @@ func (m externalAuthenticationResourceModule) beginFromBody(request operationReq
 	if appErr != nil {
 		return protocolResult{}, appErr
 	}
+
 	var body externalAuthenticationStartRequest
 	if err := request.decodeJSON(&body); err != nil {
 		return protocolResult{}, err
@@ -118,15 +165,24 @@ func (m externalAuthenticationResourceModule) beginFromBody(request operationReq
 	if !model.IsValidCredentialToken(body.InvitationClaim) {
 		return protocolResult{}, invalidRequestError(errors.New("must be a valid Invitation claim"))
 	}
-	start, err := m.authentication.BeginExternalAuthentication(request.context,
-		invocation.New(model.Principal{}, request.metadata), identity.BeginExternalAuthenticationCommand{
-			ProviderID: providerID, InvitationClaim: body.InvitationClaim, ReturnTo: body.ReturnTo,
-			ClientType: model.SessionClientWeb, DeviceID: body.DeviceID, DeviceName: body.DeviceName,
-			Source: request.metadata.IPAddress,
-		})
+
+	start, err := m.authentication.BeginExternalAuthentication(
+		request.context,
+		invocation.New(model.Principal{}, request.metadata),
+		identity.BeginExternalAuthenticationCommand{
+			ProviderID:      providerID,
+			InvitationClaim: body.InvitationClaim,
+			ReturnTo:        body.ReturnTo,
+			ClientType:      model.SessionClientWeb,
+			DeviceID:        body.DeviceID,
+			DeviceName:      body.DeviceName,
+			Source:          request.metadata.IPAddress,
+		},
+	)
 	if err != nil {
 		return protocolResult{}, err
 	}
+
 	headers := captureResponseHeaders(func(writer http.ResponseWriter) {
 		m.cookies.attachExternalLoginBinding(writer, start.Binding, start.ExpiresAt)
 	})
@@ -139,16 +195,22 @@ func (m externalAuthenticationResourceModule) listProviders(request operationReq
 	if err != nil {
 		return operationResult{}, err
 	}
-	response, err := boundedListResult(request, "authentication provider", providers,
+
+	response, err := boundedListResult(
+		request,
+		"authentication provider",
+		providers,
 		func(provider model.ExternalAuthenticationProvider) boundedPageKey {
 			return boundedPageKey{Name: provider.ID, ID: provider.ID}
 		},
 		func(provider model.ExternalAuthenticationProvider) externalAuthenticationProviderResponse {
 			return externalAuthenticationProviderResponse{ID: provider.ID, DisplayName: provider.DisplayName, Type: provider.Type}
-		})
+		},
+	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, response), nil
 }
 
@@ -159,21 +221,28 @@ func (m externalAuthenticationResourceModule) begin(
 	if appErr != nil {
 		return protocolResult{}, appErr
 	}
+
 	clientType := model.SessionClientWeb
 	if request.params.ClientType != "" {
 		clientType = model.SessionClientType(request.params.ClientType)
 	}
+
 	start, err := m.authentication.BeginExternalAuthentication(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
 		identity.BeginExternalAuthenticationCommand{
-			ProviderID: providerID, ReturnTo: request.params.ReturnTo, ClientType: clientType,
-			DeviceID: request.params.DeviceID, DeviceName: request.params.DeviceName, Source: request.metadata.IPAddress,
+			ProviderID: providerID,
+			ReturnTo:   request.params.ReturnTo,
+			ClientType: clientType,
+			DeviceID:   request.params.DeviceID,
+			DeviceName: request.params.DeviceName,
+			Source:     request.metadata.IPAddress,
 		},
 	)
 	if err != nil {
 		return protocolResult{}, err
 	}
+
 	headers := captureResponseHeaders(func(writer http.ResponseWriter) {
 		m.cookies.attachExternalLoginBinding(writer, start.Binding, start.ExpiresAt)
 	})
@@ -189,6 +258,7 @@ func (m externalAuthenticationResourceModule) complete(
 	if appErr != nil {
 		return protocolResult{}, errorWithHeaders(appErr, clearBinding)
 	}
+
 	binding, cookieErr := singleCookieValue(
 		request.request,
 		BrowserExternalLoginCookieName,
@@ -196,21 +266,26 @@ func (m externalAuthenticationResourceModule) complete(
 	if cookieErr != nil || binding == "" {
 		return protocolResult{}, errorWithHeaders(invalidExternalCallbackError(), clearBinding)
 	}
+
 	callback, appErr := externalAuthenticationCallbackFromRequest(request.request)
 	if appErr != nil {
 		return protocolResult{}, errorWithHeaders(appErr, clearBinding)
 	}
+
 	completion, err := m.authentication.CompleteExternalAuthentication(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
 		identity.CompleteExternalAuthenticationCommand{
-			ProviderID: providerID, Binding: binding, Callback: callback,
-			Source: request.metadata.IPAddress,
+			ProviderID: providerID,
+			Binding:    binding,
+			Callback:   callback,
+			Source:     request.metadata.IPAddress,
 		},
 	)
 	if err != nil {
 		return protocolResult{}, errorWithHeaders(err, clearBinding)
 	}
+
 	if completion.Restart != nil {
 		headers := captureResponseHeaders(func(writer http.ResponseWriter) {
 			m.cookies.attachExternalLoginBinding(writer, completion.Restart.Binding, completion.Restart.ExpiresAt)
@@ -218,6 +293,7 @@ func (m externalAuthenticationResourceModule) complete(
 		headers.Set("Cache-Control", "no-store")
 		return redirectProtocolResult(completion.Restart.RedirectURL).withHeaders(headers), nil
 	}
+
 	headers := combineResponseHeaders(clearBinding, captureResponseHeaders(func(writer http.ResponseWriter) {
 		m.cookies.attach(writer, completion.Tokens)
 	}))
@@ -233,20 +309,26 @@ func externalAuthenticationCallbackFromRequest(
 		len(valuesFromRequest) > model.ExternalCallbackMaxFields {
 		return model.ExternalAuthenticationCallback{}, invalidExternalCallbackError()
 	}
+
 	values := make(map[string][]string, len(valuesFromRequest))
 	for key, items := range valuesFromRequest {
-		if key == "" || len(key) > model.ExternalCallbackMaxKeyLength ||
-			len(items) == 0 || len(items) > model.ExternalCallbackMaxValues {
+		if key == "" ||
+			len(key) > model.ExternalCallbackMaxKeyLength ||
+			len(items) == 0 ||
+			len(items) > model.ExternalCallbackMaxValues {
 			return model.ExternalAuthenticationCallback{}, invalidExternalCallbackError()
 		}
+
 		values[key] = make([]string, len(items))
 		for index, item := range items {
 			if len(item) > model.ExternalCallbackMaxValueLength {
 				return model.ExternalAuthenticationCallback{}, invalidExternalCallbackError()
 			}
+
 			values[key][index] = item
 		}
 	}
+
 	return model.ExternalAuthenticationCallback{Values: values}, nil
 }
 

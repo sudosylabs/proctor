@@ -91,18 +91,25 @@ func (m affiliationResourceModule) list(request operationRequest) (operationResu
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	values, err := m.affiliations.ListAffiliations(request.context, request.invocation(), academic.ListAffiliationsQuery{UserID: userID})
 	if err != nil {
 		return operationResult{}, err
 	}
-	response, err := boundedListResult(request, "Affiliation", values,
+
+	response, err := boundedListResult(
+		request,
+		"Affiliation",
+		values,
 		func(value *model.Affiliation) boundedPageKey {
 			return boundedPageKey{At: value.CreatedAt, ID: value.ID.String()}
 		},
-		affiliationResponseFromModel)
+		affiliationResponseFromModel,
+	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, response), nil
 }
 
@@ -111,22 +118,32 @@ func (m affiliationResourceModule) create(request operationRequest) (operationRe
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body createAffiliationRequest
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
+
 	startAt, err := wireTimeMillis("start_at", body.StartAt)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	endAt, err := wireTimeMillis("end_at", body.EndAt)
 	if err != nil {
 		return operationResult{}, err
 	}
-	saved, err := m.affiliations.CreateAffiliation(request.context, request.invocation(), academic.CreateAffiliationCommand{UserID: userID, Kind: body.Kind, StartAt: startAt, EndAt: endAt})
+
+	saved, err := m.affiliations.CreateAffiliation(request.context, request.invocation(), academic.CreateAffiliationCommand{
+		UserID:  userID,
+		Kind:    body.Kind,
+		StartAt: startAt,
+		EndAt:   endAt,
+	})
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusCreated, affiliationResponseFromModel(saved)), nil
 }
 

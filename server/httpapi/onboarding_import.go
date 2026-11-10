@@ -23,10 +23,26 @@ import (
 )
 
 type OnboardingImportApplication interface {
-	UploadOnboardingImport(context.Context, invocation.Invocation, onboarding.UploadOnboardingImportCommand) (onboarding.OnboardingImportView, error)
-	GetOnboardingImport(context.Context, invocation.Invocation, model.OnboardingImportID) (onboarding.OnboardingImportView, []onboarding.OnboardingImportRowView, error)
-	ListOnboardingImports(context.Context, invocation.Invocation, onboarding.ListOnboardingImportsQuery) (paging.Page[onboarding.OnboardingImportView], error)
-	CommitOnboardingImport(context.Context, invocation.Invocation, onboarding.CommitOnboardingImportCommand) (onboarding.OnboardingImportView, error)
+	UploadOnboardingImport(
+		context.Context,
+		invocation.Invocation,
+		onboarding.UploadOnboardingImportCommand,
+	) (onboarding.OnboardingImportView, error)
+	GetOnboardingImport(
+		context.Context,
+		invocation.Invocation,
+		model.OnboardingImportID,
+	) (onboarding.OnboardingImportView, []onboarding.OnboardingImportRowView, error)
+	ListOnboardingImports(
+		context.Context,
+		invocation.Invocation,
+		onboarding.ListOnboardingImportsQuery,
+	) (paging.Page[onboarding.OnboardingImportView], error)
+	CommitOnboardingImport(
+		context.Context,
+		invocation.Invocation,
+		onboarding.CommitOnboardingImportCommand,
+	) (onboarding.OnboardingImportView, error)
 	CancelOnboardingImport(context.Context, invocation.Invocation, model.OnboardingImportID) (onboarding.OnboardingImportView, error)
 	OnboardingImportReport(context.Context, invocation.Invocation, model.OnboardingImportID, io.Writer) error
 }
@@ -86,13 +102,15 @@ type onboardingImportCursor struct {
 
 func onboardingImportCursorSpec() opaqueCursorSpec[onboardingImportCursor] {
 	return opaqueCursorSpec[onboardingImportCursor]{
-		label: "onboarding import", maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members: []string{"created_at", "id"},
+		label:                "onboarding import",
+		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
+		members:              []string{"created_at", "id"},
 		validate: func(cursor onboardingImportCursor) error {
 			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
 			if err != nil || createdAt.IsZero() || !model.OnboardingImportID(cursor.ID).IsValid() {
 				return errors.New("invalid onboarding import keyset")
 			}
+
 			return nil
 		},
 	}
@@ -112,35 +130,147 @@ type onboardingImportRowResponse struct {
 func onboardingImportResource(imports OnboardingImportApplication) apiResource {
 	module := onboardingImportModule{imports: imports}
 	return newResource("onboarding-imports",
-		idempotentProtocolRoute(IdempotencyNone, store.OnboardingImportMaximumBytes, "onboarding-import-csv", RouteProtocolStreamingUpload, AuthPrincipalRequired,
-			http.MethodPost, path("/onboarding-imports"), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "onboarding_import.conflict", "onboarding_import.file_invalid", "onboarding_import.unavailable", "administration.unavailable", "authentication.mfa.unavailable", "invitation.role_not_delegable", "invitation.unavailable", "student_progression.conflict", "student_progression.unavailable"}, module.upload),
-		principalRoute(http.MethodGet, path("/onboarding-imports"),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "onboarding_import.unavailable", "invitation.unavailable"}, module.list),
-		principalRoute(http.MethodGet, path("/onboarding-imports/{onboarding_import_id}"),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "onboarding_import.unavailable", "invitation.unavailable"}, module.get),
-		idempotentPrincipalRoute(IdempotencyRequired, http.MethodPost, path("/onboarding-imports/{onboarding_import_id}/commit"),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "onboarding_import.conflict", "onboarding_import.file_invalid", "onboarding_import.unavailable", "administration.unavailable", "idempotency.key_required", "idempotency.key_invalid", "authentication.mfa.unavailable", "invitation.unavailable", "student_progression.conflict", "student_progression.unavailable"}, module.commit),
-		principalRoute(http.MethodPost, path("/onboarding-imports/{onboarding_import_id}/cancel"), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "onboarding_import.conflict", "onboarding_import.file_invalid", "onboarding_import.unavailable", "invitation.unavailable", "student_progression.conflict", "student_progression.unavailable"}, module.cancel),
-		protocolRoute("onboarding-import-report", RouteProtocolBinaryDownload, AuthPrincipalRequired, http.MethodGet,
-			path("/onboarding-imports/{onboarding_import_id}/report"), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "onboarding_import.conflict", "onboarding_import.unavailable", "invitation.unavailable"}, module.report),
+		idempotentProtocolRoute(
+			IdempotencyNone,
+			store.OnboardingImportMaximumBytes,
+			"onboarding-import-csv",
+			RouteProtocolStreamingUpload,
+			AuthPrincipalRequired,
+			http.MethodPost,
+			path("/onboarding-imports"),
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"onboarding_import.conflict",
+				"onboarding_import.file_invalid",
+				"onboarding_import.unavailable",
+				"administration.unavailable",
+				"authentication.mfa.unavailable",
+				"invitation.role_not_delegable",
+				"invitation.unavailable",
+				"student_progression.conflict",
+				"student_progression.unavailable",
+			},
+			module.upload,
+		),
+		principalRoute(
+			http.MethodGet,
+			path("/onboarding-imports"),
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"onboarding_import.unavailable",
+				"invitation.unavailable",
+			},
+			module.list,
+		),
+		principalRoute(
+			http.MethodGet,
+			path("/onboarding-imports/{onboarding_import_id}"),
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"onboarding_import.unavailable",
+				"invitation.unavailable",
+			},
+			module.get,
+		),
+		idempotentPrincipalRoute(
+			IdempotencyRequired,
+			http.MethodPost,
+			path("/onboarding-imports/{onboarding_import_id}/commit"),
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"onboarding_import.conflict",
+				"onboarding_import.file_invalid",
+				"onboarding_import.unavailable",
+				"administration.unavailable",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"authentication.mfa.unavailable",
+				"invitation.unavailable",
+				"student_progression.conflict",
+				"student_progression.unavailable",
+			},
+			module.commit,
+		),
+		principalRoute(
+			http.MethodPost,
+			path("/onboarding-imports/{onboarding_import_id}/cancel"),
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"onboarding_import.conflict",
+				"onboarding_import.file_invalid",
+				"onboarding_import.unavailable",
+				"invitation.unavailable",
+				"student_progression.conflict",
+				"student_progression.unavailable",
+			},
+			module.cancel,
+		),
+		protocolRoute(
+			"onboarding-import-report",
+			RouteProtocolBinaryDownload,
+			AuthPrincipalRequired,
+			http.MethodGet,
+			path("/onboarding-imports/{onboarding_import_id}/report"),
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"onboarding_import.conflict",
+				"onboarding_import.unavailable",
+				"invitation.unavailable",
+			},
+			module.report,
+		),
 	)
 }
 
 func (m onboardingImportModule) upload(request operationRequest) (protocolResult, error) {
 	query := request.request.URL.Query()
 	command := onboarding.UploadOnboardingImportCommand{
-		Mode: model.OnboardingImportMode(query.Get("mode")), ScopeType: model.RoleScopeType(query.Get("scope_type")), ScopeID: query.Get("scope_id"), RoleID: model.RoleID(query.Get("role_id")), Body: request.request.Body,
+		Mode:      model.OnboardingImportMode(query.Get("mode")),
+		ScopeType: model.RoleScopeType(query.Get("scope_type")),
+		ScopeID:   query.Get("scope_id"),
+		RoleID:    model.RoleID(query.Get("role_id")),
+		Body:      request.request.Body,
 	}
 	if names, given := query["file_name"]; given {
 		if len(names) != 1 {
 			return protocolResult{}, apperror.Invalid("request.invalid", "file_name")
 		}
+
 		command.FileName = &names[0]
 	}
+
 	view, err := m.imports.UploadOnboardingImport(request.context, request.invocation(), command)
 	if err != nil {
 		return protocolResult{}, err
 	}
+
 	return streamingUploadProtocolResult(http.StatusAccepted, onboardingImportResponseFromView(view, nil)).withHeaders(noStoreHeaders()), nil
 }
 
@@ -149,27 +279,33 @@ func (m onboardingImportModule) list(request operationRequest) (operationResult,
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	values := request.request.URL.Query()
 	for key := range values {
 		if key != "state" && key != "limit" && key != "cursor" {
 			return operationResult{}, invalidRequestError(errors.New("unknown onboarding import query parameter"))
 		}
 	}
+
 	query := onboarding.ListOnboardingImportsQuery{Limit: page.Limit}
 	for _, raw := range values["state"] {
 		if raw == "" {
 			return operationResult{}, invalidRequestError(errors.New("state must be non-empty"))
 		}
+
 		query.States = append(query.States, model.OnboardingImportState(raw))
 	}
+
 	cursor, continued, err := decodePageCursor(page, onboardingImportCursorSpec())
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	if continued {
 		query.BeforeCreatedAt, _ = model.ParseRFC3339(cursor.CreatedAt)
 		query.BeforeID = model.OnboardingImportID(cursor.ID)
 	}
+
 	result, err := m.imports.ListOnboardingImports(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
@@ -177,14 +313,19 @@ func (m onboardingImportModule) list(request operationRequest) (operationResult,
 	if len(result.Items) > query.Limit {
 		return operationResult{}, errUnpresentableResult
 	}
+
 	response, err := newListResponse(result.Items, result.HasMore, func(view onboarding.OnboardingImportView) onboardingImportResponse {
 		return onboardingImportResponseFromView(view, nil)
 	}, func(last onboarding.OnboardingImportView) (string, error) {
-		return encodeOpaqueCursor(onboardingImportCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String()}, onboardingImportCursorSpec())
+		return encodeOpaqueCursor(
+			onboardingImportCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String()},
+			onboardingImportCursorSpec(),
+		)
 	})
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
@@ -205,15 +346,23 @@ func (m onboardingImportModule) commit(request operationRequest) (operationResul
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body onboardingImportCommitRequest
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, invalidRequestError(err)
 	}
-	view, err := m.imports.CommitOnboardingImport(request.context, request.invocation(), onboarding.CommitOnboardingImportCommand{ID: id,
-		ExpectedRevision: body.ExpectedRevision, PreviewDigest: body.PreviewDigest, Policy: model.OnboardingImportCommitPolicy(body.Policy), IdempotencyKey: request.idempotencyKey})
+
+	view, err := m.imports.CommitOnboardingImport(request.context, request.invocation(), onboarding.CommitOnboardingImportCommand{
+		ID:               id,
+		ExpectedRevision: body.ExpectedRevision,
+		PreviewDigest:    body.PreviewDigest,
+		Policy:           model.OnboardingImportCommitPolicy(body.Policy),
+		IdempotencyKey:   request.idempotencyKey,
+	})
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusAccepted, onboardingImportResponseFromView(view, nil)).withHeaders(noStoreHeaders()), nil
 }
 
@@ -244,22 +393,61 @@ func (m onboardingImportModule) report(request operationRequest) (protocolResult
 	return binaryDownloadProtocolResult(io.NopCloser(bytes.NewReader(body.Bytes())), int64(body.Len())).withHeaders(headers), nil
 }
 
-func onboardingImportResponseFromView(view onboarding.OnboardingImportView, rows []onboarding.OnboardingImportRowView) onboardingImportResponse {
-	response := onboardingImportResponse{ID: view.ID.String(), Mode: string(view.Mode), State: string(view.State), ScopeType: string(view.ScopeType), ScopeID: view.ScopeID,
-		RoleID: view.RoleID.String(), SourcePeriodID: view.SourcePeriodID.String(), SourceClassID: view.SourceClassID.String(), DestinationPeriodID: view.DestinationPeriodID.String(), DestinationClassID: view.DestinationClassID.String(),
-		SourceClassName: view.SourceClassName, DestinationClassName: view.DestinationClassName,
-		PreviewDigest: view.PreviewDigest, IgnoredHeaders: append([]string(nil), view.IgnoredHeaders...), TotalRows: view.TotalRows, ValidRows: view.ValidRows,
-		InvalidRows: view.InvalidRows, SucceededRows: view.SucceededRows, NoOpRows: view.NoOpRows, FailedRows: view.FailedRows, SkippedRows: view.SkippedRows,
-		CommitPolicy: string(view.CommitPolicy), ParseJobID: view.ParseJobID.String(), ExecutionJobID: view.ExecutionJobID.String(), CreatedAt: model.FormatRFC3339(view.CreatedAt),
-		UpdatedAt: model.FormatRFC3339(view.UpdatedAt), ExpiresAt: model.FormatRFC3339(view.ExpiresAt), Revision: view.Revision, FailureCode: view.FailureCode, FileName: view.FileName}
+func onboardingImportResponseFromView(
+	view onboarding.OnboardingImportView,
+	rows []onboarding.OnboardingImportRowView,
+) onboardingImportResponse {
+	response := onboardingImportResponse{
+		ID:                   view.ID.String(),
+		Mode:                 string(view.Mode),
+		State:                string(view.State),
+		ScopeType:            string(view.ScopeType),
+		ScopeID:              view.ScopeID,
+		RoleID:               view.RoleID.String(),
+		SourcePeriodID:       view.SourcePeriodID.String(),
+		SourceClassID:        view.SourceClassID.String(),
+		DestinationPeriodID:  view.DestinationPeriodID.String(),
+		DestinationClassID:   view.DestinationClassID.String(),
+		SourceClassName:      view.SourceClassName,
+		DestinationClassName: view.DestinationClassName,
+		PreviewDigest:        view.PreviewDigest,
+		IgnoredHeaders:       append([]string(nil), view.IgnoredHeaders...),
+		TotalRows:            view.TotalRows,
+		ValidRows:            view.ValidRows,
+		InvalidRows:          view.InvalidRows,
+		SucceededRows:        view.SucceededRows,
+		NoOpRows:             view.NoOpRows,
+		FailedRows:           view.FailedRows,
+		SkippedRows:          view.SkippedRows,
+		CommitPolicy:         string(view.CommitPolicy),
+		ParseJobID:           view.ParseJobID.String(),
+		ExecutionJobID:       view.ExecutionJobID.String(),
+		CreatedAt:            model.FormatRFC3339(view.CreatedAt),
+		UpdatedAt:            model.FormatRFC3339(view.UpdatedAt),
+		ExpiresAt:            model.FormatRFC3339(view.ExpiresAt),
+		Revision:             view.Revision,
+		FailureCode:          view.FailureCode,
+		FileName:             view.FileName,
+	}
 	if !view.EffectiveAt.IsZero() {
 		response.EffectiveAt = model.FormatRFC3339(view.EffectiveAt)
 	}
+
 	if rows != nil {
 		response.Rows = make([]onboardingImportRowResponse, 0, len(rows))
 		for _, row := range rows {
-			response.Rows = append(response.Rows, onboardingImportRowResponse{RowNumber: row.RowNumber, Reference: row.Reference, Operation: row.Operation, Status: string(row.Status), PreviewCode: row.PreviewCode, PublicCode: row.PublicCode, InvitationID: row.InvitationID.String(), ResourceID: row.ResourceID})
+			response.Rows = append(response.Rows, onboardingImportRowResponse{
+				RowNumber:    row.RowNumber,
+				Reference:    row.Reference,
+				Operation:    row.Operation,
+				Status:       string(row.Status),
+				PreviewCode:  row.PreviewCode,
+				PublicCode:   row.PublicCode,
+				InvitationID: row.InvitationID.String(),
+				ResourceID:   row.ResourceID,
+			})
 		}
 	}
+
 	return response
 }

@@ -82,14 +82,170 @@ func examResourceHTTPResource(application ExamResourceApplication) apiResource {
 	member := path("/exams/{exam_id}/draft/resources/{exam_resource_id}")
 	order := path("/exams/{exam_id}/draft/resources/order")
 	content := path("/exams/{exam_id}/draft/resources/{exam_resource_id}/content")
-	return newResource("exam-resources",
-		principalRoute(http.MethodGet, collection, []string{"authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "exam.resource.invalid", "exam.resource.unavailable"}, m.list),
-		idempotentProtocolRoute(IdempotencyRequired, examResourceUploadBodyLimit, "exam-resource-upload", RouteProtocolStreamingUpload, AuthPrincipalRequired, http.MethodPost, collection, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.archived", "exam.draft.revision_conflict", "exam.resource.invalid", "exam.resource.conflict", "exam.resource.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "service.busy", "exam.resource.content_invalid", "exam.resource.limit", "exam.resource.upload_invalid", "exam.resource.revision_conflict"}, m.create),
-		idempotentPrincipalRoute(IdempotencyRequired, http.MethodPatch, member, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.archived", "exam.draft.revision_conflict", "exam.resource.invalid", "exam.resource.conflict", "exam.resource.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "exam.resource.no_changes", "exam.resource.revision_conflict"}, m.editMetadata),
-		idempotentPrincipalRoute(IdempotencyRequired, http.MethodPut, order, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.archived", "exam.draft.revision_conflict", "exam.resource.invalid", "exam.resource.conflict", "exam.resource.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "exam.resource.no_changes", "exam.resource.order_invalid"}, m.reorder),
-		idempotentProtocolRoute(IdempotencyRequired, examResourceUploadBodyLimit, "exam-resource-content-replacement", RouteProtocolStreamingUpload, AuthPrincipalRequired, http.MethodPut, content, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.archived", "exam.draft.revision_conflict", "exam.resource.invalid", "exam.resource.conflict", "exam.resource.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "service.busy", "exam.resource.content_invalid", "exam.resource.upload_invalid", "exam.resource.revision_conflict"}, m.replaceContent),
-		idempotentPrincipalRoute(IdempotencyRequired, http.MethodDelete, member, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.archived", "exam.draft.revision_conflict", "exam.resource.invalid", "exam.resource.conflict", "exam.resource.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "exam.resource.revision_conflict"}, m.remove),
-		protocolRoute("exam-resource-protected-content", RouteProtocolBinaryDownload, AuthPrincipalRequired, http.MethodGet, content, []string{"authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "exam.resource.invalid", "exam.resource.unavailable"}, m.open))
+	return newResource(
+		"exam-resources",
+		principalRoute(
+			http.MethodGet,
+			collection,
+			[]string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.resource.invalid",
+				"exam.resource.unavailable",
+			},
+			m.list,
+		),
+		idempotentProtocolRoute(
+			IdempotencyRequired,
+			examResourceUploadBodyLimit,
+			"exam-resource-upload",
+			RouteProtocolStreamingUpload,
+			AuthPrincipalRequired,
+			http.MethodPost,
+			collection,
+			[]string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.archived",
+				"exam.draft.revision_conflict",
+				"exam.resource.invalid",
+				"exam.resource.conflict",
+				"exam.resource.unavailable",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"service.busy",
+				"exam.resource.content_invalid",
+				"exam.resource.limit",
+				"exam.resource.upload_invalid",
+				"exam.resource.revision_conflict",
+			},
+			m.create,
+		),
+		idempotentPrincipalRoute(
+			IdempotencyRequired,
+			http.MethodPatch,
+			member,
+			[]string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.archived",
+				"exam.draft.revision_conflict",
+				"exam.resource.invalid",
+				"exam.resource.conflict",
+				"exam.resource.unavailable",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"exam.resource.no_changes",
+				"exam.resource.revision_conflict",
+			},
+			m.editMetadata,
+		),
+		idempotentPrincipalRoute(
+			IdempotencyRequired,
+			http.MethodPut,
+			order,
+			[]string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.archived",
+				"exam.draft.revision_conflict",
+				"exam.resource.invalid",
+				"exam.resource.conflict",
+				"exam.resource.unavailable",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"exam.resource.no_changes",
+				"exam.resource.order_invalid",
+			},
+			m.reorder,
+		),
+		idempotentProtocolRoute(
+			IdempotencyRequired,
+			examResourceUploadBodyLimit,
+			"exam-resource-content-replacement",
+			RouteProtocolStreamingUpload,
+			AuthPrincipalRequired,
+			http.MethodPut,
+			content,
+			[]string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.archived",
+				"exam.draft.revision_conflict",
+				"exam.resource.invalid",
+				"exam.resource.conflict",
+				"exam.resource.unavailable",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"service.busy",
+				"exam.resource.content_invalid",
+				"exam.resource.upload_invalid",
+				"exam.resource.revision_conflict",
+			},
+			m.replaceContent,
+		),
+		idempotentPrincipalRoute(
+			IdempotencyRequired,
+			http.MethodDelete,
+			member,
+			[]string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.archived",
+				"exam.draft.revision_conflict",
+				"exam.resource.invalid",
+				"exam.resource.conflict",
+				"exam.resource.unavailable",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"exam.resource.revision_conflict",
+			},
+			m.remove,
+		),
+		protocolRoute(
+			"exam-resource-protected-content",
+			RouteProtocolBinaryDownload,
+			AuthPrincipalRequired,
+			http.MethodGet,
+			content,
+			[]string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.resource.invalid",
+				"exam.resource.unavailable",
+			},
+			m.open,
+		),
+	)
 }
 
 func (m examResourceHTTPModule) list(request operationRequest) (operationResult, error) {
@@ -97,19 +253,27 @@ func (m examResourceHTTPModule) list(request operationRequest) (operationResult,
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	items, err := m.application.ListExamResources(request.context, request.invocation(), resource.ListQuery{ExamID: examID})
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	// The Exam Capacity Policy bounds the Draft's Resources, so the complete
 	// ordered set is paged by position.
-	response, err := boundedListResult(request, "Exam Resource", items,
+	response, err := boundedListResult(
+		request,
+		"Exam Resource",
+		items,
 		func(item store.ExamResourceRecord) boundedPageKey {
 			return boundedPageKey{Name: fmt.Sprintf("%08d", item.Resource.Position), ID: item.Resource.ID.String()}
-		}, examResourceResponseFromRecord)
+		},
+		examResourceResponseFromRecord,
+	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, response), nil
 }
 func (m examResourceHTTPModule) create(request operationRequest) (protocolResult, error) {
@@ -117,6 +281,7 @@ func (m examResourceHTTPModule) create(request operationRequest) (protocolResult
 	if err != nil {
 		return protocolResult{}, err
 	}
+
 	var metadata examResourceUploadMetadata
 	content, err := decodeExamResourceMultipart(request.request, &metadata)
 	if err != nil {
@@ -125,10 +290,22 @@ func (m examResourceHTTPModule) create(request operationRequest) (protocolResult
 	if metadata.Size == nil {
 		return protocolResult{}, invalidRequestError(errors.New("size is required"))
 	}
-	result, err := m.application.CreateExamResource(request.context, request.invocation(), resource.CreateCommand{ExamID: examID, ExpectedDraftRevision: metadata.ExpectedDraftRevision, DisplayName: metadata.DisplayName, DescriptionMarkdown: metadata.DescriptionMarkdown, MediaType: model.ExamResourceMediaType(metadata.MediaType), Body: content, Size: *metadata.Size, ExpectedSHA256: metadata.SHA256, IdempotencyKey: request.idempotencyKey})
+
+	result, err := m.application.CreateExamResource(request.context, request.invocation(), resource.CreateCommand{
+		ExamID:                examID,
+		ExpectedDraftRevision: metadata.ExpectedDraftRevision,
+		DisplayName:           metadata.DisplayName,
+		DescriptionMarkdown:   metadata.DescriptionMarkdown,
+		MediaType:             model.ExamResourceMediaType(metadata.MediaType),
+		Body:                  content,
+		Size:                  *metadata.Size,
+		ExpectedSHA256:        metadata.SHA256,
+		IdempotencyKey:        request.idempotencyKey,
+	})
 	if err != nil {
 		return protocolResult{}, err
 	}
+
 	return streamingUploadProtocolResult(http.StatusCreated, examResourceResponseFromRecord(result)), nil
 }
 func (m examResourceHTTPModule) replaceContent(request operationRequest) (protocolResult, error) {
@@ -136,6 +313,7 @@ func (m examResourceHTTPModule) replaceContent(request operationRequest) (protoc
 	if err != nil {
 		return protocolResult{}, err
 	}
+
 	var metadata examResourceContentReplacementMetadata
 	content, err := decodeExamResourceMultipart(request.request, &metadata)
 	if err != nil {
@@ -144,10 +322,21 @@ func (m examResourceHTTPModule) replaceContent(request operationRequest) (protoc
 	if metadata.Size == nil {
 		return protocolResult{}, invalidRequestError(errors.New("size is required"))
 	}
-	result, err := m.application.ReplaceExamResourceContent(request.context, request.invocation(), resource.ReplaceContentCommand{ExamID: examID, ResourceID: resourceID, ExpectedDraftRevision: metadata.ExpectedDraftRevision, MediaType: model.ExamResourceMediaType(metadata.MediaType), Body: content, Size: *metadata.Size, ExpectedSHA256: metadata.SHA256, IdempotencyKey: request.idempotencyKey})
+
+	result, err := m.application.ReplaceExamResourceContent(request.context, request.invocation(), resource.ReplaceContentCommand{
+		ExamID:                examID,
+		ResourceID:            resourceID,
+		ExpectedDraftRevision: metadata.ExpectedDraftRevision,
+		MediaType:             model.ExamResourceMediaType(metadata.MediaType),
+		Body:                  content,
+		Size:                  *metadata.Size,
+		ExpectedSHA256:        metadata.SHA256,
+		IdempotencyKey:        request.idempotencyKey,
+	})
 	if err != nil {
 		return protocolResult{}, err
 	}
+
 	return streamingUploadProtocolResult(http.StatusOK, examResourceResponseFromRecord(result)), nil
 }
 func (m examResourceHTTPModule) editMetadata(request operationRequest) (operationResult, error) {
@@ -155,6 +344,7 @@ func (m examResourceHTTPModule) editMetadata(request operationRequest) (operatio
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body editExamResourceMetadataRequest
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
@@ -162,10 +352,19 @@ func (m examResourceHTTPModule) editMetadata(request operationRequest) (operatio
 	if body.DisplayName == nil && body.DescriptionMarkdown == nil {
 		return operationResult{}, invalidRequestError(errors.New("at least one metadata field is required"))
 	}
-	result, err := m.application.EditExamResourceMetadata(request.context, request.invocation(), resource.EditMetadataCommand{ExamID: examID, ResourceID: resourceID, ExpectedDraftRevision: body.ExpectedDraftRevision, DisplayName: body.DisplayName, DescriptionMarkdown: body.DescriptionMarkdown, IdempotencyKey: request.idempotencyKey})
+
+	result, err := m.application.EditExamResourceMetadata(request.context, request.invocation(), resource.EditMetadataCommand{
+		ExamID:                examID,
+		ResourceID:            resourceID,
+		ExpectedDraftRevision: body.ExpectedDraftRevision,
+		DisplayName:           body.DisplayName,
+		DescriptionMarkdown:   body.DescriptionMarkdown,
+		IdempotencyKey:        request.idempotencyKey,
+	})
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, examResourceResponseFromRecord(result)), nil
 }
 func (m examResourceHTTPModule) reorder(request operationRequest) (operationResult, error) {
@@ -173,28 +372,39 @@ func (m examResourceHTTPModule) reorder(request operationRequest) (operationResu
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body reorderExamResourcesRequest
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
+
 	ids := make([]model.ExamResourceID, len(body.ResourceIDs))
 	for i, raw := range body.ResourceIDs {
 		id, parseErr := model.ParseExamResourceID(raw)
 		if parseErr != nil {
 			return operationResult{}, invalidRequestError(parseErr)
 		}
+
 		ids[i] = id
 	}
-	items, err := m.application.ReorderExamResources(request.context, request.invocation(), resource.ReorderCommand{ExamID: examID, ExpectedDraftRevision: body.ExpectedDraftRevision, ResourceIDs: ids, IdempotencyKey: request.idempotencyKey})
+
+	items, err := m.application.ReorderExamResources(request.context, request.invocation(), resource.ReorderCommand{
+		ExamID:                examID,
+		ExpectedDraftRevision: body.ExpectedDraftRevision,
+		ResourceIDs:           ids,
+		IdempotencyKey:        request.idempotencyKey,
+	})
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	// The new order is the complete Resource set, presented in the
 	// collection envelope without a continuation.
 	response, err := newListResponse(items, false, examResourceResponseFromRecord, nil)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, response), nil
 }
 func (m examResourceHTTPModule) remove(request operationRequest) (operationResult, error) {
@@ -202,14 +412,22 @@ func (m examResourceHTTPModule) remove(request operationRequest) (operationResul
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body removeExamResourceRequest
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
-	_, err = m.application.RemoveExamResource(request.context, request.invocation(), resource.RemoveCommand{ExamID: examID, ResourceID: resourceID, ExpectedDraftRevision: body.ExpectedDraftRevision, IdempotencyKey: request.idempotencyKey})
+
+	_, err = m.application.RemoveExamResource(request.context, request.invocation(), resource.RemoveCommand{
+		ExamID:                examID,
+		ResourceID:            resourceID,
+		ExpectedDraftRevision: body.ExpectedDraftRevision,
+		IdempotencyKey:        request.idempotencyKey,
+	})
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return noContentResult(), nil
 }
 func (m examResourceHTTPModule) open(request operationRequest) (protocolResult, error) {
@@ -217,19 +435,26 @@ func (m examResourceHTTPModule) open(request operationRequest) (protocolResult, 
 	if err != nil {
 		return protocolResult{}, err
 	}
-	opened, err := m.application.OpenExamResource(request.context, request.invocation(), resource.OpenQuery{ExamID: examID, ResourceID: resourceID})
+
+	opened, err := m.application.OpenExamResource(
+		request.context,
+		request.invocation(),
+		resource.OpenQuery{ExamID: examID, ResourceID: resourceID},
+	)
 	if err != nil {
 		return protocolResult{}, err
 	}
 	if opened.Body == nil || opened.Record.Resource == nil || opened.Record.Rendition == nil {
 		return protocolResult{}, errors.New("exam resource application returned incomplete content")
 	}
+
 	etag := `"` + opened.Record.Rendition.SHA256 + `"`
 	headers := http.Header{"Content-Type": {opened.Record.Rendition.MediaType}, "Cache-Control": {"private, max-age=300"}, "ETag": {etag}}
 	if request.request.Header.Get("If-None-Match") == etag {
 		_ = opened.Body.Close()
 		return notModifiedProtocolResult(opened.Record.Rendition.Size).withHeaders(headers), nil
 	}
+
 	return binaryDownloadProtocolResult(opened.Body, opened.Record.Rendition.Size).withHeaders(headers), nil
 }
 
@@ -256,25 +481,41 @@ func examResourceResponseFromRecord(record store.ExamResourceRecord) examResourc
 	if r == nil || x == nil {
 		return examResourceResponse{}
 	}
-	return examResourceResponse{ID: r.ID.String(), DisplayName: r.DisplayName, DescriptionMarkdown: r.DescriptionMarkdown, Position: r.Position, ContentRevisionID: r.SelectedFileRevisionID.String(), MediaType: x.MediaType, Size: x.Size, SHA256: x.SHA256, UpdatedAt: model.TimeUTC(r.UpdatedAt).Format("2006-01-02T15:04:05.999999999Z07:00"), DraftRevision: record.DraftRevision}
+
+	return examResourceResponse{
+		ID:                  r.ID.String(),
+		DisplayName:         r.DisplayName,
+		DescriptionMarkdown: r.DescriptionMarkdown,
+		Position:            r.Position,
+		ContentRevisionID:   r.SelectedFileRevisionID.String(),
+		MediaType:           x.MediaType,
+		Size:                x.Size,
+		SHA256:              x.SHA256,
+		UpdatedAt:           model.TimeUTC(r.UpdatedAt).Format("2006-01-02T15:04:05.999999999Z07:00"),
+		DraftRevision:       record.DraftRevision,
+	}
 }
 
 func decodeExamResourceMultipart[T any](request *http.Request, target *T) (io.Reader, error) {
 	if request == nil || target == nil {
 		return nil, errors.New("request is required")
 	}
+
 	reader, err := request.MultipartReader()
 	if err != nil {
 		return nil, errors.New("multipart/form-data is required")
 	}
+
 	metadata, err := reader.NextPart()
 	if err != nil {
 		return nil, errors.New("metadata part is required")
 	}
+
 	defer metadata.Close()
 	if metadata.FormName() != "metadata" || metadata.FileName() != "" {
 		return nil, errors.New("metadata must be the first non-file part")
 	}
+
 	raw, err := io.ReadAll(io.LimitReader(metadata, examResourceMetadataLimit+1))
 	if err != nil || len(raw) > examResourceMetadataLimit {
 		return nil, errors.New("metadata is invalid")
@@ -282,23 +523,28 @@ func decodeExamResourceMultipart[T any](request *http.Request, target *T) (io.Re
 	if err = rejectDuplicateTopLevelJSONMembers(raw); err != nil {
 		return nil, errors.New("metadata is invalid")
 	}
+
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err = decoder.Decode(target); err != nil {
 		return nil, errors.New("metadata is invalid")
 	}
+
 	var trailing any
 	if err = decoder.Decode(&trailing); err != io.EOF {
 		return nil, errors.New("metadata is invalid")
 	}
+
 	content, err := reader.NextPart()
 	if err != nil {
 		return nil, errors.New("content part is required")
 	}
+
 	if content.FormName() != "content" {
 		_ = content.Close()
 		return nil, errors.New("content must be the second part")
 	}
+
 	return &exactMultipartContent{part: content, reader: reader}, nil
 }
 
@@ -308,12 +554,14 @@ func rejectDuplicateTopLevelJSONMembers(raw []byte) error {
 	if err != nil || token != json.Delim('{') {
 		return errors.New("metadata must be a JSON object")
 	}
+
 	seen := make(map[string]struct{})
 	for decoder.More() {
 		name, err := decoder.Token()
 		if err != nil {
 			return err
 		}
+
 		member, ok := name.(string)
 		if !ok {
 			return errors.New("metadata member name is invalid")
@@ -321,19 +569,23 @@ func rejectDuplicateTopLevelJSONMembers(raw []byte) error {
 		if _, exists := seen[member]; exists {
 			return errors.New("metadata contains a duplicate member")
 		}
+
 		seen[member] = struct{}{}
 		var value json.RawMessage
 		if err = decoder.Decode(&value); err != nil {
 			return err
 		}
 	}
+
 	if token, err = decoder.Token(); err != nil || token != json.Delim('}') {
 		return errors.New("metadata object is incomplete")
 	}
+
 	var trailing json.RawMessage
 	if err = decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
 		return errors.New("metadata contains trailing data")
 	}
+
 	return nil
 }
 

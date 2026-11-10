@@ -81,6 +81,7 @@ func (a *API) collectResources(apiPrefix string, resources ...apiResource) error
 	if err := validateResourceCatalog(apiPrefix, resources); err != nil {
 		return err
 	}
+
 	for _, resource := range resources {
 		for _, definition := range resource.routes {
 			definition.idempotency = effectiveIdempotencyRequirement(definition.idempotency)
@@ -88,11 +89,13 @@ func (a *API) collectResources(apiPrefix string, resources ...apiResource) error
 			if err != nil {
 				return fmt.Errorf("compile resource %q: %w", resource.name, err)
 			}
+
 			errorPolicy := newRouteErrorPolicy(definition.errorCodes)
 			bodyLimit := a.maxBodyBytes
 			if definition.maxBodyBytes > 0 {
 				bodyLimit = definition.maxBodyBytes
 			}
+
 			definition.maxBodyBytes = bodyLimit
 			operationHandler := a.operationHandler(definition, errorPolicy)
 			if definition.protocolOperation != nil {
@@ -100,6 +103,7 @@ func (a *API) collectResources(apiPrefix string, resources ...apiResource) error
 			} else if definition.upgradeOperation != nil {
 				operationHandler = a.upgradeOperationHandler(definition, errorPolicy)
 			}
+
 			operationHandler = a.withIdempotency(operationHandler, definition.idempotency)
 			handler := a.newHandlerWithErrorPolicy(operationHandler, definition.auth, errorPolicy)
 			handler = limitRequestBody(handler, bodyLimit)
@@ -108,40 +112,52 @@ func (a *API) collectResources(apiPrefix string, resources ...apiResource) error
 			if a.metrics != nil && definition.protocolKind != RouteProtocolUpgrade {
 				handler = observeRequestMetrics(handler, a.metrics, path, definition.method)
 			}
+
 			if a.middleware.tracing != nil {
 				handler = nameRequestSpan(handler, path)
 			}
+
 			probe := mux.NewRouter().NewRoute().Path(path).Methods(definition.method)
 			if err := probe.GetError(); err != nil {
 				return fmt.Errorf("compile resource %q %s %s: %w", resource.name, definition.method, path, err)
 			}
+
 			pathRegexp, err := probe.GetPathRegexp()
 			if err != nil {
 				return fmt.Errorf("compile resource %q %s %s matcher: %w", resource.name, definition.method, path, err)
 			}
+
 			compiledRegexp, err := regexp.Compile(pathRegexp)
 			if err != nil {
 				return fmt.Errorf("compile resource %q %s %s regexp: %w", resource.name, definition.method, path, err)
 			}
+
 			key := definition.method + " " + pathRegexp
 			if _, exists := a.catalog.routeKeys[key]; exists {
 				return fmt.Errorf("compile resource %q %s %s: duplicate route shape", resource.name, definition.method, path)
 			}
+
 			route := Route{
-				Method: definition.method, Path: path, Auth: definition.auth,
+				Method:       definition.method,
+				Path:         path,
+				Auth:         definition.auth,
 				ErrorCodes:   append([]string(nil), definition.errorCodes...),
-				ProtocolName: definition.protocolName, ProtocolKind: definition.protocolKind,
-				Idempotency: definition.idempotency,
+				ProtocolName: definition.protocolName,
+				ProtocolKind: definition.protocolKind,
+				Idempotency:  definition.idempotency,
 			}
 			sort.Strings(route.ErrorCodes)
 			a.catalog.routeKeys[key] = struct{}{}
 			a.catalog.routes = append(a.catalog.routes, route)
 			a.catalog.routeMatchers = append(a.catalog.routeMatchers, routeMatcher{route: route, pathRegexp: compiledRegexp})
 			a.catalog.pendingRoutes = append(a.catalog.pendingRoutes, pendingCatalogRoute{
-				method: definition.method, path: path, handler: handler,
+				method:  definition.method,
+				path:    path,
+				handler: handler,
 			})
 		}
 	}
+
 	return nil
 }
 

@@ -32,18 +32,41 @@ func userAdministrationResource(
 	module := userAdministrationResourceModule{accounts: accounts, sessions: sessions}
 	return newResource(
 		"user-administration",
-		principalRoute(http.MethodPost, path("/users/{user_id}/disable"), userAdministrationMutationCodes("user.invalid", "user.conflict", "user.last_system_admin"), module.disable),
-		principalRoute(http.MethodPost, path("/users/{user_id}/enable"), userAdministrationMutationCodes("user.invalid", "user.conflict", "user.last_system_admin"), module.enable),
+		principalRoute(
+			http.MethodPost,
+			path("/users/{user_id}/disable"),
+			userAdministrationMutationCodes("user.invalid", "user.conflict", "user.last_system_admin"),
+			module.disable,
+		),
+		principalRoute(
+			http.MethodPost,
+			path("/users/{user_id}/enable"),
+			userAdministrationMutationCodes("user.invalid", "user.conflict", "user.last_system_admin"),
+			module.enable,
+		),
 		principalRoute(http.MethodGet, path("/users/{user_id}/sessions"), userAdministrationReadCodes("session.not_found"), module.listSessions),
-		principalRoute(http.MethodPost, path("/users/{user_id}/sessions/revoke-all"), userAdministrationMutationCodes("session.not_found"), module.revokeAllSessions),
-		principalRoute(http.MethodDelete, path("/users/{user_id}/sessions/{session_id}"), userAdministrationMutationCodes("session.not_found"), module.revokeSession),
+		principalRoute(
+			http.MethodPost,
+			path("/users/{user_id}/sessions/revoke-all"),
+			userAdministrationMutationCodes("session.not_found"),
+			module.revokeAllSessions,
+		),
+		principalRoute(
+			http.MethodDelete,
+			path("/users/{user_id}/sessions/{session_id}"),
+			userAdministrationMutationCodes("session.not_found"),
+			module.revokeSession,
+		),
 	)
 }
 
 func userAdministrationReadCodes(extra ...string) []string {
 	codes := []string{
-		"authorization.denied", "authorization.request.invalid", "authorization.unavailable",
-		"request.invalid", "resource.not_found",
+		"authorization.denied",
+		"authorization.request.invalid",
+		"authorization.unavailable",
+		"request.invalid",
+		"resource.not_found",
 	}
 	codes = append(codes, extra...)
 	return append(codes, "administration.unavailable")
@@ -51,8 +74,12 @@ func userAdministrationReadCodes(extra ...string) []string {
 
 func userAdministrationMutationCodes(extra ...string) []string {
 	codes := []string{
-		"authorization.denied", "authorization.request.invalid",
-		"authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found",
+		"authorization.denied",
+		"authorization.request.invalid",
+		"authorization.unavailable",
+		"audit.unavailable",
+		"request.invalid",
+		"resource.not_found",
 	}
 	codes = append(codes, extra...)
 	return append(codes, "administration.unavailable")
@@ -120,12 +147,14 @@ func (m userAdministrationResourceModule) listSessions(request operationRequest)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	includeRevoked, err := strconv.ParseBool(
 		defaultQuery(request.request, "include_revoked", "false"),
 	)
 	if err != nil {
 		return operationResult{}, apperror.New("request.invalid").WithField("field", "include_revoked")
 	}
+
 	query := identity.ListUserSessionsQuery{UserID: userID, IncludeRevoked: includeRevoked, Limit: defaultSessionPageSize}
 	values := request.request.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
@@ -133,34 +162,42 @@ func (m userAdministrationResourceModule) listSessions(request operationRequest)
 		if parseErr != nil || limit < 1 || limit > maximumSessionPageSize {
 			return operationResult{}, apperror.Invalid("request.invalid", "limit")
 		}
+
 		query.Limit = limit
 	}
+
 	if raw := values.Get("cursor"); raw != "" {
 		cursor, decodeErr := decodeSessionCursor(raw)
 		if decodeErr != nil {
 			return operationResult{}, apperror.Invalid("request.invalid", "cursor")
 		}
+
 		query.BeforeCreatedAt, _ = model.ParseRFC3339(cursor.CreatedAt)
 		query.BeforeID = model.SessionID(cursor.ID)
 	}
+
 	page, listErr := m.sessions.ListUserSessions(request.context, request.invocation(), query)
 	if listErr != nil {
 		return operationResult{}, listErr
 	}
+
 	response := sessionAdministrationListResponse{Items: sessionResponsesFromModels(request.request, page.Items)}
 	if page.HasMore && len(page.Items) == 0 {
 		return operationResult{}, unpresentableResult(errors.New("session page made no progress"))
 	}
+
 	if page.HasMore {
 		last := page.Items[len(page.Items)-1]
 		var err error
 		response.NextCursor, err = encodeOpaqueCursor(sessionCursor{
-			CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String(),
+			CreatedAt: model.FormatRFC3339(last.CreatedAt),
+			ID:        last.ID.String(),
 		}, sessionCursorSpec())
 		if err != nil {
 			return operationResult{}, unpresentableResult(err)
 		}
 	}
+
 	return jsonResult(http.StatusOK, response), nil
 }
 
@@ -187,13 +224,15 @@ func decodeSessionCursor(raw string) (sessionCursor, error) {
 
 func sessionCursorSpec() opaqueCursorSpec[sessionCursor] {
 	return opaqueCursorSpec[sessionCursor]{
-		label: "session", maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members: []string{"created_at", "id"},
+		label:                "session",
+		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
+		members:              []string{"created_at", "id"},
 		validate: func(cursor sessionCursor) error {
 			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
 			if err != nil || createdAt.IsZero() || !model.SessionID(cursor.ID).IsValid() {
 				return errors.New("invalid session keyset")
 			}
+
 			return nil
 		},
 	}

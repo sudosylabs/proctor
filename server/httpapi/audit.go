@@ -64,15 +64,24 @@ type auditResourceResponse struct {
 
 func auditEventResponseFromModel(event *model.AuditEvent) auditEventResponse {
 	return auditEventResponse{
-		ID: event.ID.String(), CreatedAt: model.FormatRFC3339(event.CreatedAt),
-		UpdatedAt: model.FormatRFC3339(event.UpdatedAt),
-		ActorID:   event.ActorID.String(), SessionID: event.SessionID.String(), Action: event.Action,
-		Resource:  auditResourceResponse{Type: event.Resource.Type, ID: event.Resource.ID},
-		ScopeType: event.ScopeType, ScopeID: event.ScopeID,
-		Status: event.Status, RequestID: event.RequestID, NodeID: event.NodeID,
-		ClientType: event.ClientType, AuthMethod: event.AuthMethod,
-		IPAddress: event.IPAddress, UserAgent: event.UserAgent, ErrorCode: event.ErrorCode,
-		Reason: event.AccountDisableReason(),
+		ID:         event.ID.String(),
+		CreatedAt:  model.FormatRFC3339(event.CreatedAt),
+		UpdatedAt:  model.FormatRFC3339(event.UpdatedAt),
+		ActorID:    event.ActorID.String(),
+		SessionID:  event.SessionID.String(),
+		Action:     event.Action,
+		Resource:   auditResourceResponse{Type: event.Resource.Type, ID: event.Resource.ID},
+		ScopeType:  event.ScopeType,
+		ScopeID:    event.ScopeID,
+		Status:     event.Status,
+		RequestID:  event.RequestID,
+		NodeID:     event.NodeID,
+		ClientType: event.ClientType,
+		AuthMethod: event.AuthMethod,
+		IPAddress:  event.IPAddress,
+		UserAgent:  event.UserAgent,
+		ErrorCode:  event.ErrorCode,
+		Reason:     event.AccountDisableReason(),
 	}
 }
 
@@ -84,10 +93,26 @@ func auditResource(audits AuditListingApplication) apiResource {
 	module := auditResourceModule{audits: audits}
 	return newResource(
 		"audits",
-		principalRoute(http.MethodGet, path("/audits"),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.query.invalid", "audit.unavailable", "request.invalid", "resource.not_found"}, module.list),
-		sessionRoute(http.MethodGet, path("/users/me/audits"),
-			[]string{"audit.query.invalid", "audit.unavailable", "request.invalid"}, module.listSelf),
+		principalRoute(
+			http.MethodGet,
+			path("/audits"),
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.query.invalid",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+			},
+			module.list,
+		),
+		sessionRoute(
+			http.MethodGet,
+			path("/users/me/audits"),
+			[]string{"audit.query.invalid", "audit.unavailable", "request.invalid"},
+			module.listSelf,
+		),
 	)
 }
 
@@ -125,22 +150,27 @@ func auditQueryFromRequest(request *http.Request) (administration.ListAuditEvent
 		if err != nil || limit < 1 || limit > 200 {
 			return query, err
 		}
+
 		query.Limit = limit
 	}
+
 	if raw := values.Get("cursor"); raw != "" {
 		cursor, err := decodeAuditCursor(raw)
 		if err != nil {
 			return query, err
 		}
+
 		createdAt, _ := model.ParseRFC3339(cursor.CreatedAt)
 		query.BeforeCreatedAt = createdAt
 		query.BeforeID = model.AuditEventID(cursor.ID)
 	}
+
 	for _, name := range []string{"created_after", "created_before"} {
 		if entries, present := values[name]; present && (len(entries) != 1 || entries[0] == "") {
 			return query, errAuditQuery(name)
 		}
 	}
+
 	var err error
 	if query.Since, err = optionalAuditTime(values, "created_after"); err != nil {
 		return query, err
@@ -148,19 +178,23 @@ func auditQueryFromRequest(request *http.Request) (administration.ListAuditEvent
 	if query.Until, err = optionalAuditTime(values, "created_before"); err != nil {
 		return query, err
 	}
+
 	query.ActorID = model.UserID(values.Get("actor_id"))
 	query.Action = values.Get("action")
 	resourceType, resourceID := values.Get("resource_type"), values.Get("resource_id")
 	if (resourceType == "") != (resourceID == "") {
 		return query, errInvalidAuditResource
 	}
+
 	if resourceType != "" {
 		resource := model.Resource{Type: model.ResourceType(resourceType), ID: resourceID}
 		if resource.Validate() != nil {
 			return query, errInvalidAuditResource
 		}
+
 		query.Resource = &resource
 	}
+
 	return query, nil
 }
 
@@ -182,13 +216,15 @@ func decodeAuditCursor(raw string) (auditCursor, error) {
 
 func auditCursorSpec() opaqueCursorSpec[auditCursor] {
 	return opaqueCursorSpec[auditCursor]{
-		label: "audit", maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members: []string{"created_at", "id"},
+		label:                "audit",
+		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
+		members:              []string{"created_at", "id"},
 		validate: func(cursor auditCursor) error {
 			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
 			if err != nil || createdAt.IsZero() || !model.AuditEventID(cursor.ID).IsValid() {
 				return errors.New("invalid audit keyset")
 			}
+
 			return nil
 		},
 	}

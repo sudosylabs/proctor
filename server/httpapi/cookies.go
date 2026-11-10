@@ -55,10 +55,12 @@ type browserCookies struct {
 
 func newBrowserCookies(publicURL string) (browserCookies, error) {
 	parsed, err := url.Parse(publicURL)
-	if err != nil || parsed.Host == "" ||
+	if err != nil ||
+		parsed.Host == "" ||
 		(parsed.Scheme != "http" && parsed.Scheme != "https") {
 		return browserCookies{}, errors.New("public URL must be an absolute HTTP or HTTPS URL")
 	}
+
 	return browserCookies{
 		secure:                      parsed.Scheme == "https",
 		refreshPath:                 model.APIURLSuffix + "/auth/refresh",
@@ -125,6 +127,7 @@ func (c browserCookies) attach(
 	if tokens == nil {
 		return
 	}
+
 	binding := model.NewCredentialToken()
 	csrf := browserCSRFToken(binding)
 	c.set(

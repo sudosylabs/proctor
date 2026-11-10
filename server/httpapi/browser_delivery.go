@@ -18,14 +18,207 @@ import (
 
 func browserDeliveryResource(application ExamAttemptApplication) apiResource {
 	m := examAttemptHTTPModule{application: application}
-	return newResource("browser-delivery",
-		sessionRoute(http.MethodGet, path("/exam-attempts/{exam_attempt_id}/browser-activity/sources"), []string{"exam.delivery.control_rate_limited", "request.invalid", "resource.not_found", "exam.attempt.invalid", "exam.attempt.registered_desktop_required", "exam.attempt.connection_closed", "exam.attempt.connection_lost", "exam.attempt.sitting_not_open", "exam.attempt.unavailable", "exam.delivery.declaration_conflict", "exam.delivery.sequence_limit", "exam.delivery.detail_budget_exhausted", "exam.delivery.metadata_capacity", "exam.delivery.summary_rate_limited", "idempotency.conflict", "idempotency.in_progress"}, m.browserSourceList),
-		sessionRoute(http.MethodGet, path("/exam-attempts/{exam_attempt_id}/browser-activity/sources/{source_session_id:uuid}"), []string{"exam.delivery.control_rate_limited", "request.invalid", "resource.not_found", "exam.attempt.invalid", "exam.attempt.registered_desktop_required", "exam.attempt.connection_closed", "exam.attempt.connection_lost", "exam.attempt.sitting_not_open", "exam.attempt.unavailable", "exam.delivery.declaration_conflict", "exam.delivery.sequence_limit", "exam.delivery.detail_budget_exhausted", "exam.delivery.metadata_capacity", "exam.delivery.summary_rate_limited", "idempotency.conflict", "idempotency.in_progress"}, m.browserSourceStatus),
-		sessionRoute(http.MethodGet, path("/exam-attempts/{exam_attempt_id}/browser-activity/sources/{source_session_id:uuid}/receipts"), []string{"exam.delivery.control_rate_limited", "request.invalid", "resource.not_found", "exam.attempt.invalid", "exam.attempt.registered_desktop_required", "exam.attempt.connection_closed", "exam.attempt.connection_lost", "exam.attempt.sitting_not_open", "exam.attempt.unavailable", "exam.delivery.upload_expired", "exam.delivery.declaration_conflict", "exam.delivery.sequence_limit", "exam.delivery.detail_budget_exhausted", "exam.delivery.metadata_capacity", "exam.delivery.summary_rate_limited", "idempotency.conflict", "idempotency.in_progress"}, m.browserDeliveryReceipts),
-		boundedNativeDeliveryRoute(8192, idempotentSessionRoute(IdempotencyRequired, http.MethodPost, path("/exam-attempts/{exam_attempt_id}/browser-activity/sources/{source_session_id:uuid}/gaps"), []string{"audit.unavailable", "exam.delivery.control_rate_limited", "request.invalid", "resource.not_found", "exam.attempt.invalid", "exam.attempt.registered_desktop_required", "exam.attempt.connection_closed", "exam.attempt.connection_lost", "exam.attempt.sitting_not_open", "exam.attempt.unavailable", "exam.delivery.upload_expired", "exam.delivery.declaration_conflict", "exam.delivery.sequence_limit", "exam.delivery.detail_budget_exhausted", "exam.delivery.metadata_capacity", "exam.delivery.summary_rate_limited", "idempotency.conflict", "idempotency.in_progress", "idempotency.key_required", "idempotency.key_invalid"}, m.declareBrowserDeliveryGaps)),
-		boundedNativeDeliveryRoute(2048, idempotentSessionRoute(IdempotencyRequired, http.MethodPost, path("/exam-attempts/{exam_attempt_id}/browser-activity/sources/{source_session_id:uuid}/seal"), []string{"audit.unavailable", "exam.delivery.control_rate_limited", "request.invalid", "resource.not_found", "exam.attempt.invalid", "exam.attempt.registered_desktop_required", "exam.attempt.connection_closed", "exam.attempt.connection_lost", "exam.attempt.sitting_not_open", "exam.attempt.unavailable", "exam.delivery.upload_expired", "exam.delivery.declaration_conflict", "exam.delivery.sequence_limit", "exam.delivery.detail_budget_exhausted", "exam.delivery.metadata_capacity", "exam.delivery.summary_rate_limited", "idempotency.conflict", "idempotency.in_progress", "idempotency.key_required", "idempotency.key_invalid"}, m.sealBrowserDelivery)),
-		boundedNativeDeliveryRoute(2048, idempotentSessionRoute(IdempotencyRequired, http.MethodPost, path("/exam-attempts/{exam_attempt_id}/browser-activity/sources/{source_session_id:uuid}/summary"), []string{"audit.unavailable", "exam.delivery.control_rate_limited", "request.invalid", "resource.not_found", "exam.attempt.invalid", "exam.attempt.registered_desktop_required", "exam.attempt.connection_closed", "exam.attempt.connection_lost", "exam.attempt.sitting_not_open", "exam.attempt.unavailable", "exam.delivery.upload_expired", "exam.delivery.declaration_conflict", "exam.delivery.sequence_limit", "exam.delivery.detail_budget_exhausted", "exam.delivery.metadata_capacity", "exam.delivery.summary_rate_limited", "idempotency.conflict", "idempotency.in_progress", "idempotency.key_required", "idempotency.key_invalid"}, m.updateBrowserDeliverySummary)),
-		boundedNativeDeliveryRoute(262144, idempotentSessionRoute(IdempotencyRequired, http.MethodPost, path("/exam-attempts/{exam_attempt_id}/browser-activity/sources/{source_session_id:uuid}/events"), []string{"audit.unavailable", "request.invalid", "resource.not_found", "exam.attempt.invalid", "exam.attempt.registered_desktop_required", "exam.attempt.connection_closed", "exam.attempt.connection_lost", "exam.attempt.sitting_not_open", "exam.attempt.unavailable", "exam.delivery.upload_expired", "exam.delivery.declaration_conflict", "exam.delivery.sequence_limit", "exam.delivery.detail_budget_exhausted", "exam.delivery.metadata_capacity", "exam.delivery.summary_rate_limited", "idempotency.conflict", "idempotency.in_progress", "idempotency.key_required", "idempotency.key_invalid", "exam.delivery.batch_conflict", "exam.delivery.replay_window_exceeded", "exam.delivery.pending_capacity", "exam.delivery.append_rate_limited", "exam.attempt.browser_activity_conflict"}, m.appendHistoricalBrowserDelivery)))
+	return newResource(
+		"browser-delivery",
+		sessionRoute(
+			http.MethodGet,
+			path("/exam-attempts/{exam_attempt_id}/browser-activity/sources"),
+			[]string{
+				"exam.delivery.control_rate_limited",
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.registered_desktop_required",
+				"exam.attempt.connection_closed",
+				"exam.attempt.connection_lost",
+				"exam.attempt.sitting_not_open",
+				"exam.attempt.unavailable",
+				"exam.delivery.declaration_conflict",
+				"exam.delivery.sequence_limit",
+				"exam.delivery.detail_budget_exhausted",
+				"exam.delivery.metadata_capacity",
+				"exam.delivery.summary_rate_limited",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+			},
+			m.browserSourceList,
+		),
+		sessionRoute(
+			http.MethodGet,
+			path("/exam-attempts/{exam_attempt_id}/browser-activity/sources/{source_session_id:uuid}"),
+			[]string{
+				"exam.delivery.control_rate_limited",
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.registered_desktop_required",
+				"exam.attempt.connection_closed",
+				"exam.attempt.connection_lost",
+				"exam.attempt.sitting_not_open",
+				"exam.attempt.unavailable",
+				"exam.delivery.declaration_conflict",
+				"exam.delivery.sequence_limit",
+				"exam.delivery.detail_budget_exhausted",
+				"exam.delivery.metadata_capacity",
+				"exam.delivery.summary_rate_limited",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+			},
+			m.browserSourceStatus,
+		),
+		sessionRoute(
+			http.MethodGet,
+			path("/exam-attempts/{exam_attempt_id}/browser-activity/sources/{source_session_id:uuid}/receipts"),
+			[]string{
+				"exam.delivery.control_rate_limited",
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.registered_desktop_required",
+				"exam.attempt.connection_closed",
+				"exam.attempt.connection_lost",
+				"exam.attempt.sitting_not_open",
+				"exam.attempt.unavailable",
+				"exam.delivery.upload_expired",
+				"exam.delivery.declaration_conflict",
+				"exam.delivery.sequence_limit",
+				"exam.delivery.detail_budget_exhausted",
+				"exam.delivery.metadata_capacity",
+				"exam.delivery.summary_rate_limited",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+			},
+			m.browserDeliveryReceipts,
+		),
+		boundedNativeDeliveryRoute(
+			8192,
+			idempotentSessionRoute(
+				IdempotencyRequired,
+				http.MethodPost,
+				path("/exam-attempts/{exam_attempt_id}/browser-activity/sources/{source_session_id:uuid}/gaps"),
+				[]string{
+					"audit.unavailable",
+					"exam.delivery.control_rate_limited",
+					"request.invalid",
+					"resource.not_found",
+					"exam.attempt.invalid",
+					"exam.attempt.registered_desktop_required",
+					"exam.attempt.connection_closed",
+					"exam.attempt.connection_lost",
+					"exam.attempt.sitting_not_open",
+					"exam.attempt.unavailable",
+					"exam.delivery.upload_expired",
+					"exam.delivery.declaration_conflict",
+					"exam.delivery.sequence_limit",
+					"exam.delivery.detail_budget_exhausted",
+					"exam.delivery.metadata_capacity",
+					"exam.delivery.summary_rate_limited",
+					"idempotency.conflict",
+					"idempotency.in_progress",
+					"idempotency.key_required",
+					"idempotency.key_invalid",
+				},
+				m.declareBrowserDeliveryGaps,
+			),
+		),
+		boundedNativeDeliveryRoute(
+			2048,
+			idempotentSessionRoute(
+				IdempotencyRequired,
+				http.MethodPost,
+				path("/exam-attempts/{exam_attempt_id}/browser-activity/sources/{source_session_id:uuid}/seal"),
+				[]string{
+					"audit.unavailable",
+					"exam.delivery.control_rate_limited",
+					"request.invalid",
+					"resource.not_found",
+					"exam.attempt.invalid",
+					"exam.attempt.registered_desktop_required",
+					"exam.attempt.connection_closed",
+					"exam.attempt.connection_lost",
+					"exam.attempt.sitting_not_open",
+					"exam.attempt.unavailable",
+					"exam.delivery.upload_expired",
+					"exam.delivery.declaration_conflict",
+					"exam.delivery.sequence_limit",
+					"exam.delivery.detail_budget_exhausted",
+					"exam.delivery.metadata_capacity",
+					"exam.delivery.summary_rate_limited",
+					"idempotency.conflict",
+					"idempotency.in_progress",
+					"idempotency.key_required",
+					"idempotency.key_invalid",
+				},
+				m.sealBrowserDelivery,
+			),
+		),
+		boundedNativeDeliveryRoute(
+			2048,
+			idempotentSessionRoute(
+				IdempotencyRequired,
+				http.MethodPost,
+				path("/exam-attempts/{exam_attempt_id}/browser-activity/sources/{source_session_id:uuid}/summary"),
+				[]string{
+					"audit.unavailable",
+					"exam.delivery.control_rate_limited",
+					"request.invalid",
+					"resource.not_found",
+					"exam.attempt.invalid",
+					"exam.attempt.registered_desktop_required",
+					"exam.attempt.connection_closed",
+					"exam.attempt.connection_lost",
+					"exam.attempt.sitting_not_open",
+					"exam.attempt.unavailable",
+					"exam.delivery.upload_expired",
+					"exam.delivery.declaration_conflict",
+					"exam.delivery.sequence_limit",
+					"exam.delivery.detail_budget_exhausted",
+					"exam.delivery.metadata_capacity",
+					"exam.delivery.summary_rate_limited",
+					"idempotency.conflict",
+					"idempotency.in_progress",
+					"idempotency.key_required",
+					"idempotency.key_invalid",
+				},
+				m.updateBrowserDeliverySummary,
+			),
+		),
+		boundedNativeDeliveryRoute(
+			262144,
+			idempotentSessionRoute(
+				IdempotencyRequired,
+				http.MethodPost,
+				path("/exam-attempts/{exam_attempt_id}/browser-activity/sources/{source_session_id:uuid}/events"),
+				[]string{
+					"audit.unavailable",
+					"request.invalid",
+					"resource.not_found",
+					"exam.attempt.invalid",
+					"exam.attempt.registered_desktop_required",
+					"exam.attempt.connection_closed",
+					"exam.attempt.connection_lost",
+					"exam.attempt.sitting_not_open",
+					"exam.attempt.unavailable",
+					"exam.delivery.upload_expired",
+					"exam.delivery.declaration_conflict",
+					"exam.delivery.sequence_limit",
+					"exam.delivery.detail_budget_exhausted",
+					"exam.delivery.metadata_capacity",
+					"exam.delivery.summary_rate_limited",
+					"idempotency.conflict",
+					"idempotency.in_progress",
+					"idempotency.key_required",
+					"idempotency.key_invalid",
+					"exam.delivery.batch_conflict",
+					"exam.delivery.replay_window_exceeded",
+					"exam.delivery.pending_capacity",
+					"exam.delivery.append_rate_limited",
+					"exam.attempt.browser_activity_conflict",
+				},
+				m.appendHistoricalBrowserDelivery,
+			),
+		),
+	)
 }
 
 func browserSourceQuery(request operationRequest, list bool) (attempt.BrowserSourceQuery, error) {
@@ -33,24 +226,33 @@ func browserSourceQuery(request operationRequest, list bool) (attempt.BrowserSou
 	if err != nil {
 		return attempt.BrowserSourceQuery{}, err
 	}
-	query := attempt.BrowserSourceQuery{Access: attempt.CandidateAccess{AttemptID: attemptID}, SourceSessionID: model.BrowserSourceSessionID(request.params.BrowserSourceSessionID)}
+
+	query := attempt.BrowserSourceQuery{
+		Access:          attempt.CandidateAccess{AttemptID: attemptID},
+		SourceSessionID: model.BrowserSourceSessionID(request.params.BrowserSourceSessionID),
+	}
 	if list {
 		values := request.request.URL.Query()["participation_id"]
 		if len(values) != 1 || !model.AttemptParticipationID(values[0]).IsValid() {
 			return query, invalidRequestError(nil)
 		}
+
 		query.ParticipationID = model.AttemptParticipationID(values[0])
 	} else if !query.SourceSessionID.IsValid() {
 		return query, invalidRequestError(nil)
 	}
-	if len(request.request.Header.Values(candidateAttemptCredentialHeader)) > 0 || len(request.request.Header.Values(candidateAttemptConnectionHeader)) > 0 {
+
+	if len(request.request.Header.Values(candidateAttemptCredentialHeader)) > 0 ||
+		len(request.request.Header.Values(candidateAttemptConnectionHeader)) > 0 {
 		headers, err := candidateAttemptAccessHeaders(request.request)
 		if err != nil {
 			return query, invalidRequestError(err)
 		}
+
 		query.Access.ConnectionID = headers.ConnectionID
 		query.Access.ContinuityCredential = headers.ContinuityCredential
 	}
+
 	return query, nil
 }
 func (m examAttemptHTTPModule) browserSourceStatus(request operationRequest) (operationResult, error) {
@@ -72,6 +274,7 @@ func (m examAttemptHTTPModule) browserSourceList(request operationRequest) (oper
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	values, err := m.application.BrowserSourceList(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
@@ -79,20 +282,28 @@ func (m examAttemptHTTPModule) browserSourceList(request operationRequest) (oper
 	if values == nil || len(values) > model.BrowserSourceMaximumPerParticipation {
 		return operationResult{}, errUnpresentableResult
 	}
+
 	for _, value := range values {
 		if value.Validate() != nil {
 			return operationResult{}, errUnpresentableResult
 		}
 	}
+
 	// A Participation holds at most BrowserSourceMaximumPerParticipation
 	// sources, so the complete set is paged by source identity.
-	response, err := boundedListResult(request, "Browser source", values,
+	response, err := boundedListResult(
+		request,
+		"Browser source",
+		values,
 		func(value model.BrowserSourceStatus) boundedPageKey {
 			return boundedPageKey{Name: string(value.SourceSessionID), ID: string(value.SourceSessionID)}
-		}, func(value model.BrowserSourceStatus) model.BrowserSourceStatus { return value })
+		},
+		func(value model.BrowserSourceStatus) model.BrowserSourceStatus { return value },
+	)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
@@ -101,24 +312,30 @@ func (m examAttemptHTTPModule) browserDeliveryReceipts(request operationRequest)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	page, err := request.pageRequest()
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	if !request.request.URL.Query().Has("limit") {
 		page.Limit = browserReceiptPageLimit
 	}
+
 	if page.Limit > browserReceiptPageLimit {
 		return operationResult{}, invalidRequestError(errors.New("limit must be between 1 and 64"))
 	}
+
 	cursor, continued, err := decodePageCursor(page, browserReceiptCursorSpec())
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	first := int64(1)
 	if continued {
 		first = cursor.Sequence
 	}
+
 	value, err := m.application.BrowserDeliveryReceipts(request.context, request.invocation(), query, first, page.Limit)
 	if err != nil {
 		return operationResult{}, err
@@ -126,12 +343,17 @@ func (m examAttemptHTTPModule) browserDeliveryReceipts(request operationRequest)
 	if value == nil {
 		return operationResult{}, errUnpresentableResult
 	}
+
 	response := listResponse[model.BrowserEventReceipt]{Items: value.Receipts}
 	if value.NextSequence != nil {
-		if response.NextCursor, err = encodeOpaqueCursor(browserReceiptCursor{Sequence: *value.NextSequence}, browserReceiptCursorSpec()); err != nil {
+		if response.NextCursor, err = encodeOpaqueCursor(
+			browserReceiptCursor{Sequence: *value.NextSequence},
+			browserReceiptCursorSpec(),
+		); err != nil {
 			return operationResult{}, unpresentableResult(err)
 		}
 	}
+
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
@@ -147,12 +369,14 @@ type browserReceiptCursor struct {
 
 func browserReceiptCursorSpec() opaqueCursorSpec[browserReceiptCursor] {
 	return opaqueCursorSpec[browserReceiptCursor]{
-		label: "Browser receipt", maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members: []string{"sequence"},
+		label:                "Browser receipt",
+		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
+		members:              []string{"sequence"},
 		validate: func(cursor browserReceiptCursor) error {
 			if cursor.Sequence < 1 || cursor.Sequence > model.BrowserParticipationPositionLimit {
 				return errors.New("invalid Browser receipt keyset")
 			}
+
 			return nil
 		},
 	}
@@ -162,18 +386,28 @@ func (m examAttemptHTTPModule) declareBrowserDeliveryGaps(request operationReque
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body model.DeclareDeliveryGaps
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
-	value, err := m.application.DeclareBrowserDeliveryGaps(request.context, request.invocation(), attempt.BrowserDeliveryGapsCommand{Query: query, Declaration: body, IdempotencyKey: request.idempotencyKey})
+
+	value, err := m.application.DeclareBrowserDeliveryGaps(request.context, request.invocation(), attempt.BrowserDeliveryGapsCommand{
+		Query:          query,
+		Declaration:    body,
+		IdempotencyKey: request.idempotencyKey,
+	})
 	if err != nil {
 		return operationResult{}, err
 	}
 	if value == nil || value.Status.Validate() != nil {
 		return operationResult{}, errUnpresentableResult
 	}
-	return jsonResult(http.StatusOK, browserDeliveryGapResponse{Receipt: value.Receipt, Status: value.Status}).withHeaders(noStoreHeaders()), nil
+
+	return jsonResult(
+		http.StatusOK,
+		browserDeliveryGapResponse{Receipt: value.Receipt, Status: value.Status},
+	).withHeaders(noStoreHeaders()), nil
 }
 
 // browserDeliveryGapResponse acknowledges a Browser delivery gap declaration
@@ -188,17 +422,24 @@ func (m examAttemptHTTPModule) sealBrowserDelivery(request operationRequest) (op
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body model.FinalDeliveryDeclaration
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
-	value, err := m.application.SealBrowserDelivery(request.context, request.invocation(), attempt.BrowserDeliveryFinalCommand{Query: query, Declaration: body, IdempotencyKey: request.idempotencyKey})
+
+	value, err := m.application.SealBrowserDelivery(request.context, request.invocation(), attempt.BrowserDeliveryFinalCommand{
+		Query:          query,
+		Declaration:    body,
+		IdempotencyKey: request.idempotencyKey,
+	})
 	if err != nil {
 		return operationResult{}, err
 	}
 	if value == nil || value.Validate() != nil {
 		return operationResult{}, errUnpresentableResult
 	}
+
 	return jsonResult(http.StatusOK, value).withHeaders(noStoreHeaders()), nil
 }
 func (m examAttemptHTTPModule) updateBrowserDeliverySummary(request operationRequest) (operationResult, error) {
@@ -206,17 +447,24 @@ func (m examAttemptHTTPModule) updateBrowserDeliverySummary(request operationReq
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body model.UnretainedDeliverySummary
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
-	value, err := m.application.UpdateBrowserDeliverySummary(request.context, request.invocation(), attempt.BrowserDeliverySummaryCommand{Query: query, Summary: body, IdempotencyKey: request.idempotencyKey})
+
+	value, err := m.application.UpdateBrowserDeliverySummary(request.context, request.invocation(), attempt.BrowserDeliverySummaryCommand{
+		Query:          query,
+		Summary:        body,
+		IdempotencyKey: request.idempotencyKey,
+	})
 	if err != nil {
 		return operationResult{}, err
 	}
 	if value == nil || value.Status.Validate() != nil || value.Summary.Validate() != nil {
 		return operationResult{}, errUnpresentableResult
 	}
+
 	return jsonResult(http.StatusOK, value).withHeaders(noStoreHeaders()), nil
 }
 func (m examAttemptHTTPModule) appendHistoricalBrowserDelivery(request operationRequest) (operationResult, error) {
@@ -227,25 +475,47 @@ func (m examAttemptHTTPModule) appendHistoricalBrowserDelivery(request operation
 	if query.Access.ConnectionID != "" || query.Access.ContinuityCredential != "" {
 		return operationResult{}, invalidRequestError(nil)
 	}
+
 	var body model.BrowserActivityBatch
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
-	value, err := m.application.AppendHistoricalBrowserDelivery(request.context, request.invocation(), attempt.BrowserDeliveryAppendCommand{Query: query, Batch: body, IdempotencyKey: request.idempotencyKey})
+
+	value, err := m.application.AppendHistoricalBrowserDelivery(request.context, request.invocation(), attempt.BrowserDeliveryAppendCommand{
+		Query:          query,
+		Batch:          body,
+		IdempotencyKey: request.idempotencyKey,
+	})
 	if err != nil {
 		return operationResult{}, err
 	}
 	if value == nil {
 		return operationResult{}, errUnpresentableResult
 	}
-	progress := model.BrowserDeliveryProgress{HighestContiguous: value.HighestContiguous, SettledThrough: value.SettledThrough, HighestSeen: value.HighestSeen, AllocatedThrough: value.AllocatedThrough, TerminalMissingThrough: value.TerminalMissingThrough, MissingRanges: []model.SequenceRange{}, MissingRangesTruncated: value.MissingRangesTruncated}
+
+	progress := model.BrowserDeliveryProgress{
+		HighestContiguous:      value.HighestContiguous,
+		SettledThrough:         value.SettledThrough,
+		HighestSeen:            value.HighestSeen,
+		AllocatedThrough:       value.AllocatedThrough,
+		TerminalMissingThrough: value.TerminalMissingThrough,
+		MissingRanges:          []model.SequenceRange{},
+		MissingRangesTruncated: value.MissingRangesTruncated,
+	}
 	for _, r := range value.MissingRanges {
 		progress.MissingRanges = append(progress.MissingRanges, model.SequenceRange{First: r.First, Last: r.Last})
 	}
+
 	if progress.Validate() != nil {
 		return operationResult{}, errUnpresentableResult
 	}
-	return jsonResult(http.StatusOK, browserDeliveryAcknowledgementResponse{BrowserDeliveryProgress: progress, SourceSessionID: value.SourceSessionID, Receipts: value.Receipts, ServerTime: value.ServerTime}).withHeaders(noStoreHeaders()), nil
+
+	return jsonResult(http.StatusOK, browserDeliveryAcknowledgementResponse{
+		BrowserDeliveryProgress: progress,
+		SourceSessionID:         value.SourceSessionID,
+		Receipts:                value.Receipts,
+		ServerTime:              value.ServerTime,
+	}).withHeaders(noStoreHeaders()), nil
 }
 
 type browserDeliveryAcknowledgementResponse struct {

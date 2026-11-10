@@ -91,7 +91,9 @@ func institutionResource(institutions InstitutionApplication) apiResource {
 			http.MethodPatch,
 			path("/institution"),
 			academicMutationErrorCodes(
-				"request.invalid", "resource.not_found", "institution.invalid",
+				"request.invalid",
+				"resource.not_found",
+				"institution.invalid",
 				"institution.conflict",
 			),
 			module.patch,
@@ -137,16 +139,19 @@ func (m institutionResourceModule) patch(request operationRequest) (operationRes
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
+
 	var capacity *model.ExamCapacityPolicy
 	if requested := body.ExamCapacity.ValuePointer(); requested != nil {
 		value := requested.model()
 		capacity = &value
 	}
+
 	institution, err := m.institutions.UpdateInstitution(
 		request.context,
 		request.invocation(),
 		academic.UpdateInstitutionCommand{
-			Name: body.Name.ValuePointer(), DisplayName: body.DisplayName.ValuePointer(),
+			Name:         body.Name.ValuePointer(),
+			DisplayName:  body.DisplayName.ValuePointer(),
 			Description:  body.Description.ValuePointer(),
 			ExamCapacity: capacity,
 		},
@@ -154,6 +159,7 @@ func (m institutionResourceModule) patch(request operationRequest) (operationRes
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, institutionResponseFromModel(institution)), nil
 }
 

@@ -123,17 +123,20 @@ func decodeDuplicateFreeExamSittingObject(encoded []byte, target any) error {
 	if !utf8.Valid(encoded) {
 		return errors.New("Exam Sitting request must be valid UTF-8")
 	}
+
 	decoder := json.NewDecoder(bytes.NewReader(encoded))
 	token, err := decoder.Token()
 	if err != nil || token != json.Delim('{') {
 		return errors.New("Exam Sitting request must be a JSON object")
 	}
+
 	seen := make(map[string]struct{})
 	for decoder.More() {
 		keyToken, tokenErr := decoder.Token()
 		if tokenErr != nil {
 			return tokenErr
 		}
+
 		key, ok := keyToken.(string)
 		if !ok {
 			return errors.New("Exam Sitting request member is invalid")
@@ -141,18 +144,21 @@ func decodeDuplicateFreeExamSittingObject(encoded []byte, target any) error {
 		if _, duplicate := seen[key]; duplicate {
 			return errors.New("Exam Sitting request contains a duplicate member")
 		}
+
 		seen[key] = struct{}{}
 		var value json.RawMessage
 		if tokenErr = decoder.Decode(&value); tokenErr != nil {
 			return tokenErr
 		}
 	}
+
 	if _, err = decoder.Token(); err != nil {
 		return err
 	}
 	if _, err = decoder.Token(); err != io.EOF {
 		return errors.New("Exam Sitting request contains trailing JSON")
 	}
+
 	strict := json.NewDecoder(bytes.NewReader(encoded))
 	strict.DisallowUnknownFields()
 	return strict.Decode(target)
@@ -219,16 +225,219 @@ func examSittingResource(application ExamSittingApplication) apiResource {
 	noShows := path("/exams/{exam_id}/sittings/{exam_sitting_id}/no-shows")
 	return newResource(
 		"exam-sittings",
-		idempotentPrincipalRoute(IdempotencyRequired, http.MethodPost, collection, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.sitting.invalid", "exam.sitting.conflict", "exam.sitting.unavailable", "exam.archived", "exam.sitting.class_ineligible", "exam.sitting.schedule_outside_period", "exam.sitting.schedule_not_future", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress"}, module.schedule),
-		principalRoute(http.MethodGet, collection, []string{"authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "exam.sitting.invalid", "exam.sitting.unavailable"}, module.list),
-		principalRoute(http.MethodGet, member, []string{"authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "exam.sitting.invalid", "exam.sitting.unavailable"}, module.get),
-		idempotentPrincipalRoute(IdempotencyRequired, http.MethodPatch, member, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.sitting.invalid", "exam.sitting.conflict", "exam.sitting.unavailable", "exam.archived", "exam.sitting.revision_conflict", "exam.sitting.no_changes", "exam.sitting.state_conflict", "exam.sitting.class_ineligible", "exam.sitting.schedule_outside_period", "exam.sitting.schedule_not_future", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress"}, module.updateSchedule),
-		idempotentPrincipalRoute(IdempotencyRequired, http.MethodPost, cancel, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.sitting.invalid", "exam.sitting.conflict", "exam.sitting.unavailable", "exam.archived", "exam.sitting.revision_conflict", "exam.sitting.state_conflict", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress"}, module.cancel),
-		idempotentPrincipalRoute(IdempotencyRequired, http.MethodPost, pause, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.sitting.invalid", "exam.sitting.conflict", "exam.sitting.unavailable", "exam.sitting.revision_conflict", "exam.sitting.state_conflict", "exam.sitting.deadline_reached", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "exam.archived"}, module.pause),
-		idempotentPrincipalRoute(IdempotencyRequired, http.MethodPost, resume, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.sitting.invalid", "exam.sitting.conflict", "exam.sitting.unavailable", "exam.archived", "exam.sitting.revision_conflict", "exam.sitting.state_conflict", "exam.sitting.deadline_reached", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress"}, module.resume),
-		idempotentPrincipalRoute(IdempotencyRequired, http.MethodPost, extend, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.sitting.invalid", "exam.sitting.conflict", "exam.sitting.unavailable", "exam.archived", "exam.sitting.revision_conflict", "exam.sitting.state_conflict", "exam.sitting.deadline_reached", "exam.sitting.extension_not_later", "exam.sitting.class_ineligible", "exam.sitting.schedule_outside_period", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress"}, module.extend),
-		idempotentPrincipalRoute(IdempotencyRequired, http.MethodPost, closeSitting, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.sitting.invalid", "exam.sitting.conflict", "exam.sitting.unavailable", "exam.sitting.revision_conflict", "exam.sitting.state_conflict", "exam.sitting.deadline_reached", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "exam.archived"}, module.close),
-		principalRoute(http.MethodGet, noShows, []string{"authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "exam.sitting.invalid", "exam.sitting.unavailable", "exam.sitting.state_conflict"}, module.listNoShows),
+		idempotentPrincipalRoute(
+			IdempotencyRequired,
+			http.MethodPost,
+			collection,
+			[]string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.sitting.invalid",
+				"exam.sitting.conflict",
+				"exam.sitting.unavailable",
+				"exam.archived",
+				"exam.sitting.class_ineligible",
+				"exam.sitting.schedule_outside_period",
+				"exam.sitting.schedule_not_future",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+			},
+			module.schedule,
+		),
+		principalRoute(
+			http.MethodGet,
+			collection,
+			[]string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.sitting.invalid",
+				"exam.sitting.unavailable",
+			},
+			module.list,
+		),
+		principalRoute(
+			http.MethodGet,
+			member,
+			[]string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.sitting.invalid",
+				"exam.sitting.unavailable",
+			},
+			module.get,
+		),
+		idempotentPrincipalRoute(
+			IdempotencyRequired,
+			http.MethodPatch,
+			member,
+			[]string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.sitting.invalid",
+				"exam.sitting.conflict",
+				"exam.sitting.unavailable",
+				"exam.archived",
+				"exam.sitting.revision_conflict",
+				"exam.sitting.no_changes",
+				"exam.sitting.state_conflict",
+				"exam.sitting.class_ineligible",
+				"exam.sitting.schedule_outside_period",
+				"exam.sitting.schedule_not_future",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+			},
+			module.updateSchedule,
+		),
+		idempotentPrincipalRoute(
+			IdempotencyRequired,
+			http.MethodPost,
+			cancel,
+			[]string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.sitting.invalid",
+				"exam.sitting.conflict",
+				"exam.sitting.unavailable",
+				"exam.archived",
+				"exam.sitting.revision_conflict",
+				"exam.sitting.state_conflict",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+			},
+			module.cancel,
+		),
+		idempotentPrincipalRoute(
+			IdempotencyRequired,
+			http.MethodPost,
+			pause,
+			[]string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.sitting.invalid",
+				"exam.sitting.conflict",
+				"exam.sitting.unavailable",
+				"exam.sitting.revision_conflict",
+				"exam.sitting.state_conflict",
+				"exam.sitting.deadline_reached",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"exam.archived",
+			},
+			module.pause,
+		),
+		idempotentPrincipalRoute(
+			IdempotencyRequired,
+			http.MethodPost,
+			resume,
+			[]string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.sitting.invalid",
+				"exam.sitting.conflict",
+				"exam.sitting.unavailable",
+				"exam.archived",
+				"exam.sitting.revision_conflict",
+				"exam.sitting.state_conflict",
+				"exam.sitting.deadline_reached",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+			},
+			module.resume,
+		),
+		idempotentPrincipalRoute(
+			IdempotencyRequired,
+			http.MethodPost,
+			extend,
+			[]string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.sitting.invalid",
+				"exam.sitting.conflict",
+				"exam.sitting.unavailable",
+				"exam.archived",
+				"exam.sitting.revision_conflict",
+				"exam.sitting.state_conflict",
+				"exam.sitting.deadline_reached",
+				"exam.sitting.extension_not_later",
+				"exam.sitting.class_ineligible",
+				"exam.sitting.schedule_outside_period",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+			},
+			module.extend,
+		),
+		idempotentPrincipalRoute(
+			IdempotencyRequired,
+			http.MethodPost,
+			closeSitting,
+			[]string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.sitting.invalid",
+				"exam.sitting.conflict",
+				"exam.sitting.unavailable",
+				"exam.sitting.revision_conflict",
+				"exam.sitting.state_conflict",
+				"exam.sitting.deadline_reached",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"exam.archived",
+			},
+			module.close,
+		),
+		principalRoute(
+			http.MethodGet,
+			noShows,
+			[]string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.sitting.invalid",
+				"exam.sitting.unavailable",
+				"exam.sitting.state_conflict",
+			},
+			module.listNoShows,
+		),
 	)
 }
 
@@ -237,6 +446,7 @@ func (m examSittingHTTPModule) listNoShows(request operationRequest) (operationR
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	query := sitting.ListNoShowsQuery{ExamID: examID, SittingID: sittingID, Limit: 50}
 	values := request.request.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
@@ -245,29 +455,35 @@ func (m examSittingHTTPModule) listNoShows(request operationRequest) (operationR
 			return operationResult{}, invalidRequestError(errors.New("must be between 1 and 200"))
 		}
 	}
+
 	if raw := values.Get("cursor"); raw != "" {
 		query.AfterCandidateUserID, err = decodeExamSittingNoShowCursor(raw)
 		if err != nil {
 			return operationResult{}, invalidRequestError(err)
 		}
 	}
+
 	page, err := m.application.ListExamSittingNoShows(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	response := examSittingNoShowListResponse{Items: make([]examSittingNoShowResponse, 0, len(page.Items))}
 	for _, item := range page.Items {
 		response.Items = append(response.Items, examSittingNoShowResponse{CandidateUserID: item.CandidateUserID.String()})
 	}
+
 	if page.HasMore && len(page.Items) == 0 {
 		return operationResult{}, unpresentableResult(errors.New("no-show page made no progress"))
 	}
+
 	if page.HasMore {
 		response.NextCursor, err = encodeExamSittingNoShowCursor(page.Items[len(page.Items)-1].CandidateUserID)
 		if err != nil {
 			return operationResult{}, unpresentableResult(err)
 		}
 	}
+
 	return jsonResult(http.StatusOK, response), nil
 }
 
@@ -289,12 +505,14 @@ func decodeExamSittingNoShowCursor(raw string) (model.UserID, error) {
 
 func examSittingNoShowCursorSpec() opaqueCursorSpec[examSittingNoShowCursorWire] {
 	return opaqueCursorSpec[examSittingNoShowCursorWire]{
-		label: "no-show", maximumEncodedLength: 342,
-		members: []string{"candidate_user_id"},
+		label:                "no-show",
+		maximumEncodedLength: 342,
+		members:              []string{"candidate_user_id"},
 		validate: func(cursor examSittingNoShowCursorWire) error {
 			if !model.UserID(cursor.CandidateUserID).IsValid() {
 				return errors.New("invalid no-show keyset")
 			}
+
 			return nil
 		},
 	}
@@ -305,22 +523,27 @@ func (m examSittingHTTPModule) schedule(request operationRequest) (operationResu
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body scheduleExamSittingRequest
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
+
 	revisionID, err := model.ParseExamRevisionID(body.ExamRevisionID)
 	if err != nil {
 		return operationResult{}, invalidRequestError(err)
 	}
+
 	classID, err := model.ParseClassID(body.ClassID)
 	if err != nil {
 		return operationResult{}, invalidRequestError(err)
 	}
+
 	startAt, err := parseExamSittingTime("scheduled_start_at", body.ScheduledStartAt)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	endAt, err := parseExamSittingTime("scheduled_end_at", body.ScheduledEndAt)
 	if err != nil {
 		return operationResult{}, err
@@ -328,13 +551,19 @@ func (m examSittingHTTPModule) schedule(request operationRequest) (operationResu
 	if !startAt.Before(endAt) {
 		return operationResult{}, invalidRequestError(errors.New("must be a nonempty interval"))
 	}
+
 	view, err := m.application.ScheduleExamSitting(request.context, request.invocation(), sitting.ScheduleCommand{
-		ExamID: examID, ExamRevisionID: revisionID, ClassID: classID, ScheduledStartAt: startAt, ScheduledEndAt: endAt,
-		IdempotencyKey: request.idempotencyKey,
+		ExamID:           examID,
+		ExamRevisionID:   revisionID,
+		ClassID:          classID,
+		ScheduledStartAt: startAt,
+		ScheduledEndAt:   endAt,
+		IdempotencyKey:   request.idempotencyKey,
 	})
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusCreated, examSittingResponseFromView(view)), nil
 }
 
@@ -355,6 +584,7 @@ func (m examSittingHTTPModule) list(request operationRequest) (operationResult, 
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	query := sitting.ListQuery{ExamID: examID, Limit: 50}
 	values := request.request.URL.Query()
 	if raw := values.Get("class_id"); raw != "" {
@@ -363,19 +593,23 @@ func (m examSittingHTTPModule) list(request operationRequest) (operationResult, 
 			return operationResult{}, invalidRequestError(err)
 		}
 	}
+
 	query.States, err = parseExamSittingStates(values["state"])
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	endsAfter, startsBefore := values.Get("ends_after"), values.Get("starts_before")
 	if (endsAfter == "") != (startsBefore == "") {
 		return operationResult{}, invalidRequestError(errors.New("ends_after and starts_before must be paired"))
 	}
+
 	if endsAfter != "" {
 		query.OverlapStartAt, err = parseExamSittingTime("ends_after", endsAfter)
 		if err != nil {
 			return operationResult{}, err
 		}
+
 		query.OverlapEndAt, err = parseExamSittingTime("starts_before", startsBefore)
 		if err != nil {
 			return operationResult{}, err
@@ -384,40 +618,49 @@ func (m examSittingHTTPModule) list(request operationRequest) (operationResult, 
 			return operationResult{}, invalidRequestError(errors.New("must be a nonempty interval"))
 		}
 	}
+
 	if raw := values.Get("limit"); raw != "" {
 		query.Limit, err = strconv.Atoi(raw)
 		if err != nil || query.Limit < 1 || query.Limit > 200 {
 			return operationResult{}, invalidRequestError(errors.New("must be between 1 and 200"))
 		}
 	}
+
 	if raw := values.Get("cursor"); raw != "" {
 		cursor, cursorErr := decodeExamSittingCursor(raw)
 		if cursorErr != nil {
 			return operationResult{}, invalidRequestError(cursorErr)
 		}
+
 		query.BeforeScheduledStartAt, query.BeforeSittingID = cursor.StartAt, cursor.ID
 	}
+
 	page, err := m.application.ListExamSittings(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	response := examSittingListResponse{Items: make([]examSittingResponse, 0, len(page.Items))}
 	for _, view := range page.Items {
 		response.Items = append(response.Items, examSittingResponseFromView(view))
 	}
+
 	if page.HasMore && len(page.Items) == 0 {
 		return operationResult{}, unpresentableResult(errors.New("sitting page made no progress"))
 	}
+
 	if page.HasMore {
 		last := page.Items[len(page.Items)-1].Sitting
 		if last == nil {
 			return operationResult{}, errUnpresentableResult
 		}
+
 		response.NextCursor, err = encodeExamSittingCursor(examSittingCursor{StartAt: last.ScheduledStartAt, ID: last.ID})
 		if err != nil {
 			return operationResult{}, unpresentableResult(err)
 		}
 	}
+
 	return jsonResult(http.StatusOK, response), nil
 }
 
@@ -426,6 +669,7 @@ func (m examSittingHTTPModule) updateSchedule(request operationRequest) (operati
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body updateExamSittingScheduleRequest
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
@@ -436,39 +680,54 @@ func (m examSittingHTTPModule) updateSchedule(request operationRequest) (operati
 	if noExamSittingScheduleChange(body) {
 		return operationResult{}, invalidRequestError(errors.New("at least one change is required"))
 	}
-	command := sitting.UpdateScheduleCommand{ExamID: examID, SittingID: sittingID, ExpectedRevision: body.ExpectedRevision, IdempotencyKey: request.idempotencyKey}
+
+	command := sitting.UpdateScheduleCommand{
+		ExamID:           examID,
+		SittingID:        sittingID,
+		ExpectedRevision: body.ExpectedRevision,
+		IdempotencyKey:   request.idempotencyKey,
+	}
 	if body.ExamRevisionID.IsSet() {
 		if body.ExamRevisionID.IsNull() {
 			return operationResult{}, invalidRequestError(errors.New("must not be null"))
 		}
+
 		parsed, parseErr := model.ParseExamRevisionID(*body.ExamRevisionID.ValuePointer())
 		if parseErr != nil {
 			return operationResult{}, invalidRequestError(parseErr)
 		}
+
 		command.ExamRevisionID = &parsed
 	}
+
 	if body.ClassID.IsSet() {
 		if body.ClassID.IsNull() {
 			return operationResult{}, invalidRequestError(errors.New("must not be null"))
 		}
+
 		parsed, parseErr := model.ParseClassID(*body.ClassID.ValuePointer())
 		if parseErr != nil {
 			return operationResult{}, invalidRequestError(parseErr)
 		}
+
 		command.ClassID = &parsed
 	}
+
 	command.ScheduledStartAt, err = parseOptionalExamSittingTime("scheduled_start_at", body.ScheduledStartAt)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	command.ScheduledEndAt, err = parseOptionalExamSittingTime("scheduled_end_at", body.ScheduledEndAt)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	view, err := m.application.UpdateExamSittingSchedule(request.context, request.invocation(), command)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, examSittingResponseFromView(view)), nil
 }
 
@@ -477,6 +736,7 @@ func (m examSittingHTTPModule) cancel(request operationRequest) (operationResult
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body cancelExamSittingRequest
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
@@ -484,16 +744,24 @@ func (m examSittingHTTPModule) cancel(request operationRequest) (operationResult
 	if body.ExpectedRevision < 1 {
 		return operationResult{}, invalidRequestError(errors.New("must be positive"))
 	}
+
 	if !validExamSittingManagerReason(body.Reason) {
-		return operationResult{}, invalidRequestError(errors.New("must be trimmed valid UTF-8 between 1 and 1000 characters and at most 4000 bytes"))
+		return operationResult{}, invalidRequestError(
+			errors.New("must be trimmed valid UTF-8 between 1 and 1000 characters and at most 4000 bytes"),
+		)
 	}
+
 	view, err := m.application.CancelExamSitting(request.context, request.invocation(), sitting.CancelCommand{
-		ExamID: examID, SittingID: sittingID, ExpectedRevision: body.ExpectedRevision,
-		PrivateReason: body.Reason, IdempotencyKey: request.idempotencyKey,
+		ExamID:           examID,
+		SittingID:        sittingID,
+		ExpectedRevision: body.ExpectedRevision,
+		PrivateReason:    body.Reason,
+		IdempotencyKey:   request.idempotencyKey,
 	})
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, examSittingResponseFromView(view)), nil
 }
 
@@ -511,13 +779,16 @@ func (m examSittingHTTPModule) close(request operationRequest) (operationResult,
 	return m.managerTransition(request, "closeExamSitting", m.application.CloseExamSitting)
 }
 
-func (m examSittingHTTPModule) managerTransition(request operationRequest, operation string,
+func (m examSittingHTTPModule) managerTransition(
+	request operationRequest,
+	operation string,
 	run examSittingManagerCommandCall,
 ) (operationResult, error) {
 	examID, sittingID, err := examSittingIDs(request)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body examSittingManagerTransitionRequest
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
@@ -525,16 +796,24 @@ func (m examSittingHTTPModule) managerTransition(request operationRequest, opera
 	if body.ExpectedRevision < 1 {
 		return operationResult{}, invalidRequestError(errors.New("must be positive"))
 	}
+
 	if !validExamSittingManagerReason(body.Reason) {
-		return operationResult{}, invalidRequestError(errors.New("must be trimmed valid UTF-8 between 1 and 1000 characters and at most 4000 bytes"))
+		return operationResult{}, invalidRequestError(
+			errors.New("must be trimmed valid UTF-8 between 1 and 1000 characters and at most 4000 bytes"),
+		)
 	}
+
 	view, err := run(request.context, request.invocation(), sitting.PauseCommand{
-		ExamID: examID, SittingID: sittingID, ExpectedRevision: body.ExpectedRevision,
-		PrivateReason: body.Reason, IdempotencyKey: request.idempotencyKey,
+		ExamID:           examID,
+		SittingID:        sittingID,
+		ExpectedRevision: body.ExpectedRevision,
+		PrivateReason:    body.Reason,
+		IdempotencyKey:   request.idempotencyKey,
 	})
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, examSittingResponseFromView(view)), nil
 }
 
@@ -543,6 +822,7 @@ func (m examSittingHTTPModule) extend(request operationRequest) (operationResult
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body extendExamSittingRequest
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
@@ -550,26 +830,39 @@ func (m examSittingHTTPModule) extend(request operationRequest) (operationResult
 	if body.ExpectedRevision < 1 {
 		return operationResult{}, invalidRequestError(errors.New("must be positive"))
 	}
+
 	endAt, err := parseExamSittingTime("scheduled_end_at", body.ScheduledEndAt)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	if !validExamSittingManagerReason(body.Reason) {
-		return operationResult{}, invalidRequestError(errors.New("must be trimmed valid UTF-8 between 1 and 1000 characters and at most 4000 bytes"))
+		return operationResult{}, invalidRequestError(
+			errors.New("must be trimmed valid UTF-8 between 1 and 1000 characters and at most 4000 bytes"),
+		)
 	}
+
 	view, err := m.application.ExtendExamSitting(request.context, request.invocation(), sitting.ExtendCommand{
-		ExamID: examID, SittingID: sittingID, ExpectedRevision: body.ExpectedRevision, ScheduledEndAt: endAt,
-		PrivateReason: body.Reason, IdempotencyKey: request.idempotencyKey,
+		ExamID:           examID,
+		SittingID:        sittingID,
+		ExpectedRevision: body.ExpectedRevision,
+		ScheduledEndAt:   endAt,
+		PrivateReason:    body.Reason,
+		IdempotencyKey:   request.idempotencyKey,
 	})
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, examSittingResponseFromView(view)), nil
 }
 
 func validExamSittingManagerReason(reason string) bool {
-	return utf8.ValidString(reason) && reason == strings.TrimSpace(reason) && utf8.RuneCountInString(reason) >= 1 &&
-		utf8.RuneCountInString(reason) <= 1000 && len(reason) <= 4000
+	return utf8.ValidString(reason) &&
+		reason == strings.TrimSpace(reason) &&
+		utf8.RuneCountInString(reason) >= 1 &&
+		utf8.RuneCountInString(reason) <= 1000 &&
+		len(reason) <= 4000
 }
 
 func examSittingExamID(request operationRequest) (model.ExamID, error) {
@@ -642,13 +935,25 @@ func examSittingResponseFromView(view store.ExamSittingSnapshot) examSittingResp
 	if view.Sitting == nil {
 		return examSittingResponse{}
 	}
+
 	sitting := view.Sitting
 	return examSittingResponse{
-		ID: sitting.ID.String(), ExamID: sitting.ExamID.String(), ExamRevisionID: sitting.ExamRevisionID.String(), ClassID: sitting.ClassID.String(),
-		ScheduledStartAt: model.FormatRFC3339(sitting.ScheduledStartAt), ScheduledEndAt: model.FormatRFC3339(sitting.ScheduledEndAt),
-		State: string(sitting.State), CreatedAt: model.FormatRFC3339(sitting.CreatedAt), UpdatedAt: model.FormatRFC3339(sitting.UpdatedAt),
-		OpenedAt: sitting.OpenedAt.FormatRFC3339(), PausedAt: sitting.PausedAt.FormatRFC3339(), ClosingAt: sitting.ClosingAt.FormatRFC3339(),
-		ClosedAt: sitting.ClosedAt.FormatRFC3339(), CanceledAt: sitting.CanceledAt.FormatRFC3339(), ReasonCode: string(sitting.ReasonCode), Revision: sitting.Revision,
+		ID:               sitting.ID.String(),
+		ExamID:           sitting.ExamID.String(),
+		ExamRevisionID:   sitting.ExamRevisionID.String(),
+		ClassID:          sitting.ClassID.String(),
+		ScheduledStartAt: model.FormatRFC3339(sitting.ScheduledStartAt),
+		ScheduledEndAt:   model.FormatRFC3339(sitting.ScheduledEndAt),
+		State:            string(sitting.State),
+		CreatedAt:        model.FormatRFC3339(sitting.CreatedAt),
+		UpdatedAt:        model.FormatRFC3339(sitting.UpdatedAt),
+		OpenedAt:         sitting.OpenedAt.FormatRFC3339(),
+		PausedAt:         sitting.PausedAt.FormatRFC3339(),
+		ClosingAt:        sitting.ClosingAt.FormatRFC3339(),
+		ClosedAt:         sitting.ClosedAt.FormatRFC3339(),
+		CanceledAt:       sitting.CanceledAt.FormatRFC3339(),
+		ReasonCode:       string(sitting.ReasonCode),
+		Revision:         sitting.Revision,
 	}
 }
 
@@ -669,13 +974,15 @@ func decodeExamSittingCursor(raw string) (examSittingCursor, error) {
 
 func examSittingCursorSpec() opaqueCursorSpec[examSittingCursorWire] {
 	return opaqueCursorSpec[examSittingCursorWire]{
-		label: "Exam Sitting", maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members: []string{"start_at", "id"},
+		label:                "Exam Sitting",
+		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
+		members:              []string{"start_at", "id"},
 		validate: func(cursor examSittingCursorWire) error {
 			startAt, err := model.ParseRFC3339(cursor.StartAt)
 			if err != nil || startAt.IsZero() || !model.ExamSittingID(cursor.ID).IsValid() {
 				return errors.New("invalid Exam Sitting keyset")
 			}
+
 			return nil
 		},
 	}

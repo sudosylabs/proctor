@@ -30,6 +30,7 @@ func (r *prepareSecurityPreflightRequest) UnmarshalJSON(data []byte) error {
 	if err := rejectDuplicateJSONObjectMembers(data, "security preflight"); err != nil {
 		return err
 	}
+
 	type wire prepareSecurityPreflightRequest
 	var decoded wire
 	decoder := json.NewDecoder(bytes.NewReader(data))
@@ -37,21 +38,33 @@ func (r *prepareSecurityPreflightRequest) UnmarshalJSON(data []byte) error {
 	if err := decoder.Decode(&decoded); err != nil {
 		return err
 	}
+
 	var members map[string]json.RawMessage
 	if err := json.Unmarshal(data, &members); err != nil {
 		return err
 	}
+
 	for name, value := range members {
-		if !slices.Contains([]string{"attempt_id", "native_registry_digest", "source_manifest_digest", "configuration_manifest_fingerprint"}, name) || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+		if !slices.Contains(
+			[]string{"attempt_id", "native_registry_digest", "source_manifest_digest", "configuration_manifest_fingerprint"},
+			name,
+		) ||
+			bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
 			return errors.New("invalid security preflight member")
 		}
 	}
-	if decoded.AttemptID != "" && !model.ExamAttemptID(decoded.AttemptID).IsValid() || !model.IsValidSHA256Fingerprint(decoded.NativeRegistryDigest) || !model.IsValidSHA256Fingerprint(decoded.SourceManifestDigest) || !model.IsValidSHA256Fingerprint(decoded.ConfigurationManifestFingerprint) {
+
+	if decoded.AttemptID != "" && !model.ExamAttemptID(decoded.AttemptID).IsValid() ||
+		!model.IsValidSHA256Fingerprint(decoded.NativeRegistryDigest) ||
+		!model.IsValidSHA256Fingerprint(decoded.SourceManifestDigest) ||
+		!model.IsValidSHA256Fingerprint(decoded.ConfigurationManifestFingerprint) {
 		return errors.New("invalid security preflight identity")
 	}
+
 	if _, exists := members["attempt_id"]; exists && decoded.AttemptID == "" {
 		return errors.New("attempt_id must be omitted or a canonical ID")
 	}
+
 	*r = prepareSecurityPreflightRequest(decoded)
 	return nil
 }
@@ -89,15 +102,25 @@ type deliveryWatermarkRejectionResponse struct {
 }
 
 func securityCoverageFrom(value model.SecurityCoverageResult) securityCoverageResponse {
-	response := securityCoverageResponse{ProcessedControlSequence: value.ProcessedControlSequence, ProcessedControlDigest: value.ProcessedControlDigest,
-		CoverageResult: value.CoverageResult, SourceResetReceipts: sourceResetReceiptsFrom(value.SourceResetReceipts),
-		SecurityInteractionAllowed: value.SecurityInteractionAllowed}
+	response := securityCoverageResponse{
+		ProcessedControlSequence:   value.ProcessedControlSequence,
+		ProcessedControlDigest:     value.ProcessedControlDigest,
+		CoverageResult:             value.CoverageResult,
+		SourceResetReceipts:        sourceResetReceiptsFrom(value.SourceResetReceipts),
+		SecurityInteractionAllowed: value.SecurityInteractionAllowed,
+	}
 	if value.DeliveryWatermarkRejections != nil {
 		response.DeliveryWatermarkRejections = make([]deliveryWatermarkRejectionResponse, 0, len(value.DeliveryWatermarkRejections))
 	}
+
 	for _, rejection := range value.DeliveryWatermarkRejections {
-		response.DeliveryWatermarkRejections = append(response.DeliveryWatermarkRejections, deliveryWatermarkRejectionResponse{Family: rejection.Family, SourceID: rejection.SourceID, Reason: rejection.Reason})
+		response.DeliveryWatermarkRejections = append(response.DeliveryWatermarkRejections, deliveryWatermarkRejectionResponse{
+			Family:   rejection.Family,
+			SourceID: rejection.SourceID,
+			Reason:   rejection.Reason,
+		})
 	}
+
 	return response
 }
 
@@ -128,22 +151,42 @@ func (m examAttemptHTTPModule) prepareSecurityPreflight(request operationRequest
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body prepareSecurityPreflightRequest
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
-	prepared, err := m.application.PrepareExamSecurityPreflight(request.context, request.invocation(), attempt.PrepareSecurityPreflightCommand{SittingID: sittingID, AttemptID: model.ExamAttemptID(body.AttemptID), NativeRegistryDigest: body.NativeRegistryDigest, SourceManifestDigest: body.SourceManifestDigest, ConfigurationManifestFingerprint: body.ConfigurationManifestFingerprint, IdempotencyKey: request.idempotencyKey})
+
+	prepared, err := m.application.PrepareExamSecurityPreflight(request.context, request.invocation(), attempt.PrepareSecurityPreflightCommand{
+		SittingID:                        sittingID,
+		AttemptID:                        model.ExamAttemptID(body.AttemptID),
+		NativeRegistryDigest:             body.NativeRegistryDigest,
+		SourceManifestDigest:             body.SourceManifestDigest,
+		ConfigurationManifestFingerprint: body.ConfigurationManifestFingerprint,
+		IdempotencyKey:                   request.idempotencyKey,
+	})
 	if err != nil {
 		return operationResult{}, err
 	}
 	if prepared == nil {
 		return operationResult{}, errUnpresentableResult
 	}
-	result := securityPolicyResponse{ServerTime: prepared.ServerTime, Policy: prepared.Resolved.Policy, PolicyContentDigest: prepared.Resolved.PolicyContentDigest, CapabilityMatrixDigest: prepared.Resolved.CapabilityMatrixDigest, CatalogBindings: prepared.Resolved.CatalogBindings, PreflightChallenge: prepared.Challenge, FrozenAttemptConfiguration: prepared.FrozenAttemptConfiguration, BrowserActivityDisclosure: prepared.BrowserActivityDisclosure}
+
+	result := securityPolicyResponse{
+		ServerTime:                 prepared.ServerTime,
+		Policy:                     prepared.Resolved.Policy,
+		PolicyContentDigest:        prepared.Resolved.PolicyContentDigest,
+		CapabilityMatrixDigest:     prepared.Resolved.CapabilityMatrixDigest,
+		CatalogBindings:            prepared.Resolved.CatalogBindings,
+		PreflightChallenge:         prepared.Challenge,
+		FrozenAttemptConfiguration: prepared.FrozenAttemptConfiguration,
+		BrowserActivityDisclosure:  prepared.BrowserActivityDisclosure,
+	}
 	encoded, err := json.Marshal(result)
 	if err != nil || len(encoded) > model.SecurityPolicyResponseMaxBytes {
 		return operationResult{}, errUnpresentableResult
 	}
+
 	return jsonResult(http.StatusOK, result), nil
 }
 func (m examAttemptHTTPModule) reportSecurityPreflight(request operationRequest) (operationResult, error) {
@@ -151,26 +194,130 @@ func (m examAttemptHTTPModule) reportSecurityPreflight(request operationRequest)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var report model.SecurityPreflightReport
 	if err = request.decodeJSON(&report); err != nil {
 		return operationResult{}, err
 	}
-	result, err := m.application.ReportExamSecurityPreflight(request.context, request.invocation(), attempt.ReportSecurityPreflightCommand{PreflightID: id, Report: report, IdempotencyKey: request.idempotencyKey})
+
+	result, err := m.application.ReportExamSecurityPreflight(request.context, request.invocation(), attempt.ReportSecurityPreflightCommand{
+		PreflightID:    id,
+		Report:         report,
+		IdempotencyKey: request.idempotencyKey,
+	})
 	if err != nil {
 		return operationResult{}, err
 	}
 	if result == nil {
 		return operationResult{}, errUnpresentableResult
 	}
+
 	return jsonResult(http.StatusOK, result), nil
 }
 
 func securityPreflightResource(application ExamAttemptApplication) apiResource {
 	module := examAttemptHTTPModule{application: application}
-	return newResource("security-preflights",
-		sessionRoute(http.MethodGet, path("/exam-attempts/{exam_attempt_id}/security-policy"), []string{"exam.delivery.control_rate_limited", "request.invalid", "resource.not_found", "exam.attempt.invalid", "exam.attempt.registered_desktop_required", "exam.attempt.desktop_incompatible", "exam.attempt.sitting_not_open", "exam.attempt.management_authority_conflict", "exam.attempt.configuration_unsupported", "exam.attempt.unavailable", "exam.security.preflight_expired", "exam.security.preflight_superseded", "exam.security.preflight_consumed", "exam.security.preflight_rate_limited", "exam.security.policy_changed", "exam.security.session_changed", "exam.security.configuration_unsupported", "exam.security.attempt_not_ready", "exam.security.catalog_missing", "exam.security.unsupported_capability", "idempotency.conflict", "idempotency.in_progress", "exam.delivery.metadata_capacity"}, module.recoverSecurityPolicy),
-		idempotentSessionRoute(IdempotencyRequired, http.MethodPost, path("/exam-sittings/{exam_sitting_id}/security-preflights"), []string{"audit.unavailable", "exam.delivery.control_rate_limited", "request.invalid", "resource.not_found", "exam.attempt.invalid", "exam.attempt.registered_desktop_required", "exam.attempt.desktop_incompatible", "exam.attempt.sitting_not_open", "exam.attempt.management_authority_conflict", "exam.attempt.configuration_unsupported", "exam.attempt.unavailable", "exam.security.preflight_expired", "exam.security.preflight_superseded", "exam.security.preflight_consumed", "exam.security.preflight_rate_limited", "exam.security.policy_changed", "exam.security.session_changed", "exam.security.configuration_unsupported", "exam.security.attempt_not_ready", "exam.security.catalog_missing", "exam.security.unsupported_capability", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "exam.delivery.metadata_capacity"}, module.prepareSecurityPreflight),
-		idempotentSessionRoute(IdempotencyRequired, http.MethodPost, path("/security-preflights/{security_preflight_id}/report"), []string{"audit.unavailable", "exam.delivery.control_rate_limited", "request.invalid", "resource.not_found", "exam.attempt.invalid", "exam.attempt.registered_desktop_required", "exam.attempt.desktop_incompatible", "exam.attempt.sitting_not_open", "exam.attempt.management_authority_conflict", "exam.attempt.configuration_unsupported", "exam.attempt.unavailable", "exam.security.preflight_expired", "exam.security.preflight_superseded", "exam.security.preflight_consumed", "exam.security.preflight_rate_limited", "exam.security.policy_changed", "exam.security.session_changed", "exam.security.configuration_unsupported", "exam.security.attempt_not_ready", "exam.security.catalog_missing", "exam.security.unsupported_capability", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "exam.delivery.metadata_capacity"}, module.reportSecurityPreflight))
+	return newResource(
+		"security-preflights",
+		sessionRoute(
+			http.MethodGet,
+			path("/exam-attempts/{exam_attempt_id}/security-policy"),
+			[]string{
+				"exam.delivery.control_rate_limited",
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.registered_desktop_required",
+				"exam.attempt.desktop_incompatible",
+				"exam.attempt.sitting_not_open",
+				"exam.attempt.management_authority_conflict",
+				"exam.attempt.configuration_unsupported",
+				"exam.attempt.unavailable",
+				"exam.security.preflight_expired",
+				"exam.security.preflight_superseded",
+				"exam.security.preflight_consumed",
+				"exam.security.preflight_rate_limited",
+				"exam.security.policy_changed",
+				"exam.security.session_changed",
+				"exam.security.configuration_unsupported",
+				"exam.security.attempt_not_ready",
+				"exam.security.catalog_missing",
+				"exam.security.unsupported_capability",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"exam.delivery.metadata_capacity",
+			},
+			module.recoverSecurityPolicy,
+		),
+		idempotentSessionRoute(
+			IdempotencyRequired,
+			http.MethodPost,
+			path("/exam-sittings/{exam_sitting_id}/security-preflights"),
+			[]string{
+				"audit.unavailable",
+				"exam.delivery.control_rate_limited",
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.registered_desktop_required",
+				"exam.attempt.desktop_incompatible",
+				"exam.attempt.sitting_not_open",
+				"exam.attempt.management_authority_conflict",
+				"exam.attempt.configuration_unsupported",
+				"exam.attempt.unavailable",
+				"exam.security.preflight_expired",
+				"exam.security.preflight_superseded",
+				"exam.security.preflight_consumed",
+				"exam.security.preflight_rate_limited",
+				"exam.security.policy_changed",
+				"exam.security.session_changed",
+				"exam.security.configuration_unsupported",
+				"exam.security.attempt_not_ready",
+				"exam.security.catalog_missing",
+				"exam.security.unsupported_capability",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"exam.delivery.metadata_capacity",
+			},
+			module.prepareSecurityPreflight,
+		),
+		idempotentSessionRoute(
+			IdempotencyRequired,
+			http.MethodPost,
+			path("/security-preflights/{security_preflight_id}/report"),
+			[]string{
+				"audit.unavailable",
+				"exam.delivery.control_rate_limited",
+				"request.invalid",
+				"resource.not_found",
+				"exam.attempt.invalid",
+				"exam.attempt.registered_desktop_required",
+				"exam.attempt.desktop_incompatible",
+				"exam.attempt.sitting_not_open",
+				"exam.attempt.management_authority_conflict",
+				"exam.attempt.configuration_unsupported",
+				"exam.attempt.unavailable",
+				"exam.security.preflight_expired",
+				"exam.security.preflight_superseded",
+				"exam.security.preflight_consumed",
+				"exam.security.preflight_rate_limited",
+				"exam.security.policy_changed",
+				"exam.security.session_changed",
+				"exam.security.configuration_unsupported",
+				"exam.security.attempt_not_ready",
+				"exam.security.catalog_missing",
+				"exam.security.unsupported_capability",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"exam.delivery.metadata_capacity",
+			},
+			module.reportSecurityPreflight,
+		),
+	)
 }
 
 func (m examAttemptHTTPModule) recoverSecurityPolicy(request operationRequest) (operationResult, error) {
@@ -178,6 +325,7 @@ func (m examAttemptHTTPModule) recoverSecurityPolicy(request operationRequest) (
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	recovered, err := m.application.RecoverExamSecurityPolicy(request.context, request.invocation(), attemptID)
 	if err != nil {
 		return operationResult{}, err
@@ -185,13 +333,20 @@ func (m examAttemptHTTPModule) recoverSecurityPolicy(request operationRequest) (
 	if recovered == nil {
 		return operationResult{}, errUnpresentableResult
 	}
+
 	result := securityPolicyRecoveryResponse{
-		CurrentSources: recovered.CurrentSources, CurrentCoverage: recovered.CurrentCoverage, SourceResetReceipts: sourceResetReceiptsFrom(recovered.SourceResetReceipts),
-		SecurityCoverage: securityCoverageFrom(recovered.SecurityCoverage), ServerTime: recovered.ServerTime, Security: recovered.Security, FrozenAttemptConfiguration: recovered.FrozenAttemptConfiguration,
+		CurrentSources:             recovered.CurrentSources,
+		CurrentCoverage:            recovered.CurrentCoverage,
+		SourceResetReceipts:        sourceResetReceiptsFrom(recovered.SourceResetReceipts),
+		SecurityCoverage:           securityCoverageFrom(recovered.SecurityCoverage),
+		ServerTime:                 recovered.ServerTime,
+		Security:                   recovered.Security,
+		FrozenAttemptConfiguration: recovered.FrozenAttemptConfiguration,
 	}
 	encoded, err := json.Marshal(result)
 	if err != nil || len(encoded) > model.SecurityPolicyResponseMaxBytes {
 		return operationResult{}, errUnpresentableResult
 	}
+
 	return jsonResult(http.StatusOK, result), nil
 }

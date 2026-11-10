@@ -64,6 +64,7 @@ func decodeOpaqueCursor[T any](raw string, spec opaqueCursorSpec[T]) (T, error) 
 	if raw == "" || len(raw) > spec.maximumEncodedLength {
 		return zero, invalidOpaqueCursorError(spec.label, errors.New("encoded cursor exceeds the safety bound"))
 	}
+
 	decoded, err := base64.RawURLEncoding.Strict().DecodeString(raw)
 	if err != nil {
 		return zero, invalidOpaqueCursorError(spec.label, err)
@@ -77,31 +78,41 @@ func decodeOpaqueCursor[T any](raw string, spec opaqueCursorSpec[T]) (T, error) 
 	if err = scanOpaqueCursorJSONObject(decoded, spec.members); err != nil {
 		return zero, invalidOpaqueCursorError(spec.label, err)
 	}
+
 	decoder := json.NewDecoder(bytes.NewReader(decoded))
 	decoder.DisallowUnknownFields()
 	var value T
 	if err = decoder.Decode(&value); err != nil {
 		return zero, invalidOpaqueCursorError(spec.label, err)
 	}
+
 	var trailing any
 	if err = decoder.Decode(&trailing); err != io.EOF {
 		if err == nil {
 			err = errors.New("cursor contains trailing data")
 		}
+
 		return zero, invalidOpaqueCursorError(spec.label, err)
 	}
+
 	if err = spec.validate(value); err != nil {
 		return zero, invalidOpaqueCursorError(spec.label, err)
 	}
+
 	return value, nil
 }
 
 func validateOpaqueCursorSpec[T any](spec opaqueCursorSpec[T]) error {
-	if spec.label == "" || len(spec.label) > 64 || !utf8.ValidString(spec.label) ||
-		spec.maximumEncodedLength <= 0 || spec.maximumEncodedLength > 4096 ||
-		len(spec.members) == 0 || spec.validate == nil {
+	if spec.label == "" ||
+		len(spec.label) > 64 ||
+		!utf8.ValidString(spec.label) ||
+		spec.maximumEncodedLength <= 0 ||
+		spec.maximumEncodedLength > 4096 ||
+		len(spec.members) == 0 ||
+		spec.validate == nil {
 		return errors.New("invalid opaque cursor specification")
 	}
+
 	seen := make(map[string]struct{}, len(spec.members))
 	for _, member := range spec.members {
 		if member == "" || member == "version" || !utf8.ValidString(member) {
@@ -110,17 +121,21 @@ func validateOpaqueCursorSpec[T any](spec opaqueCursorSpec[T]) error {
 		if _, duplicate := seen[member]; duplicate {
 			return errors.New("invalid opaque cursor specification")
 		}
+
 		seen[member] = struct{}{}
 	}
+
 	declared := opaqueCursorJSONMembers(reflect.TypeFor[T]())
 	if len(declared) != len(seen) {
 		return errors.New("invalid opaque cursor specification")
 	}
+
 	for _, member := range declared {
 		if _, listed := seen[member]; !listed {
 			return errors.New("invalid opaque cursor specification")
 		}
 	}
+
 	return nil
 }
 
@@ -159,16 +174,19 @@ func scanOpaqueCursorJSONObject(data []byte, members []string) error {
 	if err != nil || token != json.Delim('{') {
 		return errors.New("cursor document must be a JSON object")
 	}
+
 	allowed := make(map[string]struct{}, len(members))
 	for _, member := range members {
 		allowed[member] = struct{}{}
 	}
+
 	seen := make(map[string]struct{}, len(members))
 	for decoder.More() {
 		keyToken, err := decoder.Token()
 		if err != nil {
 			return err
 		}
+
 		key, ok := keyToken.(string)
 		if !ok {
 			return errors.New("cursor member name is invalid")
@@ -179,21 +197,26 @@ func scanOpaqueCursorJSONObject(data []byte, members []string) error {
 		if _, exists := seen[key]; exists {
 			return errors.New("cursor contains a duplicate member")
 		}
+
 		seen[key] = struct{}{}
 		var value json.RawMessage
 		if err = decoder.Decode(&value); err != nil {
 			return err
 		}
 	}
+
 	if token, err = decoder.Token(); err != nil || token != json.Delim('}') {
 		return errors.New("cursor document is incomplete")
 	}
+
 	var trailing any
 	if err = decoder.Decode(&trailing); err != io.EOF {
 		if err == nil {
 			return errors.New("cursor contains trailing data")
 		}
+
 		return err
 	}
+
 	return nil
 }

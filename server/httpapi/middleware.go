@@ -258,15 +258,26 @@ type requestMetricsObservation struct {
 	httpFinished func()
 }
 
-func beginRequestMetrics(writer http.ResponseWriter, request *http.Request, metrics Metrics, route, method string) (*responseRecorder, *requestMetricsObservation) {
+func beginRequestMetrics(
+	writer http.ResponseWriter,
+	request *http.Request,
+	metrics Metrics,
+	route, method string,
+) (*responseRecorder, *requestMetricsObservation) {
 	response := &responseRecorder{ResponseWriter: writer}
 	body := &requestBodyRecorder{ReadCloser: request.Body}
 	if request.Body != nil {
 		request.Body = body
 	}
+
 	return response, &requestMetricsObservation{
-		metrics: metrics, route: route, method: method, started: time.Now(),
-		response: response, requestBody: body, httpFinished: metrics.HTTPStarted(),
+		metrics:      metrics,
+		route:        route,
+		method:       method,
+		started:      time.Now(),
+		response:     response,
+		requestBody:  body,
+		httpFinished: metrics.HTTPStarted(),
 	}
 }
 

@@ -73,7 +73,21 @@ func desktopCompatibilityPolicyResource(application DesktopCompatibilityApplicat
 	replace := strongRecentSessionRoute(
 		http.MethodPut,
 		path("/desktop-compatibility-policy"),
-		[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "request.invalid", "desktop_compatibility_policy.invalid", "desktop_compatibility_policy.revision_conflict", "desktop_compatibility_policy.unavailable", "resource.not_found"},
+		[]string{
+			"authorization.denied",
+			"authorization.request.invalid",
+			"authorization.unavailable",
+			"audit.unavailable",
+			"idempotency.key_required",
+			"idempotency.key_invalid",
+			"idempotency.conflict",
+			"idempotency.in_progress",
+			"request.invalid",
+			"desktop_compatibility_policy.invalid",
+			"desktop_compatibility_policy.revision_conflict",
+			"desktop_compatibility_policy.unavailable",
+			"resource.not_found",
+		},
 		module.replace,
 	)
 	replace.idempotency = IdempotencyRequired
@@ -82,7 +96,14 @@ func desktopCompatibilityPolicyResource(application DesktopCompatibilityApplicat
 		principalRoute(
 			http.MethodGet,
 			path("/desktop-compatibility-policy"),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "desktop_compatibility_policy.unavailable", "desktop_compatibility_policy.revision_conflict", "resource.not_found"},
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"desktop_compatibility_policy.unavailable",
+				"desktop_compatibility_policy.revision_conflict",
+				"resource.not_found",
+			},
 			module.get,
 		),
 		replace,
@@ -143,29 +164,34 @@ func requiredDesktopCompatibilityPolicySettings(
 			"request.invalid",
 		).WithField("field", "minimum_desktop_release")
 	}
+
 	revokedBuildIDs := body.RevokedDesktopBuildIDs.ValuePointer()
 	if revokedBuildIDs == nil {
 		return model.DesktopCompatibilityPolicySettings{}, apperror.New(
 			"request.invalid",
 		).WithField("field", "revoked_desktop_build_ids")
 	}
+
 	message := body.AdministratorMessage.ValuePointer()
 	if message == nil {
 		return model.DesktopCompatibilityPolicySettings{}, apperror.New(
 			"request.invalid",
 		).WithField("field", "administrator_message")
 	}
+
 	availability := body.Availability.ValuePointer()
 	if availability == nil {
 		return model.DesktopCompatibilityPolicySettings{}, apperror.New(
 			"request.invalid",
 		).WithField("field", "availability")
 	}
+
 	if body.RetryAt.IsNull() {
 		return model.DesktopCompatibilityPolicySettings{}, apperror.New(
 			"request.invalid",
 		).WithField("field", "retry_at")
 	}
+
 	var retryAt model.OptionalTime
 	if value := body.RetryAt.ValuePointer(); value != nil {
 		parsed, parseErr := model.ParseRFC3339(*value)
@@ -174,8 +200,10 @@ func requiredDesktopCompatibilityPolicySettings(
 				"request.invalid",
 			).WithField("field", "retry_at").Wrap(parseErr)
 		}
+
 		retryAt = model.OptionalTimeFrom(parsed)
 	}
+
 	canonicalBuildIDs := slices.Clone(*revokedBuildIDs)
 	slices.Sort(canonicalBuildIDs)
 	return model.DesktopCompatibilityPolicySettings{

@@ -26,12 +26,14 @@ type academicNameCursor struct {
 
 func academicNameCursorSpec() opaqueCursorSpec[academicNameCursor] {
 	return opaqueCursorSpec[academicNameCursor]{
-		label: "academic", maximumEncodedLength: 1024,
-		members: []string{"name", "id"},
+		label:                "academic",
+		maximumEncodedLength: 1024,
+		members:              []string{"name", "id"},
 		validate: func(cursor academicNameCursor) error {
 			if cursor.Name == "" || len(cursor.Name) > 256 || !utf8.ValidString(cursor.Name) || !model.IsValidOpaqueID(cursor.ID) {
 				return errors.New("invalid academic keyset")
 			}
+
 			return nil
 		},
 	}
@@ -77,14 +79,20 @@ type academicPeriodCursor struct {
 
 func academicPeriodCursorSpec() opaqueCursorSpec[academicPeriodCursor] {
 	return opaqueCursorSpec[academicPeriodCursor]{
-		label: "academic period", maximumEncodedLength: 1024,
-		members: []string{"start_at", "name", "id"},
+		label:                "academic period",
+		maximumEncodedLength: 1024,
+		members:              []string{"start_at", "name", "id"},
 		validate: func(cursor academicPeriodCursor) error {
 			startAt, err := model.ParseRFC3339(cursor.StartAt)
-			if err != nil || startAt.IsZero() || cursor.Name == "" || len(cursor.Name) > 256 ||
-				!utf8.ValidString(cursor.Name) || !model.AcademicPeriodID(cursor.ID).IsValid() {
+			if err != nil ||
+				startAt.IsZero() ||
+				cursor.Name == "" ||
+				len(cursor.Name) > 256 ||
+				!utf8.ValidString(cursor.Name) ||
+				!model.AcademicPeriodID(cursor.ID).IsValid() {
 				return errors.New("invalid academic period keyset")
 			}
+
 			return nil
 		},
 	}

@@ -95,16 +95,79 @@ func jobResource(jobs JobOperationsApplication) apiResource {
 	module := jobResourceModule{jobs: jobs}
 	return newResource(
 		"jobs",
-		principalRoute(http.MethodGet, path("/jobs"),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "job.query.invalid", "job.unavailable", "request.invalid", "resource.not_found"}, module.list),
-		principalRoute(http.MethodGet, path("/jobs/{job_id}"),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "resource.not_found", "job.unavailable", "request.invalid"}, module.get),
-		principalRoute(http.MethodGet, path("/jobs/{job_id}/attempts"),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "job.query.invalid", "request.invalid", "resource.not_found", "job.unavailable"}, module.listAttempts),
-		principalRoute(http.MethodPost, path("/jobs/{job_id}/cancel"),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "resource.not_found", "job.cancel.unsupported", "job.conflict", "job.unavailable", "request.invalid"}, module.cancel),
-		principalRoute(http.MethodPost, path("/jobs/{job_id}/retry"),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "resource.not_found", "job.retry.unsupported", "job.conflict", "job.unavailable", "request.invalid"}, module.retry),
+		principalRoute(
+			http.MethodGet,
+			path("/jobs"),
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"job.query.invalid",
+				"job.unavailable",
+				"request.invalid",
+				"resource.not_found",
+			},
+			module.list,
+		),
+		principalRoute(
+			http.MethodGet,
+			path("/jobs/{job_id}"),
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"resource.not_found",
+				"job.unavailable",
+				"request.invalid",
+			},
+			module.get,
+		),
+		principalRoute(
+			http.MethodGet,
+			path("/jobs/{job_id}/attempts"),
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"job.query.invalid",
+				"request.invalid",
+				"resource.not_found",
+				"job.unavailable",
+			},
+			module.listAttempts,
+		),
+		principalRoute(
+			http.MethodPost,
+			path("/jobs/{job_id}/cancel"),
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"resource.not_found",
+				"job.cancel.unsupported",
+				"job.conflict",
+				"job.unavailable",
+				"request.invalid",
+			},
+			module.cancel,
+		),
+		principalRoute(
+			http.MethodPost,
+			path("/jobs/{job_id}/retry"),
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"resource.not_found",
+				"job.retry.unsupported",
+				"job.conflict",
+				"job.unavailable",
+				"request.invalid",
+			},
+			module.retry,
+		),
 	)
 }
 
@@ -153,27 +216,37 @@ func (m jobResourceModule) listAttempts(request operationRequest) (operationResu
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	limit, before, err := attemptPagination(request.request)
 	if err != nil {
 		return operationResult{}, apperror.Invalid("request.invalid", "query")
 	}
-	page, appErr := m.jobs.ListJobAttempts(request.context, request.invocation(), app.ListJobAttemptsQuery{JobID: jobID, BeforeNumber: before, Limit: limit})
+
+	page, appErr := m.jobs.ListJobAttempts(request.context, request.invocation(), app.ListJobAttemptsQuery{
+		JobID:        jobID,
+		BeforeNumber: before,
+		Limit:        limit,
+	})
 	if appErr != nil {
 		return operationResult{}, appErr
 	}
+
 	response := jobAttemptListResponse{Items: make([]jobAttemptResponse, 0, len(page.Items))}
 	for _, item := range page.Items {
 		response.Items = append(response.Items, jobAttemptResponseFromApplication(item))
 	}
+
 	if page.HasMore && len(page.Items) == 0 {
 		return operationResult{}, unpresentableResult(errors.New("job attempt page made no progress"))
 	}
+
 	if page.HasMore {
 		response.NextCursor, err = encodeJobAttemptCursor(page.Items[len(page.Items)-1].Number)
 		if err != nil {
 			return operationResult{}, unpresentableResult(err)
 		}
 	}
+
 	return jsonResult(http.StatusOK, response), nil
 }
 func (m jobResourceModule) cancel(request operationRequest) (operationResult, error) {
@@ -254,47 +327,76 @@ func decodeJobCursor(raw string) (jobCursor, error) {
 }
 func jobCursorSpec() opaqueCursorSpec[jobCursor] {
 	return opaqueCursorSpec[jobCursor]{
-		label: "job", maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members: []string{"created_at", "id"},
+		label:                "job",
+		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
+		members:              []string{"created_at", "id"},
 		validate: func(cursor jobCursor) error {
 			createdAt, err := model.ParseRFC3339(cursor.CreatedAt)
 			if err != nil || createdAt.IsZero() || !model.JobID(cursor.ID).IsValid() {
 				return errors.New("invalid job keyset")
 			}
+
 			return nil
 		},
 	}
 }
 func jobAttemptCursorSpec() opaqueCursorSpec[jobAttemptCursor] {
 	return opaqueCursorSpec[jobAttemptCursor]{
-		label: "job attempt", maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members: []string{"number"},
+		label:                "job attempt",
+		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
+		members:              []string{"number"},
 		validate: func(cursor jobAttemptCursor) error {
 			if cursor.Number <= 0 {
 				return errors.New("invalid job attempt keyset")
 			}
+
 			return nil
 		},
 	}
 }
 func jobResponseFromApplication(view job.View) jobResponse {
-	response := jobResponse{ID: view.ID.String(), Type: view.Type, Status: view.Status, CreatedAt: model.FormatRFC3339(view.CreatedAt), UpdatedAt: model.FormatRFC3339(view.UpdatedAt), AvailableAt: model.FormatRFC3339(view.AvailableAt), PublicErrorCode: view.PublicErrorCode, AttemptCount: view.AttemptCount, MaximumAttempts: view.MaximumAttempts, Revision: view.Revision,
-		CreatedByUserID: view.CreatedByUserID.String(), CreatedByDisplayName: view.CreatedByDisplayName, Subject: view.Subject}
+	response := jobResponse{
+		ID:                   view.ID.String(),
+		Type:                 view.Type,
+		Status:               view.Status,
+		CreatedAt:            model.FormatRFC3339(view.CreatedAt),
+		UpdatedAt:            model.FormatRFC3339(view.UpdatedAt),
+		AvailableAt:          model.FormatRFC3339(view.AvailableAt),
+		PublicErrorCode:      view.PublicErrorCode,
+		AttemptCount:         view.AttemptCount,
+		MaximumAttempts:      view.MaximumAttempts,
+		Revision:             view.Revision,
+		CreatedByUserID:      view.CreatedByUserID.String(),
+		CreatedByDisplayName: view.CreatedByDisplayName,
+		Subject:              view.Subject,
+	}
 	if view.StartedAt.Valid {
 		response.StartedAt = model.FormatRFC3339(view.StartedAt.Time)
 	}
+
 	if view.CompletedAt.Valid {
 		response.CompletedAt = model.FormatRFC3339(view.CompletedAt.Time)
 	}
+
 	if view.Progress != nil {
 		response.Progress = &jobProgressResponse{Current: view.Progress.Current, Total: view.Progress.Total, Stage: view.Progress.Stage}
 	}
+
 	return response
 }
 func jobAttemptResponseFromApplication(view job.AttemptView) jobAttemptResponse {
-	response := jobAttemptResponse{ID: view.ID.String(), Number: view.Number, Status: view.Status, StartedAt: model.FormatRFC3339(view.StartedAt), HeartbeatAt: model.FormatRFC3339(view.HeartbeatAt), LeaseExpiresAt: model.FormatRFC3339(view.LeaseExpiresAt), PublicErrorCode: view.PublicErrorCode}
+	response := jobAttemptResponse{
+		ID:              view.ID.String(),
+		Number:          view.Number,
+		Status:          view.Status,
+		StartedAt:       model.FormatRFC3339(view.StartedAt),
+		HeartbeatAt:     model.FormatRFC3339(view.HeartbeatAt),
+		LeaseExpiresAt:  model.FormatRFC3339(view.LeaseExpiresAt),
+		PublicErrorCode: view.PublicErrorCode,
+	}
 	if view.CompletedAt.Valid {
 		response.CompletedAt = model.FormatRFC3339(view.CompletedAt.Time)
 	}
+
 	return response
 }

@@ -40,12 +40,14 @@ func decodeSubmissionManifestCursor(raw string) (submissionManifestCursor, error
 
 func submissionManifestCursorSpec() opaqueCursorSpec[submissionManifestCursorWire] {
 	return opaqueCursorSpec[submissionManifestCursorWire]{
-		label: "Submission manifest", maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
-		members: []string{"after_entry_id"},
+		label:                "Submission manifest",
+		maximumEncodedLength: defaultOpaqueCursorMaximumEncodedLength,
+		members:              []string{"after_entry_id"},
 		validate: func(cursor submissionManifestCursorWire) error {
 			if !model.AttemptWorkspaceEntryID(cursor.EntryID).IsValid() {
 				return errors.New("invalid Submission manifest keyset")
 			}
+
 			return nil
 		},
 	}
@@ -114,6 +116,7 @@ func (m examAttemptHTTPModule) submit(request operationRequest) (operationResult
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	var body submitExamAttemptRequest
 	if err = decodeCandidateWorkspaceJSON(request, &body); err != nil {
 		return operationResult{}, err
@@ -121,27 +124,46 @@ func (m examAttemptHTTPModule) submit(request operationRequest) (operationResult
 	if body.ExpectedWorkspaceCursor < 0 || body.FinalFocusLossSequence < 0 {
 		return operationResult{}, invalidRequestError(errors.New("Workspace Cursor and Focus Loss sequence must be nonnegative"))
 	}
+
 	revisionID, err := model.ParseExamRevisionID(body.ExpectedCurrentRevisionID)
 	if err != nil {
 		return operationResult{}, invalidRequestError(err)
 	}
 
 	mutationAccess, err := candidateWorkspaceMutationAccess(access, candidateWorkspaceMutationAccessRequest{
-		ParticipationID: body.ParticipationID, Generation: body.Generation})
+		ParticipationID: body.ParticipationID,
+		Generation:      body.Generation,
+	})
 	if err != nil {
 		return operationResult{}, err
 	}
-	receipt, err := m.application.SubmitExamAttempt(request.context, request.invocation(),
-		attempt.SubmitCommand{Access: mutationAccess, ExpectedCurrentRevisionID: revisionID,
-			ExpectedWorkspaceCursor: body.ExpectedWorkspaceCursor, FinalFocusLossSequence: body.FinalFocusLossSequence,
-			IdempotencyKey: request.idempotencyKey})
+
+	receipt, err := m.application.SubmitExamAttempt(
+		request.context,
+		request.invocation(),
+		attempt.SubmitCommand{
+			Access:                    mutationAccess,
+			ExpectedCurrentRevisionID: revisionID,
+			ExpectedWorkspaceCursor:   body.ExpectedWorkspaceCursor,
+			FinalFocusLossSequence:    body.FinalFocusLossSequence,
+			IdempotencyKey:            request.idempotencyKey,
+		},
+	)
 	if err != nil {
 		return operationResult{}, err
 	}
-	response := examSubmissionReceiptResponse{BrowserActivity: receipt.BrowserActivity, SubmissionID: receipt.SubmissionID.String(),
-		ReceiptCode: receipt.ReceiptCode.Display(), ExamAttemptID: receipt.AttemptID.String(), ExamRevisionID: receipt.ExamRevisionID.String(),
-		State: string(receipt.State), WorkspaceCursor: receipt.WorkspaceCursor,
-		ManifestDigest: receipt.ManifestDigest, SubmittedAt: model.FormatRFC3339(receipt.SubmittedAt)}
+
+	response := examSubmissionReceiptResponse{
+		BrowserActivity: receipt.BrowserActivity,
+		SubmissionID:    receipt.SubmissionID.String(),
+		ReceiptCode:     receipt.ReceiptCode.Display(),
+		ExamAttemptID:   receipt.AttemptID.String(),
+		ExamRevisionID:  receipt.ExamRevisionID.String(),
+		State:           string(receipt.State),
+		WorkspaceCursor: receipt.WorkspaceCursor,
+		ManifestDigest:  receipt.ManifestDigest,
+		SubmittedAt:     model.FormatRFC3339(receipt.SubmittedAt),
+	}
 	return jsonResult(http.StatusCreated, response).withHeaders(noStoreHeaders()), nil
 }
 
@@ -150,25 +172,36 @@ func (m examAttemptHTTPModule) getSubmission(request operationRequest) (operatio
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	view, err := m.application.GetExamSubmission(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	submission := view.Submission
-	response := examSubmissionManagerResponse{BrowserActivity: submission.BrowserActivity, SubmissionID: submission.ID.String(), ExamID: view.Authorization.ExamID.String(),
-		ExamSittingID: view.Authorization.SittingID.String(), ExamAttemptID: submission.AttemptID.String(),
-		ExamRevisionID: submission.ExamRevisionID.String(), WorkspaceID: submission.WorkspaceID.String(),
-		ManifestSchemaVersion: submission.ManifestSchemaVersion,
-		WorkspaceCursor:       submission.WorkspaceCursor, ManifestDigest: submission.ManifestDigest,
-		ManifestEntryCount: submission.ManifestEntryCount, ManifestTotalFileBytes: submission.ManifestTotalFileBytes,
-		IntegrityState: string(submission.IntegrityState),
-		SubmittedAt:    model.FormatRFC3339(submission.SubmittedAt)}
+	response := examSubmissionManagerResponse{
+		BrowserActivity:        submission.BrowserActivity,
+		SubmissionID:           submission.ID.String(),
+		ExamID:                 view.Authorization.ExamID.String(),
+		ExamSittingID:          view.Authorization.SittingID.String(),
+		ExamAttemptID:          submission.AttemptID.String(),
+		ExamRevisionID:         submission.ExamRevisionID.String(),
+		WorkspaceID:            submission.WorkspaceID.String(),
+		ManifestSchemaVersion:  submission.ManifestSchemaVersion,
+		WorkspaceCursor:        submission.WorkspaceCursor,
+		ManifestDigest:         submission.ManifestDigest,
+		ManifestEntryCount:     submission.ManifestEntryCount,
+		ManifestTotalFileBytes: submission.ManifestTotalFileBytes,
+		IntegrityState:         string(submission.IntegrityState),
+		SubmittedAt:            model.FormatRFC3339(submission.SubmittedAt),
+	}
 	if submission.IntegrityState == model.SubmissionIntegrityRetired {
 		response.IntegrityRetiredAt = model.FormatRFC3339(submission.IntegrityRetiredAt.Time)
 	} else {
 		response.FinalFocusLossSequence = &submission.FinalFocusLossSequence
 		response.UnresolvedIntegrityCount = &submission.UnresolvedIntegrityCount
 	}
+
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
@@ -177,6 +210,7 @@ func (m examAttemptHTTPModule) listSubmissionManifest(request operationRequest) 
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	query := attempt.ListSubmissionManifestQuery{GetSubmissionQuery: ownership, Limit: 50}
 	values := request.request.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
@@ -185,37 +219,55 @@ func (m examAttemptHTTPModule) listSubmissionManifest(request operationRequest) 
 			return operationResult{}, invalidRequestError(errors.New("must be between 1 and 200"))
 		}
 	}
+
 	if raw := values.Get("cursor"); raw != "" {
 		cursor, decodeErr := decodeSubmissionManifestCursor(raw)
 		if decodeErr != nil {
 			return operationResult{}, invalidRequestError(decodeErr)
 		}
+
 		query.AfterEntryID = cursor.EntryID
 	}
+
 	page, err := m.application.ListExamSubmissionManifest(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
-	response := examSubmissionManifestResponse{SubmissionID: page.SubmissionID.String(), WorkspaceCursor: page.WorkspaceCursor,
-		ManifestDigest: page.ManifestDigest, Items: make([]examSubmissionManifestItemResponse, 0, len(page.Items))}
+
+	response := examSubmissionManifestResponse{
+		SubmissionID:    page.SubmissionID.String(),
+		WorkspaceCursor: page.WorkspaceCursor,
+		ManifestDigest:  page.ManifestDigest,
+		Items:           make([]examSubmissionManifestItemResponse, 0, len(page.Items)),
+	}
 	for _, item := range page.Items {
-		mapped := examSubmissionManifestItemResponse{EntryID: item.EntryID.String(), Kind: string(item.Kind), Path: item.Path,
-			ContentVersion: item.ContentVersion.String(), MediaType: item.MediaType, SHA256: item.SHA256}
+		mapped := examSubmissionManifestItemResponse{
+			EntryID:        item.EntryID.String(),
+			Kind:           string(item.Kind),
+			Path:           item.Path,
+			ContentVersion: item.ContentVersion.String(),
+			MediaType:      item.MediaType,
+			SHA256:         item.SHA256,
+		}
 		if item.Kind == model.StarterWorkspaceEntryFile {
 			size := item.SizeBytes
 			mapped.Size = &size
 		}
+
 		response.Items = append(response.Items, mapped)
 	}
+
 	if page.HasMore {
 		if len(page.Items) == 0 {
 			return operationResult{}, errors.New("Exam Attempt application returned an invalid Submission manifest page")
 		}
+
 		response.NextCursor, err = encodeSubmissionManifestCursor(submissionManifestCursor{EntryID: page.Items[len(page.Items)-1].EntryID})
 		if err != nil {
 			return operationResult{}, unpresentableResult(err)
 		}
 	}
+
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
@@ -224,15 +276,21 @@ func (m examAttemptHTTPModule) openSubmissionFile(request operationRequest) (pro
 	if err != nil {
 		return protocolResult{}, err
 	}
+
 	entryID, err := request.params.RequireAttemptWorkspaceEntryID()
 	if err != nil {
 		return protocolResult{}, err
 	}
-	opened, err := m.application.OpenExamSubmissionFile(request.context, request.invocation(),
-		attempt.OpenSubmissionFileQuery{GetSubmissionQuery: ownership, EntryID: entryID})
+
+	opened, err := m.application.OpenExamSubmissionFile(
+		request.context,
+		request.invocation(),
+		attempt.OpenSubmissionFileQuery{GetSubmissionQuery: ownership, EntryID: entryID},
+	)
 	if err != nil {
 		return protocolResult{}, err
 	}
+
 	return candidateAttemptContentResult(request, opened, `"`+opened.SHA256+`"`, untrustedWorkspaceContentHeaders)
 }
 
@@ -241,10 +299,16 @@ func managedSubmissionQuery(request operationRequest) (attempt.GetSubmissionQuer
 	if err != nil {
 		return attempt.GetSubmissionQuery{}, err
 	}
+
 	submissionID, err := request.params.RequireSubmissionID()
 	if err != nil {
 		return attempt.GetSubmissionQuery{}, err
 	}
-	return attempt.GetSubmissionQuery{ExamID: examID, SittingID: sittingID,
-		AttemptID: attemptID, SubmissionID: submissionID}, nil
+
+	return attempt.GetSubmissionQuery{
+		ExamID:       examID,
+		SittingID:    sittingID,
+		AttemptID:    attemptID,
+		SubmissionID: submissionID,
+	}, nil
 }

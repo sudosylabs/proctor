@@ -73,12 +73,91 @@ func mfaResource(mfa MFA) apiResource {
 	base := path("/users/me/mfa")
 	return newResource(
 		"multi-factor-authentication",
-		mfaRecoverySessionRoute(http.MethodGet, base, []string{"authentication.mfa.unavailable", "authentication.reauthentication_required", "authentication.session_required"}, module.status),
-		recentMFARecoverySessionRoute(http.MethodPost, path("/users/me/mfa/setup"), []string{"authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.session_required"}, module.setup),
-		recentMFARecoverySessionRoute(http.MethodPost, path("/users/me/mfa/activate"), []string{"request.invalid", "authentication.mfa.code_invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.session_required"}, module.activate),
-		mfaEnrollmentSessionRoute(http.MethodPost, path("/users/me/mfa/challenge"), []string{"request.invalid", "authentication.mfa.code_invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.reauthentication_required", "authentication.session_required"}, module.challenge),
-		strongRecentSessionRoute(http.MethodPost, path("/users/me/mfa/recovery-codes/regenerate"), []string{"authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.session_required"}, module.regenerateRecoveryCodes),
-		strongRecentSessionRoute(http.MethodPost, path("/users/me/mfa/disable"), []string{"mfa.required_by_policy", "authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "audit.unavailable", "authentication.session_required"}, module.disable),
+		mfaRecoverySessionRoute(
+			http.MethodGet,
+			base,
+			[]string{"authentication.mfa.unavailable", "authentication.reauthentication_required", "authentication.session_required"},
+			module.status,
+		),
+		recentMFARecoverySessionRoute(
+			http.MethodPost,
+			path("/users/me/mfa/setup"),
+			[]string{
+				"authentication.mfa.disabled",
+				"authentication.mfa.not_found",
+				"authentication.mfa.conflict",
+				"authentication.mfa.unavailable",
+				"authentication.internal",
+				"audit.unavailable",
+				"authentication.session_required",
+			},
+			module.setup,
+		),
+		recentMFARecoverySessionRoute(
+			http.MethodPost,
+			path("/users/me/mfa/activate"),
+			[]string{
+				"request.invalid",
+				"authentication.mfa.code_invalid",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.mfa.disabled",
+				"authentication.mfa.not_found",
+				"authentication.mfa.conflict",
+				"authentication.mfa.unavailable",
+				"authentication.internal",
+				"audit.unavailable",
+				"authentication.session_required",
+			},
+			module.activate,
+		),
+		mfaEnrollmentSessionRoute(
+			http.MethodPost,
+			path("/users/me/mfa/challenge"),
+			[]string{
+				"request.invalid",
+				"authentication.mfa.code_invalid",
+				"authentication.rate_limited",
+				"authentication.rate_limit_unavailable",
+				"authentication.mfa.disabled",
+				"authentication.mfa.not_found",
+				"authentication.mfa.conflict",
+				"authentication.mfa.unavailable",
+				"authentication.internal",
+				"audit.unavailable",
+				"authentication.reauthentication_required",
+				"authentication.session_required",
+			},
+			module.challenge,
+		),
+		strongRecentSessionRoute(
+			http.MethodPost,
+			path("/users/me/mfa/recovery-codes/regenerate"),
+			[]string{
+				"authentication.mfa.disabled",
+				"authentication.mfa.not_found",
+				"authentication.mfa.conflict",
+				"authentication.mfa.unavailable",
+				"authentication.internal",
+				"audit.unavailable",
+				"authentication.session_required",
+			},
+			module.regenerateRecoveryCodes,
+		),
+		strongRecentSessionRoute(
+			http.MethodPost,
+			path("/users/me/mfa/disable"),
+			[]string{
+				"mfa.required_by_policy",
+				"authentication.mfa.disabled",
+				"authentication.mfa.not_found",
+				"authentication.mfa.conflict",
+				"authentication.mfa.unavailable",
+				"audit.unavailable",
+				"authentication.session_required",
+			},
+			module.disable,
+		),
 	)
 }
 
@@ -91,11 +170,15 @@ func (m mfaResourceModule) status(request operationRequest) (operationResult, er
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, mfaStatusResponse{
-		ServiceEnabled: status.ServiceEnabled, MFARecoveryRequired: status.MFARecoveryRequired,
-		MFAEnrollmentRequired: status.MFAEnrollmentRequired,
-		AuthenticationMethod:  status.AuthenticationMethod, AuthenticationProviderID: status.AuthenticationProviderID,
-		AuthenticationStrength: string(status.AuthenticationStrength), RecentlyAuthenticated: status.RecentlyAuthenticated,
+		ServiceEnabled:              status.ServiceEnabled,
+		MFARecoveryRequired:         status.MFARecoveryRequired,
+		MFAEnrollmentRequired:       status.MFAEnrollmentRequired,
+		AuthenticationMethod:        status.AuthenticationMethod,
+		AuthenticationProviderID:    status.AuthenticationProviderID,
+		AuthenticationStrength:      string(status.AuthenticationStrength),
+		RecentlyAuthenticated:       status.RecentlyAuthenticated,
 		Enabled:                     status.Enabled,
 		Pending:                     status.Pending,
 		PendingExpiresAt:            status.PendingExpiresAt.FormatRFC3339(),

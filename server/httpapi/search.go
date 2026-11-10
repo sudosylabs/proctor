@@ -77,9 +77,15 @@ func searchResource(search SearchApplication) apiResource {
 	return newResource(
 		"search",
 		principalRoute(http.MethodGet, path("/search"), []string{
-			"authorization.denied", "authorization.request.invalid", "authorization.unavailable",
-			"request.invalid", "search.query.invalid", "exam.invalid", "exam.unavailable",
-			"administration.unavailable", "resource.not_found",
+			"authorization.denied",
+			"authorization.request.invalid",
+			"authorization.unavailable",
+			"request.invalid",
+			"search.query.invalid",
+			"exam.invalid",
+			"exam.unavailable",
+			"administration.unavailable",
+			"resource.not_found",
 		}, module.find),
 	)
 }
@@ -119,20 +125,31 @@ func searchResponseFromResult(result app.SearchResult) searchResponse {
 	response := searchResponse{Items: make([]searchItemResponse, 0, len(result.Exams)+len(result.Classes)+len(result.Users))}
 	for _, exam := range result.Exams {
 		response.Items = append(response.Items, searchItemResponse{exam: &searchExamItemResponse{
-			Type: string(app.SearchTypeExam), ID: exam.ID.String(), Title: exam.Title, AcademicUnitID: exam.AcademicUnitID.String(),
+			Type:           string(app.SearchTypeExam),
+			ID:             exam.ID.String(),
+			Title:          exam.Title,
+			AcademicUnitID: exam.AcademicUnitID.String(),
 		}})
 	}
+
 	for _, class := range result.Classes {
 		response.Items = append(response.Items, searchItemResponse{class: &searchClassItemResponse{
-			Type: string(app.SearchTypeClass), ID: class.ID.String(), DisplayName: class.DisplayName,
+			Type:             string(app.SearchTypeClass),
+			ID:               class.ID.String(),
+			DisplayName:      class.DisplayName,
 			ProgrammeLevelID: class.ProgrammeLevelID.String(),
 		}})
 	}
+
 	for _, user := range result.Users {
 		response.Items = append(response.Items, searchItemResponse{user: &searchUserItemResponse{
-			Type: string(app.SearchTypeUser), ID: user.ID.String(), DisplayName: user.DisplayName, Username: user.Username,
+			Type:        string(app.SearchTypeUser),
+			ID:          user.ID.String(),
+			DisplayName: user.DisplayName,
+			Username:    user.Username,
 		}})
 	}
+
 	return response
 }
 

@@ -150,17 +150,25 @@ type boundedPageCursor struct {
 
 func boundedPageCursorSpec(label string) opaqueCursorSpec[boundedPageCursor] {
 	return opaqueCursorSpec[boundedPageCursor]{
-		label: label, maximumEncodedLength: 2048,
-		members: []string{"at", "name", "id"},
+		label:                label,
+		maximumEncodedLength: 2048,
+		members:              []string{"at", "name", "id"},
 		validate: func(cursor boundedPageCursor) error {
-			if cursor.ID == "" || len(cursor.ID) > 128 || !utf8.ValidString(cursor.ID) || len(cursor.Name) > 1024 || !utf8.ValidString(cursor.Name) || (cursor.At == "") == (cursor.Name == "") {
+			if cursor.ID == "" ||
+				len(cursor.ID) > 128 ||
+				!utf8.ValidString(cursor.ID) ||
+				len(cursor.Name) > 1024 ||
+				!utf8.ValidString(cursor.Name) ||
+				(cursor.At == "") == (cursor.Name == "") {
 				return errors.New("invalid " + label + " keyset")
 			}
+
 			if cursor.At != "" {
 				if at, err := model.ParseRFC3339(cursor.At); err != nil || at.IsZero() {
 					return errors.New("invalid " + label + " keyset")
 				}
 			}
+
 			return nil
 		},
 	}
@@ -195,16 +203,24 @@ func compareBoundedPageKeys(a, b boundedPageKey) int {
 
 // boundedListResult pages a complete bounded collection by the request's
 // limit and cursor and presents the page in the collection envelope.
-func boundedListResult[I, T any](request operationRequest, label string, items []I, key func(I) boundedPageKey, present func(I) T) (listResponse[T], error) {
+func boundedListResult[I, T any](
+	request operationRequest,
+	label string,
+	items []I,
+	key func(I) boundedPageKey,
+	present func(I) T,
+) (listResponse[T], error) {
 	page, err := request.pageRequest()
 	if err != nil {
 		return listResponse[T]{}, err
 	}
+
 	spec := boundedPageCursorSpec(label)
 	cursor, continued, err := decodePageCursor(page, spec)
 	if err != nil {
 		return listResponse[T]{}, err
 	}
+
 	ordered := slices.Clone(items)
 	slices.SortStableFunc(ordered, func(a, b I) int { return compareBoundedPageKeys(key(a), key(b)) })
 	start := 0
@@ -217,11 +233,13 @@ func boundedListResult[I, T any](request operationRequest, label string, items [
 			start++
 		}
 	}
+
 	ordered = ordered[start:]
 	hasMore := len(ordered) > page.Limit
 	if hasMore {
 		ordered = ordered[:page.Limit]
 	}
+
 	return newListResponse(ordered, hasMore, present, func(last I) (string, error) {
 		return encodeOpaqueCursor(key(last).cursor(), spec)
 	})

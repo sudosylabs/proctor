@@ -20,7 +20,11 @@ import (
 // RetentionPolicyApplication is the transport's complete policy capability.
 type RetentionPolicyApplication interface {
 	GetRetentionPolicy(context.Context, invocation.Invocation) (*model.RetentionPolicy, error)
-	ReplaceRetentionPolicy(context.Context, invocation.Invocation, administration.ReplaceRetentionPolicyCommand) (*model.RetentionPolicy, error)
+	ReplaceRetentionPolicy(
+		context.Context,
+		invocation.Invocation,
+		administration.ReplaceRetentionPolicyCommand,
+	) (*model.RetentionPolicy, error)
 }
 
 type retentionPolicyRequest struct {
@@ -59,7 +63,21 @@ func retentionPolicyResource(application RetentionPolicyApplication) apiResource
 	replace := strongRecentSessionRoute(
 		http.MethodPut,
 		path("/retention-policy"),
-		[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "request.invalid", "retention_policy.invalid", "retention_policy.revision_conflict", "retention_policy.unavailable", "resource.not_found"},
+		[]string{
+			"authorization.denied",
+			"authorization.request.invalid",
+			"authorization.unavailable",
+			"audit.unavailable",
+			"idempotency.key_required",
+			"idempotency.key_invalid",
+			"idempotency.conflict",
+			"idempotency.in_progress",
+			"request.invalid",
+			"retention_policy.invalid",
+			"retention_policy.revision_conflict",
+			"retention_policy.unavailable",
+			"resource.not_found",
+		},
 		module.replace,
 	)
 	replace.idempotency = IdempotencyRequired
@@ -68,7 +86,14 @@ func retentionPolicyResource(application RetentionPolicyApplication) apiResource
 		principalRoute(
 			http.MethodGet,
 			path("/retention-policy"),
-			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "retention_policy.unavailable", "resource.not_found", "retention_policy.revision_conflict"},
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"retention_policy.unavailable",
+				"resource.not_found",
+				"retention_policy.revision_conflict",
+			},
 			module.get,
 		),
 		replace,
@@ -155,14 +180,19 @@ func retentionPolicyResponseFromModel(policy *model.RetentionPolicy) retentionPo
 	if policy == nil {
 		return retentionPolicyResponse{}
 	}
+
 	return retentionPolicyResponse{
-		Revision:                policy.Revision,
-		SubmissionRetentionDays: policy.SubmissionRetentionDays, IntegrityRetentionDays: policy.IntegrityRetentionDays, BrowserActivityRetentionDays: policy.BrowserActivityRetentionDays, SecurityOperationalRetentionDays: policy.SecurityOperationalRetentionDays,
-		AuditRetentionDays: policy.AuditRetentionDays, ExportRetentionDays: policy.ExportRetentionDays,
-		DeletionGraceDays:        policy.DeletionGraceDays,
-		CandidateNotices:         policy.CandidateNotices,
-		AutomaticDeletionEnabled: policy.AutomaticDeletionEnabled,
-		CreatedAt:                model.FormatRFC3339(policy.CreatedAt),
-		UpdatedAt:                model.FormatRFC3339(policy.UpdatedAt),
+		Revision:                         policy.Revision,
+		SubmissionRetentionDays:          policy.SubmissionRetentionDays,
+		IntegrityRetentionDays:           policy.IntegrityRetentionDays,
+		BrowserActivityRetentionDays:     policy.BrowserActivityRetentionDays,
+		SecurityOperationalRetentionDays: policy.SecurityOperationalRetentionDays,
+		AuditRetentionDays:               policy.AuditRetentionDays,
+		ExportRetentionDays:              policy.ExportRetentionDays,
+		DeletionGraceDays:                policy.DeletionGraceDays,
+		CandidateNotices:                 policy.CandidateNotices,
+		AutomaticDeletionEnabled:         policy.AutomaticDeletionEnabled,
+		CreatedAt:                        model.FormatRFC3339(policy.CreatedAt),
+		UpdatedAt:                        model.FormatRFC3339(policy.UpdatedAt),
 	}
 }

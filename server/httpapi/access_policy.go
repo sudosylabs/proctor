@@ -20,8 +20,16 @@ import (
 
 type AccessPolicyApplication interface {
 	GetAccessPolicy(context.Context, invocation.Invocation) (administration.AccessPolicyView, error)
-	PreflightAccessPolicy(context.Context, invocation.Invocation, administration.PreflightAccessPolicyCommand) (administration.AccessPolicyPreflightResult, error)
-	ReplaceAccessPolicy(context.Context, invocation.Invocation, administration.ReplaceAccessPolicyCommand) (administration.AccessPolicyView, error)
+	PreflightAccessPolicy(
+		context.Context,
+		invocation.Invocation,
+		administration.PreflightAccessPolicyCommand,
+	) (administration.AccessPolicyPreflightResult, error)
+	ReplaceAccessPolicy(
+		context.Context,
+		invocation.Invocation,
+		administration.ReplaceAccessPolicyCommand,
+	) (administration.AccessPolicyView, error)
 	DiscoverAccess(context.Context, invocation.Invocation) (administration.PublicAccessDiscovery, error)
 }
 
@@ -120,12 +128,65 @@ type accessPolicyResourceModule struct{ application AccessPolicyApplication }
 
 func accessPolicyResource(application AccessPolicyApplication) apiResource {
 	module := accessPolicyResourceModule{application: application}
-	replace := strongRecentSessionRoute(http.MethodPut, path("/access-policy"), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "request.invalid", "access_policy.invalid", "access_policy.revision_conflict", "access_policy.blocked", "access_policy.unavailable", "resource.not_found"}, module.replace)
+	replace := strongRecentSessionRoute(
+		http.MethodPut,
+		path("/access-policy"),
+		[]string{
+			"authorization.denied",
+			"authorization.request.invalid",
+			"authorization.unavailable",
+			"audit.unavailable",
+			"idempotency.key_required",
+			"idempotency.key_invalid",
+			"idempotency.conflict",
+			"idempotency.in_progress",
+			"request.invalid",
+			"access_policy.invalid",
+			"access_policy.revision_conflict",
+			"access_policy.blocked",
+			"access_policy.unavailable",
+			"resource.not_found",
+		},
+		module.replace,
+	)
 	replace.idempotency = IdempotencyRequired
 	return newResource("access-policy",
-		publicRoute(http.MethodGet, path("/discovery"), []string{"access_policy.unavailable", "access_policy.blocked", "access_policy.revision_conflict"}, module.discover),
-		principalRoute(http.MethodGet, path("/access-policy"), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "access_policy.unavailable", "access_policy.blocked", "access_policy.revision_conflict", "resource.not_found"}, module.get),
-		strongRecentSessionRoute(http.MethodPost, path("/access-policy/preflight"), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "request.invalid", "access_policy.invalid", "access_policy.revision_conflict", "access_policy.unavailable", "access_policy.blocked", "resource.not_found"}, module.preflight),
+		publicRoute(
+			http.MethodGet,
+			path("/discovery"),
+			[]string{"access_policy.unavailable", "access_policy.blocked", "access_policy.revision_conflict"},
+			module.discover,
+		),
+		principalRoute(
+			http.MethodGet,
+			path("/access-policy"),
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"access_policy.unavailable",
+				"access_policy.blocked",
+				"access_policy.revision_conflict",
+				"resource.not_found",
+			},
+			module.get,
+		),
+		strongRecentSessionRoute(
+			http.MethodPost,
+			path("/access-policy/preflight"),
+			[]string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"access_policy.invalid",
+				"access_policy.revision_conflict",
+				"access_policy.unavailable",
+				"access_policy.blocked",
+				"resource.not_found",
+			},
+			module.preflight,
+		),
 		replace,
 	)
 }
@@ -143,21 +204,30 @@ func (m accessPolicyResourceModule) preflight(request operationRequest) (operati
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
+
 	settings, revokeExistingSessions, err := requiredAccessPolicySettings(body)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	result, err := m.application.PreflightAccessPolicy(request.context, request.invocation(), administration.PreflightAccessPolicyCommand{
-		ExpectedRevision: body.ExpectedRevision, Settings: settings,
-		RevokeExistingSessions: revokeExistingSessions})
+		ExpectedRevision:       body.ExpectedRevision,
+		Settings:               settings,
+		RevokeExistingSessions: revokeExistingSessions,
+	})
 	if err != nil {
 		return operationResult{}, err
 	}
-	response := accessPolicyPreflightResponse{Blockers: make([]accessPolicyBlockerResponse, 0, len(result.Blockers)),
-		RoleHoldersWithoutMFACount: result.RoleHoldersWithoutMFACount, RoleHolderSingleFactorSessionCount: result.RoleHolderSingleFactorSessionCount}
+
+	response := accessPolicyPreflightResponse{
+		Blockers:                           make([]accessPolicyBlockerResponse, 0, len(result.Blockers)),
+		RoleHoldersWithoutMFACount:         result.RoleHoldersWithoutMFACount,
+		RoleHolderSingleFactorSessionCount: result.RoleHolderSingleFactorSessionCount,
+	}
 	for _, blocker := range result.Blockers {
 		response.Blockers = append(response.Blockers, accessPolicyBlockerResponse{Code: string(blocker.Code), ProviderID: blocker.ProviderID})
 	}
+
 	return jsonResult(http.StatusOK, response), nil
 }
 
@@ -166,16 +236,22 @@ func (m accessPolicyResourceModule) replace(request operationRequest) (operation
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
+
 	settings, revokeExistingSessions, err := requiredAccessPolicySettings(body)
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	view, err := m.application.ReplaceAccessPolicy(request.context, request.invocation(), administration.ReplaceAccessPolicyCommand{
-		ExpectedRevision: body.ExpectedRevision, Settings: settings,
-		RevokeExistingSessions: revokeExistingSessions, IdempotencyKey: request.idempotencyKey})
+		ExpectedRevision:       body.ExpectedRevision,
+		Settings:               settings,
+		RevokeExistingSessions: revokeExistingSessions,
+		IdempotencyKey:         request.idempotencyKey,
+	})
 	if err != nil {
 		return operationResult{}, err
 	}
+
 	return jsonResult(http.StatusOK, accessPolicyResponseFromView(view)), nil
 }
 
@@ -185,46 +261,56 @@ func requiredAccessPolicySettings(body accessPolicySettingsRequest) (model.Acces
 		if candidate == nil {
 			return false, apperror.New("request.invalid").WithField("field", field)
 		}
+
 		return *candidate, nil
 	}
 	revoke, err := requiredBoolean("revoke_existing_sessions", body.RevokeExistingSessions)
 	if err != nil {
 		return model.AccessPolicySettings{}, false, err
 	}
+
 	localLogin, err := requiredBoolean("local_login_enabled", body.LocalLoginEnabled)
 	if err != nil {
 		return model.AccessPolicySettings{}, false, err
 	}
+
 	publicRegistration, err := requiredBoolean("public_registration_enabled", body.PublicRegistrationEnabled)
 	if err != nil {
 		return model.AccessPolicySettings{}, false, err
 	}
+
 	invitationAdmission, err := requiredBoolean("invitation_admission_enabled", body.InvitationAdmissionEnabled)
 	if err != nil {
 		return model.AccessPolicySettings{}, false, err
 	}
+
 	invitationLocalCredential, err := requiredBoolean("invitation_local_credential_enabled", body.InvitationLocalCredentialEnabled)
 	if err != nil {
 		return model.AccessPolicySettings{}, false, err
 	}
+
 	desktopAuthorization, err := requiredBoolean("desktop_authorization_enabled", body.DesktopAuthorizationEnabled)
 	if err != nil {
 		return model.AccessPolicySettings{}, false, err
 	}
+
 	providerAdmissions := body.ProviderAdmissions.ValuePointer()
 	if providerAdmissions == nil {
 		return model.AccessPolicySettings{}, false, apperror.New("request.invalid").WithField("field", "provider_admissions")
 	}
+
 	roleHolderMFARequired, err := requiredBoolean("role_holder_mfa_required", body.RoleHolderMFARequired)
 	if err != nil {
 		return model.AccessPolicySettings{}, false, err
 	}
+
 	// A Session length is required but may be null, which keeps the
 	// deployment default; a length below one minute is malformed.
 	requiredMinutes := func(field string, value Optional[int]) (int, error) {
 		if !value.IsSet() {
 			return 0, apperror.New("request.invalid").WithField("field", field)
 		}
+
 		minutes := value.ValuePointer()
 		if minutes == nil {
 			return 0, nil
@@ -232,21 +318,29 @@ func requiredAccessPolicySettings(body accessPolicySettingsRequest) (model.Acces
 		if *minutes < 1 {
 			return 0, apperror.New("request.invalid").WithField("field", field)
 		}
+
 		return *minutes, nil
 	}
 	idleMinutes, err := requiredMinutes("session_idle_minutes", body.SessionIdleMinutes)
 	if err != nil {
 		return model.AccessPolicySettings{}, false, err
 	}
+
 	absoluteMinutes, err := requiredMinutes("session_absolute_minutes", body.SessionAbsoluteMinutes)
 	if err != nil {
 		return model.AccessPolicySettings{}, false, err
 	}
+
 	return model.AccessPolicySettings{
-		LocalLoginEnabled: localLogin, PublicRegistrationEnabled: publicRegistration,
-		InvitationAdmissionEnabled: invitationAdmission, InvitationLocalCredentialEnabled: invitationLocalCredential,
-		DesktopAuthorizationEnabled: desktopAuthorization, ProviderAdmissions: *providerAdmissions,
-		RoleHolderMFARequired: roleHolderMFARequired, SessionIdleMinutes: idleMinutes, SessionAbsoluteMinutes: absoluteMinutes,
+		LocalLoginEnabled:                localLogin,
+		PublicRegistrationEnabled:        publicRegistration,
+		InvitationAdmissionEnabled:       invitationAdmission,
+		InvitationLocalCredentialEnabled: invitationLocalCredential,
+		DesktopAuthorizationEnabled:      desktopAuthorization,
+		ProviderAdmissions:               *providerAdmissions,
+		RoleHolderMFARequired:            roleHolderMFARequired,
+		SessionIdleMinutes:               idleMinutes,
+		SessionAbsoluteMinutes:           absoluteMinutes,
 	}, revoke, nil
 }
 
@@ -259,30 +353,57 @@ func (m accessPolicyResourceModule) discover(request operationRequest) (operatio
 }
 
 func accessPolicyResponseFromView(view administration.AccessPolicyView) accessPolicyResponse {
-	response := accessPolicyResponse{History: []accessPolicyTransitionResponse{}, AvailableProviders: []externalAuthenticationProviderResponse{}}
+	response := accessPolicyResponse{
+		History:            []accessPolicyTransitionResponse{},
+		AvailableProviders: []externalAuthenticationProviderResponse{},
+	}
 	if view.Policy == nil {
 		return response
 	}
+
 	p := view.Policy
-	response.ID, response.Revision, response.CreatedAt, response.UpdatedAt = p.ID.String(), p.Revision, model.FormatRFC3339(p.CreatedAt), model.FormatRFC3339(p.UpdatedAt)
+	response.ID, response.Revision, response.CreatedAt, response.UpdatedAt =
+		p.ID.String(),
+		p.Revision,
+		model.FormatRFC3339(p.CreatedAt),
+		model.FormatRFC3339(p.UpdatedAt)
 	response.LocalLoginEnabled, response.PublicRegistrationEnabled = p.LocalLoginEnabled, p.PublicRegistrationEnabled
-	response.InvitationAdmissionEnabled, response.InvitationLocalCredentialEnabled = p.InvitationAdmissionEnabled, p.InvitationLocalCredentialEnabled
+	response.InvitationAdmissionEnabled, response.InvitationLocalCredentialEnabled =
+		p.InvitationAdmissionEnabled,
+		p.InvitationLocalCredentialEnabled
 	response.DesktopAuthorizationEnabled, response.ProviderAdmissions = p.DesktopAuthorizationEnabled, p.Settings().ProviderAdmissions
 	response.RoleHolderMFARequired, response.RoleHolderMFAEnforced = p.RoleHolderMFARequired, view.RoleHolderMFAEnforced
-	response.SessionIdleMinutes, response.SessionAbsoluteMinutes = optionalMinutes(p.SessionIdleMinutes), optionalMinutes(p.SessionAbsoluteMinutes)
-	response.SessionIdleMinutesDefault, response.SessionIdleMinutesMaximum = view.SessionLimits.IdleDefaultMinutes, view.SessionLimits.IdleMaximumMinutes
-	response.SessionAbsoluteMinutesDefault, response.SessionAbsoluteMinutesMaximum = view.SessionLimits.AbsoluteDefaultMinutes, view.SessionLimits.AbsoluteMaximumMinutes
+	response.SessionIdleMinutes, response.SessionAbsoluteMinutes =
+		optionalMinutes(p.SessionIdleMinutes),
+		optionalMinutes(p.SessionAbsoluteMinutes)
+	response.SessionIdleMinutesDefault, response.SessionIdleMinutesMaximum =
+		view.SessionLimits.IdleDefaultMinutes,
+		view.SessionLimits.IdleMaximumMinutes
+	response.SessionAbsoluteMinutesDefault, response.SessionAbsoluteMinutesMaximum =
+		view.SessionLimits.AbsoluteDefaultMinutes,
+		view.SessionLimits.AbsoluteMaximumMinutes
 	response.DurableMail = view.DurableMail
 	for _, transition := range view.History {
 		if transition != nil {
 			response.History = append(response.History, accessPolicyTransitionResponse{
-				FromRevision: transition.FromRevision, ToRevision: transition.ToRevision, ActorUserID: transition.ActorID.String(),
-				ChangedFields: append([]string(nil), transition.ChangedFields...), ChangedAt: model.FormatRFC3339(transition.ChangedAt), Outcome: string(transition.Outcome)})
+				FromRevision:  transition.FromRevision,
+				ToRevision:    transition.ToRevision,
+				ActorUserID:   transition.ActorID.String(),
+				ChangedFields: append([]string(nil), transition.ChangedFields...),
+				ChangedAt:     model.FormatRFC3339(transition.ChangedAt),
+				Outcome:       string(transition.Outcome),
+			})
 		}
 	}
+
 	for _, provider := range view.AvailableProviders {
-		response.AvailableProviders = append(response.AvailableProviders, externalAuthenticationProviderResponse{ID: provider.ID, DisplayName: provider.DisplayName, Type: provider.Type})
+		response.AvailableProviders = append(response.AvailableProviders, externalAuthenticationProviderResponse{
+			ID:          provider.ID,
+			DisplayName: provider.DisplayName,
+			Type:        provider.Type,
+		})
 	}
+
 	return response
 }
 
@@ -295,19 +416,43 @@ func optionalMinutes(minutes int) *int {
 }
 
 func publicAccessDiscoveryResponseFromView(view administration.PublicAccessDiscovery) publicAccessDiscoveryResponse {
-	response := publicAccessDiscoveryResponse{DiscoveryVersion: view.DiscoveryVersion, CanonicalOrigin: view.CanonicalOrigin,
-		InstallationID: view.InstallationID, Initialized: view.Initialized, PolicyRevision: view.PolicyRevision,
-		Capabilities: publicAccessCapabilitiesResponse{LocalLogin: view.Capabilities.LocalLogin, PublicRegistration: view.Capabilities.PublicRegistration,
-			InvitationAdmission: view.Capabilities.InvitationAdmission, DesktopAuthorization: view.Capabilities.DesktopAuthorization},
-		Providers: []externalAuthenticationProviderResponse{}, DesktopAuthorization: desktopAuthorizationCompatibilityResponse{
-			Protocol: view.DesktopAuthorization.Protocol, MinimumVersion: view.DesktopAuthorization.MinimumVersion, MaximumVersion: view.DesktopAuthorization.MaximumVersion},
-		SupportAddress: view.SupportAddress, PasswordMinimumLength: view.PasswordMinimumLength}
+	response := publicAccessDiscoveryResponse{
+		DiscoveryVersion: view.DiscoveryVersion,
+		CanonicalOrigin:  view.CanonicalOrigin,
+		InstallationID:   view.InstallationID,
+		Initialized:      view.Initialized,
+		PolicyRevision:   view.PolicyRevision,
+		Capabilities: publicAccessCapabilitiesResponse{
+			LocalLogin:           view.Capabilities.LocalLogin,
+			PublicRegistration:   view.Capabilities.PublicRegistration,
+			InvitationAdmission:  view.Capabilities.InvitationAdmission,
+			DesktopAuthorization: view.Capabilities.DesktopAuthorization,
+		},
+		Providers: []externalAuthenticationProviderResponse{},
+		DesktopAuthorization: desktopAuthorizationCompatibilityResponse{
+			Protocol:       view.DesktopAuthorization.Protocol,
+			MinimumVersion: view.DesktopAuthorization.MinimumVersion,
+			MaximumVersion: view.DesktopAuthorization.MaximumVersion,
+		},
+		SupportAddress:        view.SupportAddress,
+		PasswordMinimumLength: view.PasswordMinimumLength,
+	}
 	if view.Institution != nil {
-		response.Institution = &publicInstitutionPresentationResponse{ID: view.Institution.ID.String(), Name: view.Institution.Name, DisplayName: view.Institution.DisplayName}
+		response.Institution = &publicInstitutionPresentationResponse{
+			ID:          view.Institution.ID.String(),
+			Name:        view.Institution.Name,
+			DisplayName: view.Institution.DisplayName,
+		}
 	}
+
 	for _, provider := range view.Providers {
-		response.Providers = append(response.Providers, externalAuthenticationProviderResponse{ID: provider.ID, DisplayName: provider.DisplayName, Type: provider.Type})
+		response.Providers = append(response.Providers, externalAuthenticationProviderResponse{
+			ID:          provider.ID,
+			DisplayName: provider.DisplayName,
+			Type:        provider.Type,
+		})
 	}
+
 	sort.Slice(response.Providers, func(i, j int) bool { return response.Providers[i].ID < response.Providers[j].ID })
 	return response
 }

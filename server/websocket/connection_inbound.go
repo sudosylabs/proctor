@@ -233,8 +233,8 @@ func (c *connectionRuntime) handleExamAttemptConnect(ctx context.Context, reques
 		return
 	}
 	c.mu.Unlock()
-	attempts, ok := c.application.(examAttemptApplication)
-	if !ok {
+	attempts := c.attempts
+	if attempts == nil {
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorAttemptConnectionFailed)
 		return
 	}
@@ -323,8 +323,8 @@ func (c *connectionRuntime) handleExamAttemptBrowserStart(ctx context.Context, r
 	}
 	binding := *c.attempt
 	c.mu.Unlock()
-	attempts, ok := c.application.(examAttemptApplication)
-	if !ok {
+	attempts := c.attempts
+	if attempts == nil {
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorBrowserActivityFailed)
 		return
 	}
@@ -368,8 +368,8 @@ func (c *connectionRuntime) handleExamAttemptBrowserAppend(ctx context.Context, 
 	}
 	binding := *c.attempt
 	c.mu.Unlock()
-	attempts, ok := c.application.(examAttemptApplication)
-	if !ok {
+	attempts := c.attempts
+	if attempts == nil {
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorBrowserActivityFailed)
 		return
 	}
@@ -420,8 +420,8 @@ func (c *connectionRuntime) handleExamAttemptRenew(ctx context.Context, request 
 	}
 	binding := *c.attempt
 	c.mu.Unlock()
-	attempts, ok := c.application.(examAttemptApplication)
-	if !ok {
+	attempts := c.attempts
+	if attempts == nil {
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorAttemptRenewalFailed)
 		return
 	}
@@ -465,8 +465,8 @@ func (c *connectionRuntime) handleExamAttemptFocusLoss(ctx context.Context, requ
 	}
 	binding := *c.attempt
 	c.mu.Unlock()
-	attempts, ok := c.application.(examAttemptApplication)
-	if !ok {
+	attempts := c.attempts
+	if attempts == nil {
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorFocusLossFailed)
 		return
 	}
@@ -558,8 +558,8 @@ func (c *connectionRuntime) finalizeExamAttempt(ctx context.Context) {
 		if binding == nil {
 			return
 		}
-		attempts, ok := c.application.(examAttemptApplication)
-		if !ok {
+		attempts := c.attempts
+		if attempts == nil {
 			return
 		}
 		closeCtx, cancel := c.finalizationContext(ctx)
@@ -599,8 +599,8 @@ func (c *connectionRuntime) handleExamAttemptSecurityUpdate(ctx context.Context,
 	}
 	binding := *c.attempt
 	c.mu.Unlock()
-	attempts, ok := c.application.(examAttemptApplication)
-	if !ok {
+	attempts := c.attempts
+	if attempts == nil {
 		c.enqueueError(request.Sequence, "exam.attempt.unavailable", websocketErrorAttemptRenewalFailed)
 		return
 	}

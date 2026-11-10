@@ -21,23 +21,6 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// forwardingNameAllowlist names the only application declarations that give a
-// type of another package a second name, with the reason each must exist.
-var forwardingNameAllowlist = map[string]string{
-	"app.examAuthoringService":        embeddedServiceName,
-	"app.examPublicationService":      embeddedServiceName,
-	"app.examRecordsService":          embeddedServiceName,
-	"app.examExportsService":          embeddedServiceName,
-	"app.examSittingService":          embeddedServiceName,
-	"app.examAttemptService":          embeddedServiceName,
-	"app.examReviewService":           embeddedServiceName,
-	"app.examResourceService":         embeddedServiceName,
-	"app.examCorrectionService":       embeddedServiceName,
-	"app.examStarterWorkspaceService": embeddedServiceName,
-}
-
-const embeddedServiceName = "App embeds this Exam service; Go names an embedded field after its type, and several child services are all named Service"
-
 // TestApplicationDeclaresNoForwardingNames keeps one name for every type and
 // constant: no application package (app or a child module) declares an alias
 // of another package's type, or an exported constant or variable that only
@@ -45,7 +28,7 @@ const embeddedServiceName = "App embeds this Exam service; Go names an embedded 
 // directly.
 func TestApplicationDeclaresNoForwardingNames(t *testing.T) {
 	t.Parallel()
-	for _, violation := range forwardingNameViolations(typedServerPackages(t), serverModule, forwardingNameAllowlist) {
+	for _, violation := range forwardingNameViolations(typedServerPackages(t), serverModule) {
 		assert.Fail(t, violation)
 	}
 }
@@ -88,10 +71,11 @@ var NewView = child.View{}
 		"app.go:10: fixture/app.ChildView is an alias of fixture/app/child.View; name fixture/app/child.View directly",
 		"app.go:12: fixture/app.ExamSummary is an alias of fixture/store.Summary; name fixture/store.Summary directly",
 		"app.go:18: fixture/app.MaximumItems restates store.Limit; name store.Limit directly",
-	}, forwardingNameViolations(loaded, "fixture", map[string]string{"app.childService": "embedded field name"}))
+		"app.go:8: fixture/app.childService is an alias of fixture/app/child.Service; name fixture/app/child.Service directly",
+	}, forwardingNameViolations(loaded, "fixture"))
 }
 
-func forwardingNameViolations(loaded []*packages.Package, module string, allowed map[string]string) []string {
+func forwardingNameViolations(loaded []*packages.Package, module string) []string {
 	var violations []string
 	for _, pkg := range loaded {
 		if pkg.PkgPath != module+"/app" && !strings.HasPrefix(pkg.PkgPath, module+"/app/") {
@@ -105,9 +89,6 @@ func forwardingNameViolations(loaded []*packages.Package, module string, allowed
 			}
 			named, ok := types.Unalias(alias.Type()).(*types.Named)
 			if !ok || named.Obj().Pkg() == nil || named.Obj().Pkg() == pkg.Types {
-				continue
-			}
-			if _, ok := allowed[pkg.Types.Name()+"."+name]; ok {
 				continue
 			}
 			target := named.Obj().Pkg().Path() + "." + named.Obj().Name()

@@ -125,9 +125,7 @@ depends only on `model`. Transports import it directly to build an
 Every type and constant has one name. Transports name a use case's command,
 query, and result types in the package that declares them (`attempt.ConnectCommand`,
 `exam.View`, `job.Page`, `store.ExamSummary`); no application package
-re-exports another package's type or constant under a second name. The only
-aliases are the parent's embedded-field names for Exam services, which share
-the type name `Service`. A transport may name `store` result types, but never
+re-exports another package's type or constant under a second name. A transport may name `store` result types, but never
 a Store contract, function, or variable, so persistence stays out of reach
 (`TestApplicationDeclaresNoForwardingNames`,
 `TestTransportsNameOnlyStoreResultTypes`).

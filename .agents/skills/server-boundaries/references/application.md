@@ -113,9 +113,10 @@ there are more than a handful of collaborators, and plain arguments otherwise.
 A service generates identifiers with one `NewID func() string` (or calls
 `model.NewID` directly) and reads time from one `Now func() time.Time`.
 
-`app.App` holds one named field per area (`Academic`, `Identity`, `Exams`,
-`Attempts`, ...), so every call site names the owner of the use case it calls:
-`app.Academic.CreateClass(...)`.
+`app.App` holds one named field per service (`Academic`, `Identity`,
+`ExamAuthoring`, `Sittings`, `Attempts`, ...), so every call site names the
+owner of the use case it calls: `app.Academic.CreateClass(...)`,
+`app.Attempts.SubmitExamAttempt(...)`.
 
 Each Exam use case is the exported method on its owning service, named as the
 public use case (`ScheduleExamSitting`), with the command, query, and result
@@ -256,7 +257,9 @@ Every use case is declared once, as an exported method on the area service that
 owns its policy, under its public use-case name (`CreateClass`, not `Create`).
 `app.App` exposes the area services as named fields and declares no use case of
 its own. Transports call `app.Academic.CreateClass` and so on; an `httpapi`
-resource receives the area service it serves.
+resource receives the area service it serves, so an `httpapi` consumer interface
+lists the methods of one service. The WebSocket hub receives the Attempt
+service (`app.Attempts`) as its own typed dependency.
 
 Work a wrapper would add belongs in the owning service method: operational
 outcome recording, error concealment, input normalization, defensive copies,
@@ -288,13 +291,14 @@ area packages described above (plan of 2026-11-10). Until an area has moved,
 its code still uses the old shape: private services in the flat `app/`
 package, a per-service `Dependencies` struct and store port, and embedding in
 `App`. Follow the new shape in any area that has moved, and do not add new
-per-service ports anywhere. `app/access`, `app/paging`, `app/academic`, `app/user` and
-`app/identity` have moved; the academic administration batches, Student Progression and
+per-service ports anywhere. `app/access`, `app/paging`, `app/academic`, `app/user`,
+`app/identity` and `app/exam` with its children have moved; the academic administration batches, Student Progression and
 onboarding imports still live in `app` and call `academic.Service`. Invitations,
 browser Invitation handoff and public registration still live in `app` and call
 `identity.Service` and the identity mechanics (the shared password hasher and
 attempt accounting) it exports for them. `identity.Service` embeds one private
-implementation per concern rather than holding every collaborator itself. These architecture tests enforce the old shape and
-retire when the last area moves: `TestServicesTakeOneDependencies`,
-`TestApplicationSurfaceIsTheEmbeddedServices`, and
-`TestApplicationDeclaresNoForwardingNames`.
+implementation per concern rather than holding every collaborator itself. `App`
+still embeds the services of the areas that remain in `app` (Invitations, roles,
+search, Jobs, mail, and so on). `TestServicesTakeOneDependencies` and
+`TestApplicationSurfaceIsTheEmbeddedServices` enforce the old shape and retire
+when the last area moves.

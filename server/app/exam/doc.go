@@ -9,7 +9,8 @@
 // or Attempt: creating Exams and editing their Draft, the Exam catalog,
 // archiving, Exam Managers, publishing Revisions, records completion, and
 // exports. Its services are Authoring, Publication, Records and Exports;
-// app.App embeds them, so their exported methods are the public use cases.
+// app.App holds them as ExamAuthoring, ExamPublication, ExamRecords and
+// ExamExports, so their exported methods are the public use cases.
 //
 // Vocabulary used across exam and its child packages:
 //   - Exam: the lasting authoring identity, owned by one Academic Unit.

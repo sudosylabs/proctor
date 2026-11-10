@@ -31,7 +31,9 @@ const (
 	examAttemptBrowserAppendAction  = "exam_attempt.browser_activity.append"
 )
 
-type examAttemptApplication interface {
+// ExamAttemptApplication is the Attempt use cases a connection runs on behalf
+// of its candidate; composition supplies the application's Attempt service.
+type ExamAttemptApplication interface {
 	ConnectExamAttempt(context.Context, invocation.Invocation, attempt.ConnectCommand) (attempt.ConnectionResult, error)
 	UpdateExamSecurityCoverage(context.Context, invocation.Invocation, attempt.UpdateSecurityCoverageCommand) (model.SecurityCoverageResult, error)
 	RenewExamAttemptParticipation(context.Context, invocation.Invocation, attempt.RenewParticipationCommand) (attempt.ParticipationRenewal, error)

@@ -22,6 +22,7 @@ import (
 
 type connectionRuntime struct {
 	application Application
+	attempts    ExamAttemptApplication
 	logger      Logger
 	localizer   Localizer
 	locale      string
@@ -72,6 +73,7 @@ type examAttemptBinding struct {
 
 func newConnectionRuntime(
 	application Application,
+	attempts ExamAttemptApplication,
 	logger Logger,
 	localizer Localizer,
 	locale string,
@@ -87,6 +89,7 @@ func newConnectionRuntime(
 ) *connectionRuntime {
 	runtime := &connectionRuntime{
 		application:   application,
+		attempts:      attempts,
 		logger:        logger,
 		localizer:     localizer,
 		locale:        locale,

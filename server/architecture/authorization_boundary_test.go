@@ -129,9 +129,9 @@ func TestApplicationFacadeDoesNotRetainPersistenceLocator(t *testing.T) {
 
 // Every use case is declared once, on the focused service that owns it. App
 // embeds the services of areas still in the flat package and names each
-// moved area's Service in an exported field (Academic *academic.Service), so
-// it declares no method of its own beyond the runtime handle composition
-// borrows, and holds no other named field.
+// moved area's services in exported fields (Academic *academic.Service,
+// Attempts *attempt.Service), so it declares no method of its own beyond the
+// runtime handle composition borrows, and holds no other named field.
 func TestApplicationSurfaceIsTheEmbeddedServices(t *testing.T) {
 	t.Parallel()
 
@@ -194,7 +194,7 @@ func TestApplicationDoesNotExportFocusedServiceImplementations(t *testing.T) {
 	})
 }
 
-// isAreaService reports a field type of the form *<area>.Service, the one
+// isAreaService reports a field type of the form *<area>.<Service>, the one
 // shape a moved area's App field takes.
 func isAreaService(expression ast.Expr) bool {
 	pointer, ok := expression.(*ast.StarExpr)
@@ -206,7 +206,7 @@ func isAreaService(expression ast.Expr) bool {
 		return false
 	}
 	_, packageQualified := selector.X.(*ast.Ident)
-	return packageQualified && selector.Sel.Name == "Service"
+	return packageQualified && selector.Sel.IsExported()
 }
 
 func appReceiverNames(function *ast.FuncDecl) (map[string]bool, bool) {

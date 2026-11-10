@@ -58,19 +58,19 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	binding, err := storetest.SaveRoleBinding(ctx, persistence, &model.RoleBinding{UserID: teacher.ID, RoleID: role.ID, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unit.ID.String(), StartsAt: model.TimeFromMillis(model.GetMillis() - 1_000)})
 	require.NoError(t, err)
 	call := invocation.New(*principal, model.RequestMetadata{RequestID: "exam-create-integration"})
-	created, appErr := helper.App.CreateExam(ctx, call, exam.CreateCommand{AcademicUnitID: unit.ID, Title: "  Systems Programming  ", InstructionsMarkdown: "Use **Go**.", IdempotencyKey: "exam-create-once"})
+	created, appErr := helper.App.ExamAuthoring.CreateExam(ctx, call, exam.CreateCommand{AcademicUnitID: unit.ID, Title: "  Systems Programming  ", InstructionsMarkdown: "Use **Go**.", IdempotencyKey: "exam-create-once"})
 	require.NoError(t, appErr)
 	require.Equal(t, teacher.ID, created.Exam.CreatorUserID)
 	require.Equal(t, teacher.ID, created.Exam.OwnerUserID)
 	require.Equal(t, "Systems Programming", created.Draft.Title)
 	require.True(t, created.Draft.Policy.Equal(model.DefaultExamPolicySet()))
 	require.Equal(t, 1, created.ManagerCount)
-	replayed, appErr := helper.App.CreateExam(ctx, call, exam.CreateCommand{AcademicUnitID: unit.ID, Title: "  Systems Programming  ", InstructionsMarkdown: "Use **Go**.", IdempotencyKey: "exam-create-once"})
+	replayed, appErr := helper.App.ExamAuthoring.CreateExam(ctx, call, exam.CreateCommand{AcademicUnitID: unit.ID, Title: "  Systems Programming  ", InstructionsMarkdown: "Use **Go**.", IdempotencyKey: "exam-create-once"})
 	require.NoError(t, appErr)
 	require.Equal(t, created.Exam.ID, replayed.Exam.ID, "replay exam")
 	editedTitle := "Distributed Systems"
 	clearInstructions := ""
-	edited, appErr := helper.App.EditExamDraftText(ctx, call, exam.EditDraftTextCommand{
+	edited, appErr := helper.App.ExamAuthoring.EditExamDraftText(ctx, call, exam.EditDraftTextCommand{
 		ExamID: created.Exam.ID, ExpectedDraftRevision: created.Draft.Revision,
 		Title: &editedTitle, InstructionsMarkdown: &clearInstructions, IdempotencyKey: "exam-edit-once",
 	})
@@ -79,13 +79,13 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	require.Empty(t, edited.Draft.InstructionsMarkdown)
 	require.Equal(t, created.Draft.Revision+1, edited.Draft.Revision)
 	require.Equal(t, created.Exam.Revision, edited.Exam.Revision)
-	editedReplay, appErr := helper.App.EditExamDraftText(ctx, call, exam.EditDraftTextCommand{
+	editedReplay, appErr := helper.App.ExamAuthoring.EditExamDraftText(ctx, call, exam.EditDraftTextCommand{
 		ExamID: created.Exam.ID, ExpectedDraftRevision: created.Draft.Revision,
 		Title: &editedTitle, InstructionsMarkdown: &clearInstructions, IdempotencyKey: "exam-edit-once",
 	})
 	require.NoError(t, appErr, "edit replay = %#v", editedReplay)
 	require.Equal(t, edited.Draft.Revision, editedReplay.Draft.Revision, "edit replay = %#v", editedReplay)
-	focusPolicy, appErr := helper.App.ConfigureExamDraftFocusLoss(ctx, call, exam.ConfigureDraftFocusLossCommand{
+	focusPolicy, appErr := helper.App.ExamAuthoring.ConfigureExamDraftFocusLoss(ctx, call, exam.ConfigureDraftFocusLossCommand{
 		ExamID: created.Exam.ID, ExpectedDraftRevision: edited.Draft.Revision,
 		Enabled: false, MinimumDuration: 500 * time.Millisecond, IncidentCount: 1,
 		Window: 10 * time.Second, Outcome: model.IntegrityOutcomeFlag, IdempotencyKey: "exam-focus-loss-once",
@@ -100,7 +100,7 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	require.Equal(t, model.IntegrityOutcomeFlag, focusPolicy.Draft.Policy.FocusLoss.Outcome)
 	require.Equal(t, editedTitle, focusPolicy.Draft.Title)
 	require.Equal(t, edited.Exam.Revision, focusPolicy.Exam.Revision)
-	focusReplay, appErr := helper.App.ConfigureExamDraftFocusLoss(ctx, call, exam.ConfigureDraftFocusLossCommand{
+	focusReplay, appErr := helper.App.ExamAuthoring.ConfigureExamDraftFocusLoss(ctx, call, exam.ConfigureDraftFocusLossCommand{
 		ExamID: created.Exam.ID, ExpectedDraftRevision: edited.Draft.Revision,
 		Enabled: false, MinimumDuration: 500 * time.Millisecond, IncidentCount: 1,
 		Window: 10 * time.Second, Outcome: model.IntegrityOutcomeFlag, IdempotencyKey: "exam-focus-loss-once",
@@ -108,12 +108,12 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	require.NoError(t, appErr, "focus policy replay = %#v", focusReplay)
 	require.Equal(t, focusPolicy.Draft.Revision, focusReplay.Draft.Revision, "focus policy replay = %#v", focusReplay)
 	staleTitle := "Operating Systems"
-	_, appErr = helper.App.EditExamDraftText(ctx, call, exam.EditDraftTextCommand{
+	_, appErr = helper.App.ExamAuthoring.EditExamDraftText(ctx, call, exam.EditDraftTextCommand{
 		ExamID: created.Exam.ID, ExpectedDraftRevision: created.Draft.Revision,
 		Title: &staleTitle, IdempotencyKey: "exam-edit-stale",
 	})
 	require.True(t, apperror.Is(appErr, "exam.draft.revision_conflict"), "stale edit error = %v", appErr)
-	got, appErr := helper.App.GetExam(ctx, call, exam.GetQuery{ExamID: created.Exam.ID})
+	got, appErr := helper.App.ExamAuthoring.GetExam(ctx, call, exam.GetQuery{ExamID: created.Exam.ID})
 	require.NoError(t, appErr)
 	require.Equal(t, created.Exam.ID, got.Exam.ID)
 	require.Equal(t, editedTitle, got.Draft.Title)
@@ -122,7 +122,7 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	require.Equal(t, 1, got.ManagerCount)
 	require.Equal(t, 0, got.ResourceCount)
 	require.False(t, got.HasStarterWorkspace)
-	active, appErr := helper.App.ListExams(ctx, call, exam.ListQuery{AcademicUnitID: unit.ID})
+	active, appErr := helper.App.ExamAuthoring.ListExams(ctx, call, exam.ListQuery{AcademicUnitID: unit.ID})
 	require.NoError(t, appErr)
 	require.Len(t, active.Items, 1)
 	require.Equal(t, created.Exam.ID, active.Items[0].ID)
@@ -133,7 +133,7 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	require.NoError(t, appErr)
 	managerMembership, err := persistence.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unit.ID, UserID: managerUser.ID, StartsAt: model.TimeFromMillis(model.GetMillis() - 1_000)})
 	require.NoError(t, err)
-	managerAdded, appErr := helper.App.AddExamManager(ctx, call, exam.AddManagerCommand{
+	managerAdded, appErr := helper.App.ExamAuthoring.AddExamManager(ctx, call, exam.AddManagerCommand{
 		ExamID: created.Exam.ID, UserID: managerUser.ID, ExpectedExamRevision: 1, IdempotencyKey: "exam-manager-add",
 	})
 	require.NoError(t, appErr, "manager addition = %#v", managerAdded)
@@ -143,23 +143,23 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	managerPrincipal, appErr := helper.App.Identity.AuthenticateAccess(ctx, managerLogin.Tokens.AccessToken)
 	require.NoError(t, appErr)
 	managerInvocation := invocation.New(*managerPrincipal, model.RequestMetadata{RequestID: "exam-manager-integration"})
-	_, appErr = helper.App.ListExamManagers(ctx, managerInvocation, exam.ListManagersQuery{ExamID: created.Exam.ID, Limit: 50})
+	_, appErr = helper.App.ExamAuthoring.ListExamManagers(ctx, managerInvocation, exam.ListManagersQuery{ExamID: created.Exam.ID, Limit: 50})
 	require.True(t, apperror.Is(appErr, "resource.not_found"), "Manager without role error = %v", appErr)
 	managerBinding, err := storetest.SaveRoleBinding(ctx, persistence, &model.RoleBinding{UserID: managerUser.ID, RoleID: role.ID, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unit.ID.String(), StartsAt: model.TimeFromMillis(model.GetMillis() - 1_000)})
 	require.NoError(t, err)
-	managers, appErr := helper.App.ListExamManagers(ctx, managerInvocation, exam.ListManagersQuery{ExamID: created.Exam.ID, Limit: 50})
+	managers, appErr := helper.App.ExamAuthoring.ListExamManagers(ctx, managerInvocation, exam.ListManagersQuery{ExamID: created.Exam.ID, Limit: 50})
 	require.NoError(t, appErr, "Manager list = %#v", managers)
 	require.Len(t, managers.Items, 2, "Manager list = %#v", managers)
 	managerBindingEndedAt := model.NowUTC().Add(-500 * time.Millisecond)
 	_, err = storetest.EndRoleBinding(ctx, persistence, managerBinding.ID, managerBindingEndedAt)
 	require.NoError(t, err)
-	_, appErr = helper.App.ListExamManagers(ctx, managerInvocation, exam.ListManagersQuery{ExamID: created.Exam.ID, Limit: 50})
+	_, appErr = helper.App.ExamAuthoring.ListExamManagers(ctx, managerInvocation, exam.ListManagersQuery{ExamID: created.Exam.ID, Limit: 50})
 	require.True(t, apperror.Is(appErr, "resource.not_found"), "Manager after role revocation error = %v", appErr)
 	_, err = storetest.SaveRoleBinding(ctx, persistence, &model.RoleBinding{UserID: managerUser.ID, RoleID: role.ID, ScopeType: model.RoleScopeAcademicUnit, ScopeID: unit.ID.String(), StartsAt: model.TimeUTC(managerBindingEndedAt)})
 	require.NoError(t, err)
 	_, err = storetest.EndAcademicUnitMember(ctx, persistence, managerMembership.ID, managerMembership.Revision, model.NowUTC().Add(-100*time.Millisecond))
 	require.NoError(t, err)
-	_, appErr = helper.App.ListExamManagers(ctx, managerInvocation, exam.ListManagersQuery{ExamID: created.Exam.ID, Limit: 50})
+	_, appErr = helper.App.ExamAuthoring.ListExamManagers(ctx, managerInvocation, exam.ListManagersQuery{ExamID: created.Exam.ID, Limit: 50})
 	require.True(t, apperror.Is(appErr, "resource.not_found"), "Manager after membership loss error = %v", appErr)
 	_, err = persistence.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unit.ID, UserID: managerUser.ID, StartsAt: model.TimeFromMillis(model.GetMillis() - 50)})
 	require.NoError(t, err)
@@ -182,13 +182,13 @@ func TestExamAuthoringIntegration(t *testing.T) {
 		ChangedAt: reenabledAt, AuditEventID: reenableAudit.ID, AuditAt: reenabledAt,
 	}))
 	require.NoError(t, err)
-	transferred, appErr := helper.App.TransferExamOwnership(ctx, call, exam.TransferOwnerCommand{
+	transferred, appErr := helper.App.ExamAuthoring.TransferExamOwnership(ctx, call, exam.TransferOwnerCommand{
 		ExamID: created.Exam.ID, UserID: managerUser.ID, ExpectedExamRevision: 2, IdempotencyKey: "exam-owner-transfer",
 	})
 	require.NoError(t, appErr, "ownership transfer = %#v", transferred)
 	require.Equal(t, managerUser.ID, transferred.Exam.OwnerUserID, "ownership transfer = %#v", transferred)
 	require.Equal(t, int64(3), transferred.Exam.Revision, "ownership transfer = %#v", transferred)
-	afterTransfer, appErr := helper.App.ListExamManagers(ctx, call, exam.ListManagersQuery{ExamID: created.Exam.ID, Limit: 50})
+	afterTransfer, appErr := helper.App.ExamAuthoring.ListExamManagers(ctx, call, exam.ListManagersQuery{ExamID: created.Exam.ID, Limit: 50})
 	require.NoError(t, appErr, "Manager relationships after ownership transfer = %#v", afterTransfer)
 	require.Len(t, afterTransfer.Items, 2, "Manager relationships after ownership transfer = %#v", afterTransfer)
 	relationships := map[model.UserID]bool{}
@@ -199,7 +199,7 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	require.True(t, remainsManager)
 	require.False(t, owner)
 	require.True(t, relationships[managerUser.ID])
-	removedCreator, appErr := helper.App.RemoveExamManager(ctx, managerInvocation, exam.RemoveManagerCommand{
+	removedCreator, appErr := helper.App.ExamAuthoring.RemoveExamManager(ctx, managerInvocation, exam.RemoveManagerCommand{
 		ExamID: created.Exam.ID, UserID: teacher.ID, ExpectedExamRevision: 3, IdempotencyKey: "exam-manager-remove-creator",
 	})
 	require.NoError(t, appErr, "creator relationship removal = %#v", removedCreator)
@@ -209,7 +209,7 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	membershipEndedAt := model.NowUTC().Add(-100 * time.Millisecond)
 	_, err = storetest.EndAcademicUnitMember(ctx, persistence, membership.ID, membership.Revision, membershipEndedAt)
 	require.NoError(t, err)
-	withoutMembership, appErr := helper.App.ListExams(ctx, call, exam.ListQuery{AcademicUnitID: unit.ID})
+	withoutMembership, appErr := helper.App.ExamAuthoring.ListExams(ctx, call, exam.ListQuery{AcademicUnitID: unit.ID})
 	require.NoError(t, appErr, "catalog after exact membership ended = %#v", withoutMembership)
 	require.Empty(t, withoutMembership.Items, "catalog after exact membership ended = %#v", withoutMembership)
 	_, err = persistence.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
@@ -219,7 +219,7 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	bindingEndedAt := model.NowUTC().Add(-50 * time.Millisecond)
 	_, err = storetest.EndRoleBinding(ctx, persistence, binding.ID, bindingEndedAt)
 	require.NoError(t, err)
-	_, appErr = helper.App.ListExams(ctx, call, exam.ListQuery{AcademicUnitID: unit.ID})
+	_, appErr = helper.App.ExamAuthoring.ListExams(ctx, call, exam.ListQuery{AcademicUnitID: unit.ID})
 	require.True(t, apperror.Is(appErr, "authorization.denied"), "catalog after role ended error = %v", appErr)
 	_, err = storetest.SaveRoleBinding(ctx, persistence, &model.RoleBinding{
 		UserID: teacher.ID, RoleID: role.ID, ScopeType: model.RoleScopeAcademicUnit,
@@ -232,9 +232,9 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	outsiderPrincipal, appErr := helper.App.Identity.AuthenticateAccess(ctx, outsiderLogin.Tokens.AccessToken)
 	require.NoError(t, appErr)
 	outsiderInvocation := invocation.New(*outsiderPrincipal, model.RequestMetadata{RequestID: "exam-get-denied-integration"})
-	_, appErr = helper.App.GetExam(ctx, outsiderInvocation, exam.GetQuery{ExamID: created.Exam.ID})
+	_, appErr = helper.App.ExamAuthoring.GetExam(ctx, outsiderInvocation, exam.GetQuery{ExamID: created.Exam.ID})
 	require.True(t, apperror.Is(appErr, "resource.not_found"), "outsider get error = %v, want concealed resource.not_found", appErr)
-	_, appErr = helper.App.ArchiveExam(ctx, outsiderInvocation, exam.ArchiveCommand{
+	_, appErr = helper.App.ExamAuthoring.ArchiveExam(ctx, outsiderInvocation, exam.ArchiveCommand{
 		ExamID: created.Exam.ID, ExpectedExamRevision: created.Exam.Revision, IdempotencyKey: "exam-archive-denied",
 	})
 	require.True(t, apperror.Is(appErr, "resource.not_found"), "outsider archive error = %v, want concealed resource.not_found", appErr)
@@ -247,14 +247,14 @@ func TestExamAuthoringIntegration(t *testing.T) {
 		ScopeID: institution.ID.String(), StartsAt: model.TimeFromMillis(model.GetMillis() - 1_000),
 	})
 	require.NoError(t, err)
-	overrideAdded, appErr := helper.App.AddExamManager(ctx, outsiderInvocation, exam.AddManagerCommand{
+	overrideAdded, appErr := helper.App.ExamAuthoring.AddExamManager(ctx, outsiderInvocation, exam.AddManagerCommand{
 		ExamID: created.Exam.ID, UserID: teacher.ID, ExpectedExamRevision: currentExamRevision, IdempotencyKey: "exam-manager-override-add",
 	})
 	require.NoError(t, appErr, "override Manager addition = %#v", overrideAdded)
 	require.Equal(t, currentExamRevision+1, overrideAdded.Exam.Revision, "override Manager addition = %#v", overrideAdded)
 	require.Equal(t, teacher.ID, overrideAdded.Manager.UserID, "override Manager addition = %#v", overrideAdded)
 	currentExamRevision = overrideAdded.Exam.Revision
-	overridePage, appErr := helper.App.ListExams(ctx, outsiderInvocation, exam.ListQuery{AcademicUnitID: unit.ID})
+	overridePage, appErr := helper.App.ExamAuthoring.ListExams(ctx, outsiderInvocation, exam.ListQuery{AcademicUnitID: unit.ID})
 	require.NoError(t, appErr, "override catalog = %#v", overridePage)
 	require.Len(t, overridePage.Items, 1, "override catalog = %#v", overridePage)
 	require.Equal(t, created.Exam.ID, overridePage.Items[0].ID, "override catalog = %#v", overridePage)
@@ -268,7 +268,7 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	require.Equal(t, model.AuditStatusSuccess, viewOverrideAudits[0].Status, "override list audits")
 	require.Equal(t, model.RoleScopeInstitution, viewOverrideAudits[0].ScopeType, "override list audits")
 	require.Equal(t, institution.ID.String(), viewOverrideAudits[0].ScopeID, "override list audits")
-	archived, appErr := helper.App.ArchiveExam(ctx, outsiderInvocation, exam.ArchiveCommand{
+	archived, appErr := helper.App.ExamAuthoring.ArchiveExam(ctx, outsiderInvocation, exam.ArchiveCommand{
 		ExamID: created.Exam.ID, ExpectedExamRevision: currentExamRevision, IdempotencyKey: "exam-archive-once",
 	})
 	require.NoError(t, appErr)
@@ -289,27 +289,27 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	require.Len(t, manageOverrideAudits, 5, "override archive audits = %#v, %v", manageOverrideAudits, err)
 	require.Equal(t, 4, manageStatuses[model.AuditStatusSuccess], "override archive audits = %#v, %v", manageOverrideAudits, err)
 	require.Equal(t, 1, manageStatuses[model.AuditStatusFail], "override archive audits = %#v, %v", manageOverrideAudits, err)
-	archiveReplay, appErr := helper.App.ArchiveExam(ctx, outsiderInvocation, exam.ArchiveCommand{
+	archiveReplay, appErr := helper.App.ExamAuthoring.ArchiveExam(ctx, outsiderInvocation, exam.ArchiveCommand{
 		ExamID: created.Exam.ID, ExpectedExamRevision: currentExamRevision, IdempotencyKey: "exam-archive-once",
 	})
 	require.NoError(t, appErr, "archive replay = %#v", archiveReplay)
 	require.Equal(t, archived.Revision, archiveReplay.Revision, "archive replay = %#v", archiveReplay)
 	require.True(t, archiveReplay.ArchivedAt.Time.Equal(archived.ArchivedAt.Time), "archive replay = %#v", archiveReplay)
-	active, appErr = helper.App.ListExams(ctx, call, exam.ListQuery{AcademicUnitID: unit.ID})
+	active, appErr = helper.App.ExamAuthoring.ListExams(ctx, call, exam.ListQuery{AcademicUnitID: unit.ID})
 	require.NoError(t, appErr, "active catalog after archive = %#v", active)
 	require.Empty(t, active.Items, "active catalog after archive = %#v", active)
-	archivedPage, appErr := helper.App.ListExams(ctx, call, exam.ListQuery{AcademicUnitID: unit.ID, ArchiveFilter: store.ExamArchiveArchived})
+	archivedPage, appErr := helper.App.ExamAuthoring.ListExams(ctx, call, exam.ListQuery{AcademicUnitID: unit.ID, ArchiveFilter: store.ExamArchiveArchived})
 	require.NoError(t, appErr, "archived catalog = %#v", archivedPage)
 	require.Len(t, archivedPage.Items, 1, "archived catalog = %#v", archivedPage)
 	require.Equal(t, archived.ID, archivedPage.Items[0].ID, "archived catalog = %#v", archivedPage)
 	require.True(t, archivedPage.Items[0].ArchivedAt.Valid, "archived catalog = %#v", archivedPage)
 	require.Equal(t, archived.Revision, archivedPage.Items[0].Revision, "archived catalog = %#v", archivedPage)
-	archivedView, appErr := helper.App.GetExam(ctx, call, exam.GetQuery{ExamID: created.Exam.ID})
+	archivedView, appErr := helper.App.ExamAuthoring.GetExam(ctx, call, exam.GetQuery{ExamID: created.Exam.ID})
 	require.NoError(t, appErr, "archived exact Get = %#v", archivedView)
 	require.True(t, archivedView.Exam.IsArchived(), "archived exact Get = %#v", archivedView)
 	require.Equal(t, editedTitle, archivedView.Draft.Title, "archived exact Get = %#v", archivedView)
 	postArchiveTitle := "Cannot edit archived Exam"
-	_, appErr = helper.App.EditExamDraftText(ctx, call, exam.EditDraftTextCommand{
+	_, appErr = helper.App.ExamAuthoring.EditExamDraftText(ctx, call, exam.EditDraftTextCommand{
 		ExamID: created.Exam.ID, ExpectedDraftRevision: focusPolicy.Draft.Revision,
 		Title: &postArchiveTitle, IdempotencyKey: "exam-edit-after-archive",
 	})

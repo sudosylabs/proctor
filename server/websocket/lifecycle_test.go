@@ -48,6 +48,7 @@ func newTestHub(t *testing.T) *websocket.Hub {
 	t.Helper()
 	hub, err := websocket.NewHub(
 		lifecycleApplication{},
+		nil,
 		lifecycleLogger{},
 		"https://proctor.example",
 		"node-a",
@@ -156,7 +157,7 @@ func TestHubOriginAllowedMatchesHTTPOriginNormalization(t *testing.T) {
 	t.Parallel()
 
 	for _, publicURL := range []string{"https://Proctor.Example:443/", "https://proctor.example", "HTTPS://PROCTOR.EXAMPLE"} {
-		hub, err := websocket.NewHub(lifecycleApplication{}, lifecycleLogger{}, publicURL, "node-a", nil)
+		hub, err := websocket.NewHub(lifecycleApplication{}, nil, lifecycleLogger{}, publicURL, "node-a", nil)
 		require.NoError(t, err, "NewHub(%q) error", publicURL)
 		t.Cleanup(func() { _ = hub.Close(context.Background()) })
 		for _, origin := range []string{"https://proctor.example", "https://PROCTOR.example", "https://proctor.example:443"} {

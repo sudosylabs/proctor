@@ -73,8 +73,10 @@ func TestConnectionRuntimeClonesTheAcceptedPrincipal(t *testing.T) {
 		SessionID:        model.NewSessionID(),
 		CredentialScopes: []string{"class.view"},
 	}
+	application := &inboundTestApplication{}
 	runtime := newConnectionRuntime(
-		&inboundTestApplication{},
+		application,
+		application,
 		replayTestLogger{},
 		nil,
 		"",
@@ -186,8 +188,10 @@ func TestHubRetainsOnlyTheRuntimeFinalSnapshot(t *testing.T) {
 
 func newInternalTestHub(t *testing.T) *Hub {
 	t.Helper()
+	application := &inboundTestApplication{}
 	hub, err := NewHub(
-		&inboundTestApplication{},
+		application,
+		application,
 		replayTestLogger{},
 		"https://proctor.example",
 		"node-a",

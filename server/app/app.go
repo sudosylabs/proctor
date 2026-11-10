@@ -25,24 +25,9 @@ import (
 	"github.com/sudosylabs/proctor/server/app/user"
 )
 
-// Exam services live in child modules whose types share names such as
-// Service; these aliases give each embedded field a distinct name.
-type (
-	examAuthoringService        = exam.Authoring
-	examPublicationService      = exam.Publication
-	examRecordsService          = exam.Records
-	examExportsService          = exam.Exports
-	examSittingService          = sitting.Service
-	examAttemptService          = attempt.Service
-	examReviewService           = review.Service
-	examResourceService         = resource.Service
-	examCorrectionService       = correction.Service
-	examStarterWorkspaceService = workspace.Service
-)
-
-// App is the long-lived application surface. It embeds each focused service
-// that owns public use cases, so its method set is their exported methods and
-// it declares no use case of its own. Construction receives only the explicit
+// App is the long-lived application surface. It holds each focused service
+// that owns public use cases, and embeds the rest, so it declares no use
+// case of its own. Construction receives only the explicit
 // Dependencies bundle; infrastructure getters and platform location are not
 // part of the public surface.
 type App struct {
@@ -58,16 +43,29 @@ type App struct {
 	Academic *academic.Service
 	*invitationService
 	*onboardingImportService
-	*examAuthoringService
-	*examPublicationService
-	*examSittingService
-	*examRecordsService
-	*examExportsService
-	*examAttemptService
-	*examReviewService
-	*examResourceService
-	*examCorrectionService
-	*examStarterWorkspaceService
+	// ExamAuthoring holds Exam draft authoring, Question and Section use
+	// cases.
+	ExamAuthoring *exam.Authoring
+	// ExamPublication holds Exam Revision publication and Revision history
+	// use cases.
+	ExamPublication *exam.Publication
+	// ExamRecords holds Exam listing, detail and record use cases.
+	ExamRecords *exam.Records
+	// ExamExports holds Exam export and content export use cases.
+	ExamExports *exam.Exports
+	// Sittings holds Sitting scheduling, lifecycle and manager use cases.
+	Sittings *sitting.Service
+	// Attempts holds Attempt connection, answer, Submission and integrity
+	// evidence use cases.
+	Attempts *attempt.Service
+	// Reviews holds Submission review, grading and result release use cases.
+	Reviews *review.Service
+	// Resources holds Exam Resource use cases.
+	Resources *resource.Service
+	// Corrections holds result correction use cases.
+	Corrections *correction.Service
+	// StarterWorkspaces holds Starter Workspace use cases.
+	StarterWorkspaces *workspace.Service
 	// Users holds the User directory, profile, settings and profile-picture
 	// use cases.
 	Users *user.Service

@@ -224,18 +224,8 @@ type Application interface {
 	registrationApplication
 	RetentionPolicyApplication
 	RetentionApplication
-	ExamRecordsApplication
-	ExamExportsApplication
 	JobOperationsApplication
 	MailApplication
-	ExamApplication
-	ExamRevisionApplication
-	ExamSittingApplication
-	ExamSittingCorrectionApplication
-	ExamResourceApplication
-	ExamStarterWorkspaceApplication
-	ExamAttemptApplication
-	ExamIntegrityReviewApplication
 }
 
 // IdentityApplication is the identity area's use cases: credential

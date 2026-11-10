@@ -20,6 +20,13 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/exam"
+	"github.com/sudosylabs/proctor/server/app/exam/attempt"
+	"github.com/sudosylabs/proctor/server/app/exam/correction"
+	"github.com/sudosylabs/proctor/server/app/exam/resource"
+	"github.com/sudosylabs/proctor/server/app/exam/review"
+	"github.com/sudosylabs/proctor/server/app/exam/sitting"
+	"github.com/sudosylabs/proctor/server/app/exam/workspace"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/realtime"
@@ -72,7 +79,7 @@ var (
 	_ httpapi.StudentProgressionApplication          = (*app.App)(nil)
 	_ httpapi.AcademicAdministrationBatchApplication = (*app.App)(nil)
 	_ httpapi.UserProfileApplication                 = (*user.Service)(nil)
-	_ httpapi.UserAccountApplication                 = (*app.App)(nil)
+	_ httpapi.UserAccountApplication                 = (*attempt.Service)(nil)
 	_ httpapi.UserSettingsApplication                = (*user.Service)(nil)
 	_ httpapi.AccountStateApplication                = (*identity.Service)(nil)
 	_ httpapi.SessionAdministrationApplication       = (*identity.Service)(nil)
@@ -82,6 +89,16 @@ var (
 	_ httpapi.BootstrapApplication                   = (*identity.Service)(nil)
 	_ httpapi.AccessPolicyApplication                = (*app.App)(nil)
 	_ httpapi.MailApplication                        = (*app.App)(nil)
+	_ httpapi.ExamApplication                        = (*exam.Authoring)(nil)
+	_ httpapi.ExamRevisionApplication                = (*exam.Publication)(nil)
+	_ httpapi.ExamSittingApplication                 = (*sitting.Service)(nil)
+	_ httpapi.ExamSittingCorrectionApplication       = (*correction.Service)(nil)
+	_ httpapi.ExamResourceApplication                = (*resource.Service)(nil)
+	_ httpapi.ExamStarterWorkspaceApplication        = (*workspace.Service)(nil)
+	_ httpapi.ExamAttemptApplication                 = (*attempt.Service)(nil)
+	_ httpapi.ExamIntegrityReviewApplication         = (*review.Service)(nil)
+	_ httpapi.ExamRecordsApplication                 = (*exam.Records)(nil)
+	_ httpapi.ExamExportsApplication                 = (*exam.Exports)(nil)
 )
 
 // consumerConstructors is a package-private failure seam used by composition
@@ -155,7 +172,7 @@ func defaultConsumerConstructors(
 			return application.AttachRealtimeClusterFanout(fanout)
 		},
 		websocket: func(application *app.App, logger runtimeLogger, publicURL, nodeID string) (composedWebSocket, error) {
-			return websocket.NewHub(application, websocketLogger{log: logger}, publicURL, nodeID, localizer)
+			return websocket.NewHub(application, application.Attempts, websocketLogger{log: logger}, publicURL, nodeID, localizer)
 		},
 		attachSink: func(application *app.App, sink realtime.Sink) error {
 			return application.AttachRealtimeSink(sink)
@@ -442,9 +459,26 @@ func httpAPIOptions(
 	// still fills every capability, as the App itself does.
 	var academics *academic.Service
 	var users *user.Service
+	var (
+		examAuthoring     *exam.Authoring
+		examPublication   *exam.Publication
+		examRecords       *exam.Records
+		examExports       *exam.Exports
+		sittings          *sitting.Service
+		attempts          *attempt.Service
+		reviews           *review.Service
+		resources         *resource.Service
+		corrections       *correction.Service
+		starterWorkspaces *workspace.Service
+	)
 	if application != nil {
 		academics = application.Academic
 		users = application.Users
+		examAuthoring, examPublication = application.ExamAuthoring, application.ExamPublication
+		examRecords, examExports = application.ExamRecords, application.ExamExports
+		sittings, attempts, reviews = application.Sittings, application.Attempts, application.Reviews
+		resources, corrections = application.Resources, application.Corrections
+		starterWorkspaces = application.StarterWorkspaces
 	}
 	identities := applicationIdentity(application)
 	return httpapi.Options{
@@ -454,7 +488,7 @@ func httpAPIOptions(
 		Application: application, Identity: identities, AcademicUnits: academics, Institutions: academics,
 		Programmes: academics, ProgrammeLevels: academics, AcademicPeriods: academics,
 		Classes: academics, Affiliations: academics, AcademicUnitMembers: academics,
-		ClassMembers: academics, UserProfiles: users, UserAccounts: application, UserSettings: users, AccountStates: identities,
+		ClassMembers: academics, UserProfiles: users, UserAccounts: attempts, UserSettings: users, AccountStates: identities,
 		Invitations:                   application,
 		BrowserInvitations:            application,
 		OnboardingImports:             application,
@@ -462,7 +496,10 @@ func httpAPIOptions(
 		AcademicAdministrationBatches: application,
 		SessionAdministrations:        identities, Roles: application, RoleBindings: application,
 		AuditListings: application, Bootstrap: identities, AccessPolicy: application, BuildInfo: buildInfo,
-		Mail:      application,
+		Mail:  application,
+		Exams: examAuthoring, ExamRevisions: examPublication, ExamSittings: sittings,
+		ExamCorrections: corrections, ExamResources: resources, ExamStarterWorkspaces: starterWorkspaces,
+		ExamAttempts: attempts, ExamIntegrityReviews: reviews, ExamRecords: examRecords, ExamExports: examExports,
 		PublicURL: snapshot.Server.PublicURL, MaxBodyBytes: snapshot.Server.MaxBodyBytes,
 		ReadTimeout: snapshot.Server.ReadTimeout.Duration, WriteTimeout: snapshot.Server.WriteTimeout.Duration,
 		TrustedProxies:          trustedProxies,

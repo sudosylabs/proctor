@@ -103,20 +103,10 @@ func resolveResourceApplications(options Options) (resourceApplications, error) 
 	var mfaKeys MFAKeyApplication = identity
 	var personalAccessTokens PersonalAccessTokens = identity
 	var userEmails UserEmailApplication = identity
-	var exams ExamApplication = application
-	var examRevisions ExamRevisionApplication = application
-	var examSittings ExamSittingApplication = application
-	var examCorrections ExamSittingCorrectionApplication = application
-	var examResources ExamResourceApplication = application
-	var examStarterWorkspace ExamStarterWorkspaceApplication = application
-	var examAttempts ExamAttemptApplication = application
-	var examIntegrityReviews ExamIntegrityReviewApplication = application
 	var jobs JobOperationsApplication = application
 	var desktopCompatibility DesktopCompatibilityApplication = identity
 	var retentionPolicy RetentionPolicyApplication = application
 	var retention RetentionApplication = application
-	var examRecords ExamRecordsApplication = application
-	var examExports ExamExportsApplication = application
 	var sessionReauthentication SessionReauthentication = identity
 	var search SearchApplication = application
 	var administrationCounts AdministrationCountsApplication = application
@@ -143,10 +133,10 @@ func resolveResourceApplications(options Options) (resourceApplications, error) 
 		academicPeriods: options.AcademicPeriods, classes: options.Classes,
 		affiliations: options.Affiliations, academicUnitMembers: options.AcademicUnitMembers,
 		classMembers: options.ClassMembers,
-		exams:        exams, examRevisions: examRevisions, examSittings: examSittings,
-		examCorrections: examCorrections, examResources: examResources,
-		examStarterWorkspace: examStarterWorkspace, examAttempts: examAttempts,
-		examIntegrityReviews: examIntegrityReviews,
+		exams:        options.Exams, examRevisions: options.ExamRevisions, examSittings: options.ExamSittings,
+		examCorrections: options.ExamCorrections, examResources: options.ExamResources,
+		examStarterWorkspace: options.ExamStarterWorkspaces, examAttempts: options.ExamAttempts,
+		examIntegrityReviews: options.ExamIntegrityReviews,
 		invitations:          options.Invitations, onboardingImports: options.OnboardingImports,
 		studentProgressions:           options.StudentProgressions,
 		academicAdministrationBatches: options.AcademicAdministrationBatches,
@@ -154,8 +144,8 @@ func resolveResourceApplications(options Options) (resourceApplications, error) 
 		desktopCompatibility: desktopCompatibility,
 		retentionPolicy:      retentionPolicy,
 		retention:            retention,
-		examRecords:          examRecords,
-		examExports:          examExports,
+		examRecords:          options.ExamRecords,
+		examExports:          options.ExamExports,
 		search:               search,
 		administrationCounts: administrationCounts,
 		audit:                options.AuditListings, jobs: jobs, mail: options.Mail, bootstrap: options.Bootstrap,
@@ -194,6 +184,16 @@ func requireResourceApplicationOptions(options Options) error {
 		{options.Bootstrap == nil, "bootstrap application is required"},
 		{options.AccessPolicy == nil, "access policy application is required"},
 		{options.Mail == nil, "mail application is required"},
+		{options.Exams == nil, "exam application is required"},
+		{options.ExamRevisions == nil, "exam revision application is required"},
+		{options.ExamSittings == nil, "exam sitting application is required"},
+		{options.ExamCorrections == nil, "exam sitting correction application is required"},
+		{options.ExamResources == nil, "exam resource application is required"},
+		{options.ExamStarterWorkspaces == nil, "exam starter workspace application is required"},
+		{options.ExamAttempts == nil, "exam attempt application is required"},
+		{options.ExamIntegrityReviews == nil, "exam integrity review application is required"},
+		{options.ExamRecords == nil, "exam records application is required"},
+		{options.ExamExports == nil, "exam exports application is required"},
 	}
 	for _, dependency := range required {
 		if dependency.missing {

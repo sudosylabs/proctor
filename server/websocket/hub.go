@@ -75,6 +75,7 @@ const (
 // drains connections when the hub was started.
 type Hub struct {
 	application  Application
+	attempts     ExamAttemptApplication
 	logger       Logger
 	localizer    Localizer
 	publicOrigin string
@@ -147,6 +148,7 @@ type Application interface {
 // connections and background work within the shutdown budget it is handed.
 func NewHub(
 	application Application,
+	attempts ExamAttemptApplication,
 	logger Logger,
 	publicURL string,
 	nodeID string,
@@ -165,6 +167,7 @@ func NewHub(
 	shardCount := max(runtime.NumCPU(), 1)
 	hub := &Hub{
 		application:  application,
+		attempts:     attempts,
 		logger:       logger,
 		localizer:    localizer,
 		publicOrigin: publicOrigin,
@@ -341,6 +344,7 @@ func (h *Hub) register(
 	resume := takeReplayResumeLocked(shard, principal, requestedID, requestedSequence)
 	connection := newConnectionRuntime(
 		h.application,
+		h.attempts,
 		h.logger,
 		h.localizer,
 		locale,

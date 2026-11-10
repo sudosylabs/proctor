@@ -30,6 +30,21 @@ func (a *testHTTPApplication) AuthenticateBearer(context.Context, string) (*mode
 	return a.principal, nil
 }
 
+// testExamApplications satisfies every Exam resource port with no behavior;
+// a test that reaches an Exam handler supplies its own fake instead.
+type testExamApplications struct {
+	ExamApplication
+	ExamRevisionApplication
+	ExamSittingApplication
+	ExamSittingCorrectionApplication
+	ExamResourceApplication
+	ExamStarterWorkspaceApplication
+	ExamAttemptApplication
+	ExamIntegrityReviewApplication
+	ExamRecordsApplication
+	ExamExportsApplication
+}
+
 type testHTTPHealth struct{}
 
 func (testHTTPHealth) Live() bool  { return true }
@@ -45,6 +60,7 @@ func validHTTPOptions(t *testing.T) Options {
 	t.Helper()
 	logger, _ := newTestLogger(t)
 	application := &testHTTPApplication{}
+	examApplications := &testExamApplications{}
 	return Options{
 		Logger: logger, Localizer: newTestLocalizer(t), Health: testHTTPHealth{}, Application: application, Identity: application,
 		AcademicUnits: &academicUnitHTTPApplication{}, Institutions: &institutionHTTPApplication{},
@@ -60,7 +76,11 @@ func validHTTPOptions(t *testing.T) Options {
 		Roles: &roleHTTPApplication{}, RoleBindings: &roleBindingHTTPApplication{},
 		AuditListings: &auditListingHTTPApplication{}, Bootstrap: &bootstrapHTTPApplication{},
 		AccessPolicy: unavailableAccessPolicyApplication{}, Mail: application,
-		BuildInfo: BuildInfo{Version: "test"}, PublicURL: "http://localhost:8065",
+		Exams: examApplications, ExamRevisions: examApplications, ExamSittings: examApplications,
+		ExamCorrections: examApplications, ExamResources: examApplications, ExamStarterWorkspaces: examApplications,
+		ExamAttempts: examApplications, ExamIntegrityReviews: examApplications, ExamRecords: examApplications,
+		ExamExports: examApplications,
+		BuildInfo:   BuildInfo{Version: "test"}, PublicURL: "http://localhost:8065",
 		MaxBodyBytes: 1 << 20, RecentAuthenticationTTL: time.Minute, NodeID: "node-a",
 		WebSocket: testWebSocketTransport{},
 	}

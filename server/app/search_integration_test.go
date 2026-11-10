@@ -97,9 +97,9 @@ func TestSearchIntegrationScopesEveryTypeToTheCaller(t *testing.T) {
 	teach(physicist, physics.unit)
 	chemist, chemistCall := newCaller("orbit-chemist")
 	teach(chemist, chemistry.unit)
-	physicsExam, appErr := helper.App.CreateExam(ctx, physicistCall, exam.CreateCommand{AcademicUnitID: physics.unit.ID, Title: "Orbit mechanics", IdempotencyKey: "search-physics-exam"})
+	physicsExam, appErr := helper.App.ExamAuthoring.CreateExam(ctx, physicistCall, exam.CreateCommand{AcademicUnitID: physics.unit.ID, Title: "Orbit mechanics", IdempotencyKey: "search-physics-exam"})
 	require.NoError(t, appErr)
-	_, appErr = helper.App.CreateExam(ctx, chemistCall, exam.CreateCommand{AcademicUnitID: chemistry.unit.ID, Title: "Orbital chemistry", IdempotencyKey: "search-chemistry-exam"})
+	_, appErr = helper.App.ExamAuthoring.CreateExam(ctx, chemistCall, exam.CreateCommand{AcademicUnitID: chemistry.unit.ID, Title: "Orbital chemistry", IdempotencyKey: "search-chemistry-exam"})
 	require.NoError(t, appErr)
 
 	result, appErr := helper.App.Search(ctx, physicistCall, app.SearchQuery{Query: "  ORBIT  "})

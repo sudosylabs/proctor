@@ -180,6 +180,16 @@ type Options struct {
 	Bootstrap                     BootstrapApplication
 	AccessPolicy                  AccessPolicyApplication
 	Mail                          MailApplication
+	Exams                         ExamApplication
+	ExamRevisions                 ExamRevisionApplication
+	ExamSittings                  ExamSittingApplication
+	ExamCorrections               ExamSittingCorrectionApplication
+	ExamResources                 ExamResourceApplication
+	ExamStarterWorkspaces         ExamStarterWorkspaceApplication
+	ExamAttempts                  ExamAttemptApplication
+	ExamIntegrityReviews          ExamIntegrityReviewApplication
+	ExamRecords                   ExamRecordsApplication
+	ExamExports                   ExamExportsApplication
 	BuildInfo                     BuildInfo
 	PublicURL                     string
 	MaxBodyBytes                  int64

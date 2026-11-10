@@ -51,7 +51,7 @@ func closeWithin(hub *Hub, budget time.Duration) error {
 func startShutdownAttempt(t *testing.T) (*Hub, *shutdownAttemptApplication, <-chan struct{}) {
 	t.Helper()
 	application := &shutdownAttemptApplication{entered: make(chan struct{}), release: make(chan struct{}), canceled: make(chan struct{})}
-	hub, err := NewHub(application, replayTestLogger{}, "https://proctor.example", "node-a", nil)
+	hub, err := NewHub(application, application, replayTestLogger{}, "https://proctor.example", "node-a", nil)
 	require.NoError(t, err)
 	err = hub.Start(context.Background())
 	require.NoError(t, err)

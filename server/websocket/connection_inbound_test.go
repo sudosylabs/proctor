@@ -226,8 +226,10 @@ func newInboundRuntime(
 	socket connectionSocket,
 	clock runtimeClock,
 ) *connectionRuntime {
+	attempts, _ := application.(ExamAttemptApplication)
 	return &connectionRuntime{
 		application: application,
+		attempts:    attempts,
 		socket:      socket,
 		clock:       clock,
 		principal: model.Principal{
@@ -1214,6 +1216,7 @@ func TestConnectionRuntimeAppendBackpressurePreservesRenewalAndCancelsWorker(t *
 	application := &blockedAppendApplication{inboundTestApplication: &inboundTestApplication{}, entered: make(chan struct{}), finished: make(chan struct{})}
 	runtime := newInboundRuntime(application.inboundTestApplication, socket, newRuntimeTestClock(at))
 	runtime.application = application
+	runtime.attempts = application
 	attemptID, participationID := model.NewExamAttemptID(), model.NewAttemptParticipationID()
 	runtime.attempt = &examAttemptBinding{attemptID: attemptID, participationID: participationID, connectionID: model.NewAttemptConnectionID(), generation: 1}
 	application.renewResult = attempt.ParticipationRenewal{SecurityCoverage: renewalCoverageResultFixture(), AttemptID: attemptID,

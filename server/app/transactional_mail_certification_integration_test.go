@@ -149,15 +149,15 @@ func TestTransactionalMailPhaseCertification(t *testing.T) {
 		ClassID: class.ID, UserID: candidate.ID, StartsAt: now.Add(-time.Hour),
 	})
 	require.NoError(t, err)
-	created, appErr := helper.App.CreateExam(ctx, adminInvocation, exam.CreateCommand{
+	created, appErr := helper.App.ExamAuthoring.CreateExam(ctx, adminInvocation, exam.CreateCommand{
 		AcademicUnitID: unit.ID, Title: "Mail Certification Exam", IdempotencyKey: "mail-cert-exam",
 	})
 	require.NoError(t, appErr)
-	published, appErr := helper.App.PublishExamRevision(ctx, adminInvocation, exam.PublishRevisionCommand{
+	published, appErr := helper.App.ExamPublication.PublishExamRevision(ctx, adminInvocation, exam.PublishRevisionCommand{
 		ExamID: created.Exam.ID, ExpectedDraftRevision: created.Draft.Revision, IdempotencyKey: "mail-cert-publish",
 	})
 	require.NoError(t, appErr)
-	_, appErr = helper.App.ScheduleExamSitting(ctx, adminInvocation, sitting.ScheduleCommand{
+	_, appErr = helper.App.Sittings.ScheduleExamSitting(ctx, adminInvocation, sitting.ScheduleCommand{
 		ExamID: created.Exam.ID, ExamRevisionID: published.ID, ClassID: class.ID,
 		ScheduledStartAt: now.Add(2 * time.Hour), ScheduledEndAt: now.Add(4 * time.Hour),
 		IdempotencyKey: "mail-cert-sitting",

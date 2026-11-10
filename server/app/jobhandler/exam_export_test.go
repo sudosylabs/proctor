@@ -80,6 +80,7 @@ func TestExamExportBuildJobIsStrictClaimBoundedAndSafe(t *testing.T) {
 }
 
 type exportMaintenanceFake struct {
+	store.ExamExportStore
 	artifacts  []store.ExamExportArtifact
 	completed  []store.ExamExportArtifact
 	limit      int

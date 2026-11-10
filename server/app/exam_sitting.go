@@ -20,30 +20,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// examSittingLifecycle is the Sitting lifecycle work the lifecycle Job
-// drives; its tests substitute a fake.
-type examSittingLifecycle interface {
-	AdvanceDue(context.Context, invocation.System, model.ExamSittingID) (store.ExamSittingLifecycleResult, error)
-	ListLifecycleDue(context.Context, invocation.System, store.ExamSittingLifecycleDueOptions) ([]store.ExamSittingLifecycleDue, error)
-}
-
-type examSittingLifecycleJobUseCases struct{ sittings examSittingLifecycle }
-
-func (uc examSittingLifecycleJobUseCases) ReconcileExamSittingLifecycleFromJob(ctx context.Context, sittingID model.ExamSittingID, jobID model.JobID,
-	attemptID model.JobAttemptID,
-) (*store.ExamSittingLifecycleResult, error) {
-	call := invocation.System{JobID: jobID, AttemptID: attemptID}
-	result, err := uc.sittings.AdvanceDue(ctx, call, sittingID)
-	if err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
-func (uc examSittingLifecycleJobUseCases) ListExamSittingLifecycleDueFromJob(ctx context.Context, system invocation.System, options store.ExamSittingLifecycleDueOptions) ([]store.ExamSittingLifecycleDue, error) {
-	return uc.sittings.ListLifecycleDue(ctx, system, options)
-}
-
 type examSittingSystemAuditAdapter struct{ audit *access.Auditor }
 
 func (a examSittingSystemAuditAdapter) Begin(ctx context.Context, call invocation.System, action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID, operation string, value map[string]any) (model.AuditEventID, error) {

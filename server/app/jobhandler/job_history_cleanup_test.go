@@ -22,6 +22,7 @@ import (
 )
 
 type jobHistoryCleanerFake struct {
+	store.JobStore
 	requests   []*store.JobHistoryCleanup
 	results    []*store.JobHistoryCleanupResult
 	enqueued   []*model.Job

@@ -23,6 +23,7 @@ import (
 )
 
 type mailMaintenanceFake struct {
+	store.MailStore
 	suppressed  int
 	outstanding *store.MailMaintenanceResult
 	expired     []*store.MailMaintenanceResult
@@ -32,6 +33,7 @@ type mailMaintenanceFake struct {
 }
 
 type sittingMailMaintenanceFake struct {
+	store.ExamSittingStore
 	results []*store.ExamSittingMailMaintenanceResult
 	calls   int
 }

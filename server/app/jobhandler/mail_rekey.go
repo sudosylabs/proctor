@@ -70,14 +70,8 @@ func DecodeMailRekeyResult(document json.RawMessage) (MailRekeyResult, error) {
 	return value, err
 }
 
-type MailRekeyJobStore interface {
-	ListRekeyTargets(context.Context, *store.MailRekeyTargetPageRequest) (*store.MailRekeyTargetPage, error)
-	ReplaceRekeyTarget(context.Context, *store.MailRekeyReplacement) (bool, error)
-	ProveRekey(context.Context, *store.MailRekeyProofRequest) (*store.MailRekeyProof, error)
-}
-
 type mailRekeyHandler struct {
-	mail   MailRekeyJobStore
+	mail   store.MailStore
 	sealer *secretseal.Sealer
 }
 
@@ -269,6 +263,6 @@ func mailRekeyDescriptor(handler job.Handler) job.Descriptor {
 
 // NewMailRekeyDescriptor registers the re-sealing of stored mail payloads
 // under a new primary key.
-func NewMailRekeyDescriptor(mail MailRekeyJobStore, sealer *secretseal.Sealer) job.Descriptor {
+func NewMailRekeyDescriptor(mail store.MailStore, sealer *secretseal.Sealer) job.Descriptor {
 	return mailRekeyDescriptor(mailRekeyHandler{mail: mail, sealer: sealer})
 }

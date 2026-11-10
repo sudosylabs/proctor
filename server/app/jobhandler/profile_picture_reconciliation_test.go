@@ -21,6 +21,7 @@ import (
 )
 
 type reconciliationUserListerFake struct {
+	store.UserStore
 	users []*model.User
 	calls []store.UserListOptions
 }

@@ -20,13 +20,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type MailDeliveryLifecycleStore interface {
-	GetDelivery(context.Context, model.MailDeliveryID) (*model.MailDelivery, error)
-	StartDelivery(context.Context, *store.MailDeliveryStart) (*model.MailDelivery, error)
-	CompleteDelivery(context.Context, *store.MailDeliveryCompletion) (*model.MailDelivery, error)
-	AcquireSendPermit(context.Context, store.MailSendClass) (*store.MailSendPermit, error)
-}
-
 type MailDeliveryMetric struct {
 	TemplateKey       model.MailTemplateKey
 	State             model.MailDeliveryState
@@ -51,7 +44,7 @@ type MailHealth interface {
 type MailDeliveryRelevance func(context.Context, *model.MailDelivery) (bool, error)
 
 type mailDeliveryHandler struct {
-	deliveries MailDeliveryLifecycleStore
+	deliveries store.MailStore
 	sender     mail.Sender
 	sealer     *secretseal.Sealer
 	recorder   MailDeliveryRecorder
@@ -346,7 +339,7 @@ func newMailDeliveryDescriptor(jobType model.JobType, concurrency int, handler j
 // MailDeliveryDependencies are the collaborators of the mail delivery Jobs.
 // The ordinary and credential pools share them.
 type MailDeliveryDependencies struct {
-	Deliveries MailDeliveryLifecycleStore
+	Deliveries store.MailStore
 	Sender     mail.Sender
 	Sealer     *secretseal.Sealer
 	Recorder   MailDeliveryRecorder

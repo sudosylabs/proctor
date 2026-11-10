@@ -279,7 +279,10 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/invocation"),
 			exact(serverModule+"/app/job"),
 			exact(serverModule+"/app/mail"),
+			exact(serverModule+"/app/user"),
+			exact(serverModule+"/app/exam"),
 			exact(serverModule+"/app/exam/attempt"),
+			exact(serverModule+"/app/exam/sitting"),
 		),
 	},
 	{

@@ -21,6 +21,7 @@ import (
 )
 
 type sessionPurgeStoreFake struct {
+	store.SessionStore
 	passes []store.SessionPurgeResult
 	inputs []store.SessionPurge
 }
@@ -36,6 +37,7 @@ func (f *sessionPurgeStoreFake) PurgeRetired(_ context.Context, input *store.Ses
 }
 
 type sessionCredentialPurgeStoreFake struct {
+	store.SessionCredentialStore
 	deleted []int64
 	inputs  []store.SessionCredentialPurge
 }

@@ -16,7 +16,7 @@ model ← app/invocation ← {app, app/idempotency, app/exam}
 {model, store, app/access, app/paging, app/apperror, app/invocation, app/idempotency, app/identity, app/internal/batchitem, app/jobhandler, app/mail} ← app/administration ← {app, httpapi, server}
 {model, store, app/academic, app/access, app/administration, app/paging, app/apperror, app/invocation, app/idempotency, app/identity, app/internal/batchitem, app/jobhandler, app/mail, app/user} ← app/onboarding ← {app, httpapi, server}
 {model, store, app/apperror, app/invocation} ← app/idempotency ← {app, app/exam}
-{model, store, app/job, app/mail, app/exam} ← app/jobhandler ← app
+{model, store, secretseal, app/invocation, app/job, app/mail, app/user, app/exam, app/exam/attempt, app/exam/sitting} ← app/jobhandler ← {app, app/identity, app/administration, app/onboarding}
 model ← app/realtime ← {app, websocket}
 {model, store} ← app/exam ← app
 {model, store, secretseal, app/exam, localization} ← app/mail ← app
@@ -65,7 +65,7 @@ inside `app/` are application-owned modules, not transports.
 | `app/paging` | `store`, `app/apperror`, standard library | `model`, parent `app`, area packages, transports, concrete adapters |
 | `app/internal/batchitem` | `model`, `store`, standard library | everything else; only `app`, `app/academic`, `app/identity`, `app/administration` and `app/onboarding` may import it, so no transport can build a batch context |
 | `app/academic` | `model`, `store`, `app/access`, `app/paging`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/mail`, `app/realtime`, `app/internal/batchitem`, standard library | parent `app`, `app/exam`, `app/job`, transports, platform, concrete adapters |
-| `app/jobhandler` | `model`, bounded `store` contracts, `app/job`, leaf `app/mail` and `app/exam` capabilities, `secretseal`, standard library | parent `app`, `store.Catalog`, transports, platform, concrete adapters |
+| `app/jobhandler` | `model`, bounded `store` contracts, `app/invocation`, `app/job`, leaf `app/mail` capabilities, the `app/user`, `app/exam`, `app/exam/attempt` and `app/exam/sitting` services its handlers hold, `secretseal`, standard library | parent `app`, `store.Catalog`, transports, platform, concrete adapters |
 | `app/realtime` | `model`, `logging`, standard library, consumer-owned ports | parent `app`, HTTP, WebSocket libraries, cluster adapters |
 | `app/exam` | `model`, bounded `store` contracts, standard library, consumer-owned ports, `app/apperror`, `app/invocation`, `app/idempotency`, and explicitly shared leaf packages such as `app/exam/safemarkdown` | parent `app`, transports, platform, concrete adapters |
 | `app/exam/safemarkdown` | Standard library | model, store, parent `app`, transports, concrete adapters |

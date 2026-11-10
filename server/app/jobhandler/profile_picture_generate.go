@@ -15,6 +15,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -39,11 +40,13 @@ func NewDefaultProfilePictureJobs(deps DefaultProfilePictureJobsDependencies) *D
 
 func (p *DefaultProfilePictureJobs) SetWake(wake func()) { p.wake = wake }
 
-func PrepareUserDefaultProfilePictureJob(user *model.User, at time.Time) (*model.User, *model.Job, error) {
-	if user == nil {
+// PrepareUserDefaultProfilePictureJob returns a copy of account prepared for
+// creation, with the Job that generates its default profile picture.
+func PrepareUserDefaultProfilePictureJob(account *model.User, at time.Time) (*model.User, *model.Job, error) {
+	if account == nil {
 		return nil, nil, errors.New("user is missing")
 	}
-	candidate := *user
+	candidate := *account
 	candidate.ID = ""
 	candidate.CreatedAt = time.Time{}
 	candidate.UpdatedAt = time.Time{}
@@ -90,7 +93,7 @@ func (p DefaultProfilePictureJobs) ProposeDefaultProfilePicture(ctx context.Cont
 }
 
 type defaultProfilePictureHandler struct {
-	generator DefaultProfilePictureGenerator
+	users *user.Service
 }
 
 func (h defaultProfilePictureHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
@@ -101,17 +104,27 @@ func (h defaultProfilePictureHandler) Run(ctx context.Context, execution job.Exe
 	if err != nil {
 		return job.PermanentFailure("job.command.invalid", err)
 	}
-	entryID, err := h.generator.EnsureDefaultProfilePicture(ctx, invocation.Job(execution.Job.ID, execution.Attempt.ID), command.UserID)
+	entryID, err := h.users.EnsureDefaultProfilePicture(ctx, invocation.Job(execution.Job.ID, execution.Attempt.ID), command.UserID)
 	if err != nil {
-		switch h.generator.ClassifyDefaultProfilePictureError(err) {
-		case "user.not_found":
-			return job.PermanentFailure("user.not_found", err)
-		case "job.invariant_failed":
-			return job.PermanentFailure("job.invariant_failed", err)
+		if code := classifyDefaultProfilePictureError(err); code != "" {
+			return job.PermanentFailure(code, err)
 		}
 		return job.RetryableFailure("dependency.unavailable", err)
 	}
 	return defaultProfilePictureJobSucceeded(entryID)
+}
+
+// classifyDefaultProfilePictureError names the public Job error code of a
+// failure the user area reports permanently, or "" for a retryable one.
+func classifyDefaultProfilePictureError(err error) string {
+	switch {
+	case errors.Is(err, user.ErrDefaultProfilePictureUserNotFound):
+		return "user.not_found"
+	case errors.Is(err, user.ErrDefaultProfilePictureInvariant):
+		return "job.invariant_failed"
+	default:
+		return ""
+	}
 }
 
 type defaultProfilePictureResult struct {
@@ -132,6 +145,6 @@ func defaultProfilePictureDescriptor(handler job.Handler) job.Descriptor {
 
 // NewDefaultProfilePictureDescriptor registers generation of a User's default
 // profile picture.
-func NewDefaultProfilePictureDescriptor(generator DefaultProfilePictureGenerator) job.Descriptor {
-	return defaultProfilePictureDescriptor(defaultProfilePictureHandler{generator: generator})
+func NewDefaultProfilePictureDescriptor(users *user.Service) job.Descriptor {
+	return defaultProfilePictureDescriptor(defaultProfilePictureHandler{users: users})
 }

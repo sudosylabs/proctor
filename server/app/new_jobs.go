@@ -160,9 +160,6 @@ func buildApplicationJobDefinitions(
 	if mailHealth == nil {
 		mailHealth = newMailHealth(deps.MailDeliverySender != nil && deps.MailDeliverySender.Enabled())
 	}
-	lifecycleUseCases := examSittingLifecycleJobUseCases{sittings: exams.sittings}
-	sealingUseCases := examSittingSealingJobUseCases{sittings: exams.sittings, attempts: exams.attempts,
-		jobs: deps.Store.Job(), now: time.Now, newID: model.NewJobID}
 	mailDelivery := jobhandler.MailDeliveryDependencies{
 		Deliveries: deps.Store.Mail(), Sender: deps.MailDeliverySender, Sealer: deps.MailSecretSealer,
 		Recorder: jobMailDeliveryRecorder{recorder: deps.MailDeliveryRecorder}, Health: jobMailHealth{health: mailHealth},
@@ -173,7 +170,7 @@ func buildApplicationJobDefinitions(
 	// This is the one place that lists every enabled Job and the schedule
 	// that proposes it. Each line names the collaborators that Job uses.
 	descriptors := []job.Descriptor{
-		jobhandler.NewDefaultProfilePictureDescriptor(jobDefaultProfilePictureGenerator{service: users}),
+		jobhandler.NewDefaultProfilePictureDescriptor(users),
 		jobhandler.NewDefaultProfilePictureReconciliationDescriptor(deps.Store.User(), defaultPictureJobs, now),
 		jobhandler.NewFilePurgeDescriptor(jobhandler.FilePurgeDependencies{
 			Files: deps.Store.File(), Content: deps.FileContent,
@@ -191,9 +188,9 @@ func buildApplicationJobDefinitions(
 		jobhandler.NewMailRekeyDescriptor(deps.Store.Mail(), deps.MailSecretSealer),
 		jobhandler.NewMFARekeyDescriptor(deps.Store.MFA(), deps.MFASecretSealer),
 		jobhandler.NewInvitationMaintenanceDescriptor(deps.Store.Invitation(), deps.Store.OnboardingImport(), deps.FileContent, now),
-		jobhandler.NewExamSittingLifecycleDescriptor(lifecycleUseCases),
-		jobhandler.NewExamSittingSealingDescriptor(sealingUseCases),
-		jobhandler.NewExamSittingLifecycleRecoveryDescriptor(lifecycleUseCases),
+		jobhandler.NewExamSittingLifecycleDescriptor(exams.sittings),
+		jobhandler.NewExamSittingSealingDescriptor(exams.sittings, exams.attempts, jobs, now, model.NewJobID),
+		jobhandler.NewExamSittingLifecycleRecoveryDescriptor(exams.sittings),
 		jobhandler.NewExamExportBuildDescriptor(exams.exports),
 		jobhandler.NewExamExportCleanupDescriptor(deps.Store.ExamExport(), deps.FileContent),
 		jobhandler.NewRetentionExpiryDescriptor(deps.Store.Retention(), retentionJobs.ExpiryAudit, jobs, now),

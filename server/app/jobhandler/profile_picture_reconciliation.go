@@ -102,16 +102,12 @@ func decodeStrictJobDocument(document json.RawMessage, target any) error {
 	return nil
 }
 
-type DefaultProfilePictureReconciliationUserLister interface {
-	List(context.Context, store.UserListOptions) ([]*model.User, error)
-}
-
 type ProfilePictureDefaultJobs interface {
 	ProposeDefaultProfilePicture(context.Context, model.UserID, time.Time) error
 }
 
 type defaultProfilePictureReconciliationHandler struct {
-	users    DefaultProfilePictureReconciliationUserLister
+	users    store.UserStore
 	defaults ProfilePictureDefaultJobs
 	now      func() time.Time
 }
@@ -180,7 +176,7 @@ func defaultProfilePictureReconciliationSucceeded(checkpoint DefaultProfilePictu
 }
 
 type defaultProfilePictureReconciliationJobProposer struct {
-	jobs JobEnqueuer
+	jobs store.JobStore
 	now  func() time.Time
 }
 
@@ -205,12 +201,12 @@ func defaultProfilePictureReconciliationDescriptor(handler job.Handler) job.Desc
 
 // NewDefaultProfilePictureReconciliationDescriptor registers the sweep that
 // proposes default profile pictures for Users that lack one.
-func NewDefaultProfilePictureReconciliationDescriptor(users DefaultProfilePictureReconciliationUserLister, defaults ProfilePictureDefaultJobs, now func() time.Time) job.Descriptor {
+func NewDefaultProfilePictureReconciliationDescriptor(users store.UserStore, defaults ProfilePictureDefaultJobs, now func() time.Time) job.Descriptor {
 	return defaultProfilePictureReconciliationDescriptor(defaultProfilePictureReconciliationHandler{users: users, defaults: defaults, now: now})
 }
 
 // NewDefaultProfilePictureReconciliationRecurrence proposes the daily default
 // profile picture reconciliation Job.
-func NewDefaultProfilePictureReconciliationRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+func NewDefaultProfilePictureReconciliationRecurrence(jobs store.JobStore, now func() time.Time) job.Recurrence {
 	return job.Recurrence{Name: "profile-picture-default-reconciliation", Proposer: defaultProfilePictureReconciliationJobProposer{jobs: jobs, now: now}}
 }

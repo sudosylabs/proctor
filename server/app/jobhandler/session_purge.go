@@ -33,19 +33,9 @@ type SessionPurgeResult struct {
 	Credentials int64 `json:"credentials"`
 }
 
-// SessionPurgeStore deletes retired Sessions.
-type SessionPurgeStore interface {
-	PurgeRetired(context.Context, *store.SessionPurge) (*store.SessionPurgeResult, error)
-}
-
-// SessionCredentialPurgeStore deletes retired Session credentials.
-type SessionCredentialPurgeStore interface {
-	PurgeRetired(context.Context, *store.SessionCredentialPurge) (int64, error)
-}
-
 type sessionPurgeHandler struct {
-	sessions    SessionPurgeStore
-	credentials SessionCredentialPurgeStore
+	sessions    store.SessionStore
+	credentials store.SessionCredentialStore
 	retention   time.Duration
 }
 
@@ -90,7 +80,7 @@ func (h sessionPurgeHandler) Run(ctx context.Context, execution job.Execution) j
 }
 
 type sessionPurgeProposer struct {
-	jobs JobEnqueuer
+	jobs store.JobStore
 	now  func() time.Time
 }
 
@@ -115,11 +105,11 @@ func sessionPurgeDescriptor(handler job.Handler) job.Descriptor {
 
 // NewSessionPurgeDescriptor registers the purge of Sessions and credentials
 // that have been retired for longer than retention.
-func NewSessionPurgeDescriptor(sessions SessionPurgeStore, credentials SessionCredentialPurgeStore, retention time.Duration) job.Descriptor {
+func NewSessionPurgeDescriptor(sessions store.SessionStore, credentials store.SessionCredentialStore, retention time.Duration) job.Descriptor {
 	return sessionPurgeDescriptor(sessionPurgeHandler{sessions: sessions, credentials: credentials, retention: retention})
 }
 
 // NewSessionPurgeRecurrence proposes the hourly retired Session purge Job.
-func NewSessionPurgeRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+func NewSessionPurgeRecurrence(jobs store.JobStore, now func() time.Time) job.Recurrence {
 	return job.Recurrence{Name: "session-purge-retired", Interval: time.Hour, Proposer: sessionPurgeProposer{jobs: jobs, now: now}}
 }

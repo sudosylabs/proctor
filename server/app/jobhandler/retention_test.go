@@ -22,6 +22,7 @@ import (
 )
 
 type retentionJobStoreFake struct {
+	store.RetentionStore
 	control                       *model.RetentionControl
 	page                          *store.RetentionRecordPage
 	purges                        []store.RetentionPurgeObject

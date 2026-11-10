@@ -14,18 +14,16 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
-type RetentionNoticeStore interface {
-	ListPendingNotices(context.Context, int) ([]model.RetentionNotice, error)
-}
 type RetentionNoticeDispatcher interface {
 	DispatchRetentionNotice(context.Context, model.RetentionNotice) error
 }
 type retentionNoticeHandler struct {
-	notices    RetentionNoticeStore
+	notices    store.RetentionStore
 	dispatcher RetentionNoticeDispatcher
-	jobs       JobEnqueuer
+	jobs       store.JobStore
 	now        func() time.Time
 }
 
@@ -79,12 +77,12 @@ func (h retentionNoticeHandler) Run(ctx context.Context, e job.Execution) job.Ou
 
 // NewRetentionNoticeDescriptor registers the dispatch of pending retention
 // notices.
-func NewRetentionNoticeDescriptor(notices RetentionNoticeStore, dispatcher RetentionNoticeDispatcher, jobs JobEnqueuer, now func() time.Time) job.Descriptor {
+func NewRetentionNoticeDescriptor(notices store.RetentionStore, dispatcher RetentionNoticeDispatcher, jobs store.JobStore, now func() time.Time) job.Descriptor {
 	return retentionDescriptor(model.JobTypeRetentionNotices, retentionNoticeHandler{notices: notices, dispatcher: dispatcher, jobs: jobs, now: now})
 }
 
 // NewRetentionNoticeRecurrence proposes the retention notice Job every ten
 // minutes.
-func NewRetentionNoticeRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+func NewRetentionNoticeRecurrence(jobs store.JobStore, now func() time.Time) job.Recurrence {
 	return job.Recurrence{Name: "retention-notices", Interval: 10 * time.Minute, Proposer: retentionProposer{jobs: jobs, now: now, jobType: model.JobTypeRetentionNotices}}
 }

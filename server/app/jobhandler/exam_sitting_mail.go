@@ -18,15 +18,8 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type SittingMailExpansionStore interface {
-	GetMailFanout(context.Context, model.MailOccurrenceID) (*store.ExamSittingMailFanoutSnapshot, error)
-	ListMailRecipients(context.Context, store.ExamSittingMailRecipientPageRequest) (*store.ExamSittingMailRecipientPage, error)
-	CommitMailRecipient(context.Context, *store.ExamSittingMailRecipientCommit) (*store.ExamSittingMailRecipientResult, error)
-	CompleteMailExpansion(context.Context, *store.ExamSittingMailExpansionCompletion) (*store.ExamSittingMailFanoutSnapshot, error)
-}
-
 type sittingMailExpansionHandler struct {
-	sittings SittingMailExpansionStore
+	sittings store.ExamSittingStore
 	mail     *mail.SittingComposer
 }
 
@@ -139,6 +132,6 @@ func sittingMailExpansionDescriptor(handler sittingMailExpansionHandler) job.Des
 
 // NewSittingMailExpansionDescriptor registers the expansion of a Sitting's
 // mail fan-out into individual deliveries.
-func NewSittingMailExpansionDescriptor(sittings SittingMailExpansionStore, composer *mail.SittingComposer) job.Descriptor {
+func NewSittingMailExpansionDescriptor(sittings store.ExamSittingStore, composer *mail.SittingComposer) job.Descriptor {
 	return sittingMailExpansionDescriptor(sittingMailExpansionHandler{sittings: sittings, mail: composer})
 }

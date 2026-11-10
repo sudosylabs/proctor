@@ -14,45 +14,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
-
-func TestExamSittingLifecycleJobReconcileLeavesClosingToDedicatedSealingJob(t *testing.T) {
-	t.Parallel()
-	at := time.Date(2026, time.August, 16, 9, 0, 0, 0, time.UTC)
-	sitting, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(), at.Add(time.Hour), at.Add(2*time.Hour), at)
-	require.NoError(t, err)
-	err = sitting.Open(at.Add(time.Hour))
-	require.NoError(t, err)
-	err = sitting.EnterClosing(model.ExamSittingReasonScheduledEndReached, at.Add(2*time.Hour))
-	require.NoError(t, err)
-	closing := *sitting
-	err = sitting.Close(at.Add(2*time.Hour + time.Second))
-	require.NoError(t, err)
-	jobID, attemptID := model.NewJobID(), model.NewJobAttemptID()
-	fake := &examSittingLifecycleFake{
-		advance: store.ExamSittingLifecycleResult{Value: &store.ExamSittingSnapshot{Sitting: &closing}, Changed: true, Transition: store.ExamSittingTransitionScheduledEndReached},
-	}
-	result, err := (examSittingLifecycleJobUseCases{sittings: fake}).ReconcileExamSittingLifecycleFromJob(context.Background(), sitting.ID, jobID, attemptID)
-	require.NoError(t, err)
-	require.NotNil(t, result, "result/call")
-	require.Equal(t, model.ExamSittingClosing, result.Value.Sitting.State, "result/call")
-	require.Equal(t, invocation.System{JobID: jobID, AttemptID: attemptID}, fake.advanceCall, "result/call")
-
-	// Another node may close before the lifecycle read. The dedicated sealing
-	// handler still owns any closure work, so this adapter returns AdvanceDue's
-	// authoritative value and never invokes the legacy zero-Attempt closer.
-	racing := &examSittingLifecycleFake{
-		advance: store.ExamSittingLifecycleResult{Value: &store.ExamSittingSnapshot{Sitting: &closing}},
-	}
-	result, err = (examSittingLifecycleJobUseCases{sittings: racing}).ReconcileExamSittingLifecycleFromJob(context.Background(), sitting.ID, jobID, attemptID)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.Equal(t, model.ExamSittingClosing, result.Value.Sitting.State)
-}
 
 func TestExamSittingLifecycleEffectPublishesOnlySafeBoundedMetadata(t *testing.T) {
 	t.Parallel()
@@ -108,19 +73,4 @@ func (f *examCollectionInvalidationStoreFake) ListCandidateInvalidationTargetsBy
 	int,
 ) ([]model.UserID, error) {
 	return append([]model.UserID(nil), f.candidateIDs...), nil
-}
-
-type examSittingLifecycleFake struct {
-	advance     store.ExamSittingLifecycleResult
-	advanceCall invocation.System
-	err         error
-}
-
-func (f *examSittingLifecycleFake) AdvanceDue(_ context.Context, call invocation.System, _ model.ExamSittingID) (store.ExamSittingLifecycleResult, error) {
-	f.advanceCall = call
-	return f.advance, f.err
-}
-
-func (f *examSittingLifecycleFake) ListLifecycleDue(context.Context, invocation.System, store.ExamSittingLifecycleDueOptions) ([]store.ExamSittingLifecycleDue, error) {
-	return nil, f.err
 }

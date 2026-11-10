@@ -137,6 +137,7 @@ func mailTestUser(principal model.Principal, at time.Time) *model.User {
 }
 
 type sittingMailExpansionStoreFake struct {
+	store.ExamSittingStore
 	fanout     *store.ExamSittingMailFanoutSnapshot
 	users      []*model.User
 	conflictID model.UserID

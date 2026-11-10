@@ -30,6 +30,7 @@ import (
 )
 
 type mailStoreFake struct {
+	store.MailStore
 	enqueue      *store.MailTestEnqueue
 	delivery     *model.MailDelivery
 	gets         int
@@ -690,7 +691,7 @@ func mailDeliveryHandlerFixture(t *testing.T, at time.Time, deadlineAfter time.D
 	return sealer, prepared.Job, prepared.Delivery
 }
 
-func runMailDeliveryJob(persistence jobhandler.MailDeliveryLifecycleStore, sender MailDeliverySender,
+func runMailDeliveryJob(persistence store.MailStore, sender MailDeliverySender,
 	sealer *secretseal.Sealer, now func() time.Time, record *model.Job,
 ) job.Outcome {
 	descriptor := jobhandler.NewMailDeliveryDescriptor(jobhandler.MailDeliveryDependencies{

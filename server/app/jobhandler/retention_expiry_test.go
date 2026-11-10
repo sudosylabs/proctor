@@ -23,6 +23,7 @@ import (
 )
 
 type expiryWorkerFake struct {
+	store.RetentionStore
 	cleanupCalls    int
 	cleanupErr      error
 	control         model.RetentionControl

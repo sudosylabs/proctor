@@ -16,9 +16,11 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 type retentionNoticesFake struct {
+	store.RetentionStore
 	items  []model.RetentionNotice
 	called int
 	fail   error

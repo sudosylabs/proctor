@@ -22,6 +22,7 @@ import (
 )
 
 type mfaRekeyStoreFake struct {
+	store.MFAStore
 	requests     []store.MFARekeyTargetPageRequest
 	pages        []*store.MFARekeyTargetPage
 	replacements []*store.MFARekeyReplacement

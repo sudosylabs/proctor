@@ -38,12 +38,7 @@ type AuditAttemptSweepResult struct {
 	Failed int64 `json:"failed"`
 }
 
-// AuditAttemptSweeper terminalizes abandoned audit attempts.
-type AuditAttemptSweeper interface {
-	FailAbandonedAttempts(context.Context, *store.AuditAttemptAbandonment) (int64, error)
-}
-
-type auditAttemptSweepHandler struct{ audits AuditAttemptSweeper }
+type auditAttemptSweepHandler struct{ audits store.AuditStore }
 
 func (h auditAttemptSweepHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
 	if execution.Job == nil {
@@ -72,7 +67,7 @@ func (h auditAttemptSweepHandler) Run(ctx context.Context, execution job.Executi
 }
 
 type auditAttemptSweepProposer struct {
-	jobs JobEnqueuer
+	jobs store.JobStore
 	now  func() time.Time
 }
 
@@ -97,11 +92,11 @@ func auditAttemptSweepDescriptor(handler job.Handler) job.Descriptor {
 
 // NewAuditAttemptSweepDescriptor registers the sweep that abandons stale
 // audit attempts.
-func NewAuditAttemptSweepDescriptor(audits AuditAttemptSweeper) job.Descriptor {
+func NewAuditAttemptSweepDescriptor(audits store.AuditStore) job.Descriptor {
 	return auditAttemptSweepDescriptor(auditAttemptSweepHandler{audits: audits})
 }
 
 // NewAuditAttemptSweepRecurrence proposes the hourly audit attempt sweep Job.
-func NewAuditAttemptSweepRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+func NewAuditAttemptSweepRecurrence(jobs store.JobStore, now func() time.Time) job.Recurrence {
 	return job.Recurrence{Name: "audit-attempt-sweep", Interval: time.Hour, Proposer: auditAttemptSweepProposer{jobs: jobs, now: now}}
 }

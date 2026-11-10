@@ -16,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -53,15 +54,14 @@ func TestExamSittingLifecycleHandlerReconcilesAndTreatsStaleWorkAsSuccess(t *tes
 	sittingID := model.NewExamSittingID()
 	record := mustExamSittingLifecycleJob(t, sittingID, at)
 	attemptID := model.NewJobAttemptID()
-	reconciler := &examSittingLifecycleReconcilerFake{result: lifecycleJobResult(t, sittingID, false)}
-	handler := examSittingLifecycleHandler{reconciler: reconciler}
+	reconciler := &examSittingLifecycleFake{result: lifecycleJobResult(t, sittingID, false)}
+	handler := examSittingLifecycleHandler{sittings: reconciler}
 
 	outcome := handler.Run(context.Background(), job.NewExecution(record, &model.JobAttempt{ID: attemptID}, nil, nil))
 	require.Equal(t, job.OutcomeSucceeded, outcome.Kind)
 	require.NoError(t, outcome.Err)
 	require.Equal(t, sittingID, reconciler.sittingID, "reconcile identity")
-	require.Equal(t, record.ID, reconciler.jobID, "reconcile identity")
-	require.Equal(t, attemptID, reconciler.attemptID, "reconcile identity")
+	require.Equal(t, invocation.Job(record.ID, attemptID), reconciler.system, "reconcile identity")
 	var result ExamSittingLifecycleJobResult
 	require.NoError(t, json.Unmarshal(outcome.Result, &result), "result = %#v", result)
 	require.False(t, result.Changed, "result = %#v", result)
@@ -95,8 +95,8 @@ func TestExamSittingLifecycleHandlerClassifiesFailures(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			reconciler := &examSittingLifecycleReconcilerFake{err: tt.err}
-			outcome := (examSittingLifecycleHandler{reconciler: reconciler}).Run(context.Background(), job.NewExecution(tt.job, attempt, nil, nil))
+			reconciler := &examSittingLifecycleFake{err: tt.err}
+			outcome := (examSittingLifecycleHandler{sittings: reconciler}).Run(context.Background(), job.NewExecution(tt.job, attempt, nil, nil))
 			require.Equal(t, tt.kind, outcome.Kind)
 			require.Equal(t, tt.code, outcome.PublicErrorCode)
 		})
@@ -105,7 +105,7 @@ func TestExamSittingLifecycleHandlerClassifiesFailures(t *testing.T) {
 
 func TestExamSittingLifecycleDescriptorIsBoundedAndNonCancelable(t *testing.T) {
 	t.Parallel()
-	descriptor := examSittingLifecycleDescriptor(examSittingLifecycleHandler{reconciler: &examSittingLifecycleReconcilerFake{}})
+	descriptor := examSittingLifecycleDescriptor(examSittingLifecycleHandler{sittings: &examSittingLifecycleFake{}})
 	require.Equal(t, model.JobTypeExamSittingLifecycle, descriptor.Type)
 	require.False(t, descriptor.Cancelable)
 	require.Equal(t, job.VisibilityOperator, descriptor.Visibility)
@@ -113,17 +113,20 @@ func TestExamSittingLifecycleDescriptorIsBoundedAndNonCancelable(t *testing.T) {
 	require.GreaterOrEqual(t, descriptor.Concurrency, 1)
 }
 
-type examSittingLifecycleReconcilerFake struct {
+type examSittingLifecycleFake struct {
+	sittingLifecycle
 	result    *store.ExamSittingLifecycleResult
 	err       error
 	sittingID model.ExamSittingID
-	jobID     model.JobID
-	attemptID model.JobAttemptID
+	system    invocation.System
 }
 
-func (f *examSittingLifecycleReconcilerFake) ReconcileExamSittingLifecycleFromJob(_ context.Context, sittingID model.ExamSittingID, jobID model.JobID, attemptID model.JobAttemptID) (*store.ExamSittingLifecycleResult, error) {
-	f.sittingID, f.jobID, f.attemptID = sittingID, jobID, attemptID
-	return f.result, f.err
+func (f *examSittingLifecycleFake) AdvanceDue(_ context.Context, system invocation.System, sittingID model.ExamSittingID) (store.ExamSittingLifecycleResult, error) {
+	f.sittingID, f.system = sittingID, system
+	if f.result == nil || f.err != nil {
+		return store.ExamSittingLifecycleResult{}, f.err
+	}
+	return *f.result, nil
 }
 
 func mustExamSittingLifecycleJob(t *testing.T, sittingID model.ExamSittingID, at time.Time) *model.Job {
@@ -167,4 +170,38 @@ func assertExamSittingLifecycleJob(t *testing.T, job *model.Job, wantType model.
 	command, err := model.DecodeExamSittingLifecycleCommand(job.Command)
 	require.NoError(t, err, "command = %#v", command)
 	require.Equal(t, sittingID, command.ExamSittingID, "command = %#v", command)
+}
+
+func TestExamSittingLifecycleJobReconcileLeavesClosingToDedicatedSealingJob(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, time.August, 16, 9, 0, 0, 0, time.UTC)
+	sitting, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(), at.Add(time.Hour), at.Add(2*time.Hour), at)
+	require.NoError(t, err)
+	err = sitting.Open(at.Add(time.Hour))
+	require.NoError(t, err)
+	err = sitting.EnterClosing(model.ExamSittingReasonScheduledEndReached, at.Add(2*time.Hour))
+	require.NoError(t, err)
+	closing := *sitting
+	record := mustExamSittingLifecycleJob(t, sitting.ID, at)
+	attemptID := model.NewJobAttemptID()
+	fake := &examSittingLifecycleFake{
+		result: &store.ExamSittingLifecycleResult{Value: &store.ExamSittingSnapshot{Sitting: &closing}, Changed: true, Transition: store.ExamSittingTransitionScheduledEndReached},
+	}
+	outcome := (examSittingLifecycleHandler{sittings: fake}).Run(context.Background(), job.NewExecution(record, &model.JobAttempt{ID: attemptID}, nil, nil))
+	require.Equal(t, job.OutcomeSucceeded, outcome.Kind, "result/call")
+	var result ExamSittingLifecycleJobResult
+	require.NoError(t, json.Unmarshal(outcome.Result, &result), "result/call")
+	require.Equal(t, model.ExamSittingClosing, result.State, "result/call")
+	require.Equal(t, invocation.System{JobID: record.ID, AttemptID: attemptID}, fake.system, "result/call")
+
+	// Another node may close before the lifecycle read. The dedicated sealing
+	// handler still owns any closure work, so the handler reports AdvanceDue's
+	// authoritative value and never invokes the legacy zero-Attempt closer.
+	racing := &examSittingLifecycleFake{
+		result: &store.ExamSittingLifecycleResult{Value: &store.ExamSittingSnapshot{Sitting: &closing}},
+	}
+	outcome = (examSittingLifecycleHandler{sittings: racing}).Run(context.Background(), job.NewExecution(record, &model.JobAttempt{ID: attemptID}, nil, nil))
+	require.Equal(t, job.OutcomeSucceeded, outcome.Kind)
+	require.NoError(t, json.Unmarshal(outcome.Result, &result))
+	require.Equal(t, model.ExamSittingClosing, result.State)
 }

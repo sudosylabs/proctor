@@ -53,6 +53,7 @@ func TestFilePurgeCommandAndCheckpointAreTypedAndBounded(t *testing.T) {
 }
 
 type purgeStoreFake struct {
+	store.FileStore
 	candidates []store.FilePurgeCandidate
 	claimed    []store.FilePurgeCandidate
 	completed  []store.FilePurgeClaim
@@ -109,6 +110,7 @@ func (f *purgeContentFake) remove(revisionID model.FileRevisionID) error {
 }
 
 type starterWorkspaceCleanupStoreFake struct {
+	store.ExamStarterWorkspaceStore
 	objects     []model.StarterWorkspaceObject
 	claimLimits []int
 	claimTokens []string
@@ -154,6 +156,7 @@ type starterWorkspaceContentPurgerFake struct {
 }
 
 type attemptWorkspaceCleanupStoreFake struct {
+	store.ExamAttemptWorkspaceStore
 	objects     []model.AttemptWorkspaceObject
 	claimLimits []int
 	claimTokens []string
@@ -513,9 +516,9 @@ func mustPurgeCommand(t *testing.T, size int) json.RawMessage {
 	return value
 }
 
-func testFilePurgeHandler(files FilePurgeStore, content FileRevisionContentPurger,
-	starterWorkspace StarterWorkspaceCleanupStore, starterWorkspaceContent StarterWorkspaceObjectPurger,
-	attemptWorkspace AttemptWorkspaceCleanupStore, attemptWorkspaceContent AttemptWorkspaceObjectPurger,
+func testFilePurgeHandler(files store.FileStore, content FileRevisionContentPurger,
+	starterWorkspace store.ExamStarterWorkspaceStore, starterWorkspaceContent StarterWorkspaceObjectPurger,
+	attemptWorkspace store.ExamAttemptWorkspaceStore, attemptWorkspaceContent AttemptWorkspaceObjectPurger,
 ) filePurgeExpiredContentHandler {
 	return filePurgeExpiredContentHandler{files: files, content: content,
 		starterWorkspace: starterWorkspace, starterWorkspaceContent: starterWorkspaceContent,
@@ -639,7 +642,7 @@ func TestFilePurgeHandlerRetriesWhenTheContinuationCannotBeEnqueued(t *testing.T
 	require.Equal(t, "database.unavailable", outcome.PublicErrorCode)
 }
 
-type failingJobEnqueuer struct{}
+type failingJobEnqueuer struct{ store.JobStore }
 
 func (failingJobEnqueuer) Enqueue(context.Context, *store.JobEnqueue) (*model.Job, bool, error) {
 	return nil, false, errors.New("database unavailable")

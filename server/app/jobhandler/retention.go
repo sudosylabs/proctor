@@ -20,14 +20,6 @@ import (
 
 const retentionJobMaximumBatch = 100
 
-type RetentionMaintenanceStore interface {
-	GetControl(context.Context) (*model.RetentionControl, error)
-	ListRecords(context.Context, store.RetentionRecordListOptions) (*store.RetentionRecordPage, error)
-	ReconcileSubmission(context.Context, *store.RetentionReconciliation) (*store.RetentionReconciliationResult, error)
-	BeginPurgeBatch(context.Context, int) ([]store.RetentionPurgeObject, error)
-	CompletePurge(context.Context, *store.RetentionPurgeCompletion) error
-}
-
 type RetentionContentPurger interface {
 	PurgeRetiredAttemptWorkspaceObject(context.Context, model.AttemptWorkspaceObjectID) error
 }
@@ -52,10 +44,10 @@ type RetentionCheckpoint struct {
 }
 
 type retentionHandler struct {
-	records RetentionMaintenanceStore
+	records store.RetentionStore
 	content RetentionContentPurger
 	audit   RetentionSystemAuditor
-	jobs    JobEnqueuer
+	jobs    store.JobStore
 	now     func() time.Time
 	purge   bool
 }
@@ -253,7 +245,7 @@ func (h retentionHandler) finish(ctx context.Context, parent *model.Job, command
 }
 
 type retentionProposer struct {
-	jobs    JobEnqueuer
+	jobs    store.JobStore
 	now     func() time.Time
 	jobType model.JobType
 }
@@ -282,23 +274,23 @@ func retentionDescriptor(jobType model.JobType, handler job.Handler) job.Descrip
 
 // NewRetentionReconcileDescriptor registers the reconciliation of retention
 // state against current policy.
-func NewRetentionReconcileDescriptor(records RetentionMaintenanceStore, audit RetentionSystemAuditor, jobs JobEnqueuer, now func() time.Time) job.Descriptor {
+func NewRetentionReconcileDescriptor(records store.RetentionStore, audit RetentionSystemAuditor, jobs store.JobStore, now func() time.Time) job.Descriptor {
 	return retentionDescriptor(model.JobTypeRetentionReconcile, retentionHandler{records: records, audit: audit, jobs: jobs, now: now})
 }
 
 // NewRetentionPurgeDescriptor registers the purge of content whose retention
 // has ended.
-func NewRetentionPurgeDescriptor(records RetentionMaintenanceStore, content RetentionContentPurger, jobs JobEnqueuer, now func() time.Time) job.Descriptor {
+func NewRetentionPurgeDescriptor(records store.RetentionStore, content RetentionContentPurger, jobs store.JobStore, now func() time.Time) job.Descriptor {
 	return retentionDescriptor(model.JobTypeRetentionPurge, retentionHandler{records: records, content: content, jobs: jobs, now: now, purge: true})
 }
 
 // NewRetentionReconcileRecurrence proposes the hourly retention
 // reconciliation Job.
-func NewRetentionReconcileRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+func NewRetentionReconcileRecurrence(jobs store.JobStore, now func() time.Time) job.Recurrence {
 	return job.Recurrence{Name: "retention-reconcile", Interval: time.Hour, Proposer: retentionProposer{jobs: jobs, now: now, jobType: model.JobTypeRetentionReconcile}}
 }
 
 // NewRetentionPurgeRecurrence proposes the hourly retention purge Job.
-func NewRetentionPurgeRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+func NewRetentionPurgeRecurrence(jobs store.JobStore, now func() time.Time) job.Recurrence {
 	return job.Recurrence{Name: "retention-purge", Interval: time.Hour, Proposer: retentionProposer{jobs: jobs, now: now, jobType: model.JobTypeRetentionPurge}}
 }

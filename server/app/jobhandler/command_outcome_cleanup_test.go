@@ -17,9 +17,11 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 type commandOutcomeCleanerFake struct {
+	store.CommandOutcomeStore
 	limit   int
 	deleted int64
 	err     error

@@ -23,6 +23,7 @@ import (
 )
 
 type mailRekeyStoreFake struct {
+	store.MailStore
 	pages        []*store.MailRekeyTargetPage
 	replacements []*store.MailRekeyReplacement
 	proof        *store.MailRekeyProof

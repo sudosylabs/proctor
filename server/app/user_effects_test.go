@@ -10,13 +10,11 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/jobhandler"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -38,14 +36,4 @@ func TestProfilePictureRealtimeEffectContainsOnlySafeChangeMetadata(t *testing.T
 	require.Equal(t, change.ActiveFileEntryID.String(), data["active_file_entry_id"])
 	require.Equal(t, float64(4), data["revision"])
 	require.Equal(t, float64(500), data["changed_at"])
-}
-
-func TestDefaultProfilePictureJobAdapterClassifiesTheAreaSentinels(t *testing.T) {
-	t.Parallel()
-	classify := jobDefaultProfilePictureGenerator{}.ClassifyDefaultProfilePictureError
-	require.Equal(t, "user.not_found", classify(user.ErrDefaultProfilePictureUserNotFound))
-	require.Equal(t, "user.not_found", classify(errors.Join(errors.New("context"), user.ErrDefaultProfilePictureUserNotFound)))
-	require.Equal(t, "job.invariant_failed", classify(user.ErrDefaultProfilePictureInvariant))
-	require.Empty(t, classify(errors.New("unclassified")))
-	var _ jobhandler.DefaultProfilePictureGenerator = jobDefaultProfilePictureGenerator{}
 }

@@ -19,6 +19,7 @@ import (
 )
 
 type deduplicatingJobEnqueuerFake struct {
+	store.JobStore
 	jobs map[string]*model.Job
 }
 

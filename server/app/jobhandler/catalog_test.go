@@ -37,7 +37,7 @@ func testDescriptors(onboarding OnboardingImportService) []job.Descriptor {
 		NewMFARekeyDescriptor(nil, nil),
 		NewInvitationMaintenanceDescriptor(nil, nil, nil, nil),
 		NewExamSittingLifecycleDescriptor(nil),
-		NewExamSittingSealingDescriptor(nil),
+		NewExamSittingSealingDescriptor(nil, nil, nil, nil, nil),
 		NewExamSittingLifecycleRecoveryDescriptor(nil),
 		NewExamExportBuildDescriptor(nil),
 		NewExamExportCleanupDescriptor(nil, nil),

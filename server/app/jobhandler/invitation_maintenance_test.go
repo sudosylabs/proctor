@@ -22,6 +22,8 @@ import (
 )
 
 type invitationMaintenanceStoreFake struct {
+	store.OnboardingImportStore
+	store.InvitationStore
 	results []*store.InvitationMaintenanceResult
 	calls   int
 	state   model.OnboardingImportState

@@ -15,6 +15,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/model"
@@ -134,17 +135,12 @@ func decodeStrictUniqueJobDocument(document json.RawMessage, target any) error {
 	return nil
 }
 
-type ExamSittingLifecycleRecoveryUseCases interface {
-	ExamSittingLifecycleReconciler
-	ListExamSittingLifecycleDueFromJob(context.Context, invocation.System, store.ExamSittingLifecycleDueOptions) ([]store.ExamSittingLifecycleDue, error)
-}
-
 type examSittingLifecycleRecoveryHandler struct {
-	service ExamSittingLifecycleRecoveryUseCases
+	sittings sittingLifecycle
 }
 
 func (h examSittingLifecycleRecoveryHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
-	if h.service == nil || execution.Job == nil || execution.Attempt == nil ||
+	if h.sittings == nil || execution.Job == nil || execution.Attempt == nil ||
 		!execution.Job.ID.IsValid() || !execution.Attempt.ID.IsValid() {
 		return job.PermanentFailure("job.command.invalid", errors.New("Exam Sitting lifecycle recovery execution is incomplete"))
 	}
@@ -166,7 +162,7 @@ func (h examSittingLifecycleRecoveryHandler) Run(ctx context.Context, execution 
 	remaining := command.WorkLimit - execution.Job.WorkReserved
 	for remaining > 0 {
 		limit := min(remaining, examSittingLifecycleRecoveryPageSize)
-		page, listErr := h.service.ListExamSittingLifecycleDueFromJob(ctx, invocation.Job(execution.Job.ID, execution.Attempt.ID), store.ExamSittingLifecycleDueOptions{
+		page, listErr := h.sittings.ListLifecycleDue(ctx, invocation.Job(execution.Job.ID, execution.Attempt.ID), store.ExamSittingLifecycleDueOptions{
 			AfterDueAt: checkpoint.AfterDueAt, AfterSittingID: checkpoint.AfterSittingID, Limit: limit,
 		})
 		if listErr != nil {
@@ -189,12 +185,13 @@ func (h examSittingLifecycleRecoveryHandler) Run(ctx context.Context, execution 
 			if !reserved {
 				return examSittingLifecycleRecoverySucceeded(checkpoint)
 			}
-			result, reconcileErr := h.service.ReconcileExamSittingLifecycleFromJob(
-				ctx, due.Value.Sitting.ID, execution.Job.ID, execution.Attempt.ID,
+			advanced, reconcileErr := h.sittings.AdvanceDue(
+				ctx, invocation.Job(execution.Job.ID, execution.Attempt.ID), due.Value.Sitting.ID,
 			)
 			if reconcileErr != nil {
 				return examSittingLifecycleFailure(reconcileErr)
 			}
+			result := &advanced
 			if err = validateExamSittingLifecycleJobResult(due.Value.Sitting.ID, result); err != nil {
 				return job.PermanentFailure("job.invariant_failed", err)
 			}
@@ -243,7 +240,7 @@ func examSittingLifecycleRecoverySucceeded(checkpoint ExamSittingLifecycleRecove
 }
 
 type examSittingLifecycleRecoveryProposer struct {
-	jobs JobEnqueuer
+	jobs store.JobStore
 	now  func() time.Time
 }
 
@@ -285,12 +282,12 @@ func examSittingLifecycleRecoveryDescriptor(handler job.Handler) job.Descriptor 
 
 // NewExamSittingLifecycleRecoveryDescriptor registers the reconciliation of
 // Exam Sittings whose lifecycle Jobs are overdue.
-func NewExamSittingLifecycleRecoveryDescriptor(service ExamSittingLifecycleRecoveryUseCases) job.Descriptor {
-	return examSittingLifecycleRecoveryDescriptor(examSittingLifecycleRecoveryHandler{service: service})
+func NewExamSittingLifecycleRecoveryDescriptor(sittings *sitting.Service) job.Descriptor {
+	return examSittingLifecycleRecoveryDescriptor(examSittingLifecycleRecoveryHandler{sittings: sittings})
 }
 
 // NewExamSittingLifecycleRecoveryRecurrence proposes the daily Exam Sitting
 // lifecycle recovery Job.
-func NewExamSittingLifecycleRecoveryRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+func NewExamSittingLifecycleRecoveryRecurrence(jobs store.JobStore, now func() time.Time) job.Recurrence {
 	return job.Recurrence{Name: "exam-sitting-lifecycle-recovery", Proposer: examSittingLifecycleRecoveryProposer{jobs: jobs, now: now}}
 }

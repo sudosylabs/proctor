@@ -74,13 +74,9 @@ func validateJobHistoryCleanupCheckpoint(value JobHistoryCleanupCheckpoint) erro
 	return nil
 }
 
-type JobHistoryCleaner interface {
-	DeleteTerminalHistory(context.Context, *store.JobHistoryCleanup) (*store.JobHistoryCleanupResult, error)
-}
-
 type jobHistoryCleanupHandler struct {
-	jobs          JobHistoryCleaner
-	continuations JobEnqueuer
+	jobs          store.JobStore
+	continuations store.JobStore
 	policies      []store.JobRetentionPolicy
 	now           func() time.Time
 }
@@ -170,7 +166,7 @@ func (h jobHistoryCleanupHandler) finish(ctx context.Context, parent *model.Job,
 }
 
 type jobHistoryCleanupProposer struct {
-	jobs JobEnqueuer
+	jobs store.JobStore
 	now  func() time.Time
 }
 
@@ -197,7 +193,7 @@ func jobHistoryCleanupDescriptor(handler job.Handler) job.Descriptor {
 // history. Each Job type is kept for the retention its descriptor in
 // registered declares, and the cleanup Job for its own, so this descriptor
 // is built after all the others.
-func NewJobHistoryCleanupDescriptor(jobs JobHistoryCleaner, continuations JobEnqueuer, now func() time.Time, registered []job.Descriptor) job.Descriptor {
+func NewJobHistoryCleanupDescriptor(jobs store.JobStore, continuations store.JobStore, now func() time.Time, registered []job.Descriptor) job.Descriptor {
 	return jobHistoryCleanupDescriptor(jobHistoryCleanupHandler{
 		jobs: jobs, continuations: continuations, now: now,
 		policies: append(retentionPolicies(registered), store.JobRetentionPolicy{
@@ -207,7 +203,7 @@ func NewJobHistoryCleanupDescriptor(jobs JobHistoryCleaner, continuations JobEnq
 }
 
 // NewJobHistoryCleanupRecurrence proposes the daily Job history cleanup Job.
-func NewJobHistoryCleanupRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+func NewJobHistoryCleanupRecurrence(jobs store.JobStore, now func() time.Time) job.Recurrence {
 	return job.Recurrence{Name: "job-history-cleanup", Proposer: jobHistoryCleanupProposer{jobs: jobs, now: now}}
 }
 

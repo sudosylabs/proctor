@@ -72,7 +72,7 @@ func TestExamSittingLifecycleRecoveryResumesCheckpointAndHonorsWorkLimit(t *test
 		reserved += units
 		return true, nil
 	})
-	outcome := (examSittingLifecycleRecoveryHandler{service: service}).Run(context.Background(), execution)
+	outcome := (examSittingLifecycleRecoveryHandler{sittings: service}).Run(context.Background(), execution)
 	require.Equal(t, job.OutcomeSucceeded, outcome.Kind)
 	require.NoError(t, outcome.Err)
 	require.Len(t, service.listOptions, 1)
@@ -99,13 +99,13 @@ func TestExamSittingLifecycleRecoveryClassifiesListAndCheckpointFailures(t *test
 	record := mustRecoveryJob(t, at, 1)
 	attempt := &model.JobAttempt{ID: model.NewJobAttemptID()}
 	service := &examSittingLifecycleRecoveryFake{err: errors.New("database unavailable")}
-	outcome := (examSittingLifecycleRecoveryHandler{service: service}).Run(context.Background(), job.NewExecution(record, attempt, nil, allowJobWorkReservation()))
+	outcome := (examSittingLifecycleRecoveryHandler{sittings: service}).Run(context.Background(), job.NewExecution(record, attempt, nil, allowJobWorkReservation()))
 	require.Equal(t, job.OutcomeRetryableFailure, outcome.Kind)
 	require.Equal(t, "dependency.unavailable", outcome.PublicErrorCode)
 
 	bad := *record
 	bad.Command = json.RawMessage(`{"work_limit":0}`)
-	outcome = (examSittingLifecycleRecoveryHandler{service: service}).Run(context.Background(), job.NewExecution(&bad, attempt, nil, nil))
+	outcome = (examSittingLifecycleRecoveryHandler{sittings: service}).Run(context.Background(), job.NewExecution(&bad, attempt, nil, nil))
 	require.Equal(t, job.OutcomePermanentFailure, outcome.Kind)
 	require.Equal(t, "job.command.invalid", outcome.PublicErrorCode)
 
@@ -114,7 +114,7 @@ func TestExamSittingLifecycleRecoveryClassifiesListAndCheckpointFailures(t *test
 		pages:   [][]store.ExamSittingLifecycleDue{{{Value: lifecycleJobResult(t, sittingID, false).Value, DueAt: at}}},
 		results: map[model.ExamSittingID]*store.ExamSittingLifecycleResult{sittingID: lifecycleJobResult(t, sittingID, false)},
 	}
-	outcome = (examSittingLifecycleRecoveryHandler{service: checkpointService}).Run(context.Background(), job.NewExecution(
+	outcome = (examSittingLifecycleRecoveryHandler{sittings: checkpointService}).Run(context.Background(), job.NewExecution(
 		record, attempt,
 		func(context.Context, job.CheckpointValue) error { return errors.New("checkpoint unavailable") },
 		allowJobWorkReservation(),
@@ -142,7 +142,7 @@ func TestExamSittingLifecycleRecoveryProposerUsesPermanentUTCDateOccurrence(t *t
 
 func TestExamSittingLifecycleRecoveryDescriptorDeclaresCheckpointContract(t *testing.T) {
 	t.Parallel()
-	descriptor := examSittingLifecycleRecoveryDescriptor(examSittingLifecycleRecoveryHandler{service: &examSittingLifecycleRecoveryFake{}})
+	descriptor := examSittingLifecycleRecoveryDescriptor(examSittingLifecycleRecoveryHandler{sittings: &examSittingLifecycleRecoveryFake{}})
 	require.Equal(t, model.JobTypeExamSittingLifecycleRecovery, descriptor.Type)
 	require.False(t, descriptor.Cancelable)
 	require.Equal(t, job.VisibilityOperator, descriptor.Visibility)
@@ -152,6 +152,7 @@ func TestExamSittingLifecycleRecoveryDescriptorDeclaresCheckpointContract(t *tes
 }
 
 type examSittingLifecycleRecoveryFake struct {
+	sittingLifecycle
 	pages       [][]store.ExamSittingLifecycleDue
 	listOptions []store.ExamSittingLifecycleDueOptions
 	results     map[model.ExamSittingID]*store.ExamSittingLifecycleResult
@@ -159,7 +160,7 @@ type examSittingLifecycleRecoveryFake struct {
 	err         error
 }
 
-func (f *examSittingLifecycleRecoveryFake) ListExamSittingLifecycleDueFromJob(_ context.Context, _ invocation.System, options store.ExamSittingLifecycleDueOptions) ([]store.ExamSittingLifecycleDue, error) {
+func (f *examSittingLifecycleRecoveryFake) ListLifecycleDue(_ context.Context, _ invocation.System, options store.ExamSittingLifecycleDueOptions) ([]store.ExamSittingLifecycleDue, error) {
 	f.listOptions = append(f.listOptions, options)
 	if f.err != nil {
 		return nil, f.err
@@ -172,12 +173,15 @@ func (f *examSittingLifecycleRecoveryFake) ListExamSittingLifecycleDueFromJob(_ 
 	return page, nil
 }
 
-func (f *examSittingLifecycleRecoveryFake) ReconcileExamSittingLifecycleFromJob(_ context.Context, sittingID model.ExamSittingID, _ model.JobID, _ model.JobAttemptID) (*store.ExamSittingLifecycleResult, error) {
+func (f *examSittingLifecycleRecoveryFake) AdvanceDue(_ context.Context, _ invocation.System, sittingID model.ExamSittingID) (store.ExamSittingLifecycleResult, error) {
 	f.reconciled = append(f.reconciled, sittingID)
 	if f.err != nil {
-		return nil, f.err
+		return store.ExamSittingLifecycleResult{}, f.err
 	}
-	return f.results[sittingID], nil
+	if result := f.results[sittingID]; result != nil {
+		return *result, nil
+	}
+	return store.ExamSittingLifecycleResult{}, nil
 }
 
 func mustRecoveryJob(t *testing.T, at time.Time, limit int) *model.Job {

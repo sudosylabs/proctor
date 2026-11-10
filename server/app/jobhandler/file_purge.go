@@ -121,12 +121,6 @@ func decodeStrictFilePurgeDocument(document json.RawMessage, target any) error {
 	return nil
 }
 
-type FilePurgeStore interface {
-	ListPurgeCandidates(context.Context, *store.FilePurgeCandidateRequest) (*store.FilePurgeCandidatePage, error)
-	ClaimPurgeCandidate(context.Context, *store.FilePurgeCandidate) (*store.FilePurgeClaim, error)
-	CompletePurge(context.Context, *store.FilePurgeClaim) error
-}
-
 // FileRevisionContentPurger is the physical-content capability used after the
 // file store has durably fenced a purge candidate.
 type FileRevisionContentPurger interface {
@@ -134,20 +128,8 @@ type FileRevisionContentPurger interface {
 	RemoveFileRevisionRenditions(context.Context, model.FileRevisionID, []model.FileRenditionID) error
 }
 
-type StarterWorkspaceCleanupStore interface {
-	ClaimObjectsForCleanup(context.Context, *store.StarterWorkspaceCleanupClaim) ([]model.StarterWorkspaceObject, error)
-	CompleteObjectCleanup(context.Context, *store.StarterWorkspaceCleanupCompletion) error
-	ReleaseObjectCleanup(context.Context, *store.StarterWorkspaceCleanupRelease) error
-}
-
 type StarterWorkspaceObjectPurger interface {
 	RemoveStarterWorkspaceObject(context.Context, model.StarterWorkspaceObjectID) error
-}
-
-type AttemptWorkspaceCleanupStore interface {
-	ClaimObjectsForCleanup(context.Context, *store.AttemptWorkspaceCleanupClaim) ([]model.AttemptWorkspaceObject, error)
-	CompleteObjectCleanup(context.Context, *store.AttemptWorkspaceCleanupCompletion) error
-	ReleaseObjectCleanup(context.Context, *store.AttemptWorkspaceCleanupRelease) error
 }
 
 type AttemptWorkspaceObjectPurger interface {
@@ -155,13 +137,13 @@ type AttemptWorkspaceObjectPurger interface {
 }
 
 type filePurgeExpiredContentHandler struct {
-	files                   FilePurgeStore
+	files                   store.FileStore
 	content                 FileRevisionContentPurger
-	starterWorkspace        StarterWorkspaceCleanupStore
+	starterWorkspace        store.ExamStarterWorkspaceStore
 	starterWorkspaceContent StarterWorkspaceObjectPurger
-	attemptWorkspace        AttemptWorkspaceCleanupStore
+	attemptWorkspace        store.ExamAttemptWorkspaceStore
 	attemptWorkspaceContent AttemptWorkspaceObjectPurger
-	continuations           JobEnqueuer
+	continuations           store.JobStore
 	now                     func() time.Time
 }
 
@@ -522,7 +504,7 @@ func filePurgeExpiredContentDescriptor(handler job.Handler) job.Descriptor {
 }
 
 type filePurgeExpiredContentProposer struct {
-	jobs JobEnqueuer
+	jobs store.JobStore
 	now  func() time.Time
 }
 
@@ -548,13 +530,13 @@ func (p filePurgeExpiredContentProposer) Propose(ctx context.Context, occurrence
 // FilePurgeDependencies are the collaborators of the expired-content purge
 // Job: file revisions plus Starter and Attempt Workspace objects.
 type FilePurgeDependencies struct {
-	Files                   FilePurgeStore
+	Files                   store.FileStore
 	Content                 FileRevisionContentPurger
-	StarterWorkspaces       StarterWorkspaceCleanupStore
+	StarterWorkspaces       store.ExamStarterWorkspaceStore
 	StarterWorkspaceContent StarterWorkspaceObjectPurger
-	AttemptWorkspaces       AttemptWorkspaceCleanupStore
+	AttemptWorkspaces       store.ExamAttemptWorkspaceStore
 	AttemptWorkspaceContent AttemptWorkspaceObjectPurger
-	Continuations           JobEnqueuer
+	Continuations           store.JobStore
 	Now                     func() time.Time
 }
 
@@ -570,6 +552,6 @@ func NewFilePurgeDescriptor(deps FilePurgeDependencies) job.Descriptor {
 }
 
 // NewFilePurgeRecurrence proposes the daily expired-content purge Job.
-func NewFilePurgeRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+func NewFilePurgeRecurrence(jobs store.JobStore, now func() time.Time) job.Recurrence {
 	return job.Recurrence{Name: "file-purge-expired-content", Proposer: filePurgeExpiredContentProposer{jobs: jobs, now: now}}
 }

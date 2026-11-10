@@ -13,25 +13,24 @@ import (
 	"errors"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type ExamExportBuilder interface {
+// examExportBuilder is the part of *exam.Exports the build Job drives. It is
+// a seam because the handler test fakes it: the real service builds and
+// publishes an archive.
+type examExportBuilder interface {
 	BuildFromJob(context.Context, invocation.System, store.ExamExportBuild) error
-}
-type ExamExportMaintenanceStore interface {
-	Reconcile(context.Context, int) (int, error)
-	BeginPurgeBatch(context.Context, int) ([]store.ExamExportArtifact, error)
-	CompletePurge(context.Context, store.ExamExportArtifact) error
 }
 type ExamExportPurger interface {
 	PurgeExamExport(context.Context, model.ExamExportID, model.JobAttemptID) error
 }
 
-type examExportBuildHandler struct{ service ExamExportBuilder }
+type examExportBuildHandler struct{ service examExportBuilder }
 type examExportBuildCommand struct {
 	ExportID model.ExamExportID `json:"export_id"`
 }
@@ -64,7 +63,7 @@ func examExportBuildDescriptor(handler job.Handler) job.Descriptor {
 }
 
 type examExportCleanupHandler struct {
-	exports ExamExportMaintenanceStore
+	exports store.ExamExportStore
 	content ExamExportPurger
 }
 type examExportCleanupCommand struct {
@@ -127,7 +126,7 @@ func examExportCleanupDescriptor(handler job.Handler) job.Descriptor {
 }
 
 type examExportCleanupProposer struct {
-	jobs JobEnqueuer
+	jobs store.JobStore
 	now  func() time.Time
 }
 
@@ -143,17 +142,17 @@ func (p examExportCleanupProposer) Propose(ctx context.Context, occurrence time.
 }
 
 // NewExamExportBuildDescriptor registers the building of one Exam export.
-func NewExamExportBuildDescriptor(service ExamExportBuilder) job.Descriptor {
-	return examExportBuildDescriptor(examExportBuildHandler{service: service})
+func NewExamExportBuildDescriptor(exports *exam.Exports) job.Descriptor {
+	return examExportBuildDescriptor(examExportBuildHandler{service: exports})
 }
 
 // NewExamExportCleanupDescriptor registers the removal of expired Exam
 // exports and their content.
-func NewExamExportCleanupDescriptor(exports ExamExportMaintenanceStore, content ExamExportPurger) job.Descriptor {
+func NewExamExportCleanupDescriptor(exports store.ExamExportStore, content ExamExportPurger) job.Descriptor {
 	return examExportCleanupDescriptor(examExportCleanupHandler{exports: exports, content: content})
 }
 
 // NewExamExportCleanupRecurrence proposes the hourly Exam export cleanup Job.
-func NewExamExportCleanupRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+func NewExamExportCleanupRecurrence(jobs store.JobStore, now func() time.Time) job.Recurrence {
 	return job.Recurrence{Name: "exam-export-cleanup", Interval: time.Hour, Proposer: examExportCleanupProposer{jobs: jobs, now: now}}
 }

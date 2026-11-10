@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
+	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/model"
@@ -41,19 +42,24 @@ type ExamSittingSealingResult struct {
 	Revision  int64                  `json:"revision"`
 }
 
-type ExamSittingSealingService interface {
-	ListExamSittingSealTargetsFromJob(context.Context, invocation.System, model.ExamSittingID, model.ExamAttemptID, int) ([]store.ExamSubmissionAutomaticSealTarget, error)
-	SealExamAttemptForSittingCloseFromJob(context.Context, store.ExamSubmissionAutomaticSealTarget, model.JobID, model.JobAttemptID) (attempt.AutomaticSubmissionResult, error)
-	FinishExamSittingSealingFromJob(context.Context, model.ExamSittingID, model.JobID, model.JobAttemptID) (*store.ExamSittingLifecycleResult, error)
-	EnqueueExamSittingSealingContinuationFromJob(context.Context, model.ExamSittingID, model.JobID) error
+// attemptSealing is the part of *attempt.Service the sealing Job drives. It
+// is a seam because the handler tests fake it: sealing a real Attempt needs
+// its Submission, audit and workspace machinery.
+type attemptSealing interface {
+	ListAutomaticSealTargets(context.Context, invocation.System, model.ExamSittingID, model.ExamAttemptID, int) ([]store.ExamSubmissionAutomaticSealTarget, error)
+	SealForSittingClose(context.Context, invocation.System, store.ExamSubmissionAutomaticSealTarget) (attempt.AutomaticSubmissionResult, error)
 }
 
 type examSittingSealingHandler struct {
-	service ExamSittingSealingService
+	sittings sittingLifecycle
+	attempts attemptSealing
+	jobs     store.JobStore
+	now      func() time.Time
+	newID    func() model.JobID
 }
 
 func (h examSittingSealingHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
-	if h.service == nil || execution.Job == nil || execution.Attempt == nil || !execution.Job.ID.IsValid() ||
+	if h.sittings == nil || h.attempts == nil || execution.Job == nil || execution.Attempt == nil || !execution.Job.ID.IsValid() ||
 		!execution.Attempt.ID.IsValid() {
 		return job.PermanentFailure("job.command.invalid", errors.New("Exam Sitting sealing execution is incomplete"))
 	}
@@ -84,7 +90,7 @@ func (h examSittingSealingHandler) Run(ctx context.Context, execution job.Execut
 	remaining := examSittingSealingMaximumWork - execution.Job.WorkReserved
 	for remaining > 0 {
 		limit := min(remaining, examSittingSealingPageSize)
-		page, listErr := h.service.ListExamSittingSealTargetsFromJob(ctx, invocation.Job(execution.Job.ID, execution.Attempt.ID), command.ExamSittingID,
+		page, listErr := h.attempts.ListAutomaticSealTargets(ctx, invocation.Job(execution.Job.ID, execution.Attempt.ID), command.ExamSittingID,
 			checkpoint.AfterAttemptID, limit)
 		if listErr != nil {
 			return examSittingSealingFailure(listErr)
@@ -107,8 +113,8 @@ func (h examSittingSealingHandler) Run(ctx context.Context, execution job.Execut
 			if !reserved {
 				return h.finishPass(ctx, execution, command, checkpoint, true)
 			}
-			sealed, sealErr := h.service.SealExamAttemptForSittingCloseFromJob(ctx, target,
-				execution.Job.ID, execution.Attempt.ID)
+			sealed, sealErr := h.attempts.SealForSittingClose(ctx,
+				invocation.Job(execution.Job.ID, execution.Attempt.ID), target)
 			if sealErr != nil {
 				return examSittingSealingFailure(sealErr)
 			}
@@ -186,10 +192,11 @@ func checkpointExamSittingSealing(ctx context.Context, execution job.Execution,
 func (h examSittingSealingHandler) finish(ctx context.Context, execution job.Execution,
 	sittingID model.ExamSittingID, checkpoint ExamSittingSealingCheckpoint,
 ) job.Outcome {
-	result, err := h.service.FinishExamSittingSealingFromJob(ctx, sittingID, execution.Job.ID, execution.Attempt.ID)
+	finished, err := h.sittings.FinishSealing(ctx, invocation.Job(execution.Job.ID, execution.Attempt.ID), sittingID)
 	if err != nil {
 		return examSittingSealingFailure(err)
 	}
+	result := &finished
 	if err = validateExamSittingLifecycleJobResult(sittingID, result); err != nil {
 		return job.PermanentFailure("job.invariant_failed", err)
 	}
@@ -204,8 +211,7 @@ func (h examSittingSealingHandler) finish(ctx context.Context, execution job.Exe
 func (h examSittingSealingHandler) continuePass(ctx context.Context, execution job.Execution,
 	command model.ExamSittingLifecycleCommand, result ExamSittingSealingResult,
 ) job.Outcome {
-	if err := h.service.EnqueueExamSittingSealingContinuationFromJob(ctx, command.ExamSittingID,
-		execution.Job.ID); err != nil {
+	if err := h.enqueueContinuation(ctx, command.ExamSittingID, execution.Job.ID); err != nil {
 		return examSittingSealingFailure(err)
 	}
 	result.Continued = true
@@ -214,6 +220,28 @@ func (h examSittingSealingHandler) continuePass(ctx context.Context, execution j
 		return job.PermanentFailure("job.invariant_failed", err)
 	}
 	return job.Outcome{Kind: job.OutcomeSucceeded, Result: resultDocument}
+}
+
+// enqueueContinuation queues the next sealing pass for a Sitting whose
+// Attempts the bounded pass did not finish.
+func (h examSittingSealingHandler) enqueueContinuation(ctx context.Context, sittingID model.ExamSittingID,
+	parentJobID model.JobID,
+) error {
+	if h.jobs == nil || h.now == nil || h.newID == nil || !sittingID.IsValid() || !parentJobID.IsValid() {
+		return store.NewErrInvalidInput("exam_sitting_sealing", "continuation", nil)
+	}
+	document, err := model.EncodeExamSittingLifecycleCommand(model.ExamSittingLifecycleCommand{ExamSittingID: sittingID})
+	if err != nil {
+		return store.NewErrInvalidInput("exam_sitting_sealing", "continuation", err)
+	}
+	at := model.TimeUTC(h.now())
+	record, err := model.NewJobWithDedupePolicy(h.newID(), model.JobTypeExamSittingSealing, document,
+		"exam-sitting-sealing-continuation:"+parentJobID.String(), model.JobDedupePermanent, at, at, 8)
+	if err != nil {
+		return store.NewErrInvalidInput("exam_sitting_sealing", "continuation", err)
+	}
+	_, _, err = h.jobs.Enqueue(ctx, &store.JobEnqueue{Job: record})
+	return err
 }
 
 // examSittingSealingFailure fails permanently only for input the Store refused. A
@@ -240,6 +268,6 @@ func examSittingSealingDescriptor(handler job.Handler) job.Descriptor {
 
 // NewExamSittingSealingDescriptor registers the automatic sealing of Exam
 // Attempts when a Sitting closes.
-func NewExamSittingSealingDescriptor(service ExamSittingSealingService) job.Descriptor {
-	return examSittingSealingDescriptor(examSittingSealingHandler{service: service})
+func NewExamSittingSealingDescriptor(sittings *sitting.Service, attempts *attempt.Service, jobs store.JobStore, now func() time.Time, newID func() model.JobID) job.Descriptor {
+	return examSittingSealingDescriptor(examSittingSealingHandler{sittings: sittings, attempts: attempts, jobs: jobs, now: now, newID: newID})
 }

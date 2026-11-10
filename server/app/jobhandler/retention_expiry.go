@@ -18,13 +18,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type RetentionExpiryMaintenanceStore interface {
-	GetControl(context.Context) (*model.RetentionControl, error)
-	ListExpiryRecords(context.Context, store.RetentionExpiryListOptions) (*store.RetentionExpiryPage, error)
-	ReconcileExpiry(context.Context, *store.RetentionExpiryReconciliation) (*store.RetentionExpiryResult, error)
-	ReconcileCleanupAuditExpiry(context.Context, *store.RetentionCleanupAuditReconciliation) (*store.RetentionCleanupAuditResult, error)
-}
-
 type RetentionExpirySystemAuditor interface {
 	BeginRetentionExpiry(context.Context, model.InstitutionID, model.RetentionExpiryKind, string) (model.AuditEventID, error)
 	FailRetention(context.Context, model.AuditEventID) error
@@ -50,9 +43,9 @@ type RetentionExpiryCheckpoint struct {
 }
 
 type retentionExpiryHandler struct {
-	records RetentionExpiryMaintenanceStore
+	records store.RetentionStore
 	audit   RetentionExpirySystemAuditor
-	jobs    JobEnqueuer
+	jobs    store.JobStore
 	now     func() time.Time
 }
 
@@ -188,7 +181,7 @@ func (h retentionExpiryHandler) finish(ctx context.Context, parent *model.Job, c
 }
 
 type retentionExpiryProposer struct {
-	jobs JobEnqueuer
+	jobs store.JobStore
 	now  func() time.Time
 }
 
@@ -249,11 +242,11 @@ func (h retentionExpiryHandler) cleanupAuditBatch(ctx context.Context, e job.Exe
 }
 
 // NewRetentionExpiryDescriptor registers the expiry of retention records.
-func NewRetentionExpiryDescriptor(records RetentionExpiryMaintenanceStore, audit RetentionExpirySystemAuditor, jobs JobEnqueuer, now func() time.Time) job.Descriptor {
+func NewRetentionExpiryDescriptor(records store.RetentionStore, audit RetentionExpirySystemAuditor, jobs store.JobStore, now func() time.Time) job.Descriptor {
 	return retentionDescriptor(model.JobTypeRetentionExpire, retentionExpiryHandler{records: records, audit: audit, jobs: jobs, now: now})
 }
 
 // NewRetentionExpiryRecurrence proposes the hourly retention expiry Job.
-func NewRetentionExpiryRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+func NewRetentionExpiryRecurrence(jobs store.JobStore, now func() time.Time) job.Recurrence {
 	return job.Recurrence{Name: "retention-expire", Interval: time.Hour, Proposer: retentionExpiryProposer{jobs: jobs, now: now}}
 }

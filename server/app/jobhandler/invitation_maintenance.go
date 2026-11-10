@@ -35,21 +35,13 @@ type InvitationMaintenanceResult struct {
 	OnboardingPurged int `json:"onboarding_purged"`
 }
 
-type InvitationMaintenanceStore interface {
-	Maintain(context.Context, int) (*store.InvitationMaintenanceResult, error)
-}
-type OnboardingImportMaintenanceStore interface {
-	GetOnboardingImport(context.Context, model.OnboardingImportID) (*store.OnboardingImport, error)
-	ListExpiredOnboardingImports(context.Context, int, time.Time) ([]model.OnboardingImportID, error)
-	PurgeOnboardingImport(context.Context, *store.OnboardingImportPurge) (bool, error)
-}
 type OnboardingImportMaintenanceFiles interface {
 	RemoveOnboardingImport(context.Context, model.OnboardingImportID) error
 	ListOnboardingImportFiles(context.Context, string, int, time.Time) ([]model.OnboardingImportID, string, error)
 }
 type invitationMaintenanceHandler struct {
-	invitations InvitationMaintenanceStore
-	imports     OnboardingImportMaintenanceStore
+	invitations store.InvitationStore
+	imports     store.OnboardingImportStore
 	content     OnboardingImportMaintenanceFiles
 	now         func() time.Time
 }
@@ -113,7 +105,7 @@ func (h invitationMaintenanceHandler) Run(ctx context.Context, execution job.Exe
 }
 
 type invitationMaintenanceProposer struct {
-	jobs JobEnqueuer
+	jobs store.JobStore
 	now  func() time.Time
 }
 
@@ -144,12 +136,12 @@ func invitationMaintenanceDescriptor(handler job.Handler) job.Descriptor {
 
 // NewInvitationMaintenanceDescriptor registers the expiry of Invitations and
 // the cleanup of onboarding import files.
-func NewInvitationMaintenanceDescriptor(invitations InvitationMaintenanceStore, imports OnboardingImportMaintenanceStore, content OnboardingImportMaintenanceFiles, now func() time.Time) job.Descriptor {
+func NewInvitationMaintenanceDescriptor(invitations store.InvitationStore, imports store.OnboardingImportStore, content OnboardingImportMaintenanceFiles, now func() time.Time) job.Descriptor {
 	return invitationMaintenanceDescriptor(invitationMaintenanceHandler{invitations: invitations, imports: imports, content: content, now: now})
 }
 
 // NewInvitationMaintenanceRecurrence proposes the daily Invitation
 // maintenance Job.
-func NewInvitationMaintenanceRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+func NewInvitationMaintenanceRecurrence(jobs store.JobStore, now func() time.Time) job.Recurrence {
 	return job.Recurrence{Name: "invitation-maintenance", Proposer: invitationMaintenanceProposer{jobs: jobs, now: now}}
 }

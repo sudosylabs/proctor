@@ -69,19 +69,12 @@ func DecodeMFARekeyResult(document json.RawMessage) (MFARekeyResult, error) {
 	return value, err
 }
 
-// MFARekeyJobStore is the Store surface the MFA rekey handler uses.
-type MFARekeyJobStore interface {
-	ListRekeyTargets(context.Context, *store.MFARekeyTargetPageRequest) (*store.MFARekeyTargetPage, error)
-	ReplaceRekeyTarget(context.Context, *store.MFARekeyReplacement) (bool, error)
-	ProveRekey(context.Context, *store.MFARekeyProofRequest) (*store.MFARekeyProof, error)
-}
-
 // mfaRekeyHandler re-seals every live TOTP secret under the fenced primary.
 // Each replacement is a compare-and-swap on the credential's key identity and
 // is checkpointed after it commits, so a retry or another node resumes after
 // the last re-sealed credential and a replayed replacement is a no-op.
 type mfaRekeyHandler struct {
-	credentials MFARekeyJobStore
+	credentials store.MFAStore
 	sealer      *secretseal.Sealer
 }
 
@@ -241,6 +234,6 @@ func mfaRekeyDescriptor(handler job.Handler) job.Descriptor {
 
 // NewMFARekeyDescriptor registers the re-sealing of MFA credentials under a
 // new primary key.
-func NewMFARekeyDescriptor(credentials MFARekeyJobStore, sealer *secretseal.Sealer) job.Descriptor {
+func NewMFARekeyDescriptor(credentials store.MFAStore, sealer *secretseal.Sealer) job.Descriptor {
 	return mfaRekeyDescriptor(mfaRekeyHandler{credentials: credentials, sealer: sealer})
 }

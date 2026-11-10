@@ -67,9 +67,7 @@ func TestJobRunnerRecoversNodeLossAroundADurableDomainCommit(t *testing.T) {
 				Effects: userRealtimeEffects{}, Defaults: recoveryDefaultPictures{}, Now: time.Now,
 			})
 			require.NoError(t, err)
-			realHandler := jobhandler.NewDefaultProfilePictureDescriptor(
-				jobDefaultProfilePictureGenerator{service: pictures},
-			).Handler
+			realHandler := jobhandler.NewDefaultProfilePictureDescriptor(pictures).Handler
 			entered := make(chan struct{})
 			canceled := make(chan struct{})
 			handler := &recoveryCommitHandler{

@@ -13,13 +13,20 @@ import (
 	"errors"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/exam/sitting"
+	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type ExamSittingLifecycleReconciler interface {
-	ReconcileExamSittingLifecycleFromJob(context.Context, model.ExamSittingID, model.JobID, model.JobAttemptID) (*store.ExamSittingLifecycleResult, error)
+// sittingLifecycle is the part of *sitting.Service the lifecycle, recovery and
+// sealing Jobs drive. It is a seam because the handler tests fake it: the real
+// service needs a Store, an audit trail and a clock to produce each result.
+type sittingLifecycle interface {
+	AdvanceDue(context.Context, invocation.System, model.ExamSittingID) (store.ExamSittingLifecycleResult, error)
+	ListLifecycleDue(context.Context, invocation.System, store.ExamSittingLifecycleDueOptions) ([]store.ExamSittingLifecycleDue, error)
+	FinishSealing(context.Context, invocation.System, model.ExamSittingID) (store.ExamSittingLifecycleResult, error)
 }
 
 // ExamSittingLifecycleJobResult is deliberately limited to safe lifecycle
@@ -33,11 +40,11 @@ type ExamSittingLifecycleJobResult struct {
 }
 
 type examSittingLifecycleHandler struct {
-	reconciler ExamSittingLifecycleReconciler
+	sittings sittingLifecycle
 }
 
 func (h examSittingLifecycleHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
-	if h.reconciler == nil || execution.Job == nil || execution.Attempt == nil ||
+	if h.sittings == nil || execution.Job == nil || execution.Attempt == nil ||
 		!execution.Job.ID.IsValid() || !execution.Attempt.ID.IsValid() {
 		return job.PermanentFailure("job.command.invalid", errors.New("Exam Sitting lifecycle Job execution is incomplete"))
 	}
@@ -45,12 +52,11 @@ func (h examSittingLifecycleHandler) Run(ctx context.Context, execution job.Exec
 	if err != nil {
 		return job.PermanentFailure("job.command.invalid", err)
 	}
-	result, err := h.reconciler.ReconcileExamSittingLifecycleFromJob(
-		ctx, command.ExamSittingID, execution.Job.ID, execution.Attempt.ID,
-	)
+	advanced, err := h.sittings.AdvanceDue(ctx, invocation.Job(execution.Job.ID, execution.Attempt.ID), command.ExamSittingID)
 	if err != nil {
 		return examSittingLifecycleFailure(err)
 	}
+	result := &advanced
 	if err = validateExamSittingLifecycleJobResult(command.ExamSittingID, result); err != nil {
 		return job.PermanentFailure("job.invariant_failed", err)
 	}
@@ -178,6 +184,6 @@ func (f ExamSittingLifecycleJobFactory) jobOfType(sittingID model.ExamSittingID,
 
 // NewExamSittingLifecycleDescriptor registers the open and deadline
 // transitions of Exam Sittings.
-func NewExamSittingLifecycleDescriptor(reconciler ExamSittingLifecycleReconciler) job.Descriptor {
-	return examSittingLifecycleDescriptor(examSittingLifecycleHandler{reconciler: reconciler})
+func NewExamSittingLifecycleDescriptor(sittings *sitting.Service) job.Descriptor {
+	return examSittingLifecycleDescriptor(examSittingLifecycleHandler{sittings: sittings})
 }

@@ -40,18 +40,9 @@ type MailCleanupResult struct {
 	Deleted                    int `json:"deleted"`
 }
 
-type MailCleanupStore interface {
-	SuppressExpired(context.Context, int) (*store.MailMaintenanceResult, error)
-	CleanupTerminal(context.Context, int) (*store.MailMaintenanceResult, error)
-}
-
-type SittingMailMaintenanceStore interface {
-	MaintainMailExpansions(context.Context, int) (*store.ExamSittingMailMaintenanceResult, error)
-}
-
 type mailCleanupHandler struct {
-	mail     MailCleanupStore
-	sittings SittingMailMaintenanceStore
+	mail     store.MailStore
+	sittings store.ExamSittingStore
 	recorder MailDeliveryRecorder
 }
 
@@ -113,7 +104,7 @@ func recordMailMaintenanceDeliveries(ctx context.Context, recorder MailDeliveryR
 }
 
 type mailCleanupProposer struct {
-	jobs JobEnqueuer
+	jobs store.JobStore
 	now  func() time.Time
 }
 
@@ -144,11 +135,11 @@ func mailCleanupDescriptor(handler job.Handler) job.Descriptor {
 
 // NewMailCleanupDescriptor registers the bounded cleanup of terminal mail
 // deliveries and Sitting mail maintenance.
-func NewMailCleanupDescriptor(mail MailCleanupStore, sittings SittingMailMaintenanceStore, recorder MailDeliveryRecorder) job.Descriptor {
+func NewMailCleanupDescriptor(mail store.MailStore, sittings store.ExamSittingStore, recorder MailDeliveryRecorder) job.Descriptor {
 	return mailCleanupDescriptor(mailCleanupHandler{mail: mail, sittings: sittings, recorder: recorder})
 }
 
 // NewMailCleanupRecurrence proposes the daily mail cleanup Job.
-func NewMailCleanupRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+func NewMailCleanupRecurrence(jobs store.JobStore, now func() time.Time) job.Recurrence {
 	return job.Recurrence{Name: "mail-cleanup", Proposer: mailCleanupProposer{jobs: jobs, now: now}}
 }

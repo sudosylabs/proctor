@@ -30,10 +30,7 @@ type CommandOutcomeCleanupResult struct {
 	Deleted int64 `json:"deleted"`
 }
 
-type CommandOutcomeCleaner interface {
-	DeleteExpired(context.Context, int) (int64, error)
-}
-type commandOutcomeCleanupHandler struct{ outcomes CommandOutcomeCleaner }
+type commandOutcomeCleanupHandler struct{ outcomes store.CommandOutcomeStore }
 
 func (h commandOutcomeCleanupHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
 	if execution.Job == nil {
@@ -52,7 +49,7 @@ func (h commandOutcomeCleanupHandler) Run(ctx context.Context, execution job.Exe
 }
 
 type commandOutcomeCleanupProposer struct {
-	jobs JobEnqueuer
+	jobs store.JobStore
 	now  func() time.Time
 }
 
@@ -77,12 +74,12 @@ func commandOutcomeCleanupDescriptor(handler job.Handler) job.Descriptor {
 
 // NewCommandOutcomeCleanupDescriptor registers the deletion of expired
 // command outcomes.
-func NewCommandOutcomeCleanupDescriptor(outcomes CommandOutcomeCleaner) job.Descriptor {
+func NewCommandOutcomeCleanupDescriptor(outcomes store.CommandOutcomeStore) job.Descriptor {
 	return commandOutcomeCleanupDescriptor(commandOutcomeCleanupHandler{outcomes: outcomes})
 }
 
 // NewCommandOutcomeCleanupRecurrence proposes the daily command outcome
 // cleanup Job.
-func NewCommandOutcomeCleanupRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+func NewCommandOutcomeCleanupRecurrence(jobs store.JobStore, now func() time.Time) job.Recurrence {
 	return job.Recurrence{Name: "command-outcome-cleanup", Proposer: commandOutcomeCleanupProposer{jobs: jobs, now: now}}
 }

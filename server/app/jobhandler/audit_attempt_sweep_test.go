@@ -22,6 +22,7 @@ import (
 )
 
 type auditAttemptSweeperFake struct {
+	store.AuditStore
 	results []int64
 	err     error
 	inputs  []store.AuditAttemptAbandonment

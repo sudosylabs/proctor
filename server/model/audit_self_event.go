@@ -164,12 +164,15 @@ func AuditSelfEventFor(action, operation string, status AuditStatus) (AuditSelfE
 	if status != AuditStatusSuccess && status != AuditStatusFail {
 		return "", false
 	}
+
 	for _, rule := range auditSelfEventRules {
-		if string(rule.action) == action && rule.operation == operation &&
+		if string(rule.action) == action &&
+			rule.operation == operation &&
 			(rule.status == "" || rule.status == status) {
 			return rule.event, true
 		}
 	}
+
 	return "", false
 }
 

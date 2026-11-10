@@ -23,12 +23,27 @@ func NewBrowserActivityDisclosure(policy *RetentionPolicy, mayCreateEvidence boo
 	if policy == nil || policy.Validate() != nil {
 		return BrowserActivityDisclosure{}, errRetentionPolicyInvalid
 	}
-	return BrowserActivityDisclosure{NoticeID: "integrated_browser_activity", Audience: "exam_managers_with_browser_activity_permission", RetentionPolicyRevision: policy.Revision, BrowserActivityRetentionDays: policy.BrowserActivityRetentionDays, RetentionAnchor: "eligible_closed_sitting_records_completion", MayCreateIntegrityEvidence: mayCreateEvidence}, nil
+
+	return BrowserActivityDisclosure{
+		NoticeID:                     "integrated_browser_activity",
+		Audience:                     "exam_managers_with_browser_activity_permission",
+		RetentionPolicyRevision:      policy.Revision,
+		BrowserActivityRetentionDays: policy.BrowserActivityRetentionDays,
+		RetentionAnchor:              "eligible_closed_sitting_records_completion",
+		MayCreateIntegrityEvidence:   mayCreateEvidence,
+	}, nil
 }
 
 func (v BrowserActivityDisclosure) Validate() error {
-	if v.NoticeID != "integrated_browser_activity" || v.Audience != "exam_managers_with_browser_activity_permission" || v.RetentionPolicyRevision < 1 || !securitySafeInt(v.RetentionPolicyRevision) || v.BrowserActivityRetentionDays < 0 || v.BrowserActivityRetentionDays > 36500 || v.RetentionAnchor != "eligible_closed_sitting_records_completion" {
+	if v.NoticeID != "integrated_browser_activity" ||
+		v.Audience != "exam_managers_with_browser_activity_permission" ||
+		v.RetentionPolicyRevision < 1 ||
+		!securitySafeInt(v.RetentionPolicyRevision) ||
+		v.BrowserActivityRetentionDays < 0 ||
+		v.BrowserActivityRetentionDays > 36500 ||
+		v.RetentionAnchor != "eligible_closed_sitting_records_completion" {
 		return errRetentionPolicyInvalid
 	}
+
 	return nil
 }

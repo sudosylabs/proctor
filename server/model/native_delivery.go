@@ -50,17 +50,40 @@ type NativeOccurrence struct {
 }
 
 func (v NativeOccurrence) Validate() error {
-	if v.Kind != "occurrence" || !IsValidAgreementID(v.OccurrenceID) || !IsValidAgreementID(v.ConditionID) || !IsValidAgreementID(v.DetectorID) || v.DetectorVersion <= 0 || !securitySafeInt(v.DetectorVersion) || !IsValidAgreementID(v.CapabilityID) || !slices.Contains([]NativeCapabilityClaim{NativeClaimObserve, NativeClaimEnforce}, v.Mode) || !slices.Contains([]string{"opened", "repeated", "recovered"}, v.Status) || !securityInstant(v.FirstObservedAt) || !securityInstant(v.LastConfirmedAt) || v.RepeatCount <= 0 || !securitySafeInt(v.RepeatCount) || !slices.Contains([]string{"complete", "partial", "unknown"}, v.Certainty) || !securitySafeInt(v.GapCount) || len(v.SourceRanges) == 0 || len(v.SourceRanges) > 11 {
+	if v.Kind != "occurrence" ||
+		!IsValidAgreementID(v.OccurrenceID) ||
+		!IsValidAgreementID(v.ConditionID) ||
+		!IsValidAgreementID(v.DetectorID) ||
+		v.DetectorVersion <= 0 ||
+		!securitySafeInt(v.DetectorVersion) ||
+		!IsValidAgreementID(v.CapabilityID) ||
+		!slices.Contains([]NativeCapabilityClaim{NativeClaimObserve, NativeClaimEnforce}, v.Mode) ||
+		!slices.Contains([]string{"opened", "repeated", "recovered"}, v.Status) ||
+		!securityInstant(v.FirstObservedAt) ||
+		!securityInstant(v.LastConfirmedAt) ||
+		v.RepeatCount <= 0 ||
+		!securitySafeInt(v.RepeatCount) ||
+		!slices.Contains([]string{"complete", "partial", "unknown"}, v.Certainty) ||
+		!securitySafeInt(v.GapCount) ||
+		len(v.SourceRanges) == 0 ||
+		len(v.SourceRanges) > 11 {
 		return ErrNativeDeliveryInvalid
 	}
+
 	previous := -1
 	for _, r := range v.SourceRanges {
 		order := slices.Index(NativeSources(), r.SourceID)
-		if order <= previous || !IsValidAgreementID(r.SourceInstanceID) || !securitySafeInt(r.FirstSequence) || !securitySafeInt(r.LastSequence) || r.LastSequence < r.FirstSequence {
+		if order <= previous ||
+			!IsValidAgreementID(r.SourceInstanceID) ||
+			!securitySafeInt(r.FirstSequence) ||
+			!securitySafeInt(r.LastSequence) ||
+			r.LastSequence < r.FirstSequence {
 			return ErrNativeDeliveryInvalid
 		}
+
 		previous = order
 	}
+
 	// Client wall clocks may roll back. Source sequences and stream ordering,
 	// never timestamp equality, determine occurrence continuity.
 	return nil
@@ -76,9 +99,13 @@ type NativeCoverageTransition struct {
 }
 
 func (v NativeCoverageTransition) Validate() error {
-	if v.Kind != "coverage_transition" || ValidateNativeCoverageSnapshot([]NativeSourceCoverage{v.Source}, []NativeCoverageClaim{}) != nil || !securityInstant(v.OccurredAt) || !slices.Contains([]string{"initial", "health_changed", "permission_changed", "reconciled", "stopped"}, v.Reason) {
+	if v.Kind != "coverage_transition" ||
+		ValidateNativeCoverageSnapshot([]NativeSourceCoverage{v.Source}, []NativeCoverageClaim{}) != nil ||
+		!securityInstant(v.OccurredAt) ||
+		!slices.Contains([]string{"initial", "health_changed", "permission_changed", "reconciled", "stopped"}, v.Reason) {
 		return ErrNativeDeliveryInvalid
 	}
+
 	return nil
 }
 
@@ -95,9 +122,17 @@ type NativeSourceGap struct {
 }
 
 func (v NativeSourceGap) Validate() error {
-	if v.Kind != "source_gap" || !slices.Contains(NativeSources(), v.SourceID) || !IsValidAgreementID(v.SourceInstanceID) || !securitySafeInt(v.FirstMissingSequence) || !securitySafeInt(v.LastMissingSequence) || v.LastMissingSequence < v.FirstMissingSequence || !slices.Contains([]string{"overflow", "source_loss", "corruption"}, v.Reason) || !securityInstant(v.OccurredAt) {
+	if v.Kind != "source_gap" ||
+		!slices.Contains(NativeSources(), v.SourceID) ||
+		!IsValidAgreementID(v.SourceInstanceID) ||
+		!securitySafeInt(v.FirstMissingSequence) ||
+		!securitySafeInt(v.LastMissingSequence) ||
+		v.LastMissingSequence < v.FirstMissingSequence ||
+		!slices.Contains([]string{"overflow", "source_loss", "corruption"}, v.Reason) ||
+		!securityInstant(v.OccurredAt) {
 		return ErrNativeDeliveryInvalid
 	}
+
 	return nil
 }
 
@@ -132,14 +167,18 @@ func (r NativeRecord) value() (any, error) {
 				continue
 			}
 		}
+
 		if candidate.Validate() != nil {
 			return nil, ErrNativeDeliveryInvalid
 		}
+
 		value, count = candidate, count+1
 	}
+
 	if count != 1 {
 		return nil, ErrNativeDeliveryInvalid
 	}
+
 	return value, nil
 }
 func (r NativeRecord) Validate() error { _, err := r.value(); return err }
@@ -154,12 +193,14 @@ func (r *NativeRecord) UnmarshalJSON(raw []byte) error {
 	if r == nil || len(raw) > 256*1024 || validateExamDocumentJSON(raw) != nil {
 		return ErrNativeDeliveryInvalid
 	}
+
 	var kind struct {
 		Kind string `json:"kind"`
 	}
 	if json.Unmarshal(raw, &kind) != nil {
 		return ErrNativeDeliveryInvalid
 	}
+
 	var value NativeRecord
 	var target any
 	switch kind.Kind {
@@ -178,9 +219,11 @@ func (r *NativeRecord) UnmarshalJSON(raw []byte) error {
 	default:
 		return ErrNativeDeliveryInvalid
 	}
+
 	if decodeClosedDeliveryDeclaration(raw, target, 256*1024) != nil || value.Validate() != nil {
 		return ErrNativeDeliveryInvalid
 	}
+
 	*r = value
 	return nil
 }
@@ -199,18 +242,33 @@ type NativeSecurityBatch struct {
 }
 
 func (b NativeSecurityBatch) Validate() error {
-	if !IsValidAgreementID(b.StreamID) || b.BatchSequence <= 0 || !securitySafeInt(b.BatchSequence) || !securitySafeInt(b.PriorAcknowledgement) || !b.ParticipationID.IsValid() || b.Generation <= 0 || !securitySafeInt(b.Generation) || !IsValidAgreementID(b.SecuritySessionID) || !IsValidSHA256Fingerprint(b.PolicyDigest) || !IsValidAgreementID(b.ApplicationReleaseID) || !IsValidAgreementID(b.MatrixID) || len(b.Records) == 0 || len(b.Records) > 64 {
+	if !IsValidAgreementID(b.StreamID) ||
+		b.BatchSequence <= 0 ||
+		!securitySafeInt(b.BatchSequence) ||
+		!securitySafeInt(b.PriorAcknowledgement) ||
+		!b.ParticipationID.IsValid() ||
+		b.Generation <= 0 ||
+		!securitySafeInt(b.Generation) ||
+		!IsValidAgreementID(b.SecuritySessionID) ||
+		!IsValidSHA256Fingerprint(b.PolicyDigest) ||
+		!IsValidAgreementID(b.ApplicationReleaseID) ||
+		!IsValidAgreementID(b.MatrixID) ||
+		len(b.Records) == 0 ||
+		len(b.Records) > 64 {
 		return ErrNativeDeliveryInvalid
 	}
+
 	for _, r := range b.Records {
 		if r.Validate() != nil {
 			return ErrNativeDeliveryInvalid
 		}
 	}
+
 	raw, err := encodeCanonicalExamDocument(b)
 	if err != nil || len(raw) > 256*1024 {
 		return ErrNativeDeliveryInvalid
 	}
+
 	return nil
 }
 func (b NativeSecurityBatch) Canonical() ([]byte, error) {
@@ -244,9 +302,14 @@ type NativeBatchReceipt struct {
 }
 
 func (r NativeBatchReceipt) Validate() error {
-	if !IsValidAgreementID(r.StreamID) || r.BatchSequence < 1 || !securitySafeInt(r.BatchSequence) || !IsValidSHA256Fingerprint(r.RequestDigest) || !securityInstant(r.ReceivedAt) {
+	if !IsValidAgreementID(r.StreamID) ||
+		r.BatchSequence < 1 ||
+		!securitySafeInt(r.BatchSequence) ||
+		!IsValidSHA256Fingerprint(r.RequestDigest) ||
+		!securityInstant(r.ReceivedAt) {
 		return ErrNativeDeliveryInvalid
 	}
+
 	return nil
 }
 
@@ -277,31 +340,64 @@ type NativeSecurityStreamStatus struct {
 }
 
 func (s NativeSecurityStreamStatus) Validate() error {
-	if !IsValidAgreementID(s.StreamID) || !securitySafeInt(s.AllocatedThroughSequence) || !securitySafeInt(s.TerminalMissingThroughSequence) || s.TerminalMissingThroughSequence > s.AllocatedThroughSequence || s.Closure.Validate(true) != nil || !securitySafeInt(s.DeclarationRevision) || !securityInstant(s.ServerTime) || !securitySafeInt(s.HighestContiguousBatchSequence) || !securitySafeInt(s.SettledThroughBatchSequence) || !securitySafeInt(s.HighestSeenBatchSequence) || s.HighestContiguousBatchSequence > s.SettledThroughBatchSequence || s.HighestContiguousBatchSequence > s.HighestSeenBatchSequence || s.HighestSeenBatchSequence > s.AllocatedThroughSequence || s.SettledThroughBatchSequence > s.AllocatedThroughSequence || ValidateSequenceRanges(s.MissingBatchRanges, 32) != nil {
+	if !IsValidAgreementID(s.StreamID) ||
+		!securitySafeInt(s.AllocatedThroughSequence) ||
+		!securitySafeInt(s.TerminalMissingThroughSequence) ||
+		s.TerminalMissingThroughSequence > s.AllocatedThroughSequence ||
+		s.Closure.Validate(true) != nil ||
+		!securitySafeInt(s.DeclarationRevision) ||
+		!securityInstant(s.ServerTime) ||
+		!securitySafeInt(s.HighestContiguousBatchSequence) ||
+		!securitySafeInt(s.SettledThroughBatchSequence) ||
+		!securitySafeInt(s.HighestSeenBatchSequence) ||
+		s.HighestContiguousBatchSequence > s.SettledThroughBatchSequence ||
+		s.HighestContiguousBatchSequence > s.HighestSeenBatchSequence ||
+		s.HighestSeenBatchSequence > s.AllocatedThroughSequence ||
+		s.SettledThroughBatchSequence > s.AllocatedThroughSequence ||
+		ValidateSequenceRanges(s.MissingBatchRanges, 32) != nil {
 		return ErrNativeDeliveryInvalid
 	}
-	if len(s.MissingBatchRanges) > 0 && (s.MissingBatchRanges[0].First <= s.SettledThroughBatchSequence || s.MissingBatchRanges[len(s.MissingBatchRanges)-1].Last > s.AllocatedThroughSequence) {
+
+	if len(s.MissingBatchRanges) > 0 &&
+		(s.MissingBatchRanges[0].First <= s.SettledThroughBatchSequence ||
+			s.MissingBatchRanges[len(s.MissingBatchRanges)-1].Last > s.AllocatedThroughSequence) {
 		return ErrNativeDeliveryInvalid
 	}
+
 	switch s.DetailMode {
 	case "collecting":
 		if s.BudgetScope != nil || s.SummaryOnlyReason != nil {
 			return ErrNativeDeliveryInvalid
 		}
 	case "summary_only":
-		if s.BudgetScope == nil || !slices.Contains([]string{"participation", "attempt"}, *s.BudgetScope) || s.SummaryOnlyReason == nil || !slices.Contains([]DeliveryStopReason{DeliveryStopRecords, DeliveryStopBytes, DeliveryStopPositions, DeliveryStopMetadata, DeliveryStopLocalLossInventory}, *s.SummaryOnlyReason) {
+		if s.BudgetScope == nil ||
+			!slices.Contains([]string{"participation", "attempt"}, *s.BudgetScope) ||
+			s.SummaryOnlyReason == nil ||
+			!slices.Contains(
+				[]DeliveryStopReason{
+					DeliveryStopRecords,
+					DeliveryStopBytes,
+					DeliveryStopPositions,
+					DeliveryStopMetadata,
+					DeliveryStopLocalLossInventory,
+				},
+				*s.SummaryOnlyReason,
+			) {
 			return ErrNativeDeliveryInvalid
 		}
 	default:
 		return ErrNativeDeliveryInvalid
 	}
+
 	if s.Summary != nil && s.Summary.Validate() != nil {
 		return ErrNativeDeliveryInvalid
 	}
+
 	raw, err := encodeCanonicalExamDocument(s)
 	if err != nil || len(raw) > 16*1024 {
 		return ErrNativeDeliveryInvalid
 	}
+
 	return nil
 }
 
@@ -314,22 +410,31 @@ type NativeSourceLifetime struct {
 	FinalSequence *int64
 }
 
-func ValidateNativeRecordBinding(record NativeRecord, resolved ResolvedNativePolicy, agreement *DesktopNativeAgreement, lifetimes []NativeSourceLifetime) error {
+func ValidateNativeRecordBinding(
+	record NativeRecord,
+	resolved ResolvedNativePolicy,
+	agreement *DesktopNativeAgreement,
+	lifetimes []NativeSourceLifetime,
+) error {
 	if record.Validate() != nil || agreement == nil {
 		return ErrNativeDeliveryInvalid
 	}
+
 	checkRange := func(source NativeSourceID, instance string, last int64) error {
 		if !slices.Contains(resolved.Sources, source) {
 			return ErrNativeDeliveryInvalid
 		}
+
 		for _, life := range lifetimes {
 			if life.SourceID == source && life.InstanceID == instance {
 				if life.FinalSequence != nil && last > *life.FinalSequence {
 					return ErrNativeDeliveryInvalid
 				}
+
 				return nil
 			}
 		}
+
 		return ErrNativeDeliveryInvalid
 	}
 	if occurrence := record.Occurrence; occurrence != nil {
@@ -338,33 +443,51 @@ func ValidateNativeRecordBinding(record NativeRecord, resolved ResolvedNativePol
 			if err := checkRange(r.SourceID, r.SourceInstanceID, r.LastSequence); err != nil {
 				return err
 			}
+
 			sources = append(sources, r.SourceID)
 		}
-		if agreement.ValidateDetector(occurrence.DetectorID, occurrence.DetectorVersion, occurrence.CapabilityID, occurrence.ConditionID, occurrence.Mode, sources) != nil {
+
+		if agreement.ValidateDetector(
+			occurrence.DetectorID,
+			occurrence.DetectorVersion,
+			occurrence.CapabilityID,
+			occurrence.ConditionID,
+			occurrence.Mode,
+			sources,
+		) != nil {
 			return ErrNativeDeliveryInvalid
 		}
+
 		selected := false
 		for _, required := range resolved.Requirements {
 			if required.CapabilityID == occurrence.CapabilityID && required.RequiredClaim == occurrence.Mode {
 				selected = true
 			}
 		}
+
 		if !selected {
 			return ErrNativeDeliveryInvalid
 		}
+
 		return nil
 	}
+
 	if transition := record.Coverage; transition != nil {
 		if err := checkRange(transition.Source.SourceID, transition.Source.SourceInstanceID, transition.Source.Sequence); err != nil {
 			return err
 		}
+
 		for _, required := range resolved.Requirements {
-			if required.SourceID == transition.Source.SourceID && required.Entry.SourceSchemaDigest == transition.Source.SourceSchemaDigest && required.Entry.AdapterVersion == transition.Source.AdapterVersion {
+			if required.SourceID == transition.Source.SourceID &&
+				required.Entry.SourceSchemaDigest == transition.Source.SourceSchemaDigest &&
+				required.Entry.AdapterVersion == transition.Source.AdapterVersion {
 				return nil
 			}
 		}
+
 		return ErrNativeDeliveryInvalid
 	}
+
 	if gap := record.Gap; gap != nil {
 		return checkRange(gap.SourceID, gap.SourceInstanceID, gap.LastMissingSequence)
 	}
@@ -373,6 +496,7 @@ func ValidateNativeRecordBinding(record NativeRecord, resolved ResolvedNativePol
 	if !slices.Contains(resolved.Sources, record.Reset.SourceID) {
 		return ErrNativeDeliveryInvalid
 	}
+
 	return nil
 }
 
@@ -384,27 +508,51 @@ type NativeOccurrenceProgress struct {
 	UnresolvedOpener bool
 }
 
-func AdvanceNativeOccurrence(prior *NativeOccurrenceProgress, next NativeOccurrence, precedingTerminalGap bool) (NativeOccurrenceProgress, error) {
+func AdvanceNativeOccurrence(
+	prior *NativeOccurrenceProgress,
+	next NativeOccurrence,
+	precedingTerminalGap bool,
+) (NativeOccurrenceProgress, error) {
 	zero := NativeOccurrenceProgress{}
 	if next.Validate() != nil {
 		return zero, ErrNativeDeliveryInvalid
 	}
+
 	if prior == nil {
 		if next.Status != "opened" && !precedingTerminalGap {
 			return zero, ErrDeliveryConflict
 		}
+
 		return NativeOccurrenceProgress{Latest: cloneNativeOccurrence(next), UnresolvedOpener: next.Status != "opened"}, nil
 	}
+
 	old := prior.Latest
-	if old.Validate() != nil || old.OccurrenceID != next.OccurrenceID || old.ConditionID != next.ConditionID || old.DetectorID != next.DetectorID || old.DetectorVersion != next.DetectorVersion || old.CapabilityID != next.CapabilityID || old.Mode != next.Mode || old.Status == "recovered" || next.Status == "opened" || !old.FirstObservedAt.Equal(next.FirstObservedAt) || next.RepeatCount < old.RepeatCount || next.GapCount < old.GapCount || len(old.SourceRanges) != len(next.SourceRanges) {
+	if old.Validate() != nil ||
+		old.OccurrenceID != next.OccurrenceID ||
+		old.ConditionID != next.ConditionID ||
+		old.DetectorID != next.DetectorID ||
+		old.DetectorVersion != next.DetectorVersion ||
+		old.CapabilityID != next.CapabilityID ||
+		old.Mode != next.Mode ||
+		old.Status == "recovered" ||
+		next.Status == "opened" ||
+		!old.FirstObservedAt.Equal(next.FirstObservedAt) ||
+		next.RepeatCount < old.RepeatCount ||
+		next.GapCount < old.GapCount ||
+		len(old.SourceRanges) != len(next.SourceRanges) {
 		return zero, ErrDeliveryConflict
 	}
+
 	for i, r := range old.SourceRanges {
 		n := next.SourceRanges[i]
-		if r.SourceID != n.SourceID || r.SourceInstanceID != n.SourceInstanceID || n.FirstSequence != r.FirstSequence || n.LastSequence < r.LastSequence {
+		if r.SourceID != n.SourceID ||
+			r.SourceInstanceID != n.SourceInstanceID ||
+			n.FirstSequence != r.FirstSequence ||
+			n.LastSequence < r.LastSequence {
 			return zero, ErrDeliveryConflict
 		}
 	}
+
 	return NativeOccurrenceProgress{Latest: cloneNativeOccurrence(next), UnresolvedOpener: prior.UnresolvedOpener}, nil
 }
 func cloneNativeOccurrence(o NativeOccurrence) NativeOccurrence {
@@ -418,7 +566,11 @@ func (v NativeOccurrence) MarshalJSON() ([]byte, error) {
 		*wire
 		FirstObservedAt securityJSONInstant `json:"first_observed_at"`
 		LastConfirmedAt securityJSONInstant `json:"last_confirmed_at"`
-	}{wire: (*wire)(&v), FirstObservedAt: securityJSONInstant{Time: v.FirstObservedAt, spelling: v.firstObservedAtSpelling}, LastConfirmedAt: securityJSONInstant{Time: v.LastConfirmedAt, spelling: v.lastConfirmedAtSpelling}})
+	}{
+		wire:            (*wire)(&v),
+		FirstObservedAt: securityJSONInstant{Time: v.FirstObservedAt, spelling: v.firstObservedAtSpelling},
+		LastConfirmedAt: securityJSONInstant{Time: v.LastConfirmedAt, spelling: v.lastConfirmedAtSpelling},
+	})
 }
 func (v *NativeOccurrence) UnmarshalJSON(raw []byte) error {
 	if v == nil {

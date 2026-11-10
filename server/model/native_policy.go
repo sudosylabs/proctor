@@ -34,7 +34,18 @@ func (m NativeMode) IsValid() bool {
 }
 
 func NativeFamilies() []string {
-	return []string{"process_application", "interactive_session", "clipboard", "printing", "removable_storage", "virtualization", "network_configuration", "camera", "microphone", "external_capture"}
+	return []string{
+		"process_application",
+		"interactive_session",
+		"clipboard",
+		"printing",
+		"removable_storage",
+		"virtualization",
+		"network_configuration",
+		"camera",
+		"microphone",
+		"external_capture",
+	}
 }
 
 // NativeFamilyPolicy is a closed immutable union. Typed fields are private so
@@ -70,6 +81,7 @@ func (p NativeFamilyPolicy) Validate() error {
 	if !f.Mode.IsValid() {
 		return errNativePolicy
 	}
+
 	disabled := f.Mode == NativeModeDisabled
 	switch f.ID {
 	case "process_application":
@@ -96,6 +108,7 @@ func (p NativeFamilyPolicy) Validate() error {
 		if f.MonitoredSpooler != "required" && f.MonitoredSpooler != "not_required" {
 			return errNativePolicy
 		}
+
 		switch f.Mode {
 		case NativeModeDisabled:
 			if f.CandidatePrintCommands != "not_applied" || f.MonitoredSpooler != "not_required" {
@@ -112,22 +125,31 @@ func (p NativeFamilyPolicy) Validate() error {
 		}
 	case "removable_storage":
 		if validateNativePolicySelection(f.EnabledSubCapabilities, []string{"removable_block_storage", "portable_mtp"}, disabled) != nil ||
-			validateNativePolicyIDs(f.AllowedStorageFunctionClassIDs) != nil || disabled && len(f.AllowedStorageFunctionClassIDs) != 0 {
+			validateNativePolicyIDs(f.AllowedStorageFunctionClassIDs) != nil ||
+			disabled && len(f.AllowedStorageFunctionClassIDs) != 0 {
 			return errNativePolicy
 		}
 	case "virtualization":
-		if disabled && f.Rule != "not_applied" || !disabled && f.Rule != "block_recognized_guest" && f.Rule != "require_certified_physical_environment" {
+		if disabled && f.Rule != "not_applied" ||
+			!disabled && f.Rule != "block_recognized_guest" && f.Rule != "require_certified_physical_environment" {
 			return errNativePolicy
 		}
 	case "network_configuration":
-		if validateNativePolicySelection(f.EnabledSubCapabilities, []string{"system_proxy_state", "os_managed_vpn_state", "tunnel_interface_state", "route_change", "network_source_health"}, disabled) != nil ||
-			validateNativePolicyIDs(f.AllowedManagedProfileIDs) != nil || validateNativePolicyIDs(f.AllowedAdapterClassIDs) != nil || validateNativePolicyIDs(f.AllowedTunnelClassIDs) != nil ||
+		if validateNativePolicySelection(
+			f.EnabledSubCapabilities,
+			[]string{"system_proxy_state", "os_managed_vpn_state", "tunnel_interface_state", "route_change", "network_source_health"},
+			disabled,
+		) != nil ||
+			validateNativePolicyIDs(f.AllowedManagedProfileIDs) != nil ||
+			validateNativePolicyIDs(f.AllowedAdapterClassIDs) != nil ||
+			validateNativePolicyIDs(f.AllowedTunnelClassIDs) != nil ||
 			disabled && (len(f.AllowedManagedProfileIDs) != 0 || len(f.AllowedAdapterClassIDs) != 0 || len(f.AllowedTunnelClassIDs) != 0) {
 			return errNativePolicy
 		}
 	case "camera", "microphone":
 		if f.ConcurrentUseCheck != "not_required" && f.ConcurrentUseCheck != "supported_required" ||
-			disabled && (f.RequireReady || f.ConcurrentUseCheck != "not_required") || !disabled && !f.RequireReady && f.ConcurrentUseCheck == "not_required" {
+			disabled && (f.RequireReady || f.ConcurrentUseCheck != "not_required") ||
+			!disabled && !f.RequireReady && f.ConcurrentUseCheck == "not_required" {
 			return errNativePolicy
 		}
 	case "external_capture":
@@ -137,6 +159,7 @@ func (p NativeFamilyPolicy) Validate() error {
 	default:
 		return errNativePolicy
 	}
+
 	return nil
 }
 
@@ -169,6 +192,7 @@ func (p NativeFamilyPolicy) MarshalJSON() ([]byte, error) {
 	if p.Validate() != nil {
 		return nil, errNativePolicy
 	}
+
 	f := p.fields
 	// This closed encoding map is constructed only from the typed family value;
 	// it is never populated with arbitrary client members.
@@ -196,6 +220,7 @@ func (p NativeFamilyPolicy) MarshalJSON() ([]byte, error) {
 		result["require_ready"] = f.RequireReady
 		result["concurrent_use_check"] = f.ConcurrentUseCheck
 	}
+
 	return json.Marshal(result)
 }
 
@@ -293,6 +318,7 @@ func (p *NativeSecurityPolicy) UnmarshalJSON(document []byte) error {
 	if p == nil || len(document) > ExamPolicySetMaxBytes || validateExamDocumentJSON(document) != nil {
 		return errNativePolicy
 	}
+
 	type wire NativeSecurityPolicy
 	var decoded wire
 	decoder := json.NewDecoder(bytes.NewReader(document))
@@ -300,14 +326,21 @@ func (p *NativeSecurityPolicy) UnmarshalJSON(document []byte) error {
 	if decoder.Decode(&decoded) != nil {
 		return errNativePolicy
 	}
+
 	candidate := NativeSecurityPolicy(decoded)
 	if candidate.Validate() != nil {
 		return errNativePolicy
 	}
+
 	var members map[string]json.RawMessage
-	if json.Unmarshal(document, &members) != nil || len(members) != 3 || members["registry_digest"] == nil || members["baseline_id"] == nil || members["families"] == nil {
+	if json.Unmarshal(document, &members) != nil ||
+		len(members) != 3 ||
+		members["registry_digest"] == nil ||
+		members["baseline_id"] == nil ||
+		members["families"] == nil {
 		return errNativePolicy
 	}
+
 	*p = candidate
 	return nil
 }

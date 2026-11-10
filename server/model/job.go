@@ -119,32 +119,82 @@ type JobAttempt struct {
 	PublicErrorCode string
 }
 
-func NewJob(id JobID, jobType JobType, command json.RawMessage, dedupeKey string, createdAt, availableAt time.Time, maximumAttempts int) (*Job, error) {
+func NewJob(
+	id JobID,
+	jobType JobType,
+	command json.RawMessage,
+	dedupeKey string,
+	createdAt, availableAt time.Time,
+	maximumAttempts int,
+) (*Job, error) {
 	return NewJobWithDedupePolicy(id, jobType, command, dedupeKey, JobDedupeActive, createdAt, availableAt, maximumAttempts)
 }
 
-func NewJobWithDedupePolicy(id JobID, jobType JobType, command json.RawMessage, dedupeKey string, dedupePolicy JobDedupePolicy, createdAt, availableAt time.Time, maximumAttempts int) (*Job, error) {
-	job := &Job{ID: id, Type: jobType, Status: JobStatusQueued, CreatedAt: TimeUTC(createdAt), UpdatedAt: TimeUTC(createdAt), AvailableAt: TimeUTC(availableAt), Command: cloneJSON(command), DedupeKey: strings.TrimSpace(dedupeKey), DedupePolicy: dedupePolicy, MaximumAttempts: maximumAttempts, Revision: 1}
+func NewJobWithDedupePolicy(
+	id JobID,
+	jobType JobType,
+	command json.RawMessage,
+	dedupeKey string,
+	dedupePolicy JobDedupePolicy,
+	createdAt, availableAt time.Time,
+	maximumAttempts int,
+) (*Job, error) {
+	job := &Job{
+		ID:              id,
+		Type:            jobType,
+		Status:          JobStatusQueued,
+		CreatedAt:       TimeUTC(createdAt),
+		UpdatedAt:       TimeUTC(createdAt),
+		AvailableAt:     TimeUTC(availableAt),
+		Command:         cloneJSON(command),
+		DedupeKey:       strings.TrimSpace(dedupeKey),
+		DedupePolicy:    dedupePolicy,
+		MaximumAttempts: maximumAttempts,
+		Revision:        1,
+	}
 	if err := job.Validate(); err != nil {
 		return nil, err
 	}
+
 	return job, nil
 }
 
 func (j *Job) Validate() error {
-	if j == nil || !j.ID.IsValid() || !j.Type.IsValid() || !j.Status.IsValid() || j.CreatedAt.IsZero() || j.UpdatedAt.Before(j.CreatedAt) || j.AvailableAt.IsZero() || !validJobDocument(j.Command, false) || len(j.DedupeKey) == 0 || len(j.DedupeKey) > 255 || !validJobDedupePolicy(j.DedupePolicy) || j.AttemptCount < 0 || j.MaximumAttempts <= 0 || j.AttemptCount > j.MaximumAttempts || j.WorkReserved < 0 || j.Revision <= 0 {
+	if j == nil ||
+		!j.ID.IsValid() ||
+		!j.Type.IsValid() ||
+		!j.Status.IsValid() ||
+		j.CreatedAt.IsZero() ||
+		j.UpdatedAt.Before(j.CreatedAt) ||
+		j.AvailableAt.IsZero() ||
+		!validJobDocument(j.Command, false) ||
+		len(j.DedupeKey) == 0 ||
+		len(j.DedupeKey) > 255 ||
+		!validJobDedupePolicy(j.DedupePolicy) ||
+		j.AttemptCount < 0 ||
+		j.MaximumAttempts <= 0 ||
+		j.AttemptCount > j.MaximumAttempts ||
+		j.WorkReserved < 0 ||
+		j.Revision <= 0 {
 		return invalidModelError("Job.Validate", "job", "", "invalid job", "")
 	}
-	if !validJobDocument(j.Checkpoint, true) || !validJobDocument(j.Result, true) || !validPublicJobCode(j.PublicErrorCode) || !validJobProgress(j.Progress) {
+
+	if !validJobDocument(j.Checkpoint, true) ||
+		!validJobDocument(j.Result, true) ||
+		!validPublicJobCode(j.PublicErrorCode) ||
+		!validJobProgress(j.Progress) {
 		return invalidModelError("Job.Validate", "job", "", "invalid job result state", "")
 	}
+
 	if !j.CreatedByUserID.IsZero() && !j.CreatedByUserID.IsValid() {
 		return invalidModelError("Job.Validate", "job", "", "invalid job initiator", "")
 	}
+
 	terminal := j.Status == JobStatusSucceeded || j.Status == JobStatusFailed || j.Status == JobStatusCanceled
 	if terminal != j.CompletedAt.Valid || (j.Status == JobStatusRunning && j.AttemptCount == 0) {
 		return invalidModelError("Job.Validate", "job", "", "invalid job lifecycle", "")
 	}
+
 	return nil
 }
 
@@ -168,9 +218,14 @@ func (j *Job) Start(at time.Time) (*Job, error) {
 }
 
 func (j *Job) UpdateProgress(progress *JobProgress, checkpoint json.RawMessage, at time.Time) (*Job, error) {
-	if j == nil || (j.Status != JobStatusRunning && j.Status != JobStatusCancelRequested) || !validJobProgress(progress) || !validJobDocument(checkpoint, true) || TimeUTC(at).Before(j.UpdatedAt) {
+	if j == nil ||
+		(j.Status != JobStatusRunning && j.Status != JobStatusCancelRequested) ||
+		!validJobProgress(progress) ||
+		!validJobDocument(checkpoint, true) ||
+		TimeUTC(at).Before(j.UpdatedAt) {
 		return nil, invalidModelError("Job.UpdateProgress", "job", "", "job progress cannot be updated", "")
 	}
+
 	result := *j
 	if progress != nil {
 		copyProgress := *progress
@@ -178,6 +233,7 @@ func (j *Job) UpdateProgress(progress *JobProgress, checkpoint json.RawMessage, 
 	} else {
 		result.Progress = nil
 	}
+
 	result.Checkpoint = cloneJSON(checkpoint)
 	result.UpdatedAt = TimeUTC(at)
 	result.Revision++
@@ -185,9 +241,13 @@ func (j *Job) UpdateProgress(progress *JobProgress, checkpoint json.RawMessage, 
 }
 
 func (j *Job) Succeed(document json.RawMessage, at time.Time) (*Job, error) {
-	if j == nil || (j.Status != JobStatusRunning && j.Status != JobStatusCancelRequested) || !validJobDocument(document, false) || TimeUTC(at).Before(j.UpdatedAt) {
+	if j == nil ||
+		(j.Status != JobStatusRunning && j.Status != JobStatusCancelRequested) ||
+		!validJobDocument(document, false) ||
+		TimeUTC(at).Before(j.UpdatedAt) {
 		return nil, invalidModelError("Job.Succeed", "job", "", "job cannot succeed", "")
 	}
+
 	result := *j
 	result.Status = JobStatusSucceeded
 	result.Result = cloneJSON(document)
@@ -199,9 +259,15 @@ func (j *Job) Succeed(document json.RawMessage, at time.Time) (*Job, error) {
 }
 
 func (j *Job) Retry(publicErrorCode string, availableAt, at time.Time) (*Job, error) {
-	if j == nil || j.Status != JobStatusRunning || j.AttemptCount >= j.MaximumAttempts || !validPublicJobCode(publicErrorCode) || !TimeUTC(availableAt).After(TimeUTC(at)) || TimeUTC(at).Before(j.UpdatedAt) {
+	if j == nil ||
+		j.Status != JobStatusRunning ||
+		j.AttemptCount >= j.MaximumAttempts ||
+		!validPublicJobCode(publicErrorCode) ||
+		!TimeUTC(availableAt).After(TimeUTC(at)) ||
+		TimeUTC(at).Before(j.UpdatedAt) {
 		return nil, invalidModelError("Job.Retry", "job", "", "job cannot retry", "")
 	}
+
 	result := *j
 	result.Status = JobStatusQueued
 	result.AvailableAt = TimeUTC(availableAt)
@@ -215,11 +281,16 @@ func (j *Job) Retry(publicErrorCode string, availableAt, at time.Time) (*Job, er
 // consumed claim slot. Attempt history still records the incompatible worker,
 // while the finite failure budget remains available to capable workers.
 func (j *Job) Relinquish(publicErrorCode string, availableAt, at time.Time) (*Job, error) {
-	if j == nil || j.Status != JobStatusRunning || j.MaximumAttempts == int(^uint(0)>>1) ||
-		!validPublicJobCode(publicErrorCode) || publicErrorCode == "" ||
-		!TimeUTC(availableAt).After(TimeUTC(at)) || TimeUTC(at).Before(j.UpdatedAt) {
+	if j == nil ||
+		j.Status != JobStatusRunning ||
+		j.MaximumAttempts == int(^uint(0)>>1) ||
+		!validPublicJobCode(publicErrorCode) ||
+		publicErrorCode == "" ||
+		!TimeUTC(availableAt).After(TimeUTC(at)) ||
+		TimeUTC(at).Before(j.UpdatedAt) {
 		return nil, invalidModelError("Job.Relinquish", "job", "", "job cannot be relinquished", "")
 	}
+
 	result := *j
 	result.Status = JobStatusQueued
 	result.AvailableAt = TimeUTC(availableAt)
@@ -231,9 +302,14 @@ func (j *Job) Relinquish(publicErrorCode string, availableAt, at time.Time) (*Jo
 }
 
 func (j *Job) Fail(publicErrorCode string, at time.Time) (*Job, error) {
-	if j == nil || (j.Status != JobStatusRunning && j.Status != JobStatusCancelRequested) || !validPublicJobCode(publicErrorCode) || publicErrorCode == "" || TimeUTC(at).Before(j.UpdatedAt) {
+	if j == nil ||
+		(j.Status != JobStatusRunning && j.Status != JobStatusCancelRequested) ||
+		!validPublicJobCode(publicErrorCode) ||
+		publicErrorCode == "" ||
+		TimeUTC(at).Before(j.UpdatedAt) {
 		return nil, invalidModelError("Job.Fail", "job", "", "job cannot fail", "")
 	}
+
 	result := *j
 	result.Status = JobStatusFailed
 	result.UpdatedAt = TimeUTC(at)
@@ -244,9 +320,13 @@ func (j *Job) Fail(publicErrorCode string, at time.Time) (*Job, error) {
 }
 
 func (j *Job) Cancel(publicErrorCode string, at time.Time) (*Job, error) {
-	if j == nil || (j.Status != JobStatusRunning && j.Status != JobStatusCancelRequested && j.Status != JobStatusQueued) || !validPublicJobCode(publicErrorCode) || TimeUTC(at).Before(j.UpdatedAt) {
+	if j == nil ||
+		(j.Status != JobStatusRunning && j.Status != JobStatusCancelRequested && j.Status != JobStatusQueued) ||
+		!validPublicJobCode(publicErrorCode) ||
+		TimeUTC(at).Before(j.UpdatedAt) {
 		return nil, invalidModelError("Job.Cancel", "job", "", "job cannot cancel", "")
 	}
+
 	result := *j
 	result.Status = JobStatusCanceled
 	result.UpdatedAt = TimeUTC(at)
@@ -288,21 +368,52 @@ func (j *Job) ExplicitRetry(at time.Time) (*Job, error) {
 	return &result, result.Validate()
 }
 
-func NewJobAttempt(id JobAttemptID, jobID JobID, number int, nodeID string, token JobClaimToken, startedAt, leaseExpiresAt time.Time) (*JobAttempt, error) {
-	attempt := &JobAttempt{ID: id, JobID: jobID, Number: number, Status: JobAttemptStatusRunning, NodeID: strings.TrimSpace(nodeID), ClaimToken: token, StartedAt: TimeUTC(startedAt), HeartbeatAt: TimeUTC(startedAt), LeaseExpiresAt: TimeUTC(leaseExpiresAt)}
+func NewJobAttempt(
+	id JobAttemptID,
+	jobID JobID,
+	number int,
+	nodeID string,
+	token JobClaimToken,
+	startedAt, leaseExpiresAt time.Time,
+) (*JobAttempt, error) {
+	attempt := &JobAttempt{
+		ID:             id,
+		JobID:          jobID,
+		Number:         number,
+		Status:         JobAttemptStatusRunning,
+		NodeID:         strings.TrimSpace(nodeID),
+		ClaimToken:     token,
+		StartedAt:      TimeUTC(startedAt),
+		HeartbeatAt:    TimeUTC(startedAt),
+		LeaseExpiresAt: TimeUTC(leaseExpiresAt),
+	}
 	if err := attempt.Validate(); err != nil {
 		return nil, err
 	}
+
 	return attempt, nil
 }
 
 func (a *JobAttempt) Validate() error {
-	if a == nil || !a.ID.IsValid() || !a.JobID.IsValid() || a.Number <= 0 || !validJobAttemptStatus(a.Status) || a.NodeID == "" || len(a.NodeID) > 255 || !a.ClaimToken.IsValid() || a.StartedAt.IsZero() || a.HeartbeatAt.Before(a.StartedAt) || !a.LeaseExpiresAt.After(a.HeartbeatAt) || !validPublicJobCode(a.PublicErrorCode) {
+	if a == nil ||
+		!a.ID.IsValid() ||
+		!a.JobID.IsValid() ||
+		a.Number <= 0 ||
+		!validJobAttemptStatus(a.Status) ||
+		a.NodeID == "" ||
+		len(a.NodeID) > 255 ||
+		!a.ClaimToken.IsValid() ||
+		a.StartedAt.IsZero() ||
+		a.HeartbeatAt.Before(a.StartedAt) ||
+		!a.LeaseExpiresAt.After(a.HeartbeatAt) ||
+		!validPublicJobCode(a.PublicErrorCode) {
 		return invalidModelError("JobAttempt.Validate", "job_attempt", "", "invalid job attempt", "")
 	}
+
 	if (a.Status == JobAttemptStatusRunning) == a.CompletedAt.Valid {
 		return invalidModelError("JobAttempt.Validate", "job_attempt", "", "invalid job attempt lifecycle", "")
 	}
+
 	return nil
 }
 
@@ -317,9 +428,14 @@ func (a *JobAttempt) Heartbeat(at, leaseExpiresAt time.Time) (*JobAttempt, error
 }
 
 func (a *JobAttempt) Complete(status JobAttemptStatus, publicErrorCode string, at time.Time) (*JobAttempt, error) {
-	if a == nil || a.Status != JobAttemptStatusRunning || status == JobAttemptStatusRunning || !validJobAttemptStatus(status) || TimeUTC(at).Before(a.HeartbeatAt) {
+	if a == nil ||
+		a.Status != JobAttemptStatusRunning ||
+		status == JobAttemptStatusRunning ||
+		!validJobAttemptStatus(status) ||
+		TimeUTC(at).Before(a.HeartbeatAt) {
 		return nil, invalidModelError("JobAttempt.Complete", "job_attempt", "", "job attempt cannot complete", "")
 	}
+
 	result := *a
 	result.Status = status
 	result.PublicErrorCode = strings.TrimSpace(publicErrorCode)
@@ -356,19 +472,42 @@ var jobSafeStage = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,63}$`)
 
 // jobTypes is the closed Job type vocabulary in declaration order.
 var jobTypes = []JobType{
-	JobTypeProfilePictureGenerateDefault, JobTypeProfilePictureReconcile, JobTypeFilePurgeExpiredContent,
-	JobTypeCleanup, JobTypeRetentionReconcile, JobTypeRetentionPurge, JobTypeRetentionNotices,
-	JobTypeRetentionExpire, JobTypeCommandOutcomeCleanup, JobTypeAuditAttemptSweep, JobTypeSessionPurgeRetired,
-	JobTypeExamSittingLifecycle, JobTypeExamSittingLifecycleRecovery, JobTypeExamSittingSealing,
-	JobTypeMailDeliver, JobTypeMailDeliverCredential, JobTypeMailCleanup, JobTypeMailRekey, JobTypeMFARekey,
-	JobTypeMailExpandSitting, JobTypeInvitationMaintenance, JobTypeOnboardingImportParse,
-	JobTypeOnboardingImportExecute, JobTypeStudentProgressionPreview, JobTypeExamExportBuild,
+	JobTypeProfilePictureGenerateDefault,
+	JobTypeProfilePictureReconcile,
+	JobTypeFilePurgeExpiredContent,
+	JobTypeCleanup,
+	JobTypeRetentionReconcile,
+	JobTypeRetentionPurge,
+	JobTypeRetentionNotices,
+	JobTypeRetentionExpire,
+	JobTypeCommandOutcomeCleanup,
+	JobTypeAuditAttemptSweep,
+	JobTypeSessionPurgeRetired,
+	JobTypeExamSittingLifecycle,
+	JobTypeExamSittingLifecycleRecovery,
+	JobTypeExamSittingSealing,
+	JobTypeMailDeliver,
+	JobTypeMailDeliverCredential,
+	JobTypeMailCleanup,
+	JobTypeMailRekey,
+	JobTypeMFARekey,
+	JobTypeMailExpandSitting,
+	JobTypeInvitationMaintenance,
+	JobTypeOnboardingImportParse,
+	JobTypeOnboardingImportExecute,
+	JobTypeStudentProgressionPreview,
+	JobTypeExamExportBuild,
 	JobTypeExamExportCleanup,
 }
 
 // jobStatuses is the closed Job status vocabulary in lifecycle order.
 var jobStatuses = []JobStatus{
-	JobStatusQueued, JobStatusRunning, JobStatusCancelRequested, JobStatusSucceeded, JobStatusFailed, JobStatusCanceled,
+	JobStatusQueued,
+	JobStatusRunning,
+	JobStatusCancelRequested,
+	JobStatusSucceeded,
+	JobStatusFailed,
+	JobStatusCanceled,
 }
 
 // JobTypes returns every Job type, including those no operator surface
@@ -385,7 +524,12 @@ func (t JobType) IsValid() bool { return slices.Contains(jobTypes, t) }
 func (s JobStatus) IsValid() bool { return slices.Contains(jobStatuses, s) }
 
 func validJobAttemptStatus(value JobAttemptStatus) bool {
-	return value == JobAttemptStatusRunning || value == JobAttemptStatusSucceeded || value == JobAttemptStatusFailed || value == JobAttemptStatusCanceled || value == JobAttemptStatusLeaseExpired || value == JobAttemptStatusIncompatible
+	return value == JobAttemptStatusRunning ||
+		value == JobAttemptStatusSucceeded ||
+		value == JobAttemptStatusFailed ||
+		value == JobAttemptStatusCanceled ||
+		value == JobAttemptStatusLeaseExpired ||
+		value == JobAttemptStatusIncompatible
 }
 func validJobDocument(value json.RawMessage, optional bool) bool {
 	if len(value) == 0 {

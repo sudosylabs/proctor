@@ -37,18 +37,22 @@ func NewAttemptConfigurationManifest(commands []string, keybindings []AttemptCom
 	if ValidateAttemptApprovedIDs(commands) != nil || keybindings == nil || len(keybindings) > AttemptApprovedIDLimit {
 		return nil, errAttemptConfiguration
 	}
+
 	previous := ""
 	for _, binding := range keybindings {
 		if !IsValidAgreementID(binding.KeybindingID) || binding.KeybindingID <= previous || !slices.Contains(commands, binding.CommandID) {
 			return nil, errAttemptConfiguration
 		}
+
 		previous = binding.KeybindingID
 	}
+
 	var schema any
 	// This literal is owned and tested here; it contains only safe integer values.
 	if err := json.Unmarshal([]byte(attemptConfigurationSchemaJSON), &schema); err != nil {
 		return nil, err
 	}
+
 	canonical, err := encodeCanonicalExamDocument(struct {
 		Schema      any                     `json:"schema"`
 		Commands    []string                `json:"approved_commands"`
@@ -57,7 +61,13 @@ func NewAttemptConfigurationManifest(commands []string, keybindings []AttemptCom
 	if err != nil {
 		return nil, err
 	}
-	return &AttemptConfigurationManifest{commands: slices.Clone(commands), keybindings: slices.Clone(keybindings), canonical: canonical, fingerprint: SHA256Fingerprint(canonical)}, nil
+
+	return &AttemptConfigurationManifest{
+		commands:    slices.Clone(commands),
+		keybindings: slices.Clone(keybindings),
+		canonical:   canonical,
+		fingerprint: SHA256Fingerprint(canonical),
+	}, nil
 }
 
 func (m *AttemptConfigurationManifest) Fingerprint() string {

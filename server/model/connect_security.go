@@ -23,12 +23,25 @@ type ConnectSecurity struct {
 }
 
 func (s ConnectSecurity) Validate() error {
-	if s.Kind == "preflight" && IsValidAgreementID(s.PreflightID) && IsValidSHA256Fingerprint(s.ReportDigest) && s.ParticipationID == "" && s.Generation == 0 && s.PolicyDigest == "" {
+	if s.Kind == "preflight" &&
+		IsValidAgreementID(s.PreflightID) &&
+		IsValidSHA256Fingerprint(s.ReportDigest) &&
+		s.ParticipationID == "" &&
+		s.Generation == 0 &&
+		s.PolicyDigest == "" {
 		return nil
 	}
-	if s.Kind == "resume" && s.PreflightID == "" && s.ReportDigest == "" && s.ParticipationID.IsValid() && s.Generation > 0 && securitySafeInt(s.Generation) && IsValidSHA256Fingerprint(s.PolicyDigest) {
+
+	if s.Kind == "resume" &&
+		s.PreflightID == "" &&
+		s.ReportDigest == "" &&
+		s.ParticipationID.IsValid() &&
+		s.Generation > 0 &&
+		securitySafeInt(s.Generation) &&
+		IsValidSHA256Fingerprint(s.PolicyDigest) {
 		return nil
 	}
+
 	return ErrSecurityPreflightInvalid
 }
 func (s *ConnectSecurity) UnmarshalJSON(raw []byte) error {
@@ -72,8 +85,21 @@ type AdmittedSecurity struct {
 }
 
 func (s AdmittedSecurity) Validate() error {
-	if s.Policy.Scope.Kind != "attempt" || s.Policy.Validate(s.Policy.ActiveFrom) != nil || !IsValidSHA256Fingerprint(s.PolicyContentDigest) || !IsValidAgreementID(s.PreflightID) || !IsValidSHA256Fingerprint(s.PreflightReportDigest) || !IsValidSHA256Fingerprint(s.PreflightPolicyDigest) || !s.ParticipationID.IsValid() || s.Generation <= 0 || !securitySafeInt(s.Generation) || s.Policy.Ordinal != s.Generation || !IsValidAgreementID(s.SecuritySessionID) || !IsValidAgreementID(s.DeliveryStreamID) || s.RenewalIntervalSeconds != int64(AttemptParticipationRenewalInterval/time.Second) {
+	if s.Policy.Scope.Kind != "attempt" ||
+		s.Policy.Validate(s.Policy.ActiveFrom) != nil ||
+		!IsValidSHA256Fingerprint(s.PolicyContentDigest) ||
+		!IsValidAgreementID(s.PreflightID) ||
+		!IsValidSHA256Fingerprint(s.PreflightReportDigest) ||
+		!IsValidSHA256Fingerprint(s.PreflightPolicyDigest) ||
+		!s.ParticipationID.IsValid() ||
+		s.Generation <= 0 ||
+		!securitySafeInt(s.Generation) ||
+		s.Policy.Ordinal != s.Generation ||
+		!IsValidAgreementID(s.SecuritySessionID) ||
+		!IsValidAgreementID(s.DeliveryStreamID) ||
+		s.RenewalIntervalSeconds != int64(AttemptParticipationRenewalInterval/time.Second) {
 		return ErrSecurityPolicyInvalid
 	}
+
 	return nil
 }

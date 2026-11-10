@@ -87,13 +87,18 @@ func (p Principal) Validate() error {
 // the one the Access Policy restricts until two-step verification is set up.
 // Only the explicitly bounded MFA operations may call this instead of Validate.
 func (p Principal) ValidateMFARecovery() error {
-	if p.MFARecoveryRequired && (p.AuthenticationGeneration <= 0 || p.ClientType != SessionClientWeb || p.CredentialType != CredentialSessionAccess) {
+	if p.MFARecoveryRequired &&
+		(p.AuthenticationGeneration <= 0 || p.ClientType != SessionClientWeb || p.CredentialType != CredentialSessionAccess) {
 		return invalidModelError("Principal.ValidateMFARecovery", "principal", "", "MFA recovery principal is invalid", "")
 	}
-	if p.MFAEnrollmentRequired && (p.ClientType != SessionClientWeb || p.CredentialType != CredentialSessionAccess ||
-		p.AuthenticationStrength != AuthenticationSingleFactor) {
+
+	if p.MFAEnrollmentRequired &&
+		(p.ClientType != SessionClientWeb ||
+			p.CredentialType != CredentialSessionAccess ||
+			p.AuthenticationStrength != AuthenticationSingleFactor) {
 		return invalidModelError("Principal.ValidateMFARecovery", "principal", "", "MFA enrollment principal is invalid", "")
 	}
+
 	return p.validateIdentity()
 }
 
@@ -101,10 +106,14 @@ func (p Principal) validateIdentity() error {
 	if p.AuthenticationGeneration < 0 {
 		return invalidModelError("Principal.validateIdentity", "principal", "", "principal authentication generation is invalid", "")
 	}
-	if !p.UserID.IsValid() || !p.CredentialID.IsValid() ||
-		p.AuthenticationMethod == "" || !p.ClientType.IsValid() {
+
+	if !p.UserID.IsValid() ||
+		!p.CredentialID.IsValid() ||
+		p.AuthenticationMethod == "" ||
+		!p.ClientType.IsValid() {
 		return invalidModelError("Principal.validateIdentity", "principal", "", "principal identity is invalid", "")
 	}
+
 	switch p.CredentialType {
 	case CredentialSessionAccess:
 		if !p.SessionID.IsValid() ||
@@ -114,37 +123,64 @@ func (p Principal) validateIdentity() error {
 			!p.AcademicUnitID.IsZero() {
 			return invalidModelError("Principal.validateIdentity", "principal", "", "session principal is invalid", "")
 		}
+
 		if p.RegisteredDesktopKey {
-			if p.ClientType != SessionClientDesktop || !p.DesktopRegistrationID.IsValid() ||
-				!IsValidDPoPKeyThumbprint(p.DPoPKeyThumbprint) || !IsValidDesktopRelease(p.DesktopRelease) ||
-				!IsValidDesktopBuildID(p.DesktopBuildID) || !p.DesktopPlatform.IsValid() ||
-				!p.DesktopArchitecture.IsValid() || p.DesktopRealtimeProtocol < 1 {
+			if p.ClientType != SessionClientDesktop ||
+				!p.DesktopRegistrationID.IsValid() ||
+				!IsValidDPoPKeyThumbprint(p.DPoPKeyThumbprint) ||
+				!IsValidDesktopRelease(p.DesktopRelease) ||
+				!IsValidDesktopBuildID(p.DesktopBuildID) ||
+				!p.DesktopPlatform.IsValid() ||
+				!p.DesktopArchitecture.IsValid() ||
+				p.DesktopRealtimeProtocol < 1 {
 				return invalidModelError("Principal.validateIdentity", "principal", "", "registered Desktop-key principal is invalid", "")
 			}
-		} else if !p.DesktopRegistrationID.IsZero() || p.DPoPKeyThumbprint != "" || p.DesktopRelease != "" ||
-			p.DesktopBuildID != "" || p.DesktopPlatform != "" || p.DesktopArchitecture != "" || p.DesktopRealtimeProtocol != 0 {
+		} else if !p.DesktopRegistrationID.IsZero() ||
+			p.DPoPKeyThumbprint != "" ||
+			p.DesktopRelease != "" ||
+			p.DesktopBuildID != "" ||
+			p.DesktopPlatform != "" ||
+			p.DesktopArchitecture != "" ||
+			p.DesktopRealtimeProtocol != 0 {
 			return invalidModelError("Principal.validateIdentity", "principal", "", "unproved Desktop-key principal is invalid", "")
 		}
+
 		if (p.AuthenticationMethod == "password" && (p.AuthenticationProviderID != "" || !p.ExternalIdentityID.IsZero())) ||
 			(p.AuthenticationMethod != "password" &&
 				(!IsValidIdentityProviderID(p.AuthenticationProviderID) || !p.ExternalIdentityID.IsValid())) {
 			return invalidModelError("Principal.validateIdentity", "principal", "", "session principal authentication provider is invalid", "")
 		}
+
 		if p.ReauthenticatedAt.Valid && p.ReauthenticatedAt.Time.Before(p.AuthenticatedAt) {
 			return invalidModelError("Principal.validateIdentity", "principal", "", "session principal reauthentication is invalid", "")
 		}
+
 		return nil
 	case CredentialPersonalAccessToken:
-		if !p.SessionID.IsZero() || p.AuthenticationStrength != "" || p.MFARecoveryRequired || p.MFAEnrollmentRequired || p.AuthenticationGeneration != 0 ||
+		if !p.SessionID.IsZero() ||
+			p.AuthenticationStrength != "" ||
+			p.MFARecoveryRequired ||
+			p.MFAEnrollmentRequired ||
+			p.AuthenticationGeneration != 0 ||
 			p.AuthenticationProviderID != "" ||
 			!p.ExternalIdentityID.IsZero() ||
-			!p.AuthenticatedAt.IsZero() || p.ReauthenticatedAt.Valid || p.MFACompletedAt.Valid ||
-			p.ClientType != SessionClientCLI || p.RegisteredDesktopKey || !p.DesktopRegistrationID.IsZero() || p.DPoPKeyThumbprint != "" ||
-			p.DesktopRelease != "" || p.DesktopBuildID != "" || p.DesktopPlatform != "" || p.DesktopArchitecture != "" || p.DesktopRealtimeProtocol != 0 ||
+			!p.AuthenticatedAt.IsZero() ||
+			p.ReauthenticatedAt.Valid ||
+			p.MFACompletedAt.Valid ||
+			p.ClientType != SessionClientCLI ||
+			p.RegisteredDesktopKey ||
+			!p.DesktopRegistrationID.IsZero() ||
+			p.DPoPKeyThumbprint != "" ||
+			p.DesktopRelease != "" ||
+			p.DesktopBuildID != "" ||
+			p.DesktopPlatform != "" ||
+			p.DesktopArchitecture != "" ||
+			p.DesktopRealtimeProtocol != 0 ||
 			len(p.CredentialScopes) == 0 ||
 			(!p.AcademicUnitID.IsZero() && !p.AcademicUnitID.IsValid()) {
 			return invalidModelError("Principal.validateIdentity", "principal", "", "personal access token principal is invalid", "")
 		}
+
 		seen := make(map[string]struct{}, len(p.CredentialScopes))
 		for _, scope := range p.CredentialScopes {
 			if !IsPersonalAccessTokenAction(scope) {
@@ -153,8 +189,10 @@ func (p Principal) validateIdentity() error {
 			if _, exists := seen[scope]; exists {
 				return invalidModelError("Principal.validateIdentity", "principal", "", "personal access token scope is duplicated", "")
 			}
+
 			seen[scope] = struct{}{}
 		}
+
 		return nil
 	default:
 		return invalidModelError("Principal.validateIdentity", "principal", "", "principal credential type is invalid", "")
@@ -169,8 +207,10 @@ func (p Principal) HasStrongAuthentication() bool {
 // holding a Desktop Session snapshot is insufficient; the current request must
 // have passed DPoP verification.
 func (p Principal) HasRegisteredDesktopKey() bool {
-	return p.RegisteredDesktopKey && p.ClientType == SessionClientDesktop &&
-		p.DesktopRegistrationID.IsValid() && IsValidDPoPKeyThumbprint(p.DPoPKeyThumbprint)
+	return p.RegisteredDesktopKey &&
+		p.ClientType == SessionClientDesktop &&
+		p.DesktopRegistrationID.IsValid() &&
+		IsValidDPoPKeyThumbprint(p.DPoPKeyThumbprint)
 }
 
 // LastAuthenticationAt is the latest primary proof: the initial

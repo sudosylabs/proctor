@@ -22,14 +22,21 @@ type UserMFARecovery struct {
 }
 
 func (r UserMFARecovery) Validate() error {
-	if !r.UserID.IsValid() || r.Generation < 0 ||
+	if !r.UserID.IsValid() ||
+		r.Generation < 0 ||
 		(r.Generation == 0 && (r.ResetAt.Valid || r.ReenrollmentRequired || !r.UpdatedAt.IsZero())) ||
 		(r.Generation > 0 && (!r.ResetAt.Valid || r.ResetAt.Time.IsZero() || r.UpdatedAt.Before(r.ResetAt.Time))) {
 		return invalidModelError("UserMFARecovery.Validate", "user_mfa_recovery", "state", "is inconsistent", "")
 	}
+
 	return nil
 }
 
 func (r UserMFARecovery) Auditable() map[string]any {
-	return map[string]any{"user_id": r.UserID.String(), "generation": r.Generation, "reset_at": r.ResetAt.Millis(), "reenrollment_required": r.ReenrollmentRequired}
+	return map[string]any{
+		"user_id":               r.UserID.String(),
+		"generation":            r.Generation,
+		"reset_at":              r.ResetAt.Millis(),
+		"reenrollment_required": r.ReenrollmentRequired,
+	}
 }

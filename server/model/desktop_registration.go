@@ -141,25 +141,36 @@ func (r *DesktopRegistration) Validate() error {
 	if !r.ID.IsValid() || !r.UserID.IsValid() || !r.InstitutionID.IsValid() {
 		return invalidModelError(where, "desktop_registration", "identity", "must be valid", "")
 	}
-	if r.CreatedAt.IsZero() || r.UpdatedAt.Before(r.CreatedAt) || r.LastUsedAt.Before(r.CreatedAt) ||
+
+	if r.CreatedAt.IsZero() ||
+		r.UpdatedAt.Before(r.CreatedAt) ||
+		r.LastUsedAt.Before(r.CreatedAt) ||
 		r.LastUsedAt.After(r.UpdatedAt) {
 		return invalidModelError(where, "desktop_registration", "timestamps", "must be ordered", "")
 	}
+
 	if err := r.PublicJWK.Validate(); err != nil {
 		return invalidModelError(where, "desktop_registration", "public_jwk", err.Error(), "")
 	}
+
 	thumbprint, err := r.PublicJWK.Thumbprint()
 	if err != nil || r.KeyThumbprint != thumbprint {
 		return invalidModelError(where, "desktop_registration", "key_thumbprint", "must match the public JWK", "")
 	}
+
 	if utf8.RuneCountInString(r.DisplayName) > DesktopRegistrationDisplayNameMaxRunes ||
-		!IsValidDesktopRelease(r.DesktopRelease) || !IsValidDesktopBuildID(r.DesktopBuildID) ||
-		!r.Platform.IsValid() || !r.Architecture.IsValid() || r.RealtimeProtocol < 1 {
+		!IsValidDesktopRelease(r.DesktopRelease) ||
+		!IsValidDesktopBuildID(r.DesktopBuildID) ||
+		!r.Platform.IsValid() ||
+		!r.Architecture.IsValid() ||
+		r.RealtimeProtocol < 1 {
 		return invalidModelError(where, "desktop_registration", "metadata", "is invalid", "")
 	}
+
 	if r.RevokedAt.Valid && (r.RevokedAt.Time.Before(r.CreatedAt) || r.RevokedAt.Time.After(r.UpdatedAt)) {
 		return invalidModelError(where, "desktop_registration", "revoked_at", "must be within the lifecycle", "")
 	}
+
 	return nil
 }
 
@@ -172,8 +183,11 @@ func (r *DesktopRegistration) Auditable() map[string]any {
 	if r == nil {
 		return nil
 	}
+
 	return map[string]any{
-		"id": r.ID.String(), "user_id": r.UserID.String(),
-		"institution_id": r.InstitutionID.String(), "revoked": r.RevokedAt.Valid,
+		"id":             r.ID.String(),
+		"user_id":        r.UserID.String(),
+		"institution_id": r.InstitutionID.String(),
+		"revoked":        r.RevokedAt.Valid,
 	}
 }

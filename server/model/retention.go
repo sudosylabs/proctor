@@ -27,7 +27,10 @@ const (
 )
 
 func (c RetentionCategory) IsValid() bool {
-	return c == RetentionCategoryWork || c == RetentionCategoryIntegrity || c == RetentionCategoryBrowserActivity || c == RetentionCategorySecurityOperational
+	return c == RetentionCategoryWork ||
+		c == RetentionCategoryIntegrity ||
+		c == RetentionCategoryBrowserActivity ||
+		c == RetentionCategorySecurityOperational
 }
 
 type RetentionControlState string
@@ -71,9 +74,12 @@ func (c *RetentionControl) Validate() error {
 }
 
 func (c *RetentionControl) Permits(policy *RetentionPolicy) bool {
-	return c.Validate() == nil && policy.Validate() == nil &&
-		c.State == RetentionControlEnabled && c.InstitutionID == policy.InstitutionID &&
-		c.ApprovedPolicyRevision == policy.Revision && policy.DeletionGraceDays > 0
+	return c.Validate() == nil &&
+		policy.Validate() == nil &&
+		c.State == RetentionControlEnabled &&
+		c.InstitutionID == policy.InstitutionID &&
+		c.ApprovedPolicyRevision == policy.Revision &&
+		policy.DeletionGraceDays > 0
 }
 
 // RetentionPreview contains aggregate counts, never examination content. Its
@@ -108,24 +114,39 @@ type RetentionPreviewCounts struct {
 }
 
 func (p *RetentionPreview) Validate() error {
-	if p == nil || !p.ID.IsValid() || !p.InstitutionID.IsValid() || p.PolicyRevision < 1 ||
-		!p.CreatedByUserID.IsValid() || p.CreatedAt.IsZero() || !p.ExpiresAt.After(p.CreatedAt) ||
+	if p == nil ||
+		!p.ID.IsValid() ||
+		!p.InstitutionID.IsValid() ||
+		p.PolicyRevision < 1 ||
+		!p.CreatedByUserID.IsValid() ||
+		p.CreatedAt.IsZero() ||
+		!p.ExpiresAt.After(p.CreatedAt) ||
 		p.ExpiresAt.Sub(p.CreatedAt) > RetentionPreviewLifetime {
 		return invalidModelError("RetentionPreview.Validate", "retention_preview", "", "invalid retention preview", "")
 	}
+
 	for _, c := range []RetentionPreviewCounts{p.Work, p.Integrity, p.BrowserActivity, p.SecurityOperational} {
-		if c.Total < 0 || c.Eligible < 0 || c.AwaitingDeadline < 0 || c.Incomplete < 0 ||
-			c.Held < 0 || c.Unconfigured < 0 || c.SupportingWork < 0 || c.ExportProtected < 0 || c.Retired < 0 ||
+		if c.Total < 0 ||
+			c.Eligible < 0 ||
+			c.AwaitingDeadline < 0 ||
+			c.Incomplete < 0 ||
+			c.Held < 0 ||
+			c.Unconfigured < 0 ||
+			c.SupportingWork < 0 ||
+			c.ExportProtected < 0 ||
+			c.Retired < 0 ||
 			c.Total != c.Eligible+c.AwaitingDeadline+c.Incomplete+c.Held+c.Unconfigured+c.SupportingWork+c.ExportProtected+c.Retired {
 			return invalidModelError("RetentionPreview.Validate", "retention_preview", "", "invalid retention preview counts", "")
 		}
 	}
+
 	if err := p.Audit.Validate(); err != nil {
 		return err
 	}
 	if err := p.Receipts.Validate(); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -167,17 +188,23 @@ type RetentionEligibility struct {
 // Supporting work uses the later configured deadline of the two categories;
 // an indefinite integrity period protects that work indefinitely.
 func (r RetentionRecord) Eligibility(policy *RetentionPolicy, at time.Time) (RetentionEligibility, error) {
-	if policy.Validate() != nil || r.Scope.Validate() != nil || !r.Scope.SubmissionID.IsValid() ||
-		!r.Category.IsValid() || at.IsZero() || r.SharedPublishedObjects < 0 ||
+	if policy.Validate() != nil ||
+		r.Scope.Validate() != nil ||
+		!r.Scope.SubmissionID.IsValid() ||
+		!r.Category.IsValid() ||
+		at.IsZero() ||
+		r.SharedPublishedObjects < 0 ||
 		(r.CompletionCurrent && (!r.CompletedAt.Valid || r.CompletedAt.Time.IsZero() || r.CompletionRevision < 1)) {
 		return RetentionEligibility{}, invalidModelError("RetentionRecord.Eligibility", "retention_record", "", "invalid retention record", "")
 	}
+
 	if r.RetiredAt.Valid {
 		return RetentionEligibility{Blocker: RetentionBlockerRetired}, nil
 	}
 	if !r.CompletionCurrent {
 		return RetentionEligibility{Blocker: RetentionBlockerIncomplete}, nil
 	}
+
 	var days int
 	switch r.Category {
 	case RetentionCategoryWork:
@@ -189,10 +216,12 @@ func (r RetentionRecord) Eligibility(policy *RetentionPolicy, at time.Time) (Ret
 	case RetentionCategorySecurityOperational:
 		days = policy.SecurityOperationalRetentionDays
 	}
+
 	var deadline OptionalTime
 	if days > 0 {
 		deadline = OptionalTimeFrom(r.CompletedAt.Time.Add(time.Duration(days) * 24 * time.Hour))
 	}
+
 	result := RetentionEligibility{EligibleAt: deadline}
 	switch {
 	case r.Held:
@@ -205,12 +234,14 @@ func (r RetentionRecord) Eligibility(policy *RetentionPolicy, at time.Time) (Ret
 		if r.Category == RetentionCategoryWork && r.HasIntegrity && policy.IntegrityRetentionDays > days {
 			result.EligibleAt = OptionalTimeFrom(r.CompletedAt.Time.Add(time.Duration(policy.IntegrityRetentionDays) * 24 * time.Hour))
 		}
+
 		if r.ExportProtectedUntil.Valid && r.ExportProtectedUntil.Time.After(at) {
 			result.Blocker = RetentionBlockerExport
 		} else if at.Before(result.EligibleAt.Time) {
 			result.Blocker = RetentionBlockerDeadline
 		}
 	}
+
 	return result, nil
 }
 
@@ -242,11 +273,21 @@ type RetentionRetirement struct {
 }
 
 func (r *RetentionRetirement) Validate() error {
-	if r == nil || !r.ID.IsValid() || r.Scope.Validate() != nil || !r.Scope.SubmissionID.IsValid() ||
-		!r.Category.IsValid() || r.PolicyRevision < 1 || r.ControlRevision < 1 || r.CompletionRevision < 1 ||
-		r.ScheduledAt.IsZero() || !r.RetireAfter.After(r.ScheduledAt) || r.PurgePending < 0 || r.PurgeVerified < 0 {
+	if r == nil ||
+		!r.ID.IsValid() ||
+		r.Scope.Validate() != nil ||
+		!r.Scope.SubmissionID.IsValid() ||
+		!r.Category.IsValid() ||
+		r.PolicyRevision < 1 ||
+		r.ControlRevision < 1 ||
+		r.CompletionRevision < 1 ||
+		r.ScheduledAt.IsZero() ||
+		!r.RetireAfter.After(r.ScheduledAt) ||
+		r.PurgePending < 0 ||
+		r.PurgeVerified < 0 {
 		return invalidModelError("RetentionRetirement.Validate", "retention_retirement", "", "invalid retention retirement", "")
 	}
+
 	switch r.State {
 	case RetentionRetirementGrace:
 		if r.RetiredAt.Valid || r.CanceledAt.Valid || r.CancellationReason != "" || r.PurgePending != 0 || r.PurgeVerified != 0 {
@@ -263,5 +304,6 @@ func (r *RetentionRetirement) Validate() error {
 	default:
 		return invalidModelError("RetentionRetirement.Validate", "retention_retirement", "", "invalid retirement state", "")
 	}
+
 	return nil
 }

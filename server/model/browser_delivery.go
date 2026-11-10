@@ -71,9 +71,17 @@ type BrowserSourceStart struct {
 }
 
 func (v BrowserSourceStart) Validate() error {
-	if !v.ParticipationID.IsValid() || v.Generation < 1 || !securitySafeInt(v.Generation) || !v.SourceSessionID.IsValid() || !v.PolicyRevisionID.IsValid() || !IsValidSHA256Fingerprint(v.PolicyDigest) || v.Transition.Validate() != nil || v.Transition.PredecessorSourceSessionID == v.SourceSessionID {
+	if !v.ParticipationID.IsValid() ||
+		v.Generation < 1 ||
+		!securitySafeInt(v.Generation) ||
+		!v.SourceSessionID.IsValid() ||
+		!v.PolicyRevisionID.IsValid() ||
+		!IsValidSHA256Fingerprint(v.PolicyDigest) ||
+		v.Transition.Validate() != nil ||
+		v.Transition.PredecessorSourceSessionID == v.SourceSessionID {
 		return ErrDeliveryInvalid
 	}
+
 	return nil
 }
 func (v BrowserSourceStart) Canonical() ([]byte, error) {
@@ -103,9 +111,13 @@ type BrowserEventReceipt struct {
 }
 
 func (v BrowserEventReceipt) Validate() error {
-	if v.Sequence < 1 || v.Sequence > BrowserParticipationPositionLimit || !IsValidSHA256Fingerprint(v.EventDigest) || !securityInstant(v.ReceivedAt) {
+	if v.Sequence < 1 ||
+		v.Sequence > BrowserParticipationPositionLimit ||
+		!IsValidSHA256Fingerprint(v.EventDigest) ||
+		!securityInstant(v.ReceivedAt) {
 		return ErrDeliveryInvalid
 	}
+
 	return nil
 }
 
@@ -120,14 +132,24 @@ type BrowserDeliveryProgress struct {
 }
 
 func (v BrowserDeliveryProgress) Validate() error {
-	if v.HighestContiguous < 0 || v.SettledThrough < v.HighestContiguous || v.HighestSeen < v.HighestContiguous || v.AllocatedThrough < v.HighestSeen || v.AllocatedThrough < v.SettledThrough || v.AllocatedThrough > BrowserParticipationPositionLimit || v.TerminalMissingThrough < 0 || v.TerminalMissingThrough > v.AllocatedThrough || ValidateSequenceRanges(v.MissingRanges, 32) != nil {
+	if v.HighestContiguous < 0 ||
+		v.SettledThrough < v.HighestContiguous ||
+		v.HighestSeen < v.HighestContiguous ||
+		v.AllocatedThrough < v.HighestSeen ||
+		v.AllocatedThrough < v.SettledThrough ||
+		v.AllocatedThrough > BrowserParticipationPositionLimit ||
+		v.TerminalMissingThrough < 0 ||
+		v.TerminalMissingThrough > v.AllocatedThrough ||
+		ValidateSequenceRanges(v.MissingRanges, 32) != nil {
 		return ErrDeliveryInvalid
 	}
+
 	for _, r := range v.MissingRanges {
 		if r.First <= v.SettledThrough || r.Last > v.AllocatedThrough {
 			return ErrDeliveryInvalid
 		}
 	}
+
 	return nil
 }
 
@@ -155,19 +177,38 @@ type BrowserSourceStatus struct {
 }
 
 func (v BrowserSourceStatus) Validate() error {
-	if v.BrowserDeliveryProgress.Validate() != nil || !v.SourceSessionID.IsValid() || !v.AttemptID.IsValid() || !v.ParticipationID.IsValid() || v.Generation < 1 || !securitySafeInt(v.Generation) || !v.PolicyRevisionID.IsValid() || !IsValidSHA256Fingerprint(v.PolicyDigest) || !securityInstant(v.StartedAt) || !securityInstant(v.ServerTime) || v.Closure.Validate(false) != nil || !securitySafeInt(v.DeclarationRevision) || v.RemainingCorrectionStarts < 0 || v.RemainingCorrectionStarts > BrowserCorrectionStartLimit || v.RemainingRuntimeResetStarts < 0 || v.RemainingRuntimeResetStarts > BrowserRuntimeResetStartLimit {
+	if v.BrowserDeliveryProgress.Validate() != nil ||
+		!v.SourceSessionID.IsValid() ||
+		!v.AttemptID.IsValid() ||
+		!v.ParticipationID.IsValid() ||
+		v.Generation < 1 ||
+		!securitySafeInt(v.Generation) ||
+		!v.PolicyRevisionID.IsValid() ||
+		!IsValidSHA256Fingerprint(v.PolicyDigest) ||
+		!securityInstant(v.StartedAt) ||
+		!securityInstant(v.ServerTime) ||
+		v.Closure.Validate(false) != nil ||
+		!securitySafeInt(v.DeclarationRevision) ||
+		v.RemainingCorrectionStarts < 0 ||
+		v.RemainingCorrectionStarts > BrowserCorrectionStartLimit ||
+		v.RemainingRuntimeResetStarts < 0 ||
+		v.RemainingRuntimeResetStarts > BrowserRuntimeResetStartLimit {
 		return ErrDeliveryInvalid
 	}
+
 	transition := BrowserStartTransition{Kind: v.StartTransition}
 	if v.PredecessorSourceSessionID != nil {
 		transition.PredecessorSourceSessionID = *v.PredecessorSourceSessionID
 	}
+
 	if v.RuntimeResetReason != nil {
 		transition.Reason = *v.RuntimeResetReason
 	}
+
 	if transition.Validate() != nil {
 		return ErrDeliveryInvalid
 	}
+
 	switch v.DetailMode {
 	case "collecting":
 		if v.BudgetScope != nil || v.SummaryOnlyReason != nil {
@@ -177,6 +218,7 @@ func (v BrowserSourceStatus) Validate() error {
 		if v.BudgetScope == nil || (*v.BudgetScope != "attempt" && *v.BudgetScope != "participation") || v.SummaryOnlyReason == nil {
 			return ErrDeliveryInvalid
 		}
+
 		quota := NewDeliveryQuotaUsage(false, false)
 		quota.SummaryOnly = true
 		quota.StopReason = v.SummaryOnlyReason
@@ -186,13 +228,16 @@ func (v BrowserSourceStatus) Validate() error {
 	default:
 		return ErrDeliveryInvalid
 	}
+
 	if v.Summary != nil && v.Summary.Validate() != nil {
 		return ErrDeliveryInvalid
 	}
+
 	raw, err := json.Marshal(v)
 	if err != nil || len(raw) > 16*1024 {
 		return ErrDeliveryInvalid
 	}
+
 	return nil
 }
 
@@ -206,17 +251,24 @@ func ValidateBrowserPolicyEvent(event BrowserActivityEvent, policy BrowserPolicy
 	if event.Kind == BrowserActivityOpened || event.Kind == BrowserActivityClosed {
 		return true, nil
 	}
+
 	var sourceRule *BrowserPolicyRule
 	if event.RedirectFromSequence != nil && prior != nil {
-		if prior.Sequence != *event.RedirectFromSequence || prior.PolicyRevisionID != event.PolicyRevisionID || (prior.Kind != BrowserActivityTopNavigation && prior.Kind != BrowserActivityTopRedirect) || prior.Location == nil || prior.MatchedRuleID == nil {
+		if prior.Sequence != *event.RedirectFromSequence ||
+			prior.PolicyRevisionID != event.PolicyRevisionID ||
+			(prior.Kind != BrowserActivityTopNavigation && prior.Kind != BrowserActivityTopRedirect) ||
+			prior.Location == nil ||
+			prior.MatchedRuleID == nil {
 			return false, ErrDeliveryConflict
 		}
+
 		var err error
 		sourceRule, err = policy.MatchLocation(*prior.Location)
 		if err != nil || sourceRule == nil || sourceRule.RuleID != *prior.MatchedRuleID {
 			return false, ErrDeliveryConflict
 		}
 	}
+
 	if event.BlockReason != nil && *event.BlockReason == BrowserBlockRedirectNotAllowed {
 		if event.MatchedRuleID == nil {
 			return false, ErrDeliveryConflict
@@ -227,14 +279,17 @@ func ValidateBrowserPolicyEvent(event BrowserActivityEvent, policy BrowserPolicy
 		if sourceRule == nil || sourceRule.AllowRedirects || sourceRule.RuleID != *event.MatchedRuleID {
 			return false, ErrDeliveryConflict
 		}
+
 		return true, nil
 	}
+
 	if sourceRule != nil && !sourceRule.AllowRedirects {
 		return false, ErrDeliveryConflict
 	}
 	if event.BlockReason != nil && *event.BlockReason == BrowserBlockInvalidURL {
 		return event.RedirectFromSequence == nil || prior != nil, nil
 	}
+
 	schemeAllowed := event.Location.Scheme == "https"
 	if event.Location.Scheme == "http" {
 		for _, r := range policy.Rules {
@@ -244,19 +299,24 @@ func ValidateBrowserPolicyEvent(event BrowserActivityEvent, policy BrowserPolicy
 			}
 		}
 	}
+
 	if event.BlockReason != nil && *event.BlockReason == BrowserBlockSchemeNotAllowed {
 		if schemeAllowed {
 			return false, ErrDeliveryConflict
 		}
+
 		return event.RedirectFromSequence == nil || prior != nil, nil
 	}
+
 	if !schemeAllowed {
 		return false, ErrDeliveryConflict
 	}
+
 	selected, err := policy.MatchLocation(*event.Location)
 	if err != nil {
 		return false, err
 	}
+
 	if event.Kind != BrowserActivityBlockedNavigation {
 		if selected == nil || event.MatchedRuleID == nil || selected.RuleID != *event.MatchedRuleID {
 			return false, ErrDeliveryConflict
@@ -269,19 +329,26 @@ func ValidateBrowserPolicyEvent(event BrowserActivityEvent, policy BrowserPolicy
 			if parsed.Scheme == "http" {
 				port = "80"
 			}
+
 			host, explicit, _ := canonicalBrowserHostPortWithDefault(parsed, port)
-			if parsed.Scheme == event.Location.Scheme && explicit == event.Location.Port && browserHostMatches(event.Location.Host, host, rule.HostMatch) {
+			if parsed.Scheme == event.Location.Scheme &&
+				explicit == event.Location.Port &&
+				browserHostMatches(event.Location.Host, host, rule.HostMatch) {
 				originMatched = true
 				break
 			}
 		}
+
 		if selected != nil || event.MatchedRuleID != nil || event.BlockReason == nil {
 			return false, ErrDeliveryConflict
 		}
-		if *event.BlockReason == BrowserBlockOriginNotAllowed && originMatched || *event.BlockReason == BrowserBlockPathNotAllowed && !originMatched {
+
+		if *event.BlockReason == BrowserBlockOriginNotAllowed && originMatched ||
+			*event.BlockReason == BrowserBlockPathNotAllowed && !originMatched {
 			return false, ErrDeliveryConflict
 		}
 	}
+
 	return event.RedirectFromSequence == nil || prior != nil, nil
 }
 
@@ -295,18 +362,30 @@ type BrowserActivityBatch struct {
 }
 
 func (v BrowserActivityBatch) Validate() error {
-	if !v.SourceSessionID.IsValid() || !v.ParticipationID.IsValid() || v.Generation < 1 || !securitySafeInt(v.Generation) || !v.PolicyRevisionID.IsValid() || !IsValidSHA256Fingerprint(v.PolicyDigest) || len(v.Events) < 1 || len(v.Events) > 64 {
+	if !v.SourceSessionID.IsValid() ||
+		!v.ParticipationID.IsValid() ||
+		v.Generation < 1 ||
+		!securitySafeInt(v.Generation) ||
+		!v.PolicyRevisionID.IsValid() ||
+		!IsValidSHA256Fingerprint(v.PolicyDigest) ||
+		len(v.Events) < 1 ||
+		len(v.Events) > 64 {
 		return ErrDeliveryInvalid
 	}
+
 	for i, event := range v.Events {
-		if event.ValidateClientRecord() != nil || event.PolicyRevisionID != v.PolicyRevisionID || i > 0 && event.Sequence <= v.Events[i-1].Sequence {
+		if event.ValidateClientRecord() != nil ||
+			event.PolicyRevisionID != v.PolicyRevisionID ||
+			i > 0 && event.Sequence <= v.Events[i-1].Sequence {
 			return ErrDeliveryInvalid
 		}
 	}
+
 	raw, err := encodeCanonicalExamDocument(v)
 	if err != nil || len(raw) > BrowserActivityAppendMaximumBytes {
 		return ErrDeliveryInvalid
 	}
+
 	return nil
 }
 func (v *BrowserActivityBatch) UnmarshalJSON(raw []byte) error {

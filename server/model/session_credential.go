@@ -79,6 +79,7 @@ func (sc *SessionCredential) Validate() error {
 	if !sc.ID.IsValid() {
 		return invalidModelError(where, "session_credential", "id", "must be a valid identifier", "")
 	}
+
 	details := "id=" + sc.ID.String()
 	if sc.CreatedAt.IsZero() || sc.UpdatedAt.IsZero() {
 		return invalidModelError(where, "session_credential", "created_at", "must be set", details)
@@ -98,6 +99,7 @@ func (sc *SessionCredential) Validate() error {
 	if !sc.ExpiresAt.After(sc.CreatedAt) {
 		return invalidModelError(where, "session_credential", "expires_at", "must be after create_at", details)
 	}
+
 	if sc.Kind == SessionCredentialAccess {
 		if sc.FamilyID != "" || !sc.ParentID.IsZero() || !sc.ReplacedByID.IsZero() || sc.UsedAt.Valid {
 			return invalidModelError(
@@ -111,6 +113,7 @@ func (sc *SessionCredential) Validate() error {
 	} else if err := sc.validateRefreshRotation(details); err != nil {
 		return err
 	}
+
 	if sc.UsedAt.Valid &&
 		(sc.UsedAt.Time.Before(sc.CreatedAt) || !sc.UsedAt.Time.Before(sc.ExpiresAt)) {
 		return invalidModelError(
@@ -121,12 +124,14 @@ func (sc *SessionCredential) Validate() error {
 			details,
 		)
 	}
+
 	if sc.ArchivedAt.Valid && sc.ArchivedAt.Time.Before(sc.CreatedAt) {
 		return invalidModelError(where, "session_credential", "archived_at", "must not precede created_at", details)
 	}
 	if sc.RevokedAt.Valid && sc.RevokedAt.Time.Before(sc.CreatedAt) {
 		return invalidModelError(where, "session_credential", "revoked_at", "must not precede create_at", details)
 	}
+
 	return nil
 }
 
@@ -142,9 +147,11 @@ func (sc *SessionCredential) validateRefreshRotation(details string) error {
 			details,
 		)
 	}
+
 	if !sc.ParentID.IsZero() && !sc.ParentID.IsValid() {
 		return invalidModelError(where, "session_credential", "parent_id", "must be a valid identifier", details)
 	}
+
 	if sc.ParentID == sc.ID {
 		return invalidModelError(
 			where,
@@ -154,6 +161,7 @@ func (sc *SessionCredential) validateRefreshRotation(details string) error {
 			details,
 		)
 	}
+
 	if !sc.ReplacedByID.IsZero() && !sc.ReplacedByID.IsValid() {
 		return invalidModelError(
 			where,
@@ -163,6 +171,7 @@ func (sc *SessionCredential) validateRefreshRotation(details string) error {
 			details,
 		)
 	}
+
 	if sc.ReplacedByID == sc.ID {
 		return invalidModelError(
 			where,
@@ -172,6 +181,7 @@ func (sc *SessionCredential) validateRefreshRotation(details string) error {
 			details,
 		)
 	}
+
 	if !sc.ReplacedByID.IsZero() && !sc.UsedAt.Valid {
 		return invalidModelError(
 			where,
@@ -181,6 +191,7 @@ func (sc *SessionCredential) validateRefreshRotation(details string) error {
 			details,
 		)
 	}
+
 	return nil
 }
 

@@ -57,23 +57,36 @@ func NewInitialRetentionPolicy(institutionID InstitutionID, at time.Time) *Reten
 }
 
 func (s RetentionPolicySettings) Validate() error {
-	for _, days := range []int{s.SubmissionRetentionDays, s.IntegrityRetentionDays, s.BrowserActivityRetentionDays, s.SecurityOperationalRetentionDays,
-		s.AuditRetentionDays, s.DeletionGraceDays} {
+	for _, days := range []int{
+		s.SubmissionRetentionDays,
+		s.IntegrityRetentionDays,
+		s.BrowserActivityRetentionDays,
+		s.SecurityOperationalRetentionDays,
+		s.AuditRetentionDays,
+		s.DeletionGraceDays,
+	} {
 		if days < 0 || days > RetentionPolicyMaxDays {
 			return errRetentionPolicyInvalid
 		}
 	}
+
 	if s.ExportRetentionDays < 0 || s.ExportRetentionDays > ExamExportMaximumDays {
 		return errRetentionPolicyInvalid
 	}
+
 	return nil
 }
 
 func (p *RetentionPolicy) Validate() error {
-	if p == nil || !p.InstitutionID.IsValid() || p.Revision < 1 ||
-		p.CreatedAt.IsZero() || p.UpdatedAt.IsZero() || p.UpdatedAt.Before(p.CreatedAt) {
+	if p == nil ||
+		!p.InstitutionID.IsValid() ||
+		p.Revision < 1 ||
+		p.CreatedAt.IsZero() ||
+		p.UpdatedAt.IsZero() ||
+		p.UpdatedAt.Before(p.CreatedAt) {
 		return errRetentionPolicyInvalid
 	}
+
 	return p.RetentionPolicySettings.Validate()
 }
 
@@ -116,8 +129,10 @@ func (p *RetentionPolicy) Auditable() map[string]any {
 	if p == nil {
 		return map[string]any{}
 	}
+
 	return map[string]any{
-		"institution_id": p.InstitutionID.String(), "revision": p.Revision,
+		"institution_id":                      p.InstitutionID.String(),
+		"revision":                            p.Revision,
 		"submission_retention_days":           p.SubmissionRetentionDays,
 		"integrity_retention_days":            p.IntegrityRetentionDays,
 		"browser_activity_retention_days":     p.BrowserActivityRetentionDays,

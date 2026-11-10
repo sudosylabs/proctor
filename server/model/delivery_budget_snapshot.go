@@ -31,31 +31,50 @@ func (s DeliveryBudgetSnapshot) Validate() error {
 	if !s.ParticipationID.IsValid() || s.Generation < 1 || !securitySafeInt(s.Generation) || !securityInstant(s.ServerTime) {
 		return ErrDeliveryInvalid
 	}
+
 	for _, f := range []struct {
 		value  DeliveryFamilyBudget
 		native bool
 	}{{s.Native, true}, {s.Browser, false}} {
-		if f.value.PendingByteLimit != DeliveryPendingByteLimit || f.value.PendingBytes < 0 || f.value.PendingBytes > f.value.PendingByteLimit || f.value.PendingBytes > f.value.Attempt.RetainedBytes {
+		if f.value.PendingByteLimit != DeliveryPendingByteLimit ||
+			f.value.PendingBytes < 0 ||
+			f.value.PendingBytes > f.value.PendingByteLimit ||
+			f.value.PendingBytes > f.value.Attempt.RetainedBytes {
 			return ErrDeliveryInvalid
 		}
+
 		for _, q := range []struct {
 			value   DeliveryQuotaUsage
 			attempt bool
 		}{{f.value.Participation, false}, {f.value.Attempt, true}} {
 			expected := NewDeliveryQuotaUsage(f.native, q.attempt)
-			if q.value.Validate() != nil || q.value.RecordLimit != expected.RecordLimit || q.value.ByteLimit != expected.ByteLimit || q.value.PositionLimit != expected.PositionLimit {
+			if q.value.Validate() != nil ||
+				q.value.RecordLimit != expected.RecordLimit ||
+				q.value.ByteLimit != expected.ByteLimit ||
+				q.value.PositionLimit != expected.PositionLimit {
 				return ErrDeliveryInvalid
 			}
 		}
-		if f.value.Participation.RetainedRecords > f.value.Attempt.RetainedRecords || f.value.Participation.RetainedBytes > f.value.Attempt.RetainedBytes || f.value.Participation.AllocatedPositions > f.value.Attempt.AllocatedPositions {
+
+		if f.value.Participation.RetainedRecords > f.value.Attempt.RetainedRecords ||
+			f.value.Participation.RetainedBytes > f.value.Attempt.RetainedBytes ||
+			f.value.Participation.AllocatedPositions > f.value.Attempt.AllocatedPositions {
 			return ErrDeliveryInvalid
 		}
 	}
-	for _, pair := range [][2]int64{{s.BrowserFlagGroups, BrowserFlagGroupLimit}, {s.BrowserEvidenceRecords, BrowserEvidenceRecordLimit}, {s.BrowserEvidenceBytes, BrowserEvidenceByteLimit}, {s.ExplicitMissingIntervals, DeliveryMissingIntervalLimit}, {s.ControlMetadataBytes, DeliveryMetadataLimitBytes}} {
+
+	for _, pair := range [][2]int64{
+		{s.BrowserFlagGroups, BrowserFlagGroupLimit},
+		{s.BrowserEvidenceRecords, BrowserEvidenceRecordLimit},
+		{s.BrowserEvidenceBytes, BrowserEvidenceByteLimit},
+		{s.ExplicitMissingIntervals, DeliveryMissingIntervalLimit},
+		{s.ControlMetadataBytes, DeliveryMetadataLimitBytes},
+	} {
 		if pair[0] < 0 || pair[0] > pair[1] {
 			return ErrDeliveryInvalid
 		}
 	}
+
 	return nil
 }
 
@@ -83,22 +102,32 @@ func (s StopDeliveryDetailsResult) Validate(family string) error {
 	if s.Budget.Validate() != nil || s.Browser == nil || len(s.Browser) > BrowserSourceMaximumPerParticipation {
 		return ErrDeliveryInvalid
 	}
+
 	switch family {
 	case "native":
-		if s.Native == nil || s.Native.Validate() != nil || s.Native.DetailMode != "summary_only" || len(s.Browser) != 0 || !s.Budget.Native.Participation.SummaryOnly {
+		if s.Native == nil ||
+			s.Native.Validate() != nil ||
+			s.Native.DetailMode != "summary_only" ||
+			len(s.Browser) != 0 ||
+			!s.Budget.Native.Participation.SummaryOnly {
 			return ErrDeliveryInvalid
 		}
 	case "browser":
 		if s.Native != nil || !s.Budget.Browser.Participation.SummaryOnly {
 			return ErrDeliveryInvalid
 		}
+
 		for _, v := range s.Browser {
-			if v.Validate() != nil || v.ParticipationID != s.Budget.ParticipationID || v.Generation != s.Budget.Generation || v.DetailMode != "summary_only" {
+			if v.Validate() != nil ||
+				v.ParticipationID != s.Budget.ParticipationID ||
+				v.Generation != s.Budget.Generation ||
+				v.DetailMode != "summary_only" {
 				return ErrDeliveryInvalid
 			}
 		}
 	default:
 		return ErrDeliveryInvalid
 	}
+
 	return nil
 }

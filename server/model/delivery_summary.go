@@ -25,9 +25,14 @@ type UnretainedDeliverySummary struct {
 }
 
 func (s UnretainedDeliverySummary) Validate() error {
-	if s.SummarySequence <= 0 || !securitySafeInt(s.SummarySequence) || !securitySafeInt(s.UnretainedRecordCount) || s.FirstUnretainedAt != nil && !securityInstant(*s.FirstUnretainedAt) || s.LastUnretainedAt != nil && !securityInstant(*s.LastUnretainedAt) {
+	if s.SummarySequence <= 0 ||
+		!securitySafeInt(s.SummarySequence) ||
+		!securitySafeInt(s.UnretainedRecordCount) ||
+		s.FirstUnretainedAt != nil && !securityInstant(*s.FirstUnretainedAt) ||
+		s.LastUnretainedAt != nil && !securityInstant(*s.LastUnretainedAt) {
 		return ErrDeliveryInvalid
 	}
+
 	return nil
 }
 func (s UnretainedDeliverySummary) Canonical() ([]byte, error) {
@@ -44,19 +49,26 @@ func (s UnretainedDeliverySummary) Compare(next UnretainedDeliverySummary) (bool
 	if err != nil {
 		return false, err
 	}
+
 	nextRaw, err := next.Canonical()
 	if err != nil {
 		return false, err
 	}
+
 	if s.SummarySequence == next.SummarySequence {
 		if bytes.Equal(priorRaw, nextRaw) {
 			return true, nil
 		}
+
 		return false, ErrDeliveryConflict
 	}
-	if next.SummarySequence < s.SummarySequence || next.UnretainedRecordCount < s.UnretainedRecordCount || !s.CountComplete && next.CountComplete {
+
+	if next.SummarySequence < s.SummarySequence ||
+		next.UnretainedRecordCount < s.UnretainedRecordCount ||
+		!s.CountComplete && next.CountComplete {
 		return false, ErrDeliveryConflict
 	}
+
 	return false, nil
 }
 
@@ -66,7 +78,11 @@ func (s UnretainedDeliverySummary) MarshalJSON() ([]byte, error) {
 		*wire
 		FirstUnretainedAt *securityJSONInstant `json:"first_unretained_at,omitempty"`
 		LastUnretainedAt  *securityJSONInstant `json:"last_unretained_at,omitempty"`
-	}{wire: (*wire)(&s), FirstUnretainedAt: optionalSecurityJSONInstant(s.FirstUnretainedAt, s.firstUnretainedAtSpelling), LastUnretainedAt: optionalSecurityJSONInstant(s.LastUnretainedAt, s.lastUnretainedAtSpelling)})
+	}{
+		wire:              (*wire)(&s),
+		FirstUnretainedAt: optionalSecurityJSONInstant(s.FirstUnretainedAt, s.firstUnretainedAtSpelling),
+		LastUnretainedAt:  optionalSecurityJSONInstant(s.LastUnretainedAt, s.lastUnretainedAtSpelling),
+	})
 }
 func (s *UnretainedDeliverySummary) UnmarshalJSON(raw []byte) error {
 	if s == nil {

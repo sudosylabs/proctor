@@ -48,34 +48,63 @@ type ExamAttempt struct {
 	Revision            int64
 }
 
-func NewExamAttempt(id ExamAttemptID, examID ExamID, sittingID ExamSittingID, candidateID UserID, admissionRevisionID ExamRevisionID, at time.Time) (*ExamAttempt, error) {
+func NewExamAttempt(
+	id ExamAttemptID,
+	examID ExamID,
+	sittingID ExamSittingID,
+	candidateID UserID,
+	admissionRevisionID ExamRevisionID,
+	at time.Time,
+) (*ExamAttempt, error) {
 	at = TimeUTC(at)
-	attempt := &ExamAttempt{ID: id, ExamID: examID, SittingID: sittingID, CandidateUserID: candidateID,
-		AdmissionRevisionID: admissionRevisionID, State: ExamAttemptActive, CreatedAt: at, UpdatedAt: at, Revision: 1}
+	attempt := &ExamAttempt{
+		ID:                  id,
+		ExamID:              examID,
+		SittingID:           sittingID,
+		CandidateUserID:     candidateID,
+		AdmissionRevisionID: admissionRevisionID,
+		State:               ExamAttemptActive,
+		CreatedAt:           at,
+		UpdatedAt:           at,
+		Revision:            1,
+	}
 	if err := attempt.Validate(); err != nil {
 		return nil, err
 	}
+
 	return attempt, nil
 }
 
 func (a *ExamAttempt) Validate() error {
-	if a == nil || !a.ID.IsValid() || !a.ExamID.IsValid() || !a.SittingID.IsValid() ||
-		!a.CandidateUserID.IsValid() || !a.AdmissionRevisionID.IsValid() || a.CreatedAt.IsZero() ||
-		a.UpdatedAt.IsZero() || a.UpdatedAt.Before(a.CreatedAt) || a.Revision < 1 {
+	if a == nil ||
+		!a.ID.IsValid() ||
+		!a.ExamID.IsValid() ||
+		!a.SittingID.IsValid() ||
+		!a.CandidateUserID.IsValid() ||
+		!a.AdmissionRevisionID.IsValid() ||
+		a.CreatedAt.IsZero() ||
+		a.UpdatedAt.IsZero() ||
+		a.UpdatedAt.Before(a.CreatedAt) ||
+		a.Revision < 1 {
 		return invalidModelError("ExamAttempt.Validate", "exam_attempt", "", "invalid Exam Attempt", "")
 	}
+
 	switch a.State {
 	case ExamAttemptReady, ExamAttemptActive, ExamAttemptSuspended:
 		if a.SubmittedAt.Valid {
 			return invalidModelError("ExamAttempt.Validate", "exam_attempt", "", "non-submitted Exam Attempt has submitted_at", "")
 		}
 	case ExamAttemptSubmitted:
-		if !a.SubmittedAt.Valid || a.SubmittedAt.Time.IsZero() || a.SubmittedAt.Time.Before(a.CreatedAt) || a.SubmittedAt.Time.After(a.UpdatedAt) {
+		if !a.SubmittedAt.Valid ||
+			a.SubmittedAt.Time.IsZero() ||
+			a.SubmittedAt.Time.Before(a.CreatedAt) ||
+			a.SubmittedAt.Time.After(a.UpdatedAt) {
 			return invalidModelError("ExamAttempt.Validate", "exam_attempt", "", "invalid submitted Exam Attempt lifecycle", "")
 		}
 	default:
 		return invalidModelError("ExamAttempt.Validate", "exam_attempt", "", "invalid Exam Attempt state", "")
 	}
+
 	return nil
 }
 
@@ -153,8 +182,13 @@ const (
 
 func (r AttemptParticipationEndReason) IsValid() bool {
 	switch r {
-	case AttemptParticipationEndInterrupted, AttemptParticipationEndLeaseExpired, AttemptParticipationEndPolicySuspended, AttemptParticipationEndKicked,
-		AttemptParticipationEndSubmitted, AttemptParticipationEndManagerEnded, AttemptParticipationEndSittingClosed:
+	case AttemptParticipationEndInterrupted,
+		AttemptParticipationEndLeaseExpired,
+		AttemptParticipationEndPolicySuspended,
+		AttemptParticipationEndKicked,
+		AttemptParticipationEndSubmitted,
+		AttemptParticipationEndManagerEnded,
+		AttemptParticipationEndSittingClosed:
 		return true
 	default:
 		return false
@@ -178,38 +212,73 @@ type AttemptParticipation struct {
 	EndReason                AttemptParticipationEndReason
 }
 
-func NewAttemptParticipation(id AttemptParticipationID, attemptID ExamAttemptID, sessionID SessionID, generation int64, credentialHash string, startedAt time.Time) (*AttemptParticipation, error) {
+func NewAttemptParticipation(
+	id AttemptParticipationID,
+	attemptID ExamAttemptID,
+	sessionID SessionID,
+	generation int64,
+	credentialHash string,
+	startedAt time.Time,
+) (*AttemptParticipation, error) {
 	startedAt = TimeUTC(startedAt)
-	participation := &AttemptParticipation{ID: id, AttemptID: attemptID, SessionID: sessionID, State: AttemptParticipationActive,
-		Generation: generation, ContinuityCredentialHash: credentialHash, StartedAt: startedAt,
-		UpdatedAt: startedAt, LeaseExpiresAt: startedAt.Add(AttemptParticipationInitialLease)}
+	participation := &AttemptParticipation{
+		ID:                       id,
+		AttemptID:                attemptID,
+		SessionID:                sessionID,
+		State:                    AttemptParticipationActive,
+		Generation:               generation,
+		ContinuityCredentialHash: credentialHash,
+		StartedAt:                startedAt,
+		UpdatedAt:                startedAt,
+		LeaseExpiresAt:           startedAt.Add(AttemptParticipationInitialLease),
+	}
 	if err := participation.Validate(); err != nil {
 		return nil, err
 	}
+
 	return participation, nil
 }
 
 func (p *AttemptParticipation) Validate() error {
-	if p == nil || !p.ID.IsValid() || !p.AttemptID.IsValid() || !p.SessionID.IsValid() || p.Generation < 1 ||
-		p.RenewalSequence < 0 || !IsValidTokenHash(p.ContinuityCredentialHash) ||
+	if p == nil ||
+		!p.ID.IsValid() ||
+		!p.AttemptID.IsValid() ||
+		!p.SessionID.IsValid() ||
+		p.Generation < 1 ||
+		p.RenewalSequence < 0 ||
+		!IsValidTokenHash(p.ContinuityCredentialHash) ||
 		p.ContinuityCredentialHash != strings.ToLower(p.ContinuityCredentialHash) ||
-		p.StartedAt.IsZero() || p.UpdatedAt.IsZero() || p.UpdatedAt.Before(p.StartedAt) ||
-		p.LeaseExpiresAt.IsZero() || p.LeaseExpiresAt.Before(p.StartedAt) {
+		p.StartedAt.IsZero() ||
+		p.UpdatedAt.IsZero() ||
+		p.UpdatedAt.Before(p.StartedAt) ||
+		p.LeaseExpiresAt.IsZero() ||
+		p.LeaseExpiresAt.Before(p.StartedAt) {
 		return invalidModelError("AttemptParticipation.Validate", "attempt_participation", "", "invalid Attempt Participation", "")
 	}
+
 	switch p.State {
 	case AttemptParticipationActive:
 		if p.EndedAt.Valid || p.EndReason != "" {
-			return invalidModelError("AttemptParticipation.Validate", "attempt_participation", "", "active Attempt Participation has end metadata", "")
+			return invalidModelError(
+				"AttemptParticipation.Validate",
+				"attempt_participation",
+				"",
+				"active Attempt Participation has end metadata",
+				"",
+			)
 		}
 	case AttemptParticipationEnded:
-		if !p.EndedAt.Valid || p.EndedAt.Time.IsZero() || p.EndedAt.Time.Before(p.StartedAt) ||
-			p.EndedAt.Time.After(p.UpdatedAt) || !p.EndReason.IsValid() {
+		if !p.EndedAt.Valid ||
+			p.EndedAt.Time.IsZero() ||
+			p.EndedAt.Time.Before(p.StartedAt) ||
+			p.EndedAt.Time.After(p.UpdatedAt) ||
+			!p.EndReason.IsValid() {
 			return invalidModelError("AttemptParticipation.Validate", "attempt_participation", "", "invalid ended Attempt Participation", "")
 		}
 	default:
 		return invalidModelError("AttemptParticipation.Validate", "attempt_participation", "", "invalid Attempt Participation state", "")
 	}
+
 	return nil
 }
 
@@ -223,10 +292,14 @@ func (p *AttemptParticipation) IsExpiredAt(at time.Time) bool {
 // sequence, another generation, a non-active Participation, or the exclusive
 // expiry boundary is permanently fenced.
 func (p *AttemptParticipation) Renew(generation, sequence int64, databaseNow time.Time) (bool, error) {
-	if p == nil || p.State != AttemptParticipationActive ||
-		generation != p.Generation || sequence < 1 || sequence < p.RenewalSequence {
+	if p == nil ||
+		p.State != AttemptParticipationActive ||
+		generation != p.Generation ||
+		sequence < 1 ||
+		sequence < p.RenewalSequence {
 		return false, invalidModelError("AttemptParticipation.Renew", "attempt_participation", "", "Attempt Participation renewal is fenced", "")
 	}
+
 	databaseNow = TimeUTC(databaseNow)
 	if databaseNow.IsZero() || databaseNow.Before(p.UpdatedAt) || p.IsExpiredAt(databaseNow) {
 		return false, invalidModelError("AttemptParticipation.Renew", "attempt_participation", "", "Attempt Participation renewal is expired", "")
@@ -234,6 +307,7 @@ func (p *AttemptParticipation) Renew(generation, sequence int64, databaseNow tim
 	if sequence == p.RenewalSequence {
 		return true, nil
 	}
+
 	candidate := *p
 	candidate.RenewalSequence = sequence
 	candidate.UpdatedAt = databaseNow
@@ -241,6 +315,7 @@ func (p *AttemptParticipation) Renew(generation, sequence int64, databaseNow tim
 	if err := candidate.Validate(); err != nil {
 		return false, err
 	}
+
 	*p = candidate
 	return false, nil
 }
@@ -285,8 +360,14 @@ const (
 // by the domain model.
 func (r AttemptConnectionCloseReason) IsValid() bool {
 	switch r {
-	case AttemptConnectionCloseTransport, AttemptConnectionCloseInterrupted, AttemptConnectionCloseLeaseExpired, AttemptConnectionClosePolicySuspended,
-		AttemptConnectionCloseKicked, AttemptConnectionCloseSubmitted, AttemptConnectionCloseManagerEnded, AttemptConnectionCloseSittingClosed:
+	case AttemptConnectionCloseTransport,
+		AttemptConnectionCloseInterrupted,
+		AttemptConnectionCloseLeaseExpired,
+		AttemptConnectionClosePolicySuspended,
+		AttemptConnectionCloseKicked,
+		AttemptConnectionCloseSubmitted,
+		AttemptConnectionCloseManagerEnded,
+		AttemptConnectionCloseSittingClosed:
 		return true
 	default:
 		return false
@@ -305,20 +386,38 @@ type AttemptConnection struct {
 	CloseReason     AttemptConnectionCloseReason
 }
 
-func NewAttemptConnection(id AttemptConnectionID, attemptID ExamAttemptID, participationID AttemptParticipationID, sessionID SessionID, at time.Time) (*AttemptConnection, error) {
-	connection := &AttemptConnection{ID: id, AttemptID: attemptID, ParticipationID: participationID,
-		SessionID: sessionID, State: AttemptConnectionOpen, OpenedAt: TimeUTC(at)}
+func NewAttemptConnection(
+	id AttemptConnectionID,
+	attemptID ExamAttemptID,
+	participationID AttemptParticipationID,
+	sessionID SessionID,
+	at time.Time,
+) (*AttemptConnection, error) {
+	connection := &AttemptConnection{
+		ID:              id,
+		AttemptID:       attemptID,
+		ParticipationID: participationID,
+		SessionID:       sessionID,
+		State:           AttemptConnectionOpen,
+		OpenedAt:        TimeUTC(at),
+	}
 	if err := connection.Validate(); err != nil {
 		return nil, err
 	}
+
 	return connection, nil
 }
 
 func (c *AttemptConnection) Validate() error {
-	if c == nil || !c.ID.IsValid() || !c.AttemptID.IsValid() || !c.ParticipationID.IsValid() ||
-		!c.SessionID.IsValid() || c.OpenedAt.IsZero() {
+	if c == nil ||
+		!c.ID.IsValid() ||
+		!c.AttemptID.IsValid() ||
+		!c.ParticipationID.IsValid() ||
+		!c.SessionID.IsValid() ||
+		c.OpenedAt.IsZero() {
 		return invalidModelError("AttemptConnection.Validate", "attempt_connection", "", "invalid Attempt Connection", "")
 	}
+
 	switch c.State {
 	case AttemptConnectionOpen:
 		if c.ClosedAt.Valid || c.CloseReason != "" {
@@ -331,6 +430,7 @@ func (c *AttemptConnection) Validate() error {
 	default:
 		return invalidModelError("AttemptConnection.Validate", "attempt_connection", "", "invalid Attempt Connection state", "")
 	}
+
 	return nil
 }
 
@@ -383,40 +483,79 @@ type IntegrityEvidence struct {
 	RecordedAt           time.Time
 }
 
-func NewConnectionLossEvidence(id IntegrityEvidenceID, attemptID ExamAttemptID, participationID AttemptParticipationID,
-	flagID IntegrityFlagID, generation int64, leaseExpiredAt, recordedAt time.Time,
+func NewConnectionLossEvidence(
+	id IntegrityEvidenceID,
+	attemptID ExamAttemptID,
+	participationID AttemptParticipationID,
+	flagID IntegrityFlagID,
+	generation int64,
+	leaseExpiredAt, recordedAt time.Time,
 ) (*IntegrityEvidence, error) {
-	evidence := &IntegrityEvidence{ID: id, AttemptID: attemptID, ParticipationID: participationID, FlagID: flagID,
-		Generation: generation, Kind: IntegrityPolicyConnectionLoss, ObservedAt: TimeUTC(leaseExpiredAt), RecordedAt: TimeUTC(recordedAt)}
+	evidence := &IntegrityEvidence{
+		ID:              id,
+		AttemptID:       attemptID,
+		ParticipationID: participationID,
+		FlagID:          flagID,
+		Generation:      generation,
+		Kind:            IntegrityPolicyConnectionLoss,
+		ObservedAt:      TimeUTC(leaseExpiredAt),
+		RecordedAt:      TimeUTC(recordedAt),
+	}
 	if err := evidence.Validate(); err != nil {
 		return nil, err
 	}
+
 	return evidence, nil
 }
 
 func (e *IntegrityEvidence) Validate() error {
-	if e == nil || !e.ID.IsValid() || !e.AttemptID.IsValid() || !e.ParticipationID.IsValid() ||
-		e.Generation < 1 || !e.Kind.IsValid() || e.ObservedAt.IsZero() ||
-		e.RecordedAt.IsZero() || e.RecordedAt.Before(e.ObservedAt) {
+	if e == nil ||
+		!e.ID.IsValid() ||
+		!e.AttemptID.IsValid() ||
+		!e.ParticipationID.IsValid() ||
+		e.Generation < 1 ||
+		!e.Kind.IsValid() ||
+		e.ObservedAt.IsZero() ||
+		e.RecordedAt.IsZero() ||
+		e.RecordedAt.Before(e.ObservedAt) {
 		return invalidModelError("IntegrityEvidence.Validate", "integrity_evidence", "", "invalid Integrity Evidence", "")
 	}
+
 	switch e.Kind {
 	case IntegrityPolicyBrowserNavigation:
-		if !e.FlagID.IsValid() || e.Browser == nil || e.Browser.Validate() != nil || !e.SignalID.IsZero() || e.Sequence != 0 || e.DurationMilliseconds != 0 || e.Source != "" || e.MissingBefore != 0 {
+		if !e.FlagID.IsValid() ||
+			e.Browser == nil ||
+			e.Browser.Validate() != nil ||
+			!e.SignalID.IsZero() ||
+			e.Sequence != 0 ||
+			e.DurationMilliseconds != 0 ||
+			e.Source != "" ||
+			e.MissingBefore != 0 {
 			return invalidModelError("IntegrityEvidence.Validate", "integrity_evidence", "", "invalid Browser integrity evidence", "")
 		}
 	case IntegrityPolicyConnectionLoss:
-		if e.Browser != nil || !e.FlagID.IsValid() || !e.SignalID.IsZero() || e.Sequence != 0 ||
-			e.DurationMilliseconds != 0 || e.Source != "" || e.MissingBefore != 0 {
+		if e.Browser != nil ||
+			!e.FlagID.IsValid() ||
+			!e.SignalID.IsZero() ||
+			e.Sequence != 0 ||
+			e.DurationMilliseconds != 0 ||
+			e.Source != "" ||
+			e.MissingBefore != 0 {
 			return invalidModelError("IntegrityEvidence.Validate", "integrity_evidence", "", "invalid Connection Loss evidence", "")
 		}
 	case IntegrityPolicyFocusLoss:
-		if e.Browser != nil || !e.FlagID.IsValid() || !e.SignalID.IsValid() || e.Sequence < 1 ||
-			e.DurationMilliseconds < 1 || e.DurationMilliseconds > FocusLossMaximumDurationMilliseconds ||
-			!e.Source.IsValid() || e.MissingBefore < 0 {
+		if e.Browser != nil ||
+			!e.FlagID.IsValid() ||
+			!e.SignalID.IsValid() ||
+			e.Sequence < 1 ||
+			e.DurationMilliseconds < 1 ||
+			e.DurationMilliseconds > FocusLossMaximumDurationMilliseconds ||
+			!e.Source.IsValid() ||
+			e.MissingBefore < 0 {
 			return invalidModelError("IntegrityEvidence.Validate", "integrity_evidence", "", "invalid Focus Loss evidence", "")
 		}
 	}
+
 	return nil
 }
 
@@ -435,19 +574,32 @@ type IntegrityFlag struct {
 	CreatedAt  time.Time
 }
 
-func NewIntegrityFlag(id IntegrityFlagID, attemptID ExamAttemptID, generation int64, kind IntegrityPolicyKind, at time.Time) (*IntegrityFlag, error) {
+func NewIntegrityFlag(
+	id IntegrityFlagID,
+	attemptID ExamAttemptID,
+	generation int64,
+	kind IntegrityPolicyKind,
+	at time.Time,
+) (*IntegrityFlag, error) {
 	flag := &IntegrityFlag{ID: id, AttemptID: attemptID, Generation: generation, Kind: kind, State: IntegrityFlagOpen, CreatedAt: TimeUTC(at)}
 	if err := flag.Validate(); err != nil {
 		return nil, err
 	}
+
 	return flag, nil
 }
 
 func (f *IntegrityFlag) Validate() error {
-	if f == nil || !f.ID.IsValid() || !f.AttemptID.IsValid() || f.Generation < 1 ||
-		!f.Kind.IsValid() || f.State != IntegrityFlagOpen || f.CreatedAt.IsZero() {
+	if f == nil ||
+		!f.ID.IsValid() ||
+		!f.AttemptID.IsValid() ||
+		f.Generation < 1 ||
+		!f.Kind.IsValid() ||
+		f.State != IntegrityFlagOpen ||
+		f.CreatedAt.IsZero() {
 		return invalidModelError("IntegrityFlag.Validate", "integrity_flag", "", "invalid Integrity Flag", "")
 	}
+
 	return nil
 }
 
@@ -514,73 +666,119 @@ type AttemptSuspension struct {
 	SuspensionPrivateReason string
 }
 
-func NewPolicyAttemptSuspension(id AttemptSuspensionID, attemptID ExamAttemptID, participationID AttemptParticipationID,
-	flagID IntegrityFlagID, generation int64, candidateReason AttemptSuspensionCandidateReason, at time.Time,
+func NewPolicyAttemptSuspension(
+	id AttemptSuspensionID,
+	attemptID ExamAttemptID,
+	participationID AttemptParticipationID,
+	flagID IntegrityFlagID,
+	generation int64,
+	candidateReason AttemptSuspensionCandidateReason,
+	at time.Time,
 ) (*AttemptSuspension, error) {
-	suspension := &AttemptSuspension{ID: id, AttemptID: attemptID, ParticipationID: participationID, FlagID: flagID,
-		Generation: generation, State: AttemptSuspensionActive, Source: AttemptSuspensionSourcePolicy,
-		CandidateReason: candidateReason, StartedAt: TimeUTC(at)}
+	suspension := &AttemptSuspension{
+		ID:              id,
+		AttemptID:       attemptID,
+		ParticipationID: participationID,
+		FlagID:          flagID,
+		Generation:      generation,
+		State:           AttemptSuspensionActive,
+		Source:          AttemptSuspensionSourcePolicy,
+		CandidateReason: candidateReason,
+		StartedAt:       TimeUTC(at),
+	}
 	if err := suspension.Validate(); err != nil {
 		return nil, err
 	}
+
 	return suspension, nil
 }
 
 // NewManualAttemptSuspension records an Exam Manager's kick of the exact
 // active Participation generation. It links no Integrity Flag.
-func NewManualAttemptSuspension(id AttemptSuspensionID, attemptID ExamAttemptID, participationID AttemptParticipationID,
-	generation int64, actorID UserID, privateReason string, at time.Time,
+func NewManualAttemptSuspension(
+	id AttemptSuspensionID,
+	attemptID ExamAttemptID,
+	participationID AttemptParticipationID,
+	generation int64,
+	actorID UserID,
+	privateReason string,
+	at time.Time,
 ) (*AttemptSuspension, error) {
-	suspension := &AttemptSuspension{ID: id, AttemptID: attemptID, ParticipationID: participationID,
-		Generation: generation, State: AttemptSuspensionActive, Source: AttemptSuspensionSourceManual,
-		CandidateReason: AttemptSuspensionCandidateReasonManagerSuspended, StartedAt: TimeUTC(at),
-		SuspendedByUserID: actorID, SuspensionPrivateReason: privateReason}
+	suspension := &AttemptSuspension{
+		ID:                      id,
+		AttemptID:               attemptID,
+		ParticipationID:         participationID,
+		Generation:              generation,
+		State:                   AttemptSuspensionActive,
+		Source:                  AttemptSuspensionSourceManual,
+		CandidateReason:         AttemptSuspensionCandidateReasonManagerSuspended,
+		StartedAt:               TimeUTC(at),
+		SuspendedByUserID:       actorID,
+		SuspensionPrivateReason: privateReason,
+	}
 	if err := suspension.Validate(); err != nil {
 		return nil, err
 	}
+
 	return suspension, nil
 }
 
 func (s *AttemptSuspension) Validate() error {
-	if s == nil || !s.ID.IsValid() || !s.AttemptID.IsValid() || !s.ParticipationID.IsValid() ||
-		s.Generation < 1 || s.StartedAt.IsZero() {
+	if s == nil ||
+		!s.ID.IsValid() ||
+		!s.AttemptID.IsValid() ||
+		!s.ParticipationID.IsValid() ||
+		s.Generation < 1 ||
+		s.StartedAt.IsZero() {
 		return invalidModelError("AttemptSuspension.Validate", "attempt_suspension", "", "invalid Attempt Suspension", "")
 	}
+
 	switch s.Source {
 	case AttemptSuspensionSourcePolicy:
-		if !s.FlagID.IsValid() || !s.CandidateReason.IsPolicy() || !s.SuspendedByUserID.IsZero() ||
+		if !s.FlagID.IsValid() ||
+			!s.CandidateReason.IsPolicy() ||
+			!s.SuspendedByUserID.IsZero() ||
 			s.SuspensionPrivateReason != "" {
 			return invalidModelError("AttemptSuspension.Validate", "attempt_suspension", "", "invalid policy Attempt Suspension", "")
 		}
 	case AttemptSuspensionSourceManual:
-		if !s.FlagID.IsZero() || s.CandidateReason != AttemptSuspensionCandidateReasonManagerSuspended ||
-			!s.SuspendedByUserID.IsValid() || !validAttemptSuspensionPrivateReason(s.SuspensionPrivateReason) {
+		if !s.FlagID.IsZero() ||
+			s.CandidateReason != AttemptSuspensionCandidateReasonManagerSuspended ||
+			!s.SuspendedByUserID.IsValid() ||
+			!validAttemptSuspensionPrivateReason(s.SuspensionPrivateReason) {
 			return invalidModelError("AttemptSuspension.Validate", "attempt_suspension", "", "invalid manual Attempt Suspension", "")
 		}
 	default:
 		return invalidModelError("AttemptSuspension.Validate", "attempt_suspension", "", "invalid Attempt Suspension source", "")
 	}
+
 	switch s.State {
 	case AttemptSuspensionActive:
 		if s.EndedAt.Valid || !s.ReallowedByUserID.IsZero() || s.PrivateReason != "" {
 			return invalidModelError("AttemptSuspension.Validate", "attempt_suspension", "", "active Attempt Suspension has re-allow metadata", "")
 		}
 	case AttemptSuspensionClosed:
-		if !s.EndedAt.Valid || s.EndedAt.Time.Before(s.StartedAt) ||
-			!s.ReallowedByUserID.IsValid() || !validAttemptSuspensionPrivateReason(s.PrivateReason) {
+		if !s.EndedAt.Valid ||
+			s.EndedAt.Time.Before(s.StartedAt) ||
+			!s.ReallowedByUserID.IsValid() ||
+			!validAttemptSuspensionPrivateReason(s.PrivateReason) {
 			return invalidModelError("AttemptSuspension.Validate", "attempt_suspension", "", "invalid closed Attempt Suspension", "")
 		}
 	default:
 		return invalidModelError("AttemptSuspension.Validate", "attempt_suspension", "", "invalid Attempt Suspension state", "")
 	}
+
 	return nil
 }
 
 func (s *AttemptSuspension) Reallow(actorID UserID, privateReason string, at time.Time) error {
-	if s == nil || s.State != AttemptSuspensionActive || !actorID.IsValid() ||
+	if s == nil ||
+		s.State != AttemptSuspensionActive ||
+		!actorID.IsValid() ||
 		!validAttemptSuspensionPrivateReason(privateReason) {
 		return invalidModelError("AttemptSuspension.Reallow", "attempt_suspension", "", "Attempt Suspension cannot be re-allowed", "")
 	}
+
 	candidate := *s
 	candidate.State = AttemptSuspensionClosed
 	candidate.EndedAt = OptionalTimeFrom(at)
@@ -589,6 +787,7 @@ func (s *AttemptSuspension) Reallow(actorID UserID, privateReason string, at tim
 	if err := candidate.Validate(); err != nil {
 		return err
 	}
+
 	*s = candidate
 	return nil
 }
@@ -600,8 +799,11 @@ func IsValidAttemptSuspensionPrivateReason(reason string) bool {
 }
 
 func validAttemptSuspensionPrivateReason(reason string) bool {
-	return utf8.ValidString(reason) && reason == strings.TrimSpace(reason) && utf8.RuneCountInString(reason) >= 1 &&
-		utf8.RuneCountInString(reason) <= AttemptSuspensionPrivateReasonMaximumRunes && len(reason) <= 4000
+	return utf8.ValidString(reason) &&
+		reason == strings.TrimSpace(reason) &&
+		utf8.RuneCountInString(reason) >= 1 &&
+		utf8.RuneCountInString(reason) <= AttemptSuspensionPrivateReasonMaximumRunes &&
+		len(reason) <= 4000
 }
 
 type AttemptWorkspaceObjectStorage string
@@ -632,10 +834,16 @@ func NewExamAttemptWorkspace(id ExamAttemptWorkspaceID, attemptID ExamAttemptID,
 }
 
 func (w *ExamAttemptWorkspace) Validate() error {
-	if w == nil || !w.ID.IsValid() || !w.AttemptID.IsValid() || w.Cursor < 0 ||
-		w.CreatedAt.IsZero() || w.UpdatedAt.IsZero() || w.UpdatedAt.Before(w.CreatedAt) {
+	if w == nil ||
+		!w.ID.IsValid() ||
+		!w.AttemptID.IsValid() ||
+		w.Cursor < 0 ||
+		w.CreatedAt.IsZero() ||
+		w.UpdatedAt.IsZero() ||
+		w.UpdatedAt.Before(w.CreatedAt) {
 		return invalidModelError("ExamAttemptWorkspace.Validate", "exam_attempt_workspace", "", "invalid Exam Attempt Workspace", "")
 	}
+
 	return nil
 }
 
@@ -679,24 +887,45 @@ type AttemptWorkspaceEntry struct {
 }
 
 func (e *AttemptWorkspaceEntry) Validate() error {
-	if e == nil || !e.ID.IsValid() || !e.WorkspaceID.IsValid() || !e.AdmissionRevisionID.IsValid() ||
-		(!e.SourceStarterEntryID.IsZero() && !e.SourceStarterEntryID.IsValid()) || e.CreatedAt.IsZero() || e.UpdatedAt.IsZero() || e.UpdatedAt.Before(e.CreatedAt) {
+	if e == nil ||
+		!e.ID.IsValid() ||
+		!e.WorkspaceID.IsValid() ||
+		!e.AdmissionRevisionID.IsValid() ||
+		(!e.SourceStarterEntryID.IsZero() && !e.SourceStarterEntryID.IsValid()) ||
+		e.CreatedAt.IsZero() ||
+		e.UpdatedAt.IsZero() ||
+		e.UpdatedAt.Before(e.CreatedAt) {
 		return invalidModelError("AttemptWorkspaceEntry.Validate", "attempt_workspace_entry", "", "invalid Attempt Workspace entry", "")
 	}
+
 	if normalized, err := NormalizeStarterWorkspacePath(e.Path); err != nil || normalized != e.Path {
 		return invalidModelError("AttemptWorkspaceEntry.Validate", "attempt_workspace_entry", "", "invalid Attempt Workspace entry path", "")
 	}
+
 	switch e.Kind {
 	case StarterWorkspaceEntryFile:
 		if !e.CurrentObjectID.IsValid() {
-			return invalidModelError("AttemptWorkspaceEntry.Validate", "attempt_workspace_entry", "", "Attempt Workspace file requires current object", "")
+			return invalidModelError(
+				"AttemptWorkspaceEntry.Validate",
+				"attempt_workspace_entry",
+				"",
+				"Attempt Workspace file requires current object",
+				"",
+			)
 		}
 	case StarterWorkspaceEntryDirectory:
 		if !e.CurrentObjectID.IsZero() {
-			return invalidModelError("AttemptWorkspaceEntry.Validate", "attempt_workspace_entry", "", "Attempt Workspace directory cannot have content", "")
+			return invalidModelError(
+				"AttemptWorkspaceEntry.Validate",
+				"attempt_workspace_entry",
+				"",
+				"Attempt Workspace directory cannot have content",
+				"",
+			)
 		}
 	default:
 		return invalidModelError("AttemptWorkspaceEntry.Validate", "attempt_workspace_entry", "", "invalid Attempt Workspace entry kind", "")
 	}
+
 	return nil
 }

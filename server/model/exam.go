@@ -37,12 +37,18 @@ type Exam struct {
 func NewExam(id ExamID, academicUnitID AcademicUnitID, creatorUserID UserID, at time.Time) (*Exam, error) {
 	at = TimeUTC(at)
 	exam := &Exam{
-		ID: id, AcademicUnitID: academicUnitID, CreatorUserID: creatorUserID,
-		OwnerUserID: creatorUserID, CreatedAt: at, UpdatedAt: at, Revision: 1,
+		ID:             id,
+		AcademicUnitID: academicUnitID,
+		CreatorUserID:  creatorUserID,
+		OwnerUserID:    creatorUserID,
+		CreatedAt:      at,
+		UpdatedAt:      at,
+		Revision:       1,
 	}
 	if err := exam.Validate(); err != nil {
 		return nil, err
 	}
+
 	return exam, nil
 }
 
@@ -54,6 +60,7 @@ func (e *Exam) Validate() error {
 	if !e.ID.IsValid() {
 		return invalidModelError(where, "exam", "id", "must be a valid identifier", "")
 	}
+
 	details := "id=" + e.ID.String()
 	if !e.AcademicUnitID.IsValid() {
 		return invalidModelError(where, "exam", "academic_unit_id", "must be a valid identifier", details)
@@ -76,6 +83,7 @@ func (e *Exam) Validate() error {
 	if e.Revision < 1 {
 		return invalidModelError(where, "exam", "revision", "must be positive", details)
 	}
+
 	return nil
 }
 
@@ -109,10 +117,14 @@ func (e *Exam) Auditable() map[string]any {
 	if e == nil {
 		return map[string]any{}
 	}
+
 	return map[string]any{
-		"id": e.ID.String(), "academic_unit_id": e.AcademicUnitID.String(),
-		"creator_user_id": e.CreatorUserID.String(), "owner_user_id": e.OwnerUserID.String(),
-		"default_revision_id": e.DefaultRevisionID.String(), "revision": e.Revision,
+		"id":                  e.ID.String(),
+		"academic_unit_id":    e.AcademicUnitID.String(),
+		"creator_user_id":     e.CreatorUserID.String(),
+		"owner_user_id":       e.OwnerUserID.String(),
+		"default_revision_id": e.DefaultRevisionID.String(),
+		"revision":            e.Revision,
 	}
 }
 
@@ -138,13 +150,18 @@ type ExamDraft struct {
 
 func NewExamDraft(examID ExamID, title, instructionsMarkdown string, policy ExamPolicySet, at time.Time) (*ExamDraft, error) {
 	draft := &ExamDraft{
-		ExamID: examID, Title: strings.TrimSpace(title),
-		InstructionsMarkdown: instructionsMarkdown, Policy: policy.Clone(), BrowserPolicy: DisabledBrowserPolicy(),
-		UpdatedAt: TimeUTC(at), Revision: 1,
+		ExamID:               examID,
+		Title:                strings.TrimSpace(title),
+		InstructionsMarkdown: instructionsMarkdown,
+		Policy:               policy.Clone(),
+		BrowserPolicy:        DisabledBrowserPolicy(),
+		UpdatedAt:            TimeUTC(at),
+		Revision:             1,
 	}
 	if err := draft.Validate(); err != nil {
 		return nil, err
 	}
+
 	return draft, nil
 }
 
@@ -156,10 +173,15 @@ func (d *ExamDraft) Validate() error {
 	if !d.ExamID.IsValid() {
 		return invalidModelError(where, "exam_draft", "exam_id", "must be a valid identifier", "")
 	}
+
 	details := "exam_id=" + d.ExamID.String()
-	if d.Title == "" || !utf8.ValidString(d.Title) || strings.TrimSpace(d.Title) != d.Title || utf8.RuneCountInString(d.Title) > ExamTitleMaxRunes {
+	if d.Title == "" ||
+		!utf8.ValidString(d.Title) ||
+		strings.TrimSpace(d.Title) != d.Title ||
+		utf8.RuneCountInString(d.Title) > ExamTitleMaxRunes {
 		return invalidModelError(where, "exam_draft", "title", "must contain 1 to 200 Unicode characters", details)
 	}
+
 	if !utf8.ValidString(d.InstructionsMarkdown) || len(d.InstructionsMarkdown) > ExamInstructionsMarkdownMaxBytes {
 		return invalidModelError(where, "exam_draft", "instructions_markdown", "must be valid bounded UTF-8", details)
 	}
@@ -175,10 +197,12 @@ func (d *ExamDraft) Validate() error {
 	if _, err := EncodeExamPolicySet(d.Policy); err != nil {
 		return invalidModelError(where, "exam_draft", "", fmt.Sprintf("%s: policy", where), "").wrap(err)
 	}
+
 	browserPolicy := d.BrowserPolicy
 	if err := browserPolicy.Validate(); err != nil {
 		return invalidModelError(where, "exam_draft", "", fmt.Sprintf("%s: browser policy", where), "").wrap(err)
 	}
+
 	return nil
 }
 
@@ -189,15 +213,18 @@ func (d *ExamDraft) ApplyBrowserPolicy(policy BrowserPolicy, at time.Time) (bool
 	if d == nil {
 		return false, invalidModelError("ExamDraft.ApplyBrowserPolicy", "exam_draft", "value", "is required", "")
 	}
+
 	canonical, err := NewBrowserPolicy(policy.Enabled, policy.StartRuleID, policy.Rules)
 	if err != nil {
 		return false, err
 	}
+
 	currentPolicy := d.BrowserPolicy
 	current, err := EncodeBrowserPolicy(currentPolicy)
 	if err != nil {
 		return false, err
 	}
+
 	proposed, err := EncodeBrowserPolicy(canonical)
 	if err != nil {
 		return false, err
@@ -205,6 +232,7 @@ func (d *ExamDraft) ApplyBrowserPolicy(policy BrowserPolicy, at time.Time) (bool
 	if string(current) == string(proposed) {
 		return false, nil
 	}
+
 	candidate := *d
 	candidate.BrowserPolicy = canonical
 	candidate.Revision++
@@ -212,9 +240,11 @@ func (d *ExamDraft) ApplyBrowserPolicy(policy BrowserPolicy, at time.Time) (bool
 	if candidate.UpdatedAt.Before(d.UpdatedAt) {
 		candidate.UpdatedAt = d.UpdatedAt
 	}
+
 	if err = candidate.Validate(); err != nil {
 		return false, err
 	}
+
 	*d = candidate
 	return true, nil
 }

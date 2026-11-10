@@ -52,16 +52,24 @@ type DeclareDeliveryGaps struct {
 }
 
 func (d DeclareDeliveryGaps) Validate() error {
-	if !IsValidAgreementID(d.DeclarationID) || !securitySafeInt(d.ExpectedDeclarationRevision) || !securitySafeInt(d.AllocatedThroughSequence) || len(d.Ranges) == 0 || ValidateSequenceRanges(d.Ranges, 32) != nil || !slices.Contains([]string{"spool_corrupt", "spool_lost", "local_capacity_exhausted"}, d.Reason) {
+	if !IsValidAgreementID(d.DeclarationID) ||
+		!securitySafeInt(d.ExpectedDeclarationRevision) ||
+		!securitySafeInt(d.AllocatedThroughSequence) ||
+		len(d.Ranges) == 0 ||
+		ValidateSequenceRanges(d.Ranges, 32) != nil ||
+		!slices.Contains([]string{"spool_corrupt", "spool_lost", "local_capacity_exhausted"}, d.Reason) {
 		return ErrDeliveryInvalid
 	}
+
 	if d.Ranges[len(d.Ranges)-1].Last > d.AllocatedThroughSequence {
 		return ErrDeliveryInvalid
 	}
+
 	raw, err := encodeCanonicalExamDocument(d)
 	if err != nil || len(raw) > 8*1024 {
 		return ErrDeliveryInvalid
 	}
+
 	return nil
 }
 func (d DeclareDeliveryGaps) Canonical() ([]byte, error) {
@@ -95,9 +103,14 @@ type DeliveryGapReceipt struct {
 }
 
 func (r DeliveryGapReceipt) Validate() error {
-	if !IsValidAgreementID(r.DeclarationID) || !IsValidSHA256Fingerprint(r.RequestDigest) || r.DeclarationRevision < 1 || !securitySafeInt(r.DeclarationRevision) || !securitySafeInt(r.SettledThroughSequence) {
+	if !IsValidAgreementID(r.DeclarationID) ||
+		!IsValidSHA256Fingerprint(r.RequestDigest) ||
+		r.DeclarationRevision < 1 ||
+		!securitySafeInt(r.DeclarationRevision) ||
+		!securitySafeInt(r.SettledThroughSequence) {
 		return ErrDeliveryInvalid
 	}
+
 	return nil
 }
 
@@ -170,8 +183,20 @@ const (
 )
 
 func (r DeliveryCloseReason) ValidFor(native bool) bool {
-	common := slices.Contains([]DeliveryCloseReason{DeliveryClosedSubmission, DeliveryClosedSuspension, DeliveryClosedManagerEnd, DeliveryClosedSitting, DeliveryClosedParticipation, DeliveryClosedSecuritySession}, r)
-	return common || !native && slices.Contains([]DeliveryCloseReason{DeliveryClosedPolicyCorrection, DeliveryClosedRuntimeReset, DeliveryClosedBrowserDisabled}, r)
+	common := slices.Contains(
+		[]DeliveryCloseReason{
+			DeliveryClosedSubmission,
+			DeliveryClosedSuspension,
+			DeliveryClosedManagerEnd,
+			DeliveryClosedSitting,
+			DeliveryClosedParticipation,
+			DeliveryClosedSecuritySession,
+		},
+		r,
+	)
+	return common ||
+		!native &&
+			slices.Contains([]DeliveryCloseReason{DeliveryClosedPolicyCorrection, DeliveryClosedRuntimeReset, DeliveryClosedBrowserDisabled}, r)
 }
 
 type DeliveryClosure struct {
@@ -187,23 +212,42 @@ type DeliveryClosure struct {
 
 func (c DeliveryClosure) Validate(native bool) error {
 	if c.ClosedAt == nil {
-		if c.CloseReason != nil || c.KnownAtClose != nil || c.FinalSequence != nil || c.FinalDeclarationID != nil || c.FinalBoundaryOrigin != nil || c.UnknownTail || c.UploadExpiresAt != nil {
+		if c.CloseReason != nil ||
+			c.KnownAtClose != nil ||
+			c.FinalSequence != nil ||
+			c.FinalDeclarationID != nil ||
+			c.FinalBoundaryOrigin != nil ||
+			c.UnknownTail ||
+			c.UploadExpiresAt != nil {
 			return ErrDeliveryInvalid
 		}
+
 		return nil
 	}
-	if !securityInstant(*c.ClosedAt) || c.CloseReason == nil || !c.CloseReason.ValidFor(native) || c.KnownAtClose == nil || !securitySafeInt(*c.KnownAtClose) || c.UploadExpiresAt == nil || !securityInstant(*c.UploadExpiresAt) || c.UploadExpiresAt.After(c.ClosedAt.Add(24*time.Hour)) {
+
+	if !securityInstant(*c.ClosedAt) ||
+		c.CloseReason == nil ||
+		!c.CloseReason.ValidFor(native) ||
+		c.KnownAtClose == nil ||
+		!securitySafeInt(*c.KnownAtClose) ||
+		c.UploadExpiresAt == nil ||
+		!securityInstant(*c.UploadExpiresAt) ||
+		c.UploadExpiresAt.After(c.ClosedAt.Add(24*time.Hour)) {
 		return ErrDeliveryInvalid
 	}
+
 	if c.FinalSequence == nil {
 		if !c.UnknownTail || c.FinalDeclarationID != nil || c.FinalBoundaryOrigin != nil {
 			return ErrDeliveryInvalid
 		}
+
 		return nil
 	}
+
 	if !securitySafeInt(*c.FinalSequence) || *c.FinalSequence < *c.KnownAtClose || c.FinalBoundaryOrigin == nil {
 		return ErrDeliveryInvalid
 	}
+
 	switch *c.FinalBoundaryOrigin {
 	case "client_declared":
 		if c.UnknownTail || c.FinalDeclarationID == nil || !IsValidAgreementID(*c.FinalDeclarationID) {
@@ -216,6 +260,7 @@ func (c DeliveryClosure) Validate(native bool) error {
 	default:
 		return ErrDeliveryInvalid
 	}
+
 	return nil
 }
 func (c DeliveryClosure) Clone() DeliveryClosure {
@@ -252,47 +297,74 @@ func (c DeliveryClosure) Clone() DeliveryClosure {
 
 // Close is called by the authoritative lifecycle transaction, never by a client
 // seal request. An earlier retirement deadline may already have elapsed.
-func (c DeliveryClosure) Close(native bool, reason DeliveryCloseReason, known int64, at time.Time, retirement *time.Time) (DeliveryClosure, error) {
+func (c DeliveryClosure) Close(
+	native bool,
+	reason DeliveryCloseReason,
+	known int64,
+	at time.Time,
+	retirement *time.Time,
+) (DeliveryClosure, error) {
 	if c.Validate(native) != nil || !reason.ValidFor(native) || !securitySafeInt(known) || !securityInstant(at) {
 		return c, ErrDeliveryInvalid
 	}
 	if c.ClosedAt != nil {
 		return c.Clone(), nil
 	}
+
 	expiry := at.Add(24 * time.Hour)
 	if retirement != nil {
 		if !securityInstant(*retirement) {
 			return c, ErrDeliveryInvalid
 		}
+
 		if retirement.Before(expiry) {
 			expiry = *retirement
 		}
 	}
+
 	return DeliveryClosure{ClosedAt: &at, CloseReason: &reason, KnownAtClose: &known, UnknownTail: true, UploadExpiresAt: &expiry}, nil
 }
 
 // DeclareFinal returns the position delta which the aggregate must reserve
 // atomically. Semantic declaration-ID replay is resolved by its receipt first.
-func (c DeliveryClosure) DeclareFinal(native bool, revision, allocated int64, summaryOnly bool, request FinalDeliveryDeclaration, at time.Time) (DeliveryClosure, int64, error) {
-	if c.Validate(native) != nil || request.Validate() != nil || !securitySafeInt(revision) || !securitySafeInt(allocated) || !securityInstant(at) {
+func (c DeliveryClosure) DeclareFinal(
+	native bool,
+	revision, allocated int64,
+	summaryOnly bool,
+	request FinalDeliveryDeclaration,
+	at time.Time,
+) (DeliveryClosure, int64, error) {
+	if c.Validate(native) != nil ||
+		request.Validate() != nil ||
+		!securitySafeInt(revision) ||
+		!securitySafeInt(allocated) ||
+		!securityInstant(at) {
 		return c, 0, ErrDeliveryInvalid
 	}
+
 	if c.ClosedAt == nil {
 		return c, 0, ErrDeliveryConflict
 	}
 	if !at.Before(*c.UploadExpiresAt) {
 		return c, 0, ErrDeliveryExpired
 	}
-	if c.FinalSequence != nil || request.ExpectedDeclarationRevision != revision || request.FinalSequence < allocated || request.FinalSequence < *c.KnownAtClose {
+
+	if c.FinalSequence != nil ||
+		request.ExpectedDeclarationRevision != revision ||
+		request.FinalSequence < allocated ||
+		request.FinalSequence < *c.KnownAtClose {
 		return c, 0, ErrDeliveryConflict
 	}
+
 	width := BrowserReceiveWindow
 	if native {
 		width = NativeReceiveWindow
 	}
+
 	if request.FinalSequence-*c.KnownAtClose > width || summaryOnly && request.FinalSequence > allocated {
 		return c, 0, ErrDeliveryConflict
 	}
+
 	next := c.Clone()
 	final := request.FinalSequence
 	id := request.DeclarationID
@@ -337,38 +409,48 @@ type DeliveryProgress struct {
 
 func ResolveDeliveryProgress(allocated int64, received, missing []SequenceRange, terminalThrough int64) (DeliveryProgress, error) {
 	result := DeliveryProgress{Missing: []SequenceRange{}}
-	if !securitySafeInt(allocated) || !securitySafeInt(terminalThrough) || terminalThrough > allocated || ValidateSequenceRanges(received, int(BrowserAttemptPositionLimit)) != nil || ValidateSequenceRanges(missing, int(DeliveryMissingIntervalLimit)) != nil {
+	if !securitySafeInt(allocated) ||
+		!securitySafeInt(terminalThrough) ||
+		terminalThrough > allocated ||
+		ValidateSequenceRanges(received, int(BrowserAttemptPositionLimit)) != nil ||
+		ValidateSequenceRanges(missing, int(DeliveryMissingIntervalLimit)) != nil {
 		return result, ErrDeliveryInvalid
 	}
+
 	for _, set := range [][]SequenceRange{received, missing} {
 		if len(set) > 0 && set[len(set)-1].Last > allocated {
 			return result, ErrDeliveryInvalid
 		}
 	}
+
 	ri, mi := 0, 0
 	for ri < len(received) && mi < len(missing) {
 		r, m := received[ri], missing[mi]
 		if r.First <= m.Last && m.First <= r.Last {
 			return result, ErrDeliveryConflict
 		}
+
 		if r.Last < m.First {
 			ri++
 		} else {
 			mi++
 		}
 	}
+
 	if len(received) > 0 {
 		result.HighestSeen = received[len(received)-1].Last
 		if received[0].First == 1 {
 			result.HighestContiguous = received[0].Last
 		}
 	}
+
 	all := make([]SequenceRange, 0, len(received)+len(missing)+1)
 	all = append(all, received...)
 	all = append(all, missing...)
 	if terminalThrough > 0 {
 		all = append(all, SequenceRange{First: 1, Last: terminalThrough})
 	}
+
 	slices.SortFunc(all, func(a, b SequenceRange) int {
 		if a.First < b.First {
 			return -1
@@ -376,6 +458,7 @@ func ResolveDeliveryProgress(allocated int64, received, missing []SequenceRange,
 		if a.First > b.First {
 			return 1
 		}
+
 		return 0
 	})
 	through := int64(0)
@@ -389,10 +472,12 @@ func ResolveDeliveryProgress(allocated int64, received, missing []SequenceRange,
 		} else if len(result.Missing) == 0 && !result.MissingTruncated && r.Last > result.SettledThrough {
 			result.SettledThrough = r.Last
 		}
+
 		if r.Last > through {
 			through = r.Last
 		}
 	}
+
 	if through < allocated {
 		if len(result.Missing) < 32 {
 			result.Missing = append(result.Missing, SequenceRange{First: through + 1, Last: allocated})
@@ -400,6 +485,7 @@ func ResolveDeliveryProgress(allocated int64, received, missing []SequenceRange,
 			result.MissingTruncated = true
 		}
 	}
+
 	return result, nil
 }
 func (p DeliveryProgress) WindowBase() int64 { return max(p.HighestContiguous, p.SettledThrough) }
@@ -407,34 +493,54 @@ func (p DeliveryProgress) WindowBase() int64 { return max(p.HighestContiguous, p
 // ValidateDeliveryGapPlacement checks the current window and actual receipts.
 // The aggregate resolves declaration replay, increments its revision and charges
 // positions/metadata in the same transaction that persists the missing intervals.
-func ValidateDeliveryGapPlacement(native bool, progress DeliveryProgress, allocated, revision int64, closure DeliveryClosure, summaryOnly bool, request DeclareDeliveryGaps, received, terminal []SequenceRange, at time.Time) error {
-	if request.Validate() != nil || closure.Validate(native) != nil || !securitySafeInt(allocated) || !securitySafeInt(revision) || !securityInstant(at) {
+func ValidateDeliveryGapPlacement(
+	native bool,
+	progress DeliveryProgress,
+	allocated, revision int64,
+	closure DeliveryClosure,
+	summaryOnly bool,
+	request DeclareDeliveryGaps,
+	received, terminal []SequenceRange,
+	at time.Time,
+) error {
+	if request.Validate() != nil ||
+		closure.Validate(native) != nil ||
+		!securitySafeInt(allocated) ||
+		!securitySafeInt(revision) ||
+		!securityInstant(at) {
 		return ErrDeliveryInvalid
 	}
+
 	if request.ExpectedDeclarationRevision != revision || summaryOnly && request.AllocatedThroughSequence > allocated {
 		return ErrDeliveryConflict
 	}
+
 	if closure.ClosedAt != nil {
 		if !at.Before(*closure.UploadExpiresAt) {
 			return ErrDeliveryExpired
 		}
+
 		boundary := *closure.KnownAtClose
 		if closure.FinalSequence != nil {
 			boundary = *closure.FinalSequence
 		}
+
 		if request.AllocatedThroughSequence > boundary {
 			return ErrDeliveryConflict
 		}
 	}
+
 	width := BrowserReceiveWindow
 	if native {
 		width = NativeReceiveWindow
 	}
+
 	base := progress.WindowBase()
 	for _, r := range request.Ranges {
 		if r.First <= base || r.Last-base > width {
 			return ErrDeliveryConflict
 		}
+
 		for _, set := range [][]SequenceRange{received, terminal} {
 			for _, prior := range set {
 				if r.First <= prior.Last && prior.First <= r.Last {
@@ -443,5 +549,6 @@ func ValidateDeliveryGapPlacement(native bool, progress DeliveryProgress, alloca
 			}
 		}
 	}
+
 	return nil
 }

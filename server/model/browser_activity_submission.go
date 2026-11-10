@@ -18,8 +18,10 @@ const (
 )
 
 func (r BrowserActivitySubmissionGapReason) IsClientReason() bool {
-	return r == BrowserActivityGapSpoolOverflow || r == BrowserActivityGapSpoolCorrupt ||
-		r == BrowserActivityGapSpoolKeyUnavailable || r == BrowserActivityGapDeliveryIncomplete
+	return r == BrowserActivityGapSpoolOverflow ||
+		r == BrowserActivityGapSpoolCorrupt ||
+		r == BrowserActivityGapSpoolKeyUnavailable ||
+		r == BrowserActivityGapDeliveryIncomplete
 }
 
 func (r BrowserActivitySubmissionGapReason) IsValid() bool {

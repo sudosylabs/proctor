@@ -97,6 +97,7 @@ func (m *MFACredential) Validate() error {
 	if !m.ID.IsValid() {
 		return invalidModelError(where, "mfa_credential", "id", "must be a valid identifier", "")
 	}
+
 	details := "id=" + m.ID.String()
 	if m.CreatedAt.IsZero() || m.UpdatedAt.IsZero() {
 		return invalidModelError(where, "mfa_credential", "created_at", "must be set", details)
@@ -107,33 +108,42 @@ func (m *MFACredential) Validate() error {
 	if !m.UserID.IsValid() {
 		return invalidModelError(where, "mfa_credential", "user_id", "must be a valid identifier", details)
 	}
+
 	if utf8.RuneCountInString(m.EncryptedSecret) == 0 ||
 		len(m.EncryptedSecret) > MFAEncryptedSecretMaxLength {
 		return invalidModelError(where, "mfa_credential", "encrypted_secret", "has an invalid length", details)
 	}
+
 	decodedKeyID, keyIDErr := hex.DecodeString(m.EncryptionKeyID)
-	if len(m.EncryptionKeyID) != MFAEncryptionKeyIDLength || keyIDErr != nil ||
+	if len(m.EncryptionKeyID) != MFAEncryptionKeyIDLength ||
+		keyIDErr != nil ||
 		hex.EncodeToString(decodedKeyID) != m.EncryptionKeyID {
 		return invalidModelError(where, "mfa_credential", "encryption_key_id", "has an invalid format", details)
 	}
+
 	if m.ArchivedAt.Valid && m.ArchivedAt.Time.Before(m.CreatedAt) {
 		return invalidModelError(where, "mfa_credential", "archived_at", "must not precede created_at", details)
 	}
+
 	switch m.State {
 	case MFAStatePending:
-		if !m.PendingExpiresAt.Valid || !m.PendingExpiresAt.Time.After(m.CreatedAt) ||
-			m.ActivatedAt.Valid || m.LastUsedTimeStep != 0 {
+		if !m.PendingExpiresAt.Valid ||
+			!m.PendingExpiresAt.Time.After(m.CreatedAt) ||
+			m.ActivatedAt.Valid ||
+			m.LastUsedTimeStep != 0 {
 			return invalidModelError(where, "mfa_credential", "state", "has inconsistent pending fields", details)
 		}
 	case MFAStateActive:
 		if m.PendingExpiresAt.Valid ||
-			!m.ActivatedAt.Valid || m.ActivatedAt.Time.Before(m.CreatedAt) ||
+			!m.ActivatedAt.Valid ||
+			m.ActivatedAt.Time.Before(m.CreatedAt) ||
 			m.LastUsedTimeStep <= 0 {
 			return invalidModelError(where, "mfa_credential", "state", "has inconsistent active fields", details)
 		}
 	default:
 		return invalidModelError(where, "mfa_credential", "state", "has an unknown value", details)
 	}
+
 	return nil
 }
 

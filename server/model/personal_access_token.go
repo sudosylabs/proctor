@@ -97,6 +97,7 @@ func (t *PersonalAccessToken) Validate() error {
 	if !t.ID.IsValid() {
 		return invalidModelError(where, "personal_access_token", "id", "must be a valid identifier", "")
 	}
+
 	details := "id=" + t.ID.String()
 	if t.CreatedAt.IsZero() || t.UpdatedAt.IsZero() {
 		return invalidModelError(where, "personal_access_token", "created_at", "must be set", details)
@@ -104,6 +105,7 @@ func (t *PersonalAccessToken) Validate() error {
 	if t.UpdatedAt.Before(t.CreatedAt) {
 		return invalidModelError(where, "personal_access_token", "updated_at", "must not precede created_at", details)
 	}
+
 	if !t.UserID.IsValid() {
 		return invalidModelError(
 			where,
@@ -113,6 +115,7 @@ func (t *PersonalAccessToken) Validate() error {
 			details,
 		)
 	}
+
 	if utf8.RuneCountInString(t.Description) == 0 ||
 		utf8.RuneCountInString(t.Description) > PersonalAccessTokenDescriptionMaxRunes {
 		return invalidModelError(
@@ -123,6 +126,7 @@ func (t *PersonalAccessToken) Validate() error {
 			details,
 		)
 	}
+
 	if !IsValidTokenHash(t.TokenHash) {
 		return invalidModelError(
 			where,
@@ -132,9 +136,11 @@ func (t *PersonalAccessToken) Validate() error {
 			details,
 		)
 	}
+
 	if err := t.validateScopes(details); err != nil {
 		return err
 	}
+
 	if !t.AcademicUnitID.IsZero() && !t.AcademicUnitID.IsValid() {
 		return invalidModelError(
 			where,
@@ -144,6 +150,7 @@ func (t *PersonalAccessToken) Validate() error {
 			details,
 		)
 	}
+
 	return t.validateLifecycle(details)
 }
 
@@ -159,6 +166,7 @@ func (t *PersonalAccessToken) validateScopes(details string) error {
 			details,
 		)
 	}
+
 	seen := make(map[string]struct{}, len(t.Scopes))
 	for _, scope := range t.Scopes {
 		if len(scope) > RolePermissionMaxLength || !validPermission.MatchString(scope) {
@@ -170,6 +178,7 @@ func (t *PersonalAccessToken) validateScopes(details string) error {
 				details,
 			)
 		}
+
 		if _, exists := seen[scope]; exists {
 			return invalidModelError(
 				where,
@@ -179,8 +188,10 @@ func (t *PersonalAccessToken) validateScopes(details string) error {
 				details,
 			)
 		}
+
 		seen[scope] = struct{}{}
 	}
+
 	return nil
 }
 
@@ -196,6 +207,7 @@ func (t *PersonalAccessToken) validateLifecycle(details string) error {
 			details,
 		)
 	}
+
 	if t.LastUsedAt.Valid &&
 		(t.LastUsedAt.Time.Before(t.CreatedAt) || !t.LastUsedAt.Time.Before(t.ExpiresAt)) {
 		return invalidModelError(
@@ -206,9 +218,11 @@ func (t *PersonalAccessToken) validateLifecycle(details string) error {
 			details,
 		)
 	}
+
 	if t.ArchivedAt.Valid && t.ArchivedAt.Time.Before(t.CreatedAt) {
 		return invalidModelError(where, "personal_access_token", "archived_at", "must not precede created_at", details)
 	}
+
 	if t.RevokedAt.Valid && t.RevokedAt.Time.Before(t.CreatedAt) {
 		return invalidModelError(
 			where,
@@ -218,6 +232,7 @@ func (t *PersonalAccessToken) validateLifecycle(details string) error {
 			details,
 		)
 	}
+
 	if t.DisabledAt.Valid && t.DisabledAt.Time.Before(t.CreatedAt) {
 		return invalidModelError(
 			where,
@@ -227,6 +242,7 @@ func (t *PersonalAccessToken) validateLifecycle(details string) error {
 			details,
 		)
 	}
+
 	return nil
 }
 

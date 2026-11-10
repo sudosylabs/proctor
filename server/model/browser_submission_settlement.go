@@ -19,9 +19,16 @@ type BrowserSubmissionSettlement struct {
 }
 
 func (v BrowserSubmissionSettlement) Validate() error {
-	if v.InventoryRevision < 1 || !securitySafeInt(v.InventoryRevision) || !securitySafeInt(v.SourceCount) || v.PendingSourceCount < 0 || v.PendingSourceCount > v.SourceCount || v.IncompleteSourceCount < 0 || v.IncompleteSourceCount > v.SourceCount {
+	if v.InventoryRevision < 1 ||
+		!securitySafeInt(v.InventoryRevision) ||
+		!securitySafeInt(v.SourceCount) ||
+		v.PendingSourceCount < 0 ||
+		v.PendingSourceCount > v.SourceCount ||
+		v.IncompleteSourceCount < 0 ||
+		v.IncompleteSourceCount > v.SourceCount {
 		return ErrDeliveryInvalid
 	}
+
 	expected := "settled"
 	switch {
 	case v.SourceCount == 0:
@@ -31,9 +38,11 @@ func (v BrowserSubmissionSettlement) Validate() error {
 	case v.IncompleteSourceCount > 0:
 		expected = "incomplete"
 	}
+
 	if v.State != expected {
 		return ErrDeliveryInvalid
 	}
+
 	return nil
 }
 func (v BrowserSubmissionSettlement) Clone() BrowserSubmissionSettlement { return v }
@@ -46,14 +55,20 @@ func BrowserSourceSettlementFacts(status BrowserSourceStatus, unresolvedProvenan
 	if status.Validate() != nil {
 		return false, false, ErrDeliveryInvalid
 	}
+
 	beforeDeadline := status.Closure.UploadExpiresAt == nil || status.ServerTime.Before(*status.Closure.UploadExpiresAt)
 	pending = beforeDeadline && (status.Closure.FinalSequence == nil || len(status.MissingRanges) > 0 && status.DetailMode != "summary_only")
-	incomplete = status.SettledThrough > status.HighestContiguous || status.Closure.UnknownTail || unresolvedProvenance || status.TerminalMissingThrough > status.HighestContiguous
+	incomplete = status.SettledThrough > status.HighestContiguous ||
+		status.Closure.UnknownTail ||
+		unresolvedProvenance ||
+		status.TerminalMissingThrough > status.HighestContiguous
 	if status.Summary != nil {
 		incomplete = incomplete || status.Summary.UnretainedRecordCount > 0 || !status.Summary.CountComplete
 	}
+
 	if status.Closure.FinalSequence != nil && !pending && status.HighestContiguous < *status.Closure.FinalSequence {
 		incomplete = true
 	}
+
 	return pending, incomplete, nil
 }

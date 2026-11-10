@@ -149,6 +149,7 @@ func (au *AcademicUnit) Validate() error {
 	if !au.ID.IsValid() {
 		return invalidModelError(where, "academic_unit", "id", "must be a valid identifier", "")
 	}
+
 	details := "id=" + au.ID.String()
 	if au.CreatedAt.IsZero() {
 		return invalidModelError(where, "academic_unit", "created_at", "must be set", details)
@@ -174,6 +175,7 @@ func (au *AcademicUnit) Validate() error {
 	if au.ArchivedAt.Valid && au.ArchivedAt.Time.Before(au.CreatedAt) {
 		return invalidModelError(where, "academic_unit", "archived_at", "must not precede created_at", details)
 	}
+
 	return validateNamed(where, "academic_unit", au.ID.String(), au.Name, au.DisplayName, au.Description)
 }
 

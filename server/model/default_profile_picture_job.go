@@ -24,8 +24,15 @@ type DefaultProfilePictureCommand struct {
 
 func EncodeDefaultProfilePictureCommand(command DefaultProfilePictureCommand) (json.RawMessage, error) {
 	if !command.UserID.IsValid() {
-		return nil, invalidModelError("EncodeDefaultProfilePictureCommand", "default_profile_picture_job", "", "default profile-picture command has invalid user ID", "")
+		return nil, invalidModelError(
+			"EncodeDefaultProfilePictureCommand",
+			"default_profile_picture_job",
+			"",
+			"default profile-picture command has invalid user ID",
+			"",
+		)
 	}
+
 	return json.Marshal(command)
 }
 
@@ -34,17 +41,45 @@ func DecodeDefaultProfilePictureCommand(document json.RawMessage) (DefaultProfil
 	decoder := json.NewDecoder(bytes.NewReader(document))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&command); err != nil {
-		return command, invalidModelError("DecodeDefaultProfilePictureCommand", "default_profile_picture_job", "", "decode default profile-picture command", "").wrap(err)
+		return command, invalidModelError(
+			"DecodeDefaultProfilePictureCommand",
+			"default_profile_picture_job",
+			"",
+			"decode default profile-picture command",
+			"",
+		).wrap(err)
 	}
+
 	var trailing any
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
 		if err == nil {
-			return command, invalidModelError("DecodeDefaultProfilePictureCommand", "default_profile_picture_job", "", "job command contains trailing JSON", "")
+			return command, invalidModelError(
+				"DecodeDefaultProfilePictureCommand",
+				"default_profile_picture_job",
+				"",
+				"job command contains trailing JSON",
+				"",
+			)
 		}
-		return command, invalidModelError("DecodeDefaultProfilePictureCommand", "default_profile_picture_job", "", "decode trailing job command", "").wrap(err)
+
+		return command, invalidModelError(
+			"DecodeDefaultProfilePictureCommand",
+			"default_profile_picture_job",
+			"",
+			"decode trailing job command",
+			"",
+		).wrap(err)
 	}
+
 	if !command.UserID.IsValid() {
-		return command, invalidModelError("DecodeDefaultProfilePictureCommand", "default_profile_picture_job", "", "default profile-picture command has invalid user ID", "")
+		return command, invalidModelError(
+			"DecodeDefaultProfilePictureCommand",
+			"default_profile_picture_job",
+			"",
+			"default profile-picture command has invalid user ID",
+			"",
+		)
 	}
+
 	return command, nil
 }

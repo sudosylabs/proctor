@@ -58,8 +58,11 @@ func DefaultExamPolicySet() ExamPolicySet {
 		Native:         DefaultNativeSecurityPolicy(),
 		ConnectionLoss: ConnectionLossPolicy{Outcome: IntegrityOutcomeFlagAndSuspend},
 		FocusLoss: FocusLossPolicy{
-			Enabled: true, MinimumDuration: 2 * time.Second, IncidentCount: 3,
-			Window: 5 * time.Minute, Outcome: IntegrityOutcomeFlagAndWarn,
+			Enabled:         true,
+			MinimumDuration: 2 * time.Second,
+			IncidentCount:   3,
+			Window:          5 * time.Minute,
+			Outcome:         IntegrityOutcomeFlagAndWarn,
 		},
 	}
 }
@@ -71,9 +74,17 @@ func (p ExamPolicySet) Validate() error {
 	if p.FocusLoss.MinimumDuration%time.Millisecond != 0 || p.FocusLoss.Window%time.Millisecond != 0 {
 		return invalidModelError("ExamPolicySet.Validate", "exam_policy_set", "", "focus loss durations require whole milliseconds", "")
 	}
+
 	if p.SchemaVersion != ExamPolicySchemaVersion {
-		return invalidModelError("ExamPolicySet.Validate", "exam_policy_set", "", fmt.Sprintf("unsupported exam policy schema version %d", p.SchemaVersion), "")
+		return invalidModelError(
+			"ExamPolicySet.Validate",
+			"exam_policy_set",
+			"",
+			fmt.Sprintf("unsupported exam policy schema version %d", p.SchemaVersion),
+			"",
+		)
 	}
+
 	if p.ConnectionLoss.Outcome != IntegrityOutcomeFlagAndSuspend {
 		return invalidModelError("ExamPolicySet.Validate", "exam_policy_set", "", "connection loss must flag and suspend", "")
 	}
@@ -86,6 +97,7 @@ func (p ExamPolicySet) Validate() error {
 	if p.FocusLoss.Window < 10*time.Second || p.FocusLoss.Window > 4*time.Hour || p.FocusLoss.Window < p.FocusLoss.MinimumDuration {
 		return invalidModelError("ExamPolicySet.Validate", "exam_policy_set", "", "focus loss window is out of bounds", "")
 	}
+
 	switch p.FocusLoss.Outcome {
 	case IntegrityOutcomeFlag, IntegrityOutcomeFlagAndWarn, IntegrityOutcomeFlagAndSuspend:
 		return nil
@@ -143,6 +155,7 @@ func DecodeExamPolicySet(data []byte) (ExamPolicySet, error) {
 	if err := validateExamDocumentJSON(data); err != nil {
 		return ExamPolicySet{}, err
 	}
+
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	var wire struct {
@@ -164,15 +177,26 @@ func DecodeExamPolicySet(data []byte) (ExamPolicySet, error) {
 	if err := requireJSONEOF(decoder); err != nil {
 		return ExamPolicySet{}, err
 	}
-	if wire.Native == nil || wire.ConnectionLoss == nil || wire.ConnectionLoss.Outcome == nil ||
-		wire.FocusLoss == nil || wire.FocusLoss.Enabled == nil || wire.FocusLoss.MinimumDurationMilliseconds == nil ||
-		wire.FocusLoss.IncidentCount == nil || wire.FocusLoss.WindowMilliseconds == nil || wire.FocusLoss.Outcome == nil {
+
+	if wire.Native == nil ||
+		wire.ConnectionLoss == nil ||
+		wire.ConnectionLoss.Outcome == nil ||
+		wire.FocusLoss == nil ||
+		wire.FocusLoss.Enabled == nil ||
+		wire.FocusLoss.MinimumDurationMilliseconds == nil ||
+		wire.FocusLoss.IncidentCount == nil ||
+		wire.FocusLoss.WindowMilliseconds == nil ||
+		wire.FocusLoss.Outcome == nil {
 		return ExamPolicySet{}, invalidModelError("DecodeExamPolicySet", "exam_policy", "", "exam policy document is incomplete", "")
 	}
-	if *wire.FocusLoss.MinimumDurationMilliseconds < 500 || *wire.FocusLoss.MinimumDurationMilliseconds > 300_000 ||
-		*wire.FocusLoss.WindowMilliseconds < 10_000 || *wire.FocusLoss.WindowMilliseconds > 14_400_000 {
+
+	if *wire.FocusLoss.MinimumDurationMilliseconds < 500 ||
+		*wire.FocusLoss.MinimumDurationMilliseconds > 300_000 ||
+		*wire.FocusLoss.WindowMilliseconds < 10_000 ||
+		*wire.FocusLoss.WindowMilliseconds > 14_400_000 {
 		return ExamPolicySet{}, invalidModelError("DecodeExamPolicySet", "exam_policy", "", "exam policy duration is out of bounds", "")
 	}
+
 	policy := ExamPolicySet{
 		SchemaVersion:  ExamPolicySchemaVersion,
 		Native:         wire.Native.Clone(),
@@ -188,6 +212,7 @@ func DecodeExamPolicySet(data []byte) (ExamPolicySet, error) {
 	if err := policy.Validate(); err != nil {
 		return ExamPolicySet{}, err
 	}
+
 	return policy, nil
 }
 

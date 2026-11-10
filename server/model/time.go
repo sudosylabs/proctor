@@ -154,10 +154,12 @@ func (o *OptionalTime) UnmarshalJSON(data []byte) error {
 	if o == nil {
 		return invalidModelError("OptionalTime.UnmarshalJSON", "optional_time", "", "OptionalTime unmarshal target is nil", "")
 	}
+
 	if string(data) == "null" || string(data) == `""` {
 		*o = OptionalTime{}
 		return nil
 	}
+
 	var raw string
 	if err := json.Unmarshal(data, &raw); err != nil {
 		// Also accept bare RFC 3339 without going through string if needed.
@@ -165,13 +167,16 @@ func (o *OptionalTime) UnmarshalJSON(data []byte) error {
 		if err2 := json.Unmarshal(data, &instant); err2 != nil {
 			return invalidModelError("OptionalTime.UnmarshalJSON", "optional_time", "", "invalid optional time", "").wrap(err)
 		}
+
 		*o = OptionalTimeFrom(instant)
 		return nil
 	}
+
 	if raw == "" {
 		*o = OptionalTime{}
 		return nil
 	}
+
 	parsed, err := time.Parse(time.RFC3339Nano, raw)
 	if err != nil {
 		parsed, err = time.Parse(time.RFC3339, raw)
@@ -179,6 +184,7 @@ func (o *OptionalTime) UnmarshalJSON(data []byte) error {
 			return invalidModelError("OptionalTime.UnmarshalJSON", "optional_time", "", fmt.Sprintf("invalid optional time %q", raw), "").wrap(err)
 		}
 	}
+
 	*o = OptionalTimeFrom(parsed)
 	return nil
 }

@@ -40,29 +40,52 @@ func (key MailTemplateKey) OccurrenceKind() (MailOccurrenceKind, bool) {
 	switch key {
 	case MailTemplateSystemTest:
 		return MailOccurrenceOperatorTest, true
-	case MailTemplateIdentityVerifyEmail, MailTemplateIdentityPasswordReset, MailTemplateIdentityEmailChangeVerifyNew,
+	case MailTemplateIdentityVerifyEmail,
+		MailTemplateIdentityPasswordReset,
+		MailTemplateIdentityEmailChangeVerifyNew,
 		MailTemplateIdentityEmailChangeWarningOld:
 		return MailOccurrenceAccountToken, true
-	case MailTemplateIdentityPasswordChanged, MailTemplateIdentityEmailVerifiedByAdmin,
-		MailTemplateIdentityAccountDisabled, MailTemplateIdentityAccountEnabled, MailTemplateIdentitySessionsRevokedByAdmin,
-		MailTemplateIdentityMFAReset, MailTemplateIdentityMFAEnabled, MailTemplateIdentityMFADisabled, MailTemplateIdentityMFARecoveryCodesRegenerated,
-		MailTemplateIdentityPersonalAccessTokenCreated, MailTemplateIdentityPersonalAccessTokenEnabled,
-		MailTemplateIdentityPersonalAccessTokenDisabled, MailTemplateIdentityPersonalAccessTokenRevoked:
+	case MailTemplateIdentityPasswordChanged,
+		MailTemplateIdentityEmailVerifiedByAdmin,
+		MailTemplateIdentityAccountDisabled,
+		MailTemplateIdentityAccountEnabled,
+		MailTemplateIdentitySessionsRevokedByAdmin,
+		MailTemplateIdentityMFAReset,
+		MailTemplateIdentityMFAEnabled,
+		MailTemplateIdentityMFADisabled,
+		MailTemplateIdentityMFARecoveryCodesRegenerated,
+		MailTemplateIdentityPersonalAccessTokenCreated,
+		MailTemplateIdentityPersonalAccessTokenEnabled,
+		MailTemplateIdentityPersonalAccessTokenDisabled,
+		MailTemplateIdentityPersonalAccessTokenRevoked:
 		return MailOccurrenceSecurityNotice, true
-	case MailTemplateAccessStudentClassInvitation, MailTemplateAccessTeacherAcademicUnitInvitation,
-		MailTemplateAccessAcademicUnitRoleInvitation, MailTemplateAccessInstitutionRoleInvitation,
-		MailTemplateAccessInvitationAccepted, MailTemplateAccessInvitationRevoked:
+	case MailTemplateAccessStudentClassInvitation,
+		MailTemplateAccessTeacherAcademicUnitInvitation,
+		MailTemplateAccessAcademicUnitRoleInvitation,
+		MailTemplateAccessInstitutionRoleInvitation,
+		MailTemplateAccessInvitationAccepted,
+		MailTemplateAccessInvitationRevoked:
 		return MailOccurrenceInvitation, true
-	case MailTemplateAcademicClassEnrolled, MailTemplateAcademicClassEnrollmentEnded, MailTemplateAcademicClassTransferred,
-		MailTemplateAcademicUnitAssigned, MailTemplateAcademicUnitAssignmentEnded, MailTemplateAuthorizationScopedRoleAssigned,
-		MailTemplateAuthorizationScopedRoleEnded, MailTemplateAuthorizationInstitutionRoleAssigned,
+	case MailTemplateAcademicClassEnrolled,
+		MailTemplateAcademicClassEnrollmentEnded,
+		MailTemplateAcademicClassTransferred,
+		MailTemplateAcademicUnitAssigned,
+		MailTemplateAcademicUnitAssignmentEnded,
+		MailTemplateAuthorizationScopedRoleAssigned,
+		MailTemplateAuthorizationScopedRoleEnded,
+		MailTemplateAuthorizationInstitutionRoleAssigned,
 		MailTemplateAuthorizationInstitutionRoleEnded:
 		return MailOccurrenceAcademicAdministration, true
-	case MailTemplateExamSittingScheduled, MailTemplateExamSittingRescheduled, MailTemplateExamSittingCanceled,
+	case MailTemplateExamSittingScheduled,
+		MailTemplateExamSittingRescheduled,
+		MailTemplateExamSittingCanceled,
 		MailTemplateExamSittingAssignmentRemoved:
 		return MailOccurrenceSittingSchedule, true
-	case MailTemplateExamManagerAdded, MailTemplateExamManagerRemoved, MailTemplateExamOwnershipTransferredToYou,
-		MailTemplateExamOwnershipTransferredFromYou, MailTemplateExamRetentionScheduled:
+	case MailTemplateExamManagerAdded,
+		MailTemplateExamManagerRemoved,
+		MailTemplateExamOwnershipTransferredToYou,
+		MailTemplateExamOwnershipTransferredFromYou,
+		MailTemplateExamRetentionScheduled:
 		return MailOccurrenceExamManagement, true
 	case MailTemplateExamSubmissionReceived, MailTemplateExamSubmissionManagerEnded, MailTemplateExamSubmissionAutomaticallySealed:
 		return MailOccurrenceSubmissionReceipt, true
@@ -254,10 +277,14 @@ type MailOccurrence struct {
 }
 
 func (o *MailOccurrence) Validate() error {
-	if o == nil || !o.ID.IsValid() || !o.ActorUserID.IsValid() || o.CreatedAt.IsZero() ||
+	if o == nil ||
+		!o.ID.IsValid() ||
+		!o.ActorUserID.IsValid() ||
+		o.CreatedAt.IsZero() ||
 		!validMailOccurrenceMeaning(o.Kind, o.TemplateKey) {
 		return invalidModelError("MailOccurrence.Validate", "mail_occurrence", "", "invalid mail occurrence", "")
 	}
+
 	return nil
 }
 
@@ -302,41 +329,62 @@ type MailFanoutBundle struct {
 }
 
 func (b *MailFanoutBundle) Validate() error {
-	if b == nil || !b.ID.IsValid() || b.CreatedAt.IsZero() || b.Revision != 1 ||
-		len(b.EncryptedPayload) == 0 || len(b.EncryptedPayload) > MailEncryptedFanoutBundleMaximumBytes ||
+	if b == nil ||
+		!b.ID.IsValid() ||
+		b.CreatedAt.IsZero() ||
+		b.Revision != 1 ||
+		len(b.EncryptedPayload) == 0 ||
+		len(b.EncryptedPayload) > MailEncryptedFanoutBundleMaximumBytes ||
 		!json.Valid(b.EncryptedPayload) {
 		return invalidModelError("MailFanoutBundle.Validate", "mail_fanout_bundle", "", "invalid mail fan-out bundle", "")
 	}
+
 	return nil
 }
 
 func (d *MailDelivery) Validate() error {
-	if d == nil || !d.ID.IsValid() || !d.OccurrenceID.IsValid() || !d.JobID.IsValid() ||
-		(d.TargetUserID.IsValid() == d.TargetInvitationID.IsValid()) || !d.TemplateKey.IsValid() ||
-		!mailDigestPattern.MatchString(d.TemplateDigest) || d.MaskedRecipient == "" ||
-		!validMaskedMailRecipient(d.MaskedRecipient) || len(d.MaskedRecipient) > MailMaskedRecipientMaximumBytes || !validMailDeliveryState(d.State) ||
-		d.CreatedAt.IsZero() || d.UpdatedAt.Before(d.CreatedAt) || d.MessageDate.IsZero() ||
+	if d == nil ||
+		!d.ID.IsValid() ||
+		!d.OccurrenceID.IsValid() ||
+		!d.JobID.IsValid() ||
+		(d.TargetUserID.IsValid() == d.TargetInvitationID.IsValid()) ||
+		!d.TemplateKey.IsValid() ||
+		!mailDigestPattern.MatchString(d.TemplateDigest) ||
+		d.MaskedRecipient == "" ||
+		!validMaskedMailRecipient(d.MaskedRecipient) ||
+		len(d.MaskedRecipient) > MailMaskedRecipientMaximumBytes ||
+		!validMailDeliveryState(d.State) ||
+		d.CreatedAt.IsZero() ||
+		d.UpdatedAt.Before(d.CreatedAt) ||
+		d.MessageDate.IsZero() ||
 		!d.MessageDate.Equal(d.CreatedAt) ||
-		!d.Deadline.After(d.CreatedAt) || !mailMessageIDPattern.MatchString(d.MessageID) ||
-		len(d.MessageID) > MailMessageIDMaximumBytes || d.AttemptCount < 0 ||
-		d.AttemptCount > MailMaximumAttempts || d.Revision <= 0 ||
+		!d.Deadline.After(d.CreatedAt) ||
+		!mailMessageIDPattern.MatchString(d.MessageID) ||
+		len(d.MessageID) > MailMessageIDMaximumBytes ||
+		d.AttemptCount < 0 ||
+		d.AttemptCount > MailMaximumAttempts ||
+		d.Revision <= 0 ||
 		!validMailPublicCode(d.PublicFailureCode) {
 		return invalidModelError("MailDelivery.Validate", "mail_delivery", "", "invalid mail delivery", "")
 	}
+
 	if len(d.EncryptedPayload) > MailEncryptedPayloadMaximumBytes ||
 		(len(d.EncryptedPayload) > 0 && !json.Valid(d.EncryptedPayload)) {
 		return invalidModelError("MailDelivery.Validate", "mail_delivery", "", "invalid encrypted mail payload", "")
 	}
+
 	terminalWithoutPayload := d.State == MailDeliveryAccepted || d.State == MailDeliverySuppressed || d.State == MailDeliveryCanceled
 	if terminalWithoutPayload != (len(d.EncryptedPayload) == 0) {
 		return invalidModelError("MailDelivery.Validate", "mail_delivery", "", "invalid mail payload lifecycle", "")
 	}
+
 	if (d.State == MailDeliveryAccepted) != d.AcceptedAt.Valid ||
 		(d.State == MailDeliveryFailed) != d.FailedAt.Valid ||
 		(d.AcceptedAt.Valid && d.AcceptedAt.Time.Before(d.CreatedAt)) ||
 		(d.FailedAt.Valid && d.FailedAt.Time.Before(d.CreatedAt)) {
 		return invalidModelError("MailDelivery.Validate", "mail_delivery", "", "invalid mail delivery lifecycle", "")
 	}
+
 	switch d.State {
 	case MailDeliveryQueued:
 		if (d.AttemptCount == 0) != (d.PublicFailureCode == "") {
@@ -355,14 +403,19 @@ func (d *MailDelivery) Validate() error {
 			return invalidModelError("MailDelivery.Validate", "mail_delivery", "", "invalid failed mail delivery", "")
 		}
 	}
+
 	return nil
 }
 
 func (d *MailDelivery) Start(at time.Time) (*MailDelivery, error) {
-	if d == nil || (d.State != MailDeliveryQueued && d.State != MailDeliverySending) ||
-		d.AttemptCount >= MailMaximumAttempts || TimeUTC(at).Before(d.UpdatedAt) || !TimeUTC(at).Before(d.Deadline) {
+	if d == nil ||
+		(d.State != MailDeliveryQueued && d.State != MailDeliverySending) ||
+		d.AttemptCount >= MailMaximumAttempts ||
+		TimeUTC(at).Before(d.UpdatedAt) ||
+		!TimeUTC(at).Before(d.Deadline) {
 		return nil, invalidModelError("MailDelivery.Start", "mail_delivery", "", "mail delivery cannot start", "")
 	}
+
 	result := d.Clone()
 	result.State = MailDeliverySending
 	result.UpdatedAt = TimeUTC(at)
@@ -373,10 +426,14 @@ func (d *MailDelivery) Start(at time.Time) (*MailDelivery, error) {
 }
 
 func (d *MailDelivery) Retry(publicCode string, at time.Time) (*MailDelivery, error) {
-	if d == nil || d.State != MailDeliverySending || !validRequiredMailPublicCode(publicCode) ||
-		TimeUTC(at).Before(d.UpdatedAt) || !TimeUTC(at).Before(d.Deadline) {
+	if d == nil ||
+		d.State != MailDeliverySending ||
+		!validRequiredMailPublicCode(publicCode) ||
+		TimeUTC(at).Before(d.UpdatedAt) ||
+		!TimeUTC(at).Before(d.Deadline) {
 		return nil, invalidModelError("MailDelivery.Retry", "mail_delivery", "", "mail delivery cannot retry", "")
 	}
+
 	result := d.Clone()
 	result.State = MailDeliveryQueued
 	result.UpdatedAt = TimeUTC(at)
@@ -416,10 +473,13 @@ func (d *MailDelivery) Accept(at time.Time) (*MailDelivery, error) {
 // deadline and destroys the recoverable payload in the same state change.
 func (d *MailDelivery) Expire(at time.Time) (*MailDelivery, error) {
 	at = TimeUTC(at)
-	if d == nil || (d.State != MailDeliveryQueued && d.State != MailDeliverySending) ||
-		at.Before(d.UpdatedAt) || at.Before(d.Deadline) {
+	if d == nil ||
+		(d.State != MailDeliveryQueued && d.State != MailDeliverySending) ||
+		at.Before(d.UpdatedAt) ||
+		at.Before(d.Deadline) {
 		return nil, invalidModelError("MailDelivery.Expire", "mail_delivery", "", "mail delivery cannot expire", "")
 	}
+
 	result := d.Clone()
 	result.State = MailDeliverySuppressed
 	result.UpdatedAt = at
@@ -434,12 +494,16 @@ func (d *MailDelivery) Expire(at time.Time) (*MailDelivery, error) {
 // destroys the encrypted payload in the same transition.
 func (d *MailDelivery) Suppress(publicCode string, at time.Time) (*MailDelivery, error) {
 	at = TimeUTC(at)
-	if d == nil || (d.State != MailDeliveryQueued && d.State != MailDeliverySending && d.State != MailDeliveryFailed) ||
-		(publicCode != MailDeliveryDisabledCode && publicCode != MailDeliveryRecipientIneligibleCode &&
-			publicCode != MailDeliveryObsoleteCode && publicCode != MailDeliveryExpiredCode) ||
+	if d == nil ||
+		(d.State != MailDeliveryQueued && d.State != MailDeliverySending && d.State != MailDeliveryFailed) ||
+		(publicCode != MailDeliveryDisabledCode &&
+			publicCode != MailDeliveryRecipientIneligibleCode &&
+			publicCode != MailDeliveryObsoleteCode &&
+			publicCode != MailDeliveryExpiredCode) ||
 		at.Before(d.UpdatedAt) {
 		return nil, invalidModelError("MailDelivery.Suppress", "mail_delivery", "", "mail delivery cannot be suppressed", "")
 	}
+
 	result := d.Clone()
 	result.State = MailDeliverySuppressed
 	result.UpdatedAt = at
@@ -476,11 +540,15 @@ func (d *MailDelivery) Cancel(at time.Time) (*MailDelivery, error) {
 // marker.
 func (d *MailDelivery) OperatorRetry(at time.Time) (*MailDelivery, error) {
 	at = TimeUTC(at)
-	if d == nil || (d.State != MailDeliveryFailed && d.State != MailDeliveryQueued && d.State != MailDeliverySending) ||
+	if d == nil ||
+		(d.State != MailDeliveryFailed && d.State != MailDeliveryQueued && d.State != MailDeliverySending) ||
 		d.AttemptCount >= MailMaximumAttempts ||
-		at.Before(d.UpdatedAt) || !at.Before(d.Deadline) || len(d.EncryptedPayload) == 0 {
+		at.Before(d.UpdatedAt) ||
+		!at.Before(d.Deadline) ||
+		len(d.EncryptedPayload) == 0 {
 		return nil, invalidModelError("MailDelivery.OperatorRetry", "mail_delivery", "", "mail delivery cannot be retried by an operator", "")
 	}
+
 	result := d.Clone()
 	result.State = MailDeliveryQueued
 	result.UpdatedAt = at
@@ -489,6 +557,7 @@ func (d *MailDelivery) OperatorRetry(at time.Time) (*MailDelivery, error) {
 	if result.AttemptCount > 0 {
 		result.PublicFailureCode = MailDeliveryOperatorRetryCode
 	}
+
 	result.Revision++
 	return result, result.Validate()
 }
@@ -507,7 +576,13 @@ func (d *MailDelivery) Auditable() map[string]any {
 	if d == nil {
 		return map[string]any{}
 	}
-	return map[string]any{"id": d.ID.String(), "occurrence_id": d.OccurrenceID.String(), "template_key": string(d.TemplateKey), "state": string(d.State)}
+
+	return map[string]any{
+		"id":            d.ID.String(),
+		"occurrence_id": d.OccurrenceID.String(),
+		"template_key":  string(d.TemplateKey),
+		"state":         string(d.State),
+	}
 }
 
 func validMailDeliveryState(state MailDeliveryState) bool {

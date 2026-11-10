@@ -98,12 +98,18 @@ type SessionLengthLimits struct {
 // positive, a maximum never exceeds its default or the storable cap, and the
 // idle default never exceeds the absolute default.
 func (l SessionLengthLimits) Validate() error {
-	if l.IdleMinimumMinutes < 1 || l.AbsoluteMinimumMinutes < 1 || l.IdleDefaultMinutes < 1 ||
-		l.AbsoluteDefaultMinutes < l.IdleDefaultMinutes || l.IdleMaximumMinutes < 1 || l.AbsoluteMaximumMinutes < 1 ||
-		l.IdleMaximumMinutes > l.IdleDefaultMinutes || l.AbsoluteMaximumMinutes > l.AbsoluteDefaultMinutes ||
+	if l.IdleMinimumMinutes < 1 ||
+		l.AbsoluteMinimumMinutes < 1 ||
+		l.IdleDefaultMinutes < 1 ||
+		l.AbsoluteDefaultMinutes < l.IdleDefaultMinutes ||
+		l.IdleMaximumMinutes < 1 ||
+		l.AbsoluteMaximumMinutes < 1 ||
+		l.IdleMaximumMinutes > l.IdleDefaultMinutes ||
+		l.AbsoluteMaximumMinutes > l.AbsoluteDefaultMinutes ||
 		l.AbsoluteMaximumMinutes > AccessPolicySessionMinutesMaximum {
 		return invalidModelError("SessionLengthLimits.Validate", "session_length_limits", "", "are inconsistent", "")
 	}
+
 	return nil
 }
 
@@ -128,8 +134,12 @@ type AccessPolicyTransition struct {
 func NewInitialAccessPolicy(id AccessPolicyID, at time.Time) *AccessPolicy {
 	at = TimeUTC(at)
 	return &AccessPolicy{
-		ID: id, Revision: 1, CreatedAt: at, UpdatedAt: at,
-		LocalLoginEnabled: true, InvitationAdmissionEnabled: true,
+		ID:                               id,
+		Revision:                         1,
+		CreatedAt:                        at,
+		UpdatedAt:                        at,
+		LocalLoginEnabled:                true,
+		InvitationAdmissionEnabled:       true,
 		InvitationLocalCredentialEnabled: true,
 		DesktopAuthorizationEnabled:      true,
 		ProviderAdmissions:               map[string]ProviderAdmissionMode{},
@@ -144,6 +154,7 @@ func (p *AccessPolicy) Validate() error {
 	if !p.ID.IsValid() {
 		return invalidModelError(where, "access_policy", "id", "must be a valid identifier", "")
 	}
+
 	details := "id=" + p.ID.String()
 	if p.Revision < 1 {
 		return invalidModelError(where, "access_policy", "revision", "must be positive", details)
@@ -154,19 +165,23 @@ func (p *AccessPolicy) Validate() error {
 	if len(p.ProviderAdmissions) > AccessPolicyProviderMaxCount {
 		return invalidModelError(where, "access_policy", "provider_admissions", "contains too many providers", details)
 	}
+
 	for providerID, mode := range p.ProviderAdmissions {
 		if !IsValidIdentityProviderID(providerID) {
 			return invalidModelError(where, "access_policy", "provider_id", "is invalid", details)
 		}
+
 		switch mode {
 		case ProviderAdmissionLinkedOnly, ProviderAdmissionInvitationRequired, ProviderAdmissionAutoProvision:
 		default:
 			return invalidModelError(where, "access_policy", "provider_admission", fmt.Sprintf("%q is invalid", mode), details)
 		}
 	}
+
 	if err := p.Settings().Validate(); err != nil {
 		return invalidModelError(where, "access_policy", "settings", err.Error(), details)
 	}
+
 	return nil
 }
 
@@ -177,27 +192,53 @@ func (s AccessPolicySettings) Validate() error {
 	if s.PublicRegistrationEnabled && !s.LocalLoginEnabled {
 		return invalidModelError("AccessPolicySettings.Validate", "access_policy_settings", "", "public registration requires local login", "")
 	}
-	if s.SessionIdleMinutes < 0 || s.SessionIdleMinutes > AccessPolicySessionMinutesMaximum ||
-		s.SessionAbsoluteMinutes < 0 || s.SessionAbsoluteMinutes > AccessPolicySessionMinutesMaximum {
+
+	if s.SessionIdleMinutes < 0 ||
+		s.SessionIdleMinutes > AccessPolicySessionMinutesMaximum ||
+		s.SessionAbsoluteMinutes < 0 ||
+		s.SessionAbsoluteMinutes > AccessPolicySessionMinutesMaximum {
 		return invalidModelError("AccessPolicySettings.Validate", "access_policy_settings", "", "session lengths are out of range", "")
 	}
+
 	if s.SessionIdleMinutes != 0 && s.SessionAbsoluteMinutes != 0 && s.SessionIdleMinutes > s.SessionAbsoluteMinutes {
-		return invalidModelError("AccessPolicySettings.Validate", "access_policy_settings", "session_idle_minutes", "exceeds the absolute session length", "")
+		return invalidModelError(
+			"AccessPolicySettings.Validate",
+			"access_policy_settings",
+			"session_idle_minutes",
+			"exceeds the absolute session length",
+			"",
+		)
 	}
+
 	if s.InvitationLocalCredentialEnabled &&
 		(!s.InvitationAdmissionEnabled || !s.LocalLoginEnabled) {
-		return invalidModelError("AccessPolicySettings.Validate", "access_policy_settings", "", "invitation local credentials require invitation admission and local login", "")
+		return invalidModelError(
+			"AccessPolicySettings.Validate",
+			"access_policy_settings",
+			"",
+			"invitation local credentials require invitation admission and local login",
+			"",
+		)
 	}
+
 	for providerID, mode := range s.ProviderAdmissions {
 		if !IsValidIdentityProviderID(providerID) {
 			return invalidModelError("AccessPolicySettings.Validate", "access_policy_settings", "", "provider ID is invalid", "")
 		}
+
 		switch mode {
 		case ProviderAdmissionLinkedOnly, ProviderAdmissionInvitationRequired, ProviderAdmissionAutoProvision:
 		default:
-			return invalidModelError("AccessPolicySettings.Validate", "access_policy_settings", "", fmt.Sprintf("provider admission %q is invalid", mode), "")
+			return invalidModelError(
+				"AccessPolicySettings.Validate",
+				"access_policy_settings",
+				"",
+				fmt.Sprintf("provider admission %q is invalid", mode),
+				"",
+			)
 		}
 	}
+
 	return nil
 }
 
@@ -210,19 +251,32 @@ func (s AccessPolicySettings) ValidateSessionLengths(limits SessionLengthLimits)
 	if s.SessionIdleMinutes == 0 && s.SessionAbsoluteMinutes == 0 {
 		return nil
 	}
+
 	// A deployment whose own lifetimes the policy cannot express refuses
 	// every explicit length.
 	valid := limits.Validate() == nil
 	_, absolute := s.EffectiveSessionMinutes(limits)
-	if s.SessionAbsoluteMinutes != 0 && (!valid ||
-		s.SessionAbsoluteMinutes < limits.AbsoluteMinimumMinutes || s.SessionAbsoluteMinutes > limits.AbsoluteMaximumMinutes) {
+	if s.SessionAbsoluteMinutes != 0 &&
+		(!valid ||
+			s.SessionAbsoluteMinutes < limits.AbsoluteMinimumMinutes ||
+			s.SessionAbsoluteMinutes > limits.AbsoluteMaximumMinutes) {
 		return invalidModelError(where, "access_policy_settings", "session_absolute_minutes", "is outside the deployment bounds", "")
 	}
-	if s.SessionIdleMinutes != 0 && (!valid ||
-		s.SessionIdleMinutes < limits.IdleMinimumMinutes || s.SessionIdleMinutes > limits.IdleMaximumMinutes ||
-		s.SessionIdleMinutes > absolute) {
-		return invalidModelError(where, "access_policy_settings", "session_idle_minutes", "is outside the deployment bounds or the absolute length", "")
+
+	if s.SessionIdleMinutes != 0 &&
+		(!valid ||
+			s.SessionIdleMinutes < limits.IdleMinimumMinutes ||
+			s.SessionIdleMinutes > limits.IdleMaximumMinutes ||
+			s.SessionIdleMinutes > absolute) {
+		return invalidModelError(
+			where,
+			"access_policy_settings",
+			"session_idle_minutes",
+			"is outside the deployment bounds or the absolute length",
+			"",
+		)
 	}
+
 	return nil
 }
 
@@ -259,21 +313,29 @@ func (p *AccessPolicy) Settings() AccessPolicySettings {
 
 // Replace applies one complete, revision-fenced policy replacement and returns
 // the only safe history fields that persistence may retain.
-func (p *AccessPolicy) Replace(expectedRevision int64, settings AccessPolicySettings, actorID UserID, at time.Time) (*AccessPolicyTransition, error) {
+func (p *AccessPolicy) Replace(
+	expectedRevision int64,
+	settings AccessPolicySettings,
+	actorID UserID,
+	at time.Time,
+) (*AccessPolicyTransition, error) {
 	if p == nil || p.Validate() != nil || !actorID.IsValid() || at.IsZero() {
 		return nil, ErrAccessPolicyInvalidTransition
 	}
 	if expectedRevision != p.Revision {
 		return nil, ErrAccessPolicyRevisionConflict
 	}
+
 	at = TimeUTC(at)
 	if at.Before(p.UpdatedAt) || settings.Validate() != nil {
 		return nil, ErrAccessPolicyInvalidTransition
 	}
+
 	changed := changedAccessPolicyFields(p.Settings(), settings)
 	if len(changed) == 0 {
 		return nil, nil
 	}
+
 	from := p.Revision
 	p.LocalLoginEnabled = settings.LocalLoginEnabled
 	p.PublicRegistrationEnabled = settings.PublicRegistrationEnabled
@@ -289,36 +351,56 @@ func (p *AccessPolicy) Replace(expectedRevision int64, settings AccessPolicySett
 	if err := p.Validate(); err != nil {
 		return nil, ErrAccessPolicyInvalidTransition
 	}
+
 	return &AccessPolicyTransition{
-		PolicyID: p.ID, FromRevision: from, ToRevision: p.Revision,
-		ActorID: actorID, ChangedFields: changed, ChangedAt: at,
-		Outcome: AccessPolicyTransitionApplied,
+		PolicyID:      p.ID,
+		FromRevision:  from,
+		ToRevision:    p.Revision,
+		ActorID:       actorID,
+		ChangedFields: changed,
+		ChangedAt:     at,
+		Outcome:       AccessPolicyTransitionApplied,
 	}, nil
 }
 
 func (t *AccessPolicyTransition) Validate() error {
-	if t == nil || !t.PolicyID.IsValid() || t.FromRevision < 1 ||
-		t.ToRevision != t.FromRevision+1 || !t.ActorID.IsValid() ||
-		t.ChangedAt.IsZero() || t.Outcome != AccessPolicyTransitionApplied ||
-		len(t.ChangedFields) == 0 || len(t.ChangedFields) > AccessPolicyTransitionFieldMaxCount {
+	if t == nil ||
+		!t.PolicyID.IsValid() ||
+		t.FromRevision < 1 ||
+		t.ToRevision != t.FromRevision+1 ||
+		!t.ActorID.IsValid() ||
+		t.ChangedAt.IsZero() ||
+		t.Outcome != AccessPolicyTransitionApplied ||
+		len(t.ChangedFields) == 0 ||
+		len(t.ChangedFields) > AccessPolicyTransitionFieldMaxCount {
 		return ErrAccessPolicyInvalidTransition
 	}
+
 	previous := ""
 	for _, field := range t.ChangedFields {
 		if !slices.Contains(accessPolicyTransitionFields, field) || field <= previous {
 			return ErrAccessPolicyInvalidTransition
 		}
+
 		previous = field
 	}
+
 	return nil
 }
 
 // accessPolicyTransitionFields are the only names a transition may record:
 // each replaceable setting, plus the one-shot revoke_existing_sessions choice.
 var accessPolicyTransitionFields = []string{
-	"desktop_authorization_enabled", "invitation_admission_enabled", "invitation_local_credential_enabled",
-	"local_login_enabled", "provider_admissions", "public_registration_enabled", "revoke_existing_sessions", "role_holder_mfa_required",
-	"session_absolute_minutes", "session_idle_minutes",
+	"desktop_authorization_enabled",
+	"invitation_admission_enabled",
+	"invitation_local_credential_enabled",
+	"local_login_enabled",
+	"provider_admissions",
+	"public_registration_enabled",
+	"revoke_existing_sessions",
+	"role_holder_mfa_required",
+	"session_absolute_minutes",
+	"session_idle_minutes",
 }
 
 func changedAccessPolicyFields(current, next AccessPolicySettings) []string {
@@ -326,30 +408,39 @@ func changedAccessPolicyFields(current, next AccessPolicySettings) []string {
 	if current.LocalLoginEnabled != next.LocalLoginEnabled {
 		changed = append(changed, "local_login_enabled")
 	}
+
 	if current.PublicRegistrationEnabled != next.PublicRegistrationEnabled {
 		changed = append(changed, "public_registration_enabled")
 	}
+
 	if current.InvitationAdmissionEnabled != next.InvitationAdmissionEnabled {
 		changed = append(changed, "invitation_admission_enabled")
 	}
+
 	if current.InvitationLocalCredentialEnabled != next.InvitationLocalCredentialEnabled {
 		changed = append(changed, "invitation_local_credential_enabled")
 	}
+
 	if current.DesktopAuthorizationEnabled != next.DesktopAuthorizationEnabled {
 		changed = append(changed, "desktop_authorization_enabled")
 	}
+
 	if !providerAdmissionsEqual(current.ProviderAdmissions, next.ProviderAdmissions) {
 		changed = append(changed, "provider_admissions")
 	}
+
 	if current.RoleHolderMFARequired != next.RoleHolderMFARequired {
 		changed = append(changed, "role_holder_mfa_required")
 	}
+
 	if current.SessionIdleMinutes != next.SessionIdleMinutes {
 		changed = append(changed, "session_idle_minutes")
 	}
+
 	if current.SessionAbsoluteMinutes != next.SessionAbsoluteMinutes {
 		changed = append(changed, "session_absolute_minutes")
 	}
+
 	slices.Sort(changed)
 	return changed
 }
@@ -387,8 +478,10 @@ func (p *AccessPolicy) Auditable() map[string]any {
 	if p == nil {
 		return map[string]any{}
 	}
+
 	return map[string]any{
-		"id": p.ID.String(), "revision": p.Revision,
+		"id":                                    p.ID.String(),
+		"revision":                              p.Revision,
 		"local_login_enabled":                   p.LocalLoginEnabled,
 		"public_registration_enabled":           p.PublicRegistrationEnabled,
 		"invitation_admission_enabled":          p.InvitationAdmissionEnabled,

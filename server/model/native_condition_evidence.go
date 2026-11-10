@@ -38,13 +38,32 @@ type NativeConditionEvidence struct {
 }
 
 func (v NativeConditionEvidence) Validate() error {
-	if !v.ID.IsValid() || !v.AttemptID.IsValid() || !v.ParticipationID.IsValid() || v.Generation < 1 || !securitySafeInt(v.Generation) || !IsValidAgreementID(v.StreamID) || !IsValidAgreementID(v.SecuritySessionID) || !v.PolicyRevisionID.IsValid() || !IsValidSHA256Fingerprint(v.PolicyDigest) || !IsValidAgreementID(v.ApplicationReleaseID) || !IsValidAgreementID(v.MatrixID) || v.BatchSequence < 1 || v.BatchSequence > NativeParticipationPositionLimit || v.RecordIndex < 0 || v.RecordIndex > 63 || v.Occurrence.Validate() != nil || !securityInstant(v.ReceivedAt) || !securityInstant(v.InterpretedAt) {
+	if !v.ID.IsValid() ||
+		!v.AttemptID.IsValid() ||
+		!v.ParticipationID.IsValid() ||
+		v.Generation < 1 ||
+		!securitySafeInt(v.Generation) ||
+		!IsValidAgreementID(v.StreamID) ||
+		!IsValidAgreementID(v.SecuritySessionID) ||
+		!v.PolicyRevisionID.IsValid() ||
+		!IsValidSHA256Fingerprint(v.PolicyDigest) ||
+		!IsValidAgreementID(v.ApplicationReleaseID) ||
+		!IsValidAgreementID(v.MatrixID) ||
+		v.BatchSequence < 1 ||
+		v.BatchSequence > NativeParticipationPositionLimit ||
+		v.RecordIndex < 0 ||
+		v.RecordIndex > 63 ||
+		v.Occurrence.Validate() != nil ||
+		!securityInstant(v.ReceivedAt) ||
+		!securityInstant(v.InterpretedAt) {
 		return ErrNativeDeliveryInvalid
 	}
+
 	raw, err := json.Marshal(v)
 	if err != nil || len(raw) > NativeConditionEvidenceMaxBytes {
 		return ErrNativeDeliveryInvalid
 	}
+
 	return nil
 }
 func (v NativeConditionEvidence) Clone() NativeConditionEvidence {
@@ -63,9 +82,13 @@ func NewNativeConditionInventory() NativeConditionInventory {
 	return NativeConditionInventory{Digest: SHA256Fingerprint([]byte("proctor.native_conditions"))}
 }
 func (v NativeConditionInventory) Validate() error {
-	if v.Records < 0 || v.Records > DeliveryAttemptRecordLimit || !IsValidSHA256Fingerprint(v.Digest) || (v.Records == 0 && v.Digest != NewNativeConditionInventory().Digest) {
+	if v.Records < 0 ||
+		v.Records > DeliveryAttemptRecordLimit ||
+		!IsValidSHA256Fingerprint(v.Digest) ||
+		(v.Records == 0 && v.Digest != NewNativeConditionInventory().Digest) {
 		return ErrNativeDeliveryInvalid
 	}
+
 	return nil
 }
 func (v NativeConditionInventory) Append(record []byte) (NativeConditionInventory, error) {

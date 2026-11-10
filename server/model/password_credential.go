@@ -72,6 +72,7 @@ func (pc *PasswordCredential) Validate() error {
 	if !pc.ID.IsValid() {
 		return invalidModelError(where, "password_credential", "id", "must be a valid identifier", "")
 	}
+
 	details := "id=" + pc.ID.String()
 	if pc.CreatedAt.IsZero() || pc.UpdatedAt.IsZero() {
 		return invalidModelError(where, "password_credential", "created_at", "must be set", details)
@@ -88,6 +89,7 @@ func (pc *PasswordCredential) Validate() error {
 	if !IsValidPasswordHash(pc.PasswordHash) {
 		return invalidModelError(where, "password_credential", "password_hash", "has an invalid length", details)
 	}
+
 	if pc.PasswordChangedAt.IsZero() || pc.PasswordChangedAt.Before(pc.CreatedAt) {
 		return invalidModelError(
 			where,
@@ -97,9 +99,11 @@ func (pc *PasswordCredential) Validate() error {
 			details,
 		)
 	}
+
 	if pc.ArchivedAt.Valid && pc.ArchivedAt.Time.Before(pc.CreatedAt) {
 		return invalidModelError(where, "password_credential", "archived_at", "must not precede created_at", details)
 	}
+
 	return nil
 }
 

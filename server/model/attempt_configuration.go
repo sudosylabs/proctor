@@ -41,14 +41,19 @@ type AttemptConfigurationPresentation struct {
 
 func (p AttemptConfigurationPresentation) Validate() error {
 	if !slices.Contains([]string{"light", "dark", "hcLight", "hcDark"}, p.ColorTheme) ||
-		p.ZoomPercent < 80 || p.ZoomPercent > 200 || p.EditorFontSizePX < 12 || p.EditorFontSizePX > 24 ||
-		p.EditorLineHeightPX < 16 || p.EditorLineHeightPX > 40 ||
+		p.ZoomPercent < 80 ||
+		p.ZoomPercent > 200 ||
+		p.EditorFontSizePX < 12 ||
+		p.EditorFontSizePX > 24 ||
+		p.EditorLineHeightPX < 16 ||
+		p.EditorLineHeightPX > 40 ||
 		!slices.Contains([]string{"auto", "on", "off"}, p.ScreenReaderMode) ||
 		!slices.Contains([]string{"auto", "verbose", "minimal"}, p.AnnouncementMode) ||
 		!slices.Contains([]string{"line", "block", "underline"}, p.CursorStyle) ||
 		!slices.Contains([]string{"blink", "smooth", "phase", "expand", "solid"}, p.CursorBlinking) {
 		return errAttemptConfiguration
 	}
+
 	return nil
 }
 
@@ -106,29 +111,39 @@ func ValidateAttemptApprovedIDs(ids []string) error {
 }
 
 func (c AttemptConfigurationCandidate) Validate() error {
-	if !IsValidSHA256Fingerprint(c.ManifestFingerprint) || !IsValidRegistryFingerprint(c.RegistryFingerprint) ||
-		!IsValidAgreementID(c.DesktopBuild) || !IsValidAgreementID(c.DesktopTarget) || !c.UserSettingsRevision.IsValid() ||
-		c.Presentation.Validate() != nil || ValidateAttemptApprovedIDs(c.ApprovedCommands) != nil ||
+	if !IsValidSHA256Fingerprint(c.ManifestFingerprint) ||
+		!IsValidRegistryFingerprint(c.RegistryFingerprint) ||
+		!IsValidAgreementID(c.DesktopBuild) ||
+		!IsValidAgreementID(c.DesktopTarget) ||
+		!c.UserSettingsRevision.IsValid() ||
+		c.Presentation.Validate() != nil ||
+		ValidateAttemptApprovedIDs(c.ApprovedCommands) != nil ||
 		ValidateAttemptApprovedIDs(c.ApprovedKeybindings) != nil {
 		return errAttemptConfiguration
 	}
+
 	// The complete frozen object must fit too; Freeze enforces that extra bound.
 	document, err := encodeCanonicalExamDocument(c)
 	if err != nil || len(document) > AttemptConfigurationMaxBytes {
 		return errAttemptConfiguration
 	}
+
 	return nil
 }
 
 // ValidateForBuild is for a new freeze only. Existing configurations instead
 // compare reproducibility with the current manifest, retaining original build metadata.
 func (c AttemptConfigurationCandidate) ValidateForBuild(build DesktopBuildTuple) error {
-	if c.Validate() != nil || build.Validate() != nil || c.DesktopBuild != build.DesktopBuildID ||
-		c.DesktopTarget != build.TargetTuple() || c.RegistryFingerprint != build.DesktopSettingsRegistryFingerprint ||
+	if c.Validate() != nil ||
+		build.Validate() != nil ||
+		c.DesktopBuild != build.DesktopBuildID ||
+		c.DesktopTarget != build.TargetTuple() ||
+		c.RegistryFingerprint != build.DesktopSettingsRegistryFingerprint ||
 		c.ManifestFingerprint != build.AttemptConfigurationManifestFingerprint ||
 		build.ConfigurationManifest.ValidateSelection(c.ApprovedCommands, c.ApprovedKeybindings) != nil {
 		return errAttemptConfiguration
 	}
+
 	return nil
 }
 
@@ -219,6 +234,7 @@ func (c *AttemptConfiguration) UnmarshalJSON(document []byte) error {
 	if c == nil || validateConfigurationShape(document, 10) != nil {
 		return errAttemptConfiguration
 	}
+
 	type candidate AttemptConfigurationCandidate
 	var decoded struct {
 		candidate
@@ -230,10 +246,16 @@ func (c *AttemptConfiguration) UnmarshalJSON(document []byte) error {
 	if decoder.Decode(&decoded) != nil {
 		return errAttemptConfiguration
 	}
-	value := AttemptConfiguration{AttemptConfigurationCandidate: AttemptConfigurationCandidate(decoded.candidate), Revision: decoded.Revision, Digest: decoded.Digest}
+
+	value := AttemptConfiguration{
+		AttemptConfigurationCandidate: AttemptConfigurationCandidate(decoded.candidate),
+		Revision:                      decoded.Revision,
+		Digest:                        decoded.Digest,
+	}
 	if value.Validate() != nil {
 		return errAttemptConfiguration
 	}
+
 	*c = value
 	return nil
 }
@@ -242,38 +264,66 @@ func validateConfigurationShape(document []byte, fields int) error {
 	if len(document) == 0 || len(document) > AttemptConfigurationMaxBytes || validateExamDocumentJSON(document) != nil {
 		return errAttemptConfiguration
 	}
+
 	var root map[string]json.RawMessage
 	if json.Unmarshal(document, &root) != nil || len(root) != fields {
 		return errAttemptConfiguration
 	}
-	keys := []string{"manifest_fingerprint", "registry_fingerprint", "desktop_build", "desktop_target", "user_settings_revision", "presentation", "approved_commands", "approved_keybindings"}
+
+	keys := []string{
+		"manifest_fingerprint",
+		"registry_fingerprint",
+		"desktop_build",
+		"desktop_target",
+		"user_settings_revision",
+		"presentation",
+		"approved_commands",
+		"approved_keybindings",
+	}
 	if fields == 10 {
 		keys = append(keys, "attempt_configuration_revision", "digest")
 	}
+
 	for _, key := range keys {
 		if _, ok := root[key]; !ok {
 			return errAttemptConfiguration
 		}
 	}
+
 	for _, value := range root {
 		if bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
 			return errAttemptConfiguration
 		}
 	}
+
 	var presentation map[string]json.RawMessage
 	if json.Unmarshal(root["presentation"], &presentation) != nil || len(presentation) != 10 {
 		return errAttemptConfiguration
 	}
-	for _, key := range []string{"color_theme", "prefer_high_contrast", "zoom_percent", "editor_font_size_px", "editor_line_height_px", "reduced_motion", "screen_reader_mode", "announcement_mode", "cursor_style", "cursor_blinking"} {
+
+	for _, key := range []string{
+		"color_theme",
+		"prefer_high_contrast",
+		"zoom_percent",
+		"editor_font_size_px",
+		"editor_line_height_px",
+		"reduced_motion",
+		"screen_reader_mode",
+		"announcement_mode",
+		"cursor_style",
+		"cursor_blinking",
+	} {
 		if _, ok := presentation[key]; !ok {
 			return errAttemptConfiguration
 		}
 	}
+
 	for _, value := range presentation {
 		if bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
 			return errAttemptConfiguration
 		}
 	}
+
 	return nil
 }
 
@@ -295,6 +345,7 @@ func SHA256Fingerprint(data []byte) string {
 }
 
 func IsValidSHA256Fingerprint(value string) bool {
-	return len(value) == len("sha256:")+sha256.Size*2 && value[:len("sha256:")] == "sha256:" &&
+	return len(value) == len("sha256:")+sha256.Size*2 &&
+		value[:len("sha256:")] == "sha256:" &&
 		validSHA256Fingerprint.MatchString(value[len("sha256:"):])
 }

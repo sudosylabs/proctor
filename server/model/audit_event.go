@@ -154,6 +154,7 @@ func (ae *AuditEvent) Validate() error {
 	if !ae.ID.IsValid() {
 		return invalidModelError(where, "audit_event", "id", "must be a valid identifier", "")
 	}
+
 	details := "id=" + ae.ID.String()
 	if ae.CreatedAt.IsZero() || ae.UpdatedAt.IsZero() {
 		return invalidModelError(where, "audit_event", "created_at", "must be set", details)
@@ -188,11 +189,13 @@ func (ae *AuditEvent) Validate() error {
 	if ae.NodeID == "" {
 		return invalidModelError(where, "audit_event", "node_id", "must not be empty", details)
 	}
+
 	if ae.IPAddress != "" {
 		if _, err := netip.ParseAddr(ae.IPAddress); err != nil {
 			return invalidModelError(where, "audit_event", "ip_address", "must be a valid IP address", details)
 		}
 	}
+
 	for field, value := range map[string]json.RawMessage{
 		"parameters":  ae.Parameters,
 		"prior_state": ae.PriorState,
@@ -202,6 +205,7 @@ func (ae *AuditEvent) Validate() error {
 			return invalidModelError(where, "audit_event", field, "must be bounded valid JSON", details)
 		}
 	}
+
 	return nil
 }
 

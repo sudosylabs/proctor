@@ -15,7 +15,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type relationshipUserStoreTestFake struct{}
+type relationshipUserStoreTestFake struct{ store.UserStore }
 
 func (relationshipUserStoreTestFake) Get(_ context.Context, id model.UserID) (*model.User, error) {
 	parsed, err := model.ParseUserID(id.String())

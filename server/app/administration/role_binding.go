@@ -23,12 +23,15 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// ListRoleBindingsQuery names either one User or one scope whose Role
+// Bindings to list.
 type ListRoleBindingsQuery struct {
 	UserID    model.UserID
 	ScopeType model.RoleScopeType
 	ScopeID   string
 }
 
+// CreateRoleBindingCommand binds a User to a Role at a scope.
 type CreateRoleBindingCommand struct {
 	UserID         model.UserID
 	RoleID         model.RoleID
@@ -40,6 +43,7 @@ type CreateRoleBindingCommand struct {
 	Batch          batchitem.Item
 }
 
+// EndRoleBindingCommand ends a Role Binding.
 type EndRoleBindingCommand struct {
 	ID             model.RoleBindingID
 	IdempotencyKey string
@@ -48,57 +52,9 @@ type EndRoleBindingCommand struct {
 	Batch          batchitem.Item
 }
 
-type roleBindingStore interface {
-	Get(context.Context, model.RoleBindingID) (*model.RoleBinding, error)
-	ListVisibleByUser(context.Context, model.UserID, store.UserVisibilityScope) ([]*model.RoleBinding, error)
-	ListByScope(context.Context, model.RoleScopeType, string) ([]*model.RoleBinding, error)
-	Save(context.Context, *store.RoleBindingCreation) (*model.RoleBinding, error)
-	End(context.Context, *store.RoleBindingEnd) (*model.RoleBinding, error)
-}
-
-type roleBindingRoleStore interface {
-	Get(context.Context, model.RoleID) (*model.Role, error)
-	GetIncludingArchived(context.Context, model.RoleID) (*model.Role, error)
-}
-
-type roleBindingUserStore interface {
-	Get(context.Context, model.UserID) (*model.User, error)
-}
-
-type roleBindingAuthorizer interface {
-	AuthorizeRoleBindingList(context.Context, invocation.Invocation, model.Action) (store.UserVisibilityScope, error)
-	AuthorizeRoleBindingPreflight(context.Context, invocation.Invocation, model.Action) error
-	AuthorizeRoleBindingScope(context.Context, invocation.Invocation, model.Action, model.RoleScopeType, string) (model.Resource, error)
-	AuthorizeActionDelegation(context.Context, invocation.Invocation, []string, model.RoleScopeType, string) error
-}
-
-type roleBindingEffects interface {
-	AuthorizationChangedForUser(context.Context, model.UserID)
-}
-
-// roleBindingServiceDependencies are the collaborators of roleBindingService;
-// newRoleBindingService validates them once and roleBindingService keeps them in deps.
-type roleBindingServiceDependencies struct {
-	Bindings      roleBindingStore
-	Roles         roleBindingRoleStore
-	Users         roleBindingUserStore
-	Authorization roleBindingAuthorizer
-	Capabilities  identity.AccessPolicyCapabilitySource
-	Audit         access.MutationAuditor
-	Mail          Mail
-	Effects       roleBindingEffects
-	Now           func() time.Time
-}
-
-type roleBindingService struct {
-	deps roleBindingServiceDependencies
-}
-
-func newRoleBindingService(deps roleBindingServiceDependencies) *roleBindingService {
-	return &roleBindingService{deps: deps}
-}
-
-func (s *roleBindingService) ListRoleBindings(ctx context.Context, invocation invocation.Invocation, query ListRoleBindingsQuery) ([]*model.RoleBinding, error) {
+// ListRoleBindings lists one User's Role Bindings within the caller's
+// visibility, or every Role Binding at one scope the caller may view.
+func (s *Service) ListRoleBindings(ctx context.Context, invocation invocation.Invocation, query ListRoleBindingsQuery) ([]*model.RoleBinding, error) {
 	userID := strings.TrimSpace(query.UserID.String())
 	scopeID := strings.TrimSpace(query.ScopeID)
 	switch {
@@ -106,11 +62,11 @@ func (s *roleBindingService) ListRoleBindings(ctx context.Context, invocation in
 		if !model.UserID(userID).IsValid() {
 			return nil, apperror.New("request.invalid").WithField("field", "user_id")
 		}
-		visibility, err := s.deps.Authorization.AuthorizeRoleBindingList(ctx, invocation, model.ActionRoleBindingView)
+		visibility, err := s.authorizeRoleBindingList(ctx, invocation, model.ActionRoleBindingView)
 		if err != nil {
 			return nil, err
 		}
-		bindings, err := s.deps.Bindings.ListVisibleByUser(ctx, model.UserID(userID), visibility)
+		bindings, err := s.roleBindings.ListVisibleByUser(ctx, model.UserID(userID), visibility)
 		if err != nil {
 			return nil, RoleBindingStoreErrors.Translate(err)
 		}
@@ -119,10 +75,10 @@ func (s *roleBindingService) ListRoleBindings(ctx context.Context, invocation in
 		}
 		return bindings, nil
 	case userID == "" && query.ScopeType.IsValid() && model.IsValidOpaqueID(scopeID):
-		if _, err := s.deps.Authorization.AuthorizeRoleBindingScope(ctx, invocation, model.ActionRoleBindingView, query.ScopeType, scopeID); err != nil {
+		if _, err := s.authorizer.AuthorizeRoleBindingScope(ctx, invocation, model.ActionRoleBindingView, query.ScopeType, scopeID); err != nil {
 			return nil, err
 		}
-		bindings, err := s.deps.Bindings.ListByScope(ctx, query.ScopeType, scopeID)
+		bindings, err := s.roleBindings.ListByScope(ctx, query.ScopeType, scopeID)
 		if err != nil {
 			return nil, RoleBindingStoreErrors.Translate(err)
 		}
@@ -135,7 +91,10 @@ func (s *roleBindingService) ListRoleBindings(ctx context.Context, invocation in
 	}
 }
 
-func (s *roleBindingService) CreateRoleBinding(ctx context.Context, invocation invocation.Invocation, command CreateRoleBindingCommand) (*model.RoleBinding, error) {
+// CreateRoleBinding binds a User to a Role at a scope the caller manages,
+// when the caller may delegate the Role's permissions there. It prepares the
+// assignment notice and drops the User's cached authorization after commit.
+func (s *Service) CreateRoleBinding(ctx context.Context, invocation invocation.Invocation, command CreateRoleBindingCommand) (*model.RoleBinding, error) {
 	userID, err := model.ParseUserID(strings.TrimSpace(command.UserID.String()))
 	if err != nil {
 		return nil, apperror.New("request.invalid").WithField("field", "user_id")
@@ -151,7 +110,7 @@ func (s *roleBindingService) CreateRoleBinding(ctx context.Context, invocation i
 	if command.StartAt < 0 || (command.EndAt != 0 && command.EndAt <= command.StartAt) {
 		return nil, apperror.New("request.invalid").WithField("field", "role_binding")
 	}
-	resource, err := s.deps.Authorization.AuthorizeRoleBindingScope(
+	resource, err := s.authorizer.AuthorizeRoleBindingScope(
 		ctx, invocation, model.ActionRoleBindingManage, command.ScopeType, scopeID,
 	)
 	if err != nil {
@@ -171,7 +130,7 @@ func (s *roleBindingService) CreateRoleBinding(ctx context.Context, invocation i
 	if err != nil {
 		return nil, err
 	}
-	mailAt := model.TimeUTC(s.deps.Now())
+	mailAt := model.TimeUTC(s.now())
 	recipient, notice, err := s.prepareRoleAssignmentNotice(ctx, command, candidate, mailAt)
 	if err != nil {
 		return nil, err
@@ -198,7 +157,7 @@ func (s *roleBindingService) CreateRoleBinding(ctx context.Context, invocation i
 	batchitem.BindBatch(idempotency, command.Batch.Fields().Metadata)
 	saved, err := access.RunAudited(
 		ctx,
-		s.deps.Audit,
+		s.auditor,
 		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionRoleBindingManage,
@@ -215,7 +174,7 @@ func (s *roleBindingService) CreateRoleBinding(ctx context.Context, invocation i
 				ExpectedRecipientRevision: recipient.Revision, Notice: notice,
 				AuditEventID: reference.ID, AuditAt: reference.MutationAt, Command: idempotency,
 			}
-			value, storeErr := s.deps.Bindings.Save(ctx, input)
+			value, storeErr := s.roleBindings.Save(ctx, input)
 			if command.Batch.Fields().Replayed != nil {
 				*command.Batch.Fields().Replayed = input.Replayed || input.NoOp
 			}
@@ -226,20 +185,20 @@ func (s *roleBindingService) CreateRoleBinding(ctx context.Context, invocation i
 	if err != nil {
 		return nil, err
 	}
-	s.deps.Effects.AuthorizationChangedForUser(ctx, saved.UserID)
+	s.effects.InvalidateAuthorization(ctx, saved.UserID)
 	return saved, nil
 }
 
 // authorizeRoleDelegation loads the bound Role and authorizes delegating its permissions at the candidate scope.
-func (s *roleBindingService) authorizeRoleDelegation(
+func (s *Service) authorizeRoleDelegation(
 	ctx context.Context, invocation invocation.Invocation, command CreateRoleBindingCommand, candidate *model.RoleBinding,
 ) (*model.Role, []string, error) {
 	var role *model.Role
 	var err error
 	if command.Batch.Fields().RetainedOutcome {
-		role, err = s.deps.Roles.GetIncludingArchived(ctx, candidate.RoleID)
+		role, err = s.roles.GetIncludingArchived(ctx, candidate.RoleID)
 	} else {
-		role, err = s.deps.Roles.Get(ctx, candidate.RoleID)
+		role, err = s.roles.Get(ctx, candidate.RoleID)
 	}
 	if err != nil {
 		return nil, nil, RoleBindingStoreErrors.Translate(err)
@@ -255,7 +214,7 @@ func (s *roleBindingService) authorizeRoleDelegation(
 		// action recognized by this binary is still checked.
 		delegatedPermissions = model.AllActions()
 	}
-	if err = s.deps.Authorization.AuthorizeActionDelegation(
+	if err = s.authorizeActionDelegation(
 		ctx, invocation, delegatedPermissions, candidate.ScopeType, candidate.ScopeID,
 	); err != nil {
 		return nil, nil, err
@@ -264,14 +223,14 @@ func (s *roleBindingService) authorizeRoleDelegation(
 }
 
 // prepareRoleAssignmentNotice loads the recipient and prepares the Role assignment mail unless the batch retained the outcome.
-func (s *roleBindingService) prepareRoleAssignmentNotice(
+func (s *Service) prepareRoleAssignmentNotice(
 	ctx context.Context, command CreateRoleBindingCommand, candidate *model.RoleBinding, mailAt time.Time,
 ) (*model.User, *store.PreparedMail, error) {
 	recipient := &model.User{ID: candidate.UserID, Revision: 1}
 	var notice *store.PreparedMail
 	if !command.Batch.Fields().RetainedOutcome {
 		var err error
-		recipient, err = s.deps.Users.Get(ctx, candidate.UserID)
+		recipient, err = s.users.Get(ctx, candidate.UserID)
 		if err != nil {
 			return nil, nil, RoleBindingStoreErrors.Translate(err)
 		}
@@ -279,7 +238,7 @@ func (s *roleBindingService) prepareRoleAssignmentNotice(
 		if candidate.ScopeType == model.RoleScopeInstitution {
 			key = model.MailTemplateAuthorizationInstitutionRoleAssigned
 		}
-		notice, err = s.deps.Mail.PrepareRelationshipTransition(mail.RelationshipTransitionPreparation{
+		notice, err = s.mail.PrepareRelationshipTransition(mail.RelationshipTransitionPreparation{
 			Recipient: recipient, OccurrenceID: model.NewMailOccurrenceID(), TemplateKey: key, ActionAt: mailAt,
 		})
 		if err != nil {
@@ -289,19 +248,22 @@ func (s *roleBindingService) prepareRoleAssignmentNotice(
 	return recipient, notice, nil
 }
 
-func (s *roleBindingService) EndRoleBinding(ctx context.Context, invocation invocation.Invocation, command EndRoleBindingCommand) (*model.RoleBinding, error) {
+// EndRoleBinding ends a Role Binding at a scope the caller manages. It
+// prepares the ending notice and drops the User's cached authorization after
+// commit.
+func (s *Service) EndRoleBinding(ctx context.Context, invocation invocation.Invocation, command EndRoleBindingCommand) (*model.RoleBinding, error) {
 	id := command.ID
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "role_binding_id")
 	}
-	if err := s.deps.Authorization.AuthorizeRoleBindingPreflight(ctx, invocation, model.ActionRoleBindingManage); err != nil {
+	if err := s.authorizer.AuthorizeRoleBindingPreflight(ctx, invocation, model.ActionRoleBindingManage); err != nil {
 		return nil, err
 	}
-	current, err := s.deps.Bindings.Get(ctx, id)
+	current, err := s.roleBindings.Get(ctx, id)
 	if err != nil {
 		return nil, RoleBindingStoreErrors.Translate(err)
 	}
-	resource, err := s.deps.Authorization.AuthorizeRoleBindingScope(
+	resource, err := s.authorizer.AuthorizeRoleBindingScope(
 		ctx, invocation, model.ActionRoleBindingManage, current.ScopeType, current.ScopeID,
 	)
 	if err != nil {
@@ -321,11 +283,11 @@ func (s *roleBindingService) EndRoleBinding(ctx context.Context, invocation invo
 	batchitem.BindOnboardingImport(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
 	batchitem.BindAuthorization(idempotency, command.Batch.Fields().Authorization)
 	batchitem.BindBatch(idempotency, command.Batch.Fields().Metadata)
-	mailAt := model.TimeUTC(s.deps.Now())
+	mailAt := model.TimeUTC(s.now())
 	recipient := &model.User{ID: current.UserID, Revision: 1}
 	var notice *store.PreparedMail
 	if !command.Batch.Fields().RetainedOutcome {
-		recipient, err = s.deps.Users.Get(ctx, current.UserID)
+		recipient, err = s.users.Get(ctx, current.UserID)
 		if err != nil {
 			return nil, RoleBindingStoreErrors.Translate(err)
 		}
@@ -333,7 +295,7 @@ func (s *roleBindingService) EndRoleBinding(ctx context.Context, invocation invo
 		if current.ScopeType == model.RoleScopeInstitution {
 			key = model.MailTemplateAuthorizationInstitutionRoleEnded
 		}
-		notice, err = s.deps.Mail.PrepareRelationshipTransition(mail.RelationshipTransitionPreparation{
+		notice, err = s.mail.PrepareRelationshipTransition(mail.RelationshipTransitionPreparation{
 			Recipient: recipient, OccurrenceID: model.NewMailOccurrenceID(), TemplateKey: key, ActionAt: mailAt,
 		})
 		if err != nil {
@@ -342,7 +304,7 @@ func (s *roleBindingService) EndRoleBinding(ctx context.Context, invocation invo
 	}
 	ended, err := access.RunAudited(
 		ctx,
-		s.deps.Audit,
+		s.auditor,
 		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionRoleBindingManage,
@@ -357,10 +319,10 @@ func (s *roleBindingService) EndRoleBinding(ctx context.Context, invocation invo
 			input := &store.RoleBindingEnd{
 				ID: id, EndAt: reference.MutationAt,
 				ExpectedRecipientRevision: recipient.Revision, Notice: notice,
-				Capabilities: identity.AccessDeploymentCapabilities(s.deps.Capabilities.Snapshot()),
+				Capabilities: identity.AccessDeploymentCapabilities(s.capabilities.Snapshot()),
 				AuditEventID: reference.ID, AuditAt: reference.MutationAt, Command: idempotency,
 			}
-			value, storeErr := s.deps.Bindings.End(ctx, input)
+			value, storeErr := s.roleBindings.End(ctx, input)
 			if command.Batch.Fields().Replayed != nil {
 				*command.Batch.Fields().Replayed = input.Replayed || input.NoOp
 			}
@@ -371,16 +333,43 @@ func (s *roleBindingService) EndRoleBinding(ctx context.Context, invocation invo
 	if err != nil {
 		return nil, err
 	}
-	s.deps.Effects.AuthorizationChangedForUser(ctx, ended.UserID)
+	s.effects.InvalidateAuthorization(ctx, ended.UserID)
 	return ended, nil
 }
 
-type roleBindingRealtimeEffects struct {
-	effects identity.AuthorizationInvalidationEffects
-}
-
-func (e roleBindingRealtimeEffects) AuthorizationChangedForUser(ctx context.Context, userID model.UserID) {
-	e.effects.InvalidateAuthorization(ctx, userID)
+// authorizeRoleBindingList authorizes listing a User's Role Bindings and
+// returns the scopes whose bindings the caller may see. It records exactly one
+// authorization decision, at the Institution or the first granted scope.
+func (s *Service) authorizeRoleBindingList(ctx context.Context, invocation invocation.Invocation, action model.Action) (store.UserVisibilityScope, error) {
+	constraint, err := s.authorizer.GrantedScopes(ctx, invocation.Principal(), action, model.ResourceInstitution)
+	if err != nil {
+		return store.UserVisibilityScope{}, err
+	}
+	institution, err := s.institutions.GetSingleton(ctx)
+	if err != nil {
+		return store.UserVisibilityScope{}, roleStoreErrors.Translate(err)
+	}
+	allowed := constraint.InstitutionWide || len(constraint.AcademicUnitRootIDs) > 0 || len(constraint.ClassIDs) > 0
+	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
+	scopeType, scopeID := model.RoleScopeInstitution, institution.ID.String()
+	if len(constraint.AcademicUnitRootIDs) > 0 {
+		resource = model.Resource{Type: model.ResourceAcademicUnit, ID: constraint.AcademicUnitRootIDs[0].String()}
+		scopeType, scopeID = model.RoleScopeAcademicUnit, resource.ID
+	} else if len(constraint.ClassIDs) > 0 {
+		resource = model.Resource{Type: model.ResourceClass, ID: constraint.ClassIDs[0].String()}
+		scopeType, scopeID = model.RoleScopeClass, resource.ID
+	}
+	if err := s.authorizer.RecordAuthorizationDecision(ctx, invocation.Principal(), action, resource, scopeType, scopeID, invocation.RequestMetadata(), allowed); err != nil {
+		return store.UserVisibilityScope{}, err
+	}
+	if !allowed {
+		return store.UserVisibilityScope{}, access.DeniedError()
+	}
+	return store.UserVisibilityScope{
+		InstitutionWide:     constraint.InstitutionWide,
+		AcademicUnitRootIDs: append([]model.AcademicUnitID(nil), constraint.AcademicUnitRootIDs...),
+		ClassIDs:            append([]model.ClassID(nil), constraint.ClassIDs...),
+	}, nil
 }
 
 // RoleBindingStoreErrors translates Role Binding Store failures into public

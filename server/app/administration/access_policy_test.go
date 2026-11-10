@@ -24,6 +24,7 @@ import (
 )
 
 type accessPolicyStoreFake struct {
+	store.AccessPolicyStore
 	snapshot       *store.AccessPolicySnapshot
 	blockers       []store.AccessPolicyBlocker
 	preflightInput *store.AccessPolicyPreflight
@@ -53,13 +54,6 @@ func (s *accessPolicyStoreFake) HasRoleHolderMFARequirement(_ context.Context, u
 func (s *accessPolicyStoreFake) Replace(_ context.Context, input *store.AccessPolicyReplacement, command *store.CommandIdempotency) (*store.AccessPolicyReplacementResult, error) {
 	s.replaceInput, s.command = input, command
 	return s.result, s.replaceErr
-}
-
-type accessPolicyAuthorizationFake struct{ action model.Action }
-
-func (a *accessPolicyAuthorizationFake) Authorize(_ context.Context, _ invocation.Invocation, action model.Action, _ model.Resource) error {
-	a.action = action
-	return nil
 }
 
 type accessPolicyCapabilitiesFake struct {
@@ -96,14 +90,7 @@ func (a *accessPolicyAuditFake) Fail(_ context.Context, id model.AuditEventID, c
 	return a.failErr
 }
 
-type accessPolicyEffectsFake struct{ changes []AccessPolicyChange }
-
-func (e *accessPolicyEffectsFake) AccessPolicyChanged(_ context.Context, change AccessPolicyChange) error {
-	e.changes = append(e.changes, change)
-	return nil
-}
-
-func accessPolicyFixture(t *testing.T) (*accessPolicyService, *accessPolicyStoreFake, *accessPolicyCapabilitiesFake, *accessPolicyEffectsFake, *accessPolicyAuditFake, invocation.Invocation) {
+func accessPolicyFixture(t *testing.T) (*Service, *accessPolicyStoreFake, *accessPolicyCapabilitiesFake, *effectsFake, *accessPolicyAuditFake, invocation.Invocation) {
 	t.Helper()
 	at := time.UnixMilli(1_000)
 	institution, err := model.NewInstitution(model.NewInstitutionID(), "northbridge", "Northbridge", "", at)
@@ -114,25 +101,21 @@ func accessPolicyFixture(t *testing.T) (*accessPolicyService, *accessPolicyStore
 		Providers:   []identity.AccessPolicyProviderCapability{{Descriptor: model.ExternalAuthenticationProvider{ID: "campus-oidc", DisplayName: "Campus", Type: "oidc"}, AutoProvision: true}},
 		DurableMail: true,
 	}}
-	effects := &accessPolicyEffectsFake{}
+	effects := &effectsFake{}
 	audit := &accessPolicyAuditFake{beginID: model.NewID()}
-	service, err := newAccessPolicyService(accessPolicyServiceDependencies{Policies: persistence, Institutions: &accessPolicyInstitutionFake{institution}, Authorization: &accessPolicyAuthorizationFake{}, Capabilities: capabilities, Audit: audit, Effects: effects, EffectFailures: accessPolicyEffectFailuresFake{}, CanonicalOrigin: "https://proctor.example.edu", SupportAddress: " Help@Example.edu ", PasswordMinimumLength: 12, RecentAuthenticationTTL: time.Minute, Now: func() time.Time { return at.Add(time.Minute) }})
+	service, err := New(Dependencies{
+		Store: &catalogFake{accessPolicies: persistence, institutions: &institutionStoreFake{institution: institution},
+			retentionPolicies: &retentionPolicyStoreFake{}, retention: &retentionLifecycleFake{}},
+		Authorizer: &resourceAuthorizerFake{}, Capabilities: capabilities, Auditor: audit, Effects: effects,
+		CanonicalOrigin: "https://proctor.example.edu", SupportAddress: " Help@Example.edu ", PasswordMinimumLength: 12,
+		RecentAuthenticationTTL: time.Minute, Now: func() time.Time { return at.Add(time.Minute) },
+	})
 	require.NoError(t, err)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		AuthenticatedAt: at, MFACompletedAt: model.OptionalTimeFrom(at.Add(30 * time.Second)), ClientType: model.SessionClientWeb}
 	return service, persistence, capabilities, effects, audit, invocation.New(principal, model.RequestMetadata{RequestID: "request-1"})
 }
-
-type accessPolicyInstitutionFake struct{ institution *model.Institution }
-
-func (s *accessPolicyInstitutionFake) GetSingleton(context.Context) (*model.Institution, error) {
-	return s.institution, nil
-}
-
-type accessPolicyEffectFailuresFake struct{}
-
-func (accessPolicyEffectFailuresFake) Report(context.Context, string, error) {}
 
 func TestAccessPolicyPreflightUsesCurrentDeploymentCapabilities(t *testing.T) {
 	t.Parallel()
@@ -357,7 +340,7 @@ func TestPublicAccessDiscoveryPublishesOperatorPresentationBeforeInitialization(
 	require.Equal(t, "help@example.edu", discovery.SupportAddress)
 	require.Equal(t, 12, discovery.PasswordMinimumLength)
 
-	service.deps.Institutions = &accessPolicyInstitutionNotFoundFake{}
+	service.institutions = &institutionStoreFake{err: store.NewErrNotFound("institution", "singleton")}
 	discovery, err = service.DiscoverAccess(context.Background(), invocation.Invocation{})
 	require.NoError(t, err)
 	require.False(t, discovery.Initialized)
@@ -368,28 +351,22 @@ func TestPublicAccessDiscoveryPublishesOperatorPresentationBeforeInitialization(
 func TestAccessPolicyServiceRejectsInvalidPublicPresentation(t *testing.T) {
 	t.Parallel()
 	service, _, _, _, _, _ := accessPolicyFixture(t)
-	for name, mutate := range map[string]func(*accessPolicyServiceDependencies){
-		"support address":         func(deps *accessPolicyServiceDependencies) { deps.SupportAddress = "not an address" },
-		"password minimum length": func(deps *accessPolicyServiceDependencies) { deps.PasswordMinimumLength = 0 },
+	for name, mutate := range map[string]func(*Dependencies){
+		"support address":         func(deps *Dependencies) { deps.SupportAddress = "not an address" },
+		"password minimum length": func(deps *Dependencies) { deps.PasswordMinimumLength = 0 },
 	} {
 		t.Run(name, func(t *testing.T) {
-			deps := service.deps
+			deps := dependenciesOf(service)
 			mutate(&deps)
-			_, err := newAccessPolicyService(deps)
+			_, err := New(deps)
 			require.Error(t, err)
 		})
 	}
-	deps := service.deps
+	deps := dependenciesOf(service)
 	deps.SupportAddress = ""
-	empty, err := newAccessPolicyService(deps)
+	empty, err := New(deps)
 	require.NoError(t, err)
 	discovery, err := empty.DiscoverAccess(context.Background(), invocation.Invocation{})
 	require.NoError(t, err)
 	require.Empty(t, discovery.SupportAddress)
-}
-
-type accessPolicyInstitutionNotFoundFake struct{}
-
-func (accessPolicyInstitutionNotFoundFake) GetSingleton(context.Context) (*model.Institution, error) {
-	return nil, store.NewErrNotFound("institution", "singleton")
 }

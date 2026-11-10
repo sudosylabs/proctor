@@ -24,7 +24,7 @@ import (
 func TestRetentionPolicyReadAuthorizesExactInstitutionAndReturnsCopy(t *testing.T) {
 	t.Parallel()
 	fixture := newRetentionPolicyFixture(t)
-	application := &Service{retentionPolicyService: fixture.service}
+	application := fixture.service
 	result, err := application.GetRetentionPolicy(t.Context(), fixture.invocation)
 	require.NoError(t, err, "GetRetentionPolicy")
 	require.NotNil(t, result, "GetRetentionPolicy")
@@ -47,7 +47,7 @@ func TestRetentionPolicyReadRejectsUnavailableOrForeignFacts(t *testing.T) {
 		name  string
 		alter func(*retentionPolicyFixture)
 	}{
-		{"missing Institution", func(f *retentionPolicyFixture) { f.service.deps.Institutions = &accessPolicyInstitutionFake{} }},
+		{"missing Institution", func(f *retentionPolicyFixture) { f.service.institutions = &institutionStoreFake{} }},
 		{"missing policy", func(f *retentionPolicyFixture) { f.policies.policy = nil }},
 		{"Store failure", func(f *retentionPolicyFixture) { f.policies.getErr = errors.New("unavailable") }},
 		{"invalid policy", func(f *retentionPolicyFixture) { f.policies.policy.Revision = 0 }},
@@ -132,7 +132,7 @@ func TestRetentionPolicyReplacementPassesAtomicAuditAndIdempotency(t *testing.T)
 	next := fixture.policies.policy.Clone()
 	require.NoError(t, next.Replace(1, command.Settings, fixture.at))
 	fixture.policies.result = &store.RetentionPolicyReplacementResult{Policy: next, Changed: true}
-	application := &Service{retentionPolicyService: fixture.service}
+	application := fixture.service
 	result, err := application.ReplaceRetentionPolicy(t.Context(), fixture.invocation, command)
 	require.NoError(t, err, "replace")
 	require.NotNil(t, result, "replace")
@@ -149,7 +149,7 @@ func TestRetentionPolicyReplacementPassesAtomicAuditAndIdempotency(t *testing.T)
 	input, idempotency := fixture.policies.replaceInput, fixture.policies.command
 	require.NotNil(t, input, "atomic input")
 	require.Equal(t, fixture.invocation.Principal(), input.Principal, "atomic input")
-	require.Equal(t, fixture.service.deps.RecentAuthenticationTTL, input.RecentAuthenticationTTL, "atomic input")
+	require.Equal(t, fixture.service.recentAuthenticationTTL, input.RecentAuthenticationTTL, "atomic input")
 	require.Equal(t, int64(1), input.ExpectedRevision, "atomic input")
 	require.Equal(t, command.Settings, input.Settings, "atomic input")
 	require.Equal(t, model.AuditEventID(fixture.audit.beginID), input.AuditEventID, "atomic input")
@@ -276,27 +276,35 @@ func TestRetentionPolicyReplacementRejectsMalformedOrForeignOutcome(t *testing.T
 
 func TestRetentionPolicyConstructionRejectsIncompleteDependencies(t *testing.T) {
 	t.Parallel()
-	for _, omit := range []func(*retentionPolicyService){
-		func(s *retentionPolicyService) { s.deps.Policies = nil },
-		func(s *retentionPolicyService) { s.deps.Lifecycle = nil },
-		func(s *retentionPolicyService) { s.deps.Institutions = nil },
-		func(s *retentionPolicyService) { s.deps.Authorization = nil },
-		func(s *retentionPolicyService) { s.deps.Audit = nil },
-		func(s *retentionPolicyService) { s.deps.RecentAuthenticationTTL = 0 },
-		func(s *retentionPolicyService) { s.deps.Now = nil },
+	complete := func() Dependencies {
+		deps := dependenciesOf(newRetentionPolicyFixture(t).service)
+		deps.Store.(*catalogFake).accessPolicies = &accessPolicyStoreFake{}
+		deps.Capabilities, deps.Effects = &accessPolicyCapabilitiesFake{}, &effectsFake{}
+		deps.CanonicalOrigin, deps.PasswordMinimumLength = "https://proctor.example.edu", 12
+		return deps
+	}
+	_, err := New(complete())
+	require.NoError(t, err, "complete construction failed")
+	for _, omit := range []func(*Dependencies){
+		func(d *Dependencies) { d.Store.(*catalogFake).retentionPolicies = nil },
+		func(d *Dependencies) { d.Store.(*catalogFake).retention = nil },
+		func(d *Dependencies) { d.Store.(*catalogFake).institutions = nil },
+		func(d *Dependencies) { d.Authorizer = nil },
+		func(d *Dependencies) { d.Auditor = nil },
+		func(d *Dependencies) { d.RecentAuthenticationTTL = 0 },
+		func(d *Dependencies) { d.Now = nil },
 	} {
-		fixture := newRetentionPolicyFixture(t)
-		candidate := *fixture.service
-		omit(&candidate)
-		_, err := newRetentionPolicyService(retentionPolicyServiceDependencies{Policies: candidate.deps.Policies, Lifecycle: candidate.deps.Lifecycle, Institutions: candidate.deps.Institutions, Authorization: candidate.deps.Authorization, Audit: candidate.deps.Audit, RecentAuthenticationTTL: candidate.deps.RecentAuthenticationTTL, Now: candidate.deps.Now})
+		deps := complete()
+		omit(&deps)
+		_, err := New(deps)
 		require.Error(t, err, "incomplete retention policy construction succeeded")
 	}
 }
 
 type retentionPolicyFixture struct {
-	service       *retentionPolicyService
+	service       *Service
 	policies      *retentionPolicyStoreFake
-	authorization *retentionPolicyAuthorizationFake
+	authorization *resourceAuthorizerFake
 	audit         *accessPolicyAuditFake
 	institution   *model.Institution
 	invocation    invocation.Invocation
@@ -309,10 +317,10 @@ func newRetentionPolicyFixture(t *testing.T) retentionPolicyFixture {
 	institution := &model.Institution{ID: model.NewInstitutionID()}
 	policy := model.NewInitialRetentionPolicy(institution.ID, at.Add(-time.Hour))
 	policies := &retentionPolicyStoreFake{policy: policy, result: &store.RetentionPolicyReplacementResult{Policy: policy}}
-	authorization := &retentionPolicyAuthorizationFake{}
+	authorization := &resourceAuthorizerFake{}
 	audit := &accessPolicyAuditFake{beginID: model.NewAuditEventID().String()}
-	service, err := newRetentionPolicyService(retentionPolicyServiceDependencies{Policies: policies, Lifecycle: &retentionLifecycleFake{}, Institutions: &accessPolicyInstitutionFake{institution: institution}, Authorization: authorization, Audit: audit, RecentAuthenticationTTL: time.Minute, Now: func() time.Time { return at }})
-	require.NoError(t, err)
+	service := &Service{retentionPolicies: policies, retention: &retentionLifecycleFake{}, institutions: &institutionStoreFake{institution: institution},
+		authorizer: authorization, auditor: audit, recentAuthenticationTTL: time.Minute, now: func() time.Time { return at }}
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		AuthenticatedAt: at, MFACompletedAt: model.OptionalTimeFrom(at), ClientType: model.SessionClientWeb}
@@ -326,6 +334,7 @@ func retentionPolicyCommand() ReplaceRetentionPolicyCommand {
 }
 
 type retentionPolicyStoreFake struct {
+	store.RetentionPolicyStore
 	policy       *model.RetentionPolicy
 	getCalls     int
 	getErr       error
@@ -345,14 +354,17 @@ func (s *retentionPolicyStoreFake) Replace(_ context.Context, input *store.Reten
 	return s.result, s.replaceErr
 }
 
-type retentionPolicyAuthorizationFake struct {
+// resourceAuthorizerFake stands for *access.Authorizer where a use case
+// authorizes one Action on the Institution, recording the last decision.
+type resourceAuthorizerFake struct {
+	Authorizer
 	action   model.Action
 	resource model.Resource
 	calls    int
 	err      error
 }
 
-func (a *retentionPolicyAuthorizationFake) Authorize(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource) error {
+func (a *resourceAuthorizerFake) Authorize(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource) error {
 	a.action, a.resource = action, resource
 	a.calls++
 	return a.err

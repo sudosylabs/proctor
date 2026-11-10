@@ -22,7 +22,7 @@ type RetentionNoticePage struct {
 
 // ListRetentionNotices returns only the current recipient's durable notices.
 // It grants no underlying record access and has no read-acknowledgement effect.
-func (s *retentionPolicyService) ListRetentionNotices(ctx context.Context, invocation invocation.Invocation, after model.RetentionRetirementID, limit int) (*RetentionNoticePage, error) {
+func (s *Service) ListRetentionNotices(ctx context.Context, invocation invocation.Invocation, after model.RetentionRetirementID, limit int) (*RetentionNoticePage, error) {
 	principal := invocation.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return nil, apperror.New("authentication.required")
@@ -30,7 +30,7 @@ func (s *retentionPolicyService) ListRetentionNotices(ctx context.Context, invoc
 	if limit < 1 || limit > model.RetentionMaximumPageSize || (!after.IsZero() && !after.IsValid()) {
 		return nil, apperror.New("retention.invalid")
 	}
-	items, err := s.deps.Lifecycle.ListNotices(ctx, principal.UserID, after, limit+1)
+	items, err := s.retention.ListNotices(ctx, principal.UserID, after, limit+1)
 	if err != nil {
 		return nil, retentionError(err)
 	}

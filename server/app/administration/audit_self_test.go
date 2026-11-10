@@ -58,7 +58,7 @@ func TestSelfAuditListingProjectsOnlyTheCallersFacts(t *testing.T) {
 		ClientType: "desktop", IPAddress: "192.0.2.10", UserAgent: "Proctor Desktop",
 	}
 	persistence := &auditListingStoreFake{events: &events, self: []*store.AuditSelfEntry{ownChange, adminReset, failedSignIn, roleGrant, enrolledOther}, count: 5}
-	service := newAuditListingService(auditListingServiceDependencies{Audits: persistence, Authorization: &auditListingAuthorizerFake{events: &events}})
+	service := &Service{audits: persistence, authorizer: &auditListingAuthorizerFake{events: &events}}
 
 	page, err := service.ListSelfAuditEvents(context.Background(), caller, ListSelfAuditEventsQuery{Limit: 4})
 	require.NoError(t, err)
@@ -116,7 +116,7 @@ func TestSelfAuditListingNarrowsTheCatalogue(t *testing.T) {
 	t.Parallel()
 	events := []string{}
 	persistence := &auditListingStoreFake{events: &events}
-	service := newAuditListingService(auditListingServiceDependencies{Audits: persistence, Authorization: &auditListingAuthorizerFake{events: &events}})
+	service := &Service{audits: persistence, authorizer: &auditListingAuthorizerFake{events: &events}}
 	since := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	_, err := service.ListSelfAuditEvents(context.Background(), selfAuditSessionInvocation(), ListSelfAuditEventsQuery{
 		Events: []model.AuditSelfEvent{model.AuditSelfEventSignInFailed, model.AuditSelfEventPasswordChanged},
@@ -144,7 +144,7 @@ func TestSelfAuditListingRejectsInvalidQueriesAndNonSessionCallers(t *testing.T)
 	t.Parallel()
 	events := []string{}
 	persistence := &auditListingStoreFake{events: &events}
-	service := newAuditListingService(auditListingServiceDependencies{Audits: persistence, Authorization: &auditListingAuthorizerFake{events: &events}})
+	service := &Service{audits: persistence, authorizer: &auditListingAuthorizerFake{events: &events}}
 	at := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	for name, query := range map[string]ListSelfAuditEventsQuery{
 		"limit":         {Limit: 201},
@@ -178,7 +178,7 @@ func TestSelfAuditListingRefusesRowsOutsideTheCallersHistory(t *testing.T) {
 			Action: string(model.ActionMFAActivate), Status: model.AuditStatusAttempt, Resource: model.Resource{Type: model.ResourceInstitution, ID: model.NewID()}},
 	} {
 		persistence := &auditListingStoreFake{events: &events, self: []*store.AuditSelfEntry{entry}}
-		service := newAuditListingService(auditListingServiceDependencies{Audits: persistence, Authorization: &auditListingAuthorizerFake{events: &events}})
+		service := &Service{audits: persistence, authorizer: &auditListingAuthorizerFake{events: &events}}
 		_, err := service.ListSelfAuditEvents(context.Background(), caller, ListSelfAuditEventsQuery{})
 		require.True(t, apperror.Is(err, "audit.unavailable"), "%s escaped: %v", name, err)
 	}
@@ -188,7 +188,7 @@ func TestSelfAuditListingReportsTheCountBoundAsALowerBound(t *testing.T) {
 	t.Parallel()
 	events := []string{}
 	persistence := &auditListingStoreFake{events: &events, count: store.MaximumAuditSelfCount}
-	service := newAuditListingService(auditListingServiceDependencies{Audits: persistence, Authorization: &auditListingAuthorizerFake{events: &events}})
+	service := &Service{audits: persistence, authorizer: &auditListingAuthorizerFake{events: &events}}
 	page, err := service.ListSelfAuditEvents(context.Background(), selfAuditSessionInvocation(), ListSelfAuditEventsQuery{Limit: 10})
 	require.NoError(t, err)
 	require.Equal(t, store.MaximumAuditSelfCount, page.Total)

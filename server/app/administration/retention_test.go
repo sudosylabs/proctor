@@ -38,7 +38,7 @@ func TestRetentionApprovalRequiresAuthorityAndCriticalAudit(t *testing.T) {
 		t.Run(gate, func(t *testing.T) {
 			fixture := newRetentionPolicyFixture(t)
 			lifecycle := &retentionLifecycleFake{}
-			fixture.service.deps.Lifecycle = lifecycle
+			fixture.service.retention = lifecycle
 			command := ChangeRetentionControlCommand{ExpectedRevision: 1, ExpectedPolicyRevision: 1, PreviewID: model.NewRetentionPreviewID(), State: model.RetentionControlEnabled, IdempotencyKey: "approve-cleanup"}
 			call := fixture.invocation
 			switch gate {
@@ -58,7 +58,7 @@ func TestRetentionApprovalRequiresAuthorityAndCriticalAudit(t *testing.T) {
 			case "missing_key":
 				command.IdempotencyKey = ""
 			}
-			application := &Service{retentionPolicyService: fixture.service}
+			application := fixture.service
 			value, err := application.ChangeRetentionControl(t.Context(), call, command)
 			require.Error(t, err, "%s did not stop approval", gate)
 			require.Nil(t, value, "%s did not stop approval", gate)
@@ -70,10 +70,10 @@ func TestRetentionApprovalRequiresAuthorityAndCriticalAudit(t *testing.T) {
 func TestRetentionApprovalPassesExactReviewedPolicyAndCredential(t *testing.T) {
 	fixture := newRetentionPolicyFixture(t)
 	control := &model.RetentionControl{InstitutionID: fixture.institution.ID, Revision: 2, State: model.RetentionControlEnabled,
-		ApprovedPolicyRevision: 7, ApprovedPreviewID: model.NewRetentionPreviewID(), ChangedByUserID: fixture.invocation.Principal().UserID, UpdatedAt: fixture.service.deps.Now()}
+		ApprovedPolicyRevision: 7, ApprovedPreviewID: model.NewRetentionPreviewID(), ChangedByUserID: fixture.invocation.Principal().UserID, UpdatedAt: fixture.service.now()}
 	lifecycle := &retentionLifecycleFake{result: &store.RetentionControlResult{Control: control}}
-	fixture.service.deps.Lifecycle = lifecycle
-	application := &Service{retentionPolicyService: fixture.service}
+	fixture.service.retention = lifecycle
+	application := fixture.service
 	value, err := application.ChangeRetentionControl(t.Context(), fixture.invocation, ChangeRetentionControlCommand{
 		ExpectedRevision: 1, ExpectedPolicyRevision: 7, PreviewID: control.ApprovedPreviewID, State: model.RetentionControlEnabled, IdempotencyKey: "approve-cleanup"})
 	require.NoError(t, err, "approval")

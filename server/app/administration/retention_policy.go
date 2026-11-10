@@ -11,7 +11,6 @@ import (
 	"context"
 	"errors"
 	"strconv"
-	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -22,22 +21,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// retentionPolicyServiceDependencies are the collaborators of retentionPolicyService;
-// newRetentionPolicyService validates them once and retentionPolicyService keeps them in deps.
-type retentionPolicyServiceDependencies struct {
-	Policies                store.RetentionPolicyStore
-	Lifecycle               store.RetentionStore
-	Institutions            institutionSingleton
-	Authorization           resourceAuthorizer
-	Audit                   access.MutationAuditor
-	RecentAuthenticationTTL time.Duration
-	Now                     func() time.Time
-}
-
-type retentionPolicyService struct {
-	deps retentionPolicyServiceDependencies
-}
-
 // ReplaceRetentionPolicyCommand completely replaces the
 // Institution policy behind optimistic revision and idempotency fences.
 type ReplaceRetentionPolicyCommand struct {
@@ -46,23 +29,16 @@ type ReplaceRetentionPolicyCommand struct {
 	IdempotencyKey   string
 }
 
-func newRetentionPolicyService(deps retentionPolicyServiceDependencies) (*retentionPolicyService, error) {
-	if deps.Policies == nil || deps.Lifecycle == nil || deps.Institutions == nil || deps.Authorization == nil || deps.Audit == nil || deps.RecentAuthenticationTTL <= 0 || deps.Now == nil {
-		return nil, errors.New("retention policy service dependencies are invalid")
-	}
-	return &retentionPolicyService{deps: deps}, nil
-}
-
 // GetRetentionPolicy returns the current administrative policy.
-func (s *retentionPolicyService) GetRetentionPolicy(
+func (s *Service) GetRetentionPolicy(
 	ctx context.Context,
 	invocation invocation.Invocation,
 ) (*model.RetentionPolicy, error) {
-	institution, _, err := s.authorize(ctx, invocation, model.ActionRetentionPolicyView)
+	institution, _, err := s.authorizeRetentionPolicy(ctx, invocation, model.ActionRetentionPolicyView)
 	if err != nil {
 		return nil, err
 	}
-	policy, err := s.deps.Policies.Get(ctx)
+	policy, err := s.retentionPolicies.Get(ctx)
 	if err != nil || policy == nil || policy.Validate() != nil || policy.InstitutionID != institution.ID {
 		return nil, retentionPolicyError(err)
 	}
@@ -70,19 +46,19 @@ func (s *retentionPolicyService) GetRetentionPolicy(
 }
 
 // ReplaceRetentionPolicy replaces the current policy.
-func (s *retentionPolicyService) ReplaceRetentionPolicy(
+func (s *Service) ReplaceRetentionPolicy(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	command ReplaceRetentionPolicyCommand,
 ) (*model.RetentionPolicy, error) {
 	if err := identity.RequireStrongRecentSession(
 		invocation.Principal(),
-		s.deps.Now(),
-		s.deps.RecentAuthenticationTTL,
+		s.now(),
+		s.recentAuthenticationTTL,
 	); err != nil {
 		return nil, err
 	}
-	institution, resource, err := s.authorize(
+	institution, resource, err := s.authorizeRetentionPolicy(
 		ctx,
 		invocation,
 		model.ActionRetentionPolicyManage,
@@ -115,7 +91,7 @@ func (s *retentionPolicyService) ReplaceRetentionPolicy(
 	}
 	stored, err := access.RunAudited(
 		ctx,
-		s.deps.Audit,
+		s.auditor,
 		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionRetentionPolicyManage,
@@ -135,16 +111,16 @@ func (s *retentionPolicyService) ReplaceRetentionPolicy(
 				"candidate_notices":                   command.Settings.CandidateNotices,
 			},
 		},
-		s.deps.Now,
+		s.now,
 		func(
 			ctx context.Context,
 			reference access.MutationReference,
 		) (*store.RetentionPolicyReplacementResult, error) {
-			return s.deps.Policies.Replace(
+			return s.retentionPolicies.Replace(
 				ctx,
 				&store.RetentionPolicyReplacement{
 					RetentionMutation: store.RetentionMutation{
-						Principal: invocation.Principal(), RecentAuthenticationTTL: s.deps.RecentAuthenticationTTL,
+						Principal: invocation.Principal(), RecentAuthenticationTTL: s.recentAuthenticationTTL,
 						AuditEventID: reference.ID, AuditAt: reference.MutationAt,
 					},
 					ExpectedRevision: command.ExpectedRevision,
@@ -164,17 +140,19 @@ func (s *retentionPolicyService) ReplaceRetentionPolicy(
 	return stored.Policy.Clone(), nil
 }
 
-func (s *retentionPolicyService) authorize(
+// authorizeRetentionPolicy authorizes a retention Action on the singleton
+// Institution.
+func (s *Service) authorizeRetentionPolicy(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	action model.Action,
 ) (*model.Institution, model.Resource, error) {
-	institution, err := s.deps.Institutions.GetSingleton(ctx)
+	institution, err := s.institutions.GetSingleton(ctx)
 	if err != nil || institution == nil || !institution.ID.IsValid() {
 		return nil, model.Resource{}, retentionPolicyError(err)
 	}
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
-	if err := s.deps.Authorization.Authorize(ctx, invocation, action, resource); err != nil {
+	if err := s.authorizer.Authorize(ctx, invocation, action, resource); err != nil {
 		return nil, model.Resource{}, err
 	}
 	return institution, resource, nil

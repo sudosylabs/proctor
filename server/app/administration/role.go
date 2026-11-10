@@ -9,22 +9,23 @@ package administration
 
 import (
 	"context"
-	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// ListRolesQuery lists every Role.
 type ListRolesQuery struct{}
 
+// GetRoleQuery reads one Role.
 type GetRoleQuery struct {
 	ID model.RoleID
 }
 
+// CreateRoleCommand creates a custom Role with the given permissions.
 type CreateRoleCommand struct {
 	Name        string
 	DisplayName string
@@ -32,6 +33,7 @@ type CreateRoleCommand struct {
 	Permissions []string
 }
 
+// UpdateRoleCommand patches a custom Role; a nil field is left unchanged.
 type UpdateRoleCommand struct {
 	ID          model.RoleID
 	DisplayName *string
@@ -39,50 +41,17 @@ type UpdateRoleCommand struct {
 	Permissions *[]string
 }
 
+// ArchiveRoleCommand archives a custom Role.
 type ArchiveRoleCommand struct {
 	ID model.RoleID
 }
 
-type roleStore interface {
-	Get(context.Context, model.RoleID) (*model.Role, error)
-	List(context.Context) ([]*model.Role, error)
-	Save(context.Context, *store.RoleCreation) (*model.Role, error)
-	Update(context.Context, *store.RoleUpdate) (*model.Role, error)
-	Archive(context.Context, *store.RoleArchive) (*model.Role, error)
-}
-
-type roleAuthorizer interface {
-	AuthorizeInstitution(context.Context, invocation.Invocation, model.Action) (model.Resource, error)
-	AuthorizeActionDelegation(context.Context, invocation.Invocation, []string, model.RoleScopeType, string) error
-}
-
-type roleEffects interface {
-	AuthorizationChanged(context.Context)
-}
-
-// roleServiceDependencies are the collaborators of roleService;
-// newRoleService validates them once and roleService keeps them in deps.
-type roleServiceDependencies struct {
-	Roles         roleStore
-	Authorization roleAuthorizer
-	Audit         access.MutationAuditor
-	Effects       roleEffects
-	Now           func() time.Time
-}
-
-type roleService struct {
-	deps roleServiceDependencies
-}
-
-func newRoleService(deps roleServiceDependencies) *roleService {
-	return &roleService{deps: deps}
-}
-
-func (s *roleService) ListRoles(ctx context.Context, invocation invocation.Invocation, _ ListRolesQuery) ([]*model.Role, error) {
-	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionRoleView); err != nil {
+// ListRoles returns every Role to a caller with Institution-wide role.view.
+func (s *Service) ListRoles(ctx context.Context, invocation invocation.Invocation, _ ListRolesQuery) ([]*model.Role, error) {
+	if _, err := s.authorizeRoles(ctx, invocation, model.ActionRoleView); err != nil {
 		return nil, err
 	}
-	roles, err := s.deps.Roles.List(ctx)
+	roles, err := s.roles.List(ctx)
 	if err != nil {
 		return nil, roleStoreErrors.Translate(err)
 	}
@@ -92,23 +61,26 @@ func (s *roleService) ListRoles(ctx context.Context, invocation invocation.Invoc
 	return roles, nil
 }
 
-func (s *roleService) GetRole(ctx context.Context, invocation invocation.Invocation, query GetRoleQuery) (*model.Role, error) {
+// GetRole returns one Role to a caller with Institution-wide role.view.
+func (s *Service) GetRole(ctx context.Context, invocation invocation.Invocation, query GetRoleQuery) (*model.Role, error) {
 	id := query.ID
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "role_id")
 	}
-	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionRoleView); err != nil {
+	if _, err := s.authorizeRoles(ctx, invocation, model.ActionRoleView); err != nil {
 		return nil, err
 	}
-	role, err := s.deps.Roles.Get(ctx, id)
+	role, err := s.roles.Get(ctx, id)
 	if err != nil {
 		return nil, roleStoreErrors.Translate(err)
 	}
 	return role, nil
 }
 
-func (s *roleService) CreateRole(ctx context.Context, invocation invocation.Invocation, command CreateRoleCommand) (*model.Role, error) {
-	resource, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionRoleManage)
+// CreateRole creates a custom Role. The caller needs Institution-wide
+// role.manage and must be able to delegate every permission it grants.
+func (s *Service) CreateRole(ctx context.Context, invocation invocation.Invocation, command CreateRoleCommand) (*model.Role, error) {
+	resource, err := s.authorizeRoles(ctx, invocation, model.ActionRoleManage)
 	if err != nil {
 		return nil, err
 	}
@@ -120,14 +92,14 @@ func (s *roleService) CreateRole(ctx context.Context, invocation invocation.Invo
 	if err := validateKnownPermissions(candidate.Permissions); err != nil {
 		return nil, err
 	}
-	if err := s.deps.Authorization.AuthorizeActionDelegation(
+	if err := s.authorizeActionDelegation(
 		ctx, invocation, candidate.Permissions, model.RoleScopeInstitution, resource.ID,
 	); err != nil {
 		return nil, err
 	}
 	return access.RunAudited(
 		ctx,
-		s.deps.Audit,
+		s.auditor,
 		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionRoleManage,
@@ -135,9 +107,9 @@ func (s *roleService) CreateRole(ctx context.Context, invocation invocation.Invo
 			Operation:  "create",
 			Value:      candidate.Auditable(),
 		},
-		s.deps.Now,
+		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.Role, error) {
-			return s.deps.Roles.Save(ctx, &store.RoleCreation{
+			return s.roles.Save(ctx, &store.RoleCreation{
 				Role: candidate, AuditEventID: reference.ID, AuditAt: reference.MutationAt,
 			})
 		},
@@ -145,16 +117,19 @@ func (s *roleService) CreateRole(ctx context.Context, invocation invocation.Invo
 	)
 }
 
-func (s *roleService) UpdateRole(ctx context.Context, invocation invocation.Invocation, command UpdateRoleCommand) (*model.Role, error) {
+// UpdateRole patches a custom Role, refusing a built-in one. Added
+// permissions must be delegable by the caller; a committed change drops every
+// User's cached authorization.
+func (s *Service) UpdateRole(ctx context.Context, invocation invocation.Invocation, command UpdateRoleCommand) (*model.Role, error) {
 	id := command.ID
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "role_id")
 	}
-	resource, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionRoleManage)
+	resource, err := s.authorizeRoles(ctx, invocation, model.ActionRoleManage)
 	if err != nil {
 		return nil, err
 	}
-	current, err := s.deps.Roles.Get(ctx, id)
+	current, err := s.roles.Get(ctx, id)
 	if err != nil {
 		return nil, roleStoreErrors.Translate(err)
 	}
@@ -171,11 +146,11 @@ func (s *roleService) UpdateRole(ctx context.Context, invocation invocation.Invo
 	}
 	candidate := current.Clone()
 	candidate.Patch(patch)
-	if err := validatePatchedPermissions(current.Permissions, command.Permissions); err != nil {
+	if err = validatePatchedPermissions(current.Permissions, command.Permissions); err != nil {
 		return nil, err
 	}
 	if added := addedRolePermissions(current.Permissions, candidate.Permissions); len(added) > 0 {
-		if err = s.deps.Authorization.AuthorizeActionDelegation(
+		if err = s.authorizeActionDelegation(
 			ctx, invocation, added, model.RoleScopeInstitution, resource.ID,
 		); err != nil {
 			return nil, err
@@ -183,7 +158,7 @@ func (s *roleService) UpdateRole(ctx context.Context, invocation invocation.Invo
 	}
 	updated, err := access.RunAudited(
 		ctx,
-		s.deps.Audit,
+		s.auditor,
 		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionRoleManage,
@@ -192,9 +167,9 @@ func (s *roleService) UpdateRole(ctx context.Context, invocation invocation.Invo
 			Value:      map[string]any{"role_id": id},
 			Prior:      current.Auditable(),
 		},
-		s.deps.Now,
+		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.Role, error) {
-			return s.deps.Roles.Update(ctx, &store.RoleUpdate{
+			return s.roles.Update(ctx, &store.RoleUpdate{
 				Role: candidate, AuditEventID: reference.ID, AuditAt: reference.MutationAt,
 			})
 		},
@@ -203,7 +178,7 @@ func (s *roleService) UpdateRole(ctx context.Context, invocation invocation.Invo
 	if err != nil {
 		return nil, err
 	}
-	s.deps.Effects.AuthorizationChanged(ctx)
+	s.effects.InvalidateAuthorization(ctx, "")
 	return updated, nil
 }
 
@@ -221,16 +196,18 @@ func addedRolePermissions(current, candidate []string) []string {
 	return added
 }
 
-func (s *roleService) ArchiveRole(ctx context.Context, invocation invocation.Invocation, command ArchiveRoleCommand) error {
+// ArchiveRole archives a custom Role, refusing a built-in one, then drops
+// every User's cached authorization.
+func (s *Service) ArchiveRole(ctx context.Context, invocation invocation.Invocation, command ArchiveRoleCommand) error {
 	id := command.ID
 	if !id.IsValid() {
 		return apperror.New("request.invalid").WithField("field", "role_id")
 	}
-	resource, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionRoleManage)
+	resource, err := s.authorizeRoles(ctx, invocation, model.ActionRoleManage)
 	if err != nil {
 		return err
 	}
-	current, err := s.deps.Roles.Get(ctx, id)
+	current, err := s.roles.Get(ctx, id)
 	if err != nil {
 		return roleStoreErrors.Translate(err)
 	}
@@ -239,7 +216,7 @@ func (s *roleService) ArchiveRole(ctx context.Context, invocation invocation.Inv
 	}
 	_, err = access.RunAudited(
 		ctx,
-		s.deps.Audit,
+		s.auditor,
 		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionRoleManage,
@@ -248,9 +225,9 @@ func (s *roleService) ArchiveRole(ctx context.Context, invocation invocation.Inv
 			Value:      map[string]any{"role_id": id},
 			Prior:      current.Auditable(),
 		},
-		s.deps.Now,
+		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.Role, error) {
-			return s.deps.Roles.Archive(ctx, &store.RoleArchive{
+			return s.roles.Archive(ctx, &store.RoleArchive{
 				ID: id, ArchiveAt: reference.MutationAt,
 				AuditEventID: reference.ID, AuditAt: reference.MutationAt,
 			})
@@ -260,69 +237,34 @@ func (s *roleService) ArchiveRole(ctx context.Context, invocation invocation.Inv
 	if err != nil {
 		return err
 	}
-	s.deps.Effects.AuthorizationChanged(ctx)
+	s.effects.InvalidateAuthorization(ctx, "")
 	return nil
 }
 
-type roleAuthorization struct {
-	authorization *access.Authorizer
-	institutions  store.InstitutionStore
-}
-
-func (a roleAuthorization) AuthorizeRoleBindingList(ctx context.Context, invocation invocation.Invocation, action model.Action) (store.UserVisibilityScope, error) {
-	constraint, err := a.authorization.GrantedScopes(ctx, invocation.Principal(), action, model.ResourceInstitution)
+// authorizeRoles authorizes a Role Action on the singleton Institution and
+// returns that Resource.
+func (s *Service) authorizeRoles(ctx context.Context, invocation invocation.Invocation, action model.Action) (model.Resource, error) {
+	institution, err := s.institutions.GetSingleton(ctx)
 	if err != nil {
-		return store.UserVisibilityScope{}, err
+		return model.Resource{}, roleStoreErrors.Translate(err)
 	}
-	institution, err := a.institutions.GetSingleton(ctx)
-	if err != nil {
-		return store.UserVisibilityScope{}, roleStoreErrors.Translate(err)
-	}
-	allowed := constraint.InstitutionWide || len(constraint.AcademicUnitRootIDs) > 0 || len(constraint.ClassIDs) > 0
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
-	scopeType, scopeID := model.RoleScopeInstitution, institution.ID.String()
-	if len(constraint.AcademicUnitRootIDs) > 0 {
-		resource = model.Resource{Type: model.ResourceAcademicUnit, ID: constraint.AcademicUnitRootIDs[0].String()}
-		scopeType, scopeID = model.RoleScopeAcademicUnit, resource.ID
-	} else if len(constraint.ClassIDs) > 0 {
-		resource = model.Resource{Type: model.ResourceClass, ID: constraint.ClassIDs[0].String()}
-		scopeType, scopeID = model.RoleScopeClass, resource.ID
+	if err := s.authorizer.Authorize(ctx, invocation, action, resource); err != nil {
+		return model.Resource{}, err
 	}
-	if err := a.authorization.RecordAuthorizationDecision(ctx, invocation.Principal(), action, resource, scopeType, scopeID, invocation.RequestMetadata(), allowed); err != nil {
-		return store.UserVisibilityScope{}, err
-	}
-	if !allowed {
-		return store.UserVisibilityScope{}, access.DeniedError()
-	}
-	return store.UserVisibilityScope{
-		InstitutionWide:     constraint.InstitutionWide,
-		AcademicUnitRootIDs: append([]model.AcademicUnitID(nil), constraint.AcademicUnitRootIDs...),
-		ClassIDs:            append([]model.ClassID(nil), constraint.ClassIDs...),
-	}, nil
+	return resource, nil
 }
 
-func (a roleAuthorization) AuthorizeRoleBindingPreflight(ctx context.Context, invocation invocation.Invocation, action model.Action) error {
-	return a.authorization.AuthorizeRoleBindingPreflight(ctx, invocation, action)
-}
-
-func (a roleAuthorization) AuthorizeRoleBindingScope(
-	ctx context.Context,
-	invocation invocation.Invocation,
-	action model.Action,
-	scopeType model.RoleScopeType,
-	scopeID string,
-) (model.Resource, error) {
-	return a.authorization.AuthorizeRoleBindingScope(ctx, invocation, action, scopeType, scopeID)
-}
-
-func (a roleAuthorization) AuthorizeActionDelegation(
+// authorizeActionDelegation refuses unless the caller may grant every Action
+// at the scope.
+func (s *Service) authorizeActionDelegation(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	actions []string,
 	scopeType model.RoleScopeType,
 	scopeID string,
 ) error {
-	allowed, err := a.authorization.CanDelegateActionsAtScope(ctx, invocation.Principal(), actions, scopeType, scopeID)
+	allowed, err := s.authorizer.CanDelegateActionsAtScope(ctx, invocation.Principal(), actions, scopeType, scopeID)
 	if err != nil {
 		return err
 	}
@@ -330,26 +272,6 @@ func (a roleAuthorization) AuthorizeActionDelegation(
 		return access.DeniedError()
 	}
 	return nil
-}
-
-func (a roleAuthorization) AuthorizeInstitution(ctx context.Context, invocation invocation.Invocation, action model.Action) (model.Resource, error) {
-	institution, err := a.institutions.GetSingleton(ctx)
-	if err != nil {
-		return model.Resource{}, roleStoreErrors.Translate(err)
-	}
-	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
-	if err := a.authorization.Authorize(ctx, invocation, action, resource); err != nil {
-		return model.Resource{}, err
-	}
-	return resource, nil
-}
-
-type roleRealtimeEffects struct {
-	effects identity.AuthorizationInvalidationEffects
-}
-
-func (e roleRealtimeEffects) AuthorizationChanged(ctx context.Context) {
-	e.effects.InvalidateAuthorization(ctx, "")
 }
 
 var roleStoreErrors = apperror.AdministrationStoreTable("role", "role.conflict", "role.invalid", map[string]apperror.Code{

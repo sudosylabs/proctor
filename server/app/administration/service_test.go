@@ -14,7 +14,80 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
+
+// catalogFake hands New the Store contracts a test supplies; a contract left
+// nil reaches New as a missing Store.
+type catalogFake struct {
+	store.Catalog
+	roles             store.RoleStore
+	roleBindings      store.RoleBindingStore
+	users             store.UserStore
+	institutions      store.InstitutionStore
+	audits            store.AuditStore
+	accessPolicies    store.AccessPolicyStore
+	retentionPolicies store.RetentionPolicyStore
+	retention         store.RetentionStore
+}
+
+func (c *catalogFake) Role() store.RoleStore                       { return c.roles }
+func (c *catalogFake) RoleBinding() store.RoleBindingStore         { return c.roleBindings }
+func (c *catalogFake) User() store.UserStore                       { return c.users }
+func (c *catalogFake) Institution() store.InstitutionStore         { return c.institutions }
+func (c *catalogFake) Audit() store.AuditStore                     { return c.audits }
+func (c *catalogFake) AccessPolicy() store.AccessPolicyStore       { return c.accessPolicies }
+func (c *catalogFake) RetentionPolicy() store.RetentionPolicyStore { return c.retentionPolicies }
+func (c *catalogFake) Retention() store.RetentionStore             { return c.retention }
+
+// dependenciesOf rebuilds the Dependencies a Service was built from, so a
+// construction test can omit one collaborator at a time.
+func dependenciesOf(s *Service) Dependencies {
+	return Dependencies{
+		Store: &catalogFake{
+			roles: s.roles, roleBindings: s.roleBindings, users: s.users, institutions: s.institutions, audits: s.audits,
+			accessPolicies: s.accessPolicies, retentionPolicies: s.retentionPolicies, retention: s.retention,
+		},
+		Authorizer: s.authorizer, Auditor: s.auditor, Capabilities: s.capabilities, Mail: s.mail, Effects: s.effects,
+		CanonicalOrigin: s.canonicalOrigin, SupportAddress: s.supportAddress, PasswordMinimumLength: s.passwordMinimumLength,
+		RecentAuthenticationTTL: s.recentAuthenticationTTL, Now: s.now,
+	}
+}
+
+// institutionStoreFake answers the singleton Institution read every
+// Institution-scoped authorization starts with.
+type institutionStoreFake struct {
+	store.InstitutionStore
+	institution *model.Institution
+	err         error
+}
+
+func (s *institutionStoreFake) GetSingleton(context.Context) (*model.Institution, error) {
+	return s.institution, s.err
+}
+
+func anyInstitution() *institutionStoreFake {
+	return &institutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}
+}
+
+// effectsFake records the effects a committed change publishes.
+type effectsFake struct {
+	events  *[]string
+	changes []AccessPolicyChange
+}
+
+func (e *effectsFake) InvalidateAuthorization(context.Context, model.UserID) {
+	if e.events != nil {
+		*e.events = append(*e.events, "invalidate-authorization")
+	}
+}
+
+func (e *effectsFake) AccessPolicyChanged(_ context.Context, change AccessPolicyChange) error {
+	e.changes = append(e.changes, change)
+	return nil
+}
+
+func (*effectsFake) Report(context.Context, string, error) {}
 
 func selfAuditSessionInvocation() invocation.Invocation {
 	at := time.Now().UTC()

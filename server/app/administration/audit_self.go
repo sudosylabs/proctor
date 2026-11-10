@@ -86,7 +86,7 @@ type SelfAuditPage struct {
 // history. It is the caller's own record, like other /users/me reads, so it
 // records no authorization decision; Personal Access Tokens are refused
 // because the history includes credential and Session changes.
-func (s *auditListingService) ListSelfAuditEvents(ctx context.Context, invocation invocation.Invocation, query ListSelfAuditEventsQuery) (SelfAuditPage, error) {
+func (s *Service) ListSelfAuditEvents(ctx context.Context, invocation invocation.Invocation, query ListSelfAuditEventsQuery) (SelfAuditPage, error) {
 	principal := invocation.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return SelfAuditPage{}, apperror.New("authentication.required")
@@ -108,7 +108,7 @@ func (s *auditListingService) ListSelfAuditEvents(ctx context.Context, invocatio
 		BeforeCreatedAt: query.BeforeCreatedAt, BeforeID: query.BeforeID,
 		Limit: query.Limit + 1,
 	}
-	entries, err := s.deps.Audits.ListSelf(ctx, options)
+	entries, err := s.audits.ListSelf(ctx, options)
 	if err != nil {
 		return SelfAuditPage{}, auditListingError(err)
 	}
@@ -127,7 +127,7 @@ func (s *auditListingService) ListSelfAuditEvents(ctx context.Context, invocatio
 	if !counted {
 		return page, nil
 	}
-	if page.Total, err = s.deps.Audits.CountSelf(ctx, options); err != nil {
+	if page.Total, err = s.audits.CountSelf(ctx, options); err != nil {
 		return SelfAuditPage{}, auditListingError(err)
 	}
 	if page.Total < len(page.Items) || page.Total > store.MaximumAuditSelfCount {

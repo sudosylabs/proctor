@@ -36,8 +36,8 @@ func TestRetentionNoticesUseExactSessionRecipientAndRejectForeignProjection(t *t
 	fixture := newRetentionPolicyFixture(t)
 	user := fixture.invocation.Principal().UserID
 	persistence := &ownRetentionNoticesFake{items: []model.RetentionNotice{{RecipientUserID: user}, {RecipientUserID: user}}}
-	fixture.service.deps.Lifecycle = persistence
-	app := &Service{retentionPolicyService: fixture.service}
+	fixture.service.retention = persistence
+	app := fixture.service
 	page, err := app.ListRetentionNotices(t.Context(), fixture.invocation, "", 1)
 	require.NoError(t, err, "page=%#v err", page)
 	require.True(t, page.HasMore, "page=%#v err", page)

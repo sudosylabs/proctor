@@ -54,7 +54,7 @@ func validHTTPOptions(t *testing.T) Options {
 		BrowserInvitations: unavailableBrowserInvitationApplication{}, OnboardingImports: unavailableOnboardingImportApplication{},
 		StudentProgressions:           unavailableStudentProgressionApplication{},
 		AcademicAdministrationBatches: unavailableAcademicAdministrationBatchApplication{},
-		UserProfiles:                  &userProfileHTTPApplication{}, UserSettings: &userSettingsHTTPApplication{},
+		UserProfiles:                  &userProfileHTTPApplication{}, UserAccounts: &userProfileHTTPApplication{}, UserSettings: &userSettingsHTTPApplication{},
 		AccountStates: &accountStateHTTPApplication{}, SessionAdministrations: &sessionAdministrationHTTPApplication{},
 		Roles: &roleHTTPApplication{}, RoleBindings: &roleBindingHTTPApplication{},
 		AuditListings: &auditListingHTTPApplication{}, Bootstrap: &bootstrapHTTPApplication{},

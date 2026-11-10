@@ -20,42 +20,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-func TestUserSearchCountsThroughTheListedOptions(t *testing.T) {
-	t.Parallel()
-	events := []string{}
-	user := &model.User{ID: model.NewUserID(), Username: "counted"}
-	persistence := &userProfileStoreFake{events: &events, countTotal: store.MaximumListCount + 5}
-	scope := store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{model.NewAcademicUnitID()}, ActiveAt: model.TimeFromMillis(100)}
-	service := newUserProfileService(userProfileServiceDependencies{Users: &userProfileSearchStoreFake{userProfileStoreFake: persistence, values: []*model.User{user}},
-		Authorization: &userProfileAuthorizerFake{events: &events, searchScope: scope}, Audit: &institutionAuditorFake{events: &events}, Now: time.Now})
-
-	first, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{Query: "count", Limit: 10,
-		Affiliations: []model.AffiliationKind{model.AffiliationStudent}})
-	require.NoError(t, err)
-	require.Equal(t, paging.Total{Counted: true, Total: store.MaximumListCount, TotalIsLowerBound: true}, first.Total)
-	expected := persistence.listOptions
-	require.Equal(t, expected, persistence.countOptions, "the count reads the list's visibility and filters")
-	require.Equal(t, store.MaximumListCount, persistence.countMaximum)
-	// Contract: authorization precedes the read, only the first page counts,
-	// and the summary reads follow the count.
-	require.Equal(t, []string{"authorize-search", "list-users", "count-users", "summarize-users", "role-binding-view-scope"}, events)
-
-	events = events[:0]
-	later, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{Query: "count", Limit: 10,
-		AfterUsername: user.Username, AfterID: user.ID})
-	require.NoError(t, err)
-	require.Equal(t, paging.Total{}, later.Total)
-	// Contract: a continued page authorizes and lists without counting.
-	require.Equal(t, []string{"authorize-search", "list-users", "summarize-users", "role-binding-view-scope"}, events)
-
-	events = events[:0]
-	page, err := service.searchUserPage(context.Background(), invocation.Invocation{}, SearchUsersQuery{Query: "count", Limit: 5})
-	require.NoError(t, err)
-	require.Len(t, page.Items, 1)
-	// Contract: global search composes the uncounted directory read.
-	require.Equal(t, []string{"authorize-search", "list-users"}, events)
-}
-
 func TestAuditListingCountsTheFirstPageWithinItsVisibility(t *testing.T) {
 	t.Parallel()
 	events := []string{}

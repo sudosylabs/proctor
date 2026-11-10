@@ -7,24 +7,35 @@
 
 package app
 
-import "time"
+import (
+	"time"
+
+	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/user"
+)
 
 func constructProfilesAndFiles(
 	deps Dependencies,
 	foundation applicationFoundation,
 	access accessAcademicConstruction,
 ) (profileFileConstruction, error) {
-	authorization := userProfileAuthorization{
-		authorization: access.authorization,
-		institutions:  deps.Store.Institution(),
+	// The Job runtime that wakes on a proposal exists only after the profile
+	// service, so constructJobs attaches the wake to these proposals later.
+	var defaultJobs *jobhandler.DefaultProfilePictureJobs
+	var proposals user.DefaultPictureJobs
+	if deps.Store.Job() != nil {
+		defaultJobs = jobhandler.NewDefaultProfilePictureJobs(jobhandler.DefaultProfilePictureJobsDependencies{Jobs: deps.Store.Job()})
+		proposals = defaultJobs
 	}
-	userSettings, err := newUserSettingsService(userSettingsServiceDependencies{Settings: deps.Store.UserSettings(), Audit: foundation.audit.UserSettingsAudit(), Effects: userSettingsRealtimeEffects{realtime: foundation.realtime}, EffectFailures: userSettingsEffectReporter{realtime: foundation.realtime}, Now: time.Now})
+	users, err := user.New(user.Dependencies{
+		Store: deps.Store, Authorizer: access.authorization, Auditor: foundation.audit.MutationAudit(),
+		SettingsAuditor: foundation.audit.UserSettingsAudit(), Effects: userRealtimeEffects{realtime: foundation.realtime},
+		DefaultJobs: proposals,
+		Uploads:     deps.FileContent, Reads: deps.FileContent, Fallback: deps.FileContent, Defaults: deps.FileContent,
+		Now: time.Now,
+	})
 	if err != nil {
 		return profileFileConstruction{}, err
 	}
-	return profileFileConstruction{
-		userProfiles:    newUserProfileService(userProfileServiceDependencies{Users: deps.Store.User(), RoleBindings: deps.Store.RoleBinding(), Authorization: authorization, Audit: foundation.audit.MutationAudit(), Now: time.Now}),
-		profilePictures: newProfilePictureService(profilePictureServiceDependencies{Users: deps.Store.User(), Files: deps.Store.File(), Uploads: deps.FileContent, Reads: deps.FileContent, Fallback: deps.FileContent, Defaults: deps.FileContent, Authorization: authorization, Audit: foundation.audit.MutationAudit(), Effects: profilePictureRealtimeEffects{realtime: foundation.realtime}, EffectFailures: profilePictureEffectReporter{realtime: foundation.realtime}, DefaultJobs: nil, Now: time.Now}),
-		userSettings:    userSettings,
-	}, nil
+	return profileFileConstruction{users: users, defaultJobs: defaultJobs}, nil
 }

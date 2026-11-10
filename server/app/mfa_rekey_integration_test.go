@@ -21,6 +21,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
@@ -108,11 +109,11 @@ func TestMFARekeyJobResealsEveryLiveSecretAndProvesRetirement(t *testing.T) {
 
 func createMFARekeyIntegrationUser(t *testing.T, ctx context.Context, persistence *sqlstore.SQLStore, username string, at time.Time) *model.User {
 	t.Helper()
-	user, defaultJob, err := prepareUserDefaultProfilePictureJob(&model.User{Username: username, Email: username + "@example.test"}, at)
+	account, defaultJob, err := prepareUserDefaultProfilePictureJob(&model.User{Username: username, Email: username + "@example.test"}, at)
 	require.NoError(t, err)
-	settings, err := prepareInitialUserSettingsDocument(user)
+	settings, err := user.PrepareInitialSettingsDocument(account)
 	require.NoError(t, err)
-	created, err := persistence.User().Create(ctx, &store.UserCreation{User: user, Settings: settings, DefaultProfilePictureJob: defaultJob})
+	created, err := persistence.User().Create(ctx, &store.UserCreation{User: account, Settings: settings, DefaultProfilePictureJob: defaultJob})
 	require.NoError(t, err)
 	return created.User
 }

@@ -563,6 +563,33 @@ func (s *Authorizer) AuthorizeProfileRead(ctx context.Context, invocation invoca
 	return ProfileReadAuthorization{FullProfile: fullProfile}, nil
 }
 
+// RoleBindingViewScope reports, without recording a decision, the scopes in
+// which the caller holds role_binding.view at the instant. It narrows what a
+// User directory summary shows; it never admits a request.
+func (s *Authorizer) RoleBindingViewScope(ctx context.Context, invocation invocation.Invocation, at time.Time) (store.UserVisibilityScope, error) {
+	constraint, err := s.GrantedScopesAt(ctx, invocation.Principal(), model.ActionRoleBindingView, model.ResourceInstitution, model.TimeUTC(at))
+	if err != nil {
+		return store.UserVisibilityScope{}, err
+	}
+	return store.UserVisibilityScope{
+		InstitutionWide:     constraint.InstitutionWide,
+		AcademicUnitRootIDs: append([]model.AcademicUnitID(nil), constraint.AcademicUnitRootIDs...),
+		ClassIDs:            append([]model.ClassID(nil), constraint.ClassIDs...),
+		ActiveAt:            model.TimeUTC(at),
+	}, nil
+}
+
+// AuthorizeProfilePictureWrite authorizes replacing or removing a User's
+// profile picture: the owner needs user.profile_picture.manage and anyone
+// else needs user.manage on the User.
+func (s *Authorizer) AuthorizeProfilePictureWrite(ctx context.Context, invocation invocation.Invocation, userID model.UserID) error {
+	action := model.ActionUserManage
+	if invocation.Principal().UserID == userID {
+		action = model.ActionUserProfilePictureManage
+	}
+	return s.Authorize(ctx, invocation, action, model.Resource{Type: model.ResourceUser, ID: userID.String()})
+}
+
 // RecordAuthorizationDecision durably records a decision a caller made from
 // scopes it derived itself, such as a list or delegation check.
 func (s *Authorizer) RecordAuthorizationDecision(

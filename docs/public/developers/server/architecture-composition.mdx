@@ -150,7 +150,7 @@ constructed server has no listener, worker, or maintenance goroutine running.
 accessor.
 
 The application is moving to one package per domain area (`app/academic`,
-`app/identity`, `app/exam`, ...). `App` exposes each area as a named field,
+`app/user`, `app/identity`, `app/exam`, ...). `App` exposes each area as a named field,
 so a call reads `app.Academic.CreateClass(...)`. Areas that have not moved yet
 still live as private services in the flat `app/` package and are embedded in
 `App`.

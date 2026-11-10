@@ -17,6 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -63,7 +64,7 @@ type searchExamCatalog interface {
 }
 
 type searchUserDirectory interface {
-	searchUserPage(context.Context, invocation.Invocation, SearchUsersQuery) (paging.Page[*model.User], error)
+	SearchUserPage(context.Context, invocation.Invocation, user.SearchUsersQuery) (paging.Page[*model.User], error)
 }
 
 type searchClassAuthorizer interface {
@@ -117,7 +118,7 @@ func (s *searchService) Search(ctx context.Context, invocation invocation.Invoca
 			result.Classes, searchErr = s.searchClasses(ctx, invocation, term, limit)
 		case SearchTypeUser:
 			var page paging.Page[*model.User]
-			page, searchErr = s.deps.Users.searchUserPage(ctx, invocation, SearchUsersQuery{Query: term, Limit: limit})
+			page, searchErr = s.deps.Users.SearchUserPage(ctx, invocation, user.SearchUsersQuery{Query: term, Limit: limit})
 			if searchErr == nil {
 				result.Users = page.Items
 			}

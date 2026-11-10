@@ -16,6 +16,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -39,22 +40,29 @@ type SessionAdministrationApplication interface {
 	RevokeUserSessions(context.Context, invocation.Invocation, app.RevokeUserSessionsCommand) error
 }
 
+// UserProfileApplication is the User directory, profile and profile-picture
+// use cases of the user area.
 type UserProfileApplication interface {
-	GetCurrentUserContext(context.Context, invocation.Invocation) (*app.CurrentUserContextView, error)
+	GetCurrentUserContext(context.Context, invocation.Invocation) (*user.CurrentUserContextView, error)
+	SearchUsers(context.Context, invocation.Invocation, user.SearchUsersQuery) (paging.Counted[user.UserDirectoryEntry], error)
+	GetUserProfile(context.Context, invocation.Invocation, user.GetUserProfileQuery) (*model.User, error)
+	UpdateUserProfile(context.Context, invocation.Invocation, user.UpdateUserProfileCommand) (*model.User, error)
+	UploadProfilePicture(context.Context, invocation.Invocation, user.UploadProfilePictureCommand) (*model.User, error)
+	RemoveProfilePicture(context.Context, invocation.Invocation, user.RemoveProfilePictureCommand) (*model.User, error)
+	GetProfilePicture(context.Context, invocation.Invocation, user.GetProfilePictureQuery) (*user.ProfilePictureContent, error)
+}
+
+// UserAccountApplication is the User use cases that stay on the application
+// root: a candidate's own exam activity and email address changes.
+type UserAccountApplication interface {
 	ListCandidateExamActivity(context.Context, invocation.Invocation, attempt.CandidateActivityQuery) (attempt.CandidateActivityPage, error)
-	SearchUsers(context.Context, invocation.Invocation, app.SearchUsersQuery) (paging.Counted[app.UserDirectoryEntry], error)
-	GetUserProfile(context.Context, invocation.Invocation, app.GetUserProfileQuery) (*model.User, error)
-	UpdateUserProfile(context.Context, invocation.Invocation, app.UpdateUserProfileCommand) (*model.User, error)
 	ChangeUserEmail(context.Context, invocation.Invocation, app.ChangeUserEmailCommand) (*app.UserEmailState, error)
 	VerifyUserEmailPrivileged(context.Context, invocation.Invocation, app.VerifyUserEmailPrivilegedCommand) (*app.UserEmailState, error)
-	UploadProfilePicture(context.Context, invocation.Invocation, app.UploadProfilePictureCommand) (*model.User, error)
-	RemoveProfilePicture(context.Context, invocation.Invocation, app.RemoveProfilePictureCommand) (*model.User, error)
-	GetProfilePicture(context.Context, invocation.Invocation, app.GetProfilePictureQuery) (*app.ProfilePictureContent, error)
 }
 
 type UserSettingsApplication interface {
-	ReadOwnUserSettings(context.Context, invocation.Invocation) (app.UserSettingsView, error)
-	ReplaceOwnUserSettings(context.Context, invocation.Invocation, app.ReplaceOwnUserSettingsCommand) (app.UserSettingsReplacementResult, error)
+	ReadOwnUserSettings(context.Context, invocation.Invocation) (user.UserSettingsView, error)
+	ReplaceOwnUserSettings(context.Context, invocation.Invocation, user.ReplaceOwnUserSettingsCommand) (user.UserSettingsReplacementResult, error)
 }
 
 type AcademicUnitApplication interface {

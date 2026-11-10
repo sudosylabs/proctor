@@ -20,6 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 	"github.com/sudosylabs/proctor/server/testlib"
@@ -37,7 +38,7 @@ func TestUserSettingsReadOwnIntegrationPreservesExactSource(t *testing.T) {
 	})
 	require.NoError(t, err)
 	const password = "correct horse battery staple"
-	user, err := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+	account, err := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
 		Username: "settings-read-user",
 		Email:    "settings-read-user@example.edu",
 	}, Password: password})
@@ -47,17 +48,17 @@ func TestUserSettingsReadOwnIntegrationPreservesExactSource(t *testing.T) {
 		ctx,
 		"UPDATE user_settings_documents SET source = $1 WHERE user_id = $2",
 		source,
-		user.ID.String(),
+		account.ID.String(),
 	)
 	require.NoError(t, err)
 	login, err := helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{
-		LoginID: user.Username, Password: password, ClientType: model.SessionClientWeb,
+		LoginID: account.Username, Password: password, ClientType: model.SessionClientWeb,
 		Source: "127.0.0.1:1",
 	})
 	require.NoError(t, err)
 	principal, err := helper.App.AuthenticateAccess(ctx, login.Tokens.AccessToken)
 	require.NoError(t, err)
-	view, err := helper.App.ReadOwnUserSettings(
+	view, err := helper.App.Users.ReadOwnUserSettings(
 		ctx,
 		invocation.New(*principal, model.RequestMetadata{RequestID: "settings-read-integration"}),
 	)
@@ -67,11 +68,11 @@ func TestUserSettingsReadOwnIntegrationPreservesExactSource(t *testing.T) {
 	require.True(t, view.Writable)
 
 	replacementSource := "{\n  // byte changes create revisions\n  \"editor.fontFamily\": \"A\\\\B\",\n  \"future.unknown\": {\"nested\": false,},\n}\n"
-	command := app.ReplaceOwnUserSettingsCommand{
+	command := user.ReplaceOwnUserSettingsCommand{
 		Source: replacementSource, FormatVersion: model.UserSettingsFormatVersion1,
 		ExpectedRevision: view.Revision, IdempotencyKey: "settings-integration-save",
 	}
-	replaced, err := helper.App.ReplaceOwnUserSettings(
+	replaced, err := helper.App.Users.ReplaceOwnUserSettings(
 		ctx,
 		invocation.New(*principal, model.RequestMetadata{RequestID: "settings-replace-integration"}),
 		command,
@@ -79,7 +80,7 @@ func TestUserSettingsReadOwnIntegrationPreservesExactSource(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, replaced.Changed)
 	require.NotEqual(t, view.Revision, replaced.Revision)
-	replay, err := helper.App.ReplaceOwnUserSettings(
+	replay, err := helper.App.Users.ReplaceOwnUserSettings(
 		ctx,
 		invocation.New(*principal, model.RequestMetadata{RequestID: "settings-replay-integration"}),
 		command,
@@ -88,10 +89,10 @@ func TestUserSettingsReadOwnIntegrationPreservesExactSource(t *testing.T) {
 	require.True(t, replay.Replayed, "replacement replay = %#v, want %#v", replay, replaced)
 	require.Equal(t, replaced.Revision, replay.Revision, "replacement replay = %#v, want %#v", replay, replaced)
 	require.True(t, replay.UpdatedAt.Equal(replaced.UpdatedAt), "replacement replay = %#v, want %#v", replay, replaced)
-	noOp, err := helper.App.ReplaceOwnUserSettings(
+	noOp, err := helper.App.Users.ReplaceOwnUserSettings(
 		ctx,
 		invocation.New(*principal, model.RequestMetadata{RequestID: "settings-noop-integration"}),
-		app.ReplaceOwnUserSettingsCommand{
+		user.ReplaceOwnUserSettingsCommand{
 			Source: replacementSource, FormatVersion: model.UserSettingsFormatVersion1,
 			ExpectedRevision: replaced.Revision, IdempotencyKey: "settings-integration-noop",
 		},
@@ -100,16 +101,16 @@ func TestUserSettingsReadOwnIntegrationPreservesExactSource(t *testing.T) {
 	require.False(t, noOp.Changed, "replacement no-op = %#v", noOp)
 	require.Equal(t, replaced.Revision, noOp.Revision, "replacement no-op = %#v", noOp)
 	require.True(t, noOp.UpdatedAt.Equal(replaced.UpdatedAt), "replacement no-op = %#v", noOp)
-	_, err = helper.App.ReplaceOwnUserSettings(
+	_, err = helper.App.Users.ReplaceOwnUserSettings(
 		ctx,
 		invocation.New(*principal, model.RequestMetadata{RequestID: "settings-conflict-integration"}),
-		app.ReplaceOwnUserSettingsCommand{
+		user.ReplaceOwnUserSettingsCommand{
 			Source: "{\"editor.fontSize\": 19}\n", FormatVersion: model.UserSettingsFormatVersion1,
 			ExpectedRevision: view.Revision, IdempotencyKey: "settings-integration-conflict",
 		},
 	)
 	require.True(t, apperror.Is(err, "user_settings.revision_conflict"), "stale replacement error = %v", err)
-	after, err := helper.App.ReadOwnUserSettings(
+	after, err := helper.App.Users.ReadOwnUserSettings(
 		ctx,
 		invocation.New(*principal, model.RequestMetadata{RequestID: "settings-after-integration"}),
 	)

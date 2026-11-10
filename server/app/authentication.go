@@ -23,6 +23,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -357,18 +358,18 @@ func (s *authenticationService) CreateLocalUser(
 	if err != nil {
 		return nil, passwordHashError(err, "authentication.internal")
 	}
-	user, job, err := prepareUserDefaultProfilePictureJob(command.User, s.deps.Now())
+	created, job, err := prepareUserDefaultProfilePictureJob(command.User, s.deps.Now())
 	if err != nil {
 		return nil, apperror.New("authentication.user.invalid").Wrap(err)
 	}
-	credential := &model.PasswordCredential{UserID: user.ID, PasswordHash: hash}
-	credential.PrepareCreate(model.NewPasswordCredentialID(), user.CreatedAt)
-	settings, err := prepareInitialUserSettingsDocument(user)
+	credential := &model.PasswordCredential{UserID: created.ID, PasswordHash: hash}
+	credential.PrepareCreate(model.NewPasswordCredentialID(), created.CreatedAt)
+	settings, err := user.PrepareInitialSettingsDocument(created)
 	if err != nil {
 		return nil, apperror.New("authentication.user.invalid").Wrap(err)
 	}
 	result, err := s.deps.Users.Create(ctx, &store.UserCreation{
-		User: user, Settings: settings, PasswordCredential: credential, DefaultProfilePictureJob: job,
+		User: created, Settings: settings, PasswordCredential: credential, DefaultProfilePictureJob: job,
 	})
 	if err != nil {
 		var conflict *store.ErrConflict

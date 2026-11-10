@@ -16,6 +16,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -69,7 +70,7 @@ func (s *accountTokenService) ChangeUserEmail(ctx context.Context, invocation in
 	}
 	current, err := s.deps.Users.Get(ctx, id)
 	if err != nil || current == nil || !current.IsActive() {
-		return nil, userStoreErrors.Translate(err)
+		return nil, user.StoreErrors.Translate(err)
 	}
 	if current.Email == newEmail {
 		return userEmailState(current), nil
@@ -86,7 +87,7 @@ func (s *accountTokenService) ChangeUserEmail(ctx context.Context, invocation in
 		func(ctx context.Context, reference access.MutationReference) (*UserEmailState, error) {
 			updated, err := s.changeUserEmail(ctx, current, newEmail, at, reference)
 			return userEmailState(updated), err
-		}, userStoreErrors.Translate)
+		}, user.StoreErrors.Translate)
 }
 
 func (s *accountTokenService) VerifyUserEmailPrivileged(ctx context.Context, invocation invocation.Invocation, command VerifyUserEmailPrivilegedCommand) (*UserEmailState, error) {
@@ -105,7 +106,7 @@ func (s *accountTokenService) VerifyUserEmailPrivileged(ctx context.Context, inv
 	}
 	current, err := s.deps.Users.Get(ctx, id)
 	if err != nil || current == nil || !current.IsActive() {
-		return nil, userStoreErrors.Translate(err)
+		return nil, user.StoreErrors.Translate(err)
 	}
 	if current.EmailVerified {
 		return userEmailState(current), nil
@@ -117,7 +118,7 @@ func (s *accountTokenService) VerifyUserEmailPrivileged(ctx context.Context, inv
 		func(ctx context.Context, reference access.MutationReference) (*UserEmailState, error) {
 			updated, err := s.verifyUserEmailPrivileged(ctx, current, at, reference)
 			return userEmailState(updated), err
-		}, userStoreErrors.Translate)
+		}, user.StoreErrors.Translate)
 }
 
 func (s *accountTokenService) changeUserEmail(ctx context.Context, current *model.User, newEmail string, now time.Time, reference access.MutationReference) (*model.User, error) {
@@ -154,7 +155,7 @@ func (s *accountTokenService) changeUserEmail(ctx context.Context, current *mode
 		VerificationOccurrence: verification.Occurrence, VerificationDelivery: verification.Delivery, VerificationJob: verification.Job,
 		AuditEventID: reference.ID, AuditAt: reference.MutationAt})
 	if err != nil {
-		return nil, userStoreErrors.Translate(err)
+		return nil, user.StoreErrors.Translate(err)
 	}
 	return result.User, nil
 }

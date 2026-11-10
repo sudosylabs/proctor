@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-package app
+package user
 
 import (
 	"context"
@@ -17,7 +17,6 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -32,6 +31,8 @@ type UserSettingsView struct {
 	UpdatedAt     time.Time
 }
 
+// UserSettingsReplacementResult reports the stored document after a
+// replacement and whether it changed it or replayed an earlier one.
 type UserSettingsReplacementResult struct {
 	Revision      model.UserSettingsRevision
 	FormatVersion int
@@ -40,6 +41,8 @@ type UserSettingsReplacementResult struct {
 	Replayed      bool
 }
 
+// ReplaceOwnUserSettingsCommand replaces the caller's settings source when
+// ExpectedRevision still names the stored revision.
 type ReplaceOwnUserSettingsCommand struct {
 	Source           string
 	FormatVersion    int
@@ -47,72 +50,30 @@ type ReplaceOwnUserSettingsCommand struct {
 	IdempotencyKey   string
 }
 
+// UserSettingsDiagnostic locates one reason a settings source was refused.
 type UserSettingsDiagnostic struct {
 	Code   string `json:"code"`
 	Line   int    `json:"line"`
 	Column int    `json:"column"`
 }
 
-type userSettingsAuditPreparer interface {
-	PrepareReplacement(context.Context, access.UserSettingsAuditInput) (*model.AuditEvent, error)
-}
-
-type userSettingsChanged struct {
+// SettingsChange describes a committed replacement of a User's settings
+// document, for the realtime effect that follows it.
+type SettingsChange struct {
 	UserID        model.UserID
 	Revision      model.UserSettingsRevision
 	FormatVersion int
 	ChangedAt     time.Time
 }
 
-type userSettingsEffects interface {
-	Changed(context.Context, userSettingsChanged) error
-}
-
-type userSettingsEffectFailures interface {
-	Report(context.Context, string, error)
-}
-
-// userSettingsServiceDependencies are the collaborators of userSettingsService;
-// newUserSettingsService validates them once and userSettingsService keeps them in deps.
-type userSettingsServiceDependencies struct {
-	Settings       store.UserSettingsStore
-	Audit          userSettingsAuditPreparer
-	Effects        userSettingsEffects
-	EffectFailures userSettingsEffectFailures
-	Now            func() time.Time
-}
-
-type userSettingsService struct {
-	deps userSettingsServiceDependencies
-}
-
-func newUserSettingsService(deps userSettingsServiceDependencies) (*userSettingsService, error) {
-	if deps.Settings == nil {
-		return nil, errors.New("user settings store is required")
-	}
-	if deps.Audit == nil {
-		return nil, errors.New("user settings audit preparer is required")
-	}
-	if deps.Effects == nil {
-		return nil, errors.New("user settings effects are required")
-	}
-	if deps.EffectFailures == nil {
-		return nil, errors.New("user settings effect failure reporter is required")
-	}
-	if deps.Now == nil {
-		return nil, errors.New("user settings clock is required")
-	}
-	return &userSettingsService{deps: deps}, nil
-}
-
-func (s *userSettingsService) ReplaceOwnUserSettings(
+func (s *Service) ReplaceOwnUserSettings(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	command ReplaceOwnUserSettingsCommand,
 ) (UserSettingsReplacementResult, error) {
 	principal := invocation.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
-		return UserSettingsReplacementResult{}, invalidTokenAppError()
+		return UserSettingsReplacementResult{}, apperror.New("authentication.token_invalid")
 	}
 	if command.IdempotencyKey == "" {
 		return UserSettingsReplacementResult{}, apperror.New("idempotency.key_required")
@@ -134,7 +95,7 @@ func (s *userSettingsService) ReplaceOwnUserSettings(
 		encoded, _ := json.Marshal(public)
 		return UserSettingsReplacementResult{}, apperror.New("user_settings.invalid").WithField("diagnostics", string(encoded))
 	}
-	current, err := s.deps.Settings.Get(ctx, principal.UserID)
+	current, err := s.settings.Get(ctx, principal.UserID)
 	if err != nil || current == nil || current.UserID != principal.UserID || current.Validate() != nil {
 		if err == nil {
 			err = errors.New("invalid persisted settings document")
@@ -145,7 +106,7 @@ func (s *userSettingsService) ReplaceOwnUserSettings(
 		return UserSettingsReplacementResult{}, apperror.New("user_settings.format_unsupported")
 	}
 	nextRevision := model.NewUserSettingsRevision()
-	updatedAt := model.TimeUTC(s.deps.Now())
+	updatedAt := model.TimeUTC(s.now())
 	if !updatedAt.After(current.UpdatedAt) {
 		updatedAt = current.UpdatedAt.Add(time.Millisecond)
 	}
@@ -165,7 +126,7 @@ func (s *userSettingsService) ReplaceOwnUserSettings(
 	var audit *model.AuditEvent
 	if current.Revision == command.ExpectedRevision &&
 		(current.Source != command.Source || current.FormatVersion != command.FormatVersion) {
-		audit, err = s.deps.Audit.PrepareReplacement(ctx, access.UserSettingsAuditInput{
+		audit, err = s.settingsAuditor.PrepareReplacement(ctx, access.UserSettingsAuditInput{
 			Invocation: invocation, UserID: principal.UserID,
 			PreviousRevision: current.Revision, ResultingRevision: nextRevision,
 			FormatVersion: command.FormatVersion, SourceBytes: len(command.Source),
@@ -174,7 +135,7 @@ func (s *userSettingsService) ReplaceOwnUserSettings(
 			return UserSettingsReplacementResult{}, err
 		}
 	}
-	stored, err := s.deps.Settings.Replace(ctx, &store.UserSettingsReplacement{
+	stored, err := s.settings.Replace(ctx, &store.UserSettingsReplacement{
 		UserID: principal.UserID, Source: command.Source, FormatVersion: command.FormatVersion,
 		ExpectedRevision: command.ExpectedRevision, NextRevision: nextRevision,
 		UpdatedAt: updatedAt, AuditEvent: audit,
@@ -190,32 +151,14 @@ func (s *userSettingsService) ReplaceOwnUserSettings(
 		UpdatedAt: stored.UpdatedAt, Changed: stored.Changed, Replayed: stored.Replayed,
 	}
 	if result.Changed && !result.Replayed {
-		if effectErr := s.deps.Effects.Changed(ctx, userSettingsChanged{
+		if effectErr := s.effects.SettingsChanged(ctx, SettingsChange{
 			UserID: principal.UserID, Revision: result.Revision,
 			FormatVersion: result.FormatVersion, ChangedAt: result.UpdatedAt,
 		}); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "user_settings_changed", effectErr)
+			s.effects.Report(ctx, "user_settings_changed", effectErr)
 		}
 	}
 	return result, nil
-}
-
-type userSettingsRealtimeEffects struct{ realtime *realtimeService }
-
-func (e userSettingsRealtimeEffects) Changed(ctx context.Context, change userSettingsChanged) error {
-	event, err := realtime.NewUserSettingsChangedEvent(
-		change.UserID, change.Revision, change.FormatVersion, change.ChangedAt,
-	)
-	if err != nil {
-		return err
-	}
-	return e.realtime.PublishRealtimeEvent(ctx, event)
-}
-
-type userSettingsEffectReporter struct{ realtime *realtimeService }
-
-func (r userSettingsEffectReporter) Report(ctx context.Context, operation string, err error) {
-	r.realtime.reportTransientFailure(ctx, operation, err)
 }
 
 func userSettingsReplacementError(err error) error {
@@ -233,12 +176,12 @@ var userSettingsStoreErrors = apperror.StoreTable{
 
 // ReadOwnUserSettings returns only the document owned by the interactive Session
 // principal. There is intentionally no caller-supplied User identifier.
-func (s *userSettingsService) ReadOwnUserSettings(ctx context.Context, invocation invocation.Invocation) (UserSettingsView, error) {
+func (s *Service) ReadOwnUserSettings(ctx context.Context, invocation invocation.Invocation) (UserSettingsView, error) {
 	principal := invocation.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
-		return UserSettingsView{}, invalidTokenAppError()
+		return UserSettingsView{}, apperror.New("authentication.token_invalid")
 	}
-	document, err := s.deps.Settings.Get(ctx, principal.UserID)
+	document, err := s.settings.Get(ctx, principal.UserID)
 	if err != nil {
 		return UserSettingsView{}, userSettingsUnavailable(err)
 	}
@@ -262,7 +205,9 @@ func userSettingsUnavailable(err error) error {
 	return apperror.New("user_settings.unavailable").Wrap(err)
 }
 
-func prepareInitialUserSettingsDocument(user *model.User) (*model.UserSettingsDocument, error) {
+// PrepareInitialSettingsDocument builds the settings document a newly created
+// User starts with, to be stored in the same step that creates the User.
+func PrepareInitialSettingsDocument(user *model.User) (*model.UserSettingsDocument, error) {
 	if user == nil || !user.ID.IsValid() || user.CreatedAt.IsZero() {
 		return nil, errors.New("prepared user is required for initial settings")
 	}

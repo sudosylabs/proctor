@@ -25,7 +25,7 @@ import (
 func TestUserSettingsApplicationBoundary(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join("..", "app", "user_settings.go")
+	path := filepath.Join("..", "app", "user", "settings.go")
 	parsed, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
 	require.NoError(t, err, "parse %s", path)
 
@@ -38,7 +38,6 @@ func TestUserSettingsApplicationBoundary(t *testing.T) {
 		serverModule + "/app/apperror":    {},
 		serverModule + "/app/idempotency": {},
 		serverModule + "/app/invocation":  {},
-		serverModule + "/app/realtime":    {},
 		serverModule + "/model":           {},
 		serverModule + "/store":           {},
 	}

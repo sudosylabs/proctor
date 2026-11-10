@@ -21,6 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/workspace"
 
 	"github.com/sudosylabs/proctor/server/app/job"
+	"github.com/sudosylabs/proctor/server/app/user"
 )
 
 // Exam services live in child modules whose types share names such as
@@ -74,9 +75,9 @@ type App struct {
 	*examResourceService
 	*examCorrectionService
 	*examStarterWorkspaceService
-	*userProfileService
-	*userSettingsService
-	*profilePictureService
+	// Users holds the User directory, profile, settings and profile-picture
+	// use cases.
+	Users *user.Service
 	*accountStateService
 	*sessionAdministrationService
 	*roleService
@@ -144,7 +145,7 @@ func New(deps Dependencies) (*App, error) {
 		return nil, err
 	}
 	administration.search = newSearchService(searchServiceDependencies{
-		Exams: examinations.authoring, Users: profiles.userProfiles,
+		Exams: examinations.authoring, Users: profiles.users,
 		ClassAuthorization: access.authorization, Classes: deps.Store.Class(),
 	})
 	administration.counts = newAdministrationCountsService(administrationCountsDependencies(identity, jobs))

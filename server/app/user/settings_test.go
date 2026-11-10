@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-package app
+package user
 
 import (
 	"context"
@@ -24,6 +24,7 @@ import (
 )
 
 type userSettingsStoreFake struct {
+	store.UserSettingsStore
 	document       *model.UserSettingsDocument
 	err            error
 	got            model.UserID
@@ -60,58 +61,6 @@ func (s *userSettingsStoreFake) Replace(
 	return s.replaceResult, nil
 }
 
-type userSettingsAuditFake struct {
-	event *model.AuditEvent
-	err   error
-	input access.UserSettingsAuditInput
-	calls int
-}
-
-type userSettingsEffectsFake struct {
-	changes []userSettingsChanged
-	err     error
-	events  *[]string
-}
-
-func (e *userSettingsEffectsFake) Changed(_ context.Context, change userSettingsChanged) error {
-	if e.events != nil {
-		*e.events = append(*e.events, "effect")
-	}
-	e.changes = append(e.changes, change)
-	return e.err
-}
-
-type userSettingsEffectFailuresFake struct {
-	operations []string
-	errors     []error
-}
-
-func (r *userSettingsEffectFailuresFake) Report(_ context.Context, operation string, err error) {
-	r.operations = append(r.operations, operation)
-	r.errors = append(r.errors, err)
-}
-
-func newUserSettingsServiceForTest(
-	t *testing.T,
-	settings store.UserSettingsStore,
-	audit userSettingsAuditPreparer,
-	now func() time.Time,
-) *userSettingsService {
-	t.Helper()
-	service, err := newUserSettingsService(userSettingsServiceDependencies{Settings: settings, Audit: audit, Effects: &userSettingsEffectsFake{}, EffectFailures: &userSettingsEffectFailuresFake{}, Now: now})
-	require.NoError(t, err)
-	return service
-}
-
-func (a *userSettingsAuditFake) PrepareReplacement(
-	_ context.Context,
-	input access.UserSettingsAuditInput,
-) (*model.AuditEvent, error) {
-	a.calls++
-	a.input = input
-	return a.event, a.err
-}
-
 func TestUserSettingsReadOwnPreservesExactSource(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
@@ -123,7 +72,7 @@ func TestUserSettingsReadOwnPreservesExactSource(t *testing.T) {
 		Revision:      model.NewUserSettingsRevision(),
 		CreatedAt:     at.Add(-time.Hour), UpdatedAt: at,
 	}}
-	service := newUserSettingsServiceForTest(t, persistence, &userSettingsAuditFake{}, time.Now)
+	service := newSettingsServiceForTest(t, persistence, &settingsAuditFake{}, time.Now)
 
 	result, err := service.ReadOwnUserSettings(context.Background(), invocation.New(principal, model.RequestMetadata{}))
 	require.NoError(t, err)
@@ -147,7 +96,7 @@ func TestUserSettingsReadOwnPreservesUnsupportedFormatAsOpaqueReadOnlySource(t *
 		UserID: principal.UserID, Source: source, FormatVersion: 2,
 		Revision: model.NewUserSettingsRevision(), CreatedAt: at.Add(-time.Hour), UpdatedAt: at,
 	}}
-	service := newUserSettingsServiceForTest(t, persistence, &userSettingsAuditFake{}, time.Now)
+	service := newSettingsServiceForTest(t, persistence, &settingsAuditFake{}, time.Now)
 
 	result, err := service.ReadOwnUserSettings(context.Background(), invocation.New(principal, model.RequestMetadata{}))
 	require.NoError(t, err)
@@ -162,7 +111,7 @@ func TestUserSettingsReadOwnPreservesUnsupportedFormatAsOpaqueReadOnlySource(t *
 func TestUserSettingsReadOwnRequiresInteractiveSession(t *testing.T) {
 	t.Parallel()
 	persistence := &userSettingsStoreFake{}
-	service := newUserSettingsServiceForTest(t, persistence, &userSettingsAuditFake{}, time.Now)
+	service := newSettingsServiceForTest(t, persistence, &settingsAuditFake{}, time.Now)
 	pat := model.Principal{
 		UserID: model.NewUserID(), CredentialID: model.PrincipalCredentialID(model.NewPersonalAccessTokenID()),
 		CredentialType: model.CredentialPersonalAccessToken, AuthenticationMethod: "personal_access_token",
@@ -198,7 +147,7 @@ func TestUserSettingsReadOwnFailsClosedWithoutExposingSource(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			service := newUserSettingsServiceForTest(t, test.store, &userSettingsAuditFake{}, time.Now)
+			service := newSettingsServiceForTest(t, test.store, &settingsAuditFake{}, time.Now)
 			_, err := service.ReadOwnUserSettings(context.Background(), invocation.New(principal, model.RequestMetadata{}))
 			require.True(t, apperror.Is(err, "user_settings.unavailable"), "ReadOwn() error = %v", err)
 			if err != nil {
@@ -218,8 +167,8 @@ func TestUserSettingsReplaceOwnValidatesAndPreparesSafeAtomicMutation(t *testing
 	}
 	source := "{\n  // visual preference\n  \"workbench.colorTheme\": \"Proctor Dark\",\n}\n"
 	persistence := &userSettingsStoreFake{document: current}
-	audit := &userSettingsAuditFake{event: &model.AuditEvent{Action: "user.settings.replace"}}
-	service := newUserSettingsServiceForTest(t, persistence, audit, func() time.Time { return at })
+	audit := &settingsAuditFake{event: &model.AuditEvent{Action: "user.settings.replace"}}
+	service := newSettingsServiceForTest(t, persistence, audit, func() time.Time { return at })
 	nextRevision := model.NewUserSettingsRevision()
 	persistence.replaceResult = &store.UserSettingsReplacementResult{
 		Revision: nextRevision, FormatVersion: 1, UpdatedAt: at, Changed: true,
@@ -254,8 +203,8 @@ func TestUserSettingsReplaceOwnRejectsInvalidSourceWithoutLeakOrMutation(t *test
 	principal := userSettingsSessionPrincipal(at)
 	secret := "secret.visual.key"
 	persistence := &userSettingsStoreFake{}
-	audit := &userSettingsAuditFake{}
-	service := newUserSettingsServiceForTest(t, persistence, audit, time.Now)
+	audit := &settingsAuditFake{}
+	service := newSettingsServiceForTest(t, persistence, audit, time.Now)
 	_, err := service.ReplaceOwnUserSettings(context.Background(), invocation.New(principal, model.RequestMetadata{}), ReplaceOwnUserSettingsCommand{
 		Source: "{\"" + secret + "\": }", FormatVersion: 1,
 		ExpectedRevision: model.NewUserSettingsRevision(), IdempotencyKey: "invalid-save",
@@ -290,8 +239,8 @@ func TestUserSettingsReplaceOwnRejectsUnsupportedFormatsWithoutEffects(t *testin
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			persistence := &userSettingsStoreFake{document: test.persisted}
-			audit := &userSettingsAuditFake{}
-			service := newUserSettingsServiceForTest(t, persistence, audit, time.Now)
+			audit := &settingsAuditFake{}
+			service := newSettingsServiceForTest(t, persistence, audit, time.Now)
 			_, err := service.ReplaceOwnUserSettings(context.Background(), invocation.New(principal, model.RequestMetadata{}), ReplaceOwnUserSettingsCommand{
 				Source: "{}\n", FormatVersion: test.targetVersion,
 				ExpectedRevision: test.persisted.Revision, IdempotencyKey: "unsupported-format-save",
@@ -322,9 +271,9 @@ func TestUserSettingsReplaceOwnMapsRevisionAndIdempotencyConflictsSafely(t *test
 	} {
 		t.Run(name, func(t *testing.T) {
 			persistence := &userSettingsStoreFake{document: current, replaceErr: storeErr}
-			service := newUserSettingsServiceForTest(t,
+			service := newSettingsServiceForTest(t,
 				persistence,
-				&userSettingsAuditFake{event: &model.AuditEvent{Action: "user.settings.replace"}},
+				&settingsAuditFake{event: &model.AuditEvent{Action: "user.settings.replace"}},
 				func() time.Time { return at },
 			)
 			_, err := service.ReplaceOwnUserSettings(context.Background(), invocation.New(principal, model.RequestMetadata{}), ReplaceOwnUserSettingsCommand{
@@ -355,9 +304,9 @@ func TestUserSettingsReplaceOwnUnknownOutcomeIsResolvedByAuthoritativeRead(t *te
 	persistence := &userSettingsStoreFake{
 		document: previous, replaceErr: errors.New("commit outcome unavailable"),
 	}
-	service := newUserSettingsServiceForTest(t,
+	service := newSettingsServiceForTest(t,
 		persistence,
-		&userSettingsAuditFake{event: &model.AuditEvent{Action: "user.settings.replace"}},
+		&settingsAuditFake{event: &model.AuditEvent{Action: "user.settings.replace"}},
 		func() time.Time { return at },
 	)
 	const source = "{\"editor.fontSize\": 18}\n"
@@ -390,9 +339,8 @@ func TestUserSettingsReplaceOwnPublishesOnePostCommitRefetchHint(t *testing.T) {
 	persistence := &userSettingsStoreFake{document: current, events: &events, replaceResult: &store.UserSettingsReplacementResult{
 		Revision: next, FormatVersion: 1, UpdatedAt: at, Changed: true,
 	}}
-	effects := &userSettingsEffectsFake{events: &events}
-	failures := &userSettingsEffectFailuresFake{}
-	service, err := newUserSettingsService(userSettingsServiceDependencies{Settings: persistence, Audit: &userSettingsAuditFake{event: &model.AuditEvent{Action: "user.settings.replace"}}, Effects: effects, EffectFailures: failures, Now: func() time.Time { return at }})
+	effects := &effectsFake{events: &events}
+	service, err := newSettingsService(persistence, &settingsAuditFake{event: &model.AuditEvent{Action: "user.settings.replace"}}, effects, func() time.Time { return at })
 	require.NoError(t, err)
 
 	result, err := service.ReplaceOwnUserSettings(context.Background(), invocation.New(principal, model.RequestMetadata{}), ReplaceOwnUserSettingsCommand{
@@ -411,7 +359,7 @@ func TestUserSettingsReplaceOwnPublishesOnePostCommitRefetchHint(t *testing.T) {
 	require.Len(t, events, 2)
 	require.Equal(t, "store", events[0])
 	require.Equal(t, "effect", events[1])
-	require.Empty(t, failures.operations)
+	require.Empty(t, effects.operations)
 }
 
 func TestUserSettingsReplaceOwnSuppressesNoOpReplayAndRejectedCommandEvents(t *testing.T) {
@@ -435,10 +383,10 @@ func TestUserSettingsReplaceOwnSuppressesNoOpReplayAndRejectedCommandEvents(t *t
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			effects := &userSettingsEffectsFake{}
+			effects := &effectsFake{}
 			persistence := &userSettingsStoreFake{document: current, replaceResult: test.result, replaceErr: test.storeErr}
-			audit := &userSettingsAuditFake{err: errors.New("audit unavailable")}
-			service, err := newUserSettingsService(userSettingsServiceDependencies{Settings: persistence, Audit: audit, Effects: effects, EffectFailures: &userSettingsEffectFailuresFake{}, Now: func() time.Time { return at.Add(time.Second) }})
+			audit := &settingsAuditFake{err: errors.New("audit unavailable")}
+			service, err := newSettingsService(persistence, audit, effects, func() time.Time { return at.Add(time.Second) })
 			require.NoError(t, err)
 			source := "{}\n"
 			if test.source != "" {
@@ -458,9 +406,9 @@ func TestUserSettingsReplaceOwnSuppressesNoOpReplayAndRejectedCommandEvents(t *t
 
 func TestUserSettingsReplaceOwnRejectedPrincipalPublishesNothing(t *testing.T) {
 	t.Parallel()
-	effects := &userSettingsEffectsFake{}
+	effects := &effectsFake{}
 	persistence := &userSettingsStoreFake{}
-	service, err := newUserSettingsService(userSettingsServiceDependencies{Settings: persistence, Audit: &userSettingsAuditFake{}, Effects: effects, EffectFailures: &userSettingsEffectFailuresFake{}, Now: time.Now})
+	service, err := newSettingsService(persistence, &settingsAuditFake{}, effects, time.Now)
 	require.NoError(t, err)
 	principal := model.Principal{
 		UserID: model.NewUserID(), CredentialID: model.PrincipalCredentialID(model.NewPersonalAccessTokenID()),
@@ -486,8 +434,8 @@ func TestUserSettingsRealtimeFailureDoesNotChangeCommittedResultAndReadReconcile
 	persistence := &userSettingsStoreFake{document: current, replaceResult: &store.UserSettingsReplacementResult{
 		Revision: next, FormatVersion: 1, UpdatedAt: at, Changed: true,
 	}}
-	failures := &userSettingsEffectFailuresFake{}
-	service, err := newUserSettingsService(userSettingsServiceDependencies{Settings: persistence, Audit: &userSettingsAuditFake{event: &model.AuditEvent{Action: "user.settings.replace"}}, Effects: &userSettingsEffectsFake{err: errors.New("peer delivery unavailable")}, EffectFailures: failures, Now: func() time.Time { return at }})
+	failures := &effectsFake{err: errors.New("peer delivery unavailable")}
+	service, err := newSettingsService(persistence, &settingsAuditFake{event: &model.AuditEvent{Action: "user.settings.replace"}}, failures, func() time.Time { return at })
 	require.NoError(t, err)
 	const source = "{\"workbench.colorTheme\": \"Dark\"}\n"
 	result, err := service.ReplaceOwnUserSettings(context.Background(), invocation.New(principal, model.RequestMetadata{}), ReplaceOwnUserSettingsCommand{
@@ -508,6 +456,7 @@ func TestUserSettingsRealtimeFailureDoesNotChangeCommittedResultAndReadReconcile
 }
 
 type userSettingsRaceStore struct {
+	store.UserSettingsStore
 	document *model.UserSettingsDocument
 	result   *store.UserSettingsReplacementResult
 	calls    atomic.Int32
@@ -524,9 +473,12 @@ func (s *userSettingsRaceStore) Replace(context.Context, *store.UserSettingsRepl
 	return nil, &store.ErrUserSettingsRevisionConflict{CurrentRevision: s.result.Revision}
 }
 
-type userSettingsAtomicEffects struct{ calls atomic.Int32 }
+type userSettingsAtomicEffects struct {
+	effectsBase
+	calls atomic.Int32
+}
 
-func (e *userSettingsAtomicEffects) Changed(context.Context, userSettingsChanged) error {
+func (e *userSettingsAtomicEffects) SettingsChanged(context.Context, SettingsChange) error {
 	e.calls.Add(1)
 	return nil
 }
@@ -546,7 +498,7 @@ func TestUserSettingsConcurrentWritersPublishOnlyTheCommittedWinner(t *testing.T
 		Revision: model.NewUserSettingsRevision(), FormatVersion: 1, UpdatedAt: at, Changed: true,
 	}}
 	effects := &userSettingsAtomicEffects{}
-	service, err := newUserSettingsService(userSettingsServiceDependencies{Settings: persistence, Audit: userSettingsConcurrentAudit{}, Effects: effects, EffectFailures: &userSettingsEffectFailuresFake{}, Now: func() time.Time { return at }})
+	service, err := newSettingsService(persistence, userSettingsConcurrentAudit{}, effects, func() time.Time { return at })
 	require.NoError(t, err)
 	start := make(chan struct{})
 	errorsByWriter := make(chan error, 2)
@@ -571,16 +523,6 @@ func TestUserSettingsConcurrentWritersPublishOnlyTheCommittedWinner(t *testing.T
 	require.Equal(t, int32(1), effects.calls.Load(), "successes")
 }
 
-func userSettingsSessionPrincipal(at time.Time) model.Principal {
-	return model.Principal{
-		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
-		CredentialID:         model.PrincipalCredentialID(model.NewSessionCredentialID()),
-		CredentialType:       model.CredentialSessionAccess,
-		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
-		ClientType: model.SessionClientWeb, AuthenticatedAt: at,
-	}
-}
-
 func containsSensitiveText(value, sensitive string) bool {
 	for index := 0; index+len(sensitive) <= len(value); index++ {
 		if value[index:index+len(sensitive)] == sensitive {
@@ -588,4 +530,15 @@ func containsSensitiveText(value, sensitive string) bool {
 		}
 	}
 	return false
+}
+
+func newSettingsService(settings store.UserSettingsStore, audit SettingsAuditor, effects Effects, now func() time.Time) (*Service, error) {
+	return New(Dependencies{Store: &catalogFake{userSettings: settings}, SettingsAuditor: audit, Effects: effects, Now: now})
+}
+
+func newSettingsServiceForTest(t *testing.T, settings store.UserSettingsStore, audit SettingsAuditor, now func() time.Time) *Service {
+	t.Helper()
+	service, err := newSettingsService(settings, audit, &effectsFake{}, now)
+	require.NoError(t, err)
+	return service
 }

@@ -19,28 +19,28 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type userSettingsHTTPApplication struct {
-	result         app.UserSettingsView
+	result         user.UserSettingsView
 	err            error
 	invocation     invocation.Invocation
 	calls          int
-	replaceResult  app.UserSettingsReplacementResult
+	replaceResult  user.UserSettingsReplacementResult
 	replaceErr     error
-	replaceCommand app.ReplaceOwnUserSettingsCommand
+	replaceCommand user.ReplaceOwnUserSettingsCommand
 	replaceCalls   int
 }
 
 func (a *userSettingsHTTPApplication) ReplaceOwnUserSettings(
 	_ context.Context,
 	invocation invocation.Invocation,
-	command app.ReplaceOwnUserSettingsCommand,
-) (app.UserSettingsReplacementResult, error) {
+	command user.ReplaceOwnUserSettingsCommand,
+) (user.UserSettingsReplacementResult, error) {
 	a.replaceCalls++
 	a.invocation = invocation
 	a.replaceCommand = command
@@ -50,7 +50,7 @@ func (a *userSettingsHTTPApplication) ReplaceOwnUserSettings(
 func (a *userSettingsHTTPApplication) ReadOwnUserSettings(
 	_ context.Context,
 	invocation invocation.Invocation,
-) (app.UserSettingsView, error) {
+) (user.UserSettingsView, error) {
 	a.calls++
 	a.invocation = invocation
 	return a.result, a.err
@@ -69,7 +69,7 @@ func TestUserSettingsHTTPReplacesWithoutEchoingSource(t *testing.T) {
 	revision := model.NewUserSettingsRevision()
 	next := model.NewUserSettingsRevision()
 	source := "{\n  // exact\n  \"workbench.colorTheme\": \"Proctor Dark\",\n}\n"
-	applicationFake := &userSettingsHTTPApplication{replaceResult: app.UserSettingsReplacementResult{
+	applicationFake := &userSettingsHTTPApplication{replaceResult: user.UserSettingsReplacementResult{
 		Revision: next, FormatVersion: 1, UpdatedAt: at, Changed: true,
 	}}
 	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userSettingsResource(applicationFake))
@@ -108,7 +108,7 @@ func TestUserSettingsHTTPReplacementIsStrictBoundedAndIdempotent(t *testing.T) {
 		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now(),
 	}
 	revision := model.NewUserSettingsRevision()
-	applicationFake := &userSettingsHTTPApplication{replaceResult: app.UserSettingsReplacementResult{
+	applicationFake := &userSettingsHTTPApplication{replaceResult: user.UserSettingsReplacementResult{
 		Revision: revision, FormatVersion: 1, UpdatedAt: time.Now(),
 	}}
 	newAPI := func() *API {
@@ -169,7 +169,7 @@ func TestUserSettingsHTTPReadsExactSelfDocumentWithoutCaching(t *testing.T) {
 		ClientType: model.SessionClientDesktop, AuthenticatedAt: at,
 	}
 	source := "{\n  // exact\n  \"workbench.colorTheme\": \"Proctor Dark\",\n}\n"
-	applicationFake := &userSettingsHTTPApplication{result: app.UserSettingsView{
+	applicationFake := &userSettingsHTTPApplication{result: user.UserSettingsView{
 		Source: source, FormatVersion: 1, Revision: model.NewUserSettingsRevision(),
 		Writable: true, UpdatedAt: at,
 	}}
@@ -208,7 +208,7 @@ func TestUserSettingsHTTPReadsUnsupportedFormatAsExactReadOnlySource(t *testing.
 		ClientType: model.SessionClientDesktop, AuthenticatedAt: at,
 	}
 	const source = "future-format(source => remains.exact);\n"
-	applicationFake := &userSettingsHTTPApplication{result: app.UserSettingsView{
+	applicationFake := &userSettingsHTTPApplication{result: user.UserSettingsView{
 		Source: source, FormatVersion: 2, Revision: model.NewUserSettingsRevision(),
 		Writable: false, UpdatedAt: at,
 	}}

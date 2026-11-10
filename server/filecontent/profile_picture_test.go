@@ -32,7 +32,7 @@ import (
 	"github.com/sudosylabs/proctor/packages/vfs"
 	"github.com/sudosylabs/proctor/packages/vfs/local"
 	"github.com/sudosylabs/proctor/packages/vfs/memory"
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/filecontent"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -170,7 +170,7 @@ func TestContentAcceptsSupportedProfilePictureFormatsAndRejectsOversizedDimensio
 			content, err := filecontent.New(memory.New(), filecontent.Policy{MaximumConcurrentOperations: 2}, nil)
 			require.NoError(t, err)
 			_, err = content.NormalizeAndStoreProfilePicture(context.Background(), model.NewFileRevisionID(), bytes.NewReader(input.Bytes()), int64(input.Len()), time.Unix(1, 0))
-			require.ErrorIs(t, err, app.ErrInvalidProfilePicture)
+			require.ErrorIs(t, err, user.ErrInvalidProfilePicture)
 		})
 	}
 
@@ -180,12 +180,12 @@ func TestContentAcceptsSupportedProfilePictureFormatsAndRejectsOversizedDimensio
 	content, err := filecontent.New(memory.New(), filecontent.Policy{MaximumConcurrentOperations: 2}, nil)
 	require.NoError(t, err)
 	_, err = content.NormalizeAndStoreProfilePicture(context.Background(), model.NewFileRevisionID(), bytes.NewReader(input.Bytes()), int64(input.Len()), time.Unix(1, 0))
-	require.ErrorIs(t, err, app.ErrInvalidProfilePicture)
+	require.ErrorIs(t, err, user.ErrInvalidProfilePicture)
 	tooLarge := bytes.Repeat([]byte{'x'}, (5<<20)+1)
 	_, err = content.NormalizeAndStoreProfilePicture(context.Background(), model.NewFileRevisionID(), bytes.NewReader(tooLarge), int64(len(tooLarge)), time.Unix(1, 0))
-	require.ErrorIs(t, err, app.ErrInvalidProfilePicture)
+	require.ErrorIs(t, err, user.ErrInvalidProfilePicture)
 	_, err = content.NormalizeAndStoreProfilePicture(context.Background(), model.NewFileRevisionID(), nil, -1, time.Unix(1, 0))
-	require.ErrorIs(t, err, app.ErrInvalidProfilePicture)
+	require.ErrorIs(t, err, user.ErrInvalidProfilePicture)
 }
 
 func TestContentAppliesEXIFOrientationBeforeProfilePictureCropping(t *testing.T) {

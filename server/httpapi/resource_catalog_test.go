@@ -88,6 +88,7 @@ func TestResolveResourceApplicationsRequiresCompleteGraph(t *testing.T) {
 		{"student progressions", "student progression application is required", func(options *Options) { options.StudentProgressions = nil }},
 		{"academic administration batches", "academic administration batch application is required", func(options *Options) { options.AcademicAdministrationBatches = nil }},
 		{"user profiles", "user profile application is required", func(options *Options) { options.UserProfiles = nil }},
+		{"user accounts", "user account application is required", func(options *Options) { options.UserAccounts = nil }},
 		{"user settings", "user settings application is required", func(options *Options) { options.UserSettings = nil }},
 		{"account states", "account state application is required", func(options *Options) { options.AccountStates = nil }},
 		{"session administration", "session administration application is required", func(options *Options) { options.SessionAdministrations = nil }},

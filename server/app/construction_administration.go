@@ -15,15 +15,11 @@ func constructAdministration(
 	access accessAcademicConstruction,
 	identity identityConstruction,
 ) administrationConstruction {
-	profileAuthorization := userProfileAuthorization{
-		authorization: access.authorization,
-		institutions:  deps.Store.Institution(),
-	}
 	roleAuthorization := roleAuthorization{
 		authorization: access.authorization,
 		institutions:  deps.Store.Institution(),
 	}
-	accountStates := newAccountStateService(accountStateServiceDependencies{Users: deps.Store.User(), Authorization: profileAuthorization, Capabilities: access.capabilities, Audit: foundation.audit.MutationAudit(), Mail: identity.mail, Effects: accountStateRealtimeEffects{effects: foundation.realtime}, Now: time.Now})
+	accountStates := newAccountStateService(accountStateServiceDependencies{Users: deps.Store.User(), Authorization: access.authorization, Capabilities: access.capabilities, Audit: foundation.audit.MutationAudit(), Mail: identity.mail, Effects: accountStateRealtimeEffects{effects: foundation.realtime}, Now: time.Now})
 	sessionAdministrations := newSessionAdministrationService(sessionAdministrationServiceDependencies{Sessions: deps.Store.Session(), Users: deps.Store.User(), Authorization: access.authorization, Audit: foundation.audit.MutationAudit(), Mail: identity.mail, Effects: foundation.realtime, Now: time.Now})
 	roleBindings := newRoleBindingService(roleBindingServiceDependencies{Bindings: deps.Store.RoleBinding(), Roles: deps.Store.Role(), Users: deps.Store.User(), Authorization: roleAuthorization, Capabilities: access.capabilities, Audit: foundation.audit.MutationAudit(), Mail: foundation.mail, Effects: roleBindingRealtimeEffects{effects: foundation.realtime}, Now: time.Now})
 	return administrationConstruction{

@@ -20,6 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
@@ -29,10 +30,10 @@ import (
 // narrower consumer-owned capability; only the application constructor needs
 // the complete concrete content adapter surface.
 type FileContent interface {
-	ProfilePictureUploadFiles
-	ProfilePictureReadFiles
-	DefaultProfilePictureRenderFiles
-	DefaultProfilePictureGenerationFiles
+	user.ProfilePictureUploadFiles
+	user.ProfilePictureReadFiles
+	user.DefaultProfilePictureRenderFiles
+	user.DefaultProfilePictureGenerationFiles
 	jobhandler.FileRevisionContentPurger
 	jobhandler.StarterWorkspaceObjectPurger
 	jobhandler.AttemptWorkspaceObjectPurger

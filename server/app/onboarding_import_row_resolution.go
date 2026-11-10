@@ -16,6 +16,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -126,14 +127,14 @@ func (s *onboardingImportService) resolveAcademicAdministrationImportOperation(c
 
 // loadAcademicAdministrationImportUser loads the active User a row targets and records it on the row.
 func (s *onboardingImportService) loadAcademicAdministrationImportUser(ctx context.Context, id string, row *store.OnboardingImportRow) error {
-	user, userErr := s.deps.Users.Get(ctx, model.UserID(id))
+	target, userErr := s.deps.Users.Get(ctx, model.UserID(id))
 	if userErr != nil {
-		return userStoreErrors.Translate(userErr)
+		return user.StoreErrors.Translate(userErr)
 	}
-	if user == nil || user.IsArchived() {
+	if target == nil || target.IsArchived() {
 		return apperror.New("resource.not_found")
 	}
-	row.UserID = user.ID
+	row.UserID = target.ID
 	return nil
 }
 

@@ -17,6 +17,7 @@ import (
 	"os"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -215,6 +216,14 @@ func (c constructionCatalogWithJobs) CommandOutcome() store.CommandOutcomeStore 
 }
 
 type constructionJobStoreStub struct{ store.JobStore }
+
+// constructionEnqueueJobStoreStub accepts every enqueue, as a Job Store does.
+type constructionEnqueueJobStoreStub struct{ store.JobStore }
+
+func (constructionEnqueueJobStoreStub) Enqueue(context.Context, *store.JobEnqueue) (*model.Job, bool, error) {
+	return nil, false, nil
+}
+
 type constructionUserStoreStub struct{ store.UserStore }
 type constructionExamExportStoreStub struct{ store.ExamExportStore }
 type constructionFileStoreStub struct{ store.FileStore }
@@ -240,7 +249,8 @@ func (constructionCommandOutcomeStoreStub) Has(context.Context, *store.CommandId
 func TestJobRecipeConnectsRuntimeOperationsAndProfileWake(t *testing.T) {
 	t.Parallel()
 
-	profiles := profileFileConstruction{profilePictures: &profilePictureService{reads: &profilePictureReadService{}}}
+	defaultJobs := jobhandler.NewDefaultProfilePictureJobs(jobhandler.DefaultProfilePictureJobsDependencies{Jobs: constructionEnqueueJobStoreStub{}})
+	profiles := profileFileConstruction{defaultJobs: defaultJobs}
 	jobs, err := constructJobs(
 		Dependencies{
 			Store: constructionCatalogWithJobs{
@@ -262,8 +272,9 @@ func TestJobRecipeConnectsRuntimeOperationsAndProfileWake(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, jobs.runtime, "constructed Jobs = %#v, want runtime and operations", jobs)
 	require.NotNil(t, jobs.operations, "constructed Jobs = %#v, want runtime and operations", jobs)
-	_, ok := profiles.profilePictures.reads.defaultJobs.(*jobhandler.DefaultProfilePictureJobs)
-	require.True(t, ok, "profile default Jobs = %#v, want attached proposer with wake backlink", profiles.profilePictures.reads.defaultJobs)
+	// Contract: the proposal the profile service makes wakes the constructed
+	// runtime, which is only possible once constructJobs has attached it.
+	require.NoError(t, defaultJobs.ProposeDefaultProfilePicture(context.Background(), model.NewUserID(), time.Now()))
 	application := assembleApplication(
 		Dependencies{}, applicationFoundation{}, identityConstruction{}, accessAcademicConstruction{},
 		examinationConstruction{}, profiles, jobs, administrationConstruction{},
@@ -274,7 +285,7 @@ func TestJobRecipeConnectsRuntimeOperationsAndProfileWake(t *testing.T) {
 
 func TestApplicationJobDefinitionsIncludeSittingLifecycleAndDailyRecovery(t *testing.T) {
 	t.Parallel()
-	profiles := profileFileConstruction{profilePictures: &profilePictureService{reads: &profilePictureReadService{}}}
+	profiles := profileFileConstruction{}
 	definitions := buildApplicationJobDefinitions(
 		Dependencies{
 			Store: constructionCatalogWithJobs{

@@ -12,7 +12,9 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -21,8 +23,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -38,14 +42,14 @@ func TestJobRunnerRecoversNodeLossAroundADurableDomainCommit(t *testing.T) {
 		t.Run(phase, func(t *testing.T) {
 			persistence := openClusteredJobIntegrationStore(t)
 			at := model.NowUTC().Add(-time.Second)
-			user, record, err := prepareUserDefaultProfilePictureJob(&model.User{
+			account, record, err := prepareUserDefaultProfilePictureJob(&model.User{
 				Username: "recovery-" + phase,
 				Email:    "recovery-" + phase + "@example.test",
 			}, at)
 			require.NoError(t, err)
-			settings, settingsErr := prepareInitialUserSettingsDocument(user)
+			settings, settingsErr := user.PrepareInitialSettingsDocument(account)
 			require.NoError(t, settingsErr)
-			_, err = persistence.User().Create(context.Background(), &store.UserCreation{User: user, Settings: settings, DefaultProfilePictureJob: record})
+			_, err = persistence.User().Create(context.Background(), &store.UserCreation{User: account, Settings: settings, DefaultProfilePictureJob: record})
 			require.NoError(t, err)
 
 			publishEntered := make(chan struct{})
@@ -54,14 +58,15 @@ func TestJobRunnerRecoversNodeLossAroundADurableDomainCommit(t *testing.T) {
 				close(continuePublish)
 			}
 			files := &recoveryFileStore{
-				profilePictureFileStore: persistence.File(),
-				publishEntered:          publishEntered,
-				continuePublish:         continuePublish,
+				FileStore:       persistence.File(),
+				publishEntered:  publishEntered,
+				continuePublish: continuePublish,
 			}
-			pictures := newProfilePictureServiceForTest(
-				persistence.User(), files, &pictureContentFake{},
-				nil, nil, nil, nil, nil, time.Now,
-			)
+			pictures, err := user.New(user.Dependencies{
+				Store: recoveryCatalog{Catalog: persistence, files: files}, SettingsAuditor: access.UserSettingsAuditAdapter{},
+				Effects: userRealtimeEffects{}, Defaults: recoveryDefaultPictures{}, Now: time.Now,
+			})
+			require.NoError(t, err)
 			realHandler := jobhandler.NewDefaultProfilePictureDescriptor(
 				jobDefaultProfilePictureGenerator{service: pictures},
 			).Handler
@@ -127,7 +132,7 @@ func TestJobRunnerRecoversNodeLossAroundADurableDomainCommit(t *testing.T) {
 			}
 			err = nodeB.Close(context.Background())
 			require.NoError(t, err)
-			persistedUser, err := persistence.User().Get(context.Background(), user.ID)
+			persistedUser, err := persistence.User().Get(context.Background(), account.ID)
 			require.NoError(t, err)
 			require.False(t, persistedUser.DefaultProfilePictureFileID.IsZero(), "recovered handler did not durably attach the default picture")
 			var availableDefaults int
@@ -160,8 +165,32 @@ type integrationJobDiagnostics struct{}
 
 func (*integrationJobDiagnostics) ErrorContext(context.Context, string, error) {}
 
+// recoveryCatalog serves the recovery file store in place of the real one.
+type recoveryCatalog struct {
+	store.Catalog
+	files store.FileStore
+}
+
+func (c recoveryCatalog) File() store.FileStore { return c.files }
+
+// recoveryDefaultPictures generates the default rendition set without image
+// work, since recovery evidence concerns the commit, not the pixels.
+type recoveryDefaultPictures struct{}
+
+func (recoveryDefaultPictures) GenerateAndStoreDefaultProfilePicture(_ context.Context, revisionID model.FileRevisionID, _ string, at time.Time) ([]model.FileRendition, error) {
+	result := make([]model.FileRendition, 0, 3)
+	for _, size := range []int{128, 256, 512} {
+		rendition, err := model.NewFileRendition(model.NewFileRenditionID(), revisionID, fmt.Sprintf("profile_%d", size), "image/webp", 10, size, size, strings.Repeat("d", 64), at)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, *rendition)
+	}
+	return result, nil
+}
+
 type recoveryFileStore struct {
-	profilePictureFileStore
+	store.FileStore
 	publishEntered  chan struct{}
 	continuePublish chan struct{}
 	once            sync.Once
@@ -172,7 +201,7 @@ func (s *recoveryFileStore) PublishDefaultProfilePicture(ctx context.Context, in
 		close(s.publishEntered)
 		<-s.continuePublish
 	})
-	return s.profilePictureFileStore.PublishDefaultProfilePicture(ctx, input)
+	return s.FileStore.PublishDefaultProfilePicture(ctx, input)
 }
 
 type recoveryCommitHandler struct {

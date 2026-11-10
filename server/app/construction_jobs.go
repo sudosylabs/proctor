@@ -34,7 +34,7 @@ func constructJobs(
 		return jobConstruction{}, errors.New("Examination lifecycle use cases are required when Jobs are enabled")
 	}
 
-	defaultJobs := jobhandler.NewDefaultProfilePictureJobs(jobhandler.DefaultProfilePictureJobsDependencies{Jobs: deps.Store.Job()})
+	defaultJobs := profiles.defaultJobs
 	// Enabled workers must be able to open every active payload before runtime
 	// construction. Disabled workers suppress payloads before decryption, so a
 	// deliberately absent or retired ring must not prevent that convergence.
@@ -60,11 +60,12 @@ func constructJobs(
 	if err != nil {
 		return jobConstruction{}, err
 	}
-	defaultJobs.SetWake(runtime.Wake)
+	if defaultJobs != nil {
+		defaultJobs.SetWake(runtime.Wake)
+	}
 	if identity.onboardingImports != nil {
 		identity.onboardingImports.wake = runtime.Wake
 	}
-	profiles.profilePictures.reads.defaultJobs = defaultJobs
 	var mailService *mailService
 	if deps.Store.Mail() != nil {
 		mailService, err = newMailService(mailServiceDependencies{Mail: deps.Store.Mail(), Users: deps.Store.User(), Authorization: mailAuthorizationAdapter{authorization: access.authorization, institutions: deps.Store.Institution()}, Audit: foundation.audit.MailAudit(), Attempts: foundation.attempts, Renderer: deps.MailTemplateRenderer, Sender: deps.MailDeliverySender, Metrics: deps.MailMetricsReader, Sealer: deps.MailSecretSealer, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Now: time.Now,
@@ -169,7 +170,7 @@ func buildApplicationJobDefinitions(
 	}
 	catalog := jobhandler.NewCatalog(jobhandler.CatalogDependencies{
 		JobStore:                       deps.Store.Job(),
-		DefaultProfilePictureGenerator: jobDefaultProfilePictureGenerator{service: profiles.profilePictures}, Users: deps.Store.User(), DefaultProfilePictureJobs: defaultJobs,
+		DefaultProfilePictureGenerator: jobDefaultProfilePictureGenerator{service: profiles.users}, Users: deps.Store.User(), DefaultProfilePictureJobs: defaultJobs,
 		Files: deps.Store.File(), FileContent: deps.FileContent,
 		StarterWorkspaces: deps.Store.ExamStarterWorkspace(), StarterWorkspaceContent: deps.FileContent,
 		AttemptWorkspaces: deps.Store.ExamAttemptWorkspace(), AttemptWorkspaceContent: deps.FileContent,

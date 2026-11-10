@@ -20,7 +20,7 @@ import (
 	"github.com/disintegration/imaging"
 	_ "golang.org/x/image/webp"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -35,7 +35,7 @@ var profilePictureSizes = [...]int{128, 256, 512}
 // into the complete canonical profile-picture rendition set.
 func (c *Content) NormalizeAndStoreProfilePicture(ctx context.Context, revisionID model.FileRevisionID, body io.Reader, size int64, at time.Time) ([]model.FileRendition, error) {
 	if c == nil || c.filesystem == nil || !revisionID.IsValid() || body == nil || size == 0 || size < -1 || size > maximumProfilePictureBytes {
-		return nil, app.ErrInvalidProfilePicture
+		return nil, user.ErrInvalidProfilePicture
 	}
 	finish, err := c.beginWork(ctx)
 	if err != nil {
@@ -47,14 +47,14 @@ func (c *Content) NormalizeAndStoreProfilePicture(ctx context.Context, revisionI
 		return nil, cancellation
 	}
 	if err != nil || int64(len(raw)) > maximumProfilePictureBytes || (size >= 0 && int64(len(raw)) != size) {
-		return nil, app.ErrInvalidProfilePicture
+		return nil, user.ErrInvalidProfilePicture
 	}
 	configuration, format, err := image.DecodeConfig(bytes.NewReader(raw))
 	if err != nil || (format != "png" && format != "jpeg" && format != "webp") || configuration.Width <= 0 || configuration.Height <= 0 || configuration.Width > 4096 || configuration.Height > 4096 {
-		return nil, app.ErrInvalidProfilePicture
+		return nil, user.ErrInvalidProfilePicture
 	}
 	if format == "jpeg" && checkJPEGScanCount(bytes.NewReader(raw)) != nil {
-		return nil, app.ErrInvalidProfilePicture
+		return nil, user.ErrInvalidProfilePicture
 	}
 	if err = ctx.Err(); err != nil {
 		return nil, err
@@ -64,7 +64,7 @@ func (c *Content) NormalizeAndStoreProfilePicture(ctx context.Context, revisionI
 		return nil, cancellation
 	}
 	if err != nil || imageValue.Bounds().Dx() <= 0 || imageValue.Bounds().Dy() <= 0 || imageValue.Bounds().Dx() > maximumProfilePicturePixels/imageValue.Bounds().Dy() {
-		return nil, app.ErrInvalidProfilePicture
+		return nil, user.ErrInvalidProfilePicture
 	}
 	squareSize := min(imageValue.Bounds().Dx(), imageValue.Bounds().Dy())
 	square := imaging.CropCenter(imageValue, squareSize, squareSize)
@@ -108,7 +108,7 @@ func (c *Content) NormalizeAndStoreProfilePicture(ctx context.Context, revisionI
 // renditions for a stable per-user seed.
 func (c *Content) GenerateAndStoreDefaultProfilePicture(ctx context.Context, revisionID model.FileRevisionID, seed string, at time.Time) ([]model.FileRendition, error) {
 	if c == nil || c.filesystem == nil || !revisionID.IsValid() {
-		return nil, app.ErrInvalidProfilePicture
+		return nil, user.ErrInvalidProfilePicture
 	}
 	finish, err := c.beginWork(ctx)
 	if err != nil {
@@ -147,9 +147,9 @@ func (c *Content) GenerateAndStoreDefaultProfilePicture(ctx context.Context, rev
 }
 
 // RenderDefaultProfilePicture renders an unpersisted deterministic fallback.
-func (c *Content) RenderDefaultProfilePicture(ctx context.Context, seed string, size int) (*app.RenderedProfilePicture, error) {
+func (c *Content) RenderDefaultProfilePicture(ctx context.Context, seed string, size int) (*user.RenderedProfilePicture, error) {
 	if c == nil || c.filesystem == nil {
-		return nil, app.ErrInvalidProfilePicture
+		return nil, user.ErrInvalidProfilePicture
 	}
 	finish, err := c.beginWork(ctx)
 	if err != nil {
@@ -173,7 +173,7 @@ func (c *Content) RenderDefaultProfilePicture(ctx context.Context, seed string, 
 	if err = ctx.Err(); err != nil {
 		return nil, err
 	}
-	return &app.RenderedProfilePicture{Body: io.NopCloser(bytes.NewReader(encoded)), MediaType: "image/webp", Size: int64(len(encoded)), SHA256: checksum}, nil
+	return &user.RenderedProfilePicture{Body: io.NopCloser(bytes.NewReader(encoded)), MediaType: "image/webp", Size: int64(len(encoded)), SHA256: checksum}, nil
 }
 
 // RemoveProfilePictureRenditions idempotently removes an exact profile-picture

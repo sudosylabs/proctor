@@ -36,7 +36,7 @@ func TestEmailChangeAuditOmitsOldAndNewMailboxes(t *testing.T) {
 		institution: &model.Institution{ID: model.NewInstitutionID()}, mailer: &emailTransitionMailerFake{}, now: func() time.Time { return now },
 	})
 	application.accountTokenService.administration = userEmailAdministration{
-		authorization: &userProfileAuthorizerFake{events: &events}, audit: auditor, recentAuthenticationTTL: 15 * time.Minute,
+		authorization: &accountAuthorizerFake{events: &events}, audit: auditor, recentAuthenticationTTL: 15 * time.Minute,
 	}
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
@@ -163,7 +163,7 @@ func TestEmailChangeUndoAndNoticeAreRateLimited(t *testing.T) {
 		tokens: &accountTokenStoreFake{}, institution: &model.Institution{ID: model.NewInstitutionID()}, mailer: &emailTransitionMailerFake{},
 		now: func() time.Time { return now }, rateLimit: LoginRateLimitPolicy{Window: time.Minute, MaximumAttempts: 1, MaximumSourceAttempts: 100}})
 	changes.accountTokenService.administration = userEmailAdministration{
-		authorization: &userProfileAuthorizerFake{events: &events}, audit: &mutationAttemptAuditorFake{events: &events, beginID: model.NewAuditEventID().String()},
+		authorization: &accountAuthorizerFake{events: &events}, audit: &mutationAttemptAuditorFake{events: &events, beginID: model.NewAuditEventID().String()},
 		recentAuthenticationTTL: 15 * time.Minute,
 	}
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),

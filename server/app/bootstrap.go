@@ -24,6 +24,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -215,7 +216,7 @@ func (s *bootstrapService) BootstrapInstallation(ctx context.Context, invocation
 	if err != nil {
 		return nil, apperror.New("request.invalid").WithField("field", "administrator").Wrap(err)
 	}
-	administratorSettings, err := prepareInitialUserSettingsDocument(administrator)
+	administratorSettings, err := user.PrepareInitialSettingsDocument(administrator)
 	if err != nil {
 		return nil, apperror.New("request.invalid").WithField("field", "administrator").Wrap(err)
 	}

@@ -18,6 +18,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -30,7 +31,7 @@ func prepareUserDefaultProfilePictureJob(user *model.User, at time.Time) (*model
 	return jobhandler.PrepareUserDefaultProfilePictureJob(user, at)
 }
 
-type jobDefaultProfilePictureGenerator struct{ service *profilePictureService }
+type jobDefaultProfilePictureGenerator struct{ service *user.Service }
 
 func (a jobDefaultProfilePictureGenerator) EnsureDefaultProfilePicture(ctx context.Context, system invocation.System, id model.UserID) (model.FileEntryID, error) {
 	return a.service.EnsureDefaultProfilePicture(ctx, system, id)
@@ -38,9 +39,9 @@ func (a jobDefaultProfilePictureGenerator) EnsureDefaultProfilePicture(ctx conte
 
 func (jobDefaultProfilePictureGenerator) ClassifyDefaultProfilePictureError(err error) string {
 	switch {
-	case errors.Is(err, errDefaultProfilePictureUserNotFound):
+	case errors.Is(err, user.ErrDefaultProfilePictureUserNotFound):
 		return "user.not_found"
-	case errors.Is(err, errDefaultProfilePictureInvariant):
+	case errors.Is(err, user.ErrDefaultProfilePictureInvariant):
 		return "job.invariant_failed"
 	default:
 		return ""

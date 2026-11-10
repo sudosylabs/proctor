@@ -169,6 +169,7 @@ type Options struct {
 	StudentProgressions           StudentProgressionApplication
 	AcademicAdministrationBatches AcademicAdministrationBatchApplication
 	UserProfiles                  UserProfileApplication
+	UserAccounts                  UserAccountApplication
 	UserSettings                  UserSettingsApplication
 	AccountStates                 AccountStateApplication
 	SessionAdministrations        SessionAdministrationApplication

@@ -288,7 +288,7 @@ area packages described above (plan of 2026-11-10). Until an area has moved,
 its code still uses the old shape: private services in the flat `app/`
 package, a per-service `Dependencies` struct and store port, and embedding in
 `App`. Follow the new shape in any area that has moved, and do not add new
-per-service ports anywhere. `app/access`, `app/paging` and `app/academic`
+per-service ports anywhere. `app/access`, `app/paging`, `app/academic` and `app/user`
 have moved; the academic administration batches, Student Progression and
 onboarding imports still live in `app` and call `academic.Service`. These architecture tests enforce the old shape and
 retire when the last area moves: `TestServicesTakeOneDependencies`,

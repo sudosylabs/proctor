@@ -15,6 +15,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -104,7 +105,7 @@ func (s *publicRegistrationService) RegisterLocalUser(ctx context.Context, invoc
 	}
 
 	at := model.TimeUTC(s.now())
-	user, defaultJob, err := prepareUserDefaultProfilePictureJob(&model.User{
+	account, defaultJob, err := prepareUserDefaultProfilePictureJob(&model.User{
 		Username:  command.Username,
 		Email:     command.Email,
 		FirstName: firstName,
@@ -113,25 +114,25 @@ func (s *publicRegistrationService) RegisterLocalUser(ctx context.Context, invoc
 	if err != nil {
 		return apperror.New("authentication.registration.invalid").Wrap(err)
 	}
-	if err = checkNewPassword(command.Password, passwordIdentity{Username: user.Username, Email: user.Email,
-		FirstName: user.FirstName, LastName: user.LastName}); err != nil {
+	if err = checkNewPassword(command.Password, passwordIdentity{Username: account.Username, Email: account.Email,
+		FirstName: account.FirstName, LastName: account.LastName}); err != nil {
 		return err
 	}
 	passwordHash, err := s.hasher.Hash(ctx, command.Password)
 	if err != nil {
 		return passwordHashError(err, "authentication.registration.unavailable")
 	}
-	credential := &model.PasswordCredential{UserID: user.ID, PasswordHash: passwordHash}
+	credential := &model.PasswordCredential{UserID: account.ID, PasswordHash: passwordHash}
 	credential.PrepareCreate(model.NewPasswordCredentialID(), at)
-	settings, err := prepareInitialUserSettingsDocument(user)
+	settings, err := user.PrepareInitialSettingsDocument(account)
 	if err != nil {
 		return registrationUnavailable(err)
 	}
 
 	rawToken := s.newToken()
 	token := &model.UserToken{
-		UserID: user.ID, Purpose: model.UserTokenEmailVerification,
-		TokenHash: model.HashToken(rawToken), Target: user.Email, ExpiresAt: at.Add(s.tokenTTL),
+		UserID: account.ID, Purpose: model.UserTokenEmailVerification,
+		TokenHash: model.HashToken(rawToken), Target: account.Email, ExpiresAt: at.Add(s.tokenTTL),
 	}
 	token.PrepareCreate(model.NewUserTokenID(), at)
 	actionURL, err := accountCredentialLink(s.publicURL, "/account/verify-email", rawToken)
@@ -139,7 +140,7 @@ func (s *publicRegistrationService) RegisterLocalUser(ctx context.Context, invoc
 		return registrationUnavailable(err)
 	}
 	prepared, err := s.mail.PreparePublicRegistrationVerification(
-		user, model.MailOccurrenceID(token.ID.String()), actionURL, at, token.ExpiresAt,
+		account, model.MailOccurrenceID(token.ID.String()), actionURL, at, token.ExpiresAt,
 	)
 	if err != nil {
 		return registrationUnavailable(err)
@@ -150,11 +151,11 @@ func (s *publicRegistrationService) RegisterLocalUser(ctx context.Context, invoc
 	}
 	audit := recoveryAuditEvent(
 		model.ActionAuthenticationPublicRegistration,
-		model.Resource{Type: model.ResourceUser, ID: user.ID.String()}, institutionID.String(),
+		model.Resource{Type: model.ResourceUser, ID: account.ID.String()}, institutionID.String(),
 		invocation.RequestMetadata(), s.nodeID, nil, "anonymous",
 	)
 	_, err = s.registrations.RegisterLocal(ctx, &store.PublicLocalUserRegistration{
-		User: user, Settings: settings, PasswordCredential: credential, DefaultProfilePictureJob: defaultJob,
+		User: account, Settings: settings, PasswordCredential: credential, DefaultProfilePictureJob: defaultJob,
 		VerificationToken: token, TokenLifetime: s.tokenTTL, MailLifetime: s.tokenTTL,
 		VerificationOccurrence: prepared.Occurrence,
 		VerificationDelivery:   prepared.Delivery, VerificationJob: prepared.Job, AuditEvent: audit,

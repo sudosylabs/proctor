@@ -34,7 +34,7 @@ func productionResources(
 		desktopRegistrationResource(applications.desktopRegistrations),
 		externalAuthenticationResource(applications.externalAuthentication, cookies),
 		browserInvitationResource(applications.browserInvitations, cookies),
-		userProfileResource(applications.userProfiles),
+		userProfileResource(applications.userProfiles, applications.userAccounts),
 		userSettingsResource(applications.userSettings),
 		userAdministrationResource(applications.accountStates, applications.sessionAdministration),
 		sessionResource(applications.sessions, cookies),

@@ -15,6 +15,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -51,35 +52,35 @@ func (s *invitationService) acceptStudentClassByClaimHash(ctx context.Context, i
 	if err != nil {
 		return nil, passwordHashError(err, "invitation.unavailable")
 	}
-	user, defaultJob, err := prepareUserDefaultProfilePictureJob(&model.User{Username: command.Username, Email: invitation.TargetEmail,
+	account, defaultJob, err := prepareUserDefaultProfilePictureJob(&model.User{Username: command.Username, Email: invitation.TargetEmail,
 		EmailVerified: true, DisplayName: command.DisplayName, FirstName: command.FirstName, LastName: command.LastName,
 		Locale: command.Locale, Timezone: timezone}, at)
 	if err != nil {
 		return nil, apperror.New("invitation.user_invalid").Wrap(err)
 	}
-	credential := &model.PasswordCredential{UserID: user.ID, PasswordHash: hash}
+	credential := &model.PasswordCredential{UserID: account.ID, PasswordHash: hash}
 	credential.PrepareCreate(model.NewPasswordCredentialID(), at)
-	settings, err := prepareInitialUserSettingsDocument(user)
+	settings, err := user.PrepareInitialSettingsDocument(account)
 	if err != nil {
 		return nil, apperror.New("invitation.user_invalid").Wrap(err)
 	}
 	effectiveStart := invitation.EffectiveStartsAt(at)
-	affiliation := &model.Affiliation{UserID: user.ID, Kind: model.AffiliationStudent, StartsAt: effectiveStart}
+	affiliation := &model.Affiliation{UserID: account.ID, Kind: model.AffiliationStudent, StartsAt: effectiveStart}
 	affiliation.PrepareCreate(model.NewAffiliationID(), at)
 	member := &model.ClassMember{ClassID: invitation.ClassID, AcademicPeriodID: invitation.AcademicPeriodID,
-		UserID: user.ID, StartsAt: effectiveStart, EndsAt: invitation.IntendedEndsAt}
+		UserID: account.ID, StartsAt: effectiveStart, EndsAt: invitation.IntendedEndsAt}
 	member.PrepareCreate(model.NewClassMemberID(), at)
-	prepared, err := s.deps.Mail.PrepareInvitationAccepted(mail.NoticePreparation{Recipient: user, At: at})
+	prepared, err := s.deps.Mail.PrepareInvitationAccepted(mail.NoticePreparation{Recipient: account, At: at})
 	if err != nil {
 		return nil, apperror.New("invitation.mail_unavailable").Wrap(err)
 	}
 	metadata := invocation.RequestMetadata()
-	event := &model.AuditEvent{ActorID: user.ID, SubjectUserID: user.ID, Action: string(model.ActionInvitationAccept),
+	event := &model.AuditEvent{ActorID: account.ID, SubjectUserID: account.ID, Action: string(model.ActionInvitationAccept),
 		Resource: model.Resource{Type: model.ResourceClass, ID: invitation.ClassID.String()}, ScopeType: model.RoleScopeClass,
 		ScopeID: invitation.ClassID.String(), Status: model.AuditStatusSuccess, RequestID: metadata.RequestID,
 		NodeID: s.deps.NodeID, ClientType: "web", AuthMethod: "invitation", IPAddress: metadata.IPAddress, UserAgent: metadata.UserAgent}
 	result, err := s.deps.Store.AcceptStudentClass(ctx, &store.StudentClassInvitationAcceptance{ClaimHash: claimHash,
-		AcceptedAt: at, User: user, Settings: settings, PasswordCredential: credential,
+		AcceptedAt: at, User: account, Settings: settings, PasswordCredential: credential,
 		DefaultProfilePictureJob: defaultJob, Affiliation: affiliation, ClassMember: member,
 		Occurrence: prepared.Occurrence, Delivery: prepared.Delivery, DeliveryJob: prepared.Job, AuditEvent: event,
 		RequiredActions:    []model.Action{model.ActionInvitationCreate, model.ActionClassMembersManage},
@@ -129,38 +130,38 @@ func (s *invitationService) acceptTeacherAcademicUnitByClaimHash(ctx context.Con
 	if err != nil {
 		return nil, passwordHashError(err, "invitation.unavailable")
 	}
-	user, defaultJob, err := prepareUserDefaultProfilePictureJob(&model.User{Username: command.Username, Email: invitation.TargetEmail,
+	account, defaultJob, err := prepareUserDefaultProfilePictureJob(&model.User{Username: command.Username, Email: invitation.TargetEmail,
 		EmailVerified: true, DisplayName: command.DisplayName, FirstName: command.FirstName, LastName: command.LastName,
 		Locale: command.Locale, Timezone: timezone}, at)
 	if err != nil {
 		return nil, apperror.New("invitation.user_invalid").Wrap(err)
 	}
-	credential := &model.PasswordCredential{UserID: user.ID, PasswordHash: hash}
+	credential := &model.PasswordCredential{UserID: account.ID, PasswordHash: hash}
 	credential.PrepareCreate(model.NewPasswordCredentialID(), at)
-	settings, err := prepareInitialUserSettingsDocument(user)
+	settings, err := user.PrepareInitialSettingsDocument(account)
 	if err != nil {
 		return nil, apperror.New("invitation.user_invalid").Wrap(err)
 	}
 	effectiveStart := invitation.EffectiveStartsAt(at)
-	affiliation := &model.Affiliation{UserID: user.ID, Kind: model.AffiliationTeacher, StartsAt: effectiveStart}
+	affiliation := &model.Affiliation{UserID: account.ID, Kind: model.AffiliationTeacher, StartsAt: effectiveStart}
 	affiliation.PrepareCreate(model.NewAffiliationID(), at)
-	member := &model.AcademicUnitMember{AcademicUnitID: invitation.AcademicUnitID, UserID: user.ID, StartsAt: effectiveStart, EndsAt: invitation.IntendedEndsAt}
+	member := &model.AcademicUnitMember{AcademicUnitID: invitation.AcademicUnitID, UserID: account.ID, StartsAt: effectiveStart, EndsAt: invitation.IntendedEndsAt}
 	member.PrepareCreate(model.NewAcademicUnitMemberID(), at)
-	binding := &model.RoleBinding{UserID: user.ID, RoleID: invitation.RoleID, OriginInvitationID: invitation.ID,
+	binding := &model.RoleBinding{UserID: account.ID, RoleID: invitation.RoleID, OriginInvitationID: invitation.ID,
 		OriginAcademicUnitMemberID: member.ID,
 		ScopeType:                  model.RoleScopeAcademicUnit, ScopeID: invitation.AcademicUnitID.String(), StartsAt: effectiveStart, EndsAt: invitation.IntendedEndsAt}
 	binding.PrepareCreate(model.NewRoleBindingID(), at)
-	prepared, err := s.deps.Mail.PrepareInvitationAccepted(mail.NoticePreparation{Recipient: user, At: at})
+	prepared, err := s.deps.Mail.PrepareInvitationAccepted(mail.NoticePreparation{Recipient: account, At: at})
 	if err != nil {
 		return nil, apperror.New("invitation.mail_unavailable").Wrap(err)
 	}
 	metadata := invocation.RequestMetadata()
-	event := &model.AuditEvent{ActorID: user.ID, SubjectUserID: user.ID, Action: string(model.ActionInvitationAccept),
+	event := &model.AuditEvent{ActorID: account.ID, SubjectUserID: account.ID, Action: string(model.ActionInvitationAccept),
 		Resource: model.Resource{Type: model.ResourceAcademicUnit, ID: invitation.AcademicUnitID.String()}, ScopeType: model.RoleScopeAcademicUnit,
 		ScopeID: invitation.AcademicUnitID.String(), Status: model.AuditStatusSuccess, RequestID: metadata.RequestID,
 		NodeID: s.deps.NodeID, ClientType: "web", AuthMethod: "invitation", IPAddress: metadata.IPAddress, UserAgent: metadata.UserAgent}
 	result, err := s.deps.Store.AcceptTeacherAcademicUnit(ctx, &store.TeacherAcademicUnitInvitationAcceptance{ClaimHash: claimHash,
-		AcceptedAt: at, User: user, Settings: settings, PasswordCredential: credential,
+		AcceptedAt: at, User: account, Settings: settings, PasswordCredential: credential,
 		DefaultProfilePictureJob: defaultJob, Affiliation: affiliation, AcademicUnitMember: member, RoleBinding: binding,
 		Occurrence: prepared.Occurrence, Delivery: prepared.Delivery, DeliveryJob: prepared.Job, AuditEvent: event,
 		RequiredActions:    []model.Action{model.ActionInvitationCreate, model.ActionAcademicUnitMembersManage},
@@ -203,45 +204,45 @@ func (s *invitationService) acceptExternalIdentity(ctx context.Context, state *m
 	at := model.TimeUTC(s.deps.Now())
 	userCandidate := externalUserCandidate(assertion)
 	userCandidate.Email, userCandidate.EmailVerified = invitation.TargetEmail, true
-	user, defaultJob, preparationErr := prepareUserDefaultProfilePictureJob(userCandidate, at)
+	account, defaultJob, preparationErr := prepareUserDefaultProfilePictureJob(userCandidate, at)
 	var settings *model.UserSettingsDocument
 	if preparationErr == nil {
-		settings, preparationErr = prepareInitialUserSettingsDocument(user)
+		settings, preparationErr = user.PrepareInitialSettingsDocument(account)
 	}
 	if preparationErr != nil {
 		userCandidate.PrepareCreate(model.NewUserID(), at)
-		user, settings, defaultJob = userCandidate, nil, nil
+		account, settings, defaultJob = userCandidate, nil, nil
 	}
-	identity := &model.ExternalIdentity{UserID: user.ID, Provider: state.Provider, Subject: assertion.Subject,
+	identity := &model.ExternalIdentity{UserID: account.ID, Provider: state.Provider, Subject: assertion.Subject,
 		LastSeenAt: model.OptionalTimeFrom(at)}
 	effectiveStart := invitation.EffectiveStartsAt(at)
 	input := &store.ExternalIdentityInvitationAcceptance{ExternalStateID: state.ID, Identity: identity,
-		ProviderEmail: providerEmail, User: user, Settings: settings, DefaultProfilePictureJob: defaultJob,
+		ProviderEmail: providerEmail, User: account, Settings: settings, DefaultProfilePictureJob: defaultJob,
 		Capabilities: capabilities}
 	resource := model.Resource{}
 	switch invitation.Purpose {
 	case model.InvitationPurposeStudentClass:
-		input.Affiliation = &model.Affiliation{UserID: user.ID, Kind: model.AffiliationStudent, StartsAt: effectiveStart}
+		input.Affiliation = &model.Affiliation{UserID: account.ID, Kind: model.AffiliationStudent, StartsAt: effectiveStart}
 		input.Affiliation.PrepareCreate(model.NewAffiliationID(), at)
 		input.ClassMember = &model.ClassMember{ClassID: invitation.ClassID, AcademicPeriodID: invitation.AcademicPeriodID,
-			UserID: user.ID, StartsAt: effectiveStart, EndsAt: invitation.IntendedEndsAt}
+			UserID: account.ID, StartsAt: effectiveStart, EndsAt: invitation.IntendedEndsAt}
 		input.ClassMember.PrepareCreate(model.NewClassMemberID(), at)
 		input.RequiredActions = []model.Action{model.ActionInvitationCreate, model.ActionClassMembersManage}
 		resource = model.Resource{Type: model.ResourceClass, ID: invitation.ClassID.String()}
 	case model.InvitationPurposeTeacherAcademicUnit:
-		input.Affiliation = &model.Affiliation{UserID: user.ID, Kind: model.AffiliationTeacher, StartsAt: effectiveStart}
+		input.Affiliation = &model.Affiliation{UserID: account.ID, Kind: model.AffiliationTeacher, StartsAt: effectiveStart}
 		input.Affiliation.PrepareCreate(model.NewAffiliationID(), at)
 		input.AcademicUnitMember = &model.AcademicUnitMember{AcademicUnitID: invitation.AcademicUnitID,
-			UserID: user.ID, StartsAt: effectiveStart, EndsAt: invitation.IntendedEndsAt}
+			UserID: account.ID, StartsAt: effectiveStart, EndsAt: invitation.IntendedEndsAt}
 		input.AcademicUnitMember.PrepareCreate(model.NewAcademicUnitMemberID(), at)
-		input.RoleBinding = &model.RoleBinding{UserID: user.ID, RoleID: invitation.RoleID, OriginInvitationID: invitation.ID,
+		input.RoleBinding = &model.RoleBinding{UserID: account.ID, RoleID: invitation.RoleID, OriginInvitationID: invitation.ID,
 			OriginAcademicUnitMemberID: input.AcademicUnitMember.ID, ScopeType: model.RoleScopeAcademicUnit,
 			ScopeID: invitation.AcademicUnitID.String(), StartsAt: effectiveStart, EndsAt: invitation.IntendedEndsAt}
 		input.RoleBinding.PrepareCreate(model.NewRoleBindingID(), at)
 		input.RequiredActions = []model.Action{model.ActionInvitationCreate, model.ActionAcademicUnitMembersManage}
 		resource = model.Resource{Type: model.ResourceAcademicUnit, ID: invitation.AcademicUnitID.String()}
 	case model.InvitationPurposeAcademicUnitRole, model.InvitationPurposeInstitutionRole:
-		input.RoleBinding = &model.RoleBinding{UserID: user.ID, RoleID: invitation.RoleID, OriginInvitationID: invitation.ID,
+		input.RoleBinding = &model.RoleBinding{UserID: account.ID, RoleID: invitation.RoleID, OriginInvitationID: invitation.ID,
 			ScopeType: invitation.ScopeType, ScopeID: invitation.ScopeID, StartsAt: effectiveStart, EndsAt: invitation.IntendedEndsAt}
 		input.RoleBinding.PrepareCreate(model.NewRoleBindingID(), at)
 		input.RequiredActions = []model.Action{model.ActionInvitationCreate, model.ActionRoleBindingManage}
@@ -253,7 +254,7 @@ func (s *invitationService) acceptExternalIdentity(ctx context.Context, state *m
 		return nil, store.NewErrInvalidInput("invitation", "purpose", nil)
 	}
 	if invitation.Purpose == model.InvitationPurposeStudentClass || invitation.Purpose == model.InvitationPurposeTeacherAcademicUnit {
-		prepared, prepareErr := s.deps.Mail.PrepareInvitationAccepted(mail.NoticePreparation{Recipient: user, At: at})
+		prepared, prepareErr := s.deps.Mail.PrepareInvitationAccepted(mail.NoticePreparation{Recipient: account, At: at})
 		if prepareErr == nil {
 			input.Notice = &store.PreparedMail{Occurrence: prepared.Occurrence, Delivery: prepared.Delivery, Job: prepared.Job}
 		}
@@ -262,7 +263,7 @@ func (s *invitationService) acceptExternalIdentity(ctx context.Context, state *m
 	if err != nil {
 		return nil, err
 	}
-	input.AuditEvent = &model.AuditEvent{ActorID: user.ID, SubjectUserID: user.ID, Action: string(model.ActionInvitationAccept), Resource: resource,
+	input.AuditEvent = &model.AuditEvent{ActorID: account.ID, SubjectUserID: account.ID, Action: string(model.ActionInvitationAccept), Resource: resource,
 		ScopeType: invitation.ScopeType, ScopeID: invitation.ScopeID, Status: model.AuditStatusSuccess,
 		RequestID: metadata.RequestID, NodeID: s.deps.NodeID, ClientType: "web", AuthMethod: authenticationMethod,
 		IPAddress: metadata.IPAddress, UserAgent: metadata.UserAgent, Parameters: auditParameters}

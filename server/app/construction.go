@@ -23,8 +23,10 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/workspace"
 
 	"github.com/sudosylabs/proctor/server/app/job"
+	"github.com/sudosylabs/proctor/server/app/jobhandler"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/user"
 )
 
 type examinationConstruction struct {
@@ -84,9 +86,10 @@ type accessAcademicConstruction struct {
 }
 
 type profileFileConstruction struct {
-	userProfiles    *userProfileService
-	userSettings    *userSettingsService
-	profilePictures *profilePictureService
+	users *user.Service
+	// defaultJobs proposes default profile picture generation; it exists only
+	// when Jobs are enabled and is woken by the Job runtime once built.
+	defaultJobs *jobhandler.DefaultProfilePictureJobs
 }
 
 type jobConstruction struct {
@@ -237,9 +240,7 @@ func assembleApplication(
 		examResourceService:                      examinations.resources,
 		examCorrectionService:                    examinations.corrections,
 		examStarterWorkspaceService:              examinations.starterWorkspace,
-		userProfileService:                       profiles.userProfiles,
-		userSettingsService:                      profiles.userSettings,
-		profilePictureService:                    profiles.profilePictures,
+		Users:                                    profiles.users,
 		accountStateService:                      administration.accountStates,
 		sessionAdministrationService:             administration.sessionAdministrations,
 		roleService:                              administration.roles,

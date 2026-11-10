@@ -20,6 +20,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
@@ -31,11 +32,11 @@ func TestMailRekeyOldPrimaryRelinquishesOnceAndNewPrimaryCompletes(t *testing.T)
 	at := model.NowUTC().Add(-time.Second)
 	institution, err := persistence.Institution().Save(ctx, &model.Institution{Name: "mail-rekey-cluster", DisplayName: "Mail Rekey Cluster"})
 	require.NoError(t, err)
-	user, defaultJob, err := prepareUserDefaultProfilePictureJob(&model.User{Username: "mail-rekey-operator", Email: "mail-rekey-operator@example.test"}, at)
+	account, defaultJob, err := prepareUserDefaultProfilePictureJob(&model.User{Username: "mail-rekey-operator", Email: "mail-rekey-operator@example.test"}, at)
 	require.NoError(t, err)
-	settings, err := prepareInitialUserSettingsDocument(user)
+	settings, err := user.PrepareInitialSettingsDocument(account)
 	require.NoError(t, err)
-	_, err = persistence.User().Create(ctx, &store.UserCreation{User: user, Settings: settings, DefaultProfilePictureJob: defaultJob})
+	_, err = persistence.User().Create(ctx, &store.UserCreation{User: account, Settings: settings, DefaultProfilePictureJob: defaultJob})
 	require.NoError(t, err)
 
 	oldKey := base64.StdEncoding.EncodeToString([]byte("old-mail-rekey-key-material-0001"))
@@ -48,7 +49,7 @@ func TestMailRekeyOldPrimaryRelinquishesOnceAndNewPrimaryCompletes(t *testing.T)
 	rekeyJob, err := model.NewJob(model.NewJobID(), model.JobTypeMailRekey, command,
 		"mail-rekey:"+newSealer.PrimaryKeyID()+":"+oldSealer.PrimaryKeyID(), at, at, 10)
 	require.NoError(t, err)
-	audit, err := persistence.Audit().Save(ctx, &model.AuditEvent{ActorID: user.ID, Action: string(model.ActionMailRekey),
+	audit, err := persistence.Audit().Save(ctx, &model.AuditEvent{ActorID: account.ID, Action: string(model.ActionMailRekey),
 		Resource:  model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()},
 		ScopeType: model.RoleScopeInstitution, ScopeID: institution.ID.String(), Status: model.AuditStatusAttempt,
 		NodeID: "new-primary-node", ClientType: string(model.SessionClientWeb), AuthMethod: "password"})

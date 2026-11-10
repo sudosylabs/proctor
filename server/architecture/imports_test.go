@@ -156,7 +156,7 @@ func TestDependencyPolicyAllowsInwardImports(t *testing.T) {
 		{name: "concrete Jobs may import Mail capabilities", from: serverModule + "/app/jobhandler", imported: serverModule + "/app/mail"},
 		{name: "concrete Jobs may import Exam capabilities", from: serverModule + "/app/jobhandler", imported: serverModule + "/app/exam/attempt"},
 		{name: "File Content may import domain models", from: serverModule + "/filecontent", imported: serverModule + "/model"},
-		{name: "File Content may import application content contracts", from: serverModule + "/filecontent", imported: serverModule + "/app"},
+		{name: "File Content may import application content contracts", from: serverModule + "/filecontent", imported: serverModule + "/app/user"},
 		{name: "File Content may import VFS contracts", from: serverModule + "/filecontent", imported: repositoryModule + "/packages/vfs"},
 		{name: "File Content may import the canonical encoder", from: serverModule + "/filecontent", imported: "github.com/HugoSmits86/nativewebp"},
 		{name: "File Content may import bounded image transforms", from: serverModule + "/filecontent", imported: "github.com/disintegration/imaging"},

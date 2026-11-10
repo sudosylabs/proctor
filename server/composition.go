@@ -22,6 +22,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/filecontent"
 	"github.com/sudosylabs/proctor/server/httpapi"
@@ -68,8 +69,9 @@ var (
 	_ httpapi.OnboardingImportApplication            = (*app.App)(nil)
 	_ httpapi.StudentProgressionApplication          = (*app.App)(nil)
 	_ httpapi.AcademicAdministrationBatchApplication = (*app.App)(nil)
-	_ httpapi.UserProfileApplication                 = (*app.App)(nil)
-	_ httpapi.UserSettingsApplication                = (*app.App)(nil)
+	_ httpapi.UserProfileApplication                 = (*user.Service)(nil)
+	_ httpapi.UserAccountApplication                 = (*app.App)(nil)
+	_ httpapi.UserSettingsApplication                = (*user.Service)(nil)
 	_ httpapi.AccountStateApplication                = (*app.App)(nil)
 	_ httpapi.SessionAdministrationApplication       = (*app.App)(nil)
 	_ httpapi.RoleApplication                        = (*app.App)(nil)
@@ -428,8 +430,10 @@ func httpAPIOptions(
 	// A reduced composition test graph has no application; its typed nil
 	// still fills every capability, as the App itself does.
 	var academics *academic.Service
+	var users *user.Service
 	if application != nil {
 		academics = application.Academic
+		users = application.Users
 	}
 	return httpapi.Options{
 		Logger: apiLogger{log: capabilities.logger}, Health: readiness,
@@ -438,7 +442,7 @@ func httpAPIOptions(
 		Application: application, AcademicUnits: academics, Institutions: academics,
 		Programmes: academics, ProgrammeLevels: academics, AcademicPeriods: academics,
 		Classes: academics, Affiliations: academics, AcademicUnitMembers: academics,
-		ClassMembers: academics, UserProfiles: application, UserSettings: application, AccountStates: application,
+		ClassMembers: academics, UserProfiles: users, UserAccounts: application, UserSettings: users, AccountStates: application,
 		Invitations:                   application,
 		BrowserInvitations:            application,
 		OnboardingImports:             application,

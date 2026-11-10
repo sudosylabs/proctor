@@ -20,6 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 	"github.com/sudosylabs/proctor/server/testlib"
@@ -37,13 +38,13 @@ func TestUserSettingsUnsupportedFormatIsOpaqueAndReadOnlyAfterRollback(t *testin
 	})
 	require.NoError(t, err)
 	const password = "correct horse battery staple"
-	user, err := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+	account, err := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
 		Username: "settings-compatibility-user",
 		Email:    "settings-compatibility-user@example.edu",
 	}, Password: password})
 	require.NoError(t, err)
 	login, err := helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{
-		LoginID: user.Username, Password: password, ClientType: model.SessionClientWeb,
+		LoginID: account.Username, Password: password, ClientType: model.SessionClientWeb,
 		Source: "127.0.0.1:1",
 	})
 	require.NoError(t, err)
@@ -53,7 +54,7 @@ func TestUserSettingsUnsupportedFormatIsOpaqueAndReadOnlyAfterRollback(t *testin
 	const source = "format-2(source => private.preference.must.remain.exact);\n"
 	_, err = persistence.GetMaster().Exec(ctx, `
 		UPDATE user_settings_documents SET source = $1, format_version = 2 WHERE user_id = $2`,
-		source, user.ID.String(),
+		source, account.ID.String(),
 	)
 	require.NoError(t, err)
 	type persistedState struct {
@@ -65,9 +66,9 @@ func TestUserSettingsUnsupportedFormatIsOpaqueAndReadOnlyAfterRollback(t *testin
 	var before persistedState
 	require.NoError(t, persistence.GetMaster().Get(ctx, &before, `
 		SELECT source, format_version, revision, updated_at
-		FROM user_settings_documents WHERE user_id = $1`, user.ID.String()))
+		FROM user_settings_documents WHERE user_id = $1`, account.ID.String()))
 	invocation := invocation.New(*principal, model.RequestMetadata{RequestID: "settings-compatibility"})
-	view, err := helper.App.ReadOwnUserSettings(ctx, invocation)
+	view, err := helper.App.Users.ReadOwnUserSettings(ctx, invocation)
 	require.NoError(t, err)
 	require.Equal(t, source, view.Source, "ReadOwnUserSettings() = %#v, persisted = %#v", view, before)
 	require.Equal(t, 2, view.FormatVersion, "ReadOwnUserSettings() = %#v, persisted = %#v", view, before)
@@ -80,7 +81,7 @@ func TestUserSettingsUnsupportedFormatIsOpaqueAndReadOnlyAfterRollback(t *testin
 		"submit unsupported target version":            2,
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, replaceErr := helper.App.ReplaceOwnUserSettings(ctx, invocation, app.ReplaceOwnUserSettingsCommand{
+			_, replaceErr := helper.App.Users.ReplaceOwnUserSettings(ctx, invocation, user.ReplaceOwnUserSettingsCommand{
 				Source: "{}\n", FormatVersion: targetVersion, ExpectedRevision: view.Revision,
 				IdempotencyKey: "settings-compatibility-" + string(rune('0'+targetVersion)),
 			})
@@ -91,7 +92,7 @@ func TestUserSettingsUnsupportedFormatIsOpaqueAndReadOnlyAfterRollback(t *testin
 	var after persistedState
 	require.NoError(t, persistence.GetMaster().Get(ctx, &after, `
 		SELECT source, format_version, revision, updated_at
-		FROM user_settings_documents WHERE user_id = $1`, user.ID.String()))
+		FROM user_settings_documents WHERE user_id = $1`, account.ID.String()))
 	require.Equal(t, before.Source, after.Source, "rejected replacements changed persisted state: before=%#v after=%#v", before, after)
 	require.Equal(t, before.FormatVersion, after.FormatVersion, "rejected replacements changed persisted state: before=%#v after=%#v", before, after)
 	require.Equal(t, before.Revision, after.Revision, "rejected replacements changed persisted state: before=%#v after=%#v", before, after)
@@ -104,7 +105,7 @@ func TestUserSettingsUnsupportedFormatIsOpaqueAndReadOnlyAfterRollback(t *testin
 	require.Empty(t, audits)
 
 	// A second read proves that the first read did not attempt a hidden repair.
-	again, err := helper.App.ReadOwnUserSettings(ctx, invocation)
+	again, err := helper.App.Users.ReadOwnUserSettings(ctx, invocation)
 	require.NoError(t, err)
 	require.Equal(t, source, again.Source)
 	require.False(t, again.Writable)

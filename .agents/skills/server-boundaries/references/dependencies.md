@@ -11,6 +11,7 @@ model ← app/invocation ← {app, app/idempotency, app/exam}
 {store, app/apperror} ← app/paging ← {app, app/academic, httpapi}
 {model, store} ← app/internal/batchitem ← {app, app/academic}
 {model, store, app/access, app/paging, app/apperror, app/invocation, app/idempotency, app/mail, app/internal/batchitem} ← app/academic ← {app, httpapi}
+{model, store, app/access, app/paging, app/apperror, app/invocation, app/idempotency} ← app/user ← {app, httpapi, filecontent}
 {model, store, app/apperror, app/invocation} ← app/idempotency ← {app, app/exam}
 {model, store, app/job, app/mail, app/exam} ← app/jobhandler ← app
 model ← app/realtime ← {app, websocket}
@@ -72,9 +73,10 @@ inside `app/` are application-owned modules, not transports.
 | `logging` | Standard library and the hidden logging engine/target implementation | application, domain, persistence, transports, global logger state |
 | `metrics` | `config`, `internal/tlscert`, narrow store recorder contracts, standard library, and Prometheus client libraries | application policy, platform service location, concrete infrastructure adapters, global Prometheus registry |
 | `tracing` | `config`, standard library, and OpenTelemetry API, SDK, and OTLP/HTTP exporter libraries | application policy, transports, store contracts, platform service location, a process-global tracer provider |
-| `app` | `model`, `store`, `app/access`, `app/paging`, `app/academic`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/job`, `app/jobhandler`, `app/realtime`, `app/exam`, `app/mail`, consumer-owned ports | `platform`, `httpapi`, `sqlstore` |
-| `filecontent` | `model`, consumer-owned `app` content contracts, `app/exam` export archive types, `packages/vfs`, narrowly allowlisted content codecs | persistence, transports, platform service location, Jobs, configuration, concrete VFS backends |
-| `httpapi` | `app`, `app/academic`, `app/paging`, `app/apperror`, `app/invocation`, `app/job`, `app/realtime`, `app/exam` and its children, `store` result types, `model`, `localization`, `internal/weborigin`, HTTP libraries | Store contracts and functions, `sqlstore`, `platform` |
+| `app/user` | `model`, `store`, `app/access`, `app/paging`, `app/apperror`, `app/invocation`, `app/idempotency`, standard library | parent `app`, `app/exam`, `app/job`, `app/jobhandler`, `app/mail`, `app/realtime`, transports, platform, concrete adapters |
+| `app` | `model`, `store`, `app/access`, `app/paging`, `app/academic`, `app/user`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/job`, `app/jobhandler`, `app/realtime`, `app/exam`, `app/mail`, consumer-owned ports | `platform`, `httpapi`, `sqlstore` |
+| `filecontent` | `model`, `app/user` content contracts, `app/exam` export archive types, `packages/vfs`, narrowly allowlisted content codecs | persistence, transports, platform service location, Jobs, configuration, concrete VFS backends |
+| `httpapi` | `app`, `app/academic`, `app/user`, `app/paging`, `app/apperror`, `app/invocation`, `app/job`, `app/realtime`, `app/exam` and its children, `store` result types, `model`, `localization`, `internal/weborigin`, HTTP libraries | Store contracts and functions, `sqlstore`, `platform` |
 | `webui` | Standard-library HTTP and filesystem contracts | Application, domain, persistence, configuration, concrete filesystems, third-party libraries |
 | `websocket` | the `httpapi` allowance with WebSocket libraries in place of HTTP libraries | Store contracts and functions, SQL and platform service location |
 | concrete adapters | Their inward contracts and implementation libraries | Application policy |

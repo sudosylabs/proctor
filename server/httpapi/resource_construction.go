@@ -24,6 +24,7 @@ type resourceApplications struct {
 	browserInvitations      BrowserInvitationApplication
 
 	userProfiles            UserProfileApplication
+	userAccounts            UserAccountApplication
 	userSettings            UserSettingsApplication
 	accountStates           AccountStateApplication
 	sessionAdministration   SessionAdministrationApplication
@@ -124,7 +125,7 @@ func resolveResourceApplications(options Options) (resourceApplications, error) 
 		desktopReauthentication: desktopReauthentication,
 		desktopRegistrations:    desktopRegistrations,
 		browserInvitations:      options.BrowserInvitations,
-		userProfiles:            options.UserProfiles, userSettings: options.UserSettings,
+		userProfiles:            options.UserProfiles, userAccounts: options.UserAccounts, userSettings: options.UserSettings,
 		accountStates: options.AccountStates, sessionAdministration: options.SessionAdministrations,
 		sessions: sessions, mfa: mfa, personalAccessTokens: personalAccessTokens,
 		mfaAdministration:       mfaAdministration,
@@ -176,6 +177,7 @@ func requireResourceApplicationOptions(options Options) error {
 		{options.StudentProgressions == nil, "student progression application is required"},
 		{options.AcademicAdministrationBatches == nil, "academic administration batch application is required"},
 		{options.UserProfiles == nil, "user profile application is required"},
+		{options.UserAccounts == nil, "user account application is required"},
 		{options.UserSettings == nil, "user settings application is required"},
 		{options.AccountStates == nil, "account state application is required"},
 		{options.SessionAdministrations == nil, "session administration application is required"},

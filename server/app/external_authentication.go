@@ -19,6 +19,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -736,7 +737,7 @@ func (s *externalAuthenticationService) prepareExternalProvisioning(
 	if err != nil {
 		return externalProvisioning{}, authenticationUnavailable(err)
 	}
-	provisioning.settings, err = prepareInitialUserSettingsDocument(provisioning.user)
+	provisioning.settings, err = user.PrepareInitialSettingsDocument(provisioning.user)
 	if err != nil {
 		return externalProvisioning{}, authenticationUnavailable(err)
 	}

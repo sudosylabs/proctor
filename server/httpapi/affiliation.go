@@ -158,6 +158,7 @@ func affiliationResponseFromModel(value *model.Affiliation) affiliationResponse 
 	}
 }
 
+// AffiliationApplication is the application port its handlers call; it lists, adds and ends a User's Affiliations.
 type AffiliationApplication interface {
 	ListAffiliations(context.Context, invocation.Invocation, academic.ListAffiliationsQuery) ([]*model.Affiliation, error)
 	CreateAffiliation(context.Context, invocation.Invocation, academic.CreateAffiliationCommand) (*model.Affiliation, error)

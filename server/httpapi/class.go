@@ -271,6 +271,7 @@ func classResponseFromModel(class *model.Class) classResponse {
 	}
 }
 
+// ClassApplication is the application port its handlers call; it reads and changes Classes.
 type ClassApplication interface {
 	GetClass(context.Context, invocation.Invocation, academic.GetClassQuery) (*model.Class, error)
 	ListClasses(context.Context, invocation.Invocation, academic.ListClassesQuery) (paging.Page[*model.Class], error)

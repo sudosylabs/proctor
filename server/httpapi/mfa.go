@@ -193,6 +193,7 @@ func mfaCode(request operationRequest) (string, error) {
 	return input.Code, nil
 }
 
+// MFA is the application port its handlers call; it manages the caller's multi-factor authentication.
 type MFA interface {
 	GetMFAStatus(context.Context, invocation.Invocation, identity.GetMFAStatusQuery) (*identity.MFAStatus, error)
 	SetupMFA(context.Context, invocation.Invocation, identity.SetupMFACommand) (*identity.MFASetup, error)

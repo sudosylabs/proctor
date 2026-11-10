@@ -16,32 +16,3 @@
 // model, store, app/apperror and app/invocation; it never imports app itself,
 // an area package, a transport, or a concrete adapter.
 package access
-
-import (
-	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/model"
-)
-
-// UserSettingsAuditInput is the bounded, safe description of one User
-// Settings replacement that UserSettingsAuditAdapter turns into an audit
-// draft.
-type UserSettingsAuditInput struct {
-	Invocation        invocation.Invocation
-	UserID            model.UserID
-	PreviousRevision  model.UserSettingsRevision
-	ResultingRevision model.UserSettingsRevision
-	FormatVersion     int
-	SourceBytes       int
-}
-
-// InvalidTokenAppError reports a Principal, credential or token that is not a
-// valid caller. It is the one definition of that failure: the identity and
-// onboarding areas and the parent app package return it too.
-func InvalidTokenAppError() error {
-	return apperror.New("authentication.token_invalid")
-}
-
-// InstitutionStoreErrors translates Institution Store failures. The academic
-// Institution use cases translate through it too.
-var InstitutionStoreErrors = apperror.AdministrationStoreTable("institution", "institution.conflict", "institution.invalid", nil)

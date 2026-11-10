@@ -25,7 +25,13 @@ import (
 const maximumProfilePictureBytes int64 = 5 << 20
 
 var ErrInvalidProfilePicture = errors.New("invalid profile picture")
+
+// ErrDefaultProfilePictureUserNotFound reports that the User whose default
+// profile picture is being created does not exist.
 var ErrDefaultProfilePictureUserNotFound = errors.New("default profile-picture user not found")
+
+// ErrDefaultProfilePictureInvariant reports that a default profile picture
+// record failed its model invariants.
 var ErrDefaultProfilePictureInvariant = errors.New("default profile-picture invariant failed")
 
 // ProfilePictureUploadFiles is the content capability used by interactive
@@ -426,15 +432,15 @@ func (s *Service) ensureDefaultProfilePicture(ctx context.Context, userID model.
 	at := model.TimeUTC(s.now())
 	entry, err := model.NewFileEntryForPurpose(model.NewFileEntryID(), model.FilePurposeProfilePictureDefault, model.FileIndexingNone, at)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrDefaultProfilePictureInvariant, err)
+		return "", fmt.Errorf("%w: %w", ErrDefaultProfilePictureInvariant, err)
 	}
 	revision, err := model.NewFileRevision(model.NewFileRevisionID(), entry.ID, model.FileAvailabilityPending, model.FileIndexingNotRequired, at)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrDefaultProfilePictureInvariant, err)
+		return "", fmt.Errorf("%w: %w", ErrDefaultProfilePictureInvariant, err)
 	}
 	lease, err := model.NewUploadLease(model.NewUploadLeaseID(), revision.ID, user.ID, at, at.Add(time.Hour))
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrDefaultProfilePictureInvariant, err)
+		return "", fmt.Errorf("%w: %w", ErrDefaultProfilePictureInvariant, err)
 	}
 	if _, err = s.files.CreateUpload(ctx, &store.FileUploadCreation{Entry: entry, Revision: revision, Lease: lease}); err != nil {
 		return "", err

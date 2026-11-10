@@ -213,6 +213,7 @@ func programmeLevelResponseFromModel(level *model.ProgrammeLevel) programmeLevel
 	}
 }
 
+// ProgrammeLevelApplication is the application port its handlers call; it reads and changes Programme Levels.
 type ProgrammeLevelApplication interface {
 	GetProgrammeLevel(context.Context, invocation.Invocation, academic.GetProgrammeLevelQuery) (*model.ProgrammeLevel, error)
 	ListProgrammeLevels(context.Context, invocation.Invocation, academic.ListProgrammeLevelsQuery) (paging.Page[*model.ProgrammeLevel], error)

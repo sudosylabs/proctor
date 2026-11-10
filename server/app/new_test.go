@@ -409,8 +409,8 @@ func TestApplicationJobDefinitionsIncludeSittingLifecycleAndDailyRecovery(t *tes
 	// The identity area defines its maintenance passes; the application graph
 	// runs each one unchanged.
 	for _, maintenance := range identity.MaintenanceTasks(catalog) {
-		task, exists := periodicByName[maintenance.Name]
-		require.True(t, exists, "%s periodic task is absent", maintenance.Name)
+		task, found := periodicByName[maintenance.Name]
+		require.True(t, found, "%s periodic task is absent", maintenance.Name)
 		require.Equal(t, maintenance, task)
 	}
 	_, exists = descriptors[model.JobType("authentication.desktop_authorization_maintenance")]

@@ -9,10 +9,7 @@ package user
 
 import (
 	"context"
-	"testing"
 	"time"
-
-	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -132,27 +129,6 @@ func (a *authorizerFake) Authorize(context.Context, invocation.Invocation, model
 func (a *authorizerFake) AuthorizeProfilePictureWrite(context.Context, invocation.Invocation, model.UserID) error {
 	*a.events = append(*a.events, "authorize-profile-picture-write")
 	return a.writeErr
-}
-
-// newService builds the Service under test, filling the collaborators a test
-// does not care about: a settings auditor, the effects, and the clock.
-func newService(t *testing.T, deps Dependencies) *Service {
-	t.Helper()
-	if deps.Store == nil {
-		deps.Store = &catalogFake{userSettings: &userSettingsStoreFake{}}
-	}
-	if deps.SettingsAuditor == nil {
-		deps.SettingsAuditor = &settingsAuditFake{}
-	}
-	if deps.Effects == nil {
-		deps.Effects = &effectsFake{}
-	}
-	if deps.Now == nil {
-		deps.Now = time.Now
-	}
-	service, err := New(deps)
-	require.NoError(t, err)
-	return service
 }
 
 func userSettingsSessionPrincipal(at time.Time) model.Principal {

@@ -151,6 +151,7 @@ func classEnrollmentResponseFromModel(enrollment *model.ClassEnrollment) classEn
 	return response
 }
 
+// ClassMemberApplication is the application port its handlers call; it lists, enrolls and ends Class memberships.
 type ClassMemberApplication interface {
 	ListClassMembersPage(context.Context, invocation.Invocation, academic.ListClassMembersPageQuery) (*academic.ClassMemberPage, error)
 	EnrollClassMember(context.Context, invocation.Invocation, academic.EnrollClassMemberCommand) (*model.ClassEnrollment, error)

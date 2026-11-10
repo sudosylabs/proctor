@@ -172,6 +172,7 @@ func programmeResponseFromModel(programme *model.Programme) programmeResponse {
 	}
 }
 
+// ProgrammeApplication is the application port its handlers call; it reads and changes Programmes.
 type ProgrammeApplication interface {
 	GetProgramme(context.Context, invocation.Invocation, academic.GetProgrammeQuery) (*model.Programme, error)
 	ListProgrammes(context.Context, invocation.Invocation, academic.ListProgrammesQuery) (paging.Page[*model.Programme], error)

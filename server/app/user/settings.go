@@ -66,6 +66,8 @@ type SettingsChange struct {
 	ChangedAt     time.Time
 }
 
+// ReplaceOwnUserSettings replaces the caller's own settings document when the
+// expected revision is current, and is idempotent per key.
 func (s *Service) ReplaceOwnUserSettings(
 	ctx context.Context,
 	invocation invocation.Invocation,

@@ -258,6 +258,7 @@ func noStoreHeaders() http.Header {
 	return http.Header{"Cache-Control": []string{"no-store"}}
 }
 
+// PersonalAccessTokens is the application port its handlers call; it creates, lists, revokes and disables personal access tokens.
 type PersonalAccessTokens interface {
 	CreatePersonalAccessToken(context.Context, invocation.Invocation, identity.CreatePersonalAccessTokenCommand) (*model.PersonalAccessTokenCreation, error)
 	ListPersonalAccessTokens(context.Context, invocation.Invocation, identity.ListPersonalAccessTokensQuery) ([]*model.PersonalAccessToken, error)

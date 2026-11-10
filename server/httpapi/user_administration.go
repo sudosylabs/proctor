@@ -227,10 +227,12 @@ func defaultQuery(r *http.Request, key, fallback string) string {
 	return value
 }
 
+// AccountStateApplication is the application port its handlers call; it enables and disables User accounts.
 type AccountStateApplication interface {
 	SetUserEnabled(context.Context, invocation.Invocation, identity.SetUserEnabledCommand) (*model.User, error)
 }
 
+// SessionAdministrationApplication is the application port its handlers call; it lists and revokes the Sessions of another User.
 type SessionAdministrationApplication interface {
 	ListUserSessions(context.Context, invocation.Invocation, identity.ListUserSessionsQuery) (paging.Page[*model.Session], error)
 	RevokeUserSession(context.Context, invocation.Invocation, identity.RevokeUserSessionCommand) error

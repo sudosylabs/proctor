@@ -233,6 +233,7 @@ func academicUnitResponseFromModel(unit *model.AcademicUnit) academicUnitRespons
 	}
 }
 
+// AcademicUnitApplication is the application port its handlers call; it reads and changes Academic Units.
 type AcademicUnitApplication interface {
 	GetAcademicUnit(context.Context, invocation.Invocation, academic.GetAcademicUnitQuery) (*model.AcademicUnit, error)
 	ListAcademicUnits(context.Context, invocation.Invocation, academic.ListAcademicUnitsQuery) (paging.Page[*model.AcademicUnit], error)

@@ -9,13 +9,13 @@ package academic
 
 import (
 	"context"
-	"github.com/sudosylabs/proctor/server/app/internal/batchitem"
 	"strings"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
+	"github.com/sudosylabs/proctor/server/app/internal/batchitem"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -86,8 +86,8 @@ func (s *Service) CreateAffiliation(ctx context.Context, invocation invocation.I
 	}
 	at := s.now()
 	candidate.PrepareCreate(affiliationID, at)
-	if err := candidate.Validate(); err != nil {
-		return nil, apperror.DomainInvalid("affiliation.invalid", err)
+	if validationErr := candidate.Validate(); validationErr != nil {
+		return nil, apperror.DomainInvalid("affiliation.invalid", validationErr)
 	}
 	idempotency, err := idempotency.Prepare(invocation, "affiliation.add", command.IdempotencyKey, struct {
 		UserID  string                `json:"user_id"`

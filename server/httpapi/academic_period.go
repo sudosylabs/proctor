@@ -237,6 +237,7 @@ func academicPeriodResponseFromModel(period *model.AcademicPeriod) academicPerio
 	}
 }
 
+// AcademicPeriodApplication is the application port its handlers call; it reads and changes Academic Periods.
 type AcademicPeriodApplication interface {
 	GetAcademicPeriod(context.Context, invocation.Invocation, academic.GetAcademicPeriodQuery) (*model.AcademicPeriod, error)
 	ListAcademicPeriods(context.Context, invocation.Invocation, academic.ListAcademicPeriodsQuery) (paging.Page[*model.AcademicPeriod], error)

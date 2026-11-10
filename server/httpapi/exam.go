@@ -908,6 +908,7 @@ func (r *configureExamDraftNativePolicyRequest) UnmarshalJSON(data []byte) error
 	return nil
 }
 
+// ExamApplication is the application port its handlers call; it authors Exams and manages their owners and managers.
 type ExamApplication interface {
 	CreateExam(context.Context, invocation.Invocation, exam.CreateCommand) (exam.View, error)
 	GetExam(context.Context, invocation.Invocation, exam.GetQuery) (exam.View, error)

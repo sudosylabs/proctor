@@ -452,6 +452,7 @@ func mailResponse(view app.MailDeliveryView) mailDeliveryResponse {
 	return result
 }
 
+// MailApplication is the application port its handlers call; it reports on and operates transactional mail: keys, rekeying, test mail, metrics and deliveries.
 type MailApplication interface {
 	GetMailKeyState(context.Context, invocation.Invocation) (app.MailKeyStateView, error)
 	StartMailRekey(context.Context, invocation.Invocation, string) (app.MailRekeyView, error)

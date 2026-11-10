@@ -353,7 +353,9 @@ func sessionIDs(sessions []*model.Session) []model.SessionID {
 	return ids
 }
 
-func validRekeyKeyID(value string) bool {
+// ValidRekeyKeyID reports whether value is a key ring key identifier: exactly
+// 32 lowercase hexadecimal characters. Mail and MFA rekey commands share it.
+func ValidRekeyKeyID(value string) bool {
 	if len(value) != 32 {
 		return false
 	}

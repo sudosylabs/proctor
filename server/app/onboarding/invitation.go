@@ -327,7 +327,7 @@ type invitationRoleReader interface {
 	Get(context.Context, model.RoleID) (*model.Role, error)
 }
 type invitationAuthorizer interface {
-	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
+	resourceAuthorizer
 	AuthorizeActionDelegation(context.Context, invocation.Invocation, []string, model.RoleScopeType, string) error
 	Visibility(context.Context, invocation.Invocation, model.Action) (store.InvitationVisibilityScope, error)
 }

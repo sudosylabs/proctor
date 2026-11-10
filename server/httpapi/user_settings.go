@@ -113,6 +113,7 @@ func (m userSettingsResourceModule) replace(request operationRequest) (operation
 	}).withHeaders(http.Header{"Cache-Control": []string{"private, no-store"}}), nil
 }
 
+// UserSettingsApplication is the application port its handlers call; it reads and replaces the caller's own settings document.
 type UserSettingsApplication interface {
 	ReadOwnUserSettings(context.Context, invocation.Invocation) (user.UserSettingsView, error)
 	ReplaceOwnUserSettings(context.Context, invocation.Invocation, user.ReplaceOwnUserSettingsCommand) (user.UserSettingsReplacementResult, error)

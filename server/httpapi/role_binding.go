@@ -127,6 +127,7 @@ func (m roleBindingResourceModule) end(request operationRequest) (operationResul
 	return jsonResult(http.StatusOK, roleBindingResponseFromModel(ended)), nil
 }
 
+// RoleBindingApplication is the application port its handlers call; it lists, creates and ends Role Bindings.
 type RoleBindingApplication interface {
 	ListRoleBindings(context.Context, invocation.Invocation, administration.ListRoleBindingsQuery) ([]*model.RoleBinding, error)
 	CreateRoleBinding(context.Context, invocation.Invocation, administration.CreateRoleBindingCommand) (*model.RoleBinding, error)

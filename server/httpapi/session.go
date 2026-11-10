@@ -142,6 +142,7 @@ func (m sessionResourceModule) revokeOthers(request operationRequest) (operation
 	return jsonResult(http.StatusOK, revokeOtherSessionsResponse{RevokedSessionCount: result.RevokedSessionCount}), nil
 }
 
+// Sessions is the application port its handlers call; it lists and revokes the caller's own Sessions.
 type Sessions interface {
 	ListSessions(context.Context, invocation.Invocation, identity.ListSessionsQuery) ([]*model.Session, error)
 	RevokeSession(context.Context, invocation.Invocation, identity.RevokeSessionCommand) error

@@ -178,6 +178,7 @@ func academicUnitMemberListItemResponseFromPage(page *academic.AcademicUnitMembe
 	return item
 }
 
+// AcademicUnitMemberApplication is the application port its handlers call; it lists, adds and ends Academic Unit memberships.
 type AcademicUnitMemberApplication interface {
 	ListAcademicUnitMembersPage(context.Context, invocation.Invocation, academic.ListAcademicUnitMembersPageQuery) (*academic.AcademicUnitMemberPage, error)
 	CreateAcademicUnitMember(context.Context, invocation.Invocation, academic.CreateAcademicUnitMemberCommand) (*model.AcademicUnitMember, error)

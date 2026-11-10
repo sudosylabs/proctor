@@ -107,6 +107,8 @@ func NewPasswordHasher(deps PasswordHasherDependencies) (*PasswordHasher, error)
 	return hasher, nil
 }
 
+// Hash validates the password against the length limits and returns its
+// Argon2id encoding with a fresh salt. It fails when the hasher is at capacity.
 func (h *PasswordHasher) Hash(ctx context.Context, password string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
@@ -153,6 +155,8 @@ func (h *PasswordHasher) hashUnchecked(password string) (string, error) {
 	), nil
 }
 
+// Verify reports nil when password matches the Argon2id encoding, and
+// ErrPasswordMismatch when it does not.
 func (h *PasswordHasher) Verify(ctx context.Context, encoded, password string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -183,6 +187,8 @@ func (h *PasswordHasher) Verify(ctx context.Context, encoded, password string) e
 	return nil
 }
 
+// VerifyDummy spends a Verify against a fixed hash so that checking an unknown
+// account takes as long as checking a known one. A mismatch returns nil.
 func (h *PasswordHasher) VerifyDummy(ctx context.Context, password string) error {
 	if len(password) > h.maximumLength {
 		password = "invalid-password-length"
@@ -244,6 +250,8 @@ func passwordWorkError(err error, unavailableCode apperror.Code) error {
 	return apperror.New(unavailableCode).Wrap(err)
 }
 
+// NeedsRehash reports whether encoded was made with parameters other than the
+// hasher's current ones. An unparsable encoding reports false.
 func (h *PasswordHasher) NeedsRehash(encoded string) bool {
 	parameters, salt, key, err := parseArgon2id(encoded)
 	if err != nil {
@@ -256,6 +264,8 @@ func (h *PasswordHasher) NeedsRehash(encoded string) bool {
 		uint32(len(key)) != h.parameters.keyBytes
 }
 
+// Validate reports whether password is valid UTF-8 and within the configured
+// minimum length in characters and maximum length in bytes.
 func (h *PasswordHasher) Validate(password string) error {
 	if !utf8.ValidString(password) {
 		return errors.New("password must be valid UTF-8")

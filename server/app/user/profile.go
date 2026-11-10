@@ -313,6 +313,8 @@ func scopedUserProjection(user *model.User) *model.User {
 	return &projected
 }
 
+// UpdateUserProfile changes a User's profile fields after authorizing the
+// caller to manage that User, and audits the change.
 func (s *Service) UpdateUserProfile(ctx context.Context, invocation invocation.Invocation, command UpdateUserProfileCommand) (*model.User, error) {
 	id := command.ID
 	if !id.IsValid() {

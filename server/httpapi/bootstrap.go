@@ -194,6 +194,7 @@ func (m bootstrapResourceModule) install(request operationRequest) (operationRes
 	return jsonResult(http.StatusCreated, installationBootstrapResponseFromModel(request.request, result)), nil
 }
 
+// BootstrapApplication is the application port its handlers call; it reports and performs installation bootstrap.
 type BootstrapApplication interface {
 	GetInstallationStatus(context.Context, invocation.Invocation, identity.GetInstallationStatusQuery) (*model.InstallationStatus, error)
 	BootstrapInstallation(context.Context, invocation.Invocation, identity.BootstrapInstallationCommand) (*model.InstallationBootstrapResult, error)

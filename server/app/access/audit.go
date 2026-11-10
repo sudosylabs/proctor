@@ -38,6 +38,18 @@ type Auditor struct {
 	now func() time.Time
 }
 
+// UserSettingsAuditInput is the bounded, safe description of one User
+// Settings replacement that UserSettingsAuditAdapter turns into an audit
+// draft.
+type UserSettingsAuditInput struct {
+	Invocation        invocation.Invocation
+	UserID            model.UserID
+	PreviousRevision  model.UserSettingsRevision
+	ResultingRevision model.UserSettingsRevision
+	FormatVersion     int
+	SourceBytes       int
+}
+
 // UserSettingsAuditAdapter prepares the audit event of a User Settings replacement.
 type UserSettingsAuditAdapter struct{ audit *Auditor }
 

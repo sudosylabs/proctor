@@ -9,7 +9,6 @@ package app
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"time"
 
@@ -98,8 +97,8 @@ func projectMailRekeyStatus(job *model.Job) (MailRekeyStatusView, error) {
 		return MailRekeyStatusView{}, errors.New("mail rekey Job is invalid")
 	}
 	command, commandErr := jobhandler.DecodeMailRekeyCommand(job.Command)
-	if commandErr != nil || !validMailRekeyKeyID(command.PrimaryKeyID) ||
-		!validMailRekeyKeyID(command.RetiringKeyID) || command.PrimaryKeyID == command.RetiringKeyID {
+	if commandErr != nil || !identity.ValidRekeyKeyID(command.PrimaryKeyID) ||
+		!identity.ValidRekeyKeyID(command.RetiringKeyID) || command.PrimaryKeyID == command.RetiringKeyID {
 		return MailRekeyStatusView{}, errors.New("mail rekey command is invalid")
 	}
 	view := MailRekeyStatusView{JobID: job.ID, Status: job.Status, PrimaryKeyID: command.PrimaryKeyID,
@@ -137,12 +136,4 @@ func projectMailRekeyStatus(job *model.Job) (MailRekeyStatusView, error) {
 		return MailRekeyStatusView{}, errors.New("successful mail rekey has no proof")
 	}
 	return view, nil
-}
-
-func validMailRekeyKeyID(value string) bool {
-	if len(value) != 32 {
-		return false
-	}
-	decoded, err := hex.DecodeString(value)
-	return err == nil && hex.EncodeToString(decoded) == value
 }

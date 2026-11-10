@@ -242,7 +242,7 @@ func projectMFARekeyStatus(job *model.Job) (MFARekeyStatusView, error) {
 		return MFARekeyStatusView{}, errors.New("MFA rekey Job is invalid")
 	}
 	command, err := jobhandler.DecodeMFARekeyCommand(job.Command)
-	if err != nil || !validRekeyKeyID(command.PrimaryKeyID) || !validRekeyKeyID(command.RetiringKeyID) ||
+	if err != nil || !ValidRekeyKeyID(command.PrimaryKeyID) || !ValidRekeyKeyID(command.RetiringKeyID) ||
 		command.PrimaryKeyID == command.RetiringKeyID {
 		return MFARekeyStatusView{}, errors.New("MFA rekey command is invalid")
 	}

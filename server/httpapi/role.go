@@ -191,6 +191,7 @@ func (m roleResourceModule) archive(request operationRequest) (operationResult, 
 	return noContentResult(), nil
 }
 
+// RoleApplication is the application port its handlers call; it reads and changes Roles.
 type RoleApplication interface {
 	ListRoles(context.Context, invocation.Invocation, administration.ListRolesQuery) ([]*model.Role, error)
 	GetRole(context.Context, invocation.Invocation, administration.GetRoleQuery) (*model.Role, error)

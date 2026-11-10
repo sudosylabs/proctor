@@ -194,6 +194,7 @@ func auditCursorSpec() opaqueCursorSpec[auditCursor] {
 	}
 }
 
+// AuditListingApplication is the application port its handlers call; it lists audit events for administrators and for the caller.
 type AuditListingApplication interface {
 	ListAuditEvents(context.Context, invocation.Invocation, administration.ListAuditEventsQuery) (paging.Counted[*model.AuditEvent], error)
 	ListSelfAuditEvents(context.Context, invocation.Invocation, administration.ListSelfAuditEventsQuery) (administration.SelfAuditPage, error)

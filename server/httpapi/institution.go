@@ -173,6 +173,7 @@ func institutionResponseFromModel(institution *model.Institution) institutionRes
 	}
 }
 
+// InstitutionApplication is the application port its handlers call; it reads and updates the Institution.
 type InstitutionApplication interface {
 	GetInstitution(context.Context, invocation.Invocation, academic.GetInstitutionQuery) (*model.Institution, error)
 	UpdateInstitution(context.Context, invocation.Invocation, academic.UpdateInstitutionCommand) (*model.Institution, error)

@@ -154,6 +154,9 @@ func Setup(tb testing.TB, options ...Option) *Helper {
 	testConfig.Authentication.Bootstrap.DevelopmentMode = false
 	testConfig.Authentication.Bootstrap.Secret = BootstrapSecret
 	testConfig.Mail.SecretSealing.EncryptionKey = base64.StdEncoding.EncodeToString(make([]byte, 32))
+	// Tests that run the server listen on a free port, so they never collide
+	// with a development server or each other on the default 8065.
+	testConfig.Server.ListenAddress = "127.0.0.1:0"
 	_, _, err = store.Set(context.Background(), testConfig)
 	require.NoError(tb, err)
 	if settings.updateConfig != nil {

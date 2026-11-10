@@ -11,10 +11,12 @@ import (
 	"context"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -63,7 +65,7 @@ type sessionAdministrationServiceDependencies struct {
 	Sessions      sessionAdministrationStore
 	Users         sessionAdministrationUserStore
 	Authorization resourceAuthorizer
-	Audit         mutationAuditor
+	Audit         access.MutationAuditor
 	Mail          sessionAdministrationMailPreparer
 	Effects       sessionRevocationEffects
 	Now           func() time.Time
@@ -81,20 +83,20 @@ func (s *sessionAdministrationService) ListUserSessions(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	query ListUserSessionsQuery,
-) (Page[*model.Session], error) {
+) (paging.Page[*model.Session], error) {
 	userID := query.UserID
 	if !userID.IsValid() {
-		return Page[*model.Session]{}, apperror.New("request.invalid").WithField("field", "user_id")
+		return paging.Page[*model.Session]{}, apperror.New("request.invalid").WithField("field", "user_id")
 	}
-	if query.Limit < 1 || query.Limit > MaximumPageLimit {
-		return Page[*model.Session]{}, apperror.Invalid("request.invalid", "limit")
+	if query.Limit < 1 || query.Limit > paging.MaximumLimit {
+		return paging.Page[*model.Session]{}, apperror.Invalid("request.invalid", "limit")
 	}
 	if query.BeforeCreatedAt.IsZero() != query.BeforeID.IsZero() ||
 		(!query.BeforeID.IsZero() && !query.BeforeID.IsValid()) {
-		return Page[*model.Session]{}, apperror.Invalid("request.invalid", "cursor")
+		return paging.Page[*model.Session]{}, apperror.Invalid("request.invalid", "cursor")
 	}
 	if err := s.deps.Authorization.Authorize(ctx, invocation, model.ActionSessionView, model.Resource{Type: model.ResourceUser, ID: userID.String()}); err != nil {
-		return Page[*model.Session]{}, err
+		return paging.Page[*model.Session]{}, err
 	}
 	page := &store.SessionPageQuery{
 		UserID: userID, Limit: query.Limit + 1,
@@ -105,9 +107,9 @@ func (s *sessionAdministrationService) ListUserSessions(
 	}
 	sessions, err := s.deps.Sessions.ListByUser(ctx, page)
 	if err != nil {
-		return Page[*model.Session]{}, sessionAdministrationStoreErrors.Translate(err)
+		return paging.Page[*model.Session]{}, sessionAdministrationStoreErrors.Translate(err)
 	}
-	return newPage(sessions, query.Limit), nil
+	return paging.New(sessions, query.Limit), nil
 }
 
 func (s *sessionAdministrationService) RevokeUserSession(
@@ -146,7 +148,7 @@ func (s *sessionAdministrationService) RevokeUserSession(
 		sessions: s.deps.Sessions, audit: s.deps.Audit, effects: s.deps.Effects, now: func() time.Time { return now },
 	}
 	return revocations.revokeOne(ctx,
-		mutationAttempt{
+		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionSessionManage,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: userID.String()},
@@ -202,7 +204,7 @@ func (s *sessionAdministrationService) RevokeUserSessions(
 		sessions: s.deps.Sessions, audit: s.deps.Audit, effects: s.deps.Effects, now: func() time.Time { return now },
 	}
 	return revocations.revokeAll(ctx,
-		mutationAttempt{
+		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionSessionManage,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: userID.String()},

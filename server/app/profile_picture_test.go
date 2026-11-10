@@ -22,6 +22,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
@@ -296,7 +297,7 @@ func (f defaultPictureGenerationFilesFake) GenerateAndStoreDefaultProfilePicture
 	return f.state.generateAndStoreDefaultProfilePicture(ctx, revisionID, seed, at)
 }
 
-func newProfilePictureServiceForTest(users profilePictureUserStore, files profilePictureFileStore, content *pictureContentFake, authorization profilePictureAuthorizer, audit mutationAuditor, effects profilePictureEffects, effectFailures profilePictureEffectFailures, defaultJobs profilePictureDefaultJobs, now func() time.Time) *profilePictureService {
+func newProfilePictureServiceForTest(users profilePictureUserStore, files profilePictureFileStore, content *pictureContentFake, authorization profilePictureAuthorizer, audit access.MutationAuditor, effects profilePictureEffects, effectFailures profilePictureEffectFailures, defaultJobs profilePictureDefaultJobs, now func() time.Time) *profilePictureService {
 	return newProfilePictureService(profilePictureServiceDependencies{Users: users, Files: files, Uploads: pictureUploadFilesFake{state: content}, Reads: pictureReadFilesFake{state: content}, Fallback: defaultPictureRenderFilesFake{state: content}, Defaults: defaultPictureGenerationFilesFake{state: content}, Authorization: authorization, Audit: audit, Effects: effects, EffectFailures: effectFailures, DefaultJobs: defaultJobs, Now: now})
 }
 

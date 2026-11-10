@@ -430,10 +430,51 @@ var dependencyRules = []dependencyRule{
 		),
 	},
 	{
+		name:           "access application",
+		sources:        []pathPattern{exact(serverModule + "/app/access")},
+		deniedStandard: standardInfrastructure,
+		project: only(
+			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/app/invocation"),
+			exact(serverModule+"/model"),
+			exact(serverModule+"/store"),
+		),
+	},
+	{
+		name:           "paging application",
+		sources:        []pathPattern{exact(serverModule + "/app/paging")},
+		deniedStandard: standardInfrastructure,
+		project: only(
+			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/store"),
+		),
+	},
+	{
+		name:           "academic application",
+		sources:        []pathPattern{exact(serverModule + "/app/academic")},
+		deniedStandard: standardInfrastructure,
+		project: only(
+			exact(serverModule+"/app/access"),
+			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/app/idempotency"),
+			exact(serverModule+"/app/internal/batchitem"),
+			exact(serverModule+"/app/invocation"),
+			exact(serverModule+"/app/mail"),
+			exact(serverModule+"/app/paging"),
+			exact(serverModule+"/app/realtime"),
+			exact(serverModule+"/model"),
+			exact(serverModule+"/store"),
+		),
+	},
+	{
 		name:           "application",
 		sources:        []pathPattern{subtree(serverModule + "/app")},
 		deniedStandard: standardInfrastructure,
 		project: only(
+			exact(serverModule+"/app/academic"),
+			exact(serverModule+"/app/access"),
+			exact(serverModule+"/app/paging"),
+			exact(serverModule+"/app/internal/batchitem"),
 			exact(serverModule+"/app/apperror"),
 			exact(serverModule+"/app/idempotency"),
 			exact(serverModule+"/app/invocation"),
@@ -461,9 +502,11 @@ var dependencyRules = []dependencyRule{
 		deniedStandard: standardInfrastructureExceptHTTP,
 		project: only(
 			exact(serverModule+"/app"),
+			exact(serverModule+"/app/academic"),
 			exact(serverModule+"/app/apperror"),
 			exact(serverModule+"/app/invocation"),
 			exact(serverModule+"/app/job"),
+			exact(serverModule+"/app/paging"),
 			exact(serverModule+"/app/realtime"),
 			subtree(serverModule+"/app/exam"),
 			exact(serverModule+"/model"),
@@ -638,6 +681,9 @@ func TestDependencyRulePrecedence(t *testing.T) {
 		{packagePath: serverModule + "/app/idempotency", wantRule: "idempotency application"},
 		{packagePath: serverModule + "/app/invocation", wantRule: "invocation application"},
 		{packagePath: serverModule + "/app/apperror", wantRule: "application error vocabulary"},
+		{packagePath: serverModule + "/app/access", wantRule: "access application"},
+		{packagePath: serverModule + "/app/paging", wantRule: "paging application"},
+		{packagePath: serverModule + "/app/academic", wantRule: "academic application"},
 		{packagePath: serverModule + "/app/exam/manageraccess", wantRule: "exam manager access"},
 		{packagePath: serverModule + "/app/exam", wantRule: "exam manager access consumers"},
 		{packagePath: serverModule + "/app/exam/review", wantRule: "exam idempotency consumers"},
@@ -706,6 +752,33 @@ func TestExamManagerAccessBoundary(t *testing.T) {
 	for _, dependency := range []string{"/app", "/app/exam", "/app/exam/resource", "/app/idempotency", "/store/sqlstore"} {
 		assert.True(t, forbiddenImport(leaf, serverModule+dependency), "Manager eligibility policy can import forbidden dependency %s", dependency)
 	}
+}
+
+func TestAreaPackageBoundaries(t *testing.T) {
+	t.Parallel()
+	access, paging, academic := serverModule+"/app/access", serverModule+"/app/paging", serverModule+"/app/academic"
+	for _, consumer := range []string{"/app", "/app/academic"} {
+		assert.False(t, forbiddenImport(serverModule+consumer, access), "%s cannot import access", consumer)
+		assert.False(t, forbiddenImport(serverModule+consumer, paging), "%s cannot import paging", consumer)
+	}
+	for _, consumer := range []string{"/app", "/httpapi", "/websocket"} {
+		assert.False(t, forbiddenImport(serverModule+consumer, academic), "%s cannot import academic", consumer)
+	}
+	for _, dependency := range []string{"/model", "/store", "/app/apperror", "/app/invocation"} {
+		assert.False(t, forbiddenImport(access, serverModule+dependency), "access cannot import %s", dependency)
+	}
+	for _, dependency := range []string{"/access", "/paging", "/mail", "/realtime", "/idempotency"} {
+		assert.False(t, forbiddenImport(academic, serverModule+"/app"+dependency), "academic cannot import app%s", dependency)
+	}
+	for _, area := range []string{access, paging, academic} {
+		for _, dependency := range []string{"/app", "/app/exam", "/app/job", "/httpapi", "/store/sqlstore", "/platform"} {
+			assert.True(t, forbiddenImport(area, serverModule+dependency), "%s can import forbidden dependency %s", area, dependency)
+		}
+	}
+	assert.True(t, forbiddenImport(access, academic), "access can import the academic area")
+	assert.True(t, forbiddenImport(access, paging), "access can import paging")
+	assert.True(t, forbiddenImport(paging, access), "paging can import access")
+	assert.True(t, forbiddenImport(paging, serverModule+"/model"), "paging can import model")
 }
 
 func TestUnclassifiedProductionPackageFailsClosed(t *testing.T) {

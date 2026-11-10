@@ -17,6 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -24,7 +25,7 @@ import (
 type OnboardingImportApplication interface {
 	UploadOnboardingImport(context.Context, invocation.Invocation, app.UploadOnboardingImportCommand) (app.OnboardingImportView, error)
 	GetOnboardingImport(context.Context, invocation.Invocation, model.OnboardingImportID) (app.OnboardingImportView, []app.OnboardingImportRowView, error)
-	ListOnboardingImports(context.Context, invocation.Invocation, app.ListOnboardingImportsQuery) (app.Page[app.OnboardingImportView], error)
+	ListOnboardingImports(context.Context, invocation.Invocation, app.ListOnboardingImportsQuery) (paging.Page[app.OnboardingImportView], error)
 	CommitOnboardingImport(context.Context, invocation.Invocation, app.CommitOnboardingImportCommand) (app.OnboardingImportView, error)
 	CancelOnboardingImport(context.Context, invocation.Invocation, model.OnboardingImportID) (app.OnboardingImportView, error)
 	OnboardingImportReport(context.Context, invocation.Invocation, model.OnboardingImportID, io.Writer) error
@@ -271,8 +272,8 @@ func (unavailableOnboardingImportApplication) UploadOnboardingImport(context.Con
 func (unavailableOnboardingImportApplication) GetOnboardingImport(context.Context, invocation.Invocation, model.OnboardingImportID) (app.OnboardingImportView, []app.OnboardingImportRowView, error) {
 	return app.OnboardingImportView{}, nil, errUnpresentableResult
 }
-func (unavailableOnboardingImportApplication) ListOnboardingImports(context.Context, invocation.Invocation, app.ListOnboardingImportsQuery) (app.Page[app.OnboardingImportView], error) {
-	return app.Page[app.OnboardingImportView]{}, errUnpresentableResult
+func (unavailableOnboardingImportApplication) ListOnboardingImports(context.Context, invocation.Invocation, app.ListOnboardingImportsQuery) (paging.Page[app.OnboardingImportView], error) {
+	return paging.Page[app.OnboardingImportView]{}, errUnpresentableResult
 }
 func (unavailableOnboardingImportApplication) CommitOnboardingImport(context.Context, invocation.Invocation, app.CommitOnboardingImportCommand) (app.OnboardingImportView, error) {
 	return app.OnboardingImportView{}, errUnpresentableResult

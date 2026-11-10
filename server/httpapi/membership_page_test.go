@@ -17,7 +17,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -27,7 +27,7 @@ func TestAcademicUnitMemberHTTPPagingUsesTheCollectionEnvelope(t *testing.T) {
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
 	scopeID := model.NewAcademicUnitID()
 	member := &model.AcademicUnitMember{ID: model.NewAcademicUnitMemberID(), UserID: model.NewUserID(), AcademicUnitID: scopeID}
-	service := &academicUnitMemberHTTPApplication{pageResult: &app.AcademicUnitMemberPage{Members: []*model.AcademicUnitMember{member}, HasMore: true, ActiveAt: 1000}}
+	service := &academicUnitMemberHTTPApplication{pageResult: &academic.AcademicUnitMemberPage{Members: []*model.AcademicUnitMember{member}, HasMore: true, ActiveAt: 1000}}
 	api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, academicUnitMemberResource(service))
 	path := "/api/v1/academic-units/" + scopeID.String() + "/members"
 	call := func(target string) *httptest.ResponseRecorder {
@@ -46,7 +46,7 @@ func TestAcademicUnitMemberHTTPPagingUsesTheCollectionEnvelope(t *testing.T) {
 	require.NoError(t, err, "next_cursor")
 	require.Equal(t, int64(1000), *cursor.ActiveAt, "continuation freezes the effective instant")
 	target := path + "?limit=1&cursor=" + url.QueryEscape(result.NextCursor)
-	service.pageResult = &app.AcademicUnitMemberPage{ActiveAt: 1000}
+	service.pageResult = &academic.AcademicUnitMemberPage{ActiveAt: 1000}
 	response = call(target)
 	require.Equal(t, http.StatusOK, response.Code, "final page/query = %d %#v", response.Code, service.pageQuery)
 	require.Empty(t, decodeMembershipPage(t, response).NextCursor, "final page/query = %d %#v", response.Code, service.pageQuery)
@@ -55,7 +55,7 @@ func TestAcademicUnitMemberHTTPPagingUsesTheCollectionEnvelope(t *testing.T) {
 	for _, suffix := range []string{"?limit=0", "?limit=201", "?limit=1&limit=2", "?cursor=", "?limit=1&history=true&active_at=1970-01-01T00:00:01Z", "?limit=1&history=invalid"} {
 		require.Equal(t, http.StatusBadRequest, call(path+suffix).Code, "invalid page query %s", suffix)
 	}
-	service.pageResult = &app.AcademicUnitMemberPage{HasMore: true, Members: []*model.AcademicUnitMember{member}}
+	service.pageResult = &academic.AcademicUnitMemberPage{HasMore: true, Members: []*model.AcademicUnitMember{member}}
 	response = call(path + "?limit=1&history=true")
 	require.Equal(t, http.StatusOK, response.Code)
 	historyCursor, err := decodeOpaqueCursor(decodeMembershipPage(t, response).NextCursor, membershipPageCursorSpec())
@@ -69,7 +69,7 @@ func TestClassMemberHTTPPagingUsesTheCollectionEnvelope(t *testing.T) {
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
 	scopeID := model.NewClassID()
 	member := &model.ClassMember{ID: model.NewClassMemberID(), UserID: model.NewUserID(), ClassID: scopeID}
-	service := &classMemberHTTPApplication{pageResult: &app.ClassMemberPage{Members: []*model.ClassMember{member}, HasMore: true, ActiveAt: 1000}}
+	service := &classMemberHTTPApplication{pageResult: &academic.ClassMemberPage{Members: []*model.ClassMember{member}, HasMore: true, ActiveAt: 1000}}
 	api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, classMemberResource(service))
 	path := "/api/v1/classes/" + scopeID.String() + "/members"
 	call := func(target string) *httptest.ResponseRecorder {
@@ -88,7 +88,7 @@ func TestClassMemberHTTPPagingUsesTheCollectionEnvelope(t *testing.T) {
 	require.NoError(t, err, "next_cursor")
 	require.Equal(t, int64(1000), *cursor.ActiveAt, "continuation freezes the effective instant")
 	target := path + "?limit=1&cursor=" + url.QueryEscape(result.NextCursor)
-	service.pageResult = &app.ClassMemberPage{ActiveAt: 1000}
+	service.pageResult = &academic.ClassMemberPage{ActiveAt: 1000}
 	response = call(target)
 	require.Equal(t, http.StatusOK, response.Code, "final page/query = %d %#v", response.Code, service.pageQuery)
 	require.Empty(t, decodeMembershipPage(t, response).NextCursor, "final page/query = %d %#v", response.Code, service.pageQuery)
@@ -97,7 +97,7 @@ func TestClassMemberHTTPPagingUsesTheCollectionEnvelope(t *testing.T) {
 	for _, suffix := range []string{"?limit=0", "?limit=201", "?limit=1&limit=2", "?cursor=", "?limit=1&history=true&active_at=1970-01-01T00:00:01Z", "?limit=1&history=invalid"} {
 		require.Equal(t, http.StatusBadRequest, call(path+suffix).Code, "invalid page query %s", suffix)
 	}
-	service.pageResult = &app.ClassMemberPage{HasMore: true, Members: []*model.ClassMember{member}}
+	service.pageResult = &academic.ClassMemberPage{HasMore: true, Members: []*model.ClassMember{member}}
 	response = call(path + "?limit=1&history=true")
 	require.Equal(t, http.StatusOK, response.Code)
 	historyCursor, err := decodeOpaqueCursor(decodeMembershipPage(t, response).NextCursor, membershipPageCursorSpec())

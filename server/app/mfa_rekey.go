@@ -13,6 +13,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
@@ -107,7 +108,7 @@ type mfaKeyServiceDependencies struct {
 	Keys                    mfaKeyStore
 	Jobs                    mfaRekeyJobReader
 	Authorization           institutionAuthorizer
-	Audit                   mutationAuditor
+	Audit                   access.MutationAuditor
 	Sealer                  *secretseal.Sealer
 	RecentAuthenticationTTL time.Duration
 	Now                     func() time.Time
@@ -186,11 +187,11 @@ func (s *mfaKeyService) StartMFARekey(ctx context.Context, invocation invocation
 		return MFARekeyView{}, apperror.New("authentication.mfa.unavailable").Wrap(err)
 	}
 	job.CreatedByUserID = invocation.Principal().UserID
-	operation, err := runAuditedMutation(ctx, s.deps.Audit, mutationAttempt{
+	operation, err := access.RunAudited(ctx, s.deps.Audit, access.Mutation{
 		Invocation: invocation, Action: model.ActionMFARekey, Resource: resource,
 		ScopeType: model.RoleScopeInstitution, ScopeID: resource.ID, Operation: "start_rekey",
 		Value: map[string]any{"job_id": job.ID.String(), "primary_key_id": primaryKeyID, "retiring_key_id": command.RetiringKeyID},
-	}, s.deps.Now, func(ctx context.Context, reference mutationAttemptReference) (*store.MFARekeyOperation, error) {
+	}, s.deps.Now, func(ctx context.Context, reference access.MutationReference) (*store.MFARekeyOperation, error) {
 		return s.deps.Keys.StartRekey(ctx, &store.MFARekeyStart{PrimaryKeyID: primaryKeyID, RetiringKeyID: command.RetiringKeyID,
 			Job: job, AuditEventID: reference.ID, AuditAt: reference.MutationAt})
 	}, mfaRekeyStoreErrors.Translate)
@@ -287,7 +288,7 @@ var mfaRekeyStoreErrors = apperror.StoreTable{
 // mfaKeyAuthorization resolves the Institution resource for MFA key-ring
 // authorization.
 type mfaKeyAuthorization struct {
-	authorization *accessControlService
+	authorization *access.Authorizer
 	institutions  store.InstitutionStore
 }
 

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -91,7 +92,7 @@ type roleBindingServiceDependencies struct {
 	Users         roleBindingUserStore
 	Authorization roleBindingAuthorizer
 	Capabilities  accessPolicyCapabilitySource
-	Audit         mutationAuditor
+	Audit         access.MutationAuditor
 	Mail          relationshipTransitionMailPreparer
 	Effects       roleBindingEffects
 	Now           func() time.Time
@@ -203,10 +204,10 @@ func (s *roleBindingService) CreateRoleBinding(ctx context.Context, invocation i
 	}
 	bindAcademicAdministrationAuthorization(idempotency, command.batchAuthorization)
 	bindAcademicAdministrationBatch(idempotency, command.batchMetadata)
-	saved, err := runAuditedMutation(
+	saved, err := access.RunAudited(
 		ctx,
 		s.deps.Audit,
-		mutationAttempt{
+		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionRoleBindingManage,
 			Resource:   resource,
@@ -215,7 +216,7 @@ func (s *roleBindingService) CreateRoleBinding(ctx context.Context, invocation i
 			Subject:    candidate.UserID,
 		},
 		func() time.Time { return mailAt },
-		func(ctx context.Context, reference mutationAttemptReference) (*model.RoleBinding, error) {
+		func(ctx context.Context, reference access.MutationReference) (*model.RoleBinding, error) {
 			input := &store.RoleBindingCreation{
 				Binding: candidate, ExpectedRoleUpdatedAt: role.UpdatedAt,
 				ExpectedRolePermissions:   append([]string(nil), role.Permissions...),
@@ -347,10 +348,10 @@ func (s *roleBindingService) EndRoleBinding(ctx context.Context, invocation invo
 			return nil, apperror.New("mail.unavailable").Wrap(err)
 		}
 	}
-	ended, err := runAuditedMutation(
+	ended, err := access.RunAudited(
 		ctx,
 		s.deps.Audit,
-		mutationAttempt{
+		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionRoleBindingManage,
 			Resource:   resource,
@@ -360,7 +361,7 @@ func (s *roleBindingService) EndRoleBinding(ctx context.Context, invocation invo
 			Subject:    current.UserID,
 		},
 		func() time.Time { return mailAt },
-		func(ctx context.Context, reference mutationAttemptReference) (*model.RoleBinding, error) {
+		func(ctx context.Context, reference access.MutationReference) (*model.RoleBinding, error) {
 			input := &store.RoleBindingEnd{
 				ID: id, EndAt: reference.MutationAt,
 				ExpectedRecipientRevision: recipient.Revision, Notice: notice,

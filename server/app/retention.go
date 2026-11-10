@@ -12,6 +12,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -97,10 +98,10 @@ func (s *retentionPolicyService) CreateRetentionPreview(ctx context.Context, inv
 	if err != nil {
 		return nil, err
 	}
-	preview, err := runAuditedMutation(ctx, s.deps.Audit, mutationAttempt{
+	preview, err := access.RunAudited(ctx, s.deps.Audit, access.Mutation{
 		Invocation: invocation, Action: model.ActionRetentionPolicyView, Resource: resource, ScopeType: model.RoleScopeInstitution,
 		ScopeID: inst.ID.String(), Operation: "preview", Value: map[string]any{"policy_revision": command.ExpectedPolicyRevision}}, s.deps.Now,
-		func(ctx context.Context, reference mutationAttemptReference) (*model.RetentionPreview, error) {
+		func(ctx context.Context, reference access.MutationReference) (*model.RetentionPreview, error) {
 			return s.deps.Lifecycle.CreatePreview(ctx, &store.RetentionPreviewCreation{
 				RetentionMutation: store.RetentionMutation{Principal: invocation.Principal(), AuditEventID: reference.ID, AuditAt: reference.MutationAt},
 				PreviewID:         model.NewRetentionPreviewID(), ExpectedPolicyRevision: command.ExpectedPolicyRevision}, idempotency)
@@ -143,11 +144,11 @@ func (s *retentionPolicyService) ChangeRetentionControl(ctx context.Context, inv
 	if err != nil {
 		return nil, err
 	}
-	result, err := runAuditedMutation(ctx, s.deps.Audit, mutationAttempt{
+	result, err := access.RunAudited(ctx, s.deps.Audit, access.Mutation{
 		Invocation: invocation, Action: model.ActionRetentionCleanupManage, Resource: resource, ScopeType: model.RoleScopeInstitution,
 		ScopeID: inst.ID.String(), Operation: "control", Value: map[string]any{"policy_revision": command.ExpectedPolicyRevision,
 			"control_revision": command.ExpectedRevision, "state": string(command.State)}}, s.deps.Now,
-		func(ctx context.Context, reference mutationAttemptReference) (*store.RetentionControlResult, error) {
+		func(ctx context.Context, reference access.MutationReference) (*store.RetentionControlResult, error) {
 			return s.deps.Lifecycle.ChangeControl(ctx, &store.RetentionControlChange{
 				RetentionMutation: store.RetentionMutation{Principal: invocation.Principal(), AuditEventID: reference.ID, AuditAt: reference.MutationAt, RecentAuthenticationTTL: s.deps.RecentAuthenticationTTL},
 				ExpectedRevision:  command.ExpectedRevision, ExpectedPolicyRevision: command.ExpectedPolicyRevision, State: command.State, PreviewID: command.PreviewID}, idempotency)

@@ -17,6 +17,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
@@ -345,13 +346,13 @@ type personalAccessTokenScopeAuthorizerFake struct {
 	events     *[]string
 	allowed    bool
 	err        error
-	delegation PersonalAccessTokenDelegation
+	delegation access.PersonalAccessTokenDelegation
 }
 
 func (a *personalAccessTokenScopeAuthorizerFake) PersonalAccessTokenDelegation(
 	context.Context,
 	model.Principal,
-) (PersonalAccessTokenDelegation, error) {
+) (access.PersonalAccessTokenDelegation, error) {
 	return a.delegation, a.err
 }
 

@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -764,7 +765,7 @@ var desktopAuthorizationStoreErrors = apperror.StoreTable{
 	Unavailable: "authentication.desktop_authorization.unavailable",
 }
 
-type desktopAuthorizationAuditAdapter struct{ audit *auditService }
+type desktopAuthorizationAuditAdapter struct{ audit *access.Auditor }
 
 // PrepareIssue records the approval attempt with the approving account as the
 // actor and the browser request's identity, never as an actor-less system event.
@@ -774,8 +775,8 @@ func (a desktopAuthorizationAuditAdapter) PrepareIssue(ctx context.Context, invo
 	if a.audit == nil || !userID.IsValid() || !institutionID.IsValid() {
 		return nil, apperror.New("audit.unavailable")
 	}
-	return a.audit.BeginAccountActionAtScope(ctx, accountAuditActor{userID: userID,
-		sessionID: invocation.Principal().SessionID, clientType: model.SessionClientWeb},
+	return a.audit.BeginAccountActionAtScope(ctx, access.AccountAuditActor{UserID: userID,
+		SessionID: invocation.Principal().SessionID, ClientType: model.SessionClientWeb},
 		model.ActionAuthenticationDesktopAuthorization,
 		model.Resource{Type: model.ResourceUser, ID: userID.String()}, model.RoleScopeInstitution,
 		institutionID.String(), invocation.RequestMetadata(), map[string]any{"operation": "issue_code"})
@@ -789,7 +790,7 @@ func (a desktopAuthorizationAuditAdapter) PrepareExchange(ctx context.Context, i
 	if a.audit == nil || !userID.IsValid() || !institutionID.IsValid() {
 		return nil, apperror.New("audit.unavailable")
 	}
-	return a.audit.BeginAccountActionAtScope(ctx, accountAuditActor{userID: userID, clientType: model.SessionClientDesktop},
+	return a.audit.BeginAccountActionAtScope(ctx, access.AccountAuditActor{UserID: userID, ClientType: model.SessionClientDesktop},
 		model.ActionAuthenticationDesktopSessionIssue,
 		model.Resource{Type: model.ResourceUser, ID: userID.String()}, model.RoleScopeInstitution,
 		institutionID.String(), invocation.RequestMetadata(), map[string]any{"operation": "exchange"})
@@ -805,8 +806,8 @@ func (a desktopAuthorizationAuditAdapter) RecordRejectedIssue(ctx context.Contex
 	if a.audit == nil || !caller.UserID.IsValid() || !userID.IsValid() || !institutionID.IsValid() {
 		return apperror.New("audit.unavailable")
 	}
-	event, err := a.audit.BeginAccountActionAtScope(ctx, accountAuditActor{userID: caller.UserID,
-		sessionID: caller.SessionID, clientType: model.SessionClientWeb},
+	event, err := a.audit.BeginAccountActionAtScope(ctx, access.AccountAuditActor{UserID: caller.UserID,
+		SessionID: caller.SessionID, ClientType: model.SessionClientWeb},
 		model.ActionAuthenticationDesktopAuthorization,
 		model.Resource{Type: model.ResourceUser, ID: userID.String()}, model.RoleScopeInstitution,
 		institutionID.String(), invocation.RequestMetadata(), map[string]any{"operation": "issue_code"})
@@ -824,7 +825,7 @@ func (a desktopAuthorizationAuditAdapter) PrepareWithdrawal(ctx context.Context,
 	if a.audit == nil || !userID.IsValid() || !institutionID.IsValid() || !sessionID.IsValid() {
 		return nil, apperror.New("audit.unavailable")
 	}
-	return a.audit.BeginAccountActionAtScope(ctx, accountAuditActor{userID: userID, clientType: model.SessionClientDesktop},
+	return a.audit.BeginAccountActionAtScope(ctx, access.AccountAuditActor{UserID: userID, ClientType: model.SessionClientDesktop},
 		model.ActionAuthenticationDesktopSessionIssue,
 		model.Resource{Type: model.ResourceUser, ID: userID.String()}, model.RoleScopeInstitution,
 		institutionID.String(), invocation.RequestMetadata(),

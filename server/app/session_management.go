@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -69,7 +70,7 @@ type LogoutCommand struct{}
 // newSelfSessionService validates them once and selfSessionService keeps them in deps.
 type selfSessionServiceDependencies struct {
 	Sessions store.SessionStore
-	Audit    mutationAuditor
+	Audit    access.MutationAuditor
 	Effects  sessionRevocationEffects
 	Now      func() time.Time
 }
@@ -140,7 +141,7 @@ func (s *selfSessionService) RevokeSession(
 
 	revocations := sessionRevocationCoordinator{sessions: s.deps.Sessions, audit: s.deps.Audit, effects: s.deps.Effects, now: s.deps.Now}
 	return revocations.revokeOne(ctx,
-		mutationAttempt{
+		access.Mutation{
 			Invocation: invocation, Action: model.ActionSessionManage,
 			Resource:  model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 			Operation: "revoke_own_session",
@@ -165,7 +166,7 @@ func (s *selfSessionService) RevokeAllSessions(
 	}
 	revocations := sessionRevocationCoordinator{sessions: s.deps.Sessions, audit: s.deps.Audit, effects: s.deps.Effects, now: s.deps.Now}
 	return revocations.revokeAll(ctx,
-		mutationAttempt{
+		access.Mutation{
 			Invocation: invocation, Action: model.ActionSessionManage,
 			Resource:  model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 			Operation: "revoke_own_sessions",
@@ -191,7 +192,7 @@ func (s *selfSessionService) RevokeOtherSessions(
 	}
 	revocations := sessionRevocationCoordinator{sessions: s.deps.Sessions, audit: s.deps.Audit, effects: s.deps.Effects, now: s.deps.Now}
 	count, err := revocations.revokeAllCounted(ctx,
-		mutationAttempt{
+		access.Mutation{
 			Invocation: invocation, Action: model.ActionSessionManage,
 			Resource:  model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 			Operation: "revoke_other_sessions",

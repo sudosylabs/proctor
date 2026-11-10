@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/review"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
@@ -23,7 +24,7 @@ import (
 type examIntegrityReviewAuthorizationAdapter struct {
 	reviews  store.ExamIntegrityReviewStore
 	sittings *sitting.Service
-	audit    authorizationDecisionAudit
+	audit    access.DecisionAudit
 }
 
 func (a examIntegrityReviewAuthorizationAdapter) AuthorizeSubmissionView(ctx context.Context, invocation invocation.Invocation,

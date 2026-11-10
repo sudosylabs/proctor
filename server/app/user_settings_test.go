@@ -16,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -62,7 +63,7 @@ func (s *userSettingsStoreFake) Replace(
 type userSettingsAuditFake struct {
 	event *model.AuditEvent
 	err   error
-	input userSettingsAuditInput
+	input access.UserSettingsAuditInput
 	calls int
 }
 
@@ -104,7 +105,7 @@ func newUserSettingsServiceForTest(
 
 func (a *userSettingsAuditFake) PrepareReplacement(
 	_ context.Context,
-	input userSettingsAuditInput,
+	input access.UserSettingsAuditInput,
 ) (*model.AuditEvent, error) {
 	a.calls++
 	a.input = input
@@ -532,7 +533,7 @@ func (e *userSettingsAtomicEffects) Changed(context.Context, userSettingsChanged
 
 type userSettingsConcurrentAudit struct{}
 
-func (userSettingsConcurrentAudit) PrepareReplacement(context.Context, userSettingsAuditInput) (*model.AuditEvent, error) {
+func (userSettingsConcurrentAudit) PrepareReplacement(context.Context, access.UserSettingsAuditInput) (*model.AuditEvent, error) {
 	return &model.AuditEvent{Action: "user.settings.replace"}, nil
 }
 

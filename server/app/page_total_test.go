@@ -9,55 +9,16 @@ package app
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
-
-func TestCountFirstPageCountsOnlyTheFirstPageAndChecksTheStore(t *testing.T) {
-	t.Parallel()
-	calls := 0
-	count := func(total int) func(int) (int, error) {
-		return func(maximum int) (int, error) {
-			calls++
-			require.Equal(t, store.MaximumListCount, maximum)
-			return total, nil
-		}
-	}
-	total, consistent, err := countFirstPage(true, 2, count(7))
-	require.NoError(t, err)
-	require.True(t, consistent)
-	require.Equal(t, PageTotal{Counted: true, Total: 7}, total)
-
-	total, consistent, err = countFirstPage(true, 1, count(store.MaximumListCount))
-	require.NoError(t, err)
-	require.True(t, consistent)
-	require.Equal(t, PageTotal{Counted: true, Total: store.MaximumListCount, TotalIsLowerBound: true}, total)
-
-	calls = 0
-	total, consistent, err = countFirstPage(false, 2, count(7))
-	require.NoError(t, err)
-	require.True(t, consistent)
-	require.Equal(t, PageTotal{}, total)
-	require.Zero(t, calls, "a later page is not counted")
-
-	for name, stored := range map[string]int{"fewer than the page": 1, "past the bound": store.MaximumListCount + 1} {
-		t.Run(name, func(t *testing.T) {
-			_, consistent, countErr := countFirstPage(true, 2, count(stored))
-			require.NoError(t, countErr)
-			require.False(t, consistent)
-		})
-	}
-	failure := errors.New("count failed")
-	_, _, err = countFirstPage(true, 0, func(int) (int, error) { return 0, failure })
-	require.ErrorIs(t, err, failure)
-}
 
 func TestUserSearchCountsThroughTheListedOptions(t *testing.T) {
 	t.Parallel()
@@ -71,7 +32,7 @@ func TestUserSearchCountsThroughTheListedOptions(t *testing.T) {
 	first, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{Query: "count", Limit: 10,
 		Affiliations: []model.AffiliationKind{model.AffiliationStudent}})
 	require.NoError(t, err)
-	require.Equal(t, PageTotal{Counted: true, Total: store.MaximumListCount, TotalIsLowerBound: true}, first.PageTotal)
+	require.Equal(t, paging.Total{Counted: true, Total: store.MaximumListCount, TotalIsLowerBound: true}, first.Total)
 	expected := persistence.listOptions
 	require.Equal(t, expected, persistence.countOptions, "the count reads the list's visibility and filters")
 	require.Equal(t, store.MaximumListCount, persistence.countMaximum)
@@ -83,7 +44,7 @@ func TestUserSearchCountsThroughTheListedOptions(t *testing.T) {
 	later, err := service.SearchUsers(context.Background(), invocation.Invocation{}, SearchUsersQuery{Query: "count", Limit: 10,
 		AfterUsername: user.Username, AfterID: user.ID})
 	require.NoError(t, err)
-	require.Equal(t, PageTotal{}, later.PageTotal)
+	require.Equal(t, paging.Total{}, later.Total)
 	// Contract: a continued page authorizes and lists without counting.
 	require.Equal(t, []string{"authorize-search", "list-users", "summarize-users", "role-binding-view-scope"}, events)
 
@@ -105,14 +66,14 @@ func TestAuditListingCountsTheFirstPageWithinItsVisibility(t *testing.T) {
 
 	first, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{Limit: 10, Since: model.TimeFromMillis(50)})
 	require.NoError(t, err)
-	require.Equal(t, PageTotal{Counted: true, Total: 42}, first.PageTotal)
+	require.Equal(t, paging.Total{Counted: true, Total: 42}, first.Total)
 	require.Equal(t, persistence.input, persistence.listCountInput, "the count reads the list's visibility and filters")
 
 	events = events[:0]
 	later, err := service.ListAuditEvents(context.Background(), invocation.Invocation{}, ListAuditEventsQuery{Limit: 10,
 		BeforeCreatedAt: event.CreatedAt, BeforeID: event.ID})
 	require.NoError(t, err)
-	require.Equal(t, PageTotal{}, later.PageTotal)
+	require.Equal(t, paging.Total{}, later.Total)
 	// Contract: a continued page authorizes and lists without counting.
 	require.Equal(t, []string{"authorize-view", "list-audits"}, events)
 }
@@ -133,12 +94,12 @@ func TestInvitationListCountsTheFirstPageAndPendingSummary(t *testing.T) {
 
 	first, err := service.ListInvitations(context.Background(), caller, ListInvitationsQuery{State: model.InvitationPending, Limit: 25})
 	require.NoError(t, err)
-	require.Equal(t, PageTotal{Counted: true, Total: 9}, first.PageTotal)
+	require.Equal(t, paging.Total{Counted: true, Total: 9}, first.Total)
 	require.Equal(t, persistence.listOptions, persistence.countOptions, "the count reads the list's visibility and filters")
 
 	later, err := service.ListInvitations(context.Background(), caller, ListInvitationsQuery{Limit: 25, BeforeCreatedAt: now, BeforeID: model.NewInvitationID()})
 	require.NoError(t, err)
-	require.Equal(t, PageTotal{}, later.PageTotal)
+	require.Equal(t, paging.Total{}, later.Total)
 
 	authorizer.actions = nil
 	pending, err := service.countPendingInvitations(context.Background(), caller, MaximumAdministrationCount)
@@ -160,14 +121,14 @@ func TestMailDeliveryListCountsTheFirstPageThroughTheListedOptions(t *testing.T)
 	query := ListMailDeliveriesQuery{States: []model.MailDeliveryState{model.MailDeliveryFailed}, Limit: 10}
 	first, err := service.ListMailDeliveries(context.Background(), caller, query)
 	require.NoError(t, err)
-	require.Equal(t, PageTotal{Counted: true, Total: 3}, first.PageTotal)
+	require.Equal(t, paging.Total{Counted: true, Total: 3}, first.Total)
 	require.Equal(t, query.States, persistence.countOptions.States, "the count reads the list's filters")
 
 	query.BeforeCreatedAt, query.BeforeID = delivery.CreatedAt, delivery.ID
 	persistence.counts = 0
 	later, err := service.ListMailDeliveries(context.Background(), caller, query)
 	require.NoError(t, err)
-	require.Equal(t, PageTotal{}, later.PageTotal)
+	require.Equal(t, paging.Total{}, later.Total)
 	require.Zero(t, persistence.counts, "a later page is not counted")
 
 	failed, err := service.countFailedMailDeliveries(context.Background(), caller, MaximumAdministrationCount)

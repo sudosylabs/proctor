@@ -16,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -61,7 +62,7 @@ func TestEmailChangePreparesFrozenOldWarningAndNewTargetVerification(t *testing.
 	mailer := &emailTransitionMailerFake{}
 	app := newAccountTokenTestApp(t, accountTokenTestDependencies{users: &accountTokenUserStoreFake{byID: user}, passwords: &accountTokenPasswordStoreFake{},
 		tokens: tokens, institution: &model.Institution{ID: model.NewInstitutionID()}, mailer: mailer, now: func() time.Time { return now }})
-	result, err := app.accountTokenService.changeUserEmail(context.Background(), user, "new@example.edu", now, mutationAttemptReference{ID: model.NewAuditEventID(), MutationAt: now})
+	result, err := app.accountTokenService.changeUserEmail(context.Background(), user, "new@example.edu", now, access.MutationReference{ID: model.NewAuditEventID(), MutationAt: now})
 	require.NoError(t, err)
 	require.Equal(t, "new@example.edu", result.Email, "result/aggregate = %#v", result)
 	require.NotNil(t, tokens.emailChange, "result/aggregate = %#v", result)

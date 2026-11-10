@@ -18,27 +18,27 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type classMemberHTTPApplication struct {
-	pageQuery     app.ListClassMembersPageQuery
-	pageResult    *app.ClassMemberPage
+	pageQuery     academic.ListClassMembersPageQuery
+	pageResult    *academic.ClassMemberPage
 	result        *model.ClassEnrollment
 	ended         *model.ClassMember
 	values        []*model.ClassMember
-	enrollCommand app.EnrollClassMemberCommand
-	endCommand    app.EndClassMemberCommand
+	enrollCommand academic.EnrollClassMemberCommand
+	endCommand    academic.EndClassMemberCommand
 }
 
-func (a *classMemberHTTPApplication) EnrollClassMember(_ context.Context, _ invocation.Invocation, command app.EnrollClassMemberCommand) (*model.ClassEnrollment, error) {
+func (a *classMemberHTTPApplication) EnrollClassMember(_ context.Context, _ invocation.Invocation, command academic.EnrollClassMemberCommand) (*model.ClassEnrollment, error) {
 	a.enrollCommand = command
 	return a.result, nil
 }
 
-func (a *classMemberHTTPApplication) EndClassMember(_ context.Context, _ invocation.Invocation, command app.EndClassMemberCommand) (*model.ClassMember, error) {
+func (a *classMemberHTTPApplication) EndClassMember(_ context.Context, _ invocation.Invocation, command academic.EndClassMemberCommand) (*model.ClassMember, error) {
 	a.endCommand = command
 	return a.ended, nil
 }
@@ -107,12 +107,12 @@ func TestClassMemberHistoryQueryIsForwarded(t *testing.T) {
 	require.True(t, *query.History, "history")
 }
 
-func (a *classMemberHTTPApplication) ListClassMembersPage(_ context.Context, _ invocation.Invocation, query app.ListClassMembersPageQuery) (*app.ClassMemberPage, error) {
+func (a *classMemberHTTPApplication) ListClassMembersPage(_ context.Context, _ invocation.Invocation, query academic.ListClassMembersPageQuery) (*academic.ClassMemberPage, error) {
 	a.pageQuery = query
 	if a.pageResult != nil {
 		return a.pageResult, nil
 	}
-	return &app.ClassMemberPage{}, nil
+	return &academic.ClassMemberPage{}, nil
 }
 
 func TestClassMemberOpenAPIDocument(t *testing.T) {

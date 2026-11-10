@@ -23,6 +23,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -139,18 +140,18 @@ type focusedAuditApplication struct {
 func (f *focusedAuditApplication) ListSelfAuditEvents(_ context.Context, _ invocation.Invocation, query app.ListSelfAuditEventsQuery) (app.SelfAuditPage, error) {
 	f.selfQuery = query
 	f.selfCalls++
-	page := app.SelfAuditPage{Page: app.Page[app.SelfAuditEvent]{Items: f.self, HasMore: f.hasMore}, Counted: query.BeforeID.IsZero()}
+	page := app.SelfAuditPage{Page: paging.Page[app.SelfAuditEvent]{Items: f.self, HasMore: f.hasMore}, Counted: query.BeforeID.IsZero()}
 	if page.Counted {
 		page.Total, page.TotalIsLowerBound = f.selfTotal, f.selfTotal == store.MaximumAuditSelfCount
 	}
 	return page, f.err
 }
 
-func (f *focusedAuditApplication) ListAuditEvents(_ context.Context, _ invocation.Invocation, query app.ListAuditEventsQuery) (app.CountedPage[*model.AuditEvent], error) {
+func (f *focusedAuditApplication) ListAuditEvents(_ context.Context, _ invocation.Invocation, query app.ListAuditEventsQuery) (paging.Counted[*model.AuditEvent], error) {
 	f.query = query
-	page := app.CountedPage[*model.AuditEvent]{Page: app.Page[*model.AuditEvent]{Items: f.events, HasMore: f.hasMore}}
+	page := paging.Counted[*model.AuditEvent]{Page: paging.Page[*model.AuditEvent]{Items: f.events, HasMore: f.hasMore}}
 	if query.BeforeID.IsZero() {
-		page.PageTotal = app.PageTotal{Counted: true, Total: max(f.total, len(f.events)), TotalIsLowerBound: f.total == store.MaximumListCount}
+		page.Total = paging.Total{Counted: true, Total: max(f.total, len(f.events)), TotalIsLowerBound: f.total == store.MaximumListCount}
 	}
 	return page, f.err
 }

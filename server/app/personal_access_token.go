@@ -19,6 +19,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
@@ -86,7 +87,7 @@ type personalAccessTokenAuditor interface {
 
 type personalAccessTokenScopeAuthorizer interface {
 	CanDelegateActionsAtScope(context.Context, model.Principal, []string, model.RoleScopeType, string) (bool, error)
-	PersonalAccessTokenDelegation(context.Context, model.Principal) (PersonalAccessTokenDelegation, error)
+	PersonalAccessTokenDelegation(context.Context, model.Principal) (access.PersonalAccessTokenDelegation, error)
 }
 
 type personalAccessTokenUserStore interface {
@@ -539,7 +540,7 @@ func (s *personalAccessTokenAdministrationService) failPreparedMutation(
 }
 
 type personalAccessTokenAuditAdapter struct {
-	audit *auditService
+	audit *access.Auditor
 }
 
 func (a personalAccessTokenAuditAdapter) Prepare(

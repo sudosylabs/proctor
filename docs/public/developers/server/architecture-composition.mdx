@@ -72,13 +72,14 @@ word leads you through each step.
 1. **Route.** `httpapi/class.go` declares the route in `classResource` with
    `principalRoute`. That helper says the route needs a signed-in principal
    and lists the errors it may return. `classResourceModule.create` decodes
-   the body into `createClassRequest` and builds an `app.CreateClassCommand`.
-2. **Use case.** `app/class.go`, `CreateClass`, takes the request through
-   these steps:
+   the body into `createClassRequest` and builds an
+   `academic.CreateClassCommand`.
+2. **Use case.** `app/academic/class.go`, `academic.Service.CreateClass`,
+   takes the request through these steps:
    1. validates the Programme Level ID;
    2. authorizes `model.ActionClassManage` against that Programme Level;
    3. builds a `model.Class` and calls `Validate`;
-   4. records the mutation through `runAuditedMutation` (`app/mutation_attempt.go`).
+   4. records the mutation through `access.RunAudited` (`app/access/mutation_attempt.go`).
 3. **Store contract.** `store.ClassStore.Create`, declared in
    `store/academic.go`, takes a `store.ClassCreation` that carries the Class
    and its audit event, so both commit together.

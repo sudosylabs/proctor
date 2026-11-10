@@ -19,34 +19,35 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type academicPeriodHTTPApplication struct {
-	updateCommand  app.UpdateAcademicPeriodCommand
-	archiveCommand app.ArchiveAcademicPeriodCommand
+	updateCommand  academic.UpdateAcademicPeriodCommand
+	archiveCommand academic.ArchiveAcademicPeriodCommand
 	result         *model.AcademicPeriod
 	list           []*model.AcademicPeriod
-	createCommand  app.CreateAcademicPeriodCommand
+	createCommand  academic.CreateAcademicPeriodCommand
 }
 
-func (a *academicPeriodHTTPApplication) GetAcademicPeriod(context.Context, invocation.Invocation, app.GetAcademicPeriodQuery) (*model.AcademicPeriod, error) {
+func (a *academicPeriodHTTPApplication) GetAcademicPeriod(context.Context, invocation.Invocation, academic.GetAcademicPeriodQuery) (*model.AcademicPeriod, error) {
 	return a.result, nil
 }
-func (a *academicPeriodHTTPApplication) ListAcademicPeriods(context.Context, invocation.Invocation, app.ListAcademicPeriodsQuery) (app.Page[*model.AcademicPeriod], error) {
-	return app.Page[*model.AcademicPeriod]{Items: a.list}, nil
+func (a *academicPeriodHTTPApplication) ListAcademicPeriods(context.Context, invocation.Invocation, academic.ListAcademicPeriodsQuery) (paging.Page[*model.AcademicPeriod], error) {
+	return paging.Page[*model.AcademicPeriod]{Items: a.list}, nil
 }
-func (a *academicPeriodHTTPApplication) CreateAcademicPeriod(_ context.Context, _ invocation.Invocation, command app.CreateAcademicPeriodCommand) (*model.AcademicPeriod, error) {
+func (a *academicPeriodHTTPApplication) CreateAcademicPeriod(_ context.Context, _ invocation.Invocation, command academic.CreateAcademicPeriodCommand) (*model.AcademicPeriod, error) {
 	a.createCommand = command
 	return a.result, nil
 }
-func (a *academicPeriodHTTPApplication) UpdateAcademicPeriod(_ context.Context, _ invocation.Invocation, command app.UpdateAcademicPeriodCommand) (*model.AcademicPeriod, error) {
+func (a *academicPeriodHTTPApplication) UpdateAcademicPeriod(_ context.Context, _ invocation.Invocation, command academic.UpdateAcademicPeriodCommand) (*model.AcademicPeriod, error) {
 	a.updateCommand = command
 	return a.result, nil
 }
-func (a *academicPeriodHTTPApplication) ArchiveAcademicPeriod(_ context.Context, _ invocation.Invocation, command app.ArchiveAcademicPeriodCommand) error {
+func (a *academicPeriodHTTPApplication) ArchiveAcademicPeriod(_ context.Context, _ invocation.Invocation, command academic.ArchiveAcademicPeriodCommand) error {
 	a.archiveCommand = command
 	return nil
 }

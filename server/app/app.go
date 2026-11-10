@@ -11,6 +11,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
@@ -58,16 +59,9 @@ type App struct {
 	*accessPolicyService
 	*retentionPolicyService
 	*desktopCompatibilityService
-	*academicUnitQueryService
-	*academicUnitCommandService
-	*institutionService
-	*programmeService
-	*programmeLevelService
-	*academicPeriodService
-	*classService
-	*affiliationService
-	*academicUnitMemberService
-	*classMemberService
+	// Academic holds the Institution, Academic Unit, Programme, Academic
+	// Period, Class, membership and Affiliation use cases.
+	Academic *academic.Service
 	*invitationService
 	*onboardingImportService
 	*examAuthoringService
@@ -210,5 +204,5 @@ func constructOnboardingImports(deps Dependencies, identity identityConstruction
 		catalog.AcademicPeriod() == nil || catalog.Class() == nil || catalog.Role() == nil {
 		return nil, nil
 	}
-	return newOnboardingImportService(onboardingImportServiceDependencies{Imports: catalog.OnboardingImport(), Content: deps.FileContent, Invitations: identity.invitations, AdministrationBatches: administration.academicAdministrationBatches, Authentication: identity.authentication, Authorization: invitationAuthorizationAdapter{authorization: access.authorization}, Audit: mutationAuditAdapter{audit: foundation.audit}, Tokens: catalog.PersonalAccessToken(), Users: catalog.User(), Institutions: catalog.Institution(), Units: catalog.AcademicUnit(), Programmes: catalog.Programme(), Levels: catalog.ProgrammeLevel(), Periods: catalog.AcademicPeriod(), Classes: catalog.Class(), Roles: catalog.Role(), Affiliations: catalog.Affiliation(), UnitMembers: catalog.AcademicUnitMember(), ClassMembers: catalog.ClassMember(), RoleBindings: catalog.RoleBinding(), Now: time.Now})
+	return newOnboardingImportService(onboardingImportServiceDependencies{Imports: catalog.OnboardingImport(), Content: deps.FileContent, Invitations: identity.invitations, AdministrationBatches: administration.academicAdministrationBatches, Authentication: identity.authentication, Authorization: invitationAuthorizationAdapter{authorization: access.authorization}, Audit: foundation.audit.MutationAudit(), Tokens: catalog.PersonalAccessToken(), Users: catalog.User(), Institutions: catalog.Institution(), Units: catalog.AcademicUnit(), Programmes: catalog.Programme(), Levels: catalog.ProgrammeLevel(), Periods: catalog.AcademicPeriod(), Classes: catalog.Class(), Roles: catalog.Role(), Affiliations: catalog.Affiliation(), UnitMembers: catalog.AcademicUnitMember(), ClassMembers: catalog.ClassMember(), RoleBindings: catalog.RoleBinding(), Now: time.Now})
 }

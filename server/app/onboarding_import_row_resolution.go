@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -143,7 +144,7 @@ func (s *onboardingImportService) resolveAcademicAdministrationImportClassTransf
 	}
 	previous, getErr := s.deps.ClassMembers.Get(ctx, model.ClassMemberID(item.RelationshipID))
 	if getErr != nil {
-		return classMemberStoreErrors.Translate(getErr)
+		return academic.ClassMemberStoreErrors.Translate(getErr)
 	}
 	if previous.UserID != row.UserID {
 		return apperror.New("resource.not_found")
@@ -182,14 +183,14 @@ func (s *onboardingImportService) resolveAcademicAdministrationImportRelationshi
 	case AcademicAdministrationAffiliationEnd:
 		value, getErr := s.deps.Affiliations.Get(ctx, model.AffiliationID(item.RelationshipID))
 		if getErr != nil {
-			return affiliationStoreErrors.Translate(getErr)
+			return academic.AffiliationStoreErrors.Translate(getErr)
 		}
 		row.UserID, row.AffiliationKind = value.UserID, value.Kind
 		return s.deps.Authorization.Authorize(ctx, invocation, model.ActionUserManage, model.Resource{Type: model.ResourceUser, ID: value.UserID.String()})
 	case AcademicAdministrationAcademicUnitMemberEnd:
 		value, getErr := s.deps.UnitMembers.Get(ctx, model.AcademicUnitMemberID(item.RelationshipID))
 		if getErr != nil {
-			return academicUnitMemberStoreErrors.Translate(getErr)
+			return academic.AcademicUnitMemberStoreErrors.Translate(getErr)
 		}
 		if value.AcademicUnitID.String() != current.ScopeID {
 			return apperror.New("resource.not_found")
@@ -199,7 +200,7 @@ func (s *onboardingImportService) resolveAcademicAdministrationImportRelationshi
 	case AcademicAdministrationClassEnd:
 		value, getErr := s.deps.ClassMembers.Get(ctx, model.ClassMemberID(item.RelationshipID))
 		if getErr != nil {
-			return classMemberStoreErrors.Translate(getErr)
+			return academic.ClassMemberStoreErrors.Translate(getErr)
 		}
 		if value.ClassID.String() != current.ScopeID {
 			return apperror.New("resource.not_found")

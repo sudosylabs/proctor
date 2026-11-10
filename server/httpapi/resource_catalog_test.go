@@ -21,20 +21,21 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type recordingOnboardingImportApplication struct {
 	getID     string
 	listQuery *app.ListOnboardingImportsQuery
-	listPage  app.Page[app.OnboardingImportView]
+	listPage  paging.Page[app.OnboardingImportView]
 	listErr   error
 
 	uploadCommand *app.UploadOnboardingImportCommand
 	uploadView    app.OnboardingImportView
 }
 
-func (c *recordingOnboardingImportApplication) ListOnboardingImports(_ context.Context, _ invocation.Invocation, query app.ListOnboardingImportsQuery) (app.Page[app.OnboardingImportView], error) {
+func (c *recordingOnboardingImportApplication) ListOnboardingImports(_ context.Context, _ invocation.Invocation, query app.ListOnboardingImportsQuery) (paging.Page[app.OnboardingImportView], error) {
 	c.listQuery = &query
 	return c.listPage, c.listErr
 }

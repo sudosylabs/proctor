@@ -12,8 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -58,16 +60,16 @@ func newAuditListingService(deps auditListingServiceDependencies) *auditListingS
 	return &auditListingService{deps: deps}
 }
 
-func (s *auditListingService) ListAuditEvents(ctx context.Context, invocation invocation.Invocation, query ListAuditEventsQuery) (CountedPage[*model.AuditEvent], error) {
+func (s *auditListingService) ListAuditEvents(ctx context.Context, invocation invocation.Invocation, query ListAuditEventsQuery) (paging.Counted[*model.AuditEvent], error) {
 	visibility, err := s.deps.Authorization.AuthorizeList(ctx, invocation)
 	if err != nil {
-		return CountedPage[*model.AuditEvent]{}, err
+		return paging.Counted[*model.AuditEvent]{}, err
 	}
 	validAcademicVisibility := len(visibility.AllowedActions) > 0 &&
 		((visibility.AcademicInstitutionWide && len(visibility.AcademicUnitRootIDs) == 0) ||
 			(!visibility.AcademicInstitutionWide && len(visibility.AcademicUnitRootIDs) > 0))
 	if !visibility.InstitutionWide && !validAcademicVisibility {
-		return CountedPage[*model.AuditEvent]{}, authorizationDeniedError()
+		return paging.Counted[*model.AuditEvent]{}, access.DeniedError()
 	}
 	if query.Limit == 0 {
 		query.Limit = 50
@@ -77,7 +79,7 @@ func (s *auditListingService) ListAuditEvents(ctx context.Context, invocation in
 		(query.BeforeID != "" && !model.AuditEventID(query.BeforeID).IsValid()) ||
 		(query.Resource != nil && query.Resource.Validate() != nil) ||
 		(!query.Since.IsZero() && !query.Until.IsZero() && !query.Since.Before(query.Until)) {
-		return CountedPage[*model.AuditEvent]{}, apperror.New("audit.query.invalid")
+		return paging.Counted[*model.AuditEvent]{}, apperror.New("audit.query.invalid")
 	}
 	options := store.AuditListOptions{
 		ActorID: model.UserID(strings.TrimSpace(query.ActorID.String())), Action: strings.TrimSpace(query.Action),
@@ -86,19 +88,19 @@ func (s *auditListingService) ListAuditEvents(ctx context.Context, invocation in
 	}
 	events, err := s.deps.Audits.List(ctx, options)
 	if err != nil {
-		return CountedPage[*model.AuditEvent]{}, auditListingError(err)
+		return paging.Counted[*model.AuditEvent]{}, auditListingError(err)
 	}
-	page := CountedPage[*model.AuditEvent]{Page: newPage(events, query.Limit)}
+	page := paging.Counted[*model.AuditEvent]{Page: paging.New(events, query.Limit)}
 	if !visibility.InstitutionWide {
 		page.Items = academicAuditProjection(page.Items)
 	}
-	total, consistent, err := countFirstPage(query.BeforeID.IsZero() && query.BeforeCreatedAt.IsZero(), len(page.Items), func(maximum int) (int, error) {
+	total, consistent, err := paging.CountFirst(query.BeforeID.IsZero() && query.BeforeCreatedAt.IsZero(), len(page.Items), func(maximum int) (int, error) {
 		return s.deps.Audits.Count(ctx, options, maximum)
 	})
 	if err != nil || !consistent {
-		return CountedPage[*model.AuditEvent]{}, auditListingError(err)
+		return paging.Counted[*model.AuditEvent]{}, auditListingError(err)
 	}
-	page.PageTotal = total
+	page.Total = total
 	return page, nil
 }
 
@@ -125,7 +127,7 @@ func academicAuditProjection(events []*model.AuditEvent) []*model.AuditEvent {
 }
 
 type auditListingAuthorization struct {
-	authorization *accessControlService
+	authorization *access.Authorizer
 	institutions  store.InstitutionStore
 }
 
@@ -135,18 +137,18 @@ func (a auditListingAuthorization) AuthorizeList(ctx context.Context, invocation
 		return store.AuditVisibilityScope{}, auditListingError(err)
 	}
 	principal := invocation.Principal()
-	global, err := a.authorization.authorizedScopes(ctx, principal, model.ActionAuditView, model.ResourceInstitution)
+	global, err := a.authorization.GrantedScopes(ctx, principal, model.ActionAuditView, model.ResourceInstitution)
 	if err != nil {
 		return store.AuditVisibilityScope{}, err
 	}
 	if global.InstitutionWide {
 		resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
-		if err = a.authorization.deps.Audit.RecordAuthorizationDecision(ctx, principal, model.ActionAuditView, resource, model.RoleScopeInstitution, institution.ID.String(), invocation.RequestMetadata(), true); err != nil {
+		if err = a.authorization.RecordAuthorizationDecision(ctx, principal, model.ActionAuditView, resource, model.RoleScopeInstitution, institution.ID.String(), invocation.RequestMetadata(), true); err != nil {
 			return store.AuditVisibilityScope{}, err
 		}
 		return store.AuditVisibilityScope{InstitutionWide: true}, nil
 	}
-	academic, err := a.authorization.authorizedScopes(ctx, principal, model.ActionAcademicAuditView, model.ResourceAcademicUnit)
+	academic, err := a.authorization.GrantedScopes(ctx, principal, model.ActionAcademicAuditView, model.ResourceAcademicUnit)
 	if err != nil {
 		return store.AuditVisibilityScope{}, err
 	}
@@ -157,11 +159,11 @@ func (a auditListingAuthorization) AuthorizeList(ctx context.Context, invocation
 		resource = model.Resource{Type: model.ResourceAcademicUnit, ID: academic.AcademicUnitRootIDs[0].String()}
 		scopeType, scopeID = model.RoleScopeAcademicUnit, resource.ID
 	}
-	if err := a.authorization.deps.Audit.RecordAuthorizationDecision(ctx, principal, model.ActionAcademicAuditView, resource, scopeType, scopeID, invocation.RequestMetadata(), allowed); err != nil {
+	if err := a.authorization.RecordAuthorizationDecision(ctx, principal, model.ActionAcademicAuditView, resource, scopeType, scopeID, invocation.RequestMetadata(), allowed); err != nil {
 		return store.AuditVisibilityScope{}, err
 	}
 	if !allowed {
-		return store.AuditVisibilityScope{}, authorizationDeniedError()
+		return store.AuditVisibilityScope{}, access.DeniedError()
 	}
 	return store.AuditVisibilityScope{
 		AcademicInstitutionWide: academic.InstitutionWide,

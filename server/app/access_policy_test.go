@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -70,19 +71,19 @@ type accessPolicyAuditFake struct {
 	beginID  string
 	beginErr error
 	failErr  error
-	attempt  mutationAttempt
+	attempt  access.Mutation
 	failID   string
 	failCode string
 }
 
 func (a *accessPolicyAuditFake) Begin(_ context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource, operation string, value, prior map[string]any) (model.AuditEventID, error) {
-	a.attempt = mutationAttempt{Invocation: invocation, Action: action, Resource: resource,
+	a.attempt = access.Mutation{Invocation: invocation, Action: action, Resource: resource,
 		Operation: operation, Value: value, Prior: prior}
 	return model.AuditEventID(a.beginID), a.beginErr
 }
 
 func (a *accessPolicyAuditFake) BeginAtScope(_ context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID, operation string, value, prior map[string]any) (model.AuditEventID, error) {
-	a.attempt = mutationAttempt{Invocation: invocation, Action: action, Resource: resource,
+	a.attempt = access.Mutation{Invocation: invocation, Action: action, Resource: resource,
 		ScopeType: scopeType, ScopeID: scopeID, Operation: operation, Value: value, Prior: prior}
 	return model.AuditEventID(a.beginID), a.beginErr
 }

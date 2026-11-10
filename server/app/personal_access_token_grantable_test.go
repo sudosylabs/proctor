@@ -16,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -51,7 +52,7 @@ type grantableScopeFixture struct {
 	siblingID     model.AcademicUnitID
 	units         *grantableAcademicUnitStoreFake
 	institutions  *personalAccessTokenInstitutionStoreFake
-	access        *accessControlService
+	access        *access.Authorizer
 }
 
 func newGrantableScopeFixture(t *testing.T) grantableScopeFixture {
@@ -77,7 +78,7 @@ func newGrantableScopeFixture(t *testing.T) grantableScopeFixture {
 	}
 	institution := &model.Institution{ID: fixture.institutionID}
 	fixture.institutions = &personalAccessTokenInstitutionStoreFake{institution: institution}
-	resolver, err := newAccessScopeResolver(accessScopeResolverDependencies{
+	resolver, err := access.NewScopeResolver(access.ScopeResolverDependencies{
 		Institutions: &accessInstitutionStoreFake{institution: institution}, AcademicUnits: fixture.units,
 		Classes: &accessClassStoreFake{}, Users: &accessUserStoreFake{}, ClassMembers: &accessClassMemberStoreFake{},
 		Exams: &accessExamAuthoringStoreFake{}, Sittings: &accessExamSittingStoreFake{},
@@ -85,7 +86,7 @@ func newGrantableScopeFixture(t *testing.T) grantableScopeFixture {
 	})
 	require.NoError(t, err)
 	institutionRole, unitRole, childRole := model.NewRoleID(), model.NewRoleID(), model.NewRoleID()
-	fixture.access, err = newAccessControlService(accessControlServiceDependencies{
+	fixture.access, err = access.NewAuthorizer(access.AuthorizerDependencies{
 		Roles: &accessRoleStoreFake{roles: []*model.Role{
 			{ID: institutionRole, Permissions: []string{string(model.ActionAuditView), string(model.ActionExamManage)}},
 			{ID: unitRole, Permissions: []string{
@@ -99,10 +100,9 @@ func newGrantableScopeFixture(t *testing.T) grantableScopeFixture {
 			{UserID: fixture.userID, RoleID: unitRole, ScopeType: model.RoleScopeAcademicUnit, ScopeID: fixture.parentID.String()},
 			{UserID: fixture.userID, RoleID: childRole, ScopeType: model.RoleScopeAcademicUnit, ScopeID: fixture.childID.String()},
 		}},
-		Resolver: resolver, Audit: accessDecisionAuditFake{},
+		Resolver: resolver, Audit: accessDecisionAuditFake{}, Now: func() time.Time { return fixture.now },
 	})
 	require.NoError(t, err)
-	fixture.access.now = func() time.Time { return fixture.now }
 	return fixture
 }
 
@@ -232,9 +232,9 @@ func TestGrantablePersonalAccessTokenScopesBoundListedAcademicUnits(t *testing.T
 		roots = append(roots, id)
 	}
 	slices.Sort(roots)
-	authorization := &personalAccessTokenScopeAuthorizerFake{delegation: PersonalAccessTokenDelegation{
+	authorization := &personalAccessTokenScopeAuthorizerFake{delegation: access.PersonalAccessTokenDelegation{
 		AcademicUnitRootIDs: roots,
-		Actions: []PersonalAccessTokenActionDelegation{
+		Actions: []access.PersonalAccessTokenActionDelegation{
 			{Action: model.ActionExamView, AcademicUnitIDs: roots},
 			{Action: model.ActionAuditView, InstitutionWide: true},
 		},

@@ -18,36 +18,37 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type programmeLevelHTTPApplication struct {
-	archiveCommand app.ArchiveProgrammeLevelCommand
+	archiveCommand academic.ArchiveProgrammeLevelCommand
 	result         *model.ProgrammeLevel
 	list           []*model.ProgrammeLevel
 	err            error
-	createCommand  app.CreateProgrammeLevelCommand
-	updateCommand  app.UpdateProgrammeLevelCommand
+	createCommand  academic.CreateProgrammeLevelCommand
+	updateCommand  academic.UpdateProgrammeLevelCommand
 }
 
-func (a *programmeLevelHTTPApplication) GetProgrammeLevel(context.Context, invocation.Invocation, app.GetProgrammeLevelQuery) (*model.ProgrammeLevel, error) {
+func (a *programmeLevelHTTPApplication) GetProgrammeLevel(context.Context, invocation.Invocation, academic.GetProgrammeLevelQuery) (*model.ProgrammeLevel, error) {
 	return a.result, a.err
 }
-func (a *programmeLevelHTTPApplication) ListProgrammeLevels(context.Context, invocation.Invocation, app.ListProgrammeLevelsQuery) (app.Page[*model.ProgrammeLevel], error) {
-	return app.Page[*model.ProgrammeLevel]{Items: a.list}, a.err
+func (a *programmeLevelHTTPApplication) ListProgrammeLevels(context.Context, invocation.Invocation, academic.ListProgrammeLevelsQuery) (paging.Page[*model.ProgrammeLevel], error) {
+	return paging.Page[*model.ProgrammeLevel]{Items: a.list}, a.err
 }
-func (a *programmeLevelHTTPApplication) CreateProgrammeLevel(_ context.Context, _ invocation.Invocation, command app.CreateProgrammeLevelCommand) (*model.ProgrammeLevel, error) {
+func (a *programmeLevelHTTPApplication) CreateProgrammeLevel(_ context.Context, _ invocation.Invocation, command academic.CreateProgrammeLevelCommand) (*model.ProgrammeLevel, error) {
 	a.createCommand = command
 	return a.result, a.err
 }
-func (a *programmeLevelHTTPApplication) UpdateProgrammeLevel(_ context.Context, _ invocation.Invocation, command app.UpdateProgrammeLevelCommand) (*model.ProgrammeLevel, error) {
+func (a *programmeLevelHTTPApplication) UpdateProgrammeLevel(_ context.Context, _ invocation.Invocation, command academic.UpdateProgrammeLevelCommand) (*model.ProgrammeLevel, error) {
 	a.updateCommand = command
 	return a.result, a.err
 }
-func (a *programmeLevelHTTPApplication) ArchiveProgrammeLevel(_ context.Context, _ invocation.Invocation, command app.ArchiveProgrammeLevelCommand) error {
+func (a *programmeLevelHTTPApplication) ArchiveProgrammeLevel(_ context.Context, _ invocation.Invocation, command academic.ArchiveProgrammeLevelCommand) error {
 	a.archiveCommand = command
 	return a.err
 }

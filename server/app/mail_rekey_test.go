@@ -17,6 +17,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
@@ -59,7 +60,7 @@ func (f *mailRekeyStarterFake) Get(_ context.Context, id model.JobID) (*model.Jo
 
 type mailRekeyAuditFake struct {
 	beginID  string
-	attempt  mutationAttempt
+	attempt  access.Mutation
 	failID   string
 	failCode string
 	failErr  error
@@ -74,7 +75,7 @@ func (f *mailRekeyAuditFake) BeginAtScope(_ context.Context, invocation invocati
 	if f.events != nil {
 		*f.events = append(*f.events, "audit")
 	}
-	f.attempt = mutationAttempt{Invocation: invocation, Action: action, Resource: resource, ScopeType: scopeType,
+	f.attempt = access.Mutation{Invocation: invocation, Action: action, Resource: resource, ScopeType: scopeType,
 		ScopeID: scopeID, Operation: operation, Value: value, Prior: prior}
 	return model.AuditEventID(f.beginID), nil
 }

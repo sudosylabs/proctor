@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -31,7 +32,7 @@ type retentionPolicyServiceDependencies struct {
 	Lifecycle               store.RetentionStore
 	Institutions            retentionPolicyInstitutionStore
 	Authorization           resourceAuthorizer
-	Audit                   mutationAuditor
+	Audit                   access.MutationAuditor
 	RecentAuthenticationTTL time.Duration
 	Now                     func() time.Time
 }
@@ -115,10 +116,10 @@ func (s *retentionPolicyService) ReplaceRetentionPolicy(
 	if err != nil {
 		return nil, err
 	}
-	stored, err := runAuditedMutation(
+	stored, err := access.RunAudited(
 		ctx,
 		s.deps.Audit,
-		mutationAttempt{
+		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionRetentionPolicyManage,
 			Resource:   resource,
@@ -140,7 +141,7 @@ func (s *retentionPolicyService) ReplaceRetentionPolicy(
 		s.deps.Now,
 		func(
 			ctx context.Context,
-			reference mutationAttemptReference,
+			reference access.MutationReference,
 		) (*store.RetentionPolicyReplacementResult, error) {
 			return s.deps.Policies.Replace(
 				ctx,

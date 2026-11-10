@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
@@ -63,7 +64,7 @@ type jobExamExportTitles interface {
 type jobOperationsServiceDependencies struct {
 	Jobs          jobOperatorEngine
 	Authorization institutionAuthorizer
-	Audit         mutationAuditor
+	Audit         access.MutationAuditor
 	Users         jobInitiatorNames
 	ExamExports   jobExamExportTitles
 	Now           func() time.Time
@@ -77,7 +78,7 @@ type jobOperationsService struct {
 }
 
 type jobOperationsAuthorization struct {
-	authorization *accessControlService
+	authorization *access.Authorizer
 	institutions  store.InstitutionStore
 }
 

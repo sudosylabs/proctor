@@ -11,9 +11,11 @@ import (
 	"context"
 
 	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -32,7 +34,7 @@ type AccountStateApplication interface {
 }
 
 type SessionAdministrationApplication interface {
-	ListUserSessions(context.Context, invocation.Invocation, app.ListUserSessionsQuery) (app.Page[*model.Session], error)
+	ListUserSessions(context.Context, invocation.Invocation, app.ListUserSessionsQuery) (paging.Page[*model.Session], error)
 	RevokeUserSession(context.Context, invocation.Invocation, app.RevokeUserSessionCommand) error
 	RevokeUserSessions(context.Context, invocation.Invocation, app.RevokeUserSessionsCommand) error
 }
@@ -40,7 +42,7 @@ type SessionAdministrationApplication interface {
 type UserProfileApplication interface {
 	GetCurrentUserContext(context.Context, invocation.Invocation) (*app.CurrentUserContextView, error)
 	ListCandidateExamActivity(context.Context, invocation.Invocation, attempt.CandidateActivityQuery) (attempt.CandidateActivityPage, error)
-	SearchUsers(context.Context, invocation.Invocation, app.SearchUsersQuery) (app.CountedPage[app.UserDirectoryEntry], error)
+	SearchUsers(context.Context, invocation.Invocation, app.SearchUsersQuery) (paging.Counted[app.UserDirectoryEntry], error)
 	GetUserProfile(context.Context, invocation.Invocation, app.GetUserProfileQuery) (*model.User, error)
 	UpdateUserProfile(context.Context, invocation.Invocation, app.UpdateUserProfileCommand) (*model.User, error)
 	ChangeUserEmail(context.Context, invocation.Invocation, app.ChangeUserEmailCommand) (*app.UserEmailState, error)
@@ -56,50 +58,50 @@ type UserSettingsApplication interface {
 }
 
 type AcademicUnitApplication interface {
-	GetAcademicUnit(context.Context, invocation.Invocation, app.GetAcademicUnitQuery) (*model.AcademicUnit, error)
-	ListAcademicUnits(context.Context, invocation.Invocation, app.ListAcademicUnitsQuery) (app.Page[*model.AcademicUnit], error)
-	SearchAcademicUnits(context.Context, invocation.Invocation, app.SearchAcademicUnitsQuery) (app.Page[*model.AcademicUnit], error)
-	CreateAcademicUnit(context.Context, invocation.Invocation, app.CreateAcademicUnitCommand) (*model.AcademicUnit, error)
-	UpdateAcademicUnit(context.Context, invocation.Invocation, app.UpdateAcademicUnitCommand) (*model.AcademicUnit, error)
-	ArchiveAcademicUnit(context.Context, invocation.Invocation, app.ArchiveAcademicUnitCommand) error
+	GetAcademicUnit(context.Context, invocation.Invocation, academic.GetAcademicUnitQuery) (*model.AcademicUnit, error)
+	ListAcademicUnits(context.Context, invocation.Invocation, academic.ListAcademicUnitsQuery) (paging.Page[*model.AcademicUnit], error)
+	SearchAcademicUnits(context.Context, invocation.Invocation, academic.SearchAcademicUnitsQuery) (paging.Page[*model.AcademicUnit], error)
+	CreateAcademicUnit(context.Context, invocation.Invocation, academic.CreateAcademicUnitCommand) (*model.AcademicUnit, error)
+	UpdateAcademicUnit(context.Context, invocation.Invocation, academic.UpdateAcademicUnitCommand) (*model.AcademicUnit, error)
+	ArchiveAcademicUnit(context.Context, invocation.Invocation, academic.ArchiveAcademicUnitCommand) error
 }
 
 type InstitutionApplication interface {
-	GetInstitution(context.Context, invocation.Invocation, app.GetInstitutionQuery) (*model.Institution, error)
-	UpdateInstitution(context.Context, invocation.Invocation, app.UpdateInstitutionCommand) (*model.Institution, error)
+	GetInstitution(context.Context, invocation.Invocation, academic.GetInstitutionQuery) (*model.Institution, error)
+	UpdateInstitution(context.Context, invocation.Invocation, academic.UpdateInstitutionCommand) (*model.Institution, error)
 }
 
 type ProgrammeApplication interface {
-	GetProgramme(context.Context, invocation.Invocation, app.GetProgrammeQuery) (*model.Programme, error)
-	ListProgrammes(context.Context, invocation.Invocation, app.ListProgrammesQuery) (app.Page[*model.Programme], error)
-	CreateProgramme(context.Context, invocation.Invocation, app.CreateProgrammeCommand) (*model.Programme, error)
-	UpdateProgramme(context.Context, invocation.Invocation, app.UpdateProgrammeCommand) (*model.Programme, error)
-	ArchiveProgramme(context.Context, invocation.Invocation, app.ArchiveProgrammeCommand) error
+	GetProgramme(context.Context, invocation.Invocation, academic.GetProgrammeQuery) (*model.Programme, error)
+	ListProgrammes(context.Context, invocation.Invocation, academic.ListProgrammesQuery) (paging.Page[*model.Programme], error)
+	CreateProgramme(context.Context, invocation.Invocation, academic.CreateProgrammeCommand) (*model.Programme, error)
+	UpdateProgramme(context.Context, invocation.Invocation, academic.UpdateProgrammeCommand) (*model.Programme, error)
+	ArchiveProgramme(context.Context, invocation.Invocation, academic.ArchiveProgrammeCommand) error
 }
 
 type ProgrammeLevelApplication interface {
-	GetProgrammeLevel(context.Context, invocation.Invocation, app.GetProgrammeLevelQuery) (*model.ProgrammeLevel, error)
-	ListProgrammeLevels(context.Context, invocation.Invocation, app.ListProgrammeLevelsQuery) (app.Page[*model.ProgrammeLevel], error)
-	CreateProgrammeLevel(context.Context, invocation.Invocation, app.CreateProgrammeLevelCommand) (*model.ProgrammeLevel, error)
-	UpdateProgrammeLevel(context.Context, invocation.Invocation, app.UpdateProgrammeLevelCommand) (*model.ProgrammeLevel, error)
-	ArchiveProgrammeLevel(context.Context, invocation.Invocation, app.ArchiveProgrammeLevelCommand) error
+	GetProgrammeLevel(context.Context, invocation.Invocation, academic.GetProgrammeLevelQuery) (*model.ProgrammeLevel, error)
+	ListProgrammeLevels(context.Context, invocation.Invocation, academic.ListProgrammeLevelsQuery) (paging.Page[*model.ProgrammeLevel], error)
+	CreateProgrammeLevel(context.Context, invocation.Invocation, academic.CreateProgrammeLevelCommand) (*model.ProgrammeLevel, error)
+	UpdateProgrammeLevel(context.Context, invocation.Invocation, academic.UpdateProgrammeLevelCommand) (*model.ProgrammeLevel, error)
+	ArchiveProgrammeLevel(context.Context, invocation.Invocation, academic.ArchiveProgrammeLevelCommand) error
 }
 
 type AcademicPeriodApplication interface {
-	GetAcademicPeriod(context.Context, invocation.Invocation, app.GetAcademicPeriodQuery) (*model.AcademicPeriod, error)
-	ListAcademicPeriods(context.Context, invocation.Invocation, app.ListAcademicPeriodsQuery) (app.Page[*model.AcademicPeriod], error)
-	CreateAcademicPeriod(context.Context, invocation.Invocation, app.CreateAcademicPeriodCommand) (*model.AcademicPeriod, error)
-	UpdateAcademicPeriod(context.Context, invocation.Invocation, app.UpdateAcademicPeriodCommand) (*model.AcademicPeriod, error)
-	ArchiveAcademicPeriod(context.Context, invocation.Invocation, app.ArchiveAcademicPeriodCommand) error
+	GetAcademicPeriod(context.Context, invocation.Invocation, academic.GetAcademicPeriodQuery) (*model.AcademicPeriod, error)
+	ListAcademicPeriods(context.Context, invocation.Invocation, academic.ListAcademicPeriodsQuery) (paging.Page[*model.AcademicPeriod], error)
+	CreateAcademicPeriod(context.Context, invocation.Invocation, academic.CreateAcademicPeriodCommand) (*model.AcademicPeriod, error)
+	UpdateAcademicPeriod(context.Context, invocation.Invocation, academic.UpdateAcademicPeriodCommand) (*model.AcademicPeriod, error)
+	ArchiveAcademicPeriod(context.Context, invocation.Invocation, academic.ArchiveAcademicPeriodCommand) error
 }
 
 type ClassApplication interface {
-	GetClass(context.Context, invocation.Invocation, app.GetClassQuery) (*model.Class, error)
-	ListClasses(context.Context, invocation.Invocation, app.ListClassesQuery) (app.Page[*model.Class], error)
-	SearchClasses(context.Context, invocation.Invocation, app.SearchClassesQuery) (app.Page[*model.Class], error)
-	CreateClass(context.Context, invocation.Invocation, app.CreateClassCommand) (*model.Class, error)
-	UpdateClass(context.Context, invocation.Invocation, app.UpdateClassCommand) (*model.Class, error)
-	ArchiveClass(context.Context, invocation.Invocation, app.ArchiveClassCommand) error
+	GetClass(context.Context, invocation.Invocation, academic.GetClassQuery) (*model.Class, error)
+	ListClasses(context.Context, invocation.Invocation, academic.ListClassesQuery) (paging.Page[*model.Class], error)
+	SearchClasses(context.Context, invocation.Invocation, academic.SearchClassesQuery) (paging.Page[*model.Class], error)
+	CreateClass(context.Context, invocation.Invocation, academic.CreateClassCommand) (*model.Class, error)
+	UpdateClass(context.Context, invocation.Invocation, academic.UpdateClassCommand) (*model.Class, error)
+	ArchiveClass(context.Context, invocation.Invocation, academic.ArchiveClassCommand) error
 }
 
 type ExamApplication interface {
@@ -118,21 +120,21 @@ type ExamApplication interface {
 }
 
 type AffiliationApplication interface {
-	ListAffiliations(context.Context, invocation.Invocation, app.ListAffiliationsQuery) ([]*model.Affiliation, error)
-	CreateAffiliation(context.Context, invocation.Invocation, app.CreateAffiliationCommand) (*model.Affiliation, error)
-	EndAffiliation(context.Context, invocation.Invocation, app.EndAffiliationCommand) (*model.Affiliation, error)
+	ListAffiliations(context.Context, invocation.Invocation, academic.ListAffiliationsQuery) ([]*model.Affiliation, error)
+	CreateAffiliation(context.Context, invocation.Invocation, academic.CreateAffiliationCommand) (*model.Affiliation, error)
+	EndAffiliation(context.Context, invocation.Invocation, academic.EndAffiliationCommand) (*model.Affiliation, error)
 }
 
 type AcademicUnitMemberApplication interface {
-	ListAcademicUnitMembersPage(context.Context, invocation.Invocation, app.ListAcademicUnitMembersPageQuery) (*app.AcademicUnitMemberPage, error)
-	CreateAcademicUnitMember(context.Context, invocation.Invocation, app.CreateAcademicUnitMemberCommand) (*model.AcademicUnitMember, error)
-	EndAcademicUnitMember(context.Context, invocation.Invocation, app.EndAcademicUnitMemberCommand) (*model.AcademicUnitMember, error)
+	ListAcademicUnitMembersPage(context.Context, invocation.Invocation, academic.ListAcademicUnitMembersPageQuery) (*academic.AcademicUnitMemberPage, error)
+	CreateAcademicUnitMember(context.Context, invocation.Invocation, academic.CreateAcademicUnitMemberCommand) (*model.AcademicUnitMember, error)
+	EndAcademicUnitMember(context.Context, invocation.Invocation, academic.EndAcademicUnitMemberCommand) (*model.AcademicUnitMember, error)
 }
 
 type ClassMemberApplication interface {
-	ListClassMembersPage(context.Context, invocation.Invocation, app.ListClassMembersPageQuery) (*app.ClassMemberPage, error)
-	EnrollClassMember(context.Context, invocation.Invocation, app.EnrollClassMemberCommand) (*model.ClassEnrollment, error)
-	EndClassMember(context.Context, invocation.Invocation, app.EndClassMemberCommand) (*model.ClassMember, error)
+	ListClassMembersPage(context.Context, invocation.Invocation, academic.ListClassMembersPageQuery) (*academic.ClassMemberPage, error)
+	EnrollClassMember(context.Context, invocation.Invocation, academic.EnrollClassMemberCommand) (*model.ClassEnrollment, error)
+	EndClassMember(context.Context, invocation.Invocation, academic.EndClassMemberCommand) (*model.ClassMember, error)
 }
 
 type Sessions interface {
@@ -160,7 +162,7 @@ type MFA interface {
 }
 
 type AuditListingApplication interface {
-	ListAuditEvents(context.Context, invocation.Invocation, app.ListAuditEventsQuery) (app.CountedPage[*model.AuditEvent], error)
+	ListAuditEvents(context.Context, invocation.Invocation, app.ListAuditEventsQuery) (paging.Counted[*model.AuditEvent], error)
 	ListSelfAuditEvents(context.Context, invocation.Invocation, app.ListSelfAuditEventsQuery) (app.SelfAuditPage, error)
 }
 
@@ -219,7 +221,6 @@ type Application interface {
 	MFA
 	MFAAdministration
 	MFAKeyApplication
-	InstitutionApplication
 	DesktopCompatibilityApplication
 	RetentionPolicyApplication
 	RetentionApplication

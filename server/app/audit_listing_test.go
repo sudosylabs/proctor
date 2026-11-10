@@ -18,6 +18,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -147,7 +148,7 @@ func TestAuditListingAuthorizesOnceThenReads(t *testing.T) {
 	require.Equal(t, 11, persistence.input.Limit, "the read probes one past the page; result/input = %#v / %#v", got, persistence.input)
 	// Contract: authorization precedes the read, and the first page then counts.
 	require.Equal(t, []string{"authorize-view", "list-audits", "count-audits"}, events)
-	require.Equal(t, PageTotal{Counted: true, Total: 1}, got.PageTotal)
+	require.Equal(t, paging.Total{Counted: true, Total: 1}, got.Total)
 }
 
 func TestAuditListingFailsClosedWhenAuthorizationReturnsZeroVisibility(t *testing.T) {

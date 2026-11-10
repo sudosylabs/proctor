@@ -23,6 +23,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -78,7 +79,7 @@ func (m *recordingMailAPI) ListMailDeliveries(_ context.Context, _ invocation.In
 	m.listQuery = query
 	page := app.MailDeliveryPage{Items: []app.MailDeliveryView{m.view}}
 	if query.BeforeID.IsZero() {
-		page.PageTotal = app.PageTotal{Counted: true, Total: 1}
+		page.Total = paging.Total{Counted: true, Total: 1}
 	}
 	return page, nil
 }

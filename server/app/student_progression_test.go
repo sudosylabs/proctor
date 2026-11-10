@@ -18,6 +18,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -73,7 +74,7 @@ func TestStudentProgressionListingScopesBothClassesThroughOneDecision(t *testing
 	require.Equal(t, values[0].Progression.ID, page.Items[0].ID)
 	require.Equal(t, "Year 1 Blue", page.Items[0].SourceClassName)
 	require.Equal(t, "Year 2 Blue", page.Items[0].DestinationClassName)
-	require.Equal(t, PageTotal{Counted: true, Total: 5}, page.PageTotal)
+	require.Equal(t, paging.Total{Counted: true, Total: 5}, page.Total)
 
 	persistence.options, persistence.counted, persistence.values = nil, nil, values[:1]
 	page, err = service.ListStudentProgressions(context.Background(), invocation.Invocation{}, ListStudentProgressionsQuery{

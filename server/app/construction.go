@@ -12,6 +12,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
@@ -49,7 +51,7 @@ type applicationFoundation struct {
 	attempts    *authenticationAttemptAccounting
 	invalidator *authenticationCacheInvalidator
 	realtime    *realtimeService
-	audit       *auditService
+	audit       *access.Auditor
 	mail        *mail.Composer
 	mailHealth  *MailHealth
 }
@@ -73,21 +75,12 @@ type identityConstruction struct {
 }
 
 type accessAcademicConstruction struct {
-	authorization        *accessControlService
+	authorization        *access.Authorizer
 	capabilities         accessPolicyCapabilitySource
 	accessPolicies       *accessPolicyService
 	retentionPolicy      *retentionPolicyService
 	desktopCompatibility *desktopCompatibilityService
-	academicUnits        *academicUnitQueryService
-	academicUnitCommands *academicUnitCommandService
-	institutions         *institutionService
-	programmes           *programmeService
-	programmeLevels      *programmeLevelService
-	academicPeriods      *academicPeriodService
-	classes              *classService
-	affiliations         *affiliationService
-	academicUnitMembers  *academicUnitMemberService
-	classMembers         *classMemberService
+	academic             *academic.Service
 }
 
 type profileFileConstruction struct {
@@ -184,7 +177,7 @@ func constructApplicationFoundation(deps Dependencies) (applicationFoundation, e
 		return applicationFoundation{}, err
 	}
 	realtime.attempts = deps.Store.ExamAttempt()
-	audit, err := newAuditService(auditServiceDependencies{Audits: deps.Store.Audit(), Institutions: deps.Store.Institution(), NodeID: deps.NodeID})
+	audit, err := access.NewAuditor(access.AuditorDependencies{Audits: deps.Store.Audit(), Institutions: deps.Store.Institution(), NodeID: deps.NodeID})
 	if err != nil {
 		return applicationFoundation{}, err
 	}
@@ -233,16 +226,7 @@ func assembleApplication(
 		accessPolicyService:                      access.accessPolicies,
 		retentionPolicyService:                   access.retentionPolicy,
 		desktopCompatibilityService:              access.desktopCompatibility,
-		academicUnitQueryService:                 access.academicUnits,
-		academicUnitCommandService:               access.academicUnitCommands,
-		institutionService:                       access.institutions,
-		programmeService:                         access.programmes,
-		programmeLevelService:                    access.programmeLevels,
-		academicPeriodService:                    access.academicPeriods,
-		classService:                             access.classes,
-		affiliationService:                       access.affiliations,
-		academicUnitMemberService:                access.academicUnitMembers,
-		classMemberService:                       access.classMembers,
+		Academic:                                 access.academic,
 		examAuthoringService:                     examinations.authoring,
 		examPublicationService:                   examinations.revisions,
 		examSittingService:                       examinations.sittings,

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
@@ -60,7 +61,7 @@ func constructExamPublication(
 		Users:             deps.Store.User(),
 		Mail:              foundation.mail,
 		Authorizer:        examAuthorizationAdapter{authorization: access.authorization},
-		Auditor:           mutationAuditAdapter{audit: foundation.audit},
+		Auditor:           foundation.audit.MutationAudit(),
 		Outcomes:          deps.Store.CommandOutcome(),
 		Effects:           effects,
 		EffectFailures:    effects,
@@ -86,7 +87,7 @@ func constructExamPublication(
 		Access:            deps.Store.ExamAuthoring(),
 		Memberships:       deps.Store.AcademicUnitMember(),
 		Authorizer:        examAuthorizationAdapter{authorization: access.authorization},
-		Auditor:           mutationAuditAdapter{audit: foundation.audit},
+		Auditor:           foundation.audit.MutationAudit(),
 		Effects:           effects,
 		EffectFailures:    effects,
 		Now:               time.Now,
@@ -113,7 +114,7 @@ func constructExamSittings(
 		Access:         deps.Store.ExamAuthoring(),
 		Memberships:    deps.Store.AcademicUnitMember(),
 		Authorizer:     access.authorization,
-		Auditor:        mutationAuditAdapter{audit: foundation.audit},
+		Auditor:        foundation.audit.MutationAudit(),
 		SystemAuditor:  examSittingSystemAuditAdapter{audit: foundation.audit},
 		Effects:        examSittingRealtimeEffects{realtime: foundation.realtime, collections: collectionEffects},
 		EffectFailures: examSittingRealtimeEffects{realtime: foundation.realtime, collections: collectionEffects},
@@ -142,7 +143,7 @@ func constructExamAttempts(
 		Persistence: deps.Store.ExamAttempt(), Workspace: deps.Store.ExamAttemptWorkspace(),
 		Submissions: deps.Store.ExamSubmission(), Sittings: deps.Store.ExamSitting(),
 		Managers:      examAttemptManagerAuthorizationAdapter{sittings: sittings, submissions: deps.Store.ExamSubmission(), audit: foundation.audit},
-		Auditor:       mutationAuditAdapter{audit: foundation.audit},
+		Auditor:       foundation.audit.MutationAudit(),
 		SystemAuditor: examAttemptSystemAuditAdapter{audit: foundation.audit},
 		Effects:       attemptEffects, EffectFailures: attemptEffects, Content: deps.FileContent, Mail: submissionMail,
 		DesktopBuilds: access.desktopCompatibility,
@@ -166,7 +167,7 @@ func constructExamAttempts(
 	reviews, err := review.New(review.Dependencies{Persistence: deps.Store.ExamIntegrityReview(),
 		Authorizer: examIntegrityReviewAuthorizationAdapter{reviews: deps.Store.ExamIntegrityReview(), sittings: sittings,
 			audit: foundation.audit},
-		Auditor: mutationAuditAdapter{audit: foundation.audit},
+		Auditor: foundation.audit.MutationAudit(),
 		Effects: reviewEffects, EffectFailures: reviewEffects, Mail: resultReleaseMail, Now: time.Now,
 		NewReviewID: model.NewSubmissionReviewID, NewDecisionID: model.NewIntegrityReviewDecisionID})
 	if err != nil {
@@ -186,7 +187,7 @@ func constructExamContent(
 		Access:         deps.Store.ExamAuthoring(),
 		Memberships:    deps.Store.AcademicUnitMember(),
 		Authorizer:     access.authorization,
-		Auditor:        mutationAuditAdapter{audit: foundation.audit},
+		Auditor:        foundation.audit.MutationAudit(),
 		Effects:        examResourceRealtimeEffects{realtime: foundation.realtime},
 		EffectFailures: examResourceRealtimeEffects{realtime: foundation.realtime},
 		Content:        deps.FileContent,
@@ -205,7 +206,7 @@ func constructExamContent(
 		Access:            deps.Store.ExamAuthoring(),
 		Memberships:       deps.Store.AcademicUnitMember(),
 		Authorizer:        access.authorization,
-		Auditor:           mutationAuditAdapter{audit: foundation.audit},
+		Auditor:           foundation.audit.MutationAudit(),
 		Effects:           examCorrectionRealtimeEffects{realtime: foundation.realtime, collections: collectionEffects},
 		EffectFailures:    examCorrectionRealtimeEffects{realtime: foundation.realtime, collections: collectionEffects},
 		Content:           deps.FileContent,
@@ -227,7 +228,7 @@ func constructExamContent(
 		Access:         deps.Store.ExamAuthoring(),
 		Memberships:    deps.Store.AcademicUnitMember(),
 		Authorizer:     access.authorization,
-		Auditor:        mutationAuditAdapter{audit: foundation.audit},
+		Auditor:        foundation.audit.MutationAudit(),
 		Content:        deps.FileContent,
 		Effects:        examStarterWorkspaceRealtimeEffects{realtime: foundation.realtime},
 		EffectFailures: examStarterWorkspaceRealtimeEffects{realtime: foundation.realtime},
@@ -252,7 +253,7 @@ func constructExamRecords(
 		Access:      deps.Store.ExamAuthoring(),
 		Memberships: deps.Store.AcademicUnitMember(),
 		Authorizer:  access.authorization,
-		Auditor:     mutationAuditAdapter{audit: foundation.audit},
+		Auditor:     foundation.audit.MutationAudit(),
 		RecentTTL:   deps.RecentAuthenticationTTL,
 		Now:         time.Now,
 		NewHoldID:   model.NewRetentionHoldID,
@@ -265,7 +266,7 @@ func constructExamRecords(
 		Access:      deps.Store.ExamAuthoring(),
 		Memberships: deps.Store.AcademicUnitMember(),
 		Authorizer:  access.authorization,
-		Auditor:     mutationAuditAdapter{audit: foundation.audit},
+		Auditor:     foundation.audit.MutationAudit(),
 		Content:     deps.FileContent,
 		Now:         time.Now,
 		NewID:       model.NewExamExportID,
@@ -278,7 +279,7 @@ func constructExamRecords(
 	return nil
 }
 
-type examAttemptSystemAuditAdapter struct{ audit *auditService }
+type examAttemptSystemAuditAdapter struct{ audit *access.Auditor }
 
 func (a examAttemptSystemAuditAdapter) Begin(ctx context.Context, action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID, operation string, value map[string]any) (model.AuditEventID, error) {
 	auditValue := make(map[string]any, len(value))

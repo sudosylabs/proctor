@@ -14,9 +14,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -176,11 +178,11 @@ type InvitationAdministrationView struct {
 }
 
 // InvitationAdministrationPage is one page of visible Invitations; the first
-// page also carries their total (see PageTotal).
+// page also carries their total (see paging.Total).
 type InvitationAdministrationPage struct {
 	Items []InvitationAdministrationView
 	More  bool
-	PageTotal
+	paging.Total
 }
 
 type ListInvitationsQuery struct {
@@ -358,7 +360,7 @@ type invitationServiceDependencies struct {
 	Authorization           invitationAuthorizer
 	Mail                    invitationMailPreparer
 	Hasher                  invitationPasswordHasher
-	Audit                   mutationAuditor
+	Audit                   access.MutationAuditor
 	Attempts                invitationAttemptLimiter
 	MembershipEffects       invitationMembershipEffects
 	NodeID                  string
@@ -372,7 +374,7 @@ type invitationService struct {
 	deps invitationServiceDependencies
 }
 
-type invitationAuthorizationAdapter struct{ authorization *accessControlService }
+type invitationAuthorizationAdapter struct{ authorization *access.Authorizer }
 
 func (a invitationAuthorizationAdapter) Authorize(ctx context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource) error {
 	if a.authorization == nil {
@@ -385,12 +387,12 @@ func (a invitationAuthorizationAdapter) AuthorizeActionDelegation(ctx context.Co
 	if a.authorization == nil {
 		return apperror.New("invitation.unavailable")
 	}
-	allowed, err := a.authorization.canDelegateActionsAtScope(ctx, invocation.Principal(), actions, scopeType, scopeID)
+	allowed, err := a.authorization.CanDelegateActionsAtScope(ctx, invocation.Principal(), actions, scopeType, scopeID)
 	if err != nil {
 		return err
 	}
 	if !allowed {
-		return authorizationDeniedError()
+		return access.DeniedError()
 	}
 	return nil
 }
@@ -412,11 +414,11 @@ func (a invitationAuthorizationAdapter) Visibility(ctx context.Context, invocati
 	if a.authorization == nil {
 		return store.InvitationVisibilityScope{}, apperror.New("invitation.unavailable")
 	}
-	constraint, err := a.authorization.authorizedScopes(ctx, invocation.Principal(), action, resourceType)
+	constraint, err := a.authorization.GrantedScopes(ctx, invocation.Principal(), action, resourceType)
 	if err != nil {
 		return store.InvitationVisibilityScope{}, err
 	}
-	institution, err := a.authorization.deps.Resolver.deps.Institutions.GetSingleton(ctx)
+	institution, err := a.authorization.Institution(ctx)
 	if err != nil {
 		return store.InvitationVisibilityScope{}, invitationStoreErrors.Translate(err)
 	}
@@ -430,11 +432,11 @@ func (a invitationAuthorizationAdapter) Visibility(ctx context.Context, invocati
 		resource = model.Resource{Type: model.ResourceClass, ID: constraint.ClassIDs[0].String()}
 		scopeType, scopeID = model.RoleScopeClass, resource.ID
 	}
-	if err = a.authorization.deps.Audit.RecordAuthorizationDecision(ctx, invocation.Principal(), action, resource, scopeType, scopeID, invocation.RequestMetadata(), allowed); err != nil {
+	if err = a.authorization.RecordAuthorizationDecision(ctx, invocation.Principal(), action, resource, scopeType, scopeID, invocation.RequestMetadata(), allowed); err != nil {
 		return store.InvitationVisibilityScope{}, err
 	}
 	if !allowed {
-		return store.InvitationVisibilityScope{}, authorizationDeniedError()
+		return store.InvitationVisibilityScope{}, access.DeniedError()
 	}
 	return store.InvitationVisibilityScope{InstitutionWide: constraint.InstitutionWide,
 		AcademicUnitRootIDs: append([]model.AcademicUnitID(nil), constraint.AcademicUnitRootIDs...), ClassIDs: append([]model.ClassID(nil), constraint.ClassIDs...)}, nil

@@ -13,7 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -39,16 +39,16 @@ func academicNameCursorSpec() opaqueCursorSpec[academicNameCursor] {
 
 // academicNamePageQuery parses the page parameters of a name-ordered
 // academic listing.
-func (r operationRequest) academicNamePageQuery() (app.NamePageQuery, error) {
+func (r operationRequest) academicNamePageQuery() (paging.NameQuery, error) {
 	page, err := r.pageRequest()
 	if err != nil {
-		return app.NamePageQuery{}, err
+		return paging.NameQuery{}, err
 	}
 	cursor, present, err := decodePageCursor(page, academicNameCursorSpec())
 	if err != nil {
-		return app.NamePageQuery{}, err
+		return paging.NameQuery{}, err
 	}
-	query := app.NamePageQuery{Limit: page.Limit}
+	query := paging.NameQuery{Limit: page.Limit}
 	if present {
 		query.AfterName, query.AfterID = cursor.Name, cursor.ID
 	}
@@ -56,7 +56,7 @@ func (r operationRequest) academicNamePageQuery() (app.NamePageQuery, error) {
 }
 
 // academicNameListResult presents one name-ordered page.
-func academicNameListResult[I, T any](page app.Page[I], present func(I) T, key func(I) (string, string)) (operationResult, error) {
+func academicNameListResult[I, T any](page paging.Page[I], present func(I) T, key func(I) (string, string)) (operationResult, error) {
 	response, err := newListResponse(page.Items, page.HasMore, present, func(last I) (string, error) {
 		name, id := key(last)
 		return encodeOpaqueCursor(academicNameCursor{Name: name, ID: id}, academicNameCursorSpec())

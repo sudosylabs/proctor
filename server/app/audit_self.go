@@ -13,6 +13,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -75,7 +76,7 @@ type SelfAuditEvent struct {
 // pages, stopped at store.MaximumAuditSelfCount, where TotalIsLowerBound is
 // set. Later pages leave Counted false and the client keeps the first total.
 type SelfAuditPage struct {
-	Page[SelfAuditEvent]
+	paging.Page[SelfAuditEvent]
 	Counted           bool
 	Total             int
 	TotalIsLowerBound bool
@@ -99,7 +100,7 @@ func (s *auditListingService) ListSelfAuditEvents(ctx context.Context, invocatio
 	counted := query.BeforeID.IsZero()
 	keys := model.AuditSelfEventKeys(query.Events, query.Status)
 	if len(keys) == 0 {
-		return SelfAuditPage{Page: newPage[SelfAuditEvent](nil, query.Limit), Counted: counted}, nil
+		return SelfAuditPage{Page: paging.New[SelfAuditEvent](nil, query.Limit), Counted: counted}, nil
 	}
 	options := store.AuditSelfListOptions{
 		UserID: principal.UserID, Relation: query.Relation, Events: keys,
@@ -122,7 +123,7 @@ func (s *auditListingService) ListSelfAuditEvents(ctx context.Context, invocatio
 		}
 		items = append(items, item)
 	}
-	page := SelfAuditPage{Page: newPage(items, query.Limit), Counted: counted}
+	page := SelfAuditPage{Page: paging.New(items, query.Limit), Counted: counted}
 	if !counted {
 		return page, nil
 	}

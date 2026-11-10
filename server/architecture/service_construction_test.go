@@ -83,8 +83,23 @@ type App struct{ *kept }
 
 func New(deps keptDependencies) *App { return &App{kept: newKept(deps)} }
 `,
+		"app/area/area.go": `package area
+
+type reader interface{ Read() error }
+
+type Dependencies struct{ Reader reader }
+
+type Service struct{ reader reader }
+
+func New(deps Dependencies) (*Service, error) { return &Service{reader: deps.Reader}, nil }
+
+type helper struct{ reader reader }
+
+func newHelper(deps Dependencies) *helper { return &helper{reader: deps.Reader} }
+`,
 	})
 	require.Equal(t, []string{
+		"area.go:13: fixture/app/area.newHelper keeps no deps field of type Dependencies in helper",
 		"services.go:12: fixture/app.newPositional takes 2 parameters; take one Dependencies struct and keep it in positional.deps",
 		"services.go:20: fixture/app.newUnkept keeps no deps field of type unkeptDependencies in unkept",
 		"services.go:26: fixture/app.newConfigured takes Config; take one struct named Dependencies or <X>Dependencies",
@@ -122,6 +137,9 @@ func serviceConstructionViolations(loaded []*packages.Package, module string, al
 			if !ok || dependencies.Obj().Pkg() != pkg.Types || !strings.HasSuffix(dependencies.Obj().Name(), "Dependencies") {
 				violations = append(violations, fmt.Sprintf("%s: %s takes %s; take one struct named Dependencies or <X>Dependencies",
 					position, qualified, types.TypeString(signature.Params().At(0).Type(), types.RelativeTo(pkg.Types))))
+				continue
+			}
+			if areaServiceConstructor(pkg.PkgPath, module, name, built, dependencies) {
 				continue
 			}
 			if !keepsDependencies(built, dependencies) {
@@ -177,6 +195,14 @@ func holdsCollaborator(structure *types.Struct, depth int) bool {
 		}
 	}
 	return false
+}
+
+// areaServiceConstructor reports the area-package shape: a child package of
+// app whose New(Dependencies) builds its Service and keeps the collaborators
+// as the Service's own fields rather than a deps copy.
+func areaServiceConstructor(pkgPath, module, name string, built, dependencies *types.Named) bool {
+	return strings.HasPrefix(pkgPath, module+"/app/") && name == "New" &&
+		built.Obj().Name() == "Service" && dependencies.Obj().Name() == "Dependencies"
 }
 
 func keepsDependencies(built, dependencies *types.Named) bool {

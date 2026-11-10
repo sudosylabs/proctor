@@ -10,7 +10,7 @@ package httpapi
 import (
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -96,7 +96,7 @@ func (m academicUnitMemberResourceModule) list(request operationRequest) (operat
 	if err != nil {
 		return operationResult{}, err
 	}
-	page, err := m.members.ListAcademicUnitMembersPage(request.context, request.invocation(), app.ListAcademicUnitMembersPageQuery{AcademicUnitID: unitID, MembershipPageQuery: query, AfterUserID: model.UserID(after.AfterUserID), AfterID: model.AcademicUnitMemberID(after.AfterID)})
+	page, err := m.members.ListAcademicUnitMembersPage(request.context, request.invocation(), academic.ListAcademicUnitMembersPageQuery{AcademicUnitID: unitID, MembershipPageQuery: query, AfterUserID: model.UserID(after.AfterUserID), AfterID: model.AcademicUnitMemberID(after.AfterID)})
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -122,7 +122,7 @@ func (m academicUnitMemberResourceModule) create(request operationRequest) (oper
 	if err != nil {
 		return operationResult{}, err
 	}
-	saved, err := m.members.CreateAcademicUnitMember(request.context, request.invocation(), app.CreateAcademicUnitMemberCommand{AcademicUnitID: unitID, UserID: model.UserID(body.UserID), StartAt: startAt})
+	saved, err := m.members.CreateAcademicUnitMember(request.context, request.invocation(), academic.CreateAcademicUnitMemberCommand{AcademicUnitID: unitID, UserID: model.UserID(body.UserID), StartAt: startAt})
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -134,7 +134,7 @@ func (m academicUnitMemberResourceModule) end(request operationRequest) (operati
 	if err != nil {
 		return operationResult{}, err
 	}
-	ended, err := m.members.EndAcademicUnitMember(request.context, request.invocation(), app.EndAcademicUnitMemberCommand{ID: id})
+	ended, err := m.members.EndAcademicUnitMember(request.context, request.invocation(), academic.EndAcademicUnitMemberCommand{ID: id})
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -157,7 +157,7 @@ func academicUnitMemberResponseFromModel(member *model.AcademicUnitMember) acade
 	}
 }
 
-func academicUnitMemberListItemResponseFromPage(page *app.AcademicUnitMemberPage, member *model.AcademicUnitMember) academicUnitMemberListItemResponse {
+func academicUnitMemberListItemResponseFromPage(page *academic.AcademicUnitMemberPage, member *model.AcademicUnitMember) academicUnitMemberListItemResponse {
 	identity := page.Users[member.UserID]
 	item := academicUnitMemberListItemResponse{
 		academicUnitMemberResponse: academicUnitMemberResponseFromModel(member),

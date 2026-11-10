@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -197,7 +198,7 @@ func TestAuditServiceLocalLoginEventsCarryRequestIdentity(t *testing.T) {
 	t.Parallel()
 	audits := &systemAuditStoreFake{}
 	institutionID := model.NewInstitutionID()
-	service, err := newAuditService(auditServiceDependencies{Audits: audits, Institutions: loginAuditInstitutionStore{id: institutionID}, NodeID: "node-login"})
+	service, err := access.NewAuditor(access.AuditorDependencies{Audits: audits, Institutions: loginAuditInstitutionStore{id: institutionID}, NodeID: "node-login"})
 	require.NoError(t, err)
 	metadata := model.RequestMetadata{RequestID: "request-1", IPAddress: "192.0.2.20", UserAgent: "agent"}
 	userID := model.NewUserID()

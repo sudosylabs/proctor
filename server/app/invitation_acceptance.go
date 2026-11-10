@@ -11,6 +11,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
@@ -322,12 +323,12 @@ func (s *invitationService) acceptScopedRoleByClaimHash(
 	if purpose == model.InvitationPurposeInstitutionRole {
 		resourceType = model.ResourceInstitution
 	}
-	result, err := runAuditedMutation(ctx, s.deps.Audit, mutationAttempt{
+	result, err := access.RunAudited(ctx, s.deps.Audit, access.Mutation{
 		Invocation: invocation, Action: model.ActionInvitationAccept,
 		Resource:  model.Resource{Type: resourceType, ID: invitation.ScopeID},
 		ScopeType: invitation.ScopeType, ScopeID: invitation.ScopeID,
 		Operation: "accept_scoped_role_invitation", Value: invitation.Auditable(), Subject: principal.UserID,
-	}, s.deps.Now, func(ctx context.Context, attempt mutationAttemptReference) (*store.ScopedRoleInvitationAcceptanceResult, error) {
+	}, s.deps.Now, func(ctx context.Context, attempt access.MutationReference) (*store.ScopedRoleInvitationAcceptanceResult, error) {
 		return s.deps.Store.AcceptScopedRole(ctx, &store.ScopedRoleInvitationAcceptance{ClaimHash: claimHash,
 			UserID: principal.UserID, RoleBinding: binding, AuditEventID: attempt.ID, AuditAt: attempt.MutationAt,
 			RequiredActions:    []model.Action{model.ActionInvitationCreate, model.ActionRoleBindingManage},

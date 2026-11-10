@@ -18,19 +18,19 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 type academicUnitMemberHTTPApplication struct {
-	pageQuery     app.ListAcademicUnitMembersPageQuery
-	pageResult    *app.AcademicUnitMemberPage
+	pageQuery     academic.ListAcademicUnitMembersPageQuery
+	pageResult    *academic.AcademicUnitMemberPage
 	result        *model.AcademicUnitMember
 	values        []*model.AcademicUnitMember
-	createCommand app.CreateAcademicUnitMemberCommand
-	endCommand    app.EndAcademicUnitMemberCommand
+	createCommand academic.CreateAcademicUnitMemberCommand
+	endCommand    academic.EndAcademicUnitMemberCommand
 }
 
 func TestAcademicUnitMemberHistoryQueryIncludesEndedMemberships(t *testing.T) {
@@ -61,11 +61,11 @@ func TestAcademicUnitMemberFalseHistoryQueryUsesActiveAt(t *testing.T) {
 	require.Equal(t, int64(123), *query.ActiveAt, "active at")
 }
 
-func (a *academicUnitMemberHTTPApplication) CreateAcademicUnitMember(_ context.Context, _ invocation.Invocation, command app.CreateAcademicUnitMemberCommand) (*model.AcademicUnitMember, error) {
+func (a *academicUnitMemberHTTPApplication) CreateAcademicUnitMember(_ context.Context, _ invocation.Invocation, command academic.CreateAcademicUnitMemberCommand) (*model.AcademicUnitMember, error) {
 	a.createCommand = command
 	return a.result, nil
 }
-func (a *academicUnitMemberHTTPApplication) EndAcademicUnitMember(_ context.Context, _ invocation.Invocation, command app.EndAcademicUnitMemberCommand) (*model.AcademicUnitMember, error) {
+func (a *academicUnitMemberHTTPApplication) EndAcademicUnitMember(_ context.Context, _ invocation.Invocation, command academic.EndAcademicUnitMemberCommand) (*model.AcademicUnitMember, error) {
 	a.endCommand = command
 	return a.result, nil
 }
@@ -127,7 +127,7 @@ func TestAcademicUnitMemberListNamesMembersAndTheirRolesHere(t *testing.T) {
 		return body.Items[0]
 	}
 
-	members.pageResult = &app.AcademicUnitMemberPage{Members: []*model.AcademicUnitMember{member}, Users: map[model.UserID]store.UserIdentity{userID: identity}}
+	members.pageResult = &academic.AcademicUnitMemberPage{Members: []*model.AcademicUnitMember{member}, Users: map[model.UserID]store.UserIdentity{userID: identity}}
 	item := list()
 	require.JSONEq(t, `{"display_name":"Amina Diallo","username":"amina"}`, string(item["user"]), "no email without Institution-wide user.view")
 	_, rolesShown := item["roles_here"]
@@ -136,7 +136,7 @@ func TestAcademicUnitMemberListNamesMembersAndTheirRolesHere(t *testing.T) {
 	require.False(t, moreShown, "no roles_here_more without role_binding.view on the unit")
 
 	identity.Email = "amina@example.edu"
-	members.pageResult = &app.AcademicUnitMemberPage{
+	members.pageResult = &academic.AcademicUnitMemberPage{
 		Members: []*model.AcademicUnitMember{member}, Users: map[model.UserID]store.UserIdentity{userID: identity},
 		RolesHere: map[model.UserID]store.UserRoleBindingSummary{userID: {UserID: userID, More: 2, Bindings: []store.RoleBindingSummary{{
 			RoleID: roleID, DisplayName: "Reviewer", ScopeType: model.RoleScopeAcademicUnit, ScopeID: unitID.String(),
@@ -166,12 +166,12 @@ func TestAcademicUnitMemberResourceRejectsInvalidQueryAndMissingPrincipal(t *tes
 	require.Equal(t, http.StatusUnauthorized, unauthenticatedResponse.Code, "unauthenticated status = %d: %s", unauthenticatedResponse.Code, unauthenticatedResponse.Body.String())
 }
 
-func (a *academicUnitMemberHTTPApplication) ListAcademicUnitMembersPage(_ context.Context, _ invocation.Invocation, query app.ListAcademicUnitMembersPageQuery) (*app.AcademicUnitMemberPage, error) {
+func (a *academicUnitMemberHTTPApplication) ListAcademicUnitMembersPage(_ context.Context, _ invocation.Invocation, query academic.ListAcademicUnitMembersPageQuery) (*academic.AcademicUnitMemberPage, error) {
 	a.pageQuery = query
 	if a.pageResult != nil {
 		return a.pageResult, nil
 	}
-	return &app.AcademicUnitMemberPage{}, nil
+	return &academic.AcademicUnitMemberPage{}, nil
 }
 
 func TestAcademicUnitMemberOpenAPIDocument(t *testing.T) {

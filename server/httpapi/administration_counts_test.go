@@ -18,6 +18,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -96,18 +97,18 @@ func TestUserDirectoryReportsItsTotalOnTheFirstPageOnly(t *testing.T) {
 func TestPageTotalMembersRefuseAMismatchedPage(t *testing.T) {
 	t.Parallel()
 	for name, test := range map[string]struct {
-		total     app.PageTotal
+		total     paging.Total
 		continued bool
 	}{
-		"a continued page counted":    {total: app.PageTotal{Counted: true, Total: 1}, continued: true},
-		"a first page left uncounted": {total: app.PageTotal{}, continued: false},
+		"a continued page counted":    {total: paging.Total{Counted: true, Total: 1}, continued: true},
+		"a first page left uncounted": {total: paging.Total{}, continued: false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, _, err := pageTotalMembers(test.total, test.continued)
 			require.ErrorIs(t, err, errUnpresentableResult)
 		})
 	}
-	total, lowerBound, err := pageTotalMembers(app.PageTotal{}, true)
+	total, lowerBound, err := pageTotalMembers(paging.Total{}, true)
 	require.NoError(t, err)
 	require.Nil(t, total)
 	require.Nil(t, lowerBound)

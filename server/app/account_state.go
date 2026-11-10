@@ -14,6 +14,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -75,7 +76,7 @@ type accountStateServiceDependencies struct {
 	Users         accountStateStore
 	Authorization accountStateAuthorizer
 	Capabilities  accessPolicyCapabilitySource
-	Audit         mutationAuditor
+	Audit         access.MutationAuditor
 	Mail          accountStateMailPreparer
 	Effects       accountStateEffects
 	Now           func() time.Time
@@ -145,10 +146,10 @@ func (s *accountStateService) SetUserEnabled(ctx context.Context, invocation inv
 	if reason != "" {
 		parameters["reason"] = reason
 	}
-	result, err := runAuditedMutation(
+	result, err := access.RunAudited(
 		ctx,
 		s.deps.Audit,
-		mutationAttempt{
+		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionUserManage,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: userID.String()},
@@ -157,7 +158,7 @@ func (s *accountStateService) SetUserEnabled(ctx context.Context, invocation inv
 			Prior:      current.Auditable(),
 		},
 		func() time.Time { return now },
-		func(ctx context.Context, reference mutationAttemptReference) (*store.UserDisabledStateResult, error) {
+		func(ctx context.Context, reference access.MutationReference) (*store.UserDisabledStateResult, error) {
 			input := &store.UserDisabledStateChange{
 				ID: userID, ExpectedRevision: current.Revision, Disabled: disabled,
 				Capabilities: accessDeploymentCapabilities(s.deps.Capabilities.Snapshot()),

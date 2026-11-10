@@ -16,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -53,7 +54,7 @@ func TestAuthenticationServiceRequiresSecurityDependencies(t *testing.T) {
 		sessions           store.SessionStore
 		sessionCredentials store.SessionCredentialStore
 		attempts           *authenticationAttemptAccounting
-		audit              mutationAuditor
+		audit              access.MutationAuditor
 		loginAudit         localLoginAuditor
 		effects            authenticationSecurityEffects
 		mfa                authenticationMFAVerifier
@@ -104,20 +105,20 @@ func TestExternalAuthenticationServiceRequiresInvalidator(t *testing.T) {
 
 	persistence := newAuthenticationStoreFake()
 	authentication := newTestAuthenticationService(t, persistence)
-	audit, auditErr := newAuditService(auditServiceDependencies{Audits: securityAuditStore{}, Institutions: securityInstitutionStore{}, NodeID: model.NewID()})
+	audit, auditErr := access.NewAuditor(access.AuditorDependencies{Audits: securityAuditStore{}, Institutions: securityInstitutionStore{}, NodeID: model.NewID()})
 	require.NoError(t, auditErr)
-	_, err := newExternalAuthenticationService(externalAuthenticationServiceDependencies{Registry: securityEffectsProviderSourceFake{}, LoginStates: securityExternalLoginStateStore{}, Institutions: securityInstitutionStore{}, Identities: securityExternalIdentityStore{}, Sessions: persistence.Session(), AccessPolicy: allowAllAuthenticationAccessPolicy(), Attempts: mustAuthenticationAttemptAccounting(t, newAuthenticationCacheFake()), Authentication: authentication, Invalidator: nil, Audit: audit, MutationAudit: mutationAuditAdapter{audit: audit}, Capabilities: &accessPolicyCapabilitiesFake{}, InvitationAcceptor: &externalInvitationAcceptorFake{}, DesktopAuthorization: &externalDesktopAuthorizationFake{}, DesktopReauthentication: externalDesktopReauthenticationFake{}, Policy: ExternalAuthenticationPolicy{}, RecentAuthenticationTTL: 15 * time.Minute, Diagnostics: &securityEffectsDiagnosticsFake{}, NewCredential: model.NewCredentialToken, Now: nil})
+	_, err := newExternalAuthenticationService(externalAuthenticationServiceDependencies{Registry: securityEffectsProviderSourceFake{}, LoginStates: securityExternalLoginStateStore{}, Institutions: securityInstitutionStore{}, Identities: securityExternalIdentityStore{}, Sessions: persistence.Session(), AccessPolicy: allowAllAuthenticationAccessPolicy(), Attempts: mustAuthenticationAttemptAccounting(t, newAuthenticationCacheFake()), Authentication: authentication, Invalidator: nil, Audit: audit, MutationAudit: audit.MutationAudit(), Capabilities: &accessPolicyCapabilitiesFake{}, InvitationAcceptor: &externalInvitationAcceptorFake{}, DesktopAuthorization: &externalDesktopAuthorizationFake{}, DesktopReauthentication: externalDesktopReauthenticationFake{}, Policy: ExternalAuthenticationPolicy{}, RecentAuthenticationTTL: 15 * time.Minute, Diagnostics: &securityEffectsDiagnosticsFake{}, NewCredential: model.NewCredentialToken, Now: nil})
 	require.Error(t, err, "nil authentication invalidator was accepted")
 }
 
 func TestAuditServiceRequiresDependencies(t *testing.T) {
 	t.Parallel()
 
-	_, err := newAuditService(auditServiceDependencies{Audits: nil, Institutions: securityInstitutionStore{}, NodeID: model.NewID()})
+	_, err := access.NewAuditor(access.AuditorDependencies{Audits: nil, Institutions: securityInstitutionStore{}, NodeID: model.NewID()})
 	require.Error(t, err, "nil audit store was accepted")
-	_, err = newAuditService(auditServiceDependencies{Audits: securityAuditStore{}, Institutions: nil, NodeID: model.NewID()})
+	_, err = access.NewAuditor(access.AuditorDependencies{Audits: securityAuditStore{}, Institutions: nil, NodeID: model.NewID()})
 	require.Error(t, err, "nil audit institution store was accepted")
-	_, err = newAuditService(auditServiceDependencies{Audits: securityAuditStore{}, Institutions: securityInstitutionStore{}, NodeID: ""})
+	_, err = access.NewAuditor(access.AuditorDependencies{Audits: securityAuditStore{}, Institutions: securityInstitutionStore{}, NodeID: ""})
 	require.Error(t, err, "empty audit node ID was accepted")
 }
 

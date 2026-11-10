@@ -13,6 +13,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
@@ -42,7 +43,7 @@ type authenticationMethodServiceDependencies struct {
 	Providers    externalProviderSource
 	Capabilities accessPolicyCapabilitySource
 	Hasher       *passwordHasher
-	Audit        mutationAuditor
+	Audit        access.MutationAuditor
 	Effects      authenticationSecurityEffects
 	RecentTTL    time.Duration
 	Now          func() time.Time
@@ -124,10 +125,10 @@ func (s *authenticationMethodService) EnrollPassword(ctx context.Context, invoca
 	if err != nil {
 		return passwordHashError(err, "authentication.internal")
 	}
-	_, appErr := runAuditedMutation(ctx, s.deps.Audit, mutationAttempt{Invocation: invocation,
+	_, appErr := access.RunAudited(ctx, s.deps.Audit, access.Mutation{Invocation: invocation,
 		Action: model.ActionExternalIdentityManage, Resource: model.Resource{Type: model.ResourceUser, ID: userID.String()},
 		Operation: "enroll_password", Value: map[string]any{"method": "password"}}, s.deps.Now,
-		func(ctx context.Context, reference mutationAttemptReference) (*store.AuthenticationMethodMutationResult, error) {
+		func(ctx context.Context, reference access.MutationReference) (*store.AuthenticationMethodMutationResult, error) {
 			return s.deps.Passwords.Enroll(ctx, &store.PasswordCredentialEnrollment{
 				Credential: &model.PasswordCredential{UserID: userID, PasswordHash: hash}, Reuse: s.deps.Hasher.ReuseCheck(password),
 				Capabilities: accessDeploymentCapabilities(s.deps.Capabilities.Snapshot()), AuditEventID: reference.ID, AuditAt: reference.MutationAt})
@@ -159,10 +160,10 @@ func (s *authenticationMethodService) ChangePassword(ctx context.Context, invoca
 	if err != nil {
 		return apperror.New("authentication.method.unavailable").Wrap(err)
 	}
-	result, appErr := runAuditedMutation(ctx, s.deps.Audit, mutationAttempt{Invocation: invocation,
+	result, appErr := access.RunAudited(ctx, s.deps.Audit, access.Mutation{Invocation: invocation,
 		Action: model.ActionExternalIdentityManage, Resource: model.Resource{Type: model.ResourceUser, ID: user.ID.String()},
 		Operation: "change_password", Value: map[string]any{"method": "password"}}, s.deps.Now,
-		func(ctx context.Context, reference mutationAttemptReference) (*store.AuthenticationMethodMutationResult, error) {
+		func(ctx context.Context, reference access.MutationReference) (*store.AuthenticationMethodMutationResult, error) {
 			return s.deps.Passwords.Change(ctx, &store.PasswordCredentialChange{UserID: user.ID, KeepSessionID: principal.SessionID,
 				PasswordHash: hash, Reuse: s.deps.Hasher.ReuseCheck(command.Password), RevocationReason: model.SessionRevocationPasswordChanged,
 				Occurrence: prepared.Occurrence, Delivery: prepared.Delivery, Job: prepared.Job,
@@ -179,10 +180,10 @@ func (s *authenticationMethodService) RemovePassword(ctx context.Context, invoca
 		return err
 	}
 	userID := invocation.Principal().UserID
-	result, appErr := runAuditedMutation(ctx, s.deps.Audit, mutationAttempt{Invocation: invocation,
+	result, appErr := access.RunAudited(ctx, s.deps.Audit, access.Mutation{Invocation: invocation,
 		Action: model.ActionExternalIdentityManage, Resource: model.Resource{Type: model.ResourceUser, ID: userID.String()},
 		Operation: "remove_password", Value: map[string]any{"method": "password"}}, s.deps.Now,
-		func(ctx context.Context, reference mutationAttemptReference) (*store.AuthenticationMethodMutationResult, error) {
+		func(ctx context.Context, reference access.MutationReference) (*store.AuthenticationMethodMutationResult, error) {
 			return s.deps.Passwords.Remove(ctx, &store.PasswordCredentialRemoval{UserID: userID,
 				Capabilities: accessDeploymentCapabilities(s.deps.Capabilities.Snapshot()), ChangedAt: reference.MutationAt,
 				RevocationReason: model.SessionRevocationPasswordRemoved, AuditEventID: reference.ID, AuditAt: reference.MutationAt})
@@ -201,10 +202,10 @@ func (s *authenticationMethodService) UnlinkExternalIdentity(ctx context.Context
 		return apperror.New("request.invalid")
 	}
 	userID := invocation.Principal().UserID
-	result, appErr := runAuditedMutation(ctx, s.deps.Audit, mutationAttempt{Invocation: invocation,
+	result, appErr := access.RunAudited(ctx, s.deps.Audit, access.Mutation{Invocation: invocation,
 		Action: model.ActionExternalIdentityManage, Resource: model.Resource{Type: model.ResourceUser, ID: userID.String()},
 		Operation: "unlink_provider", Value: map[string]any{"identity_id": id.String()}}, s.deps.Now,
-		func(ctx context.Context, reference mutationAttemptReference) (*store.AuthenticationMethodMutationResult, error) {
+		func(ctx context.Context, reference access.MutationReference) (*store.AuthenticationMethodMutationResult, error) {
 			return s.deps.Identities.Unlink(ctx, &store.ExternalIdentityUnlink{ID: id, UserID: userID,
 				Capabilities: accessDeploymentCapabilities(s.deps.Capabilities.Snapshot()), ChangedAt: reference.MutationAt,
 				RevocationReason: model.SessionRevocationExternalIdentityUnlinked, AuditEventID: reference.ID, AuditAt: reference.MutationAt})

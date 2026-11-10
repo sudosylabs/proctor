@@ -18,34 +18,35 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type programmeHTTPApplication struct {
-	archiveCommand app.ArchiveProgrammeCommand
+	archiveCommand academic.ArchiveProgrammeCommand
 	result         *model.Programme
 	list           []*model.Programme
-	createCommand  app.CreateProgrammeCommand
-	updateCommand  app.UpdateProgrammeCommand
+	createCommand  academic.CreateProgrammeCommand
+	updateCommand  academic.UpdateProgrammeCommand
 }
 
-func (a *programmeHTTPApplication) GetProgramme(context.Context, invocation.Invocation, app.GetProgrammeQuery) (*model.Programme, error) {
+func (a *programmeHTTPApplication) GetProgramme(context.Context, invocation.Invocation, academic.GetProgrammeQuery) (*model.Programme, error) {
 	return a.result, nil
 }
-func (a *programmeHTTPApplication) ListProgrammes(context.Context, invocation.Invocation, app.ListProgrammesQuery) (app.Page[*model.Programme], error) {
-	return app.Page[*model.Programme]{Items: a.list}, nil
+func (a *programmeHTTPApplication) ListProgrammes(context.Context, invocation.Invocation, academic.ListProgrammesQuery) (paging.Page[*model.Programme], error) {
+	return paging.Page[*model.Programme]{Items: a.list}, nil
 }
-func (a *programmeHTTPApplication) CreateProgramme(_ context.Context, _ invocation.Invocation, command app.CreateProgrammeCommand) (*model.Programme, error) {
+func (a *programmeHTTPApplication) CreateProgramme(_ context.Context, _ invocation.Invocation, command academic.CreateProgrammeCommand) (*model.Programme, error) {
 	a.createCommand = command
 	return a.result, nil
 }
-func (a *programmeHTTPApplication) UpdateProgramme(_ context.Context, _ invocation.Invocation, command app.UpdateProgrammeCommand) (*model.Programme, error) {
+func (a *programmeHTTPApplication) UpdateProgramme(_ context.Context, _ invocation.Invocation, command academic.UpdateProgrammeCommand) (*model.Programme, error) {
 	a.updateCommand = command
 	return a.result, nil
 }
-func (a *programmeHTTPApplication) ArchiveProgramme(_ context.Context, _ invocation.Invocation, command app.ArchiveProgrammeCommand) error {
+func (a *programmeHTTPApplication) ArchiveProgramme(_ context.Context, _ invocation.Invocation, command academic.ArchiveProgrammeCommand) error {
 	a.archiveCommand = command
 	return nil
 }

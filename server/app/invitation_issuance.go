@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -54,7 +55,7 @@ func (s *invitationService) IssueStudentClassInvitation(ctx context.Context, inv
 		return InvitationView{}, err
 	}
 	bindOnboardingImportCommand(idempotency, command.onboardingImportID, command.onboardingImportRowNumber)
-	attempt := mutationAttempt{Invocation: invocation, Action: model.ActionInvitationCreate, Resource: resource,
+	attempt := access.Mutation{Invocation: invocation, Action: model.ActionInvitationCreate, Resource: resource,
 		ScopeType: model.RoleScopeClass, ScopeID: class.ID.String(), Operation: "issue_student_class",
 		Value: map[string]any{"purpose": model.InvitationPurposeStudentClass, "class_id": class.ID.String(), "academic_period_id": period.ID.String()}}
 	if recovered, ok, recoverErr := s.recoverInvitationIssueOutcome(ctx, idempotency, attempt); ok {
@@ -104,8 +105,8 @@ func (s *invitationService) IssueStudentClassInvitation(ctx context.Context, inv
 		return InvitationView{}, apperror.New("invitation.mail_unavailable").Wrap(err)
 	}
 	attempt.Value = invitation.Auditable()
-	created, err := runAuditedMutation(ctx, s.deps.Audit, attempt,
-		func() time.Time { return issuedAt }, func(ctx context.Context, reference mutationAttemptReference) (*store.InvitationCommandResult, error) {
+	created, err := access.RunAudited(ctx, s.deps.Audit, attempt,
+		func() time.Time { return issuedAt }, func(ctx context.Context, reference access.MutationReference) (*store.InvitationCommandResult, error) {
 			return s.storeStudentClassInvitation(ctx, idempotency, invitation, prepared, reference)
 		}, invitationStoreErrors.Translate)
 	if err != nil {
@@ -126,14 +127,14 @@ func newStudentClassInvitationValue(invocation invocation.Invocation, command Is
 		ClaimHash: claimHash, IssuedAt: issuedAt, Lifetime: lifetime,
 	})
 	if err != nil {
-		return nil, domainInvalid("invitation.invalid", err)
+		return nil, apperror.DomainInvalid("invitation.invalid", err)
 	}
 	return value, nil
 }
 
 // storeStudentClassInvitation records the audited Student Class Invitation issue, idempotently when a key is present.
 func (s *invitationService) storeStudentClassInvitation(ctx context.Context, idempotency *store.CommandIdempotency, invitation *model.Invitation,
-	prepared *store.PreparedMail, reference mutationAttemptReference) (*store.InvitationCommandResult, error) {
+	prepared *store.PreparedMail, reference access.MutationReference) (*store.InvitationCommandResult, error) {
 	input := &store.StudentClassInvitationIssue{Invitation: invitation, Occurrence: prepared.Occurrence,
 		Delivery: prepared.Delivery, DeliveryJob: prepared.Job, AuditEventID: reference.ID, AuditAt: reference.MutationAt}
 	if idempotency != nil {
@@ -188,7 +189,7 @@ func (s *invitationService) IssueTeacherAcademicUnitInvitation(ctx context.Conte
 		return InvitationView{}, err
 	}
 	bindOnboardingImportCommand(idempotency, command.onboardingImportID, command.onboardingImportRowNumber)
-	attempt := mutationAttempt{Invocation: invocation, Action: model.ActionInvitationCreate, Resource: resource,
+	attempt := access.Mutation{Invocation: invocation, Action: model.ActionInvitationCreate, Resource: resource,
 		ScopeType: model.RoleScopeAcademicUnit, ScopeID: unit.ID.String(), Operation: "issue_teacher_academic_unit",
 		Value: map[string]any{"purpose": model.InvitationPurposeTeacherAcademicUnit, "academic_unit_id": unit.ID.String(), "role_id": role.ID.String()}}
 	if recovered, ok, recoverErr := s.recoverInvitationIssueOutcome(ctx, idempotency, attempt); ok {
@@ -238,8 +239,8 @@ func (s *invitationService) IssueTeacherAcademicUnitInvitation(ctx context.Conte
 		return InvitationView{}, apperror.New("invitation.mail_unavailable").Wrap(err)
 	}
 	attempt.Value = invitation.Auditable()
-	created, err := runAuditedMutation(ctx, s.deps.Audit, attempt,
-		func() time.Time { return issuedAt }, func(ctx context.Context, reference mutationAttemptReference) (*store.InvitationCommandResult, error) {
+	created, err := access.RunAudited(ctx, s.deps.Audit, attempt,
+		func() time.Time { return issuedAt }, func(ctx context.Context, reference access.MutationReference) (*store.InvitationCommandResult, error) {
 			return s.storeTeacherAcademicUnitInvitation(ctx, idempotency, invitation, prepared, reference)
 		}, invitationStoreErrors.Translate)
 	if err != nil {
@@ -260,7 +261,7 @@ func newTeacherAcademicUnitInvitationValue(invocation invocation.Invocation, com
 		ClaimHash: claimHash, IssuedAt: issuedAt, Lifetime: lifetime,
 	})
 	if err != nil {
-		return nil, domainInvalid("invitation.invalid", err)
+		return nil, apperror.DomainInvalid("invitation.invalid", err)
 	}
 	return value, nil
 }
@@ -268,7 +269,7 @@ func newTeacherAcademicUnitInvitationValue(invocation invocation.Invocation, com
 // storeTeacherAcademicUnitInvitation records the audited Teacher Academic Unit Invitation issue, idempotently when a
 // key is present.
 func (s *invitationService) storeTeacherAcademicUnitInvitation(ctx context.Context, idempotency *store.CommandIdempotency, invitation *model.Invitation,
-	prepared *store.PreparedMail, reference mutationAttemptReference) (*store.InvitationCommandResult, error) {
+	prepared *store.PreparedMail, reference access.MutationReference) (*store.InvitationCommandResult, error) {
 	input := &store.TeacherAcademicUnitInvitationIssue{Invitation: invitation,
 		Lifetime:   invitation.ExpiresAt.Sub(invitation.CreatedAt),
 		Occurrence: prepared.Occurrence, Delivery: prepared.Delivery, DeliveryJob: prepared.Job,
@@ -286,7 +287,7 @@ func (s *invitationService) storeTeacherAcademicUnitInvitation(ctx context.Conte
 
 // resolveOnboardingInvitationNoOp completes an onboarding import row as a no-op when the store reports that the
 // candidate Invitation would change nothing; handled reports whether the caller must return the view and error.
-func (s *invitationService) resolveOnboardingInvitationNoOp(ctx context.Context, invocation invocation.Invocation, attempt mutationAttempt,
+func (s *invitationService) resolveOnboardingInvitationNoOp(ctx context.Context, invocation invocation.Invocation, attempt access.Mutation,
 	candidate *model.Invitation, idempotency *store.CommandIdempotency) (view InvitationView, handled bool, err error) {
 	_, noOp, noOpErr := s.deps.Store.ResolveOnboardingInvitationNoOp(ctx, candidate)
 	if noOpErr != nil {
@@ -405,7 +406,7 @@ func (s *invitationService) IssueInstitutionRoleInvitation(ctx context.Context, 
 }
 
 func (s *invitationService) issueAuthorizedScopedRole(ctx context.Context, invocation invocation.Invocation, issue authorizedScopedRoleInvitationIssue) (InvitationView, error) {
-	attempt := mutationAttempt{Invocation: invocation, Action: model.ActionInvitationCreate, Resource: issue.resource,
+	attempt := access.Mutation{Invocation: invocation, Action: model.ActionInvitationCreate, Resource: issue.resource,
 		ScopeType: issue.scopeType, ScopeID: issue.scopeID, Operation: issue.operation,
 		Value: map[string]any{"purpose": issue.purpose, "academic_unit_id": issue.academicUnitID.String(), "role_id": issue.role.ID.String()}}
 	if recovered, ok, recoverErr := s.recoverInvitationIssueOutcome(ctx, issue.idempotency, attempt); ok {
@@ -425,7 +426,7 @@ func (s *invitationService) issueAuthorizedScopedRole(ctx context.Context, invoc
 			ClaimHash: strings.Repeat("0", model.TokenHashLength), IssuedAt: issuedAt, Lifetime: issue.lifetime,
 		})
 		if candidateErr != nil {
-			return InvitationView{}, domainInvalid("invitation.invalid", candidateErr)
+			return InvitationView{}, apperror.DomainInvalid("invitation.invalid", candidateErr)
 		}
 		_, noOp, noOpErr := s.deps.Store.ResolveOnboardingInvitationNoOp(ctx, candidate)
 		if noOpErr != nil {
@@ -447,7 +448,7 @@ func (s *invitationService) issueAuthorizedScopedRole(ctx context.Context, invoc
 			ClaimHash: strings.Repeat("0", model.TokenHashLength), IssuedAt: issuedAt, Lifetime: issue.lifetime,
 		})
 		if candidateErr != nil {
-			return InvitationView{}, domainInvalid("invitation.invalid", candidateErr)
+			return InvitationView{}, apperror.DomainInvalid("invitation.invalid", candidateErr)
 		}
 		attempt.Value = candidate.Auditable()
 		return s.recordDuplicateInvitationView(ctx, issue.idempotency, attempt,
@@ -465,7 +466,7 @@ func (s *invitationService) issueAuthorizedScopedRole(ctx context.Context, invoc
 		ClaimHash: model.HashInvitationClaim(rawClaim), IssuedAt: issuedAt, Lifetime: issue.lifetime,
 	})
 	if err != nil {
-		return InvitationView{}, domainInvalid("invitation.invalid", err)
+		return InvitationView{}, apperror.DomainInvalid("invitation.invalid", err)
 	}
 	actionURL, err := accountCredentialLink(s.deps.PublicURL, "/join", rawClaim)
 	if err != nil {
@@ -476,8 +477,8 @@ func (s *invitationService) issueAuthorizedScopedRole(ctx context.Context, invoc
 		return InvitationView{}, apperror.New("invitation.mail_unavailable").Wrap(err)
 	}
 	attempt.Value = invitation.Auditable()
-	created, err := runAuditedMutation(ctx, s.deps.Audit, attempt,
-		func() time.Time { return issuedAt }, func(ctx context.Context, reference mutationAttemptReference) (*store.InvitationCommandResult, error) {
+	created, err := access.RunAudited(ctx, s.deps.Audit, attempt,
+		func() time.Time { return issuedAt }, func(ctx context.Context, reference access.MutationReference) (*store.InvitationCommandResult, error) {
 			input := &store.ScopedRoleInvitationIssue{Invitation: invitation, Lifetime: issue.lifetime,
 				Occurrence: prepared.Occurrence, Delivery: prepared.Delivery, DeliveryJob: prepared.Job,
 				AuditEventID: reference.ID, AuditAt: reference.MutationAt}
@@ -500,14 +501,14 @@ func (s *invitationService) issueAuthorizedScopedRole(ctx context.Context, invoc
 	return view, nil
 }
 
-func (s *invitationService) completeOnboardingInvitationNoOp(ctx context.Context, invocation invocation.Invocation, attempt mutationAttempt,
+func (s *invitationService) completeOnboardingInvitationNoOp(ctx context.Context, invocation invocation.Invocation, attempt access.Mutation,
 	candidate *model.Invitation, idempotency *store.CommandIdempotency) (InvitationView, error) {
 	if candidate == nil || idempotency == nil || !idempotency.OnboardingImportID.IsValid() {
 		return InvitationView{}, apperror.New("invitation.unavailable")
 	}
 	attempt.Value = candidate.Auditable()
-	created, err := runAuditedMutation(ctx, s.deps.Audit, attempt,
-		func() time.Time { return candidate.CreatedAt }, func(ctx context.Context, reference mutationAttemptReference) (*store.InvitationCommandResult, error) {
+	created, err := access.RunAudited(ctx, s.deps.Audit, attempt,
+		func() time.Time { return candidate.CreatedAt }, func(ctx context.Context, reference access.MutationReference) (*store.InvitationCommandResult, error) {
 			switch candidate.Purpose {
 			case model.InvitationPurposeStudentClass:
 				return s.deps.Store.IssueStudentClassIdempotently(ctx, &store.StudentClassInvitationIssue{Invitation: candidate,

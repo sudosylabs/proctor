@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -28,7 +28,7 @@ import (
 type institutionHTTPApplication struct {
 	principal model.Principal
 	result    *model.Institution
-	command   app.UpdateInstitutionCommand
+	command   academic.UpdateInstitutionCommand
 }
 
 func (a *institutionHTTPApplication) AuthenticateAccess(
@@ -48,7 +48,7 @@ func (a *institutionHTTPApplication) AuthenticateBearer(
 func (a *institutionHTTPApplication) GetInstitution(
 	_ context.Context,
 	invocation invocation.Invocation,
-	_ app.GetInstitutionQuery,
+	_ academic.GetInstitutionQuery,
 ) (*model.Institution, error) {
 	if invocation.Principal().UserID != a.principal.UserID {
 		return nil, apperror.New("request.invalid")
@@ -59,7 +59,7 @@ func (a *institutionHTTPApplication) GetInstitution(
 func (a *institutionHTTPApplication) UpdateInstitution(
 	_ context.Context,
 	invocation invocation.Invocation,
-	command app.UpdateInstitutionCommand,
+	command academic.UpdateInstitutionCommand,
 ) (*model.Institution, error) {
 	if invocation.Principal().UserID != a.principal.UserID {
 		return nil, apperror.New("request.invalid")

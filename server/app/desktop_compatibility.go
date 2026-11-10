@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
@@ -76,7 +77,7 @@ type desktopCompatibilityServiceDependencies struct {
 	Policies                store.DesktopCompatibilityPolicyStore
 	Institutions            desktopCompatibilityInstitutionStore
 	Authorization           resourceAuthorizer
-	Audit                   mutationAuditor
+	Audit                   access.MutationAuditor
 	Builds                  []model.DesktopBuildTuple
 	SkipBuildChecks         bool
 	RecentAuthenticationTTL time.Duration
@@ -273,10 +274,10 @@ func (s *desktopCompatibilityService) ReplaceDesktopCompatibilityPolicy(
 	if err != nil {
 		return nil, err
 	}
-	stored, err := runAuditedMutation(
+	stored, err := access.RunAudited(
 		ctx,
 		s.deps.Audit,
-		mutationAttempt{
+		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionDesktopCompatibilityPolicyManage,
 			Resource:   resource,
@@ -295,7 +296,7 @@ func (s *desktopCompatibilityService) ReplaceDesktopCompatibilityPolicy(
 		s.deps.Now,
 		func(
 			ctx context.Context,
-			reference mutationAttemptReference,
+			reference access.MutationReference,
 		) (*store.DesktopCompatibilityPolicyReplacementResult, error) {
 			return s.deps.Policies.Replace(
 				ctx,

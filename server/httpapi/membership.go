@@ -11,14 +11,13 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/sudosylabs/proctor/server/app"
-
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-func membershipPageQuery(request *http.Request, scope model.Resource) (app.MembershipPageQuery, membershipPageCursor, error) {
+func membershipPageQuery(request *http.Request, scope model.Resource) (academic.MembershipPageQuery, membershipPageCursor, error) {
 	values := request.URL.Query()
-	query := app.MembershipPageQuery{Limit: 50}
+	query := academic.MembershipPageQuery{Limit: 50}
 	var cursor membershipPageCursor
 	for _, key := range []string{"limit", "cursor", "active_at", "history"} {
 		if entries, present := values[key]; present && (len(entries) != 1 || entries[0] == "") {

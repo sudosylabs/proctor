@@ -18,20 +18,22 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type academicUnitHTTPApplication struct {
 	Application
+	InstitutionApplication
 	principal      model.Principal
 	unit           *model.AcademicUnit
 	created        *model.AcademicUnit
-	createCommand  app.CreateAcademicUnitCommand
-	updateCommand  app.UpdateAcademicUnitCommand
-	archiveCommand app.ArchiveAcademicUnitCommand
+	createCommand  academic.CreateAcademicUnitCommand
+	updateCommand  academic.UpdateAcademicUnitCommand
+	archiveCommand academic.ArchiveAcademicUnitCommand
 	getErr         error
 }
 
@@ -52,7 +54,7 @@ func (a *academicUnitHTTPApplication) AuthenticateBearer(
 func (a *academicUnitHTTPApplication) GetAcademicUnit(
 	_ context.Context,
 	invocation invocation.Invocation,
-	query app.GetAcademicUnitQuery,
+	query academic.GetAcademicUnitQuery,
 ) (*model.AcademicUnit, error) {
 	if invocation.Principal().UserID != a.principal.UserID || query.ID != a.unit.ID {
 		return nil, apperror.New("request.invalid")
@@ -66,23 +68,23 @@ func (a *academicUnitHTTPApplication) GetAcademicUnit(
 func (a *academicUnitHTTPApplication) ListAcademicUnits(
 	context.Context,
 	invocation.Invocation,
-	app.ListAcademicUnitsQuery,
-) (app.Page[*model.AcademicUnit], error) {
-	return app.Page[*model.AcademicUnit]{Items: []*model.AcademicUnit{}}, nil
+	academic.ListAcademicUnitsQuery,
+) (paging.Page[*model.AcademicUnit], error) {
+	return paging.Page[*model.AcademicUnit]{Items: []*model.AcademicUnit{}}, nil
 }
 
 func (a *academicUnitHTTPApplication) SearchAcademicUnits(
 	context.Context,
 	invocation.Invocation,
-	app.SearchAcademicUnitsQuery,
-) (app.Page[*model.AcademicUnit], error) {
-	return app.Page[*model.AcademicUnit]{Items: []*model.AcademicUnit{}}, nil
+	academic.SearchAcademicUnitsQuery,
+) (paging.Page[*model.AcademicUnit], error) {
+	return paging.Page[*model.AcademicUnit]{Items: []*model.AcademicUnit{}}, nil
 }
 
 func (a *academicUnitHTTPApplication) CreateAcademicUnit(
 	_ context.Context,
 	invocation invocation.Invocation,
-	command app.CreateAcademicUnitCommand,
+	command academic.CreateAcademicUnitCommand,
 ) (*model.AcademicUnit, error) {
 	if invocation.Principal().UserID != a.principal.UserID {
 		return nil, apperror.New("request.invalid")
@@ -94,7 +96,7 @@ func (a *academicUnitHTTPApplication) CreateAcademicUnit(
 func (a *academicUnitHTTPApplication) UpdateAcademicUnit(
 	_ context.Context,
 	invocation invocation.Invocation,
-	command app.UpdateAcademicUnitCommand,
+	command academic.UpdateAcademicUnitCommand,
 ) (*model.AcademicUnit, error) {
 	if invocation.Principal().UserID != a.principal.UserID {
 		return nil, apperror.New("request.invalid")
@@ -106,7 +108,7 @@ func (a *academicUnitHTTPApplication) UpdateAcademicUnit(
 func (a *academicUnitHTTPApplication) ArchiveAcademicUnit(
 	_ context.Context,
 	invocation invocation.Invocation,
-	command app.ArchiveAcademicUnitCommand,
+	command academic.ArchiveAcademicUnitCommand,
 ) error {
 	if invocation.Principal().UserID != a.principal.UserID {
 		return apperror.New("request.invalid")
@@ -276,7 +278,7 @@ func TestAcademicUnitHTTPCreateMapsCommandWithoutPermissionPreflight(t *testing.
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, request)
 			require.Equal(t, http.StatusCreated, response.Code, "status = %d: %s", response.Code, response.Body.String())
-			wantCommand := app.CreateAcademicUnitCommand{
+			wantCommand := academic.CreateAcademicUnitCommand{
 				ParentID: model.AcademicUnitID(tt.wantParentID), Name: "computing",
 				DisplayName: "Computing", Description: "School",
 			}

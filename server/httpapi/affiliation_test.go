@@ -18,7 +18,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -27,19 +27,19 @@ import (
 type affiliationHTTPApplication struct {
 	result        *model.Affiliation
 	values        []*model.Affiliation
-	createCommand app.CreateAffiliationCommand
-	endCommand    app.EndAffiliationCommand
+	createCommand academic.CreateAffiliationCommand
+	endCommand    academic.EndAffiliationCommand
 	listErr       error
 }
 
-func (a *affiliationHTTPApplication) ListAffiliations(context.Context, invocation.Invocation, app.ListAffiliationsQuery) ([]*model.Affiliation, error) {
+func (a *affiliationHTTPApplication) ListAffiliations(context.Context, invocation.Invocation, academic.ListAffiliationsQuery) ([]*model.Affiliation, error) {
 	return a.values, a.listErr
 }
-func (a *affiliationHTTPApplication) CreateAffiliation(_ context.Context, _ invocation.Invocation, command app.CreateAffiliationCommand) (*model.Affiliation, error) {
+func (a *affiliationHTTPApplication) CreateAffiliation(_ context.Context, _ invocation.Invocation, command academic.CreateAffiliationCommand) (*model.Affiliation, error) {
 	a.createCommand = command
 	return a.result, nil
 }
-func (a *affiliationHTTPApplication) EndAffiliation(_ context.Context, _ invocation.Invocation, command app.EndAffiliationCommand) (*model.Affiliation, error) {
+func (a *affiliationHTTPApplication) EndAffiliation(_ context.Context, _ invocation.Invocation, command academic.EndAffiliationCommand) (*model.Affiliation, error) {
 	a.endCommand = command
 	return a.result, nil
 }

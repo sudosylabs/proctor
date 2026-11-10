@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 )
@@ -40,7 +41,7 @@ func (e examCorrectionRealtimeEffects) Report(ctx context.Context, operation str
 	e.realtime.reportTransientFailure(ctx, operation, err)
 }
 
-var _ correction.Authorizer = (*accessControlService)(nil)
-var _ correction.Auditor = mutationAuditAdapter{}
+var _ correction.Authorizer = (*access.Authorizer)(nil)
+var _ correction.Auditor = access.MutationAuditAdapter{}
 var _ correction.Effects = examCorrectionRealtimeEffects{}
 var _ correction.EffectFailures = examCorrectionRealtimeEffects{}

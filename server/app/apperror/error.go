@@ -12,7 +12,8 @@
 // translates typed Store failures and Concealment presents a protected use
 // case's failures, so no module writes its own translator or presenter.
 //
-// The package depends only on the standard library. It contains no HTTP
+// The package depends only on the standard library, the Store error
+// contracts, and the domain ValidationError. It contains no HTTP
 // status, protocol envelope, localization state, or request metadata; each
 // transport maps codes through its own exhaustive table.
 package apperror

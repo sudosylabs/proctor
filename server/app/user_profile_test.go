@@ -16,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -149,7 +150,7 @@ func TestCurrentUserContextRejectsPersonalAccessTokensWithoutReading(t *testing.
 	require.Equal(t, 0, persistence.currentContextLimit, "unauthorized request reached persistence with limit")
 }
 
-func (a *userProfileAuthorizerFake) AuthorizeSearch(context.Context, invocation.Invocation) (store.UserVisibilityScope, error) {
+func (a *userProfileAuthorizerFake) AuthorizeUserSearch(context.Context, invocation.Invocation) (store.UserVisibilityScope, error) {
 	*a.events = append(*a.events, "authorize-search")
 	if a.searchScope.InstitutionWide || a.searchScope.ClassMemberInstitutionWide ||
 		len(a.searchScope.AcademicUnitRootIDs) > 0 || len(a.searchScope.ClassMemberAcademicUnitRootIDs) > 0 ||
@@ -163,9 +164,9 @@ func (a *userProfileAuthorizerFake) RoleBindingViewScope(_ context.Context, _ in
 	a.roleScopeAt = at
 	return a.roleScope, nil
 }
-func (a *userProfileAuthorizerFake) AuthorizeProfileRead(context.Context, invocation.Invocation, model.UserID) (profileReadAuthorization, error) {
+func (a *userProfileAuthorizerFake) AuthorizeProfileRead(context.Context, invocation.Invocation, model.UserID) (access.ProfileReadAuthorization, error) {
 	*a.events = append(*a.events, "authorize-read")
-	return profileReadAuthorization{FullProfile: a.fullRead}, a.readErr
+	return access.ProfileReadAuthorization{FullProfile: a.fullRead}, a.readErr
 }
 func (a *userProfileAuthorizerFake) Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error {
 	*a.events = append(*a.events, "authorize-manage")

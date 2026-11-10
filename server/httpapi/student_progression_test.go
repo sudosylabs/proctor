@@ -21,6 +21,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -31,10 +32,10 @@ type studentProgressionApplicationFake struct {
 	getID   string
 
 	listQuery *app.ListStudentProgressionsQuery
-	listPage  app.CountedPage[app.OnboardingImportView]
+	listPage  paging.Counted[app.OnboardingImportView]
 }
 
-func (f *studentProgressionApplicationFake) ListStudentProgressions(_ context.Context, _ invocation.Invocation, query app.ListStudentProgressionsQuery) (app.CountedPage[app.OnboardingImportView], error) {
+func (f *studentProgressionApplicationFake) ListStudentProgressions(_ context.Context, _ invocation.Invocation, query app.ListStudentProgressionsQuery) (paging.Counted[app.OnboardingImportView], error) {
 	f.listQuery = &query
 	return f.listPage, nil
 }
@@ -119,9 +120,9 @@ func TestStudentProgressionListParsesFiltersAndPagesTheCountedEnvelope(t *testin
 		ParseJobID: model.NewJobID(), CreatedAt: at, UpdatedAt: at, ExpiresAt: at.Add(7 * 24 * time.Hour), Revision: 2}
 	older := newest
 	older.ID, older.CreatedAt = model.NewOnboardingImportID(), at.Add(-time.Minute)
-	fake := &studentProgressionApplicationFake{listPage: app.CountedPage[app.OnboardingImportView]{
-		Page:      app.Page[app.OnboardingImportView]{Items: []app.OnboardingImportView{newest, older}, HasMore: true},
-		PageTotal: app.PageTotal{Counted: true, Total: 3}}}
+	fake := &studentProgressionApplicationFake{listPage: paging.Counted[app.OnboardingImportView]{
+		Page:  paging.Page[app.OnboardingImportView]{Items: []app.OnboardingImportView{newest, older}, HasMore: true},
+		Total: paging.Total{Counted: true, Total: 3}}}
 	httpAPI := studentProgressionListAPI(t, fake)
 
 	response := httptest.NewRecorder()
@@ -149,7 +150,7 @@ func TestStudentProgressionListParsesFiltersAndPagesTheCountedEnvelope(t *testin
 	require.Equal(t, 3, *page.Total)
 	require.False(t, *page.TotalIsLowerBound)
 
-	fake.listPage = app.CountedPage[app.OnboardingImportView]{Page: app.Page[app.OnboardingImportView]{Items: []app.OnboardingImportView{}}}
+	fake.listPage = paging.Counted[app.OnboardingImportView]{Page: paging.Page[app.OnboardingImportView]{Items: []app.OnboardingImportView{}}}
 	response = httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, authenticatedCatalogRequest(http.MethodGet, "/api/v1/student-progressions?cursor="+page.NextCursor))
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())

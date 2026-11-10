@@ -318,7 +318,7 @@ enforce both halves.
 Every event about a User's account names that User as its subject
 (`subject_user_id`). A User resource is always its own subject, enforced by
 the model and a database check; a writer whose resource is a scope, Class, or
-the Institution names the affected User through `mutationAttempt.Subject` or
+the Institution names the affected User through `access.Mutation.Subject` or
 the draft's `SubjectUserID` (Role Binding grants and ends, Class and Academic
 Unit membership, Invitation acceptance, self-service MFA, and Personal Access
 Token changes). A runner given a subject its auditor cannot record refuses the
@@ -344,7 +344,7 @@ the pending state:
   `AuditEventID` and `AuditAt`. The operation completes the attempt as
   `success` in the transaction that commits the state, Session issuance
   included; on any failure the application completes it as `fail` with the
-  public error code (`runAuditedMutation` owns this for ordinary mutations).
+  public error code (`access.RunAudited` owns this for ordinary mutations).
   Actor work begins from the Principal (or, for a handoff with no Principal
   yet, the proved account); trusted durable work begins an actorless system
   attempt and never fabricates a User. This is the protocol for every

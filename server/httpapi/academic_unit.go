@@ -10,7 +10,8 @@ package httpapi
 import (
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -67,16 +68,16 @@ func (m academicUnitResourceModule) listRoot(request operationRequest) (operatio
 	if err != nil {
 		return operationResult{}, err
 	}
-	var page app.Page[*model.AcademicUnit]
+	var page paging.Page[*model.AcademicUnit]
 	if query := request.request.URL.Query().Get("q"); query != "" {
 		page, err = m.academicUnits.SearchAcademicUnits(
 			request.context,
 			request.invocation(),
-			app.SearchAcademicUnitsQuery{Query: query, NamePageQuery: pageQuery},
+			academic.SearchAcademicUnitsQuery{Query: query, NameQuery: pageQuery},
 		)
 	} else {
 		page, err = m.academicUnits.ListAcademicUnits(
-			request.context, request.invocation(), app.ListAcademicUnitsQuery{NamePageQuery: pageQuery},
+			request.context, request.invocation(), academic.ListAcademicUnitsQuery{NameQuery: pageQuery},
 		)
 	}
 	if err != nil {
@@ -95,7 +96,7 @@ func (m academicUnitResourceModule) createRoot(request operationRequest) (operat
 	saved, err := m.academicUnits.CreateAcademicUnit(
 		request.context,
 		request.invocation(),
-		app.CreateAcademicUnitCommand{
+		academic.CreateAcademicUnitCommand{
 			Name: body.Name, DisplayName: body.DisplayName,
 			Description: body.Description, IdempotencyKey: request.idempotencyKey,
 		},
@@ -114,7 +115,7 @@ func (m academicUnitResourceModule) get(request operationRequest) (operationResu
 	unit, err := m.academicUnits.GetAcademicUnit(
 		request.context,
 		request.invocation(),
-		app.GetAcademicUnitQuery{ID: id},
+		academic.GetAcademicUnitQuery{ID: id},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -137,7 +138,7 @@ func (m academicUnitResourceModule) patch(request operationRequest) (operationRe
 	unit, err := m.academicUnits.UpdateAcademicUnit(
 		request.context,
 		request.invocation(),
-		app.UpdateAcademicUnitCommand{ExpectedRevision: body.ExpectedRevision.ValuePointer(),
+		academic.UpdateAcademicUnitCommand{ExpectedRevision: body.ExpectedRevision.ValuePointer(),
 			ID: id, ParentID: optionalIdentifier[model.AcademicUnitID](body.ParentID), Name: body.Name,
 			DisplayName: body.DisplayName, Description: body.Description,
 		},
@@ -160,7 +161,7 @@ func (m academicUnitResourceModule) archive(request operationRequest) (operation
 	err = m.academicUnits.ArchiveAcademicUnit(
 		request.context,
 		request.invocation(),
-		app.ArchiveAcademicUnitCommand{ExpectedRevision: expectedRevision, ID: id},
+		academic.ArchiveAcademicUnitCommand{ExpectedRevision: expectedRevision, ID: id},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -180,7 +181,7 @@ func (m academicUnitResourceModule) listChildren(request operationRequest) (oper
 	page, err := m.academicUnits.ListAcademicUnits(
 		request.context,
 		request.invocation(),
-		app.ListAcademicUnitsQuery{ParentID: id, NamePageQuery: pageQuery},
+		academic.ListAcademicUnitsQuery{ParentID: id, NameQuery: pageQuery},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -202,7 +203,7 @@ func (m academicUnitResourceModule) createChild(request operationRequest) (opera
 	saved, err := m.academicUnits.CreateAcademicUnit(
 		request.context,
 		request.invocation(),
-		app.CreateAcademicUnitCommand{
+		academic.CreateAcademicUnitCommand{
 			ParentID: id, Name: body.Name, DisplayName: body.DisplayName,
 			Description: body.Description,
 		},

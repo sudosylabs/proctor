@@ -13,6 +13,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
@@ -103,11 +104,11 @@ func (s *mailService) StartMailRekey(ctx context.Context, invocation invocation.
 		return MailRekeyView{}, apperror.New("mail.unavailable").Wrap(err)
 	}
 	job.CreatedByUserID = invocation.Principal().UserID
-	operation, err := runAuditedMutation(ctx, s.rekeyAudit, mutationAttempt{
+	operation, err := access.RunAudited(ctx, s.rekeyAudit, access.Mutation{
 		Invocation: invocation, Action: model.ActionMailRekey, Resource: resource,
 		ScopeType: model.RoleScopeInstitution, ScopeID: resource.ID, Operation: "start_rekey",
 		Value: map[string]any{"job_id": job.ID.String(), "primary_key_id": primaryKeyID, "retiring_key_id": retiringKeyID},
-	}, s.deps.Now, func(ctx context.Context, reference mutationAttemptReference) (*store.MailRekeyOperation, error) {
+	}, s.deps.Now, func(ctx context.Context, reference access.MutationReference) (*store.MailRekeyOperation, error) {
 		return s.rekey.StartRekey(ctx, &store.MailRekeyStart{PrimaryKeyID: primaryKeyID,
 			RetiringKeyID: retiringKeyID, Job: job, AuditEventID: reference.ID, AuditAt: reference.MutationAt})
 	}, mailRekeyStoreErrors.Translate)

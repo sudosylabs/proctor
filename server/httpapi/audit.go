@@ -107,7 +107,7 @@ func (m auditResourceModule) list(request operationRequest) (operationResult, er
 	if err != nil {
 		return operationResult{}, err
 	}
-	response, err := withPageTotal(envelope, page.PageTotal, !query.BeforeID.IsZero())
+	response, err := withPageTotal(envelope, page.Total, !query.BeforeID.IsZero())
 	if err != nil {
 		return operationResult{}, err
 	}

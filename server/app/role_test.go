@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -132,7 +133,7 @@ func TestRoleCreateCommitsWithoutSideEffects(t *testing.T) {
 
 func TestRoleCreateAndUpdateRejectUndelegablePermissionsBeforeAudit(t *testing.T) {
 	t.Parallel()
-	denied := authorizationDeniedError()
+	denied := access.DeniedError()
 
 	t.Run("create", func(t *testing.T) {
 		events := []string{}

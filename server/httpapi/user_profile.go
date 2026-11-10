@@ -506,7 +506,7 @@ func (m userProfileResourceModule) search(request operationRequest) (operationRe
 	if err != nil {
 		return operationResult{}, err
 	}
-	response, err := withPageTotal(envelope, page.PageTotal, present)
+	response, err := withPageTotal(envelope, page.Total, present)
 	if err != nil {
 		return operationResult{}, err
 	}

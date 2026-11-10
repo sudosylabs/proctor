@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -29,7 +30,7 @@ type RevokeDesktopRegistrationCommand struct {
 // newDesktopRegistrationService validates them once and desktopRegistrationService keeps them in deps.
 type desktopRegistrationServiceDependencies struct {
 	Registrations           store.DesktopRegistrationStore
-	Audit                   mutationAuditor
+	Audit                   access.MutationAuditor
 	Effects                 authenticationSecurityEffects
 	RecentAuthenticationTTL time.Duration
 	Now                     func() time.Time

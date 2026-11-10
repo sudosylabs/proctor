@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
@@ -561,7 +562,7 @@ func (s *mfaApplicationService) failMutation(
 	return mapped
 }
 
-type mfaAuditAdapter struct{ audit *auditService }
+type mfaAuditAdapter struct{ audit *access.Auditor }
 
 // Begin records self-service MFA mutations, which are audited against the
 // Institution, with the acting User as their subject. An administrator reset

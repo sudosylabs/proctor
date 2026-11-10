@@ -8,7 +8,8 @@
 package app
 
 import (
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/exam"
 )
 
-var _ exam.RecordsAuthorizer = (*accessControlService)(nil)
+var _ exam.RecordsAuthorizer = (*access.Authorizer)(nil)

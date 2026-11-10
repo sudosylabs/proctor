@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -104,7 +105,7 @@ type accessPolicyServiceDependencies struct {
 	Institutions    accessPolicyInstitutionStore
 	Authorization   resourceAuthorizer
 	Capabilities    accessPolicyCapabilitySource
-	Audit           mutationAuditor
+	Audit           access.MutationAuditor
 	Effects         accessPolicyEffects
 	EffectFailures  accessPolicyEffectFailures
 	CanonicalOrigin string
@@ -249,12 +250,12 @@ func (s *accessPolicyService) ReplaceAccessPolicy(ctx context.Context, invocatio
 	if err != nil {
 		return AccessPolicyView{}, err
 	}
-	stored, err := runAuditedMutation(ctx, s.deps.Audit, mutationAttempt{
+	stored, err := access.RunAudited(ctx, s.deps.Audit, access.Mutation{
 		Invocation: invocation, Action: model.ActionAccessPolicyManage,
 		Resource:  model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()},
 		ScopeType: model.RoleScopeInstitution, ScopeID: institution.ID.String(), Operation: "replace",
 		Value: accessPolicyReplacementAuditValue(command),
-	}, s.deps.Now, func(ctx context.Context, reference mutationAttemptReference) (*store.AccessPolicyReplacementResult, error) {
+	}, s.deps.Now, func(ctx context.Context, reference access.MutationReference) (*store.AccessPolicyReplacementResult, error) {
 		return s.deps.Policies.Replace(ctx, &store.AccessPolicyReplacement{Preflight: *input,
 			ActorID: invocation.Principal().UserID, AuditEventID: reference.ID, AuditAt: reference.MutationAt}, idempotency)
 	}, accessPolicyError)

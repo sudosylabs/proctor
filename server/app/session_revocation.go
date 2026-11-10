@@ -11,6 +11,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -30,19 +31,19 @@ type sessionRevocationEffects interface {
 // Account and password transitions keep their separate atomic Store operations.
 type sessionRevocationCoordinator struct {
 	sessions sessionRevocationStore
-	audit    mutationAuditor
+	audit    access.MutationAuditor
 	effects  sessionRevocationEffects
 	now      func() time.Time
 }
 
 func (c sessionRevocationCoordinator) revokeOne(
 	ctx context.Context,
-	attempt mutationAttempt,
+	attempt access.Mutation,
 	input *store.SessionRevocation,
 	mapError func(error) error,
 ) error {
-	result, err := runAuditedMutation(ctx, c.audit, attempt, c.now,
-		func(ctx context.Context, reference mutationAttemptReference) (*store.SessionRevocationResult, error) {
+	result, err := access.RunAudited(ctx, c.audit, attempt, c.now,
+		func(ctx context.Context, reference access.MutationReference) (*store.SessionRevocationResult, error) {
 			input.RevokedAt = reference.MutationAt
 			input.AuditEventID, input.AuditAt = reference.ID, reference.MutationAt
 			return c.sessions.Revoke(ctx, input)
@@ -60,7 +61,7 @@ func (c sessionRevocationCoordinator) revokeOne(
 
 func (c sessionRevocationCoordinator) revokeAll(
 	ctx context.Context,
-	attempt mutationAttempt,
+	attempt access.Mutation,
 	input *store.UserSessionsRevocation,
 	mapError func(error) error,
 	unchanged *bool,
@@ -73,13 +74,13 @@ func (c sessionRevocationCoordinator) revokeAll(
 // newly revoked; a replayed or no-op revocation reports zero.
 func (c sessionRevocationCoordinator) revokeAllCounted(
 	ctx context.Context,
-	attempt mutationAttempt,
+	attempt access.Mutation,
 	input *store.UserSessionsRevocation,
 	mapError func(error) error,
 	unchanged *bool,
 ) (int, error) {
-	result, err := runAuditedMutation(ctx, c.audit, attempt, c.now,
-		func(ctx context.Context, reference mutationAttemptReference) (*store.UserSessionsRevocationResult, error) {
+	result, err := access.RunAudited(ctx, c.audit, attempt, c.now,
+		func(ctx context.Context, reference access.MutationReference) (*store.UserSessionsRevocationResult, error) {
 			input.RevokedAt = reference.MutationAt
 			input.AuditEventID, input.AuditAt = reference.ID, reference.MutationAt
 			value, err := c.sessions.RevokeAllForUser(ctx, input)

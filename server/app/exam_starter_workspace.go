@@ -11,6 +11,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/exam/workspace"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
@@ -29,7 +30,7 @@ func (e examStarterWorkspaceRealtimeEffects) Report(ctx context.Context, operati
 	e.realtime.reportTransientFailure(ctx, operation, err)
 }
 
-var _ workspace.Authorizer = (*accessControlService)(nil)
-var _ workspace.Auditor = mutationAuditAdapter{}
+var _ workspace.Authorizer = (*access.Authorizer)(nil)
+var _ workspace.Auditor = access.MutationAuditAdapter{}
 var _ workspace.Effects = examStarterWorkspaceRealtimeEffects{}
 var _ workspace.EffectFailures = examStarterWorkspaceRealtimeEffects{}

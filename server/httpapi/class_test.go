@@ -18,18 +18,19 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type classHTTPApplication struct {
-	updateCommand  app.UpdateClassCommand
-	archiveCommand app.ArchiveClassCommand
+	updateCommand  academic.UpdateClassCommand
+	archiveCommand academic.ArchiveClassCommand
 	result         *model.Class
 	list           []*model.Class
-	createCommand  app.CreateClassCommand
+	createCommand  academic.CreateClassCommand
 	searchErr      error
 }
 
@@ -209,14 +210,14 @@ func newFocusedResourceAPI(
 	return httpAPI
 }
 
-func (a *classHTTPApplication) GetClass(context.Context, invocation.Invocation, app.GetClassQuery) (*model.Class, error) {
+func (a *classHTTPApplication) GetClass(context.Context, invocation.Invocation, academic.GetClassQuery) (*model.Class, error) {
 	return a.result, nil
 }
-func (a *classHTTPApplication) ListClasses(context.Context, invocation.Invocation, app.ListClassesQuery) (app.Page[*model.Class], error) {
-	return app.Page[*model.Class]{Items: a.list}, nil
+func (a *classHTTPApplication) ListClasses(context.Context, invocation.Invocation, academic.ListClassesQuery) (paging.Page[*model.Class], error) {
+	return paging.Page[*model.Class]{Items: a.list}, nil
 }
-func (a *classHTTPApplication) SearchClasses(context.Context, invocation.Invocation, app.SearchClassesQuery) (app.Page[*model.Class], error) {
-	return app.Page[*model.Class]{Items: a.list}, a.searchErr
+func (a *classHTTPApplication) SearchClasses(context.Context, invocation.Invocation, academic.SearchClassesQuery) (paging.Page[*model.Class], error) {
+	return paging.Page[*model.Class]{Items: a.list}, a.searchErr
 }
 
 func TestClassSearchMapsMissingAcademicUnit(t *testing.T) {
@@ -240,15 +241,15 @@ func TestClassSearchMapsMissingAcademicUnit(t *testing.T) {
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusNotFound, response.Code, "status = %d: %s", response.Code, response.Body.String())
 }
-func (a *classHTTPApplication) CreateClass(_ context.Context, _ invocation.Invocation, command app.CreateClassCommand) (*model.Class, error) {
+func (a *classHTTPApplication) CreateClass(_ context.Context, _ invocation.Invocation, command academic.CreateClassCommand) (*model.Class, error) {
 	a.createCommand = command
 	return a.result, nil
 }
-func (a *classHTTPApplication) UpdateClass(_ context.Context, _ invocation.Invocation, command app.UpdateClassCommand) (*model.Class, error) {
+func (a *classHTTPApplication) UpdateClass(_ context.Context, _ invocation.Invocation, command academic.UpdateClassCommand) (*model.Class, error) {
 	a.updateCommand = command
 	return a.result, nil
 }
-func (a *classHTTPApplication) ArchiveClass(_ context.Context, _ invocation.Invocation, command app.ArchiveClassCommand) error {
+func (a *classHTTPApplication) ArchiveClass(_ context.Context, _ invocation.Invocation, command academic.ArchiveClassCommand) error {
 	a.archiveCommand = command
 	return nil
 }

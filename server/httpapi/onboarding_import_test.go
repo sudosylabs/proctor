@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -46,7 +47,7 @@ func TestOnboardingImportListParsesFiltersAndPagesTheEnvelope(t *testing.T) {
 		ParseJobID: model.NewJobID(), CreatedAt: at, UpdatedAt: at, ExpiresAt: at.Add(7 * 24 * time.Hour), Revision: 3}
 	older := newest
 	older.ID, older.CreatedAt = model.NewOnboardingImportID(), at.Add(-time.Minute)
-	fake := &recordingOnboardingImportApplication{listPage: app.Page[app.OnboardingImportView]{Items: []app.OnboardingImportView{newest, older}, HasMore: true}}
+	fake := &recordingOnboardingImportApplication{listPage: paging.Page[app.OnboardingImportView]{Items: []app.OnboardingImportView{newest, older}, HasMore: true}}
 	httpAPI := onboardingImportListAPI(t, fake)
 
 	response := httptest.NewRecorder()
@@ -63,7 +64,7 @@ func TestOnboardingImportListParsesFiltersAndPagesTheEnvelope(t *testing.T) {
 	require.NotContains(t, page.Items[0], "rows")
 	require.NotEmpty(t, page.NextCursor)
 
-	fake.listPage = app.Page[app.OnboardingImportView]{Items: []app.OnboardingImportView{}}
+	fake.listPage = paging.Page[app.OnboardingImportView]{Items: []app.OnboardingImportView{}}
 	response = httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, authenticatedCatalogRequest(http.MethodGet, "/api/v1/onboarding-imports?cursor="+page.NextCursor))
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())

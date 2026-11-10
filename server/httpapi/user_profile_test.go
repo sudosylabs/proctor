@@ -24,6 +24,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -87,9 +88,9 @@ type sessionAdministrationHTTPApplication struct {
 	revokeAllCommand app.RevokeUserSessionsCommand
 }
 
-func (a *sessionAdministrationHTTPApplication) ListUserSessions(_ context.Context, _ invocation.Invocation, query app.ListUserSessionsQuery) (app.Page[*model.Session], error) {
+func (a *sessionAdministrationHTTPApplication) ListUserSessions(_ context.Context, _ invocation.Invocation, query app.ListUserSessionsQuery) (paging.Page[*model.Session], error) {
 	a.listQuery = query
-	return app.Page[*model.Session]{Items: a.list, HasMore: a.hasMore}, nil
+	return paging.Page[*model.Session]{Items: a.list, HasMore: a.hasMore}, nil
 }
 
 func (a *sessionAdministrationHTTPApplication) RevokeUserSession(_ context.Context, _ invocation.Invocation, command app.RevokeUserSessionCommand) error {
@@ -157,9 +158,9 @@ type auditListingHTTPApplication struct {
 	list []*model.AuditEvent
 }
 
-func (a *auditListingHTTPApplication) ListAuditEvents(_ context.Context, _ invocation.Invocation, query app.ListAuditEventsQuery) (app.CountedPage[*model.AuditEvent], error) {
-	return app.CountedPage[*model.AuditEvent]{Page: app.Page[*model.AuditEvent]{Items: a.list},
-		PageTotal: app.PageTotal{Counted: query.BeforeID.IsZero(), Total: len(a.list)}}, nil
+func (a *auditListingHTTPApplication) ListAuditEvents(_ context.Context, _ invocation.Invocation, query app.ListAuditEventsQuery) (paging.Counted[*model.AuditEvent], error) {
+	return paging.Counted[*model.AuditEvent]{Page: paging.Page[*model.AuditEvent]{Items: a.list},
+		Total: paging.Total{Counted: query.BeforeID.IsZero(), Total: len(a.list)}}, nil
 }
 
 type bootstrapHTTPApplication struct {
@@ -196,7 +197,7 @@ func (a *loginRevisionHTTPApplication) Login(
 	}, nil
 }
 
-func (a *userProfileHTTPApplication) SearchUsers(_ context.Context, _ invocation.Invocation, query app.SearchUsersQuery) (app.CountedPage[app.UserDirectoryEntry], error) {
+func (a *userProfileHTTPApplication) SearchUsers(_ context.Context, _ invocation.Invocation, query app.SearchUsersQuery) (paging.Counted[app.UserDirectoryEntry], error) {
 	a.searchQuery = query
 	entries := a.entries
 	if entries == nil {
@@ -205,9 +206,9 @@ func (a *userProfileHTTPApplication) SearchUsers(_ context.Context, _ invocation
 			entries = append(entries, app.UserDirectoryEntry{User: user, Memberships: store.UserDirectorySummary{UserID: user.ID}})
 		}
 	}
-	page := app.CountedPage[app.UserDirectoryEntry]{Page: app.Page[app.UserDirectoryEntry]{Items: entries, HasMore: a.searchHasMore}}
+	page := paging.Counted[app.UserDirectoryEntry]{Page: paging.Page[app.UserDirectoryEntry]{Items: entries, HasMore: a.searchHasMore}}
 	if query.AfterID == "" {
-		page.PageTotal = app.PageTotal{Counted: true, Total: max(a.searchTotal, len(entries)), TotalIsLowerBound: a.searchTotal == store.MaximumListCount}
+		page.Total = paging.Total{Counted: true, Total: max(a.searchTotal, len(entries)), TotalIsLowerBound: a.searchTotal == store.MaximumListCount}
 	}
 	return page, nil
 }

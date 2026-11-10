@@ -7,6 +7,10 @@ identityprovider ← {model, config}
 internal/canonicaljson ← model ← store ← app/job
 {model, store} ← app/apperror ← {app, app/idempotency, app/exam, httpapi, websocket}
 model ← app/invocation ← {app, app/idempotency, app/exam}
+{model, store, app/apperror, app/invocation} ← app/access ← {app, app/academic}
+{store, app/apperror} ← app/paging ← {app, app/academic, httpapi}
+{model, store} ← app/internal/batchitem ← {app, app/academic}
+{model, store, app/access, app/paging, app/apperror, app/invocation, app/idempotency, app/mail, app/internal/batchitem} ← app/academic ← {app, httpapi}
 {model, store, app/apperror, app/invocation} ← app/idempotency ← {app, app/exam}
 {model, store, app/job, app/mail, app/exam} ← app/jobhandler ← app
 model ← app/realtime ← {app, websocket}
@@ -50,9 +54,13 @@ inside `app/` are application-owned modules, not transports.
 | `store` | `model` | `sqlstore`, HTTP, application services |
 | `store/sqlstore` | `model`, `store`, `config`, `migrations`, `internal/canonicaljson`, SQL libraries | Application services, transports, runtime composition |
 | `app/job` | `model`, `store.JobStore`, standard library | parent `app`, concrete Jobs, transports, concrete adapters |
-| `app/apperror` | `store` error contracts, standard library | SQL, HTTP status, localization, transports, concrete adapters |
+| `app/apperror` | `store` error contracts, the `model` validation error, standard library | SQL, HTTP status, localization, transports, concrete adapters |
 | `app/invocation` | `model`, standard library | authorization or audit policy, `store`, parent `app`, Exam modules, transports, concrete adapters |
 | `app/idempotency` | `model`, `store`, `app/apperror`, `app/invocation`, standard library | business operation policy, parent `app`, Exam modules, transports, concrete adapters |
+| `app/access` | `model`, `store`, `app/apperror`, `app/invocation`, standard library | parent `app`, area packages, `app/exam`, transports, platform, concrete adapters |
+| `app/paging` | `store`, `app/apperror`, standard library | `model`, parent `app`, area packages, transports, concrete adapters |
+| `app/internal/batchitem` | `model`, `store`, standard library | everything else; only `app` and `app/academic` may import it, so no transport can build a batch context |
+| `app/academic` | `model`, `store`, `app/access`, `app/paging`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/mail`, `app/realtime`, `app/internal/batchitem`, standard library | parent `app`, `app/exam`, `app/job`, transports, platform, concrete adapters |
 | `app/jobhandler` | `model`, bounded `store` contracts, `app/job`, leaf `app/mail` and `app/exam` capabilities, `secretseal`, standard library | parent `app`, `store.Catalog`, transports, platform, concrete adapters |
 | `app/realtime` | `model`, standard library, consumer-owned ports | parent `app`, HTTP, WebSocket libraries, cluster adapters |
 | `app/exam` | `model`, bounded `store` contracts, standard library, consumer-owned ports, `app/apperror`, `app/invocation`, `app/idempotency`, and explicitly shared leaf packages such as `app/exam/safemarkdown` | parent `app`, transports, platform, concrete adapters |
@@ -64,9 +72,9 @@ inside `app/` are application-owned modules, not transports.
 | `logging` | Standard library and the hidden logging engine/target implementation | application, domain, persistence, transports, global logger state |
 | `metrics` | `config`, `internal/tlscert`, narrow store recorder contracts, standard library, and Prometheus client libraries | application policy, platform service location, concrete infrastructure adapters, global Prometheus registry |
 | `tracing` | `config`, standard library, and OpenTelemetry API, SDK, and OTLP/HTTP exporter libraries | application policy, transports, store contracts, platform service location, a process-global tracer provider |
-| `app` | `model`, `store`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/job`, `app/jobhandler`, `app/realtime`, `app/exam`, `app/mail`, consumer-owned ports | `platform`, `httpapi`, `sqlstore` |
+| `app` | `model`, `store`, `app/access`, `app/paging`, `app/academic`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/job`, `app/jobhandler`, `app/realtime`, `app/exam`, `app/mail`, consumer-owned ports | `platform`, `httpapi`, `sqlstore` |
 | `filecontent` | `model`, consumer-owned `app` content contracts, `app/exam` export archive types, `packages/vfs`, narrowly allowlisted content codecs | persistence, transports, platform service location, Jobs, configuration, concrete VFS backends |
-| `httpapi` | `app`, `app/apperror`, `app/invocation`, `app/job`, `app/realtime`, `app/exam` and its children, `store` result types, `model`, `localization`, `internal/weborigin`, HTTP libraries | Store contracts and functions, `sqlstore`, `platform` |
+| `httpapi` | `app`, `app/academic`, `app/paging`, `app/apperror`, `app/invocation`, `app/job`, `app/realtime`, `app/exam` and its children, `store` result types, `model`, `localization`, `internal/weborigin`, HTTP libraries | Store contracts and functions, `sqlstore`, `platform` |
 | `webui` | Standard-library HTTP and filesystem contracts | Application, domain, persistence, configuration, concrete filesystems, third-party libraries |
 | `websocket` | the `httpapi` allowance with WebSocket libraries in place of HTTP libraries | Store contracts and functions, SQL and platform service location |
 | concrete adapters | Their inward contracts and implementation libraries | Application policy |

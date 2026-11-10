@@ -303,7 +303,7 @@ func (m mailResourceModule) listDeliveries(request operationRequest) (operationR
 			return operationResult{}, unpresentableResult(err)
 		}
 	}
-	if response.Total, response.TotalIsLowerBound, err = pageTotalMembers(page.PageTotal, !query.BeforeID.IsZero()); err != nil {
+	if response.Total, response.TotalIsLowerBound, err = pageTotalMembers(page.Total, !query.BeforeID.IsZero()); err != nil {
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, response), nil

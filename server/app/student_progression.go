@@ -17,8 +17,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -77,18 +79,18 @@ type ListStudentProgressionsQuery struct {
 // authorization decision, and applied to both Classes as a Store predicate.
 // Items carry the summary projection without rows plus both Class names; the
 // first page also carries the total.
-func (s *onboardingImportService) ListStudentProgressions(ctx context.Context, invocation invocation.Invocation, query ListStudentProgressionsQuery) (CountedPage[OnboardingImportView], error) {
-	limit, probe, err := resolvePageLimit(query.Limit, "limit")
+func (s *onboardingImportService) ListStudentProgressions(ctx context.Context, invocation invocation.Invocation, query ListStudentProgressionsQuery) (paging.Counted[OnboardingImportView], error) {
+	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
 	if err != nil {
-		return CountedPage[OnboardingImportView]{}, err
+		return paging.Counted[OnboardingImportView]{}, err
 	}
 	if len(query.States) > 8 {
-		return CountedPage[OnboardingImportView]{}, apperror.Invalid("request.invalid", "state")
+		return paging.Counted[OnboardingImportView]{}, apperror.Invalid("request.invalid", "state")
 	}
 	states := make([]model.OnboardingImportState, 0, len(query.States))
 	for _, state := range query.States {
 		if !state.IsValid() {
-			return CountedPage[OnboardingImportView]{}, apperror.Invalid("request.invalid", "state")
+			return paging.Counted[OnboardingImportView]{}, apperror.Invalid("request.invalid", "state")
 		}
 		if !slices.Contains(states, state) {
 			states = append(states, state)
@@ -104,15 +106,15 @@ func (s *onboardingImportService) ListStudentProgressions(ctx context.Context, i
 		{"destination_class_id", query.DestinationClassID.IsZero() || query.DestinationClassID.IsValid()},
 	} {
 		if !filter.valid {
-			return CountedPage[OnboardingImportView]{}, apperror.Invalid("request.invalid", filter.field)
+			return paging.Counted[OnboardingImportView]{}, apperror.Invalid("request.invalid", filter.field)
 		}
 	}
 	if (!query.BeforeID.IsZero() || !query.BeforeCreatedAt.IsZero()) && (!query.BeforeID.IsValid() || query.BeforeCreatedAt.IsZero()) {
-		return CountedPage[OnboardingImportView]{}, apperror.Invalid("request.invalid", "cursor")
+		return paging.Counted[OnboardingImportView]{}, apperror.Invalid("request.invalid", "cursor")
 	}
 	scope, err := s.deps.Authorization.Visibility(ctx, invocation, model.ActionAcademicProgressionManage)
 	if err != nil {
-		return CountedPage[OnboardingImportView]{}, err
+		return paging.Counted[OnboardingImportView]{}, err
 	}
 	options := store.StudentProgressionListOptions{Visibility: store.StudentProgressionVisibilityScope(scope), States: states,
 		SourcePeriodID: query.SourcePeriodID, SourceClassID: query.SourceClassID, DestinationPeriodID: query.DestinationPeriodID,
@@ -122,31 +124,31 @@ func (s *onboardingImportService) ListStudentProgressions(ctx context.Context, i
 	}
 	values, err := s.deps.Imports.ListStudentProgressions(ctx, options)
 	if err != nil {
-		return CountedPage[OnboardingImportView]{}, studentProgressionError(err)
+		return paging.Counted[OnboardingImportView]{}, studentProgressionError(err)
 	}
 	if len(values) > probe {
-		return CountedPage[OnboardingImportView]{}, apperror.New("student_progression.unavailable")
+		return paging.Counted[OnboardingImportView]{}, apperror.New("student_progression.unavailable")
 	}
 	items := make([]OnboardingImportView, 0, len(values))
 	for _, value := range values {
 		if value == nil || value.Progression == nil || value.Progression.Mode != model.OnboardingImportStudentProgression {
-			return CountedPage[OnboardingImportView]{}, apperror.New("student_progression.unavailable")
+			return paging.Counted[OnboardingImportView]{}, apperror.New("student_progression.unavailable")
 		}
 		view := onboardingImportView(value.Progression)
 		view.SourceClassName, view.DestinationClassName = value.SourceClassName, value.DestinationClassName
 		items = append(items, view)
 	}
-	page := CountedPage[OnboardingImportView]{Page: newPage(items, limit)}
-	total, consistent, err := countFirstPage(!query.BeforeID.IsValid(), len(page.Items), func(maximum int) (int, error) {
+	page := paging.Counted[OnboardingImportView]{Page: paging.New(items, limit)}
+	total, consistent, err := paging.CountFirst(!query.BeforeID.IsValid(), len(page.Items), func(maximum int) (int, error) {
 		return s.deps.Imports.CountStudentProgressions(ctx, options, maximum)
 	})
 	if err != nil {
-		return CountedPage[OnboardingImportView]{}, studentProgressionError(err)
+		return paging.Counted[OnboardingImportView]{}, studentProgressionError(err)
 	}
 	if !consistent {
-		return CountedPage[OnboardingImportView]{}, apperror.New("student_progression.unavailable")
+		return paging.Counted[OnboardingImportView]{}, apperror.New("student_progression.unavailable")
 	}
-	page.PageTotal = total
+	page.Total = total
 	return page, nil
 }
 
@@ -230,7 +232,7 @@ func (s *onboardingImportService) DryRunStudentProgression(ctx context.Context, 
 		DestinationClassRevision: destinationClass.Revision, EffectiveAt: effectiveAt, ParseJobID: job.ID, CreatedAt: at, UpdatedAt: at,
 		ExpiresAt: at.Add(onboardingImportRetention), Revision: 1}
 	created, err := runStudentProgressionAuditedMutation(ctx, s.deps.Audit, invocation, "student_progression.dry_run", id.String(),
-		sourceClass.ID, destinationClass.ID, at, func(ctx context.Context, destinationReference, sourceReference mutationAttemptReference) (*store.OnboardingImport, error) {
+		sourceClass.ID, destinationClass.ID, at, func(ctx context.Context, destinationReference, sourceReference access.MutationReference) (*store.OnboardingImport, error) {
 			return s.deps.Imports.CreateOnboardingImport(ctx, &store.OnboardingImportCreation{Import: value, ParseJob: job,
 				AuditEventID: destinationReference.ID, SourceAuditEventID: sourceReference.ID, AuditAt: destinationReference.MutationAt})
 		}, studentProgressionError)
@@ -243,22 +245,22 @@ func (s *onboardingImportService) DryRunStudentProgression(ctx context.Context, 
 	return onboardingImportView(created), nil
 }
 
-func runStudentProgressionAuditedMutation[T any](ctx context.Context, audit mutationAuditor, invocation invocation.Invocation, operation, progressionID string,
+func runStudentProgressionAuditedMutation[T any](ctx context.Context, audit access.MutationAuditor, invocation invocation.Invocation, operation, progressionID string,
 	sourceClassID, destinationClassID model.ClassID, at time.Time,
-	mutate func(context.Context, mutationAttemptReference, mutationAttemptReference) (T, error), mapError func(error) error,
+	mutate func(context.Context, access.MutationReference, access.MutationReference) (T, error), mapError func(error) error,
 ) (T, error) {
-	destination := mutationAttempt{Invocation: invocation, Action: model.ActionAcademicProgressionManage,
+	destination := access.Mutation{Invocation: invocation, Action: model.ActionAcademicProgressionManage,
 		Resource: model.Resource{Type: model.ResourceClass, ID: destinationClassID.String()}, ScopeType: model.RoleScopeClass,
 		ScopeID: destinationClassID.String(), Operation: operation,
 		Value: map[string]any{"student_progression_id": progressionID, "class_id": destinationClassID.String()}}
-	return runAuditedMutation(ctx, audit, destination, func() time.Time { return at },
-		func(ctx context.Context, destinationReference mutationAttemptReference) (T, error) {
-			source := mutationAttempt{Invocation: invocation, Action: model.ActionAcademicProgressionManage,
+	return access.RunAudited(ctx, audit, destination, func() time.Time { return at },
+		func(ctx context.Context, destinationReference access.MutationReference) (T, error) {
+			source := access.Mutation{Invocation: invocation, Action: model.ActionAcademicProgressionManage,
 				Resource: model.Resource{Type: model.ResourceClass, ID: sourceClassID.String()}, ScopeType: model.RoleScopeClass,
 				ScopeID: sourceClassID.String(), Operation: operation,
 				Value: map[string]any{"student_progression_id": progressionID, "class_id": sourceClassID.String()}}
-			return runAuditedMutation(ctx, audit, source, func() time.Time { return model.TimeUTC(destinationReference.MutationAt) },
-				func(ctx context.Context, sourceReference mutationAttemptReference) (T, error) {
+			return access.RunAudited(ctx, audit, source, func() time.Time { return model.TimeUTC(destinationReference.MutationAt) },
+				func(ctx context.Context, sourceReference access.MutationReference) (T, error) {
 					return mutate(ctx, destinationReference, sourceReference)
 				}, mapError)
 		}, mapError)

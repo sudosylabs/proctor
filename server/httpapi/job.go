@@ -17,6 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -130,7 +131,7 @@ func (m jobResourceModule) list(request operationRequest) (operationResult, erro
 			return operationResult{}, unpresentableResult(err)
 		}
 	}
-	total := app.PageTotal{Counted: page.Counted, Total: page.Total, TotalIsLowerBound: page.TotalIsLowerBound}
+	total := paging.Total{Counted: page.Counted, Total: page.Total, TotalIsLowerBound: page.TotalIsLowerBound}
 	if response.Total, response.TotalIsLowerBound, err = pageTotalMembers(total, !query.BeforeID.IsZero()); err != nil {
 		return operationResult{}, err
 	}

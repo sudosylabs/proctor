@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
@@ -131,13 +132,12 @@ func TestMissedAuthorizationInvalidationStillUsesCurrentStoreState(t *testing.T)
 		roles:       map[string]*model.Role{roleID: role},
 		bindings:    map[string]*model.RoleBinding{bindingID: binding},
 	}
-	resolver, err := newAccessScopeResolver(accessScopeResolverDependencies{Institutions: root.Institution(), AcademicUnits: recoveryAccessAcademicUnitStore{}, Classes: recoveryAccessClassStore{}, Users: recoveryAccessUserStore{}, ClassMembers: recoveryAccessClassMemberStore{}, Exams: &accessExamAuthoringStoreFake{}, Sittings: &accessExamSittingStoreFake{}, Submissions: &accessExamSubmissionStoreFake{}, AcademicPeriods: &accessAcademicPeriodStoreFake{}})
+	resolver, err := access.NewScopeResolver(access.ScopeResolverDependencies{Institutions: root.Institution(), AcademicUnits: recoveryAccessAcademicUnitStore{}, Classes: recoveryAccessClassStore{}, Users: recoveryAccessUserStore{}, ClassMembers: recoveryAccessClassMemberStore{}, Exams: &accessExamAuthoringStoreFake{}, Sittings: &accessExamSittingStoreFake{}, Submissions: &accessExamSubmissionStoreFake{}, AcademicPeriods: &accessAcademicPeriodStoreFake{}})
 	require.NoError(t, err)
-	audit, err := newAuditService(auditServiceDependencies{Audits: root.Audit(), Institutions: root.Institution(), NodeID: "node-test"})
+	audit, err := access.NewAuditor(access.AuditorDependencies{Audits: root.Audit(), Institutions: root.Institution(), NodeID: "node-test"})
 	require.NoError(t, err)
-	authz, err := newAccessControlService(accessControlServiceDependencies{Roles: root.Role(), Bindings: root.RoleBinding(), Resolver: resolver, Audit: audit})
+	authz, err := access.NewAuthorizer(access.AuthorizerDependencies{Roles: root.Role(), Bindings: root.RoleBinding(), Resolver: resolver, Audit: audit, Now: func() time.Time { return now }})
 	require.NoError(t, err)
-	authz.now = func() time.Time { return now }
 
 	principal := model.Principal{
 		UserID:                 model.UserID(userID),

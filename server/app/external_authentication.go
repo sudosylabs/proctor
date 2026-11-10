@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
@@ -127,7 +128,7 @@ type externalAuthenticationServiceDependencies struct {
 	Authentication          authenticationSessionIssuer
 	Invalidator             realtime.AuthenticationInvalidator
 	Audit                   externalAuthenticationAudit
-	MutationAudit           mutationAuditor
+	MutationAudit           access.MutationAuditor
 	Capabilities            accessPolicyCapabilitySource
 	InvitationAcceptor      externalInvitationAcceptor
 	DesktopAuthorization    externalAuthenticationDesktopAuthorization

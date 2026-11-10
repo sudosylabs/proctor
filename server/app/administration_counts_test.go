@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -74,7 +75,7 @@ func TestOpenOnboardingImportCountUsesTheBatchViewScopes(t *testing.T) {
 	require.Equal(t, store.OnboardingImportVisibilityScope{InstitutionWide: true}, imports.visibility, "the import scopes are the onboarding_batch.view scopes")
 	require.Equal(t, MaximumAdministrationCount, imports.maximum)
 
-	authorizer.err = authorizationDeniedError()
+	authorizer.err = access.DeniedError()
 	_, err = service.countOpenOnboardingImports(context.Background(), administrationCountsSession(), MaximumAdministrationCount)
 	require.True(t, apperror.Is(err, "authorization.denied"), "a denial reaches the summary, which omits the count: %v", err)
 }
@@ -86,7 +87,7 @@ func administrationCountsSession() invocation.Invocation {
 func TestAdministrationCountsOmitsWhatTheCallerMayNotList(t *testing.T) {
 	t.Parallel()
 	invitations := &administrationCounterFake{total: 12}
-	jobs := &administrationCounterFake{err: authorizationDeniedError()}
+	jobs := &administrationCounterFake{err: access.DeniedError()}
 	mail := &administrationCounterFake{total: MaximumAdministrationCount}
 	imports := &administrationCounterFake{total: 0}
 	service := newAdministrationCountsService(administrationCountsServiceDependencies{Invitations: invitations, Jobs: jobs, Mail: mail, Imports: imports})

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
@@ -47,7 +48,7 @@ func userEmailState(user *model.User) *UserEmailState {
 // mutation needs beyond the account-token mechanics. Composition sets it once.
 type userEmailAdministration struct {
 	authorization           resourceAuthorizer
-	audit                   mutationAuditor
+	audit                   access.MutationAuditor
 	recentAuthenticationTTL time.Duration
 }
 
@@ -79,10 +80,10 @@ func (s *accountTokenService) ChangeUserEmail(ctx context.Context, invocation in
 		return nil, err
 	}
 	at := model.TimeUTC(s.deps.Now())
-	return runAuditedMutation(ctx, s.administration.audit, mutationAttempt{Invocation: invocation, Action: model.ActionUserManage,
+	return access.RunAudited(ctx, s.administration.audit, access.Mutation{Invocation: invocation, Action: model.ActionUserManage,
 		Resource: model.Resource{Type: model.ResourceUser, ID: id.String()}, Operation: "change_email",
 		Value: map[string]any{"email_changed": true, "email_verified": false}, Prior: current.Auditable()}, func() time.Time { return at },
-		func(ctx context.Context, reference mutationAttemptReference) (*UserEmailState, error) {
+		func(ctx context.Context, reference access.MutationReference) (*UserEmailState, error) {
 			updated, err := s.changeUserEmail(ctx, current, newEmail, at, reference)
 			return userEmailState(updated), err
 		}, userStoreErrors.Translate)
@@ -110,16 +111,16 @@ func (s *accountTokenService) VerifyUserEmailPrivileged(ctx context.Context, inv
 		return userEmailState(current), nil
 	}
 	at := model.TimeUTC(s.deps.Now())
-	return runAuditedMutation(ctx, s.administration.audit, mutationAttempt{Invocation: invocation, Action: model.ActionUserManage,
+	return access.RunAudited(ctx, s.administration.audit, access.Mutation{Invocation: invocation, Action: model.ActionUserManage,
 		Resource: model.Resource{Type: model.ResourceUser, ID: id.String()}, Operation: "verify_email_privileged",
 		Value: map[string]any{"email_verified": true}, Prior: current.Auditable()}, func() time.Time { return at },
-		func(ctx context.Context, reference mutationAttemptReference) (*UserEmailState, error) {
+		func(ctx context.Context, reference access.MutationReference) (*UserEmailState, error) {
 			updated, err := s.verifyUserEmailPrivileged(ctx, current, at, reference)
 			return userEmailState(updated), err
 		}, userStoreErrors.Translate)
 }
 
-func (s *accountTokenService) changeUserEmail(ctx context.Context, current *model.User, newEmail string, now time.Time, reference mutationAttemptReference) (*model.User, error) {
+func (s *accountTokenService) changeUserEmail(ctx context.Context, current *model.User, newEmail string, now time.Time, reference access.MutationReference) (*model.User, error) {
 	rawToken := s.deps.NewToken()
 	token := &model.UserToken{UserID: current.ID, Purpose: model.UserTokenEmailVerification, TokenHash: model.HashToken(rawToken), Target: newEmail, ExpiresAt: now.Add(s.deps.Policy.EmailVerificationTTL)}
 	token.PrepareCreate(model.NewUserTokenID(), now)
@@ -197,7 +198,7 @@ func (s *accountTokenService) CompleteEmailChangeUndo(ctx context.Context, invoc
 	return nil
 }
 
-func (s *accountTokenService) verifyUserEmailPrivileged(ctx context.Context, current *model.User, now time.Time, reference mutationAttemptReference) (*model.User, error) {
+func (s *accountTokenService) verifyUserEmailPrivileged(ctx context.Context, current *model.User, now time.Time, reference access.MutationReference) (*model.User, error) {
 	prepared, err := s.deps.Mail.PrepareEmailVerifiedByAdministrator(mail.NoticePreparation{Recipient: current, At: now})
 	if err != nil {
 		return nil, accountRecoveryUnavailable(err)

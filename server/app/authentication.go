@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -152,11 +153,11 @@ type localLoginAuditor interface {
 	RecordLocalLoginFailure(context.Context, invocation.Invocation, model.UserID, model.SessionClientType, string) error
 }
 
-type localLoginAuditAdapter struct{ audit *auditService }
+type localLoginAuditAdapter struct{ audit *access.Auditor }
 
 func (a localLoginAuditAdapter) BeginLocalLogin(ctx context.Context, invocation invocation.Invocation, userID model.UserID, clientType model.SessionClientType) (model.AuditEventID, error) {
 	if a.audit == nil {
-		return "", auditUnavailable(errors.New("local login audit service is unavailable"))
+		return "", access.AuditUnavailable(errors.New("local login audit service is unavailable"))
 	}
 	event, err := a.audit.BeginLocalLogin(ctx, userID, clientType, invocation.RequestMetadata())
 	if err != nil {
@@ -169,7 +170,7 @@ func (a localLoginAuditAdapter) CompleteLocalLogin(ctx context.Context, auditID 
 	errorCode string, result any,
 ) error {
 	if a.audit == nil {
-		return auditUnavailable(errors.New("local login audit service is unavailable"))
+		return access.AuditUnavailable(errors.New("local login audit service is unavailable"))
 	}
 	_, err := a.audit.CompleteCriticalAction(ctx, auditID, status, errorCode, result)
 	return err
@@ -179,7 +180,7 @@ func (a localLoginAuditAdapter) RecordLocalLoginFailure(ctx context.Context, inv
 	clientType model.SessionClientType, errorCode string,
 ) error {
 	if a.audit == nil {
-		return auditUnavailable(errors.New("local login audit service is unavailable"))
+		return access.AuditUnavailable(errors.New("local login audit service is unavailable"))
 	}
 	return a.audit.RecordLocalLoginFailure(ctx, target, clientType, invocation.RequestMetadata(), errorCode)
 }
@@ -199,7 +200,7 @@ type authenticationServiceDependencies struct {
 	Cache              authenticationCache
 	Attempts           *authenticationAttemptAccounting
 	SecurityEffects    authenticationSecurityEffects
-	Audit              mutationAuditor
+	Audit              access.MutationAuditor
 	LoginAudit         localLoginAuditor
 	Hasher             *passwordHasher
 	MFA                authenticationMFAVerifier
@@ -1113,7 +1114,7 @@ func (s *authenticationService) Logout(ctx context.Context, invocation invocatio
 	}
 	revocations := sessionRevocationCoordinator{sessions: s.deps.Sessions, audit: s.deps.Audit, effects: s.deps.SecurityEffects, now: s.deps.Now}
 	return revocations.revokeOne(ctx,
-		mutationAttempt{
+		access.Mutation{
 			Invocation: invocation, Action: model.ActionSessionManage,
 			Resource:  model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 			Operation: "logout", Value: map[string]any{"session_id": principal.SessionID.String()},

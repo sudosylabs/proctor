@@ -10,6 +10,7 @@ package app
 import (
 	"context"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -23,7 +24,7 @@ type realtimeAdmissionService struct {
 	principals    *authenticationService
 	exams         realtimeExamViewAuthorizer
 	sittings      realtimeSittingViewAuthorizer
-	authorization *accessControlService
+	authorization *access.Authorizer
 	operational   OperationalRecorder
 }
 

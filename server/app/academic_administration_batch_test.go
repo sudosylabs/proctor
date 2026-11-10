@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -34,7 +35,7 @@ func (f *academicAdministrationBatchAuthorizerFake) Authorize(_ context.Context,
 }
 
 type academicAdministrationBatchCommandsFake struct {
-	enrollments []EnrollClassMemberCommand
+	enrollments []academic.EnrollClassMemberCommand
 	disabled    []SetUserEnabledCommand
 	operations  []AcademicAdministrationBatchOperation
 }
@@ -49,26 +50,26 @@ func (f *academicAdministrationOutcomeLookupFake) Has(_ context.Context, command
 	return f.found, nil
 }
 
-func (f *academicAdministrationBatchCommandsFake) CreateAffiliation(_ context.Context, _ invocation.Invocation, command CreateAffiliationCommand) (*model.Affiliation, error) {
+func (f *academicAdministrationBatchCommandsFake) CreateAffiliation(_ context.Context, _ invocation.Invocation, command academic.CreateAffiliationCommand) (*model.Affiliation, error) {
 	f.operations = append(f.operations, AcademicAdministrationAffiliationAdd)
 	return &model.Affiliation{ID: model.NewAffiliationID()}, nil
 }
-func (f *academicAdministrationBatchCommandsFake) EndAffiliation(_ context.Context, _ invocation.Invocation, command EndAffiliationCommand) (*model.Affiliation, error) {
+func (f *academicAdministrationBatchCommandsFake) EndAffiliation(_ context.Context, _ invocation.Invocation, command academic.EndAffiliationCommand) (*model.Affiliation, error) {
 	f.operations = append(f.operations, AcademicAdministrationAffiliationEnd)
 	return &model.Affiliation{ID: model.AffiliationID(command.ID)}, nil
 }
-func (f *academicAdministrationBatchCommandsFake) CreateAcademicUnitMember(_ context.Context, _ invocation.Invocation, command CreateAcademicUnitMemberCommand) (*model.AcademicUnitMember, error) {
+func (f *academicAdministrationBatchCommandsFake) CreateAcademicUnitMember(_ context.Context, _ invocation.Invocation, command academic.CreateAcademicUnitMemberCommand) (*model.AcademicUnitMember, error) {
 	f.operations = append(f.operations, AcademicAdministrationAcademicUnitMemberAdd)
 	return &model.AcademicUnitMember{ID: model.NewAcademicUnitMemberID()}, nil
 }
-func (f *academicAdministrationBatchCommandsFake) EndAcademicUnitMember(_ context.Context, _ invocation.Invocation, command EndAcademicUnitMemberCommand) (*model.AcademicUnitMember, error) {
+func (f *academicAdministrationBatchCommandsFake) EndAcademicUnitMember(_ context.Context, _ invocation.Invocation, command academic.EndAcademicUnitMemberCommand) (*model.AcademicUnitMember, error) {
 	f.operations = append(f.operations, AcademicAdministrationAcademicUnitMemberEnd)
 	return &model.AcademicUnitMember{ID: model.AcademicUnitMemberID(command.ID)}, nil
 }
-func (f *academicAdministrationBatchCommandsFake) EnrollClassMember(_ context.Context, _ invocation.Invocation, command EnrollClassMemberCommand) (*model.ClassEnrollment, error) {
+func (f *academicAdministrationBatchCommandsFake) EnrollClassMember(_ context.Context, _ invocation.Invocation, command academic.EnrollClassMemberCommand) (*model.ClassEnrollment, error) {
 	f.enrollments = append(f.enrollments, command)
-	if command.batchMetadata != nil && command.batchMetadata.DuplicateOfKeyDigest != ([32]byte{}) {
-		command.batchMetadata.Duplicate = true
+	if command.Batch.Fields().Metadata != nil && command.Batch.Fields().Metadata.DuplicateOfKeyDigest != ([32]byte{}) {
+		command.Batch.Fields().Metadata.Duplicate = true
 	}
 	operation := AcademicAdministrationClassEnroll
 	if command.RequireTransfer {
@@ -120,7 +121,7 @@ func TestAcademicAdministrationBatchLooksUpRetainedOutcomeBeforeDispatch(t *test
 	require.NotNil(t, lookup.command, "retained lookup result=%#v command=%#v enrollments=%#v error", result, lookup.command, commands.enrollments)
 	require.Equal(t, "class_member.enroll", lookup.command.Operation, "retained lookup result=%#v command=%#v enrollments=%#v error", result, lookup.command, commands.enrollments)
 	require.Len(t, commands.enrollments, 1, "retained lookup result=%#v command=%#v enrollments=%#v error", result, lookup.command, commands.enrollments)
-	require.True(t, commands.enrollments[0].batchRetainedOutcome, "retained lookup result=%#v command=%#v enrollments=%#v error", result, lookup.command, commands.enrollments)
+	require.True(t, commands.enrollments[0].Batch.Fields().RetainedOutcome, "retained lookup result=%#v command=%#v enrollments=%#v error", result, lookup.command, commands.enrollments)
 }
 
 func TestAcademicAdministrationBatchPreservesDistinctEffectiveHistories(t *testing.T) {
@@ -143,7 +144,7 @@ func TestAcademicAdministrationBatchPreservesDistinctEffectiveHistories(t *testi
 	require.Equal(t, 0, result.Failed, "distinct histories result=%#v operations=%#v error", result, commands.operations)
 	require.Len(t, commands.operations, 2, "distinct histories result=%#v operations=%#v error", result, commands.operations)
 }
-func (f *academicAdministrationBatchCommandsFake) EndClassMember(_ context.Context, _ invocation.Invocation, command EndClassMemberCommand) (*model.ClassMember, error) {
+func (f *academicAdministrationBatchCommandsFake) EndClassMember(_ context.Context, _ invocation.Invocation, command academic.EndClassMemberCommand) (*model.ClassMember, error) {
 	f.operations = append(f.operations, AcademicAdministrationClassEnd)
 	return &model.ClassMember{ID: model.ClassMemberID(command.ID)}, nil
 }

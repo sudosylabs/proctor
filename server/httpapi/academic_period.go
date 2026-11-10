@@ -10,7 +10,7 @@ package httpapi
 import (
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -102,7 +102,7 @@ func (m academicPeriodResourceModule) list(request operationRequest) (operationR
 	if err != nil {
 		return operationResult{}, err
 	}
-	query := app.ListAcademicPeriodsQuery{Query: request.request.URL.Query().Get("q"), Limit: paging.Limit}
+	query := academic.ListAcademicPeriodsQuery{Query: request.request.URL.Query().Get("q"), Limit: paging.Limit}
 	if present {
 		query.AfterStartAt, query.AfterName, query.AfterID = academicPeriodCursorStart(cursor), cursor.Name, model.AcademicPeriodID(cursor.ID)
 	}
@@ -135,7 +135,7 @@ func (m academicPeriodResourceModule) create(request operationRequest) (operatio
 	period, err := m.academicPeriods.CreateAcademicPeriod(
 		request.context,
 		request.invocation(),
-		app.CreateAcademicPeriodCommand{
+		academic.CreateAcademicPeriodCommand{
 			OwnerType: body.OwnerType, OwnerID: body.OwnerID,
 			Name: body.Name, DisplayName: body.DisplayName,
 			Description: body.Description, StartAt: startAt, EndAt: endAt,
@@ -154,7 +154,7 @@ func (m academicPeriodResourceModule) get(request operationRequest) (operationRe
 		return operationResult{}, err
 	}
 	period, err := m.academicPeriods.GetAcademicPeriod(
-		request.context, request.invocation(), app.GetAcademicPeriodQuery{ID: id},
+		request.context, request.invocation(), academic.GetAcademicPeriodQuery{ID: id},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -185,7 +185,7 @@ func (m academicPeriodResourceModule) patch(request operationRequest) (operation
 	period, err := m.academicPeriods.UpdateAcademicPeriod(
 		request.context,
 		request.invocation(),
-		app.UpdateAcademicPeriodCommand{ExpectedRevision: body.ExpectedRevision.ValuePointer(),
+		academic.UpdateAcademicPeriodCommand{ExpectedRevision: body.ExpectedRevision.ValuePointer(),
 			ID: id, Name: body.Name.ValuePointer(),
 			DisplayName: body.DisplayName.ValuePointer(),
 			Description: body.Description.ValuePointer(),
@@ -208,7 +208,7 @@ func (m academicPeriodResourceModule) archive(request operationRequest) (operati
 		return operationResult{}, err
 	}
 	if err := m.academicPeriods.ArchiveAcademicPeriod(
-		request.context, request.invocation(), app.ArchiveAcademicPeriodCommand{ExpectedRevision: expectedRevision, ID: id},
+		request.context, request.invocation(), academic.ArchiveAcademicPeriodCommand{ExpectedRevision: expectedRevision, ID: id},
 	); err != nil {
 		return operationResult{}, err
 	}

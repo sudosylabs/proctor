@@ -13,6 +13,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -52,17 +53,8 @@ type UserSettingsDiagnostic struct {
 	Column int    `json:"column"`
 }
 
-type userSettingsAuditInput struct {
-	Invocation        invocation.Invocation
-	UserID            model.UserID
-	PreviousRevision  model.UserSettingsRevision
-	ResultingRevision model.UserSettingsRevision
-	FormatVersion     int
-	SourceBytes       int
-}
-
 type userSettingsAuditPreparer interface {
-	PrepareReplacement(context.Context, userSettingsAuditInput) (*model.AuditEvent, error)
+	PrepareReplacement(context.Context, access.UserSettingsAuditInput) (*model.AuditEvent, error)
 }
 
 type userSettingsChanged struct {
@@ -173,7 +165,7 @@ func (s *userSettingsService) ReplaceOwnUserSettings(
 	var audit *model.AuditEvent
 	if current.Revision == command.ExpectedRevision &&
 		(current.Source != command.Source || current.FormatVersion != command.FormatVersion) {
-		audit, err = s.deps.Audit.PrepareReplacement(ctx, userSettingsAuditInput{
+		audit, err = s.deps.Audit.PrepareReplacement(ctx, access.UserSettingsAuditInput{
 			Invocation: invocation, UserID: principal.UserID,
 			PreviousRevision: current.Revision, ResultingRevision: nextRevision,
 			FormatVersion: command.FormatVersion, SourceBytes: len(command.Source),

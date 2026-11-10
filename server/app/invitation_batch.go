@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -166,15 +167,15 @@ func invitationBatchLifecycleOperation(operation InvitationBatchOperation) strin
 	return ""
 }
 
-func (s *invitationService) recordInvitationCommandDuplicate(ctx context.Context, idempotency *store.CommandIdempotency, attempt mutationAttempt, input store.InvitationBatchDuplicate) (*store.InvitationBatchCommandResult, error) {
-	return runAuditedMutation(ctx, s.deps.Audit, attempt, s.deps.Now,
-		func(ctx context.Context, reference mutationAttemptReference) (*store.InvitationBatchCommandResult, error) {
+func (s *invitationService) recordInvitationCommandDuplicate(ctx context.Context, idempotency *store.CommandIdempotency, attempt access.Mutation, input store.InvitationBatchDuplicate) (*store.InvitationBatchCommandResult, error) {
+	return access.RunAudited(ctx, s.deps.Audit, attempt, s.deps.Now,
+		func(ctx context.Context, reference access.MutationReference) (*store.InvitationBatchCommandResult, error) {
 			input.AuditEventID, input.AuditAt = reference.ID, reference.MutationAt
 			return s.deps.Store.RecordBatchDuplicate(ctx, &input, idempotency)
 		}, invitationStoreErrors.Translate)
 }
 
-func (s *invitationService) recordDuplicateInvitationView(ctx context.Context, idempotency *store.CommandIdempotency, attempt mutationAttempt, input store.InvitationBatchDuplicate, canonicalKey string) (InvitationView, error) {
+func (s *invitationService) recordDuplicateInvitationView(ctx context.Context, idempotency *store.CommandIdempotency, attempt access.Mutation, input store.InvitationBatchDuplicate, canonicalKey string) (InvitationView, error) {
 	if idempotency == nil || canonicalKey == "" {
 		return InvitationView{}, apperror.New("request.invalid")
 	}
@@ -194,7 +195,7 @@ func (s *invitationService) recordDuplicateInvitationView(ctx context.Context, i
 	return InvitationView{ID: result.InvitationID, Replayed: true}, nil
 }
 
-func (s *invitationService) recoverInvitationIssueOutcome(ctx context.Context, idempotency *store.CommandIdempotency, attempt mutationAttempt) (InvitationView, bool, error) {
+func (s *invitationService) recoverInvitationIssueOutcome(ctx context.Context, idempotency *store.CommandIdempotency, attempt access.Mutation) (InvitationView, bool, error) {
 	if idempotency == nil {
 		return InvitationView{}, false, nil
 	}
@@ -205,8 +206,8 @@ func (s *invitationService) recoverInvitationIssueOutcome(ctx context.Context, i
 	if err == nil && found.Invitation != nil {
 		attempt.Value = found.Invitation.Auditable()
 	}
-	replayed, err := runAuditedMutation(ctx, s.deps.Audit, attempt, s.deps.Now,
-		func(ctx context.Context, reference mutationAttemptReference) (*store.InvitationCommandResult, error) {
+	replayed, err := access.RunAudited(ctx, s.deps.Audit, attempt, s.deps.Now,
+		func(ctx context.Context, reference access.MutationReference) (*store.InvitationCommandResult, error) {
 			value, replayErr := s.deps.Store.ReplayIssue(ctx, &store.InvitationReplay{AuditEventID: reference.ID, AuditAt: reference.MutationAt}, idempotency)
 			if replayErr == nil && value.Duplicate {
 				return nil, apperror.New("onboarding_batch.duplicate")
@@ -221,7 +222,7 @@ func (s *invitationService) recoverInvitationIssueOutcome(ctx context.Context, i
 	return view, true, nil
 }
 
-func (s *invitationService) recoverInvitationAdministrationOutcome(ctx context.Context, idempotency *store.CommandIdempotency, attempt mutationAttempt) (InvitationAdministrationView, bool, error) {
+func (s *invitationService) recoverInvitationAdministrationOutcome(ctx context.Context, idempotency *store.CommandIdempotency, attempt access.Mutation) (InvitationAdministrationView, bool, error) {
 	if idempotency == nil {
 		return InvitationAdministrationView{}, false, nil
 	}
@@ -232,8 +233,8 @@ func (s *invitationService) recoverInvitationAdministrationOutcome(ctx context.C
 	if err == nil && found.Invitation != nil {
 		attempt.Value = found.Invitation.Auditable()
 	}
-	replayed, err := runAuditedMutation(ctx, s.deps.Audit, attempt, s.deps.Now,
-		func(ctx context.Context, reference mutationAttemptReference) (*store.InvitationAdministrationCommandResult, error) {
+	replayed, err := access.RunAudited(ctx, s.deps.Audit, attempt, s.deps.Now,
+		func(ctx context.Context, reference access.MutationReference) (*store.InvitationAdministrationCommandResult, error) {
 			value, replayErr := s.deps.Store.ReplayAdministration(ctx, &store.InvitationReplay{AuditEventID: reference.ID, AuditAt: reference.MutationAt}, idempotency)
 			if replayErr == nil && value.Duplicate {
 				return nil, apperror.New("onboarding_batch.duplicate")

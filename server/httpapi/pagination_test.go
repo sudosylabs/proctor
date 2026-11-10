@@ -18,8 +18,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -99,11 +100,11 @@ func TestBoundedListResultPagesTheStableOrder(t *testing.T) {
 
 type programmePageHTTPApplication struct {
 	programmeHTTPApplication
-	query app.ListProgrammesQuery
-	page  app.Page[*model.Programme]
+	query academic.ListProgrammesQuery
+	page  paging.Page[*model.Programme]
 }
 
-func (a *programmePageHTTPApplication) ListProgrammes(_ context.Context, _ invocation.Invocation, query app.ListProgrammesQuery) (app.Page[*model.Programme], error) {
+func (a *programmePageHTTPApplication) ListProgrammes(_ context.Context, _ invocation.Invocation, query academic.ListProgrammesQuery) (paging.Page[*model.Programme], error) {
 	a.query = query
 	return a.page, nil
 }
@@ -118,7 +119,7 @@ func TestAcademicNameListContinuesAfterTheLastName(t *testing.T) {
 	}
 	unitID := model.NewAcademicUnitID()
 	programme := &model.Programme{ID: model.NewProgrammeID(), AcademicUnitID: unitID, Name: "computer-science", DisplayName: "Computer Science"}
-	application := &programmePageHTTPApplication{page: app.Page[*model.Programme]{Items: []*model.Programme{programme}, HasMore: true}}
+	application := &programmePageHTTPApplication{page: paging.Page[*model.Programme]{Items: []*model.Programme{programme}, HasMore: true}}
 	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, programmeResource(application))
 	call := func(query string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+unitID.String()+"/programmes"+query, nil)
@@ -130,16 +131,16 @@ func TestAcademicNameListContinuesAfterTheLastName(t *testing.T) {
 
 	response := call("?q=comp&limit=1")
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	require.Equal(t, app.NamePageQuery{Limit: 1}, application.query.NamePageQuery)
+	require.Equal(t, paging.NameQuery{Limit: 1}, application.query.NameQuery)
 	var page listResponse[programmeResponse]
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &page))
 	require.Len(t, page.Items, 1)
 	require.NotContains(t, page.NextCursor, programme.Name, "the cursor is opaque")
 
-	application.page = app.Page[*model.Programme]{Items: []*model.Programme{}}
+	application.page = paging.Page[*model.Programme]{Items: []*model.Programme{}}
 	response = call("?q=comp&cursor=" + url.QueryEscape(page.NextCursor))
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	require.Equal(t, app.NamePageQuery{AfterName: programme.Name, AfterID: programme.ID.String(), Limit: defaultPageLimit}, application.query.NamePageQuery)
+	require.Equal(t, paging.NameQuery{AfterName: programme.Name, AfterID: programme.ID.String(), Limit: defaultPageLimit}, application.query.NameQuery)
 	require.JSONEq(t, `{"items":[]}`, response.Body.String(), "the last page omits next_cursor")
 	require.Equal(t, http.StatusBadRequest, call("?cursor=bm90LWEtY3Vyc29y").Code)
 }

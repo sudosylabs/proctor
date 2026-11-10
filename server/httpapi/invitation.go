@@ -358,7 +358,7 @@ func (m invitationResourceModule) list(request operationRequest) (operationResul
 			return operationResult{}, unpresentableResult(err)
 		}
 	}
-	if response.Total, response.TotalIsLowerBound, err = pageTotalMembers(page.PageTotal, query.BeforeID.IsValid()); err != nil {
+	if response.Total, response.TotalIsLowerBound, err = pageTotalMembers(page.Total, query.BeforeID.IsValid()); err != nil {
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil

@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
@@ -354,7 +355,7 @@ func (e examAttemptRealtimeEffects) Report(ctx context.Context, operation string
 }
 
 var _ attempt.ManagerAuthorizer = examAttemptManagerAuthorizationAdapter{}
-var _ attempt.Auditor = mutationAuditAdapter{}
+var _ attempt.Auditor = access.MutationAuditAdapter{}
 var _ attempt.Effects = examAttemptRealtimeEffects{}
 var _ attempt.EffectFailures = examAttemptRealtimeEffects{}
 

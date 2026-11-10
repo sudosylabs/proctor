@@ -12,9 +12,11 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -61,11 +63,11 @@ type searchExamCatalog interface {
 }
 
 type searchUserDirectory interface {
-	searchUserPage(context.Context, invocation.Invocation, SearchUsersQuery) (Page[*model.User], error)
+	searchUserPage(context.Context, invocation.Invocation, SearchUsersQuery) (paging.Page[*model.User], error)
 }
 
 type searchClassAuthorizer interface {
-	authorizeClassSearch(context.Context, invocation.Invocation) (store.ClassVisibilityScope, error)
+	AuthorizeClassSearch(context.Context, invocation.Invocation) (store.ClassVisibilityScope, error)
 }
 
 type searchClassStore interface {
@@ -114,7 +116,7 @@ func (s *searchService) Search(ctx context.Context, invocation invocation.Invoca
 		case SearchTypeClass:
 			result.Classes, searchErr = s.searchClasses(ctx, invocation, term, limit)
 		case SearchTypeUser:
-			var page Page[*model.User]
+			var page paging.Page[*model.User]
 			page, searchErr = s.deps.Users.searchUserPage(ctx, invocation, SearchUsersQuery{Query: term, Limit: limit})
 			if searchErr == nil {
 				result.Users = page.Items
@@ -129,13 +131,13 @@ func (s *searchService) Search(ctx context.Context, invocation invocation.Invoca
 		}
 	}
 	if denied == len(types) {
-		return SearchResult{}, authorizationDeniedError()
+		return SearchResult{}, access.DeniedError()
 	}
 	return result, nil
 }
 
 func (s *searchService) searchClasses(ctx context.Context, invocation invocation.Invocation, term string, limit int) ([]*model.Class, error) {
-	visibility, err := s.deps.ClassAuthorization.authorizeClassSearch(ctx, invocation)
+	visibility, err := s.deps.ClassAuthorization.AuthorizeClassSearch(ctx, invocation)
 	if err != nil {
 		return nil, err
 	}

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
@@ -100,7 +101,7 @@ type profilePictureFileStore interface {
 }
 
 type profilePictureAuthorizer interface {
-	AuthorizeProfileRead(context.Context, invocation.Invocation, model.UserID) (profileReadAuthorization, error)
+	AuthorizeProfileRead(context.Context, invocation.Invocation, model.UserID) (access.ProfileReadAuthorization, error)
 	AuthorizeProfilePictureWrite(context.Context, invocation.Invocation, model.UserID) error
 }
 
@@ -133,7 +134,7 @@ type profilePictureServiceDependencies struct {
 	Fallback       DefaultProfilePictureRenderFiles
 	Defaults       DefaultProfilePictureGenerationFiles
 	Authorization  profilePictureAuthorizer
-	Audit          mutationAuditor
+	Audit          access.MutationAuditor
 	Effects        profilePictureEffects
 	EffectFailures profilePictureEffectFailures
 	DefaultJobs    profilePictureDefaultJobs
@@ -154,7 +155,7 @@ type profilePictureUploadService struct {
 	files          profilePictureFileStore
 	content        ProfilePictureUploadFiles
 	authorization  profilePictureAuthorizer
-	audit          mutationAuditor
+	audit          access.MutationAuditor
 	effects        profilePictureEffects
 	effectFailures profilePictureEffectFailures
 	now            func() time.Time
@@ -164,7 +165,7 @@ type profilePictureRemovalService struct {
 	users          profilePictureUserStore
 	files          profilePictureFileStore
 	authorization  profilePictureAuthorizer
-	audit          mutationAuditor
+	audit          access.MutationAuditor
 	effects        profilePictureEffects
 	effectFailures profilePictureEffectFailures
 	now            func() time.Time
@@ -327,10 +328,10 @@ func (s *profilePictureUploadService) publishProfilePicture(ctx context.Context,
 	if invocation.Principal().UserID == current.ID {
 		action = model.ActionUserProfilePictureManage
 	}
-	published, err := runAuditedMutation(
+	published, err := access.RunAudited(
 		ctx,
 		s.audit,
-		mutationAttempt{
+		access.Mutation{
 			Invocation: invocation,
 			Action:     action,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: current.ID.String()},
@@ -339,7 +340,7 @@ func (s *profilePictureUploadService) publishProfilePicture(ctx context.Context,
 			Prior:      map[string]any{"user": current.Auditable(), "active_file_entry_id": current.CustomProfilePictureFileID.String()},
 		},
 		func() time.Time { return changedAt },
-		func(ctx context.Context, reference mutationAttemptReference) (*store.ProfilePicturePublicationResult, error) {
+		func(ctx context.Context, reference access.MutationReference) (*store.ProfilePicturePublicationResult, error) {
 			return s.files.PublishProfilePicture(ctx, &store.ProfilePicturePublication{
 				ActorID: invocation.Principal().UserID, UserID: current.ID,
 				ExpectedUserRevision: current.Revision, EntryID: entryID, RevisionID: staged.revision.ID,
@@ -448,10 +449,10 @@ func (s *profilePictureRemovalService) Remove(ctx context.Context, invocation in
 		action = model.ActionUserProfilePictureManage
 	}
 	var changedAt time.Time
-	updated, err := runAuditedMutation(
+	updated, err := access.RunAudited(
 		ctx,
 		s.audit,
-		mutationAttempt{
+		access.Mutation{
 			Invocation: invocation,
 			Action:     action,
 			Resource:   model.Resource{Type: model.ResourceUser, ID: current.ID.String()},
@@ -463,7 +464,7 @@ func (s *profilePictureRemovalService) Remove(ctx context.Context, invocation in
 			changedAt = model.TimeUTC(s.now())
 			return changedAt
 		},
-		func(ctx context.Context, reference mutationAttemptReference) (*model.User, error) {
+		func(ctx context.Context, reference access.MutationReference) (*model.User, error) {
 			return s.files.RemoveProfilePicture(ctx, &store.ProfilePictureRemoval{
 				ActorID: invocation.Principal().UserID, UserID: current.ID,
 				ExpectedUserRevision: current.Revision, EntryID: state.EntryID,

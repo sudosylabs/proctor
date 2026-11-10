@@ -10,7 +10,7 @@ package httpapi
 import (
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -76,7 +76,7 @@ func (m classMemberResourceModule) list(request operationRequest) (operationResu
 	if err != nil {
 		return operationResult{}, err
 	}
-	page, err := m.members.ListClassMembersPage(request.context, request.invocation(), app.ListClassMembersPageQuery{ClassID: classID, MembershipPageQuery: query, AfterUserID: model.UserID(after.AfterUserID), AfterID: model.ClassMemberID(after.AfterID)})
+	page, err := m.members.ListClassMembersPage(request.context, request.invocation(), academic.ListClassMembersPageQuery{ClassID: classID, MembershipPageQuery: query, AfterUserID: model.UserID(after.AfterUserID), AfterID: model.ClassMemberID(after.AfterID)})
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -101,7 +101,7 @@ func (m classMemberResourceModule) enroll(request operationRequest) (operationRe
 	if err != nil {
 		return operationResult{}, err
 	}
-	enrollment, err := m.members.EnrollClassMember(request.context, request.invocation(), app.EnrollClassMemberCommand{ClassID: classID, UserID: model.UserID(body.UserID), StartAt: startAt, EndAt: endAt})
+	enrollment, err := m.members.EnrollClassMember(request.context, request.invocation(), academic.EnrollClassMemberCommand{ClassID: classID, UserID: model.UserID(body.UserID), StartAt: startAt, EndAt: endAt})
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -113,7 +113,7 @@ func (m classMemberResourceModule) end(request operationRequest) (operationResul
 	if err != nil {
 		return operationResult{}, err
 	}
-	ended, err := m.members.EndClassMember(request.context, request.invocation(), app.EndClassMemberCommand{ID: id})
+	ended, err := m.members.EndClassMember(request.context, request.invocation(), academic.EndClassMemberCommand{ID: id})
 	if err != nil {
 		return operationResult{}, err
 	}

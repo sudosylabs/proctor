@@ -12,6 +12,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
@@ -43,7 +44,7 @@ func (uc examSittingLifecycleJobUseCases) ListExamSittingLifecycleDueFromJob(ctx
 	return uc.sittings.ListLifecycleDue(ctx, system, options)
 }
 
-type examSittingSystemAuditAdapter struct{ audit *auditService }
+type examSittingSystemAuditAdapter struct{ audit *access.Auditor }
 
 func (a examSittingSystemAuditAdapter) Begin(ctx context.Context, call invocation.System, action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID, operation string, value map[string]any) (model.AuditEventID, error) {
 	auditValue := make(map[string]any, len(value)+2)
@@ -142,8 +143,8 @@ func (e examSittingRealtimeEffects) Report(ctx context.Context, operation string
 	e.realtime.reportTransientFailure(ctx, operation, err)
 }
 
-var _ sitting.Authorizer = (*accessControlService)(nil)
-var _ sitting.Auditor = mutationAuditAdapter{}
+var _ sitting.Authorizer = (*access.Authorizer)(nil)
+var _ sitting.Auditor = access.MutationAuditAdapter{}
 var _ sitting.SystemAuditor = examSittingSystemAuditAdapter{}
 var _ sitting.Effects = examSittingRealtimeEffects{}
 var _ sitting.EffectFailures = examSittingRealtimeEffects{}

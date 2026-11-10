@@ -13,8 +13,10 @@ import (
 	"slices"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -110,7 +112,7 @@ type userDirectoryRoleBindingStore interface {
 }
 
 type userProfileAuthorizer interface {
-	AuthorizeSearch(context.Context, invocation.Invocation) (store.UserVisibilityScope, error)
+	AuthorizeUserSearch(context.Context, invocation.Invocation) (store.UserVisibilityScope, error)
 	// RoleBindingViewScope reports, without recording a decision, the scopes
 	// in which the caller holds role_binding.view at the instant. It narrows
 	// what a directory summary shows; it never admits a request.
@@ -118,7 +120,7 @@ type userProfileAuthorizer interface {
 	// AuthorizeProfileRead reports fullProfile when the caller reads its own
 	// profile or holds institution-wide User visibility; a scoped grant reads
 	// the limited profile.
-	AuthorizeProfileRead(context.Context, invocation.Invocation, model.UserID) (profileReadAuthorization, error)
+	AuthorizeProfileRead(context.Context, invocation.Invocation, model.UserID) (access.ProfileReadAuthorization, error)
 	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
 }
 
@@ -128,7 +130,7 @@ type userProfileServiceDependencies struct {
 	Users         userProfileStore
 	RoleBindings  userDirectoryRoleBindingStore
 	Authorization userProfileAuthorizer
-	Audit         mutationAuditor
+	Audit         access.MutationAuditor
 	Now           func() time.Time
 }
 
@@ -161,25 +163,25 @@ type UserDirectoryEntry struct {
 // SearchUsers reads one page of the User directory with each User's summary.
 // The first page, read without a keyset, also counts every User the filters
 // match within the same visibility.
-func (s *userProfileService) SearchUsers(ctx context.Context, invocation invocation.Invocation, query SearchUsersQuery) (CountedPage[UserDirectoryEntry], error) {
+func (s *userProfileService) SearchUsers(ctx context.Context, invocation invocation.Invocation, query SearchUsersQuery) (paging.Counted[UserDirectoryEntry], error) {
 	page, options, err := s.listUsers(ctx, invocation, query)
 	if err != nil {
-		return CountedPage[UserDirectoryEntry]{}, err
+		return paging.Counted[UserDirectoryEntry]{}, err
 	}
-	total, consistent, err := countFirstPage(query.AfterID == "", len(page.Items), func(maximum int) (int, error) {
+	total, consistent, err := paging.CountFirst(query.AfterID == "", len(page.Items), func(maximum int) (int, error) {
 		return s.deps.Users.Count(ctx, options, maximum)
 	})
 	if err != nil {
-		return CountedPage[UserDirectoryEntry]{}, userStoreErrors.Translate(err)
+		return paging.Counted[UserDirectoryEntry]{}, userStoreErrors.Translate(err)
 	}
 	if !consistent {
-		return CountedPage[UserDirectoryEntry]{}, apperror.New("administration.unavailable").WithField("resource", "user")
+		return paging.Counted[UserDirectoryEntry]{}, apperror.New("administration.unavailable").WithField("resource", "user")
 	}
 	entries, err := s.summarizeUsers(ctx, invocation, page.Items, options.Visibility)
 	if err != nil {
-		return CountedPage[UserDirectoryEntry]{}, err
+		return paging.Counted[UserDirectoryEntry]{}, err
 	}
-	return CountedPage[UserDirectoryEntry]{Page: Page[UserDirectoryEntry]{Items: entries, HasMore: page.HasMore}, PageTotal: total}, nil
+	return paging.Counted[UserDirectoryEntry]{Page: paging.Page[UserDirectoryEntry]{Items: entries, HasMore: page.HasMore}, Total: total}, nil
 }
 
 // summarizeUsers attaches each listed User's summary, read in one batch per
@@ -241,7 +243,7 @@ func (s *userProfileService) summarizeUsers(ctx context.Context, invocation invo
 }
 
 // searchUserPage is the uncounted directory read that global search composes.
-func (s *userProfileService) searchUserPage(ctx context.Context, invocation invocation.Invocation, query SearchUsersQuery) (Page[*model.User], error) {
+func (s *userProfileService) searchUserPage(ctx context.Context, invocation invocation.Invocation, query SearchUsersQuery) (paging.Page[*model.User], error) {
 	page, _, err := s.listUsers(ctx, invocation, query)
 	return page, err
 }
@@ -249,21 +251,21 @@ func (s *userProfileService) searchUserPage(ctx context.Context, invocation invo
 // listUsers authorizes and reads one directory page, returning the Store
 // options it read with so a count runs through the same filters and
 // visibility.
-func (s *userProfileService) listUsers(ctx context.Context, invocation invocation.Invocation, query SearchUsersQuery) (Page[*model.User], store.UserListOptions, error) {
-	limit, probe, err := resolvePageLimit(query.Limit, "limit")
+func (s *userProfileService) listUsers(ctx context.Context, invocation invocation.Invocation, query SearchUsersQuery) (paging.Page[*model.User], store.UserListOptions, error) {
+	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
 	if err != nil {
-		return Page[*model.User]{}, store.UserListOptions{}, err
+		return paging.Page[*model.User]{}, store.UserListOptions{}, err
 	}
 	affiliations, err := userDirectoryAffiliations(query.Affiliations)
 	if err != nil {
-		return Page[*model.User]{}, store.UserListOptions{}, err
+		return paging.Page[*model.User]{}, store.UserListOptions{}, err
 	}
 	if query.AcademicUnitID != "" && !query.AcademicUnitID.IsValid() {
-		return Page[*model.User]{}, store.UserListOptions{}, apperror.Invalid("request.invalid", "academic_unit_id")
+		return paging.Page[*model.User]{}, store.UserListOptions{}, apperror.Invalid("request.invalid", "academic_unit_id")
 	}
-	visibility, err := s.deps.Authorization.AuthorizeSearch(ctx, invocation)
+	visibility, err := s.deps.Authorization.AuthorizeUserSearch(ctx, invocation)
 	if err != nil {
-		return Page[*model.User]{}, store.UserListOptions{}, err
+		return paging.Page[*model.User]{}, store.UserListOptions{}, err
 	}
 	includeDisabled := query.IncludeDisabled && visibility.InstitutionWide
 	if visibility.ActiveAt.IsZero() && (len(affiliations) > 0 || query.AcademicUnitID != "") {
@@ -276,9 +278,9 @@ func (s *userProfileService) listUsers(ctx context.Context, invocation invocatio
 	}
 	users, err := s.deps.Users.List(ctx, options)
 	if err != nil {
-		return Page[*model.User]{}, store.UserListOptions{}, userStoreErrors.Translate(err)
+		return paging.Page[*model.User]{}, store.UserListOptions{}, userStoreErrors.Translate(err)
 	}
-	page := newPage(users, limit)
+	page := paging.New(users, limit)
 	if !visibility.InstitutionWide {
 		page.Items = scopedUserDirectoryProjection(page.Items)
 	}
@@ -368,13 +370,13 @@ func (s *userProfileService) UpdateUserProfile(ctx context.Context, invocation i
 	at := s.deps.Now()
 	candidate.PrepareUpdate(at)
 	if err := candidate.Validate(); err != nil {
-		return nil, domainInvalid("user.invalid", err)
+		return nil, apperror.DomainInvalid("user.invalid", err)
 	}
 	resource := model.Resource{Type: model.ResourceUser, ID: id.String()}
-	return runAuditedMutation(
+	return access.RunAudited(
 		ctx,
 		s.deps.Audit,
-		mutationAttempt{
+		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionUserManage,
 			Resource:   resource,
@@ -383,7 +385,7 @@ func (s *userProfileService) UpdateUserProfile(ctx context.Context, invocation i
 			Prior:      current.Auditable(),
 		},
 		func() time.Time { return at },
-		func(ctx context.Context, reference mutationAttemptReference) (*model.User, error) {
+		func(ctx context.Context, reference access.MutationReference) (*model.User, error) {
 			return s.deps.Users.UpdateProfile(ctx, &store.UserProfileUpdate{
 				UserID: current.ID, Changes: changes, ExpectedRevision: expectedRevision,
 				AuditEventID: reference.ID, AuditAt: reference.MutationAt,
@@ -396,18 +398,18 @@ func (s *userProfileService) UpdateUserProfile(ctx context.Context, invocation i
 var userStoreErrors = apperror.AdministrationStoreTable("user", "user.conflict", "user.invalid", nil)
 
 type userProfileAuthorization struct {
-	authorization *accessControlService
+	authorization *access.Authorizer
 	institutions  store.InstitutionStore
 }
 
-func (a userProfileAuthorization) AuthorizeSearch(ctx context.Context, invocation invocation.Invocation) (store.UserVisibilityScope, error) {
-	return a.authorization.authorizeUserSearch(ctx, invocation)
+func (a userProfileAuthorization) AuthorizeUserSearch(ctx context.Context, invocation invocation.Invocation) (store.UserVisibilityScope, error) {
+	return a.authorization.AuthorizeUserSearch(ctx, invocation)
 }
 
 // RoleBindingViewScope derives the caller's role_binding.view scopes at the
 // instant, as the Role Binding list does, without recording a decision.
 func (a userProfileAuthorization) RoleBindingViewScope(ctx context.Context, invocation invocation.Invocation, at time.Time) (store.UserVisibilityScope, error) {
-	constraint, err := a.authorization.authorizedScopesAt(ctx, invocation.Principal(), model.ActionRoleBindingView, model.ResourceInstitution, model.TimeUTC(at))
+	constraint, err := a.authorization.GrantedScopesAt(ctx, invocation.Principal(), model.ActionRoleBindingView, model.ResourceInstitution, model.TimeUTC(at))
 	if err != nil {
 		return store.UserVisibilityScope{}, err
 	}
@@ -419,26 +421,8 @@ func (a userProfileAuthorization) RoleBindingViewScope(ctx context.Context, invo
 	}, nil
 }
 
-// profileReadAuthorization reports how much of a User profile the caller
-// may read: FullProfile for its own profile or institution-wide User
-// visibility, the limited profile otherwise.
-type profileReadAuthorization struct {
-	FullProfile bool
-}
-
-func (a userProfileAuthorization) AuthorizeProfileRead(ctx context.Context, invocation invocation.Invocation, userID model.UserID) (profileReadAuthorization, error) {
-	principal := invocation.Principal()
-	if principal.Validate() != nil {
-		return profileReadAuthorization{}, invalidTokenAppError()
-	}
-	if principal.UserID == userID {
-		return profileReadAuthorization{FullProfile: true}, nil
-	}
-	fullProfile, err := a.authorization.authorizeUserRead(ctx, invocation, userID.String())
-	if err != nil {
-		return profileReadAuthorization{}, err
-	}
-	return profileReadAuthorization{FullProfile: fullProfile}, nil
+func (a userProfileAuthorization) AuthorizeProfileRead(ctx context.Context, invocation invocation.Invocation, userID model.UserID) (access.ProfileReadAuthorization, error) {
+	return a.authorization.AuthorizeProfileRead(ctx, invocation, userID)
 }
 
 func (a userProfileAuthorization) Authorize(ctx context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource) error {
@@ -449,7 +433,7 @@ func (a userProfileAuthorization) Authorize(ctx context.Context, invocation invo
 // operation whose purpose includes re-enabling them. Other User operations
 // retain the ordinary active-resource visibility rule.
 func (a userProfileAuthorization) AuthorizeAccountStateManage(ctx context.Context, invocation invocation.Invocation, userID model.UserID) error {
-	return a.authorization.authorizeUserAccountState(ctx, invocation, userID.String())
+	return a.authorization.AuthorizeAccountStateManage(ctx, invocation, userID)
 }
 
 func (a userProfileAuthorization) AuthorizeProfilePictureWrite(ctx context.Context, invocation invocation.Invocation, userID model.UserID) error {

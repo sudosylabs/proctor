@@ -22,6 +22,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -108,14 +109,14 @@ func (a *invitationHTTPApplication) AcceptStudentClassInvitation(_ context.Conte
 }
 func (a *invitationHTTPApplication) ListInvitations(_ context.Context, _ invocation.Invocation, query app.ListInvitationsQuery) (app.InvitationAdministrationPage, error) {
 	a.list = query
-	var total app.PageTotal
+	var total paging.Total
 	if !query.BeforeID.IsValid() {
-		total = app.PageTotal{Counted: true, Total: a.listTotal}
+		total = paging.Total{Counted: true, Total: a.listTotal}
 	}
 	if a.listEmpty {
-		return app.InvitationAdministrationPage{More: a.listMore, PageTotal: total}, nil
+		return app.InvitationAdministrationPage{More: a.listMore, Total: total}, nil
 	}
-	return app.InvitationAdministrationPage{Items: []app.InvitationAdministrationView{a.administrationView()}, More: a.listMore, PageTotal: total}, nil
+	return app.InvitationAdministrationPage{Items: []app.InvitationAdministrationView{a.administrationView()}, More: a.listMore, Total: total}, nil
 }
 
 func TestInvitationAdministrationRejectsNoProgressPage(t *testing.T) {

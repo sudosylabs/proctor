@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -465,12 +466,12 @@ func (s *desktopReauthenticationService) CompleteDesktopReauthentication(ctx con
 		return nil, err
 	}
 	authentication := s.deps.Authentication
-	result, err := runAuditedMutation(ctx, authentication.deps.Audit, mutationAttempt{
+	result, err := access.RunAudited(ctx, authentication.deps.Audit, access.Mutation{
 		Invocation: invocation, Action: model.ActionAuthenticationReauthenticate,
 		Resource:  model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 		Operation: desktopReauthenticationOperation(principal.AuthenticationMethod),
 		Value:     map[string]any{"session_id": principal.SessionID.String()},
-	}, s.deps.Now, func(ctx context.Context, reference mutationAttemptReference) (*store.SessionReauthenticationResult, error) {
+	}, s.deps.Now, func(ctx context.Context, reference access.MutationReference) (*store.SessionReauthenticationResult, error) {
 		return s.deps.Transactions.CompleteDesktopReauthentication(ctx, &store.DesktopReauthenticationCompletion{
 			CodeHash: codeHash, StateHash: model.HashToken(command.State),
 			CodeChallenge: model.PKCES256Challenge(command.CodeVerifier),
@@ -529,7 +530,7 @@ var desktopReauthenticationStoreErrors = apperror.StoreTable{
 	Unavailable: "authentication.internal",
 }
 
-type desktopReauthenticationAuditAdapter struct{ audit *auditService }
+type desktopReauthenticationAuditAdapter struct{ audit *access.Auditor }
 
 // RecordRejectedReauthentication records, as a failed reauthentication, a
 // browser proof of another account: the proving account is the actor and the
@@ -540,7 +541,7 @@ func (a desktopReauthenticationAuditAdapter) RecordRejectedReauthentication(ctx 
 	if a.audit == nil || !rejection.actor.IsValid() || !rejection.target.IsValid() || !rejection.institutionID.IsValid() {
 		return apperror.New("audit.unavailable")
 	}
-	event, err := a.audit.BeginAccountActionAtScope(ctx, accountAuditActor{userID: rejection.actor, clientType: model.SessionClientWeb},
+	event, err := a.audit.BeginAccountActionAtScope(ctx, access.AccountAuditActor{UserID: rejection.actor, ClientType: model.SessionClientWeb},
 		model.ActionAuthenticationReauthenticate,
 		model.Resource{Type: model.ResourceUser, ID: rejection.target.String()}, model.RoleScopeInstitution,
 		rejection.institutionID.String(), invocation.RequestMetadata(), map[string]any{"operation": rejection.operation})

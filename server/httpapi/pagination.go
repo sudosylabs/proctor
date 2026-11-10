@@ -15,7 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -48,7 +48,7 @@ type countedListResponse[T any] struct {
 // pageTotalMembers presents an application first-page total: both members on
 // a counted page, neither on a later one. A page counted when it continued a
 // cursor, or not counted when it began one, is unpresentable.
-func pageTotalMembers(total app.PageTotal, continued bool) (*int, *bool, error) {
+func pageTotalMembers(total paging.Total, continued bool) (*int, *bool, error) {
 	if total.Counted == continued {
 		return nil, nil, errUnpresentableResult
 	}
@@ -60,7 +60,7 @@ func pageTotalMembers(total app.PageTotal, continued bool) (*int, *bool, error) 
 }
 
 // withPageTotal adds an application first-page total to an envelope.
-func withPageTotal[T any](envelope listResponse[T], total app.PageTotal, continued bool) (countedListResponse[T], error) {
+func withPageTotal[T any](envelope listResponse[T], total paging.Total, continued bool) (countedListResponse[T], error) {
 	count, lowerBound, err := pageTotalMembers(total, continued)
 	if err != nil {
 		return countedListResponse[T]{}, err

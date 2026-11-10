@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/config"
@@ -53,15 +54,15 @@ type composedWebSocket interface {
 
 var (
 	_ httpapi.Application                            = (*app.App)(nil)
-	_ httpapi.AcademicUnitApplication                = (*app.App)(nil)
-	_ httpapi.InstitutionApplication                 = (*app.App)(nil)
-	_ httpapi.ProgrammeApplication                   = (*app.App)(nil)
-	_ httpapi.ProgrammeLevelApplication              = (*app.App)(nil)
-	_ httpapi.AcademicPeriodApplication              = (*app.App)(nil)
-	_ httpapi.ClassApplication                       = (*app.App)(nil)
-	_ httpapi.AffiliationApplication                 = (*app.App)(nil)
-	_ httpapi.AcademicUnitMemberApplication          = (*app.App)(nil)
-	_ httpapi.ClassMemberApplication                 = (*app.App)(nil)
+	_ httpapi.AcademicUnitApplication                = (*academic.Service)(nil)
+	_ httpapi.InstitutionApplication                 = (*academic.Service)(nil)
+	_ httpapi.ProgrammeApplication                   = (*academic.Service)(nil)
+	_ httpapi.ProgrammeLevelApplication              = (*academic.Service)(nil)
+	_ httpapi.AcademicPeriodApplication              = (*academic.Service)(nil)
+	_ httpapi.ClassApplication                       = (*academic.Service)(nil)
+	_ httpapi.AffiliationApplication                 = (*academic.Service)(nil)
+	_ httpapi.AcademicUnitMemberApplication          = (*academic.Service)(nil)
+	_ httpapi.ClassMemberApplication                 = (*academic.Service)(nil)
 	_ httpapi.InvitationApplication                  = (*app.App)(nil)
 	_ httpapi.BrowserInvitationApplication           = (*app.App)(nil)
 	_ httpapi.OnboardingImportApplication            = (*app.App)(nil)
@@ -424,14 +425,20 @@ func httpAPIOptions(
 	if err != nil {
 		return httpapi.Options{}, fmt.Errorf("parse trusted proxies: %w", err)
 	}
+	// A reduced composition test graph has no application; its typed nil
+	// still fills every capability, as the App itself does.
+	var academics *academic.Service
+	if application != nil {
+		academics = application.Academic
+	}
 	return httpapi.Options{
 		Logger: apiLogger{log: capabilities.logger}, Health: readiness,
 		Metrics:     httpMetrics,
 		Tracing:     httpTracer,
-		Application: application, AcademicUnits: application, Institutions: application,
-		Programmes: application, ProgrammeLevels: application, AcademicPeriods: application,
-		Classes: application, Affiliations: application, AcademicUnitMembers: application,
-		ClassMembers: application, UserProfiles: application, UserSettings: application, AccountStates: application,
+		Application: application, AcademicUnits: academics, Institutions: academics,
+		Programmes: academics, ProgrammeLevels: academics, AcademicPeriods: academics,
+		Classes: academics, Affiliations: academics, AcademicUnitMembers: academics,
+		ClassMembers: academics, UserProfiles: application, UserSettings: application, AccountStates: application,
 		Invitations:                   application,
 		BrowserInvitations:            application,
 		OnboardingImports:             application,

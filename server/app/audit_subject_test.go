@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -33,7 +34,7 @@ func TestAuditWritersNameTheSubjectUser(t *testing.T) {
 	t.Parallel()
 	audits := &systemAuditStoreFake{}
 	singleton := &model.Institution{ID: model.NewInstitutionID()}
-	service, err := newAuditService(auditServiceDependencies{Audits: audits, Institutions: subjectAuditInstitutions{institution: singleton}, NodeID: "node-subject"})
+	service, err := access.NewAuditor(access.AuditorDependencies{Audits: audits, Institutions: subjectAuditInstitutions{institution: singleton}, NodeID: "node-subject"})
 	require.NoError(t, err)
 	caller := selfAuditSessionInvocation()
 	me := caller.Principal().UserID
@@ -50,16 +51,16 @@ func TestAuditWritersNameTheSubjectUser(t *testing.T) {
 	require.Equal(t, target, audits.saved.SubjectUserID, "an administrator reset names its target")
 	require.Equal(t, me, audits.saved.ActorID)
 
-	_, err = (mutationAuditAdapter{audit: service}).Begin(context.Background(), caller, model.ActionSessionManage,
+	_, err = (service.MutationAudit()).Begin(context.Background(), caller, model.ActionSessionManage,
 		model.Resource{Type: model.ResourceUser, ID: me.String()}, "revoke_own_sessions", nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, me, audits.saved.SubjectUserID, "a User resource is its own subject")
 
 	member, classID := model.NewUserID(), model.NewClassID()
-	_, err = runAuditedMutation(context.Background(), mutationAuditAdapter{audit: service}, mutationAttempt{
+	_, err = access.RunAudited(context.Background(), service.MutationAudit(), access.Mutation{
 		Invocation: caller, Action: model.ActionClassMembersManage,
 		Resource: model.Resource{Type: model.ResourceClass, ID: classID.String()}, Operation: "enroll", Subject: member,
-	}, time.Now, func(context.Context, mutationAttemptReference) (struct{}, error) { return struct{}{}, nil },
+	}, time.Now, func(context.Context, access.MutationReference) (struct{}, error) { return struct{}{}, nil },
 		func(err error) error { return err })
 	require.NoError(t, err)
 	require.Equal(t, member, audits.saved.SubjectUserID)
@@ -79,11 +80,11 @@ func (s subjectAuditInstitutions) GetSingleton(context.Context) (*model.Institut
 func TestAuditedMutationWithSubjectRefusesAnAuditorThatWouldDropIt(t *testing.T) {
 	t.Parallel()
 	events := []string{}
-	_, err := runAuditedMutation(context.Background(), &academicUnitCommandAuditor{events: &events}, mutationAttempt{
+	_, err := access.RunAudited(context.Background(), &academicUnitCommandAuditor{events: &events}, access.Mutation{
 		Invocation: selfAuditSessionInvocation(), Action: model.ActionRoleBindingManage,
 		Resource: model.Resource{Type: model.ResourceInstitution, ID: model.NewID()}, Operation: "create_binding",
 		Subject: model.NewUserID(),
-	}, time.Now, func(context.Context, mutationAttemptReference) (struct{}, error) {
+	}, time.Now, func(context.Context, access.MutationReference) (struct{}, error) {
 		require.Fail(t, "the mutation ran without a durable subject")
 		return struct{}{}, nil
 	}, func(err error) error { return err })

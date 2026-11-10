@@ -17,6 +17,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
@@ -197,7 +198,7 @@ func TestJobOperationsRequireDependencies(t *testing.T) {
 		name          string
 		jobs          jobOperatorEngine
 		authorization institutionAuthorizer
-		audit         mutationAuditor
+		audit         access.MutationAuditor
 		users         jobInitiatorNames
 		exports       jobExamExportTitles
 		now           func() time.Time

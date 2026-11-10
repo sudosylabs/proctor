@@ -14,9 +14,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
@@ -46,11 +48,11 @@ type MailDeliveryView struct {
 
 // MailDeliveryPage is one page of mail deliveries; HasMore reports that
 // another page follows the last item. The first page also carries their
-// total (see PageTotal).
+// total (see paging.Total).
 type MailDeliveryPage struct {
 	Items   []MailDeliveryView
 	HasMore bool
-	PageTotal
+	paging.Total
 }
 
 type ListMailDeliveriesQuery struct {
@@ -81,7 +83,7 @@ type mailInstitutionStore interface {
 }
 
 type mailAuthorizationAdapter struct {
-	authorization *accessControlService
+	authorization *access.Authorizer
 	institutions  mailInstitutionStore
 }
 
@@ -130,7 +132,7 @@ type mailService struct {
 	rekey      mailRekeyStarter
 	keyState   mailKeyInspector
 	rekeyJobs  mailRekeyJobReader
-	rekeyAudit mutationAuditor
+	rekeyAudit access.MutationAuditor
 
 	composer *mail.Composer
 
@@ -298,7 +300,7 @@ func (s *mailService) ListMailDeliveries(ctx context.Context, invocation invocat
 	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionMailView); err != nil {
 		return MailDeliveryPage{}, err
 	}
-	if query.Limit < 1 || query.Limit > MaximumPageLimit {
+	if query.Limit < 1 || query.Limit > paging.MaximumLimit {
 		return MailDeliveryPage{}, apperror.New("mail.query.invalid")
 	}
 	options := store.MailDeliveryListOptions{
@@ -316,7 +318,7 @@ func (s *mailService) ListMailDeliveries(ctx context.Context, invocation invocat
 	for _, delivery := range deliveries {
 		page.Items = append(page.Items, mailDeliveryView(delivery))
 	}
-	total, consistent, err := countFirstPage(query.BeforeID.IsZero(), len(page.Items), func(maximum int) (int, error) {
+	total, consistent, err := paging.CountFirst(query.BeforeID.IsZero(), len(page.Items), func(maximum int) (int, error) {
 		return s.deps.Mail.CountDeliveries(ctx, options, maximum)
 	})
 	if err != nil {
@@ -325,7 +327,7 @@ func (s *mailService) ListMailDeliveries(ctx context.Context, invocation invocat
 	if !consistent {
 		return MailDeliveryPage{}, apperror.New("mail.unavailable")
 	}
-	page.PageTotal = total
+	page.Total = total
 	return page, nil
 }
 

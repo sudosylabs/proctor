@@ -11,6 +11,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -63,7 +64,7 @@ type roleEffects interface {
 type roleServiceDependencies struct {
 	Roles         roleStore
 	Authorization roleAuthorizer
-	Audit         mutationAuditor
+	Audit         access.MutationAuditor
 	Effects       roleEffects
 	Now           func() time.Time
 }
@@ -123,10 +124,10 @@ func (s *roleService) CreateRole(ctx context.Context, invocation invocation.Invo
 	); err != nil {
 		return nil, err
 	}
-	return runAuditedMutation(
+	return access.RunAudited(
 		ctx,
 		s.deps.Audit,
-		mutationAttempt{
+		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionRoleManage,
 			Resource:   resource,
@@ -134,7 +135,7 @@ func (s *roleService) CreateRole(ctx context.Context, invocation invocation.Invo
 			Value:      candidate.Auditable(),
 		},
 		s.deps.Now,
-		func(ctx context.Context, reference mutationAttemptReference) (*model.Role, error) {
+		func(ctx context.Context, reference access.MutationReference) (*model.Role, error) {
 			return s.deps.Roles.Save(ctx, &store.RoleCreation{
 				Role: candidate, AuditEventID: reference.ID, AuditAt: reference.MutationAt,
 			})
@@ -179,10 +180,10 @@ func (s *roleService) UpdateRole(ctx context.Context, invocation invocation.Invo
 			return nil, err
 		}
 	}
-	updated, err := runAuditedMutation(
+	updated, err := access.RunAudited(
 		ctx,
 		s.deps.Audit,
-		mutationAttempt{
+		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionRoleManage,
 			Resource:   resource,
@@ -191,7 +192,7 @@ func (s *roleService) UpdateRole(ctx context.Context, invocation invocation.Invo
 			Prior:      current.Auditable(),
 		},
 		s.deps.Now,
-		func(ctx context.Context, reference mutationAttemptReference) (*model.Role, error) {
+		func(ctx context.Context, reference access.MutationReference) (*model.Role, error) {
 			return s.deps.Roles.Update(ctx, &store.RoleUpdate{
 				Role: candidate, AuditEventID: reference.ID, AuditAt: reference.MutationAt,
 			})
@@ -235,10 +236,10 @@ func (s *roleService) ArchiveRole(ctx context.Context, invocation invocation.Inv
 	if current.BuiltIn {
 		return apperror.New("role.built_in.protected").WithField("resource", "role")
 	}
-	_, err = runAuditedMutation(
+	_, err = access.RunAudited(
 		ctx,
 		s.deps.Audit,
-		mutationAttempt{
+		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionRoleManage,
 			Resource:   resource,
@@ -247,7 +248,7 @@ func (s *roleService) ArchiveRole(ctx context.Context, invocation invocation.Inv
 			Prior:      current.Auditable(),
 		},
 		s.deps.Now,
-		func(ctx context.Context, reference mutationAttemptReference) (*model.Role, error) {
+		func(ctx context.Context, reference access.MutationReference) (*model.Role, error) {
 			return s.deps.Roles.Archive(ctx, &store.RoleArchive{
 				ID: id, ArchiveAt: reference.MutationAt,
 				AuditEventID: reference.ID, AuditAt: reference.MutationAt,
@@ -263,12 +264,12 @@ func (s *roleService) ArchiveRole(ctx context.Context, invocation invocation.Inv
 }
 
 type roleAuthorization struct {
-	authorization *accessControlService
+	authorization *access.Authorizer
 	institutions  store.InstitutionStore
 }
 
 func (a roleAuthorization) AuthorizeRoleBindingList(ctx context.Context, invocation invocation.Invocation, action model.Action) (store.UserVisibilityScope, error) {
-	constraint, err := a.authorization.authorizedScopes(ctx, invocation.Principal(), action, model.ResourceInstitution)
+	constraint, err := a.authorization.GrantedScopes(ctx, invocation.Principal(), action, model.ResourceInstitution)
 	if err != nil {
 		return store.UserVisibilityScope{}, err
 	}
@@ -286,11 +287,11 @@ func (a roleAuthorization) AuthorizeRoleBindingList(ctx context.Context, invocat
 		resource = model.Resource{Type: model.ResourceClass, ID: constraint.ClassIDs[0].String()}
 		scopeType, scopeID = model.RoleScopeClass, resource.ID
 	}
-	if err := a.authorization.deps.Audit.RecordAuthorizationDecision(ctx, invocation.Principal(), action, resource, scopeType, scopeID, invocation.RequestMetadata(), allowed); err != nil {
+	if err := a.authorization.RecordAuthorizationDecision(ctx, invocation.Principal(), action, resource, scopeType, scopeID, invocation.RequestMetadata(), allowed); err != nil {
 		return store.UserVisibilityScope{}, err
 	}
 	if !allowed {
-		return store.UserVisibilityScope{}, authorizationDeniedError()
+		return store.UserVisibilityScope{}, access.DeniedError()
 	}
 	return store.UserVisibilityScope{
 		InstitutionWide:     constraint.InstitutionWide,
@@ -300,7 +301,7 @@ func (a roleAuthorization) AuthorizeRoleBindingList(ctx context.Context, invocat
 }
 
 func (a roleAuthorization) AuthorizeRoleBindingPreflight(ctx context.Context, invocation invocation.Invocation, action model.Action) error {
-	return a.authorization.authorizeRoleBindingPreflight(ctx, invocation, action)
+	return a.authorization.AuthorizeRoleBindingPreflight(ctx, invocation, action)
 }
 
 func (a roleAuthorization) AuthorizeRoleBindingScope(
@@ -310,7 +311,7 @@ func (a roleAuthorization) AuthorizeRoleBindingScope(
 	scopeType model.RoleScopeType,
 	scopeID string,
 ) (model.Resource, error) {
-	return a.authorization.authorizeRoleBindingScope(ctx, invocation, action, scopeType, scopeID)
+	return a.authorization.AuthorizeRoleBindingScope(ctx, invocation, action, scopeType, scopeID)
 }
 
 func (a roleAuthorization) AuthorizeActionDelegation(
@@ -320,12 +321,12 @@ func (a roleAuthorization) AuthorizeActionDelegation(
 	scopeType model.RoleScopeType,
 	scopeID string,
 ) error {
-	allowed, err := a.authorization.canDelegateActionsAtScope(ctx, invocation.Principal(), actions, scopeType, scopeID)
+	allowed, err := a.authorization.CanDelegateActionsAtScope(ctx, invocation.Principal(), actions, scopeType, scopeID)
 	if err != nil {
 		return err
 	}
 	if !allowed {
-		return authorizationDeniedError()
+		return access.DeniedError()
 	}
 	return nil
 }

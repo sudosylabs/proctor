@@ -67,13 +67,13 @@ func constructJobs(
 	profiles.profilePictures.reads.defaultJobs = defaultJobs
 	var mailService *mailService
 	if deps.Store.Mail() != nil {
-		mailService, err = newMailService(mailServiceDependencies{Mail: deps.Store.Mail(), Users: deps.Store.User(), Authorization: mailAuthorizationAdapter{authorization: access.authorization, institutions: deps.Store.Institution()}, Audit: mailAuditAdapter{audit: foundation.audit}, Attempts: foundation.attempts, Renderer: deps.MailTemplateRenderer, Sender: deps.MailDeliverySender, Metrics: deps.MailMetricsReader, Sealer: deps.MailSecretSealer, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Now: time.Now,
+		mailService, err = newMailService(mailServiceDependencies{Mail: deps.Store.Mail(), Users: deps.Store.User(), Authorization: mailAuthorizationAdapter{authorization: access.authorization, institutions: deps.Store.Institution()}, Audit: foundation.audit.MailAudit(), Attempts: foundation.attempts, Renderer: deps.MailTemplateRenderer, Sender: deps.MailDeliverySender, Metrics: deps.MailMetricsReader, Sealer: deps.MailSecretSealer, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Now: time.Now,
 			InstitutionName: (&institutionNameCache{institutions: deps.Store.Institution(), now: time.Now}).Name})
 		if err != nil {
 			return jobConstruction{}, err
 		}
 		mailService.rekeyJobs = deps.Store.Job()
-		mailService.rekeyAudit = mutationAuditAdapter{audit: foundation.audit}
+		mailService.rekeyAudit = foundation.audit.MutationAudit()
 		mailService.wake = runtime.Wake
 	}
 
@@ -81,14 +81,14 @@ func constructJobs(
 	if deps.Store.MFA() != nil {
 		mfaKeys, err = newMFAKeyService(mfaKeyServiceDependencies{Keys: deps.Store.MFA(), Jobs: deps.Store.Job(),
 			Authorization: mfaKeyAuthorization{authorization: access.authorization, institutions: deps.Store.Institution()},
-			Audit:         mutationAuditAdapter{audit: foundation.audit}, Sealer: deps.MFASecretSealer,
+			Audit:         foundation.audit.MutationAudit(), Sealer: deps.MFASecretSealer,
 			RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Now: time.Now, Wake: runtime.Wake})
 		if err != nil {
 			return jobConstruction{}, err
 		}
 	}
 
-	operations, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: runtime, Authorization: jobOperationsAuthorization{authorization: access.authorization, institutions: deps.Store.Institution()}, Audit: mutationAuditAdapter{audit: foundation.audit},
+	operations, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: runtime, Authorization: jobOperationsAuthorization{authorization: access.authorization, institutions: deps.Store.Institution()}, Audit: foundation.audit.MutationAudit(),
 		Users: deps.Store.User(), ExamExports: deps.Store.ExamExport(), Now: time.Now})
 	if err != nil {
 		return jobConstruction{}, err

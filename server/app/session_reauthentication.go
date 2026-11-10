@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -71,11 +72,11 @@ func (s *authenticationService) ReauthenticatePassword(ctx context.Context, invo
 		}
 		return nil, passwordWorkError(err, "authentication.internal")
 	}
-	result, err := runAuditedMutation(ctx, s.deps.Audit, mutationAttempt{
+	result, err := access.RunAudited(ctx, s.deps.Audit, access.Mutation{
 		Invocation: invocation, Action: model.ActionAuthenticationReauthenticate,
 		Resource:  model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 		Operation: "password", Value: map[string]any{"session_id": principal.SessionID.String()},
-	}, s.deps.Now, func(ctx context.Context, reference mutationAttemptReference) (*store.SessionReauthenticationResult, error) {
+	}, s.deps.Now, func(ctx context.Context, reference access.MutationReference) (*store.SessionReauthenticationResult, error) {
 		auditID := reference.ID
 		credentialID, err := model.ParseSessionCredentialID(principal.CredentialID.String())
 		if err != nil {

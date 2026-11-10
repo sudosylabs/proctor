@@ -12,6 +12,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
@@ -19,7 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type examAuthorizationAdapter struct{ authorization *accessControlService }
+type examAuthorizationAdapter struct{ authorization *access.Authorizer }
 
 func (a examAuthorizationAdapter) Authorize(ctx context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource) error {
 	return a.authorization.Authorize(ctx, invocation, action, resource)
@@ -27,31 +28,31 @@ func (a examAuthorizationAdapter) Authorize(ctx context.Context, invocation invo
 
 func (a examAuthorizationAdapter) AuthorizeList(ctx context.Context, invocation invocation.Invocation, _ model.AcademicUnitID) (store.ExamListVisibility, error) {
 	principal := invocation.Principal()
-	decisionAt := model.TimeUTC(a.authorization.now())
-	ordinary, err := a.authorization.authorizedScopesAt(ctx, principal, model.ActionExamView, model.ResourceExam, decisionAt)
+	decisionAt := model.TimeUTC(a.authorization.Now())
+	ordinary, err := a.authorization.GrantedScopesAt(ctx, principal, model.ActionExamView, model.ResourceExam, decisionAt)
 	if err != nil {
 		return store.ExamListVisibility{}, err
 	}
-	override, err := a.authorization.authorizedScopesAt(ctx, principal, model.ActionExamViewOverride, model.ResourceExam, decisionAt)
+	override, err := a.authorization.GrantedScopesAt(ctx, principal, model.ActionExamViewOverride, model.ResourceExam, decisionAt)
 	if err != nil {
 		return store.ExamListVisibility{}, err
 	}
 	hasOrdinary := ordinary.InstitutionWide || len(ordinary.AcademicUnitRootIDs) > 0
 	hasOverride := override.InstitutionWide || len(override.AcademicUnitRootIDs) > 0
-	institution, err := a.authorization.deps.Resolver.deps.Institutions.GetSingleton(ctx)
+	institution, err := a.authorization.Institution(ctx)
 	if err != nil {
-		return store.ExamListVisibility{}, authorizationResourceError("institution", err)
+		return store.ExamListVisibility{}, access.ResourceError("institution", err)
 	}
 	action := model.ActionExamView
 	if hasOverride {
 		action = model.ActionExamViewOverride
 	}
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
-	if err := a.authorization.deps.Audit.RecordAuthorizationDecision(ctx, principal, action, resource, model.RoleScopeInstitution, institution.ID.String(), invocation.RequestMetadata(), hasOrdinary || hasOverride); err != nil {
+	if err := a.authorization.RecordAuthorizationDecision(ctx, principal, action, resource, model.RoleScopeInstitution, institution.ID.String(), invocation.RequestMetadata(), hasOrdinary || hasOverride); err != nil {
 		return store.ExamListVisibility{}, err
 	}
 	if !hasOrdinary && !hasOverride {
-		return store.ExamListVisibility{}, authorizationDeniedError()
+		return store.ExamListVisibility{}, access.DeniedError()
 	}
 	return store.ExamListVisibility{ActorUserID: principal.UserID,
 		OrdinaryMembershipAt:    decisionAt,
@@ -105,6 +106,6 @@ func (e examRealtimeEffects) Report(ctx context.Context, operation string, err e
 }
 
 var _ exam.Authorizer = examAuthorizationAdapter{}
-var _ exam.Auditor = mutationAuditAdapter{}
+var _ exam.Auditor = access.MutationAuditAdapter{}
 var _ exam.Effects = examRealtimeEffects{}
 var _ exam.EffectFailures = examRealtimeEffects{}

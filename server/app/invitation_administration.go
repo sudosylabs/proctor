@@ -11,9 +11,11 @@ import (
 	"context"
 	"strings"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -44,7 +46,7 @@ func (s *invitationService) ListInvitations(ctx context.Context, invocation invo
 	for _, item := range page.Items {
 		result.Items = append(result.Items, invitationAdministrationView(item))
 	}
-	total, consistent, err := countFirstPage(!query.BeforeID.IsValid(), len(result.Items), func(maximum int) (int, error) {
+	total, consistent, err := paging.CountFirst(!query.BeforeID.IsValid(), len(result.Items), func(maximum int) (int, error) {
 		return s.deps.Store.Count(ctx, options, maximum)
 	})
 	if err != nil {
@@ -53,7 +55,7 @@ func (s *invitationService) ListInvitations(ctx context.Context, invocation invo
 	if !consistent {
 		return InvitationAdministrationPage{}, apperror.New("invitation.unavailable")
 	}
-	result.PageTotal = total
+	result.Total = total
 	return result, nil
 }
 
@@ -115,7 +117,7 @@ func (s *invitationService) ResendInvitation(ctx context.Context, invocation inv
 	if err != nil {
 		return InvitationAdministrationView{}, err
 	}
-	attempt := mutationAttempt{Invocation: invocation, Action: model.ActionInvitationManage,
+	attempt := access.Mutation{Invocation: invocation, Action: model.ActionInvitationManage,
 		Resource: invitationResource(current.Invitation), ScopeType: current.Invitation.ScopeType, ScopeID: current.Invitation.ScopeID,
 		Operation: "resend", Value: current.Invitation.Auditable()}
 	if recovered, ok, recoverErr := s.recoverInvitationAdministrationOutcome(ctx, idempotency, attempt); ok {
@@ -130,8 +132,8 @@ func (s *invitationService) ResendInvitation(ctx context.Context, invocation inv
 				CanonicalFingerprint: command.batchCanonicalFingerprint}, command.batchCanonicalKey)
 		return InvitationAdministrationView{InvitationView: view}, duplicateErr
 	}
-	result, err := runAuditedMutation(ctx, s.deps.Audit, attempt, s.deps.Now,
-		func(ctx context.Context, reference mutationAttemptReference) (*store.InvitationAdministrationCommandResult, error) {
+	result, err := access.RunAudited(ctx, s.deps.Audit, attempt, s.deps.Now,
+		func(ctx context.Context, reference access.MutationReference) (*store.InvitationAdministrationCommandResult, error) {
 			if idempotency != nil {
 				replayed, replayErr := s.deps.Store.ReplayAdministration(ctx, &store.InvitationReplay{AuditEventID: reference.ID, AuditAt: reference.MutationAt}, idempotency)
 				if replayErr == nil {
@@ -210,7 +212,7 @@ func (s *invitationService) RevokeInvitation(ctx context.Context, invocation inv
 	if err != nil {
 		return InvitationAdministrationView{}, err
 	}
-	attempt := mutationAttempt{Invocation: invocation, Action: model.ActionInvitationManage,
+	attempt := access.Mutation{Invocation: invocation, Action: model.ActionInvitationManage,
 		Resource: invitationResource(current.Invitation), ScopeType: current.Invitation.ScopeType, ScopeID: current.Invitation.ScopeID,
 		Operation: "revoke", Value: current.Invitation.Auditable()}
 	if recovered, ok, recoverErr := s.recoverInvitationAdministrationOutcome(ctx, idempotency, attempt); ok {
@@ -222,8 +224,8 @@ func (s *invitationService) RevokeInvitation(ctx context.Context, invocation inv
 				CanonicalFingerprint: command.batchCanonicalFingerprint}, command.batchCanonicalKey)
 		return InvitationAdministrationView{InvitationView: view}, duplicateErr
 	}
-	result, err := runAuditedMutation(ctx, s.deps.Audit, attempt, s.deps.Now,
-		func(ctx context.Context, reference mutationAttemptReference) (*store.InvitationAdministrationCommandResult, error) {
+	result, err := access.RunAudited(ctx, s.deps.Audit, attempt, s.deps.Now,
+		func(ctx context.Context, reference access.MutationReference) (*store.InvitationAdministrationCommandResult, error) {
 			if idempotency != nil {
 				replayed, replayErr := s.deps.Store.ReplayAdministration(ctx, &store.InvitationReplay{AuditEventID: reference.ID, AuditAt: reference.MutationAt}, idempotency)
 				if replayErr == nil {

@@ -8,7 +8,6 @@
 package httpapi
 
 import (
-	"context"
 	"os"
 	"testing"
 
@@ -18,11 +17,9 @@ import (
 	"github.com/sudosylabs/proctor/server/logging"
 )
 
-type testLogger struct {
-	log *logging.Logger
-}
-
-func newTestLogger(tb testing.TB) (Logger, *logging.Buffer) {
+// newTestLogger returns a real logger writing JSON records, including debug
+// ones, to the returned buffer.
+func newTestLogger(tb testing.TB) (*logging.Logger, *logging.Buffer) {
 	tb.Helper()
 	var logs logging.Buffer
 	logger, err := logging.New()
@@ -34,7 +31,14 @@ func newTestLogger(tb testing.TB) (Logger, *logging.Buffer) {
 			Name: "test", Type: "console", Level: "debug", Format: "json", Writer: &logs,
 		}},
 	}))
-	return testLogger{log: logger}, &logs
+	return logger, &logs
+}
+
+// newDiscardLogger returns a real logger whose records the test never reads.
+func newDiscardLogger(tb testing.TB) *logging.Logger {
+	tb.Helper()
+	logger, _ := newTestLogger(tb)
+	return logger
 }
 
 func newTestLocalizer(tb testing.TB) Localizer {
@@ -42,21 +46,4 @@ func newTestLocalizer(tb testing.TB) Localizer {
 	localizer, err := localization.New(os.DirFS("../i18n"), localization.EnglishLocale)
 	require.NoError(tb, err)
 	return localizer
-}
-
-func (l testLogger) InfoContext(ctx context.Context, message string, fields ...LogField) {
-	l.log.InfoContext(ctx, message, testLogFields(fields)...)
-}
-
-func (l testLogger) ErrorContext(ctx context.Context, message string, fields ...LogField) {
-	l.log.ErrorContext(ctx, message, testLogFields(fields)...)
-	_ = l.log.Flush(ctx)
-}
-
-func testLogFields(fields []LogField) []logging.Field {
-	out := make([]logging.Field, 0, len(fields))
-	for _, field := range fields {
-		out = append(out, logging.Any(field.Key, field.Value))
-	}
-	return out
 }

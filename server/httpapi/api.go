@@ -26,6 +26,7 @@ import (
 	"github.com/gorilla/mux"
 
 	"github.com/sudosylabs/proctor/server/localization"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -33,7 +34,7 @@ type API struct {
 	handler                 http.Handler
 	router                  *mux.Router
 	authenticator           Authenticator
-	logger                  Logger
+	logger                  *logging.Logger
 	metrics                 Metrics
 	localizer               Localizer
 	cookies                 browserCookies

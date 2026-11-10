@@ -62,7 +62,7 @@ func TestMailRekeyOldPrimaryRelinquishesOnceAndNewPrimaryCompletes(t *testing.T)
 	oldDescriptor.BaseRetryDelay, oldDescriptor.MaximumRetryDelay = 10*time.Millisecond, 10*time.Millisecond
 	oldDescriptor.LeaseDuration, oldDescriptor.HeartbeatInterval = mailRekeyClusterLease, mailRekeyClusterHeartbeat
 	oldNode, err := job.New(job.Dependencies{Store: persistence.Job(), Descriptors: []job.Descriptor{oldDescriptor},
-		NodeID: "old-primary-node", Diagnostics: &integrationJobDiagnostics{}, Policy: job.Policy{PollInterval: 5 * time.Millisecond}})
+		NodeID: "old-primary-node", Diagnostics: newDiscardLogger(t), Policy: job.Policy{PollInterval: 5 * time.Millisecond}})
 	require.NoError(t, err)
 	err = oldNode.Start(ctx)
 	require.NoError(t, err)
@@ -84,7 +84,7 @@ func TestMailRekeyOldPrimaryRelinquishesOnceAndNewPrimaryCompletes(t *testing.T)
 	newDescriptor.BaseRetryDelay, newDescriptor.MaximumRetryDelay = 10*time.Millisecond, 10*time.Millisecond
 	newDescriptor.LeaseDuration, newDescriptor.HeartbeatInterval = mailRekeyClusterLease, mailRekeyClusterHeartbeat
 	newNode, err := job.New(job.Dependencies{Store: persistence.Job(), Descriptors: []job.Descriptor{newDescriptor},
-		NodeID: "new-primary-node", Diagnostics: &integrationJobDiagnostics{}, Policy: job.Policy{PollInterval: 5 * time.Millisecond}})
+		NodeID: "new-primary-node", Diagnostics: newDiscardLogger(t), Policy: job.Policy{PollInterval: 5 * time.Millisecond}})
 	require.NoError(t, err)
 	err = newNode.Start(ctx)
 	require.NoError(t, err)

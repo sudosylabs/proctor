@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -30,10 +31,6 @@ type Engine struct {
 	closed  bool
 	cancel  context.CancelFunc
 	wg      sync.WaitGroup
-}
-
-type Diagnostics interface {
-	ErrorContext(context.Context, string, error)
 }
 
 // Recorder observes bounded Job runtime facts and never receives commands,
@@ -108,7 +105,7 @@ type Dependencies struct {
 	Store       store.JobStore
 	Descriptors []Descriptor
 	NodeID      string
-	Diagnostics Diagnostics
+	Diagnostics *logging.Logger
 	Recorder    Recorder
 	// Tracer, when set, encloses each claimed execution in a span.
 	Tracer        Tracer
@@ -256,7 +253,7 @@ func (r *Engine) worker(ctx context.Context, descriptor Descriptor) {
 		}
 		token, err := model.NewJobClaimToken()
 		if err != nil {
-			r.deps.Diagnostics.ErrorContext(ctx, "generate job claim token", err)
+			r.deps.Diagnostics.ErrorContext(ctx, "generate job claim token", logging.Err(err))
 			resetTimer(timer, r.deps.Policy.PollInterval)
 			continue
 		}
@@ -272,7 +269,7 @@ func (r *Engine) worker(ctx context.Context, descriptor Descriptor) {
 			}
 			r.record(Activity{Kind: "job", Name: string(descriptor.Type), Operation: "claim", Outcome: result, Duration: claimDuration})
 			if !store.IsNotFound(err) && !errors.Is(err, context.Canceled) {
-				r.deps.Diagnostics.ErrorContext(ctx, "claim durable job", err)
+				r.deps.Diagnostics.ErrorContext(ctx, "claim durable job", logging.Err(err))
 			}
 			resetTimer(timer, r.deps.Policy.PollInterval)
 			continue
@@ -391,7 +388,7 @@ func (r *Engine) heartbeatClaim(h claimHeartbeat) {
 			heartbeatStarted := time.Now()
 			if _, err := r.deps.Store.Heartbeat(h.handlerCtx, &store.JobHeartbeat{AttemptID: claim.Attempt.ID, ClaimToken: claim.Attempt.ClaimToken, LeaseDuration: descriptor.LeaseDuration}); err != nil {
 				r.record(Activity{Kind: "job", Name: string(descriptor.Type), Operation: "heartbeat", Outcome: "error", Duration: time.Since(heartbeatStarted)})
-				r.deps.Diagnostics.ErrorContext(h.parent, "heartbeat durable job", err)
+				r.deps.Diagnostics.ErrorContext(h.parent, "heartbeat durable job", logging.Err(err))
 				if !heartbeatClaimLost(err) && time.Since(renewedAt)+descriptor.HeartbeatInterval < descriptor.LeaseDuration {
 					continue
 				}
@@ -409,7 +406,7 @@ func (r *Engine) heartbeatClaim(h claimHeartbeat) {
 				requested, err := r.deps.Store.CancellationRequested(h.handlerCtx, claim.Attempt.ID, claim.Attempt.ClaimToken)
 				if err != nil {
 					r.record(Activity{Kind: "job", Name: string(descriptor.Type), Operation: "cancellation_check", Outcome: "error", Duration: time.Since(cancellationStarted)})
-					r.deps.Diagnostics.ErrorContext(h.parent, "observe durable job cancellation", err)
+					r.deps.Diagnostics.ErrorContext(h.parent, "observe durable job cancellation", logging.Err(err))
 					if !heartbeatClaimLost(err) && time.Since(renewedAt)+descriptor.HeartbeatInterval < descriptor.LeaseDuration {
 						continue
 					}
@@ -512,7 +509,7 @@ func (r *Engine) complete(ctx context.Context, descriptor Descriptor, claim *sto
 	_, err := r.deps.Store.Complete(ctx, completion)
 	r.record(Activity{Kind: "job", Name: string(descriptor.Type), Operation: "complete", Outcome: simpleJobOutcome(err), Duration: time.Since(started)})
 	if err != nil && !errors.Is(err, context.Canceled) {
-		r.deps.Diagnostics.ErrorContext(ctx, "complete durable job", err)
+		r.deps.Diagnostics.ErrorContext(ctx, "complete durable job", logging.Err(err))
 	}
 }
 

@@ -20,6 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -59,7 +60,7 @@ func TestAccountTokenServiceRequiresDependencies(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			args := validAccountTokenConstructorArgs()
+			args := validAccountTokenConstructorArgs(t)
 			test.remove(&args)
 			_, err := args.build()
 			require.Error(t, err, "constructor accepted missing dependency")
@@ -517,7 +518,7 @@ func newAccountTokenTestApp(t *testing.T, deps accountTokenTestDependencies) *Se
 	if deps.accessPolicy == nil {
 		deps.accessPolicy = allowAllAuthenticationAccessPolicy()
 	}
-	service, err := newAccountTokenService(accountTokenServiceDependencies{Users: deps.users, Passwords: deps.passwords, Tokens: deps.tokens, AccessPolicy: deps.accessPolicy, Institutions: &accountTokenInstitutionStoreFake{institution: deps.institution}, Mail: deps.mailer, Attempts: deps.attempts, Hasher: deps.hasher, Audit: accountTokenAuditRecorder{nodeID: "node-1"}, Effects: deps.effects, Diagnostics: accountTokenDiagnosticsFake{}, Policy: AccountRecoveryPolicy{
+	service, err := newAccountTokenService(accountTokenServiceDependencies{Users: deps.users, Passwords: deps.passwords, Tokens: deps.tokens, AccessPolicy: deps.accessPolicy, Institutions: &accountTokenInstitutionStoreFake{institution: deps.institution}, Mail: deps.mailer, Attempts: deps.attempts, Hasher: deps.hasher, Audit: accountTokenAuditRecorder{nodeID: "node-1"}, Effects: deps.effects, Diagnostics: newDiscardLogger(t), Policy: AccountRecoveryPolicy{
 		EmailVerificationTTL: 24 * time.Hour,
 		PasswordResetTTL:     45 * time.Minute,
 		EmailChangeUndoTTL:   72 * time.Hour,
@@ -699,10 +700,6 @@ func (f *accountTokenEffectsFake) SessionsRevoked(
 	}
 }
 
-type accountTokenDiagnosticsFake struct{}
-
-func (accountTokenDiagnosticsFake) ErrorContext(context.Context, string, error) {}
-
 type accountTokenConstructorArgs struct {
 	users        store.UserStore
 	passwords    store.PasswordCredentialStore
@@ -713,11 +710,11 @@ type accountTokenConstructorArgs struct {
 	hasher       accountTokenPasswordHasher
 	audit        accountTokenAuditRecorder
 	effects      accountTokenEffects
-	diagnostics  RecoveryDiagnostics
+	diagnostics  *logging.Logger
 	newToken     func() string
 }
 
-func validAccountTokenConstructorArgs() accountTokenConstructorArgs {
+func validAccountTokenConstructorArgs(t testing.TB) accountTokenConstructorArgs {
 	return accountTokenConstructorArgs{
 		users:        &accountTokenUserStoreFake{},
 		passwords:    &accountTokenPasswordStoreFake{},
@@ -728,7 +725,7 @@ func validAccountTokenConstructorArgs() accountTokenConstructorArgs {
 		hasher:       accountTokenHasherFake{},
 		audit:        accountTokenAuditRecorder{nodeID: "node-1"},
 		effects:      &accountTokenEffectsFake{},
-		diagnostics:  accountTokenDiagnosticsFake{},
+		diagnostics:  newDiscardLogger(t),
 		newToken:     func() string { return accountTokenTestRawToken },
 	}
 }

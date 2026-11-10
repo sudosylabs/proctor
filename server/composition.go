@@ -118,7 +118,7 @@ type consumerConstructors struct {
 	application    func(app.Dependencies) (*app.App, error)
 	realtime       func(borrowedCluster) (realtime.ClusterFanout, error)
 	attachRealtime func(*app.App, realtime.ClusterFanout) error
-	websocket      func(*app.App, runtimeLogger, string, string) (composedWebSocket, error)
+	websocket      func(*app.App, *logging.Logger, string, string) (composedWebSocket, error)
 	attachSink     func(*app.App, realtime.Sink) error
 	http           func(httpapi.Options) (runtimeTransport, http.Handler, error)
 	webapp         func(webui.Options) (http.Handler, error)
@@ -179,8 +179,8 @@ func defaultConsumerConstructors(
 		attachRealtime: func(application *app.App, fanout realtime.ClusterFanout) error {
 			return application.Realtime.AttachRealtimeClusterFanout(fanout)
 		},
-		websocket: func(application *app.App, logger runtimeLogger, publicURL, nodeID string) (composedWebSocket, error) {
-			return websocket.NewHub(application.RealtimeAdmission, application.Attempts, websocketLogger{log: logger}, publicURL, nodeID, localizer)
+		websocket: func(application *app.App, logger *logging.Logger, publicURL, nodeID string) (composedWebSocket, error) {
+			return websocket.NewHub(application.RealtimeAdmission, application.Attempts, logger, publicURL, nodeID, localizer)
 		},
 		attachSink: func(application *app.App, sink realtime.Sink) error {
 			return application.Realtime.AttachRealtimeSink(sink)
@@ -500,7 +500,7 @@ func httpAPIOptions(
 	}
 	identities := applicationIdentity(application)
 	return httpapi.Options{
-		Logger: apiLogger{log: capabilities.logger}, Health: readiness,
+		Logger: capabilities.logger, Health: readiness,
 		Metrics:  httpMetrics,
 		Tracing:  httpTracer,
 		Identity: identities, Search: search, AdministrationCounts: counts, Jobs: jobs,

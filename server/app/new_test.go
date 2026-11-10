@@ -41,11 +41,6 @@ type constructionRegistryStub struct {
 	identity.ExternalProviderSource
 }
 type constructionFileContentStub struct{ FileContent }
-type constructionAuthenticationDiagnosticsStub struct {
-	identity.AuthenticationDiagnostics
-}
-type constructionRealtimeDiagnosticsStub struct{ realtimeDiagnostics }
-type constructionRecoveryDiagnosticsStub struct{ identity.RecoveryDiagnostics }
 
 type activeMailPayloadKeyStoreFake struct {
 	state *store.MailKeyState
@@ -99,9 +94,9 @@ func TestApplicationDependencyValidationIsFailFastAndOrdered(t *testing.T) {
 		Registry:                  constructionRegistryStub{},
 		FileContent:               constructionFileContentStub{},
 		NodeID:                    "node-a",
-		AuthenticationDiagnostics: constructionAuthenticationDiagnosticsStub{},
-		RealtimeDiagnostics:       constructionRealtimeDiagnosticsStub{},
-		RecoveryDiagnostics:       constructionRecoveryDiagnosticsStub{},
+		AuthenticationDiagnostics: newDiscardLogger(t),
+		RealtimeDiagnostics:       newDiscardLogger(t),
+		RecoveryDiagnostics:       newDiscardLogger(t),
 	}
 	require.NoError(t, validateApplicationDependencies(valid))
 
@@ -270,7 +265,7 @@ func TestJobRecipeConnectsRuntimeOperationsAndProfileWake(t *testing.T) {
 				personalAccessTokens: constructionPersonalAccessTokenStoreStub{},
 				examSittings:         constructionExamSittingStoreStub{},
 			},
-			NodeID: "node-a", RecoveryDiagnostics: constructionRecoveryDiagnosticsStub{},
+			NodeID: "node-a", RecoveryDiagnostics: newDiscardLogger(t),
 		},
 		sharedMechanics{},
 		nil,

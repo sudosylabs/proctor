@@ -147,7 +147,7 @@ type invalidatingSecurityEffects struct{ invalidator *CacheInvalidator }
 
 func newInvalidatingSecurityEffects(t *testing.T, cache AuthenticationCache) invalidatingSecurityEffects {
 	t.Helper()
-	invalidator, err := NewCacheInvalidator(CacheInvalidatorDependencies{Cache: cache, Diagnostics: &securityEffectsDiagnosticsFake{}})
+	invalidator, err := NewCacheInvalidator(CacheInvalidatorDependencies{Cache: cache, Diagnostics: newDiscardLogger(t)})
 	require.NoError(t, err)
 	return invalidatingSecurityEffects{invalidator: invalidator}
 }

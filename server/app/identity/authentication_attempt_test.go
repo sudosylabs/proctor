@@ -461,7 +461,7 @@ func TestSuccessfulLoginTreatsAttemptResetFailureAsDiagnosticOnly(t *testing.T) 
 	}
 	persistence := newAuthenticationStoreFake()
 	service := newTestAuthenticationServiceWithCache(t, persistence, cache)
-	diagnostics := &securityEffectsDiagnosticsFake{}
+	diagnostics, logs := newTestLogger(t)
 	service.deps.Diagnostics = diagnostics
 	user, err := service.CreateLocalUser(context.Background(), CreateLocalUserCommand{
 		User: &model.User{
@@ -476,9 +476,10 @@ func TestSuccessfulLoginTreatsAttemptResetFailureAsDiagnosticOnly(t *testing.T) 
 	})
 	require.NoError(t, err, "login result")
 	require.NotNil(t, result, "login result")
-	require.Len(t, diagnostics.messages, 1)
-	require.Equal(t, "login rate-limit reset failed", diagnostics.messages[0])
-	for _, diagnostic := range append(append([]string(nil), diagnostics.messages...), diagnostics.errors...) {
+	records := loggedRecords(t, logs)
+	require.Len(t, records, 1)
+	require.Equal(t, "login rate-limit reset failed", records[0].Message)
+	for _, diagnostic := range append(loggedMessages(records), loggedErrors(records)...) {
 		lower := strings.ToLower(diagnostic)
 		require.NotContains(t, lower, "reset-user")
 		require.NotContains(t, lower, "192.0.2.9")

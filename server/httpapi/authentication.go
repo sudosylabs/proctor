@@ -25,6 +25,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -721,16 +722,16 @@ func ambiguousCredentialError() error {
 func writeApplicationError(
 	writer http.ResponseWriter,
 	request *http.Request,
-	logger Logger,
+	logger *logging.Logger,
 	appErr error,
 ) {
 	if applicationErrorRequiresLogging(appErr) {
 		logger.ErrorContext(
 			request.Context(),
 			"application request failed",
-			logString("request_id", RequestID(request.Context())),
-			logString("error_id", applicationErrorCode(appErr)),
-			logErr(appErr),
+			logging.String("request_id", RequestID(request.Context())),
+			logging.String("error_id", applicationErrorCode(appErr)),
+			logging.Err(appErr),
 		)
 	}
 	WriteError(writer, request, appErr)

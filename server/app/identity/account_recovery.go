@@ -24,6 +24,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -483,7 +484,7 @@ func (s *accountTokenService) logHiddenRecoveryFailure(
 	message string,
 	err error,
 ) {
-	s.deps.Diagnostics.ErrorContext(ctx, message, err)
+	s.deps.Diagnostics.ErrorContext(ctx, message, logging.Err(err))
 }
 
 func invalidAccountCredential() error {

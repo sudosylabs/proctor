@@ -11,6 +11,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/sudosylabs/proctor/server/logging"
 )
 
 type OccurrenceProposer interface {
@@ -89,7 +91,7 @@ func nextRecurrenceOccurrence(now time.Time, interval time.Duration) time.Time {
 	return now.UTC().Truncate(interval).Add(interval)
 }
 
-func runRecurrenceProposal(ctx context.Context, recurrence Recurrence, diagnostics Diagnostics, clock Clock, retryDelay time.Duration, wake func(), recorder Recorder) {
+func runRecurrenceProposal(ctx context.Context, recurrence Recurrence, diagnostics *logging.Logger, clock Clock, retryDelay time.Duration, wake func(), recorder Recorder) {
 	if recurrence.Name == "" || recurrence.Proposer == nil || diagnostics == nil || clock == nil || retryDelay <= 0 {
 		return
 	}
@@ -101,7 +103,7 @@ func runRecurrenceProposal(ctx context.Context, recurrence Recurrence, diagnosti
 			recorder.Record(Activity{Kind: "recurrence", Name: recurrence.Name, Operation: "propose", Outcome: simpleJobOutcome(err), Duration: time.Since(started)})
 		}
 		if err != nil && !errors.Is(err, context.Canceled) {
-			diagnostics.ErrorContext(ctx, "propose durable job "+recurrence.Name, err)
+			diagnostics.ErrorContext(ctx, "propose durable job "+recurrence.Name, logging.Err(err))
 		}
 		delay := retryDelay
 		if err == nil {

@@ -132,7 +132,7 @@ func TestConstructionProjectionOmitsLifecycleAuthority(t *testing.T) {
 		}
 		for _, specification := range generic.Specs {
 			typeSpec, ok := specification.(*ast.TypeSpec)
-			if !ok || (typeSpec.Name.Name != "borrowedCache" && typeSpec.Name.Name != "borrowedMailer" && typeSpec.Name.Name != "borrowedCluster" && typeSpec.Name.Name != "runtimeLogger") {
+			if !ok || (typeSpec.Name.Name != "borrowedCache" && typeSpec.Name.Name != "borrowedMailer" && typeSpec.Name.Name != "borrowedCluster") {
 				continue
 			}
 			checked[typeSpec.Name.Name] = true
@@ -150,30 +150,6 @@ func TestConstructionProjectionOmitsLifecycleAuthority(t *testing.T) {
 	for _, name := range []string{"borrowedCache", "borrowedMailer", "borrowedCluster"} {
 		assert.True(t, checked[name], "borrowed capability contract %s was removed or made uninspectable", name)
 	}
-
-	serverPath := filepath.Join("..", "server.go")
-	serverFile, err := parser.ParseFile(token.NewFileSet(), serverPath, nil, 0)
-	require.NoError(t, err)
-	for _, declaration := range serverFile.Decls {
-		generic, ok := declaration.(*ast.GenDecl)
-		if !ok {
-			continue
-		}
-		for _, specification := range generic.Specs {
-			typeSpec, ok := specification.(*ast.TypeSpec)
-			if !ok || typeSpec.Name.Name != "runtimeLogger" {
-				continue
-			}
-			checked["runtimeLogger"] = true
-			contract := typeSpec.Type.(*ast.InterfaceType)
-			for _, method := range contract.Methods.List {
-				for _, name := range method.Names {
-					assert.False(t, forbidden[name.Name], "runtimeLogger exposes lifecycle method %s", name.Name)
-				}
-			}
-		}
-	}
-	assert.True(t, checked["runtimeLogger"], "runtimeLogger borrowed contract was removed or made uninspectable")
 }
 
 func TestTestingRuntimeIsBehavioralProjection(t *testing.T) {

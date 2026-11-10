@@ -21,6 +21,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -59,7 +60,7 @@ func requireAuthentication(
 	next http.Handler,
 	requirement AuthRequirement,
 	application Authenticator,
-	logger Logger,
+	logger *logging.Logger,
 	cookies browserCookies,
 	recentAuthenticationTTL time.Duration,
 	errorPolicy routeErrorPolicy,
@@ -117,7 +118,7 @@ func requireAuthentication(
 			logger.ErrorContext(
 				request.Context(),
 				"route has unsupported authentication requirement",
-				logString("requirement", string(requirement)),
+				logging.String("requirement", string(requirement)),
 			)
 			WriteProblem(writer, internalProblem(request))
 		})
@@ -128,7 +129,7 @@ func requireAuthentication(
 // verifying CSRF when the credential arrived in a cookie.
 func requireRefreshCredential(
 	next http.Handler,
-	logger Logger,
+	logger *logging.Logger,
 	cookies browserCookies,
 	errorPolicy routeErrorPolicy,
 ) http.Handler {
@@ -198,7 +199,7 @@ func requestDPoPProof(request *http.Request) (string, error) {
 	return values[0], nil
 }
 
-func writeDPoPApplicationError(writer http.ResponseWriter, request *http.Request, logger Logger, policy routeErrorPolicy, err error) {
+func writeDPoPApplicationError(writer http.ResponseWriter, request *http.Request, logger *logging.Logger, policy routeErrorPolicy, err error) {
 	if nonce, ok := identity.DPoPChallengeNonce(err); ok {
 		writer.Header().Set("DPoP-Nonce", nonce)
 		writer.Header().Set("WWW-Authenticate", `DPoP error="use_dpop_nonce"`)

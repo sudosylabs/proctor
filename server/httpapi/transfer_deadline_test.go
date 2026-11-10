@@ -9,7 +9,6 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -109,7 +108,7 @@ func TestTransferRoutesOutliveServerTimeouts(t *testing.T) {
 	cookies, err := newBrowserCookies("http://localhost:8065")
 	require.NoError(t, err)
 	httpAPI := &API{
-		authenticator: authenticator, logger: discardLogger{}, localizer: newTestLocalizer(t), cookies: cookies,
+		authenticator: authenticator, logger: newDiscardLogger(t), localizer: newTestLocalizer(t), cookies: cookies,
 		recentAuthenticationTTL: time.Minute,
 		transferDeadlines:       newTransferDeadlines(serverTimeout, serverTimeout),
 	}
@@ -158,8 +157,3 @@ func TestTransferRoutesOutliveServerTimeouts(t *testing.T) {
 		require.True(t, bytes.Equal(body, downloadBody), "slow download = %d, %d bytes", response.StatusCode, len(body))
 	})
 }
-
-type discardLogger struct{}
-
-func (discardLogger) InfoContext(context.Context, string, ...LogField)  {}
-func (discardLogger) ErrorContext(context.Context, string, ...LogField) {}

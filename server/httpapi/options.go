@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -24,33 +25,12 @@ type BuildInfo struct {
 	GoVersion string `json:"go_version"`
 }
 
-// Logger is the narrow operational logging port owned by the HTTP transport.
-// Composition supplies a logging-backed adapter; package httpapi never imports logging.
-type Logger interface {
-	InfoContext(ctx context.Context, message string, fields ...LogField)
-	ErrorContext(ctx context.Context, message string, fields ...LogField)
-}
-
 // Localizer is the narrow presentation-owned localization port. Application
 // and domain failures remain stable codes; only the HTTP edge asks for prose.
 type Localizer interface {
 	Translate(locale, id string, args any) (string, error)
 	SupportedLocales() []string
 }
-
-// LogField is one structured operational log attribute.
-type LogField struct {
-	Key   string
-	Value any
-}
-
-func logString(key, value string) LogField  { return LogField{Key: key, Value: value} }
-func logInt(key string, value int) LogField { return LogField{Key: key, Value: value} }
-func logInt64(key string, value int64) LogField {
-	return LogField{Key: key, Value: value}
-}
-func logAny(key string, value any) LogField { return LogField{Key: key, Value: value} }
-func logErr(err error) LogField             { return LogField{Key: "error", Value: err} }
 
 type Health interface {
 	Live() bool
@@ -148,7 +128,7 @@ type routeMatcher struct {
 // Options contains composition-owned dependencies. New validates the complete
 // set before compiling any resource route into the immutable HTTP manifest.
 type Options struct {
-	Logger                        Logger
+	Logger                        *logging.Logger
 	Metrics                       Metrics
 	Tracing                       Tracing
 	Localizer                     Localizer

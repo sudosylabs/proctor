@@ -57,7 +57,7 @@ func TestSessionRevocationWithoutClusterFanoutRejectsWithWarmPeerCache(t *testin
 	require.NotEmpty(t, sessionID, "session not found")
 	hashes, err := storeFake.Session().Withdraw(ctx, &store.SessionWithdrawal{ID: model.SessionID(sessionID), UserID: user.ID, RevokedAt: time.Now(), Reason: model.SessionRevocationInactiveUser})
 	require.NoError(t, err)
-	invalidator, err := NewCacheInvalidator(CacheInvalidatorDependencies{Cache: cacheA, Diagnostics: &securityEffectsDiagnosticsFake{}})
+	invalidator, err := NewCacheInvalidator(CacheInvalidatorDependencies{Cache: cacheA, Diagnostics: newDiscardLogger(t)})
 	require.NoError(t, err)
 	invalidator.InvalidateAccessCredentials(ctx, hashes)
 

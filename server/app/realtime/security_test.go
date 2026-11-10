@@ -10,12 +10,13 @@ package realtime
 import (
 	"context"
 	"errors"
-	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -29,8 +30,7 @@ func TestSessionRevocationAppliesAllLocalEffectsBeforeStablePeerFanout(t *testin
 		order.add("broadcast")
 		return nil
 	}}
-	diagnostics := &recordingDiagnostics{}
-	service := mustNewService(t, invalidator, diagnostics)
+	service := mustNewService(t, invalidator, newDiscardLogger(t))
 	require.NoError(t, service.SetSink(sink))
 	require.NoError(t, service.SetClusterFanout(fanout))
 
@@ -66,7 +66,7 @@ func TestAuthenticationAndAuthorizationInvalidationPreserveWireFixtures(t *testi
 	const userID = "bbbbbbbbbbbbbbbbbbbbbbbbbb"
 	const hash = "345bf502d577508c91103476c743217fa304f9a15e92c6bdc5810f891677891f"
 	invalidator := &recordingInvalidator{}
-	service := mustNewService(t, invalidator, &recordingDiagnostics{})
+	service := mustNewService(t, invalidator, newDiscardLogger(t))
 	sink := &securityRecordingSink{}
 	fanout := &recordingFanout{}
 	require.NoError(t, service.SetSink(sink))
@@ -99,7 +99,7 @@ func TestAuthenticationAndAuthorizationInvalidationPreserveWireFixtures(t *testi
 func TestSecurityPropagationRejectsInvalidPeerAndLocalInputWithoutLeaks(t *testing.T) {
 	t.Parallel()
 
-	diagnostics := &recordingDiagnostics{}
+	diagnostics, logs := newTestLogger(t)
 	invalidator := &recordingInvalidator{}
 	sink := &securityRecordingSink{}
 	fanout := &recordingFanout{}
@@ -114,8 +114,8 @@ func TestSecurityPropagationRejectsInvalidPeerAndLocalInputWithoutLeaks(t *testi
 	require.Empty(t, fanout.broadcasts, "invalid local input produced effects: broadcasts")
 	require.Equal(t, 0, invalidator.accessCalls(), "invalid local input produced effects: broadcasts")
 	require.Equal(t, 0, sink.totalCloses(), "invalid local input produced effects: broadcasts")
-	require.Equal(t, 3, diagnostics.count(), "diagnostics count/text")
-	require.NotContains(t, diagnostics.joined(), sensitive, "diagnostics count/text")
+	require.Equal(t, 3, logCount(logs), "diagnostics count/text")
+	require.NotContains(t, logs.String(), sensitive, "diagnostics count/text")
 
 	require.Error(t, fanout.handler(clusterEventSessionRevoked)(context.Background(), []byte(`{"user_id":"invalid","session_ids":[],"access_token_hashes":[],"close_connections":true}`)), "invalid peer session revocation was accepted")
 	require.Error(t, fanout.handler(clusterEventAuthorizationInvalidated)(context.Background(), []byte(`{"user_id":"invalid"}`)), "invalid peer authorization invalidation was accepted")
@@ -131,27 +131,27 @@ func TestSecurityPropagationMissingAndFailingFanoutIsDiagnosticOnly(t *testing.T
 	const sessionID = "cccccccccccccccccccccccccc"
 	invalidator := &recordingInvalidator{}
 	sink := &securityRecordingSink{}
-	diagnostics := &recordingDiagnostics{}
+	diagnostics, logs := newTestLogger(t)
 	service := mustNewService(t, invalidator, diagnostics)
 	require.NoError(t, service.SetSink(sink))
 	service.SessionsRevoked(context.Background(), userID, []model.SessionID{sessionID}, nil)
 	service.AuthenticationCacheInvalidated(context.Background(), userID, nil)
 	require.Equal(t, 2, invalidator.accessCalls(), "missing fanout effects: access")
 	require.Equal(t, 1, sink.sessionCloseCount(), "missing fanout effects: access")
-	require.Equal(t, 2, diagnostics.count(), "missing fanout effects: access")
-	missingDiagnostics := diagnostics.joined()
+	require.Equal(t, 2, logCount(logs), "missing fanout effects: access")
+	missingDiagnostics := logs.String()
 	require.Contains(t, missingDiagnostics, securityOperationSessionRevocation)
 	require.Contains(t, missingDiagnostics, securityOperationAuthenticationCache)
 	require.Contains(t, missingDiagnostics, "realtime cluster fan-out is not attached")
 
-	failureDiagnostics := &recordingDiagnostics{}
+	failureDiagnostics, failureLogs := newTestLogger(t)
 	serviceWithFailure := mustNewService(t, &recordingInvalidator{}, failureDiagnostics)
 	secretFailure := "transport accidentally included credential-secret"
 	fanout := &recordingFanout{broadcast: func(string, []byte) error { return errors.New(secretFailure) }}
 	require.NoError(t, serviceWithFailure.SetClusterFanout(fanout))
 	serviceWithFailure.InvalidateAuthorization(context.Background(), userID)
-	failureText := failureDiagnostics.joined()
-	require.Equal(t, 1, failureDiagnostics.count())
+	failureText := failureLogs.String()
+	require.Equal(t, 1, logCount(failureLogs))
 	require.Contains(t, failureText, securityOperationAuthorization)
 	require.Contains(t, failureText, "realtime cluster fan-out failed")
 	require.NotContains(t, failureText, secretFailure)
@@ -164,7 +164,7 @@ func TestSecurityPropagationWithoutSinkStillInvalidatesAndFansOut(t *testing.T) 
 	const sessionID = "cccccccccccccccccccccccccc"
 	invalidator := &recordingInvalidator{}
 	fanout := &recordingFanout{}
-	service := mustNewService(t, invalidator, &recordingDiagnostics{})
+	service := mustNewService(t, invalidator, newDiscardLogger(t))
 	require.NoError(t, service.SetClusterFanout(fanout))
 
 	service.SessionsRevoked(context.Background(), userID, []model.SessionID{sessionID}, nil)
@@ -201,7 +201,7 @@ func TestConcurrentSecurityPropagation(t *testing.T) {
 	t.Parallel()
 
 	invalidator := &recordingInvalidator{}
-	service := mustNewService(t, invalidator, &recordingDiagnostics{})
+	service := mustNewService(t, invalidator, newDiscardLogger(t))
 	sink := &securityRecordingSink{}
 	fanout := &recordingFanout{}
 	require.NoError(t, service.SetSink(sink))
@@ -226,7 +226,7 @@ func TestConcurrentSecurityPropagation(t *testing.T) {
 func TestSecurityCollaboratorsAreRequiredAtConstruction(t *testing.T) {
 	t.Parallel()
 
-	_, err := New(Dependencies{AuthenticationInvalidator: nil, Diagnostics: &recordingDiagnostics{}})
+	_, err := New(Dependencies{AuthenticationInvalidator: nil, Diagnostics: newDiscardLogger(t)})
 	require.Error(t, err, "nil invalidator was accepted")
 	_, err = New(Dependencies{AuthenticationInvalidator: &recordingInvalidator{}, Diagnostics: nil})
 	require.Error(t, err, "nil diagnostics were accepted")
@@ -235,7 +235,7 @@ func TestSecurityCollaboratorsAreRequiredAtConstruction(t *testing.T) {
 func mustNewService(
 	t *testing.T,
 	invalidator AuthenticationInvalidator,
-	diagnostics Diagnostics,
+	diagnostics *logging.Logger,
 ) *Service {
 	t.Helper()
 	service, err := New(Dependencies{AuthenticationInvalidator: invalidator, Diagnostics: diagnostics})
@@ -334,34 +334,34 @@ func (s *securityRecordingSink) totalCloses() int {
 	return s.sessionCloseCount() + s.userCloseCount() + s.allCloseCount()
 }
 
-type diagnosticRecord struct {
-	message string
-	err     string
+// newTestLogger returns a real logger writing JSON records, one per line, to a
+// buffer the test may read.
+func newTestLogger(tb testing.TB) (*logging.Logger, *logging.Buffer) {
+	tb.Helper()
+	var logs logging.Buffer
+	logger, err := logging.New()
+	require.NoError(tb, err)
+	tb.Cleanup(func() { _ = logger.Shutdown() })
+	require.NoError(tb, logger.Configure(logging.Config{
+		MaxFieldBytes: 1024,
+		Targets: []logging.Target{{
+			Name: "test", Type: "console", Level: "debug", Format: "json", Writer: &logs,
+		}},
+	}))
+	return logger, &logs
 }
 
-type recordingDiagnostics struct {
-	mu      sync.Mutex
-	records []diagnosticRecord
+// newDiscardLogger returns a real logger whose records the test never reads.
+func newDiscardLogger(tb testing.TB) *logging.Logger {
+	tb.Helper()
+	logger, _ := newTestLogger(tb)
+	return logger
 }
 
-func (d *recordingDiagnostics) ErrorContext(_ context.Context, message string, err error) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.records = append(d.records, diagnosticRecord{message: message, err: fmt.Sprint(err)})
-}
-
-func (d *recordingDiagnostics) count() int {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	return len(d.records)
-}
-
-func (d *recordingDiagnostics) joined() string {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	return fmt.Sprint(d.records)
+// logCount reports how many records the buffer holds.
+func logCount(logs *logging.Buffer) int {
+	return strings.Count(logs.String(), "\n")
 }
 
 var _ AuthenticationInvalidator = (*recordingInvalidator)(nil)
 var _ Sink = (*securityRecordingSink)(nil)
-var _ Diagnostics = (*recordingDiagnostics)(nil)

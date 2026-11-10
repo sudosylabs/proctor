@@ -18,6 +18,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -144,10 +145,28 @@ func (*jobRunnerStoreFake) DeleteTerminalHistory(context.Context, *store.JobHist
 	return nil, nil
 }
 
-type jobDiagnosticsFake struct{ errors []error }
+// newTestLogger returns a real logger writing JSON records to a buffer the
+// test may read.
+func newTestLogger(tb testing.TB) (*logging.Logger, *logging.Buffer) {
+	tb.Helper()
+	var logs logging.Buffer
+	logger, err := logging.New()
+	require.NoError(tb, err)
+	tb.Cleanup(func() { _ = logger.Shutdown() })
+	require.NoError(tb, logger.Configure(logging.Config{
+		MaxFieldBytes: 1024,
+		Targets: []logging.Target{{
+			Name: "test", Type: "console", Level: "debug", Format: "json", Writer: &logs,
+		}},
+	}))
+	return logger, &logs
+}
 
-func (d *jobDiagnosticsFake) ErrorContext(_ context.Context, _ string, err error) {
-	d.errors = append(d.errors, err)
+// newDiscardLogger returns a real logger whose records the test never reads.
+func newDiscardLogger(tb testing.TB) *logging.Logger {
+	tb.Helper()
+	logger, _ := newTestLogger(tb)
+	return logger
 }
 
 type noOpProposer struct{}
@@ -159,7 +178,7 @@ func TestEngineValidatesRecurrencesAtConstruction(t *testing.T) {
 	descriptor := testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))
 	config := Dependencies{
 		Store: &jobRunnerStoreFake{}, Descriptors: []Descriptor{descriptor}, NodeID: "node-a",
-		Diagnostics: &jobDiagnosticsFake{}, Policy: Policy{PollInterval: time.Second},
+		Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Second},
 		Recurrences: []Recurrence{{Name: "daily", Proposer: noOpProposer{}}, {Name: "daily", Proposer: noOpProposer{}}},
 	}
 	_, err := New(config)
@@ -183,7 +202,7 @@ func TestEngineClaimsAndCompletesThroughItsPublicLifecycle(t *testing.T) {
 	recorder := &jobMetricsFake{}
 	engine, err := New(Dependencies{
 		Store: persistence, Descriptors: []Descriptor{descriptor}, NodeID: "node-a",
-		Diagnostics: &jobDiagnosticsFake{}, Recorder: recorder, Policy: Policy{PollInterval: time.Millisecond},
+		Diagnostics: newDiscardLogger(t), Recorder: recorder, Policy: Policy{PollInterval: time.Millisecond},
 	})
 	require.NoError(t, err)
 	described, describeErr := engine.Descriptor(descriptor.Type)
@@ -249,7 +268,7 @@ func TestEngineTracesEachExecutionWithTheHandlerInsideTheSpan(t *testing.T) {
 	tracer := &jobTracerFake{}
 	engine, err := New(Dependencies{
 		Store: persistence, Descriptors: []Descriptor{descriptor}, NodeID: "node-a",
-		Diagnostics: &jobDiagnosticsFake{}, Tracer: tracer, Policy: Policy{PollInterval: time.Millisecond},
+		Diagnostics: newDiscardLogger(t), Tracer: tracer, Policy: Policy{PollInterval: time.Millisecond},
 	})
 	require.NoError(t, err)
 	require.NoError(t, engine.Start(context.Background()))
@@ -288,7 +307,7 @@ func TestEngineRecordsUnsupportedClaimAsAnExecution(t *testing.T) {
 	recorder := &jobMetricsFake{}
 	engine, err := New(Dependencies{
 		Store: persistence, Descriptors: []Descriptor{descriptor}, NodeID: "node-a",
-		Diagnostics: &jobDiagnosticsFake{}, Recorder: recorder, Policy: Policy{PollInterval: time.Millisecond},
+		Diagnostics: newDiscardLogger(t), Recorder: recorder, Policy: Policy{PollInterval: time.Millisecond},
 	})
 	require.NoError(t, err)
 	err = engine.Start(context.Background())
@@ -334,7 +353,7 @@ func TestEngineSchedulesRetryWithBoundedDeterministicBackoff(t *testing.T) {
 			persistence := &jobRunnerStoreFake{}
 			registry, err := NewRegistry([]Descriptor{descriptor})
 			require.NoError(t, err)
-			engine, err := newTestEngine(persistence, registry, "node-a", &jobDiagnosticsFake{}, time.Second)
+			engine, err := newTestEngine(persistence, registry, "node-a", newDiscardLogger(t), time.Second)
 			require.NoError(t, err)
 			engine.execute(context.Background(), descriptor, claim)
 			persistence.mu.Lock()
@@ -357,7 +376,7 @@ func TestEngineRelinquishesIncompatibleWorkWithoutConsumingItsRetryBudget(t *tes
 	registry, err := NewRegistry([]Descriptor{descriptor})
 	require.NoError(t, err)
 	persistence := &jobRunnerStoreFake{}
-	runner, err := newTestEngine(persistence, registry, "node-old", &jobDiagnosticsFake{}, time.Second)
+	runner, err := newTestEngine(persistence, registry, "node-old", newDiscardLogger(t), time.Second)
 	require.NoError(t, err)
 
 	runner.execute(context.Background(), descriptor, claim)
@@ -377,7 +396,7 @@ func TestEngineContainsPanicsAsRetryableOutcomes(t *testing.T) {
 	registry, err := NewRegistry([]Descriptor{descriptor})
 	require.NoError(t, err)
 	persistence := &jobRunnerStoreFake{}
-	runner, err := newTestEngine(persistence, registry, "node-a", &jobDiagnosticsFake{}, time.Second)
+	runner, err := newTestEngine(persistence, registry, "node-a", newDiscardLogger(t), time.Second)
 	require.NoError(t, err)
 	runner.execute(context.Background(), descriptor, claim)
 	persistence.mu.Lock()
@@ -402,7 +421,7 @@ func TestEngineFencesOccurrenceWorkReservations(t *testing.T) {
 	registry, err := NewRegistry([]Descriptor{descriptor})
 	require.NoError(t, err)
 	persistence := &jobRunnerStoreFake{}
-	runner, err := newTestEngine(persistence, registry, "node-a", &jobDiagnosticsFake{}, time.Second)
+	runner, err := newTestEngine(persistence, registry, "node-a", newDiscardLogger(t), time.Second)
 	require.NoError(t, err)
 	runner.execute(context.Background(), descriptor, claim)
 	require.True(t, reserved, "reservation")
@@ -427,7 +446,7 @@ func TestEngineHeartbeatsLongWorkAndCompletesWithItsFence(t *testing.T) {
 	registry, err := NewRegistry([]Descriptor{descriptor})
 	require.NoError(t, err)
 	persistence := &jobRunnerStoreFake{}
-	runner, err := newTestEngine(persistence, registry, "node-a", &jobDiagnosticsFake{}, time.Second)
+	runner, err := newTestEngine(persistence, registry, "node-a", newDiscardLogger(t), time.Second)
 	require.NoError(t, err)
 	runner.execute(context.Background(), descriptor, claim)
 	persistence.mu.Lock()
@@ -464,7 +483,7 @@ func TestEngineToleratesHeartbeatFailuresWithinLeaseSlack(t *testing.T) {
 			registry, err := NewRegistry([]Descriptor{descriptor})
 			require.NoError(t, err)
 			persistence := &jobRunnerStoreFake{heartbeatErrors: []error{test.failure}}
-			runner, err := newTestEngine(persistence, registry, "node-a", &jobDiagnosticsFake{}, time.Second)
+			runner, err := newTestEngine(persistence, registry, "node-a", newDiscardLogger(t), time.Second)
 			require.NoError(t, err)
 			runner.execute(context.Background(), descriptor, claim)
 			persistence.mu.Lock()
@@ -491,7 +510,7 @@ func TestEngineCompletesHandlerThatSucceedsAtItsTimeout(t *testing.T) {
 	registry, err := NewRegistry([]Descriptor{descriptor})
 	require.NoError(t, err)
 	persistence := &jobRunnerStoreFake{}
-	runner, err := newTestEngine(persistence, registry, "node-a", &jobDiagnosticsFake{}, time.Second)
+	runner, err := newTestEngine(persistence, registry, "node-a", newDiscardLogger(t), time.Second)
 	require.NoError(t, err)
 	runner.execute(context.Background(), descriptor, claim)
 	persistence.mu.Lock()
@@ -512,7 +531,7 @@ func TestEngineObservesDurableCancellationCooperatively(t *testing.T) {
 	persistence := &jobRunnerStoreFake{cancelRequested: true}
 	registry, err := NewRegistry([]Descriptor{descriptor})
 	require.NoError(t, err)
-	runner, err := newTestEngine(persistence, registry, "node-a", &jobDiagnosticsFake{}, time.Second)
+	runner, err := newTestEngine(persistence, registry, "node-a", newDiscardLogger(t), time.Second)
 	require.NoError(t, err)
 	runner.execute(context.Background(), descriptor, claim)
 	persistence.mu.Lock()
@@ -530,7 +549,7 @@ func TestEngineRejectsASucceededOutcomeWithoutResult(t *testing.T) {
 	registry, err := NewRegistry([]Descriptor{descriptor})
 	require.NoError(t, err)
 	persistence := &jobRunnerStoreFake{}
-	runner, err := newTestEngine(persistence, registry, "node-a", &jobDiagnosticsFake{}, time.Second)
+	runner, err := newTestEngine(persistence, registry, "node-a", newDiscardLogger(t), time.Second)
 	require.NoError(t, err)
 	runner.execute(context.Background(), descriptor, claim)
 	persistence.mu.Lock()
@@ -548,7 +567,7 @@ func TestEngineShutdownIsBounded(t *testing.T) {
 	descriptor.Timeout = 20 * time.Millisecond
 	registry, err := NewRegistry([]Descriptor{descriptor})
 	require.NoError(t, err)
-	runner, err := newTestEngine(&jobRunnerStoreFake{}, registry, "node-a", &jobDiagnosticsFake{}, time.Second)
+	runner, err := newTestEngine(&jobRunnerStoreFake{}, registry, "node-a", newDiscardLogger(t), time.Second)
 	require.NoError(t, err)
 	blocked := make(chan struct{})
 	runner.wg.Add(1)
@@ -574,7 +593,7 @@ func TestEngineShutdownEndsWithTheCallersBudget(t *testing.T) {
 	descriptor.Timeout = time.Minute
 	registry, err := NewRegistry([]Descriptor{descriptor})
 	require.NoError(t, err)
-	runner, err := newTestEngine(&jobRunnerStoreFake{}, registry, "node-a", &jobDiagnosticsFake{}, time.Second)
+	runner, err := newTestEngine(&jobRunnerStoreFake{}, registry, "node-a", newDiscardLogger(t), time.Second)
 	require.NoError(t, err)
 	blocked := make(chan struct{})
 	t.Cleanup(func() { close(blocked) })
@@ -611,7 +630,7 @@ func TestEngineEnforcesTypedCheckpointContract(t *testing.T) {
 	registry, err := NewRegistry([]Descriptor{descriptor})
 	require.NoError(t, err)
 	persistence := &jobRunnerStoreFake{}
-	runner, err := newTestEngine(persistence, registry, "node-a", &jobDiagnosticsFake{}, time.Second)
+	runner, err := newTestEngine(persistence, registry, "node-a", newDiscardLogger(t), time.Second)
 	require.NoError(t, err)
 	runner.execute(context.Background(), descriptor, claim)
 	require.NoError(t, checkpointErr)
@@ -653,7 +672,7 @@ func succeededOutcome() Outcome {
 	return Outcome{Kind: OutcomeSucceeded, Result: json.RawMessage(`{}`)}
 }
 
-func newTestEngine(persistence store.JobStore, registry *Registry, nodeID string, diagnostics Diagnostics, poll time.Duration) (*Engine, error) {
+func newTestEngine(persistence store.JobStore, registry *Registry, nodeID string, diagnostics *logging.Logger, poll time.Duration) (*Engine, error) {
 	descriptors := make([]Descriptor, 0, len(registry.types))
 	for _, jobType := range registry.types {
 		descriptors = append(descriptors, registry.descriptors[jobType])

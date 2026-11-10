@@ -7,11 +7,14 @@
 
 package app
 
-import "github.com/sudosylabs/proctor/server/app/realtime"
+import (
+	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/logging"
+)
 
 func newRealtimeService(
 	invalidator realtime.AuthenticationInvalidator,
-	diagnostics realtimeDiagnostics,
+	diagnostics *logging.Logger,
 ) (*RealtimeService, error) {
 	delivery, err := realtime.New(realtime.Dependencies{AuthenticationInvalidator: invalidator, Diagnostics: diagnostics})
 	if err != nil {

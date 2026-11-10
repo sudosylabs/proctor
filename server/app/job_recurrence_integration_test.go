@@ -130,7 +130,7 @@ func newRecurrenceIntegrationEngine(t *testing.T, persistence *sqlstore.SQLStore
 	descriptor.Handler = recurrenceIntegrationHandler{}
 	engine, err := job.New(job.Dependencies{
 		Store: persistence.Job(), Descriptors: []job.Descriptor{descriptor},
-		NodeID: nodeID, Diagnostics: &integrationJobDiagnostics{},
+		NodeID: nodeID, Diagnostics: newDiscardLogger(t),
 		Policy: job.Policy{PollInterval: 5 * time.Millisecond, ProposalRetryDelay: 5 * time.Millisecond},
 		Clock:  fixedRealtimeClock{at: occurrence}, Recurrences: []job.Recurrence{{Name: "job-history-cleanup", Proposer: proposer}},
 	})

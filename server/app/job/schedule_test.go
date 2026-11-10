@@ -81,7 +81,7 @@ func TestEngineRetriesSameOccurrenceWakesLocallyAndStopsRecurrence(t *testing.T)
 	descriptor := testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))
 	persistence := &jobRunnerStoreFake{claimRequests: make(chan struct{}, 8)}
 	engine, err := New(Dependencies{
-		Store: persistence, Descriptors: []Descriptor{descriptor}, NodeID: "node-a", Diagnostics: &jobDiagnosticsFake{},
+		Store: persistence, Descriptors: []Descriptor{descriptor}, NodeID: "node-a", Diagnostics: newDiscardLogger(t),
 		Policy: Policy{PollInterval: time.Hour, ProposalRetryDelay: 10 * time.Second}, Clock: clock,
 		Recurrences: []Recurrence{{Name: "daily", Proposer: proposer}},
 	})
@@ -132,7 +132,7 @@ func TestEngineCopiesRecurrenceDefinitionsAtConstruction(t *testing.T) {
 	recurrences := []Recurrence{{Name: "daily", Proposer: original}}
 	descriptor := testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))
 	engine, err := New(Dependencies{
-		Store: &jobRunnerStoreFake{}, Descriptors: []Descriptor{descriptor}, NodeID: "node-a", Diagnostics: &jobDiagnosticsFake{},
+		Store: &jobRunnerStoreFake{}, Descriptors: []Descriptor{descriptor}, NodeID: "node-a", Diagnostics: newDiscardLogger(t),
 		Policy: Policy{PollInterval: time.Hour}, Clock: clock, Recurrences: recurrences,
 	})
 	require.NoError(t, err)
@@ -161,7 +161,7 @@ func TestConcurrentEnginesAndRestartProposeTheSameOccurrence(t *testing.T) {
 	newEngine := func(nodeID string) *Engine {
 		t.Helper()
 		engine, err := New(Dependencies{
-			Store: &jobRunnerStoreFake{}, Descriptors: []Descriptor{descriptor}, NodeID: nodeID, Diagnostics: &jobDiagnosticsFake{},
+			Store: &jobRunnerStoreFake{}, Descriptors: []Descriptor{descriptor}, NodeID: nodeID, Diagnostics: newDiscardLogger(t),
 			Policy: Policy{PollInterval: time.Hour}, Clock: newManualClock(at),
 			Recurrences: []Recurrence{{Name: "daily", Proposer: proposer}},
 		})
@@ -201,9 +201,10 @@ func TestRecurrenceIntervalRetriesSameBucketThenAdvancesAtUTCBoundary(t *testing
 	proposer := &occurrenceProposerFake{calls: make(chan time.Time, 4), fail: 1}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
+	logger := newDiscardLogger(t)
 	go func() {
 		defer close(done)
-		runRecurrenceProposal(ctx, Recurrence{Name: "hourly", Interval: time.Hour, Proposer: proposer}, &jobDiagnosticsFake{}, clock, 5*time.Minute, nil, nil)
+		runRecurrenceProposal(ctx, Recurrence{Name: "hourly", Interval: time.Hour, Proposer: proposer}, logger, clock, 5*time.Minute, nil, nil)
 	}()
 	defer func() { cancel(); <-done }()
 	require.True(t, (<-proposer.calls).Equal(at))

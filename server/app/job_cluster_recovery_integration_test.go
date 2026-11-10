@@ -78,7 +78,7 @@ func TestJobRunnerRecoversNodeLossAroundADurableDomainCommit(t *testing.T) {
 			descriptor := clusteredRecoveryJobDescriptor(handler)
 			nodeA, err := job.New(job.Dependencies{
 				Store: persistence.Job(), Descriptors: []job.Descriptor{descriptor}, NodeID: "node-a",
-				Diagnostics: &integrationJobDiagnostics{}, Policy: job.Policy{PollInterval: 5 * time.Millisecond},
+				Diagnostics: newDiscardLogger(t), Policy: job.Policy{PollInterval: 5 * time.Millisecond},
 			})
 			require.NoError(t, err)
 			err = nodeA.Start(context.Background())
@@ -115,7 +115,7 @@ func TestJobRunnerRecoversNodeLossAroundADurableDomainCommit(t *testing.T) {
 			time.Sleep(3 * descriptor.LeaseDuration)
 			nodeB, err := job.New(job.Dependencies{
 				Store: persistence.Job(), Descriptors: []job.Descriptor{descriptor}, NodeID: "node-b",
-				Diagnostics: &integrationJobDiagnostics{}, Policy: job.Policy{PollInterval: 5 * time.Millisecond},
+				Diagnostics: newDiscardLogger(t), Policy: job.Policy{PollInterval: 5 * time.Millisecond},
 			})
 			require.NoError(t, err)
 			err = nodeB.Start(context.Background())
@@ -160,10 +160,6 @@ func TestJobRunnerRecoversNodeLossAroundADurableDomainCommit(t *testing.T) {
 		})
 	}
 }
-
-type integrationJobDiagnostics struct{}
-
-func (*integrationJobDiagnostics) ErrorContext(context.Context, string, error) {}
 
 // recoveryCatalog serves the recovery file store in place of the real one.
 type recoveryCatalog struct {

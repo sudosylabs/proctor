@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -79,7 +80,7 @@ type currentAuthenticationAccessPolicyDependencies struct {
 	// two-step verification. While it is false the role holder requirement
 	// pauses instead of restricting everyone it covers.
 	MFAEnabled  bool
-	Diagnostics AuthenticationDiagnostics
+	Diagnostics *logging.Logger
 	Now         func() time.Time
 }
 
@@ -173,7 +174,7 @@ func (p *currentAuthenticationAccessPolicy) RequiresMFA(ctx context.Context, use
 		if policy.RoleHolderMFARequired {
 			p.pausedWarning.Do(func() {
 				p.deps.Diagnostics.WarnContext(ctx, "role holder two-step verification is paused",
-					errors.New("the access policy requires two-step verification of role holders, but the deployment configuration disables MFA"))
+					logging.Err(errors.New("the access policy requires two-step verification of role holders, but the deployment configuration disables MFA")))
 			})
 		}
 		return false, nil

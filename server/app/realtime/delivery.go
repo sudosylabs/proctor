@@ -23,6 +23,7 @@ import (
 	"io"
 	"sync"
 
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -55,13 +56,6 @@ type AuthenticationInvalidator interface {
 	InvalidateSessionActivity(context.Context, []model.SessionID)
 }
 
-// Diagnostics records bounded, non-fatal security propagation failures.
-// Implementations must not enrich these reports with complete payloads or
-// security-sensitive identifiers.
-type Diagnostics interface {
-	ErrorContext(context.Context, string, error)
-}
-
 // InvalidPublicationError reports a transport-neutral event validation
 // failure. Callers decide how to expose the failure at their boundary.
 type InvalidPublicationError struct {
@@ -84,7 +78,10 @@ func (e *DeliveryError) Unwrap() error { return e.err }
 // New validates them once and Service keeps them in deps.
 type Dependencies struct {
 	AuthenticationInvalidator AuthenticationInvalidator
-	Diagnostics               Diagnostics
+	// Diagnostics records bounded, non-fatal security propagation failures. It
+	// must not be enriched with complete payloads or security-sensitive
+	// identifiers.
+	Diagnostics *logging.Logger
 }
 
 // Service owns ordinary realtime event delivery. It is inert after

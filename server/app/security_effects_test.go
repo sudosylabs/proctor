@@ -26,9 +26,9 @@ type securityInstitutionStore struct{ store.InstitutionStore }
 func TestRealtimeServiceRequiresSecurityDependencies(t *testing.T) {
 	t.Parallel()
 
-	invalidator, err := identity.NewCacheInvalidator(identity.CacheInvalidatorDependencies{Cache: newAuthenticationCacheFake(), Diagnostics: &securityEffectsDiagnosticsFake{}})
+	invalidator, err := identity.NewCacheInvalidator(identity.CacheInvalidatorDependencies{Cache: newAuthenticationCacheFake(), Diagnostics: newDiscardLogger(t)})
 	require.NoError(t, err)
-	_, err = newRealtimeService(nil, &securityEffectsRealtimeDiagnosticsFake{})
+	_, err = newRealtimeService(nil, newDiscardLogger(t))
 	require.Error(t, err, "nil authentication invalidator was accepted")
 	_, err = newRealtimeService(invalidator, nil)
 	require.Error(t, err, "nil realtime diagnostics were accepted")

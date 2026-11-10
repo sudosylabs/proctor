@@ -32,6 +32,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
@@ -69,12 +70,6 @@ func recordOperational(recorder OperationalRecorder, subsystem, event string, er
 	if recorder != nil {
 		recorder.RecordOperational(subsystem, event, err)
 	}
-}
-
-// RecoveryDiagnostics reports non-fatal recovery failures without depending
-// on a concrete logger package.
-type RecoveryDiagnostics interface {
-	ErrorContext(ctx context.Context, message string, err error)
 }
 
 // PasswordPolicy is the immutable password-hashing projection composition
@@ -156,8 +151,8 @@ type Dependencies struct {
 	ExternalAuth            ExternalAuthenticationPolicy
 	RecentAuthenticationTTL time.Duration
 
-	AuthenticationDiagnostics AuthenticationDiagnostics
-	RecoveryDiagnostics       RecoveryDiagnostics
+	AuthenticationDiagnostics *logging.Logger
+	RecoveryDiagnostics       *logging.Logger
 }
 
 // Service holds every identity use case. Each concern keeps its own focused

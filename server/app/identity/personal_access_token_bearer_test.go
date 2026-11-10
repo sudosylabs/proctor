@@ -31,7 +31,7 @@ func TestPersonalAccessTokenBearerResolverPreservesCredentialCeilings(t *testing
 	persistence := &personalAccessTokenResolutionStoreFake{
 		resolution: &store.PersonalAccessTokenResolution{Token: token, User: user},
 	}
-	resolver, err := newPersonalAccessTokenBearerResolver(personalAccessTokenBearerResolverDependencies{Tokens: persistence, Policy: PersonalAccessTokenPolicy{LastUsedUpdateInterval: 5 * time.Minute}, Diagnostics: personalAccessTokenDiagnosticsFake{}})
+	resolver, err := newPersonalAccessTokenBearerResolver(personalAccessTokenBearerResolverDependencies{Tokens: persistence, Policy: PersonalAccessTokenPolicy{LastUsedUpdateInterval: 5 * time.Minute}, Diagnostics: newDiscardLogger(t)})
 	require.NoError(t, err)
 
 	principal, err := resolver.ResolveBearer(context.Background(), raw, at)
@@ -70,7 +70,3 @@ func (s *personalAccessTokenResolutionStoreFake) Resolve(
 	s.hash, s.at, s.updateInterval = hash, at, updateInterval
 	return s.resolution, nil
 }
-
-type personalAccessTokenDiagnosticsFake struct{}
-
-func (personalAccessTokenDiagnosticsFake) WarnContext(context.Context, string, error) {}

@@ -21,6 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/app/user"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
@@ -95,7 +96,7 @@ type Dependencies struct {
 	ExternalAuth            identity.ExternalAuthenticationPolicy
 	RecentAuthenticationTTL time.Duration
 
-	AuthenticationDiagnostics identity.AuthenticationDiagnostics
-	RealtimeDiagnostics       realtimeDiagnostics
-	RecoveryDiagnostics       identity.RecoveryDiagnostics
+	AuthenticationDiagnostics *logging.Logger
+	RealtimeDiagnostics       *logging.Logger
+	RecoveryDiagnostics       *logging.Logger
 }

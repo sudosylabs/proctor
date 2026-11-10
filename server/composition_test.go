@@ -21,6 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/cluster"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/httpapi"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/webui"
 )
@@ -101,7 +102,7 @@ func TestConsumerConstructionFailuresUnwindExactlyOnce(t *testing.T) {
 				application:    func(app.Dependencies) (*app.App, error) { return nil, nil },
 				realtime:       func(borrowedCluster) (realtime.ClusterFanout, error) { return compositionFanout{}, nil },
 				attachRealtime: func(*app.App, realtime.ClusterFanout) error { return nil },
-				websocket: func(*app.App, runtimeLogger, string, string) (composedWebSocket, error) {
+				websocket: func(*app.App, *logging.Logger, string, string) (composedWebSocket, error) {
 					return compositionWebSocket{closer: websocketCloser}, nil
 				},
 				attachSink: func(*app.App, realtime.Sink) error { return nil },
@@ -126,7 +127,7 @@ func TestConsumerConstructionFailuresUnwindExactlyOnce(t *testing.T) {
 			case "attach-realtime":
 				constructors.attachRealtime = func(*app.App, realtime.ClusterFanout) error { return primaryErr }
 			case "websocket":
-				constructors.websocket = func(*app.App, runtimeLogger, string, string) (composedWebSocket, error) { return nil, primaryErr }
+				constructors.websocket = func(*app.App, *logging.Logger, string, string) (composedWebSocket, error) { return nil, primaryErr }
 			case "attach-sink":
 				constructors.attachSink = func(*app.App, realtime.Sink) error { return primaryErr }
 			case "http":
@@ -187,7 +188,7 @@ func TestRealtimeHandlerRegistrationFailureUnwindsComposition(t *testing.T) {
 			return newRealtimeClusterAdapter(cluster)
 		},
 		attachRealtime: func(_ *app.App, fanout realtime.ClusterFanout) error {
-			service, err := realtime.New(realtime.Dependencies{AuthenticationInvalidator: noopRealtimeInvalidator{}, Diagnostics: silentClusterLogger{}})
+			service, err := realtime.New(realtime.Dependencies{AuthenticationInvalidator: noopRealtimeInvalidator{}, Diagnostics: newDiscardLogger(t)})
 			if err != nil {
 				return err
 			}

@@ -17,13 +17,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type connectionRuntime struct {
 	application Application
 	attempts    ExamAttemptApplication
-	logger      Logger
+	logger      *logging.Logger
 	localizer   Localizer
 	locale      string
 	nodeID      string
@@ -74,7 +75,7 @@ type examAttemptBinding struct {
 func newConnectionRuntime(
 	application Application,
 	attempts ExamAttemptApplication,
-	logger Logger,
+	logger *logging.Logger,
 	localizer Localizer,
 	locale string,
 	nodeID string,

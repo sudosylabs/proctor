@@ -72,7 +72,7 @@ func TestRequestTracingContinuesParentsOnlyFromTrustedProxies(t *testing.T) {
 			handler := withMiddleware(nameRequestSpan(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 				inner = request.Context().Value(tracedContextKey{})
 				writer.WriteHeader(http.StatusNoContent)
-			}), "/api/v1/users/{user_id:[0-9a-z]{26}}/affiliations"), discardLogger{}, middlewarePolicy{trustedProxies: proxies, tracing: tracing})
+			}), "/api/v1/users/{user_id:[0-9a-z]{26}}/affiliations"), newDiscardLogger(t), middlewarePolicy{trustedProxies: proxies, tracing: tracing})
 			request := httptest.NewRequestWithContext(t.Context(), "PROPFIND", "/api/v1/users/abc/affiliations?token=secret", nil)
 			request.RemoteAddr = test.remoteAddress
 			request.Header.Set("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")

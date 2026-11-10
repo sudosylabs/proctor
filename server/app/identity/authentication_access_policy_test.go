@@ -23,7 +23,7 @@ func TestCurrentAuthenticationAccessPolicyReturnsExactExternalProviderAdmission(
 	policy.ProviderAdmissions["campus"] = model.ProviderAdmissionInvitationRequired
 	reader, err := newCurrentAuthenticationAccessPolicy(currentAuthenticationAccessPolicyDependencies{Policies: &accessPolicyStoreFake{
 		snapshot: &store.AccessPolicySnapshot{Policy: policy},
-	}, Diagnostics: &securityEffectsDiagnosticsFake{}, Now: time.Now})
+	}, Diagnostics: newDiscardLogger(t), Now: time.Now})
 	require.NoError(t, err)
 
 	admission, err := reader.ExternalProviderAdmission(context.Background(), " CAMPUS ")
@@ -53,7 +53,7 @@ func TestCurrentAuthenticationAccessPolicyPausesRoleHolderMFAWithoutMFA(t *testi
 		{name: "paused while MFA is disabled", mfaEnabled: false, want: false, warnings: 1},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			diagnostics := &securityEffectsDiagnosticsFake{}
+			diagnostics, logs := newTestLogger(t)
 			reader, err := newCurrentAuthenticationAccessPolicy(currentAuthenticationAccessPolicyDependencies{Policies: policies,
 				MFAEnabled: test.mfaEnabled, Diagnostics: diagnostics, Now: time.Now})
 			require.NoError(t, err)
@@ -62,7 +62,7 @@ func TestCurrentAuthenticationAccessPolicyPausesRoleHolderMFAWithoutMFA(t *testi
 				require.NoError(t, requireErr)
 				require.Equal(t, test.want, required)
 			}
-			require.Len(t, diagnostics.messages, test.warnings, "the paused rule warns once, not per request")
+			require.Len(t, loggedRecords(t, logs), test.warnings, "the paused rule warns once, not per request")
 		})
 	}
 }

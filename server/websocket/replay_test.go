@@ -16,6 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -74,10 +75,11 @@ func TestConnectionRuntimeClonesTheAcceptedPrincipal(t *testing.T) {
 		CredentialScopes: []string{"class.view"},
 	}
 	application := &inboundTestApplication{}
+	logger, _ := newTestLogger(t)
 	runtime := newConnectionRuntime(
 		application,
 		application,
-		replayTestLogger{},
+		logger,
 		nil,
 		"",
 		"node-a",
@@ -189,10 +191,11 @@ func TestHubRetainsOnlyTheRuntimeFinalSnapshot(t *testing.T) {
 func newInternalTestHub(t *testing.T) *Hub {
 	t.Helper()
 	application := &inboundTestApplication{}
+	logger, _ := newTestLogger(t)
 	hub, err := NewHub(
 		application,
 		application,
-		replayTestLogger{},
+		logger,
 		"https://proctor.example",
 		"node-a",
 		nil,
@@ -201,6 +204,18 @@ func newInternalTestHub(t *testing.T) *Hub {
 	return hub
 }
 
-type replayTestLogger struct{}
-
-func (replayTestLogger) WarnContext(context.Context, string, error) {}
+// newTestLogger returns a real logger writing to a buffer the test may read.
+func newTestLogger(tb testing.TB) (*logging.Logger, *logging.Buffer) {
+	tb.Helper()
+	var logs logging.Buffer
+	logger, err := logging.New()
+	require.NoError(tb, err)
+	tb.Cleanup(func() { _ = logger.Shutdown() })
+	require.NoError(tb, logger.Configure(logging.Config{
+		MaxFieldBytes: 1024,
+		Targets: []logging.Target{{
+			Name: "test", Type: "console", Level: "debug", Format: "json", Writer: &logs,
+		}},
+	}))
+	return logger, &logs
+}

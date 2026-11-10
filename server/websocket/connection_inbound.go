@@ -25,6 +25,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -571,7 +572,7 @@ func (c *connectionRuntime) finalizeExamAttempt(ctx context.Context) {
 			ConnectionID: binding.connectionID, Reason: model.AttemptConnectionCloseTransport,
 		})
 		if err != nil && c.logger != nil {
-			c.logger.WarnContext(closeCtx, "Exam Attempt connection close failed", err)
+			c.logger.WarnContext(closeCtx, "Exam Attempt connection close failed", logging.Err(err))
 		}
 	})
 }

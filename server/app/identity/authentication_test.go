@@ -590,7 +590,7 @@ func newTestAuthenticationServiceWithEffects(
 		MaximumSourceAttempts:      100,
 		AccountFailuresBeforeDelay: 50,
 		MaximumAccountFailureDelay: time.Second,
-	}, Diagnostics: &securityEffectsDiagnosticsFake{}, NewCredential: newCredential, Now: now, Desktop: testAuthenticationDesktopDependencies(t, cache)})
+	}, Diagnostics: newDiscardLogger(t), NewCredential: newCredential, Now: now, Desktop: testAuthenticationDesktopDependencies(t, cache)})
 	require.NoError(t, err)
 	return service
 }

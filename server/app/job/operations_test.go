@@ -64,7 +64,7 @@ func TestEngineProjectsOnlySafeOperatorFields(t *testing.T) {
 	persistence := &operatorStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: record, list: []*model.Job{record}}
 	engine, err := New(Dependencies{
 		Store: persistence, Descriptors: []Descriptor{testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))},
-		NodeID: "node-a", Diagnostics: &jobDiagnosticsFake{}, Policy: Policy{PollInterval: time.Second},
+		NodeID: "node-a", Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Second},
 	})
 	require.NoError(t, err)
 	page, err := engine.List(context.Background(), ListQuery{Limit: 20})
@@ -102,7 +102,7 @@ func TestEngineCountsTheFirstPageOfOperatorVisibleJobs(t *testing.T) {
 	require.NoError(t, err)
 	persistence := &operatorStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: record, list: []*model.Job{record}, total: store.MaximumListCount}
 	engine, err := New(Dependencies{Store: persistence, Descriptors: []Descriptor{testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))},
-		NodeID: "node-a", Diagnostics: &jobDiagnosticsFake{}, Policy: Policy{PollInterval: time.Second}})
+		NodeID: "node-a", Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Second}})
 	require.NoError(t, err)
 
 	page, err := engine.List(context.Background(), ListQuery{Statuses: []model.JobStatus{model.JobStatusFailed}, Limit: 20})
@@ -144,7 +144,7 @@ func TestEngineProjectsSafeAttemptsAndPreservesCursor(t *testing.T) {
 	require.NoError(t, err)
 	attempt := model.JobAttempt{ID: model.NewJobAttemptID(), JobID: record.ID, Number: 3, Status: model.JobAttemptStatusRunning, NodeID: "private-node", ClaimToken: model.JobClaimToken(strings.Repeat("a", 64)), StartedAt: at, HeartbeatAt: at, LeaseExpiresAt: at.Add(time.Minute)}
 	persistence := &operatorStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: record, attempts: []model.JobAttempt{attempt}}
-	engine, err := New(Dependencies{Store: persistence, Descriptors: []Descriptor{testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))}, NodeID: "node-a", Diagnostics: &jobDiagnosticsFake{}, Policy: Policy{PollInterval: time.Second}})
+	engine, err := New(Dependencies{Store: persistence, Descriptors: []Descriptor{testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))}, NodeID: "node-a", Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Second}})
 	require.NoError(t, err)
 	page, err := engine.Attempts(context.Background(), AttemptListQuery{JobID: record.ID, BeforeNumber: 4, Limit: 20})
 	require.NoError(t, err, "Attempts() = %#v, options=%#v", page, persistence.attemptOptions)
@@ -180,7 +180,7 @@ func TestEnginePreparesAndAppliesDescriptorGovernedControls(t *testing.T) {
 	descriptor := testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))
 	descriptor.Cancelable = true
 	descriptor.ExplicitRetryStatuses = []model.JobStatus{model.JobStatusFailed}
-	engine, err := New(Dependencies{Store: persistence, Descriptors: []Descriptor{descriptor}, NodeID: "node-a", Diagnostics: &jobDiagnosticsFake{}, Policy: Policy{PollInterval: time.Second}})
+	engine, err := New(Dependencies{Store: persistence, Descriptors: []Descriptor{descriptor}, NodeID: "node-a", Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Second}})
 	require.NoError(t, err)
 	target, err := engine.PrepareCancellation(context.Background(), queued.ID)
 	require.NoError(t, err, "PrepareCancellation()")
@@ -217,7 +217,7 @@ func TestEngineRejectsInvalidQueriesAndUnsupportedControls(t *testing.T) {
 	record, err := model.NewJob(model.NewJobID(), model.JobTypeProfilePictureGenerateDefault, json.RawMessage(`{}`), "unsupported", at, at, 8)
 	require.NoError(t, err)
 	persistence := &operatorStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: record}
-	engine, err := New(Dependencies{Store: persistence, Descriptors: []Descriptor{testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))}, NodeID: "node-a", Diagnostics: &jobDiagnosticsFake{}, Policy: Policy{PollInterval: time.Second}})
+	engine, err := New(Dependencies{Store: persistence, Descriptors: []Descriptor{testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))}, NodeID: "node-a", Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Second}})
 	require.NoError(t, err)
 	_, err = engine.List(context.Background(), ListQuery{Limit: 201})
 	require.ErrorIs(t, err, ErrQueryInvalid)

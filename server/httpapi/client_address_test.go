@@ -23,7 +23,7 @@ func serveRequestIdentity(t *testing.T, proxies []netip.Prefix, configure func(*
 	var metadata model.RequestMetadata
 	handler := withMiddleware(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
 		metadata = RequestMetadata(request.Context())
-	}), discardLogger{}, middlewarePolicy{trustedProxies: proxies})
+	}), newDiscardLogger(t), middlewarePolicy{trustedProxies: proxies})
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health/live", nil)
 	configure(request)
 	response := httptest.NewRecorder()

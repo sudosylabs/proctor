@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -249,7 +250,7 @@ func (a *API) operationHandler(
 			return
 		}
 		if err := validateOperationResult(result, errorPolicy); err != nil {
-			a.logger.ErrorContext(request.Context(), "route returned an invalid operation result", logErr(err))
+			a.logger.ErrorContext(request.Context(), "route returned an invalid operation result", logging.Err(err))
 			WriteProblem(writer, internalProblem(request))
 			return
 		}
@@ -309,7 +310,7 @@ func (a *API) protocolOperationHandler(
 		}
 		if definition.protocolKind == RouteProtocolStreamingUpload {
 			if err := a.transferDeadlines.extendForUpload(writer, request.ContentLength, definition.maxBodyBytes); err != nil {
-				a.logger.ErrorContext(request.Context(), "extend upload transfer deadline", logErr(err))
+				a.logger.ErrorContext(request.Context(), "extend upload transfer deadline", logging.Err(err))
 			}
 		}
 		result, err := definition.protocolOperation(operationRequest{
@@ -320,7 +321,7 @@ func (a *API) protocolOperationHandler(
 		if result.body != nil {
 			defer func() {
 				if err := result.body.Close(); err != nil {
-					a.logger.ErrorContext(request.Context(), "close protocol response body", logErr(err))
+					a.logger.ErrorContext(request.Context(), "close protocol response body", logging.Err(err))
 				}
 			}()
 		}
@@ -342,7 +343,7 @@ func (a *API) protocolOperationHandler(
 			return
 		}
 		if err := validateProtocolResult(definition.protocolKind, result); err != nil {
-			a.logger.ErrorContext(request.Context(), "route returned an invalid protocol result", logErr(err))
+			a.logger.ErrorContext(request.Context(), "route returned an invalid protocol result", logging.Err(err))
 			WriteProblem(writer, internalProblem(request))
 			return
 		}
@@ -357,13 +358,13 @@ func (a *API) protocolOperationHandler(
 				return
 			}
 			if err := a.transferDeadlines.extendForDownload(writer, result.contentLength); err != nil {
-				a.logger.ErrorContext(request.Context(), "extend download transfer deadline", logErr(err))
+				a.logger.ErrorContext(request.Context(), "extend download transfer deadline", logging.Err(err))
 			}
 			writer.Header().Set("Content-Length", strconv.FormatInt(result.contentLength, 10))
 			writer.WriteHeader(result.status)
 			written, copyErr := io.CopyN(writer, result.body, result.contentLength)
 			if copyErr != nil || written != result.contentLength {
-				a.logger.ErrorContext(request.Context(), "write bounded protocol response", logInt64("written", written), logErr(copyErr))
+				a.logger.ErrorContext(request.Context(), "write bounded protocol response", logging.Int64("written", written), logging.Err(copyErr))
 			}
 		case RouteProtocolStreamingUpload:
 			writeJSON(writer, result.status, result.jsonBody)
@@ -414,7 +415,7 @@ func validateProtocolResult(expected RouteProtocolKind, result protocolResult) e
 func writeRouteApplicationError(
 	writer http.ResponseWriter,
 	request *http.Request,
-	logger Logger,
+	logger *logging.Logger,
 	policy routeErrorPolicy,
 	err error,
 ) {
@@ -422,9 +423,9 @@ func writeRouteApplicationError(
 		logger.ErrorContext(
 			request.Context(),
 			"route returned an undeclared application error",
-			logString("request_id", RequestID(request.Context())),
-			logString("error_id", applicationErrorCode(err)),
-			logErr(err),
+			logging.String("request_id", RequestID(request.Context())),
+			logging.String("error_id", applicationErrorCode(err)),
+			logging.Err(err),
 		)
 		WriteProblem(writer, internalProblem(request))
 		return
@@ -448,9 +449,9 @@ func (a *API) logInvalidRouteError(request *http.Request, err error) {
 	a.logger.ErrorContext(
 		request.Context(),
 		"route returned an invalid application error response",
-		logString("request_id", RequestID(request.Context())),
-		logString("error_id", applicationErrorCode(err)),
-		logErr(err),
+		logging.String("request_id", RequestID(request.Context())),
+		logging.String("error_id", applicationErrorCode(err)),
+		logging.Err(err),
 	)
 }
 

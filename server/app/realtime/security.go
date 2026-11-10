@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -169,7 +170,7 @@ func (s *Service) reportSecurityFailure(ctx context.Context, message, category s
 	diagnostics := s.deps.Diagnostics
 	s.mu.RUnlock()
 	if diagnostics != nil {
-		diagnostics.ErrorContext(ctx, message, errors.New(category))
+		diagnostics.ErrorContext(ctx, message, logging.Err(errors.New(category)))
 	}
 }
 

@@ -10,9 +10,13 @@ package app
 import (
 	"context"
 	"sync"
+	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/logging"
 )
 
 // These fakes stand in for the identity mechanics that mail and realtime
@@ -73,24 +77,18 @@ func (c *authenticationCacheFake) Add(_ context.Context, key string, delta int64
 	return c.counters[key], nil
 }
 
-type securityEffectsDiagnosticsFake struct {
-	messages []string
-	errors   []string
-}
-
-func (d *securityEffectsDiagnosticsFake) WarnContext(_ context.Context, message string, err error) {
-	d.messages = append(d.messages, message)
-	d.errors = append(d.errors, err.Error())
-}
-
-type securityEffectsRealtimeDiagnosticsFake struct{}
-
-func (*securityEffectsRealtimeDiagnosticsFake) ErrorContext(context.Context, string, error) {}
-
-func (*securityEffectsRealtimeDiagnosticsFake) ErrorContextWithEvent(
-	context.Context,
-	string,
-	string,
-	error,
-) {
+// newDiscardLogger returns a real logger whose records the test never reads.
+func newDiscardLogger(tb testing.TB) *logging.Logger {
+	tb.Helper()
+	var logs logging.Buffer
+	logger, err := logging.New()
+	require.NoError(tb, err)
+	tb.Cleanup(func() { _ = logger.Shutdown() })
+	require.NoError(tb, logger.Configure(logging.Config{
+		MaxFieldBytes: 1024,
+		Targets: []logging.Target{{
+			Name: "test", Type: "console", Level: "debug", Format: "json", Writer: &logs,
+		}},
+	}))
+	return logger
 }

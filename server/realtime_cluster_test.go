@@ -20,6 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/cluster"
 	"github.com/sudosylabs/proctor/server/cluster/local"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -96,7 +97,7 @@ func TestRealtimeClusterAdapterRegistersStableChildEventsAndPropagatesFailure(t 
 	}}
 	adapter, err := newRealtimeClusterAdapter(transport)
 	require.NoError(t, err)
-	service, err := realtime.New(realtime.Dependencies{AuthenticationInvalidator: noopRealtimeInvalidator{}, Diagnostics: silentClusterLogger{}})
+	service, err := realtime.New(realtime.Dependencies{AuthenticationInvalidator: noopRealtimeInvalidator{}, Diagnostics: newDiscardLogger(t)})
 	require.NoError(t, err)
 	err = service.SetClusterFanout(adapter)
 	require.ErrorIs(t, err, registrationErr, "SetClusterFanout() error")
@@ -119,7 +120,7 @@ func TestRealtimeClusterAdapterPreservesSingleNodeLocalFirstPublication(t *testi
 	require.NoError(t, err)
 	adapter, err := newRealtimeClusterAdapter(transport)
 	require.NoError(t, err)
-	service, err := realtime.New(realtime.Dependencies{AuthenticationInvalidator: noopRealtimeInvalidator{}, Diagnostics: silentClusterLogger{}})
+	service, err := realtime.New(realtime.Dependencies{AuthenticationInvalidator: noopRealtimeInvalidator{}, Diagnostics: newDiscardLogger(t)})
 	require.NoError(t, err)
 	sink := &countingRealtimeSink{}
 	require.NoError(t, service.SetSink(sink))
@@ -161,6 +162,22 @@ func (s *countingRealtimeSink) publishCount() int {
 type silentClusterLogger struct{}
 
 func (silentClusterLogger) ErrorContext(context.Context, string, error) {}
+
+// newDiscardLogger returns a real logger whose records the test never reads.
+func newDiscardLogger(tb testing.TB) *logging.Logger {
+	tb.Helper()
+	var logs logging.Buffer
+	logger, err := logging.New()
+	require.NoError(tb, err)
+	tb.Cleanup(func() { _ = logger.Shutdown() })
+	require.NoError(tb, logger.Configure(logging.Config{
+		MaxFieldBytes: 1024,
+		Targets: []logging.Target{{
+			Name: "test", Type: "console", Level: "debug", Format: "json", Writer: &logs,
+		}},
+	}))
+	return logger
+}
 
 type noopRealtimeInvalidator struct{}
 

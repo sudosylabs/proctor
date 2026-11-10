@@ -12,6 +12,7 @@ import (
 	"errors"
 
 	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -37,7 +38,7 @@ type AuthorizationInvalidationEffects interface {
 // NewCacheInvalidator validates them once and CacheInvalidator keeps them in deps.
 type CacheInvalidatorDependencies struct {
 	Cache       AuthenticationCache
-	Diagnostics AuthenticationDiagnostics
+	Diagnostics *logging.Logger
 }
 
 // CacheInvalidator deletes cached access credentials and Session activity; it
@@ -68,7 +69,7 @@ func (i *CacheInvalidator) InvalidateAccessCredentials(
 			i.deps.Diagnostics.WarnContext(
 				ctx,
 				"authentication cache delete failed",
-				errors.New("cache operation failed"),
+				logging.Err(errors.New("cache operation failed")),
 			)
 		}
 	}
@@ -84,7 +85,7 @@ func (i *CacheInvalidator) InvalidateSessionActivity(
 			i.deps.Diagnostics.WarnContext(
 				ctx,
 				"session activity cache delete failed",
-				errors.New("cache operation failed"),
+				logging.Err(errors.New("cache operation failed")),
 			)
 		}
 	}

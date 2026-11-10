@@ -14,6 +14,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -50,7 +51,7 @@ type accountTokenServiceDependencies struct {
 	Hasher       accountTokenPasswordHasher
 	Audit        accountTokenAuditRecorder
 	Effects      accountTokenEffects
-	Diagnostics  RecoveryDiagnostics
+	Diagnostics  *logging.Logger
 	Policy       AccountRecoveryPolicy
 	PublicURL    string
 	NewToken     func() string

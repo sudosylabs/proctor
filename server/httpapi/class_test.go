@@ -22,6 +22,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -185,7 +186,7 @@ func TestClassResourceFailsClosedForUndeclaredAuthenticationError(t *testing.T) 
 
 func newFocusedResourceAPI(
 	t *testing.T,
-	logger Logger,
+	logger *logging.Logger,
 	authenticator Authenticator,
 	resources ...apiResource,
 ) *API {

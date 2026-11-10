@@ -121,17 +121,6 @@ type monitoredRuntimeComponent interface {
 	Failures() <-chan error
 }
 
-// runtimeLogger is a borrowed operational view. Lifecycle operations such as
-// Flush and Shutdown remain available only to Platform, the infrastructure
-// owner; the architecture tests hold this contract free of lifecycle methods.
-type runtimeLogger interface {
-	Info(message string, fields ...logging.Field)
-	InfoContext(ctx context.Context, message string, fields ...logging.Field)
-	WarnContext(ctx context.Context, message string, fields ...logging.Field)
-	ErrorContext(ctx context.Context, message string, fields ...logging.Field)
-	StdLogger(level slog.Level) *log.Logger
-}
-
 type runtimeTransport interface {
 	http.Handler
 	Close() error
@@ -295,7 +284,7 @@ type runtimeComponents struct {
 	reconciler            runtimeReconciler
 	administratorRecovery runtimeAdministratorRecovery
 	settings              runtimeSettings
-	logger                runtimeLogger
+	logger                *logging.Logger
 	jobs                  runtimeComponent
 	servingLease          monitoredRuntimeComponent
 	metrics               runtimeMetrics

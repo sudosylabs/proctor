@@ -14,22 +14,16 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
-
-// realtimeDiagnostics extends the child module's bounded diagnostics only for
-// application-owned reporting of failed post-commit effects.
-type realtimeDiagnostics interface {
-	realtime.Diagnostics
-	ErrorContextWithEvent(ctx context.Context, message, event string, err error)
-}
 
 // realtimeServiceDependencies are the collaborators of RealtimeService;
 // newRealtimeServiceWithDelivery validates them once and RealtimeService keeps them in deps.
 type realtimeServiceDependencies struct {
 	Delivery    *realtime.Service
-	Diagnostics realtimeDiagnostics
+	Diagnostics *logging.Logger
 }
 
 // RealtimeService translates the child module's publication failures into
@@ -102,7 +96,11 @@ func (s *RealtimeService) reportTransientFailure(
 	if s.deps.Diagnostics == nil {
 		return
 	}
-	s.deps.Diagnostics.ErrorContextWithEvent(ctx, "transient realtime publication failed", event, err)
+	fields := []logging.Field{logging.String("event", event)}
+	if err != nil {
+		fields = append(fields, logging.Err(err))
+	}
+	s.deps.Diagnostics.ErrorContext(ctx, "transient realtime publication failed", fields...)
 }
 
 // SessionsRevoked propagates revoked Sessions and access tokens, then tells

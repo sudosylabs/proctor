@@ -21,7 +21,6 @@ import (
 	"github.com/sudosylabs/proctor/server/app/identity"
 	appmail "github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/config"
-	"github.com/sudosylabs/proctor/server/httpapi"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/platform"
@@ -108,9 +107,9 @@ func applicationDependencies(
 		},
 		ExternalAuth:              externalAuthenticationPolicyFromConfig(auth, cfg.Server.PublicURL, capabilities.nodeID),
 		RecentAuthenticationTTL:   auth.RecentAuthenticationTTL.Duration,
-		AuthenticationDiagnostics: loggingAuthenticationDiagnostics{log: log},
-		RealtimeDiagnostics:       loggingRealtimeDiagnostics{log: log},
-		RecoveryDiagnostics:       loggingRecoveryDiagnostics{log: log},
+		AuthenticationDiagnostics: log,
+		RealtimeDiagnostics:       log,
+		RecoveryDiagnostics:       log,
 	}, nil
 }
 
@@ -393,55 +392,6 @@ func mapExternalProviderError(err error) error {
 	}
 }
 
-type loggingAuthenticationDiagnostics struct {
-	log runtimeLogger
-}
-
-func (d loggingAuthenticationDiagnostics) WarnContext(ctx context.Context, message string, err error) {
-	if d.log == nil {
-		return
-	}
-	fields := []logging.Field{}
-	if err != nil {
-		fields = append(fields, logging.Err(err))
-	}
-	d.log.WarnContext(ctx, message, fields...)
-}
-
-type loggingRealtimeDiagnostics struct {
-	log runtimeLogger
-}
-
-func (d loggingRealtimeDiagnostics) ErrorContext(ctx context.Context, message string, err error) {
-	if d.log == nil {
-		return
-	}
-	fields := []logging.Field{}
-	if err != nil {
-		fields = append(fields, logging.Err(err))
-	}
-	d.log.ErrorContext(ctx, message, fields...)
-}
-
-func (d loggingRealtimeDiagnostics) ErrorContextWithEvent(
-	ctx context.Context,
-	message, event string,
-	err error,
-) {
-	if d.log == nil {
-		return
-	}
-	fields := []logging.Field{logging.String("event", event)}
-	if err != nil {
-		fields = append(fields, logging.Err(err))
-	}
-	d.log.ErrorContext(ctx, message, fields...)
-}
-
-type loggingRecoveryDiagnostics struct {
-	log runtimeLogger
-}
-
 type mailDeliveryMetricKey struct {
 	template model.MailTemplateKey
 	state    model.MailDeliveryState
@@ -460,7 +410,7 @@ type mailDeliveryMetricAggregate struct {
 // state, and public outcome vocabularies; it never retains identifiers,
 // recipients, or message content.
 type operationalMailTelemetry struct {
-	log runtimeLogger
+	log *logging.Logger
 
 	mu           sync.Mutex
 	deliveries   map[mailDeliveryMetricKey]mailDeliveryMetricAggregate
@@ -469,7 +419,7 @@ type operationalMailTelemetry struct {
 	health       string
 }
 
-func newMailTelemetry(log runtimeLogger, metrics app.MailDeliveryRecorder) (app.MailDeliveryRecorder, app.MailMetricsReader) {
+func newMailTelemetry(log *logging.Logger, metrics app.MailDeliveryRecorder) (app.MailDeliveryRecorder, app.MailMetricsReader) {
 	operational := &operationalMailTelemetry{
 		log: log, deliveries: make(map[mailDeliveryMetricKey]mailDeliveryMetricAggregate),
 		queues:       make(map[mailDeliveryMetricKey]app.MailQueueMetric),
@@ -622,60 +572,4 @@ func mailQueueAgeBucket(age time.Duration) string {
 		}
 	}
 	return "gte_24h"
-}
-
-func (d loggingRecoveryDiagnostics) ErrorContext(ctx context.Context, message string, err error) {
-	if d.log == nil {
-		return
-	}
-	fields := []logging.Field{}
-	if err != nil {
-		fields = append(fields, logging.Err(err))
-	}
-	d.log.ErrorContext(ctx, message, fields...)
-}
-
-// websocketLogger adapts logging to the narrow websocket.Logger port so the
-// sibling transport package never imports logging.
-type websocketLogger struct {
-	log runtimeLogger
-}
-
-func (l websocketLogger) WarnContext(ctx context.Context, message string, err error) {
-	if l.log == nil {
-		return
-	}
-	fields := []logging.Field{}
-	if err != nil {
-		fields = append(fields, logging.Err(err))
-	}
-	l.log.WarnContext(ctx, message, fields...)
-}
-
-// apiLogger adapts logging to the narrow httpapi.Logger port so the HTTP transport
-// package never imports logging.
-type apiLogger struct {
-	log runtimeLogger
-}
-
-func (l apiLogger) InfoContext(ctx context.Context, message string, fields ...httpapi.LogField) {
-	if l.log == nil {
-		return
-	}
-	l.log.InfoContext(ctx, message, apiLogFields(fields)...)
-}
-
-func (l apiLogger) ErrorContext(ctx context.Context, message string, fields ...httpapi.LogField) {
-	if l.log == nil {
-		return
-	}
-	l.log.ErrorContext(ctx, message, apiLogFields(fields)...)
-}
-
-func apiLogFields(fields []httpapi.LogField) []logging.Field {
-	out := make([]logging.Field, 0, len(fields))
-	for _, field := range fields {
-		out = append(out, logging.Any(field.Key, field.Value))
-	}
-	return out
 }

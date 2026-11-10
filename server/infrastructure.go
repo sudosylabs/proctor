@@ -112,7 +112,7 @@ type ownedInfrastructure struct {
 // not escape composeNode; Platform owns every referenced capability after
 // acceptance.
 type constructionCapabilities struct {
-	logger                 runtimeLogger
+	logger                 *logging.Logger
 	persistence            store.Catalog
 	cache                  borrowedCache
 	cluster                borrowedCluster
@@ -452,7 +452,7 @@ func checkAcquisitionContext(ctx context.Context, phase string) error {
 
 func logStartupInfrastructure(
 	snapshot config.Config,
-	logger runtimeLogger,
+	logger *logging.Logger,
 	migration *sqlstore.MigrationResult,
 ) {
 	if logger == nil {

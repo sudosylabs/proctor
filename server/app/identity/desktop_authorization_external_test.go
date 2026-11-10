@@ -170,7 +170,7 @@ func newDesktopExternalAuthenticationFixture(t *testing.T, transactions *desktop
 		institutions: providerConnectionInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}},
 		identities:   externalIdentityStoreFake{}, sessions: externalSessionStoreFake{},
 		attempts: newExternalAuthenticationAttempts(t, newAuthenticationCacheFake()), issuer: externalSessionIssuerFake{},
-		invalidator: externalInvalidatorFake{}, audit: externalAuditFake{}, diagnostics: &securityEffectsDiagnosticsFake{},
+		invalidator: externalInvalidatorFake{}, audit: externalAuditFake{}, diagnostics: newDiscardLogger(t),
 		acceptor: &externalInvitationAcceptorFake{}, desktop: desktop, newCredential: model.NewCredentialToken, now: time.Now,
 	}).build()
 	require.NoError(t, err)

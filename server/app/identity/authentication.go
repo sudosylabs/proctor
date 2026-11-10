@@ -25,6 +25,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
 	"github.com/sudosylabs/proctor/server/app/user"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -190,12 +191,6 @@ func (a localLoginAuditAdapter) RecordLocalLoginFailure(ctx context.Context, inv
 	return a.audit.RecordLocalLoginFailure(ctx, target, clientType, invocation.RequestMetadata(), errorCode)
 }
 
-// AuthenticationDiagnostics reports non-fatal authentication failures without
-// depending on a concrete logger package.
-type AuthenticationDiagnostics interface {
-	WarnContext(context.Context, string, error)
-}
-
 // authenticationServiceDependencies are the collaborators of authenticationService;
 // newAuthenticationService validates them once and authenticationService keeps them in deps.
 type authenticationServiceDependencies struct {
@@ -214,7 +209,7 @@ type authenticationServiceDependencies struct {
 	PersonalTokens     authenticationPATResolver
 	SessionPolicy      SessionPolicy
 	LoginRateLimit     LoginRateLimitPolicy
-	Diagnostics        AuthenticationDiagnostics
+	Diagnostics        *logging.Logger
 	NewCredential      func() string
 	Now                func() time.Time
 	Desktop            authenticationDesktopDependencies
@@ -1200,7 +1195,7 @@ func (s *authenticationService) warn(ctx context.Context, message string, err er
 	if s.deps.Diagnostics == nil {
 		return
 	}
-	s.deps.Diagnostics.WarnContext(ctx, message, err)
+	s.deps.Diagnostics.WarnContext(ctx, message, logging.Err(err))
 }
 
 func validRawCredential(token string) bool {

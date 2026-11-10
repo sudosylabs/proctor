@@ -125,7 +125,7 @@ preserve the working targets. Flush and shutdown are deadline-aware;
 
 Unexpected failures are logged once at the outer operational boundary.
 Request-driven application services return failures rather than logging them;
-long-lived workers receive a narrow logging port only for otherwise
+long-lived workers receive the `*logging.Logger` only for otherwise
 unobservable operational events. Context may include component, request ID,
 node ID, and safe entity IDs—never complete users, sessions, configuration,
 credentials, tokens, exam answers, provider payloads, or raw claims.

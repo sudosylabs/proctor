@@ -21,6 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -405,7 +406,7 @@ func TestExternalAuthenticationRequiresFocusedDependencies(t *testing.T) {
 		attempts:    newExternalAuthenticationAttempts(t, newAuthenticationCacheFake()),
 		issuer:      externalSessionIssuerFake{},
 		invalidator: externalInvalidatorFake{}, audit: externalAuditFake{},
-		diagnostics: &securityEffectsDiagnosticsFake{}, newCredential: model.NewCredentialToken,
+		diagnostics: newDiscardLogger(t), newCredential: model.NewCredentialToken,
 		acceptor: &externalInvitationAcceptorFake{},
 		desktop:  &externalDesktopAuthorizationFake{},
 		now:      time.Now,
@@ -445,7 +446,7 @@ type externalAuthenticationConstructorArgs struct {
 	issuer        authenticationSessionIssuer
 	invalidator   realtime.AuthenticationInvalidator
 	audit         externalAuthenticationAudit
-	diagnostics   AuthenticationDiagnostics
+	diagnostics   *logging.Logger
 	acceptor      InvitationAcceptor
 	desktop       externalAuthenticationDesktopAuthorization
 	newCredential func() string

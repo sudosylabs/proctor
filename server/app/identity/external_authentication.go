@@ -21,6 +21,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/user"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -140,7 +141,7 @@ type externalAuthenticationServiceDependencies struct {
 	DesktopReauthentication externalAuthenticationDesktopReauthentication
 	Policy                  ExternalAuthenticationPolicy
 	RecentAuthenticationTTL time.Duration
-	Diagnostics             AuthenticationDiagnostics
+	Diagnostics             *logging.Logger
 	NewCredential           func() string
 	Now                     func() time.Time
 }

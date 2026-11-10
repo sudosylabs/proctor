@@ -9,14 +9,17 @@ package identity
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -24,7 +27,7 @@ import (
 func TestAuthenticationCacheInvalidatorRequiresDependencies(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewCacheInvalidator(CacheInvalidatorDependencies{Cache: nil, Diagnostics: &securityEffectsDiagnosticsFake{}})
+	_, err := NewCacheInvalidator(CacheInvalidatorDependencies{Cache: nil, Diagnostics: newDiscardLogger(t)})
 	require.Error(t, err, "nil cache was accepted")
 	_, err = NewCacheInvalidator(CacheInvalidatorDependencies{Cache: newAuthenticationCacheFake(), Diagnostics: nil})
 	require.Error(t, err, "nil diagnostics was accepted")
@@ -61,7 +64,7 @@ func TestAuthenticationServiceRequiresSecurityDependencies(t *testing.T) {
 	}
 	desktop := testAuthenticationDesktopDependencies(t, cache)
 	construct := func(deps dependencies) error {
-		_, constructorErr := newAuthenticationService(authenticationServiceDependencies{Users: deps.users, Passwords: deps.passwords, Sessions: deps.sessions, SessionCredentials: deps.sessionCredentials, AccessPolicy: allowAllAuthenticationAccessPolicy(), Cache: cache, Attempts: deps.attempts, SecurityEffects: deps.effects, Audit: deps.audit, LoginAudit: deps.loginAudit, Hasher: hasher, MFA: deps.mfa, PersonalTokens: deps.personalTokens, SessionPolicy: SessionPolicy{}, LoginRateLimit: LoginRateLimitPolicy{}, Diagnostics: &securityEffectsDiagnosticsFake{}, NewCredential: deps.newCredential, Now: nil, Desktop: desktop})
+		_, constructorErr := newAuthenticationService(authenticationServiceDependencies{Users: deps.users, Passwords: deps.passwords, Sessions: deps.sessions, SessionCredentials: deps.sessionCredentials, AccessPolicy: allowAllAuthenticationAccessPolicy(), Cache: cache, Attempts: deps.attempts, SecurityEffects: deps.effects, Audit: deps.audit, LoginAudit: deps.loginAudit, Hasher: hasher, MFA: deps.mfa, PersonalTokens: deps.personalTokens, SessionPolicy: SessionPolicy{}, LoginRateLimit: LoginRateLimitPolicy{}, Diagnostics: newDiscardLogger(t), NewCredential: deps.newCredential, Now: nil, Desktop: desktop})
 		return constructorErr
 	}
 	tests := []struct {
@@ -96,7 +99,7 @@ func TestExternalAuthenticationServiceRequiresInvalidator(t *testing.T) {
 	authentication := newTestAuthenticationService(t, persistence)
 	audit, auditErr := access.NewAuditor(access.AuditorDependencies{Audits: securityAuditStore{}, Institutions: securityInstitutionStore{}, NodeID: model.NewID()})
 	require.NoError(t, auditErr)
-	_, err := newExternalAuthenticationService(externalAuthenticationServiceDependencies{Registry: securityEffectsProviderSourceFake{}, LoginStates: securityExternalLoginStateStore{}, Institutions: securityInstitutionStore{}, Identities: securityExternalIdentityStore{}, Sessions: persistence.Session(), AccessPolicy: allowAllAuthenticationAccessPolicy(), Attempts: mustAuthenticationAttemptAccounting(t, newAuthenticationCacheFake()), Authentication: authentication, Invalidator: nil, Audit: audit, MutationAudit: audit.MutationAudit(), Capabilities: &accessPolicyCapabilitiesFake{}, InvitationAcceptor: &externalInvitationAcceptorFake{}, DesktopAuthorization: &externalDesktopAuthorizationFake{}, DesktopReauthentication: externalDesktopReauthenticationFake{}, Policy: ExternalAuthenticationPolicy{}, RecentAuthenticationTTL: 15 * time.Minute, Diagnostics: &securityEffectsDiagnosticsFake{}, NewCredential: model.NewCredentialToken, Now: nil})
+	_, err := newExternalAuthenticationService(externalAuthenticationServiceDependencies{Registry: securityEffectsProviderSourceFake{}, LoginStates: securityExternalLoginStateStore{}, Institutions: securityInstitutionStore{}, Identities: securityExternalIdentityStore{}, Sessions: persistence.Session(), AccessPolicy: allowAllAuthenticationAccessPolicy(), Attempts: mustAuthenticationAttemptAccounting(t, newAuthenticationCacheFake()), Authentication: authentication, Invalidator: nil, Audit: audit, MutationAudit: audit.MutationAudit(), Capabilities: &accessPolicyCapabilitiesFake{}, InvitationAcceptor: &externalInvitationAcceptorFake{}, DesktopAuthorization: &externalDesktopAuthorizationFake{}, DesktopReauthentication: externalDesktopReauthenticationFake{}, Policy: ExternalAuthenticationPolicy{}, RecentAuthenticationTTL: 15 * time.Minute, Diagnostics: newDiscardLogger(t), NewCredential: model.NewCredentialToken, Now: nil})
 	require.Error(t, err, "nil authentication invalidator was accepted")
 }
 
@@ -142,7 +145,7 @@ func TestAuthenticationCacheInvalidatorOwnsKeysAndSafeDiagnostics(t *testing.T) 
 			authenticationCachePrefix + "failed-hash": errors.New("delete failed"),
 		},
 	}
-	diagnostics := &securityEffectsDiagnosticsFake{}
+	diagnostics, logs := newTestLogger(t)
 	invalidator, err := NewCacheInvalidator(CacheInvalidatorDependencies{Cache: cache, Diagnostics: diagnostics})
 	require.NoError(t, err)
 
@@ -162,8 +165,9 @@ func TestAuthenticationCacheInvalidatorOwnsKeysAndSafeDiagnostics(t *testing.T) 
 		activityCachePrefix + "session-two",
 	}
 	require.Equal(t, wantDeletes, cache.deleted, "deleted keys")
-	require.Equal(t, []string{"authentication cache delete failed"}, diagnostics.messages, "diagnostics")
-	require.Equal(t, []string{"cache operation failed"}, diagnostics.errors, "diagnostic errors")
+	records := loggedRecords(t, logs)
+	require.Equal(t, []string{"authentication cache delete failed"}, loggedMessages(records), "diagnostics")
+	require.Equal(t, []string{"cache operation failed"}, loggedErrors(records), "diagnostic errors")
 }
 
 type securityEffectsCacheFake struct {
@@ -187,14 +191,68 @@ func (c *securityEffectsCacheFake) Delete(_ context.Context, key string) error {
 	return c.deleteErrors[key]
 }
 
-type securityEffectsDiagnosticsFake struct {
-	messages []string
-	errors   []string
+// newTestLogger returns a real logger writing JSON records, one per line, to a
+// buffer the test may read through loggedRecords.
+func newTestLogger(tb testing.TB) (*logging.Logger, *logging.Buffer) {
+	tb.Helper()
+	var logs logging.Buffer
+	logger, err := logging.New()
+	require.NoError(tb, err)
+	tb.Cleanup(func() { _ = logger.Shutdown() })
+	require.NoError(tb, logger.Configure(logging.Config{
+		MaxFieldBytes: 1024,
+		Targets: []logging.Target{{
+			Name: "test", Type: "console", Level: "debug", Format: "json", Writer: &logs,
+		}},
+	}))
+	return logger, &logs
 }
 
-func (d *securityEffectsDiagnosticsFake) WarnContext(_ context.Context, message string, err error) {
-	d.messages = append(d.messages, message)
-	d.errors = append(d.errors, err.Error())
+// newDiscardLogger returns a real logger whose records the test never reads.
+func newDiscardLogger(tb testing.TB) *logging.Logger {
+	tb.Helper()
+	logger, _ := newTestLogger(tb)
+	return logger
+}
+
+// loggedRecord is one record a test logger wrote.
+type loggedRecord struct {
+	Level   string `json:"level"`
+	Message string `json:"msg"`
+	Error   string `json:"error"`
+}
+
+// loggedRecords decodes every record the buffer holds, in order.
+func loggedRecords(tb testing.TB, logs *logging.Buffer) []loggedRecord {
+	tb.Helper()
+	var records []loggedRecord
+	for _, line := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
+		if line == "" {
+			continue
+		}
+		var record loggedRecord
+		require.NoError(tb, json.Unmarshal([]byte(line), &record))
+		records = append(records, record)
+	}
+	return records
+}
+
+// loggedMessages lists the message of each record, in order.
+func loggedMessages(records []loggedRecord) []string {
+	messages := []string{}
+	for _, record := range records {
+		messages = append(messages, record.Message)
+	}
+	return messages
+}
+
+// loggedErrors lists the error text of each record, in order.
+func loggedErrors(records []loggedRecord) []string {
+	texts := []string{}
+	for _, record := range records {
+		texts = append(texts, record.Error)
+	}
+	return texts
 }
 
 type discardAuthenticationSecurityEffects struct{}

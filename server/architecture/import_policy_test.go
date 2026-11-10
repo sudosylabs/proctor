@@ -287,6 +287,7 @@ var dependencyRules = []dependencyRule{
 		sources:        []pathPattern{subtree(serverModule + "/app/job")},
 		deniedStandard: standardInfrastructure,
 		project: only(
+			exact(serverModule+"/logging"),
 			exact(serverModule+"/model"),
 			exact(serverModule+"/store"),
 		),
@@ -295,7 +296,7 @@ var dependencyRules = []dependencyRule{
 		name:           "realtime application",
 		sources:        []pathPattern{subtree(serverModule + "/app/realtime")},
 		deniedStandard: standardInfrastructure,
-		project:        only(exact(serverModule + "/model")),
+		project:        only(exact(serverModule+"/logging"), exact(serverModule+"/model")),
 	},
 	{
 		name:           "mail application",
@@ -485,6 +486,7 @@ var dependencyRules = []dependencyRule{
 		sources:        []pathPattern{exact(serverModule + "/app/identity")},
 		deniedStandard: standardInfrastructure,
 		project: only(
+			exact(serverModule+"/logging"),
 			exact(serverModule+"/app/access"),
 			exact(serverModule+"/app/apperror"),
 			exact(serverModule+"/app/exam/attempt"),
@@ -547,6 +549,7 @@ var dependencyRules = []dependencyRule{
 		sources:        []pathPattern{subtree(serverModule + "/app")},
 		deniedStandard: standardInfrastructure,
 		project: only(
+			exact(serverModule+"/logging"),
 			exact(serverModule+"/app/academic"),
 			exact(serverModule+"/app/access"),
 			exact(serverModule+"/app/administration"),
@@ -581,6 +584,7 @@ var dependencyRules = []dependencyRule{
 		},
 		deniedStandard: standardInfrastructureExceptHTTP,
 		project: only(
+			exact(serverModule+"/logging"),
 			exact(serverModule+"/app"),
 			exact(serverModule+"/app/academic"),
 			exact(serverModule+"/app/administration"),

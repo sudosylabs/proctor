@@ -30,6 +30,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/internal/weborigin"
 	"github.com/sudosylabs/proctor/server/localization"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -76,7 +77,7 @@ const (
 type Hub struct {
 	application  Application
 	attempts     ExamAttemptApplication
-	logger       Logger
+	logger       *logging.Logger
 	localizer    Localizer
 	publicOrigin string
 	nodeID       string
@@ -126,11 +127,6 @@ type shard struct {
 	budgets map[string]*sharedFrameBudget
 }
 
-// Logger reports operational transport failures without depending on logging.
-type Logger interface {
-	WarnContext(ctx context.Context, message string, err error)
-}
-
 // Localizer is the narrow presentation port used after the HTTP handshake.
 type Localizer interface {
 	Translate(locale, id string, args any) (string, error)
@@ -149,7 +145,7 @@ type Application interface {
 func NewHub(
 	application Application,
 	attempts ExamAttemptApplication,
-	logger Logger,
+	logger *logging.Logger,
 	publicURL string,
 	nodeID string,
 	localizer Localizer,
@@ -267,7 +263,7 @@ func (h *Hub) Accept(
 		if h.recorder != nil {
 			h.recorder.ConnectionOpened("upgrade_error")
 		}
-		h.logger.WarnContext(request.Context(), "WebSocket upgrade failed", err)
+		h.logger.WarnContext(request.Context(), "WebSocket upgrade failed", logging.Err(err))
 		switch {
 		case refusedStatus >= http.StatusBadRequest && refusedStatus < http.StatusInternalServerError:
 			return apperror.New("request.invalid").Wrap(err)

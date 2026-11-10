@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -65,7 +66,7 @@ type authenticationSessionIssuer interface {
 type personalAccessTokenBearerResolverDependencies struct {
 	Tokens      store.PersonalAccessTokenStore
 	Policy      PersonalAccessTokenPolicy
-	Diagnostics AuthenticationDiagnostics
+	Diagnostics *logging.Logger
 }
 
 type personalAccessTokenBearerResolver struct {
@@ -115,7 +116,7 @@ func (r *personalAccessTokenBearerResolver) ResolveBearer(
 		r.deps.Diagnostics.WarnContext(
 			ctx,
 			"personal access token resolved to invalid principal",
-			fmt.Errorf("personal_access_token_id=%s", resolved.Token.ID.String()),
+			logging.Err(fmt.Errorf("personal_access_token_id=%s", resolved.Token.ID.String())),
 		)
 		return nil, access.InvalidTokenAppError()
 	}

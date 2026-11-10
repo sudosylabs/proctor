@@ -10,6 +10,7 @@ package job
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -77,8 +78,9 @@ func TestRunPeriodicTaskRunsImmediatelyAndOnEachInterval(t *testing.T) {
 	runner := &periodicTestRunner{seen: make(chan struct{}, 3)}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
+	logger := newDiscardLogger(t)
 	go func() {
-		runPeriodicTask(ctx, PeriodicTask{Name: "scan", Interval: 2 * time.Second, Runner: runner}, &jobDiagnosticsFake{}, clock, nil)
+		runPeriodicTask(ctx, PeriodicTask{Name: "scan", Interval: 2 * time.Second, Runner: runner}, logger, clock, nil)
 		close(done)
 	}()
 
@@ -102,7 +104,7 @@ func TestRunPeriodicTaskReportsErrorAndContinues(t *testing.T) {
 	t.Parallel()
 	clock := newManualClock(time.Now())
 	runner := &periodicTestRunner{err: errors.New("database unavailable"), seen: make(chan struct{}, 2)}
-	diagnostics := &recordingPeriodicDiagnostics{seen: make(chan struct{}, 1)}
+	diagnostics, logs := newTestLogger(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
@@ -110,11 +112,10 @@ func TestRunPeriodicTaskReportsErrorAndContinues(t *testing.T) {
 		close(done)
 	}()
 	waitPeriodicCall(t, runner.seen)
-	select {
-	case <-diagnostics.seen:
-	case <-time.After(time.Second):
-		require.FailNow(t, "periodic task error was not reported")
-	}
+	require.Eventually(t, func() bool {
+		return strings.Contains(logs.String(), "run periodic runtime task scan") &&
+			strings.Contains(logs.String(), "database unavailable")
+	}, time.Second, time.Millisecond, "periodic task error was not reported")
 	timer := waitPeriodicTimer(t, clock.timers)
 	clock.advance(timer, clock.Now().Add(2*time.Second))
 	waitPeriodicCall(t, runner.seen)
@@ -131,7 +132,7 @@ func TestEngineOwnsPeriodicTaskLifecycleAndCopiesDefinitions(t *testing.T) {
 	descriptor := testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))
 	engine, err := New(Dependencies{
 		Store: &jobRunnerStoreFake{}, Descriptors: []Descriptor{descriptor}, NodeID: "node-a",
-		Diagnostics: &jobDiagnosticsFake{}, Policy: Policy{PollInterval: time.Hour}, Clock: clock, PeriodicTasks: tasks,
+		Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Hour}, Clock: clock, PeriodicTasks: tasks,
 	})
 	require.NoError(t, err)
 	tasks[0] = PeriodicTask{Name: "replacement", Interval: time.Hour, Runner: replacement}
@@ -172,14 +173,5 @@ func waitPeriodicTimer(t *testing.T, timers <-chan *manualTimer) *manualTimer {
 	case <-time.After(time.Second):
 		require.FailNow(t, "periodic task did not create its timer")
 		return nil
-	}
-}
-
-type recordingPeriodicDiagnostics struct{ seen chan struct{} }
-
-func (d *recordingPeriodicDiagnostics) ErrorContext(context.Context, string, error) {
-	select {
-	case d.seen <- struct{}{}:
-	default:
 	}
 }

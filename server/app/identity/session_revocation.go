@@ -16,37 +16,24 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type sessionRevocationStore interface {
-	Revoke(context.Context, *store.SessionRevocation) (*store.SessionRevocationResult, error)
-	RevokeAllForUser(context.Context, *store.UserSessionsRevocation) (*store.UserSessionsRevocationResult, error)
-}
-
-type sessionRevocationEffects interface {
-	SessionsRevoked(context.Context, model.UserID, []model.SessionID, []string)
-}
-
-// sessionRevocationCoordinator commits an already-authorized revocation and
-// publishes only its new durable effects. Callers retain ownership checks,
-// audit intent, public errors, administrative mail and command preparation.
-// Account and password transitions keep their separate atomic Store operations.
-type sessionRevocationCoordinator struct {
-	sessions sessionRevocationStore
-	audit    access.MutationAuditor
-	effects  sessionRevocationEffects
-	now      func() time.Time
-}
-
-func (c sessionRevocationCoordinator) revokeOne(
+// revokeSession, revokeAllSessions and revokeAllSessionsCounted commit an
+// already-authorized revocation and publish only its new durable effects.
+// Callers retain ownership checks, audit intent, public errors,
+// administrative mail and command preparation, and pass the clock the
+// mutation audit is stamped with. Account and password transitions keep their
+// separate atomic Store operations.
+func (s *Service) revokeSession(
 	ctx context.Context,
 	attempt access.Mutation,
 	input *store.SessionRevocation,
 	mapError func(error) error,
+	now func() time.Time,
 ) error {
-	result, err := access.RunAudited(ctx, c.audit, attempt, c.now,
+	result, err := access.RunAudited(ctx, s.auditor, attempt, now,
 		func(ctx context.Context, reference access.MutationReference) (*store.SessionRevocationResult, error) {
 			input.RevokedAt = reference.MutationAt
 			input.AuditEventID, input.AuditAt = reference.ID, reference.MutationAt
-			return c.sessions.Revoke(ctx, input)
+			return s.sessions.Revoke(ctx, input)
 		}, mapError)
 	if err != nil {
 		return err
@@ -54,36 +41,39 @@ func (c sessionRevocationCoordinator) revokeOne(
 	// The Store represents an already-absent logout with no affected Session;
 	// other single revocations retain their owning use case's not-found error.
 	if result != nil && result.Session != nil {
-		c.publish(ctx, input.UserID.String(), []*model.Session{result.Session}, result.TokenHashes)
+		s.publishSessionsRevoked(ctx, input.UserID.String(), []*model.Session{result.Session}, result.TokenHashes)
 	}
 	return nil
 }
 
-func (c sessionRevocationCoordinator) revokeAll(
+func (s *Service) revokeAllSessions(
 	ctx context.Context,
 	attempt access.Mutation,
 	input *store.UserSessionsRevocation,
 	mapError func(error) error,
 	unchanged *bool,
+	now func() time.Time,
 ) error {
-	_, err := c.revokeAllCounted(ctx, attempt, input, mapError, unchanged)
+	_, err := s.revokeAllSessionsCounted(ctx, attempt, input, mapError, unchanged, now)
 	return err
 }
 
-// revokeAllCounted is revokeAll that also reports how many Sessions this call
-// newly revoked; a replayed or no-op revocation reports zero.
-func (c sessionRevocationCoordinator) revokeAllCounted(
+// revokeAllSessionsCounted is revokeAllSessions that also reports how many
+// Sessions this call newly revoked; a replayed or no-op revocation reports
+// zero.
+func (s *Service) revokeAllSessionsCounted(
 	ctx context.Context,
 	attempt access.Mutation,
 	input *store.UserSessionsRevocation,
 	mapError func(error) error,
 	unchanged *bool,
+	now func() time.Time,
 ) (int, error) {
-	result, err := access.RunAudited(ctx, c.audit, attempt, c.now,
+	result, err := access.RunAudited(ctx, s.auditor, attempt, now,
 		func(ctx context.Context, reference access.MutationReference) (*store.UserSessionsRevocationResult, error) {
 			input.RevokedAt = reference.MutationAt
 			input.AuditEventID, input.AuditAt = reference.ID, reference.MutationAt
-			value, err := c.sessions.RevokeAllForUser(ctx, input)
+			value, err := s.sessions.RevokeAllForUser(ctx, input)
 			// Batch callers retain the Store's replay/no-op observation even when
 			// the mutation fails; an unavailable audit attempt leaves it untouched.
 			if unchanged != nil {
@@ -97,17 +87,17 @@ func (c sessionRevocationCoordinator) revokeAllCounted(
 	if result == nil || input.Replayed || input.NoOp {
 		return 0, nil
 	}
-	c.publish(ctx, input.UserID.String(), result.Sessions, result.TokenHashes)
+	s.publishSessionsRevoked(ctx, input.UserID.String(), result.Sessions, result.TokenHashes)
 	return len(result.Sessions), nil
 }
 
-func (c sessionRevocationCoordinator) publish(
+func (s *Service) publishSessionsRevoked(
 	ctx context.Context,
 	userID string,
 	sessions []*model.Session,
 	hashes []string,
 ) {
 	if len(sessions) != 0 {
-		c.effects.SessionsRevoked(ctx, model.UserID(userID), sessionIDs(sessions), hashes)
+		s.effects.SessionsRevoked(ctx, model.UserID(userID), sessionIDs(sessions), hashes)
 	}
 }

@@ -224,6 +224,6 @@ func (externalHandoffAudit) BeginAuthentication(context.Context, model.UserID, s
 	return &model.AuditEvent{ID: model.NewAuditEventID()}, nil
 }
 
-func (externalHandoffSessionIssuer) recoveryState(_ context.Context, userID model.UserID) (*model.UserMFARecovery, error) {
+func (externalHandoffSessionIssuer) mfaRecoveryState(_ context.Context, userID model.UserID) (*model.UserMFARecovery, error) {
 	return &model.UserMFARecovery{UserID: userID}, nil
 }

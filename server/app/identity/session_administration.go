@@ -45,38 +45,8 @@ type RevokeUserSessionsCommand struct {
 	Batch batchitem.Item
 }
 
-type sessionAdministrationStore interface {
-	Get(context.Context, model.SessionID) (*model.Session, error)
-	ListByUser(context.Context, *store.SessionPageQuery) ([]*model.Session, error)
-	Revoke(context.Context, *store.SessionRevocation) (*store.SessionRevocationResult, error)
-	RevokeAllForUser(context.Context, *store.UserSessionsRevocation) (*store.UserSessionsRevocationResult, error)
-}
-
-type sessionAdministrationUserStore interface {
-	Get(context.Context, model.UserID) (*model.User, error)
-}
-
-// sessionAdministrationServiceDependencies are the collaborators of sessionAdministrationService;
-// newSessionAdministrationService validates them once and sessionAdministrationService keeps them in deps.
-type sessionAdministrationServiceDependencies struct {
-	Sessions      sessionAdministrationStore
-	Users         sessionAdministrationUserStore
-	Authorization resourceAuthorizer
-	Audit         access.MutationAuditor
-	Mail          sessionAdministrationMailPreparer
-	Effects       sessionRevocationEffects
-	Now           func() time.Time
-}
-
-type sessionAdministrationService struct {
-	deps sessionAdministrationServiceDependencies
-}
-
-func newSessionAdministrationService(deps sessionAdministrationServiceDependencies) *sessionAdministrationService {
-	return &sessionAdministrationService{deps: deps}
-}
-
-func (s *sessionAdministrationService) ListUserSessions(
+// ListUserSessions pages one User's Sessions for an administrator.
+func (s *Service) ListUserSessions(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	query ListUserSessionsQuery,
@@ -92,7 +62,7 @@ func (s *sessionAdministrationService) ListUserSessions(
 		(!query.BeforeID.IsZero() && !query.BeforeID.IsValid()) {
 		return paging.Page[*model.Session]{}, apperror.Invalid("request.invalid", "cursor")
 	}
-	if err := s.deps.Authorization.Authorize(ctx, invocation, model.ActionSessionView, model.Resource{Type: model.ResourceUser, ID: userID.String()}); err != nil {
+	if err := s.authorizer.Authorize(ctx, invocation, model.ActionSessionView, model.Resource{Type: model.ResourceUser, ID: userID.String()}); err != nil {
 		return paging.Page[*model.Session]{}, err
 	}
 	page := &store.SessionPageQuery{
@@ -100,16 +70,18 @@ func (s *sessionAdministrationService) ListUserSessions(
 		BeforeCreatedAt: query.BeforeCreatedAt, BeforeID: query.BeforeID,
 	}
 	if !query.IncludeRevoked {
-		page.ActiveAt = model.TimeUTC(s.deps.Now())
+		page.ActiveAt = model.TimeUTC(s.now())
 	}
-	sessions, err := s.deps.Sessions.ListByUser(ctx, page)
+	sessions, err := s.sessions.ListByUser(ctx, page)
 	if err != nil {
 		return paging.Page[*model.Session]{}, sessionAdministrationStoreErrors.Translate(err)
 	}
 	return paging.New(sessions, query.Limit), nil
 }
 
-func (s *sessionAdministrationService) RevokeUserSession(
+// RevokeUserSession revokes one of a User's Sessions for an administrator and
+// notifies the User.
+func (s *Service) RevokeUserSession(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	command RevokeUserSessionCommand,
@@ -122,29 +94,26 @@ func (s *sessionAdministrationService) RevokeUserSession(
 	if !sessionID.IsValid() {
 		return apperror.New("request.invalid").WithField("field", "session_id")
 	}
-	if err := s.deps.Authorization.Authorize(ctx, invocation, model.ActionSessionManage, model.Resource{Type: model.ResourceUser, ID: userID.String()}); err != nil {
+	if err := s.authorizer.Authorize(ctx, invocation, model.ActionSessionManage, model.Resource{Type: model.ResourceUser, ID: userID.String()}); err != nil {
 		return err
 	}
-	session, err := s.deps.Sessions.Get(ctx, sessionID)
+	session, err := s.sessions.Get(ctx, sessionID)
 	if err != nil || session.UserID != userID {
 		if err == nil {
 			err = store.NewErrNotFound("session", sessionID.String())
 		}
 		return sessionAdministrationStoreErrors.Translate(err)
 	}
-	user, err := s.deps.Users.Get(ctx, userID)
+	user, err := s.users.Get(ctx, userID)
 	if err != nil {
 		return sessionAdministrationStoreErrors.Translate(err)
 	}
-	now := model.TimeUTC(s.deps.Now())
+	now := model.TimeUTC(s.now())
 	prepared, err := s.prepareRevocationNotice(user, now)
 	if err != nil {
 		return sessionAdministrationStoreErrors.Translate(err)
 	}
-	revocations := sessionRevocationCoordinator{
-		sessions: s.deps.Sessions, audit: s.deps.Audit, effects: s.deps.Effects, now: func() time.Time { return now },
-	}
-	return revocations.revokeOne(ctx,
+	return s.revokeSession(ctx,
 		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionSessionManage,
@@ -158,11 +127,13 @@ func (s *sessionAdministrationService) RevokeUserSession(
 			Occurrence: prepared.Occurrence, Delivery: prepared.Delivery, DeliveryJob: prepared.Job,
 			Reason: model.SessionRevocationAdministratorSession,
 		},
-		sessionAdministrationStoreErrors.Translate,
+		sessionAdministrationStoreErrors.Translate, func() time.Time { return now },
 	)
 }
 
-func (s *sessionAdministrationService) RevokeUserSessions(
+// RevokeUserSessions revokes every Session of a User for an administrator, or
+// for an administration batch row, and notifies the User.
+func (s *Service) RevokeUserSessions(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	command RevokeUserSessionsCommand,
@@ -171,14 +142,14 @@ func (s *sessionAdministrationService) RevokeUserSessions(
 	if !userID.IsValid() {
 		return apperror.New("request.invalid").WithField("field", "user_id")
 	}
-	if err := s.deps.Authorization.Authorize(ctx, invocation, model.ActionSessionManage, model.Resource{Type: model.ResourceUser, ID: userID.String()}); err != nil {
+	if err := s.authorizer.Authorize(ctx, invocation, model.ActionSessionManage, model.Resource{Type: model.ResourceUser, ID: userID.String()}); err != nil {
 		return err
 	}
-	user, err := s.deps.Users.Get(ctx, userID)
+	user, err := s.users.Get(ctx, userID)
 	if err != nil {
 		return sessionAdministrationStoreErrors.Translate(err)
 	}
-	now := model.TimeUTC(s.deps.Now())
+	now := model.TimeUTC(s.now())
 	idempotency, err := idempotency.Prepare(invocation, "user_sessions.revoke", command.IdempotencyKey, struct {
 		UserID string `json:"user_id"`
 	}{userID.String()})
@@ -198,10 +169,7 @@ func (s *sessionAdministrationService) RevokeUserSessions(
 			return sessionAdministrationStoreErrors.Translate(err)
 		}
 	}
-	revocations := sessionRevocationCoordinator{
-		sessions: s.deps.Sessions, audit: s.deps.Audit, effects: s.deps.Effects, now: func() time.Time { return now },
-	}
-	return revocations.revokeAll(ctx,
+	return s.revokeAllSessions(ctx,
 		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionSessionManage,
@@ -214,12 +182,12 @@ func (s *sessionAdministrationService) RevokeUserSessions(
 			Occurrence: prepared.Occurrence, Delivery: prepared.Delivery, DeliveryJob: prepared.Job,
 			Reason: model.SessionRevocationAdministratorAllSessions, Command: idempotency,
 		},
-		sessionAdministrationStoreErrors.Translate, batch.Replayed,
+		sessionAdministrationStoreErrors.Translate, batch.Replayed, func() time.Time { return now },
 	)
 }
 
-func (s *sessionAdministrationService) prepareRevocationNotice(user *model.User, at time.Time) (*store.PreparedMail, error) {
-	return s.deps.Mail.PrepareSessionsRevokedByAdministrator(mail.NoticePreparation{Recipient: user, At: at})
+func (s *Service) prepareRevocationNotice(user *model.User, at time.Time) (*store.PreparedMail, error) {
+	return s.mail.PrepareSessionsRevokedByAdministrator(mail.NoticePreparation{Recipient: user, At: at})
 }
 
 var sessionAdministrationStoreErrors = apperror.StoreTable{

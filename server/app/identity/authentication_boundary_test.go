@@ -20,12 +20,8 @@ func TestAuthenticationDoesNotRetainRootStore(t *testing.T) {
 	t.Parallel()
 
 	rootStore := reflect.TypeOf((*store.Store)(nil)).Elem()
-	service := reflect.TypeOf(authenticationService{})
+	service := reflect.TypeOf(Service{})
 	for index := 0; index < service.NumField(); index++ {
-		require.NotEqual(t, rootStore, service.Field(index).Type, "authenticationService retains root store in field")
-	}
-	selfSessions := reflect.TypeOf(selfSessionService{})
-	for index := 0; index < selfSessions.NumField(); index++ {
-		require.NotEqual(t, rootStore, selfSessions.Field(index).Type, "selfSessionService retains root store in field")
+		require.NotEqual(t, rootStore, service.Field(index).Type, "Service retains root store in field")
 	}
 }

@@ -140,7 +140,7 @@ type desktopAuthorizationService struct {
 	deps desktopAuthorizationServiceDependencies
 
 	users          desktopAuthorizationUserStore
-	authentication *authenticationService
+	authentication *Service
 
 	compatibility desktopAuthorizationCompatibility
 	dpop          *dpopSecurity
@@ -152,7 +152,7 @@ type desktopAuthorizationCompatibility interface {
 
 type desktopAuthorizationIdentityDependencies struct {
 	users          desktopAuthorizationUserStore
-	authentication *authenticationService
+	authentication *Service
 	compatibility  desktopAuthorizationCompatibility
 	dpop           *dpopSecurity
 }
@@ -703,7 +703,7 @@ func (s *desktopAuthorizationService) withdrawUndisclosedDesktopSession(
 	revokeCtx := context.WithoutCancel(ctx)
 	withdrawal, auditErr := s.deps.Audit.PrepareWithdrawal(revokeCtx, invocation, result.Session.UserID,
 		institutionID, result.Session.ID)
-	hashes, revokeErr := s.authentication.deps.Sessions.Withdraw(revokeCtx, &store.SessionWithdrawal{ID: result.Session.ID, UserID: result.Session.UserID, RevokedAt: s.deps.Now(), Reason: model.SessionRevocationDesktopAuthorizationFailed})
+	hashes, revokeErr := s.authentication.sessions.Withdraw(revokeCtx, &store.SessionWithdrawal{ID: result.Session.ID, UserID: result.Session.UserID, RevokedAt: s.deps.Now(), Reason: model.SessionRevocationDesktopAuthorizationFailed})
 	if auditErr == nil && withdrawal != nil {
 		if revokeErr != nil {
 			auditErr = s.deps.Audit.Fail(revokeCtx, withdrawal.ID, "authentication.desktop_authorization.unavailable")
@@ -716,7 +716,7 @@ func (s *desktopAuthorizationService) withdrawUndisclosedDesktopSession(
 	if revokeErr != nil {
 		return apperror.New("authentication.desktop_authorization.unavailable").Wrap(errors.Join(nonceErr, revokeErr, auditErr))
 	}
-	s.authentication.deps.SecurityEffects.SessionsRevoked(revokeCtx, result.Session.UserID,
+	s.authentication.effects.SessionsRevoked(revokeCtx, result.Session.UserID,
 		[]model.SessionID{result.Session.ID}, hashes)
 	if auditErr != nil {
 		return apperror.New("audit.unavailable").Wrap(errors.Join(nonceErr, auditErr))

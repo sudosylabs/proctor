@@ -50,7 +50,7 @@ func TestSessionCreationAndRefreshUseThePolicySessionLengths(t *testing.T) {
 	shortened := sessionLifetimes{Idle: 30 * time.Minute, Absolute: 90 * time.Minute}
 	policy := allowAllAuthenticationAccessPolicy().(authenticationAccessPolicyFake)
 	policy.lifetimes = &shortened
-	service.deps.AccessPolicy = policy
+	service.accessPolicy = policy
 	result, err := service.Login(context.Background(), invocation.Invocation{}, LoginCommand{
 		LoginID: user.Email, Password: roleHolderMFATestPassword, ClientType: model.SessionClientWeb, Source: "192.0.2.20",
 	})
@@ -65,8 +65,8 @@ func TestSessionCreationAndRefreshUseThePolicySessionLengths(t *testing.T) {
 	refreshing.rotation = &store.SessionRotation{Session: &model.Session{ID: model.NewSessionID(), UserID: user.ID, ClientType: model.SessionClientWeb,
 		AuthenticationStrength: model.AuthenticationMultiFactor}}
 	refresher := newTestAuthenticationServiceWithEffects(t, refreshing, newAuthenticationCacheFake(), &authenticationEffectsRecorder{},
-		discardAuthenticationMFAVerifier{}, discardAuthenticationPATResolver{}, model.NewCredentialToken, func() time.Time { return at })
-	refresher.deps.AccessPolicy = policy
+		discardAuthenticationMFAVerifier{}, discardPersonalAccessTokenStore{}, model.NewCredentialToken, func() time.Time { return at })
+	refresher.accessPolicy = policy
 	_, _, err = refresher.RefreshSession(context.Background(), invocation.Invocation{}, RefreshSessionCommand{RefreshToken: model.NewCredentialToken()})
 	require.NoError(t, err)
 	require.Equal(t, at.Add(30*time.Minute), refreshing.rotationInput.IdleExpiresAt)

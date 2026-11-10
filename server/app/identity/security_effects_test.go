@@ -19,6 +19,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -47,26 +49,30 @@ func TestAuthenticationServiceRequiresSecurityDependencies(t *testing.T) {
 		sessionCredentials store.SessionCredentialStore
 		attempts           *AttemptAccounting
 		audit              access.MutationAuditor
-		loginAudit         localLoginAuditor
 		effects            SecurityEffects
 		mfa                authenticationMFAVerifier
-		personalTokens     authenticationPATResolver
+		personalTokens     store.PersonalAccessTokenStore
 		newCredential      func() string
 	}
 	valid := dependencies{
 		users: persistence.User(), passwords: persistence.PasswordCredential(),
 		sessions: persistence.Session(), sessionCredentials: persistence.SessionCredential(),
 		attempts: mustAuthenticationAttemptAccounting(t, cache),
-		audit:    &mutationAttemptAuditorFake{}, loginAudit: &localLoginAuditorFake{},
-		effects: discardAuthenticationSecurityEffects{},
-		mfa:     discardAuthenticationMFAVerifier{}, personalTokens: discardAuthenticationPATResolver{},
+		audit:    &mutationAttemptAuditorFake{},
+		effects:  discardAuthenticationSecurityEffects{},
+		mfa:      discardAuthenticationMFAVerifier{}, personalTokens: discardPersonalAccessTokenStore{},
 		newCredential: model.NewCredentialToken,
 	}
-	desktop := testAuthenticationDesktopDependencies(t, cache)
+	dpop := testAuthenticationDPoP(t, cache)
 	construct := func(deps dependencies) error {
-		_, constructorErr := newAuthenticationService(authenticationServiceDependencies{Users: deps.users, Passwords: deps.passwords, Sessions: deps.sessions, SessionCredentials: deps.sessionCredentials, AccessPolicy: allowAllAuthenticationAccessPolicy(), Cache: cache, Attempts: deps.attempts, SecurityEffects: deps.effects, Audit: deps.audit, LoginAudit: deps.loginAudit, Hasher: hasher, MFA: deps.mfa, PersonalTokens: deps.personalTokens, SessionPolicy: SessionPolicy{}, LoginRateLimit: LoginRateLimitPolicy{}, Diagnostics: newDiscardLogger(t), NewCredential: deps.newCredential, Now: nil, Desktop: desktop})
-		return constructorErr
+		service := &Service{users: deps.users, passwords: deps.passwords, sessions: deps.sessions, sessionCredentials: deps.sessionCredentials,
+			desktopRegistrations: authenticationDesktopRegistrationLookupFake{}, personalAccessTokens: deps.personalTokens,
+			accessPolicy: allowAllAuthenticationAccessPolicy(), dpop: dpop, cache: cache, attempts: deps.attempts, hasher: hasher,
+			auditor: deps.audit, securityAudit: &localLoginAuditorFake{}, effects: deps.effects, mfa: deps.mfa,
+			diagnostics: newDiscardLogger(t), newCredential: deps.newCredential, now: time.Now}
+		return service.requireSessionAuthentication()
 	}
+	require.NoError(t, construct(valid), "complete dependencies were refused")
 	tests := []struct {
 		name   string
 		mutate func(*dependencies)
@@ -77,10 +83,9 @@ func TestAuthenticationServiceRequiresSecurityDependencies(t *testing.T) {
 		{name: "session credentials", mutate: func(deps *dependencies) { deps.sessionCredentials = nil }},
 		{name: "attempt accounting", mutate: func(deps *dependencies) { deps.attempts = nil }},
 		{name: "audit", mutate: func(deps *dependencies) { deps.audit = nil }},
-		{name: "login audit", mutate: func(deps *dependencies) { deps.loginAudit = nil }},
 		{name: "effects", mutate: func(deps *dependencies) { deps.effects = nil }},
 		{name: "MFA verifier", mutate: func(deps *dependencies) { deps.mfa = nil }},
-		{name: "PAT resolver", mutate: func(deps *dependencies) { deps.personalTokens = nil }},
+		{name: "personal access token store", mutate: func(deps *dependencies) { deps.personalTokens = nil }},
 		{name: "credential generator", mutate: func(deps *dependencies) { deps.newCredential = nil }},
 	}
 	for _, test := range tests {
@@ -90,6 +95,22 @@ func TestAuthenticationServiceRequiresSecurityDependencies(t *testing.T) {
 			require.Error(t, construct(candidate), "nil %s dependency was accepted", test.name)
 		})
 	}
+	// Composition without an Auditor still builds, as it did when local login
+	// audit was an adapter over a nil Auditor; every admitted local login then
+	// fails closed instead of signing in unaudited.
+	t.Run("login audit", func(t *testing.T) {
+		service := newTestAuthenticationService(t, persistence)
+		service.securityAudit = nil
+		user, createErr := service.CreateLocalUser(context.Background(), CreateLocalUserCommand{
+			User: &model.User{Username: "unaudited", Email: "unaudited@example.edu"}, Password: "CorrectHorseBatteryStaple1!",
+		})
+		require.NoError(t, createErr)
+		login, loginErr := service.Login(context.Background(), invocation.Invocation{}, LoginCommand{
+			LoginID: user.Username, Password: "CorrectHorseBatteryStaple1!", ClientType: model.SessionClientCLI, Source: "192.0.2.1",
+		})
+		require.Nil(t, login, "nil login audit admitted a sign-in")
+		require.True(t, apperror.Is(loginErr, "audit.unavailable"), "nil login audit = %v", loginErr)
+	})
 }
 
 func TestExternalAuthenticationServiceRequiresInvalidator(t *testing.T) {
@@ -120,13 +141,13 @@ type securityExternalIdentityStore struct{ store.ExternalIdentityStore }
 type securityAuditStore struct{ store.AuditStore }
 
 // TestAuthenticationRetainsOnlyClockAndCredentialFunctions keeps sibling
-// callbacks out of authenticationService. The realtime half of this rule, and
+// callbacks out of the Service. The realtime half of this rule, and
 // the guarantee that authentication cannot hold the realtime service, now
 // follow from the package boundary and live in the parent app package.
 func TestAuthenticationRetainsOnlyClockAndCredentialFunctions(t *testing.T) {
 	t.Parallel()
 
-	authenticationType := reflect.TypeOf(authenticationService{})
+	authenticationType := reflect.TypeOf(Service{})
 	for index := 0; index < authenticationType.NumField(); index++ {
 		field := authenticationType.Field(index)
 		// now and wait are clock primitives, not sibling callbacks.

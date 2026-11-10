@@ -155,16 +155,71 @@ type Dependencies struct {
 	RecoveryDiagnostics       *logging.Logger
 }
 
-// Service holds every identity use case. Each concern keeps its own focused
+// securityAuditor is the part of *access.Auditor that records a local
+// password sign-in: the admitted attempt, its completion and a terminal
+// failure. Mutations are audited through the Service's access.MutationAuditor.
+type securityAuditor interface {
+	BeginLocalLogin(context.Context, model.UserID, model.SessionClientType, model.RequestMetadata) (*model.AuditEvent, error)
+	CompleteCriticalAction(context.Context, model.AuditEventID, model.AuditStatus, string, any) (*model.AuditEvent, error)
+	RecordLocalLoginFailure(context.Context, model.UserID, model.SessionClientType, model.RequestMetadata, string) error
+}
+
+var _ securityAuditor = (*access.Auditor)(nil)
+
+// mailComposer is the part of *mail.Composer the Service prepares frozen
+// security notices with.
+type mailComposer interface {
+	PrepareSessionsRevokedByAdministrator(mail.NoticePreparation) (*store.PreparedMail, error)
+}
+
+var _ mailComposer = (*mail.Composer)(nil)
+
+// Service holds every identity use case. Sign-in and Sessions live on the
+// Service itself: its fields are the Store contracts those use cases call and
+// one of each collaborator. The remaining concerns keep their own focused
 // implementation, embedded here so the Service's method set is their exported
 // methods.
 type Service struct {
-	*authenticationService
+	users                store.UserStore
+	passwords            store.PasswordCredentialStore
+	sessions             store.SessionStore
+	sessionCredentials   store.SessionCredentialStore
+	desktopRegistrations store.DesktopRegistrationStore
+	personalAccessTokens store.PersonalAccessTokenStore
+
+	// accessPolicy is the one *currentAuthenticationAccessPolicy every flow
+	// shares; dpop is the one DPoP nonce and replay guard, shared with
+	// Desktop authorization.
+	accessPolicy authenticationAccessPolicy
+	dpop         *dpopSecurity
+	cache        AuthenticationCache
+	attempts     *AttemptAccounting
+	hasher       *PasswordHasher
+	authorizer   resourceAuthorizer
+	auditor      access.MutationAuditor
+	// securityAudit is nil when composition supplies no Auditor; local
+	// sign-in then fails closed with the audit unavailable.
+	securityAudit securityAuditor
+	mail          mailComposer
+	effects       SecurityEffects
+	// mfa is the embedded two-step verification implementation, which
+	// sign-in asks for the recovery state and the login second factor.
+	mfa         authenticationMFAVerifier
+	operational OperationalRecorder
+	diagnostics *logging.Logger
+
+	sessionPolicy             SessionPolicy
+	loginRateLimit            LoginRateLimitPolicy
+	personalAccessTokenPolicy PersonalAccessTokenPolicy
+	newCredential             func() string
+	now                       func() time.Time
+	// wait applies a progressive login delay; tests replace it.
+	wait func(context.Context, time.Duration) error
+
 	*desktopAuthorizationService
 	*desktopReauthenticationService
 	*desktopRegistrationService
 	*desktopCompatibilityService
-	*selfSessionService
 	*externalAuthenticationService
 	*authenticationMethodService
 	*mfaApplicationService
@@ -172,7 +227,6 @@ type Service struct {
 	*accountTokenService
 	*personalAccessTokenAdministrationService
 	*accountStateService
-	*sessionAdministrationService
 	*bootstrapService
 }
 
@@ -211,7 +265,9 @@ func New(deps Dependencies) (*Service, error) {
 	return service, nil
 }
 
-// constructSessionAuthentication builds DPoP, the authentication access policy, MFA, local authentication and desktop authorization.
+// constructSessionAuthentication builds DPoP, the authentication access
+// policy and MFA, sets the Service's sign-in and Session collaborators, and
+// builds Desktop authorization.
 func (s *Service) constructSessionAuthentication(deps Dependencies, mfa *mfaMechanics) (*currentAuthenticationAccessPolicy, error) {
 	dpop, err := newDPoPSecurity(dpopSecurityDependencies{Cache: deps.Cache, Policy: dpopPolicy{Origin: deps.PublicURL,
 		NonceLifetime: 5 * time.Minute, ProofLifetime: 5 * time.Minute, ClockSkew: time.Minute,
@@ -227,38 +283,38 @@ func (s *Service) constructSessionAuthentication(deps Dependencies, mfa *mfaMech
 	if err != nil {
 		return nil, err
 	}
-	// Expand PAT policy used both at bearer resolution and administration.
-	patResolver, err := newPersonalAccessTokenBearerResolver(personalAccessTokenBearerResolverDependencies{Tokens: deps.Store.PersonalAccessToken(), Policy: deps.PersonalAccessToken, Diagnostics: deps.AuthenticationDiagnostics})
-	if err != nil {
+	s.users, s.passwords = deps.Store.User(), deps.Store.PasswordCredential()
+	s.sessions, s.sessionCredentials = deps.Store.Session(), deps.Store.SessionCredential()
+	s.desktopRegistrations, s.personalAccessTokens = deps.Store.DesktopRegistration(), deps.Store.PersonalAccessToken()
+	s.accessPolicy, s.dpop, s.cache, s.attempts, s.hasher = authenticationAccess, dpop, deps.Cache, deps.Attempts, deps.Hasher
+	s.authorizer, s.auditor, s.mail, s.effects = deps.Authorizer, deps.Auditor.MutationAudit(), deps.Mail, deps.Effects
+	if deps.Auditor != nil {
+		s.securityAudit = deps.Auditor
+	}
+	s.mfa, s.operational, s.diagnostics = mfaApplication, deps.Operational, deps.AuthenticationDiagnostics
+	s.sessionPolicy, s.loginRateLimit, s.personalAccessTokenPolicy = deps.Sessions, deps.LoginRateLimit, deps.PersonalAccessToken
+	s.newCredential, s.now, s.wait = model.NewCredentialToken, time.Now, waitContext
+	if err = s.requireSessionAuthentication(); err != nil {
 		return nil, err
 	}
-	authentication, err := newAuthenticationService(authenticationServiceDependencies{Users: deps.Store.User(), Passwords: deps.Store.PasswordCredential(), Sessions: deps.Store.Session(), SessionCredentials: deps.Store.SessionCredential(), AccessPolicy: authenticationAccess, Cache: deps.Cache, Attempts: deps.Attempts, SecurityEffects: deps.Effects, Audit: deps.Auditor.MutationAudit(), LoginAudit: localLoginAuditAdapter{audit: deps.Auditor}, Hasher: deps.Hasher, MFA: mfaApplication, PersonalTokens: patResolver, SessionPolicy: deps.Sessions, LoginRateLimit: deps.LoginRateLimit, Diagnostics: deps.AuthenticationDiagnostics, NewCredential: model.NewCredentialToken, Now: time.Now, Desktop: authenticationDesktopDependencies{registrations: deps.Store.DesktopRegistration(), dpop: dpop}})
-	if err != nil {
-		return nil, err
-	}
-	authentication.operational = deps.Operational
 	desktopPolicy := DesktopAuthorizationPolicy{Issuer: deps.PublicURL, AllowLoopbackHTTPDevelopment: deps.LoopbackHTTPDevelopment}
 	desktopAttempts := desktopAuthorizationAttemptAccounting{attempts: deps.Attempts, policy: deps.LoginRateLimit}
-	desktopAuthorization, err := newDesktopAuthorizationService(desktopAuthorizationServiceDependencies{Transactions: deps.Store.BrowserAuthentication(), Institutions: deps.Store.Institution(), AccessPolicy: authenticationAccess, Capabilities: deps.Capabilities, Audit: desktopAuthorizationAuditAdapter{audit: deps.Auditor}, Attempts: desktopAttempts, SessionPolicy: deps.Sessions, Policy: desktopPolicy, NewCredential: model.NewCredentialToken, Now: time.Now, Identity: desktopAuthorizationIdentityDependencies{users: deps.Store.User(), authentication: authentication,
+	desktopAuthorization, err := newDesktopAuthorizationService(desktopAuthorizationServiceDependencies{Transactions: deps.Store.BrowserAuthentication(), Institutions: deps.Store.Institution(), AccessPolicy: authenticationAccess, Capabilities: deps.Capabilities, Audit: desktopAuthorizationAuditAdapter{audit: deps.Auditor}, Attempts: desktopAttempts, SessionPolicy: deps.Sessions, Policy: desktopPolicy, NewCredential: model.NewCredentialToken, Now: time.Now, Identity: desktopAuthorizationIdentityDependencies{users: deps.Store.User(), authentication: s,
 		compatibility: s.desktopCompatibilityService, dpop: dpop}})
 	if err != nil {
 		return nil, err
 	}
-	desktopReauthentication, err := newDesktopReauthenticationService(desktopReauthenticationServiceDependencies{Transactions: deps.Store.BrowserAuthentication(), Institutions: deps.Store.Institution(), Users: deps.Store.User(), Capabilities: deps.Capabilities, Audit: desktopReauthenticationAuditAdapter{audit: deps.Auditor}, Attempts: desktopAttempts, Authentication: authentication, Policy: desktopPolicy, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, NewCredential: model.NewCredentialToken, Now: time.Now})
+	desktopReauthentication, err := newDesktopReauthenticationService(desktopReauthenticationServiceDependencies{Transactions: deps.Store.BrowserAuthentication(), Institutions: deps.Store.Institution(), Users: deps.Store.User(), Capabilities: deps.Capabilities, Audit: desktopReauthenticationAuditAdapter{audit: deps.Auditor}, Attempts: desktopAttempts, Authentication: s, Policy: desktopPolicy, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, NewCredential: model.NewCredentialToken, Now: time.Now})
 	if err != nil {
 		return nil, err
 	}
-	s.mfaApplicationService, s.authenticationService = mfaApplication, authentication
+	s.mfaApplicationService = mfaApplication
 	s.desktopAuthorizationService, s.desktopReauthenticationService = desktopAuthorization, desktopReauthentication
 	return authenticationAccess, nil
 }
 
-// constructAccountServices builds self-service Sessions, account tokens, token administration and Desktop registrations.
+// constructAccountServices builds account tokens, token administration and Desktop registrations.
 func (s *Service) constructAccountServices(deps Dependencies, authenticationAccess *currentAuthenticationAccessPolicy) error {
-	selfSessions, err := newSelfSessionService(selfSessionServiceDependencies{Sessions: deps.Store.Session(), Audit: deps.Auditor.MutationAudit(), Effects: deps.Effects, Now: time.Now})
-	if err != nil {
-		return err
-	}
 	accountTokens, err := newAccountTokenService(accountTokenServiceDependencies{Users: deps.Store.User(), Passwords: deps.Store.PasswordCredential(), Tokens: deps.Store.UserToken(), AccessPolicy: authenticationAccess, Institutions: deps.Store.Institution(), Mail: deps.Mail, Attempts: deps.Attempts, Hasher: deps.Hasher, Audit: accountTokenAuditRecorder{nodeID: deps.NodeID}, Effects: deps.Effects, Diagnostics: deps.RecoveryDiagnostics, Policy: deps.AccountRecovery, PublicURL: deps.PublicURL, NewToken: model.NewCredentialToken, Now: time.Now})
 	if err != nil {
 		return err
@@ -275,7 +331,7 @@ func (s *Service) constructAccountServices(deps Dependencies, authenticationAcce
 	if err != nil {
 		return err
 	}
-	s.selfSessionService, s.accountTokenService = selfSessions, accountTokens
+	s.accountTokenService = accountTokens
 	s.personalAccessTokenAdministrationService, s.desktopRegistrationService = personalAccessTokenAdministration, desktopRegistrations
 	return nil
 }
@@ -292,7 +348,7 @@ func (s *Service) constructExternalAuthentication(deps Dependencies, authenticat
 	if externalPolicy.LoginRateLimit == (LoginRateLimitPolicy{}) {
 		externalPolicy.LoginRateLimit = deps.LoginRateLimit
 	}
-	externalAuthentication, err := newExternalAuthenticationService(externalAuthenticationServiceDependencies{Registry: deps.Registry, LoginStates: deps.Store.ExternalLoginState(), Institutions: deps.Store.Institution(), Identities: deps.Store.ExternalIdentity(), Sessions: deps.Store.Session(), AccessPolicy: authenticationAccess, Attempts: deps.Attempts, Authentication: s.authenticationService, Invalidator: deps.Invalidator, Audit: deps.Auditor, MutationAudit: deps.Auditor.MutationAudit(), Capabilities: deps.Capabilities, InvitationAcceptor: deps.Invitations, DesktopAuthorization: s.desktopAuthorizationService, DesktopReauthentication: s.desktopReauthenticationService, Policy: externalPolicy, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Diagnostics: deps.AuthenticationDiagnostics, NewCredential: model.NewCredentialToken, Now: time.Now})
+	externalAuthentication, err := newExternalAuthenticationService(externalAuthenticationServiceDependencies{Registry: deps.Registry, LoginStates: deps.Store.ExternalLoginState(), Institutions: deps.Store.Institution(), Identities: deps.Store.ExternalIdentity(), Sessions: deps.Store.Session(), AccessPolicy: authenticationAccess, Attempts: deps.Attempts, Authentication: s, Invalidator: deps.Invalidator, Audit: deps.Auditor, MutationAudit: deps.Auditor.MutationAudit(), Capabilities: deps.Capabilities, InvitationAcceptor: deps.Invitations, DesktopAuthorization: s.desktopAuthorizationService, DesktopReauthentication: s.desktopReauthenticationService, Policy: externalPolicy, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Diagnostics: deps.AuthenticationDiagnostics, NewCredential: model.NewCredentialToken, Now: time.Now})
 	if err != nil {
 		return err
 	}
@@ -304,11 +360,10 @@ func (s *Service) constructExternalAuthentication(deps Dependencies, authenticat
 	return nil
 }
 
-// constructAdministration builds account state, Session administration,
-// bootstrap and, when the catalog has Jobs, the MFA key ring.
+// constructAdministration builds account state, bootstrap and, when the
+// catalog has Jobs, the MFA key ring.
 func (s *Service) constructAdministration(deps Dependencies) error {
 	s.accountStateService = newAccountStateService(accountStateServiceDependencies{Users: deps.Store.User(), Authorization: deps.Authorizer, Capabilities: deps.Capabilities, Audit: deps.Auditor.MutationAudit(), Mail: deps.Mail, Effects: accountStateRealtimeEffects{effects: deps.Effects}, Now: time.Now})
-	s.sessionAdministrationService = newSessionAdministrationService(sessionAdministrationServiceDependencies{Sessions: deps.Store.Session(), Users: deps.Store.User(), Authorization: deps.Authorizer, Audit: deps.Auditor.MutationAudit(), Mail: deps.Mail, Effects: deps.Effects, Now: time.Now})
 	s.bootstrapService = newBootstrapService(bootstrapServiceDependencies{Installations: deps.Store.Installation(), Hasher: deps.Hasher, Attempts: deps.Attempts, RateLimit: deps.LoginRateLimit, Protection: deps.BootstrapProtection, NodeID: deps.NodeID, Now: time.Now, RecoveryPolicy: administratorRecoveryPolicy{capabilities: deps.Capabilities, mfaEnabled: deps.MFA.Enabled}})
 	if deps.Store.Job() == nil || deps.Store.MFA() == nil {
 		return nil

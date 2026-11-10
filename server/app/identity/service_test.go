@@ -377,7 +377,7 @@ func (f *systemAuditStoreFake) Save(_ context.Context, event *model.AuditEvent) 
 // seedAuthenticatedSession creates a local User and signs them in from the CLI.
 func seedAuthenticatedSession(
 	t *testing.T,
-	service *authenticationService,
+	service *Service,
 ) (*model.User, string) {
 	t.Helper()
 	password := "CorrectHorseBatteryStaple1!"

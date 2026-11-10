@@ -44,7 +44,7 @@ func TestDesktopLocalAuthenticationPreservesPasswordCapacityFailure(t *testing.T
 			if account == "missing" {
 				command.LoginID = "missing@example.edu"
 			}
-			saturatePasswordWork(t, authentication.deps.Hasher)
+			saturatePasswordWork(t, authentication.hasher)
 			result, err := service.AuthenticateDesktopAuthorizationLocally(context.Background(), invocation.Invocation{}, command)
 			require.Nil(t, result, "saturated Desktop authentication = %#v/%v", result, err)
 			require.True(t, apperror.Is(err, "service.busy"), "saturated Desktop authentication = %#v/%v", result, err)
@@ -260,7 +260,7 @@ func TestDesktopAuthorizationExchangeFailsClosedWhenSessionNonceCannotBeStored(t
 	result, err := service.ExchangeDesktopAuthorization(context.Background(), invocation.Invocation{}, command)
 	require.Nil(t, result, "Exchange() = %#v, %v; want no credential response", result, err)
 	require.True(t, apperror.Is(err, "authentication.dpop.unavailable"), "Exchange() = %#v, %v; want no credential response", result, err)
-	sessions := identity.authentication.deps.Sessions.(*desktopAuthorizationSessionStoreStub)
+	sessions := identity.authentication.sessions.(*desktopAuthorizationSessionStoreStub)
 	require.Equal(t, session.ID.String(), sessions.revokedID)
 	require.Equal(t, session.UserID.String(), sessions.revokedUserID)
 	require.Equal(t, model.SessionRevocationDesktopAuthorizationFailed, sessions.reason)
@@ -684,7 +684,7 @@ func testDesktopAuthorizationIdentity(
 	}})
 	require.NoError(t, err)
 	return desktopAuthorizationIdentityDependencies{
-		users: desktopAuthorizationUserStoreStub{}, authentication: &authenticationService{deps: authenticationServiceDependencies{Sessions: &desktopAuthorizationSessionStoreStub{}, SecurityEffects: discardAuthenticationSecurityEffects{}}},
+		users: desktopAuthorizationUserStoreStub{}, authentication: &Service{sessions: &desktopAuthorizationSessionStoreStub{}, effects: discardAuthenticationSecurityEffects{}},
 		compatibility: desktopAuthorizationCompatibilityFake{}, dpop: security,
 	}
 }

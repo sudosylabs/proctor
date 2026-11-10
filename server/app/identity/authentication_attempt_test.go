@@ -201,7 +201,7 @@ func TestAuthenticationAttemptAccountingIsolatesAllFourCallerFlowsAndProtectsInp
 	policy := LoginRateLimitPolicy{
 		Window: time.Minute, MaximumAttempts: 1, MaximumSourceAttempts: 1,
 	}
-	login := &authenticationService{deps: authenticationServiceDependencies{Attempts: accounting, LoginRateLimit: policy}}
+	login := &Service{attempts: accounting, loginRateLimit: policy}
 	recovery := &accountTokenService{deps: accountTokenServiceDependencies{Attempts: accounting, Policy: AccountRecoveryPolicy{RateLimit: policy}}}
 	external := &externalAuthenticationService{deps: externalAuthenticationServiceDependencies{Attempts: accounting, Policy: ExternalAuthenticationPolicy{LoginRateLimit: policy}}}
 	bootstrap := &bootstrapService{deps: bootstrapServiceDependencies{Attempts: accounting}, rateLimitWindow: policy.Window, maximumSourceAttempts: policy.MaximumSourceAttempts}
@@ -462,7 +462,7 @@ func TestSuccessfulLoginTreatsAttemptResetFailureAsDiagnosticOnly(t *testing.T) 
 	persistence := newAuthenticationStoreFake()
 	service := newTestAuthenticationServiceWithCache(t, persistence, cache)
 	diagnostics, logs := newTestLogger(t)
-	service.deps.Diagnostics = diagnostics
+	service.diagnostics = diagnostics
 	user, err := service.CreateLocalUser(context.Background(), CreateLocalUserCommand{
 		User: &model.User{
 			Username: "reset-user", Email: "reset-user@example.edu",
@@ -505,11 +505,11 @@ func (w *recordingLoginWait) recorded() []time.Duration {
 	return append([]time.Duration(nil), w.delays...)
 }
 
-func newAccountFailureLoginService(t *testing.T) (*authenticationService, *recordingLoginWait) {
+func newAccountFailureLoginService(t *testing.T) (*Service, *recordingLoginWait) {
 	t.Helper()
 	persistence := newAuthenticationStoreFake()
 	service := newTestAuthenticationService(t, persistence)
-	service.deps.LoginRateLimit = LoginRateLimitPolicy{
+	service.loginRateLimit = LoginRateLimitPolicy{
 		Window: time.Minute, MaximumAttempts: 2, MaximumSourceAttempts: 100,
 		AccountFailuresBeforeDelay: 2, MaximumAccountFailureDelay: time.Second,
 	}

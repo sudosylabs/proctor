@@ -32,7 +32,8 @@ type localLoginAuditRecord struct {
 	result     any
 }
 
-// localLoginAuditorFake keeps the terminal outcome of every local login audit
+// localLoginAuditorFake stands in for *access.Auditor and keeps the terminal
+// outcome of every local login audit, with the request metadata it received,
 // so tests assert what became durable rather than which calls were made.
 type localLoginAuditorFake struct {
 	pending     map[string]*localLoginAuditRecord
@@ -40,35 +41,35 @@ type localLoginAuditorFake struct {
 	completeErr error
 }
 
-func (f *localLoginAuditorFake) BeginLocalLogin(_ context.Context, invocation invocation.Invocation, userID model.UserID, clientType model.SessionClientType) (model.AuditEventID, error) {
+func (f *localLoginAuditorFake) BeginLocalLogin(_ context.Context, userID model.UserID, clientType model.SessionClientType, metadata model.RequestMetadata) (*model.AuditEvent, error) {
 	if f.pending == nil {
 		f.pending = map[string]*localLoginAuditRecord{}
 	}
-	id := model.NewID()
-	f.pending[id] = &localLoginAuditRecord{status: model.AuditStatusAttempt, actor: userID, target: userID,
-		clientType: clientType, metadata: invocation.RequestMetadata()}
-	return model.AuditEventID(id), nil
+	id := model.NewAuditEventID()
+	f.pending[id.String()] = &localLoginAuditRecord{status: model.AuditStatusAttempt, actor: userID, target: userID,
+		clientType: clientType, metadata: metadata}
+	return &model.AuditEvent{ID: id}, nil
 }
 
-func (f *localLoginAuditorFake) CompleteLocalLogin(_ context.Context, auditID model.AuditEventID, status model.AuditStatus, errorCode string, result any) error {
+func (f *localLoginAuditorFake) CompleteCriticalAction(_ context.Context, auditID model.AuditEventID, status model.AuditStatus, errorCode string, result any) (*model.AuditEvent, error) {
 	if f.completeErr != nil {
-		return f.completeErr
+		return nil, f.completeErr
 	}
 	record, ok := f.pending[auditID.String()]
 	if !ok {
-		return errors.New("unknown audit attempt")
+		return nil, errors.New("unknown audit attempt")
 	}
 	delete(f.pending, auditID.String())
 	record.status, record.errorCode, record.result = status, errorCode, result
 	f.terminal = append(f.terminal, *record)
-	return nil
+	return &model.AuditEvent{ID: auditID, Status: status, ErrorCode: errorCode}, nil
 }
 
-func (f *localLoginAuditorFake) RecordLocalLoginFailure(_ context.Context, invocation invocation.Invocation, target model.UserID,
-	clientType model.SessionClientType, errorCode string,
+func (f *localLoginAuditorFake) RecordLocalLoginFailure(_ context.Context, target model.UserID,
+	clientType model.SessionClientType, metadata model.RequestMetadata, errorCode string,
 ) error {
 	f.terminal = append(f.terminal, localLoginAuditRecord{status: model.AuditStatusFail, target: target,
-		clientType: clientType, metadata: invocation.RequestMetadata(), errorCode: errorCode})
+		clientType: clientType, metadata: metadata, errorCode: errorCode})
 	return nil
 }
 
@@ -80,13 +81,13 @@ func (failingLoginMFAVerifier) verifyLogin(context.Context, string, string, time
 	return "", 0, apperror.New("authentication.mfa.code_invalid")
 }
 
-func newLocalLoginAuditFixture(t *testing.T, mfa authenticationMFAVerifier) (*authenticationService, *authenticationStoreFake, *localLoginAuditorFake, *model.User) {
+func newLocalLoginAuditFixture(t *testing.T, mfa authenticationMFAVerifier) (*Service, *authenticationStoreFake, *localLoginAuditorFake, *model.User) {
 	t.Helper()
 	persistence := newAuthenticationStoreFake()
 	service := newTestAuthenticationServiceWithPorts(t, persistence, newAuthenticationCacheFake(), mfa,
-		discardAuthenticationPATResolver{}, model.NewCredentialToken, time.Now)
+		discardPersonalAccessTokenStore{}, model.NewCredentialToken, time.Now)
 	audit := &localLoginAuditorFake{}
-	service.deps.LoginAudit = audit
+	service.securityAudit = audit
 	user, err := service.CreateLocalUser(context.Background(), CreateLocalUserCommand{
 		User: &model.User{Username: "audited-user", Email: "audited-user@example.edu"}, Password: "CorrectHorseBatteryStaple1!",
 	})
@@ -168,7 +169,7 @@ func TestLocalLoginFailuresAreDurablyAudited(t *testing.T) {
 func TestLocalLoginRejectedBeforeAdmissionWritesNoAudit(t *testing.T) {
 	t.Parallel()
 	service, _, audit, user := newLocalLoginAuditFixture(t, discardAuthenticationMFAVerifier{})
-	service.deps.LoginRateLimit.MaximumAttempts = 1
+	service.loginRateLimit.MaximumAttempts = 1
 	command := LoginCommand{LoginID: user.Email, Password: "incorrect password", ClientType: model.SessionClientCLI, Source: "192.0.2.10:3"}
 	_, err := service.Login(context.Background(), localLoginInvocation(), command)
 	require.True(t, apperror.Is(err, "authentication.credentials_invalid"), "first err = %v", err)

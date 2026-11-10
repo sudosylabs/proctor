@@ -156,7 +156,7 @@ type recoveryExternalIssuerFake struct {
 	calls int
 }
 
-func (f *recoveryExternalIssuerFake) recoveryState(context.Context, model.UserID) (*model.UserMFARecovery, error) {
+func (f *recoveryExternalIssuerFake) mfaRecoveryState(context.Context, model.UserID) (*model.UserMFARecovery, error) {
 	return f.state, nil
 }
 func (f *recoveryExternalIssuerFake) createSession(context.Context, sessionIssuance) (*model.Session, *model.AuthenticationTokens, error) {

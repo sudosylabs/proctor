@@ -75,12 +75,12 @@ func TestSessionExpiryRejectsDespitePositiveCache(t *testing.T) {
 	storeFake := newAuthenticationStoreFake()
 	cache := newAuthenticationCacheFake()
 	service := newTestAuthenticationServiceWithCache(t, storeFake, cache)
-	service.deps.SessionPolicy.AccessTTL = time.Hour
-	service.deps.SessionPolicy.IdleTTL = time.Hour
-	service.deps.SessionPolicy.AbsoluteTTL = time.Hour
+	service.sessionPolicy.AccessTTL = time.Hour
+	service.sessionPolicy.IdleTTL = time.Hour
+	service.sessionPolicy.AbsoluteTTL = time.Hour
 
 	fixedNow := time.Date(2026, 8, 8, 12, 0, 0, 0, time.UTC)
-	service.deps.Now = func() time.Time { return fixedNow }
+	service.now = func() time.Time { return fixedNow }
 
 	_, rawAccess := seedAuthenticatedSession(t, service)
 	ctx := context.Background()

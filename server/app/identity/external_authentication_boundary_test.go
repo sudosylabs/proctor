@@ -857,10 +857,10 @@ func (desktopCallbackExternalProvider) Complete(context.Context, ExternalProvide
 	return nil, errors.New("not used")
 }
 
-func (externalSessionIssuerFake) recoveryState(_ context.Context, userID model.UserID) (*model.UserMFARecovery, error) {
+func (externalSessionIssuerFake) mfaRecoveryState(_ context.Context, userID model.UserID) (*model.UserMFARecovery, error) {
 	return &model.UserMFARecovery{UserID: userID}, nil
 }
 
-func (providerConnectionSessionIssuerFake) recoveryState(_ context.Context, userID model.UserID) (*model.UserMFARecovery, error) {
+func (providerConnectionSessionIssuerFake) mfaRecoveryState(_ context.Context, userID model.UserID) (*model.UserMFARecovery, error) {
 	return &model.UserMFARecovery{UserID: userID}, nil
 }

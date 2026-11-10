@@ -113,12 +113,12 @@ func newDesktopReauthenticationTestHarness(t *testing.T) desktopReauthentication
 	require.NoError(t, err)
 	events := []string{}
 	mutations := &mutationAttemptAuditorFake{events: &events, beginID: model.NewID()}
-	authentication.deps.Audit = mutations
+	authentication.auditor = mutations
 	transactions := &desktopReauthenticationStoreFake{}
 	audit := &desktopReauthenticationAuditorFake{}
 	service, err := newDesktopReauthenticationService(desktopReauthenticationServiceDependencies{
 		Transactions: transactions, Institutions: desktopAuthorizationInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}},
-		Users: authentication.deps.Users, Capabilities: &accessPolicyCapabilitiesFake{snapshot: AccessPolicyCapabilitySnapshot{Providers: []AccessPolicyProviderCapability{
+		Users: authentication.users, Capabilities: &accessPolicyCapabilitiesFake{snapshot: AccessPolicyCapabilitySnapshot{Providers: []AccessPolicyProviderCapability{
 			{Descriptor: model.ExternalAuthenticationProvider{ID: "campus", DisplayName: "Campus sign-in", Type: "oidc"}},
 		}}},
 		Audit: audit, Attempts: &desktopAuthorizationAttemptLimiterFake{}, Authentication: authentication,

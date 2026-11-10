@@ -16,6 +16,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 type dpopRecoveryVerifier struct {
@@ -27,7 +28,10 @@ func (v *dpopRecoveryVerifier) recoveryState(_ context.Context, id model.UserID)
 	return &model.UserMFARecovery{UserID: id, Generation: v.generation}, nil
 }
 
-type dpopRegistrationLookup struct{ registration *model.DesktopRegistration }
+type dpopRegistrationLookup struct {
+	store.DesktopRegistrationStore
+	registration *model.DesktopRegistration
+}
 
 func (s dpopRegistrationLookup) Get(context.Context, model.DesktopRegistrationID) (*model.DesktopRegistration, error) {
 	return s.registration, nil
@@ -56,8 +60,8 @@ func TestDPoPAuthenticationAfterMFARecoverySupportsPrincipalRevalidation(t *test
 	persistence.sessionByCredential[credential.TokenHash] = session
 	recovery := &dpopRecoveryVerifier{generation: 2}
 	service := newTestAuthenticationServiceWithPorts(t, persistence, newAuthenticationCacheFake(), recovery,
-		discardAuthenticationPATResolver{}, model.NewCredentialToken, func() time.Time { return at })
-	service.registrations = dpopRegistrationLookup{registration: registration}
+		discardPersonalAccessTokenStore{}, model.NewCredentialToken, func() time.Time { return at })
+	service.desktopRegistrations = dpopRegistrationLookup{registration: registration}
 	nonce, err := service.dpop.IssueNonce(ctx, dpopBinding{Kind: dpopBindingSession, SessionID: session.ID,
 		DesktopRegistrationID: registration.ID, KeyThumbprint: registration.KeyThumbprint, Origin: service.dpop.deps.Policy.Origin})
 	require.NoError(t, err)

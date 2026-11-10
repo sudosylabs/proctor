@@ -25,7 +25,7 @@ const roleHolderMFATestPassword = "CorrectHorseBatteryStaple1!"
 // roleHolderMFALoginFixture creates one local User without a second factor and
 // returns the service and the User. covered decides whether the Access Policy
 // requires that User to use two-step verification.
-func roleHolderMFALoginFixture(t *testing.T, covered bool) (*authenticationService, *authenticationStoreFake, *model.User) {
+func roleHolderMFALoginFixture(t *testing.T, covered bool) (*Service, *authenticationStoreFake, *model.User) {
 	t.Helper()
 	persistence := newAuthenticationStoreFake()
 	service := newTestAuthenticationService(t, persistence)
@@ -35,7 +35,7 @@ func roleHolderMFALoginFixture(t *testing.T, covered bool) (*authenticationServi
 	require.NoError(t, err)
 	policy := allowAllAuthenticationAccessPolicy().(authenticationAccessPolicyFake)
 	policy.roleHolderMFA = map[model.UserID]bool{user.ID: covered}
-	service.deps.AccessPolicy = policy
+	service.accessPolicy = policy
 	return service, persistence, user
 }
 
@@ -101,8 +101,8 @@ func TestRefreshEnforcesRoleHolderMFARequirementBySessionKind(t *testing.T) {
 			persistence.users[user.ID.String()] = user
 			persistence.rotation = &store.SessionRotation{Session: session}
 			service := newTestAuthenticationServiceWithEffects(t, persistence, newAuthenticationCacheFake(), &authenticationEffectsRecorder{},
-				discardAuthenticationMFAVerifier{}, discardAuthenticationPATResolver{}, model.NewCredentialToken, func() time.Time { return at })
-			service.deps.AccessPolicy = authenticationAccessPolicyFake{local: true, roleHolderMFA: map[model.UserID]bool{user.ID: test.covered}}
+				discardAuthenticationMFAVerifier{}, discardPersonalAccessTokenStore{}, model.NewCredentialToken, func() time.Time { return at })
+			service.accessPolicy = authenticationAccessPolicyFake{local: true, roleHolderMFA: map[model.UserID]bool{user.ID: test.covered}}
 			_, _, err := service.RefreshSession(context.Background(), invocation.Invocation{}, RefreshSessionCommand{RefreshToken: model.NewCredentialToken()})
 			if test.wantCode != "" {
 				require.True(t, apperror.Is(err, test.wantCode), "err=%v", err)

@@ -16,10 +16,6 @@ type accountStateMailPreparer interface {
 	PrepareAccountStateChanged(mail.NoticePreparation, bool) (*store.PreparedMail, error)
 }
 
-type sessionAdministrationMailPreparer interface {
-	PrepareSessionsRevokedByAdministrator(mail.NoticePreparation) (*store.PreparedMail, error)
-}
-
 type mfaNoticeMailPreparer interface {
 	PrepareMFANotice(mail.NoticePreparation, mail.MFANoticeKind) (*store.PreparedMail, error)
 }

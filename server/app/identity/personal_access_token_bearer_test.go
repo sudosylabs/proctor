@@ -31,10 +31,9 @@ func TestPersonalAccessTokenBearerResolverPreservesCredentialCeilings(t *testing
 	persistence := &personalAccessTokenResolutionStoreFake{
 		resolution: &store.PersonalAccessTokenResolution{Token: token, User: user},
 	}
-	resolver, err := newPersonalAccessTokenBearerResolver(personalAccessTokenBearerResolverDependencies{Tokens: persistence, Policy: PersonalAccessTokenPolicy{LastUsedUpdateInterval: 5 * time.Minute}, Diagnostics: newDiscardLogger(t)})
-	require.NoError(t, err)
+	resolver := &Service{personalAccessTokens: persistence, personalAccessTokenPolicy: PersonalAccessTokenPolicy{LastUsedUpdateInterval: 5 * time.Minute}, diagnostics: newDiscardLogger(t)}
 
-	principal, err := resolver.ResolveBearer(context.Background(), raw, at)
+	principal, err := resolver.resolvePersonalAccessTokenBearer(context.Background(), raw, at)
 	require.NoError(t, err)
 	require.Equal(t, model.HashToken(raw), persistence.hash)
 	require.NotEqual(t, raw, persistence.hash)
@@ -48,7 +47,7 @@ func TestPersonalAccessTokenBearerResolverPreservesCredentialCeilings(t *testing
 	require.Len(t, principal.CredentialScopes, 2)
 
 	token.AcademicUnitID = model.AcademicUnitID("")
-	unscoped, err := resolver.ResolveBearer(context.Background(), raw, at)
+	unscoped, err := resolver.resolvePersonalAccessTokenBearer(context.Background(), raw, at)
 	require.NoError(t, err)
 	require.True(t, unscoped.AcademicUnitID.IsZero())
 }
@@ -56,6 +55,7 @@ func TestPersonalAccessTokenBearerResolverPreservesCredentialCeilings(t *testing
 type personalAccessTokenResolutionStoreFake struct {
 	store.PersonalAccessTokenStore
 	resolution     *store.PersonalAccessTokenResolution
+	calls          int
 	hash           string
 	at             time.Time
 	updateInterval time.Duration
@@ -67,6 +67,7 @@ func (s *personalAccessTokenResolutionStoreFake) Resolve(
 	at time.Time,
 	updateInterval time.Duration,
 ) (*store.PersonalAccessTokenResolution, error) {
+	s.calls++
 	s.hash, s.at, s.updateInterval = hash, at, updateInterval
 	return s.resolution, nil
 }

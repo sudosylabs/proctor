@@ -9,7 +9,6 @@ package identity
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -27,10 +26,6 @@ type authenticationMFAVerifier interface {
 		string,
 		time.Time,
 	) (model.AuthenticationStrength, int64, error)
-}
-
-type authenticationPATResolver interface {
-	ResolveBearer(context.Context, string, time.Time) (*model.Principal, error)
 }
 
 type sessionIssuance struct {
@@ -54,36 +49,16 @@ type sessionIssuance struct {
 }
 
 type authenticationSessionIssuer interface {
-	recoveryState(context.Context, model.UserID) (*model.UserMFARecovery, error)
+	mfaRecoveryState(context.Context, model.UserID) (*model.UserMFARecovery, error)
 	createSession(
 		context.Context,
 		sessionIssuance,
 	) (*model.Session, *model.AuthenticationTokens, error)
 }
 
-// personalAccessTokenBearerResolverDependencies are the collaborators of personalAccessTokenBearerResolver;
-// newPersonalAccessTokenBearerResolver validates them once and personalAccessTokenBearerResolver keeps them in deps.
-type personalAccessTokenBearerResolverDependencies struct {
-	Tokens      store.PersonalAccessTokenStore
-	Policy      PersonalAccessTokenPolicy
-	Diagnostics *logging.Logger
-}
-
-type personalAccessTokenBearerResolver struct {
-	deps personalAccessTokenBearerResolverDependencies
-}
-
-func newPersonalAccessTokenBearerResolver(deps personalAccessTokenBearerResolverDependencies) (*personalAccessTokenBearerResolver, error) {
-	if deps.Tokens == nil {
-		return nil, errors.New("personal access token store is required")
-	}
-	if deps.Diagnostics == nil {
-		return nil, errors.New("personal access token diagnostics are required")
-	}
-	return &personalAccessTokenBearerResolver{deps: deps}, nil
-}
-
-func (r *personalAccessTokenBearerResolver) ResolveBearer(
+// resolvePersonalAccessTokenBearer resolves a raw personal access token to
+// its CLI principal, debouncing the token's last-used write.
+func (s *Service) resolvePersonalAccessTokenBearer(
 	ctx context.Context,
 	rawToken string,
 	at time.Time,
@@ -91,11 +66,11 @@ func (r *personalAccessTokenBearerResolver) ResolveBearer(
 	if !validRawCredential(rawToken) {
 		return nil, access.InvalidTokenAppError()
 	}
-	resolved, err := r.deps.Tokens.Resolve(
+	resolved, err := s.personalAccessTokens.Resolve(
 		ctx,
 		model.HashToken(rawToken),
 		model.TimeUTC(at),
-		r.deps.Policy.LastUsedUpdateInterval,
+		s.personalAccessTokenPolicy.LastUsedUpdateInterval,
 	)
 	if err != nil {
 		if store.IsNotFound(err) {
@@ -113,7 +88,7 @@ func (r *personalAccessTokenBearerResolver) ResolveBearer(
 		AcademicUnitID:       resolved.Token.AcademicUnitID,
 	}
 	if principal.Validate() != nil {
-		r.deps.Diagnostics.WarnContext(
+		s.diagnostics.WarnContext(
 			ctx,
 			"personal access token resolved to invalid principal",
 			logging.Err(fmt.Errorf("personal_access_token_id=%s", resolved.Token.ID.String())),
@@ -122,5 +97,3 @@ func (r *personalAccessTokenBearerResolver) ResolveBearer(
 	}
 	return principal, nil
 }
-
-var _ authenticationPATResolver = (*personalAccessTokenBearerResolver)(nil)

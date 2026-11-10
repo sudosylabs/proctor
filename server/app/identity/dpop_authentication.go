@@ -31,7 +31,7 @@ func DPoPChallengeNonce(err error) (string, bool) {
 // AuthenticateDPoP resolves a Desktop access credential and establishes the
 // request-scoped registered_desktop_key assurance only after proof, nonce,
 // replay, Session, User, and Registration validation.
-func (s *authenticationService) AuthenticateDPoP(
+func (s *Service) AuthenticateDPoP(
 	ctx context.Context,
 	rawToken string,
 	proof string,
@@ -46,7 +46,7 @@ func (s *authenticationService) AuthenticateDPoP(
 	if _, err = s.verifyDesktopProof(ctx, resolved, rawToken, proof, method, path, true); err != nil {
 		return nil, err
 	}
-	now := model.TimeUTC(s.deps.Now())
+	now := model.TimeUTC(s.now())
 	if err = s.updateActivity(ctx, resolved, now); err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func (s *authenticationService) AuthenticateDPoP(
 	return principal, nil
 }
 
-func (s *authenticationService) validateDPoPRefresh(
+func (s *Service) validateDPoPRefresh(
 	ctx context.Context,
 	rawToken string,
 	proof string,
@@ -72,15 +72,15 @@ func (s *authenticationService) validateDPoPRefresh(
 	return err
 }
 
-func (s *authenticationService) resolveDesktopCredential(
+func (s *Service) resolveDesktopCredential(
 	ctx context.Context,
 	rawToken string,
 	kind model.SessionCredentialKind,
 ) (*resolvedAuthentication, error) {
-	if s.registrations == nil || s.dpop == nil || !validRawCredential(rawToken) {
+	if s.desktopRegistrations == nil || s.dpop == nil || !validRawCredential(rawToken) {
 		return nil, access.InvalidTokenAppError()
 	}
-	credential, session, err := s.deps.SessionCredentials.GetSessionByTokenHash(
+	credential, session, err := s.sessionCredentials.GetSessionByTokenHash(
 		ctx, model.HashToken(rawToken), kind,
 	)
 	if err != nil {
@@ -89,7 +89,7 @@ func (s *authenticationService) resolveDesktopCredential(
 		}
 		return nil, authenticationUnavailable(err)
 	}
-	now := model.TimeUTC(s.deps.Now())
+	now := model.TimeUTC(s.now())
 	if session.ClientType != model.SessionClientDesktop || credential.IsExpiredAt(now) ||
 		!session.DesktopRegistrationID.IsValid() || !model.IsValidDPoPKeyThumbprint(session.DPoPKeyThumbprint) {
 		return nil, access.InvalidTokenAppError()
@@ -98,7 +98,7 @@ func (s *authenticationService) resolveDesktopCredential(
 	if err != nil {
 		return nil, err
 	}
-	user, err := s.deps.Users.Get(ctx, session.UserID)
+	user, err := s.users.Get(ctx, session.UserID)
 	if err != nil || !user.IsActive() {
 		if store.IsNotFound(err) || err == nil {
 			return nil, access.InvalidTokenAppError()
@@ -108,7 +108,7 @@ func (s *authenticationService) resolveDesktopCredential(
 	return &resolvedAuthentication{Credential: credential, Session: session, User: user}, nil
 }
 
-func (s *authenticationService) verifyDesktopProof(
+func (s *Service) verifyDesktopProof(
 	ctx context.Context,
 	resolved *resolvedAuthentication,
 	accessToken string,
@@ -117,10 +117,10 @@ func (s *authenticationService) verifyDesktopProof(
 	path string,
 	accessBound bool,
 ) (*model.DesktopRegistration, error) {
-	if resolved == nil || resolved.Session == nil || s.registrations == nil || s.dpop == nil {
+	if resolved == nil || resolved.Session == nil || s.desktopRegistrations == nil || s.dpop == nil {
 		return nil, access.InvalidTokenAppError()
 	}
-	registration, err := s.registrations.Get(ctx, resolved.Session.DesktopRegistrationID)
+	registration, err := s.desktopRegistrations.Get(ctx, resolved.Session.DesktopRegistrationID)
 	if err != nil {
 		if store.IsNotFound(err) {
 			return nil, access.InvalidTokenAppError()
@@ -146,7 +146,7 @@ func (s *authenticationService) verifyDesktopProof(
 	return registration, err
 }
 
-func (s *authenticationService) dpopTarget(path string) (string, error) {
+func (s *Service) dpopTarget(path string) (string, error) {
 	if s.dpop == nil || path == "" || !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") ||
 		strings.ContainsAny(path, "?#") {
 		return "", errors.New("invalid DPoP request path")

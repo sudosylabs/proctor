@@ -59,7 +59,7 @@ type desktopReauthenticationServiceDependencies struct {
 	Capabilities            AccessPolicyCapabilitySource
 	Audit                   desktopReauthenticationAuditor
 	Attempts                desktopAuthorizationAttemptLimiter
-	Authentication          *authenticationService
+	Authentication          *Service
 	Policy                  DesktopAuthorizationPolicy
 	RecentAuthenticationTTL time.Duration
 	NewCredential           func() string
@@ -295,11 +295,11 @@ func (s *desktopReauthenticationService) AuthenticateDesktopReauthenticationPass
 		return nil, apperror.New("authentication.reauthentication_method_required")
 	}
 	authentication := s.deps.Authentication
-	receipt, limited, err := authentication.deps.Attempts.account(ctx, authenticationAttemptIntent{
-		purpose: authenticationAttemptPurposeReauthentication, window: authentication.deps.LoginRateLimit.Window,
+	receipt, limited, err := authentication.attempts.account(ctx, authenticationAttemptIntent{
+		purpose: authenticationAttemptPurposeReauthentication, window: authentication.loginRateLimit.Window,
 		limits: []AttemptLimit{
-			{dimension: authenticationAttemptDimensionIdentitySource, maximum: authentication.deps.LoginRateLimit.MaximumAttempts, identity: current.UserID.String(), source: command.Source},
-			{dimension: authenticationAttemptDimensionSource, maximum: authentication.deps.LoginRateLimit.MaximumSourceAttempts, source: command.Source},
+			{dimension: authenticationAttemptDimensionIdentitySource, maximum: authentication.loginRateLimit.MaximumAttempts, identity: current.UserID.String(), source: command.Source},
+			{dimension: authenticationAttemptDimensionSource, maximum: authentication.loginRateLimit.MaximumSourceAttempts, source: command.Source},
 		},
 	})
 	if err != nil {
@@ -308,22 +308,22 @@ func (s *desktopReauthenticationService) AuthenticateDesktopReauthenticationPass
 	if limited {
 		return nil, apperror.New("authentication.rate_limited")
 	}
-	allowed, err := authentication.deps.AccessPolicy.AllowsLocalLogin(ctx)
+	allowed, err := authentication.accessPolicy.AllowsLocalLogin(ctx)
 	if err != nil {
 		return nil, authenticationUnavailable(err)
 	}
-	if !allowed || command.Password == "" || len(command.Password) > authentication.deps.Hasher.maximumLength {
+	if !allowed || command.Password == "" || len(command.Password) > authentication.hasher.maximumLength {
 		return nil, invalidCredentialsAppError()
 	}
 	user, err := s.deps.Users.Get(ctx, current.UserID)
 	if err != nil || user == nil || !user.IsActive() {
 		return nil, invalidCredentialsAppError()
 	}
-	credential, err := authentication.deps.Passwords.GetByUser(ctx, current.UserID)
+	credential, err := authentication.passwords.GetByUser(ctx, current.UserID)
 	if err != nil {
 		return nil, desktopReauthenticationStoreErrors.Translate(err)
 	}
-	if err = authentication.deps.Hasher.Verify(ctx, credential.PasswordHash, command.Password); err != nil {
+	if err = authentication.hasher.Verify(ctx, credential.PasswordHash, command.Password); err != nil {
 		if errors.Is(err, ErrPasswordMismatch) {
 			return nil, invalidCredentialsAppError()
 		}
@@ -336,7 +336,7 @@ func (s *desktopReauthenticationService) AuthenticateDesktopReauthenticationPass
 	}); err != nil {
 		return nil, err
 	}
-	if err = authentication.deps.Attempts.reset(ctx, receipt, authenticationAttemptDimensionIdentitySource); err != nil {
+	if err = authentication.attempts.reset(ctx, receipt, authenticationAttemptDimensionIdentitySource); err != nil {
 		authentication.warn(ctx, "desktop reauthentication rate-limit reset failed", err)
 	}
 	return s.DesktopReauthenticationContext(ctx, invocation, command.Binding)
@@ -466,7 +466,7 @@ func (s *desktopReauthenticationService) CompleteDesktopReauthentication(ctx con
 		return nil, err
 	}
 	authentication := s.deps.Authentication
-	result, err := access.RunAudited(ctx, authentication.deps.Audit, access.Mutation{
+	result, err := access.RunAudited(ctx, authentication.auditor, access.Mutation{
 		Invocation: invocation, Action: model.ActionAuthenticationReauthenticate,
 		Resource:  model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 		Operation: desktopReauthenticationOperation(principal.AuthenticationMethod),
@@ -486,7 +486,7 @@ func (s *desktopReauthenticationService) CompleteDesktopReauthentication(ctx con
 	if result == nil || result.Session == nil || !result.Session.ReauthenticatedAt.Valid {
 		return nil, authenticationUnavailable(errors.New("desktop reauthentication returned no Session"))
 	}
-	authentication.deps.SecurityEffects.AuthenticationCacheInvalidated(ctx, principal.UserID, result.AccessTokenHashes)
+	authentication.effects.AuthenticationCacheInvalidated(ctx, principal.UserID, result.AccessTokenHashes)
 	latest := result.Session.AuthenticatedAt
 	if result.Session.ReauthenticatedAt.Time.After(latest) {
 		latest = result.Session.ReauthenticatedAt.Time

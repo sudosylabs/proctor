@@ -26,8 +26,10 @@ func TestAuthenticationAttemptAccountingHasOneProductionOwner(t *testing.T) {
 	t.Parallel()
 
 	accountingType := reflect.TypeOf((*AttemptAccounting)(nil))
+	local, ok := reflect.TypeOf(Service{}).FieldByName("attempts")
+	require.True(t, ok, "local login does not retain the shared private attempt accounting")
+	require.Equal(t, accountingType, local.Type, "local login does not retain the shared private attempt accounting")
 	for name, service := range map[string]reflect.Type{
-		"local login":             reflect.TypeOf(authenticationService{}),
 		"account recovery":        reflect.TypeOf(accountTokenService{}),
 		"external authentication": reflect.TypeOf(externalAuthenticationService{}),
 		"installation bootstrap":  reflect.TypeOf(bootstrapService{}),

@@ -577,7 +577,7 @@ func (s *externalAuthenticationService) complete(
 	if err != nil {
 		return nil, err
 	}
-	recovery, recoveryErr := s.deps.Authentication.recoveryState(ctx, resolution.User.ID)
+	recovery, recoveryErr := s.deps.Authentication.mfaRecoveryState(ctx, resolution.User.ID)
 	if recoveryErr != nil {
 		return nil, recoveryErr
 	}

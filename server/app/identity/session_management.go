@@ -16,9 +16,7 @@ package identity
 
 import (
 	"context"
-	"errors"
 	"strings"
-	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -66,36 +64,8 @@ type RefreshSessionCommand struct {
 // LogoutCommand ends the caller's current session.
 type LogoutCommand struct{}
 
-// selfSessionServiceDependencies are the collaborators of selfSessionService;
-// newSelfSessionService validates them once and selfSessionService keeps them in deps.
-type selfSessionServiceDependencies struct {
-	Sessions store.SessionStore
-	Audit    access.MutationAuditor
-	Effects  sessionRevocationEffects
-	Now      func() time.Time
-}
-
-type selfSessionService struct {
-	deps selfSessionServiceDependencies
-}
-
-func newSelfSessionService(deps selfSessionServiceDependencies) (*selfSessionService, error) {
-	if deps.Sessions == nil {
-		return nil, errors.New("self-session store is required")
-	}
-	if deps.Audit == nil {
-		return nil, errors.New("self-session audit is required")
-	}
-	if deps.Effects == nil {
-		return nil, errors.New("self-session effects are required")
-	}
-	if deps.Now == nil {
-		return nil, errors.New("self-session clock is required")
-	}
-	return &selfSessionService{deps: deps}, nil
-}
-
-func (s *selfSessionService) ListSessions(
+// ListSessions lists the caller's active Sessions.
+func (s *Service) ListSessions(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	_ ListSessionsQuery,
@@ -104,10 +74,10 @@ func (s *selfSessionService) ListSessions(
 	if principal.Validate() != nil {
 		return nil, access.InvalidTokenAppError()
 	}
-	sessions, err := s.deps.Sessions.ListActiveByUser(
+	sessions, err := s.sessions.ListActiveByUser(
 		ctx,
 		principal.UserID,
-		model.TimeUTC(s.deps.Now()),
+		model.TimeUTC(s.now()),
 	)
 	if err != nil {
 		return nil, authenticationUnavailable(err)
@@ -115,7 +85,8 @@ func (s *selfSessionService) ListSessions(
 	return sessions, nil
 }
 
-func (s *selfSessionService) RevokeSession(
+// RevokeSession revokes one of the caller's own Sessions.
+func (s *Service) RevokeSession(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	command RevokeSessionCommand,
@@ -128,7 +99,7 @@ func (s *selfSessionService) RevokeSession(
 	if !model.SessionID(sessionID).IsValid() {
 		return apperror.New("session.id.invalid").WithField("field", "session_id")
 	}
-	session, err := s.deps.Sessions.Get(ctx, model.SessionID(sessionID))
+	session, err := s.sessions.Get(ctx, model.SessionID(sessionID))
 	if err != nil {
 		if store.IsNotFound(err) {
 			return apperror.New("session.not_found")
@@ -139,8 +110,7 @@ func (s *selfSessionService) RevokeSession(
 		return apperror.New("session.not_found")
 	}
 
-	revocations := sessionRevocationCoordinator{sessions: s.deps.Sessions, audit: s.deps.Audit, effects: s.deps.Effects, now: s.deps.Now}
-	return revocations.revokeOne(ctx,
+	return s.revokeSession(ctx,
 		access.Mutation{
 			Invocation: invocation, Action: model.ActionSessionManage,
 			Resource:  model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
@@ -151,11 +121,12 @@ func (s *selfSessionService) RevokeSession(
 			SessionID: session.ID, UserID: principal.UserID,
 			Reason: model.SessionRevocationUserSession,
 		},
-		selfSessionRevocationStoreErrors.Translate,
+		selfSessionRevocationStoreErrors.Translate, s.now,
 	)
 }
 
-func (s *selfSessionService) RevokeAllSessions(
+// RevokeAllSessions revokes every active Session of the caller.
+func (s *Service) RevokeAllSessions(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	_ RevokeAllSessionsCommand,
@@ -164,8 +135,7 @@ func (s *selfSessionService) RevokeAllSessions(
 	if principal.Validate() != nil {
 		return access.InvalidTokenAppError()
 	}
-	revocations := sessionRevocationCoordinator{sessions: s.deps.Sessions, audit: s.deps.Audit, effects: s.deps.Effects, now: s.deps.Now}
-	return revocations.revokeAll(ctx,
+	return s.revokeAllSessions(ctx,
 		access.Mutation{
 			Invocation: invocation, Action: model.ActionSessionManage,
 			Resource:  model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
@@ -174,14 +144,14 @@ func (s *selfSessionService) RevokeAllSessions(
 		&store.UserSessionsRevocation{
 			UserID: principal.UserID, Reason: model.SessionRevocationUserAllSessions,
 		},
-		authenticationUnavailable, nil,
+		authenticationUnavailable, nil, s.now,
 	)
 }
 
 // RevokeOtherSessions revokes every live Session of the caller except the
 // one making the request, which stays signed in. The principal must hold a
 // Session; the kept Session is recorded in the audit result.
-func (s *selfSessionService) RevokeOtherSessions(
+func (s *Service) RevokeOtherSessions(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	_ RevokeOtherSessionsCommand,
@@ -190,8 +160,7 @@ func (s *selfSessionService) RevokeOtherSessions(
 	if principal.Validate() != nil || !principal.SessionID.IsValid() {
 		return nil, access.InvalidTokenAppError()
 	}
-	revocations := sessionRevocationCoordinator{sessions: s.deps.Sessions, audit: s.deps.Audit, effects: s.deps.Effects, now: s.deps.Now}
-	count, err := revocations.revokeAllCounted(ctx,
+	count, err := s.revokeAllSessionsCounted(ctx,
 		access.Mutation{
 			Invocation: invocation, Action: model.ActionSessionManage,
 			Resource:  model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
@@ -202,7 +171,7 @@ func (s *selfSessionService) RevokeOtherSessions(
 			UserID: principal.UserID, KeepSessionID: principal.SessionID,
 			Reason: model.SessionRevocationUserOtherSessions,
 		},
-		selfOtherSessionsRevocationStoreErrors.Translate, nil,
+		selfOtherSessionsRevocationStoreErrors.Translate, nil, s.now,
 	)
 	if err != nil {
 		return nil, err

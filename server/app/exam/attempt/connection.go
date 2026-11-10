@@ -69,7 +69,10 @@ type ConnectionResult struct {
 // The Store's Connect re-decides everything that depends on current rows,
 // inside one transaction that locks those rows, against PostgreSQL time. See
 // lockExamAttemptEligibility in store/sqlstore/exam_attempt_admission_store.go.
-// Admission requires all of the following:
+// The Sitting state, deadline, Academic Period and management-authority
+// rules are decided by model.CheckAttemptAdmissionSitting and
+// model.CheckAttemptAdmissionCandidate; the rest are SQL predicates over the
+// locked rows. Admission requires all of the following:
 //   - the Sitting is Open (an exact replay may also find it Paused), and its
 //     scheduled end has not passed;
 //   - the candidate User is active;

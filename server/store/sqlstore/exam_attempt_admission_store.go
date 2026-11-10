@@ -59,11 +59,14 @@ func (s *SQLExamAttemptStore) lockExamAttemptEligibility(ctx context.Context, tx
 		WHERE s.id=? AND s.exam_id=? FOR SHARE OF s,c`, input.SittingID.String(), initial.ExamID); err != nil {
 		return zero, translateError("exam_sitting", input.SittingID.String(), err)
 	}
-	if guard.PeriodID != initial.PeriodID {
-		return zero, store.NewErrConflict("exam_attempt", "exam_attempt_membership", nil)
-	}
-	if guard.State != string(model.ExamSittingOpen) && !(allowPaused && guard.State == string(model.ExamSittingPaused)) {
-		return zero, store.NewErrConflict("exam_sitting", "exam_sitting_state", nil)
+	// The Sitting's own rules are decided before the Session is locked, so
+	// a Sitting that admits nobody takes no further locks.
+	if err = model.CheckAttemptAdmissionSitting(model.AttemptAdmissionSitting{
+		PeriodMatches: guard.PeriodID == initial.PeriodID,
+		State:         model.ExamSittingState(guard.State),
+		AllowPaused:   allowPaused,
+	}); err != nil {
+		return zero, examAttemptAdmissionConflict(err)
 	}
 	if err = lockExamAttemptSessionEligibility(ctx, tx, input, guard.ClassID); err != nil {
 		return zero, err
@@ -76,16 +79,34 @@ func (s *SQLExamAttemptStore) lockExamAttemptEligibility(ctx context.Context, tx
 	if err != nil {
 		return zero, err
 	}
-	if hasManagementAuthority {
-		return zero, store.NewErrConflict("exam_attempt", "exam_attempt_management_authority", nil)
-	}
-	if !guard.DatabaseNow.Before(guard.ScheduledEnd) {
-		return zero, store.NewErrConflict("exam_sitting", "exam_sitting_deadline_reached", nil)
+	if err = model.CheckAttemptAdmissionCandidate(model.AttemptAdmissionCandidate{
+		HasManagementAuthority: hasManagementAuthority,
+		DecisionTime:           guard.DatabaseNow,
+		ScheduledEnd:           guard.ScheduledEnd,
+	}); err != nil {
+		return zero, examAttemptAdmissionConflict(err)
 	}
 	if err = requireExamAttemptEligibilityAtDecisionTime(ctx, tx, input, guard); err != nil {
 		return zero, err
 	}
 	return guard, nil
+}
+
+// examAttemptAdmissionConflict names the Store conflict for each admission
+// rule the model refuses.
+func examAttemptAdmissionConflict(err error) error {
+	switch {
+	case errors.Is(err, model.ErrAttemptAdmissionMembership):
+		return store.NewErrConflict("exam_attempt", "exam_attempt_membership", nil)
+	case errors.Is(err, model.ErrAttemptAdmissionSittingState):
+		return store.NewErrConflict("exam_sitting", "exam_sitting_state", nil)
+	case errors.Is(err, model.ErrAttemptAdmissionManagementAuthority):
+		return store.NewErrConflict("exam_attempt", "exam_attempt_management_authority", nil)
+	case errors.Is(err, model.ErrAttemptAdmissionDeadlineReached):
+		return store.NewErrConflict("exam_sitting", "exam_sitting_deadline_reached", nil)
+	default:
+		return err
+	}
 }
 
 // examAttemptAdmissionLineage is the Sitting's Exam and Academic Period read

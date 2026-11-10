@@ -29,7 +29,8 @@ func (d DeliveryExpiryDue) Valid() bool {
 	if !d.AttemptID.IsValid() || !d.ParticipationID.IsValid() || !d.SittingID.IsValid() || !d.ClassID.IsValid() {
 		return false
 	}
-	return d.Family == "native" && model.IsValidAgreementID(d.SourceID) || d.Family == "browser" && model.BrowserSourceSessionID(d.SourceID).IsValid()
+	return d.Family == "native" && model.IsValidAgreementID(d.SourceID) ||
+		d.Family == "browser" && model.BrowserSourceSessionID(d.SourceID).IsValid()
 }
 
 type DeliveryExpiry struct {

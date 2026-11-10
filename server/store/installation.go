@@ -82,7 +82,10 @@ type AdministratorRecoveryReconciliationResult struct {
 type InstallationStore interface {
 	Get(context.Context) (*model.InstallationState, error)
 	Bootstrap(context.Context, *InstallationBootstrap) (*model.InstallationBootstrapResult, error)
-	ReconcileSystemAdministratorRole(context.Context, *SystemAdministratorRoleReconciliation) (*SystemAdministratorRoleReconciliationResult, error)
+	ReconcileSystemAdministratorRole(
+		context.Context,
+		*SystemAdministratorRoleReconciliation,
+	) (*SystemAdministratorRoleReconciliationResult, error)
 	RecoverAdministratorAccess(context.Context, *AdministratorRecovery) (*AdministratorRecoveryResult, error)
 	ResetAdministratorMFA(context.Context, *AdministratorMFAReset) (*AdministratorMFAResetResult, error)
 	ReconcileAdministratorRecovery(context.Context, *AdministratorRecoveryReconciliation) (*AdministratorRecoveryReconciliationResult, error)

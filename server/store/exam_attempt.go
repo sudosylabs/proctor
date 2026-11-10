@@ -453,7 +453,14 @@ type BrowserActivitySourceStart struct {
 }
 
 func (v BrowserActivitySourceStart) Declaration() model.BrowserSourceStart {
-	return model.BrowserSourceStart{ParticipationID: v.ParticipationID, Generation: v.Generation, SourceSessionID: v.SourceSessionID, PolicyRevisionID: v.PolicyRevisionID, PolicyDigest: v.PolicyDigest, Transition: v.Transition}
+	return model.BrowserSourceStart{
+		ParticipationID:  v.ParticipationID,
+		Generation:       v.Generation,
+		SourceSessionID:  v.SourceSessionID,
+		PolicyRevisionID: v.PolicyRevisionID,
+		PolicyDigest:     v.PolicyDigest,
+		Transition:       v.Transition,
+	}
 }
 
 // BrowserSourceRefusal represents an already committed predecessor closure.
@@ -667,7 +674,10 @@ func (c CandidateRuntimeCapabilities) Validate() error {
 		if !c.Browser.PolicyRevisionID.IsZero() || c.Browser.PolicyDigest != "" {
 			return errors.New("disabled candidate browser capability has policy metadata")
 		}
-	case CandidateBrowserAvailable, CandidateBrowserSittingPaused, CandidateBrowserAcknowledgementRequired, CandidateBrowserTemporarilyUnavailable:
+	case CandidateBrowserAvailable,
+		CandidateBrowserSittingPaused,
+		CandidateBrowserAcknowledgementRequired,
+		CandidateBrowserTemporarilyUnavailable:
 		if !c.Browser.PolicyRevisionID.IsValid() || !model.IsValidSHA256Fingerprint(c.Browser.PolicyDigest) {
 			return errors.New("enabled candidate browser capability lacks policy metadata")
 		}
@@ -1010,7 +1020,12 @@ type ExamAttemptStore interface {
 	// audit before invoking ExpireParticipation; it never performs the transition.
 	// Exact selector/generation mismatches and a current unexpired lease fail
 	// with stable not-found/conflict errors rather than exposing another record.
-	ResolveParticipationExpiry(context.Context, model.ExamAttemptID, model.AttemptParticipationID, int64) (*ExamAttemptParticipationExpiryDue, error)
+	ResolveParticipationExpiry(
+		context.Context,
+		model.ExamAttemptID,
+		model.AttemptParticipationID,
+		int64,
+	) (*ExamAttemptParticipationExpiryDue, error)
 	DeliveryBudget(context.Context, DeliveryBudgetAccess) (*model.DeliveryBudgetSnapshot, error)
 	StopDeliveryDetails(context.Context, *DeliveryDetailsStop, *CommandIdempotency) (*model.StopDeliveryDetailsResult, error)
 	ListExpiredDeliveries(context.Context, int) ([]DeliveryExpiryDue, error)
@@ -1061,19 +1076,34 @@ type ExamAttemptStore interface {
 	ListSittingCandidateStatuses(context.Context, SittingCandidateStatusListOptions) (*SittingCandidateStatusPage, error)
 	GetCandidatePresentation(context.Context, CandidateAttemptAccess) (*CandidateExamPresentation, error)
 	ResolveLiveDeliveryTarget(context.Context, CandidateAttemptAccess) (*DeliveryOwnerTarget, error)
-	AppendHistoricalBrowserDelivery(context.Context, *BrowserActivityAppend, *CommandIdempotency) (*model.BrowserActivityAcknowledgement, error)
+	AppendHistoricalBrowserDelivery(
+		context.Context,
+		*BrowserActivityAppend,
+		*CommandIdempotency,
+	) (*model.BrowserActivityAcknowledgement, error)
 	ResolveBrowserDeliveryTarget(context.Context, BrowserDeliveryAccess) (*DeliveryOwnerTarget, error)
 	BrowserDeliveryReceipts(context.Context, BrowserDeliveryAccess, int64, int) (*model.BrowserReceiptPage, error)
 	DeclareBrowserDeliveryGaps(context.Context, *BrowserDeliveryGapDeclaration, *CommandIdempotency) (*model.BrowserDeliveryGapResult, error)
 	SealBrowserDelivery(context.Context, *BrowserDeliveryFinalDeclaration, *CommandIdempotency) (*model.BrowserSourceStatus, error)
-	UpdateBrowserDeliverySummary(context.Context, *BrowserDeliverySummaryUpdate, *CommandIdempotency) (*model.BrowserDeliverySummaryResult, error)
+	UpdateBrowserDeliverySummary(
+		context.Context,
+		*BrowserDeliverySummaryUpdate,
+		*CommandIdempotency,
+	) (*model.BrowserDeliverySummaryResult, error)
 
 	BrowserSourceStatus(context.Context, BrowserDeliveryAccess) (*model.BrowserSourceStatus, error)
 	BrowserSourceList(context.Context, BrowserDeliveryAccess) ([]model.BrowserSourceStatus, error)
 	StartBrowserActivity(context.Context, *BrowserActivitySourceStart) (*model.BrowserSourceStatus, error)
 	AppendBrowserActivity(context.Context, *BrowserActivityAppend) (*model.BrowserActivityAcknowledgement, error)
-	ResolveCorrectionAcknowledgementTarget(context.Context, ExamAttemptCorrectionAcknowledgement) (*ExamAttemptCorrectionAcknowledgementTarget, error)
-	AcknowledgeCorrection(context.Context, *ExamAttemptCorrectionAcknowledgement, *CommandIdempotency) (*ExamAttemptCorrectionAcknowledgementResult, error)
+	ResolveCorrectionAcknowledgementTarget(
+		context.Context,
+		ExamAttemptCorrectionAcknowledgement,
+	) (*ExamAttemptCorrectionAcknowledgementTarget, error)
+	AcknowledgeCorrection(
+		context.Context,
+		*ExamAttemptCorrectionAcknowledgement,
+		*CommandIdempotency,
+	) (*ExamAttemptCorrectionAcknowledgementResult, error)
 	ListBrowserActivity(context.Context, BrowserActivityListOptions) ([]BrowserActivityRecord, error)
 	ResolveCandidateResource(context.Context, CandidateAttemptAccess, model.ExamResourceID) (*CandidateResourceContent, error)
 }

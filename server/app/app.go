@@ -43,28 +43,31 @@ type App struct {
 	Academic *academic.Service
 	*invitationService
 	*onboardingImportService
-	// ExamAuthoring holds Exam draft authoring, Question and Section use
-	// cases.
+	// ExamAuthoring holds the Exam catalog: creating, listing and archiving
+	// Exams, editing their Draft, and managing Exam Managers.
 	ExamAuthoring *exam.Authoring
-	// ExamPublication holds Exam Revision publication and Revision history
-	// use cases.
+	// ExamPublication publishes immutable Exam Revisions and lists them.
 	ExamPublication *exam.Publication
-	// ExamRecords holds Exam listing, detail and record use cases.
+	// ExamRecords completes a Sitting's records, waives Submission reviews
+	// and manages retention holds.
 	ExamRecords *exam.Records
-	// ExamExports holds Exam export and content export use cases.
+	// ExamExports builds and serves Exam exports.
 	ExamExports *exam.Exports
-	// Sittings holds Sitting scheduling, lifecycle and manager use cases.
+	// Sittings schedules Exam Sittings and moves them through their
+	// lifecycle.
 	Sittings *sitting.Service
-	// Attempts holds Attempt connection, answer, Submission and integrity
-	// evidence use cases.
+	// Attempts holds the candidate side, from joining a Sitting to sealing a
+	// Submission, plus manager inspection of Attempts.
 	Attempts *attempt.Service
-	// Reviews holds Submission review, grading and result release use cases.
+	// Reviews holds post-Submission Integrity review and result release; it
+	// does not grade.
 	Reviews *review.Service
-	// Resources holds Exam Resource use cases.
+	// Resources manages the Exam Resources of an Exam Draft.
 	Resources *resource.Service
-	// Corrections holds result correction use cases.
+	// Corrections changes an Open or Paused Sitting's instructions, browser
+	// policy or Resources by publishing a new Exam Revision.
 	Corrections *correction.Service
-	// StarterWorkspaces holds Starter Workspace use cases.
+	// StarterWorkspaces manages the Starter Workspace of an Exam Draft.
 	StarterWorkspaces *workspace.Service
 	// Users holds the User directory, profile, settings and profile-picture
 	// use cases.

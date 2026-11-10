@@ -147,3 +147,8 @@ func mailCleanupDescriptor(handler job.Handler) job.Descriptor {
 func NewMailCleanupDescriptor(mail MailCleanupStore, sittings SittingMailMaintenanceStore, recorder MailDeliveryRecorder) job.Descriptor {
 	return mailCleanupDescriptor(mailCleanupHandler{mail: mail, sittings: sittings, recorder: recorder})
 }
+
+// NewMailCleanupRecurrence proposes the daily mail cleanup Job.
+func NewMailCleanupRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+	return job.Recurrence{Name: "mail-cleanup", Proposer: mailCleanupProposer{jobs: jobs, now: now}}
+}

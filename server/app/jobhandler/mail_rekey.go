@@ -266,3 +266,9 @@ func mailRekeyDescriptor(handler job.Handler) job.Descriptor {
 		Visibility: job.VisibilityOperator, SuccessRetention: 90 * 24 * time.Hour,
 		FailureRetention: 180 * 24 * time.Hour, Handler: handler}
 }
+
+// NewMailRekeyDescriptor registers the re-sealing of stored mail payloads
+// under a new primary key.
+func NewMailRekeyDescriptor(mail MailRekeyJobStore, sealer *secretseal.Sealer) job.Descriptor {
+	return mailRekeyDescriptor(mailRekeyHandler{mail: mail, sealer: sealer})
+}

@@ -112,3 +112,14 @@ func (p sessionPurgeProposer) Propose(ctx context.Context, occurrence time.Time)
 func sessionPurgeDescriptor(handler job.Handler) job.Descriptor {
 	return job.Descriptor{Type: model.JobTypeSessionPurgeRetired, PublicErrorCodes: []string{"dependency.unavailable", "job.command.invalid"}, Timeout: 10 * time.Minute, Concurrency: 1, MaximumAttempts: 5, LeaseDuration: time.Minute, HeartbeatInterval: 15 * time.Second, BaseRetryDelay: time.Second, MaximumRetryDelay: time.Minute, Visibility: job.VisibilityOperator, SuccessRetention: 7 * 24 * time.Hour, FailureRetention: 90 * 24 * time.Hour, Handler: handler}
 }
+
+// NewSessionPurgeDescriptor registers the purge of Sessions and credentials
+// that have been retired for longer than retention.
+func NewSessionPurgeDescriptor(sessions SessionPurgeStore, credentials SessionCredentialPurgeStore, retention time.Duration) job.Descriptor {
+	return sessionPurgeDescriptor(sessionPurgeHandler{sessions: sessions, credentials: credentials, retention: retention})
+}
+
+// NewSessionPurgeRecurrence proposes the hourly retired Session purge Job.
+func NewSessionPurgeRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+	return job.Recurrence{Name: "session-purge-retired", Interval: time.Hour, Proposer: sessionPurgeProposer{jobs: jobs, now: now}}
+}

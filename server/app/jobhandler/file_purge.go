@@ -544,3 +544,32 @@ func (p filePurgeExpiredContentProposer) Propose(ctx context.Context, occurrence
 	_, _, err = p.jobs.Enqueue(ctx, &store.JobEnqueue{Job: job})
 	return err
 }
+
+// FilePurgeDependencies are the collaborators of the expired-content purge
+// Job: file revisions plus Starter and Attempt Workspace objects.
+type FilePurgeDependencies struct {
+	Files                   FilePurgeStore
+	Content                 FileRevisionContentPurger
+	StarterWorkspaces       StarterWorkspaceCleanupStore
+	StarterWorkspaceContent StarterWorkspaceObjectPurger
+	AttemptWorkspaces       AttemptWorkspaceCleanupStore
+	AttemptWorkspaceContent AttemptWorkspaceObjectPurger
+	Continuations           JobEnqueuer
+	Now                     func() time.Time
+}
+
+// NewFilePurgeDescriptor registers the purge of expired file and workspace
+// content.
+func NewFilePurgeDescriptor(deps FilePurgeDependencies) job.Descriptor {
+	return filePurgeExpiredContentDescriptor(filePurgeExpiredContentHandler{
+		files: deps.Files, content: deps.Content,
+		starterWorkspace: deps.StarterWorkspaces, starterWorkspaceContent: deps.StarterWorkspaceContent,
+		attemptWorkspace: deps.AttemptWorkspaces, attemptWorkspaceContent: deps.AttemptWorkspaceContent,
+		continuations: deps.Continuations, now: deps.Now,
+	})
+}
+
+// NewFilePurgeRecurrence proposes the daily expired-content purge Job.
+func NewFilePurgeRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+	return job.Recurrence{Name: "file-purge-expired-content", Proposer: filePurgeExpiredContentProposer{jobs: jobs, now: now}}
+}

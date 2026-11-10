@@ -113,8 +113,10 @@ func TestCredentialMailDescriptorUsesDedicatedPoolAndReserve(t *testing.T) {
 	record.Type = model.JobTypeMailDeliverCredential
 	persistence := &mailStoreFake{delivery: delivery}
 	sender := &mailSenderFake{enabled: true, from: MailAddress{Address: "no-reply@example.test"}}
-	descriptor := jobhandler.NewMailDeliveryDescriptor(persistence, sender, sealer, nil, nil, jobMailDeliveryIsRelevant,
-		func() time.Time { return at.Add(time.Second) }, true)
+	descriptor := jobhandler.NewMailCredentialDeliveryDescriptor(jobhandler.MailDeliveryDependencies{
+		Deliveries: persistence, Sender: sender, Sealer: sealer, Relevance: jobMailDeliveryIsRelevant,
+		Now: func() time.Time { return at.Add(time.Second) },
+	})
 	require.Equal(t, model.JobTypeMailDeliverCredential, descriptor.Type, "credential descriptor = type")
 	require.Equal(t, 4, descriptor.Concurrency, "credential descriptor = type")
 	outcome := descriptor.Handler.Run(context.Background(), job.NewExecution(record, nil, nil, nil))
@@ -601,10 +603,10 @@ func TestMailDeliveryHandlerRecordsAttemptBeforeCompletionFailure(t *testing.T) 
 	persistence := &mailStoreFake{delivery: delivery, completeErr: completionErr}
 	sender := &mailSenderFake{enabled: true, from: MailAddress{Address: "no-reply@example.test"}}
 	recorder := &jobMailMetricsFake{}
-	descriptor := jobhandler.NewMailDeliveryDescriptor(
-		persistence, sender, sealer, recorder, nil, jobMailDeliveryIsRelevant,
-		func() time.Time { return at.Add(time.Second) }, false,
-	)
+	descriptor := jobhandler.NewMailDeliveryDescriptor(jobhandler.MailDeliveryDependencies{
+		Deliveries: persistence, Sender: sender, Sealer: sealer, Recorder: recorder, Relevance: jobMailDeliveryIsRelevant,
+		Now: func() time.Time { return at.Add(time.Second) },
+	})
 	outcome := descriptor.Handler.Run(context.Background(), job.NewExecution(record, nil, nil, nil))
 	require.Equal(t, job.OutcomeRetryableFailure, outcome.Kind)
 	require.ErrorIs(t, outcome.Err, completionErr)
@@ -691,7 +693,9 @@ func mailDeliveryHandlerFixture(t *testing.T, at time.Time, deadlineAfter time.D
 func runMailDeliveryJob(persistence jobhandler.MailDeliveryLifecycleStore, sender MailDeliverySender,
 	sealer *secretseal.Sealer, now func() time.Time, record *model.Job,
 ) job.Outcome {
-	descriptor := jobhandler.NewMailDeliveryDescriptor(persistence, sender, sealer, nil, nil, jobMailDeliveryIsRelevant, now, false)
+	descriptor := jobhandler.NewMailDeliveryDescriptor(jobhandler.MailDeliveryDependencies{
+		Deliveries: persistence, Sender: sender, Sealer: sealer, Relevance: jobMailDeliveryIsRelevant, Now: now,
+	})
 	return descriptor.Handler.Run(context.Background(), job.NewExecution(record, nil, nil, nil))
 }
 

@@ -247,3 +247,13 @@ func (h retentionExpiryHandler) cleanupAuditBatch(ctx context.Context, e job.Exe
 	}
 	return h.finish(ctx, e.Job, command, cp)
 }
+
+// NewRetentionExpiryDescriptor registers the expiry of retention records.
+func NewRetentionExpiryDescriptor(records RetentionExpiryMaintenanceStore, audit RetentionExpirySystemAuditor, jobs JobEnqueuer, now func() time.Time) job.Descriptor {
+	return retentionDescriptor(model.JobTypeRetentionExpire, retentionExpiryHandler{records: records, audit: audit, jobs: jobs, now: now})
+}
+
+// NewRetentionExpiryRecurrence proposes the hourly retention expiry Job.
+func NewRetentionExpiryRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+	return job.Recurrence{Name: "retention-expire", Interval: time.Hour, Proposer: retentionExpiryProposer{jobs: jobs, now: now}}
+}

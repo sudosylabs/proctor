@@ -343,15 +343,31 @@ func newMailDeliveryDescriptor(jobType model.JobType, concurrency int, handler j
 	return job.Descriptor{Type: jobType, PublicErrorCodes: []string{"mail.delivery.conflict", "mail.delivery.failed", "mail.delivery.not_found", "mail.delivery.unavailable", model.MailMessageInvalidCode, model.MailPayloadUnavailableCode, model.MailTransportAcceptanceUncertainCode, model.MailTransportPermanentCode, model.MailTransportTemporaryCode, model.MailTransportUnknownCode}, Timeout: time.Minute, Concurrency: concurrency, MaximumAttempts: model.MailMaximumAttempts, LeaseDuration: time.Minute, HeartbeatInterval: 15 * time.Second, BaseRetryDelay: 30 * time.Second, MaximumRetryDelay: 30 * time.Minute, Visibility: job.VisibilityOperator, SuccessRetention: 90 * 24 * time.Hour, FailureRetention: 180 * 24 * time.Hour, Handler: handler}
 }
 
+// MailDeliveryDependencies are the collaborators of the mail delivery Jobs.
+// The ordinary and credential pools share them.
+type MailDeliveryDependencies struct {
+	Deliveries MailDeliveryLifecycleStore
+	Sender     mail.Sender
+	Sealer     *secretseal.Sealer
+	Recorder   MailDeliveryRecorder
+	Health     MailHealth
+	Relevance  MailDeliveryRelevance
+	Now        func() time.Time
+}
+
+func (d MailDeliveryDependencies) handler() mailDeliveryHandler {
+	return mailDeliveryHandler{deliveries: d.Deliveries, sender: d.Sender, sealer: d.Sealer, recorder: d.Recorder,
+		health: d.Health, relevance: d.Relevance, now: d.Now}
+}
+
 // NewMailDeliveryDescriptor registers durable delivery of one frozen mail
-// message; credential selects the dedicated credential-mail pool.
-func NewMailDeliveryDescriptor(deliveries MailDeliveryLifecycleStore, sender mail.Sender, sealer *secretseal.Sealer,
-	recorder MailDeliveryRecorder, health MailHealth, relevance MailDeliveryRelevance, now func() time.Time, credential bool,
-) job.Descriptor {
-	handler := mailDeliveryHandler{deliveries: deliveries, sender: sender, sealer: sealer, recorder: recorder,
-		health: health, relevance: relevance, now: now}
-	if credential {
-		return mailCredentialDeliveryDescriptor(handler)
-	}
-	return mailDeliveryDescriptor(handler)
+// message through the ordinary pool.
+func NewMailDeliveryDescriptor(deps MailDeliveryDependencies) job.Descriptor {
+	return mailDeliveryDescriptor(deps.handler())
+}
+
+// NewMailCredentialDeliveryDescriptor registers durable delivery of one
+// frozen credential mail message through the dedicated credential pool.
+func NewMailCredentialDeliveryDescriptor(deps MailDeliveryDependencies) job.Descriptor {
+	return mailCredentialDeliveryDescriptor(deps.handler())
 }

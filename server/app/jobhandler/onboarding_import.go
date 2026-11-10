@@ -154,3 +154,14 @@ func onboardingImportDescriptor(kind model.JobType, handler job.Handler, cancela
 		BaseRetryDelay: 10 * time.Second, MaximumRetryDelay: 5 * time.Minute, Cancelable: cancelable, Visibility: job.VisibilityDomain,
 		SuccessRetention: 7 * 24 * time.Hour, FailureRetention: 7 * 24 * time.Hour, Handler: handler}
 }
+
+// NewOnboardingImportDescriptors registers the onboarding import parse,
+// Student progression preview and import execution Jobs, which all call the
+// same application service.
+func NewOnboardingImportDescriptors(service OnboardingImportService) []job.Descriptor {
+	return []job.Descriptor{
+		onboardingImportParseDescriptor(onboardingImportParseHandler{service: service}),
+		studentProgressionPreviewDescriptor(studentProgressionPreviewHandler{service: service}),
+		onboardingImportExecuteDescriptor(onboardingImportExecuteHandler{service: service}),
+	}
+}

@@ -71,9 +71,7 @@ func TestMFARekeyJobResealsEveryLiveSecretAndProvesRetirement(t *testing.T) {
 		RetiringKeyID: oldSealer.PrimaryKeyID(), Job: rekeyJob, AuditEventID: attempt.ID, AuditAt: model.NowUTC()})
 	require.NoError(t, err)
 
-	descriptor := integrationJobDescriptor(t, jobhandler.NewCatalog(jobhandler.CatalogDependencies{
-		JobStore: persistence.Job(), MFARekey: persistence.MFA(), MFASealer: newSealer,
-	}), model.JobTypeMFARekey)
+	descriptor := jobhandler.NewMFARekeyDescriptor(persistence.MFA(), newSealer)
 	node, err := job.New(job.Dependencies{Store: persistence.Job(), Descriptors: []job.Descriptor{descriptor},
 		NodeID: "mfa-rekey-node", Diagnostics: &integrationJobDiagnostics{}, Policy: job.Policy{PollInterval: 5 * time.Millisecond}})
 	require.NoError(t, err)

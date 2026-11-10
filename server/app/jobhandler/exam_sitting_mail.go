@@ -136,3 +136,9 @@ func sittingMailExpansionDescriptor(handler sittingMailExpansionHandler) job.Des
 		MaximumRetryDelay: 30 * time.Minute, Visibility: job.VisibilityOperator,
 		SuccessRetention: 90 * 24 * time.Hour, FailureRetention: 180 * 24 * time.Hour, Handler: handler}
 }
+
+// NewSittingMailExpansionDescriptor registers the expansion of a Sitting's
+// mail fan-out into individual deliveries.
+func NewSittingMailExpansionDescriptor(sittings SittingMailExpansionStore, composer *mail.SittingComposer) job.Descriptor {
+	return sittingMailExpansionDescriptor(sittingMailExpansionHandler{sittings: sittings, mail: composer})
+}

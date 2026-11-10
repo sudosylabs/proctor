@@ -94,3 +94,14 @@ func (p auditAttemptSweepProposer) Propose(ctx context.Context, occurrence time.
 func auditAttemptSweepDescriptor(handler job.Handler) job.Descriptor {
 	return job.Descriptor{Type: model.JobTypeAuditAttemptSweep, PublicErrorCodes: []string{"dependency.unavailable", "job.command.invalid"}, Timeout: 5 * time.Minute, Concurrency: 1, MaximumAttempts: 5, LeaseDuration: time.Minute, HeartbeatInterval: 15 * time.Second, BaseRetryDelay: time.Second, MaximumRetryDelay: time.Minute, Visibility: job.VisibilityOperator, SuccessRetention: 7 * 24 * time.Hour, FailureRetention: 90 * 24 * time.Hour, Handler: handler}
 }
+
+// NewAuditAttemptSweepDescriptor registers the sweep that abandons stale
+// audit attempts.
+func NewAuditAttemptSweepDescriptor(audits AuditAttemptSweeper) job.Descriptor {
+	return auditAttemptSweepDescriptor(auditAttemptSweepHandler{audits: audits})
+}
+
+// NewAuditAttemptSweepRecurrence proposes the hourly audit attempt sweep Job.
+func NewAuditAttemptSweepRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+	return job.Recurrence{Name: "audit-attempt-sweep", Interval: time.Hour, Proposer: auditAttemptSweepProposer{jobs: jobs, now: now}}
+}

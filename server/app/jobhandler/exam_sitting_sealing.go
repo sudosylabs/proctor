@@ -237,3 +237,9 @@ func examSittingSealingDescriptor(handler job.Handler) job.Descriptor {
 		ExplicitRetryStatuses: []model.JobStatus{model.JobStatusFailed}, Visibility: job.VisibilityOperator,
 		SuccessRetention: 30 * 24 * time.Hour, FailureRetention: 90 * 24 * time.Hour, Handler: handler}
 }
+
+// NewExamSittingSealingDescriptor registers the automatic sealing of Exam
+// Attempts when a Sitting closes.
+func NewExamSittingSealingDescriptor(service ExamSittingSealingService) job.Descriptor {
+	return examSittingSealingDescriptor(examSittingSealingHandler{service: service})
+}

@@ -22,7 +22,7 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// contractOnboardingService only lets NewCatalog include the onboarding
+// contractOnboardingService only lets testDescriptors include the onboarding
 // Job descriptors; the contract tests never run a handler.
 type contractOnboardingService struct{}
 
@@ -69,9 +69,9 @@ func contractComponentEnum(t *testing.T, name string) []string {
 // new Job or stage fails here until the contract lists it.
 func TestJobContractEnumsMatchTheCatalog(t *testing.T) {
 	t.Parallel()
-	catalog := NewCatalog(CatalogDependencies{Onboarding: contractOnboardingService{}})
+	descriptors := testDescriptors(contractOnboardingService{})
 	var types, stages, codes []string
-	for _, descriptor := range catalog.Descriptors {
+	for _, descriptor := range descriptors {
 		types = append(types, string(descriptor.Type))
 		stages = append(stages, descriptor.ProgressStages...)
 		codes = append(codes, descriptor.PublicErrorCodes...)

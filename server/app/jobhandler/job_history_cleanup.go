@@ -192,3 +192,31 @@ func (p jobHistoryCleanupProposer) Propose(ctx context.Context, occurrence time.
 func jobHistoryCleanupDescriptor(handler job.Handler) job.Descriptor {
 	return job.Descriptor{Type: model.JobTypeCleanup, Checkpoints: true, ProgressStages: []string{"completed"}, PublicErrorCodes: []string{"dependency.unavailable", "job.checkpoint.invalid", "job.command.invalid", "job.invariant_failed"}, Timeout: 10 * time.Minute, Concurrency: 1, MaximumAttempts: 5, LeaseDuration: time.Minute, HeartbeatInterval: 15 * time.Second, BaseRetryDelay: time.Second, MaximumRetryDelay: time.Minute, Visibility: job.VisibilityOperator, SuccessRetention: 30 * 24 * time.Hour, FailureRetention: 90 * 24 * time.Hour, Handler: handler}
 }
+
+// NewJobHistoryCleanupDescriptor registers the deletion of terminal Job
+// history. Each Job type is kept for the retention its descriptor in
+// registered declares, and the cleanup Job for its own, so this descriptor
+// is built after all the others.
+func NewJobHistoryCleanupDescriptor(jobs JobHistoryCleaner, continuations JobEnqueuer, now func() time.Time, registered []job.Descriptor) job.Descriptor {
+	return jobHistoryCleanupDescriptor(jobHistoryCleanupHandler{
+		jobs: jobs, continuations: continuations, now: now,
+		policies: append(retentionPolicies(registered), store.JobRetentionPolicy{
+			Type: model.JobTypeCleanup, SucceededCanceledAge: 30 * 24 * time.Hour, FailedAge: 90 * 24 * time.Hour,
+		}),
+	})
+}
+
+// NewJobHistoryCleanupRecurrence proposes the daily Job history cleanup Job.
+func NewJobHistoryCleanupRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+	return job.Recurrence{Name: "job-history-cleanup", Proposer: jobHistoryCleanupProposer{jobs: jobs, now: now}}
+}
+
+func retentionPolicies(descriptors []job.Descriptor) []store.JobRetentionPolicy {
+	policies := make([]store.JobRetentionPolicy, 0, len(descriptors))
+	for _, descriptor := range descriptors {
+		policies = append(policies, store.JobRetentionPolicy{
+			Type: descriptor.Type, SucceededCanceledAge: descriptor.SuccessRetention, FailedAge: descriptor.FailureRetention,
+		})
+	}
+	return policies
+}

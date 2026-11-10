@@ -238,3 +238,9 @@ func mfaRekeyDescriptor(handler job.Handler) job.Descriptor {
 		Visibility: job.VisibilityOperator, SuccessRetention: 90 * 24 * time.Hour,
 		FailureRetention: 180 * 24 * time.Hour, Handler: handler}
 }
+
+// NewMFARekeyDescriptor registers the re-sealing of MFA credentials under a
+// new primary key.
+func NewMFARekeyDescriptor(credentials MFARekeyJobStore, sealer *secretseal.Sealer) job.Descriptor {
+	return mfaRekeyDescriptor(mfaRekeyHandler{credentials: credentials, sealer: sealer})
+}

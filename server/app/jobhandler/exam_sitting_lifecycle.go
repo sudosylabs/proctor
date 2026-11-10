@@ -175,3 +175,9 @@ func (f ExamSittingLifecycleJobFactory) jobOfType(sittingID model.ExamSittingID,
 	at := model.TimeUTC(f.now())
 	return model.NewJob(f.newID(), jobType, command, dedupeKey, at, model.TimeUTC(availableAt), 8)
 }
+
+// NewExamSittingLifecycleDescriptor registers the open and deadline
+// transitions of Exam Sittings.
+func NewExamSittingLifecycleDescriptor(reconciler ExamSittingLifecycleReconciler) job.Descriptor {
+	return examSittingLifecycleDescriptor(examSittingLifecycleHandler{reconciler: reconciler})
+}

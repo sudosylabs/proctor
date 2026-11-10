@@ -141,3 +141,15 @@ func invitationMaintenanceDescriptor(handler job.Handler) job.Descriptor {
 		MaximumRetryDelay: 30 * time.Minute, Visibility: job.VisibilityOperator, SuccessRetention: 30 * 24 * time.Hour,
 		FailureRetention: 90 * 24 * time.Hour, Handler: handler}
 }
+
+// NewInvitationMaintenanceDescriptor registers the expiry of Invitations and
+// the cleanup of onboarding import files.
+func NewInvitationMaintenanceDescriptor(invitations InvitationMaintenanceStore, imports OnboardingImportMaintenanceStore, content OnboardingImportMaintenanceFiles, now func() time.Time) job.Descriptor {
+	return invitationMaintenanceDescriptor(invitationMaintenanceHandler{invitations: invitations, imports: imports, content: content, now: now})
+}
+
+// NewInvitationMaintenanceRecurrence proposes the daily Invitation
+// maintenance Job.
+func NewInvitationMaintenanceRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+	return job.Recurrence{Name: "invitation-maintenance", Proposer: invitationMaintenanceProposer{jobs: jobs, now: now}}
+}

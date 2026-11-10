@@ -13,7 +13,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -76,9 +75,7 @@ func TestRecurringMaintenanceUsesOnePermanentOccurrenceAcrossNodesAndRestart(t *
 	persistence := openClusteredJobIntegrationStore(t)
 	occurrence := time.Date(2026, time.August, 11, 8, 0, 0, 0, time.UTC)
 	proposer := &signalingCleanupProposer{
-		next: integrationRecurrenceProposer(t, jobhandler.NewCatalog(jobhandler.CatalogDependencies{
-			JobStore: persistence.Job(), Now: time.Now,
-		}), "job-history-cleanup"),
+		next:  jobhandler.NewJobHistoryCleanupRecurrence(persistence.Job(), time.Now).Proposer,
 		calls: make(chan recurrenceProposalResult, 3),
 	}
 	first := newRecurrenceIntegrationEngine(t, persistence, "node-a", proposer, occurrence)
@@ -105,9 +102,7 @@ func TestRecurringMaintenanceRecoversTransientProposalFailureWithoutRepeatingCom
 	persistence := openClusteredJobIntegrationStore(t)
 	occurrence := time.Date(2026, time.August, 11, 8, 0, 0, 0, time.UTC)
 	proposer := &signalingCleanupProposer{
-		next: integrationRecurrenceProposer(t, jobhandler.NewCatalog(jobhandler.CatalogDependencies{
-			JobStore: persistence.Job(), Now: time.Now,
-		}), "job-history-cleanup"),
+		next:          jobhandler.NewJobHistoryCleanupRecurrence(persistence.Job(), time.Now).Proposer,
 		remainingFail: 1,
 		calls:         make(chan recurrenceProposalResult, 3),
 	}
@@ -131,9 +126,7 @@ func TestRecurringMaintenanceRecoversTransientProposalFailureWithoutRepeatingCom
 
 func newRecurrenceIntegrationEngine(t *testing.T, persistence *sqlstore.SQLStore, nodeID string, proposer job.OccurrenceProposer, occurrence time.Time) *job.Engine {
 	t.Helper()
-	descriptor := integrationJobDescriptor(t, jobhandler.NewCatalog(jobhandler.CatalogDependencies{
-		JobStore: persistence.Job(), Now: time.Now,
-	}), model.JobTypeCleanup)
+	descriptor := jobhandler.NewJobHistoryCleanupDescriptor(persistence.Job(), persistence.Job(), time.Now, nil)
 	descriptor.Handler = recurrenceIntegrationHandler{}
 	engine, err := job.New(job.Dependencies{
 		Store: persistence.Job(), Descriptors: []job.Descriptor{descriptor},
@@ -143,28 +136,6 @@ func newRecurrenceIntegrationEngine(t *testing.T, persistence *sqlstore.SQLStore
 	})
 	require.NoError(t, err)
 	return engine
-}
-
-func integrationJobDescriptor(t *testing.T, catalog jobhandler.Catalog, jobType model.JobType) job.Descriptor {
-	t.Helper()
-	for _, descriptor := range catalog.Descriptors {
-		if descriptor.Type == jobType {
-			return descriptor
-		}
-	}
-	require.FailNow(t, fmt.Sprintf("production Job catalog does not contain %q", jobType))
-	return job.Descriptor{}
-}
-
-func integrationRecurrenceProposer(t *testing.T, catalog jobhandler.Catalog, name string) job.OccurrenceProposer {
-	t.Helper()
-	for _, recurrence := range catalog.Recurrences {
-		if recurrence.Name == name {
-			return recurrence.Proposer
-		}
-	}
-	require.FailNow(t, fmt.Sprintf("production Job catalog does not contain recurrence %q", name))
-	return nil
 }
 
 func waitForCleanupOccurrenceSucceeded(t *testing.T, persistence *sqlstore.SQLStore, occurrence time.Time) {

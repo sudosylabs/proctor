@@ -8,166 +8,29 @@
 // Package jobhandler owns Proctor's concrete durable Job definitions.
 //
 // The sibling app/job package is the generic execution engine. This package
-// contains application-specific handlers, commands, schedules, and the single
-// catalog that makes the enabled durable work visible in one place.
+// contains application-specific handlers, commands, and schedules. Each Job
+// file exports a constructor that takes exactly the collaborators its handler
+// uses and returns the Job's descriptor, and a recurrence constructor when
+// the Job is scheduled. The enabled durable work is listed in one place, in
+// the application's Job definitions (app/new_jobs.go), one line per Job.
 package jobhandler
 
 import (
 	"context"
-	"time"
 
 	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/job"
-	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/model"
-	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// DefaultProfilePictureGenerator creates a User's default profile picture and
+// classifies its failures into public Job error codes.
 type DefaultProfilePictureGenerator interface {
 	EnsureDefaultProfilePicture(context.Context, invocation.System, model.UserID) (model.FileEntryID, error)
 	ClassifyDefaultProfilePictureError(error) string
 }
 
+// JobEnqueuer adds a Job to the durable queue.
 type JobEnqueuer interface {
 	Enqueue(context.Context, *store.JobEnqueue) (*model.Job, bool, error)
-}
-
-// CatalogDependencies is deliberately capability-oriented. It does not expose
-// the application or infrastructure composition roots to workers.
-type CatalogDependencies struct {
-	JobStore store.JobStore
-
-	DefaultProfilePictureGenerator DefaultProfilePictureGenerator
-	Users                          DefaultProfilePictureReconciliationUserLister
-	DefaultProfilePictureJobs      ProfilePictureDefaultJobs
-
-	Files                     FilePurgeStore
-	FileContent               FileRevisionContentPurger
-	StarterWorkspaces         StarterWorkspaceCleanupStore
-	StarterWorkspaceContent   StarterWorkspaceObjectPurger
-	AttemptWorkspaces         AttemptWorkspaceCleanupStore
-	AttemptWorkspaceContent   AttemptWorkspaceObjectPurger
-	CommandOutcomes           CommandOutcomeCleaner
-	AuditAttempts             AuditAttemptSweeper
-	Sessions                  SessionPurgeStore
-	SessionCredentials        SessionCredentialPurgeStore
-	SessionRetiredRetention   time.Duration
-	Retention                 RetentionMaintenanceStore
-	RetentionContent          RetentionContentPurger
-	RetentionAudit            RetentionSystemAuditor
-	ExamExports               ExamExportBuilder
-	ExamExportStore           ExamExportMaintenanceStore
-	ExamExportContent         ExamExportPurger
-	RetentionExpiry           RetentionExpiryMaintenanceStore
-	RetentionExpiryAudit      RetentionExpirySystemAuditor
-	RetentionNotices          RetentionNoticeStore
-	RetentionNoticeDispatcher RetentionNoticeDispatcher
-
-	MailDeliveries         MailDeliveryLifecycleStore
-	MailSender             mail.Sender
-	MailSealer             *secretseal.Sealer
-	MailRecorder           MailDeliveryRecorder
-	MailHealth             MailHealth
-	MailRelevance          MailDeliveryRelevance
-	SittingMailStore       SittingMailExpansionStore
-	SittingMail            *mail.SittingComposer
-	MailCleanup            MailCleanupStore
-	SittingMailMaintenance SittingMailMaintenanceStore
-	MailRekey              MailRekeyJobStore
-	MFARekey               MFARekeyJobStore
-	MFASealer              *secretseal.Sealer
-
-	Invitations       InvitationMaintenanceStore
-	OnboardingImports OnboardingImportMaintenanceStore
-	OnboardingFiles   OnboardingImportMaintenanceFiles
-
-	ExamSittingLifecycle ExamSittingLifecycleRecoveryUseCases
-	ExamSittingSealing   ExamSittingSealingService
-	Onboarding           OnboardingImportService
-
-	Now func() time.Time
-}
-
-type Catalog struct {
-	Descriptors []job.Descriptor
-	Recurrences []job.Recurrence
-}
-
-func NewCatalog(deps CatalogDependencies) Catalog {
-	now := deps.Now
-	if now == nil {
-		now = time.Now
-	}
-	purgeHandler := filePurgeExpiredContentHandler{
-		files: deps.Files, content: deps.FileContent,
-		starterWorkspace: deps.StarterWorkspaces, starterWorkspaceContent: deps.StarterWorkspaceContent,
-		attemptWorkspace: deps.AttemptWorkspaces, attemptWorkspaceContent: deps.AttemptWorkspaceContent,
-		continuations: deps.JobStore, now: now,
-	}
-	descriptors := []job.Descriptor{
-		defaultProfilePictureDescriptor(defaultProfilePictureHandler{generator: deps.DefaultProfilePictureGenerator}),
-		defaultProfilePictureReconciliationDescriptor(defaultProfilePictureReconciliationHandler{users: deps.Users, defaults: deps.DefaultProfilePictureJobs, now: now}),
-		filePurgeExpiredContentDescriptor(purgeHandler),
-		commandOutcomeCleanupDescriptor(commandOutcomeCleanupHandler{outcomes: deps.CommandOutcomes}),
-		auditAttemptSweepDescriptor(auditAttemptSweepHandler{audits: deps.AuditAttempts}),
-		sessionPurgeDescriptor(sessionPurgeHandler{sessions: deps.Sessions, credentials: deps.SessionCredentials, retention: deps.SessionRetiredRetention}),
-		mailDeliveryDescriptor(mailDeliveryHandler{deliveries: deps.MailDeliveries, sender: deps.MailSender, sealer: deps.MailSealer, recorder: deps.MailRecorder, health: deps.MailHealth, relevance: deps.MailRelevance, now: now}),
-		mailCredentialDeliveryDescriptor(mailDeliveryHandler{deliveries: deps.MailDeliveries, sender: deps.MailSender, sealer: deps.MailSealer, recorder: deps.MailRecorder, health: deps.MailHealth, relevance: deps.MailRelevance, now: now}),
-		sittingMailExpansionDescriptor(sittingMailExpansionHandler{sittings: deps.SittingMailStore, mail: deps.SittingMail}),
-		mailCleanupDescriptor(mailCleanupHandler{mail: deps.MailCleanup, sittings: deps.SittingMailMaintenance, recorder: deps.MailRecorder}),
-		mailRekeyDescriptor(mailRekeyHandler{mail: deps.MailRekey, sealer: deps.MailSealer}),
-		mfaRekeyDescriptor(mfaRekeyHandler{credentials: deps.MFARekey, sealer: deps.MFASealer}),
-		invitationMaintenanceDescriptor(invitationMaintenanceHandler{invitations: deps.Invitations, imports: deps.OnboardingImports, content: deps.OnboardingFiles, now: now}),
-		examSittingLifecycleDescriptor(examSittingLifecycleHandler{reconciler: deps.ExamSittingLifecycle}),
-		examSittingSealingDescriptor(examSittingSealingHandler{service: deps.ExamSittingSealing}),
-		examSittingLifecycleRecoveryDescriptor(examSittingLifecycleRecoveryHandler{service: deps.ExamSittingLifecycle}),
-		examExportBuildDescriptor(examExportBuildHandler{service: deps.ExamExports}),
-		examExportCleanupDescriptor(examExportCleanupHandler{exports: deps.ExamExportStore, content: deps.ExamExportContent}),
-		retentionDescriptor(model.JobTypeRetentionExpire, retentionExpiryHandler{records: deps.RetentionExpiry, audit: deps.RetentionExpiryAudit, jobs: deps.JobStore, now: now}),
-		retentionDescriptor(model.JobTypeRetentionReconcile, retentionHandler{records: deps.Retention, audit: deps.RetentionAudit, jobs: deps.JobStore, now: now}),
-		retentionDescriptor(model.JobTypeRetentionPurge, retentionHandler{records: deps.Retention, content: deps.RetentionContent, jobs: deps.JobStore, now: now, purge: true}),
-		retentionDescriptor(model.JobTypeRetentionNotices, retentionNoticeHandler{notices: deps.RetentionNotices, dispatcher: deps.RetentionNoticeDispatcher, jobs: deps.JobStore, now: now}),
-	}
-	if deps.Onboarding != nil {
-		descriptors = append(descriptors,
-			onboardingImportParseDescriptor(onboardingImportParseHandler{service: deps.Onboarding}),
-			studentProgressionPreviewDescriptor(studentProgressionPreviewHandler{service: deps.Onboarding}),
-			onboardingImportExecuteDescriptor(onboardingImportExecuteHandler{service: deps.Onboarding}),
-		)
-	}
-	descriptors = append(descriptors, jobHistoryCleanupDescriptor(jobHistoryCleanupHandler{
-		jobs: deps.JobStore, continuations: deps.JobStore, now: now,
-		policies: append(retentionPolicies(descriptors), store.JobRetentionPolicy{
-			Type: model.JobTypeCleanup, SucceededCanceledAge: 30 * 24 * time.Hour, FailedAge: 90 * 24 * time.Hour,
-		}),
-	}))
-
-	recurrences := []job.Recurrence{
-		{Name: "profile-picture-default-reconciliation", Proposer: defaultProfilePictureReconciliationJobProposer{jobs: deps.JobStore, now: now}},
-		{Name: "file-purge-expired-content", Proposer: filePurgeExpiredContentProposer{jobs: deps.JobStore, now: now}},
-		{Name: "job-history-cleanup", Proposer: jobHistoryCleanupProposer{jobs: deps.JobStore, now: now}},
-		{Name: "command-outcome-cleanup", Proposer: commandOutcomeCleanupProposer{jobs: deps.JobStore, now: now}},
-		{Name: "audit-attempt-sweep", Interval: time.Hour, Proposer: auditAttemptSweepProposer{jobs: deps.JobStore, now: now}},
-		{Name: "session-purge-retired", Interval: time.Hour, Proposer: sessionPurgeProposer{jobs: deps.JobStore, now: now}},
-		{Name: "mail-cleanup", Proposer: mailCleanupProposer{jobs: deps.JobStore, now: now}},
-		{Name: "invitation-maintenance", Proposer: invitationMaintenanceProposer{jobs: deps.JobStore, now: now}},
-		{Name: "exam-sitting-lifecycle-recovery", Proposer: examSittingLifecycleRecoveryProposer{jobs: deps.JobStore, now: now}},
-		{Name: "exam-export-cleanup", Interval: time.Hour, Proposer: examExportCleanupProposer{jobs: deps.JobStore, now: now}},
-		{Name: "retention-expire", Interval: time.Hour, Proposer: retentionExpiryProposer{jobs: deps.JobStore, now: now}},
-		{Name: "retention-reconcile", Interval: time.Hour, Proposer: retentionProposer{jobs: deps.JobStore, now: now, jobType: model.JobTypeRetentionReconcile}},
-		{Name: "retention-purge", Interval: time.Hour, Proposer: retentionProposer{jobs: deps.JobStore, now: now, jobType: model.JobTypeRetentionPurge}},
-		{Name: "retention-notices", Interval: 10 * time.Minute, Proposer: retentionProposer{jobs: deps.JobStore, now: now, jobType: model.JobTypeRetentionNotices}},
-	}
-	return Catalog{Descriptors: descriptors, Recurrences: recurrences}
-}
-
-func retentionPolicies(descriptors []job.Descriptor) []store.JobRetentionPolicy {
-	policies := make([]store.JobRetentionPolicy, 0, len(descriptors))
-	for _, descriptor := range descriptors {
-		policies = append(policies, store.JobRetentionPolicy{
-			Type: descriptor.Type, SucceededCanceledAge: descriptor.SuccessRetention, FailedAge: descriptor.FailureRetention,
-		})
-	}
-	return policies
 }

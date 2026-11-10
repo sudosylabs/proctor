@@ -141,3 +141,19 @@ func (p examExportCleanupProposer) Propose(ctx context.Context, occurrence time.
 	_, _, err = p.jobs.Enqueue(ctx, &store.JobEnqueue{Job: job})
 	return err
 }
+
+// NewExamExportBuildDescriptor registers the building of one Exam export.
+func NewExamExportBuildDescriptor(service ExamExportBuilder) job.Descriptor {
+	return examExportBuildDescriptor(examExportBuildHandler{service: service})
+}
+
+// NewExamExportCleanupDescriptor registers the removal of expired Exam
+// exports and their content.
+func NewExamExportCleanupDescriptor(exports ExamExportMaintenanceStore, content ExamExportPurger) job.Descriptor {
+	return examExportCleanupDescriptor(examExportCleanupHandler{exports: exports, content: content})
+}
+
+// NewExamExportCleanupRecurrence proposes the hourly Exam export cleanup Job.
+func NewExamExportCleanupRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+	return job.Recurrence{Name: "exam-export-cleanup", Interval: time.Hour, Proposer: examExportCleanupProposer{jobs: jobs, now: now}}
+}

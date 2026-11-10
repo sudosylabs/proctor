@@ -58,9 +58,7 @@ func TestMailRekeyOldPrimaryRelinquishesOnceAndNewPrimaryCompletes(t *testing.T)
 		RetiringKeyID: oldSealer.PrimaryKeyID(), Job: rekeyJob, AuditEventID: audit.ID, AuditAt: model.NowUTC()})
 	require.NoError(t, err)
 
-	oldDescriptor := integrationJobDescriptor(t, jobhandler.NewCatalog(jobhandler.CatalogDependencies{
-		JobStore: persistence.Job(), MailRekey: persistence.Mail(), MailSealer: oldSealer,
-	}), model.JobTypeMailRekey)
+	oldDescriptor := jobhandler.NewMailRekeyDescriptor(persistence.Mail(), oldSealer)
 	oldDescriptor.BaseRetryDelay, oldDescriptor.MaximumRetryDelay = 10*time.Millisecond, 10*time.Millisecond
 	oldDescriptor.LeaseDuration, oldDescriptor.HeartbeatInterval = mailRekeyClusterLease, mailRekeyClusterHeartbeat
 	oldNode, err := job.New(job.Dependencies{Store: persistence.Job(), Descriptors: []job.Descriptor{oldDescriptor},
@@ -82,9 +80,7 @@ func TestMailRekeyOldPrimaryRelinquishesOnceAndNewPrimaryCompletes(t *testing.T)
 	require.Len(t, attempts, 1, "no-compatible-node attempts")
 	require.Equal(t, "old-primary-node", attempts[0].NodeID, "no-compatible-node attempts")
 
-	newDescriptor := integrationJobDescriptor(t, jobhandler.NewCatalog(jobhandler.CatalogDependencies{
-		JobStore: persistence.Job(), MailRekey: persistence.Mail(), MailSealer: newSealer,
-	}), model.JobTypeMailRekey)
+	newDescriptor := jobhandler.NewMailRekeyDescriptor(persistence.Mail(), newSealer)
 	newDescriptor.BaseRetryDelay, newDescriptor.MaximumRetryDelay = 10*time.Millisecond, 10*time.Millisecond
 	newDescriptor.LeaseDuration, newDescriptor.HeartbeatInterval = mailRekeyClusterLease, mailRekeyClusterHeartbeat
 	newNode, err := job.New(job.Dependencies{Store: persistence.Job(), Descriptors: []job.Descriptor{newDescriptor},

@@ -279,3 +279,26 @@ func (p retentionProposer) Propose(ctx context.Context, occurrence time.Time) er
 func retentionDescriptor(jobType model.JobType, handler job.Handler) job.Descriptor {
 	return job.Descriptor{Type: jobType, Checkpoints: true, PublicErrorCodes: []string{"retention.unavailable", "job.command.invalid", "job.checkpoint.invalid", "job.invariant_failed"}, Timeout: 10 * time.Minute, Concurrency: 1, MaximumAttempts: 5, LeaseDuration: time.Minute, HeartbeatInterval: 15 * time.Second, BaseRetryDelay: time.Second, MaximumRetryDelay: time.Minute, Visibility: job.VisibilityOperator, SuccessRetention: 30 * 24 * time.Hour, FailureRetention: 90 * 24 * time.Hour, Handler: handler}
 }
+
+// NewRetentionReconcileDescriptor registers the reconciliation of retention
+// state against current policy.
+func NewRetentionReconcileDescriptor(records RetentionMaintenanceStore, audit RetentionSystemAuditor, jobs JobEnqueuer, now func() time.Time) job.Descriptor {
+	return retentionDescriptor(model.JobTypeRetentionReconcile, retentionHandler{records: records, audit: audit, jobs: jobs, now: now})
+}
+
+// NewRetentionPurgeDescriptor registers the purge of content whose retention
+// has ended.
+func NewRetentionPurgeDescriptor(records RetentionMaintenanceStore, content RetentionContentPurger, jobs JobEnqueuer, now func() time.Time) job.Descriptor {
+	return retentionDescriptor(model.JobTypeRetentionPurge, retentionHandler{records: records, content: content, jobs: jobs, now: now, purge: true})
+}
+
+// NewRetentionReconcileRecurrence proposes the hourly retention
+// reconciliation Job.
+func NewRetentionReconcileRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+	return job.Recurrence{Name: "retention-reconcile", Interval: time.Hour, Proposer: retentionProposer{jobs: jobs, now: now, jobType: model.JobTypeRetentionReconcile}}
+}
+
+// NewRetentionPurgeRecurrence proposes the hourly retention purge Job.
+func NewRetentionPurgeRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+	return job.Recurrence{Name: "retention-purge", Interval: time.Hour, Proposer: retentionProposer{jobs: jobs, now: now, jobType: model.JobTypeRetentionPurge}}
+}

@@ -19,9 +19,9 @@ erase evidence. `store.JobStore` owns atomic enqueue, claim, fencing,
 checkpoint, terminal, and retention contracts. Application use cases own job
 creation and actor-sensitive cancellation authorization. The `app/jobhandler`
 package owns concrete handlers, typed payloads, progress meaning, descriptor
-policy, recurrence proposers, and the explicit durable-work catalog. Parent
-`app` supplies narrow use-case adapters and constructs the generic `app/job`
-engine from that catalog. The
+policy, recurrence proposers, and one exported constructor per Job. Parent
+`app` supplies narrow use-case adapters, lists every enabled Job in
+`app/new_jobs.go`, and constructs the generic `app/job` engine from that list. The
 module-root server then owns the engine's start and close order as part of the
 runtime lifecycle. Root ownership therefore means lifecycle ownership, not
 that the root defines Job types or application policy. A worker receives only
@@ -137,8 +137,9 @@ transition belong to the engine. An opaque prepared control target carries the
 engine's validated transition and revision across that audit boundary without
 exposing persistence mechanics.
 
-`app/jobhandler.NewCatalog` constructs one immutable instance-scoped handler
-registry from capability-oriented dependencies. Every descriptor declares whether it checkpoints, its timeout,
+Each `app/jobhandler` constructor (for example `NewFilePurgeDescriptor`) takes
+only the capabilities its handler uses; `app/new_jobs.go` registers them in one
+immutable instance-scoped list. Every descriptor declares whether it checkpoints, its timeout,
 per-node concurrency, retry/backoff, cancelability, retention, and handler.
 Startup rejects duplicate types and missing handlers; there is no process-global
 mutable registration.

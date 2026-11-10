@@ -282,3 +282,15 @@ func examSittingLifecycleRecoveryDescriptor(handler job.Handler) job.Descriptor 
 		Handler: handler,
 	}
 }
+
+// NewExamSittingLifecycleRecoveryDescriptor registers the reconciliation of
+// Exam Sittings whose lifecycle Jobs are overdue.
+func NewExamSittingLifecycleRecoveryDescriptor(service ExamSittingLifecycleRecoveryUseCases) job.Descriptor {
+	return examSittingLifecycleRecoveryDescriptor(examSittingLifecycleRecoveryHandler{service: service})
+}
+
+// NewExamSittingLifecycleRecoveryRecurrence proposes the daily Exam Sitting
+// lifecycle recovery Job.
+func NewExamSittingLifecycleRecoveryRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+	return job.Recurrence{Name: "exam-sitting-lifecycle-recovery", Proposer: examSittingLifecycleRecoveryProposer{jobs: jobs, now: now}}
+}

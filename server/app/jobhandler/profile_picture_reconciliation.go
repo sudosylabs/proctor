@@ -202,3 +202,15 @@ func (p defaultProfilePictureReconciliationJobProposer) Propose(ctx context.Cont
 func defaultProfilePictureReconciliationDescriptor(handler job.Handler) job.Descriptor {
 	return job.Descriptor{Type: model.JobTypeProfilePictureReconcile, Checkpoints: true, ProgressStages: []string{"completed"}, PublicErrorCodes: []string{"dependency.unavailable", "job.checkpoint.invalid", "job.command.invalid", "job.invariant_failed"}, Timeout: 10 * time.Minute, Concurrency: 1, MaximumAttempts: 5, LeaseDuration: time.Minute, HeartbeatInterval: 15 * time.Second, BaseRetryDelay: time.Second, MaximumRetryDelay: time.Minute, Visibility: job.VisibilityOperator, SuccessRetention: 30 * 24 * time.Hour, FailureRetention: 90 * 24 * time.Hour, Handler: handler}
 }
+
+// NewDefaultProfilePictureReconciliationDescriptor registers the sweep that
+// proposes default profile pictures for Users that lack one.
+func NewDefaultProfilePictureReconciliationDescriptor(users DefaultProfilePictureReconciliationUserLister, defaults ProfilePictureDefaultJobs, now func() time.Time) job.Descriptor {
+	return defaultProfilePictureReconciliationDescriptor(defaultProfilePictureReconciliationHandler{users: users, defaults: defaults, now: now})
+}
+
+// NewDefaultProfilePictureReconciliationRecurrence proposes the daily default
+// profile picture reconciliation Job.
+func NewDefaultProfilePictureReconciliationRecurrence(jobs JobEnqueuer, now func() time.Time) job.Recurrence {
+	return job.Recurrence{Name: "profile-picture-default-reconciliation", Proposer: defaultProfilePictureReconciliationJobProposer{jobs: jobs, now: now}}
+}

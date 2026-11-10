@@ -32,19 +32,9 @@ func TestJobHistoryCleanupContinuesAcrossNodesPastOneDailyBatch(t *testing.T) {
 	for range 237 {
 		insertTerminalJobHistoryFixture(t, ss, model.JobTypeProfilePictureGenerateDefault, model.JobStatusSucceeded, 31*24*time.Hour, true)
 	}
-	catalog := jobhandler.NewCatalog(jobhandler.CatalogDependencies{JobStore: ss.Job(), Now: time.Now})
-	var descriptor job.Descriptor
-	var proposer job.OccurrenceProposer
-	for _, value := range catalog.Descriptors {
-		if value.Type == model.JobTypeCleanup {
-			descriptor = value
-		}
-	}
-	for _, value := range catalog.Recurrences {
-		if value.Name == "job-history-cleanup" {
-			proposer = value.Proposer
-		}
-	}
+	registered := []job.Descriptor{jobhandler.NewDefaultProfilePictureDescriptor(nil)}
+	descriptor := jobhandler.NewJobHistoryCleanupDescriptor(ss.Job(), ss.Job(), time.Now, registered)
+	proposer := jobhandler.NewJobHistoryCleanupRecurrence(ss.Job(), time.Now).Proposer
 	require.NotNil(t, descriptor.Handler, "history cleanup catalog is incomplete")
 	require.NotNil(t, proposer, "history cleanup catalog is incomplete")
 	occurrence := model.NowUTC()

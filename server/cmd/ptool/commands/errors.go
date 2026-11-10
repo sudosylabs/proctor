@@ -66,6 +66,7 @@ func newErrorsCheckCommand(options *errorCatalogOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			current, err := os.ReadFile(filepath.Clean(options.mapping))
 			if err != nil {
 				return fmt.Errorf("read generated error mapping %s: %w", options.mapping, err)
@@ -73,6 +74,7 @@ func newErrorsCheckCommand(options *errorCatalogOptions) *cobra.Command {
 			if !bytes.Equal(current, catalog.RenderHTTPMapping()) {
 				return fmt.Errorf("generated error mapping %s is stale; run `go run ./cmd/ptool errors generate`", options.mapping)
 			}
+
 			mints, err := scanMintedErrorCodes(command.Context(), options.module)
 			if err != nil {
 				return err
@@ -83,6 +85,7 @@ func newErrorsCheckCommand(options *errorCatalogOptions) *cobra.Command {
 			if err = verifyStoreTableConstraints(options.module); err != nil {
 				return err
 			}
+
 			_, err = fmt.Fprintf(command.OutOrStdout(), "verified %d catalog codes against %d minted constants\n", len(catalog.Entries), len(mints))
 			return err
 		},

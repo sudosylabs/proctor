@@ -227,24 +227,31 @@ func validateAuthenticationSessions(authentication Authentication, add func(stri
 			add(item.field, "must be greater than zero")
 		}
 	}
+
 	if sessions.AccessTTL.Duration > sessions.IdleTTL.Duration {
 		add("authentication.sessions.access_ttl", "must not exceed idle_ttl")
 	}
+
 	if sessions.IdleTTL.Duration > sessions.AbsoluteTTL.Duration {
 		add("authentication.sessions.idle_ttl", "must not exceed absolute_ttl")
 	}
+
 	if sessions.RefreshTTL.Duration > sessions.AbsoluteTTL.Duration {
 		add("authentication.sessions.refresh_ttl", "must not exceed absolute_ttl")
 	}
+
 	if sessions.ActivityUpdateInterval.Duration >= sessions.IdleTTL.Duration {
 		add("authentication.sessions.activity_update_interval", "must be less than idle_ttl")
 	}
+
 	if sessions.MaximumPerUser < 1 || sessions.MaximumPerUser > 1000 {
 		add("authentication.sessions.maximum_per_user", "must be between 1 and 1000")
 	}
+
 	if sessions.RetiredRetention.Duration < time.Hour || sessions.RetiredRetention.Duration > 8760*time.Hour {
 		add("authentication.sessions.retired_retention", "must be between 1h and 8760h")
 	}
+
 	if authentication.RecentAuthenticationTTL.Duration < time.Minute ||
 		authentication.RecentAuthenticationTTL.Duration > 24*time.Hour {
 		add(
@@ -252,6 +259,7 @@ func validateAuthenticationSessions(authentication Authentication, add func(stri
 			"must be between 1m and 24h",
 		)
 	}
+
 	if authentication.RecentAuthenticationTTL.Duration >
 		sessions.AbsoluteTTL.Duration {
 		add(
@@ -265,13 +273,15 @@ func validateAuthenticationSessions(authentication Authentication, add func(stri
 func validateAuthenticationLoginRateLimit(rateLimit LoginRateLimit, add func(string, string)) {
 	validateAuthenticationRateLimit(
 		"authentication.login_rate_limit", AttemptRateLimit{
-			Window: rateLimit.Window, MaximumAttempts: rateLimit.MaximumAttempts,
+			Window:                rateLimit.Window,
+			MaximumAttempts:       rateLimit.MaximumAttempts,
 			MaximumSourceAttempts: rateLimit.MaximumSourceAttempts,
 		}, add,
 	)
 	if rateLimit.AccountFailuresBeforeDelay < 1 || rateLimit.AccountFailuresBeforeDelay > 10_000 {
 		add("authentication.login_rate_limit.account_failures_before_delay", "must be between 1 and 10000")
 	}
+
 	if rateLimit.MaximumAccountFailureDelay.Duration < 250*time.Millisecond ||
 		rateLimit.MaximumAccountFailureDelay.Duration > 30*time.Second {
 		add("authentication.login_rate_limit.maximum_account_failure_delay", "must be between 250ms and 30s")
@@ -341,24 +351,30 @@ func validateAuthenticationPersonalAccessTokens(tokens PersonalAccessTokens, add
 
 // validateAuthenticationMFA reports invalid MFA issuer, setup, recovery code and key settings.
 func validateAuthenticationMFA(mfa MFA, add func(string, string)) {
-	if len(mfa.Issuer) == 0 || len(mfa.Issuer) > 128 ||
+	if len(mfa.Issuer) == 0 ||
+		len(mfa.Issuer) > 128 ||
 		strings.ContainsAny(mfa.Issuer, "\x00\r\n") {
 		add("authentication.mfa.issuer", "must contain between 1 and 128 safe characters")
 	}
+
 	if mfa.SetupTTL.Duration < time.Minute || mfa.SetupTTL.Duration > time.Hour {
 		add("authentication.mfa.setup_ttl", "must be between 1m and 1h")
 	}
+
 	if mfa.RecoveryCodeCount < 5 || mfa.RecoveryCodeCount > 20 {
 		add("authentication.mfa.recovery_code_count", "must be between 5 and 20")
 	}
+
 	if mfa.Enabled && mfa.EncryptionKey == "" {
 		add(
 			"authentication.mfa.encryption_key",
 			"is required when MFA is enabled",
 		)
 	}
+
 	validateSecretSealing("authentication.mfa", SecretSealing{
-		EncryptionKey: mfa.EncryptionKey, DecryptionKeys: mfa.DecryptionKeys,
+		EncryptionKey:  mfa.EncryptionKey,
+		DecryptionKeys: mfa.DecryptionKeys,
 	}, add)
 }
 

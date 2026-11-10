@@ -51,11 +51,14 @@ func HandlesPath(requestPath string) bool {
 	if requestPath == "/" {
 		return true
 	}
+
 	if strings.HasPrefix(requestPath, "/assets/") {
 		name := strings.TrimPrefix(requestPath, "/")
-		return fs.ValidPath(name) && path.Clean(name) == name &&
+		return fs.ValidPath(name) &&
+			path.Clean(name) == name &&
 			fingerprintedAsset.MatchString(path.Base(name))
 	}
+
 	_, ok := hostedRoutes[requestPath]
 	return ok
 }
@@ -92,6 +95,7 @@ func New(files fs.FS, options Options) (http.Handler, error) {
 	if files == nil {
 		return nil, errors.New("webapp files are required")
 	}
+
 	options.BuildVersion = strings.TrimSpace(options.BuildVersion)
 	options.BuildCommit = strings.TrimSpace(options.BuildCommit)
 	if options.BuildVersion == "" || options.BuildCommit == "" {
@@ -102,6 +106,7 @@ func New(files fs.FS, options Options) (http.Handler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read webapp build manifest: %w", err)
 	}
+
 	var manifest buildManifest
 	decoder := json.NewDecoder(bytes.NewReader(manifestData))
 	decoder.DisallowUnknownFields()
@@ -111,10 +116,14 @@ func New(files fs.FS, options Options) (http.Handler, error) {
 	if err := requireJSONEOF(decoder); err != nil {
 		return nil, fmt.Errorf("decode webapp build manifest: %w", err)
 	}
+
 	if manifest.Version != options.BuildVersion || manifest.Commit != options.BuildCommit {
 		return nil, fmt.Errorf(
 			"webapp build %q at %q does not match server build %q at %q",
-			manifest.Version, manifest.Commit, options.BuildVersion, options.BuildCommit,
+			manifest.Version,
+			manifest.Commit,
+			options.BuildVersion,
+			options.BuildCommit,
 		)
 	}
 
@@ -130,15 +139,20 @@ func New(files fs.FS, options Options) (http.Handler, error) {
 	if notFound == nil {
 		notFound = http.NotFoundHandler()
 	}
+
 	methodNotAllowed := options.MethodNotAllowed
 	if methodNotAllowed == nil {
 		methodNotAllowed = http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 			http.Error(writer, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		})
 	}
+
 	return &handler{
-		files: files, index: index, fileServer: http.FileServer(http.FS(files)),
-		notFound: notFound, methodNotAllowed: methodNotAllowed,
+		files:            files,
+		index:            index,
+		fileServer:       http.FileServer(http.FS(files)),
+		notFound:         notFound,
+		methodNotAllowed: methodNotAllowed,
 	}, nil
 }
 
@@ -197,20 +211,28 @@ func mustHostedRoutes(data []byte) map[string]struct{} {
 	if err := json.Unmarshal(data, &routes); err != nil {
 		panic(fmt.Sprintf("webui: decode hosted route catalog: %v", err))
 	}
+
 	result := make(map[string]struct{}, len(routes))
 	for _, route := range routes {
-		if route == "/" || !strings.HasPrefix(route, "/") || strings.HasPrefix(route, "/assets/") ||
-			path.Clean(route) != route || strings.HasSuffix(route, "/") {
+		if route == "/" ||
+			!strings.HasPrefix(route, "/") ||
+			strings.HasPrefix(route, "/assets/") ||
+			path.Clean(route) != route ||
+			strings.HasSuffix(route, "/") {
 			panic(fmt.Sprintf("webui: invalid hosted route %q", route))
 		}
+
 		if _, exists := result[route]; exists {
 			panic(fmt.Sprintf("webui: duplicate hosted route %q", route))
 		}
+
 		result[route] = struct{}{}
 	}
+
 	if len(result) == 0 {
 		panic("webui: hosted route catalog is empty")
 	}
+
 	return result
 }
 
@@ -242,7 +264,10 @@ func requireJSONEOF(decoder *json.Decoder) error {
 }
 
 func setSecurityHeaders(header http.Header) {
-	header.Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'")
+	header.Set(
+		"Content-Security-Policy",
+		"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'",
+	)
 	header.Set("Cross-Origin-Opener-Policy", "same-origin")
 	header.Set("Cross-Origin-Resource-Policy", "same-origin")
 	header.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()")

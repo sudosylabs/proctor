@@ -40,9 +40,11 @@ func validateLog(log Log, add func(string, string)) {
 	if log.MaxFieldBytes < 256 || log.MaxFieldBytes > 1<<20 {
 		add("log.max_field_bytes", "must be between 256 and 1048576")
 	}
+
 	if log.QueueSize < 1 || log.QueueSize > 1<<20 {
 		add("log.queue_size", "must be between 1 and 1048576")
 	}
+
 	for _, timeout := range []struct {
 		path  string
 		value time.Duration
@@ -55,9 +57,11 @@ func validateLog(log Log, add func(string, string)) {
 			add(timeout.path, "must be positive and no greater than one minute")
 		}
 	}
+
 	if len(log.Targets) == 0 {
 		add("log.targets", "must contain at least one target")
 	}
+
 	names := make(map[string]struct{}, len(log.Targets))
 	for index, target := range log.Targets {
 		prefix := fmt.Sprintf("log.targets[%d]", index)
@@ -68,9 +72,11 @@ func validateLog(log Log, add func(string, string)) {
 		} else {
 			names[target.Name] = struct{}{}
 		}
+
 		if target.QueueSize < 1 || target.QueueSize > 1<<20 {
 			add(prefix+".queue_size", "must be between 1 and 1048576")
 		}
+
 		switch strings.ToLower(target.Type) {
 		case "console":
 			if target.File != "" {
@@ -82,23 +88,28 @@ func validateLog(log Log, add func(string, string)) {
 			} else if strings.ContainsAny(target.File, "\x00\r\n") {
 				add(prefix+".file", "contains invalid characters")
 			}
+
 			if target.MaxSizeMB < 1 || target.MaxSizeMB > 10240 {
 				add(prefix+".max_size_mb", "must be between 1 and 10240")
 			}
+
 			if target.MaxAgeDays < 0 || target.MaxAgeDays > 3650 {
 				add(prefix+".max_age_days", "must be between 0 and 3650")
 			}
+
 			if target.MaxBackups < 0 || target.MaxBackups > 10000 {
 				add(prefix+".max_backups", "must be between 0 and 10000")
 			}
 		default:
 			add(prefix+".type", "must be console or file")
 		}
+
 		switch strings.ToLower(target.Level) {
 		case "trace", "debug", "info", "warn", "error":
 		default:
 			add(prefix+".level", "must be one of trace, debug, info, warn, error")
 		}
+
 		switch strings.ToLower(target.Format) {
 		case "text", "json":
 		default:

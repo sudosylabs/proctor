@@ -147,8 +147,16 @@ type runtimeReconciler interface {
 // runtimeAdministratorRecovery is borrowed only by the inert Server facade;
 // it is never projected into HTTP or another transport.
 type runtimeAdministratorRecovery interface {
-	RecoverAdministratorAccess(context.Context, invocation.System, identity.AdministratorRecoveryCommand) (*identity.AdministratorRecoveryResult, error)
-	ResetAdministratorMFA(context.Context, invocation.System, identity.AdministratorMFAResetCommand) (*identity.AdministratorMFAResetResult, error)
+	RecoverAdministratorAccess(
+		context.Context,
+		invocation.System,
+		identity.AdministratorRecoveryCommand,
+	) (*identity.AdministratorRecoveryResult, error)
+	ResetAdministratorMFA(
+		context.Context,
+		invocation.System,
+		identity.AdministratorMFAResetCommand,
+	) (*identity.AdministratorMFAResetResult, error)
 }
 
 // runtimeTracing is the span exporter's lifecycle: Close flushes buffered
@@ -245,11 +253,14 @@ func runtimeSettingsFromConfig(settings config.Server) runtimeSettings {
 	publicURL, _ := url.Parse(settings.PublicURL)
 	authority := canonicalPublicURLAuthority(publicURL)
 	return runtimeSettings{
-		listenAddress: settings.ListenAddress, publicURL: settings.PublicURL,
+		listenAddress:     settings.ListenAddress,
+		publicURL:         settings.PublicURL,
 		readHeaderTimeout: settings.ReadHeaderTimeout.Duration,
-		readTimeout:       settings.ReadTimeout.Duration, writeTimeout: settings.WriteTimeout.Duration,
-		idleTimeout: settings.IdleTimeout.Duration, shutdownTimeout: settings.ShutdownTimeout.Duration,
-		maxHeaderBytes: settings.MaxHeaderBytes,
+		readTimeout:       settings.ReadTimeout.Duration,
+		writeTimeout:      settings.WriteTimeout.Duration,
+		idleTimeout:       settings.IdleTimeout.Duration,
+		shutdownTimeout:   settings.ShutdownTimeout.Duration,
+		maxHeaderBytes:    settings.MaxHeaderBytes,
 		tls: httpTLSSettings{
 			mode:                      settings.TLS.Mode,
 			certificateFile:           settings.TLS.CertificateFile,
@@ -364,26 +375,35 @@ type Server struct {
 
 // RecoverAdministratorAccess runs only while the constructed node remains
 // inert. Running the node permanently closes this host-only capability.
-func (s *Server) RecoverAdministratorAccess(ctx context.Context, command AdministratorRecoveryCommand) (*AdministratorRecoveryResult, error) {
+func (s *Server) RecoverAdministratorAccess(
+	ctx context.Context,
+	command AdministratorRecoveryCommand,
+) (*AdministratorRecoveryResult, error) {
 	if s == nil {
 		return nil, errors.New("server is nil")
 	}
+
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
 	if s.state != nodeInert {
 		return nil, errors.New("administrator recovery requires an inert server")
 	}
+
 	recovery := s.components.administratorRecovery
 	if recovery == nil {
 		return nil, errors.New("administrator recovery is unavailable")
 	}
+
 	result, err := recovery.RecoverAdministratorAccess(ctx, invocation.Task("administrator-recovery"), identity.AdministratorRecoveryCommand{
-		InstitutionID: model.InstitutionID(command.InstitutionID), UserID: model.UserID(command.UserID),
-		EnableLocalLogin: command.EnableLocalLogin, Password: command.Password,
+		InstitutionID:    model.InstitutionID(command.InstitutionID),
+		UserID:           model.UserID(command.UserID),
+		EnableLocalLogin: command.EnableLocalLogin,
+		Password:         command.Password,
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	return &AdministratorRecoveryResult{
 		LocalLoginEnabled: result.LocalLoginEnabled,
 		PasswordRotated:   result.PasswordRotated,
@@ -411,13 +431,16 @@ func New(ctx context.Context, optionValues ...Option) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	result, err := composeNode(ctx, compositionInput{
-		configPath: settings.configPath, serviceEnvironment: environment,
+		configPath:           settings.configPath,
+		serviceEnvironment:   environment,
 		requireCurrentSchema: settings.requireCurrentSchema,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("construct server: %w", err)
 	}
+
 	result.server.readyNotifier = settings.readyNotifier
 	result.server.stoppingNotifier = settings.stoppingNotifier
 	return result.server, nil
@@ -514,15 +537,21 @@ func (s *Server) startupStages() []startupStage {
 	}}
 	if s.components.metrics != nil {
 		stages = append(stages, startupStage{
-			name: "start metrics", start: s.components.metrics.Start, verify: s.verifyMetrics,
+			name:   "start metrics",
+			start:  s.components.metrics.Start,
+			verify: s.verifyMetrics,
 		})
 	}
+
 	if s.components.servingLease != nil {
 		stages = append(stages, startupStage{
-			name: "start serving node lease", start: s.components.servingLease.Start, verify: s.verifyServingNodeLease,
+			name:    "start serving node lease",
+			start:   s.components.servingLease.Start,
+			verify:  s.verifyServingNodeLease,
 			entered: func(ctx context.Context) { s.components.logger.InfoContext(ctx, "serving node lease started") },
 		})
 	}
+
 	if reconciler := s.components.reconciler; reconciler != nil {
 		stages = append(stages, startupStage{
 			name: "reconcile protected built-in roles",
@@ -538,24 +567,31 @@ func (s *Server) startupStages() []startupStage {
 			verify:  s.verifyServingNodeLease,
 		})
 	}
+
 	if s.components.jobs != nil {
 		stages = append(stages, startupStage{
-			name: "start durable jobs", start: s.components.jobs.Start, verify: s.verifyServingNodeLease,
+			name:   "start durable jobs",
+			start:  s.components.jobs.Start,
+			verify: s.verifyServingNodeLease,
 			entered: func(ctx context.Context) {
 				s.recordStarted(func(m *lifecycleMilestones) { m.jobsStarted = true })
 				s.components.logger.InfoContext(ctx, "durable jobs started")
 			},
 		})
 	}
+
 	if s.components.websocket != nil {
 		stages = append(stages, startupStage{
-			name: "start WebSocket", start: s.components.websocket.Start, verify: s.verifyServingNodeLease,
+			name:   "start WebSocket",
+			start:  s.components.websocket.Start,
+			verify: s.verifyServingNodeLease,
 			entered: func(ctx context.Context) {
 				s.recordStarted(func(m *lifecycleMilestones) { m.websocketStarted = true })
 				s.components.logger.InfoContext(ctx, "WebSocket service started")
 			},
 		})
 	}
+
 	return stages
 }
 
@@ -651,6 +687,7 @@ func (s *Server) startHTTP(runCtx context.Context, listener net.Listener) httpSe
 				s.milestones.listenerBound = false
 				s.milestones.httpServing = true
 			}
+
 			s.lifecycleMu.Unlock()
 			handoff <- accepted
 			return accepted
@@ -671,6 +708,7 @@ func (s *Server) awaitHandoff(runCtx context.Context, serving httpServe) (stopPl
 		if !s.handoffRefusedForShutdown(runCtx, serveErr) && serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
 			stop.cause = fmt.Errorf("serve HTTP: %w", serveErr)
 		}
+
 		return stop, false
 	case accepted := <-serving.handoff:
 		if !accepted {
@@ -683,6 +721,7 @@ func (s *Server) awaitHandoff(runCtx context.Context, serving httpServe) (stopPl
 	case metricsErr := <-s.metricsFailures():
 		return stopPlan{cause: fmt.Errorf("serve metrics: %w", metricsErr), force: true}, false
 	}
+
 	// Handoff and a dependency failure may become selectable together. Drain
 	// any already-queued failure before publishing readiness so a dead required
 	// listener or serving lease is never briefly advertised as healthy.
@@ -692,6 +731,7 @@ func (s *Server) awaitHandoff(runCtx context.Context, serving httpServe) (stopPl
 	if err := s.verifyServingNodeLease(); err != nil {
 		return stopPlan{cause: err, force: true}, false
 	}
+
 	return stopPlan{}, true
 }
 
@@ -791,12 +831,16 @@ func (s *Server) Reload(ctx context.Context) error {
 			result = errors.Join(result, fmt.Errorf("reload configuration: %w", err))
 			s.components.logger.ErrorContext(ctx, "configuration reload failed; keeping the current configuration", logging.Err(err))
 		case len(reloaded.RestartRequired) > 0:
-			s.components.logger.WarnContext(ctx, "configuration reloaded; changed settings that require a restart keep their running values",
-				logging.String("restart_required", strings.Join(reloaded.RestartRequired, ", ")))
+			s.components.logger.WarnContext(
+				ctx,
+				"configuration reloaded; changed settings that require a restart keep their running values",
+				logging.String("restart_required", strings.Join(reloaded.RestartRequired, ", ")),
+			)
 		default:
 			s.components.logger.InfoContext(ctx, "configuration reloaded")
 		}
 	}
+
 	s.httpMu.Lock()
 	httpServer := s.http
 	s.httpMu.Unlock()
@@ -806,12 +850,14 @@ func (s *Server) Reload(ctx context.Context) error {
 			s.components.logger.ErrorContext(ctx, "TLS certificate reload failed; keeping the current certificate", logging.Err(err))
 		}
 	}
+
 	if reloader, ok := s.components.metrics.(certificateReloader); ok {
 		if err := reloader.ReloadCertificates(); err != nil {
 			result = errors.Join(result, fmt.Errorf("reload metrics TLS certificates: %w", err))
 			s.components.logger.ErrorContext(ctx, "metrics TLS certificate reload failed; keeping the current certificate", logging.Err(err))
 		}
 	}
+
 	return result
 }
 

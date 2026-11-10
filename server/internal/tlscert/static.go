@@ -52,8 +52,11 @@ type Static struct {
 // rotation check a handshake triggers.
 func New(certificateFile, privateKeyFile string, reportFailure func(error)) *Static {
 	return &Static{
-		certificateFile: certificateFile, privateKeyFile: privateKeyFile,
-		interval: CheckInterval, now: time.Now, reportFailure: reportFailure,
+		certificateFile: certificateFile,
+		privateKeyFile:  privateKeyFile,
+		interval:        CheckInterval,
+		now:             time.Now,
+		reportFailure:   reportFailure,
 	}
 }
 
@@ -118,12 +121,16 @@ func (c *Static) statFiles() (certificateFileStamp, error) {
 	if err != nil {
 		return certificateFileStamp{}, fmt.Errorf("inspect static TLS certificate: %w", err)
 	}
+
 	privateKey, err := os.Stat(c.privateKeyFile)
 	if err != nil {
 		return certificateFileStamp{}, fmt.Errorf("inspect static TLS private key: %w", err)
 	}
+
 	return certificateFileStamp{
-		certificateModified: certificate.ModTime(), privateKeyModified: privateKey.ModTime(),
-		certificateSize: certificate.Size(), privateKeySize: privateKey.Size(),
+		certificateModified: certificate.ModTime(),
+		privateKeyModified:  privateKey.ModTime(),
+		certificateSize:     certificate.Size(),
+		privateKeySize:      privateKey.Size(),
 	}, nil
 }

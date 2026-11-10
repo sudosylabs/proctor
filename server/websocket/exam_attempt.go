@@ -35,12 +35,28 @@ const (
 // of its candidate; composition supplies the application's Attempt service.
 type ExamAttemptApplication interface {
 	ConnectExamAttempt(context.Context, invocation.Invocation, attempt.ConnectCommand) (attempt.ConnectionResult, error)
-	UpdateExamSecurityCoverage(context.Context, invocation.Invocation, attempt.UpdateSecurityCoverageCommand) (model.SecurityCoverageResult, error)
-	RenewExamAttemptParticipation(context.Context, invocation.Invocation, attempt.RenewParticipationCommand) (attempt.ParticipationRenewal, error)
+	UpdateExamSecurityCoverage(
+		context.Context,
+		invocation.Invocation,
+		attempt.UpdateSecurityCoverageCommand,
+	) (model.SecurityCoverageResult, error)
+	RenewExamAttemptParticipation(
+		context.Context,
+		invocation.Invocation,
+		attempt.RenewParticipationCommand,
+	) (attempt.ParticipationRenewal, error)
 	EvaluateExamAttemptFocusLoss(context.Context, invocation.Invocation, attempt.FocusLossCommand) (attempt.FocusLossEvaluation, error)
 	CloseExamAttemptConnection(context.Context, invocation.Invocation, attempt.CloseConnectionCommand) (attempt.ConnectionClosedResult, error)
-	StartExamAttemptBrowserActivity(context.Context, invocation.Invocation, attempt.StartBrowserActivityCommand) (model.BrowserSourceStatus, error)
-	AppendExamAttemptBrowserActivity(context.Context, invocation.Invocation, attempt.AppendBrowserActivityCommand) (model.BrowserActivityAcknowledgement, error)
+	StartExamAttemptBrowserActivity(
+		context.Context,
+		invocation.Invocation,
+		attempt.StartBrowserActivityCommand,
+	) (model.BrowserSourceStatus, error)
+	AppendExamAttemptBrowserActivity(
+		context.Context,
+		invocation.Invocation,
+		attempt.AppendBrowserActivityCommand,
+	) (model.BrowserActivityAcknowledgement, error)
 }
 
 type examAttemptConnectRequest struct {
@@ -168,15 +184,25 @@ type deliveryWatermarkRejectionResponse struct {
 }
 
 func securityCoverageFrom(value model.SecurityCoverageResult) securityCoverageResponse {
-	response := securityCoverageResponse{ProcessedControlSequence: value.ProcessedControlSequence, ProcessedControlDigest: value.ProcessedControlDigest,
-		CoverageResult: value.CoverageResult, SourceResetReceipts: sourceResetReceiptsFrom(value.SourceResetReceipts),
-		SecurityInteractionAllowed: value.SecurityInteractionAllowed}
+	response := securityCoverageResponse{
+		ProcessedControlSequence:   value.ProcessedControlSequence,
+		ProcessedControlDigest:     value.ProcessedControlDigest,
+		CoverageResult:             value.CoverageResult,
+		SourceResetReceipts:        sourceResetReceiptsFrom(value.SourceResetReceipts),
+		SecurityInteractionAllowed: value.SecurityInteractionAllowed,
+	}
 	if value.DeliveryWatermarkRejections != nil {
 		response.DeliveryWatermarkRejections = make([]deliveryWatermarkRejectionResponse, 0, len(value.DeliveryWatermarkRejections))
 	}
+
 	for _, rejection := range value.DeliveryWatermarkRejections {
-		response.DeliveryWatermarkRejections = append(response.DeliveryWatermarkRejections, deliveryWatermarkRejectionResponse{Family: rejection.Family, SourceID: rejection.SourceID, Reason: rejection.Reason})
+		response.DeliveryWatermarkRejections = append(response.DeliveryWatermarkRejections, deliveryWatermarkRejectionResponse{
+			Family:   rejection.Family,
+			SourceID: rejection.SourceID,
+			Reason:   rejection.Reason,
+		})
 	}
+
 	return response
 }
 
@@ -274,14 +300,25 @@ func decodeExamAttemptBrowserStartRequest(document json.RawMessage) (examAttempt
 	if err != nil {
 		return value, err
 	}
-	declaration := model.BrowserSourceStart{ParticipationID: model.AttemptParticipationID(value.ParticipationID), Generation: value.Generation, SourceSessionID: model.BrowserSourceSessionID(value.SourceSessionID), PolicyRevisionID: model.ExamRevisionID(value.PolicyRevisionID), PolicyDigest: value.PolicyDigest, Transition: value.Transition}
+
+	declaration := model.BrowserSourceStart{
+		ParticipationID:  model.AttemptParticipationID(value.ParticipationID),
+		Generation:       value.Generation,
+		SourceSessionID:  model.BrowserSourceSessionID(value.SourceSessionID),
+		PolicyRevisionID: model.ExamRevisionID(value.PolicyRevisionID),
+		PolicyDigest:     value.PolicyDigest,
+		Transition:       value.Transition,
+	}
 	if len(document) > 8192 || !model.IsValidCredentialToken(value.ContinuityCredential) || declaration.Validate() != nil {
 		return value, errors.New("invalid Browser Activity source start")
 	}
+
 	return value, nil
 }
 
-func decodeExamAttemptBrowserAppendRequest(document json.RawMessage) (examAttemptBrowserAppendRequest, []model.BrowserActivityEvent, error) {
+func decodeExamAttemptBrowserAppendRequest(
+	document json.RawMessage,
+) (examAttemptBrowserAppendRequest, []model.BrowserActivityEvent, error) {
 	value, err := decodeStrictExamAttemptObject[examAttemptBrowserAppendRequest](document, "Browser Activity append request", 7)
 	if err != nil {
 		return value, nil, err
@@ -289,27 +326,45 @@ func decodeExamAttemptBrowserAppendRequest(document json.RawMessage) (examAttemp
 	if len(document) > model.BrowserActivityAppendMaximumBytes || !model.IsValidCredentialToken(value.ContinuityCredential) {
 		return value, nil, model.ErrDeliveryInvalid
 	}
-	batch := model.BrowserActivityBatch{SourceSessionID: model.BrowserSourceSessionID(value.SourceSessionID), ParticipationID: model.AttemptParticipationID(value.ParticipationID), Generation: value.Generation, PolicyRevisionID: model.ExamRevisionID(value.PolicyRevisionID), PolicyDigest: value.PolicyDigest, Events: make([]model.BrowserActivityEvent, len(value.Events))}
+
+	batch := model.BrowserActivityBatch{
+		SourceSessionID:  model.BrowserSourceSessionID(value.SourceSessionID),
+		ParticipationID:  model.AttemptParticipationID(value.ParticipationID),
+		Generation:       value.Generation,
+		PolicyRevisionID: model.ExamRevisionID(value.PolicyRevisionID),
+		PolicyDigest:     value.PolicyDigest,
+		Events:           make([]model.BrowserActivityEvent, len(value.Events)),
+	}
 	for i, raw := range value.Events {
 		if json.Unmarshal(raw, &batch.Events[i]) != nil {
 			return value, nil, model.ErrDeliveryInvalid
 		}
 	}
+
 	if batch.Validate() != nil {
 		return value, nil, model.ErrDeliveryInvalid
 	}
+
 	return value, batch.Events, nil
 }
 
 func browserActivityAcknowledgementWire(value model.BrowserActivityAcknowledgement) examAttemptBrowserAcknowledgementResponse {
-	response := examAttemptBrowserAcknowledgementResponse{SourceSessionID: string(value.SourceSessionID), HighestContiguous: value.HighestContiguous,
-		Receipts: append([]model.BrowserEventReceipt{}, value.Receipts...), SettledThrough: value.SettledThrough,
-		AllocatedThrough: value.AllocatedThrough, TerminalMissingThrough: value.TerminalMissingThrough,
-		HighestSeen: value.HighestSeen, MissingRangesTruncated: value.MissingRangesTruncated,
-		MissingRanges: make([]browserActivityMissingRangeResponse, len(value.MissingRanges)), ServerTime: model.FormatRFC3339(value.ServerTime)}
+	response := examAttemptBrowserAcknowledgementResponse{
+		SourceSessionID:        string(value.SourceSessionID),
+		HighestContiguous:      value.HighestContiguous,
+		Receipts:               append([]model.BrowserEventReceipt{}, value.Receipts...),
+		SettledThrough:         value.SettledThrough,
+		AllocatedThrough:       value.AllocatedThrough,
+		TerminalMissingThrough: value.TerminalMissingThrough,
+		HighestSeen:            value.HighestSeen,
+		MissingRangesTruncated: value.MissingRangesTruncated,
+		MissingRanges:          make([]browserActivityMissingRangeResponse, len(value.MissingRanges)),
+		ServerTime:             model.FormatRFC3339(value.ServerTime),
+	}
 	for index, missing := range value.MissingRanges {
 		response.MissingRanges[index] = browserActivityMissingRangeResponse{First: missing.First, Last: missing.Last}
 	}
+
 	return response
 }
 
@@ -318,13 +373,17 @@ func decodeExamAttemptConnectRequest(document json.RawMessage) (examAttemptConne
 	if err != nil {
 		return value, err
 	}
-	if value.IdempotencyKey == "" || !model.IsValidCredentialToken(value.ContinuityCredential) ||
+
+	if value.IdempotencyKey == "" ||
+		!model.IsValidCredentialToken(value.ContinuityCredential) ||
 		!model.IsValidSHA256Fingerprint(value.ConfigurationManifestFingerprint) {
 		return value, errors.New("Exam Attempt connect request fields are invalid")
 	}
+
 	if _, err = model.ParseExamSittingID(value.ExamSittingID); err != nil {
 		return value, errors.New("Exam Attempt Sitting identity is invalid")
 	}
+
 	return value, nil
 }
 
@@ -334,47 +393,82 @@ func candidateRuntimeCapabilitiesWire(value store.CandidateRuntimeCapabilities) 
 		browser.PolicyRevisionID = value.Browser.PolicyRevisionID.String()
 		browser.PolicyDigest = value.Browser.PolicyDigest
 	}
-	return candidateRuntimeCapabilitiesResponse{SchemaVersion: value.SchemaVersion,
-		ServerTime: model.FormatRFC3339(value.ServerTime), InteractionState: string(value.InteractionState),
-		AttemptConfiguration: candidateAttemptConfigurationResponse{Revision: value.AttemptConfiguration.Revision,
-			Presentation: value.AttemptConfiguration.Presentation, ApprovedCommands: append([]string{}, value.AttemptConfiguration.ApprovedCommands...),
-			ApprovedKeybindings: append([]string{}, value.AttemptConfiguration.ApprovedKeybindings...), Digest: value.AttemptConfiguration.Digest},
+
+	return candidateRuntimeCapabilitiesResponse{
+		SchemaVersion:    value.SchemaVersion,
+		ServerTime:       model.FormatRFC3339(value.ServerTime),
+		InteractionState: string(value.InteractionState),
+		AttemptConfiguration: candidateAttemptConfigurationResponse{
+			Revision:            value.AttemptConfiguration.Revision,
+			Presentation:        value.AttemptConfiguration.Presentation,
+			ApprovedCommands:    append([]string{}, value.AttemptConfiguration.ApprovedCommands...),
+			ApprovedKeybindings: append([]string{}, value.AttemptConfiguration.ApprovedKeybindings...),
+			Digest:              value.AttemptConfiguration.Digest,
+		},
 		FocusLossCollectionEnabled:    value.FocusLossCollectionEnabled,
 		PendingCorrectionCapabilities: append([]model.CandidateCapability{}, value.PendingCorrectionCapabilities...),
-		WorkspaceMutationAllowed:      value.WorkspaceMutationAllowed, SubmissionAllowed: value.SubmissionAllowed,
-		Browser: browser,
-		ExamRevision: candidateExamRevisionResponse{AdmissionRevisionID: value.ExamRevision.AdmissionRevisionID.String(),
-			CurrentRevisionID: value.ExamRevision.CurrentRevisionID.String(), AcknowledgementRequired: value.ExamRevision.AcknowledgementRequired},
-		Departure: candidateDepartureResponse{Allowed: value.Departure.Allowed, Reason: value.Departure.Reason}}
+		WorkspaceMutationAllowed:      value.WorkspaceMutationAllowed,
+		SubmissionAllowed:             value.SubmissionAllowed,
+		Browser:                       browser,
+		ExamRevision: candidateExamRevisionResponse{
+			AdmissionRevisionID:     value.ExamRevision.AdmissionRevisionID.String(),
+			CurrentRevisionID:       value.ExamRevision.CurrentRevisionID.String(),
+			AcknowledgementRequired: value.ExamRevision.AcknowledgementRequired,
+		},
+		Departure: candidateDepartureResponse{Allowed: value.Departure.Allowed, Reason: value.Departure.Reason},
+	}
 }
 
 func candidateBrowserPolicyWire(value *store.CandidateBrowserPolicy) *candidateBrowserPolicyResponse {
 	if value == nil {
 		return nil
 	}
-	response := &candidateBrowserPolicyResponse{Enabled: value.Policy.Enabled, PolicyRevisionNumber: value.PolicyRevisionNumber, BrowserActivityDisclosure: value.BrowserActivityDisclosure,
-		StartRuleID: value.Policy.StartRuleID, PolicyRevisionID: value.PolicyRevisionID.String(), PolicyDigest: value.PolicyDigest,
-		Rules: make([]candidateBrowserPolicyRuleResponse, len(value.Policy.Rules))}
-	for index, rule := range value.Policy.Rules {
-		response.Rules[index] = candidateBrowserPolicyRuleResponse{RuleID: rule.RuleID, Origin: rule.Origin, PathPrefix: rule.PathPrefix,
-			HostMatch: string(rule.HostMatch), AllowRedirects: rule.AllowRedirects, BlockedNavigationOutcome: string(rule.BlockedNavigationOutcome), InstitutionHTTPException: rule.InstitutionHTTPException}
+
+	response := &candidateBrowserPolicyResponse{
+		Enabled:                   value.Policy.Enabled,
+		PolicyRevisionNumber:      value.PolicyRevisionNumber,
+		BrowserActivityDisclosure: value.BrowserActivityDisclosure,
+		StartRuleID:               value.Policy.StartRuleID,
+		PolicyRevisionID:          value.PolicyRevisionID.String(),
+		PolicyDigest:              value.PolicyDigest,
+		Rules:                     make([]candidateBrowserPolicyRuleResponse, len(value.Policy.Rules)),
 	}
+	for index, rule := range value.Policy.Rules {
+		response.Rules[index] = candidateBrowserPolicyRuleResponse{
+			RuleID:                   rule.RuleID,
+			Origin:                   rule.Origin,
+			PathPrefix:               rule.PathPrefix,
+			HostMatch:                string(rule.HostMatch),
+			AllowRedirects:           rule.AllowRedirects,
+			BlockedNavigationOutcome: string(rule.BlockedNavigationOutcome),
+			InstitutionHTTPException: rule.InstitutionHTTPException,
+		}
+	}
+
 	return response
 }
 
 func candidateLiveCorrectionsWire(values []model.CandidateLiveCorrection) []candidateLiveCorrectionResponse {
 	result := make([]candidateLiveCorrectionResponse, len(values))
 	for index, value := range values {
-		item := candidateLiveCorrectionResponse{RevisionID: value.RevisionID.String(), RevisionNumber: value.RevisionNumber,
-			EffectiveAt: model.FormatRFC3339(value.EffectiveAt), Summary: value.Summary,
-			ChangedAreas:         append([]model.ExamCorrectionChangedArea(nil), value.ChangedAreas...),
-			AffectedCapabilities: append([]model.CandidateCapability{}, value.AffectedCapabilities...), AcknowledgementRequired: value.AcknowledgementRequired, AcknowledgementState: value.AcknowledgementState}
+		item := candidateLiveCorrectionResponse{
+			RevisionID:              value.RevisionID.String(),
+			RevisionNumber:          value.RevisionNumber,
+			EffectiveAt:             model.FormatRFC3339(value.EffectiveAt),
+			Summary:                 value.Summary,
+			ChangedAreas:            append([]model.ExamCorrectionChangedArea(nil), value.ChangedAreas...),
+			AffectedCapabilities:    append([]model.CandidateCapability{}, value.AffectedCapabilities...),
+			AcknowledgementRequired: value.AcknowledgementRequired,
+			AcknowledgementState:    value.AcknowledgementState,
+		}
 		if value.AcknowledgedAt.Valid {
 			at := model.FormatRFC3339(value.AcknowledgedAt.Time)
 			item.AcknowledgedAt = &at
 		}
+
 		result[index] = item
 	}
+
 	return result
 }
 
@@ -383,9 +477,15 @@ func decodeExamAttemptRenewRequest(document json.RawMessage) (examAttemptRenewRe
 	if err != nil {
 		return value, err
 	}
-	if len(document) > model.SecurityControlMaxBytes || value.SecurityCoverage.Validate() != nil || value.Generation < 1 || value.Sequence < 1 || !model.IsValidCredentialToken(value.ContinuityCredential) {
+
+	if len(document) > model.SecurityControlMaxBytes ||
+		value.SecurityCoverage.Validate() != nil ||
+		value.Generation < 1 ||
+		value.Sequence < 1 ||
+		!model.IsValidCredentialToken(value.ContinuityCredential) {
 		return value, errors.New("Exam Attempt renewal request fields are invalid")
 	}
+
 	return value, nil
 }
 
@@ -394,12 +494,17 @@ func decodeExamAttemptFocusLossRequest(document json.RawMessage) (examAttemptFoc
 	if err != nil {
 		return value, err
 	}
-	if value.SchemaVersion != model.FocusLossSignalSchemaVersion || value.Generation < 1 || value.Sequence < 1 ||
+
+	if value.SchemaVersion != model.FocusLossSignalSchemaVersion ||
+		value.Generation < 1 ||
+		value.Sequence < 1 ||
 		value.DurationMilliseconds < 1 ||
 		value.DurationMilliseconds > model.FocusLossMaximumDurationMilliseconds ||
-		!model.FocusLossSource(value.Source).IsValid() || !model.IsValidCredentialToken(value.ContinuityCredential) {
+		!model.FocusLossSource(value.Source).IsValid() ||
+		!model.IsValidCredentialToken(value.ContinuityCredential) {
 		return value, errors.New("Exam Attempt Focus Loss request fields are invalid")
 	}
+
 	return value, nil
 }
 
@@ -408,17 +513,20 @@ func decodeStrictExamAttemptObject[T any](document json.RawMessage, label string
 	if !utf8.Valid(document) {
 		return value, errors.New(label + " must be valid UTF-8")
 	}
+
 	decoder := json.NewDecoder(bytes.NewReader(document))
 	token, err := decoder.Token()
 	if err != nil || token != json.Delim('{') {
 		return value, errors.New(label + " must be an object")
 	}
+
 	seen := make(map[string]struct{}, expectedMembers)
 	for decoder.More() {
 		member, tokenErr := decoder.Token()
 		if tokenErr != nil {
 			return value, tokenErr
 		}
+
 		name, ok := member.(string)
 		if !ok {
 			return value, errors.New(label + " member is invalid")
@@ -426,27 +534,33 @@ func decodeStrictExamAttemptObject[T any](document json.RawMessage, label string
 		if _, duplicate := seen[name]; duplicate {
 			return value, errors.New(label + " contains a duplicate member")
 		}
+
 		seen[name] = struct{}{}
 		var raw json.RawMessage
 		if err = decoder.Decode(&raw); err != nil {
 			return value, err
 		}
 	}
+
 	if _, err = decoder.Token(); err != nil {
 		return value, err
 	}
+
 	strict := json.NewDecoder(bytes.NewReader(document))
 	strict.DisallowUnknownFields()
 	if err = strict.Decode(&value); err != nil {
 		return value, err
 	}
+
 	var trailing any
 	if err = strict.Decode(&trailing); !errors.Is(err, io.EOF) {
 		if err == nil {
 			return value, errors.New(label + " contains trailing JSON")
 		}
+
 		return value, err
 	}
+
 	return value, nil
 }
 
@@ -507,8 +621,13 @@ func decodeExamAttemptSecurityUpdateRequest(raw json.RawMessage) (examAttemptSec
 	if err != nil {
 		return value, err
 	}
-	if len(raw) > model.SecurityControlMaxBytes || value.Generation < 1 || !model.IsValidCredentialToken(value.ContinuityCredential) || value.SecurityCoverage.Validate() != nil {
+
+	if len(raw) > model.SecurityControlMaxBytes ||
+		value.Generation < 1 ||
+		!model.IsValidCredentialToken(value.ContinuityCredential) ||
+		value.SecurityCoverage.Validate() != nil {
 		return value, errors.New("invalid security coverage update")
 	}
+
 	return value, nil
 }

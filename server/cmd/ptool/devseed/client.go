@@ -47,9 +47,17 @@ func nested(value object, key string) object { obj, _ := value[key].(map[string]
 
 func loopbackOrigin(raw string) (string, error) {
 	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "http" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" || (u.Path != "" && u.Path != "/") || u.RawPath != "" {
+	if err != nil ||
+		u.Scheme != "http" ||
+		u.User != nil ||
+		u.RawQuery != "" ||
+		u.Fragment != "" ||
+		u.Opaque != "" ||
+		(u.Path != "" && u.Path != "/") ||
+		u.RawPath != "" {
 		return "", errors.New("seed requires an HTTP loopback origin with an explicit port")
 	}
+
 	host := u.Hostname()
 	if host != "localhost" {
 		ip := net.ParseIP(host)
@@ -57,10 +65,12 @@ func loopbackOrigin(raw string) (string, error) {
 			return "", errors.New("seed refuses non-loopback origins")
 		}
 	}
+
 	port, err := strconv.Atoi(u.Port())
 	if err != nil || port < 1 || port > 65535 {
 		return "", errors.New("seed requires an explicit valid port")
 	}
+
 	return "http://" + net.JoinHostPort(host, strconv.Itoa(port)), nil
 }
 
@@ -95,11 +105,20 @@ func (e *responseError) Error() string {
 	return fmt.Sprintf("server returned HTTP %d (response body withheld)", e.Status)
 }
 
-func (r *runner) request(origin, method, path, token, key string, body json.RawMessage, content []byte) (json.RawMessage, http.Header, error) {
+func (r *runner) request(
+	origin, method, path, token, key string,
+	body json.RawMessage,
+	content []byte,
+) (json.RawMessage, http.Header, error) {
 	return r.requestWithMatch(origin, method, path, token, key, body, content, "")
 }
 
-func (r *runner) requestWithMatch(origin, method, path, token, key string, body json.RawMessage, content []byte, ifMatch string) (json.RawMessage, http.Header, error) {
+func (r *runner) requestWithMatch(
+	origin, method, path, token, key string,
+	body json.RawMessage,
+	content []byte,
+	ifMatch string,
+) (json.RawMessage, http.Header, error) {
 	// Retain aliases within this run: collection readers may hold the previous
 	// token while a long fixture crosses the ordinary access-token deadline.
 	var owner *account
@@ -112,15 +131,18 @@ func (r *runner) requestWithMatch(origin, method, path, token, key string, body 
 					if r.tokens == nil {
 						r.tokens = map[string]*account{}
 					}
+
 					r.tokens[token] = a
 					break
 				}
 			}
 		}
+
 		if owner != nil {
 			token = owner.Token
 		}
 	}
+
 	raw, headers, err := r.send(origin, method, path, token, key, body, content, ifMatch)
 	var failed *responseError
 	if owner == nil || path == "/api/v1/users/me" || !errors.As(err, &failed) || failed.Status != http.StatusUnauthorized {
@@ -129,21 +151,30 @@ func (r *runner) requestWithMatch(origin, method, path, token, key string, body 
 	if err = r.login(owner); err != nil {
 		return nil, nil, err
 	}
+
 	// Retry only once, with the exact body and idempotency key already journaled.
 	return r.send(origin, method, path, owner.Token, key, body, content, ifMatch)
 }
 
-func (r *runner) send(origin, method, path, token, key string, body json.RawMessage, content []byte, ifMatch string) (json.RawMessage, http.Header, error) {
+func (r *runner) send(
+	origin, method, path, token, key string,
+	body json.RawMessage,
+	content []byte,
+	ifMatch string,
+) (json.RawMessage, http.Header, error) {
 	if !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") {
 		return nil, nil, errors.New("invalid API path")
 	}
+
 	if body != nil {
 		var compact bytes.Buffer
 		if err := json.Compact(&compact, body); err != nil {
 			return nil, nil, errors.New("invalid saved JSON request")
 		}
+
 		body = compact.Bytes()
 	}
+
 	var payload io.Reader
 	contentType := "application/json"
 	if content != nil && body == nil {
@@ -152,13 +183,17 @@ func (r *runner) send(origin, method, path, token, key string, body json.RawMess
 	} else if content != nil {
 		var buffer bytes.Buffer
 		writer := multipart.NewWriter(&buffer)
-		part, err := writer.CreatePart(textproto.MIMEHeader{"Content-Disposition": {`form-data; name="metadata"`}, "Content-Type": {"application/json"}})
+		part, err := writer.CreatePart(textproto.MIMEHeader{
+			"Content-Disposition": {`form-data; name="metadata"`},
+			"Content-Type":        {"application/json"},
+		})
 		if err != nil {
 			return nil, nil, err
 		}
 		if _, err = part.Write(body); err != nil {
 			return nil, nil, err
 		}
+
 		part, err = writer.CreateFormFile("content", "fixture")
 		if err != nil {
 			return nil, nil, err
@@ -169,34 +204,43 @@ func (r *runner) send(origin, method, path, token, key string, body json.RawMess
 		if err = writer.Close(); err != nil {
 			return nil, nil, err
 		}
+
 		payload, contentType = &buffer, writer.FormDataContentType()
 	} else if body != nil {
 		payload = bytes.NewReader(body)
 	}
+
 	req, err := http.NewRequestWithContext(r.ctx, method, origin+path, payload)
 	if err != nil {
 		return nil, nil, errors.New("could not construct local request")
 	}
+
 	req.Header.Set("Accept", "application/json")
 	if payload != nil {
 		req.Header.Set("Content-Type", contentType)
 	}
+
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
+
 	if key != "" {
 		req.Header.Set("Idempotency-Key", key)
 	}
+
 	if ifMatch != "" {
 		req.Header.Set("If-Match", ifMatch)
 	}
+
 	resp, err := r.client.Do(req)
 	if err != nil {
 		if r.ctx.Err() != nil {
 			return nil, nil, r.ctx.Err()
 		}
+
 		return nil, nil, errors.New("local request failed; rerun to reconcile the saved operation")
 	}
+
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20+1))
 	if err != nil || len(raw) > 8<<20 {
@@ -205,6 +249,7 @@ func (r *runner) send(origin, method, path, token, key string, body json.RawMess
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, resp.Header, &responseError{Status: resp.StatusCode}
 	}
+
 	return raw, resp.Header, nil
 }
 
@@ -220,6 +265,7 @@ func (r *runner) list(path, token string) ([]object, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		var items []object
 		if err := json.Unmarshal(raw, &items); err != nil {
 			var wrapped struct {
@@ -229,6 +275,7 @@ func (r *runner) list(path, token string) ([]object, error) {
 			if err = json.Unmarshal(raw, &wrapped); err != nil {
 				return nil, errors.New("invalid collection response")
 			}
+
 			items = wrapped.Items
 			if wrapped.NextCursor != "" {
 				u, _ := url.Parse(path)
@@ -240,16 +287,19 @@ func (r *runner) list(path, token string) ([]object, error) {
 				continue
 			}
 		}
+
 		results = append(results, items...)
 		next := ""
 		for _, link := range strings.Split(headers.Get("Link"), ",") {
 			if !strings.Contains(link, `rel="next"`) {
 				continue
 			}
+
 			start, end := strings.Index(link, "<"), strings.Index(link, ">")
 			if start < 0 || end <= start {
 				return nil, errors.New("invalid pagination link")
 			}
+
 			u, err := url.Parse(link[start+1 : end])
 			if err != nil {
 				return nil, errors.New("invalid pagination link")
@@ -260,12 +310,16 @@ func (r *runner) list(path, token string) ([]object, error) {
 			if u.User != nil || u.Fragment != "" {
 				return nil, errors.New("invalid pagination link")
 			}
+
 			next = u.RequestURI()
 		}
+
 		if next == "" {
 			return results, nil
 		}
+
 		path = next
 	}
+
 	return nil, errors.New("collection exceeded 100 pages")
 }

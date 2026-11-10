@@ -42,6 +42,7 @@ func verifyStoreTableConstraints(moduleDir string) error {
 	if err != nil {
 		return err
 	}
+
 	var dead []string
 	fset := token.NewFileSet()
 	err = walkProductionGo(filepath.Join(moduleDir, "app"), func(path string) error {
@@ -49,21 +50,28 @@ func verifyStoreTableConstraints(moduleDir string) error {
 		if parseErr != nil {
 			return parseErr
 		}
+
 		for _, constraint := range storeTableConstraintKeys(file) {
 			if !produced[constraint.name] {
-				dead = append(dead, fmt.Sprintf("%s: StoreTable maps constraint %q that the Store never produces",
-					relativeSourcePath(fset.Position(constraint.pos).String()), constraint.name))
+				dead = append(dead, fmt.Sprintf(
+					"%s: StoreTable maps constraint %q that the Store never produces",
+					relativeSourcePath(fset.Position(constraint.pos).String()),
+					constraint.name,
+				))
 			}
 		}
+
 		return nil
 	})
 	if err != nil {
 		return err
 	}
+
 	if len(dead) > 0 {
 		sort.Strings(dead)
 		return errors.New(strings.Join(dead, "\n"))
 	}
+
 	return nil
 }
 
@@ -81,6 +89,7 @@ func storeTableConstraintKeys(file *ast.File) []storeTableConstraint {
 		if !ok || !isStoreTableType(table.Type) {
 			return true
 		}
+
 		for _, element := range table.Elts {
 			field, ok := element.(*ast.KeyValueExpr)
 			if !ok {
@@ -89,15 +98,18 @@ func storeTableConstraintKeys(file *ast.File) []storeTableConstraint {
 			if name, isIdent := field.Key.(*ast.Ident); !isIdent || name.Name != "Constraints" {
 				continue
 			}
+
 			constraints, ok := field.Value.(*ast.CompositeLit)
 			if !ok {
 				continue
 			}
+
 			for _, entry := range constraints.Elts {
 				pair, ok := entry.(*ast.KeyValueExpr)
 				if !ok {
 					continue
 				}
+
 				if literal, ok := pair.Key.(*ast.BasicLit); ok && literal.Kind == token.STRING {
 					if value, err := strconv.Unquote(literal.Value); err == nil {
 						keys = append(keys, storeTableConstraint{name: value, pos: literal.Pos()})
@@ -105,6 +117,7 @@ func storeTableConstraintKeys(file *ast.File) []storeTableConstraint {
 				}
 			}
 		}
+
 		return true
 	})
 	return keys
@@ -130,12 +143,14 @@ func producedStoreConstraints(moduleDir string) (map[string]bool, error) {
 			if err != nil {
 				return err
 			}
+
 			ast.Inspect(file, func(node ast.Node) bool {
 				if literal, ok := node.(*ast.BasicLit); ok && literal.Kind == token.STRING {
 					if value, unquoteErr := strconv.Unquote(literal.Value); unquoteErr == nil {
 						produced[value] = true
 					}
 				}
+
 				return true
 			})
 			return nil
@@ -144,19 +159,23 @@ func producedStoreConstraints(moduleDir string) (map[string]bool, error) {
 			return nil, err
 		}
 	}
+
 	schemas, err := filepath.Glob(filepath.Join(moduleDir, storeConstraintSchema, "*.up.sql"))
 	if err != nil {
 		return nil, err
 	}
+
 	for _, schema := range schemas {
 		source, readErr := os.ReadFile(filepath.Clean(schema))
 		if readErr != nil {
 			return nil, fmt.Errorf("read SQL schema %s: %w", schema, readErr)
 		}
+
 		for _, identifier := range sqlIdentifier.FindAllString(string(source), -1) {
 			produced[identifier] = true
 		}
 	}
+
 	return produced, nil
 }
 

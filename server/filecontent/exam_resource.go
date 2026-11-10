@@ -50,7 +50,14 @@ var disablePDFCPUConfigDir sync.Once
 // authored bytes under an opaque immutable rendition identity. The returned
 // metadata is safe to pass to the named SQL finalization operation; the VFS
 // key remains private to File Content.
-func (c *Content) StoreExamResource(ctx context.Context, revisionID model.FileRevisionID, mediaType model.ExamResourceMediaType, body io.Reader, declaredSize int64, at time.Time) (model.FileRendition, error) {
+func (c *Content) StoreExamResource(
+	ctx context.Context,
+	revisionID model.FileRevisionID,
+	mediaType model.ExamResourceMediaType,
+	body io.Reader,
+	declaredSize int64,
+	at time.Time,
+) (model.FileRendition, error) {
 	return c.StoreExamResourceRendition(ctx, revisionID, model.NewFileRenditionID(), mediaType, body, declaredSize, at)
 }
 
@@ -58,14 +65,31 @@ func (c *Content) StoreExamResource(ctx context.Context, revisionID model.FileRe
 // caller-preallocated opaque identity. Preallocation lets an idempotent Stage
 // command resume after an unknown VFS or database commit outcome without
 // discovering object keys or allocating a second rendition.
-func (c *Content) StoreExamResourceRendition(ctx context.Context, revisionID model.FileRevisionID, renditionID model.FileRenditionID, mediaType model.ExamResourceMediaType, body io.Reader, declaredSize int64, at time.Time) (model.FileRendition, error) {
-	if c == nil || c.filesystem == nil || !revisionID.IsValid() || !renditionID.IsValid() || !mediaType.IsValid() || body == nil || declaredSize < 0 || declaredSize > model.ExamResourceMaximumBytes {
+func (c *Content) StoreExamResourceRendition(
+	ctx context.Context,
+	revisionID model.FileRevisionID,
+	renditionID model.FileRenditionID,
+	mediaType model.ExamResourceMediaType,
+	body io.Reader,
+	declaredSize int64,
+	at time.Time,
+) (model.FileRendition, error) {
+	if c == nil ||
+		c.filesystem == nil ||
+		!revisionID.IsValid() ||
+		!renditionID.IsValid() ||
+		!mediaType.IsValid() ||
+		body == nil ||
+		declaredSize < 0 ||
+		declaredSize > model.ExamResourceMaximumBytes {
 		return model.FileRendition{}, ErrInvalidExamResourceContent
 	}
+
 	finish, err := c.beginWork(ctx)
 	if err != nil {
 		return model.FileRendition{}, err
 	}
+
 	defer finish()
 	if err = ctx.Err(); err != nil {
 		return model.FileRendition{}, err
@@ -77,6 +101,7 @@ func (c *Content) StoreExamResourceRendition(ctx context.Context, revisionID mod
 	if err != nil {
 		return model.FileRendition{}, sanitize("create exam resource spool", err)
 	}
+
 	defer releaseSpool()
 
 	digest := sha256.New()
@@ -94,11 +119,13 @@ func (c *Content) StoreExamResourceRendition(ctx context.Context, revisionID mod
 	if err = ctx.Err(); err != nil {
 		return model.FileRendition{}, err
 	}
+
 	spoolReader := workReadSeeker{ctx: ctx, reader: spool}
 	if _, err = spoolReader.Seek(0, io.SeekStart); err != nil {
 		if cancellation := ctx.Err(); cancellation != nil {
 			return model.FileRendition{}, cancellation
 		}
+
 		return model.FileRendition{}, sanitize("rewind exam resource spool", err)
 	}
 
@@ -107,12 +134,14 @@ func (c *Content) StoreExamResourceRendition(ctx context.Context, revisionID mod
 	if err != nil {
 		return model.FileRendition{}, ErrInvalidExamResourceContent
 	}
+
 	conditionalWrite := c.filesystem.Capabilities().ConditionalWrite
 	if !conditionalWrite {
 		matching, openErr := c.openMatchingExamResource(ctx, revisionID, renditionID, size, checksum)
 		if cancellation := ctx.Err(); cancellation != nil {
 			return model.FileRendition{}, cancellation
 		}
+
 		switch {
 		case openErr == nil && matching:
 			return *rendition, nil
@@ -122,10 +151,17 @@ func (c *Content) StoreExamResourceRendition(ctx context.Context, revisionID mod
 			return model.FileRendition{}, sanitize("stage exam resource", openErr)
 		}
 	}
-	_, err = c.filesystem.Write(ctx, examResourceRenditionKey(revisionID, renditionID), spoolReader, vfs.WriteOptions{Size: &size, NoOverwrite: conditionalWrite})
+
+	_, err = c.filesystem.Write(
+		ctx,
+		examResourceRenditionKey(revisionID, renditionID),
+		spoolReader,
+		vfs.WriteOptions{Size: &size, NoOverwrite: conditionalWrite},
+	)
 	if cancellation := ctx.Err(); cancellation != nil {
 		return model.FileRendition{}, cancellation
 	}
+
 	if err != nil {
 		existing, verifyErr := c.openMatchingExamResource(ctx, revisionID, renditionID, size, checksum)
 		if cancellation := ctx.Err(); cancellation != nil {
@@ -134,20 +170,30 @@ func (c *Content) StoreExamResourceRendition(ctx context.Context, revisionID mod
 		if verifyErr == nil && existing {
 			return *rendition, nil
 		}
+
 		return model.FileRendition{}, sanitize("stage exam resource", err)
 	}
+
 	return *rendition, nil
 }
 
-func (c *Content) openMatchingExamResource(ctx context.Context, revisionID model.FileRevisionID, renditionID model.FileRenditionID, size int64, checksum string) (bool, error) {
+func (c *Content) openMatchingExamResource(
+	ctx context.Context,
+	revisionID model.FileRevisionID,
+	renditionID model.FileRenditionID,
+	size int64,
+	checksum string,
+) (bool, error) {
 	file, err := c.filesystem.Open(ctx, examResourceRenditionKey(revisionID, renditionID), vfs.OpenOptions{})
 	if err != nil {
 		return false, err
 	}
+
 	defer file.Body.Close()
 	if file.Info.Size != size {
 		return false, nil
 	}
+
 	digest := sha256.New()
 	read, err := io.Copy(digest, io.LimitReader(workReader{ctx: ctx, reader: file.Body}, size+1))
 	if cancellation := ctx.Err(); cancellation != nil {
@@ -156,19 +202,26 @@ func (c *Content) openMatchingExamResource(ctx context.Context, revisionID model
 	if err != nil {
 		return false, err
 	}
+
 	return read == size && fmt.Sprintf("%x", digest.Sum(nil)) == checksum, nil
 }
 
 // OpenExamResource opens only the exact rendition selected by authoritative
 // Exam Resource metadata. It performs no discovery and exposes no object key.
-func (c *Content) OpenExamResource(ctx context.Context, revisionID model.FileRevisionID, renditionID model.FileRenditionID) (io.ReadCloser, error) {
+func (c *Content) OpenExamResource(
+	ctx context.Context,
+	revisionID model.FileRevisionID,
+	renditionID model.FileRenditionID,
+) (io.ReadCloser, error) {
 	if c == nil || c.filesystem == nil || !revisionID.IsValid() || !renditionID.IsValid() {
 		return nil, ErrInvalidExamResourceContent
 	}
+
 	file, err := c.filesystem.Open(ctx, examResourceRenditionKey(revisionID, renditionID), vfs.OpenOptions{})
 	if err != nil {
 		return nil, sanitize("open exam resource", err)
 	}
+
 	return file.Body, nil
 }
 
@@ -321,10 +374,15 @@ func blockedExamResourcePDFValue(key string, object types.Object) bool {
 
 func validateExamResourceImage(file io.ReadSeeker, mediaType model.ExamResourceMediaType, size int64) error {
 	config, format, err := image.DecodeConfig(file)
-	want := map[model.ExamResourceMediaType]string{model.ExamResourceMediaPNG: "png", model.ExamResourceMediaJPEG: "jpeg", model.ExamResourceMediaWebP: "webp"}[mediaType]
+	want := map[model.ExamResourceMediaType]string{
+		model.ExamResourceMediaPNG:  "png",
+		model.ExamResourceMediaJPEG: "jpeg",
+		model.ExamResourceMediaWebP: "webp",
+	}[mediaType]
 	if err != nil || format != want || config.Width <= 0 || config.Height <= 0 || config.Width > maximumExamResourcePixels/config.Height {
 		return ErrInvalidExamResourceContent
 	}
+
 	if format == "jpeg" {
 		if _, err = file.Seek(0, io.SeekStart); err != nil {
 			return err
@@ -333,12 +391,14 @@ func validateExamResourceImage(file io.ReadSeeker, mediaType model.ExamResourceM
 			return ErrInvalidExamResourceContent
 		}
 	}
+
 	if _, err = file.Seek(0, io.SeekStart); err != nil {
 		return err
 	}
 	if _, _, err = image.Decode(file); err != nil {
 		return ErrInvalidExamResourceContent
 	}
+
 	return validateExactImageEnvelope(file, mediaType, size)
 }
 
@@ -351,6 +411,7 @@ func validateExactImageEnvelope(file io.ReadSeeker, mediaType model.ExamResource
 		if _, err := file.Seek(-12, io.SeekEnd); err != nil {
 			return err
 		}
+
 		var tail [12]byte
 		if _, err := io.ReadFull(file, tail[:]); err != nil || tail != [12]byte{0, 0, 0, 0, 'I', 'E', 'N', 'D', 0xae, 0x42, 0x60, 0x82} {
 			return ErrInvalidExamResourceContent
@@ -362,6 +423,7 @@ func validateExactImageEnvelope(file io.ReadSeeker, mediaType model.ExamResource
 		if _, err := file.Seek(-2, io.SeekEnd); err != nil {
 			return err
 		}
+
 		var tail [2]byte
 		if _, err := io.ReadFull(file, tail[:]); err != nil || tail != [2]byte{0xff, 0xd9} {
 			return ErrInvalidExamResourceContent
@@ -373,13 +435,21 @@ func validateExactImageEnvelope(file io.ReadSeeker, mediaType model.ExamResource
 		if _, err := file.Seek(0, io.SeekStart); err != nil {
 			return err
 		}
+
 		var header [12]byte
-		if _, err := io.ReadFull(file, header[:]); err != nil || string(header[:4]) != "RIFF" || string(header[8:]) != "WEBP" || uint64(binary.LittleEndian.Uint32(header[4:8]))+8 != uint64(size) {
+		if _, err := io.ReadFull(
+			file,
+			header[:],
+		); err != nil ||
+			string(header[:4]) != "RIFF" ||
+			string(header[8:]) != "WEBP" ||
+			uint64(binary.LittleEndian.Uint32(header[4:8]))+8 != uint64(size) {
 			return ErrInvalidExamResourceContent
 		}
 	default:
 		return ErrInvalidExamResourceContent
 	}
+
 	return nil
 }
 
@@ -405,6 +475,7 @@ func validateExamResourceUTF8(file io.ReadSeeker) error {
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		return err
 	}
+
 	reader := bufio.NewReaderSize(file, examResourceCopyBuffer)
 	var prefix [4]byte
 	prefixSize := 0
@@ -420,6 +491,7 @@ func validateExamResourceUTF8(file io.ReadSeeker) error {
 		if leading && unicode.IsSpace(r) {
 			continue
 		}
+
 		leading = false
 		if prefixSize < len(prefix) {
 			var encoded [utf8.UTFMax]byte
@@ -427,10 +499,12 @@ func validateExamResourceUTF8(file io.ReadSeeker) error {
 			prefixSize += copy(prefix[prefixSize:], encoded[:encodedSize])
 		}
 	}
+
 	for _, blocked := range [][]byte{{'M', 'Z'}, {'P', 'K', 3, 4}, {0x7f, 'E', 'L', 'F'}, {'#', '!'}} {
 		if prefixSize >= len(blocked) && string(prefix[:len(blocked)]) == string(blocked) {
 			return ErrInvalidExamResourceContent
 		}
 	}
+
 	return nil
 }

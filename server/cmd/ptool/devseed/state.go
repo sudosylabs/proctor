@@ -64,19 +64,30 @@ func (j *journal) validate() error {
 	if j.StartedAt.IsZero() || j.ScheduleAt.IsZero() || j.Generation < 0 {
 		return errors.New("invalid seed journal schedule")
 	}
+
 	for _, a := range j.Accounts {
 		if a == nil || a.Username == "" || a.Email == "" || a.Password == "" {
 			return errors.New("invalid seed journal account")
 		}
 	}
+
 	for _, op := range j.Operations {
-		if op == nil || op.Done && !json.Valid(op.Result) || !op.Done && (op.PreparedAt.IsZero() || op.Method == "" || op.Path == "" || !json.Valid(op.Body)) {
+		if op == nil ||
+			op.Done && !json.Valid(op.Result) ||
+			!op.Done && (op.PreparedAt.IsZero() || op.Method == "" || op.Path == "" || !json.Valid(op.Body)) {
 			return errors.New("invalid seed journal operation")
 		}
-		if op.IfMatch != "" && (!pictureETag(op.IfMatch) || op.Method != "PUT" || !strings.HasSuffix(op.Path, "/profile-picture") || len(op.Content) == 0 || string(op.Body) != "null") {
+
+		if op.IfMatch != "" &&
+			(!pictureETag(op.IfMatch) ||
+				op.Method != "PUT" ||
+				!strings.HasSuffix(op.Path, "/profile-picture") ||
+				len(op.Content) == 0 ||
+				string(op.Body) != "null") {
 			return errors.New("invalid seed journal picture upload")
 		}
 	}
+
 	return nil
 }
 
@@ -103,18 +114,22 @@ func writeJSON(path string, value any) error {
 	if err := privateFile(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
+
 	raw, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return err
 	}
+
 	f, err := os.CreateTemp(filepath.Dir(path), ".seed-*")
 	if err != nil {
 		return err
 	}
+
 	defer os.Remove(f.Name())
 	if _, err = f.Write(append(raw, '\n')); err == nil {
 		err = f.Sync()
 	}
+
 	closeErr := f.Close()
 	if err != nil {
 		return err
@@ -125,10 +140,12 @@ func writeJSON(path string, value any) error {
 	if err = os.Rename(f.Name(), path); err != nil {
 		return err
 	}
+
 	directory, err := os.Open(filepath.Dir(path))
 	if err != nil {
 		return err
 	}
+
 	defer directory.Close()
 	return directory.Sync()
 }
@@ -146,11 +163,13 @@ func (r *runner) step(key, token, method, path string, body object, content []by
 	if exists && op.Done {
 		return decode(op.Result), nil
 	}
+
 	if !exists {
 		raw, err := json.Marshal(body)
 		if err != nil {
 			return nil, err
 		}
+
 		op = &operation{PreparedAt: time.Now().UTC(), Method: method, Path: path, Body: raw, Content: content}
 		r.state.Operations[key] = op
 		if err := r.save(); err != nil {
@@ -161,17 +180,23 @@ func (r *runner) step(key, token, method, path string, body object, content []by
 		if err != nil {
 			return nil, fmt.Errorf("reconcile %s: %w", key, err)
 		}
+
 		if found {
 			op.Done, op.Result = true, raw
 			return decode(raw), r.save()
 		}
 	}
+
 	// Server command outcomes are retained for 24 hours. Use a deliberately
 	// shorter retry window when an authoritative read cannot prove completion;
 	// never turn an expired key into another blind create.
 	if exists && (op.PreparedAt.IsZero() || time.Since(op.PreparedAt) > time.Hour) {
-		return nil, fmt.Errorf("seed step %s has an unresolved outcome older than the one-hour automatic retry window; inspect it before continuing", key)
+		return nil, fmt.Errorf(
+			"seed step %s has an unresolved outcome older than the one-hour automatic retry window; inspect it before continuing",
+			key,
+		)
 	}
+
 	digest := sha256.Sum256([]byte(r.state.RunID + "/" + key))
 	idempotencyKey := ""
 	// These seeded operations require command idempotency. Older administration
@@ -179,20 +204,25 @@ func (r *runner) step(key, token, method, path string, body object, content []by
 	if op.Path == "/api/v1/exams" || strings.HasPrefix(op.Path, "/api/v1/exams/") || op.Path == "/api/v1/users/me/settings" {
 		idempotencyKey = "dev-seed-" + hex.EncodeToString(digest[:16])
 	}
+
 	requestBody := op.Body
 	if op.IfMatch != "" {
 		requestBody = nil // A journaled, revision-fenced raw picture upload.
 	}
+
 	raw, _, err := r.requestWithMatch(r.state.Server, op.Method, op.Path, token, idempotencyKey, requestBody, op.Content, op.IfMatch)
 	if err != nil {
 		return nil, fmt.Errorf("seed step %s: %w", key, err)
 	}
+
 	if len(raw) == 0 {
 		raw = json.RawMessage(`{}`)
 	}
+
 	if !json.Valid(raw) {
 		return nil, fmt.Errorf("seed step %s returned invalid JSON", key)
 	}
+
 	op.Done, op.Result = true, raw
 	return decode(raw), r.save()
 }

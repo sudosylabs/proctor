@@ -50,6 +50,7 @@ func Run(ctx context.Context, options Options, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+
 	mailpit, err := loopbackOrigin(options.MailpitURL)
 	if err != nil {
 		return err
@@ -66,6 +67,7 @@ func Run(ctx context.Context, options Options, out io.Writer) error {
 	if err = os.MkdirAll(options.StateDir, 0700); err != nil {
 		return err
 	}
+
 	info, err := os.Lstat(options.StateDir)
 	if err != nil {
 		return err
@@ -73,10 +75,12 @@ func Run(ctx context.Context, options Options, out io.Writer) error {
 	if !info.IsDir() || info.Mode().Perm()&0077 != 0 {
 		return errors.New("seed directory must be private (mode 0700) and not a symlink")
 	}
+
 	unlock, err := lockState(filepath.Join(options.StateDir, "lock"))
 	if err != nil {
 		return err
 	}
+
 	defer unlock()
 	r := &runner{ctx: ctx, options: options, client: localHTTPClient(), out: out}
 	defer r.client.CloseIdleConnections()
@@ -89,6 +93,7 @@ func Run(ctx context.Context, options Options, out io.Writer) error {
 		if info.Size() > 32<<20 {
 			return errors.New("seed journal exceeds 32 MiB")
 		}
+
 		raw, readErr := os.ReadFile(path)
 		if readErr != nil {
 			return readErr
@@ -96,14 +101,26 @@ func Run(ctx context.Context, options Options, out io.Writer) error {
 		if len(raw) > 32<<20 {
 			return errors.New("seed journal exceeds 32 MiB")
 		}
+
 		decoder := json.NewDecoder(bytes.NewReader(raw))
 		decoder.DisallowUnknownFields()
 		if err = decoder.Decode(&r.state); err != nil || r.state == nil {
 			return errors.New("invalid seed journal; it may come from another format, so use a separate pristine development installation")
 		}
-		if r.state.Server != server || r.state.Mailpit != mailpit || r.state.Profile != options.Profile || r.state.Seed != options.Seed || len(r.state.RunID) != 32 || r.state.Accounts == nil || r.state.Operations == nil || r.state.Records == nil {
-			return errors.New("seed journal origin or dataset does not match; use its original options or a separate pristine development installation")
+
+		if r.state.Server != server ||
+			r.state.Mailpit != mailpit ||
+			r.state.Profile != options.Profile ||
+			r.state.Seed != options.Seed ||
+			len(r.state.RunID) != 32 ||
+			r.state.Accounts == nil ||
+			r.state.Operations == nil ||
+			r.state.Records == nil {
+			return errors.New(
+				"seed journal origin or dataset does not match; use its original options or a separate pristine development installation",
+			)
 		}
+
 		if err = r.state.validate(); err != nil {
 			return err
 		}
@@ -115,11 +132,22 @@ func Run(ctx context.Context, options Options, out io.Writer) error {
 				return errors.New("legacy or incomplete seed state found; preserve it and use a separate pristine development installation")
 			}
 		}
-		r.state = &journal{Server: server, Mailpit: mailpit, Profile: options.Profile, Seed: options.Seed, StartedAt: time.Now().UTC(), Accounts: map[string]*account{}, Operations: map[string]*operation{}, Records: map[string]record{}}
+
+		r.state = &journal{
+			Server:     server,
+			Mailpit:    mailpit,
+			Profile:    options.Profile,
+			Seed:       options.Seed,
+			StartedAt:  time.Now().UTC(),
+			Accounts:   map[string]*account{},
+			Operations: map[string]*operation{},
+			Records:    map[string]record{},
+		}
 		r.state.RunID, err = randomHex(16)
 		if err != nil {
 			return err
 		}
+
 		r.state.ScheduleAt = r.state.StartedAt
 		// Check readiness and ownership before leaving a new journal behind.
 		status, statusErr := r.get("/api/v1/bootstrap", "")
@@ -133,28 +161,34 @@ func Run(ctx context.Context, options Options, out io.Writer) error {
 			return err
 		}
 	}
+
 	if err = r.bootstrap(); err != nil {
 		return err
 	}
+
 	if options.RefreshSittings {
 		if !r.state.Ready {
 			return errors.New("finish the pending seed run without --refresh-sittings first")
 		}
+
 		r.state.Generation++
 		next := time.Now().UTC()
 		if !next.After(r.state.ScheduleAt.Add(time.Second)) {
 			next = r.state.ScheduleAt.Add(time.Second)
 		}
+
 		r.state.ScheduleAt = next
 		r.state.Ready = false
 		if err = r.save(); err != nil {
 			return err
 		}
 	}
+
 	if !r.state.Ready {
 		if err = r.preflight(); err != nil {
 			return err
 		}
+
 		fmt.Fprintln(out, "Creating or reconciling the synthetic development dataset…")
 		if err = r.populate(); err != nil {
 			return err
@@ -162,6 +196,7 @@ func Run(ctx context.Context, options Options, out io.Writer) error {
 		if err = r.verify(); err != nil {
 			return err
 		}
+
 		r.state.Ready = true
 		if err = r.save(); err != nil {
 			return err
@@ -169,6 +204,7 @@ func Run(ctx context.Context, options Options, out io.Writer) error {
 	} else if err = r.verify(); err != nil {
 		return err
 	}
+
 	return r.report()
 }
 
@@ -180,57 +216,87 @@ func (r *runner) bootstrap() error {
 	if str(decode(raw), "canonical_origin") != r.state.Server {
 		return errors.New("server canonical origin differs from seed origin")
 	}
+
 	admin, err := r.account("administrator", "northbridge-admin", "administrator@northbridge.example")
 	if err != nil {
 		return err
 	}
+
 	raw, err = r.get("/api/v1/bootstrap", "")
 	if err != nil {
 		return err
 	}
+
 	initialized, valid := decode(raw)["initialized"].(bool)
 	if !valid {
 		return errors.New("invalid bootstrap status")
 	}
+
 	if !initialized {
 		if r.state.InstitutionID != "" {
 			return errors.New("the recorded installation has been replaced; refusing to recreate it")
 		}
+
 		var env []byte
 		env, err = os.ReadFile(r.options.EnvironmentFile)
 		if err != nil {
 			return errors.New("cannot read generated development environment; run make dev-state")
 		}
+
 		secret := ""
 		for _, line := range strings.Split(string(env), "\n") {
 			if value, ok := strings.CutPrefix(line, "PROCTOR_AUTHENTICATION_BOOTSTRAP_SECRET="); ok {
 				secret = value
 			}
 		}
+
 		if len(secret) < 32 || len(secret) > 512 {
 			return errors.New("generated bootstrap secret is missing or invalid")
 		}
-		body := object{"institution": object{"name": "northbridge-university", "display_name": "Northbridge University", "description": "Synthetic development fixture " + r.state.RunID}, "administrator": object{"username": admin.Username, "email": admin.Email, "display_name": "Northbridge Administrator", "first_name": "Morgan", "last_name": "Reed", "locale": "en", "timezone": "Europe/London"}, "password": admin.Password, "bootstrap_secret": secret}
+
+		body := object{
+			"institution": object{
+				"name":         "northbridge-university",
+				"display_name": "Northbridge University",
+				"description":  "Synthetic development fixture " + r.state.RunID,
+			},
+			"administrator": object{
+				"username":     admin.Username,
+				"email":        admin.Email,
+				"display_name": "Northbridge Administrator",
+				"first_name":   "Morgan",
+				"last_name":    "Reed",
+				"locale":       "en",
+				"timezone":     "Europe/London",
+			},
+			"password":         admin.Password,
+			"bootstrap_secret": secret,
+		}
 		if _, err = r.step("bootstrap", "", "POST", "/api/v1/bootstrap", body, nil, nil); err != nil {
 			return err
 		}
 	}
+
 	// Login proof plus the private marker reconciles a lost bootstrap response.
 	if err = r.login(admin); err != nil {
 		return err
 	}
+
 	raw, err = r.get("/api/v1/discovery", "")
 	if err != nil {
 		return err
 	}
+
 	discovery := decode(raw)
 	if str(discovery, "canonical_origin") != r.state.Server {
 		return errors.New("server canonical origin differs from seed origin")
 	}
+
 	id := str(nested(discovery, "institution"), "id")
 	if id == "" || (r.state.InstitutionID != "" && r.state.InstitutionID != id) {
 		return errors.New("seed installation identity mismatch")
 	}
+
 	raw, err = r.get("/api/v1/institution", admin.Token)
 	if err != nil {
 		return err
@@ -238,6 +304,7 @@ func (r *runner) bootstrap() error {
 	if r.state.InstitutionID == "" && str(decode(raw), "description") != "Synthetic development fixture "+r.state.RunID {
 		return errors.New("installation does not carry this seed's bootstrap marker")
 	}
+
 	r.state.InstitutionID = id
 	return r.remember("user/administrator", admin.UserID, "Northbridge Administrator", "/api/v1/users/"+admin.UserID)
 }
@@ -277,14 +344,17 @@ func (r *runner) login(a *account) error {
 			if id == "" || (a.UserID != "" && id != a.UserID) {
 				return errors.New("account identity mismatch")
 			}
+
 			a.UserID = id
 			return nil
 		}
+
 		var response *responseError
 		if !errors.As(err, &response) || response.Status != 401 {
 			return err
 		}
 	}
+
 	var raw json.RawMessage
 	var err error
 	if a.RefreshToken != "" {
@@ -294,26 +364,37 @@ func (r *runner) login(a *account) error {
 			return fmt.Errorf("development session refresh failed: %w", err)
 		}
 	}
+
 	if len(raw) == 0 {
-		body, _ := json.Marshal(object{"login_id": a.Username, "password": a.Password, "client_type": "cli", "device_id": "dev-seed-" + r.state.RunID, "device_name": "Proctor development seed"})
+		body, _ := json.Marshal(object{
+			"login_id":    a.Username,
+			"password":    a.Password,
+			"client_type": "cli",
+			"device_id":   "dev-seed-" + r.state.RunID,
+			"device_name": "Proctor development seed",
+		})
 		raw, _, err = r.request(r.state.Server, "POST", "/api/v1/auth/login", "", "", body, nil)
 		if err != nil {
 			return fmt.Errorf("development account login failed: %w", err)
 		}
 	}
+
 	a.Token = str(nested(decode(raw), "tokens"), "access_token")
 	a.RefreshToken = str(nested(decode(raw), "tokens"), "refresh_token")
 	if a.Token == "" || a.RefreshToken == "" {
 		return errors.New("authentication response did not contain both session tokens")
 	}
+
 	raw, err = r.get("/api/v1/users/me", a.Token)
 	if err != nil {
 		return err
 	}
+
 	id := str(decode(raw), "id")
 	if id == "" || (a.UserID != "" && a.UserID != id) {
 		return errors.New("development account identity mismatch")
 	}
+
 	a.UserID = id
 	return r.save()
 }
@@ -353,20 +434,49 @@ func (r *runner) verify() error {
 }
 
 func (r *runner) report() error {
-	manifest := object{"server_url": r.state.Server, "profile": r.state.Profile, "seed": r.state.Seed, "institution_id": r.state.InstitutionID, "created_at": r.state.StartedAt, "sitting_generation": r.state.Generation, "records": r.state.Records}
+	manifest := object{
+		"server_url":         r.state.Server,
+		"profile":            r.state.Profile,
+		"seed":               r.state.Seed,
+		"institution_id":     r.state.InstitutionID,
+		"created_at":         r.state.StartedAt,
+		"sitting_generation": r.state.Generation,
+		"records":            r.state.Records,
+	}
 	users := map[string]object{}
 	credentials := map[string]object{}
 	for key, a := range r.state.Accounts {
-		users[key] = object{"id": a.UserID, "username": a.Username, "email": a.Email, "mfa_enabled": a.MFASecret != "", "seeded_disabled": a.SeededDisabled, "seeded_custom_picture": a.SeededCustomPicture}
+		users[key] = object{
+			"id":                    a.UserID,
+			"username":              a.Username,
+			"email":                 a.Email,
+			"mfa_enabled":           a.MFASecret != "",
+			"seeded_disabled":       a.SeededDisabled,
+			"seeded_custom_picture": a.SeededCustomPicture,
+		}
 		credentials[key] = object{"username": a.Username, "password": a.Password, "mfa_secret": a.MFASecret, "recovery_codes": a.RecoveryCodes}
 	}
+
 	manifest["accounts"] = users
 	if err := writeJSON(filepath.Join(r.options.StateDir, "fixture.json"), manifest); err != nil {
 		return err
 	}
-	if err := writeJSON(filepath.Join(r.options.StateDir, "credentials.json"), object{"server_url": r.state.Server, "accounts": credentials}); err != nil {
+
+	if err := writeJSON(
+		filepath.Join(r.options.StateDir, "credentials.json"),
+		object{"server_url": r.state.Server, "accounts": credentials},
+	); err != nil {
 		return err
 	}
-	fmt.Fprintf(r.out, "Development fixture verified: %d accounts, %d records (%s).\nFixture manifest: %s\nPrivate credentials: %s\n", len(users), len(r.state.Records), r.state.Profile, filepath.Join(r.options.StateDir, "fixture.json"), filepath.Join(r.options.StateDir, "credentials.json"))
+
+	fmt.Fprintf(
+		r.out,
+		"Development fixture verified: %d accounts, %d records (%s).\nFixture manifest: %s\nPrivate credentials: %s\n",
+		len(users),
+		len(r.state.Records),
+		r.state.Profile,
+		filepath.Join(r.options.StateDir, "fixture.json"),
+		filepath.Join(r.options.StateDir, "credentials.json"),
+	)
 	return nil
 }

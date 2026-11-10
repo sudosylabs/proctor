@@ -42,14 +42,30 @@ func programmingTemplate() examTemplate {
 		Directories:   []string{"src", "src/lib", "tests", "notes", "empty-directory"},
 		Files: []fixtureFile{
 			{"README.md", "text/markdown", "# Stable deduplication\n\nExplain your approach, complexity, and test results here.\n"},
-			{"src/main.py", "text/plain", "from lib.records import unique_records\n\nif __name__ == '__main__':\n    print(unique_records([3, 1, 3]))\n"},
-			{"src/lib/records.py", "text/plain", "def unique_records(records):\n    \"\"\"Return distinct values in their original order.\"\"\"\n    raise NotImplementedError('Complete this function')\n"},
-			{"tests/test_records.py", "text/plain", "from src.lib.records import unique_records\n\ndef test_empty_input():\n    assert unique_records([]) == []\n"},
+			{
+				"src/main.py",
+				"text/plain",
+				"from lib.records import unique_records\n\nif __name__ == '__main__':\n    print(unique_records([3, 1, 3]))\n",
+			},
+			{
+				"src/lib/records.py",
+				"text/plain",
+				"def unique_records(records):\n    \"\"\"Return distinct values in their original order.\"\"\"\n    raise NotImplementedError('Complete this function')\n",
+			},
+			{
+				"tests/test_records.py",
+				"text/plain",
+				"from src.lib.records import unique_records\n\ndef test_empty_input():\n    assert unique_records([]) == []\n",
+			},
 			{"notes/résumé.md", "text/markdown", "# Notes\n\nRecord observations about Unicode and edge cases.\n"},
 			{"notes/design-decisions-and-test-observations-for-the-final-implementation.md", "text/markdown", ""},
 		},
 		Resources: []fixtureFile{
-			{"Reference notes.md", "text/markdown", "# Reference notes\n\nPreserve input order. Equality is exact; do not normalize text. Consider empty input and repeated values.\n"},
+			{
+				"Reference notes.md",
+				"text/markdown",
+				"# Reference notes\n\nPreserve input order. Equality is exact; do not normalize text. Consider empty input and repeated values.\n",
+			},
 			{"Sample observations.csv", "text/csv", "record_id,label,value\n1,North,12\n2,South,7\n3,North,12\n4,East,7\n"},
 		},
 	}
@@ -62,13 +78,29 @@ func databaseTemplate() examTemplate {
 		Clarification: "A loan due on 2030-03-15 is not overdue. Dates use ISO 8601 calendar notation.\n",
 		Directories:   []string{"queries", "fixtures"},
 		Files: []fixtureFile{
-			{"schema.sql", "text/plain", "CREATE TABLE books (id INTEGER PRIMARY KEY, title TEXT NOT NULL);\nCREATE TABLE loans (id INTEGER PRIMARY KEY, book_id INTEGER NOT NULL REFERENCES books(id), due_on TEXT NOT NULL, returned_on TEXT);\n"},
-			{"fixtures/loans.sql", "text/plain", "INSERT INTO books VALUES (1, 'A Guide to Algorithms'), (2, 'Data in Practice');\nINSERT INTO loans VALUES (1, 1, '2030-03-10', NULL), (2, 2, '2030-03-12', '2030-03-13'), (3, 2, '2030-03-15', NULL);\n"},
-			{"queries/overdue.sql", "text/plain", "-- Return loan_id, title, and due_on for overdue, outstanding loans.\n-- Write your query here.\n"},
+			{
+				"schema.sql",
+				"text/plain",
+				"CREATE TABLE books (id INTEGER PRIMARY KEY, title TEXT NOT NULL);\nCREATE TABLE loans (id INTEGER PRIMARY KEY, book_id INTEGER NOT NULL REFERENCES books(id), due_on TEXT NOT NULL, returned_on TEXT);\n",
+			},
+			{
+				"fixtures/loans.sql",
+				"text/plain",
+				"INSERT INTO books VALUES (1, 'A Guide to Algorithms'), (2, 'Data in Practice');\nINSERT INTO loans VALUES (1, 1, '2030-03-10', NULL), (2, 2, '2030-03-12', '2030-03-13'), (3, 2, '2030-03-15', NULL);\n",
+			},
+			{
+				"queries/overdue.sql",
+				"text/plain",
+				"-- Return loan_id, title, and due_on for overdue, outstanding loans.\n-- Write your query here.\n",
+			},
 			{"answer.md", "text/markdown", "# Query design\n\n## Indexes\n\n## Boundary cases\n"},
 		},
 		Resources: []fixtureFile{
-			{"Library schema.md", "text/markdown", "# Relationships\n\nEach loan refers to one book. A book can have several historical loans. `returned_on` is NULL while a loan is outstanding.\n"},
+			{
+				"Library schema.md",
+				"text/markdown",
+				"# Relationships\n\nEach loan refers to one book. A book can have several historical loans. `returned_on` is NULL while a loan is outstanding.\n",
+			},
 			{"Expected overdue loans.csv", "text/csv", "loan_id,title,due_on\n1,A Guide to Algorithms,2030-03-10\n"},
 			{"Report parameters.json", "application/json", "{\"reference_date\":\"2030-03-15\",\"sort\":[\"due_on\",\"loan_id\"]}\n"},
 		},
@@ -82,13 +114,25 @@ func analysisTemplate() examTemplate {
 		Clarification: "Whitespace-only values count as missing. A numeric zero remains a valid observation and contributes to the mean.\n",
 		Directories:   []string{"analysis", "data", "data/raw", "reports", "reports/figures", "tests"},
 		Files: []fixtureFile{
-			{"analysis/summary.py", "text/plain", "def summarize(rows):\n    \"\"\"Return count, missing count, and mean by sensor.\"\"\"\n    raise NotImplementedError('Complete the summary')\n"},
+			{
+				"analysis/summary.py",
+				"text/plain",
+				"def summarize(rows):\n    \"\"\"Return count, missing count, and mean by sensor.\"\"\"\n    raise NotImplementedError('Complete the summary')\n",
+			},
 			{"data/raw/readings.csv", "text/csv", "sensor,value\nnorth,8\nnorth,\nnorth,12\nsouth,0\nsouth,4\nwest,\n"},
-			{"tests/test_summary.py", "text/plain", "import unittest\nfrom analysis.summary import summarize\n\nclass SummaryTests(unittest.TestCase):\n    def test_zero_is_valid(self):\n        result = summarize([{'sensor': 'south', 'value': '0'}])\n        self.assertEqual(result['south'], {'count': 1, 'missing': 0, 'mean': 0.0})\n"},
+			{
+				"tests/test_summary.py",
+				"text/plain",
+				"import unittest\nfrom analysis.summary import summarize\n\nclass SummaryTests(unittest.TestCase):\n    def test_zero_is_valid(self):\n        result = summarize([{'sensor': 'south', 'value': '0'}])\n        self.assertEqual(result['south'], {'count': 1, 'missing': 0, 'mean': 0.0})\n",
+			},
 			{"reports/quality.md", "text/markdown", "# Sensor quality report\n\n## Results\n\n## Missing observations\n\n## Limitations\n"},
 		},
 		Resources: []fixtureFile{
-			{"Data dictionary.json", "application/json", "{\"sensor\":\"fictional sensor identifier\",\"value\":\"numeric reading or empty field\",\"unit\":\"degrees Celsius\"}\n"},
+			{
+				"Data dictionary.json",
+				"application/json",
+				"{\"sensor\":\"fictional sensor identifier\",\"value\":\"numeric reading or empty field\",\"unit\":\"degrees Celsius\"}\n",
+			},
 		},
 	}
 }

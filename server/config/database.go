@@ -36,12 +36,15 @@ func validateDatabase(database Database, add func(string, string)) {
 			add("database.data_source", "must be a PostgreSQL URL with host and database name")
 		}
 	}
+
 	if database.MaxOpenConnections < 2 {
 		add("database.max_open_connections", "must be at least 2 for locked migrations")
 	}
+
 	if database.MaxIdleConnections < 0 || database.MaxIdleConnections > database.MaxOpenConnections {
 		add("database.max_idle_connections", "must be between zero and max_open_connections")
 	}
+
 	for _, item := range []struct {
 		field string
 		value time.Duration
@@ -55,6 +58,7 @@ func validateDatabase(database Database, add func(string, string)) {
 			add(item.field, "must be greater than zero")
 		}
 	}
+
 	if database.SlowOperationThreshold.Duration < 0 {
 		add("database.slow_operation_threshold", "must be zero (disabled) or greater")
 	}

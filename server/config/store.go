@@ -194,7 +194,12 @@ func (s *Store) Set(ctx context.Context, candidate Config) (Config, Config, erro
 	defer s.operationMu.Unlock()
 
 	s.mu.RLock()
-	closed, old, previousPersisted, previousOverrides, listeners := s.closed, s.current.Clone(), s.persisted.Clone(), s.overrides.clone(), s.copyListenersLocked()
+	closed, old, previousPersisted, previousOverrides, listeners :=
+		s.closed,
+		s.current.Clone(),
+		s.persisted.Clone(),
+		s.overrides.clone(),
+		s.copyListenersLocked()
 	s.mu.RUnlock()
 	if closed {
 		return Config{}, Config{}, ErrStoreClosed

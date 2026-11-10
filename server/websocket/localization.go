@@ -46,28 +46,67 @@ const (
 )
 
 var websocketErrorMessages = map[websocketErrorPresentation]localizedMessage{
-	websocketErrorActionUnknown:                {id: "websocket.error.action.unknown", fallback: "Unknown WebSocket action."},
-	websocketErrorAttemptAlreadyConnected:      {id: "websocket.error.exam_attempt.connection.already_established", fallback: "Exam Attempt connection is already established."},
-	websocketErrorAttemptConnectionDenied:      {id: "websocket.error.exam_attempt.connection.denied", fallback: "Exam Attempt connection denied."},
-	websocketErrorAttemptConnectionFailed:      {id: "websocket.error.exam_attempt.connection.failed", fallback: "Exam Attempt connection failed."},
-	websocketErrorAttemptConnectionInactive:    {id: "websocket.error.exam_attempt.connection.inactive", fallback: "Exam Attempt connection is not active."},
-	websocketErrorAttemptConnectionLost:        {id: "websocket.error.exam_attempt.connection.lost", fallback: "Secure connectivity could not be renewed. Ask a manager to re-allow access."},
-	websocketErrorAttemptConnectRequestInvalid: {id: "websocket.error.exam_attempt.connection.request_invalid", fallback: "Invalid Exam Attempt connection request."},
-	websocketErrorAttemptRenewalDenied:         {id: "websocket.error.exam_attempt.renewal.denied", fallback: "Exam Attempt renewal denied."},
-	websocketErrorAttemptRenewalFailed:         {id: "websocket.error.exam_attempt.renewal.failed", fallback: "Exam Attempt renewal failed."},
-	websocketErrorAttemptRenewalRequestInvalid: {id: "websocket.error.exam_attempt.renewal.request_invalid", fallback: "Invalid Exam Attempt renewal request."},
-	websocketErrorFocusLossConflict:            {id: "websocket.error.exam_attempt.focus_loss.conflict", fallback: "Focus Loss signal conflicts with an accepted sequence."},
-	websocketErrorFocusLossDenied:              {id: "websocket.error.exam_attempt.focus_loss.denied", fallback: "Focus Loss signal was denied."},
-	websocketErrorFocusLossFailed:              {id: "websocket.error.exam_attempt.focus_loss.failed", fallback: "Focus Loss signal could not be accepted."},
-	websocketErrorFocusLossSignalInvalid:       {id: "websocket.error.exam_attempt.focus_loss.signal_invalid", fallback: "Invalid Focus Loss signal."},
-	websocketErrorBrowserActivityInvalid:       {id: "websocket.error.exam_attempt.browser_activity.invalid", fallback: "Invalid browser activity record."},
-	websocketErrorBrowserActivityFailed:        {id: "websocket.error.exam_attempt.browser_activity.failed", fallback: "Browser activity could not be accepted."},
-	websocketErrorRequestInvalid:               {id: "websocket.error.request.invalid", fallback: "Invalid WebSocket request."},
-	websocketErrorRateLimited:                  {id: "websocket.error.rate_limited", fallback: "Too many WebSocket requests. Retry shortly."},
-	websocketErrorSubscriptionDenied:           {id: "websocket.error.subscription.denied", fallback: "WebSocket subscription denied."},
-	websocketErrorSubscriptionFailed:           {id: "websocket.error.subscription.failed", fallback: "WebSocket subscription failed."},
-	websocketErrorSubscriptionInvalid:          {id: "websocket.error.subscription.invalid", fallback: "Invalid subscription."},
-	websocketErrorSubscriptionLimit:            {id: "websocket.error.subscription.limit", fallback: "WebSocket subscription limit reached."},
+	websocketErrorActionUnknown: {id: "websocket.error.action.unknown", fallback: "Unknown WebSocket action."},
+	websocketErrorAttemptAlreadyConnected: {
+		id:       "websocket.error.exam_attempt.connection.already_established",
+		fallback: "Exam Attempt connection is already established.",
+	},
+	websocketErrorAttemptConnectionDenied: {
+		id:       "websocket.error.exam_attempt.connection.denied",
+		fallback: "Exam Attempt connection denied.",
+	},
+	websocketErrorAttemptConnectionFailed: {
+		id:       "websocket.error.exam_attempt.connection.failed",
+		fallback: "Exam Attempt connection failed.",
+	},
+	websocketErrorAttemptConnectionInactive: {
+		id:       "websocket.error.exam_attempt.connection.inactive",
+		fallback: "Exam Attempt connection is not active.",
+	},
+	websocketErrorAttemptConnectionLost: {
+		id:       "websocket.error.exam_attempt.connection.lost",
+		fallback: "Secure connectivity could not be renewed. Ask a manager to re-allow access.",
+	},
+	websocketErrorAttemptConnectRequestInvalid: {
+		id:       "websocket.error.exam_attempt.connection.request_invalid",
+		fallback: "Invalid Exam Attempt connection request.",
+	},
+	websocketErrorAttemptRenewalDenied: {id: "websocket.error.exam_attempt.renewal.denied", fallback: "Exam Attempt renewal denied."},
+	websocketErrorAttemptRenewalFailed: {id: "websocket.error.exam_attempt.renewal.failed", fallback: "Exam Attempt renewal failed."},
+	websocketErrorAttemptRenewalRequestInvalid: {
+		id:       "websocket.error.exam_attempt.renewal.request_invalid",
+		fallback: "Invalid Exam Attempt renewal request.",
+	},
+	websocketErrorFocusLossConflict: {
+		id:       "websocket.error.exam_attempt.focus_loss.conflict",
+		fallback: "Focus Loss signal conflicts with an accepted sequence.",
+	},
+	websocketErrorFocusLossDenied: {
+		id:       "websocket.error.exam_attempt.focus_loss.denied",
+		fallback: "Focus Loss signal was denied.",
+	},
+	websocketErrorFocusLossFailed: {
+		id:       "websocket.error.exam_attempt.focus_loss.failed",
+		fallback: "Focus Loss signal could not be accepted.",
+	},
+	websocketErrorFocusLossSignalInvalid: {
+		id:       "websocket.error.exam_attempt.focus_loss.signal_invalid",
+		fallback: "Invalid Focus Loss signal.",
+	},
+	websocketErrorBrowserActivityInvalid: {
+		id:       "websocket.error.exam_attempt.browser_activity.invalid",
+		fallback: "Invalid browser activity record.",
+	},
+	websocketErrorBrowserActivityFailed: {
+		id:       "websocket.error.exam_attempt.browser_activity.failed",
+		fallback: "Browser activity could not be accepted.",
+	},
+	websocketErrorRequestInvalid:      {id: "websocket.error.request.invalid", fallback: "Invalid WebSocket request."},
+	websocketErrorRateLimited:         {id: "websocket.error.rate_limited", fallback: "Too many WebSocket requests. Retry shortly."},
+	websocketErrorSubscriptionDenied:  {id: "websocket.error.subscription.denied", fallback: "WebSocket subscription denied."},
+	websocketErrorSubscriptionFailed:  {id: "websocket.error.subscription.failed", fallback: "WebSocket subscription failed."},
+	websocketErrorSubscriptionInvalid: {id: "websocket.error.subscription.invalid", fallback: "Invalid subscription."},
+	websocketErrorSubscriptionLimit:   {id: "websocket.error.subscription.limit", fallback: "WebSocket subscription limit reached."},
 }
 
 var websocketCloseMessages = map[string]localizedMessage{

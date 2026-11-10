@@ -45,26 +45,38 @@ func invalidAttemptWorkspaceContent(cause error) error {
 // discoverable; PostgreSQL publication remains a separate fenced mutation,
 // and a caller that rejects the returned digest reclaims the reserved
 // identity.
-func (c *Content) StageAttemptWorkspaceObject(ctx context.Context, objectID model.AttemptWorkspaceObjectID,
-	body io.Reader, declaredSize int64, mediaType string,
+func (c *Content) StageAttemptWorkspaceObject(
+	ctx context.Context,
+	objectID model.AttemptWorkspaceObjectID,
+	body io.Reader,
+	declaredSize int64,
+	mediaType string,
 ) (*model.AttemptWorkspaceContent, error) {
 	mediaType = strings.TrimSpace(mediaType)
 	if c == nil || c.filesystem == nil {
 		return nil, errors.New("Attempt Workspace content dependency is unavailable")
 	}
-	if !objectID.IsValid() || body == nil || declaredSize < 0 ||
-		declaredSize > model.AttemptWorkspaceMaximumFileBytes || mediaType == "" || len(mediaType) > 255 {
+
+	if !objectID.IsValid() ||
+		body == nil ||
+		declaredSize < 0 ||
+		declaredSize > model.AttemptWorkspaceMaximumFileBytes ||
+		mediaType == "" ||
+		len(mediaType) > 255 {
 		return nil, invalidAttemptWorkspaceContent(errors.New("invalid metadata"))
 	}
+
 	stream := newExactSizeReader(body, declaredSize)
 	content := func() (*model.AttemptWorkspaceContent, error) {
 		if err := stream.finish(); err != nil {
 			return nil, invalidAttemptWorkspaceContent(err)
 		}
+
 		staged := &model.AttemptWorkspaceContent{MediaType: mediaType, SizeBytes: declaredSize, SHA256: stream.checksum()}
 		if err := staged.Validate(); err != nil {
 			return nil, invalidAttemptWorkspaceContent(err)
 		}
+
 		return staged, nil
 	}
 	key := attemptWorkspaceObjectKey(objectID)
@@ -79,6 +91,7 @@ func (c *Content) StageAttemptWorkspaceObject(ctx context.Context, objectID mode
 			if err != nil {
 				return nil, err
 			}
+
 			matching, openErr := c.openMatchingAttemptWorkspaceObject(ctx, objectID, staged.SizeBytes, staged.SHA256)
 			switch {
 			case openErr != nil:
@@ -86,11 +99,13 @@ func (c *Content) StageAttemptWorkspaceObject(ctx context.Context, objectID mode
 			case !matching:
 				return nil, sanitize("stage Attempt Workspace object", vfs.ErrConflict)
 			}
+
 			return staged, nil
 		case !errors.Is(statErr, vfs.ErrNotFound):
 			return nil, sanitize("stage Attempt Workspace object", statErr)
 		}
 	}
+
 	size := declaredSize
 	info, writeErr := c.filesystem.Write(ctx, key, stream, vfs.WriteOptions{Size: &size, NoOverwrite: conditional})
 	staged, contentErr := content()
@@ -103,36 +118,52 @@ func (c *Content) StageAttemptWorkspaceObject(ctx context.Context, objectID mode
 				return nil, errors.Join(contentErr, sanitize("remove invalid Attempt Workspace object", removeErr))
 			}
 		}
+
 		return nil, contentErr
 	}
+
 	if writeErr != nil {
-		if matching, verifyErr := c.openMatchingAttemptWorkspaceObject(ctx, objectID, staged.SizeBytes, staged.SHA256); verifyErr == nil && matching {
+		if matching, verifyErr := c.openMatchingAttemptWorkspaceObject(
+			ctx,
+			objectID,
+			staged.SizeBytes,
+			staged.SHA256,
+		); verifyErr == nil && matching {
 			return staged, nil
 		}
+
 		return nil, sanitize("stage Attempt Workspace object", writeErr)
 	}
+
 	if info.Size != size {
 		return nil, sanitize("stage Attempt Workspace object", errors.New("backend size mismatch"))
 	}
+
 	return staged, nil
 }
 
-func (c *Content) openMatchingAttemptWorkspaceObject(ctx context.Context, objectID model.AttemptWorkspaceObjectID,
-	size int64, checksum string,
+func (c *Content) openMatchingAttemptWorkspaceObject(
+	ctx context.Context,
+	objectID model.AttemptWorkspaceObjectID,
+	size int64,
+	checksum string,
 ) (bool, error) {
 	file, err := c.filesystem.Open(ctx, attemptWorkspaceObjectKey(objectID), vfs.OpenOptions{})
 	if err != nil {
 		return false, err
 	}
+
 	defer file.Body.Close()
 	if file.Info.Size != size {
 		return false, nil
 	}
+
 	digest := sha256.New()
 	read, err := io.Copy(digest, io.LimitReader(file.Body, model.AttemptWorkspaceMaximumFileBytes+1))
 	if err != nil {
 		return false, err
 	}
+
 	return read == size && fmt.Sprintf("%x", digest.Sum(nil)) == checksum, nil
 }
 

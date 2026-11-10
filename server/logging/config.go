@@ -69,6 +69,7 @@ func buildBackend(cfg Config, diagnostics *diagnostics) (*backend, error) {
 	if len(cfg.Targets) == 0 {
 		return nil, errors.New("at least one log target is required")
 	}
+
 	engine, err := logr.New(
 		logr.MaxQueueSize(cfg.QueueSize),
 		logr.MaxFieldLen(0),
@@ -82,6 +83,7 @@ func buildBackend(cfg Config, diagnostics *diagnostics) (*backend, error) {
 				diagnostics.dropped.Add(1)
 				return true
 			}
+
 			return false
 		}),
 		logr.OnTargetQueueFull(func(_ logr.Target, record *logr.LogRec, _ int) bool {
@@ -89,12 +91,14 @@ func buildBackend(cfg Config, diagnostics *diagnostics) (*backend, error) {
 				diagnostics.dropped.Add(1)
 				return true
 			}
+
 			return false
 		}),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("construct logging engine: %w", err)
 	}
+
 	cleanup := func(cause error) (*backend, error) {
 		_ = engine.Shutdown()
 		return nil, cause
@@ -107,23 +111,28 @@ func buildBackend(cfg Config, diagnostics *diagnostics) (*backend, error) {
 		if _, exists := names[target.Name]; exists {
 			return cleanup(fmt.Errorf("duplicate log target %q", target.Name))
 		}
+
 		names[target.Name] = struct{}{}
 		level, parseErr := parseLevel(target.Level)
 		if parseErr != nil {
 			return cleanup(fmt.Errorf("target %q: %w", target.Name, parseErr))
 		}
+
 		output, outputErr := targetOutput(target)
 		if outputErr != nil {
 			return cleanup(fmt.Errorf("target %q: %w", target.Name, outputErr))
 		}
+
 		formatter, formatErr := targetFormatter(target)
 		if formatErr != nil {
 			return cleanup(fmt.Errorf("target %q: %w", target.Name, formatErr))
 		}
+
 		queueSize := target.QueueSize
 		if queueSize == 0 {
 			queueSize = defaultTargetQueueSize
 		}
+
 		if queueSize < 1 {
 			return cleanup(fmt.Errorf("target %q queue size must be positive", target.Name))
 		}
@@ -131,11 +140,13 @@ func buildBackend(cfg Config, diagnostics *diagnostics) (*backend, error) {
 			return cleanup(fmt.Errorf("target %q: %w", target.Name, addErr))
 		}
 	}
+
 	for _, target := range cfg.Targets {
 		if buffer, ok := target.Writer.(*Buffer); ok {
 			buffer.bindFlush(engine.Flush)
 		}
 	}
+
 	return &backend{engine: engine, logger: engine.NewLogger(), maxFieldBytes: cfg.MaxFieldBytes}, nil
 }
 
@@ -160,8 +171,10 @@ func targetOutput(target Target) (logr.Target, error) {
 		if target.File != "" || strings.EqualFold(target.Type, "file") {
 			return nil, errors.New("writer and file cannot both be configured")
 		}
+
 		return targets.NewWriterTarget(target.Writer), nil
 	}
+
 	switch strings.ToLower(target.Type) {
 	case "console":
 		return targets.NewWriterTarget(os.Stderr), nil
@@ -172,9 +185,13 @@ func targetOutput(target Target) (logr.Target, error) {
 		if target.MaxSizeMB < 0 || target.MaxAgeDays < 0 || target.MaxBackups < 0 {
 			return nil, errors.New("file rotation limits cannot be negative")
 		}
+
 		return targets.NewFileTarget(targets.FileOptions{
-			Filename: target.File, MaxSize: target.MaxSizeMB, MaxAge: target.MaxAgeDays,
-			MaxBackups: target.MaxBackups, Compress: target.Compress,
+			Filename:   target.File,
+			MaxSize:    target.MaxSizeMB,
+			MaxAge:     target.MaxAgeDays,
+			MaxBackups: target.MaxBackups,
+			Compress:   target.Compress,
 		}), nil
 	default:
 		return nil, fmt.Errorf("unsupported target type %q", target.Type)

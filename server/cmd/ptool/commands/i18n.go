@@ -92,7 +92,13 @@ func newI18nCheckCommand(options *i18nOptions) *cobra.Command {
 			if err := localizer.ValidateDefinitionsWithDelegatedPrefixes(definitions, "webapp."); err != nil {
 				return err
 			}
-			_, err = fmt.Fprintf(command.OutOrStdout(), "validated %d messages across %d locale(s)\n", len(definitions), len(localizer.SupportedLocales()))
+
+			_, err = fmt.Fprintf(
+				command.OutOrStdout(),
+				"validated %d messages across %d locale(s)\n",
+				len(definitions),
+				len(localizer.SupportedLocales()),
+			)
 			return err
 		},
 	}
@@ -135,21 +141,25 @@ func newI18nMissingCommand(options *i18nOptions) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			locales := localizer.SupportedLocales()
 			if locale != "" {
 				locales = []string{locale}
 			}
+
 			for _, candidate := range locales {
 				missing, err := localizer.MissingDefinitions(candidate, definitions)
 				if err != nil {
 					return err
 				}
+
 				for _, definition := range missing {
 					if _, err := fmt.Fprintf(command.OutOrStdout(), "%s\t%s\t%s\n", candidate, definition.ID, definition.Origin); err != nil {
 						return err
 					}
 				}
 			}
+
 			return nil
 		},
 	}
@@ -171,11 +181,13 @@ func newI18nFormatCommand(options *i18nOptions) *cobra.Command {
 			if len(files) == 0 {
 				return errors.New("no localization catalogs found")
 			}
+
 			for _, name := range files {
 				changed, err := formatCatalog(name, check)
 				if err != nil {
 					return err
 				}
+
 				if changed {
 					if check {
 						return fmt.Errorf("catalog %q is not formatted", name)
@@ -185,6 +197,7 @@ func newI18nFormatCommand(options *i18nOptions) *cobra.Command {
 					}
 				}
 			}
+
 			return nil
 		},
 	}
@@ -197,19 +210,23 @@ func formatCatalog(name string, check bool) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+
 	decoder := json.NewDecoder(bytes.NewReader(input))
 	decoder.DisallowUnknownFields()
 	var entries []catalogEntry
 	if err := decoder.Decode(&entries); err != nil {
 		return false, fmt.Errorf("decode catalog %q: %w", name, err)
 	}
+
 	var trailing any
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
 		if err == nil {
 			err = errors.New("multiple JSON values")
 		}
+
 		return false, fmt.Errorf("decode catalog %q: %w", name, err)
 	}
+
 	sort.Slice(entries, func(i, j int) bool { return entries[i].ID < entries[j].ID })
 	for index, entry := range entries {
 		if strings.TrimSpace(entry.ID) == "" || len(entry.Translation) == 0 {
@@ -219,38 +236,46 @@ func formatCatalog(name string, check bool) (bool, error) {
 			return false, fmt.Errorf("catalog %q repeats id %q", name, entry.ID)
 		}
 	}
+
 	formatted, err := json.MarshalIndent(entries, "", "  ")
 	if err != nil {
 		return false, err
 	}
+
 	formatted = append(formatted, '\n')
 	changed := !bytes.Equal(input, formatted)
 	if !changed || check {
 		return changed, nil
 	}
+
 	info, err := os.Stat(name)
 	if err != nil {
 		return false, err
 	}
+
 	temporary, err := os.CreateTemp(filepath.Dir(name), ".ptool-i18n-*")
 	if err != nil {
 		return false, err
 	}
+
 	temporaryName := temporary.Name()
 	defer os.Remove(temporaryName)
 	if err := temporary.Chmod(info.Mode().Perm()); err != nil {
 		temporary.Close()
 		return false, err
 	}
+
 	if _, err := temporary.Write(formatted); err != nil {
 		temporary.Close()
 		return false, err
 	}
+
 	if err := temporary.Close(); err != nil {
 		return false, err
 	}
 	if err := os.Rename(temporaryName, name); err != nil {
 		return false, err
 	}
+
 	return true, nil
 }

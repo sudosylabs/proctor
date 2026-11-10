@@ -28,8 +28,9 @@ func NewProfileMapper(
 ) *ProfileMapper {
 	return &ProfileMapper{
 		descriptor: model.ExternalAuthenticationProvider{
-			ID: settings.ID, DisplayName: settings.DisplayName,
-			Type: settings.Type,
+			ID:          settings.ID,
+			DisplayName: settings.DisplayName,
+			Type:        settings.Type,
 		},
 		autoProvision: settings.AutoProvision,
 		claims:        settings.Claims,
@@ -57,6 +58,7 @@ func (m *ProfileMapper) Assertion(
 		if items := values[name]; len(items) != 0 {
 			return strings.TrimSpace(items[0])
 		}
+
 		return ""
 	}
 	subject := first(m.claims.Subject)
@@ -69,6 +71,7 @@ func (m *ProfileMapper) Assertion(
 			fmt.Errorf("provider returned an invalid subject"),
 		)
 	}
+
 	homeOrganization := strings.ToLower(
 		strings.TrimSpace(first(m.claims.HomeOrganization)),
 	)
@@ -81,6 +84,7 @@ func (m *ProfileMapper) Assertion(
 			fmt.Errorf("provider returned an unauthorized home organization"),
 		)
 	}
+
 	strength := model.AuthenticationSingleFactor
 	if providerClaimMatches(
 		values[m.claims.MultiFactorAttribute],
@@ -88,6 +92,7 @@ func (m *ProfileMapper) Assertion(
 	) {
 		strength = model.AuthenticationMultiFactor
 	}
+
 	assertion := &model.ExternalAuthenticationAssertion{
 		ProviderID:       m.descriptor.ID,
 		Subject:          subject,
@@ -108,7 +113,8 @@ func (m *ProfileMapper) Assertion(
 	}
 	if m.autoProvision {
 		candidate := &model.User{
-			Username: assertion.Username, Email: assertion.Email,
+			Username:      assertion.Username,
+			Email:         assertion.Email,
 			EmailVerified: assertion.EmailVerified,
 			DisplayName:   assertion.DisplayName,
 			FirstName:     assertion.FirstName,
@@ -123,6 +129,7 @@ func (m *ProfileMapper) Assertion(
 			)
 		}
 	}
+
 	return assertion, nil
 }
 

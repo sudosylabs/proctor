@@ -144,6 +144,7 @@ func Setup(tb testing.TB, options ...Option) *Helper {
 	for _, option := range options {
 		option(&settings)
 	}
+
 	store, err := config.NewStore(
 		context.Background(),
 		config.NewMemoryStore(nil),
@@ -172,7 +173,11 @@ func Setup(tb testing.TB, options ...Option) *Helper {
 	require.NoError(tb, logger.Configure(logging.Config{
 		MaxFieldBytes: store.Get().Log.MaxFieldBytes,
 		Targets: []logging.Target{{
-			Name: "test", Type: "console", Level: "trace", Format: "json", Writer: logs,
+			Name:   "test",
+			Type:   "console",
+			Level:  "trace",
+			Format: "json",
+			Writer: logs,
 		}},
 	}))
 	logger.LockConfiguration()
@@ -186,6 +191,7 @@ func Setup(tb testing.TB, options ...Option) *Helper {
 		require.NoError(tb, err)
 		mailerOverride = mailer
 	}
+
 	filesystem := memory.New()
 	if settings.cluster == nil && store.Get().Cluster.Backend == "local" {
 		settings.cluster, err = local.New(store.Get().Cluster.NodeID, testClusterLogger{})
@@ -198,6 +204,7 @@ func Setup(tb testing.TB, options ...Option) *Helper {
 		lifecycle = NewLifecycleStore()
 		persistenceOverride = lifecycle
 	}
+
 	runtime, err := server.NewForTesting(context.Background(), server.TestingOverrides{
 		Configuration:       store,
 		Logger:              logger,

@@ -61,8 +61,10 @@ func validateExamResourceJSONSyntax(source io.Reader) error {
 			if err == io.EOF && depth == 0 && states[0] == jsonRootDone {
 				return nil
 			}
+
 			return ErrInvalidExamResourceContent
 		}
+
 		state := states[depth]
 		switch state {
 		case jsonRootDone:
@@ -72,9 +74,11 @@ func validateExamResourceJSONSyntax(source io.Reader) error {
 				depth--
 				continue
 			}
+
 			if value != ',' {
 				return ErrInvalidExamResourceContent
 			}
+
 			states[depth] = jsonArrayValue
 			continue
 		case jsonObjectAfter:
@@ -82,9 +86,11 @@ func validateExamResourceJSONSyntax(source io.Reader) error {
 				depth--
 				continue
 			}
+
 			if value != ',' {
 				return ErrInvalidExamResourceContent
 			}
+
 			states[depth] = jsonObjectKey
 			continue
 		case jsonObjectFirst, jsonObjectKey:
@@ -92,15 +98,18 @@ func validateExamResourceJSONSyntax(source io.Reader) error {
 				depth--
 				continue
 			}
+
 			if value != '"' || readJSONString(reader) != nil {
 				return ErrInvalidExamResourceContent
 			}
+
 			states[depth] = jsonObjectColon
 			continue
 		case jsonObjectColon:
 			if value != ':' {
 				return ErrInvalidExamResourceContent
 			}
+
 			states[depth] = jsonObjectValue
 			continue
 		case jsonArrayFirst:
@@ -108,6 +117,7 @@ func validateExamResourceJSONSyntax(source io.Reader) error {
 				depth--
 				continue
 			}
+
 			states[depth] = jsonArrayAfter
 		case jsonArrayValue:
 			states[depth] = jsonArrayAfter
@@ -116,11 +126,13 @@ func validateExamResourceJSONSyntax(source io.Reader) error {
 		case jsonRootValue:
 			states[depth] = jsonRootDone
 		}
+
 		switch value {
 		case '[', '{':
 			if depth == maximumExamResourceJSONDepth {
 				return ErrInvalidExamResourceContent
 			}
+
 			depth++
 			states[depth] = jsonArrayFirst
 			if value == '{' {
@@ -139,6 +151,7 @@ func validateExamResourceJSONSyntax(source io.Reader) error {
 		default:
 			err = ErrInvalidExamResourceContent
 		}
+
 		if err != nil {
 			return err
 		}
@@ -211,24 +224,30 @@ func readJSONNumber(reader *bufio.Reader, first byte) error {
 			return ErrInvalidExamResourceContent
 		}
 	}
+
 	if first < '0' || first > '9' {
 		return ErrInvalidExamResourceContent
 	}
+
 	if first != '0' {
 		if _, err := readJSONDigits(reader); err != nil {
 			if err == io.EOF {
 				return nil
 			}
+
 			return ErrInvalidExamResourceContent
 		}
 	}
+
 	next, err := reader.Peek(1)
 	if err != nil {
 		if err == io.EOF {
 			return nil
 		}
+
 		return ErrInvalidExamResourceContent
 	}
+
 	if next[0] == '.' {
 		_, _ = reader.ReadByte()
 		var found bool
@@ -239,28 +258,34 @@ func readJSONNumber(reader *bufio.Reader, first byte) error {
 		if err == io.EOF {
 			return nil
 		}
+
 		next, err = reader.Peek(1)
 		if err != nil {
 			if err == io.EOF {
 				return nil
 			}
+
 			return ErrInvalidExamResourceContent
 		}
 	}
+
 	if next[0] == 'e' || next[0] == 'E' {
 		_, _ = reader.ReadByte()
 		next, err = reader.Peek(1)
 		if err != nil {
 			return ErrInvalidExamResourceContent
 		}
+
 		if next[0] == '+' || next[0] == '-' {
 			_, _ = reader.ReadByte()
 		}
+
 		found, err := readJSONDigits(reader)
 		if !found || err != nil && err != io.EOF {
 			return ErrInvalidExamResourceContent
 		}
 	}
+
 	return nil
 }
 

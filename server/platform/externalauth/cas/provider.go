@@ -129,6 +129,7 @@ func (p *Provider) Complete(
 			model.ErrInvalidExternalAuthenticationCallback,
 		)
 	}
+
 	ticket, err := request.Callback.SingleValue("ticket", 2048)
 	if err != nil {
 		return nil, externalauth.Rejected(
@@ -136,6 +137,7 @@ func (p *Provider) Complete(
 			err,
 		)
 	}
+
 	serviceURL, err := casServiceURL(request.CallbackURL, request.State)
 	if err != nil {
 		return nil, externalauth.InvalidResponse(
@@ -143,6 +145,7 @@ func (p *Provider) Complete(
 			err,
 		)
 	}
+
 	validationURL := *p.validateURL
 	query := validationURL.Query()
 	query.Set("service", serviceURL)
@@ -150,6 +153,7 @@ func (p *Provider) Complete(
 	if !request.AuthenticationStartedAt.IsZero() {
 		query.Set("renew", "true")
 	}
+
 	validationURL.RawQuery = query.Encode()
 
 	httpRequest, err := http.NewRequestWithContext(
@@ -164,6 +168,7 @@ func (p *Provider) Complete(
 			err,
 		)
 	}
+
 	httpRequest.Header.Set("Accept", "application/xml, text/xml")
 	response, err := p.client.Do(httpRequest)
 	if err != nil {
@@ -172,6 +177,7 @@ func (p *Provider) Complete(
 			err,
 		)
 	}
+
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, response.Body)
@@ -180,6 +186,7 @@ func (p *Provider) Complete(
 			fmt.Errorf("provider status %d", response.StatusCode),
 		)
 	}
+
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, externalauth.InvalidResponse(
@@ -187,18 +194,21 @@ func (p *Provider) Complete(
 			err,
 		)
 	}
+
 	if int64(len(body)) > p.maximumResponseBytes {
 		return nil, externalauth.InvalidResponse(
 			"read CAS validation",
 			externalauth.ErrResponseTooLarge,
 		)
 	}
+
 	if bytes.Contains(bytes.ToUpper(body), []byte("<!DOCTYPE")) {
 		return nil, externalauth.InvalidResponse(
 			"decode CAS validation",
 			errors.New("document type is not allowed"),
 		)
 	}
+
 	var envelope serviceResponse
 	decoder := xml.NewDecoder(bytes.NewReader(body))
 	decoder.Strict = true
@@ -208,18 +218,21 @@ func (p *Provider) Complete(
 			err,
 		)
 	}
+
 	if envelope.Failure != nil {
 		return nil, externalauth.Rejected(
 			"validate CAS ticket",
 			errors.New("CAS rejected authentication"),
 		)
 	}
+
 	if envelope.Success == nil {
 		return nil, externalauth.InvalidResponse(
 			"decode CAS validation",
 			errors.New("missing authentication result"),
 		)
 	}
+
 	values := make(
 		map[string][]string,
 		len(envelope.Success.Attributes.Values)+1,
@@ -228,12 +241,16 @@ func (p *Provider) Complete(
 	for _, attribute := range envelope.Success.Attributes.Values {
 		name := attribute.XMLName.Local
 		value := strings.TrimSpace(attribute.Value)
-		if name == "" || value == "" || len(value) > 4096 ||
+		if name == "" ||
+			value == "" ||
+			len(value) > 4096 ||
 			len(values) >= 256 {
 			continue
 		}
+
 		values[name] = append(values[name], value)
 	}
+
 	emailVerified := p.mapperEmailVerified(values)
 	authenticatedAt := p.now()
 	if !request.AuthenticationStartedAt.IsZero() {
@@ -243,8 +260,10 @@ func (p *Provider) Complete(
 		if request.AuthenticationStartedAt.After(authenticatedAt) {
 			return nil, externalauth.Rejected("verify fresh CAS authentication", errors.New("fresh authentication time is invalid"))
 		}
+
 		authenticatedAt = request.AuthenticationStartedAt
 	}
+
 	return p.mapper.Assertion(
 		values,
 		emailVerified,
@@ -278,12 +297,16 @@ func casServiceURL(callbackURL string, state string) (string, error) {
 	if !model.IsValidCredentialToken(state) {
 		return "", errors.New("CAS state is invalid")
 	}
+
 	parsed, err := url.Parse(callbackURL)
-	if err != nil || parsed.Host == "" ||
+	if err != nil ||
+		parsed.Host == "" ||
 		(parsed.Scheme != "http" && parsed.Scheme != "https") ||
-		parsed.User != nil || parsed.Fragment != "" {
+		parsed.User != nil ||
+		parsed.Fragment != "" {
 		return "", errors.New("CAS callback URL is invalid")
 	}
+
 	query := parsed.Query()
 	query.Set("state", state)
 	parsed.RawQuery = query.Encode()

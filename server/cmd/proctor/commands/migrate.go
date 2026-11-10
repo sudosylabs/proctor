@@ -19,7 +19,13 @@ import (
 type migrateUpExecutor func(context.Context, string) (int, error)
 type migrateStatusExecutor func(context.Context, string) (server.MigrationStatus, error)
 
-func newMigrateCommand(up migrateUpExecutor, status migrateStatusExecutor, planDown migrateDownPlanExecutor, down migrateDownExecutor, text commandText) *cobra.Command {
+func newMigrateCommand(
+	up migrateUpExecutor,
+	status migrateStatusExecutor,
+	planDown migrateDownPlanExecutor,
+	down migrateDownExecutor,
+	text commandText,
+) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "migrate",
 		Short: text.value("cli.migrate.short", "Manage the Proctor database schema", nil),
@@ -38,10 +44,12 @@ func newMigrateCommand(up migrateUpExecutor, status migrateStatusExecutor, planD
 				if err != nil {
 					return err
 				}
+
 				version, err := up(command.Context(), path)
 				if err != nil {
 					return err
 				}
+
 				_, err = fmt.Fprintln(command.OutOrStdout(), text.value(
 					"cli.migrate.up.success",
 					"database schema migrated to version {{.Version}}",
@@ -59,10 +67,12 @@ func newMigrateCommand(up migrateUpExecutor, status migrateStatusExecutor, planD
 				if err != nil {
 					return err
 				}
+
 				result, err := status(command.Context(), path)
 				if err != nil {
 					return err
 				}
+
 				_, err = fmt.Fprintln(command.OutOrStdout(), text.value(
 					"cli.migrate.status.success",
 					"database schema version {{.DatabaseVersion}}; server schema version {{.ServerVersion}}; pending migrations {{.PendingMigrations}}",

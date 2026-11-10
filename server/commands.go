@@ -27,15 +27,21 @@ const (
 // host-only recovery capability, and closes every acquired resource without
 // ever starting workers, listeners, or transports. It never migrates and
 // refuses a schema that differs from this build.
-func RecoverAdministratorAccess(ctx context.Context, configPath string, command AdministratorRecoveryCommand) (_ *AdministratorRecoveryResult, resultErr error) {
+func RecoverAdministratorAccess(
+	ctx context.Context,
+	configPath string,
+	command AdministratorRecoveryCommand,
+) (_ *AdministratorRecoveryResult, resultErr error) {
 	options := []Option{withCurrentSchemaRequired()}
 	if configPath != "" {
 		options = append(options, WithConfigPath(configPath))
 	}
+
 	node, err := New(ctx, options...)
 	if err != nil {
 		return nil, err
 	}
+
 	defer func() { resultErr = errors.Join(resultErr, node.Close()) }()
 	return node.RecoverAdministratorAccess(ctx, command)
 }

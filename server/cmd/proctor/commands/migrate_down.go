@@ -33,18 +33,22 @@ func newMigrateDownCommand(plan migrateDownPlanExecutor, down migrateDownExecuto
 			if steps < 1 {
 				return newUsageError(text.value("cli.migrate.down.error.steps", "migrate down requires --steps with a count of at least 1", nil))
 			}
+
 			path, err := configPath(command, text)
 			if err != nil {
 				return err
 			}
+
 			planned, err := plan(command.Context(), path, steps)
 			if err != nil {
 				return err
 			}
+
 			output := command.OutOrStdout()
 			if err = writeRollbackPlan(output, planned, text); err != nil {
 				return err
 			}
+
 			if len(planned.LiveServingNodes) > 0 {
 				return errors.New(text.value(
 					"cli.migrate.down.error.live_nodes",
@@ -52,22 +56,40 @@ func newMigrateDownCommand(plan migrateDownPlanExecutor, down migrateDownExecuto
 					map[string]any{"Nodes": strings.Join(planned.LiveServingNodes, ", ")},
 				))
 			}
+
 			if !confirm {
-				return errors.New(text.value("cli.migrate.down.error.confirm", "nothing was reverted; re-run with --confirm to revert these migrations", nil))
+				return errors.New(text.value(
+					"cli.migrate.down.error.confirm",
+					"nothing was reverted; re-run with --confirm to revert these migrations",
+					nil,
+				))
 			}
+
 			version, err := down(command.Context(), path, steps)
 			if err != nil {
 				return err
 			}
+
 			_, err = fmt.Fprintln(output, text.value(
-				"cli.migrate.down.success", "database schema reverted to version {{.Version}}",
+				"cli.migrate.down.success",
+				"database schema reverted to version {{.Version}}",
 				map[string]any{"Version": version},
 			))
 			return err
 		},
 	}
-	command.Flags().IntVar(&steps, "steps", 0, text.value("cli.migrate.down.flag.steps", "number of newest migrations to revert (required)", nil))
-	command.Flags().BoolVar(&confirm, "confirm", false, text.value("cli.migrate.down.flag.confirm", "revert the listed migrations; without it the command only prints them", nil))
+	command.Flags().IntVar(
+		&steps,
+		"steps",
+		0,
+		text.value("cli.migrate.down.flag.steps", "number of newest migrations to revert (required)", nil),
+	)
+	command.Flags().BoolVar(
+		&confirm,
+		"confirm",
+		false,
+		text.value("cli.migrate.down.flag.confirm", "revert the listed migrations; without it the command only prints them", nil),
+	)
 	return command
 }
 

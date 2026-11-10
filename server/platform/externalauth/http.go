@@ -23,7 +23,8 @@ func NewHTTPClient(timeout time.Duration, maximumResponseBytes int64) *http.Clie
 	return &http.Client{
 		Timeout: timeout,
 		Transport: &boundedRoundTripper{
-			base: transport, maximumResponseBytes: maximumResponseBytes,
+			base:                 transport,
+			maximumResponseBytes: maximumResponseBytes,
 		},
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse

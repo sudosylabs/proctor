@@ -167,19 +167,36 @@ func LocalizationDefinitions() []localization.Definition {
 	for _, id := range plain {
 		definitions = append(definitions, localization.Definition{ID: id, Origin: commandLocalizationOrigin})
 	}
+
 	definitions = append(definitions,
 		localization.Definition{ID: "cli.cluster.status.database_time", Origin: commandLocalizationOrigin, Variables: []string{"Time"}},
-		localization.Definition{ID: "cli.cluster.status.schema", Origin: commandLocalizationOrigin, Variables: []string{"DatabaseVersion", "PendingMigrations", "ServerVersion"}},
+		localization.Definition{
+			ID:        "cli.cluster.status.schema",
+			Origin:    commandLocalizationOrigin,
+			Variables: []string{"DatabaseVersion", "PendingMigrations", "ServerVersion"},
+		},
 		localization.Definition{ID: "cli.config.show.environment_overrides", Origin: commandLocalizationOrigin, Variables: []string{"Names"}},
 		localization.Definition{ID: "cli.jobs.error.limit", Origin: commandLocalizationOrigin, Variables: []string{"Maximum"}},
 		localization.Definition{ID: "cli.jobs.error.unknown_state", Origin: commandLocalizationOrigin, Variables: []string{"Known", "Value"}},
 		localization.Definition{ID: "cli.jobs.error.unknown_type", Origin: commandLocalizationOrigin, Variables: []string{"Known", "Value"}},
 		localization.Definition{ID: "cli.migrate.down.error.live_nodes", Origin: commandLocalizationOrigin, Variables: []string{"Nodes"}},
-		localization.Definition{ID: "cli.migrate.down.plan", Origin: commandLocalizationOrigin, Variables: []string{"Count", "DatabaseVersion", "TargetVersion"}},
+		localization.Definition{
+			ID:        "cli.migrate.down.plan",
+			Origin:    commandLocalizationOrigin,
+			Variables: []string{"Count", "DatabaseVersion", "TargetVersion"},
+		},
 		localization.Definition{ID: "cli.migrate.down.success", Origin: commandLocalizationOrigin, Variables: []string{"Version"}},
 		localization.Definition{ID: "cli.migrate.up.success", Origin: commandLocalizationOrigin, Variables: []string{"Version"}},
-		localization.Definition{ID: "cli.migrate.status.success", Origin: commandLocalizationOrigin, Variables: []string{"DatabaseVersion", "PendingMigrations", "ServerVersion"}},
-		localization.Definition{ID: "cli.version.output", Origin: commandLocalizationOrigin, Variables: []string{"BuildTime", "Commit", "GoVersion", "Version"}},
+		localization.Definition{
+			ID:        "cli.migrate.status.success",
+			Origin:    commandLocalizationOrigin,
+			Variables: []string{"DatabaseVersion", "PendingMigrations", "ServerVersion"},
+		},
+		localization.Definition{
+			ID:        "cli.version.output",
+			Origin:    commandLocalizationOrigin,
+			Variables: []string{"BuildTime", "Commit", "GoVersion", "Version"},
+		},
 	)
 	return definitions
 }

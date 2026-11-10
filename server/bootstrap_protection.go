@@ -42,8 +42,10 @@ func resolveBootstrapProtection(
 		if validateErr := state.Validate(); validateErr != nil {
 			return identity.BootstrapProtectionPolicy{}, fmt.Errorf("validate installation bootstrap state: %w", validateErr)
 		}
+
 		return identity.BootstrapProtectionPolicy{}, nil
 	}
+
 	if !store.IsNotFound(err) {
 		return identity.BootstrapProtectionPolicy{}, fmt.Errorf("determine installation bootstrap state: %w", err)
 	}
@@ -53,6 +55,7 @@ func resolveBootstrapProtection(
 		if _, err := rand.Read(secretBytes); err != nil {
 			return identity.BootstrapProtectionPolicy{}, fmt.Errorf("generate development bootstrap secret: %w", err)
 		}
+
 		secret := base64.RawURLEncoding.EncodeToString(secretBytes)
 		if output == nil {
 			return identity.BootstrapProtectionPolicy{}, errors.New("development bootstrap secret output is unavailable")
@@ -60,7 +63,11 @@ func resolveBootstrapProtection(
 		if _, err := fmt.Fprintf(output, "Proctor development bootstrap secret: %s\n", secret); err != nil {
 			return identity.BootstrapProtectionPolicy{}, fmt.Errorf("display development bootstrap secret: %w", err)
 		}
+
 		return identity.BootstrapProtectionPolicy{Secret: secret}, nil
 	}
-	return identity.BootstrapProtectionPolicy{}, errors.New("bootstrap secret is required for an uninitialized network-accessible installation")
+
+	return identity.BootstrapProtectionPolicy{}, errors.New(
+		"bootstrap secret is required for an uninitialized network-accessible installation",
+	)
 }

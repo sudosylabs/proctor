@@ -144,10 +144,12 @@ func ShowJob(ctx context.Context, configPath, id string) (_ JobDetail, resultErr
 	if !jobID.IsValid() {
 		return JobDetail{}, fmt.Errorf("job ID %q is invalid", id)
 	}
+
 	database, closeDatabase, err := openJobDatabase(ctx, configPath)
 	if err != nil {
 		return JobDetail{}, err
 	}
+
 	defer func() { resultErr = errors.Join(resultErr, closeDatabase()) }()
 
 	record, err := database.Job().Get(ctx, jobID)
@@ -157,10 +159,12 @@ func ShowJob(ctx context.Context, configPath, id string) (_ JobDetail, resultErr
 	if err != nil {
 		return JobDetail{}, err
 	}
+
 	attempts, err := database.Job().ListAttemptsPage(ctx, store.JobAttemptListOptions{JobID: jobID, Limit: JobAttemptDisplayLimit + 1})
 	if err != nil {
 		return JobDetail{}, err
 	}
+
 	detail := JobDetail{
 		JobSummary:   summarizeJob(record),
 		Attempts:     []JobAttemptSummary{},
@@ -168,11 +172,17 @@ func ShowJob(ctx context.Context, configPath, id string) (_ JobDetail, resultErr
 	}
 	for _, attempt := range attempts[:min(len(attempts), JobAttemptDisplayLimit)] {
 		detail.Attempts = append(detail.Attempts, JobAttemptSummary{
-			Number: attempt.Number, State: string(attempt.Status), NodeID: attempt.NodeID,
-			StartedAt: attempt.StartedAt, HeartbeatAt: attempt.HeartbeatAt, LeaseExpiresAt: attempt.LeaseExpiresAt,
-			CompletedAt: attempt.CompletedAt.Ptr(), ErrorCode: attempt.PublicErrorCode,
+			Number:         attempt.Number,
+			State:          string(attempt.Status),
+			NodeID:         attempt.NodeID,
+			StartedAt:      attempt.StartedAt,
+			HeartbeatAt:    attempt.HeartbeatAt,
+			LeaseExpiresAt: attempt.LeaseExpiresAt,
+			CompletedAt:    attempt.CompletedAt.Ptr(),
+			ErrorCode:      attempt.PublicErrorCode,
 		})
 	}
+
 	return detail, nil
 }
 
@@ -224,13 +234,21 @@ func openJobDatabase(ctx context.Context, configPath string) (*sqlstore.SQLStore
 
 func summarizeJob(record *model.Job) JobSummary {
 	summary := JobSummary{
-		ID: record.ID.String(), Type: string(record.Type), State: string(record.Status),
-		AttemptCount: record.AttemptCount, MaximumAttempts: record.MaximumAttempts, LastErrorCode: record.PublicErrorCode,
-		CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt, AvailableAt: record.AvailableAt,
-		StartedAt: record.StartedAt.Ptr(), CompletedAt: record.CompletedAt.Ptr(),
+		ID:              record.ID.String(),
+		Type:            string(record.Type),
+		State:           string(record.Status),
+		AttemptCount:    record.AttemptCount,
+		MaximumAttempts: record.MaximumAttempts,
+		LastErrorCode:   record.PublicErrorCode,
+		CreatedAt:       record.CreatedAt,
+		UpdatedAt:       record.UpdatedAt,
+		AvailableAt:     record.AvailableAt,
+		StartedAt:       record.StartedAt.Ptr(),
+		CompletedAt:     record.CompletedAt.Ptr(),
 	}
 	if record.Progress != nil {
 		summary.Progress = &JobProgress{Current: record.Progress.Current, Total: record.Progress.Total, Stage: record.Progress.Stage}
 	}
+
 	return summary
 }

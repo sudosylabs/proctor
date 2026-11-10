@@ -46,14 +46,17 @@ func (r *runner) enrollMFA(key string, a *account) error {
 	if err := r.login(a); err != nil {
 		return err
 	}
+
 	raw, err := r.get("/api/v1/users/me/mfa", a.Token)
 	if err != nil {
 		return err
 	}
+
 	status := decode(raw)
 	if status["service_enabled"] != true {
 		return errors.New("MFA fixtures require local MFA to be enabled; use the generated make run-server environment")
 	}
+
 	if status["recently_authenticated"] != true {
 		a.Token = ""
 		a.RefreshToken = ""
@@ -61,40 +64,48 @@ func (r *runner) enrollMFA(key string, a *account) error {
 			return err
 		}
 	}
+
 	if status["enabled"] == true {
 		if a.MFASecret == "" {
 			return errors.New("MFA was enabled outside this seed; refusing to replace it")
 		}
+
 		// An activation response may be lost after commit. The saved enrollment
 		// secret still works; one-time recovery codes cannot be recovered by read.
 		r.state.Operations["mfa/"+key] = &operation{Done: true, Result: json.RawMessage(`{}`)}
 		return r.save()
 	}
+
 	// A pending enrollment can be replaced through the public setup operation.
 	// Persist the returned secret before activation so its unknown outcome is safe.
 	raw, _, err = r.request(r.state.Server, "POST", "/api/v1/users/me/mfa/setup", a.Token, "", json.RawMessage(`{}`), nil)
 	if err != nil {
 		return err
 	}
+
 	a.MFASecret = str(decode(raw), "secret")
 	if err = r.save(); err != nil {
 		return err
 	}
+
 	code, err := totp(a.MFASecret, time.Now())
 	if err != nil {
 		return err
 	}
+
 	body, _ := json.Marshal(object{"code": code})
 	raw, _, err = r.request(r.state.Server, "POST", "/api/v1/users/me/mfa/activate", a.Token, "", body, nil)
 	if err != nil {
 		return err
 	}
+
 	var result struct {
 		RecoveryCodes []string `json:"recovery_codes"`
 	}
 	if err = json.Unmarshal(raw, &result); err != nil {
 		return errors.New("invalid MFA activation response")
 	}
+
 	a.RecoveryCodes = result.RecoveryCodes
 	r.state.Operations["mfa/"+key] = &operation{Done: true, Result: json.RawMessage(`{}`)}
 	return r.save()

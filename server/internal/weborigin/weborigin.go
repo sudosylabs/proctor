@@ -18,10 +18,14 @@ import (
 // FromPublicURL returns the serialized origin of an HTTP or HTTPS public URL.
 func FromPublicURL(publicURL string) (string, error) {
 	parsed, err := url.Parse(publicURL)
-	if err != nil || parsed.User != nil || parsed.Opaque != "" || parsed.Host == "" ||
+	if err != nil ||
+		parsed.User != nil ||
+		parsed.Opaque != "" ||
+		parsed.Host == "" ||
 		(parsed.Scheme != "https" && parsed.Scheme != "http") {
 		return "", errors.New("public URL must have an HTTP or HTTPS origin")
 	}
+
 	return serialize(parsed), nil
 }
 
@@ -31,12 +35,20 @@ func FromHeader(value string) (string, bool) {
 	if value == "" || strings.TrimSpace(value) != value {
 		return "", false
 	}
+
 	parsed, err := url.Parse(value)
-	if err != nil || parsed.User != nil || parsed.Opaque != "" || parsed.Host == "" || parsed.Path != "" ||
-		parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" ||
+	if err != nil ||
+		parsed.User != nil ||
+		parsed.Opaque != "" ||
+		parsed.Host == "" ||
+		parsed.Path != "" ||
+		parsed.RawQuery != "" ||
+		parsed.ForceQuery ||
+		parsed.Fragment != "" ||
 		(parsed.Scheme != "https" && parsed.Scheme != "http") {
 		return "", false
 	}
+
 	return serialize(parsed), true
 }
 

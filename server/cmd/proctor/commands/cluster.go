@@ -42,6 +42,7 @@ func newClusterCommand(status clusterStatusExecutor, text commandText) *cobra.Co
 			if err != nil {
 				return err
 			}
+
 			result, err := status(command.Context(), path)
 			if err != nil {
 				return err
@@ -49,6 +50,7 @@ func newClusterCommand(status clusterStatusExecutor, text commandText) *cobra.Co
 			if asJSON {
 				return writeJSON(command.OutOrStdout(), result)
 			}
+
 			return writeClusterStatus(command.OutOrStdout(), result, text)
 		},
 	}
@@ -69,9 +71,11 @@ func writeClusterStatus(output io.Writer, status server.ClusterStatus, text comm
 	)); err != nil {
 		return err
 	}
+
 	if !status.DatabaseTime.IsZero() {
 		if _, err := fmt.Fprintln(output, text.value(
-			"cli.cluster.status.database_time", "database time {{.Time}}",
+			"cli.cluster.status.database_time",
+			"database time {{.Time}}",
 			map[string]any{"Time": formatInstant(status.DatabaseTime)},
 		)); err != nil {
 			return err
@@ -86,27 +90,47 @@ func writeClusterStatus(output io.Writer, status server.ClusterStatus, text comm
 	} else {
 		_, _ = fmt.Fprintln(table, text.value("cli.cluster.status.serving_header", "NODE\tSTATE\tUPDATED\tEXPIRES\tLEASE", nil))
 		for _, node := range status.ServingNodes {
-			_, _ = fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\n", node.NodeID, liveness(node.Live, text),
-				formatInstant(node.UpdatedAt), formatInstant(node.ExpiresAt), node.LeaseID)
+			_, _ = fmt.Fprintf(
+				table,
+				"%s\t%s\t%s\t%s\t%s\n",
+				node.NodeID,
+				liveness(node.Live, text),
+				formatInstant(node.UpdatedAt),
+				formatInstant(node.ExpiresAt),
+				node.LeaseID,
+			)
 		}
 	}
+
 	_, _ = fmt.Fprintln(table)
 	_, _ = fmt.Fprintln(table, text.value("cli.cluster.status.discovery_title", "Cluster discovery", nil))
 	if len(status.Discovery) == 0 {
 		_, _ = fmt.Fprintln(table, text.value("cli.cluster.status.none", "(none)", nil))
 	} else {
-		_, _ = fmt.Fprintln(table, text.value("cli.cluster.status.discovery_header", "NODE\tSTATE\tADDRESS\tVERSION\tPROTOCOL\tUPDATED\tEXPIRES", nil))
+		_, _ = fmt.Fprintln(
+			table,
+			text.value("cli.cluster.status.discovery_header", "NODE\tSTATE\tADDRESS\tVERSION\tPROTOCOL\tUPDATED\tEXPIRES", nil),
+		)
 		for _, node := range status.Discovery {
-			_, _ = fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", node.NodeID, liveness(node.Live, text),
-				node.AdvertiseAddress, node.ServerVersion,
+			_, _ = fmt.Fprintf(
+				table,
+				"%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				node.NodeID,
+				liveness(node.Live, text),
+				node.AdvertiseAddress,
+				node.ServerVersion,
 				strconv.Itoa(node.ProtocolMin)+"-"+strconv.Itoa(node.ProtocolMax),
-				formatInstant(node.UpdatedAt), formatInstant(node.ExpiresAt))
+				formatInstant(node.UpdatedAt),
+				formatInstant(node.ExpiresAt),
+			)
 		}
 	}
+
 	if status.Truncated {
 		_, _ = fmt.Fprintln(table)
 		_, _ = fmt.Fprintln(table, text.value("cli.cluster.status.truncated", "output stopped at its row bound; more rows exist", nil))
 	}
+
 	return table.Flush()
 }
 

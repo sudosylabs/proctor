@@ -91,12 +91,14 @@ func validateExternalAuthentication(
 			"must be between 1m and 30m",
 		)
 	}
+
 	if len(external.Providers) > identityprovider.MaximumCount {
 		add(
 			"authentication.external.providers",
 			fmt.Sprintf("must contain at most %d providers", identityprovider.MaximumCount),
 		)
 	}
+
 	seen := make(map[string]struct{}, len(external.Providers))
 	for index, provider := range external.Providers {
 		prefix := fmt.Sprintf("authentication.external.providers[%d]", index)
@@ -107,10 +109,13 @@ func validateExternalAuthentication(
 		} else {
 			seen[provider.ID] = struct{}{}
 		}
-		if len(provider.DisplayName) == 0 || len(provider.DisplayName) > 128 ||
+
+		if len(provider.DisplayName) == 0 ||
+			len(provider.DisplayName) > 128 ||
 			strings.ContainsAny(provider.DisplayName, "\x00\r\n") {
 			add(prefix+".display_name", "must contain between 1 and 128 safe characters")
 		}
+
 		switch provider.Type {
 		case ExternalAuthenticationTypeCAS:
 			if provider.CAS == nil {
@@ -118,6 +123,7 @@ func validateExternalAuthentication(
 			} else {
 				validateCASProvider(prefix+".cas", *provider.CAS, add)
 			}
+
 			if provider.OIDC != nil {
 				add(prefix+".oidc", "must be omitted for a cas provider")
 			}
@@ -127,12 +133,14 @@ func validateExternalAuthentication(
 			} else {
 				validateOIDCProvider(prefix+".oidc", *provider.OIDC, add)
 			}
+
 			if provider.CAS != nil {
 				add(prefix+".cas", "must be omitted for an oidc provider")
 			}
 		default:
 			add(prefix+".type", "must name a registered provider type")
 		}
+
 		validateExternalClaims(
 			prefix+".claims",
 			provider.Type,
@@ -175,34 +183,45 @@ func validateOIDCProvider(
 	validateExternalHTTPSURL(prefix+".issuer", provider.Issuer, add)
 	parsed, _ := url.Parse(provider.Issuer)
 	if parsed != nil &&
-		(parsed.RawQuery != "" || parsed.Fragment != "" ||
+		(parsed.RawQuery != "" ||
+			parsed.Fragment != "" ||
 			(parsed.Path != "" && strings.HasSuffix(parsed.Path, "/"))) {
 		add(prefix+".issuer", "must not contain a query, fragment, or trailing slash")
 	}
-	if provider.ClientID == "" || len(provider.ClientID) > 512 ||
+
+	if provider.ClientID == "" ||
+		len(provider.ClientID) > 512 ||
 		strings.ContainsAny(provider.ClientID, "\x00\r\n") {
 		add(prefix+".client_id", "must contain between 1 and 512 safe characters")
 	}
-	if provider.ClientSecret == "" || len(provider.ClientSecret) > 4096 ||
+
+	if provider.ClientSecret == "" ||
+		len(provider.ClientSecret) > 4096 ||
 		strings.ContainsAny(provider.ClientSecret, "\x00\r\n") {
 		add(prefix+".client_secret", "must contain between 1 and 4096 safe characters")
 	}
+
 	seenScopes := make(map[string]struct{}, len(provider.Scopes))
 	for index, scope := range provider.Scopes {
 		field := fmt.Sprintf("%s.scopes[%d]", prefix, index)
-		if scope == "" || len(scope) > 128 ||
+		if scope == "" ||
+			len(scope) > 128 ||
 			strings.ContainsAny(scope, "\x00\r\n \t") {
 			add(field, "must contain between 1 and 128 safe characters")
 			continue
 		}
+
 		if _, exists := seenScopes[scope]; exists {
 			add(field, "must be unique")
 		}
+
 		seenScopes[scope] = struct{}{}
 	}
+
 	if _, exists := seenScopes["openid"]; !exists {
 		add(prefix+".scopes", "must include openid")
 	}
+
 	validateExternalHTTPBounds(
 		prefix,
 		provider.Timeout.Duration,
@@ -231,7 +250,9 @@ func validateExternalHTTPSURL(
 	add func(string, string),
 ) {
 	parsed, err := url.Parse(value)
-	if err != nil || parsed.Host == "" || parsed.User != nil ||
+	if err != nil ||
+		parsed.Host == "" ||
+		parsed.User != nil ||
 		(parsed.Scheme != "https" &&
 			!(parsed.Scheme == "http" && isLoopbackHost(parsed.Hostname()))) {
 		add(field, "must be an HTTPS URL, or loopback HTTP for development")
@@ -269,25 +290,31 @@ func validateExternalClaims(
 			)
 		}
 	}
+
 	if claims.Subject == "" {
 		add(prefix+".subject", "is required")
 	}
+
 	if providerType == ExternalAuthenticationTypeOIDC && claims.Subject != "sub" {
 		add(prefix+".subject", "must be sub for an oidc provider")
 	}
+
 	if autoProvision {
 		if claims.Username == "" {
 			add(prefix+".username", "is required when auto_provision is enabled")
 		}
+
 		if claims.Email == "" {
 			add(prefix+".email", "is required when auto_provision is enabled")
 		}
 	}
+
 	seenOrganizations := make(map[string]struct{}, len(claims.AllowedHomeOrganizations))
 	for index, organization := range claims.AllowedHomeOrganizations {
 		organization = strings.ToLower(strings.TrimSpace(organization))
 		field := fmt.Sprintf("%s.allowed_home_organizations[%d]", prefix, index)
-		if len(organization) == 0 || len(organization) > 255 ||
+		if len(organization) == 0 ||
+			len(organization) > 255 ||
 			strings.ContainsAny(organization, "\x00\r\n @/") {
 			add(field, "must be a safe DNS-style organization identifier")
 		} else if _, exists := seenOrganizations[organization]; exists {
@@ -296,9 +323,11 @@ func validateExternalClaims(
 			seenOrganizations[organization] = struct{}{}
 		}
 	}
+
 	if len(claims.AllowedHomeOrganizations) != 0 && claims.HomeOrganization == "" {
 		add(prefix+".home_organization", "is required when allowed_home_organizations is configured")
 	}
+
 	seenMFAValues := make(map[string]struct{}, len(claims.MultiFactorValues))
 	for index, value := range claims.MultiFactorValues {
 		value = strings.TrimSpace(value)
@@ -311,6 +340,7 @@ func validateExternalClaims(
 			seenMFAValues[value] = struct{}{}
 		}
 	}
+
 	if (claims.MultiFactorAttribute == "") != (len(claims.MultiFactorValues) == 0) {
 		add(
 			prefix+".multi_factor_values",
@@ -323,16 +353,21 @@ func validConfigurationName(value string, maximum int) bool {
 	if len(value) == 0 || len(value) > maximum {
 		return false
 	}
+
 	for index, character := range value {
 		if (character < 'a' || character > 'z') &&
 			(character < '0' || character > '9') &&
-			character != '.' && character != '_' && character != '-' {
+			character != '.' &&
+			character != '_' &&
+			character != '-' {
 			return false
 		}
+
 		if index == 0 && (character == '.' || character == '_' || character == '-') {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -340,20 +375,27 @@ func validClaimName(value string) bool {
 	if len(value) == 0 || len(value) > 128 {
 		return false
 	}
+
 	for index, character := range value {
 		if (character < 'a' || character > 'z') &&
 			(character < 'A' || character > 'Z') &&
 			(character < '0' || character > '9') &&
-			character != '.' && character != '_' &&
-			character != ':' && character != '-' {
+			character != '.' &&
+			character != '_' &&
+			character != ':' &&
+			character != '-' {
 			return false
 		}
+
 		if index == 0 &&
 			((character >= '0' && character <= '9') ||
-				character == '.' || character == ':' || character == '-') {
+				character == '.' ||
+				character == ':' ||
+				character == '-') {
 			return false
 		}
 	}
+
 	return true
 }
 

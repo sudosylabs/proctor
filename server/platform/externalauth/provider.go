@@ -107,6 +107,7 @@ func (r *Registry) Configure(
 		if !definition.Enabled {
 			continue
 		}
+
 		factory, exists := r.factories[definition.Type]
 		if !exists {
 			return fmt.Errorf(
@@ -115,6 +116,7 @@ func (r *Registry) Configure(
 				definition.Type,
 			)
 		}
+
 		provider, err := factory.New(definition)
 		if err != nil {
 			return fmt.Errorf(
@@ -123,12 +125,14 @@ func (r *Registry) Configure(
 				err,
 			)
 		}
+
 		if provider == nil {
 			return fmt.Errorf(
 				"external authentication provider %q factory returned nil",
 				definition.ID,
 			)
 		}
+
 		descriptor := provider.Descriptor()
 		if descriptor.ID != definition.ID ||
 			descriptor.Type != definition.Type {
@@ -137,14 +141,17 @@ func (r *Registry) Configure(
 				definition.ID,
 			)
 		}
+
 		if _, exists := configured[descriptor.ID]; exists {
 			return fmt.Errorf(
 				"external authentication provider %q is duplicated",
 				descriptor.ID,
 			)
 		}
+
 		configured[descriptor.ID] = provider
 	}
+
 	r.mutex.Lock()
 	r.providers = configured
 	r.mutex.Unlock()
@@ -198,18 +205,24 @@ func (e *OperationError) Is(target error) bool {
 
 func Rejected(operation string, cause error) error {
 	return &OperationError{
-		Kind: ErrAuthenticationRejected, Operation: operation, Cause: cause,
+		Kind:      ErrAuthenticationRejected,
+		Operation: operation,
+		Cause:     cause,
 	}
 }
 
 func InvalidResponse(operation string, cause error) error {
 	return &OperationError{
-		Kind: ErrInvalidResponse, Operation: operation, Cause: cause,
+		Kind:      ErrInvalidResponse,
+		Operation: operation,
+		Cause:     cause,
 	}
 }
 
 func Unavailable(operation string, cause error) error {
 	return &OperationError{
-		Kind: ErrProviderUnavailable, Operation: operation, Cause: cause,
+		Kind:      ErrProviderUnavailable,
+		Operation: operation,
+		Cause:     cause,
 	}
 }

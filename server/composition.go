@@ -78,14 +78,17 @@ func defaultConsumerConstructors(
 	if err != nil {
 		return consumerConstructors{}, fmt.Errorf("open localization catalogs: %w", err)
 	}
+
 	localizer, err := localization.New(catalogFiles, snapshot.Localization.DefaultLocale)
 	if err != nil {
 		return consumerConstructors{}, fmt.Errorf("construct localizer: %w", err)
 	}
+
 	templateFiles, err := runtimeAssetDirectory("templates")
 	if err != nil {
 		return consumerConstructors{}, fmt.Errorf("open mail templates: %w", err)
 	}
+
 	mailRenderer, err := mail.NewRendererWithPolicy(templateFiles, localizer, mail.RendererPolicy{
 		AllowLoopbackHTTPDevelopment: explicitLoopbackHTTPDevelopment(snapshot.Server.PublicURL),
 		SupportAddress:               snapshot.Mail.SupportAddress,
@@ -94,18 +97,24 @@ func defaultConsumerConstructors(
 	if err != nil {
 		return consumerConstructors{}, fmt.Errorf("construct mail renderer: %w", err)
 	}
+
 	webappFiles := overrideWebappFiles
 	if webappFiles == nil {
 		webappFiles = os.DirFS(snapshot.Server.WebappDirectory)
 	}
+
 	return consumerConstructors{
 		fileContent: func(capabilities constructionCapabilities) (app.FileContent, error) {
 			var recorder filecontent.WorkRecorder
 			if capabilities.metrics != nil && capabilities.metrics.Enabled() {
 				recorder = workMetricsRecorder{metrics: capabilities.metrics, pool: "file_content"}
 			}
-			return filecontent.New(capabilities.filesystem,
-				filecontent.Policy{MaximumConcurrentOperations: snapshot.FileContent.MaximumConcurrentOperations}, recorder)
+
+			return filecontent.New(
+				capabilities.filesystem,
+				filecontent.Policy{MaximumConcurrentOperations: snapshot.FileContent.MaximumConcurrentOperations},
+				recorder,
+			)
 		},
 		dependencies: func(capabilities constructionCapabilities, content app.FileContent) (app.Dependencies, error) {
 			dependencies, err := applicationDependencies(capabilities, snapshot, content, mailRenderer)
@@ -113,6 +122,7 @@ func defaultConsumerConstructors(
 			if err == nil && overrideDesktopBuildCatalog != nil {
 				dependencies.DesktopBuildCatalog = append([]model.DesktopBuildTuple(nil), overrideDesktopBuildCatalog...)
 			}
+
 			return dependencies, err
 		},
 		application: app.New,
@@ -140,6 +150,7 @@ func defaultConsumerConstructors(
 			if runner := application.JobEngine(); runner != nil {
 				return runner
 			}
+
 			return nil
 		},
 	}, nil
@@ -164,6 +175,7 @@ func composeNode(ctx context.Context, input compositionInput) (*compositionResul
 	if !input.serviceEnvironment.valid() {
 		return nil, errors.New("invalid service environment")
 	}
+
 	// 1. Acquire and decorate infrastructure under one temporary owner.
 	infrastructure, err := openRuntimeInfrastructure(ctx, input.configPath, input.overrides, schemaPolicyFor(input.requireCurrentSchema))
 	if err != nil {
@@ -176,6 +188,7 @@ func composeNode(ctx context.Context, input compositionInput) (*compositionResul
 	if err != nil {
 		return nil, fmt.Errorf("accept platform ownership: %w", err)
 	}
+
 	logStartupInfrastructure(snapshot, capabilities.logger, capabilities.migration)
 	capabilities.logger.Info("service environment selected",
 		logging.String("environment", string(input.serviceEnvironment)),
@@ -189,11 +202,18 @@ func composeNode(ctx context.Context, input compositionInput) (*compositionResul
 		input.serviceEnvironment,
 	)
 	if constructorsErr != nil {
-		return nil, compositionRelease{platform: applicationPlatform, shutdownTimeout: snapshot.Server.ShutdownTimeout.Duration, metrics: capabilities.metrics, tracing: capabilities.tracing}.fail(constructorsErr)
+		return nil, compositionRelease{
+			platform:        applicationPlatform,
+			shutdownTimeout: snapshot.Server.ShutdownTimeout.Duration,
+			metrics:         capabilities.metrics,
+			tracing:         capabilities.tracing,
+		}.fail(constructorsErr)
 	}
+
 	if input.constructors != nil {
 		constructors = *input.constructors
 	}
+
 	return composeConsumers(ctx, applicationPlatform, snapshot, capabilities, input, constructors)
 }
 
@@ -207,15 +227,22 @@ func composeConsumers(
 ) (*compositionResult, error) {
 	// 3. Construct consumers in dependency order. Every failure releases only
 	// the consumers already built, followed by Platform.
-	release := compositionRelease{platform: applicationPlatform, shutdownTimeout: snapshot.Server.ShutdownTimeout.Duration, metrics: capabilities.metrics, tracing: capabilities.tracing}
+	release := compositionRelease{
+		platform:        applicationPlatform,
+		shutdownTimeout: snapshot.Server.ShutdownTimeout.Duration,
+		metrics:         capabilities.metrics,
+		tracing:         capabilities.tracing,
+	}
 	applicationDeps, err := composeApplicationDependencies(ctx, snapshot, capabilities, input, constructors)
 	if err != nil {
 		return nil, release.fail(err)
 	}
+
 	application, err := constructors.application(applicationDeps)
 	if err != nil {
 		return nil, release.fail(fmt.Errorf("construct application: %w", err))
 	}
+
 	clusterFanout, err := constructors.realtime(capabilities.cluster)
 	if err != nil {
 		return nil, release.fail(fmt.Errorf("construct realtime cluster adapter: %w", err))
@@ -228,14 +255,18 @@ func composeConsumers(
 	if err != nil {
 		return nil, release.fail(err)
 	}
+
 	buildInfo := resolveBuildInfo(input.overrides.BuildInfo)
 	webSocketHub, err := constructors.websocket(
-		application, capabilities.logger,
-		snapshot.Server.PublicURL, capabilities.nodeID,
+		application,
+		capabilities.logger,
+		snapshot.Server.PublicURL,
+		capabilities.nodeID,
 	)
 	if err != nil {
 		return nil, release.fail(fmt.Errorf("construct WebSocket hub: %w", err))
 	}
+
 	release.websocket = webSocketHub.Close
 	if attachable, ok := webSocketHub.(interface {
 		AttachRecorder(websocket.Recorder) error
@@ -244,27 +275,33 @@ func composeConsumers(
 			return nil, release.fail(fmt.Errorf("attach WebSocket metrics: %w", err))
 		}
 	}
+
 	if err = constructors.attachSink(application, webSocketHub); err != nil {
 		return nil, release.fail(fmt.Errorf("attach realtime sink: %w", err))
 	}
+
 	httpSettings, err := httpAPISettings(readiness, buildInfo, snapshot, capabilities, webSocketHub)
 	if err != nil {
 		return nil, release.fail(err)
 	}
+
 	httpTransport, httpAPI, err := constructors.http(application, httpSettings)
 	if err != nil {
 		return nil, release.fail(fmt.Errorf("construct HTTP API: %w", err))
 	}
+
 	release.transport = httpTransport.Close
 	rootTransport, err := composeRootTransport(httpTransport, httpAPI, buildInfo, snapshot, constructors)
 	if err != nil {
 		return nil, release.fail(err)
 	}
+
 	release.transport = rootTransport.Close
 	jobRuntime := constructors.jobs(application)
 	if jobRuntime == nil && !input.allowMissingJobs {
 		return nil, release.fail(fmt.Errorf("require durable Job runtime: %w", errDurableJobRuntimeUnavailable))
 	}
+
 	servingLease, err := newServingNodeLeaseRuntime(capabilities.persistence.ServingNodeLease(), capabilities.nodeID)
 	if err != nil {
 		return nil, release.fail(fmt.Errorf("construct serving node lease: %w", err))
@@ -273,15 +310,26 @@ func composeConsumers(
 	// 4. Assemble one inert lifecycle owner. No listener, goroutine, readiness,
 	// or transport lifecycle operation runs during composition.
 	node := &Server{components: runtimeComponents{
-		platform: applicationPlatform, reconciler: applicationIdentity(application), administratorRecovery: applicationIdentity(application),
-		settings: runtimeSettingsFromConfig(snapshot.Server),
-		logger:   capabilities.logger, jobs: jobRuntime, servingLease: servingLease, transport: rootTransport,
-		websocket: webSocketHub, metrics: capabilities.metrics, tracing: capabilities.tracing, readiness: readiness, listen: net.Listen, newHTTP: newHTTPServer,
+		platform:              applicationPlatform,
+		reconciler:            applicationIdentity(application),
+		administratorRecovery: applicationIdentity(application),
+		settings:              runtimeSettingsFromConfig(snapshot.Server),
+		logger:                capabilities.logger,
+		jobs:                  jobRuntime,
+		servingLease:          servingLease,
+		transport:             rootTransport,
+		websocket:             webSocketHub,
+		metrics:               capabilities.metrics,
+		tracing:               capabilities.tracing,
+		readiness:             readiness,
+		listen:                net.Listen,
+		newHTTP:               newHTTPServer,
 	}}
 	return &compositionResult{
 		server: node,
 		test: testingProjection{
-			application: application, handler: rootTransport,
+			application: application,
+			handler:     rootTransport,
 		},
 	}, nil
 }
@@ -357,10 +405,16 @@ func composeReadiness(applicationPlatform runtimeComponent) (*app.Health, error)
 	if checker, ok := applicationPlatform.(interface{ CheckDependencies(context.Context) error }); ok {
 		dependencyProbe = checker.CheckDependencies
 	}
-	readiness, err := app.NewHealth(app.HealthDependencies{Probe: dependencyProbe, Timeout: app.DefaultReadinessProbeTimeout, Interval: time.Second})
+
+	readiness, err := app.NewHealth(app.HealthDependencies{
+		Probe:    dependencyProbe,
+		Timeout:  app.DefaultReadinessProbeTimeout,
+		Interval: time.Second,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("construct readiness: %w", err)
 	}
+
 	return readiness, nil
 }
 
@@ -369,10 +423,13 @@ func resolveBuildInfo(buildInfo httpapi.BuildInfo) httpapi.BuildInfo {
 	if buildInfo == (httpapi.BuildInfo{}) {
 		current := app.CurrentBuildInfo()
 		buildInfo = httpapi.BuildInfo{
-			Version: current.Version, Commit: current.Commit,
-			BuildTime: current.BuildTime, GoVersion: current.GoVersion,
+			Version:   current.Version,
+			Commit:    current.Commit,
+			BuildTime: current.BuildTime,
+			GoVersion: current.GoVersion,
 		}
 	}
+
 	return buildInfo
 }
 
@@ -397,24 +454,31 @@ func httpAPISettings(
 	if capabilities.metrics != nil && capabilities.metrics.Enabled() {
 		httpMetrics = capabilities.metrics
 	}
+
 	var httpTracer httpapi.Tracing
 	if capabilities.tracing.Enabled() {
 		httpTracer = httpTracing{tracing: capabilities.tracing}
 	}
+
 	trustedProxies, err := config.ParseTrustedProxies(snapshot.Server.TrustedProxies)
 	if err != nil {
 		return httpapi.Settings{}, fmt.Errorf("parse trusted proxies: %w", err)
 	}
+
 	return httpapi.Settings{
-		Logger: capabilities.logger, Health: readiness,
-		Metrics:   httpMetrics,
-		Tracing:   httpTracer,
-		BuildInfo: buildInfo,
-		PublicURL: snapshot.Server.PublicURL, MaxBodyBytes: snapshot.Server.MaxBodyBytes,
-		ReadTimeout: snapshot.Server.ReadTimeout.Duration, WriteTimeout: snapshot.Server.WriteTimeout.Duration,
+		Logger:                  capabilities.logger,
+		Health:                  readiness,
+		Metrics:                 httpMetrics,
+		Tracing:                 httpTracer,
+		BuildInfo:               buildInfo,
+		PublicURL:               snapshot.Server.PublicURL,
+		MaxBodyBytes:            snapshot.Server.MaxBodyBytes,
+		ReadTimeout:             snapshot.Server.ReadTimeout.Duration,
+		WriteTimeout:            snapshot.Server.WriteTimeout.Duration,
 		TrustedProxies:          trustedProxies,
 		RecentAuthenticationTTL: snapshot.Authentication.RecentAuthenticationTTL.Duration,
-		NodeID:                  capabilities.nodeID, WebSocket: webSocketHub,
+		NodeID:                  capabilities.nodeID,
+		WebSocket:               webSocketHub,
 	}, nil
 }
 

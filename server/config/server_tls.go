@@ -81,9 +81,13 @@ func validateServerTLS(server Server, cluster Cluster, add func(string, string))
 			add(item.field, "contains a null byte")
 		}
 	}
-	if maxAge := settings.StrictTransportSecurityMaxAge.Duration; maxAge < 0 || maxAge > maximumStrictTransportSecurityMaxAge || maxAge%time.Second != 0 {
+
+	if maxAge := settings.StrictTransportSecurityMaxAge.Duration; maxAge < 0 ||
+		maxAge > maximumStrictTransportSecurityMaxAge ||
+		maxAge%time.Second != 0 {
 		add("server.tls.strict_transport_security_max_age", "must be whole seconds between 0 and 17520h")
 	}
+
 	if settings.LetsEncrypt.Email != "" && !validMailbox(settings.LetsEncrypt.Email) {
 		add("server.tls.lets_encrypt.email", "must be a plain email address")
 	}
@@ -94,6 +98,7 @@ func validateServerTLS(server Server, cluster Cluster, add func(string, string))
 		if strings.TrimSpace(settings.CertificateFile) == "" {
 			add("server.tls.certificate_file", "is required when TLS mode is static")
 		}
+
 		if strings.TrimSpace(settings.PrivateKeyFile) == "" {
 			add("server.tls.private_key_file", "is required when TLS mode is static")
 		}
@@ -101,15 +106,19 @@ func validateServerTLS(server Server, cluster Cluster, add func(string, string))
 		if strings.TrimSpace(settings.LetsEncrypt.CacheDirectory) == "" {
 			add("server.tls.lets_encrypt.cache_directory", "is required when TLS mode is lets_encrypt")
 		}
+
 		if server.LetsEncryptHostname() == "" {
 			add("server.public_url", "must use a fully qualified DNS hostname for Let's Encrypt")
 		}
+
 		if cluster.Backend == "memberlist" {
 			add("server.tls.mode", "lets_encrypt is single-node only; terminate public TLS at the load balancer in a cluster")
 		}
+
 		if !settings.ForwardHTTPToHTTPS {
 			add("server.tls.forward_http_to_https", "must be enabled for Let's Encrypt HTTP-01 challenges")
 		}
+
 		if !settings.LetsEncrypt.AcceptTermsOfService {
 			add("server.tls.lets_encrypt.accept_terms_of_service", "must be true to accept the Let's Encrypt Subscriber Agreement")
 		}
@@ -120,10 +129,12 @@ func validateServerTLS(server Server, cluster Cluster, add func(string, string))
 	if settings.Mode != ServerTLSModeDisabled && (parsedPublicURL == nil || parsedPublicURL.Scheme != "https") {
 		add("server.public_url", "scheme must be https when built-in TLS is enabled")
 	}
+
 	if settings.ForwardHTTPToHTTPS {
 		if settings.Mode == ServerTLSModeDisabled {
 			add("server.tls.forward_http_to_https", "requires static or lets_encrypt TLS mode")
 		}
+
 		validateTCPListenAddress("server.tls.http_listen_address", settings.HTTPListenAddress, false, add)
 		if settings.HTTPListenAddress == server.ListenAddress {
 			add("server.tls.http_listen_address", "must differ from server.listen_address")
@@ -147,24 +158,32 @@ func (s Server) LetsEncryptHostname() string {
 }
 
 func validACMEDNSHostname(hostname string) bool {
-	if len(hostname) == 0 || len(hostname) > 253 || hostname == "localhost" ||
-		net.ParseIP(hostname) != nil || !strings.Contains(hostname, ".") {
+	if len(hostname) == 0 ||
+		len(hostname) > 253 ||
+		hostname == "localhost" ||
+		net.ParseIP(hostname) != nil ||
+		!strings.Contains(hostname, ".") {
 		return false
 	}
+
 	canonical, err := idna.Lookup.ToASCII(hostname)
 	if err != nil || canonical != hostname {
 		return false
 	}
+
 	for _, label := range strings.Split(hostname, ".") {
 		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
 			return false
 		}
+
 		for _, character := range label {
 			if (character < 'a' || character > 'z') &&
-				(character < '0' || character > '9') && character != '-' {
+				(character < '0' || character > '9') &&
+				character != '-' {
 				return false
 			}
 		}
 	}
+
 	return true
 }

@@ -65,12 +65,14 @@ func InspectCluster(ctx context.Context, configPath string) (_ ClusterStatus, re
 	if err != nil {
 		return ClusterStatus{}, err
 	}
+
 	defer func() { resultErr = errors.Join(resultErr, closeDatabase()) }()
 
 	schema, err := readMigrationStatus(ctx, database)
 	if err != nil {
 		return ClusterStatus{}, err
 	}
+
 	status := ClusterStatus{
 		Schema:       ClusterSchema(schema),
 		ServingNodes: []ServingNode{},
@@ -79,24 +81,36 @@ func InspectCluster(ctx context.Context, configPath string) (_ ClusterStatus, re
 	if schema.DatabaseVersion == 0 {
 		return status, nil
 	}
+
 	inspection, err := database.InspectCluster(ctx)
 	if err != nil {
 		return ClusterStatus{}, err
 	}
+
 	status.DatabaseTime = inspection.DatabaseTime
 	status.Truncated = inspection.ServingNodeLeasesTruncated || inspection.DiscoveryNodesTruncated
 	for _, lease := range inspection.ServingNodeLeases {
 		status.ServingNodes = append(status.ServingNodes, ServingNode{
-			NodeID: lease.NodeID, LeaseID: lease.LeaseID, UpdatedAt: lease.UpdatedAt, ExpiresAt: lease.ExpiresAt,
-			Live: lease.ExpiresAt.After(inspection.DatabaseTime),
+			NodeID:    lease.NodeID,
+			LeaseID:   lease.LeaseID,
+			UpdatedAt: lease.UpdatedAt,
+			ExpiresAt: lease.ExpiresAt,
+			Live:      lease.ExpiresAt.After(inspection.DatabaseTime),
 		})
 	}
+
 	for _, node := range inspection.DiscoveryNodes {
 		status.Discovery = append(status.Discovery, DiscoveryNode{
-			NodeID: node.NodeID, AdvertiseAddress: node.AdvertiseAddress, ServerVersion: node.ServerVersion,
-			ProtocolMin: node.ProtocolMin, ProtocolMax: node.ProtocolMax,
-			UpdatedAt: node.UpdatedAt, ExpiresAt: node.ExpiresAt, Live: node.IsLive(inspection.DatabaseTime),
+			NodeID:           node.NodeID,
+			AdvertiseAddress: node.AdvertiseAddress,
+			ServerVersion:    node.ServerVersion,
+			ProtocolMin:      node.ProtocolMin,
+			ProtocolMax:      node.ProtocolMax,
+			UpdatedAt:        node.UpdatedAt,
+			ExpiresAt:        node.ExpiresAt,
+			Live:             node.IsLive(inspection.DatabaseTime),
 		})
 	}
+
 	return status, nil
 }

@@ -85,6 +85,7 @@ func (d *reliableDelivery) enqueue(node *hashimemberlist.Node, payload []byte, d
 		done(cluster.ErrStopped)
 		return
 	}
+
 	peer, exists := d.peers[node.Name]
 	if !exists {
 		peer = &reliablePeer{wake: make(chan struct{}, 1)}
@@ -92,6 +93,7 @@ func (d *reliableDelivery) enqueue(node *hashimemberlist.Node, payload []byte, d
 		d.workers.Add(1)
 		go d.deliver(node.Name, peer)
 	}
+
 	var dropped []reliableEnvelope
 	for len(peer.queue) > 0 && (len(peer.queue) >= d.maximumEnvelopes || peer.bytes+len(payload) > d.maximumBytes) {
 		dropped = append(dropped, peer.queue[0])
@@ -99,6 +101,7 @@ func (d *reliableDelivery) enqueue(node *hashimemberlist.Node, payload []byte, d
 		peer.queue[0] = reliableEnvelope{}
 		peer.queue = peer.queue[1:]
 	}
+
 	peer.queue = append(peer.queue, reliableEnvelope{node: node, payload: payload, done: done})
 	peer.bytes += len(payload)
 	d.mu.Unlock()
@@ -106,6 +109,7 @@ func (d *reliableDelivery) enqueue(node *hashimemberlist.Node, payload []byte, d
 	case peer.wake <- struct{}{}:
 	default:
 	}
+
 	for _, envelope := range dropped {
 		envelope.done(errReliableQueueFull)
 	}
@@ -122,6 +126,7 @@ func (d *reliableDelivery) deliver(name string, peer *reliablePeer) {
 				d.mu.Unlock()
 				return
 			}
+
 			d.mu.Unlock()
 			if !idle.Stop() {
 				select {
@@ -129,23 +134,28 @@ func (d *reliableDelivery) deliver(name string, peer *reliablePeer) {
 				default:
 				}
 			}
+
 			idle.Reset(d.idleTimeout)
 			select {
 			case <-peer.wake:
 				continue
 			case <-idle.C:
 			}
+
 			d.mu.Lock()
 			if len(peer.queue) == 0 {
 				if d.peers[name] == peer {
 					delete(d.peers, name)
 				}
+
 				d.mu.Unlock()
 				return
 			}
+
 			d.mu.Unlock()
 			continue
 		}
+
 		envelope := peer.queue[0]
 		peer.queue[0] = reliableEnvelope{}
 		peer.queue = peer.queue[1:]

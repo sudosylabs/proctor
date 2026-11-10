@@ -44,21 +44,27 @@ func (r *exactSizeReader) Read(buffer []byte) (int, error) {
 	if r.err != nil {
 		return 0, r.err
 	}
+
 	if r.remaining == 0 {
 		if err := r.probe(); err != nil {
 			return 0, err
 		}
+
 		return 0, io.EOF
 	}
+
 	if len(buffer) == 0 {
 		return 0, nil
 	}
+
 	if int64(len(buffer)) > r.remaining {
 		buffer = buffer[:r.remaining]
 	}
+
 	if len(buffer) > streamReadLimit {
 		buffer = buffer[:streamReadLimit]
 	}
+
 	read, err := r.body.Read(buffer)
 	r.remaining -= int64(read)
 	_, _ = r.digest.Write(buffer[:read])
@@ -72,6 +78,7 @@ func (r *exactSizeReader) Read(buffer []byte) (int, error) {
 		r.err = err
 		return read, err
 	}
+
 	return read, nil
 }
 

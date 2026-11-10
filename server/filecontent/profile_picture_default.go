@@ -36,14 +36,17 @@ func renderDefaultProfilePicture(ctx context.Context, seed string) (*image.NRGBA
 	if len(seed) != model.ProfilePictureSeedLength {
 		return nil, fmt.Errorf("invalid default profile-picture seed")
 	}
+
 	seedBytes, err := hex.DecodeString(seed)
 	if err != nil || len(seedBytes) != model.ProfilePictureSeedLength/2 {
 		return nil, fmt.Errorf("invalid default profile-picture seed")
 	}
+
 	glyph, err := defaultProfilePictureShape(ctx, seedBytes)
 	if err != nil {
 		return nil, err
 	}
+
 	foreground, background := defaultProfilePictureColors(seedBytes)
 	dimension := defaultProfilePictureSize * defaultProfilePictureSupersample
 	canvas := image.NewNRGBA(image.Rect(0, 0, dimension, dimension))
@@ -58,6 +61,7 @@ func renderDefaultProfilePicture(ctx context.Context, seed string) (*image.NRGBA
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
+
 		for col, filled := range glyph[row] {
 			if filled {
 				glyph.drawCell(
@@ -69,6 +73,7 @@ func renderDefaultProfilePicture(ctx context.Context, seed string) (*image.NRGBA
 			}
 		}
 	}
+
 	// Downsample a single antialiased master so the geometry and edge treatment
 	// agree for persisted renditions and transient reads at every supported size.
 	master := imaging.Resize(
@@ -80,6 +85,7 @@ func renderDefaultProfilePicture(ctx context.Context, seed string) (*image.NRGBA
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+
 	return master, nil
 }
 
@@ -161,6 +167,7 @@ func defaultProfilePictureShape(ctx context.Context, seed []byte) (defaultProfil
 		if err := ctx.Err(); err != nil {
 			return defaultProfilePictureGlyph{}, err
 		}
+
 		digest := sha256.Sum256([]byte(fmt.Sprintf("proctor-avatar-prototype/shape/%x/%d", seed, attempt)))
 		var glyph defaultProfilePictureGlyph
 		var count, rows int
@@ -171,18 +178,22 @@ func defaultProfilePictureShape(ctx context.Context, seed []byte) (defaultProfil
 				filled := digest[index/8]&(1<<(index%8)) != 0
 				glyph[row][col], glyph[row][4-col] = filled, filled
 			}
+
 			rowCount := 0
 			for _, filled := range glyph[row] {
 				if filled {
 					rowCount++
 				}
 			}
+
 			count += rowCount
 			if rowCount > 0 {
 				rows++
 			}
+
 			outer = outer || glyph[row][0]
 		}
+
 		// Bound density and require a full-height, full-width connected silhouette
 		// so small circular crops retain a substantial, recognizable shape.
 		densityOK := count >= 11 && count <= 17
@@ -191,6 +202,7 @@ func defaultProfilePictureShape(ctx context.Context, seed []byte) (defaultProfil
 			return glyph, nil
 		}
 	}
+
 	// A bounded search must still produce a valid image for every seed.
 	return defaultProfilePictureGlyph{
 		{false, false, true, false, false},
@@ -250,26 +262,32 @@ func (g defaultProfilePictureGlyph) drawCell(
 		draw.Src,
 	)
 	for _, corner := range [...]image.Point{
-		{X: -1, Y: -1}, {X: 1, Y: -1},
-		{X: -1, Y: 1}, {X: 1, Y: 1},
+		{X: -1, Y: -1},
+		{X: 1, Y: -1},
+		{X: -1, Y: 1},
+		{X: 1, Y: 1},
 	} {
 		// Only convex outer corners are rounded; shared cell edges stay joined.
 		if g.contains(cell.Y+corner.Y, cell.X) || g.contains(cell.Y, cell.X+corner.X) {
 			continue
 		}
+
 		for y := range radius {
 			for x := range radius {
 				dx, dy := float64(x)+0.5-radius, float64(y)+0.5-radius
 				if dx*dx+dy*dy <= radius*radius {
 					continue
 				}
+
 				px, py := x, y
 				if corner.X > 0 {
 					px = width - 1 - x
 				}
+
 				if corner.Y > 0 {
 					py = width - 1 - y
 				}
+
 				canvas.SetNRGBA(left+px, top+py, background)
 			}
 		}

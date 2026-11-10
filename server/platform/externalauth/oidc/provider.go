@@ -132,21 +132,25 @@ func (p *Provider) Complete(
 			model.ErrInvalidExternalAuthenticationCallback,
 		)
 	}
+
 	providerError, err := request.Callback.OptionalSingleValue("error", 256)
 	if err != nil {
 		return nil, externalauth.Rejected("validate OIDC callback", err)
 	}
+
 	if providerError != "" {
 		return nil, externalauth.Rejected(
 			"complete OIDC authorization",
 			errors.New("provider denied authorization"),
 		)
 	}
+
 	code, err := request.Callback.SingleValue(
 		"code",
 		8192,
 	)
-	if err != nil || !model.IsValidCredentialToken(request.Proof) ||
+	if err != nil ||
+		!model.IsValidCredentialToken(request.Proof) ||
 		!validCallbackURL(request.CallbackURL) {
 		return nil, externalauth.Rejected(
 			"validate OIDC callback",
@@ -158,6 +162,7 @@ func (p *Provider) Complete(
 	if err != nil {
 		return nil, err
 	}
+
 	providerContext := coreoidc.ClientContext(ctx, p.client)
 	oauthConfig := p.oauthConfig(discovered, request.CallbackURL)
 	token, err := oauthConfig.Exchange(
@@ -176,11 +181,13 @@ func (p *Provider) Complete(
 				err,
 			)
 		}
+
 		return nil, externalauth.Unavailable(
 			"exchange OIDC authorization code",
 			err,
 		)
 	}
+
 	rawIDToken, ok := token.Extra("id_token").(string)
 	if !ok || rawIDToken == "" {
 		return nil, externalauth.InvalidResponse(
@@ -188,6 +195,7 @@ func (p *Provider) Complete(
 			errors.New("provider omitted the ID token"),
 		)
 	}
+
 	verifier := discovered.VerifierContext(
 		providerContext,
 		&coreoidc.Config{ClientID: p.settings.ClientID},
@@ -199,6 +207,7 @@ func (p *Provider) Complete(
 			err,
 		)
 	}
+
 	expectedNonce := transactionNonce(
 		p.mapper.Descriptor().ID,
 		request.Proof,
@@ -212,6 +221,7 @@ func (p *Provider) Complete(
 			errors.New("OIDC nonce mismatch"),
 		)
 	}
+
 	if idToken.AccessTokenHash != "" {
 		if err := idToken.VerifyAccessToken(token.AccessToken); err != nil {
 			return nil, externalauth.InvalidResponse(
@@ -220,6 +230,7 @@ func (p *Provider) Complete(
 			)
 		}
 	}
+
 	claims := make(map[string]json.RawMessage)
 	if err := idToken.Claims(&claims); err != nil {
 		return nil, externalauth.InvalidResponse(
@@ -227,6 +238,7 @@ func (p *Provider) Complete(
 			err,
 		)
 	}
+
 	if p.settings.UseUserInfo {
 		userInfo, err := discovered.UserInfo(
 			providerContext,
@@ -238,6 +250,7 @@ func (p *Provider) Complete(
 				err,
 			)
 		}
+
 		if subtle.ConstantTimeCompare(
 			[]byte(userInfo.Subject),
 			[]byte(idToken.Subject),
@@ -247,6 +260,7 @@ func (p *Provider) Complete(
 				errors.New("userinfo subject does not match ID token"),
 			)
 		}
+
 		userInfoClaims := make(map[string]json.RawMessage)
 		if err := userInfo.Claims(&userInfoClaims); err != nil {
 			return nil, externalauth.InvalidResponse(
@@ -254,15 +268,19 @@ func (p *Provider) Complete(
 				err,
 			)
 		}
+
 		securityClaim := p.mapper.Claims().MultiFactorAttribute
 		for name, value := range userInfoClaims {
-			if name != "sub" && name != "auth_time" &&
-				name != "amr" && name != "acr" &&
+			if name != "sub" &&
+				name != "auth_time" &&
+				name != "amr" &&
+				name != "acr" &&
 				name != securityClaim {
 				claims[name] = value
 			}
 		}
 	}
+
 	encodedSubject, _ := json.Marshal(idToken.Subject)
 	claims["sub"] = encodedSubject
 	values := oidcClaimValues(claims)
@@ -281,14 +299,17 @@ func (p *Provider) Complete(
 			err,
 		)
 	}
+
 	if !request.AuthenticationStartedAt.IsZero() {
 		// OIDC Core requires auth_time with max_age. Issued-at is never
 		// accepted as substitute proof of a fresh end-user authentication.
-		if len(claims["auth_time"]) == 0 || authenticatedAt < request.AuthenticationStartedAt.Truncate(time.Second).UnixMilli() ||
+		if len(claims["auth_time"]) == 0 ||
+			authenticatedAt < request.AuthenticationStartedAt.Truncate(time.Second).UnixMilli() ||
 			authenticatedAt > p.now().UnixMilli() {
 			return nil, externalauth.Rejected("verify fresh OIDC authentication", errors.New("fresh authentication proof is unavailable"))
 		}
 	}
+
 	return p.mapper.Assertion(
 		values,
 		emailVerified,
@@ -304,6 +325,7 @@ func (p *Provider) discover(
 	if p.discovered != nil {
 		return p.discovered, nil
 	}
+
 	providerContext := coreoidc.ClientContext(ctx, p.client)
 	discovered, err := coreoidc.NewProvider(
 		providerContext,
@@ -315,6 +337,7 @@ func (p *Provider) discover(
 			err,
 		)
 	}
+
 	var metadata struct {
 		AuthorizationEndpoint string `json:"authorization_endpoint"`
 		TokenEndpoint         string `json:"token_endpoint"`
@@ -327,6 +350,7 @@ func (p *Provider) discover(
 			err,
 		)
 	}
+
 	for field, endpoint := range map[string]string{
 		"authorization endpoint": metadata.AuthorizationEndpoint,
 		"token endpoint":         metadata.TokenEndpoint,
@@ -339,6 +363,7 @@ func (p *Provider) discover(
 			)
 		}
 	}
+
 	if p.settings.UseUserInfo &&
 		!validProviderEndpoint(metadata.UserInfoEndpoint) {
 		return nil, externalauth.InvalidResponse(
@@ -346,6 +371,7 @@ func (p *Provider) discover(
 			errors.New("userinfo endpoint is invalid"),
 		)
 	}
+
 	p.discovered = discovered
 	return discovered, nil
 }
@@ -446,20 +472,25 @@ func validCallbackURL(value string) bool {
 
 func validProviderEndpoint(value string) bool {
 	parsed, err := url.Parse(value)
-	if err != nil || parsed.Host == "" || parsed.User != nil ||
+	if err != nil ||
+		parsed.Host == "" ||
+		parsed.User != nil ||
 		parsed.Fragment != "" {
 		return false
 	}
+
 	if parsed.Scheme == "https" {
 		return true
 	}
 	if parsed.Scheme != "http" {
 		return false
 	}
+
 	host := parsed.Hostname()
 	if strings.EqualFold(host, "localhost") {
 		return true
 	}
+
 	address := net.ParseIP(host)
 	return address != nil && address.IsLoopback()
 }

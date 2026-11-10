@@ -156,10 +156,12 @@ func NewHub(
 	if logger == nil {
 		return nil, errors.New("WebSocket logger is required")
 	}
+
 	publicOrigin, err := weborigin.FromPublicURL(publicURL)
 	if err != nil {
 		return nil, errors.New("WebSocket public URL is invalid")
 	}
+
 	shardCount := max(runtime.NumCPU(), 1)
 	hub := &Hub{
 		application:  application,
@@ -179,6 +181,7 @@ func NewHub(
 			budgets: make(map[string]*sharedFrameBudget),
 		}
 	}
+
 	return hub, nil
 }
 
@@ -235,14 +238,18 @@ func (h *Hub) Accept(
 		if h.recorder != nil {
 			h.recorder.ConnectionOpened("unavailable")
 		}
+
 		return apperror.New("websocket.unavailable")
 	}
+
 	if !h.OriginAllowed(request.Header.Get("Origin"), allowMissingOrigin) {
 		if h.recorder != nil {
 			h.recorder.ConnectionOpened("origin_invalid")
 		}
+
 		return apperror.New("websocket.origin.invalid")
 	}
+
 	// A handshake refused before the connection is hijacked leaves the
 	// response uncommitted, so the HTTP transport answers it with Problem
 	// Details instead of the upgrader's plain-text error.
@@ -263,6 +270,7 @@ func (h *Hub) Accept(
 		if h.recorder != nil {
 			h.recorder.ConnectionOpened("upgrade_error")
 		}
+
 		h.logger.WarnContext(request.Context(), "WebSocket upgrade failed", logging.Err(err))
 		switch {
 		case refusedStatus >= http.StatusBadRequest && refusedStatus < http.StatusInternalServerError:
@@ -270,13 +278,16 @@ func (h *Hub) Accept(
 		case refusedStatus != 0:
 			return apperror.New("websocket.unavailable").Wrap(err)
 		}
+
 		return nil
 	}
+
 	runtimeSocket := newGorillaConnectionSocket(socket)
 	locale := ""
 	if h.localizer != nil {
 		locale = localization.PreferredLocale(request.Header.Get("Accept-Language"), h.localizer.SupportedLocales())
 	}
+
 	connection, resumed := h.register(
 		runtimeSocket,
 		principal,
@@ -289,6 +300,7 @@ func (h *Hub) Accept(
 		if h.recorder != nil {
 			h.recorder.ConnectionOpened("rejected")
 		}
+
 		_ = runtimeSocket.WriteControl(
 			websocketCloseMessage,
 			websocket.FormatCloseMessage(CloseLimit, localizedCloseReason(h.localizer, locale, websocketCloseMessages["connection_limit"])),
@@ -297,15 +309,18 @@ func (h *Hub) Accept(
 		_ = runtimeSocket.Close()
 		return nil
 	}
+
 	if h.recorder != nil {
 		h.recorder.ConnectionOpened("success")
 	}
+
 	connection.enqueueHello(resumed, connectionID != "" && !resumed)
 	connection.run(request.Context())
 	h.unregister(connection)
 	if h.recorder != nil {
 		h.recorder.ConnectionClosed("closed")
 	}
+
 	return nil
 }
 
@@ -452,6 +467,7 @@ func (h *Hub) unregister(connection *connectionRuntime) {
 	if !exists || current != connection {
 		return
 	}
+
 	delete(shard.conns, connectionID)
 	if budget := connection.inbound.shared; budget != nil {
 		budget.holders--
@@ -459,10 +475,12 @@ func (h *Hub) unregister(connection *connectionRuntime) {
 			budget.releasedAt = time.Now()
 		}
 	}
+
 	snapshot := connection.finalSnapshot()
 	if h.recorder != nil {
 		h.recorder.AddWebSocketSubscriptions(-len(snapshot.subscriptions))
 	}
+
 	h.mu.RLock()
 	started := h.state == hubStarted
 	h.mu.RUnlock()
@@ -511,14 +529,17 @@ func (h *Hub) publishWire(event *Event) {
 		if h.recorder != nil {
 			h.recorder.ObserveWebSocketBroadcast("invalid", "rejected", 0)
 		}
+
 		return
 	}
+
 	var shards []*shard
 	if event.UserID != "" {
 		shards = []*shard{h.shardForUser(event.UserID)}
 	} else {
 		shards = h.shards
 	}
+
 	var connections []*connectionRuntime
 	for _, shard := range shards {
 		shard.mu.RLock()
@@ -526,21 +547,27 @@ func (h *Hub) publishWire(event *Event) {
 			if event.UserID != "" && !connection.belongsToUser(event.UserID) {
 				continue
 			}
-			if event.Action != "" && !connection.hasSubscription(
-				Subscription{Action: event.Action, Resource: event.Resource},
-			) {
+
+			if event.Action != "" &&
+				!connection.hasSubscription(
+					Subscription{Action: event.Action, Resource: event.Resource},
+				) {
 				continue
 			}
+
 			if connection.acquire() {
 				connections = append(connections, connection)
 			}
 		}
+
 		shard.mu.RUnlock()
 	}
+
 	for _, connection := range connections {
 		connection.enqueueEvent(event)
 		connection.release()
 	}
+
 	if h.recorder != nil {
 		// Event names are application payload data rather than a closed wire
 		// registry. Keep the metric series bounded while retaining publication
@@ -638,6 +665,7 @@ func (h *Hub) shutdown(ctx context.Context) error {
 		if bounded && !time.Now().Before(deadline) {
 			return context.DeadlineExceeded
 		}
+
 		return nil
 	}
 	h.mu.Lock()
@@ -662,33 +690,45 @@ func (h *Hub) shutdown(ctx context.Context) error {
 					connections = append(connections, connection)
 				}
 			}
+
 			shard.replay = make(map[string]*replayState)
 			shard.mu.Unlock()
 		}
+
 		for _, connection := range connections {
 			connection.beginShutdown(deadline)
 		}
+
 		// Every close frame shares the same short deadline. A slow peer cannot
 		// spend another full write budget for each connection in the Hub.
 		controlDeadline := time.Now().Add(shutdownControlWait)
 		if bounded {
 			controlDeadline = minTime(deadline, controlDeadline)
 		}
+
 		for _, connection := range connections {
-			connection.closeWithDeadline(CloseServer, localizedCloseReason(connection.localizer, connection.locale, websocketCloseMessages["server_shutdown"]), false, controlDeadline)
+			connection.closeWithDeadline(
+				CloseServer,
+				localizedCloseReason(connection.localizer, connection.locale, websocketCloseMessages["server_shutdown"]),
+				false,
+				controlDeadline,
+			)
 			connection.closeTransport()
 			connection.release()
 		}
+
 		abort := func(err error) error {
 			for _, connection := range connections {
 				connection.cancelFinalization()
 				connection.closeTransport()
 			}
+
 			return fmt.Errorf("WebSocket shutdown: %w", err)
 		}
 		if err := shutdownError(); err != nil {
 			return abort(err)
 		}
+
 		for _, connection := range connections {
 			select {
 			case <-connection.runDone:
@@ -696,14 +736,17 @@ func (h *Hub) shutdown(ctx context.Context) error {
 				return abort(ctx.Err())
 			}
 		}
+
 		select {
 		case <-done:
 		case <-ctx.Done():
 			return abort(ctx.Err())
 		}
+
 		if err := shutdownError(); err != nil {
 			return abort(err)
 		}
+
 		return nil
 	default:
 		h.mu.Unlock()

@@ -167,18 +167,22 @@ func writeArchiveEntry(writer *tar.Writer, source, name, prefix string, modified
 	if err != nil {
 		return fmt.Errorf("inspect archive entry %q: %w", name, err)
 	}
+
 	relative, err := filepath.Rel(source, name)
 	if err != nil {
 		return fmt.Errorf("resolve archive entry %q: %w", name, err)
 	}
+
 	archiveName := prefix
 	if relative != "." {
 		archiveName = path.Join(prefix, filepath.ToSlash(relative))
 	}
+
 	header, err := tar.FileInfoHeader(info, "")
 	if err != nil {
 		return fmt.Errorf("create archive header for %q: %w", name, err)
 	}
+
 	header.Name = archiveName
 	header.Uid = 0
 	header.Gid = 0
@@ -198,19 +202,23 @@ func writeArchiveEntry(writer *tar.Writer, source, name, prefix string, modified
 	} else {
 		header.Mode = 0o644
 	}
+
 	if err := writer.WriteHeader(header); err != nil {
 		return fmt.Errorf("write archive header for %q: %w", name, err)
 	}
 	if info.IsDir() {
 		return nil
 	}
+
 	file, err := os.Open(name)
 	if err != nil {
 		return fmt.Errorf("open archive entry %q: %w", name, err)
 	}
+
 	defer file.Close()
 	if _, err := io.Copy(writer, file); err != nil {
 		return fmt.Errorf("write archive entry %q: %w", name, err)
 	}
+
 	return nil
 }

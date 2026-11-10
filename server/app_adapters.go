@@ -42,10 +42,12 @@ func applicationDependencies(
 	if content == nil {
 		return app.Dependencies{}, errors.New("file content is nil")
 	}
+
 	mailSecretSealer, err := newMailSecretSealer(cfg.Mail)
 	if err != nil {
 		return app.Dependencies{}, err
 	}
+
 	mfaSecretSealer, err := newMFASecretSealer(cfg.Authentication.MFA)
 	if err != nil {
 		return app.Dependencies{}, err
@@ -53,20 +55,24 @@ func applicationDependencies(
 	if mailRenderer == nil {
 		return app.Dependencies{}, errors.New("mail template renderer is nil")
 	}
+
 	assetFiles, err := runtimeAssetDirectory("templates")
 	if err != nil {
 		return app.Dependencies{}, fmt.Errorf("open mail inline assets: %w", err)
 	}
+
 	mailAssets, err := appmail.NewInlineAssets(assetFiles)
 	if err != nil {
 		return app.Dependencies{}, fmt.Errorf("construct mail inline assets: %w", err)
 	}
+
 	mailer := accountMailerAdapter{mailer: capabilities.mailer, assets: mailAssets}
 	mailDeliveryRecorder, mailMetricsReader := newMailTelemetry(log, nil)
 	desktopBuilds, err := verifiedDesktopBuildCatalog()
 	if err != nil {
 		return app.Dependencies{}, err
 	}
+
 	return app.Dependencies{
 		Store:                   capabilities.persistence,
 		Cache:                   cache,
@@ -174,7 +180,8 @@ func externalAuthenticationPolicyFromConfig(auth config.Authentication, publicUR
 // configuration. Non-loopback HTTP never receives this capability.
 func explicitLoopbackHTTPDevelopment(raw string) bool {
 	parsed, err := url.Parse(raw)
-	return err == nil && parsed.Scheme == "http" &&
+	return err == nil &&
+		parsed.Scheme == "http" &&
 		model.ValidateBrowserAuthenticationIssuer(raw, true) == nil
 }
 
@@ -245,21 +252,34 @@ func (a accountMailerAdapter) Send(ctx context.Context, message appmail.Outbound
 	if err != nil {
 		return appmail.TransportPermanent, err
 	}
+
 	attachments := make([]mailpkg.Attachment, 0, len(images))
 	for _, image := range images {
 		attachments = append(attachments, mailpkg.Attachment{
-			Filename: image.Filename, ContentType: "image/png", ContentID: image.ContentID, Inline: true, Data: image.Data,
+			Filename:    image.Filename,
+			ContentType: "image/png",
+			ContentID:   image.ContentID,
+			Inline:      true,
+			Data:        image.Data,
 		})
 	}
+
 	_, err = a.mailer.Send(ctx, mailpkg.Message{
-		From: mailpkg.Address{Name: message.From.Name, Address: message.From.Address}, EnvelopeFrom: message.EnvelopeFrom,
-		To: []mailpkg.Address{{Name: message.To.Name, Address: message.To.Address}}, Subject: message.Subject,
-		Text: message.Text, HTML: message.HTML, Headers: message.Headers, MessageID: message.MessageID, Date: message.Date,
-		Attachments: attachments,
+		From:         mailpkg.Address{Name: message.From.Name, Address: message.From.Address},
+		EnvelopeFrom: message.EnvelopeFrom,
+		To:           []mailpkg.Address{{Name: message.To.Name, Address: message.To.Address}},
+		Subject:      message.Subject,
+		Text:         message.Text,
+		HTML:         message.HTML,
+		Headers:      message.Headers,
+		MessageID:    message.MessageID,
+		Date:         message.Date,
+		Attachments:  attachments,
 	})
 	if err == nil {
 		return appmail.TransportUnknown, nil
 	}
+
 	return classifyMailTransportError(err), err
 }
 
@@ -274,6 +294,7 @@ func classifyMailTransportError(err error) appmail.TransportOutcome {
 	if errors.Is(err, mailpkg.ErrTLS) || errors.Is(err, mailpkg.ErrAuthentication) {
 		return appmail.TransportTemporary
 	}
+
 	var portable portableMailOutcome
 	if errors.As(err, &portable) {
 		switch portable.MailOutcome() {
@@ -285,12 +306,16 @@ func classifyMailTransportError(err error) appmail.TransportOutcome {
 			return appmail.TransportAcceptanceUncertain
 		}
 	}
+
 	switch {
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded), errors.Is(err, mailpkg.ErrConnection):
 		return appmail.TransportTemporary
-	case errors.Is(err, mailpkg.ErrInvalidMessage), errors.Is(err, mailpkg.ErrInvalidAddress),
-		errors.Is(err, mailpkg.ErrInvalidHeader), errors.Is(err, mailpkg.ErrMessageTooLarge),
-		errors.Is(err, mailpkg.ErrRejected), errors.Is(err, mailpkg.ErrUnsupported):
+	case errors.Is(err, mailpkg.ErrInvalidMessage),
+		errors.Is(err, mailpkg.ErrInvalidAddress),
+		errors.Is(err, mailpkg.ErrInvalidHeader),
+		errors.Is(err, mailpkg.ErrMessageTooLarge),
+		errors.Is(err, mailpkg.ErrRejected),
+		errors.Is(err, mailpkg.ErrUnsupported):
 		return appmail.TransportPermanent
 	default:
 		return appmail.TransportUnknown
@@ -421,13 +446,15 @@ type operationalMailTelemetry struct {
 
 func newMailTelemetry(log *logging.Logger, metrics app.MailDeliveryRecorder) (app.MailDeliveryRecorder, app.MailMetricsReader) {
 	operational := &operationalMailTelemetry{
-		log: log, deliveries: make(map[mailDeliveryMetricKey]mailDeliveryMetricAggregate),
+		log:          log,
+		deliveries:   make(map[mailDeliveryMetricKey]mailDeliveryMetricAggregate),
 		queues:       make(map[mailDeliveryMetricKey]app.MailQueueMetric),
 		queueBuckets: make(map[mailDeliveryMetricKey]string),
 	}
 	if metrics == nil {
 		return operational, operational
 	}
+
 	return fanoutMailDeliveryRecorder{first: metrics, second: operational}, operational
 }
 
@@ -440,10 +467,13 @@ func (r *operationalMailTelemetry) RecordMailDelivery(ctx context.Context, metri
 	if metric.ProcessingLatency > aggregate.maximumLatency {
 		aggregate.maximumLatency = metric.ProcessingLatency
 	}
+
 	r.deliveries[key] = aggregate
 	r.mu.Unlock()
 	if r.log != nil {
-		r.log.InfoContext(ctx, "mail delivery outcome",
+		r.log.InfoContext(
+			ctx,
+			"mail delivery outcome",
 			logging.String("template_key", string(metric.TemplateKey)),
 			logging.String("state", string(metric.State)),
 			logging.String("outcome_code", metric.OutcomeCode),
@@ -460,7 +490,9 @@ func (r *operationalMailTelemetry) RecordMailAttempt(ctx context.Context, metric
 	r.deliveries[key] = aggregate
 	r.mu.Unlock()
 	if r.log != nil {
-		r.log.InfoContext(ctx, "mail delivery attempt started",
+		r.log.InfoContext(
+			ctx,
+			"mail delivery attempt started",
 			logging.String("template_key", string(metric.TemplateKey)),
 			logging.String("state", string(metric.State)),
 		)
@@ -473,6 +505,7 @@ func (r *operationalMailTelemetry) RecordMailQueueSnapshot(ctx context.Context, 
 		key := mailDeliveryMetricKey{template: metric.TemplateKey, state: metric.State, code: metric.OutcomeCode}
 		next[key] = metric
 	}
+
 	r.mu.Lock()
 	previous := r.queues
 	r.queues = next
@@ -482,27 +515,36 @@ func (r *operationalMailTelemetry) RecordMailQueueSnapshot(ctx context.Context, 
 		prior, exists := previous[key]
 		priorBucket := r.queueBuckets[key]
 		r.queueBuckets[key] = bucket
-		if !exists || prior.Count != metric.Count || prior.HealthCode != metric.HealthCode ||
-			prior.Truncated != metric.Truncated || priorBucket != bucket {
+		if !exists ||
+			prior.Count != metric.Count ||
+			prior.HealthCode != metric.HealthCode ||
+			prior.Truncated != metric.Truncated ||
+			priorBucket != bucket {
 			observations = append(observations, metric)
 		}
 	}
+
 	for key, metric := range previous {
 		if _, exists := next[key]; exists {
 			continue
 		}
+
 		metric.Count = 0
 		metric.OldestAge = 0
 		observations = append(observations, metric)
 		delete(r.queueBuckets, key)
 	}
+
 	r.mu.Unlock()
 	if r.log == nil {
 		return
 	}
+
 	for _, metric := range observations {
 		bucket := mailQueueAgeBucket(metric.OldestAge)
-		r.log.InfoContext(ctx, "mail queue observation",
+		r.log.InfoContext(
+			ctx,
+			"mail queue observation",
 			logging.String("template_key", string(metric.TemplateKey)),
 			logging.String("state", string(metric.State)),
 			logging.String("outcome_code", metric.OutcomeCode),
@@ -534,14 +576,20 @@ func (r *operationalMailTelemetry) Snapshot() app.MailMetricsSnapshot {
 	}
 	for key, aggregate := range r.deliveries {
 		snapshot.Deliveries = append(snapshot.Deliveries, app.MailDeliveryMetricAggregate{
-			TemplateKey: key.template, State: key.state, OutcomeCode: key.code,
-			Count: aggregate.count, AttemptCount: aggregate.attempts,
-			ProcessingLatency: aggregate.processingLatency, MaximumProcessingLatency: aggregate.maximumLatency,
+			TemplateKey:              key.template,
+			State:                    key.state,
+			OutcomeCode:              key.code,
+			Count:                    aggregate.count,
+			AttemptCount:             aggregate.attempts,
+			ProcessingLatency:        aggregate.processingLatency,
+			MaximumProcessingLatency: aggregate.maximumLatency,
 		})
 	}
+
 	for _, metric := range r.queues {
 		snapshot.Queues = append(snapshot.Queues, metric)
 	}
+
 	sort.Slice(snapshot.Deliveries, func(i, j int) bool {
 		left, right := snapshot.Deliveries[i], snapshot.Deliveries[j]
 		if left.TemplateKey != right.TemplateKey {
@@ -550,6 +598,7 @@ func (r *operationalMailTelemetry) Snapshot() app.MailMetricsSnapshot {
 		if left.State != right.State {
 			return left.State < right.State
 		}
+
 		return left.OutcomeCode < right.OutcomeCode
 	})
 	sort.Slice(snapshot.Queues, func(i, j int) bool {
@@ -560,16 +609,26 @@ func (r *operationalMailTelemetry) Snapshot() app.MailMetricsSnapshot {
 		if left.State != right.State {
 			return left.State < right.State
 		}
+
 		return left.OutcomeCode < right.OutcomeCode
 	})
 	return snapshot
 }
 
 func mailQueueAgeBucket(age time.Duration) string {
-	for _, boundary := range []time.Duration{5 * time.Minute, 15 * time.Minute, 30 * time.Minute, time.Hour, 3 * time.Hour, 12 * time.Hour, 24 * time.Hour} {
+	for _, boundary := range []time.Duration{
+		5 * time.Minute,
+		15 * time.Minute,
+		30 * time.Minute,
+		time.Hour,
+		3 * time.Hour,
+		12 * time.Hour,
+		24 * time.Hour,
+	} {
 		if age < boundary {
 			return fmt.Sprintf("lt_%s", boundary)
 		}
 	}
+
 	return "gte_24h"
 }

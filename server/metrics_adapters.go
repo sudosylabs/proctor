@@ -242,7 +242,19 @@ func (m *measuredMailer) Close() error { return m.next.Close() }
 
 func boundedSMTPOperation(operation string) string {
 	switch operation {
-	case "send", "test", "connect", "greeting", "hello", "starttls", "authenticate", "mail-from", "recipient", "data", "write", "commit", "quit":
+	case "send",
+		"test",
+		"connect",
+		"greeting",
+		"hello",
+		"starttls",
+		"authenticate",
+		"mail-from",
+		"recipient",
+		"data",
+		"write",
+		"commit",
+		"quit":
 		return operation
 	default:
 		return "unknown"

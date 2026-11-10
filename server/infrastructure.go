@@ -79,14 +79,20 @@ type schemaPersistence interface {
 func prepareSchema(ctx context.Context, persistence schemaPersistence, policy schemaPolicy) (*sqlstore.MigrationResult, error) {
 	if policy == schemaRequireCurrent {
 		if err := persistence.ValidateSchema(ctx); err != nil {
-			return nil, fmt.Errorf("database schema is not current; this command never migrates, so run `proctor migrate status` and `proctor migrate up` with every node stopped, then retry: %w", err)
+			return nil, fmt.Errorf(
+				"database schema is not current; this command never migrates, so run `proctor migrate status` and `proctor migrate up` with every node stopped, then retry: %w",
+				err,
+			)
 		}
+
 		return nil, nil
 	}
+
 	migration, err := persistence.ApplyPendingMigrations(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("migrate database: %w", err)
 	}
+
 	return &migration, nil
 }
 
@@ -249,9 +255,12 @@ func (i *ownedInfrastructure) constructTelemetry(cfg config.Config) (*metrics.Mo
 	if source, ok := i.persistence.(interface{ Stats() sql.DBStats }); ok {
 		databaseStats = source.Stats
 	}
+
 	currentBuild := app.CurrentBuildInfo()
 	metricsModule, err := metrics.New(cfg.Metrics, metrics.BuildInfo{
-		Version: currentBuild.Version, Commit: currentBuild.Commit, GoVersion: currentBuild.GoVersion,
+		Version:   currentBuild.Version,
+		Commit:    currentBuild.Commit,
+		GoVersion: currentBuild.GoVersion,
 	}, metrics.Sources{
 		Database: databaseStats,
 		ErrorLog: i.logger.StdLogger(slog.LevelError),
@@ -263,13 +272,16 @@ func (i *ownedInfrastructure) constructTelemetry(cfg config.Config) (*metrics.Mo
 	if err != nil {
 		return nil, nil, fmt.Errorf("construct metrics module: %w", err)
 	}
+
 	i.metrics = metricsModule
 	tracingModule, err := tracing.New(cfg.Tracing, tracing.Identity{
-		Version: currentBuild.Version, NodeID: cfg.Cluster.NodeID,
+		Version: currentBuild.Version,
+		NodeID:  cfg.Cluster.NodeID,
 	}, i.logger.StdLogger(slog.LevelError))
 	if err != nil {
 		return nil, nil, fmt.Errorf("construct tracing module: %w", err)
 	}
+
 	i.tracing = tracingModule
 	return metricsModule, tracingModule, nil
 }
@@ -286,18 +298,22 @@ func (i *ownedInfrastructure) decoratePersistenceWithRetryAndTiming(
 	if overrides.StoreRetry != nil {
 		storeRetry = *overrides.StoreRetry
 	}
+
 	var storeRetryMetrics retrylayer.Recorder
 	if metricsModule.Enabled() {
 		storeRetryMetrics = metricsModule
 	}
+
 	retriedPersistence, err := retrylayer.NewWithRecorder(i.persistence, storeRetry, storeRetryMetrics)
 	if err != nil {
 		return fmt.Errorf("construct store retry layer: %w", err)
 	}
+
 	i.replacePersistence(retriedPersistence)
 	if err := checkAcquisitionContext(ctx, "decorate persistence with retry"); err != nil {
 		return err
 	}
+
 	storeMetrics := overrides.StoreMetrics
 	if storeMetrics == nil {
 		if metricsModule.Enabled() {
@@ -306,6 +322,7 @@ func (i *ownedInfrastructure) decoratePersistenceWithRetryAndTiming(
 			storeMetrics = timerlayer.NopRecorder{}
 		}
 	}
+
 	timerOptions := timerlayer.Options{
 		SlowThreshold: cfg.Database.SlowOperationThreshold.Duration,
 		Slow:          slowStoreOperationLog{logger: i.logger},
@@ -313,10 +330,12 @@ func (i *ownedInfrastructure) decoratePersistenceWithRetryAndTiming(
 	if tracingModule.Enabled() {
 		timerOptions.Tracer = storeTracing{tracing: tracingModule}
 	}
+
 	timedPersistence, err := timerlayer.New(i.persistence, storeMetrics, timerOptions)
 	if err != nil {
 		return fmt.Errorf("construct store timing layer: %w", err)
 	}
+
 	i.replacePersistence(timedPersistence)
 	return checkAcquisitionContext(ctx, "decorate persistence with timing")
 }
@@ -328,37 +347,48 @@ func (i *ownedInfrastructure) acquireCacheMailerAndVFS(ctx context.Context, cfg 
 		if err != nil {
 			return fmt.Errorf("open cache: %w", err)
 		}
+
 		i.cache = cache
 	}
+
 	if metricsModule.Enabled() {
 		i.cache = &measuredCache{next: i.cache, backend: cfg.Cache.Backend, metrics: metricsModule}
 	}
+
 	if err := checkAcquisitionContext(ctx, "acquire cache"); err != nil {
 		return err
 	}
+
 	if i.mailer == nil {
 		mailer, err := newMailer(cfg.Mail)
 		if err != nil {
 			return fmt.Errorf("open mail transport: %w", err)
 		}
+
 		i.mailer = mailer
 	}
+
 	if metricsModule.Enabled() {
 		i.mailer = &measuredMailer{next: i.mailer, metrics: metricsModule}
 	}
+
 	if err := checkAcquisitionContext(ctx, "acquire mail transport"); err != nil {
 		return err
 	}
+
 	if i.filesystem == nil {
 		filesystem, err := newVFS(cfg.VFS)
 		if err != nil {
 			return fmt.Errorf("open VFS: %w", err)
 		}
+
 		i.filesystem = filesystem
 	}
+
 	if metricsModule.Enabled() {
 		i.filesystem = &measuredVFS{next: i.filesystem, backend: cfg.VFS.Backend, metrics: metricsModule}
 	}
+
 	return checkAcquisitionContext(ctx, "acquire VFS")
 }
 
@@ -402,10 +432,12 @@ func (i *ownedInfrastructure) decoratePersistenceWithLocalCache(
 			return fmt.Errorf("construct local store cache: %w", err)
 		}
 	}
+
 	storeCachePolicy := localcachelayer.DefaultPolicy()
 	if overrides.StoreCachePolicy != nil {
 		storeCachePolicy = *overrides.StoreCachePolicy
 	}
+
 	storeCacheMetrics := overrides.StoreCacheMetrics
 	if storeCacheMetrics == nil {
 		if metricsModule.Enabled() {
@@ -414,10 +446,12 @@ func (i *ownedInfrastructure) decoratePersistenceWithLocalCache(
 			storeCacheMetrics = localcachelayer.NopRecorder{}
 		}
 	}
+
 	cacheInvalidation, err := newLocalCacheClusterAdapter(i.cluster)
 	if err != nil {
 		return fmt.Errorf("construct local-cache invalidation adapter: %w", err)
 	}
+
 	cachedPersistence, err := localcachelayer.New(
 		i.persistence,
 		storeLocalCache,
@@ -428,6 +462,7 @@ func (i *ownedInfrastructure) decoratePersistenceWithLocalCache(
 	if err != nil {
 		return fmt.Errorf("construct local-cache store layer: %w", err)
 	}
+
 	i.replacePersistence(cachedPersistence)
 	return checkAcquisitionContext(ctx, "decorate persistence with local cache")
 }
@@ -500,6 +535,7 @@ func (i *ownedInfrastructure) acceptPlatform(
 	if i.cluster != nil {
 		capabilities.nodeID = i.cluster.NodeID()
 	}
+
 	resources := platform.OwnedResources{
 		Configuration:          i.configuration,
 		Logger:                 i.logger,
@@ -517,8 +553,13 @@ func (i *ownedInfrastructure) acceptPlatform(
 		// Metrics and tracing share one shutdown budget, as in release.
 		budget, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
-		return nil, config.Config{}, constructionCapabilities{}, errors.Join(err, capabilities.metrics.Close(budget), capabilities.tracing.Close(budget))
+		return nil, config.Config{}, constructionCapabilities{}, errors.Join(
+			err,
+			capabilities.metrics.Close(budget),
+			capabilities.tracing.Close(budget),
+		)
 	}
+
 	return service, snapshot, capabilities, nil
 }
 
@@ -542,38 +583,47 @@ func (i *ownedInfrastructure) release() error {
 	if i.cluster != nil {
 		clusterErr = i.cluster.Stop(stopCtx)
 	}
+
 	var vfsErr error
 	if closer, ok := i.filesystem.(interface{ Close() error }); ok {
 		vfsErr = closer.Close()
 	}
+
 	var mailErr error
 	if i.mailer != nil {
 		mailErr = i.mailer.Close()
 	}
+
 	var cacheErr error
 	if i.cache != nil {
 		cacheErr = i.cache.Close()
 	}
+
 	var storeErr error
 	if i.persistence != nil {
 		storeErr = i.persistence.Close()
 	}
+
 	var loggerErr error
 	if i.logger != nil {
 		loggerErr = i.logger.Shutdown(stopCtx)
 	}
+
 	var configErr error
 	if i.configuration != nil {
 		configErr = i.configuration.Close()
 	}
+
 	var metricsErr error
 	if i.metrics != nil {
 		metricsErr = i.metrics.Close(stopCtx)
 	}
+
 	var tracingErr error
 	if i.tracing != nil {
 		tracingErr = i.tracing.Close(context.Background())
 	}
+
 	return errors.Join(
 		metricsErr,
 		tracingErr,
@@ -598,6 +648,7 @@ func newCache(settings config.Cache) (platform.Cache, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		return platform.NewCacheAdapter(platform.CacheBackend{Store: store}), nil
 	case "redis":
 		clientOption := rueidis.ClientOption{
@@ -614,10 +665,12 @@ func newCache(settings config.Cache) (platform.Cache, error) {
 		if settings.Redis.TLS {
 			clientOption.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 		}
+
 		client, err := rueidis.NewClient(clientOption)
 		if err != nil {
 			return nil, fmt.Errorf("create Redis client: %w", err)
 		}
+
 		store, err := redis.New(
 			client,
 			cache.BytesCodec(),
@@ -627,6 +680,7 @@ func newCache(settings config.Cache) (platform.Cache, error) {
 			client.Close()
 			return nil, err
 		}
+
 		return platform.NewCacheAdapter(platform.CacheBackend{
 			Store: store,
 			Ping:  func(ctx context.Context) error { return client.Do(ctx, client.B().Ping().Build()).Error() },
@@ -704,6 +758,7 @@ func newCluster(
 		if discovery == nil {
 			return nil, fmt.Errorf("cluster discovery store is required for memberlist")
 		}
+
 		key, decryptionKeys, err := memberlist.DecodeEncryptionKeyring(
 			settings.Memberlist.EncryptionKey,
 			settings.Memberlist.DecryptionKeys,
@@ -711,9 +766,11 @@ func newCluster(
 		if err != nil {
 			return nil, err
 		}
+
 		if serverVersion == "" {
 			serverVersion = app.Version
 		}
+
 		return memberlist.New(memberlist.Config{
 			NodeID:             settings.NodeID,
 			BindAddress:        settings.Memberlist.BindAddress,

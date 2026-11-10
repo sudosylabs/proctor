@@ -35,6 +35,7 @@ func PreferredLocale(acceptLanguage string, supported []string) string {
 		if locale == "" {
 			continue
 		}
+
 		quality := 1.0
 		for _, parameter := range parts[1:] {
 			name, value, ok := strings.Cut(strings.TrimSpace(parameter), "=")
@@ -47,8 +48,10 @@ func PreferredLocale(acceptLanguage string, supported []string) string {
 				}
 			}
 		}
+
 		preferences = append(preferences, preference{locale: locale, quality: quality, order: order})
 	}
+
 	bestLocale, bestQuality, bestSpecificity, bestOrder := "", -1.0, specificity{}, len(preferences)+1
 	for _, candidate := range supported {
 		normalized := strings.ToLower(strings.ReplaceAll(candidate, "_", "-"))
@@ -63,12 +66,14 @@ func PreferredLocale(acceptLanguage string, supported []string) string {
 			case requested.locale == "*":
 				matched = specificity{kind: 1}
 			}
+
 			preferredMatch := moreSpecific(matched, candidateSpecificity) ||
 				matched == candidateSpecificity && requested.order < candidateOrder
 			if matched.kind > 0 && preferredMatch {
 				candidateQuality, candidateSpecificity, candidateOrder = requested.quality, matched, requested.order
 			}
 		}
+
 		better := candidateQuality > bestQuality ||
 			candidateQuality == bestQuality && moreSpecific(candidateSpecificity, bestSpecificity) ||
 			candidateQuality == bestQuality && candidateSpecificity == bestSpecificity && candidateOrder < bestOrder
@@ -76,5 +81,6 @@ func PreferredLocale(acceptLanguage string, supported []string) string {
 			bestLocale, bestQuality, bestSpecificity, bestOrder = candidate, candidateQuality, candidateSpecificity, candidateOrder
 		}
 	}
+
 	return bestLocale
 }

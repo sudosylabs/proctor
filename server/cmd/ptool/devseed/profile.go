@@ -59,19 +59,30 @@ func (r *runner) profilePicture(alias string) error {
 		if err != nil {
 			return err
 		}
+
 		tag := headers.Get("ETag")
 		if !pictureETag(tag) {
 			return errors.New("profile picture did not supply a strong checksum ETag")
 		}
+
 		content, err := picturePNG(r.state.Seed, alias)
 		if err != nil {
 			return err
 		}
-		r.state.Operations[key] = &operation{PreparedAt: time.Now().UTC(), Method: "PUT", Path: path, Body: json.RawMessage("null"), Content: content, IfMatch: tag}
+
+		r.state.Operations[key] = &operation{
+			PreparedAt: time.Now().UTC(),
+			Method:     "PUT",
+			Path:       path,
+			Body:       json.RawMessage("null"),
+			Content:    content,
+			IfMatch:    tag,
+		}
 		if err = r.save(); err != nil {
 			return err
 		}
 	}
+
 	// Normalization belongs to the server, so the client cannot derive the
 	// resulting WebP checksum from its PNG. Never adopt an intervening picture
 	// or replace it with a new ETag after an ambiguous upload outcome.
@@ -83,11 +94,13 @@ func (r *runner) profilePicture(alias string) error {
 		if headers.Get("ETag") != r.state.Operations[key].IfMatch {
 			return nil, false, fmt.Errorf("picture for %s changed after upload preparation; inspect the saved operation before continuing", alias)
 		}
+
 		return nil, false, nil
 	})
 	if err != nil {
 		return err
 	}
+
 	a.SeededCustomPicture = true
 	return r.remember(key, a.UserID, "Custom profile picture — "+alias, path)
 }

@@ -31,15 +31,21 @@ type AdministratorMFAResetResult struct {
 
 // ResetAdministratorMFA constructs and closes an inert graph without starting
 // workers or transports. Its named Store aggregate rejects live serving nodes.
-func ResetAdministratorMFA(ctx context.Context, configPath string, command AdministratorMFAResetCommand) (_ *AdministratorMFAResetResult, resultErr error) {
+func ResetAdministratorMFA(
+	ctx context.Context,
+	configPath string,
+	command AdministratorMFAResetCommand,
+) (_ *AdministratorMFAResetResult, resultErr error) {
 	options := []Option{withCurrentSchemaRequired()}
 	if configPath != "" {
 		options = append(options, WithConfigPath(configPath))
 	}
+
 	node, err := New(ctx, options...)
 	if err != nil {
 		return nil, err
 	}
+
 	defer func() { resultErr = errors.Join(resultErr, node.Close()) }()
 	return node.ResetAdministratorMFA(ctx, command)
 }
@@ -50,6 +56,7 @@ func (s *Server) ResetAdministratorMFA(ctx context.Context, command Administrato
 	if s == nil {
 		return nil, errors.New("server is nil")
 	}
+
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
 	if s.state != nodeInert {
@@ -58,14 +65,21 @@ func (s *Server) ResetAdministratorMFA(ctx context.Context, command Administrato
 	if s.components.administratorRecovery == nil {
 		return nil, errors.New("administrator MFA reset is unavailable")
 	}
-	result, err := s.components.administratorRecovery.ResetAdministratorMFA(ctx, invocation.Task("administrator-mfa-reset"), identity.AdministratorMFAResetCommand{
-		InstitutionID: model.InstitutionID(command.InstitutionID), UserID: model.UserID(command.UserID),
-	})
+
+	result, err := s.components.administratorRecovery.ResetAdministratorMFA(
+		ctx,
+		invocation.Task("administrator-mfa-reset"),
+		identity.AdministratorMFAResetCommand{
+			InstitutionID: model.InstitutionID(command.InstitutionID),
+			UserID:        model.UserID(command.UserID),
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
 	if result == nil || !result.ReenrollmentRequired || result.RecoveryGeneration < 1 {
 		return nil, errors.New("administrator MFA reset returned no recovery restriction")
 	}
+
 	return &AdministratorMFAResetResult{RecoveryGeneration: result.RecoveryGeneration, ReenrollmentRequired: true}, nil
 }

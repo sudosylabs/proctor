@@ -247,7 +247,8 @@ func (m *Manager) TLSConfig() *tls.Config {
 	return &tls.Config{
 		GetCertificate: m.GetCertificate,
 		NextProtos: []string{
-			"h2", "http/1.1", // enable HTTP/2
+			"h2",
+			"http/1.1",     // enable HTTP/2
 			acme.ALPNProto, // enable tls-alpn ACME challenges
 		},
 	}
@@ -360,8 +361,10 @@ func supportsECDSA(hello *tls.ClientHelloInfo) bool {
 		for _, scheme := range hello.SignatureSchemes {
 			const tlsECDSAWithSHA1 tls.SignatureScheme = 0x0203 // constant added in Go 1.10
 			switch scheme {
-			case tlsECDSAWithSHA1, tls.ECDSAWithP256AndSHA256,
-				tls.ECDSAWithP384AndSHA384, tls.ECDSAWithP521AndSHA512:
+			case tlsECDSAWithSHA1,
+				tls.ECDSAWithP256AndSHA256,
+				tls.ECDSAWithP384AndSHA384,
+				tls.ECDSAWithP521AndSHA512:
 				ecdsaOK = true
 				break schemeLoop
 			}
@@ -370,6 +373,7 @@ func supportsECDSA(hello *tls.ClientHelloInfo) bool {
 			return false
 		}
 	}
+
 	if hello.SupportedCurves != nil {
 		ecdsaOK := false
 		for _, curve := range hello.SupportedCurves {
@@ -378,10 +382,12 @@ func supportsECDSA(hello *tls.ClientHelloInfo) bool {
 				break
 			}
 		}
+
 		if !ecdsaOK {
 			return false
 		}
 	}
+
 	for _, suite := range hello.CipherSuites {
 		switch suite {
 		case tls.TLS_ECDHE_ECDSA_WITH_RC4_128_SHA,
@@ -394,6 +400,7 @@ func supportsECDSA(hello *tls.ClientHelloInfo) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -858,6 +865,7 @@ func (m *Manager) fulfill(ctx context.Context, client *acme.Client, chal *acme.C
 		if err != nil {
 			return nil, err
 		}
+
 		m.putCertToken(ctx, domain, &cert)
 		return func() error {
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
@@ -871,6 +879,7 @@ func (m *Manager) fulfill(ctx context.Context, client *acme.Client, chal *acme.C
 		if err != nil {
 			return nil, err
 		}
+
 		p := client.HTTP01ChallengePath(chal.Token)
 		m.putHTTPToken(ctx, p, resp)
 		return func() error {
@@ -881,6 +890,7 @@ func (m *Manager) fulfill(ctx context.Context, client *acme.Client, chal *acme.C
 			return err
 		}, nil
 	}
+
 	return nil, fmt.Errorf("acme/autocert: unknown challenge type %q", chal.Type)
 }
 
@@ -1289,15 +1299,18 @@ func validCert(ck certKey, der [][]byte, key crypto.Signer, now time.Time) (leaf
 	for _, b := range der {
 		n += len(b)
 	}
+
 	pub := make([]byte, n)
 	n = 0
 	for _, b := range der {
 		n += copy(pub[n:], b)
 	}
+
 	x509Cert, err := x509.ParseCertificates(pub)
 	if err != nil || len(x509Cert) == 0 {
 		return nil, errors.New("acme/autocert: no public key found")
 	}
+
 	// verify the leaf is not expired and matches the domain name
 	leaf = x509Cert[0]
 	if now.Before(leaf.NotBefore) {
@@ -1313,6 +1326,7 @@ func validCert(ck certKey, der [][]byte, key crypto.Signer, now time.Time) (leaf
 	if isRevokedLetsEncrypt(leaf) {
 		return nil, errors.New("acme/autocert: certificate was probably revoked by Let's Encrypt")
 	}
+
 	// ensure the leaf corresponds to the private key and matches the certKey type
 	switch pub := leaf.PublicKey.(type) {
 	case *rsa.PublicKey:
@@ -1340,6 +1354,7 @@ func validCert(ck certKey, der [][]byte, key crypto.Signer, now time.Time) (leaf
 	default:
 		return nil, errors.New("acme/autocert: unknown public key algorithm")
 	}
+
 	return leaf, nil
 }
 
@@ -1348,6 +1363,7 @@ func validCert(ck certKey, der [][]byte, key crypto.Signer, now time.Time) (leaf
 // can be safely removed from May 2022.
 func isRevokedLetsEncrypt(cert *x509.Certificate) bool {
 	O := cert.Issuer.Organization
-	return len(O) == 1 && O[0] == "Let's Encrypt" &&
+	return len(O) == 1 &&
+		O[0] == "Let's Encrypt" &&
 		cert.NotBefore.Before(time.Date(2022, time.January, 26, 0, 48, 0, 0, time.UTC))
 }

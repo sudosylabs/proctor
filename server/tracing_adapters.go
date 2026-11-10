@@ -45,8 +45,10 @@ var _ job.Tracer = jobTracing{}
 func (t jobTracing) StartExecution(ctx context.Context, jobType model.JobType) (context.Context, func(job.ExecutionOutcome)) {
 	ctx, finish := t.tracing.StartJobExecution(ctx, string(jobType))
 	return ctx, func(outcome job.ExecutionOutcome) {
-		finish(string(outcome), outcome != job.ExecutionSucceeded && outcome != job.ExecutionCanceled &&
-			outcome != job.ExecutionRelinquished && outcome != job.ExecutionShutdown)
+		finish(string(outcome), outcome != job.ExecutionSucceeded &&
+			outcome != job.ExecutionCanceled &&
+			outcome != job.ExecutionRelinquished &&
+			outcome != job.ExecutionShutdown)
 	}
 }
 

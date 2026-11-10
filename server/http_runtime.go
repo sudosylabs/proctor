@@ -225,7 +225,12 @@ func newAutomaticCertificateManager(settings httpTLSSettings, errorLog *log.Logg
 			HostPolicy: autocert.HostWhitelist(settings.letsEncryptHostname),
 			RenewalFailed: func(domain string, retryIn time.Duration, err error) {
 				if errorLog != nil {
-					errorLog.Printf("Let's Encrypt certificate renewal for %s failed; keeping the current certificate and retrying in %s: %v", domain, retryIn.Round(time.Second), err)
+					errorLog.Printf(
+						"Let's Encrypt certificate renewal for %s failed; keeping the current certificate and retrying in %s: %v",
+						domain,
+						retryIn.Round(time.Second),
+						err,
+					)
 				}
 			},
 		},

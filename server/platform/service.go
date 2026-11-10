@@ -228,32 +228,39 @@ func closeOwnedResources(ctx context.Context, resources OwnedResources) error {
 	if resources.Cluster != nil {
 		clusterErr = resources.Cluster.Stop(ctx)
 	}
+
 	var vfsErr error
 	if closer, ok := resources.VFS.(interface{ Close() error }); ok {
 		vfsErr = closer.Close()
 	}
+
 	var mailerErr error
 	if resources.Mailer != nil {
 		mailerErr = resources.Mailer.Close()
 	}
+
 	var cacheErr error
 	if resources.Cache != nil {
 		cacheErr = resources.Cache.Close()
 	}
+
 	var persistenceErr error
 	if resources.Persistence != nil {
 		persistenceErr = resources.Persistence.Close()
 	}
+
 	var loggerErr error
 	if resources.Logger != nil {
 		flushCtx, cancelFlush := context.WithTimeout(context.Background(), shutdownTimeout(resources.Configuration))
 		loggerErr = resources.Logger.Shutdown(flushCtx)
 		cancelFlush()
 	}
+
 	var configurationErr error
 	if resources.Configuration != nil {
 		configurationErr = resources.Configuration.Close()
 	}
+
 	return errors.Join(
 		clusterErr,
 		vfsErr,
@@ -346,9 +353,15 @@ func (s *Service) Close(ctx context.Context) error {
 		for _, id := range s.configListeners {
 			s.configStore.RemoveListener(id)
 		}
+
 		s.shutdownErr = closeOwnedResources(ctx, OwnedResources{
-			Configuration: s.configStore, Logger: s.logger, Persistence: s.store,
-			Cache: s.cache, Cluster: s.cluster, Mailer: s.mailer, VFS: s.vfs,
+			Configuration: s.configStore,
+			Logger:        s.logger,
+			Persistence:   s.store,
+			Cache:         s.cache,
+			Cluster:       s.cluster,
+			Mailer:        s.mailer,
+			VFS:           s.vfs,
 		})
 	})
 	return s.shutdownErr
@@ -358,16 +371,27 @@ func configureLogger(logger *logging.Logger, settings config.Log) error {
 	targets := make([]logging.Target, 0, len(settings.Targets))
 	for _, target := range settings.Targets {
 		targets = append(targets, logging.Target{
-			Name: target.Name, Type: target.Type, Level: target.Level, Format: target.Format,
-			File: target.File, AddSource: true, QueueSize: target.QueueSize,
-			MaxSizeMB: target.MaxSizeMB, MaxAgeDays: target.MaxAgeDays,
-			MaxBackups: target.MaxBackups, Compress: target.Compress,
+			Name:       target.Name,
+			Type:       target.Type,
+			Level:      target.Level,
+			Format:     target.Format,
+			File:       target.File,
+			AddSource:  true,
+			QueueSize:  target.QueueSize,
+			MaxSizeMB:  target.MaxSizeMB,
+			MaxAgeDays: target.MaxAgeDays,
+			MaxBackups: target.MaxBackups,
+			Compress:   target.Compress,
 		})
 	}
+
 	return logger.Configure(logging.Config{
-		MaxFieldBytes: settings.MaxFieldBytes, QueueSize: settings.QueueSize,
-		EnqueueTimeout: settings.EnqueueTimeout.Duration, FlushTimeout: settings.FlushTimeout.Duration,
-		ShutdownTimeout: settings.ShutdownTimeout.Duration, Targets: targets,
+		MaxFieldBytes:   settings.MaxFieldBytes,
+		QueueSize:       settings.QueueSize,
+		EnqueueTimeout:  settings.EnqueueTimeout.Duration,
+		FlushTimeout:    settings.FlushTimeout.Duration,
+		ShutdownTimeout: settings.ShutdownTimeout.Duration,
+		Targets:         targets,
 	})
 }
 

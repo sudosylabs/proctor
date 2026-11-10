@@ -19,28 +19,28 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type recordingOnboardingImportApplication struct {
 	getID     string
-	listQuery *app.ListOnboardingImportsQuery
-	listPage  paging.Page[app.OnboardingImportView]
+	listQuery *onboarding.ListOnboardingImportsQuery
+	listPage  paging.Page[onboarding.OnboardingImportView]
 	listErr   error
 
-	uploadCommand *app.UploadOnboardingImportCommand
-	uploadView    app.OnboardingImportView
+	uploadCommand *onboarding.UploadOnboardingImportCommand
+	uploadView    onboarding.OnboardingImportView
 }
 
-func (c *recordingOnboardingImportApplication) ListOnboardingImports(_ context.Context, _ invocation.Invocation, query app.ListOnboardingImportsQuery) (paging.Page[app.OnboardingImportView], error) {
+func (c *recordingOnboardingImportApplication) ListOnboardingImports(_ context.Context, _ invocation.Invocation, query onboarding.ListOnboardingImportsQuery) (paging.Page[onboarding.OnboardingImportView], error) {
 	c.listQuery = &query
 	return c.listPage, c.listErr
 }
 
-func (c *recordingOnboardingImportApplication) UploadOnboardingImport(_ context.Context, _ invocation.Invocation, command app.UploadOnboardingImportCommand) (app.OnboardingImportView, error) {
+func (c *recordingOnboardingImportApplication) UploadOnboardingImport(_ context.Context, _ invocation.Invocation, command onboarding.UploadOnboardingImportCommand) (onboarding.OnboardingImportView, error) {
 	if command.Body != nil {
 		_, _ = io.Copy(io.Discard, command.Body)
 	}
@@ -48,17 +48,17 @@ func (c *recordingOnboardingImportApplication) UploadOnboardingImport(_ context.
 	return c.uploadView, nil
 }
 
-func (c *recordingOnboardingImportApplication) GetOnboardingImport(_ context.Context, _ invocation.Invocation, id model.OnboardingImportID) (app.OnboardingImportView, []app.OnboardingImportRowView, error) {
+func (c *recordingOnboardingImportApplication) GetOnboardingImport(_ context.Context, _ invocation.Invocation, id model.OnboardingImportID) (onboarding.OnboardingImportView, []onboarding.OnboardingImportRowView, error) {
 	c.getID = id.String()
-	return app.OnboardingImportView{}, nil, nil
+	return onboarding.OnboardingImportView{}, nil, nil
 }
 
-func (*recordingOnboardingImportApplication) CommitOnboardingImport(context.Context, invocation.Invocation, app.CommitOnboardingImportCommand) (app.OnboardingImportView, error) {
-	return app.OnboardingImportView{}, nil
+func (*recordingOnboardingImportApplication) CommitOnboardingImport(context.Context, invocation.Invocation, onboarding.CommitOnboardingImportCommand) (onboarding.OnboardingImportView, error) {
+	return onboarding.OnboardingImportView{}, nil
 }
 
-func (*recordingOnboardingImportApplication) CancelOnboardingImport(context.Context, invocation.Invocation, model.OnboardingImportID) (app.OnboardingImportView, error) {
-	return app.OnboardingImportView{}, nil
+func (*recordingOnboardingImportApplication) CancelOnboardingImport(context.Context, invocation.Invocation, model.OnboardingImportID) (onboarding.OnboardingImportView, error) {
+	return onboarding.OnboardingImportView{}, nil
 }
 
 func (*recordingOnboardingImportApplication) OnboardingImportReport(context.Context, invocation.Invocation, model.OnboardingImportID, io.Writer) error {

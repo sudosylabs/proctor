@@ -16,7 +16,7 @@ package httpapi
 import (
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -102,7 +102,7 @@ func (m roleResourceModule) list(request operationRequest) (operationResult, err
 	roles, err := m.roles.ListRoles(
 		request.context,
 		request.invocation(),
-		app.ListRolesQuery{},
+		administration.ListRolesQuery{},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -124,7 +124,7 @@ func (m roleResourceModule) get(request operationRequest) (operationResult, erro
 	role, err := m.roles.GetRole(
 		request.context,
 		request.invocation(),
-		app.GetRoleQuery{ID: roleID},
+		administration.GetRoleQuery{ID: roleID},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -140,7 +140,7 @@ func (m roleResourceModule) create(request operationRequest) (operationResult, e
 	saved, err := m.roles.CreateRole(
 		request.context,
 		request.invocation(),
-		app.CreateRoleCommand{
+		administration.CreateRoleCommand{
 			Name: input.Name, DisplayName: input.DisplayName,
 			Description: input.Description, Permissions: input.Permissions,
 		},
@@ -163,7 +163,7 @@ func (m roleResourceModule) patch(request operationRequest) (operationResult, er
 	updated, err := m.roles.UpdateRole(
 		request.context,
 		request.invocation(),
-		app.UpdateRoleCommand{
+		administration.UpdateRoleCommand{
 			ID: roleID, DisplayName: input.DisplayName,
 			Description: input.Description, Permissions: input.Permissions,
 		},
@@ -182,7 +182,7 @@ func (m roleResourceModule) archive(request operationRequest) (operationResult, 
 	if err := m.roles.ArchiveRole(
 		request.context,
 		request.invocation(),
-		app.ArchiveRoleCommand{ID: roleID},
+		administration.ArchiveRoleCommand{ID: roleID},
 	); err != nil {
 		return operationResult{}, err
 	}

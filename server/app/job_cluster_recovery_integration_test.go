@@ -282,3 +282,9 @@ func openClusteredJobIntegrationStore(t *testing.T) *sqlstore.SQLStore {
 	require.NoError(t, err)
 	return persistence
 }
+
+// prepareUserDefaultProfilePictureJob prepares a test User and the default
+// profile picture Job its creation proposes.
+func prepareUserDefaultProfilePictureJob(user *model.User, at time.Time) (*model.User, *model.Job, error) {
+	return jobhandler.PrepareUserDefaultProfilePictureJob(user, at)
+}

@@ -11,14 +11,14 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
 )
 
 type BrowserInvitationApplication interface {
-	StartBrowserInvitation(context.Context, invocation.Invocation, app.StartBrowserInvitationCommand) (*app.BrowserInvitationStart, error)
-	AcceptBrowserInvitation(context.Context, invocation.Invocation, app.BrowserInvitationAcceptanceCommand) (*app.InvitationAcceptanceView, error)
-	AcceptBrowserInvitationWithSession(context.Context, invocation.Invocation, app.BrowserInvitationSessionAcceptanceCommand) (*app.InvitationAcceptanceView, error)
+	StartBrowserInvitation(context.Context, invocation.Invocation, onboarding.StartBrowserInvitationCommand) (*onboarding.BrowserInvitationStart, error)
+	AcceptBrowserInvitation(context.Context, invocation.Invocation, onboarding.BrowserInvitationAcceptanceCommand) (*onboarding.InvitationAcceptanceView, error)
+	AcceptBrowserInvitationWithSession(context.Context, invocation.Invocation, onboarding.BrowserInvitationSessionAcceptanceCommand) (*onboarding.InvitationAcceptanceView, error)
 }
 
 type browserInvitationStartRequest struct {
@@ -56,15 +56,15 @@ type browserInvitationResourceModule struct {
 
 type unavailableBrowserInvitationApplication struct{}
 
-func (unavailableBrowserInvitationApplication) StartBrowserInvitation(context.Context, invocation.Invocation, app.StartBrowserInvitationCommand) (*app.BrowserInvitationStart, error) {
+func (unavailableBrowserInvitationApplication) StartBrowserInvitation(context.Context, invocation.Invocation, onboarding.StartBrowserInvitationCommand) (*onboarding.BrowserInvitationStart, error) {
 	return nil, errUnpresentableResult
 }
 
-func (unavailableBrowserInvitationApplication) AcceptBrowserInvitation(context.Context, invocation.Invocation, app.BrowserInvitationAcceptanceCommand) (*app.InvitationAcceptanceView, error) {
+func (unavailableBrowserInvitationApplication) AcceptBrowserInvitation(context.Context, invocation.Invocation, onboarding.BrowserInvitationAcceptanceCommand) (*onboarding.InvitationAcceptanceView, error) {
 	return nil, errUnpresentableResult
 }
 
-func (unavailableBrowserInvitationApplication) AcceptBrowserInvitationWithSession(context.Context, invocation.Invocation, app.BrowserInvitationSessionAcceptanceCommand) (*app.InvitationAcceptanceView, error) {
+func (unavailableBrowserInvitationApplication) AcceptBrowserInvitationWithSession(context.Context, invocation.Invocation, onboarding.BrowserInvitationSessionAcceptanceCommand) (*onboarding.InvitationAcceptanceView, error) {
 	return nil, errUnpresentableResult
 }
 
@@ -108,7 +108,7 @@ func (m browserInvitationResourceModule) start(request operationRequest) (operat
 	started, err := m.application.StartBrowserInvitation(
 		request.context,
 		request.invocation(),
-		app.StartBrowserInvitationCommand{Claim: body.Claim, Source: request.metadata.IPAddress},
+		onboarding.StartBrowserInvitationCommand{Claim: body.Claim, Source: request.metadata.IPAddress},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -132,7 +132,7 @@ func (m browserInvitationResourceModule) accept(request operationRequest) (opera
 	accepted, err := m.application.AcceptBrowserInvitation(
 		request.context,
 		request.invocation(),
-		app.BrowserInvitationAcceptanceCommand{
+		onboarding.BrowserInvitationAcceptanceCommand{
 			Handle: body.Handle, BrowserProof: proof, Password: body.Password, Username: body.Username,
 			DisplayName: body.DisplayName, FirstName: body.FirstName, LastName: body.LastName,
 			Locale: body.Locale, Timezone: body.Timezone, Source: request.metadata.IPAddress,
@@ -153,7 +153,7 @@ func (m browserInvitationResourceModule) acceptWithSession(request operationRequ
 	accepted, err := m.application.AcceptBrowserInvitationWithSession(
 		request.context,
 		request.invocation(),
-		app.BrowserInvitationSessionAcceptanceCommand{
+		onboarding.BrowserInvitationSessionAcceptanceCommand{
 			Handle: body.Handle, BrowserProof: proof, Source: request.metadata.IPAddress,
 		},
 	)

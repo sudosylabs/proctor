@@ -77,8 +77,8 @@ type ExternalProviderSource interface {
 }
 
 // InvitationAcceptor admits an External Identity through the Invitation its
-// login state carries. The parent app package implements it with the
-// Invitation use cases.
+// login state carries. The parent app package connects it to the onboarding
+// area's Invitation acceptance.
 type InvitationAcceptor interface {
 	AcceptExternalIdentity(context.Context, *model.ExternalLoginState, *model.ExternalAuthenticationAssertion,
 		store.AccessDeploymentCapabilities, model.RequestMetadata, string) (*store.ExternalIdentityInvitationAcceptanceResult, error)

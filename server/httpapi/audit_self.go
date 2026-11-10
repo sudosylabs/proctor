@@ -13,7 +13,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -44,7 +44,7 @@ type selfAuditResourceResponse struct {
 	ID   string             `json:"id,omitempty"`
 }
 
-func selfAuditEventResponseFromApplication(event app.SelfAuditEvent) selfAuditEventResponse {
+func selfAuditEventResponseFromApplication(event administration.SelfAuditEvent) selfAuditEventResponse {
 	return selfAuditEventResponse{
 		ID: event.ID.String(), CreatedAt: model.FormatRFC3339(event.CreatedAt),
 		Event: string(event.Event), Status: event.Status, Relation: string(event.Relation),
@@ -110,7 +110,7 @@ func (m auditResourceModule) listSelf(request operationRequest) (operationResult
 	if len(result.Items) > query.Limit || result.Counted == continued {
 		return operationResult{}, errUnpresentableResult
 	}
-	envelope, err := newListResponse(result.Items, result.HasMore, selfAuditEventResponseFromApplication, func(last app.SelfAuditEvent) (string, error) {
+	envelope, err := newListResponse(result.Items, result.HasMore, selfAuditEventResponseFromApplication, func(last administration.SelfAuditEvent) (string, error) {
 		return encodeOpaqueCursor(selfAuditCursor{CreatedAt: model.FormatRFC3339(last.CreatedAt), ID: last.ID.String(), Order: order}, selfAuditCursorSpec())
 	})
 	if err != nil {
@@ -124,8 +124,8 @@ func (m auditResourceModule) listSelf(request operationRequest) (operationResult
 	return jsonResult(http.StatusOK, response).withHeaders(privateNoStoreHeaders()), nil
 }
 
-func selfAuditQueryFromValues(values url.Values) (app.ListSelfAuditEventsQuery, error) {
-	var query app.ListSelfAuditEventsQuery
+func selfAuditQueryFromValues(values url.Values) (administration.ListSelfAuditEventsQuery, error) {
+	var query administration.ListSelfAuditEventsQuery
 	for key, entries := range values {
 		switch key {
 		case "limit", "cursor", "event":

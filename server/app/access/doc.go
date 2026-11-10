@@ -36,12 +36,12 @@ type UserSettingsAuditInput struct {
 }
 
 // InvalidTokenAppError reports a Principal, credential or token that is not a
-// valid caller. It is the one definition of that failure: the identity area
-// and the parent app package return it too.
+// valid caller. It is the one definition of that failure: the identity and
+// onboarding areas and the parent app package return it too.
 func InvalidTokenAppError() error {
 	return apperror.New("authentication.token_invalid")
 }
 
-// institutionStoreErrors translates Institution Store failures, as the
-// Institution use cases do.
-var institutionStoreErrors = apperror.AdministrationStoreTable("institution", "institution.conflict", "institution.invalid", nil)
+// InstitutionStoreErrors translates Institution Store failures. The academic
+// Institution use cases translate through it too.
+var InstitutionStoreErrors = apperror.AdministrationStoreTable("institution", "institution.conflict", "institution.invalid", nil)

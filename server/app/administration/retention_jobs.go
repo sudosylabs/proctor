@@ -1,0 +1,116 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+
+package administration
+
+import (
+	"context"
+	"time"
+
+	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
+)
+
+// RetentionJobs are the retention Jobs' system audit and candidate notice
+// dispatcher, for the Job catalog.
+type RetentionJobs struct {
+	Audit       jobhandler.RetentionSystemAuditor
+	ExpiryAudit jobhandler.RetentionExpirySystemAuditor
+	Notices     jobhandler.RetentionNoticeDispatcher
+}
+
+// NewRetentionJobs builds the retention Jobs' ports. Only composition can
+// build working ones, because it alone holds the Auditor.
+func NewRetentionJobs(audit *access.Auditor, records store.RetentionStore, users store.UserStore, composer *mail.Composer, now func() time.Time) RetentionJobs {
+	system := retentionJobAudit{audit: audit}
+	return RetentionJobs{Audit: system, ExpiryAudit: system,
+		Notices: retentionNoticeDispatcher{records: records, users: users, mail: composer, now: now}}
+}
+
+type retentionJobAudit struct{ audit *access.Auditor }
+
+type retentionNoticeDispatcher struct {
+	records store.RetentionStore
+	users   store.UserStore
+	mail    *mail.Composer
+	now     func() time.Time
+}
+
+func (d retentionNoticeDispatcher) DispatchRetentionNotice(ctx context.Context, notice model.RetentionNotice) error {
+	input := &store.RetentionNoticeMail{RetirementID: notice.RetirementID, RecipientUserID: notice.RecipientUserID}
+	if d.records == nil {
+		return apperror.New("retention.unavailable")
+	}
+	if d.users == nil || d.now == nil {
+		input.FailureCode = "mail.preparation_unavailable"
+		return d.records.CompleteNotice(ctx, input)
+	}
+	user, err := d.users.Get(ctx, notice.RecipientUserID)
+	if err != nil || user == nil {
+		input.FailureCode = "mail.recipient_unavailable"
+		return d.records.CompleteNotice(ctx, input)
+	}
+	if d.mail == nil {
+		input.FailureCode = "mail.preparation_unavailable"
+		return d.records.CompleteNotice(ctx, input)
+	}
+	input.Mail, err = d.mail.PrepareRetentionScheduled(mail.NoticePreparation{Recipient: user, At: model.TimeUTC(d.now())}, notice.RetireAfter)
+	if err != nil {
+		input.Mail = nil
+		input.FailureCode = "mail.preparation_unavailable"
+	}
+	return d.records.CompleteNotice(ctx, input)
+}
+
+func (a retentionJobAudit) BeginRetention(ctx context.Context, institutionID model.InstitutionID, submissionID model.SubmissionID) (model.AuditEventID, error) {
+	if a.audit == nil {
+		return "", apperror.New("audit.unavailable")
+	}
+	event, err := a.audit.BeginSystemCriticalActionAtScope(ctx, model.ActionRetentionCleanupManage,
+		model.Resource{Type: model.ResourceSubmission, ID: submissionID.String()}, model.RoleScopeInstitution, institutionID.String(),
+		map[string]any{"operation": "retention.reconcile", "submission_id": submissionID.String()})
+	if err != nil {
+		return "", err
+	}
+	return event.ID, nil
+}
+
+func (a retentionJobAudit) FailRetention(ctx context.Context, id model.AuditEventID) error {
+	if a.audit == nil {
+		return apperror.New("audit.unavailable")
+	}
+	_, err := a.audit.CompleteCriticalAction(ctx, id, model.AuditStatusFail, "retention.unavailable", nil)
+	return err
+}
+
+func (a retentionJobAudit) BeginRetentionExpiry(ctx context.Context, institutionID model.InstitutionID, kind model.RetentionExpiryKind, id string) (model.AuditEventID, error) {
+	if a.audit == nil || !kind.IsValid() || !model.IsValidOpaqueID(id) {
+		return "", apperror.New("audit.unavailable")
+	}
+	event, err := a.audit.BeginSystemCriticalActionAtScope(ctx, model.ActionRetentionCleanupManage,
+		model.Resource{Type: model.ResourceInstitution, ID: institutionID.String()}, model.RoleScopeInstitution, institutionID.String(),
+		map[string]any{"operation": "retention.expire", "kind": string(kind), "record_id": id})
+	if err != nil {
+		return "", err
+	}
+	return event.ID, nil
+}
+
+func (a retentionJobAudit) PrepareRetentionCleanupAudit(_ context.Context, institutionID model.InstitutionID) (*model.AuditEvent, error) {
+	if a.audit == nil || a.audit.NodeID() == "" || !institutionID.IsValid() {
+		return nil, apperror.New("audit.unavailable")
+	}
+	parameters, err := model.EncodeAuditData(map[string]string{"operation": "retention.expire_cleanup_history"})
+	if err != nil {
+		return nil, apperror.New("audit.unavailable")
+	}
+	return &model.AuditEvent{Action: string(model.ActionRetentionCleanupManage), Resource: model.Resource{Type: model.ResourceInstitution, ID: institutionID.String()}, ScopeType: model.RoleScopeInstitution, ScopeID: institutionID.String(), Status: model.AuditStatusAttempt, NodeID: a.audit.NodeID(), ClientType: "system", Parameters: parameters}, nil
+}

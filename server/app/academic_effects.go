@@ -13,21 +13,15 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// classMemberEffects publishes a candidate's Class Membership change and
-// reports a publication that failed.
-type classMemberEffects interface {
-	MembershipChanged(context.Context, model.UserID, []model.ClassID) error
-	Report(context.Context, string, error)
-}
-
 // academicRealtimeEffects publishes the realtime effects of academic changes
-// through the application's realtime service. Invitation acceptance uses
-// its Class Membership effects as well.
+// through the application's realtime service. Invitation acceptance in the
+// onboarding area uses its Class Membership effects as well.
 type academicRealtimeEffects struct {
 	sittings store.ExamSittingStore
 	realtime *realtimeService
@@ -117,8 +111,8 @@ func (e academicRealtimeEffects) Report(ctx context.Context, operation string, e
 }
 
 var (
-	_ academic.Effects    = academicRealtimeEffects{}
-	_ classMemberEffects  = academicRealtimeEffects{}
-	_ academic.Authorizer = (*access.Authorizer)(nil)
-	_ academic.Auditor    = access.MutationAuditAdapter{}
+	_ academic.Effects             = academicRealtimeEffects{}
+	_ onboarding.MembershipEffects = academicRealtimeEffects{}
+	_ academic.Authorizer          = (*access.Authorizer)(nil)
+	_ academic.Auditor             = access.MutationAuditAdapter{}
 )

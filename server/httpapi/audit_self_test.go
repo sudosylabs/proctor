@@ -16,7 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -27,12 +27,12 @@ func TestSelfAuditResourceParsesFiltersAndPagesPrivately(t *testing.T) {
 	logger, _ := newTestLogger(t)
 	principal := operatorTestPrincipal()
 	at := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
-	last := app.SelfAuditEvent{
+	last := administration.SelfAuditEvent{
 		ID: model.NewAuditEventID(), CreatedAt: at, Event: model.AuditSelfEventMFAResetByAdministrator,
-		Status: model.AuditStatusSuccess, Relation: store.AuditSelfRelationSubject, ActorKind: app.SelfAuditActorAdministrator,
+		Status: model.AuditStatusSuccess, Relation: store.AuditSelfRelationSubject, ActorKind: administration.SelfAuditActorAdministrator,
 		Resource: model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()}, ClientType: "web",
 	}
-	audits := &focusedAuditApplication{self: []app.SelfAuditEvent{last}, hasMore: true, selfTotal: 248}
+	audits := &focusedAuditApplication{self: []administration.SelfAuditEvent{last}, hasMore: true, selfTotal: 248}
 	httpAPI := newFocusedResourceAPI(t, logger, &academicUnitHTTPApplication{principal: principal}, auditResource(audits))
 
 	response := serveOperatorRequest(httpAPI, http.MethodGet,
@@ -72,7 +72,7 @@ func TestSelfAuditResourceParsesFiltersAndPagesPrivately(t *testing.T) {
 	crossed := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/users/me/audits?order=asc&cursor="+url.QueryEscape(page.NextCursor), "", true)
 	assertHTTPProblem(t, crossed, http.StatusBadRequest, "request.invalid")
 
-	audits.self, audits.hasMore, audits.selfTotal = []app.SelfAuditEvent{last}, true, store.MaximumAuditSelfCount
+	audits.self, audits.hasMore, audits.selfTotal = []administration.SelfAuditEvent{last}, true, store.MaximumAuditSelfCount
 	oldest := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/users/me/audits?order=asc&limit=1", "", true)
 	require.Equal(t, http.StatusOK, oldest.Code, oldest.Body.String())
 	require.True(t, audits.selfQuery.Ascending)

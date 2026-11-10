@@ -13,10 +13,10 @@
 //
 // The mechanics the flows share stay inside the package behind them: the
 // password hasher, attempt accounting, the authentication cache invalidator,
-// and the TOTP mechanics. The parent app package borrows the hasher, the
-// attempt accounting and the invalidator, which it builds once with the
-// exported constructors, for Invitations, public registration, test mail and
-// realtime propagation; those flows stay in the parent for now.
+// and the TOTP mechanics. The parent app package builds the hasher, the
+// attempt accounting and the invalidator once with the exported
+// constructors, and shares them with the onboarding area's Invitations and
+// public registration and with its own test mail and realtime propagation.
 //
 // Start with identity.go for the Service and its collaborators, then open the
 // file named for the concern you are changing.

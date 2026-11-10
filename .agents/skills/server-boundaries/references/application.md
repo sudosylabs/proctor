@@ -35,7 +35,8 @@ Each actor-sensitive use case authorizes immediately before expensive work or mu
 Domain models own local invariants and transitions. Application services own use-case policy, authorization, multi-aggregate coordination, transaction intent, audit, and external effects.
 
 Each domain area is one package under `app/`: `app/access`, `app/academic`,
-`app/identity`, `app/user`, and `app/exam` with its children. An area package
+`app/identity`, `app/user`, `app/administration`, `app/onboarding`, and
+`app/exam` with its children. An area package
 exports a `Service` (or a few, when one would be too wide) whose exported
 methods are the area's use cases, together with that area's effects and
 adapters. A contributor looking for a feature opens the area directory; nothing

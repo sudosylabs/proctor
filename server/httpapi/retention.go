@@ -13,18 +13,18 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type RetentionApplication interface {
-	ListRetentionNotices(context.Context, invocation.Invocation, model.RetentionRetirementID, int) (*app.RetentionNoticePage, error)
+	ListRetentionNotices(context.Context, invocation.Invocation, model.RetentionRetirementID, int) (*administration.RetentionNoticePage, error)
 	GetRetentionControl(context.Context, invocation.Invocation) (*model.RetentionControl, error)
 	GetRetentionPreview(context.Context, invocation.Invocation, model.RetentionPreviewID) (*model.RetentionPreview, error)
-	CreateRetentionPreview(context.Context, invocation.Invocation, app.CreateRetentionPreviewCommand) (*model.RetentionPreview, error)
-	ChangeRetentionControl(context.Context, invocation.Invocation, app.ChangeRetentionControlCommand) (*model.RetentionControl, error)
-	ListRetentionRecords(context.Context, invocation.Invocation, model.SubmissionID, int) (*app.RetentionRecordPage, error)
+	CreateRetentionPreview(context.Context, invocation.Invocation, administration.CreateRetentionPreviewCommand) (*model.RetentionPreview, error)
+	ChangeRetentionControl(context.Context, invocation.Invocation, administration.ChangeRetentionControlCommand) (*model.RetentionControl, error)
+	ListRetentionRecords(context.Context, invocation.Invocation, model.SubmissionID, int) (*administration.RetentionRecordPage, error)
 }
 
 type retentionHTTPModule struct{ application RetentionApplication }
@@ -142,7 +142,7 @@ func (m retentionHTTPModule) changeControl(request operationRequest) (operationR
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
-	c, err := m.application.ChangeRetentionControl(request.context, request.invocation(), app.ChangeRetentionControlCommand{
+	c, err := m.application.ChangeRetentionControl(request.context, request.invocation(), administration.ChangeRetentionControlCommand{
 		ExpectedRevision: body.ExpectedRevision, ExpectedPolicyRevision: body.ExpectedPolicyRevision, PreviewID: model.RetentionPreviewID(body.PreviewID),
 		State: model.RetentionControlState(body.State), IdempotencyKey: request.idempotencyKey})
 	if err != nil {
@@ -155,7 +155,7 @@ func (m retentionHTTPModule) preview(request operationRequest) (operationResult,
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
-	p, err := m.application.CreateRetentionPreview(request.context, request.invocation(), app.CreateRetentionPreviewCommand{ExpectedPolicyRevision: body.ExpectedPolicyRevision, IdempotencyKey: request.idempotencyKey})
+	p, err := m.application.CreateRetentionPreview(request.context, request.invocation(), administration.CreateRetentionPreviewCommand{ExpectedPolicyRevision: body.ExpectedPolicyRevision, IdempotencyKey: request.idempotencyKey})
 	if err != nil {
 		return operationResult{}, err
 	}

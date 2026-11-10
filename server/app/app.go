@@ -8,10 +8,8 @@
 package app
 
 import (
-	"errors"
-	"time"
-
 	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
@@ -22,6 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/identity"
 
 	"github.com/sudosylabs/proctor/server/app/job"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/app/user"
 )
 
@@ -34,15 +33,17 @@ type App struct {
 	// Identity holds sign-in, Session, MFA, token, Desktop authorization,
 	// account recovery, account state and bootstrap use cases.
 	Identity *identity.Service
-	*browserInvitationService
-	*publicRegistrationService
-	*accessPolicyService
-	*retentionPolicyService
+	// Onboarding brings people in: Invitations, browser Invitation handoff,
+	// public registration, academic administration batches, onboarding
+	// imports and Student Progression.
+	Onboarding *onboarding.Service
+	// Administration holds the institution administrator's access and
+	// retention controls: Roles, Role Bindings, the Access Policy and access
+	// discovery, retention, and the audit listings.
+	Administration *administration.Service
 	// Academic holds the Institution, Academic Unit, Programme, Academic
 	// Period, Class, membership and Affiliation use cases.
 	Academic *academic.Service
-	*invitationService
-	*onboardingImportService
 	// ExamAuthoring holds the Exam catalog: creating, listing and archiving
 	// Exams, editing their Draft, and managing Exam Managers.
 	ExamAuthoring *exam.Authoring
@@ -72,10 +73,6 @@ type App struct {
 	// Users holds the User directory, profile, settings and profile-picture
 	// use cases.
 	Users *user.Service
-	*roleService
-	*roleBindingService
-	*auditListingService
-	*academicAdministrationBatchService
 	*searchService
 	*administrationCountsService
 	*realtimeService
@@ -125,11 +122,11 @@ func New(deps Dependencies) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	administration := constructAdministration(deps, foundation, access, accounts)
-	accounts.onboardingImports, err = constructOnboardingImports(deps, accounts, administration, access, foundation)
+	accounts.onboarding, accounts.onboardingPorts, err = constructOnboarding(deps, foundation, access, accounts)
 	if err != nil {
 		return nil, err
 	}
+	var administration administrationConstruction
 	jobs, err := constructJobs(deps, foundation, access, accounts, examinations, profiles)
 	if err != nil {
 		return nil, err
@@ -147,11 +144,11 @@ func New(deps Dependencies) (*App, error) {
 // their counts are then left out.
 func administrationCountsDependencies(accounts accountConstruction, jobs jobConstruction) administrationCountsServiceDependencies {
 	var deps administrationCountsServiceDependencies
-	if accounts.invitations != nil {
-		deps.Invitations = accounts.invitations
+	if accounts.onboardingPorts.CountPendingInvitations != nil {
+		deps.Invitations = pendingInvitationCounter(accounts.onboardingPorts.CountPendingInvitations)
 	}
-	if accounts.onboardingImports != nil {
-		deps.Imports = accounts.onboardingImports
+	if accounts.onboardingPorts.CountOpenImports != nil {
+		deps.Imports = openImportCounter(accounts.onboardingPorts.CountOpenImports)
 	}
 	if jobs.operations != nil {
 		deps.Jobs = jobs.operations
@@ -160,31 +157,4 @@ func administrationCountsDependencies(accounts accountConstruction, jobs jobCons
 		deps.Mail = jobs.mail
 	}
 	return deps
-}
-
-// constructOnboardingImports projects the onboarding import stores. A
-// deliberately reduced lifecycle test catalog omits whole capability
-// families and so constructs no onboarding imports; production catalogs
-// project every target store together.
-func constructOnboardingImports(deps Dependencies, accounts accountConstruction, administration administrationConstruction,
-	access accessAcademicConstruction, foundation applicationFoundation,
-) (*onboardingImportService, error) {
-	if deps.Store == nil {
-		return nil, errors.New("onboarding import store catalog is required")
-	}
-	catalog := deps.Store
-	if catalog.OnboardingImport() == nil {
-		return nil, errors.New("onboarding import persistence is required")
-	}
-	if deps.FileContent == nil {
-		return nil, errors.New("onboarding import file content is required")
-	}
-	if catalog.PersonalAccessToken() == nil || catalog.User() == nil {
-		return nil, errors.New("onboarding import credential stores are required")
-	}
-	if catalog.Institution() == nil || catalog.AcademicUnit() == nil || catalog.Programme() == nil || catalog.ProgrammeLevel() == nil ||
-		catalog.AcademicPeriod() == nil || catalog.Class() == nil || catalog.Role() == nil {
-		return nil, nil
-	}
-	return newOnboardingImportService(onboardingImportServiceDependencies{Imports: catalog.OnboardingImport(), Content: deps.FileContent, Invitations: accounts.invitations, AdministrationBatches: administration.academicAdministrationBatches, Authentication: accounts.identity, Authorization: invitationAuthorizationAdapter{authorization: access.authorization}, Audit: foundation.audit.MutationAudit(), Tokens: catalog.PersonalAccessToken(), Users: catalog.User(), Institutions: catalog.Institution(), Units: catalog.AcademicUnit(), Programmes: catalog.Programme(), Levels: catalog.ProgrammeLevel(), Periods: catalog.AcademicPeriod(), Classes: catalog.Class(), Roles: catalog.Role(), Affiliations: catalog.Affiliation(), UnitMembers: catalog.AcademicUnitMember(), ClassMembers: catalog.ClassMember(), RoleBindings: catalog.RoleBinding(), Now: time.Now})
 }

@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -109,30 +109,30 @@ type roleHTTPApplication struct {
 	RoleApplication
 	list           []*model.Role
 	result         *model.Role
-	createCommand  app.CreateRoleCommand
-	updateCommand  app.UpdateRoleCommand
-	archiveCommand app.ArchiveRoleCommand
+	createCommand  administration.CreateRoleCommand
+	updateCommand  administration.UpdateRoleCommand
+	archiveCommand administration.ArchiveRoleCommand
 }
 
-func (a *roleHTTPApplication) ListRoles(context.Context, invocation.Invocation, app.ListRolesQuery) ([]*model.Role, error) {
+func (a *roleHTTPApplication) ListRoles(context.Context, invocation.Invocation, administration.ListRolesQuery) ([]*model.Role, error) {
 	return a.list, nil
 }
 
-func (a *roleHTTPApplication) GetRole(context.Context, invocation.Invocation, app.GetRoleQuery) (*model.Role, error) {
+func (a *roleHTTPApplication) GetRole(context.Context, invocation.Invocation, administration.GetRoleQuery) (*model.Role, error) {
 	return a.result, nil
 }
 
-func (a *roleHTTPApplication) CreateRole(_ context.Context, _ invocation.Invocation, command app.CreateRoleCommand) (*model.Role, error) {
+func (a *roleHTTPApplication) CreateRole(_ context.Context, _ invocation.Invocation, command administration.CreateRoleCommand) (*model.Role, error) {
 	a.createCommand = command
 	return a.result, nil
 }
 
-func (a *roleHTTPApplication) UpdateRole(_ context.Context, _ invocation.Invocation, command app.UpdateRoleCommand) (*model.Role, error) {
+func (a *roleHTTPApplication) UpdateRole(_ context.Context, _ invocation.Invocation, command administration.UpdateRoleCommand) (*model.Role, error) {
 	a.updateCommand = command
 	return a.result, nil
 }
 
-func (a *roleHTTPApplication) ArchiveRole(_ context.Context, _ invocation.Invocation, command app.ArchiveRoleCommand) error {
+func (a *roleHTTPApplication) ArchiveRole(_ context.Context, _ invocation.Invocation, command administration.ArchiveRoleCommand) error {
 	a.archiveCommand = command
 	return nil
 }
@@ -143,15 +143,15 @@ type roleBindingHTTPApplication struct {
 	result *model.RoleBinding
 }
 
-func (a *roleBindingHTTPApplication) ListRoleBindings(context.Context, invocation.Invocation, app.ListRoleBindingsQuery) ([]*model.RoleBinding, error) {
+func (a *roleBindingHTTPApplication) ListRoleBindings(context.Context, invocation.Invocation, administration.ListRoleBindingsQuery) ([]*model.RoleBinding, error) {
 	return a.list, nil
 }
 
-func (a *roleBindingHTTPApplication) CreateRoleBinding(context.Context, invocation.Invocation, app.CreateRoleBindingCommand) (*model.RoleBinding, error) {
+func (a *roleBindingHTTPApplication) CreateRoleBinding(context.Context, invocation.Invocation, administration.CreateRoleBindingCommand) (*model.RoleBinding, error) {
 	return a.result, nil
 }
 
-func (a *roleBindingHTTPApplication) EndRoleBinding(context.Context, invocation.Invocation, app.EndRoleBindingCommand) (*model.RoleBinding, error) {
+func (a *roleBindingHTTPApplication) EndRoleBinding(context.Context, invocation.Invocation, administration.EndRoleBindingCommand) (*model.RoleBinding, error) {
 	return a.result, nil
 }
 
@@ -160,7 +160,7 @@ type auditListingHTTPApplication struct {
 	list []*model.AuditEvent
 }
 
-func (a *auditListingHTTPApplication) ListAuditEvents(_ context.Context, _ invocation.Invocation, query app.ListAuditEventsQuery) (paging.Counted[*model.AuditEvent], error) {
+func (a *auditListingHTTPApplication) ListAuditEvents(_ context.Context, _ invocation.Invocation, query administration.ListAuditEventsQuery) (paging.Counted[*model.AuditEvent], error) {
 	return paging.Counted[*model.AuditEvent]{Page: paging.Page[*model.AuditEvent]{Items: a.list},
 		Total: paging.Total{Counted: query.BeforeID.IsZero(), Total: len(a.list)}}, nil
 }

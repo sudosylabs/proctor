@@ -10,7 +10,7 @@
 // Classes, Academic Unit and Class memberships, and Affiliations. Service holds
 // every one of these use cases, one file per entity.
 // Academic administration batches, Student Progression and onboarding imports
-// stay in the parent app package for now and call Service methods.
+// live in app/onboarding and call Service methods.
 // Start with academic.go for the Service and its collaborators, then open the
 // file named for the entity you are changing.
 package academic

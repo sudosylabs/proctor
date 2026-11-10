@@ -12,6 +12,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/identity"
@@ -175,8 +176,8 @@ type MFA interface {
 }
 
 type AuditListingApplication interface {
-	ListAuditEvents(context.Context, invocation.Invocation, app.ListAuditEventsQuery) (paging.Counted[*model.AuditEvent], error)
-	ListSelfAuditEvents(context.Context, invocation.Invocation, app.ListSelfAuditEventsQuery) (app.SelfAuditPage, error)
+	ListAuditEvents(context.Context, invocation.Invocation, administration.ListAuditEventsQuery) (paging.Counted[*model.AuditEvent], error)
+	ListSelfAuditEvents(context.Context, invocation.Invocation, administration.ListSelfAuditEventsQuery) (administration.SelfAuditPage, error)
 }
 
 type BootstrapApplication interface {
@@ -202,17 +203,17 @@ type DesktopCompatibilityApplication interface {
 }
 
 type RoleApplication interface {
-	ListRoles(context.Context, invocation.Invocation, app.ListRolesQuery) ([]*model.Role, error)
-	GetRole(context.Context, invocation.Invocation, app.GetRoleQuery) (*model.Role, error)
-	CreateRole(context.Context, invocation.Invocation, app.CreateRoleCommand) (*model.Role, error)
-	UpdateRole(context.Context, invocation.Invocation, app.UpdateRoleCommand) (*model.Role, error)
-	ArchiveRole(context.Context, invocation.Invocation, app.ArchiveRoleCommand) error
+	ListRoles(context.Context, invocation.Invocation, administration.ListRolesQuery) ([]*model.Role, error)
+	GetRole(context.Context, invocation.Invocation, administration.GetRoleQuery) (*model.Role, error)
+	CreateRole(context.Context, invocation.Invocation, administration.CreateRoleCommand) (*model.Role, error)
+	UpdateRole(context.Context, invocation.Invocation, administration.UpdateRoleCommand) (*model.Role, error)
+	ArchiveRole(context.Context, invocation.Invocation, administration.ArchiveRoleCommand) error
 }
 
 type RoleBindingApplication interface {
-	ListRoleBindings(context.Context, invocation.Invocation, app.ListRoleBindingsQuery) ([]*model.RoleBinding, error)
-	CreateRoleBinding(context.Context, invocation.Invocation, app.CreateRoleBindingCommand) (*model.RoleBinding, error)
-	EndRoleBinding(context.Context, invocation.Invocation, app.EndRoleBindingCommand) (*model.RoleBinding, error)
+	ListRoleBindings(context.Context, invocation.Invocation, administration.ListRoleBindingsQuery) ([]*model.RoleBinding, error)
+	CreateRoleBinding(context.Context, invocation.Invocation, administration.CreateRoleBindingCommand) (*model.RoleBinding, error)
+	EndRoleBinding(context.Context, invocation.Invocation, administration.EndRoleBindingCommand) (*model.RoleBinding, error)
 }
 
 // Application is the cohesive application-facing API contract. Its component
@@ -221,9 +222,6 @@ type RoleBindingApplication interface {
 type Application interface {
 	SearchApplication
 	AdministrationCountsApplication
-	registrationApplication
-	RetentionPolicyApplication
-	RetentionApplication
 	JobOperationsApplication
 	MailApplication
 }

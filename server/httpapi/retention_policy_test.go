@@ -18,14 +18,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type retentionPolicyHTTPApplication struct {
 	policy  *model.RetentionPolicy
-	command app.ReplaceRetentionPolicyCommand
+	command administration.ReplaceRetentionPolicyCommand
 	calls   int
 }
 
@@ -35,7 +35,7 @@ func (a *retentionPolicyHTTPApplication) GetRetentionPolicy(context.Context, inv
 }
 
 func (a *retentionPolicyHTTPApplication) ReplaceRetentionPolicy(_ context.Context, _ invocation.Invocation,
-	command app.ReplaceRetentionPolicyCommand) (*model.RetentionPolicy, error) {
+	command administration.ReplaceRetentionPolicyCommand) (*model.RetentionPolicy, error) {
 	a.calls++
 	a.command = command
 	return a.policy, nil

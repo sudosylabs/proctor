@@ -36,7 +36,7 @@ func (s *Service) GetInstitution(
 ) (*model.Institution, error) {
 	institution, err := s.institutions.GetSingleton(ctx)
 	if err != nil {
-		return nil, institutionStoreErrors.Translate(err)
+		return nil, access.InstitutionStoreErrors.Translate(err)
 	}
 	if err := s.authorizer.Authorize(
 		ctx, invocation, model.ActionInstitutionManage,
@@ -55,7 +55,7 @@ func (s *Service) UpdateInstitution(
 ) (*model.Institution, error) {
 	current, err := s.institutions.GetSingleton(ctx)
 	if err != nil {
-		return nil, institutionStoreErrors.Translate(err)
+		return nil, access.InstitutionStoreErrors.Translate(err)
 	}
 	resource := model.Resource{Type: model.ResourceInstitution, ID: current.ResourceID()}
 	if err := s.authorizer.Authorize(
@@ -97,8 +97,6 @@ func (s *Service) UpdateInstitution(
 				Institution: &candidate, AuditEventID: reference.ID, AuditAt: reference.MutationAt,
 			})
 		},
-		institutionStoreErrors.Translate,
+		access.InstitutionStoreErrors.Translate,
 	)
 }
-
-var institutionStoreErrors = apperror.AdministrationStoreTable("institution", "institution.conflict", "institution.invalid", nil)

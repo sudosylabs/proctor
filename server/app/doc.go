@@ -12,11 +12,12 @@
 // formats live in httpapi and websocket, SQL in store/sqlstore, and stored
 // file bytes in filecontent.
 //
-// App, built once by New, is the application's public surface. It embeds one
+// App, built once by New, is the application's public surface. It holds one
 // service per area, so each use case is declared once, as a method on its
-// service. Each area is moving into its own child package, which App will
-// expose as a named field; until an area moves, its services live in this
-// package. Exam use cases already live in app/exam and its children.
+// service. Each area is moving into its own child package, which App
+// exposes as a named field; until an area moves, its services live in this
+// package and App embeds them. Exam use cases already live in app/exam and
+// its children.
 //
 // Where to look:
 //   - app.go: App and New
@@ -27,6 +28,10 @@
 //   - child packages: apperror (the one application error type), invocation
 //     (the call context every use case takes), idempotency, job (the durable
 //     Job engine), jobhandler, mail, realtime and exam
-//   - area packages: academic, user and identity (sign-in, Sessions, MFA,
-//     tokens, Desktop authorization, account recovery and account state)
+//   - area packages: academic, user, identity (sign-in, Sessions, MFA,
+//     tokens, Desktop authorization, account recovery and account state),
+//     administration (Roles, Role Bindings, the Access Policy, retention and
+//     the audit listings) and onboarding (Invitations, public registration,
+//     academic administration batches, onboarding imports and Student
+//     Progression)
 package app

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
@@ -63,9 +64,6 @@ func constructJobs(
 	}
 	if defaultJobs != nil {
 		defaultJobs.SetWake(runtime.Wake)
-	}
-	if accounts.onboardingImports != nil {
-		accounts.onboardingImports.wake = runtime.Wake
 	}
 	if accounts.wake != nil {
 		accounts.wake.wake = runtime.Wake
@@ -157,10 +155,7 @@ func buildApplicationJobDefinitions(
 	lifecycleUseCases := examSittingLifecycleJobUseCases{sittings: examinations.sittings}
 	sealingUseCases := examSittingSealingJobUseCases{sittings: examinations.sittings, attempts: examinations.attempts,
 		jobs: deps.Store.Job(), now: time.Now, newID: model.NewJobID}
-	var onboarding jobhandler.OnboardingImportService
-	if accounts.onboardingImports != nil {
-		onboarding = onboardingImportJobs{service: accounts.onboardingImports}
-	}
+	retentionJobs := administration.NewRetentionJobs(foundation.audit, deps.Store.Retention(), deps.Store.User(), foundation.mail, time.Now)
 	catalog := jobhandler.NewCatalog(jobhandler.CatalogDependencies{
 		JobStore:                       deps.Store.Job(),
 		DefaultProfilePictureGenerator: jobDefaultProfilePictureGenerator{service: profiles.users}, Users: deps.Store.User(), DefaultProfilePictureJobs: defaultJobs,
@@ -170,15 +165,15 @@ func buildApplicationJobDefinitions(
 		CommandOutcomes: deps.Store.CommandOutcome(), AuditAttempts: deps.Store.Audit(),
 		Sessions: deps.Store.Session(), SessionCredentials: deps.Store.SessionCredential(), SessionRetiredRetention: deps.Sessions.RetiredRetention,
 		ExamExports: examinations.exports, ExamExportStore: deps.Store.ExamExport(), ExamExportContent: deps.FileContent,
-		Retention: deps.Store.Retention(), RetentionContent: deps.FileContent, RetentionAudit: retentionJobAudit{audit: foundation.audit},
-		RetentionExpiry: deps.Store.Retention(), RetentionExpiryAudit: retentionJobAudit{audit: foundation.audit},
-		RetentionNotices: deps.Store.Retention(), RetentionNoticeDispatcher: retentionNoticeDispatcher{records: deps.Store.Retention(), users: deps.Store.User(), mail: foundation.mail, now: time.Now},
+		Retention: deps.Store.Retention(), RetentionContent: deps.FileContent, RetentionAudit: retentionJobs.Audit,
+		RetentionExpiry: deps.Store.Retention(), RetentionExpiryAudit: retentionJobs.ExpiryAudit,
+		RetentionNotices: deps.Store.Retention(), RetentionNoticeDispatcher: retentionJobs.Notices,
 		MailDeliveries: deps.Store.Mail(), MailSender: deps.MailDeliverySender, MailSealer: deps.MailSecretSealer,
 		MailRecorder: jobMailDeliveryRecorder{recorder: deps.MailDeliveryRecorder}, MailHealth: jobMailHealth{health: mailHealth},
 		MailRelevance: jobMailDeliveryIsRelevant, SittingMailStore: deps.Store.ExamSitting(), SittingMail: examinations.sittingMail,
 		MailCleanup: deps.Store.Mail(), SittingMailMaintenance: deps.Store.ExamSitting(), MailRekey: deps.Store.Mail(), MFARekey: deps.Store.MFA(), MFASealer: deps.MFASecretSealer,
 		Invitations: deps.Store.Invitation(), OnboardingImports: deps.Store.OnboardingImport(), OnboardingFiles: deps.FileContent,
-		ExamSittingLifecycle: lifecycleUseCases, ExamSittingSealing: sealingUseCases, Onboarding: onboarding, Now: time.Now,
+		ExamSittingLifecycle: lifecycleUseCases, ExamSittingSealing: sealingUseCases, Onboarding: accounts.onboardingPorts.ImportJobs, Now: time.Now,
 	})
 	periodicTasks := []job.PeriodicTask{
 		{Name: examAttemptExpiryPeriodicTaskName, Interval: examAttemptExpiryScanInterval, Runner: examAttemptExpiryPeriodicRunner{attempts: examinations.attempts}},

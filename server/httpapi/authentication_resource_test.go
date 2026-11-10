@@ -18,10 +18,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -33,7 +33,7 @@ type authenticationEntryHTTPApplication struct {
 	loginCalls          int
 	logoutCommand       identity.LogoutCommand
 	logoutCalls         int
-	registrationCommand app.RegisterLocalUserCommand
+	registrationCommand onboarding.RegisterLocalUserCommand
 	registrationCalls   int
 	registrationError   error
 }
@@ -41,7 +41,7 @@ type authenticationEntryHTTPApplication struct {
 func (af *authenticationEntryHTTPApplication) RegisterLocalUser(
 	_ context.Context,
 	_ invocation.Invocation,
-	command app.RegisterLocalUserCommand,
+	command onboarding.RegisterLocalUserCommand,
 ) error {
 	af.registrationCommand = command
 	af.registrationCalls++

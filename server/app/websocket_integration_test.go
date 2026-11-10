@@ -27,7 +27,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
@@ -347,20 +347,20 @@ func TestWebSocketTwoNodeConformance(t *testing.T) {
 		login.Tokens.AccessToken,
 	)
 	require.NoError(t, appErr)
-	role, err := nodeA.App.CreateRole(
+	role, err := nodeA.App.Administration.CreateRole(
 		context.Background(),
 		invocation.New(*principal, model.RequestMetadata{RequestID: "two-node-role-create"}),
-		app.CreateRoleCommand{
+		administration.CreateRoleCommand{
 			Name: "cluster_observer", DisplayName: "Cluster Observer",
 			Permissions: []string{string(model.ActionUserView)},
 		},
 	)
 	require.NoError(t, err)
 	updatedDisplayName := "Updated Cluster Observer"
-	_, err = nodeA.App.UpdateRole(
+	_, err = nodeA.App.Administration.UpdateRole(
 		context.Background(),
 		invocation.New(*principal, model.RequestMetadata{RequestID: "two-node-role-patch"}),
-		app.UpdateRoleCommand{ID: role.ID, DisplayName: &updatedDisplayName},
+		administration.UpdateRoleCommand{ID: role.ID, DisplayName: &updatedDisplayName},
 	)
 	require.NoError(t, err)
 	_ = connection.SetReadDeadline(time.Now().Add(5 * time.Second))

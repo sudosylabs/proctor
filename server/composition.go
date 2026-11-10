@@ -20,6 +20,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
@@ -29,6 +30,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/workspace"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/config"
@@ -73,21 +75,24 @@ var (
 	_ httpapi.AffiliationApplication                 = (*academic.Service)(nil)
 	_ httpapi.AcademicUnitMemberApplication          = (*academic.Service)(nil)
 	_ httpapi.ClassMemberApplication                 = (*academic.Service)(nil)
-	_ httpapi.InvitationApplication                  = (*app.App)(nil)
-	_ httpapi.BrowserInvitationApplication           = (*app.App)(nil)
-	_ httpapi.OnboardingImportApplication            = (*app.App)(nil)
-	_ httpapi.StudentProgressionApplication          = (*app.App)(nil)
-	_ httpapi.AcademicAdministrationBatchApplication = (*app.App)(nil)
+	_ httpapi.InvitationApplication                  = (*onboarding.Service)(nil)
+	_ httpapi.BrowserInvitationApplication           = (*onboarding.Service)(nil)
+	_ httpapi.OnboardingImportApplication            = (*onboarding.Service)(nil)
+	_ httpapi.StudentProgressionApplication          = (*onboarding.Service)(nil)
+	_ httpapi.AcademicAdministrationBatchApplication = (*onboarding.Service)(nil)
+	_ httpapi.RegistrationApplication                = (*onboarding.Service)(nil)
 	_ httpapi.UserProfileApplication                 = (*user.Service)(nil)
 	_ httpapi.UserAccountApplication                 = (*attempt.Service)(nil)
 	_ httpapi.UserSettingsApplication                = (*user.Service)(nil)
 	_ httpapi.AccountStateApplication                = (*identity.Service)(nil)
 	_ httpapi.SessionAdministrationApplication       = (*identity.Service)(nil)
-	_ httpapi.RoleApplication                        = (*app.App)(nil)
-	_ httpapi.RoleBindingApplication                 = (*app.App)(nil)
-	_ httpapi.AuditListingApplication                = (*app.App)(nil)
+	_ httpapi.RoleApplication                        = (*administration.Service)(nil)
+	_ httpapi.RoleBindingApplication                 = (*administration.Service)(nil)
+	_ httpapi.AuditListingApplication                = (*administration.Service)(nil)
 	_ httpapi.BootstrapApplication                   = (*identity.Service)(nil)
-	_ httpapi.AccessPolicyApplication                = (*app.App)(nil)
+	_ httpapi.AccessPolicyApplication                = (*administration.Service)(nil)
+	_ httpapi.RetentionPolicyApplication             = (*administration.Service)(nil)
+	_ httpapi.RetentionApplication                   = (*administration.Service)(nil)
 	_ httpapi.MailApplication                        = (*app.App)(nil)
 	_ httpapi.ExamApplication                        = (*exam.Authoring)(nil)
 	_ httpapi.ExamRevisionApplication                = (*exam.Publication)(nil)
@@ -458,6 +463,8 @@ func httpAPIOptions(
 	// A reduced composition test graph has no application; its typed nil
 	// still fills every capability, as the App itself does.
 	var academics *academic.Service
+	var administrations *administration.Service
+	var onboardings *onboarding.Service
 	var users *user.Service
 	var (
 		examAuthoring     *exam.Authoring
@@ -473,6 +480,8 @@ func httpAPIOptions(
 	)
 	if application != nil {
 		academics = application.Academic
+		administrations = application.Administration
+		onboardings = application.Onboarding
 		users = application.Users
 		examAuthoring, examPublication = application.ExamAuthoring, application.ExamPublication
 		examRecords, examExports = application.ExamRecords, application.ExamExports
@@ -489,13 +498,15 @@ func httpAPIOptions(
 		Programmes: academics, ProgrammeLevels: academics, AcademicPeriods: academics,
 		Classes: academics, Affiliations: academics, AcademicUnitMembers: academics,
 		ClassMembers: academics, UserProfiles: users, UserAccounts: attempts, UserSettings: users, AccountStates: identities,
-		Invitations:                   application,
-		BrowserInvitations:            application,
-		OnboardingImports:             application,
-		StudentProgressions:           application,
-		AcademicAdministrationBatches: application,
-		SessionAdministrations:        identities, Roles: application, RoleBindings: application,
-		AuditListings: application, Bootstrap: identities, AccessPolicy: application, BuildInfo: buildInfo,
+		Invitations:                   onboardings,
+		BrowserInvitations:            onboardings,
+		Registration:                  onboardings,
+		OnboardingImports:             onboardings,
+		StudentProgressions:           onboardings,
+		AcademicAdministrationBatches: onboardings,
+		SessionAdministrations:        identities, Roles: administrations, RoleBindings: administrations,
+		AuditListings: administrations, Bootstrap: identities, AccessPolicy: administrations,
+		RetentionPolicy: administrations, Retention: administrations, BuildInfo: buildInfo,
 		Mail:  application,
 		Exams: examAuthoring, ExamRevisions: examPublication, ExamSittings: sittings,
 		ExamCorrections: corrections, ExamResources: resources, ExamStarterWorkspaces: starterWorkspaces,

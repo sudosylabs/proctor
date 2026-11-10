@@ -21,10 +21,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -268,10 +268,10 @@ func authenticationResponseFromRefresh(
 	}
 }
 
-// registrationApplication is public self-registration, which stays on the
-// application root beside Invitations.
-type registrationApplication interface {
-	RegisterLocalUser(context.Context, invocation.Invocation, app.RegisterLocalUserCommand) error
+// RegistrationApplication is public self-registration, which the onboarding
+// area owns beside Invitations.
+type RegistrationApplication interface {
+	RegisterLocalUser(context.Context, invocation.Invocation, onboarding.RegisterLocalUserCommand) error
 }
 
 type authenticationEntryApplication interface {
@@ -288,12 +288,12 @@ type authenticationEntryApplication interface {
 }
 
 type authenticationResourceModule struct {
-	registration   registrationApplication
+	registration   RegistrationApplication
 	authentication authenticationEntryApplication
 	cookies        browserCookies
 }
 
-func authenticationResource(registration registrationApplication, authentication authenticationEntryApplication, cookies browserCookies) apiResource {
+func authenticationResource(registration RegistrationApplication, authentication authenticationEntryApplication, cookies browserCookies) apiResource {
 	module := authenticationResourceModule{registration: registration, authentication: authentication, cookies: cookies}
 	return newResource(
 		"authentication",
@@ -385,7 +385,7 @@ func (m authenticationResourceModule) register(request operationRequest) (operat
 	if err := m.registration.RegisterLocalUser(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
-		app.RegisterLocalUserCommand{
+		onboarding.RegisterLocalUserCommand{
 			Username: input.Username, Email: input.Email, FirstName: input.FirstName,
 			LastName: input.LastName, Password: input.Password,
 			Source: request.metadata.IPAddress,

@@ -20,7 +20,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -56,11 +56,11 @@ func TestRoleHolderMFAPolicyRestrictsSignInUntilEnrollment(t *testing.T) {
 	adminPrincipal, err := helper.App.Identity.AuthenticateAccess(ctx, admin.Tokens.AccessToken)
 	require.NoError(t, err)
 	adminInvocation := invocation.New(*adminPrincipal, model.RequestMetadata{RequestID: "role-holder-mfa-policy"})
-	current, err := helper.App.GetAccessPolicy(ctx, adminInvocation)
+	current, err := helper.App.Administration.GetAccessPolicy(ctx, adminInvocation)
 	require.NoError(t, err)
 	settings := current.Policy.Settings()
 	settings.RoleHolderMFARequired = true
-	replaced, err := helper.App.ReplaceAccessPolicy(ctx, adminInvocation, app.ReplaceAccessPolicyCommand{
+	replaced, err := helper.App.Administration.ReplaceAccessPolicy(ctx, adminInvocation, administration.ReplaceAccessPolicyCommand{
 		ExpectedRevision: current.Policy.Revision, Settings: settings, RevokeExistingSessions: true, IdempotencyKey: "role-holder-mfa-enable",
 	})
 	require.NoError(t, err)
@@ -144,11 +144,11 @@ func TestAccessPolicySessionLengthAppliesToRunningAndNewSessions(t *testing.T) {
 		ClientType: model.SessionClientWeb, Source: "127.0.0.1:2"})
 	require.NoError(t, err)
 
-	current, err := helper.App.GetAccessPolicy(ctx, adminInvocation)
+	current, err := helper.App.Administration.GetAccessPolicy(ctx, adminInvocation)
 	require.NoError(t, err)
 	settings := current.Policy.Settings()
 	settings.SessionAbsoluteMinutes = 60
-	replaced, err := helper.App.ReplaceAccessPolicy(ctx, adminInvocation, app.ReplaceAccessPolicyCommand{
+	replaced, err := helper.App.Administration.ReplaceAccessPolicy(ctx, adminInvocation, administration.ReplaceAccessPolicyCommand{
 		ExpectedRevision: current.Policy.Revision, Settings: settings, IdempotencyKey: "session-length-shorten",
 	})
 	require.NoError(t, err)
@@ -169,7 +169,7 @@ func TestAccessPolicySessionLengthAppliesToRunningAndNewSessions(t *testing.T) {
 	require.LessOrEqual(t, lifetime, time.Hour, "new Session lasts the policy length")
 	require.False(t, fresh.Session.IdleExpiresAt.After(fresh.Session.ExpiresAt))
 
-	_, err = helper.App.ReplaceAccessPolicy(ctx, adminInvocation, app.ReplaceAccessPolicyCommand{
+	_, err = helper.App.Administration.ReplaceAccessPolicy(ctx, adminInvocation, administration.ReplaceAccessPolicyCommand{
 		ExpectedRevision: replaced.Policy.Revision, Settings: func() model.AccessPolicySettings {
 			longer := replaced.Policy.Settings()
 			longer.SessionAbsoluteMinutes = replaced.SessionLimits.AbsoluteMaximumMinutes + 1

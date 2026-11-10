@@ -19,6 +19,9 @@ import (
 type testHTTPApplication struct {
 	Application
 	IdentityApplication
+	RetentionPolicyApplication
+	RetentionApplication
+	RegistrationApplication
 	principal *model.Principal
 }
 
@@ -68,14 +71,14 @@ func validHTTPOptions(t *testing.T) Options {
 		AcademicPeriods: &academicPeriodHTTPApplication{}, Classes: &classHTTPApplication{},
 		Affiliations: &affiliationHTTPApplication{}, AcademicUnitMembers: &academicUnitMemberHTTPApplication{},
 		ClassMembers: &classMemberHTTPApplication{}, Invitations: unavailableInvitationApplication{},
-		BrowserInvitations: unavailableBrowserInvitationApplication{}, OnboardingImports: unavailableOnboardingImportApplication{},
+		BrowserInvitations: unavailableBrowserInvitationApplication{}, Registration: application, OnboardingImports: unavailableOnboardingImportApplication{},
 		StudentProgressions:           unavailableStudentProgressionApplication{},
 		AcademicAdministrationBatches: unavailableAcademicAdministrationBatchApplication{},
 		UserProfiles:                  &userProfileHTTPApplication{}, UserAccounts: &userProfileHTTPApplication{}, UserSettings: &userSettingsHTTPApplication{},
 		AccountStates: &accountStateHTTPApplication{}, SessionAdministrations: &sessionAdministrationHTTPApplication{},
 		Roles: &roleHTTPApplication{}, RoleBindings: &roleBindingHTTPApplication{},
 		AuditListings: &auditListingHTTPApplication{}, Bootstrap: &bootstrapHTTPApplication{},
-		AccessPolicy: unavailableAccessPolicyApplication{}, Mail: application,
+		AccessPolicy: unavailableAccessPolicyApplication{}, RetentionPolicy: application, Retention: application, Mail: application,
 		Exams: examApplications, ExamRevisions: examApplications, ExamSittings: examApplications,
 		ExamCorrections: examApplications, ExamResources: examApplications, ExamStarterWorkspaces: examApplications,
 		ExamAttempts: examApplications, ExamIntegrityReviews: examApplications, ExamRecords: examApplications,

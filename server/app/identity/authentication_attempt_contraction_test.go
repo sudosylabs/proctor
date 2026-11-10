@@ -40,7 +40,8 @@ func TestAuthenticationAttemptAccountingHasOneProductionOwner(t *testing.T) {
 	}
 
 	// The parent app package builds the one shared instance and hands it to
-	// this package and to its own Invitation, registration and mail flows.
+	// this package, to the onboarding area's Invitation and registration
+	// flows, and to its own mail flows.
 	constructorCalls := 0
 	for _, directory := range []string{".", ".."} {
 		for name, file := range parseProductionGoFiles(t, directory) {

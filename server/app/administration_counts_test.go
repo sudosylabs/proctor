@@ -18,7 +18,6 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
-	"github.com/sudosylabs/proctor/server/store"
 )
 
 // administrationCounterFake answers one count, or an error, and records the
@@ -50,34 +49,6 @@ func (f *administrationCounterFake) countFailedMailDeliveries(_ context.Context,
 
 func (f *administrationCounterFake) countOpenOnboardingImports(_ context.Context, _ invocation.Invocation, maximum int) (int, error) {
 	return f.count(maximum)
-}
-
-type openImportCountStoreFake struct {
-	store.OnboardingImportStore
-	visibility store.OnboardingImportVisibilityScope
-	maximum    int
-}
-
-func (f *openImportCountStoreFake) CountOpenOnboardingImports(_ context.Context, visibility store.OnboardingImportVisibilityScope, maximum int) (int, error) {
-	f.visibility, f.maximum = visibility, maximum
-	return 4, nil
-}
-
-func TestOpenOnboardingImportCountUsesTheBatchViewScopes(t *testing.T) {
-	t.Parallel()
-	imports := &openImportCountStoreFake{}
-	authorizer := &invitationAuthorizerFake{}
-	service := &onboardingImportService{deps: onboardingImportServiceDependencies{Imports: imports, Authorization: authorizer}}
-	total, err := service.countOpenOnboardingImports(context.Background(), administrationCountsSession(), MaximumAdministrationCount)
-	require.NoError(t, err)
-	require.Equal(t, 4, total)
-	require.Equal(t, []model.Action{model.ActionOnboardingBatchView}, authorizer.actions)
-	require.Equal(t, store.OnboardingImportVisibilityScope{InstitutionWide: true}, imports.visibility, "the import scopes are the onboarding_batch.view scopes")
-	require.Equal(t, MaximumAdministrationCount, imports.maximum)
-
-	authorizer.err = access.DeniedError()
-	_, err = service.countOpenOnboardingImports(context.Background(), administrationCountsSession(), MaximumAdministrationCount)
-	require.True(t, apperror.Is(err, "authorization.denied"), "a denial reaches the summary, which omits the count: %v", err)
 }
 
 func administrationCountsSession() invocation.Invocation {

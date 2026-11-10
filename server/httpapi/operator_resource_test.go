@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
@@ -53,23 +54,23 @@ func serveOperatorRequest(api *API, method, path, body string, authenticated boo
 
 type focusedRoleApplication struct {
 	roles  []*model.Role
-	create app.CreateRoleCommand
+	create administration.CreateRoleCommand
 }
 
-func (f *focusedRoleApplication) ListRoles(context.Context, invocation.Invocation, app.ListRolesQuery) ([]*model.Role, error) {
+func (f *focusedRoleApplication) ListRoles(context.Context, invocation.Invocation, administration.ListRolesQuery) ([]*model.Role, error) {
 	return f.roles, nil
 }
-func (f *focusedRoleApplication) GetRole(context.Context, invocation.Invocation, app.GetRoleQuery) (*model.Role, error) {
+func (f *focusedRoleApplication) GetRole(context.Context, invocation.Invocation, administration.GetRoleQuery) (*model.Role, error) {
 	return f.roles[0], nil
 }
-func (f *focusedRoleApplication) CreateRole(_ context.Context, _ invocation.Invocation, command app.CreateRoleCommand) (*model.Role, error) {
+func (f *focusedRoleApplication) CreateRole(_ context.Context, _ invocation.Invocation, command administration.CreateRoleCommand) (*model.Role, error) {
 	f.create = command
 	return f.roles[0], nil
 }
-func (f *focusedRoleApplication) UpdateRole(context.Context, invocation.Invocation, app.UpdateRoleCommand) (*model.Role, error) {
+func (f *focusedRoleApplication) UpdateRole(context.Context, invocation.Invocation, administration.UpdateRoleCommand) (*model.Role, error) {
 	return f.roles[0], nil
 }
-func (*focusedRoleApplication) ArchiveRole(context.Context, invocation.Invocation, app.ArchiveRoleCommand) error {
+func (*focusedRoleApplication) ArchiveRole(context.Context, invocation.Invocation, administration.ArchiveRoleCommand) error {
 	return nil
 }
 
@@ -90,16 +91,16 @@ func TestRoleResourceUsesKernelAuthenticationAndTypedOperation(t *testing.T) {
 
 type focusedRoleBindingApplication struct {
 	binding *model.RoleBinding
-	end     app.EndRoleBindingCommand
+	end     administration.EndRoleBindingCommand
 }
 
-func (*focusedRoleBindingApplication) ListRoleBindings(context.Context, invocation.Invocation, app.ListRoleBindingsQuery) ([]*model.RoleBinding, error) {
+func (*focusedRoleBindingApplication) ListRoleBindings(context.Context, invocation.Invocation, administration.ListRoleBindingsQuery) ([]*model.RoleBinding, error) {
 	return []*model.RoleBinding{}, nil
 }
-func (f *focusedRoleBindingApplication) CreateRoleBinding(context.Context, invocation.Invocation, app.CreateRoleBindingCommand) (*model.RoleBinding, error) {
+func (f *focusedRoleBindingApplication) CreateRoleBinding(context.Context, invocation.Invocation, administration.CreateRoleBindingCommand) (*model.RoleBinding, error) {
 	return f.binding, nil
 }
-func (f *focusedRoleBindingApplication) EndRoleBinding(_ context.Context, _ invocation.Invocation, command app.EndRoleBindingCommand) (*model.RoleBinding, error) {
+func (f *focusedRoleBindingApplication) EndRoleBinding(_ context.Context, _ invocation.Invocation, command administration.EndRoleBindingCommand) (*model.RoleBinding, error) {
 	f.end = command
 	return f.binding, nil
 }
@@ -126,28 +127,28 @@ func TestRoleBindingResourceOwnsPathCommandAndAuthentication(t *testing.T) {
 }
 
 type focusedAuditApplication struct {
-	query     app.ListAuditEventsQuery
+	query     administration.ListAuditEventsQuery
 	events    []*model.AuditEvent
 	hasMore   bool
 	total     int
 	err       error
-	selfQuery app.ListSelfAuditEventsQuery
-	self      []app.SelfAuditEvent
+	selfQuery administration.ListSelfAuditEventsQuery
+	self      []administration.SelfAuditEvent
 	selfCalls int
 	selfTotal int
 }
 
-func (f *focusedAuditApplication) ListSelfAuditEvents(_ context.Context, _ invocation.Invocation, query app.ListSelfAuditEventsQuery) (app.SelfAuditPage, error) {
+func (f *focusedAuditApplication) ListSelfAuditEvents(_ context.Context, _ invocation.Invocation, query administration.ListSelfAuditEventsQuery) (administration.SelfAuditPage, error) {
 	f.selfQuery = query
 	f.selfCalls++
-	page := app.SelfAuditPage{Page: paging.Page[app.SelfAuditEvent]{Items: f.self, HasMore: f.hasMore}, Counted: query.BeforeID.IsZero()}
+	page := administration.SelfAuditPage{Page: paging.Page[administration.SelfAuditEvent]{Items: f.self, HasMore: f.hasMore}, Counted: query.BeforeID.IsZero()}
 	if page.Counted {
 		page.Total, page.TotalIsLowerBound = f.selfTotal, f.selfTotal == store.MaximumAuditSelfCount
 	}
 	return page, f.err
 }
 
-func (f *focusedAuditApplication) ListAuditEvents(_ context.Context, _ invocation.Invocation, query app.ListAuditEventsQuery) (paging.Counted[*model.AuditEvent], error) {
+func (f *focusedAuditApplication) ListAuditEvents(_ context.Context, _ invocation.Invocation, query administration.ListAuditEventsQuery) (paging.Counted[*model.AuditEvent], error) {
 	f.query = query
 	page := paging.Counted[*model.AuditEvent]{Page: paging.Page[*model.AuditEvent]{Items: f.events, HasMore: f.hasMore}}
 	if query.BeforeID.IsZero() {

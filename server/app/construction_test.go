@@ -24,6 +24,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
 
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
@@ -288,6 +289,12 @@ func TestJobRecipeConnectsRuntimeOperationsAndProfileWake(t *testing.T) {
 	require.Same(t, jobs.operations, application.jobOperationsService, "assembled application did not retain the constructed Job runtime and operations")
 }
 
+// constructionOnboardingImportJobsStub stands in for the onboarding import
+// Jobs' port; building the Job definitions never calls it.
+type constructionOnboardingImportJobsStub struct {
+	jobhandler.OnboardingImportService
+}
+
 func TestApplicationJobDefinitionsIncludeSittingLifecycleAndDailyRecovery(t *testing.T) {
 	t.Parallel()
 	profiles := profileFileConstruction{}
@@ -303,7 +310,7 @@ func TestApplicationJobDefinitionsIncludeSittingLifecycleAndDailyRecovery(t *tes
 			FileContent: constructionFileContentStub{},
 		},
 		applicationFoundation{},
-		accountConstruction{onboardingImports: &onboardingImportService{}},
+		accountConstruction{onboardingPorts: onboarding.Ports{ImportJobs: constructionOnboardingImportJobsStub{}}},
 		examinationConstruction{sittings: &sitting.Service{}, attempts: &attempt.Service{}}, profiles,
 		jobhandler.NewDefaultProfilePictureJobs(jobhandler.DefaultProfilePictureJobsDependencies{Jobs: constructionJobStoreStub{}}),
 		newMailHealth(false),

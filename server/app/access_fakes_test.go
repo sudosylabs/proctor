@@ -11,82 +11,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/sudosylabs/proctor/server/app/access"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
-
-type mutationAttemptAuditorFake struct {
-	events   *[]string
-	beginID  string
-	beginIDs []string
-	beginErr error
-	failErr  error
-	failID   string
-	failCode string
-	attempt  access.Mutation
-	attempts []access.Mutation
-}
-
-func (a *mutationAttemptAuditorFake) BeginAtScope(_ context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID, operation string, value, prior map[string]any) (model.AuditEventID, error) {
-	*a.events = append(*a.events, "begin-at-scope")
-	a.attempt = access.Mutation{
-		Invocation: invocation,
-		Action:     action,
-		Resource:   resource,
-		ScopeType:  scopeType,
-		ScopeID:    scopeID,
-		Operation:  operation,
-		Value:      value,
-		Prior:      prior,
-	}
-	a.attempts = append(a.attempts, a.attempt)
-	return model.AuditEventID(a.nextBeginID()), a.beginErr
-}
-
-func (a *mutationAttemptAuditorFake) Begin(_ context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource, operation string, value, prior map[string]any) (model.AuditEventID, error) {
-	*a.events = append(*a.events, "begin")
-	a.attempt = access.Mutation{
-		Invocation: invocation,
-		Action:     action,
-		Resource:   resource,
-		Operation:  operation,
-		Value:      value,
-		Prior:      prior,
-	}
-	a.attempts = append(a.attempts, a.attempt)
-	return model.AuditEventID(a.nextBeginID()), a.beginErr
-}
-
-func (a *mutationAttemptAuditorFake) BeginForSubject(ctx context.Context, attempt access.Mutation) (model.AuditEventID, error) {
-	var id model.AuditEventID
-	var err error
-	if attempt.ScopeType != "" {
-		id, err = a.BeginAtScope(ctx, attempt.Invocation, attempt.Action, attempt.Resource, attempt.ScopeType, attempt.ScopeID, attempt.Operation, attempt.Value, attempt.Prior)
-	} else {
-		id, err = a.Begin(ctx, attempt.Invocation, attempt.Action, attempt.Resource, attempt.Operation, attempt.Value, attempt.Prior)
-	}
-	a.attempt.Subject = attempt.Subject
-	a.attempts[len(a.attempts)-1].Subject = attempt.Subject
-	return id, err
-}
-
-func (a *mutationAttemptAuditorFake) nextBeginID() string {
-	if len(a.beginIDs) == 0 {
-		return a.beginID
-	}
-	id := a.beginIDs[0]
-	a.beginIDs = a.beginIDs[1:]
-	return id
-}
-
-func (a *mutationAttemptAuditorFake) Fail(_ context.Context, id model.AuditEventID, code string) error {
-	*a.events = append(*a.events, "fail")
-	a.failID = id.String()
-	a.failCode = code
-	return a.failErr
-}
 
 type accessAcademicPeriodStoreFake struct {
 	period  *model.AcademicPeriod

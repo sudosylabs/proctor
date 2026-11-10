@@ -13,6 +13,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
@@ -21,6 +22,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/exam/workspace"
 	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
 
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
@@ -58,21 +60,21 @@ type applicationFoundation struct {
 }
 
 type accountConstruction struct {
-	identity           *identity.Service
-	browserInvitations *browserInvitationService
-	publicRegistration *publicRegistrationService
-	invitations        *invitationService
-	onboardingImports  *onboardingImportService
+	identity *identity.Service
+	// invitationAcceptor reaches the onboarding area's Invitation
+	// acceptance once constructOnboarding builds it.
+	invitationAcceptor *externalInvitationAcceptor
+	onboarding         *onboarding.Service
+	onboardingPorts    onboarding.Ports
 	// wake reaches the Job runtime once constructJobs builds it.
 	wake *jobWake
 }
 
 type accessAcademicConstruction struct {
-	authorization   *access.Authorizer
-	capabilities    identity.AccessPolicyCapabilitySource
-	accessPolicies  *accessPolicyService
-	retentionPolicy *retentionPolicyService
-	academic        *academic.Service
+	authorization  *access.Authorizer
+	capabilities   identity.AccessPolicyCapabilitySource
+	administration *administration.Service
+	academic       *academic.Service
 }
 
 type profileFileConstruction struct {
@@ -89,10 +91,6 @@ type jobConstruction struct {
 }
 
 type administrationConstruction struct {
-	roles                         *roleService
-	roleBindings                  *roleBindingService
-	auditListings                 *auditListingService
-	academicAdministrationBatches *academicAdministrationBatchService
 	// search spans Exams, Users and Classes, so it is built once every one of
 	// those services exists.
 	search *searchService
@@ -188,32 +186,24 @@ func assembleApplication(
 	administration administrationConstruction,
 ) *App {
 	return &App{
-		Identity:                           accounts.identity,
-		browserInvitationService:           accounts.browserInvitations,
-		publicRegistrationService:          accounts.publicRegistration,
-		invitationService:                  accounts.invitations,
-		onboardingImportService:            accounts.onboardingImports,
-		accessPolicyService:                access.accessPolicies,
-		retentionPolicyService:             access.retentionPolicy,
-		Academic:                           access.academic,
-		ExamAuthoring:                      examinations.authoring,
-		ExamPublication:                    examinations.revisions,
-		Sittings:                           examinations.sittings,
-		Attempts:                           examinations.attempts,
-		Reviews:                            examinations.reviews,
-		ExamRecords:                        examinations.records,
-		ExamExports:                        examinations.exports,
-		Resources:                          examinations.resources,
-		Corrections:                        examinations.corrections,
-		StarterWorkspaces:                  examinations.starterWorkspace,
-		Users:                              profiles.users,
-		roleService:                        administration.roles,
-		roleBindingService:                 administration.roleBindings,
-		auditListingService:                administration.auditListings,
-		academicAdministrationBatchService: administration.academicAdministrationBatches,
-		realtimeService:                    foundation.realtime,
-		searchService:                      administration.search,
-		administrationCountsService:        administration.counts,
+		Identity:                    accounts.identity,
+		Onboarding:                  accounts.onboarding,
+		Administration:              access.administration,
+		Academic:                    access.academic,
+		ExamAuthoring:               examinations.authoring,
+		ExamPublication:             examinations.revisions,
+		Sittings:                    examinations.sittings,
+		Attempts:                    examinations.attempts,
+		Reviews:                     examinations.reviews,
+		ExamRecords:                 examinations.records,
+		ExamExports:                 examinations.exports,
+		Resources:                   examinations.resources,
+		Corrections:                 examinations.corrections,
+		StarterWorkspaces:           examinations.starterWorkspace,
+		Users:                       profiles.users,
+		realtimeService:             foundation.realtime,
+		searchService:               administration.search,
+		administrationCountsService: administration.counts,
 		realtimeAdmissionService: &realtimeAdmissionService{
 			principals: accounts.identity, exams: examinations.authoring, sittings: examinations.sittings,
 			authorization: access.authorization, operational: deps.OperationalRecorder,

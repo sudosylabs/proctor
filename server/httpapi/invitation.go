@@ -14,27 +14,27 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type InvitationApplication interface {
-	IssueStudentClassInvitation(context.Context, invocation.Invocation, app.IssueStudentClassInvitationCommand) (app.InvitationView, error)
-	AcceptStudentClassInvitation(context.Context, invocation.Invocation, app.AcceptStudentClassInvitationCommand) (*app.InvitationAcceptanceView, error)
-	IssueTeacherAcademicUnitInvitation(context.Context, invocation.Invocation, app.IssueTeacherAcademicUnitInvitationCommand) (app.InvitationView, error)
-	AcceptTeacherAcademicUnitInvitation(context.Context, invocation.Invocation, app.AcceptTeacherAcademicUnitInvitationCommand) (*app.InvitationAcceptanceView, error)
-	IssueAcademicUnitRoleInvitation(context.Context, invocation.Invocation, app.IssueAcademicUnitRoleInvitationCommand) (app.InvitationView, error)
-	AcceptAcademicUnitRoleInvitation(context.Context, invocation.Invocation, app.AcceptAcademicUnitRoleInvitationCommand) (*app.InvitationAcceptanceView, error)
-	IssueInstitutionRoleInvitation(context.Context, invocation.Invocation, app.IssueInstitutionRoleInvitationCommand) (app.InvitationView, error)
-	AcceptInstitutionRoleInvitation(context.Context, invocation.Invocation, app.AcceptInstitutionRoleInvitationCommand) (*app.InvitationAcceptanceView, error)
-	ListInvitations(context.Context, invocation.Invocation, app.ListInvitationsQuery) (app.InvitationAdministrationPage, error)
-	GetInvitation(context.Context, invocation.Invocation, model.InvitationID) (app.InvitationAdministrationView, error)
-	ResendInvitation(context.Context, invocation.Invocation, app.ResendInvitationCommand) (app.InvitationAdministrationView, error)
-	RevokeInvitation(context.Context, invocation.Invocation, app.RevokeInvitationCommand) (app.InvitationAdministrationView, error)
-	ReplaceInvitation(context.Context, invocation.Invocation, app.ReplaceInvitationCommand) (app.InvitationAdministrationView, error)
-	RunInvitationBatch(context.Context, invocation.Invocation, app.RunInvitationBatchCommand) (app.InvitationBatchResult, error)
+	IssueStudentClassInvitation(context.Context, invocation.Invocation, onboarding.IssueStudentClassInvitationCommand) (onboarding.InvitationView, error)
+	AcceptStudentClassInvitation(context.Context, invocation.Invocation, onboarding.AcceptStudentClassInvitationCommand) (*onboarding.InvitationAcceptanceView, error)
+	IssueTeacherAcademicUnitInvitation(context.Context, invocation.Invocation, onboarding.IssueTeacherAcademicUnitInvitationCommand) (onboarding.InvitationView, error)
+	AcceptTeacherAcademicUnitInvitation(context.Context, invocation.Invocation, onboarding.AcceptTeacherAcademicUnitInvitationCommand) (*onboarding.InvitationAcceptanceView, error)
+	IssueAcademicUnitRoleInvitation(context.Context, invocation.Invocation, onboarding.IssueAcademicUnitRoleInvitationCommand) (onboarding.InvitationView, error)
+	AcceptAcademicUnitRoleInvitation(context.Context, invocation.Invocation, onboarding.AcceptAcademicUnitRoleInvitationCommand) (*onboarding.InvitationAcceptanceView, error)
+	IssueInstitutionRoleInvitation(context.Context, invocation.Invocation, onboarding.IssueInstitutionRoleInvitationCommand) (onboarding.InvitationView, error)
+	AcceptInstitutionRoleInvitation(context.Context, invocation.Invocation, onboarding.AcceptInstitutionRoleInvitationCommand) (*onboarding.InvitationAcceptanceView, error)
+	ListInvitations(context.Context, invocation.Invocation, onboarding.ListInvitationsQuery) (onboarding.InvitationAdministrationPage, error)
+	GetInvitation(context.Context, invocation.Invocation, model.InvitationID) (onboarding.InvitationAdministrationView, error)
+	ResendInvitation(context.Context, invocation.Invocation, onboarding.ResendInvitationCommand) (onboarding.InvitationAdministrationView, error)
+	RevokeInvitation(context.Context, invocation.Invocation, onboarding.RevokeInvitationCommand) (onboarding.InvitationAdministrationView, error)
+	ReplaceInvitation(context.Context, invocation.Invocation, onboarding.ReplaceInvitationCommand) (onboarding.InvitationAdministrationView, error)
+	RunInvitationBatch(context.Context, invocation.Invocation, onboarding.RunInvitationBatchCommand) (onboarding.InvitationBatchResult, error)
 }
 
 type issueStudentClassInvitationRequest struct {
@@ -224,47 +224,47 @@ type invitationResourceModule struct{ invitations InvitationApplication }
 
 type unavailableInvitationApplication struct{}
 
-func (unavailableInvitationApplication) IssueStudentClassInvitation(context.Context, invocation.Invocation, app.IssueStudentClassInvitationCommand) (app.InvitationView, error) {
-	return app.InvitationView{}, errUnpresentableResult
+func (unavailableInvitationApplication) IssueStudentClassInvitation(context.Context, invocation.Invocation, onboarding.IssueStudentClassInvitationCommand) (onboarding.InvitationView, error) {
+	return onboarding.InvitationView{}, errUnpresentableResult
 }
-func (unavailableInvitationApplication) AcceptStudentClassInvitation(context.Context, invocation.Invocation, app.AcceptStudentClassInvitationCommand) (*app.InvitationAcceptanceView, error) {
+func (unavailableInvitationApplication) AcceptStudentClassInvitation(context.Context, invocation.Invocation, onboarding.AcceptStudentClassInvitationCommand) (*onboarding.InvitationAcceptanceView, error) {
 	return nil, errUnpresentableResult
 }
-func (unavailableInvitationApplication) IssueTeacherAcademicUnitInvitation(context.Context, invocation.Invocation, app.IssueTeacherAcademicUnitInvitationCommand) (app.InvitationView, error) {
-	return app.InvitationView{}, errUnpresentableResult
+func (unavailableInvitationApplication) IssueTeacherAcademicUnitInvitation(context.Context, invocation.Invocation, onboarding.IssueTeacherAcademicUnitInvitationCommand) (onboarding.InvitationView, error) {
+	return onboarding.InvitationView{}, errUnpresentableResult
 }
-func (unavailableInvitationApplication) AcceptTeacherAcademicUnitInvitation(context.Context, invocation.Invocation, app.AcceptTeacherAcademicUnitInvitationCommand) (*app.InvitationAcceptanceView, error) {
+func (unavailableInvitationApplication) AcceptTeacherAcademicUnitInvitation(context.Context, invocation.Invocation, onboarding.AcceptTeacherAcademicUnitInvitationCommand) (*onboarding.InvitationAcceptanceView, error) {
 	return nil, errUnpresentableResult
 }
-func (unavailableInvitationApplication) IssueAcademicUnitRoleInvitation(context.Context, invocation.Invocation, app.IssueAcademicUnitRoleInvitationCommand) (app.InvitationView, error) {
-	return app.InvitationView{}, errUnpresentableResult
+func (unavailableInvitationApplication) IssueAcademicUnitRoleInvitation(context.Context, invocation.Invocation, onboarding.IssueAcademicUnitRoleInvitationCommand) (onboarding.InvitationView, error) {
+	return onboarding.InvitationView{}, errUnpresentableResult
 }
-func (unavailableInvitationApplication) AcceptAcademicUnitRoleInvitation(context.Context, invocation.Invocation, app.AcceptAcademicUnitRoleInvitationCommand) (*app.InvitationAcceptanceView, error) {
+func (unavailableInvitationApplication) AcceptAcademicUnitRoleInvitation(context.Context, invocation.Invocation, onboarding.AcceptAcademicUnitRoleInvitationCommand) (*onboarding.InvitationAcceptanceView, error) {
 	return nil, errUnpresentableResult
 }
-func (unavailableInvitationApplication) IssueInstitutionRoleInvitation(context.Context, invocation.Invocation, app.IssueInstitutionRoleInvitationCommand) (app.InvitationView, error) {
-	return app.InvitationView{}, errUnpresentableResult
+func (unavailableInvitationApplication) IssueInstitutionRoleInvitation(context.Context, invocation.Invocation, onboarding.IssueInstitutionRoleInvitationCommand) (onboarding.InvitationView, error) {
+	return onboarding.InvitationView{}, errUnpresentableResult
 }
-func (unavailableInvitationApplication) AcceptInstitutionRoleInvitation(context.Context, invocation.Invocation, app.AcceptInstitutionRoleInvitationCommand) (*app.InvitationAcceptanceView, error) {
+func (unavailableInvitationApplication) AcceptInstitutionRoleInvitation(context.Context, invocation.Invocation, onboarding.AcceptInstitutionRoleInvitationCommand) (*onboarding.InvitationAcceptanceView, error) {
 	return nil, errUnpresentableResult
 }
-func (unavailableInvitationApplication) ListInvitations(context.Context, invocation.Invocation, app.ListInvitationsQuery) (app.InvitationAdministrationPage, error) {
-	return app.InvitationAdministrationPage{}, errUnpresentableResult
+func (unavailableInvitationApplication) ListInvitations(context.Context, invocation.Invocation, onboarding.ListInvitationsQuery) (onboarding.InvitationAdministrationPage, error) {
+	return onboarding.InvitationAdministrationPage{}, errUnpresentableResult
 }
-func (unavailableInvitationApplication) GetInvitation(context.Context, invocation.Invocation, model.InvitationID) (app.InvitationAdministrationView, error) {
-	return app.InvitationAdministrationView{}, errUnpresentableResult
+func (unavailableInvitationApplication) GetInvitation(context.Context, invocation.Invocation, model.InvitationID) (onboarding.InvitationAdministrationView, error) {
+	return onboarding.InvitationAdministrationView{}, errUnpresentableResult
 }
-func (unavailableInvitationApplication) ResendInvitation(context.Context, invocation.Invocation, app.ResendInvitationCommand) (app.InvitationAdministrationView, error) {
-	return app.InvitationAdministrationView{}, errUnpresentableResult
+func (unavailableInvitationApplication) ResendInvitation(context.Context, invocation.Invocation, onboarding.ResendInvitationCommand) (onboarding.InvitationAdministrationView, error) {
+	return onboarding.InvitationAdministrationView{}, errUnpresentableResult
 }
-func (unavailableInvitationApplication) RevokeInvitation(context.Context, invocation.Invocation, app.RevokeInvitationCommand) (app.InvitationAdministrationView, error) {
-	return app.InvitationAdministrationView{}, errUnpresentableResult
+func (unavailableInvitationApplication) RevokeInvitation(context.Context, invocation.Invocation, onboarding.RevokeInvitationCommand) (onboarding.InvitationAdministrationView, error) {
+	return onboarding.InvitationAdministrationView{}, errUnpresentableResult
 }
-func (unavailableInvitationApplication) ReplaceInvitation(context.Context, invocation.Invocation, app.ReplaceInvitationCommand) (app.InvitationAdministrationView, error) {
-	return app.InvitationAdministrationView{}, errUnpresentableResult
+func (unavailableInvitationApplication) ReplaceInvitation(context.Context, invocation.Invocation, onboarding.ReplaceInvitationCommand) (onboarding.InvitationAdministrationView, error) {
+	return onboarding.InvitationAdministrationView{}, errUnpresentableResult
 }
-func (unavailableInvitationApplication) RunInvitationBatch(context.Context, invocation.Invocation, app.RunInvitationBatchCommand) (app.InvitationBatchResult, error) {
-	return app.InvitationBatchResult{}, errUnpresentableResult
+func (unavailableInvitationApplication) RunInvitationBatch(context.Context, invocation.Invocation, onboarding.RunInvitationBatchCommand) (onboarding.InvitationBatchResult, error) {
+	return onboarding.InvitationBatchResult{}, errUnpresentableResult
 }
 
 func invitationResource(invitations InvitationApplication) apiResource {
@@ -306,20 +306,20 @@ func (m invitationResourceModule) batch(request operationRequest) (operationResu
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, invalidRequestError(err)
 	}
-	items := make([]app.InvitationBatchItemCommand, 0, len(body.Items))
+	items := make([]onboarding.InvitationBatchItemCommand, 0, len(body.Items))
 	for _, item := range body.Items {
 		startAt, endAt, err := wireWindowMillis(item.StartAt, item.EndAt)
 		if err != nil {
 			return operationResult{}, err
 		}
-		items = append(items, app.InvitationBatchItemCommand{IdempotencyKey: item.Key, InvitationID: model.InvitationID(item.InvitationID),
+		items = append(items, onboarding.InvitationBatchItemCommand{IdempotencyKey: item.Key, InvitationID: model.InvitationID(item.InvitationID),
 			ExpectedRevision: item.ExpectedRevision, TargetEmail: item.Email, RoleID: model.RoleID(item.RoleID),
 			IntendedStartsAt: startAt, IntendedEndsAt: endAt, SuggestedUsername: item.SuggestedUsername,
 			SuggestedDisplayName: item.SuggestedDisplayName, SuggestedFirstName: item.SuggestedFirstName,
 			SuggestedLastName: item.SuggestedLastName, SuggestedLocale: item.SuggestedLocale, SuggestedTimezone: item.SuggestedTimezone})
 	}
-	result, err := m.invitations.RunInvitationBatch(request.context, request.invocation(), app.RunInvitationBatchCommand{
-		Operation: app.InvitationBatchOperation(body.Operation), ScopeType: model.RoleScopeType(body.ScopeType),
+	result, err := m.invitations.RunInvitationBatch(request.context, request.invocation(), onboarding.RunInvitationBatchCommand{
+		Operation: onboarding.InvitationBatchOperation(body.Operation), ScopeType: model.RoleScopeType(body.ScopeType),
 		ScopeID: body.ScopeID, IdempotencyKey: request.idempotencyKey, Items: items,
 	})
 	if err != nil {
@@ -377,18 +377,18 @@ func (m invitationResourceModule) get(request operationRequest) (operationResult
 }
 
 func (m invitationResourceModule) resend(request operationRequest) (operationResult, error) {
-	return m.mutate(request, func(id model.InvitationID, revision int64) (app.InvitationAdministrationView, error) {
-		return m.invitations.ResendInvitation(request.context, request.invocation(), app.ResendInvitationCommand{ID: id, ExpectedRevision: revision})
+	return m.mutate(request, func(id model.InvitationID, revision int64) (onboarding.InvitationAdministrationView, error) {
+		return m.invitations.ResendInvitation(request.context, request.invocation(), onboarding.ResendInvitationCommand{ID: id, ExpectedRevision: revision})
 	})
 }
 
 func (m invitationResourceModule) revoke(request operationRequest) (operationResult, error) {
-	return m.mutate(request, func(id model.InvitationID, revision int64) (app.InvitationAdministrationView, error) {
-		return m.invitations.RevokeInvitation(request.context, request.invocation(), app.RevokeInvitationCommand{ID: id, ExpectedRevision: revision})
+	return m.mutate(request, func(id model.InvitationID, revision int64) (onboarding.InvitationAdministrationView, error) {
+		return m.invitations.RevokeInvitation(request.context, request.invocation(), onboarding.RevokeInvitationCommand{ID: id, ExpectedRevision: revision})
 	})
 }
 
-func (m invitationResourceModule) mutate(request operationRequest, mutation func(model.InvitationID, int64) (app.InvitationAdministrationView, error)) (operationResult, error) {
+func (m invitationResourceModule) mutate(request operationRequest, mutation func(model.InvitationID, int64) (onboarding.InvitationAdministrationView, error)) (operationResult, error) {
 	id, err := request.params.RequireInvitationID()
 	if err != nil {
 		return operationResult{}, err
@@ -423,7 +423,7 @@ func (m invitationResourceModule) replace(request operationRequest) (operationRe
 	if err != nil {
 		return operationResult{}, err
 	}
-	view, err := m.invitations.ReplaceInvitation(request.context, request.invocation(), app.ReplaceInvitationCommand{
+	view, err := m.invitations.ReplaceInvitation(request.context, request.invocation(), onboarding.ReplaceInvitationCommand{
 		ID: id, ExpectedRevision: body.ExpectedRevision, Purpose: body.Purpose, TargetEmail: body.Email,
 		ClassID: model.ClassID(body.ClassID), AcademicUnitID: model.AcademicUnitID(body.AcademicUnitID), InstitutionID: model.InstitutionID(body.InstitutionID), RoleID: model.RoleID(body.RoleID),
 		IntendedStartsAt: startAt, IntendedEndsAt: endAt, SuggestedUsername: body.SuggestedUsername,
@@ -437,9 +437,9 @@ func (m invitationResourceModule) replace(request operationRequest) (operationRe
 	return jsonResult(http.StatusCreated, invitationAdministrationResponseFromView(view)).withHeaders(noStoreHeaders()), nil
 }
 
-func invitationListQuery(request *http.Request) (app.ListInvitationsQuery, error) {
+func invitationListQuery(request *http.Request) (onboarding.ListInvitationsQuery, error) {
 	values := request.URL.Query()
-	query := app.ListInvitationsQuery{Limit: 50, TargetEmail: values.Get("email"), TargetID: values.Get("target_id")}
+	query := onboarding.ListInvitationsQuery{Limit: 50, TargetEmail: values.Get("email"), TargetID: values.Get("target_id")}
 	if raw := values.Get("limit"); raw != "" {
 		limit, err := strconv.Atoi(raw)
 		if err != nil || limit < 1 || limit > 200 {
@@ -529,7 +529,7 @@ func (m invitationResourceModule) issueAcademicUnitRole(request operationRequest
 	if err != nil {
 		return operationResult{}, err
 	}
-	created, err := m.invitations.IssueAcademicUnitRoleInvitation(request.context, request.invocation(), app.IssueAcademicUnitRoleInvitationCommand{
+	created, err := m.invitations.IssueAcademicUnitRoleInvitation(request.context, request.invocation(), onboarding.IssueAcademicUnitRoleInvitationCommand{
 		TargetEmail: body.Email, AcademicUnitID: unitID, RoleID: model.RoleID(body.RoleID), IntendedStartsAt: startAt, IntendedEndsAt: endAt,
 		ExpiresInDays: body.ExpiresInDays,
 	})
@@ -552,7 +552,7 @@ func (m invitationResourceModule) issueInstitutionRole(request operationRequest)
 	if err != nil {
 		return operationResult{}, err
 	}
-	created, err := m.invitations.IssueInstitutionRoleInvitation(request.context, request.invocation(), app.IssueInstitutionRoleInvitationCommand{
+	created, err := m.invitations.IssueInstitutionRoleInvitation(request.context, request.invocation(), onboarding.IssueInstitutionRoleInvitationCommand{
 		TargetEmail: body.Email, InstitutionID: institutionID, RoleID: model.RoleID(body.RoleID), IntendedStartsAt: startAt, IntendedEndsAt: endAt,
 		ExpiresInDays: body.ExpiresInDays,
 	})
@@ -567,7 +567,7 @@ func (m invitationResourceModule) acceptAcademicUnitRole(request operationReques
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
-	accepted, err := m.invitations.AcceptAcademicUnitRoleInvitation(request.context, request.invocation(), app.AcceptAcademicUnitRoleInvitationCommand{
+	accepted, err := m.invitations.AcceptAcademicUnitRoleInvitation(request.context, request.invocation(), onboarding.AcceptAcademicUnitRoleInvitationCommand{
 		Claim: body.Claim, Source: request.metadata.IPAddress,
 	})
 	if err != nil {
@@ -581,7 +581,7 @@ func (m invitationResourceModule) acceptInstitutionRole(request operationRequest
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
-	accepted, err := m.invitations.AcceptInstitutionRoleInvitation(request.context, request.invocation(), app.AcceptInstitutionRoleInvitationCommand{
+	accepted, err := m.invitations.AcceptInstitutionRoleInvitation(request.context, request.invocation(), onboarding.AcceptInstitutionRoleInvitationCommand{
 		Claim: body.Claim, Source: request.metadata.IPAddress,
 	})
 	if err != nil {
@@ -603,7 +603,7 @@ func (m invitationResourceModule) issueTeacherAcademicUnit(request operationRequ
 	if err != nil {
 		return operationResult{}, err
 	}
-	created, err := m.invitations.IssueTeacherAcademicUnitInvitation(request.context, request.invocation(), app.IssueTeacherAcademicUnitInvitationCommand{
+	created, err := m.invitations.IssueTeacherAcademicUnitInvitation(request.context, request.invocation(), onboarding.IssueTeacherAcademicUnitInvitationCommand{
 		TargetEmail: body.Email, AcademicUnitID: unitID, RoleID: model.RoleID(body.RoleID), IntendedStartsAt: startAt, IntendedEndsAt: endAt,
 		SuggestedUsername: body.SuggestedUsername, SuggestedDisplayName: body.SuggestedDisplayName,
 		SuggestedFirstName: body.SuggestedFirstName, SuggestedLastName: body.SuggestedLastName, SuggestedLocale: body.SuggestedLocale, SuggestedTimezone: body.SuggestedTimezone,
@@ -620,7 +620,7 @@ func (m invitationResourceModule) acceptTeacherAcademicUnit(request operationReq
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
-	accepted, err := m.invitations.AcceptTeacherAcademicUnitInvitation(request.context, request.invocation(), app.AcceptTeacherAcademicUnitInvitationCommand{
+	accepted, err := m.invitations.AcceptTeacherAcademicUnitInvitation(request.context, request.invocation(), onboarding.AcceptTeacherAcademicUnitInvitationCommand{
 		Claim: body.Claim, Password: body.Password, Username: body.Username, DisplayName: body.DisplayName,
 		FirstName: body.FirstName, LastName: body.LastName, Locale: body.Locale, Timezone: body.Timezone, Source: request.metadata.IPAddress,
 	})
@@ -643,7 +643,7 @@ func (m invitationResourceModule) issueStudentClass(request operationRequest) (o
 	if err != nil {
 		return operationResult{}, err
 	}
-	created, err := m.invitations.IssueStudentClassInvitation(request.context, request.invocation(), app.IssueStudentClassInvitationCommand{
+	created, err := m.invitations.IssueStudentClassInvitation(request.context, request.invocation(), onboarding.IssueStudentClassInvitationCommand{
 		TargetEmail: body.Email, ClassID: classID, IntendedStartsAt: startAt, IntendedEndsAt: endAt,
 		SuggestedUsername: body.SuggestedUsername, SuggestedDisplayName: body.SuggestedDisplayName,
 		SuggestedFirstName: body.SuggestedFirstName, SuggestedLastName: body.SuggestedLastName, SuggestedLocale: body.SuggestedLocale, SuggestedTimezone: body.SuggestedTimezone,
@@ -660,7 +660,7 @@ func (m invitationResourceModule) acceptStudentClass(request operationRequest) (
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
-	accepted, err := m.invitations.AcceptStudentClassInvitation(request.context, request.invocation(), app.AcceptStudentClassInvitationCommand{
+	accepted, err := m.invitations.AcceptStudentClassInvitation(request.context, request.invocation(), onboarding.AcceptStudentClassInvitationCommand{
 		Claim: body.Claim, Password: body.Password, Username: body.Username, DisplayName: body.DisplayName,
 		FirstName: body.FirstName, LastName: body.LastName, Locale: body.Locale, Timezone: body.Timezone,
 		Source: request.metadata.IPAddress,
@@ -671,7 +671,7 @@ func (m invitationResourceModule) acceptStudentClass(request operationRequest) (
 	return jsonResult(http.StatusOK, invitationAcceptanceResponseFromView(accepted)), nil
 }
 
-func invitationAcceptanceResponseFromView(accepted *app.InvitationAcceptanceView) invitationAcceptanceResponse {
+func invitationAcceptanceResponseFromView(accepted *onboarding.InvitationAcceptanceView) invitationAcceptanceResponse {
 	response := invitationAcceptanceResponse{Replayed: accepted.Replayed}
 	if accepted.User != nil {
 		response.UserID = accepted.User.ID.String()
@@ -692,14 +692,14 @@ func invitationAcceptanceResponseFromView(accepted *app.InvitationAcceptanceView
 	return response
 }
 
-func invitationResponseFromView(view app.InvitationView) invitationResponse {
+func invitationResponseFromView(view onboarding.InvitationView) invitationResponse {
 	return invitationResponse{ID: view.ID.String(), Purpose: string(view.Purpose), State: string(view.State), ClassID: view.ClassID.String(),
 		AcademicPeriodID: view.AcademicPeriodID.String(), AcademicUnitID: view.AcademicUnitID.String(), RoleID: view.RoleID.String(),
 		RoleActions: append([]string(nil), view.RoleActions...), StartAt: model.FormatRFC3339(view.IntendedStartsAt),
 		EndAt: view.IntendedEndsAt.FormatRFC3339(), ExpiresAt: model.FormatRFC3339(view.ExpiresAt)}
 }
 
-func invitationAdministrationResponseFromView(view app.InvitationAdministrationView) invitationAdministrationResponse {
+func invitationAdministrationResponseFromView(view onboarding.InvitationAdministrationView) invitationAdministrationResponse {
 	base := invitationResponseFromView(view.InvitationView)
 	response := invitationAdministrationResponse{ID: base.ID, Purpose: base.Purpose, State: base.State,
 		ClassID: base.ClassID, AcademicPeriodID: base.AcademicPeriodID, AcademicUnitID: base.AcademicUnitID,

@@ -15,7 +15,7 @@ import "errors"
 type resourceApplications struct {
 	authenticator Authenticator
 
-	registration            registrationApplication
+	registration            RegistrationApplication
 	authentication          authenticationEntryApplication
 	authenticationMethods   authenticationMethodApplication
 	desktopAuthorization    DesktopAuthorization
@@ -90,7 +90,6 @@ func resolveResourceApplications(options Options) (resourceApplications, error) 
 	// broad-Application resource requires changing its declared contract, not a
 	// runtime assertion hidden in catalog construction.
 	var authenticator Authenticator = identity
-	var registration registrationApplication = application
 	var authentication authenticationEntryApplication = identity
 	var authenticationMethods authenticationMethodApplication = identity
 	var desktopAuthorization DesktopAuthorization = identity
@@ -105,8 +104,6 @@ func resolveResourceApplications(options Options) (resourceApplications, error) 
 	var userEmails UserEmailApplication = identity
 	var jobs JobOperationsApplication = application
 	var desktopCompatibility DesktopCompatibilityApplication = identity
-	var retentionPolicy RetentionPolicyApplication = application
-	var retention RetentionApplication = application
 	var sessionReauthentication SessionReauthentication = identity
 	var search SearchApplication = application
 	var administrationCounts AdministrationCountsApplication = application
@@ -117,7 +114,7 @@ func resolveResourceApplications(options Options) (resourceApplications, error) 
 
 	return resourceApplications{
 		authenticator: authenticator,
-		registration:  registration, authentication: authentication, authenticationMethods: authenticationMethods,
+		registration:  options.Registration, authentication: authentication, authenticationMethods: authenticationMethods,
 		desktopAuthorization: desktopAuthorization, externalAuthentication: externalAuthentication,
 		desktopReauthentication: desktopReauthentication,
 		desktopRegistrations:    desktopRegistrations,
@@ -142,8 +139,8 @@ func resolveResourceApplications(options Options) (resourceApplications, error) 
 		academicAdministrationBatches: options.AcademicAdministrationBatches,
 		roles:                         options.Roles, roleBindings: options.RoleBindings, accessPolicy: options.AccessPolicy,
 		desktopCompatibility: desktopCompatibility,
-		retentionPolicy:      retentionPolicy,
-		retention:            retention,
+		retentionPolicy:      options.RetentionPolicy,
+		retention:            options.Retention,
 		examRecords:          options.ExamRecords,
 		examExports:          options.ExamExports,
 		search:               search,
@@ -170,6 +167,7 @@ func requireResourceApplicationOptions(options Options) error {
 		{options.ClassMembers == nil, "class member application is required"},
 		{options.Invitations == nil, "invitation application is required"},
 		{options.BrowserInvitations == nil, "browser invitation application is required"},
+		{options.Registration == nil, "registration application is required"},
 		{options.OnboardingImports == nil, "onboarding import application is required"},
 		{options.StudentProgressions == nil, "student progression application is required"},
 		{options.AcademicAdministrationBatches == nil, "academic administration batch application is required"},
@@ -183,6 +181,8 @@ func requireResourceApplicationOptions(options Options) error {
 		{options.AuditListings == nil, "audit listing application is required"},
 		{options.Bootstrap == nil, "bootstrap application is required"},
 		{options.AccessPolicy == nil, "access policy application is required"},
+		{options.RetentionPolicy == nil, "retention policy application is required"},
+		{options.Retention == nil, "retention application is required"},
 		{options.Mail == nil, "mail application is required"},
 		{options.Exams == nil, "exam application is required"},
 		{options.ExamRevisions == nil, "exam revision application is required"},

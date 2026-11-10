@@ -17,32 +17,32 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type browserInvitationHTTPApplication struct {
-	start   app.StartBrowserInvitationCommand
-	local   app.BrowserInvitationAcceptanceCommand
-	session app.BrowserInvitationSessionAcceptanceCommand
+	start   onboarding.StartBrowserInvitationCommand
+	local   onboarding.BrowserInvitationAcceptanceCommand
+	session onboarding.BrowserInvitationSessionAcceptanceCommand
 }
 
-func (a *browserInvitationHTTPApplication) StartBrowserInvitation(_ context.Context, _ invocation.Invocation, command app.StartBrowserInvitationCommand) (*app.BrowserInvitationStart, error) {
+func (a *browserInvitationHTTPApplication) StartBrowserInvitation(_ context.Context, _ invocation.Invocation, command onboarding.StartBrowserInvitationCommand) (*onboarding.BrowserInvitationStart, error) {
 	a.start = command
-	return &app.BrowserInvitationStart{
+	return &onboarding.BrowserInvitationStart{
 		Handle: model.NewCredentialToken(), BrowserProof: model.NewCredentialToken(),
-		Purpose: model.InvitationPurposeStudentClass, Requirement: app.BrowserInvitationRequirementAccount,
+		Purpose: model.InvitationPurposeStudentClass, Requirement: onboarding.BrowserInvitationRequirementAccount,
 		ExpiresAt: time.Now().Add(time.Minute).UnixMilli(), Email: "student.one@example.edu", ClassDisplayName: "Biology 101",
 	}, nil
 }
 
-func (a *browserInvitationHTTPApplication) AcceptBrowserInvitation(_ context.Context, _ invocation.Invocation, command app.BrowserInvitationAcceptanceCommand) (*app.InvitationAcceptanceView, error) {
+func (a *browserInvitationHTTPApplication) AcceptBrowserInvitation(_ context.Context, _ invocation.Invocation, command onboarding.BrowserInvitationAcceptanceCommand) (*onboarding.InvitationAcceptanceView, error) {
 	a.local = command
 	return browserInvitationAcceptance(), nil
 }
 
-func (a *browserInvitationHTTPApplication) AcceptBrowserInvitationWithSession(_ context.Context, _ invocation.Invocation, command app.BrowserInvitationSessionAcceptanceCommand) (*app.InvitationAcceptanceView, error) {
+func (a *browserInvitationHTTPApplication) AcceptBrowserInvitationWithSession(_ context.Context, _ invocation.Invocation, command onboarding.BrowserInvitationSessionAcceptanceCommand) (*onboarding.InvitationAcceptanceView, error) {
 	a.session = command
 	return browserInvitationAcceptance(), nil
 }
@@ -110,9 +110,9 @@ func TestBrowserInvitationSessionAcceptanceUsesAuthenticatedPrincipal(t *testing
 	require.NotEmpty(t, applicationFake.session.BrowserProof, "accept session = %d command=%#v body=%s", response.Code, applicationFake.session, response.Body.String())
 }
 
-func browserInvitationAcceptance() *app.InvitationAcceptanceView {
-	return &app.InvitationAcceptanceView{
-		Invitation: app.InvitationView{ID: model.NewInvitationID()},
+func browserInvitationAcceptance() *onboarding.InvitationAcceptanceView {
+	return &onboarding.InvitationAcceptanceView{
+		Invitation: onboarding.InvitationView{ID: model.NewInvitationID()},
 		User:       &model.User{ID: model.NewUserID()},
 	}
 }

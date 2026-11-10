@@ -285,7 +285,7 @@ func (s *Authorizer) AuthorizeWithScope(
 func (s *Authorizer) InstitutionResource(ctx context.Context) (model.Resource, error) {
 	institution, err := s.deps.Resolver.deps.Institutions.GetSingleton(ctx)
 	if err != nil {
-		return model.Resource{}, institutionStoreErrors.Translate(err)
+		return model.Resource{}, InstitutionStoreErrors.Translate(err)
 	}
 	return model.Resource{Type: model.ResourceInstitution, ID: institution.ResourceID()}, nil
 }

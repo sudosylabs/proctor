@@ -8,8 +8,6 @@
 package app
 
 import (
-	"context"
-	"io"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/exam"
@@ -21,6 +19,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
@@ -44,15 +43,7 @@ type FileContent interface {
 	resource.FileContent
 	correction.Content
 	workspace.Content
-	OnboardingImportFiles
-}
-
-type OnboardingImportFiles interface {
-	StageOnboardingImport(context.Context, model.OnboardingImportID, io.Reader, int64) (string, int64, error)
-	IsOnboardingImportTooLarge(error) bool
-	OpenOnboardingImport(context.Context, model.OnboardingImportID) (io.ReadCloser, error)
-	RemoveOnboardingImport(context.Context, model.OnboardingImportID) error
-	ListOnboardingImportFiles(context.Context, string, int, time.Time) ([]model.OnboardingImportID, string, error)
+	onboarding.OnboardingImportFiles
 }
 
 // Dependencies are the explicit capabilities package app needs. The module-root

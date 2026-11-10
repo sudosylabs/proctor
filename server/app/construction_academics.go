@@ -12,6 +12,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -31,11 +32,12 @@ func constructAccessAndAcademics(
 		providers: deps.Registry, mail: deps.MailDeliverySender, health: foundation.mailHealth,
 		mfaEnabled: deps.MFA.Enabled,
 	}
-	accessPolicies, err := newAccessPolicyService(accessPolicyServiceDependencies{Policies: deps.Store.AccessPolicy(), Institutions: deps.Store.Institution(), Authorization: authorization, Capabilities: capabilities, Audit: foundation.audit.MutationAudit(), Effects: accessPolicyRealtimeEffects{realtime: foundation.realtime}, EffectFailures: accessPolicyEffectReporter{realtime: foundation.realtime}, CanonicalOrigin: deps.PublicURL, SupportAddress: deps.SupportAddress, PasswordMinimumLength: deps.Password.MinimumLength, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Sessions: deps.Sessions, Now: time.Now})
-	if err != nil {
-		return accessAcademicConstruction{}, err
-	}
-	retentionPolicy, err := newRetentionPolicyService(retentionPolicyServiceDependencies{Policies: deps.Store.RetentionPolicy(), Lifecycle: deps.Store.Retention(), Institutions: deps.Store.Institution(), Authorization: authorization, Audit: foundation.audit.MutationAudit(), RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Now: time.Now})
+	administrations, err := administration.New(administration.Dependencies{
+		Store: deps.Store, Authorizer: authorization, Auditor: foundation.audit.MutationAudit(), Capabilities: capabilities,
+		Mail: foundation.mail, Effects: administrationRealtimeEffects{realtime: foundation.realtime},
+		CanonicalOrigin: deps.PublicURL, SupportAddress: deps.SupportAddress, PasswordMinimumLength: deps.Password.MinimumLength,
+		RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Sessions: deps.Sessions, Now: time.Now,
+	})
 	if err != nil {
 		return accessAcademicConstruction{}, err
 	}
@@ -48,8 +50,7 @@ func constructAccessAndAcademics(
 		return accessAcademicConstruction{}, err
 	}
 	return accessAcademicConstruction{
-		authorization: authorization, capabilities: capabilities, accessPolicies: accessPolicies,
-		retentionPolicy: retentionPolicy,
-		academic:        academics,
+		authorization: authorization, capabilities: capabilities, administration: administrations,
+		academic: academics,
 	}, nil
 }

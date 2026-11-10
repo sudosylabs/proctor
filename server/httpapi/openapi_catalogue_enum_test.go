@@ -15,7 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -79,12 +79,12 @@ func TestMailFailureCodeEnumMatchesTheCatalogue(t *testing.T) {
 
 func TestAcademicAdministrationBatchErrorCodeEnumMatchesTheCatalogue(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, app.AcademicAdministrationBatchErrorCodes(), openAPIComponentEnum(t, "AcademicAdministrationBatchErrorCode"))
+	require.Equal(t, onboarding.AcademicAdministrationBatchErrorCodes(), openAPIComponentEnum(t, "AcademicAdministrationBatchErrorCode"))
 }
 
 func TestInvitationBatchErrorCodeEnumMatchesTheCatalogue(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, app.InvitationBatchErrorCodes(), openAPIComponentEnum(t, "InvitationBatchErrorCode"))
+	require.Equal(t, onboarding.InvitationBatchErrorCodes(), openAPIComponentEnum(t, "InvitationBatchErrorCode"))
 }
 
 func TestAuditActionEnumMatchesTheCatalogue(t *testing.T) {
@@ -94,14 +94,14 @@ func TestAuditActionEnumMatchesTheCatalogue(t *testing.T) {
 
 func TestOnboardingImportCodeEnumsMatchTheCatalogues(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, app.OnboardingImportFailureCodes(), openAPIComponentEnum(t, "OnboardingImportFailureCode"))
-	require.Equal(t, app.OnboardingImportPreviewCodes(), openAPIComponentEnum(t, "OnboardingImportPreviewCode"))
-	require.Equal(t, app.OnboardingImportRowCodes(), openAPIComponentEnum(t, "OnboardingImportRowCode"))
+	require.Equal(t, onboarding.OnboardingImportFailureCodes(), openAPIComponentEnum(t, "OnboardingImportFailureCode"))
+	require.Equal(t, onboarding.OnboardingImportPreviewCodes(), openAPIComponentEnum(t, "OnboardingImportPreviewCode"))
+	require.Equal(t, onboarding.OnboardingImportRowCodes(), openAPIComponentEnum(t, "OnboardingImportRowCode"))
 	for _, code := range model.StudentProgressionFailureCodes() {
-		require.Contains(t, app.OnboardingImportFailureCodes(), code, "a progression failure is an import failure_code")
+		require.Contains(t, onboarding.OnboardingImportFailureCodes(), code, "a progression failure is an import failure_code")
 	}
 	for _, code := range model.StudentProgressionPreviewCodes() {
-		require.Contains(t, app.OnboardingImportPreviewCodes(), code, "a progression row outcome is a preview_code")
+		require.Contains(t, onboarding.OnboardingImportPreviewCodes(), code, "a progression row outcome is a preview_code")
 	}
 }
 

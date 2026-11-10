@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -687,7 +687,7 @@ func TestAcademicUnitVisibilityIsBoundedAcrossUsersBindingsAndAudits(t *testing.
 	historicalRead := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/"+historicalUser.ID.String(), nil, login.Tokens.AccessToken)
 	require.Equal(t, http.StatusForbidden, historicalRead.Code, "historical user read status = %d: %s", historicalRead.Code, historicalRead.Body.String())
 
-	bindings, listErr := helper.App.ListRoleBindings(ctx, invocation, app.ListRoleBindingsQuery{UserID: bindingUser.ID})
+	bindings, listErr := helper.App.Administration.ListRoleBindings(ctx, invocation, administration.ListRoleBindingsQuery{UserID: bindingUser.ID})
 	require.NoError(t, listErr)
 	seenBindings := map[string]bool{}
 	for _, binding := range bindings {

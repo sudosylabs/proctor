@@ -53,6 +53,20 @@ type administrationInvitationCounter interface {
 	countPendingInvitations(context.Context, invocation.Invocation, int) (int, error)
 }
 
+// pendingInvitationCounter and openImportCounter answer the summary's
+// onboarding counts through the onboarding area's Ports.
+type pendingInvitationCounter func(context.Context, invocation.Invocation, int) (int, error)
+
+func (f pendingInvitationCounter) countPendingInvitations(ctx context.Context, invocation invocation.Invocation, maximum int) (int, error) {
+	return f(ctx, invocation, maximum)
+}
+
+type openImportCounter func(context.Context, invocation.Invocation, int) (int, error)
+
+func (f openImportCounter) countOpenOnboardingImports(ctx context.Context, invocation invocation.Invocation, maximum int) (int, error) {
+	return f(ctx, invocation, maximum)
+}
+
 type administrationJobCounter interface {
 	countRecentJobFailures(context.Context, invocation.Invocation, time.Duration, int) (int, error)
 }

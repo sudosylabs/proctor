@@ -18,37 +18,37 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type retentionHTTPFake struct {
 	RetentionApplication
-	control    app.ChangeRetentionControlCommand
-	preview    app.CreateRetentionPreviewCommand
-	noticePage *app.RetentionNoticePage
-	recordPage *app.RetentionRecordPage
+	control    administration.ChangeRetentionControlCommand
+	preview    administration.CreateRetentionPreviewCommand
+	noticePage *administration.RetentionNoticePage
+	recordPage *administration.RetentionRecordPage
 	after      model.RetentionRetirementID
 	calls      int
 }
 
-func (f *retentionHTTPFake) ChangeRetentionControl(_ context.Context, _ invocation.Invocation, c app.ChangeRetentionControlCommand) (*model.RetentionControl, error) {
+func (f *retentionHTTPFake) ChangeRetentionControl(_ context.Context, _ invocation.Invocation, c administration.ChangeRetentionControlCommand) (*model.RetentionControl, error) {
 	f.calls++
 	f.control = c
 	return &model.RetentionControl{Revision: 2, State: c.State, ApprovedPolicyRevision: c.ExpectedPolicyRevision, ApprovedPreviewID: c.PreviewID, UpdatedAt: model.NowUTC()}, nil
 }
-func (f *retentionHTTPFake) CreateRetentionPreview(_ context.Context, _ invocation.Invocation, c app.CreateRetentionPreviewCommand) (*model.RetentionPreview, error) {
+func (f *retentionHTTPFake) CreateRetentionPreview(_ context.Context, _ invocation.Invocation, c administration.CreateRetentionPreviewCommand) (*model.RetentionPreview, error) {
 	f.calls++
 	f.preview = c
 	return &model.RetentionPreview{ID: model.NewRetentionPreviewID(), PolicyRevision: c.ExpectedPolicyRevision, CreatedAt: model.NowUTC(), ExpiresAt: model.NowUTC().Add(time.Hour)}, nil
 }
-func (f *retentionHTTPFake) ListRetentionNotices(_ context.Context, _ invocation.Invocation, after model.RetentionRetirementID, _ int) (*app.RetentionNoticePage, error) {
+func (f *retentionHTTPFake) ListRetentionNotices(_ context.Context, _ invocation.Invocation, after model.RetentionRetirementID, _ int) (*administration.RetentionNoticePage, error) {
 	f.calls++
 	f.after = after
 	return f.noticePage, nil
 }
-func (f *retentionHTTPFake) ListRetentionRecords(context.Context, invocation.Invocation, model.SubmissionID, int) (*app.RetentionRecordPage, error) {
+func (f *retentionHTTPFake) ListRetentionRecords(context.Context, invocation.Invocation, model.SubmissionID, int) (*administration.RetentionRecordPage, error) {
 	f.calls++
 	return f.recordPage, nil
 }
@@ -130,7 +130,7 @@ func TestRetentionHTTPNoticeProjectionIsRecipientOnlyAndBounded(t *testing.T) {
 	logger, _ := newTestLogger(t)
 	p := retentionHTTPPrincipal()
 	notice := model.RetentionNotice{RetirementID: model.NewRetentionRetirementID(), RecipientUserID: p.UserID, Scope: model.RetentionHoldScope{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(), SubmissionID: model.NewSubmissionID()}, ExamTitle: "Algorithms final", SittingStartAt: time.Date(2026, 5, 4, 9, 0, 0, 0, time.UTC), SittingEndAt: time.Date(2026, 5, 4, 11, 0, 0, 0, time.UTC), Category: model.RetentionCategoryWork, State: model.RetentionRetirementGrace, CreatedAt: model.NowUTC(), RetireAfter: model.NowUTC().Add(7 * 24 * time.Hour), DeliveryState: "failed", DeliveryErrorCode: "mail.preparation_unavailable"}
-	application := &retentionHTTPFake{noticePage: &app.RetentionNoticePage{Items: []model.RetentionNotice{notice}, HasMore: true}}
+	application := &retentionHTTPFake{noticePage: &administration.RetentionNoticePage{Items: []model.RetentionNotice{notice}, HasMore: true}}
 	api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: p}, retentionResource(application))
 	r := serveRetentionHTTP(api, "GET", "/api/v1/users/me/retention-notices?limit=1", "", "")
 	var page retentionNoticesResponse
@@ -143,12 +143,12 @@ func TestRetentionHTTPNoticeProjectionIsRecipientOnlyAndBounded(t *testing.T) {
 	require.Equal(t, "Algorithms final", page.Items[0].ExamTitle)
 	require.Equal(t, "2026-05-04T09:00:00Z", page.Items[0].SittingStartAt)
 	require.Equal(t, "2026-05-04T11:00:00Z", page.Items[0].SittingEndAt)
-	application.noticePage = &app.RetentionNoticePage{Items: []model.RetentionNotice{}}
+	application.noticePage = &administration.RetentionNoticePage{Items: []model.RetentionNotice{}}
 	r = serveRetentionHTTP(api, "GET", "/api/v1/users/me/retention-notices?limit=1&cursor="+page.NextCursor, "", "")
 	require.Equal(t, 200, r.Code, "cursor did not roundtrip")
 	require.Equal(t, notice.RetirementID, application.after, "cursor did not roundtrip")
 	notice.RecipientUserID = model.NewUserID()
-	application.noticePage = &app.RetentionNoticePage{Items: []model.RetentionNotice{notice}}
+	application.noticePage = &administration.RetentionNoticePage{Items: []model.RetentionNotice{notice}}
 	r = serveRetentionHTTP(api, "GET", "/api/v1/users/me/retention-notices", "", "")
 	require.Equal(t, 500, r.Code, "wrong recipient response exposed")
 }

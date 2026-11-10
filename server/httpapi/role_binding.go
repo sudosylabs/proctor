@@ -10,7 +10,7 @@ package httpapi
 import (
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -68,7 +68,7 @@ func (m roleBindingResourceModule) list(request operationRequest) (operationResu
 	bindings, err := m.bindings.ListRoleBindings(
 		request.context,
 		request.invocation(),
-		app.ListRoleBindingsQuery{
+		administration.ListRoleBindingsQuery{
 			UserID: model.UserID(values.Get("user_id")), ScopeType: model.RoleScopeType(values.Get("scope_type")),
 			ScopeID: values.Get("scope_id"),
 		},
@@ -98,7 +98,7 @@ func (m roleBindingResourceModule) create(request operationRequest) (operationRe
 	saved, err := m.bindings.CreateRoleBinding(
 		request.context,
 		request.invocation(),
-		app.CreateRoleBindingCommand{
+		administration.CreateRoleBindingCommand{
 			UserID: model.UserID(input.UserID), RoleID: model.RoleID(input.RoleID), ScopeType: input.ScopeType,
 			ScopeID: input.ScopeID, StartAt: startAt, EndAt: endAt,
 		},
@@ -117,7 +117,7 @@ func (m roleBindingResourceModule) end(request operationRequest) (operationResul
 	ended, err := m.bindings.EndRoleBinding(
 		request.context,
 		request.invocation(),
-		app.EndRoleBindingCommand{ID: bindingID},
+		administration.EndRoleBindingCommand{ID: bindingID},
 	)
 	if err != nil {
 		return operationResult{}, err

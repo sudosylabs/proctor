@@ -166,6 +166,7 @@ type Options struct {
 	ClassMembers                  ClassMemberApplication
 	Invitations                   InvitationApplication
 	BrowserInvitations            BrowserInvitationApplication
+	Registration                  RegistrationApplication
 	OnboardingImports             OnboardingImportApplication
 	StudentProgressions           StudentProgressionApplication
 	AcademicAdministrationBatches AcademicAdministrationBatchApplication
@@ -179,6 +180,8 @@ type Options struct {
 	AuditListings                 AuditListingApplication
 	Bootstrap                     BootstrapApplication
 	AccessPolicy                  AccessPolicyApplication
+	RetentionPolicy               RetentionPolicyApplication
+	Retention                     RetentionApplication
 	Mail                          MailApplication
 	Exams                         ExamApplication
 	ExamRevisions                 ExamRevisionApplication

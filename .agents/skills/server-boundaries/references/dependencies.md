@@ -7,12 +7,14 @@ identityprovider ← {model, config}
 internal/canonicaljson ← model ← store ← app/job
 {model, store} ← app/apperror ← {app, app/idempotency, app/exam, httpapi, websocket}
 model ← app/invocation ← {app, app/idempotency, app/exam}
-{model, store, app/apperror, app/invocation} ← app/access ← {app, app/academic, app/user, app/identity}
-{store, app/apperror} ← app/paging ← {app, app/academic, app/user, app/identity, httpapi}
-{model, store} ← app/internal/batchitem ← {app, app/academic, app/identity}
+{model, store, app/apperror, app/invocation} ← app/access ← {app, app/academic, app/user, app/identity, app/administration, app/onboarding}
+{store, app/apperror} ← app/paging ← {app, app/academic, app/user, app/identity, app/administration, app/onboarding, httpapi}
+{model, store} ← app/internal/batchitem ← {app, app/academic, app/identity, app/administration, app/onboarding}
 {model, store, app/access, app/paging, app/apperror, app/invocation, app/idempotency, app/mail, app/internal/batchitem} ← app/academic ← {app, httpapi}
 {model, store, app/access, app/paging, app/apperror, app/invocation, app/idempotency} ← app/user ← {app, httpapi, filecontent}
 {model, store, secretseal, app/access, app/paging, app/apperror, app/invocation, app/idempotency, app/internal/batchitem, app/job, app/jobhandler, app/mail, app/realtime, app/user, app/exam/attempt} ← app/identity ← {app, httpapi, server}
+{model, store, app/access, app/paging, app/apperror, app/invocation, app/idempotency, app/identity, app/internal/batchitem, app/jobhandler, app/mail} ← app/administration ← {app, httpapi, server}
+{model, store, app/academic, app/access, app/administration, app/paging, app/apperror, app/invocation, app/idempotency, app/identity, app/internal/batchitem, app/jobhandler, app/mail, app/user} ← app/onboarding ← {app, httpapi, server}
 {model, store, app/apperror, app/invocation} ← app/idempotency ← {app, app/exam}
 {model, store, app/job, app/mail, app/exam} ← app/jobhandler ← app
 model ← app/realtime ← {app, websocket}
@@ -61,7 +63,7 @@ inside `app/` are application-owned modules, not transports.
 | `app/idempotency` | `model`, `store`, `app/apperror`, `app/invocation`, standard library | business operation policy, parent `app`, Exam modules, transports, concrete adapters |
 | `app/access` | `model`, `store`, `app/apperror`, `app/invocation`, standard library | parent `app`, area packages, `app/exam`, transports, platform, concrete adapters |
 | `app/paging` | `store`, `app/apperror`, standard library | `model`, parent `app`, area packages, transports, concrete adapters |
-| `app/internal/batchitem` | `model`, `store`, standard library | everything else; only `app`, `app/academic` and `app/identity` may import it, so no transport can build a batch context |
+| `app/internal/batchitem` | `model`, `store`, standard library | everything else; only `app`, `app/academic`, `app/identity`, `app/administration` and `app/onboarding` may import it, so no transport can build a batch context |
 | `app/academic` | `model`, `store`, `app/access`, `app/paging`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/mail`, `app/realtime`, `app/internal/batchitem`, standard library | parent `app`, `app/exam`, `app/job`, transports, platform, concrete adapters |
 | `app/jobhandler` | `model`, bounded `store` contracts, `app/job`, leaf `app/mail` and `app/exam` capabilities, `secretseal`, standard library | parent `app`, `store.Catalog`, transports, platform, concrete adapters |
 | `app/realtime` | `model`, standard library, consumer-owned ports | parent `app`, HTTP, WebSocket libraries, cluster adapters |
@@ -76,7 +78,9 @@ inside `app/` are application-owned modules, not transports.
 | `tracing` | `config`, standard library, and OpenTelemetry API, SDK, and OTLP/HTTP exporter libraries | application policy, transports, store contracts, platform service location, a process-global tracer provider |
 | `app/user` | `model`, `store`, `app/access`, `app/paging`, `app/apperror`, `app/invocation`, `app/idempotency`, standard library | parent `app`, `app/exam`, `app/job`, `app/jobhandler`, `app/mail`, `app/realtime`, transports, platform, concrete adapters |
 | `app/identity` | `model`, `store`, `secretseal`, `app/access`, `app/paging`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/internal/batchitem`, `app/job`, `app/jobhandler`, `app/mail`, `app/realtime`, `app/user`, the `app/exam/attempt` native-build contract, `golang.org/x/crypto/argon2`, standard library | parent `app`, `app/academic`, other `app/exam` modules, transports, platform, concrete adapters |
-| `app` | `model`, `store`, `app/access`, `app/paging`, `app/academic`, `app/user`, `app/identity`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/job`, `app/jobhandler`, `app/realtime`, `app/exam`, `app/mail`, consumer-owned ports | `platform`, `httpapi`, `sqlstore` |
+| `app/administration` | `model`, `store`, `app/access`, `app/paging`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/identity`, `app/internal/batchitem`, `app/jobhandler`, `app/mail`, standard library | parent `app`, `app/academic`, `app/exam`, `app/job`, `app/realtime`, transports, platform, concrete adapters |
+| `app/onboarding` | `model`, `store`, `app/academic`, `app/access`, `app/administration`, `app/paging`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/identity`, `app/internal/batchitem`, `app/jobhandler`, `app/mail`, `app/user`, standard library | parent `app`, `app/exam`, `app/job`, `app/realtime`, transports, platform, concrete adapters |
+| `app` | `model`, `store`, `app/access`, `app/paging`, `app/academic`, `app/user`, `app/identity`, `app/administration`, `app/onboarding`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/job`, `app/jobhandler`, `app/realtime`, `app/exam`, `app/mail`, consumer-owned ports | `platform`, `httpapi`, `sqlstore` |
 | `filecontent` | `model`, `app/user` content contracts, `app/exam` export archive types, `packages/vfs`, narrowly allowlisted content codecs | persistence, transports, platform service location, Jobs, configuration, concrete VFS backends |
 | `httpapi` | `app`, `app/academic`, `app/user`, `app/identity`, `app/paging`, `app/apperror`, `app/invocation`, `app/job`, `app/realtime`, `app/exam` and its children, `store` result types, `model`, `localization`, `internal/weborigin`, HTTP libraries | Store contracts and functions, `sqlstore`, `platform` |
 | `webui` | Standard-library HTTP and filesystem contracts | Application, domain, persistence, configuration, concrete filesystems, third-party libraries |

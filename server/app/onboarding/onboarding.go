@@ -8,8 +8,16 @@
 // Package onboarding owns bringing people into the installation: issuing,
 // replacing, revoking and accepting Invitations, browser Invitation handoff,
 // public self-registration, academic administration batches, onboarding
-// imports and Student Progression. Service holds every one of these use
-// cases, one file per concern.
+// imports and Student Progression. One flat Service holds every one of these
+// use cases, one file per concern; its fields are the Store contracts it
+// calls and one of each collaborator: the authorizer, the mutation auditor,
+// Mail, the shared password hasher and attempt accounting, the membership
+// effects, and the academic, administration and identity commands a batch
+// runs.
+//
+// Onboarding imports and Student Progression are optional: a reduced Store
+// catalog that lacks the academic administration stores builds a Service
+// without them, whose import use cases refuse with onboarding_import.unavailable.
 //
 // New also returns Ports, the trusted entry points only composition receives:
 // external sign-in's Invitation acceptance, the administration summary
@@ -29,6 +37,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/administration"
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
@@ -37,11 +46,70 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// resourceAuthorizer is the one authorization port. A use case authorizes an
-// Action on a concrete Resource immediately before the work it guards.
+// resourceAuthorizer is the part of *access.Authorizer the onboarding use
+// cases call. A use case authorizes an Action on a concrete Resource
+// immediately before the work it guards; a scoped list resolves the caller's
+// granted scopes and records its one decision.
 type resourceAuthorizer interface {
 	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
+	CanDelegateActionsAtScope(context.Context, model.Principal, []string, model.RoleScopeType, string) (bool, error)
+	GrantedScopes(context.Context, model.Principal, model.Action, model.ResourceType) (access.AuthorizedScopeConstraint, error)
+	Institution(context.Context) (*model.Institution, error)
+	RecordAuthorizationDecision(context.Context, model.Principal, model.Action, model.Resource, model.RoleScopeType, string, model.RequestMetadata, bool) error
 }
+
+var _ resourceAuthorizer = (*access.Authorizer)(nil)
+
+// mailComposer is the part of *mail.Composer onboarding prepares frozen mail
+// with: the Invitation lifecycle messages and the public registration
+// verification.
+type mailComposer interface {
+	Enabled() bool
+	PrepareInvitation(*model.Invitation, string) (*store.PreparedMail, error)
+	PrepareInvitationResend(*model.Invitation, string, model.UserID, time.Time) (*store.PreparedMail, error)
+	PrepareInvitationRevocation(*model.Invitation, model.UserID, time.Time) (*store.PreparedMail, error)
+	PrepareInvitationAccepted(mail.NoticePreparation) (*store.PreparedMail, error)
+	PreparePublicRegistrationVerification(*model.User, model.MailOccurrenceID, string, time.Time, time.Time) (*store.PreparedMail, error)
+}
+
+var _ mailComposer = (*mail.Composer)(nil)
+
+// passwordHasher is the password work of the shared *identity.PasswordHasher.
+type passwordHasher interface {
+	Hash(context.Context, string) (string, error)
+}
+
+var _ passwordHasher = (*identity.PasswordHasher)(nil)
+
+// academicCommands, roleBindingCommands and identityCommands are the
+// ordinary use cases an academic administration batch row runs, held as the
+// academic, administration and identity Services themselves. identityCommands
+// also revalidates an onboarding import's frozen Principal.
+type academicCommands interface {
+	CreateAffiliation(context.Context, invocation.Invocation, academic.CreateAffiliationCommand) (*model.Affiliation, error)
+	EndAffiliation(context.Context, invocation.Invocation, academic.EndAffiliationCommand) (*model.Affiliation, error)
+	CreateAcademicUnitMember(context.Context, invocation.Invocation, academic.CreateAcademicUnitMemberCommand) (*model.AcademicUnitMember, error)
+	EndAcademicUnitMember(context.Context, invocation.Invocation, academic.EndAcademicUnitMemberCommand) (*model.AcademicUnitMember, error)
+	EnrollClassMember(context.Context, invocation.Invocation, academic.EnrollClassMemberCommand) (*model.ClassEnrollment, error)
+	EndClassMember(context.Context, invocation.Invocation, academic.EndClassMemberCommand) (*model.ClassMember, error)
+}
+
+type roleBindingCommands interface {
+	CreateRoleBinding(context.Context, invocation.Invocation, administration.CreateRoleBindingCommand) (*model.RoleBinding, error)
+	EndRoleBinding(context.Context, invocation.Invocation, administration.EndRoleBindingCommand) (*model.RoleBinding, error)
+}
+
+type identityCommands interface {
+	SetUserEnabled(context.Context, invocation.Invocation, identity.SetUserEnabledCommand) (*model.User, error)
+	RevokeUserSessions(context.Context, invocation.Invocation, identity.RevokeUserSessionsCommand) error
+	ValidatePrincipal(context.Context, model.Principal) error
+}
+
+var (
+	_ academicCommands    = (*academic.Service)(nil)
+	_ roleBindingCommands = (*administration.Service)(nil)
+	_ identityCommands    = (*identity.Service)(nil)
+)
 
 // MembershipEffects publishes the realtime effects of the Class Membership
 // and Role an accepted Invitation grants. Report records a publication that
@@ -86,16 +154,53 @@ type Dependencies struct {
 	RecentAuthenticationTTL time.Duration
 }
 
-// Service holds every onboarding use case. Each concern keeps its own focused
-// implementation, embedded here so the Service's method set is their exported
-// methods. Onboarding imports and Student Progression are absent from a
-// reduced Store catalog that lacks the academic administration stores.
+// Service holds every onboarding use case. Its fields are the Store contracts
+// it calls and one of each collaborator.
 type Service struct {
-	*invitationService
-	*browserInvitationService
-	*publicRegistrationService
-	*academicAdministrationBatchService
-	*onboardingImportService
+	invitations           store.InvitationStore
+	browserAuthentication store.BrowserAuthenticationStore
+	institutions          store.InstitutionStore
+	academicUnits         store.AcademicUnitStore
+	programmes            store.ProgrammeStore
+	levels                store.ProgrammeLevelStore
+	periods               store.AcademicPeriodStore
+	classes               store.ClassStore
+	roles                 store.RoleStore
+	users                 store.UserStore
+	accessPolicies        store.AccessPolicyStore
+	commandOutcomes       store.CommandOutcomeStore
+	tokens                store.PersonalAccessTokenStore
+	affiliations          store.AffiliationStore
+	unitMembers           store.AcademicUnitMemberStore
+	classMembers          store.ClassMemberStore
+	roleBindings          store.RoleBindingStore
+	// imports is nil when the Store catalog is too reduced for onboarding
+	// imports; every import use case then refuses (see requireImports).
+	imports store.OnboardingImportStore
+	content OnboardingImportFiles
+
+	// authorizer is nil when composition supplies no Authorizer; every
+	// authorization then refuses with invitation.unavailable.
+	authorizer        resourceAuthorizer
+	auditor           access.MutationAuditor
+	mail              mailComposer
+	hasher            passwordHasher
+	attempts          *identity.AttemptAccounting
+	membershipEffects MembershipEffects
+	academic          academicCommands
+	administration    roleBindingCommands
+	identity          identityCommands
+	wake              func()
+
+	nodeID    string
+	publicURL string
+	// rateLimit bounds Invitation claim acceptance and public registration
+	// attempts; emailVerificationTTL is a registration token's lifetime.
+	rateLimit               identity.LoginRateLimitPolicy
+	emailVerificationTTL    time.Duration
+	recentAuthenticationTTL time.Duration
+	newToken                func() string
+	now                     func() time.Time
 }
 
 // Ports are the trusted entry points New hands only to composition. None
@@ -116,79 +221,177 @@ type Ports struct {
 	ImportJobs jobhandler.OnboardingImportService
 }
 
-// New builds the Service, every focused implementation it embeds, and the
+// New builds the Service, keeping the Store contracts it calls, and the
 // Ports composition wires into external sign-in, the administration summary
-// and the Job catalog.
+// and the Job catalog. It refuses missing collaborators.
 func New(deps Dependencies) (*Service, Ports, error) {
 	if deps.Store == nil {
 		return nil, Ports{}, errors.New("onboarding store catalog is required")
 	}
 	catalog := deps.Store
-	authorization := invitationAuthorizationAdapter{authorization: deps.Authorizer}
-	invitations, err := newInvitationService(invitationServiceDependencies{Store: catalog.Invitation(), Classes: catalog.Class(), Periods: catalog.AcademicPeriod(), AcademicUnits: catalog.AcademicUnit(), Roles: catalog.Role(), Authorization: authorization, Mail: deps.Mail, Hasher: deps.Hasher, Audit: deps.Auditor, Attempts: invitationAttemptAccounting{attempts: deps.Attempts, policy: deps.AccountRecovery.RateLimit}, MembershipEffects: deps.MembershipEffects, NodeID: deps.NodeID, PublicURL: deps.PublicURL, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, NewClaim: model.NewCredentialToken, Now: time.Now})
+	if catalog.Invitation() == nil || catalog.Class() == nil || catalog.AcademicPeriod() == nil || catalog.AcademicUnit() == nil || catalog.Role() == nil ||
+		deps.Auditor == nil || deps.MembershipEffects == nil || deps.NodeID == "" || deps.PublicURL == "" || deps.RecentAuthenticationTTL <= 0 {
+		return nil, Ports{}, errors.New("invitation service dependencies are invalid")
+	}
+	if catalog.BrowserAuthentication() == nil || catalog.Institution() == nil || model.ValidateBrowserAuthenticationIssuer(deps.PublicURL, true) != nil {
+		return nil, Ports{}, errors.New("browser invitation dependencies are invalid")
+	}
+	rateLimit := deps.AccountRecovery.RateLimit
+	if catalog.User() == nil || deps.Attempts == nil || rateLimit.Window <= 0 || rateLimit.MaximumAttempts <= 0 || rateLimit.MaximumSourceAttempts <= 0 ||
+		deps.AccountRecovery.EmailVerificationTTL <= 0 {
+		return nil, Ports{}, errors.New("public registration dependencies are invalid")
+	}
+	s := &Service{
+		invitations:             catalog.Invitation(),
+		browserAuthentication:   catalog.BrowserAuthentication(),
+		institutions:            catalog.Institution(),
+		academicUnits:           catalog.AcademicUnit(),
+		programmes:              catalog.Programme(),
+		levels:                  catalog.ProgrammeLevel(),
+		periods:                 catalog.AcademicPeriod(),
+		classes:                 catalog.Class(),
+		roles:                   catalog.Role(),
+		users:                   catalog.User(),
+		accessPolicies:          catalog.AccessPolicy(),
+		commandOutcomes:         catalog.CommandOutcome(),
+		tokens:                  catalog.PersonalAccessToken(),
+		affiliations:            catalog.Affiliation(),
+		unitMembers:             catalog.AcademicUnitMember(),
+		classMembers:            catalog.ClassMember(),
+		roleBindings:            catalog.RoleBinding(),
+		auditor:                 deps.Auditor,
+		mail:                    deps.Mail,
+		hasher:                  deps.Hasher,
+		attempts:                deps.Attempts,
+		membershipEffects:       deps.MembershipEffects,
+		academic:                deps.Academic,
+		administration:          deps.Administration,
+		identity:                deps.Identity,
+		nodeID:                  deps.NodeID,
+		publicURL:               deps.PublicURL,
+		rateLimit:               rateLimit,
+		emailVerificationTTL:    deps.AccountRecovery.EmailVerificationTTL,
+		recentAuthenticationTTL: deps.RecentAuthenticationTTL,
+		newToken:                model.NewCredentialToken,
+		now:                     time.Now,
+	}
+	if deps.Authorizer != nil {
+		s.authorizer = deps.Authorizer
+	}
+	enabled, err := onboardingImportsEnabled(deps)
 	if err != nil {
 		return nil, Ports{}, err
 	}
-	browserInvitations, err := newBrowserInvitationService(browserInvitationServiceDependencies{Transactions: catalog.BrowserAuthentication(), Institutions: catalog.Institution(), Invitations: invitations, Issuer: deps.PublicURL, NewProof: model.NewCredentialToken})
-	if err != nil {
-		return nil, Ports{}, err
+	ports := Ports{AcceptExternalIdentity: s.acceptExternalIdentity, CountPendingInvitations: s.countPendingInvitations}
+	if enabled {
+		s.imports, s.content, s.wake = catalog.OnboardingImport(), deps.Content, deps.Wake
+		ports.CountOpenImports, ports.ImportJobs = s.countOpenOnboardingImports, onboardingImportJobs{service: s}
 	}
-	publicRegistration, err := newPublicRegistrationService(publicRegistrationDependencies{
-		registrations: catalog.User(),
-		policies:      currentPublicRegistrationPolicy{policies: catalog.AccessPolicy()},
-		institutions:  publicRegistrationInstitutionAdapter{institutions: catalog.Institution()},
-		mail:          deps.Mail,
-		attempts:      deps.Attempts,
-		hasher:        deps.Hasher,
-		rateLimit:     deps.AccountRecovery.RateLimit,
-		tokenTTL:      deps.AccountRecovery.EmailVerificationTTL,
-		publicURL:     deps.PublicURL,
-		nodeID:        deps.NodeID,
-		newToken:      model.NewCredentialToken,
-		now:           time.Now,
-	})
-	if err != nil {
-		return nil, Ports{}, err
-	}
-	batches := newAcademicAdministrationBatchService(academicAdministrationBatchServiceDependencies{Commands: academicAdministrationCommandServices{academic: deps.Academic,
-		roleBindings: deps.Administration, identity: deps.Identity}, Authorization: authorization, Outcomes: catalog.CommandOutcome(), Now: time.Now, RecentTTL: deps.RecentAuthenticationTTL})
-	imports, err := constructOnboardingImports(deps, invitations, batches, authorization)
-	if err != nil {
-		return nil, Ports{}, err
-	}
-	service := &Service{
-		invitationService: invitations, browserInvitationService: browserInvitations,
-		publicRegistrationService: publicRegistration, academicAdministrationBatchService: batches,
-		onboardingImportService: imports,
-	}
-	ports := Ports{AcceptExternalIdentity: invitations.acceptExternalIdentity, CountPendingInvitations: invitations.countPendingInvitations}
-	if imports != nil {
-		imports.wake = deps.Wake
-		ports.CountOpenImports, ports.ImportJobs = imports.countOpenOnboardingImports, onboardingImportJobs{service: imports}
-	}
-	return service, ports, nil
+	return s, ports, nil
 }
 
-// constructOnboardingImports projects the onboarding import stores. A deliberately
-// reduced lifecycle test catalog omits whole capability families and so
-// constructs no onboarding imports; production catalogs project every target
-// store together.
-func constructOnboardingImports(deps Dependencies, invitations *invitationService, batches *academicAdministrationBatchService,
-	authorization invitationAuthorizationAdapter,
-) (*onboardingImportService, error) {
+// onboardingImportsEnabled reports whether the Store catalog projects every
+// onboarding import store. A deliberately reduced lifecycle test catalog
+// omits whole capability families and so has no onboarding imports;
+// production catalogs project every target store together.
+func onboardingImportsEnabled(deps Dependencies) (bool, error) {
 	catalog := deps.Store
 	if catalog.OnboardingImport() == nil {
-		return nil, errors.New("onboarding import persistence is required")
+		return false, errors.New("onboarding import persistence is required")
 	}
 	if deps.Content == nil {
-		return nil, errors.New("onboarding import file content is required")
+		return false, errors.New("onboarding import file content is required")
 	}
 	if catalog.PersonalAccessToken() == nil || catalog.User() == nil {
-		return nil, errors.New("onboarding import credential stores are required")
+		return false, errors.New("onboarding import credential stores are required")
 	}
 	if catalog.Institution() == nil || catalog.AcademicUnit() == nil || catalog.Programme() == nil || catalog.ProgrammeLevel() == nil ||
 		catalog.AcademicPeriod() == nil || catalog.Class() == nil || catalog.Role() == nil {
-		return nil, nil
+		return false, nil
 	}
-	return newOnboardingImportService(onboardingImportServiceDependencies{Imports: catalog.OnboardingImport(), Content: deps.Content, Invitations: invitations, AdministrationBatches: batches, Authentication: deps.Identity, Authorization: authorization, Audit: deps.Auditor, Tokens: catalog.PersonalAccessToken(), Users: catalog.User(), Institutions: catalog.Institution(), Units: catalog.AcademicUnit(), Programmes: catalog.Programme(), Levels: catalog.ProgrammeLevel(), Periods: catalog.AcademicPeriod(), Classes: catalog.Class(), Roles: catalog.Role(), Affiliations: catalog.Affiliation(), UnitMembers: catalog.AcademicUnitMember(), ClassMembers: catalog.ClassMember(), RoleBindings: catalog.RoleBinding(), Now: time.Now})
+	if deps.Identity == nil {
+		return false, errors.New("onboarding import application collaborators are required")
+	}
+	if catalog.Affiliation() == nil || catalog.AcademicUnitMember() == nil || catalog.ClassMember() == nil || catalog.RoleBinding() == nil {
+		return false, errors.New("onboarding import academic administration stores are required")
+	}
+	return true, nil
+}
+
+// requireImports refuses an onboarding import use case on a Service built
+// without onboarding imports.
+func (s *Service) requireImports() error {
+	if s.imports == nil {
+		return apperror.New("onboarding_import.unavailable")
+	}
+	return nil
+}
+
+// authorize authorizes an Action on a concrete Resource.
+func (s *Service) authorize(ctx context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource) error {
+	if s.authorizer == nil {
+		return apperror.New("invitation.unavailable")
+	}
+	return s.authorizer.Authorize(ctx, invocation, action, resource)
+}
+
+// authorizeActionDelegation refuses unless the caller may grant every Action
+// at the scope.
+func (s *Service) authorizeActionDelegation(ctx context.Context, invocation invocation.Invocation, actions []string, scopeType model.RoleScopeType, scopeID string) error {
+	if s.authorizer == nil {
+		return apperror.New("invitation.unavailable")
+	}
+	allowed, err := s.authorizer.CanDelegateActionsAtScope(ctx, invocation.Principal(), actions, scopeType, scopeID)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return access.DeniedError()
+	}
+	return nil
+}
+
+// visibility resolves and records the caller's institution-family scopes for
+// invitation.view, invitation.manage, onboarding_batch.view, or
+// academic_progression.manage, which share one scope shape: the Institution,
+// Academic Unit subtrees, and Classes. Progression authority is a Class
+// action, so its scopes are resolved for Class resources.
+func (s *Service) visibility(ctx context.Context, invocation invocation.Invocation, action model.Action) (store.InvitationVisibilityScope, error) {
+	resourceType := model.ResourceInstitution
+	switch action {
+	case model.ActionInvitationView, model.ActionInvitationManage, model.ActionOnboardingBatchView:
+	case model.ActionAcademicProgressionManage:
+		resourceType = model.ResourceClass
+	default:
+		return store.InvitationVisibilityScope{}, apperror.New("invitation.unavailable")
+	}
+	if s.authorizer == nil {
+		return store.InvitationVisibilityScope{}, apperror.New("invitation.unavailable")
+	}
+	constraint, err := s.authorizer.GrantedScopes(ctx, invocation.Principal(), action, resourceType)
+	if err != nil {
+		return store.InvitationVisibilityScope{}, err
+	}
+	institution, err := s.authorizer.Institution(ctx)
+	if err != nil {
+		return store.InvitationVisibilityScope{}, invitationStoreErrors.Translate(err)
+	}
+	allowed := constraint.InstitutionWide || len(constraint.AcademicUnitRootIDs) > 0 || len(constraint.ClassIDs) > 0
+	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
+	scopeType, scopeID := model.RoleScopeInstitution, institution.ID.String()
+	if len(constraint.AcademicUnitRootIDs) > 0 {
+		resource = model.Resource{Type: model.ResourceAcademicUnit, ID: constraint.AcademicUnitRootIDs[0].String()}
+		scopeType, scopeID = model.RoleScopeAcademicUnit, resource.ID
+	} else if len(constraint.ClassIDs) > 0 {
+		resource = model.Resource{Type: model.ResourceClass, ID: constraint.ClassIDs[0].String()}
+		scopeType, scopeID = model.RoleScopeClass, resource.ID
+	}
+	if err = s.authorizer.RecordAuthorizationDecision(ctx, invocation.Principal(), action, resource, scopeType, scopeID, invocation.RequestMetadata(), allowed); err != nil {
+		return store.InvitationVisibilityScope{}, err
+	}
+	if !allowed {
+		return store.InvitationVisibilityScope{}, access.DeniedError()
+	}
+	return store.InvitationVisibilityScope{InstitutionWide: constraint.InstitutionWide,
+		AcademicUnitRootIDs: append([]model.AcademicUnitID(nil), constraint.AcademicUnitRootIDs...), ClassIDs: append([]model.ClassID(nil), constraint.ClassIDs...)}, nil
 }

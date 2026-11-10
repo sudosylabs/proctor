@@ -79,11 +79,11 @@ func requireOnboardingImportPreviewCodes(rows []store.OnboardingImportRow) error
 }
 
 // failImport marks an import failed with a catalogued failure_code.
-func (s *onboardingImportService) failImport(ctx context.Context, id model.OnboardingImportID, code string) (*store.OnboardingImport, error) {
+func (s *Service) failImport(ctx context.Context, id model.OnboardingImportID, code string) (*store.OnboardingImport, error) {
 	if err := requireOnboardingImportFailureCode(code); err != nil {
 		return nil, err
 	}
-	return s.deps.Imports.FailOnboardingImport(ctx, &store.OnboardingImportFailure{ID: id, Code: code, At: model.TimeUTC(s.deps.Now())})
+	return s.imports.FailOnboardingImport(ctx, &store.OnboardingImportFailure{ID: id, Code: code, At: model.TimeUTC(s.now())})
 }
 
 // requireOnboardingImportRowCode refuses an executed row's public code

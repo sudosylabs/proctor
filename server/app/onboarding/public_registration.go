@@ -11,7 +11,6 @@ import (
 	"context"
 	"errors"
 	"strings"
-	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
@@ -33,60 +32,11 @@ type RegisterLocalUserCommand struct {
 	Source    string
 }
 
-type publicRegistrationStore interface {
-	RegisterLocal(context.Context, *store.PublicLocalUserRegistration) (*store.PublicLocalUserRegistrationResult, error)
-}
-
-type publicRegistrationPolicy interface {
-	PublicRegistration(context.Context) (enabled bool, localLogin bool, err error)
-}
-
-type publicRegistrationInstitution interface {
-	InstitutionID(context.Context) (model.InstitutionID, error)
-}
-
-type publicRegistrationPasswordHasher interface {
-	Hash(context.Context, string) (string, error)
-}
-
-// publicRegistrationVerificationPreparer exposes only the one frozen
-// credential message this use case is allowed to create.
-type publicRegistrationVerificationPreparer interface {
-	Enabled() bool
-	PreparePublicRegistrationVerification(*model.User, model.MailOccurrenceID, string, time.Time, time.Time) (*store.PreparedMail, error)
-}
-
-type publicRegistrationDependencies struct {
-	registrations publicRegistrationStore
-	policies      publicRegistrationPolicy
-	institutions  publicRegistrationInstitution
-	mail          publicRegistrationVerificationPreparer
-	attempts      *identity.AttemptAccounting
-	hasher        publicRegistrationPasswordHasher
-	rateLimit     identity.LoginRateLimitPolicy
-	tokenTTL      time.Duration
-	publicURL     string
-	nodeID        string
-	newToken      func() string
-	now           func() time.Time
-}
-
-type publicRegistrationService struct {
-	publicRegistrationDependencies
-}
-
-func newPublicRegistrationService(deps publicRegistrationDependencies) (*publicRegistrationService, error) {
-	if deps.registrations == nil || deps.policies == nil || deps.institutions == nil || deps.mail == nil ||
-		deps.attempts == nil || deps.hasher == nil || deps.rateLimit.Window <= 0 ||
-		deps.rateLimit.MaximumAttempts <= 0 || deps.rateLimit.MaximumSourceAttempts <= 0 ||
-		deps.tokenTTL <= 0 || deps.publicURL == "" || deps.nodeID == "" || deps.newToken == nil || deps.now == nil {
-		return nil, errors.New("public registration dependencies are invalid")
-	}
-	return &publicRegistrationService{publicRegistrationDependencies: deps}, nil
-}
-
-func (s *publicRegistrationService) RegisterLocalUser(ctx context.Context, invocation invocation.Invocation, command RegisterLocalUserCommand) error {
-	registrationEnabled, localLoginEnabled, err := s.policies.PublicRegistration(ctx)
+// RegisterLocalUser registers an unverified local account when the Access Policy
+// allows public registration, mailing its email verification. A duplicate
+// identity is indistinguishable from accepted work.
+func (s *Service) RegisterLocalUser(ctx context.Context, invocation invocation.Invocation, command RegisterLocalUserCommand) error {
+	registrationEnabled, localLoginEnabled, err := s.publicRegistrationPolicy(ctx)
 	if err != nil {
 		return registrationUnavailable(err)
 	}
@@ -94,7 +44,7 @@ func (s *publicRegistrationService) RegisterLocalUser(ctx context.Context, invoc
 		return apperror.New("authentication.registration.invitation_required")
 	}
 	normalizedEmail := strings.ToLower(strings.TrimSpace(model.SanitizeUnicode(command.Email)))
-	if err = s.checkRateLimit(ctx, normalizedEmail, command.Source); err != nil {
+	if err = s.checkPublicRegistrationAttempt(ctx, normalizedEmail, command.Source); err != nil {
 		return err
 	}
 	if !s.mail.Enabled() {
@@ -134,7 +84,7 @@ func (s *publicRegistrationService) RegisterLocalUser(ctx context.Context, invoc
 	rawToken := s.newToken()
 	token := &model.UserToken{
 		UserID: account.ID, Purpose: model.UserTokenEmailVerification,
-		TokenHash: model.HashToken(rawToken), Target: account.Email, ExpiresAt: at.Add(s.tokenTTL),
+		TokenHash: model.HashToken(rawToken), Target: account.Email, ExpiresAt: at.Add(s.emailVerificationTTL),
 	}
 	token.PrepareCreate(model.NewUserTokenID(), at)
 	actionURL, err := identity.AccountCredentialLink(s.publicURL, "/account/verify-email", rawToken)
@@ -147,7 +97,7 @@ func (s *publicRegistrationService) RegisterLocalUser(ctx context.Context, invoc
 	if err != nil {
 		return registrationUnavailable(err)
 	}
-	institutionID, err := s.institutions.InstitutionID(ctx)
+	institutionID, err := s.institutionID(ctx)
 	if err != nil {
 		return registrationUnavailable(err)
 	}
@@ -156,9 +106,9 @@ func (s *publicRegistrationService) RegisterLocalUser(ctx context.Context, invoc
 		model.Resource{Type: model.ResourceUser, ID: account.ID.String()}, institutionID,
 		invocation.RequestMetadata(), s.nodeID, nil, "anonymous",
 	)
-	_, err = s.registrations.RegisterLocal(ctx, &store.PublicLocalUserRegistration{
+	_, err = s.users.RegisterLocal(ctx, &store.PublicLocalUserRegistration{
 		User: account, Settings: settings, PasswordCredential: credential, DefaultProfilePictureJob: defaultJob,
-		VerificationToken: token, TokenLifetime: s.tokenTTL, MailLifetime: s.tokenTTL,
+		VerificationToken: token, TokenLifetime: s.emailVerificationTTL, MailLifetime: s.emailVerificationTTL,
 		VerificationOccurrence: prepared.Occurrence,
 		VerificationDelivery:   prepared.Delivery, VerificationJob: prepared.Job, AuditEvent: audit,
 	})
@@ -175,7 +125,7 @@ func (s *publicRegistrationService) RegisterLocalUser(ctx context.Context, invoc
 	return registrationUnavailable(err)
 }
 
-func (s *publicRegistrationService) checkRateLimit(ctx context.Context, registrantIdentity, source string) error {
+func (s *Service) checkPublicRegistrationAttempt(ctx context.Context, registrantIdentity, source string) error {
 	limited, err := s.attempts.Account(ctx, identity.AttemptPurposePublicRegistration, "register", s.rateLimit.Window,
 		identity.IdentityAttemptLimit(registrantIdentity, s.rateLimit.MaximumAttempts),
 		identity.SourceAttemptLimit(source, s.rateLimit.MaximumSourceAttempts),
@@ -193,10 +143,10 @@ func registrationUnavailable(err error) error {
 	return apperror.New("authentication.registration.unavailable").Wrap(err)
 }
 
-type currentPublicRegistrationPolicy struct{ policies store.AccessPolicyStore }
-
-func (p currentPublicRegistrationPolicy) PublicRegistration(ctx context.Context) (bool, bool, error) {
-	snapshot, err := p.policies.Get(ctx, 0)
+// publicRegistrationPolicy reads whether the current Access Policy allows
+// public registration and local login.
+func (s *Service) publicRegistrationPolicy(ctx context.Context) (enabled bool, localLogin bool, err error) {
+	snapshot, err := s.accessPolicies.Get(ctx, 0)
 	if err != nil {
 		return false, false, err
 	}
@@ -206,17 +156,12 @@ func (p currentPublicRegistrationPolicy) PublicRegistration(ctx context.Context)
 	return snapshot.Policy.PublicRegistrationEnabled, snapshot.Policy.LocalLoginEnabled, nil
 }
 
-type publicRegistrationInstitutionAdapter struct{ institutions store.InstitutionStore }
-
-func (a publicRegistrationInstitutionAdapter) InstitutionID(ctx context.Context) (model.InstitutionID, error) {
-	institution, err := a.institutions.GetSingleton(ctx)
+// institutionID reads the singleton Institution's identifier; an absent or
+// invalid Institution yields an empty identifier and the Store's error.
+func (s *Service) institutionID(ctx context.Context) (model.InstitutionID, error) {
+	institution, err := s.institutions.GetSingleton(ctx)
 	if err != nil || institution == nil || !institution.ID.IsValid() {
 		return "", err
 	}
 	return institution.ID, nil
 }
-
-var (
-	_ publicRegistrationStore          = (store.UserStore)(nil)
-	_ publicRegistrationPasswordHasher = (*identity.PasswordHasher)(nil)
-)

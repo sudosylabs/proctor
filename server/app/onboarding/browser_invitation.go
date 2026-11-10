@@ -9,32 +9,12 @@ package onboarding
 
 import (
 	"context"
-	"errors"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
-
-type browserInvitationTransactionStore interface {
-	CreateInvitation(context.Context, *store.BrowserInvitationTransactionCreation) (*store.BrowserInvitationCreated, error)
-	ResolveInvitation(context.Context, string, string) (*store.BrowserInvitationResolution, error)
-}
-
-// browserInvitationServiceDependencies are the collaborators of browserInvitationService;
-// newBrowserInvitationService validates them once and browserInvitationService keeps them in deps.
-type browserInvitationServiceDependencies struct {
-	Transactions browserInvitationTransactionStore
-	Institutions store.InstitutionStore
-	Invitations  *invitationService
-	Issuer       string
-	NewProof     func() string
-}
-
-type browserInvitationService struct {
-	deps browserInvitationServiceDependencies
-}
 
 type StartBrowserInvitationCommand struct {
 	Claim  string
@@ -71,23 +51,17 @@ type BrowserInvitationSessionAcceptanceCommand struct {
 	Handle, BrowserProof, Source string
 }
 
-func newBrowserInvitationService(deps browserInvitationServiceDependencies) (*browserInvitationService, error) {
-	if deps.Transactions == nil || deps.Institutions == nil || deps.Invitations == nil ||
-		model.ValidateBrowserAuthenticationIssuer(deps.Issuer, true) != nil || deps.NewProof == nil {
-		return nil, errors.New("browser invitation dependencies are invalid")
-	}
-	return &browserInvitationService{deps: deps}, nil
-}
-
-func (s *browserInvitationService) StartBrowserInvitation(ctx context.Context, _ invocation.Invocation, command StartBrowserInvitationCommand) (*BrowserInvitationStart, error) {
+// StartBrowserInvitation exchanges a raw Invitation claim for a hashed browser handle
+// and proof bound to the pending Invitation, after counting the claim attempt.
+func (s *Service) StartBrowserInvitation(ctx context.Context, _ invocation.Invocation, command StartBrowserInvitationCommand) (*BrowserInvitationStart, error) {
 	if !model.IsValidCredentialToken(command.Claim) {
 		return nil, apperror.New("invitation.invalid")
 	}
 	claimHash := model.HashInvitationClaim(command.Claim)
-	if err := s.deps.Invitations.deps.Attempts.Check(ctx, claimHash, command.Source); err != nil {
+	if err := s.checkInvitationAttempt(ctx, claimHash, command.Source); err != nil {
 		return nil, err
 	}
-	invitation, err := s.deps.Invitations.deps.Store.GetByClaimHash(ctx, claimHash)
+	invitation, err := s.invitations.GetByClaimHash(ctx, claimHash)
 	if err != nil || invitation == nil {
 		return nil, invalidInvitationError(err)
 	}
@@ -105,7 +79,7 @@ func (s *browserInvitationService) StartBrowserInvitation(ctx context.Context, _
 	}
 	var classDisplayName string
 	if invitation.Purpose == model.InvitationPurposeStudentClass {
-		class, classErr := s.deps.Invitations.deps.Classes.Get(ctx, invitation.ClassID)
+		class, classErr := s.classes.Get(ctx, invitation.ClassID)
 		if classErr != nil && !store.IsNotFound(classErr) {
 			return nil, apperror.New("invitation.unavailable").Wrap(classErr)
 		}
@@ -114,20 +88,20 @@ func (s *browserInvitationService) StartBrowserInvitation(ctx context.Context, _
 		}
 		classDisplayName = class.DisplayName
 	}
-	institution, err := s.deps.Institutions.GetSingleton(ctx)
+	institution, err := s.institutions.GetSingleton(ctx)
 	if err != nil || institution == nil || !institution.ID.IsValid() {
 		return nil, apperror.New("invitation.unavailable").Wrap(err)
 	}
-	handle, proof := s.deps.NewProof(), s.deps.NewProof()
+	handle, proof := s.newToken(), s.newToken()
 	if !model.IsValidCredentialToken(handle) || !model.IsValidCredentialToken(proof) || handle == proof {
 		return nil, apperror.New("invitation.unavailable")
 	}
 	creation := &store.BrowserInvitationTransactionCreation{
-		ID: model.NewBrowserAuthenticationTransactionID(), InstitutionID: institution.ID, Issuer: s.deps.Issuer,
+		ID: model.NewBrowserAuthenticationTransactionID(), InstitutionID: institution.ID, Issuer: s.publicURL,
 		InvitationID: invitation.ID, InvitationPurpose: invitation.Purpose, InvitationClaimHash: claimHash,
 		HandleHash: model.HashToken(handle), BrowserProofHash: model.HashToken(proof),
 	}
-	saved, err := s.deps.Transactions.CreateInvitation(ctx, creation)
+	saved, err := s.browserAuthentication.CreateInvitation(ctx, creation)
 	if err != nil || saved == nil {
 		return nil, browserInvitationStoreErrors.Translate(err)
 	}
@@ -142,12 +116,14 @@ func (s *browserInvitationService) StartBrowserInvitation(ctx context.Context, _
 	}, nil
 }
 
-func (s *browserInvitationService) AcceptBrowserInvitation(ctx context.Context, invocation invocation.Invocation, command BrowserInvitationAcceptanceCommand) (*InvitationAcceptanceView, error) {
-	resolution, invitation, err := s.resolve(ctx, command.Handle, command.BrowserProof)
+// AcceptBrowserInvitation accepts a student Class or teacher Academic Unit Invitation
+// through its browser handle and proof, creating the local account.
+func (s *Service) AcceptBrowserInvitation(ctx context.Context, invocation invocation.Invocation, command BrowserInvitationAcceptanceCommand) (*InvitationAcceptanceView, error) {
+	resolution, invitation, err := s.resolveBrowserInvitation(ctx, command.Handle, command.BrowserProof)
 	if err != nil {
 		return nil, err
 	}
-	if err = s.deps.Invitations.deps.Attempts.Check(ctx, model.HashToken(command.Handle), command.Source); err != nil {
+	if err = s.checkInvitationAttempt(ctx, model.HashToken(command.Handle), command.Source); err != nil {
 		return nil, err
 	}
 	base := AcceptStudentClassInvitationCommand{
@@ -159,9 +135,9 @@ func (s *browserInvitationService) AcceptBrowserInvitation(ctx context.Context, 
 	var accepted *InvitationAcceptanceView
 	switch invitation.Purpose {
 	case model.InvitationPurposeStudentClass:
-		accepted, err = s.deps.Invitations.acceptStudentClassByClaimHash(ctx, invocation, base, resolution.InvitationClaimHash)
+		accepted, err = s.acceptStudentClassByClaimHash(ctx, invocation, base, resolution.InvitationClaimHash)
 	case model.InvitationPurposeTeacherAcademicUnit:
-		accepted, err = s.deps.Invitations.acceptTeacherAcademicUnitByClaimHash(ctx, invocation, AcceptTeacherAcademicUnitInvitationCommand(base), resolution.InvitationClaimHash)
+		accepted, err = s.acceptTeacherAcademicUnitByClaimHash(ctx, invocation, AcceptTeacherAcademicUnitInvitationCommand(base), resolution.InvitationClaimHash)
 	default:
 		return nil, apperror.New("invitation.invalid")
 	}
@@ -171,23 +147,25 @@ func (s *browserInvitationService) AcceptBrowserInvitation(ctx context.Context, 
 	return accepted, nil
 }
 
-func (s *browserInvitationService) AcceptBrowserInvitationWithSession(ctx context.Context, invocation invocation.Invocation, command BrowserInvitationSessionAcceptanceCommand) (*InvitationAcceptanceView, error) {
+// AcceptBrowserInvitationWithSession accepts a scoped Role Invitation through its browser
+// handle and proof for the caller's web Session.
+func (s *Service) AcceptBrowserInvitationWithSession(ctx context.Context, invocation invocation.Invocation, command BrowserInvitationSessionAcceptanceCommand) (*InvitationAcceptanceView, error) {
 	principal := invocation.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess ||
 		principal.ClientType != model.SessionClientWeb {
 		return nil, apperror.New("invitation.invalid")
 	}
-	resolution, invitation, err := s.resolve(ctx, command.Handle, command.BrowserProof)
+	resolution, invitation, err := s.resolveBrowserInvitation(ctx, command.Handle, command.BrowserProof)
 	if err != nil {
 		return nil, err
 	}
-	if err = s.deps.Invitations.deps.Attempts.Check(ctx, model.HashToken(command.Handle), command.Source); err != nil {
+	if err = s.checkInvitationAttempt(ctx, model.HashToken(command.Handle), command.Source); err != nil {
 		return nil, err
 	}
 	if invitation.Purpose != model.InvitationPurposeAcademicUnitRole && invitation.Purpose != model.InvitationPurposeInstitutionRole {
 		return nil, apperror.New("invitation.invalid")
 	}
-	accepted, err := s.deps.Invitations.acceptScopedRoleByClaimHash(
+	accepted, err := s.acceptScopedRoleByClaimHash(
 		ctx, invocation, resolution.InvitationClaimHash, invitation.Purpose,
 		browserInvitationProof(resolution, command.Handle, command.BrowserProof),
 	)
@@ -197,19 +175,19 @@ func (s *browserInvitationService) AcceptBrowserInvitationWithSession(ctx contex
 	return accepted, nil
 }
 
-func (s *browserInvitationService) resolve(ctx context.Context, handle, proof string) (*store.BrowserInvitationResolution, *model.Invitation, error) {
+func (s *Service) resolveBrowserInvitation(ctx context.Context, handle, proof string) (*store.BrowserInvitationResolution, *model.Invitation, error) {
 	if !model.IsValidCredentialToken(handle) || !model.IsValidCredentialToken(proof) {
 		return nil, nil, apperror.New("invitation.invalid")
 	}
 	handleHash, proofHash := model.HashToken(handle), model.HashToken(proof)
-	resolution, err := s.deps.Transactions.ResolveInvitation(ctx, handleHash, proofHash)
+	resolution, err := s.browserAuthentication.ResolveInvitation(ctx, handleHash, proofHash)
 	if err != nil || resolution == nil {
 		return nil, nil, browserInvitationStoreErrors.Translate(err)
 	}
 	if !resolution.ID.IsValid() || !resolution.InvitationID.IsValid() || !model.IsValidTokenHash(resolution.InvitationClaimHash) {
 		return nil, nil, apperror.New("invitation.unavailable")
 	}
-	invitation, err := s.deps.Invitations.deps.Store.GetByClaimHash(ctx, resolution.InvitationClaimHash)
+	invitation, err := s.invitations.GetByClaimHash(ctx, resolution.InvitationClaimHash)
 	if err != nil || invitation == nil || invitation.ID != resolution.InvitationID {
 		return nil, nil, browserInvitationStoreErrors.Translate(err)
 	}

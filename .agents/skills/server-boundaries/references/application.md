@@ -305,9 +305,9 @@ keeps only the services that span areas or own no area (`SearchService`,
 `AdministrationCounts`, `RealtimeService`, `RealtimeAdmission`,
 `JobOperations`, `MailService`), each named on `App` like an area service.
 
-`academic.Service` and `administration.Service` are flat: one struct whose
-fields are the Store contracts it calls and one of each collaborator, built
-by one `New`. What remains is inside two area packages: `identity.Service`
-and `onboarding.Service` still embed one private implementation per concern
-rather than holding their collaborators themselves. Do not add a new
-embedded implementation.
+`academic.Service`, `administration.Service` and `onboarding.Service` are
+flat: one struct whose fields are the Store contracts it calls and one of each
+collaborator, built by one `New`. What remains is inside one area package:
+`identity.Service` still embeds one private implementation per concern rather
+than holding its collaborators itself. Do not add a new embedded
+implementation.

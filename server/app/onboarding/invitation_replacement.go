@@ -20,7 +20,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-func (s *invitationService) ReplaceInvitation(ctx context.Context, invocation invocation.Invocation, command ReplaceInvitationCommand) (InvitationAdministrationView, error) {
+// ReplaceInvitation revokes a pending Invitation and issues its corrected replacement,
+// reauthorizing the replacement's target.
+func (s *Service) ReplaceInvitation(ctx context.Context, invocation invocation.Invocation, command ReplaceInvitationCommand) (InvitationAdministrationView, error) {
 	id := command.ID
 	if !id.IsValid() || command.ExpectedRevision < 1 {
 		return InvitationAdministrationView{}, apperror.New("request.invalid").WithField("field", "invitation_id")
@@ -28,15 +30,15 @@ func (s *invitationService) ReplaceInvitation(ctx context.Context, invocation in
 	if _, err := invitationLifetime(command.ExpiresInDays, model.InvitationLifetime); err != nil {
 		return InvitationAdministrationView{}, err
 	}
-	visibility, err := s.deps.Authorization.Visibility(ctx, invocation, model.ActionInvitationManage)
+	visibility, err := s.visibility(ctx, invocation, model.ActionInvitationManage)
 	if err != nil {
 		return InvitationAdministrationView{}, err
 	}
-	current, err := s.deps.Store.GetForAdministration(ctx, id, visibility)
+	current, err := s.invitations.GetForAdministration(ctx, id, visibility)
 	if err != nil {
 		return InvitationAdministrationView{}, invitationStoreErrors.Translate(err)
 	}
-	if !s.deps.Mail.Enabled() {
+	if !s.mail.Enabled() {
 		return InvitationAdministrationView{}, apperror.New("invitation.mail_unavailable")
 	}
 	lifetime, err := invitationLifetime(command.ExpiresInDays, replacedInvitationLifetime(current.Invitation))
@@ -47,11 +49,11 @@ func (s *invitationService) ReplaceInvitation(ctx context.Context, invocation in
 	if err != nil {
 		return InvitationAdministrationView{}, err
 	}
-	actionURL, err := identity.AccountCredentialLink(s.deps.PublicURL, "/join", rawClaim)
+	actionURL, err := identity.AccountCredentialLink(s.publicURL, "/join", rawClaim)
 	if err != nil {
 		return InvitationAdministrationView{}, apperror.New("invitation.unavailable").Wrap(err)
 	}
-	prepared, err := s.deps.Mail.PrepareInvitation(replacement, actionURL)
+	prepared, err := s.mail.PrepareInvitation(replacement, actionURL)
 	if err != nil {
 		return InvitationAdministrationView{}, apperror.New("invitation.mail_unavailable").Wrap(err)
 	}
@@ -61,12 +63,12 @@ func (s *invitationService) ReplaceInvitation(ctx context.Context, invocation in
 	replacementAttempt := access.Mutation{Invocation: invocation, Action: model.ActionInvitationCreate,
 		Resource: invitationResource(replacement), ScopeType: replacement.ScopeType, ScopeID: replacement.ScopeID,
 		Operation: "replacement_issue", Value: replacement.Auditable()}
-	result, err := access.RunAudited(ctx, s.deps.Audit, currentAttempt, s.deps.Now,
+	result, err := access.RunAudited(ctx, s.auditor, currentAttempt, s.now,
 		func(ctx context.Context, currentReference access.MutationReference) (*store.InvitationAdministrationRecord, error) {
-			return access.RunAudited(ctx, s.deps.Audit, replacementAttempt,
+			return access.RunAudited(ctx, s.auditor, replacementAttempt,
 				func() time.Time { return model.TimeUTC(currentReference.MutationAt) },
 				func(ctx context.Context, replacementReference access.MutationReference) (*store.InvitationAdministrationRecord, error) {
-					return s.deps.Store.Replace(ctx, &store.InvitationReplacement{CurrentID: id, ExpectedRevision: command.ExpectedRevision,
+					return s.invitations.Replace(ctx, &store.InvitationReplacement{CurrentID: id, ExpectedRevision: command.ExpectedRevision,
 						Replacement: replacement, Lifetime: lifetime, Occurrence: prepared.Occurrence,
 						Delivery: prepared.Delivery, DeliveryJob: prepared.Job, ActorUserID: invocation.Principal().UserID,
 						CurrentAuditEventID: currentReference.ID, ReplacementAuditEventID: replacementReference.ID,
@@ -79,13 +81,13 @@ func (s *invitationService) ReplaceInvitation(ctx context.Context, invocation in
 	return invitationAdministrationView(result), nil
 }
 
-func (s *invitationService) prepareReplacement(ctx context.Context, invocation invocation.Invocation, command ReplaceInvitationCommand, lifetime time.Duration) (*model.Invitation, string, error) {
+func (s *Service) prepareReplacement(ctx context.Context, invocation invocation.Invocation, command ReplaceInvitationCommand, lifetime time.Duration) (*model.Invitation, string, error) {
 	purpose := model.InvitationPurpose(strings.TrimSpace(command.Purpose))
 	if !purpose.IsValid() {
 		return nil, "", apperror.New("request.invalid").WithField("field", "purpose")
 	}
-	at := model.TimeUTC(s.deps.Now())
-	rawClaim := s.deps.NewClaim()
+	at := model.TimeUTC(s.now())
+	rawClaim := s.newToken()
 	if !model.IsValidCredentialToken(rawClaim) {
 		return nil, "", apperror.New("invitation.unavailable")
 	}
@@ -124,22 +126,22 @@ type invitationReplacementDraft struct {
 }
 
 // prepareStudentClassReplacement authorizes the Class target and builds the replacement Student Class Invitation.
-func (s *invitationService) prepareStudentClassReplacement(ctx context.Context, invocation invocation.Invocation, command ReplaceInvitationCommand, draft invitationReplacementDraft) (*model.Invitation, error) {
+func (s *Service) prepareStudentClassReplacement(ctx context.Context, invocation invocation.Invocation, command ReplaceInvitationCommand, draft invitationReplacementDraft) (*model.Invitation, error) {
 	classID, err := model.ParseClassID(strings.TrimSpace(command.ClassID.String()))
 	if err != nil {
 		return nil, apperror.New("request.invalid").WithField("field", "class_id").Wrap(err)
 	}
 	resource := model.Resource{Type: model.ResourceClass, ID: classID.String()}
 	for _, action := range []model.Action{model.ActionInvitationCreate, model.ActionClassMembersManage} {
-		if err = s.deps.Authorization.Authorize(ctx, invocation, action, resource); err != nil {
+		if err = s.authorize(ctx, invocation, action, resource); err != nil {
 			return nil, err
 		}
 	}
-	class, err := s.deps.Classes.Get(ctx, classID)
+	class, err := s.classes.Get(ctx, classID)
 	if err != nil || class.ID != classID {
 		return nil, invitationStoreErrors.Translate(err)
 	}
-	period, err := s.deps.Periods.Get(ctx, class.AcademicPeriodID)
+	period, err := s.periods.Get(ctx, class.AcademicPeriodID)
 	if err != nil || period.ID != class.AcademicPeriodID {
 		return nil, invitationStoreErrors.Translate(err)
 	}
@@ -162,7 +164,7 @@ func (s *invitationService) prepareStudentClassReplacement(ctx context.Context, 
 
 // prepareAcademicUnitReplacement authorizes the Academic Unit target and delegated Role and builds the replacement
 // Teacher Academic Unit or Academic Unit Role Invitation.
-func (s *invitationService) prepareAcademicUnitReplacement(ctx context.Context, invocation invocation.Invocation, command ReplaceInvitationCommand, draft invitationReplacementDraft) (*model.Invitation, error) {
+func (s *Service) prepareAcademicUnitReplacement(ctx context.Context, invocation invocation.Invocation, command ReplaceInvitationCommand, draft invitationReplacementDraft) (*model.Invitation, error) {
 	purpose := draft.purpose
 	unitID, err := model.ParseAcademicUnitID(strings.TrimSpace(command.AcademicUnitID.String()))
 	if err != nil {
@@ -178,22 +180,22 @@ func (s *invitationService) prepareAcademicUnitReplacement(ctx context.Context, 
 		required[1] = model.ActionRoleBindingManage
 	}
 	for _, action := range required {
-		if err = s.deps.Authorization.Authorize(ctx, invocation, action, resource); err != nil {
+		if err = s.authorize(ctx, invocation, action, resource); err != nil {
 			return nil, err
 		}
 	}
-	unit, err := s.deps.AcademicUnits.Get(ctx, unitID)
+	unit, err := s.academicUnits.Get(ctx, unitID)
 	if err != nil || unit.ID != unitID || unit.IsArchived() {
 		return nil, invitationStoreErrors.Translate(err)
 	}
-	role, err := s.deps.Roles.Get(ctx, roleID)
+	role, err := s.roles.Get(ctx, roleID)
 	if err != nil || role.ID != roleID || role.IsArchived() {
 		return nil, invitationStoreErrors.Translate(err)
 	}
 	if err = validateInvitationDelegableRole(role, model.RoleScopeAcademicUnit); err != nil {
 		return nil, err
 	}
-	if err = s.deps.Authorization.AuthorizeActionDelegation(ctx, invocation, role.Permissions, model.RoleScopeAcademicUnit, unitID.String()); err != nil {
+	if err = s.authorizeActionDelegation(ctx, invocation, role.Permissions, model.RoleScopeAcademicUnit, unitID.String()); err != nil {
 		return nil, err
 	}
 	startsAt := draft.startsAt
@@ -225,8 +227,8 @@ func (s *invitationService) prepareAcademicUnitReplacement(ctx context.Context, 
 
 // prepareInstitutionRoleReplacement requires recent strong authentication, authorizes the Institution target and
 // delegated Role, and builds the replacement Institution Role Invitation.
-func (s *invitationService) prepareInstitutionRoleReplacement(ctx context.Context, invocation invocation.Invocation, command ReplaceInvitationCommand, draft invitationReplacementDraft) (*model.Invitation, error) {
-	if err := identity.RequireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
+func (s *Service) prepareInstitutionRoleReplacement(ctx context.Context, invocation invocation.Invocation, command ReplaceInvitationCommand, draft invitationReplacementDraft) (*model.Invitation, error) {
+	if err := identity.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 		return nil, err
 	}
 	institutionID, err := model.ParseInstitutionID(strings.TrimSpace(command.InstitutionID.String()))
@@ -239,18 +241,18 @@ func (s *invitationService) prepareInstitutionRoleReplacement(ctx context.Contex
 	}
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institutionID.String()}
 	for _, action := range []model.Action{model.ActionInvitationCreate, model.ActionRoleBindingManage} {
-		if err = s.deps.Authorization.Authorize(ctx, invocation, action, resource); err != nil {
+		if err = s.authorize(ctx, invocation, action, resource); err != nil {
 			return nil, err
 		}
 	}
-	role, err := s.deps.Roles.Get(ctx, roleID)
+	role, err := s.roles.Get(ctx, roleID)
 	if err != nil || role.ID != roleID || role.IsArchived() {
 		return nil, invitationStoreErrors.Translate(err)
 	}
 	if err = validateInvitationDelegableRole(role, model.RoleScopeInstitution); err != nil {
 		return nil, err
 	}
-	if err = s.deps.Authorization.AuthorizeActionDelegation(ctx, invocation, role.Permissions, model.RoleScopeInstitution, institutionID.String()); err != nil {
+	if err = s.authorizeActionDelegation(ctx, invocation, role.Permissions, model.RoleScopeInstitution, institutionID.String()); err != nil {
 		return nil, err
 	}
 	startsAt := draft.startsAt

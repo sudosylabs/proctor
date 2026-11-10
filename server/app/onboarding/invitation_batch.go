@@ -24,7 +24,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-func (s *invitationService) RunInvitationBatch(ctx context.Context, invocation invocation.Invocation, command RunInvitationBatchCommand) (InvitationBatchResult, error) {
+// RunInvitationBatch runs one Invitation operation over up to
+// MaximumInvitationBatchItems rows after one batch authorization at the scope.
+func (s *Service) RunInvitationBatch(ctx context.Context, invocation invocation.Invocation, command RunInvitationBatchCommand) (InvitationBatchResult, error) {
 	command.ScopeID = strings.TrimSpace(command.ScopeID)
 	if !command.Operation.IsValid() || !model.IsValidOpaqueID(command.ScopeID) || command.IdempotencyKey == "" ||
 		len(command.Items) < 1 || len(command.Items) > MaximumInvitationBatchItems || !invitationBatchScopeMatchesOperation(command.Operation, command.ScopeType) {
@@ -34,11 +36,11 @@ func (s *invitationService) RunInvitationBatch(ctx context.Context, invocation i
 	if err != nil {
 		return InvitationBatchResult{}, err
 	}
-	if err = s.deps.Authorization.Authorize(ctx, invocation, model.ActionOnboardingBatchManage, resource); err != nil {
+	if err = s.authorize(ctx, invocation, model.ActionOnboardingBatchManage, resource); err != nil {
 		return InvitationBatchResult{}, err
 	}
 	if command.Operation == InvitationBatchAcademicUnitRoleCreate || command.Operation == InvitationBatchInstitutionRoleCreate {
-		if err = identity.RequireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
+		if err = identity.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 			return InvitationBatchResult{}, err
 		}
 	}
@@ -133,7 +135,7 @@ func invitationBatchScopeMatchesOperation(operation InvitationBatchOperation, sc
 	}
 }
 
-func (s *invitationService) invitationBatchAuthorizationResource(ctx context.Context, scopeType model.RoleScopeType, scopeID string) (model.Resource, error) {
+func (s *Service) invitationBatchAuthorizationResource(ctx context.Context, scopeType model.RoleScopeType, scopeID string) (model.Resource, error) {
 	switch scopeType {
 	case model.RoleScopeInstitution:
 		return model.Resource{Type: model.ResourceInstitution, ID: scopeID}, nil
@@ -160,15 +162,15 @@ func invitationBatchLifecycleOperation(operation InvitationBatchOperation) strin
 	return ""
 }
 
-func (s *invitationService) recordInvitationCommandDuplicate(ctx context.Context, idempotency *store.CommandIdempotency, attempt access.Mutation, input store.InvitationBatchDuplicate) (*store.InvitationBatchCommandResult, error) {
-	return access.RunAudited(ctx, s.deps.Audit, attempt, s.deps.Now,
+func (s *Service) recordInvitationCommandDuplicate(ctx context.Context, idempotency *store.CommandIdempotency, attempt access.Mutation, input store.InvitationBatchDuplicate) (*store.InvitationBatchCommandResult, error) {
+	return access.RunAudited(ctx, s.auditor, attempt, s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.InvitationBatchCommandResult, error) {
 			input.AuditEventID, input.AuditAt = reference.ID, reference.MutationAt
-			return s.deps.Store.RecordBatchDuplicate(ctx, &input, idempotency)
+			return s.invitations.RecordBatchDuplicate(ctx, &input, idempotency)
 		}, invitationStoreErrors.Translate)
 }
 
-func (s *invitationService) recordDuplicateInvitationView(ctx context.Context, idempotency *store.CommandIdempotency, attempt access.Mutation, input store.InvitationBatchDuplicate, canonicalKey string) (InvitationView, error) {
+func (s *Service) recordDuplicateInvitationView(ctx context.Context, idempotency *store.CommandIdempotency, attempt access.Mutation, input store.InvitationBatchDuplicate, canonicalKey string) (InvitationView, error) {
 	if idempotency == nil || canonicalKey == "" {
 		return InvitationView{}, apperror.New("request.invalid")
 	}
@@ -188,20 +190,20 @@ func (s *invitationService) recordDuplicateInvitationView(ctx context.Context, i
 	return InvitationView{ID: result.InvitationID, Replayed: true}, nil
 }
 
-func (s *invitationService) recoverInvitationIssueOutcome(ctx context.Context, idempotency *store.CommandIdempotency, attempt access.Mutation) (InvitationView, bool, error) {
+func (s *Service) recoverInvitationIssueOutcome(ctx context.Context, idempotency *store.CommandIdempotency, attempt access.Mutation) (InvitationView, bool, error) {
 	if idempotency == nil {
 		return InvitationView{}, false, nil
 	}
-	found, err := s.deps.Store.FindCommandOutcome(ctx, idempotency)
+	found, err := s.invitations.FindCommandOutcome(ctx, idempotency)
 	if store.IsNotFound(err) {
 		return InvitationView{}, false, nil
 	}
 	if err == nil && found.Invitation != nil {
 		attempt.Value = found.Invitation.Auditable()
 	}
-	replayed, err := access.RunAudited(ctx, s.deps.Audit, attempt, s.deps.Now,
+	replayed, err := access.RunAudited(ctx, s.auditor, attempt, s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.InvitationCommandResult, error) {
-			value, replayErr := s.deps.Store.ReplayIssue(ctx, &store.InvitationReplay{AuditEventID: reference.ID, AuditAt: reference.MutationAt}, idempotency)
+			value, replayErr := s.invitations.ReplayIssue(ctx, &store.InvitationReplay{AuditEventID: reference.ID, AuditAt: reference.MutationAt}, idempotency)
 			if replayErr == nil && value.Duplicate {
 				return nil, apperror.New("onboarding_batch.duplicate")
 			}
@@ -215,20 +217,20 @@ func (s *invitationService) recoverInvitationIssueOutcome(ctx context.Context, i
 	return view, true, nil
 }
 
-func (s *invitationService) recoverInvitationAdministrationOutcome(ctx context.Context, idempotency *store.CommandIdempotency, attempt access.Mutation) (InvitationAdministrationView, bool, error) {
+func (s *Service) recoverInvitationAdministrationOutcome(ctx context.Context, idempotency *store.CommandIdempotency, attempt access.Mutation) (InvitationAdministrationView, bool, error) {
 	if idempotency == nil {
 		return InvitationAdministrationView{}, false, nil
 	}
-	found, err := s.deps.Store.FindCommandOutcome(ctx, idempotency)
+	found, err := s.invitations.FindCommandOutcome(ctx, idempotency)
 	if store.IsNotFound(err) {
 		return InvitationAdministrationView{}, false, nil
 	}
 	if err == nil && found.Invitation != nil {
 		attempt.Value = found.Invitation.Auditable()
 	}
-	replayed, err := access.RunAudited(ctx, s.deps.Audit, attempt, s.deps.Now,
+	replayed, err := access.RunAudited(ctx, s.auditor, attempt, s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.InvitationAdministrationCommandResult, error) {
-			value, replayErr := s.deps.Store.ReplayAdministration(ctx, &store.InvitationReplay{AuditEventID: reference.ID, AuditAt: reference.MutationAt}, idempotency)
+			value, replayErr := s.invitations.ReplayAdministration(ctx, &store.InvitationReplay{AuditEventID: reference.ID, AuditAt: reference.MutationAt}, idempotency)
 			if replayErr == nil && value.Duplicate {
 				return nil, apperror.New("onboarding_batch.duplicate")
 			}
@@ -299,7 +301,7 @@ func invitationBatchDuplicateKey(operation InvitationBatchOperation, item Invita
 	}
 }
 
-func (s *invitationService) runInvitationBatchItem(ctx context.Context, invocation invocation.Invocation, batch RunInvitationBatchCommand, item InvitationBatchItemCommand, itemKey string, duplicate bool, canonicalKey string, canonicalFingerprint [sha256.Size]byte) (model.InvitationID, InvitationBatchItemStatus, error) {
+func (s *Service) runInvitationBatchItem(ctx context.Context, invocation invocation.Invocation, batch RunInvitationBatchCommand, item InvitationBatchItemCommand, itemKey string, duplicate bool, canonicalKey string, canonicalFingerprint [sha256.Size]byte) (model.InvitationID, InvitationBatchItemStatus, error) {
 	switch batch.Operation {
 	case InvitationBatchStudentClassCreate:
 		view, err := s.IssueStudentClassInvitation(ctx, invocation, IssueStudentClassInvitationCommand{TargetEmail: item.TargetEmail, ClassID: model.ClassID(batch.ScopeID),

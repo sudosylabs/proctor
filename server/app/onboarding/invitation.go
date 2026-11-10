@@ -14,11 +14,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -314,138 +311,6 @@ func (v InvitationView) String() string {
 	return fmt.Sprintf("Invitation{%s %s %s %s}", v.ID, v.Purpose, v.State, v.ClassID)
 }
 
-type invitationClassReader interface {
-	Get(context.Context, model.ClassID) (*model.Class, error)
-}
-type invitationPeriodReader interface {
-	Get(context.Context, model.AcademicPeriodID) (*model.AcademicPeriod, error)
-}
-type invitationAcademicUnitReader interface {
-	Get(context.Context, model.AcademicUnitID) (*model.AcademicUnit, error)
-}
-type invitationRoleReader interface {
-	Get(context.Context, model.RoleID) (*model.Role, error)
-}
-type invitationAuthorizer interface {
-	resourceAuthorizer
-	AuthorizeActionDelegation(context.Context, invocation.Invocation, []string, model.RoleScopeType, string) error
-	Visibility(context.Context, invocation.Invocation, model.Action) (store.InvitationVisibilityScope, error)
-}
-type invitationPasswordHasher interface {
-	Hash(context.Context, string) (string, error)
-}
-type invitationAttemptLimiter interface {
-	Check(context.Context, string, string) error
-}
-type invitationMailPreparer interface {
-	Enabled() bool
-	PrepareInvitation(*model.Invitation, string) (*store.PreparedMail, error)
-	PrepareInvitationResend(*model.Invitation, string, model.UserID, time.Time) (*store.PreparedMail, error)
-	PrepareInvitationRevocation(*model.Invitation, model.UserID, time.Time) (*store.PreparedMail, error)
-	PrepareInvitationAccepted(mail.NoticePreparation) (*store.PreparedMail, error)
-}
-
-// invitationServiceDependencies are the collaborators of invitationService;
-// newInvitationService validates them once and invitationService keeps them in deps.
-type invitationServiceDependencies struct {
-	Store                   store.InvitationStore
-	Classes                 invitationClassReader
-	Periods                 invitationPeriodReader
-	AcademicUnits           invitationAcademicUnitReader
-	Roles                   invitationRoleReader
-	Authorization           invitationAuthorizer
-	Mail                    invitationMailPreparer
-	Hasher                  invitationPasswordHasher
-	Audit                   access.MutationAuditor
-	Attempts                invitationAttemptLimiter
-	MembershipEffects       MembershipEffects
-	NodeID                  string
-	PublicURL               string
-	RecentAuthenticationTTL time.Duration
-	NewClaim                func() string
-	Now                     func() time.Time
-}
-
-type invitationService struct {
-	deps invitationServiceDependencies
-}
-
-type invitationAuthorizationAdapter struct{ authorization *access.Authorizer }
-
-func (a invitationAuthorizationAdapter) Authorize(ctx context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource) error {
-	if a.authorization == nil {
-		return apperror.New("invitation.unavailable")
-	}
-	return a.authorization.Authorize(ctx, invocation, action, resource)
-}
-
-func (a invitationAuthorizationAdapter) AuthorizeActionDelegation(ctx context.Context, invocation invocation.Invocation, actions []string, scopeType model.RoleScopeType, scopeID string) error {
-	if a.authorization == nil {
-		return apperror.New("invitation.unavailable")
-	}
-	allowed, err := a.authorization.CanDelegateActionsAtScope(ctx, invocation.Principal(), actions, scopeType, scopeID)
-	if err != nil {
-		return err
-	}
-	if !allowed {
-		return access.DeniedError()
-	}
-	return nil
-}
-
-// Visibility resolves and records the caller's institution-family scopes for
-// invitation.view, invitation.manage, onboarding_batch.view, or
-// academic_progression.manage, which share one scope shape: the Institution,
-// Academic Unit subtrees, and Classes. Progression authority is a Class
-// action, so its scopes are resolved for Class resources.
-func (a invitationAuthorizationAdapter) Visibility(ctx context.Context, invocation invocation.Invocation, action model.Action) (store.InvitationVisibilityScope, error) {
-	resourceType := model.ResourceInstitution
-	switch action {
-	case model.ActionInvitationView, model.ActionInvitationManage, model.ActionOnboardingBatchView:
-	case model.ActionAcademicProgressionManage:
-		resourceType = model.ResourceClass
-	default:
-		return store.InvitationVisibilityScope{}, apperror.New("invitation.unavailable")
-	}
-	if a.authorization == nil {
-		return store.InvitationVisibilityScope{}, apperror.New("invitation.unavailable")
-	}
-	constraint, err := a.authorization.GrantedScopes(ctx, invocation.Principal(), action, resourceType)
-	if err != nil {
-		return store.InvitationVisibilityScope{}, err
-	}
-	institution, err := a.authorization.Institution(ctx)
-	if err != nil {
-		return store.InvitationVisibilityScope{}, invitationStoreErrors.Translate(err)
-	}
-	allowed := constraint.InstitutionWide || len(constraint.AcademicUnitRootIDs) > 0 || len(constraint.ClassIDs) > 0
-	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
-	scopeType, scopeID := model.RoleScopeInstitution, institution.ID.String()
-	if len(constraint.AcademicUnitRootIDs) > 0 {
-		resource = model.Resource{Type: model.ResourceAcademicUnit, ID: constraint.AcademicUnitRootIDs[0].String()}
-		scopeType, scopeID = model.RoleScopeAcademicUnit, resource.ID
-	} else if len(constraint.ClassIDs) > 0 {
-		resource = model.Resource{Type: model.ResourceClass, ID: constraint.ClassIDs[0].String()}
-		scopeType, scopeID = model.RoleScopeClass, resource.ID
-	}
-	if err = a.authorization.RecordAuthorizationDecision(ctx, invocation.Principal(), action, resource, scopeType, scopeID, invocation.RequestMetadata(), allowed); err != nil {
-		return store.InvitationVisibilityScope{}, err
-	}
-	if !allowed {
-		return store.InvitationVisibilityScope{}, access.DeniedError()
-	}
-	return store.InvitationVisibilityScope{InstitutionWide: constraint.InstitutionWide,
-		AcademicUnitRootIDs: append([]model.AcademicUnitID(nil), constraint.AcademicUnitRootIDs...), ClassIDs: append([]model.ClassID(nil), constraint.ClassIDs...)}, nil
-}
-
-func newInvitationService(deps invitationServiceDependencies) (*invitationService, error) {
-	if deps.Store == nil || deps.Classes == nil || deps.Periods == nil || deps.AcademicUnits == nil || deps.Roles == nil || deps.Authorization == nil || deps.Mail == nil || deps.Hasher == nil || deps.Audit == nil ||
-		deps.Attempts == nil || deps.MembershipEffects == nil || deps.NodeID == "" || deps.PublicURL == "" || deps.RecentAuthenticationTTL <= 0 || deps.NewClaim == nil || deps.Now == nil {
-		return nil, errors.New("invitation service dependencies are invalid")
-	}
-	return &invitationService{deps: deps}, nil
-}
-
 func invitationResource(invitation *model.Invitation) model.Resource {
 	if invitation == nil {
 		return model.Resource{}
@@ -491,20 +356,19 @@ var invitationStoreErrors = apperror.StoreTable{
 
 func invalidInvitationError(err error) error { return apperror.New("invitation.invalid").Wrap(err) }
 
-type invitationAttemptAccounting struct {
-	attempts *identity.AttemptAccounting
-	policy   identity.LoginRateLimitPolicy
-}
-
 const invitationAcceptanceAttemptQualifier = "claim-accept"
 
-func (a invitationAttemptAccounting) Check(ctx context.Context, claimIdentity, source string) error {
-	if a.attempts == nil || a.policy.Window <= 0 || a.policy.MaximumAttempts <= 0 || a.policy.MaximumSourceAttempts <= 0 {
+// checkInvitationAttempt counts one Invitation claim attempt against the
+// claim's identity and the caller's source, refusing once either limit is
+// exceeded.
+func (s *Service) checkInvitationAttempt(ctx context.Context, claimIdentity, source string) error {
+	policy := s.rateLimit
+	if s.attempts == nil || policy.Window <= 0 || policy.MaximumAttempts <= 0 || policy.MaximumSourceAttempts <= 0 {
 		return identity.RateLimitUnavailableAppError(errors.New("invitation attempt accounting is unavailable"))
 	}
-	limited, err := a.attempts.Account(ctx, identity.AttemptPurposeInvitation, invitationAcceptanceAttemptQualifier, a.policy.Window,
-		identity.IdentityAttemptLimit(claimIdentity, a.policy.MaximumAttempts),
-		identity.SourceAttemptLimit(source, a.policy.MaximumSourceAttempts),
+	limited, err := s.attempts.Account(ctx, identity.AttemptPurposeInvitation, invitationAcceptanceAttemptQualifier, policy.Window,
+		identity.IdentityAttemptLimit(claimIdentity, policy.MaximumAttempts),
+		identity.SourceAttemptLimit(source, policy.MaximumSourceAttempts),
 	)
 	if err != nil {
 		return identity.RateLimitUnavailableAppError(err)

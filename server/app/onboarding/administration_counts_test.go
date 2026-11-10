@@ -44,12 +44,15 @@ func (f *openImportCountStoreFake) CountOpenOnboardingImports(_ context.Context,
 func TestOpenOnboardingImportCountUsesTheBatchViewScopes(t *testing.T) {
 	t.Parallel()
 	imports := &openImportCountStoreFake{}
-	authorizer := &invitationAuthorizerFake{}
-	service := &onboardingImportService{deps: onboardingImportServiceDependencies{Imports: imports, Authorization: authorizer}}
+	authorizer := &authorizerFake{}
+	service := &Service{imports: imports, authorizer: authorizer}
 	total, err := service.countOpenOnboardingImports(context.Background(), administrationCountsSession(), administrationCountMaximum)
 	require.NoError(t, err)
 	require.Equal(t, 4, total)
 	require.Equal(t, []model.Action{model.ActionOnboardingBatchView}, authorizer.actions)
+	require.Len(t, authorizer.decisions, 1, "the count records one scoped decision")
+	require.Equal(t, model.RoleScopeInstitution, authorizer.decisions[0].scopeType)
+	require.True(t, authorizer.decisions[0].allowed)
 	require.Equal(t, store.OnboardingImportVisibilityScope{InstitutionWide: true}, imports.visibility, "the import scopes are the onboarding_batch.view scopes")
 	require.Equal(t, administrationCountMaximum, imports.maximum)
 
@@ -68,8 +71,8 @@ func TestInvitationListCountsTheFirstPageAndPendingSummary(t *testing.T) {
 		ScopeID: classID.String(), ClaimHash: model.HashInvitationClaim(model.NewCredentialToken()), IssuedAt: now})
 	require.NoError(t, err)
 	persistence := &invitationStoreFake{invitation: invitation, countTotal: 9}
-	authorizer := &invitationAuthorizerFake{}
-	service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{}, authorizer, &invitationMailPreparerFake{}, now.Add(time.Hour))
+	authorizer := &authorizerFake{}
+	service := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{}, authorizer, &mailFake{}, now.Add(time.Hour))
 	caller := invocation.New(model.Principal{UserID: model.NewUserID()}, model.RequestMetadata{})
 
 	first, err := service.ListInvitations(context.Background(), caller, ListInvitationsQuery{State: model.InvitationPending, Limit: 25})

@@ -23,17 +23,12 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type academicAdministrationBatchAuthorizerFake struct {
-	resource model.Resource
-	err      error
-}
-
-func (f *academicAdministrationBatchAuthorizerFake) Authorize(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource) error {
-	if action != model.ActionOnboardingBatchManage {
-		return apperror.New("authorization.denied")
-	}
-	f.resource = resource
-	return f.err
+// newBatchServiceForTest builds a Service whose batch rows run through
+// commands, which stands in for the academic, administration and identity
+// Services alike.
+func newBatchServiceForTest(commands *academicAdministrationBatchCommandsFake, authorizer resourceAuthorizer, outcomes store.CommandOutcomeStore, now time.Time) *Service {
+	return &Service{academic: commands, administration: commands, identity: commands, authorizer: authorizer, commandOutcomes: outcomes,
+		now: func() time.Time { return now }, recentAuthenticationTTL: 15 * time.Minute}
 }
 
 type academicAdministrationBatchCommandsFake struct {
@@ -43,6 +38,7 @@ type academicAdministrationBatchCommandsFake struct {
 }
 
 type academicAdministrationOutcomeLookupFake struct {
+	store.CommandOutcomeStore
 	found   bool
 	command *store.CommandIdempotency
 }
@@ -90,7 +86,7 @@ func TestAcademicAdministrationBatchRetainsStableSemanticDuplicateDisposition(t 
 		ClientType: model.SessionClientWeb, AuthenticatedAt: now}, model.RequestMetadata{})
 
 	commands := &academicAdministrationBatchCommandsFake{}
-	service := newAcademicAdministrationBatchService(academicAdministrationBatchServiceDependencies{Commands: commands, Authorization: &academicAdministrationBatchAuthorizerFake{}, Outcomes: nil, Now: func() time.Time { return now }, RecentTTL: 15 * time.Minute})
+	service := newBatchServiceForTest(commands, &authorizerFake{}, nil, now)
 	result, err := service.RunAcademicAdministrationBatch(context.Background(), invocation, RunAcademicAdministrationBatchCommand{
 		Operation: AcademicAdministrationClassEnroll, ScopeType: model.RoleScopeClass, ScopeID: classID,
 		IdempotencyKey: "batch", Items: []AcademicAdministrationBatchItemCommand{
@@ -110,7 +106,7 @@ func TestAcademicAdministrationBatchLooksUpRetainedOutcomeBeforeDispatch(t *test
 	now := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
 	commands := &academicAdministrationBatchCommandsFake{}
 	lookup := &academicAdministrationOutcomeLookupFake{found: true}
-	service := newAcademicAdministrationBatchService(academicAdministrationBatchServiceDependencies{Commands: commands, Authorization: &academicAdministrationBatchAuthorizerFake{}, Outcomes: lookup, Now: func() time.Time { return now }, RecentTTL: 15 * time.Minute})
+	service := newBatchServiceForTest(commands, &authorizerFake{}, lookup, now)
 	invocation := invocation.New(model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
@@ -129,7 +125,7 @@ func TestAcademicAdministrationBatchLooksUpRetainedOutcomeBeforeDispatch(t *test
 func TestAcademicAdministrationBatchPreservesDistinctEffectiveHistories(t *testing.T) {
 	now := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
 	commands := &academicAdministrationBatchCommandsFake{}
-	service := newAcademicAdministrationBatchService(academicAdministrationBatchServiceDependencies{Commands: commands, Authorization: &academicAdministrationBatchAuthorizerFake{}, Outcomes: nil, Now: func() time.Time { return now }, RecentTTL: 15 * time.Minute})
+	service := newBatchServiceForTest(commands, &authorizerFake{}, nil, now)
 	invocation := invocation.New(model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
@@ -167,6 +163,10 @@ func (f *academicAdministrationBatchCommandsFake) SetUserEnabled(_ context.Conte
 	}
 	return &model.User{ID: model.UserID(command.ID)}, nil
 }
+func (*academicAdministrationBatchCommandsFake) ValidatePrincipal(context.Context, model.Principal) error {
+	return nil
+}
+
 func (f *academicAdministrationBatchCommandsFake) RevokeUserSessions(context.Context, invocation.Invocation, identity.RevokeUserSessionsCommand) error {
 	f.operations = append(f.operations, AcademicAdministrationUserSessionsRevoke)
 	return nil
@@ -175,8 +175,8 @@ func (f *academicAdministrationBatchCommandsFake) RevokeUserSessions(context.Con
 func TestAcademicAdministrationBatchRunsClosedRowsThroughOrdinaryCommands(t *testing.T) {
 	now := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
 	commands := &academicAdministrationBatchCommandsFake{}
-	authorizer := &academicAdministrationBatchAuthorizerFake{}
-	service := newAcademicAdministrationBatchService(academicAdministrationBatchServiceDependencies{Commands: commands, Authorization: authorizer, Outcomes: nil, Now: func() time.Time { return now }, RecentTTL: 15 * time.Minute})
+	authorizer := &authorizerFake{}
+	service := newBatchServiceForTest(commands, authorizer, nil, now)
 	classID := model.NewClassID().String()
 	previousID := model.NewClassMemberID().String()
 	userID := model.NewUserID().String()
@@ -194,6 +194,7 @@ func TestAcademicAdministrationBatchRunsClosedRowsThroughOrdinaryCommands(t *tes
 		},
 	})
 	require.NoError(t, err)
+	require.Equal(t, []model.Action{model.ActionOnboardingBatchManage}, authorizer.actions)
 	require.Equal(t, model.Resource{Type: model.ResourceClass, ID: classID}, authorizer.resource)
 	require.Equal(t, 1, result.Succeeded, "Run() = %#v commands", result)
 	require.Equal(t, 2, result.Failed, "Run() = %#v commands", result)
@@ -235,7 +236,7 @@ func TestAcademicAdministrationBatchDispatchesEveryClosedOperation(t *testing.T)
 	for _, testCase := range cases {
 		t.Run(string(testCase.operation), func(t *testing.T) {
 			commands := &academicAdministrationBatchCommandsFake{}
-			service := newAcademicAdministrationBatchService(academicAdministrationBatchServiceDependencies{Commands: commands, Authorization: &academicAdministrationBatchAuthorizerFake{}, Outcomes: nil, Now: func() time.Time { return now }, RecentTTL: 15 * time.Minute})
+			service := newBatchServiceForTest(commands, &authorizerFake{}, nil, now)
 			testCase.item.IdempotencyKey = "row"
 			result, err := service.RunAcademicAdministrationBatch(context.Background(), invocation, RunAcademicAdministrationBatchCommand{Operation: testCase.operation,
 				ScopeType: testCase.scopeType, ScopeID: model.NewID(), IdempotencyKey: "batch", Items: []AcademicAdministrationBatchItemCommand{testCase.item}})
@@ -250,7 +251,7 @@ func TestAcademicAdministrationBatchDispatchesEveryClosedOperation(t *testing.T)
 func TestAcademicAdministrationSensitiveBatchRequiresStrongRecentInteractiveSession(t *testing.T) {
 	now := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
 	commands := &academicAdministrationBatchCommandsFake{}
-	service := newAcademicAdministrationBatchService(academicAdministrationBatchServiceDependencies{Commands: commands, Authorization: &academicAdministrationBatchAuthorizerFake{}, Outcomes: nil, Now: func() time.Time { return now }, RecentTTL: 15 * time.Minute})
+	service := newBatchServiceForTest(commands, &authorizerFake{}, nil, now)
 	institutionID := model.NewInstitutionID().String()
 	userID := model.NewUserID().String()
 

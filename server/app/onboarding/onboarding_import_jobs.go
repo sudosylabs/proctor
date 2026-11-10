@@ -19,7 +19,7 @@ import (
 
 // onboardingImportJobs translates the onboarding import Job entry points into
 // the port the concrete onboarding import Jobs call.
-type onboardingImportJobs struct{ service *onboardingImportService }
+type onboardingImportJobs struct{ service *Service }
 
 func (a onboardingImportJobs) PreviewProgression(ctx context.Context, id model.OnboardingImportID) (string, error) {
 	err := a.service.previewProgression(ctx, id)
@@ -54,7 +54,7 @@ func (a onboardingImportJobs) Parse(ctx context.Context, id model.OnboardingImpo
 }
 
 func (a onboardingImportJobs) Get(ctx context.Context, id model.OnboardingImportID) (*store.OnboardingImport, error) {
-	return a.service.deps.Imports.GetOnboardingImport(ctx, id)
+	return a.service.imports.GetOnboardingImport(ctx, id)
 }
 
 func (a onboardingImportJobs) Execute(ctx context.Context, id model.OnboardingImportID, after int,

@@ -22,6 +22,7 @@ import (
 )
 
 type browserInvitationTransactionStoreFake struct {
+	store.BrowserAuthenticationStore
 	created         *store.BrowserInvitationTransactionCreation
 	createdAt       time.Time
 	expiresAt       time.Time
@@ -79,20 +80,13 @@ func (s browserInvitationStoreFake) GetByClaimHash(context.Context, string) (*mo
 	return s.invitation, nil
 }
 
-type browserInvitationInstitutionStoreFake struct {
-	store.InstitutionStore
-	institution *model.Institution
-}
-
-func (s browserInvitationInstitutionStoreFake) GetSingleton(context.Context) (*model.Institution, error) {
-	return s.institution, nil
-}
-
-type browserInvitationAttemptLimiterFake struct{ checks int }
-
-func (a *browserInvitationAttemptLimiterFake) Check(context.Context, string, string) error {
-	a.checks++
-	return nil
+// withBrowserStores returns a copy of s that also holds the browser
+// Invitation handoff's Store contracts and proof source.
+func withBrowserStores(s *Service, transactions store.BrowserAuthenticationStore, institution *model.Institution, newProof func() string) *Service {
+	browser := *s
+	browser.browserAuthentication, browser.institutions = transactions, institutionStoreFake{institution: institution}
+	browser.publicURL, browser.newToken = "https://proctor.example.edu", newProof
+	return &browser
 }
 
 func TestBrowserInvitationPreservesPasswordWorkFailures(t *testing.T) {
@@ -102,15 +96,14 @@ func TestBrowserInvitationPreservesPasswordWorkFailures(t *testing.T) {
 				invitation := &model.Invitation{ID: model.NewInvitationID(), Purpose: purpose,
 					ClaimHash: model.HashInvitationClaim(model.NewCredentialToken()), TargetEmail: "invited@example.edu"}
 				persistence := &invitationStoreFake{invitation: invitation}
-				mail := &invitationMailPreparerFake{}
+				mail := &mailFake{}
 				invitations := newInvitationServiceForTest(t, persistence, invitationAcademicUnitStoreFake{}, invitationRoleStoreFake{},
-					&invitationAuthorizerFake{}, mail, time.Now())
-				invitations.deps.Hasher = hasher
+					&authorizerFake{}, mail, time.Now())
+				invitations.hasher = hasher
 				transactions := &browserInvitationTransactionStoreFake{resolveResult: &store.BrowserInvitationResolution{
 					ID: model.NewBrowserAuthenticationTransactionID(), InvitationID: invitation.ID, InvitationClaimHash: invitation.ClaimHash,
 				}}
-				service, err := newBrowserInvitationService(browserInvitationServiceDependencies{Transactions: transactions, Institutions: browserInvitationInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, Invitations: invitations, Issuer: "https://proctor.example.edu", NewProof: model.NewCredentialToken})
-				require.NoError(t, err)
+				service := withBrowserStores(invitations, transactions, &model.Institution{ID: model.NewInstitutionID()}, model.NewCredentialToken)
 				result, err := service.AcceptBrowserInvitation(ctx, invocation.Invocation{}, BrowserInvitationAcceptanceCommand{
 					Handle: model.NewCredentialToken(), BrowserProof: model.NewCredentialToken(), Username: "invited",
 					Password: "correct horse battery staple", Source: "192.0.2.38",
@@ -136,23 +129,22 @@ func TestBrowserInvitationStartReplacesRawClaimWithTwoHashedProofs(t *testing.T)
 		State: model.InvitationPending, ClaimHash: model.HashInvitationClaim(claim),
 		TargetEmail: "student.one@example.edu", ExpiresAt: now.Add(time.Minute),
 	}
-	attempts := &browserInvitationAttemptLimiterFake{}
-	invitationService := &invitationService{deps: invitationServiceDependencies{Store: browserInvitationStoreFake{invitation: invitation}, Classes: invitationClassStoreFake{class: &model.Class{DisplayName: "Biology 101"}}, Attempts: attempts}}
+	attempts := newExpiringAuthenticationAttemptCache(time.Now)
+	invitationService := &Service{invitations: browserInvitationStoreFake{invitation: invitation}, classes: invitationClassStoreFake{class: &model.Class{DisplayName: "Biology 101"}}, attempts: mustAuthenticationAttemptAccounting(t, attempts), rateLimit: testRateLimit}
 	transactions := &browserInvitationTransactionStoreFake{createdAt: now, expiresAt: invitation.ExpiresAt}
 	proofs := []string{handle, proof}
-	service, err := newBrowserInvitationService(browserInvitationServiceDependencies{Transactions: transactions, Institutions: browserInvitationInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, Invitations: invitationService, Issuer: "https://proctor.example.edu", NewProof: func() string {
+	service := withBrowserStores(invitationService, transactions, &model.Institution{ID: model.NewInstitutionID()}, func() string {
 		value := proofs[0]
 		proofs = proofs[1:]
 		return value
-	}})
-	require.NoError(t, err)
+	})
 	started, err := service.StartBrowserInvitation(context.Background(), invocation.Invocation{}, StartBrowserInvitationCommand{Claim: claim, Source: "source"})
 	require.NoError(t, err)
 	require.Equal(t, handle, started.Handle, "start = %#v checks", started)
 	require.Equal(t, proof, started.BrowserProof, "start = %#v checks", started)
 	require.Equal(t, BrowserInvitationRequirementAccount, started.Requirement, "start = %#v checks", started)
 	require.Equal(t, invitation.ExpiresAt.UnixMilli(), started.ExpiresAt, "start = %#v checks", started)
-	require.Equal(t, 1, attempts.checks, "start = %#v checks", started)
+	require.Equal(t, 1, invitationAttemptChecks(attempts), "start = %#v checks", started)
 	require.Equal(t, "student.one@example.edu", started.Email, "start = %#v", started)
 	require.Equal(t, "Biology 101", started.ClassDisplayName, "start = %#v", started)
 	created := transactions.created
@@ -176,23 +168,22 @@ func TestBrowserInvitationStoreNilResultsFailClosed(t *testing.T) {
 		State: model.InvitationPending, ClaimHash: model.HashInvitationClaim(claim),
 		ExpiresAt: now.Add(time.Minute),
 	}
-	invitationService := &invitationService{deps: invitationServiceDependencies{Store: browserInvitationStoreFake{invitation: invitation}, Classes: invitationClassStoreFake{class: &model.Class{DisplayName: "Biology 101"}}, Attempts: &browserInvitationAttemptLimiterFake{}}}
+	invitationService := &Service{invitations: browserInvitationStoreFake{invitation: invitation}, classes: invitationClassStoreFake{class: &model.Class{DisplayName: "Biology 101"}}, attempts: testAttempts(t), rateLimit: testRateLimit}
 	transactions := &browserInvitationTransactionStoreFake{createNil: true}
 	proofs := []string{model.NewCredentialToken(), model.NewCredentialToken()}
-	service, err := newBrowserInvitationService(browserInvitationServiceDependencies{Transactions: transactions, Institutions: browserInvitationInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, Invitations: invitationService, Issuer: "https://proctor.example.edu", NewProof: func() string {
+	service := withBrowserStores(invitationService, transactions, &model.Institution{ID: model.NewInstitutionID()}, func() string {
 		value := proofs[0]
 		proofs = proofs[1:]
 		return value
-	}})
-	require.NoError(t, err)
+	})
 	// An explicit nil result from an otherwise successful dependency must not
 	// become a successful application response or a later nil dereference.
-	_, err = service.StartBrowserInvitation(context.Background(), invocation.Invocation{}, StartBrowserInvitationCommand{Claim: claim, Source: "source"})
+	_, err := service.StartBrowserInvitation(context.Background(), invocation.Invocation{}, StartBrowserInvitationCommand{Claim: claim, Source: "source"})
 	require.True(t, apperror.Is(err, "invitation.unavailable"), "Start error = %v, want invitation.unavailable", err)
 
 	transactions.createNil = false
 	transactions.resolveNil = true
-	_, _, err = service.resolve(context.Background(), model.NewCredentialToken(), model.NewCredentialToken())
+	_, _, err = service.resolveBrowserInvitation(context.Background(), model.NewCredentialToken(), model.NewCredentialToken())
 	require.True(t, apperror.Is(err, "invitation.unavailable"), "resolve error = %v, want invitation.unavailable", err)
 }
 
@@ -204,21 +195,19 @@ func TestBrowserInvitationMalformedStoreFactsFailClosed(t *testing.T) {
 		ID: model.NewInvitationID(), Purpose: model.InvitationPurposeStudentClass,
 		State: model.InvitationPending, ClaimHash: model.HashInvitationClaim(claim), ExpiresAt: now.Add(time.Minute),
 	}
-	invitationService := &invitationService{deps: invitationServiceDependencies{Store: browserInvitationStoreFake{invitation: invitation}, Classes: invitationClassStoreFake{class: &model.Class{DisplayName: "Biology 101"}}, Attempts: &browserInvitationAttemptLimiterFake{}}}
+	invitationService := &Service{invitations: browserInvitationStoreFake{invitation: invitation}, classes: invitationClassStoreFake{class: &model.Class{DisplayName: "Biology 101"}}, attempts: testAttempts(t), rateLimit: testRateLimit}
 	for name, institution := range map[string]*model.Institution{
 		"nil Institution":              nil,
 		"invalid Institution identity": {},
 	} {
 		t.Run(name, func(t *testing.T) {
-			service, err := newBrowserInvitationService(browserInvitationServiceDependencies{Transactions: &browserInvitationTransactionStoreFake{}, Institutions: browserInvitationInstitutionStoreFake{institution: institution}, Invitations: invitationService, Issuer: "https://proctor.example.edu", NewProof: model.NewCredentialToken})
-			require.NoError(t, err)
-			_, err = service.StartBrowserInvitation(context.Background(), invocation.Invocation{}, StartBrowserInvitationCommand{Claim: claim, Source: "source"})
+			service := withBrowserStores(invitationService, &browserInvitationTransactionStoreFake{}, institution, model.NewCredentialToken)
+			_, err := service.StartBrowserInvitation(context.Background(), invocation.Invocation{}, StartBrowserInvitationCommand{Claim: claim, Source: "source"})
 			require.True(t, apperror.Is(err, "invitation.unavailable"), "Start error = %v", err)
 		})
 	}
-	newService := func(transactions *browserInvitationTransactionStoreFake) *browserInvitationService {
-		service, err := newBrowserInvitationService(browserInvitationServiceDependencies{Transactions: transactions, Institutions: browserInvitationInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, Invitations: invitationService, Issuer: "https://proctor.example.edu", NewProof: model.NewCredentialToken})
-		require.NoError(t, err)
+	newService := func(transactions *browserInvitationTransactionStoreFake) *Service {
+		service := withBrowserStores(invitationService, transactions, &model.Institution{ID: model.NewInstitutionID()}, model.NewCredentialToken)
 		return service
 	}
 
@@ -253,7 +242,7 @@ func TestBrowserInvitationMalformedStoreFactsFailClosed(t *testing.T) {
 	} {
 		t.Run("resolve "+name, func(t *testing.T) {
 			service := newService(&browserInvitationTransactionStoreFake{resolveResult: result})
-			_, _, err := service.resolve(context.Background(), model.NewCredentialToken(), model.NewCredentialToken())
+			_, _, err := service.resolveBrowserInvitation(context.Background(), model.NewCredentialToken(), model.NewCredentialToken())
 			require.True(t, apperror.Is(err, "invitation.unavailable"), "resolve error = %v", err)
 		})
 	}
@@ -263,15 +252,14 @@ func TestBrowserInvitationSessionAcceptanceRequiresWebSession(t *testing.T) {
 	t.Parallel()
 	now := model.NowUTC()
 	transactions := &browserInvitationTransactionStoreFake{}
-	service, err := newBrowserInvitationService(browserInvitationServiceDependencies{Transactions: transactions, Institutions: browserInvitationInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, Invitations: &invitationService{deps: invitationServiceDependencies{Store: browserInvitationStoreFake{}, Attempts: &browserInvitationAttemptLimiterFake{}}}, Issuer: "https://proctor.example.edu", NewProof: model.NewCredentialToken})
-	require.NoError(t, err)
+	service := withBrowserStores(&Service{invitations: browserInvitationStoreFake{}, attempts: testAttempts(t), rateLimit: testRateLimit}, transactions, &model.Institution{ID: model.NewInstitutionID()}, model.NewCredentialToken)
 	principal := model.Principal{
 		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientDesktop, AuthenticatedAt: now,
 	}
-	_, err = service.AcceptBrowserInvitationWithSession(
+	_, err := service.AcceptBrowserInvitationWithSession(
 		context.Background(),
 		invocation.New(principal, model.RequestMetadata{}),
 		BrowserInvitationSessionAcceptanceCommand{
@@ -282,7 +270,10 @@ func TestBrowserInvitationSessionAcceptanceRequiresWebSession(t *testing.T) {
 	require.Equal(t, 0, transactions.resolveCalls, "AcceptSession error=%v resolve_calls", err)
 }
 
-type browserInvitationClassFailureFake struct{ err error }
+type browserInvitationClassFailureFake struct {
+	store.ClassStore
+	err error
+}
 
 func (f browserInvitationClassFailureFake) Get(context.Context, model.ClassID) (*model.Class, error) {
 	return nil, f.err
@@ -298,12 +289,9 @@ func TestBrowserInvitationStartNamesOnlyTheStudentClass(t *testing.T) {
 				ClaimHash: model.HashInvitationClaim(claim), TargetEmail: "staff@example.edu", ExpiresAt: now.Add(time.Minute),
 				AcademicUnitID: model.NewAcademicUnitID(), RoleID: model.NewRoleID()}
 			// A Class reader that fails proves non-student purposes never consult it.
-			invitations := &invitationService{deps: invitationServiceDependencies{Store: browserInvitationStoreFake{invitation: invitation},
-				Classes: browserInvitationClassFailureFake{err: errors.New("unexpected Class read")}, Attempts: &browserInvitationAttemptLimiterFake{}}}
-			service, err := newBrowserInvitationService(browserInvitationServiceDependencies{Transactions: &browserInvitationTransactionStoreFake{createdAt: now, expiresAt: invitation.ExpiresAt},
-				Institutions: browserInvitationInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, Invitations: invitations,
-				Issuer: "https://proctor.example.edu", NewProof: model.NewCredentialToken})
-			require.NoError(t, err)
+			invitations := &Service{invitations: browserInvitationStoreFake{invitation: invitation},
+				classes: browserInvitationClassFailureFake{err: errors.New("unexpected Class read")}, attempts: testAttempts(t), rateLimit: testRateLimit}
+			service := withBrowserStores(invitations, &browserInvitationTransactionStoreFake{createdAt: now, expiresAt: invitation.ExpiresAt}, &model.Institution{ID: model.NewInstitutionID()}, model.NewCredentialToken)
 			started, err := service.StartBrowserInvitation(context.Background(), invocation.Invocation{}, StartBrowserInvitationCommand{Claim: claim, Source: "source"})
 			require.NoError(t, err)
 			require.Equal(t, "staff@example.edu", started.Email)
@@ -316,7 +304,7 @@ func TestBrowserInvitationStartClassFailuresCreateNoTransaction(t *testing.T) {
 	t.Parallel()
 	now := model.TimeUTC(time.Now())
 	for name, test := range map[string]struct {
-		classes invitationClassReader
+		classes store.ClassStore
 		code    string
 	}{
 		"missing Class":     {classes: browserInvitationClassFailureFake{err: store.NewErrNotFound("class", "missing")}, code: "invitation.invalid"},
@@ -328,13 +316,10 @@ func TestBrowserInvitationStartClassFailuresCreateNoTransaction(t *testing.T) {
 			invitation := &model.Invitation{ID: model.NewInvitationID(), Purpose: model.InvitationPurposeStudentClass, State: model.InvitationPending,
 				ClaimHash: model.HashInvitationClaim(claim), TargetEmail: "student@example.edu", ExpiresAt: now.Add(time.Minute)}
 			transactions := &browserInvitationTransactionStoreFake{}
-			invitations := &invitationService{deps: invitationServiceDependencies{Store: browserInvitationStoreFake{invitation: invitation},
-				Classes: test.classes, Attempts: &browserInvitationAttemptLimiterFake{}}}
-			service, err := newBrowserInvitationService(browserInvitationServiceDependencies{Transactions: transactions,
-				Institutions: browserInvitationInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, Invitations: invitations,
-				Issuer: "https://proctor.example.edu", NewProof: model.NewCredentialToken})
-			require.NoError(t, err)
-			_, err = service.StartBrowserInvitation(context.Background(), invocation.Invocation{}, StartBrowserInvitationCommand{Claim: claim, Source: "source"})
+			invitations := &Service{invitations: browserInvitationStoreFake{invitation: invitation},
+				classes: test.classes, attempts: testAttempts(t), rateLimit: testRateLimit}
+			service := withBrowserStores(invitations, transactions, &model.Institution{ID: model.NewInstitutionID()}, model.NewCredentialToken)
+			_, err := service.StartBrowserInvitation(context.Background(), invocation.Invocation{}, StartBrowserInvitationCommand{Claim: claim, Source: "source"})
 			require.True(t, apperror.Is(err, test.code), "Start error = %v, want %s", err, test.code)
 			require.Nil(t, transactions.created, "a failed Class read created a browser transaction")
 		})

@@ -21,8 +21,10 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-func (s *invitationService) ListInvitations(ctx context.Context, invocation invocation.Invocation, query ListInvitationsQuery) (InvitationAdministrationPage, error) {
-	visibility, err := s.deps.Authorization.Visibility(ctx, invocation, model.ActionInvitationView)
+// ListInvitations pages the Invitations visible through the caller's invitation.view
+// scopes; the first page also carries their total.
+func (s *Service) ListInvitations(ctx context.Context, invocation invocation.Invocation, query ListInvitationsQuery) (InvitationAdministrationPage, error) {
+	visibility, err := s.visibility(ctx, invocation, model.ActionInvitationView)
 	if err != nil {
 		return InvitationAdministrationPage{}, err
 	}
@@ -39,7 +41,7 @@ func (s *invitationService) ListInvitations(ctx context.Context, invocation invo
 	options := store.InvitationListOptions{Visibility: visibility, Purpose: query.Purpose, State: query.State,
 		TargetEmail: targetEmail, TargetID: strings.TrimSpace(query.TargetID), CreatedAfter: query.CreatedAfter,
 		CreatedBefore: query.CreatedBefore, BeforeCreatedAt: query.BeforeCreatedAt, BeforeID: query.BeforeID, Limit: query.Limit}
-	page, err := s.deps.Store.List(ctx, options)
+	page, err := s.invitations.List(ctx, options)
 	if err != nil {
 		return InvitationAdministrationPage{}, invitationStoreErrors.Translate(err)
 	}
@@ -48,7 +50,7 @@ func (s *invitationService) ListInvitations(ctx context.Context, invocation invo
 		result.Items = append(result.Items, invitationAdministrationView(item))
 	}
 	total, consistent, err := paging.CountFirst(!query.BeforeID.IsValid(), len(result.Items), func(maximum int) (int, error) {
-		return s.deps.Store.Count(ctx, options, maximum)
+		return s.invitations.Count(ctx, options, maximum)
 	})
 	if err != nil {
 		return InvitationAdministrationPage{}, invitationStoreErrors.Translate(err)
@@ -63,43 +65,47 @@ func (s *invitationService) ListInvitations(ctx context.Context, invocation invo
 // countPendingInvitations counts the unexpired pending Invitations within the
 // caller's invitation.view visibility, authorized and audited exactly as
 // ListInvitations is, stopping at maximum.
-func (s *invitationService) countPendingInvitations(ctx context.Context, invocation invocation.Invocation, maximum int) (int, error) {
-	visibility, err := s.deps.Authorization.Visibility(ctx, invocation, model.ActionInvitationView)
+func (s *Service) countPendingInvitations(ctx context.Context, invocation invocation.Invocation, maximum int) (int, error) {
+	visibility, err := s.visibility(ctx, invocation, model.ActionInvitationView)
 	if err != nil {
 		return 0, err
 	}
-	total, err := s.deps.Store.Count(ctx, store.InvitationListOptions{Visibility: visibility, State: model.InvitationPending, Unexpired: true, Limit: 1}, maximum)
+	total, err := s.invitations.Count(ctx, store.InvitationListOptions{Visibility: visibility, State: model.InvitationPending, Unexpired: true, Limit: 1}, maximum)
 	if err != nil {
 		return 0, invitationStoreErrors.Translate(err)
 	}
 	return total, nil
 }
 
-func (s *invitationService) GetInvitation(ctx context.Context, invocation invocation.Invocation, id model.InvitationID) (InvitationAdministrationView, error) {
+// GetInvitation reads one Invitation visible through the caller's invitation.view
+// scopes.
+func (s *Service) GetInvitation(ctx context.Context, invocation invocation.Invocation, id model.InvitationID) (InvitationAdministrationView, error) {
 	if !id.IsValid() {
 		return InvitationAdministrationView{}, apperror.New("request.invalid").WithField("field", "invitation_id")
 	}
-	visibility, err := s.deps.Authorization.Visibility(ctx, invocation, model.ActionInvitationView)
+	visibility, err := s.visibility(ctx, invocation, model.ActionInvitationView)
 	if err != nil {
 		return InvitationAdministrationView{}, err
 	}
-	record, err := s.deps.Store.GetForAdministration(ctx, id, visibility)
+	record, err := s.invitations.GetForAdministration(ctx, id, visibility)
 	if err != nil {
 		return InvitationAdministrationView{}, invitationStoreErrors.Translate(err)
 	}
 	return invitationAdministrationView(record), nil
 }
 
-func (s *invitationService) ResendInvitation(ctx context.Context, invocation invocation.Invocation, command ResendInvitationCommand) (InvitationAdministrationView, error) {
+// ResendInvitation issues a fresh claim for a pending Invitation visible through the
+// caller's invitation.manage scopes and mails it.
+func (s *Service) ResendInvitation(ctx context.Context, invocation invocation.Invocation, command ResendInvitationCommand) (InvitationAdministrationView, error) {
 	id := command.ID
 	if !id.IsValid() || command.ExpectedRevision < 1 {
 		return InvitationAdministrationView{}, apperror.New("request.invalid").WithField("field", "invitation_id")
 	}
-	visibility, err := s.deps.Authorization.Visibility(ctx, invocation, model.ActionInvitationManage)
+	visibility, err := s.visibility(ctx, invocation, model.ActionInvitationManage)
 	if err != nil {
 		return InvitationAdministrationView{}, err
 	}
-	current, err := s.deps.Store.GetForAdministration(ctx, id, visibility)
+	current, err := s.invitations.GetForAdministration(ctx, id, visibility)
 	if err != nil {
 		return InvitationAdministrationView{}, invitationStoreErrors.Translate(err)
 	}
@@ -108,7 +114,7 @@ func (s *invitationService) ResendInvitation(ctx context.Context, invocation inv
 			return InvitationAdministrationView{}, apperror.New("resource.not_found")
 		}
 		if invitationPurposeRequiresInteractiveBatch(current.Invitation.Purpose) {
-			if err = identity.RequireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
+			if err = identity.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 				return InvitationAdministrationView{}, err
 			}
 		}
@@ -125,7 +131,7 @@ func (s *invitationService) ResendInvitation(ctx context.Context, invocation inv
 		return recovered, recoverErr
 	}
 	if command.batchDuplicate {
-		if !s.deps.Mail.Enabled() {
+		if !s.mail.Enabled() {
 			return InvitationAdministrationView{}, apperror.New("invitation.mail_unavailable")
 		}
 		view, duplicateErr := s.recordDuplicateInvitationView(ctx, idempotency, attempt,
@@ -133,10 +139,10 @@ func (s *invitationService) ResendInvitation(ctx context.Context, invocation inv
 				CanonicalFingerprint: command.batchCanonicalFingerprint}, command.batchCanonicalKey)
 		return InvitationAdministrationView{InvitationView: view}, duplicateErr
 	}
-	result, err := access.RunAudited(ctx, s.deps.Audit, attempt, s.deps.Now,
+	result, err := access.RunAudited(ctx, s.auditor, attempt, s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.InvitationAdministrationCommandResult, error) {
 			if idempotency != nil {
-				replayed, replayErr := s.deps.Store.ReplayAdministration(ctx, &store.InvitationReplay{AuditEventID: reference.ID, AuditAt: reference.MutationAt}, idempotency)
+				replayed, replayErr := s.invitations.ReplayAdministration(ctx, &store.InvitationReplay{AuditEventID: reference.ID, AuditAt: reference.MutationAt}, idempotency)
 				if replayErr == nil {
 					if replayed.Duplicate {
 						return nil, apperror.New("onboarding_batch.duplicate")
@@ -147,19 +153,19 @@ func (s *invitationService) ResendInvitation(ctx context.Context, invocation inv
 					return nil, replayErr
 				}
 			}
-			if !s.deps.Mail.Enabled() {
+			if !s.mail.Enabled() {
 				return nil, apperror.New("invitation.mail_unavailable")
 			}
 			at := model.TimeUTC(reference.MutationAt)
-			rawClaim := s.deps.NewClaim()
+			rawClaim := s.newToken()
 			if !model.IsValidCredentialToken(rawClaim) {
 				return nil, apperror.New("invitation.unavailable")
 			}
-			actionURL, linkErr := identity.AccountCredentialLink(s.deps.PublicURL, "/join", rawClaim)
+			actionURL, linkErr := identity.AccountCredentialLink(s.publicURL, "/join", rawClaim)
 			if linkErr != nil {
 				return nil, apperror.New("invitation.unavailable").Wrap(linkErr)
 			}
-			prepared, prepareErr := s.deps.Mail.PrepareInvitationResend(current.Invitation, actionURL, invocation.Principal().UserID, at)
+			prepared, prepareErr := s.mail.PrepareInvitationResend(current.Invitation, actionURL, invocation.Principal().UserID, at)
 			if prepareErr != nil {
 				return nil, apperror.New("invitation.mail_unavailable").Wrap(prepareErr)
 			}
@@ -168,13 +174,13 @@ func (s *invitationService) ResendInvitation(ctx context.Context, invocation inv
 				DeliveryJob: prepared.Job, ActorUserID: invocation.Principal().UserID,
 				AuditEventID: reference.ID, AuditAt: reference.MutationAt}
 			if idempotency != nil {
-				value, storeErr := s.deps.Store.ResendIdempotently(ctx, input, idempotency)
+				value, storeErr := s.invitations.ResendIdempotently(ctx, input, idempotency)
 				if storeErr == nil && value.Duplicate {
 					return nil, apperror.New("onboarding_batch.duplicate")
 				}
 				return value, storeErr
 			}
-			record, storeErr := s.deps.Store.Resend(ctx, input)
+			record, storeErr := s.invitations.Resend(ctx, input)
 			return &store.InvitationAdministrationCommandResult{Record: record}, storeErr
 		}, invitationStoreErrors.Translate)
 	if err != nil {
@@ -185,16 +191,18 @@ func (s *invitationService) ResendInvitation(ctx context.Context, invocation inv
 	return view, nil
 }
 
-func (s *invitationService) RevokeInvitation(ctx context.Context, invocation invocation.Invocation, command RevokeInvitationCommand) (InvitationAdministrationView, error) {
+// RevokeInvitation revokes a pending Invitation visible through the caller's
+// invitation.manage scopes and mails the revocation notice.
+func (s *Service) RevokeInvitation(ctx context.Context, invocation invocation.Invocation, command RevokeInvitationCommand) (InvitationAdministrationView, error) {
 	id := command.ID
 	if !id.IsValid() || command.ExpectedRevision < 1 {
 		return InvitationAdministrationView{}, apperror.New("request.invalid").WithField("field", "invitation_id")
 	}
-	visibility, err := s.deps.Authorization.Visibility(ctx, invocation, model.ActionInvitationManage)
+	visibility, err := s.visibility(ctx, invocation, model.ActionInvitationManage)
 	if err != nil {
 		return InvitationAdministrationView{}, err
 	}
-	current, err := s.deps.Store.GetForAdministration(ctx, id, visibility)
+	current, err := s.invitations.GetForAdministration(ctx, id, visibility)
 	if err != nil {
 		return InvitationAdministrationView{}, invitationStoreErrors.Translate(err)
 	}
@@ -203,7 +211,7 @@ func (s *invitationService) RevokeInvitation(ctx context.Context, invocation inv
 			return InvitationAdministrationView{}, apperror.New("resource.not_found")
 		}
 		if invitationPurposeRequiresInteractiveBatch(current.Invitation.Purpose) {
-			if err = identity.RequireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
+			if err = identity.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 				return InvitationAdministrationView{}, err
 			}
 		}
@@ -225,10 +233,10 @@ func (s *invitationService) RevokeInvitation(ctx context.Context, invocation inv
 				CanonicalFingerprint: command.batchCanonicalFingerprint}, command.batchCanonicalKey)
 		return InvitationAdministrationView{InvitationView: view}, duplicateErr
 	}
-	result, err := access.RunAudited(ctx, s.deps.Audit, attempt, s.deps.Now,
+	result, err := access.RunAudited(ctx, s.auditor, attempt, s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.InvitationAdministrationCommandResult, error) {
 			if idempotency != nil {
-				replayed, replayErr := s.deps.Store.ReplayAdministration(ctx, &store.InvitationReplay{AuditEventID: reference.ID, AuditAt: reference.MutationAt}, idempotency)
+				replayed, replayErr := s.invitations.ReplayAdministration(ctx, &store.InvitationReplay{AuditEventID: reference.ID, AuditAt: reference.MutationAt}, idempotency)
 				if replayErr == nil {
 					if replayed.Duplicate {
 						return nil, apperror.New("onboarding_batch.duplicate")
@@ -240,7 +248,7 @@ func (s *invitationService) RevokeInvitation(ctx context.Context, invocation inv
 				}
 			}
 			at := model.TimeUTC(reference.MutationAt)
-			prepared, prepareErr := s.deps.Mail.PrepareInvitationRevocation(current.Invitation, invocation.Principal().UserID, at)
+			prepared, prepareErr := s.mail.PrepareInvitationRevocation(current.Invitation, invocation.Principal().UserID, at)
 			if prepareErr != nil {
 				return nil, apperror.New("invitation.mail_unavailable").Wrap(prepareErr)
 			}
@@ -248,13 +256,13 @@ func (s *invitationService) RevokeInvitation(ctx context.Context, invocation inv
 				ActorUserID: invocation.Principal().UserID, RevocationNotice: &store.PreparedMail{Occurrence: prepared.Occurrence,
 					Delivery: prepared.Delivery, Job: prepared.Job}, AuditEventID: reference.ID, AuditAt: reference.MutationAt}
 			if idempotency != nil {
-				value, storeErr := s.deps.Store.RevokeIdempotently(ctx, input, idempotency)
+				value, storeErr := s.invitations.RevokeIdempotently(ctx, input, idempotency)
 				if storeErr == nil && value.Duplicate {
 					return nil, apperror.New("onboarding_batch.duplicate")
 				}
 				return value, storeErr
 			}
-			record, storeErr := s.deps.Store.Revoke(ctx, input)
+			record, storeErr := s.invitations.Revoke(ctx, input)
 			return &store.InvitationAdministrationCommandResult{Record: record}, storeErr
 		}, invitationStoreErrors.Translate)
 	if err != nil {

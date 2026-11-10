@@ -28,7 +28,7 @@ func TestPublicRegistrationPreparesOneAtomicUnverifiedLocalAccount(t *testing.T)
 
 	at := time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
 	persistence := &publicRegistrationStoreFake{}
-	mail := &publicRegistrationMailFake{enabled: true}
+	mail := &mailFake{}
 	service := newTestPublicRegistrationService(t, persistence, mail, at)
 	rawToken := model.NewCredentialToken()
 	service.newToken = func() string { return rawToken }
@@ -83,21 +83,24 @@ func TestPublicRegistrationFailsClosedBeforeAccountPreparationWhenPolicyOrMailDi
 
 	for _, test := range []struct {
 		name     string
-		policy   publicRegistrationPolicyFake
+		policy   accessPolicyStoreFake
 		mail     bool
 		wantCode string
 	}{
-		{name: "public registration disabled", policy: publicRegistrationPolicyFake{local: true}, mail: true, wantCode: "authentication.registration.invitation_required"},
-		{name: "local login disabled", policy: publicRegistrationPolicyFake{registration: true}, mail: true, wantCode: "authentication.registration.invitation_required"},
-		{name: "mail disabled", policy: publicRegistrationPolicyFake{registration: true, local: true}, wantCode: "authentication.registration.unavailable"},
+		{name: "public registration disabled", policy: accessPolicyStoreFake{local: true}, mail: true, wantCode: "authentication.registration.invitation_required"},
+		{name: "local login disabled", policy: accessPolicyStoreFake{}, mail: true, wantCode: "authentication.registration.invitation_required"},
+		// The Access Policy cannot enable public registration without local
+		// login; a Store answering such a policy fails closed.
+		{name: "registration without local login", policy: accessPolicyStoreFake{registration: true}, mail: true, wantCode: "authentication.registration.unavailable"},
+		{name: "mail disabled", policy: accessPolicyStoreFake{registration: true, local: true}, wantCode: "authentication.registration.unavailable"},
 	} {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			persistence := &publicRegistrationStoreFake{}
-			mail := &publicRegistrationMailFake{enabled: test.mail}
+			mail := &mailFake{disabled: !test.mail}
 			service := newTestPublicRegistrationService(t, persistence, mail, time.Now())
-			service.policies = test.policy
+			service.accessPolicies = test.policy
 			err := service.RegisterLocalUser(context.Background(), invocation.Invocation{}, RegisterLocalUserCommand{
 				Username: "student", Email: "student@example.edu", FirstName: "New", LastName: "Student",
 				Password: "correct horse battery staple", Source: "192.0.2.20",
@@ -117,7 +120,7 @@ func TestPublicRegistrationConcealsDuplicateIdentity(t *testing.T) {
 		t.Run(constraint, func(t *testing.T) {
 			t.Parallel()
 			persistence := &publicRegistrationStoreFake{err: store.NewErrConflict("user", constraint, nil)}
-			service := newTestPublicRegistrationService(t, persistence, &publicRegistrationMailFake{enabled: true}, time.Now())
+			service := newTestPublicRegistrationService(t, persistence, &mailFake{}, time.Now())
 			require.NoError(t, service.RegisterLocalUser(context.Background(), invocation.Invocation{}, RegisterLocalUserCommand{
 				Username: "student", Email: "student@example.edu", FirstName: "New", LastName: "Student",
 				Password: "correct horse battery staple", Source: "192.0.2.30",
@@ -139,7 +142,7 @@ func TestPublicRegistrationDoesNotConcealUnrelatedPersistenceConflicts(t *testin
 		t.Run(conflict.Resource+"/"+conflict.Constraint, func(t *testing.T) {
 			t.Parallel()
 			persistence := &publicRegistrationStoreFake{err: conflict}
-			service := newTestPublicRegistrationService(t, persistence, &publicRegistrationMailFake{enabled: true}, time.Now())
+			service := newTestPublicRegistrationService(t, persistence, &mailFake{}, time.Now())
 			err := service.RegisterLocalUser(context.Background(), invocation.Invocation{}, RegisterLocalUserCommand{
 				Username: "student", Email: "student@example.edu", FirstName: "New", LastName: "Student",
 				Password: "correct horse battery staple", Source: "192.0.2.30",
@@ -153,8 +156,8 @@ func TestPublicRegistrationMailAndPersistenceFailuresCreateNoPartialApplicationS
 	t.Parallel()
 
 	mailFailureStore := &publicRegistrationStoreFake{}
-	mailFailure := newTestPublicRegistrationService(t, mailFailureStore, &publicRegistrationMailFake{
-		enabled: true, err: errors.New("seal failed"),
+	mailFailure := newTestPublicRegistrationService(t, mailFailureStore, &mailFake{
+		registrationErr: errors.New("seal failed"),
 	}, time.Now())
 	command := RegisterLocalUserCommand{
 		Username: "student", Email: "student@example.edu", FirstName: "New", LastName: "Student",
@@ -164,7 +167,7 @@ func TestPublicRegistrationMailAndPersistenceFailuresCreateNoPartialApplicationS
 	require.True(t, apperror.Is(err, "authentication.registration.unavailable"), "mail preparation failure = %v", err)
 	require.Nil(t, mailFailureStore.input)
 
-	persistenceFailure := newTestPublicRegistrationService(t, &publicRegistrationStoreFake{err: errors.New("database unavailable")}, &publicRegistrationMailFake{enabled: true}, time.Now())
+	persistenceFailure := newTestPublicRegistrationService(t, &publicRegistrationStoreFake{err: errors.New("database unavailable")}, &mailFake{}, time.Now())
 	err = persistenceFailure.RegisterLocalUser(context.Background(), invocation.Invocation{}, command)
 	require.True(t, apperror.Is(err, "authentication.registration.unavailable"), "persistence failure = %v", err)
 }
@@ -172,7 +175,7 @@ func TestPublicRegistrationMailAndPersistenceFailuresCreateNoPartialApplicationS
 func TestPublicRegistrationPasswordWorkFailuresStopBeforeMailAndPersistence(t *testing.T) {
 	testPasswordHashFailures(t, "authentication.registration.unavailable", func(t *testing.T, ctx context.Context, hasher testPasswordHasher) error {
 		persistence := &publicRegistrationStoreFake{}
-		mail := &publicRegistrationMailFake{enabled: true}
+		mail := &mailFake{}
 		service := newTestPublicRegistrationService(t, persistence, mail, time.Now())
 		service.hasher = hasher
 		err := service.RegisterLocalUser(ctx, invocation.Invocation{}, RegisterLocalUserCommand{
@@ -189,7 +192,7 @@ func TestPublicRegistrationRejectsAnInvalidPasswordBeforeMailOrPersistence(t *te
 	t.Parallel()
 
 	persistence := &publicRegistrationStoreFake{}
-	mail := &publicRegistrationMailFake{enabled: true}
+	mail := &mailFake{}
 	service := newTestPublicRegistrationService(t, persistence, mail, time.Now())
 	err := service.RegisterLocalUser(context.Background(), invocation.Invocation{}, RegisterLocalUserCommand{
 		Username: "student", Email: "student@example.edu", FirstName: "New", LastName: "Student",
@@ -216,7 +219,7 @@ func TestPublicRegistrationRequiresFirstAndLastNamesBeforeCredentialPreparation(
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			persistence := &publicRegistrationStoreFake{}
-			mail := &publicRegistrationMailFake{enabled: true}
+			mail := &mailFake{}
 			service := newTestPublicRegistrationService(t, persistence, mail, time.Now())
 			err := service.RegisterLocalUser(context.Background(), invocation.Invocation{}, RegisterLocalUserCommand{
 				Username: "student", Email: "student@example.edu", FirstName: test.firstName,
@@ -233,7 +236,7 @@ func TestPublicRegistrationUsesPrivateSharedAttemptAccounting(t *testing.T) {
 	t.Parallel()
 
 	cache := newExpiringAuthenticationAttemptCache(time.Now)
-	service := newTestPublicRegistrationService(t, &publicRegistrationStoreFake{}, &publicRegistrationMailFake{enabled: true}, time.Now())
+	service := newTestPublicRegistrationService(t, &publicRegistrationStoreFake{}, &mailFake{}, time.Now())
 	service.attempts = mustAuthenticationAttemptAccounting(t, cache)
 	service.rateLimit = identity.LoginRateLimitPolicy{Window: time.Minute, MaximumAttempts: 1, MaximumSourceAttempts: 10}
 	command := RegisterLocalUserCommand{Username: "student", Email: " Student@Example.EDU ", FirstName: "New", LastName: "Student", Password: "correct horse battery staple", Source: "192.0.2.40:443"}
@@ -249,6 +252,7 @@ func TestPublicRegistrationUsesPrivateSharedAttemptAccounting(t *testing.T) {
 }
 
 type publicRegistrationStoreFake struct {
+	store.UserStore
 	input *store.PublicLocalUserRegistration
 	err   error
 }
@@ -261,32 +265,33 @@ func (s *publicRegistrationStoreFake) RegisterLocal(_ context.Context, input *st
 	return &store.PublicLocalUserRegistrationResult{User: input.User, Token: input.VerificationToken}, nil
 }
 
-type publicRegistrationPolicyFake struct {
+// accessPolicyStoreFake answers the current Access Policy with the public
+// registration and local login settings a test chooses.
+type accessPolicyStoreFake struct {
+	store.AccessPolicyStore
 	registration bool
 	local        bool
 	err          error
 }
 
-func (p publicRegistrationPolicyFake) PublicRegistration(context.Context) (bool, bool, error) {
-	return p.registration, p.local, p.err
-}
-
-type publicRegistrationMailFake struct {
-	enabled      bool
-	prepareCalls int
-	actionURL    string
-	err          error
-}
-
-func (m *publicRegistrationMailFake) Enabled() bool { return m.enabled }
-
-func (m *publicRegistrationMailFake) PreparePublicRegistrationVerification(recipient *model.User, occurrenceID model.MailOccurrenceID, actionURL string, at, deadline time.Time) (*store.PreparedMail, error) {
-	m.prepareCalls++
-	m.actionURL = actionURL
-	if m.err != nil {
-		return nil, m.err
+func (p accessPolicyStoreFake) Get(context.Context, int) (*store.AccessPolicySnapshot, error) {
+	if p.err != nil {
+		return nil, p.err
 	}
-	if !m.enabled {
+	policy := model.NewInitialAccessPolicy(model.NewAccessPolicyID(), time.UnixMilli(100))
+	policy.PublicRegistrationEnabled, policy.LocalLoginEnabled = p.registration, p.local
+	// Invitation local credentials need local login, so they go with it.
+	policy.InvitationLocalCredentialEnabled = policy.InvitationLocalCredentialEnabled && p.local
+	return &store.AccessPolicySnapshot{Policy: policy}, nil
+}
+
+func (f *mailFake) PreparePublicRegistrationVerification(recipient *model.User, occurrenceID model.MailOccurrenceID, actionURL string, at, deadline time.Time) (*store.PreparedMail, error) {
+	f.prepareCalls++
+	f.actionURL = actionURL
+	if f.registrationErr != nil {
+		return nil, f.registrationErr
+	}
+	if f.disabled {
 		return nil, errors.New("mail disabled")
 	}
 	occurrence := &model.MailOccurrence{ID: occurrenceID, Kind: model.MailOccurrenceAccountToken, TemplateKey: model.MailTemplateIdentityVerifyEmail,
@@ -299,37 +304,20 @@ func (m *publicRegistrationMailFake) PreparePublicRegistrationVerification(recip
 	return &store.PreparedMail{Occurrence: occurrence, Delivery: delivery, Job: job}, nil
 }
 
-func newTestPublicRegistrationService(t *testing.T, persistence publicRegistrationStore, mail publicRegistrationVerificationPreparer, at time.Time) *publicRegistrationService {
+func newTestPublicRegistrationService(t *testing.T, persistence store.UserStore, mail mailComposer, at time.Time) *Service {
 	t.Helper()
-	service, err := newPublicRegistrationService(publicRegistrationDependencies{
-		registrations: persistence,
-		policies:      publicRegistrationPolicyFake{registration: true, local: true},
-		institutions:  publicRegistrationInstitutionFake{id: model.NewInstitutionID()},
-		mail:          mail,
-		attempts:      mustAuthenticationAttemptAccounting(t, newExpiringAuthenticationAttemptCache(time.Now)),
-		hasher:        &registrationPasswordHasherFake{},
-		rateLimit:     identity.LoginRateLimitPolicy{Window: time.Minute, MaximumAttempts: 10, MaximumSourceAttempts: 100},
-		tokenTTL:      time.Hour,
-		publicURL:     "https://proctor.example.test",
-		nodeID:        "registration-test-node",
-		newToken:      model.NewCredentialToken,
-		now:           func() time.Time { return at },
-	})
-	require.NoError(t, err)
-	return service
-}
-
-type publicRegistrationInstitutionFake struct{ id model.InstitutionID }
-
-func (f publicRegistrationInstitutionFake) InstitutionID(context.Context) (model.InstitutionID, error) {
-	return f.id, nil
-}
-
-type registrationPasswordHasherFake struct{}
-
-func (*registrationPasswordHasherFake) Hash(_ context.Context, password string) (string, error) {
-	if password == "" {
-		return "", apperror.New("authentication.password.invalid")
+	return &Service{
+		users:                persistence,
+		accessPolicies:       accessPolicyStoreFake{registration: true, local: true},
+		institutions:         institutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}},
+		mail:                 mail,
+		attempts:             mustAuthenticationAttemptAccounting(t, newExpiringAuthenticationAttemptCache(time.Now)),
+		hasher:               passwordHasherFake{},
+		rateLimit:            identity.LoginRateLimitPolicy{Window: time.Minute, MaximumAttempts: 10, MaximumSourceAttempts: 100},
+		emailVerificationTTL: time.Hour,
+		publicURL:            "https://proctor.example.test",
+		nodeID:               "registration-test-node",
+		newToken:             model.NewCredentialToken,
+		now:                  func() time.Time { return at },
 	}
-	return "$argon2id$registration-test", nil
 }

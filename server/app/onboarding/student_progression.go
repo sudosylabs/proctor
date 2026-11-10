@@ -40,16 +40,17 @@ type CommitStudentProgressionCommand struct {
 	IdempotencyKey   string
 }
 
-func (s *onboardingImportService) GetStudentProgression(ctx context.Context, invocation invocation.Invocation, id model.OnboardingImportID) (OnboardingImportView, []OnboardingImportRowView, error) {
+// GetStudentProgression reads one Student Progression, its rows and its Class names.
+func (s *Service) GetStudentProgression(ctx context.Context, invocation invocation.Invocation, id model.OnboardingImportID) (OnboardingImportView, []OnboardingImportRowView, error) {
 	view, rows, err := s.get(ctx, invocation, id, model.OnboardingImportStudentProgression)
 	if err != nil {
 		return OnboardingImportView{}, nil, studentProgressionError(err)
 	}
-	source, err := s.deps.Classes.Get(ctx, view.SourceClassID)
+	source, err := s.classes.Get(ctx, view.SourceClassID)
 	if err != nil {
 		return OnboardingImportView{}, nil, studentProgressionError(err)
 	}
-	destination, err := s.deps.Classes.Get(ctx, view.DestinationClassID)
+	destination, err := s.classes.Get(ctx, view.DestinationClassID)
 	if err != nil {
 		return OnboardingImportView{}, nil, studentProgressionError(err)
 	}
@@ -79,7 +80,7 @@ type ListStudentProgressionsQuery struct {
 // authorization decision, and applied to both Classes as a Store predicate.
 // Items carry the summary projection without rows plus both Class names; the
 // first page also carries the total.
-func (s *onboardingImportService) ListStudentProgressions(ctx context.Context, invocation invocation.Invocation, query ListStudentProgressionsQuery) (paging.Counted[OnboardingImportView], error) {
+func (s *Service) ListStudentProgressions(ctx context.Context, invocation invocation.Invocation, query ListStudentProgressionsQuery) (paging.Counted[OnboardingImportView], error) {
 	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
 	if err != nil {
 		return paging.Counted[OnboardingImportView]{}, err
@@ -112,7 +113,10 @@ func (s *onboardingImportService) ListStudentProgressions(ctx context.Context, i
 	if (!query.BeforeID.IsZero() || !query.BeforeCreatedAt.IsZero()) && (!query.BeforeID.IsValid() || query.BeforeCreatedAt.IsZero()) {
 		return paging.Counted[OnboardingImportView]{}, apperror.Invalid("request.invalid", "cursor")
 	}
-	scope, err := s.deps.Authorization.Visibility(ctx, invocation, model.ActionAcademicProgressionManage)
+	if err = s.requireImports(); err != nil {
+		return paging.Counted[OnboardingImportView]{}, studentProgressionError(err)
+	}
+	scope, err := s.visibility(ctx, invocation, model.ActionAcademicProgressionManage)
 	if err != nil {
 		return paging.Counted[OnboardingImportView]{}, err
 	}
@@ -122,7 +126,7 @@ func (s *onboardingImportService) ListStudentProgressions(ctx context.Context, i
 	if query.BeforeID.IsValid() {
 		options.BeforeCreatedAt, options.BeforeID = model.TimeUTC(query.BeforeCreatedAt), query.BeforeID
 	}
-	values, err := s.deps.Imports.ListStudentProgressions(ctx, options)
+	values, err := s.imports.ListStudentProgressions(ctx, options)
 	if err != nil {
 		return paging.Counted[OnboardingImportView]{}, studentProgressionError(err)
 	}
@@ -140,7 +144,7 @@ func (s *onboardingImportService) ListStudentProgressions(ctx context.Context, i
 	}
 	page := paging.Counted[OnboardingImportView]{Page: paging.New(items, limit)}
 	total, consistent, err := paging.CountFirst(!query.BeforeID.IsValid(), len(page.Items), func(maximum int) (int, error) {
-		return s.deps.Imports.CountStudentProgressions(ctx, options, maximum)
+		return s.imports.CountStudentProgressions(ctx, options, maximum)
 	})
 	if err != nil {
 		return paging.Counted[OnboardingImportView]{}, studentProgressionError(err)
@@ -152,60 +156,69 @@ func (s *onboardingImportService) ListStudentProgressions(ctx context.Context, i
 	return page, nil
 }
 
-func (s *onboardingImportService) CommitStudentProgression(ctx context.Context, invocation invocation.Invocation, command CommitStudentProgressionCommand) (OnboardingImportView, error) {
+// CommitStudentProgression commits a previewed Student Progression whose preview
+// digest and revision still match.
+func (s *Service) CommitStudentProgression(ctx context.Context, invocation invocation.Invocation, command CommitStudentProgressionCommand) (OnboardingImportView, error) {
 	view, err := s.commit(ctx, invocation, CommitOnboardingImportCommand{ID: command.ID, ExpectedRevision: command.ExpectedRevision,
 		PreviewDigest: command.PreviewDigest, Policy: model.OnboardingImportValidRowsOnly, IdempotencyKey: command.IdempotencyKey}, model.OnboardingImportStudentProgression)
 	return view, studentProgressionError(err)
 }
 
-func (s *onboardingImportService) CancelStudentProgression(ctx context.Context, invocation invocation.Invocation, id model.OnboardingImportID) (OnboardingImportView, error) {
+// CancelStudentProgression cancels an unfinished Student Progression.
+func (s *Service) CancelStudentProgression(ctx context.Context, invocation invocation.Invocation, id model.OnboardingImportID) (OnboardingImportView, error) {
 	view, err := s.cancel(ctx, invocation, id, model.OnboardingImportStudentProgression)
 	return view, studentProgressionError(err)
 }
 
-func (s *onboardingImportService) StudentProgressionReport(ctx context.Context, invocation invocation.Invocation, id model.OnboardingImportID, output io.Writer) error {
+// StudentProgressionReport writes a finished Student Progression's row report.
+func (s *Service) StudentProgressionReport(ctx context.Context, invocation invocation.Invocation, id model.OnboardingImportID, output io.Writer) error {
 	return studentProgressionError(s.report(ctx, invocation, id, output, model.OnboardingImportStudentProgression))
 }
 
-func (s *onboardingImportService) DryRunStudentProgression(ctx context.Context, invocation invocation.Invocation, command DryRunStudentProgressionCommand) (OnboardingImportView, error) {
+// DryRunStudentProgression proposes the preview of moving a source Class's Students
+// into a destination Class.
+func (s *Service) DryRunStudentProgression(ctx context.Context, invocation invocation.Invocation, command DryRunStudentProgressionCommand) (OnboardingImportView, error) {
 	sourcePeriodID, sourceClassID := model.AcademicPeriodID(strings.TrimSpace(command.SourcePeriodID.String())), model.ClassID(strings.TrimSpace(command.SourceClassID.String()))
 	destinationPeriodID, destinationClassID := model.AcademicPeriodID(strings.TrimSpace(command.DestinationPeriodID.String())), model.ClassID(strings.TrimSpace(command.DestinationClassID.String()))
 	if !sourcePeriodID.IsValid() || !sourceClassID.IsValid() || !destinationPeriodID.IsValid() || !destinationClassID.IsValid() ||
 		sourceClassID == destinationClassID || command.EffectiveAt <= 0 {
 		return OnboardingImportView{}, apperror.New("request.invalid")
 	}
+	if err := s.requireImports(); err != nil {
+		return OnboardingImportView{}, studentProgressionError(err)
+	}
 	for _, classID := range []model.ClassID{sourceClassID, destinationClassID} {
 		resource := model.Resource{Type: model.ResourceClass, ID: classID.String()}
 		for _, action := range []model.Action{model.ActionAcademicProgressionManage, model.ActionClassMembersManage} {
-			if err := s.deps.Authorization.Authorize(ctx, invocation, action, resource); err != nil {
+			if err := s.authorize(ctx, invocation, action, resource); err != nil {
 				return OnboardingImportView{}, err
 			}
 		}
 	}
-	sourcePeriod, err := s.deps.Periods.Get(ctx, sourcePeriodID)
+	sourcePeriod, err := s.periods.Get(ctx, sourcePeriodID)
 	if err != nil {
 		return OnboardingImportView{}, studentProgressionError(err)
 	}
-	destinationPeriod, err := s.deps.Periods.Get(ctx, destinationPeriodID)
+	destinationPeriod, err := s.periods.Get(ctx, destinationPeriodID)
 	if err != nil {
 		return OnboardingImportView{}, studentProgressionError(err)
 	}
-	sourceClass, err := s.deps.Classes.Get(ctx, sourceClassID)
+	sourceClass, err := s.classes.Get(ctx, sourceClassID)
 	if err != nil {
 		return OnboardingImportView{}, studentProgressionError(err)
 	}
-	destinationClass, err := s.deps.Classes.Get(ctx, destinationClassID)
+	destinationClass, err := s.classes.Get(ctx, destinationClassID)
 	if err != nil {
 		return OnboardingImportView{}, studentProgressionError(err)
 	}
 	if sourceClass.AcademicPeriodID != sourcePeriod.ID || destinationClass.AcademicPeriodID != destinationPeriod.ID || sourceClass.IsArchived() || destinationClass.IsArchived() {
 		return OnboardingImportView{}, apperror.New("student_progression.target_conflict")
 	}
-	sourceLevel, err := s.deps.Levels.Get(ctx, sourceClass.ProgrammeLevelID)
+	sourceLevel, err := s.levels.Get(ctx, sourceClass.ProgrammeLevelID)
 	if err != nil {
 		return OnboardingImportView{}, studentProgressionError(err)
 	}
-	destinationLevel, err := s.deps.Levels.Get(ctx, destinationClass.ProgrammeLevelID)
+	destinationLevel, err := s.levels.Get(ctx, destinationClass.ProgrammeLevelID)
 	if err != nil {
 		return OnboardingImportView{}, studentProgressionError(err)
 	}
@@ -219,7 +232,7 @@ func (s *onboardingImportService) DryRunStudentProgression(ctx context.Context, 
 	if err = s.validatePrincipal(ctx, invocation.Principal()); err != nil {
 		return OnboardingImportView{}, err
 	}
-	at := model.TimeUTC(s.deps.Now())
+	at := model.TimeUTC(s.now())
 	id := model.NewOnboardingImportID()
 	job, err := newOnboardingImportJob(model.JobTypeStudentProgressionPreview, id, at)
 	if err != nil {
@@ -231,9 +244,9 @@ func (s *onboardingImportService) DryRunStudentProgression(ctx context.Context, 
 		SourcePeriodRevision: sourcePeriod.Revision, SourceClassRevision: sourceClass.Revision, DestinationPeriodRevision: destinationPeriod.Revision,
 		DestinationClassRevision: destinationClass.Revision, EffectiveAt: effectiveAt, ParseJobID: job.ID, CreatedAt: at, UpdatedAt: at,
 		ExpiresAt: at.Add(onboardingImportRetention), Revision: 1}
-	created, err := runStudentProgressionAuditedMutation(ctx, s.deps.Audit, invocation, "student_progression.dry_run", id.String(),
+	created, err := runStudentProgressionAuditedMutation(ctx, s.auditor, invocation, "student_progression.dry_run", id.String(),
 		sourceClass.ID, destinationClass.ID, at, func(ctx context.Context, destinationReference, sourceReference access.MutationReference) (*store.OnboardingImport, error) {
-			return s.deps.Imports.CreateOnboardingImport(ctx, &store.OnboardingImportCreation{Import: value, ParseJob: job,
+			return s.imports.CreateOnboardingImport(ctx, &store.OnboardingImportCreation{Import: value, ParseJob: job,
 				AuditEventID: destinationReference.ID, SourceAuditEventID: sourceReference.ID, AuditAt: destinationReference.MutationAt})
 		}, studentProgressionError)
 	if err != nil {
@@ -266,8 +279,8 @@ func runStudentProgressionAuditedMutation[T any](ctx context.Context, audit acce
 		}, mapError)
 }
 
-func (s *onboardingImportService) previewProgression(ctx context.Context, id model.OnboardingImportID) error {
-	current, err := s.deps.Imports.GetOnboardingImport(ctx, id)
+func (s *Service) previewProgression(ctx context.Context, id model.OnboardingImportID) error {
+	current, err := s.imports.GetOnboardingImport(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -285,33 +298,33 @@ func (s *onboardingImportService) previewProgression(ctx context.Context, id mod
 	for _, classID := range []model.ClassID{current.SourceClassID, current.DestinationClassID} {
 		resource := model.Resource{Type: model.ResourceClass, ID: classID.String()}
 		for _, action := range []model.Action{model.ActionAcademicProgressionManage, model.ActionClassMembersManage} {
-			if err = s.deps.Authorization.Authorize(ctx, invocation, action, resource); err != nil {
+			if err = s.authorize(ctx, invocation, action, resource); err != nil {
 				return err
 			}
 		}
 	}
-	sourcePeriod, err := s.deps.Periods.Get(ctx, current.SourcePeriodID)
+	sourcePeriod, err := s.periods.Get(ctx, current.SourcePeriodID)
 	if err != nil {
 		return err
 	}
 	if sourcePeriod.Revision != current.SourcePeriodRevision {
 		return apperror.New("student_progression.target_conflict")
 	}
-	destinationPeriod, err := s.deps.Periods.Get(ctx, current.DestinationPeriodID)
+	destinationPeriod, err := s.periods.Get(ctx, current.DestinationPeriodID)
 	if err != nil {
 		return err
 	}
 	if destinationPeriod.Revision != current.DestinationPeriodRevision {
 		return apperror.New("student_progression.target_conflict")
 	}
-	sourceClass, err := s.deps.Classes.Get(ctx, current.SourceClassID)
+	sourceClass, err := s.classes.Get(ctx, current.SourceClassID)
 	if err != nil {
 		return err
 	}
 	if sourceClass.Revision != current.SourceClassRevision {
 		return apperror.New("student_progression.target_conflict")
 	}
-	destinationClass, err := s.deps.Classes.Get(ctx, current.DestinationClassID)
+	destinationClass, err := s.classes.Get(ctx, current.DestinationClassID)
 	if err != nil {
 		return err
 	}
@@ -319,7 +332,7 @@ func (s *onboardingImportService) previewProgression(ctx context.Context, id mod
 		return apperror.New("student_progression.target_conflict")
 	}
 	rosterAt := studentProgressionRosterInstant(current, sourcePeriod)
-	members, err := s.deps.Imports.ListStudentProgressionRoster(ctx, sourceClass.ID, rosterAt, store.OnboardingImportMaximumRows+1)
+	members, err := s.imports.ListStudentProgressionRoster(ctx, sourceClass.ID, rosterAt, store.OnboardingImportMaximumRows+1)
 	if err != nil {
 		return err
 	}
@@ -342,14 +355,14 @@ func (s *onboardingImportService) previewProgression(ctx context.Context, id mod
 		return err
 	}
 	digest := sha256.Sum256(document)
-	_, err = s.deps.Imports.CompleteOnboardingImportPreview(ctx, &store.OnboardingImportPreviewCompletion{ID: id, ExpectedRevision: current.Revision,
-		Digest: hex.EncodeToString(digest[:]), Rows: rows, At: model.TimeUTC(s.deps.Now())})
+	_, err = s.imports.CompleteOnboardingImportPreview(ctx, &store.OnboardingImportPreviewCompletion{ID: id, ExpectedRevision: current.Revision,
+		Digest: hex.EncodeToString(digest[:]), Rows: rows, At: model.TimeUTC(s.now())})
 	return err
 }
 
 // previewProgressionRow builds the preview row for one source roster member, classifying the member's eligibility
 // and any existing destination membership.
-func (s *onboardingImportService) previewProgressionRow(ctx context.Context, id model.OnboardingImportID, current *store.OnboardingImport,
+func (s *Service) previewProgressionRow(ctx context.Context, id model.OnboardingImportID, current *store.OnboardingImport,
 	destinationClass *model.Class, index int, member *model.ClassMember) (store.OnboardingImportRow, error) {
 	row := store.OnboardingImportRow{ImportID: id, RowNumber: index + 1, Reference: member.ID.String(), ScopeType: model.RoleScopeClass,
 		ScopeID: destinationClass.ID.String(), TargetRevision: destinationClass.Revision, UserID: member.UserID, RelationshipID: member.ID.String(),
@@ -364,7 +377,7 @@ func (s *onboardingImportService) previewProgressionRow(ctx context.Context, id 
 	} else {
 		row.Operation = string(AcademicAdministrationClassEnroll)
 	}
-	user, userErr := s.deps.Users.Get(ctx, member.UserID)
+	user, userErr := s.users.Get(ctx, member.UserID)
 	if userErr != nil {
 		return store.OnboardingImportRow{}, userErr
 	}
@@ -372,7 +385,7 @@ func (s *onboardingImportService) previewProgressionRow(ctx context.Context, id 
 		row.PreviewStatus, row.Status, row.PreviewCode = model.OnboardingImportRowInvalid, model.OnboardingImportRowInvalid, "student_progression.ineligible_target"
 		return row, nil
 	}
-	affiliations, affiliationErr := s.deps.Affiliations.ListActiveByUser(ctx, member.UserID, current.EffectiveAt)
+	affiliations, affiliationErr := s.affiliations.ListActiveByUser(ctx, member.UserID, current.EffectiveAt)
 	if affiliationErr != nil {
 		return store.OnboardingImportRow{}, affiliationErr
 	}
@@ -380,7 +393,7 @@ func (s *onboardingImportService) previewProgressionRow(ctx context.Context, id 
 		row.PreviewStatus, row.Status, row.PreviewCode = model.OnboardingImportRowInvalid, model.OnboardingImportRowInvalid, "student_progression.ineligible_target"
 		return row, nil
 	}
-	active, activeErr := s.deps.ClassMembers.ListActiveByUser(ctx, member.UserID, current.EffectiveAt)
+	active, activeErr := s.classMembers.ListActiveByUser(ctx, member.UserID, current.EffectiveAt)
 	if activeErr != nil {
 		return store.OnboardingImportRow{}, activeErr
 	}

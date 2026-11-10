@@ -41,10 +41,6 @@ type AuditAttemptSweepResult struct {
 type auditAttemptSweepHandler struct{ audits store.AuditStore }
 
 func (h auditAttemptSweepHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
-	if execution.Job == nil {
-		return job.PermanentFailure("job.command.invalid", errors.New("job is missing"))
-	}
-
 	var command AuditAttemptSweepCommand
 	if err := decodeStrictJobDocument(execution.Job.Command, &command); err != nil ||
 		command.BatchSize < 1 ||

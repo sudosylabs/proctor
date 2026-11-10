@@ -50,7 +50,7 @@ type retentionExpiryHandler struct {
 }
 
 func (h retentionExpiryHandler) Run(ctx context.Context, e job.Execution) job.Outcome {
-	if e.Job == nil || h.records == nil || h.audit == nil || h.jobs == nil || h.now == nil {
+	if h.records == nil || h.audit == nil || h.jobs == nil || h.now == nil {
 		return job.PermanentFailure("job.command.invalid", errors.New("retention expiry dependencies unavailable"))
 	}
 

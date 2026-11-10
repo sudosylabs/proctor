@@ -578,7 +578,14 @@ func heartbeatClaimLost(err error) bool {
 	return store.IsConflict(err) || store.IsNotFound(err)
 }
 
+// runHandler is the only place a handler is invoked. It fails the attempt
+// without calling the handler when the Execution has no Job, and contains a
+// handler panic as a retryable failure.
 func runHandler(ctx context.Context, handler Handler, execution Execution) (outcome Outcome) {
+	if execution.Job == nil {
+		return PermanentFailure("job.command.invalid", errors.New("job is missing"))
+	}
+
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			outcome = RetryableFailure("job.handler_panic", fmt.Errorf("job handler panic: %T", recovered))

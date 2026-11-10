@@ -45,7 +45,6 @@ type examSittingLifecycleHandler struct {
 
 func (h examSittingLifecycleHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
 	if h.sittings == nil ||
-		execution.Job == nil ||
 		execution.Attempt == nil ||
 		!execution.Job.ID.IsValid() ||
 		!execution.Attempt.ID.IsValid() {

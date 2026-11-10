@@ -158,8 +158,7 @@ type filePurgeExpiredContentHandler struct {
 const filePurgeContinuationDelay = time.Second
 
 func (h filePurgeExpiredContentHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
-	if execution.Job == nil ||
-		!execution.Job.ID.IsValid() ||
+	if !execution.Job.ID.IsValid() ||
 		h.files == nil ||
 		h.content == nil ||
 		h.continuations == nil ||

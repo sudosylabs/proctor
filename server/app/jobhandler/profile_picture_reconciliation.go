@@ -118,10 +118,6 @@ type defaultProfilePictureReconciliationHandler struct {
 }
 
 func (h defaultProfilePictureReconciliationHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
-	if execution.Job == nil {
-		return job.PermanentFailure("job.command.invalid", errors.New("job is missing"))
-	}
-
 	command, err := DecodeDefaultProfilePictureReconciliationCommand(execution.Job.Command)
 	if err != nil {
 		return job.PermanentFailure("job.command.invalid", err)

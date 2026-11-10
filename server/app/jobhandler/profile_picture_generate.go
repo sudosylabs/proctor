@@ -106,7 +106,7 @@ type defaultProfilePictureHandler struct {
 }
 
 func (h defaultProfilePictureHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
-	if execution.Job == nil || execution.Attempt == nil {
+	if execution.Attempt == nil {
 		return job.PermanentFailure("job.command.invalid", errors.New("job is missing"))
 	}
 	command, err := model.DecodeDefaultProfilePictureCommand(execution.Job.Command)

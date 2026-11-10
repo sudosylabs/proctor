@@ -47,10 +47,6 @@ type mailCleanupHandler struct {
 }
 
 func (h mailCleanupHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
-	if execution.Job == nil {
-		return job.PermanentFailure("job.command.invalid", errors.New("mail cleanup job is invalid"))
-	}
-
 	var command MailCleanupCommand
 	if decodeStrictJobDocument(execution.Job.Command, &command) != nil ||
 		command.PageSize < 1 ||

@@ -67,7 +67,6 @@ type examSittingSealingHandler struct {
 func (h examSittingSealingHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
 	if h.sittings == nil ||
 		h.attempts == nil ||
-		execution.Job == nil ||
 		execution.Attempt == nil ||
 		!execution.Job.ID.IsValid() ||
 		!execution.Attempt.ID.IsValid() {

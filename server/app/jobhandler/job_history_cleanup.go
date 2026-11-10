@@ -85,7 +85,7 @@ type jobHistoryCleanupHandler struct {
 }
 
 func (h jobHistoryCleanupHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
-	if execution.Job == nil || !execution.Job.ID.IsValid() || h.jobs == nil || h.continuations == nil || h.now == nil {
+	if !execution.Job.ID.IsValid() || h.jobs == nil || h.continuations == nil || h.now == nil {
 		return job.PermanentFailure("job.command.invalid", errors.New("job history cleanup dependencies or execution are missing"))
 	}
 

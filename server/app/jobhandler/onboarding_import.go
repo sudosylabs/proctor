@@ -123,8 +123,7 @@ func (h onboardingImportExecuteHandler) Run(ctx context.Context, execution job.E
 
 func decodeOnboardingImportJob(execution job.Execution, expected model.JobType) (onboardingImportJobCommand, error) {
 	var command onboardingImportJobCommand
-	if execution.Job == nil ||
-		execution.Job.Type != expected ||
+	if execution.Job.Type != expected ||
 		decodeStrictJobDocument(execution.Job.Command, &command) != nil ||
 		!model.OnboardingImportID(command.ImportID).IsValid() {
 		return command, errors.New("invalid onboarding import job")

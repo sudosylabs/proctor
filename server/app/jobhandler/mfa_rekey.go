@@ -79,8 +79,7 @@ type mfaRekeyHandler struct {
 }
 
 func (h mfaRekeyHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
-	if execution.Job == nil ||
-		execution.Attempt == nil ||
+	if execution.Attempt == nil ||
 		!execution.Job.ID.IsValid() ||
 		!execution.Attempt.ID.IsValid() ||
 		h.credentials == nil ||

@@ -33,10 +33,6 @@ type CommandOutcomeCleanupResult struct {
 type commandOutcomeCleanupHandler struct{ outcomes store.CommandOutcomeStore }
 
 func (h commandOutcomeCleanupHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
-	if execution.Job == nil {
-		return job.PermanentFailure("job.command.invalid", errors.New("job is missing"))
-	}
-
 	var command CommandOutcomeCleanupCommand
 	if err := decodeStrictJobDocument(
 		execution.Job.Command,

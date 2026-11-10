@@ -47,7 +47,7 @@ type invitationMaintenanceHandler struct {
 }
 
 func (h invitationMaintenanceHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
-	if execution.Job == nil || h.invitations == nil || h.imports == nil || h.content == nil || h.now == nil {
+	if h.invitations == nil || h.imports == nil || h.content == nil || h.now == nil {
 		return job.PermanentFailure("job.command.invalid", errors.New("Invitation maintenance job is invalid"))
 	}
 

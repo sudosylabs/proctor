@@ -53,7 +53,7 @@ type retentionHandler struct {
 }
 
 func (h retentionHandler) Run(ctx context.Context, e job.Execution) job.Outcome {
-	if e.Job == nil || h.records == nil || h.jobs == nil || h.now == nil || (!h.purge && h.audit == nil) || (h.purge && h.content == nil) {
+	if h.records == nil || h.jobs == nil || h.now == nil || (!h.purge && h.audit == nil) || (h.purge && h.content == nil) {
 		return job.PermanentFailure("job.command.invalid", errors.New("retention dependencies are unavailable"))
 	}
 

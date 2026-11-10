@@ -406,6 +406,29 @@ func TestEngineContainsPanicsAsRetryableOutcomes(t *testing.T) {
 	require.Equal(t, "job.handler_panic", persistence.completion.PublicErrorCode)
 }
 
+func TestEngineFailsAnAttemptWithoutAJobBeforeItsHandlerRuns(t *testing.T) {
+	t.Parallel()
+	claim := jobRunnerClaim(t)
+	claim.Job = nil
+	handlerRan := false
+	descriptor := testDescriptor(handlerFunc(func(_ context.Context, execution Execution) Outcome {
+		handlerRan = true
+		return Outcome{Kind: OutcomeSucceeded, Result: execution.Job.Command}
+	}))
+	registry, err := NewRegistry([]Descriptor{descriptor})
+	require.NoError(t, err)
+	persistence := &jobRunnerStoreFake{}
+	runner, err := newTestEngine(persistence, registry, "node-a", newDiscardLogger(t), time.Second)
+	require.NoError(t, err)
+	runner.execute(context.Background(), descriptor, claim)
+	persistence.mu.Lock()
+	defer persistence.mu.Unlock()
+	require.False(t, handlerRan)
+	require.NotNil(t, persistence.completion)
+	require.Equal(t, store.JobCompletionPermanentFailure, persistence.completion.Kind)
+	require.Equal(t, "job.command.invalid", persistence.completion.PublicErrorCode)
+}
+
 func TestEngineFencesOccurrenceWorkReservations(t *testing.T) {
 	t.Parallel()
 	claim := jobRunnerClaim(t)

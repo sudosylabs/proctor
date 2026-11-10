@@ -40,10 +40,6 @@ type sessionPurgeHandler struct {
 }
 
 func (h sessionPurgeHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
-	if execution.Job == nil {
-		return job.PermanentFailure("job.command.invalid", errors.New("job is missing"))
-	}
-
 	var command SessionPurgeCommand
 	if err := decodeStrictJobDocument(execution.Job.Command, &command); err != nil ||
 		command.BatchSize < 1 ||

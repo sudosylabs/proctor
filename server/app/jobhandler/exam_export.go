@@ -38,7 +38,6 @@ type examExportBuildCommand struct {
 func (h examExportBuildHandler) Run(ctx context.Context, e job.Execution) job.Outcome {
 	var command examExportBuildCommand
 	if h.service == nil ||
-		e.Job == nil ||
 		e.Attempt == nil ||
 		!e.Job.ID.IsValid() ||
 		!e.Attempt.ID.IsValid() ||
@@ -102,7 +101,6 @@ func (h examExportCleanupHandler) Run(ctx context.Context, e job.Execution) job.
 	var command examExportCleanupCommand
 	if h.exports == nil ||
 		h.content == nil ||
-		e.Job == nil ||
 		decodeStrictUniqueJobDocument(e.Job.Command, &command) != nil ||
 		command.BatchSize < 1 ||
 		command.BatchSize > 100 ||

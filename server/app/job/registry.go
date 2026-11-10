@@ -19,6 +19,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
+// Execution is what a handler runs with: the engine never runs a handler
+// without a Job, so handlers read Execution.Job without checking it.
 type Execution struct {
 	Job         *model.Job
 	Attempt     *model.JobAttempt
@@ -184,9 +186,6 @@ func NewRegistry(values []Descriptor) (*Registry, error) {
 }
 
 func (r *Registry) Descriptor(jobType model.JobType) (Descriptor, error) {
-	if r == nil {
-		return Descriptor{}, errors.New("job registry is nil")
-	}
 	descriptor, ok := r.descriptors[jobType]
 	if !ok {
 		return Descriptor{}, fmt.Errorf("job type %q is not registered", jobType)
@@ -241,17 +240,11 @@ func normalizedCodes(values []string) ([]string, error) {
 }
 
 func (r *Registry) Types() []model.JobType {
-	if r == nil {
-		return nil
-	}
 	return append([]model.JobType(nil), r.types...)
 }
 
 func (r *Registry) MaximumTimeout() time.Duration {
 	var maximum time.Duration
-	if r == nil {
-		return 0
-	}
 	for _, descriptor := range r.descriptors {
 		maximum = max(maximum, descriptor.Timeout)
 	}

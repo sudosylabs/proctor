@@ -24,10 +24,6 @@ type sittingMailExpansionHandler struct {
 }
 
 func (h sittingMailExpansionHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
-	if execution.Job == nil {
-		return job.PermanentFailure("job.command.invalid", errors.New("Sitting mail expansion Job is missing"))
-	}
-
 	command, err := model.DecodeSittingMailExpansionCommand(execution.Job.Command)
 	if err != nil {
 		return job.PermanentFailure("job.command.invalid", err)

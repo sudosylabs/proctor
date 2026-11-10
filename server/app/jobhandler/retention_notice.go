@@ -29,8 +29,7 @@ type retentionNoticeHandler struct {
 
 func (h retentionNoticeHandler) Run(ctx context.Context, e job.Execution) job.Outcome {
 	var command RetentionCommand
-	if e.Job == nil ||
-		h.notices == nil ||
+	if h.notices == nil ||
 		h.dispatcher == nil ||
 		h.jobs == nil ||
 		h.now == nil ||

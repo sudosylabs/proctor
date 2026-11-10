@@ -32,7 +32,14 @@ are listed there with their reasons.
 
 Each actor-sensitive use case authorizes immediately before expensive work or mutation. HTTP and WebSocket establish credential and assurance requirements but do not preflight resource permissions or issue decision receipts.
 
-Domain models own local invariants and transitions. Application services own use-case policy, authorization, multi-aggregate coordination, transaction intent, audit, and external effects. Focused service implementations are normally unexported behind `app.App` and consumer-owned interfaces.
+Domain models own local invariants and transitions. Application services own use-case policy, authorization, multi-aggregate coordination, transaction intent, audit, and external effects.
+
+Each domain area is one package under `app/`: `app/access`, `app/academic`,
+`app/identity`, `app/user`, and `app/exam` with its children. An area package
+exports a `Service` (or a few, when one would be too wide) whose exported
+methods are the area's use cases, together with that area's effects and
+adapters. A contributor looking for a feature opens the area directory; nothing
+about one flow lives in the parent package.
 
 Background jobs call application use cases with a system/service invocation. They do not manipulate stores directly.
 
@@ -98,20 +105,16 @@ Workspace aggregate and narrow audit, content, and realtime ports. None imports
 the parent application package or selects SQL, VFS, WebSocket, Jobs, or other
 infrastructure.
 
-Every application service, parent or child, is constructed the same way:
-`New(Dependencies) (*Service, error)` in a child package, `NewX(XDependencies)
-(*X, error)` for each service of the root `app/exam` package, and
-`newX(xDependencies)` for the parent's unexported services. The constructor
-validates every collaborator once and the service keeps them in a single
-`deps` field, beside any state it derives; no service takes positional
-collaborators. A type is a service when it holds a collaborator: an
-interface, a function, or a pointer to a type with methods.
-`TestServicesTakeOneDependencies` enforces the shape; only `app.New`, which
-distributes its Dependencies to the services it embeds, keeps no `deps`. `app.App` embeds each Exam
-service by its concrete type, through a parent alias such as
-`examSittingService` that gives the embedded field a distinct name. A parent
-adapter or Job runner names a narrow port only where its test substitutes a
-fake.
+A service is a struct whose fields are its collaborators: the `store`
+contracts it calls, the concrete `*access.Authorizer` and `*access.Auditor`,
+and whatever else it needs. Its constructor takes a `Dependencies` struct when
+there are more than a handful of collaborators, and plain arguments otherwise.
+A service generates identifiers with one `NewID func() string` (or calls
+`model.NewID` directly) and reads time from one `Now func() time.Time`.
+
+`app.App` holds one named field per area (`Academic`, `Identity`, `Exams`,
+`Attempts`, ...), so every call site names the owner of the use case it calls:
+`app.Academic.CreateClass(...)`.
 
 Each Exam use case is the exported method on its owning service, named as the
 public use case (`ScheduleExamSitting`), with the command, query, and result
@@ -166,8 +169,8 @@ empty architectural placeholder. Its `doc.go` must define the Exam, Draft,
 Revision, Sitting, Attempt, Participation, Resource, Starter Workspace,
 Workspace, Submission, Integrity, and Review vocabulary; state what the
 package owns and excludes; and state its allowed inward dependencies. The
-parent `app.App` embeds its services as the public surface and `app.New`
-remains the sole application constructor. Detailed examination boundaries are in
+parent `app.App` exposes its services as named fields and `app.New` remains
+the sole application constructor. Detailed examination boundaries are in
 [the `exam-lifecycle` reference](../../exam-lifecycle/references/examinations.md).
 
 Realtime receives its required authentication invalidator and diagnostics at
@@ -205,28 +208,30 @@ time, proof destruction, and atomic terminal transitions.
 Interfaces normally live beside their consumer and expose only what it needs. Broad aggregates may exist at composition but are not daily dependencies. Prefer concrete types during construction and narrow interfaces at consumption.
 
 An interface exists only where something substitutes behind it: a second
-production implementation, a fake that the consumer's tests pass in, a
-type-assertion or `errors.As` capability probe, or a consumer-owned port across
-a module or dependency boundary that the consumer cannot name concretely, such
-as a child-module port the parent implements, a transport port the application
-implements, or a File Content capability. Otherwise the consumer holds the
-concrete type. A local port that would repeat a Store contract or a child
-module's owned contract uses that contract directly, and identical ports in
-one package are declared once. Each port carries only the methods its
-consumer calls or must pass on.
+production implementation, a type-assertion or `errors.As` capability probe,
+or a port across a module boundary that the consumer cannot name concretely,
+such as a File Content capability. Otherwise the consumer holds the concrete
+type. A service never redeclares a Store contract: it holds `store.ClassStore`
+(or the root `store.Store`) directly. A test fakes a Store contract by
+embedding it and overriding only the methods the test exercises:
 
-An adapter translates one concrete service, Store, or infrastructure value at
-one seam. It never holds, embeds, or delegates to another adapter: when two
-ports need the same translation, one adapter satisfies both, and port method
-names converge so that it can. A type is an adapter by shape, not by name:
-a struct that implements a port and whose methods mostly forward, in a few
-statements, to one field it holds. Holding a port counts as holding an
-adapter when every other production implementation of that port is one, so a
-decorator over an adapter is a chain too. Supply a backend's lifecycle as
-values to the one adapter (as `platform.CacheBackend` does) rather than as a
-second adapter beneath it. Authorization ports share the single
-`Authorize(ctx, Invocation, Action, Resource)` shape that the Access Control
-service satisfies directly.
+~~~go
+type classStoreFake struct {
+    store.ClassStore
+    created *store.ClassCreation
+}
+~~~
+
+Calling a method the fake does not override panics, which tells the test author
+exactly what to add.
+
+An adapter exists only where two packages genuinely disagree on a type and
+neither may import the other. Application code uses the interfaces of the
+reusable `packages/cache` and `packages/mail` modules and the `server/logging`
+logger directly, so it needs no adapter for them. An adapter translates one
+value at one seam and never wraps another adapter. Authorization uses the
+single `Authorize(ctx, Invocation, Action, Resource)` shape of
+`*access.Authorizer`.
 
 Persistence is the exception: the bounded root `store.Store` and complete per-model or aggregate contracts live together in `store` for shared conformance testing.
 
@@ -241,63 +246,47 @@ in the architecture test's `reachableOnlyFromTests` list, which
 `TestProductionFunctionsAreReachable` checks by rapid type analysis from every
 `main` package.
 
-Migrations are by vertical slice. A package or capability is introduced only when working code has a stable responsibility to inhabit it; bulk moves are prohibited.
+Migrations are by vertical slice. A package or capability is introduced only when working code has a stable responsibility to inhabit it. An area moves into its package as one complete commit series (code, tests, transports and documentation together), never half in the parent and half in the child.
 
 ## One application surface
 
-Every use case is declared once, as an exported method on the focused service
-that owns its policy, under its public use-case name (`CreateClass`, not
-`Create`). `app.App` embeds each such service, so the App method set is the
-union of their exported methods and the transports' consumer-owned ports are
-satisfied through promotion. App declares no use-case method of its own:
-neither a forwarder nor a wrapper that adds logic around a service call.
+Every use case is declared once, as an exported method on the area service that
+owns its policy, under its public use-case name (`CreateClass`, not `Create`).
+`app.App` exposes the area services as named fields and declares no use case of
+its own. Transports call `app.Academic.CreateClass` and so on; an `httpapi`
+resource receives the area service it serves.
 
-Work a wrapper used to add belongs in the owning service method: operational
+Work a wrapper would add belongs in the owning service method: operational
 outcome recording, error concealment, input normalization, defensive copies,
 and result narrowing. A service whose construction is optional, such as Mail
 or Job operations when the graph has no Job Store, answers its own
-unavailability with a nil-receiver guard. A use case that needs several
-services lives on the service that owns its policy and receives the others as
+unavailability with a nil-receiver guard. A use case that needs several areas
+lives on the service that owns its policy and receives the others as
 collaborators; it never reads another service's fields.
 
-Every exported method of an embedded service joins the public surface. A
-service therefore exports only its use cases and the methods that a
-child-module port requires; ports inside `app` use unexported methods. Two
-embedded services never export the same name, because Go silently drops an
-ambiguous promoted method. App keeps a named field only for a runtime handle
-that composition borrows, such as the Job engine, or a collaborator whose
-methods must not join the surface.
-
-This shape was chosen over inlining every service into App methods. The
-transports already consume narrow ports that `*app.App` satisfies, and the
-Exam children are separate services. Embedding removes the doubled
-declaration while keeping those ports, each service's focused dependency set,
-and the fakes its unit tests use.
-
-`app.App` is not a persistence locator. Focused services receive exact Store
-contracts during composition. App retains neither the root Store nor a Store
-accessor; architecture tests reject restoring either that locator or
+`app.App` is not a persistence locator. Area services hold the Store contracts
+they use. App itself has no Store field or accessor; architecture tests reject
 production `App.Store()` traversal.
 
-`app.New` remains the sole application constructor and exposes its fail-fast
-order directly: validate shared dependencies, construct shared mechanics,
-construct Identity, construct access and Academic Structure, construct
-Examination authoring, construct profile and file behavior, construct optional
-Jobs, then construct administration and bootstrap behavior before assembling
-the facade. Private same-package recipes
-retain the projection and wiring knowledge for those cohesive slices. Their
-result values exist only during construction and are not runtime locators or
-alternate application interfaces.
+`app.New` remains the sole application constructor. It reads top to bottom:
+validate shared dependencies, build `access`, then each area in dependency
+order, then optional Jobs, and return the `App`.
 
-Readable ordered construction and selective child modules are useful
-structural patterns, but another project's platform-service taxonomy is not a
-package template. A child package is introduced only after the responsibility
-is stable, can obey inward dependencies without a parent-package cycle, and
-passes the deletion test. Concrete focused implementations remain unexported
-unless a real cross-package consumer requires their type.
+Another project's package taxonomy is not a template. An area or child package
+is introduced only after the responsibility is stable, can obey inward
+dependencies without a cycle, and passes the deletion test.
 
-Internal interfaces are sized around one cohesive consumer need or an existing
-atomic contract, not mechanically around every method and not as broad getter
-aggregates. Test fakes remain beside their consuming focused service; Store
-conformance and the real composition graph provide shared persistence and
-wiring evidence.
+Test fakes remain beside the tests that use them; Store conformance and the
+real composition graph provide shared persistence and wiring evidence.
+
+## Migration status
+
+The repository is moving from per-service ports and an embedding `App` to the
+area packages described above (plan of 2026-11-10). Until an area has moved,
+its code still uses the old shape: private services in the flat `app/`
+package, a per-service `Dependencies` struct and store port, and embedding in
+`App`. Follow the new shape in any area that has moved, and do not add new
+per-service ports anywhere. These architecture tests enforce the old shape and
+retire when the last area moves: `TestServicesTakeOneDependencies`,
+`TestApplicationSurfaceIsTheEmbeddedServices`, and
+`TestApplicationDeclaresNoForwardingNames`.

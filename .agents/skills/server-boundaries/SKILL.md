@@ -31,8 +31,9 @@ description: Design or change Proctor server packages, dependency direction, app
 The module-root `server.New` is the sole composition root. `platform.Service`
 owns infrastructure lifecycle and health and never becomes an application
 service locator. `app.New` is the sole application constructor; `app.App`
-embeds the focused services so each use case is declared once, on its
-owning service, and it is not a Store accessor. Concrete backend selection remains in
+holds one named field per domain area package (`app/academic`, `app/identity`,
+...), each use case is declared once on its area service, and App is not a
+Store accessor. Concrete backend selection remains in
 the root server package.
 
 Use direct typed commands, queries, and results. `invocation.Invocation` carries the
@@ -42,7 +43,9 @@ cases authorize against current resource state immediately before expensive
 work or mutation. Background work enters through application use cases rather
 than manipulating stores directly.
 
-Interfaces live beside their consumer and expose one cohesive need. The
-bounded root `store.Store` and its model/aggregate contracts are the deliberate
-grouped exception for shared conformance. A child package cannot import its
-parent, select infrastructure, or redeclare a sibling's contracts.
+Services hold concrete collaborators and the `store` contracts they call;
+an interface exists only where something real substitutes behind it, and tests
+fake a Store contract by embedding it. The bounded root `store.Store` and its
+model/aggregate contracts are the deliberate grouped exception for shared
+conformance. A child package cannot import its parent, select infrastructure,
+or redeclare a sibling's contracts.

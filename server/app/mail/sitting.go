@@ -72,6 +72,12 @@ func NewSittingComposer(deps SittingComposerDependencies) (*SittingComposer, err
 	return &SittingComposer{deps: deps}, nil
 }
 
+// Prepare builds the mail fan-out for one Sitting schedule change: the mail
+// occurrence, the Job that later expands it into per-recipient deliveries, and
+// a sealed bundle of every Sitting schedule template rendered in every
+// supported locale. It selects no recipients. When mail sending is disabled
+// the fan-out has no bundle and its expansion Job already has cancellation
+// requested.
 func (p *SittingComposer) Prepare(
 	actorID model.UserID,
 	sitting *model.ExamSitting,
@@ -250,6 +256,12 @@ func (p *SittingComposer) OpenBundle(bundle *model.MailFanoutBundle) (FrozenSitt
 // skips that recipient rather than stopping mail to everyone after it.
 var ErrSittingMailRecipientInvalid = errors.New("sitting mail recipient is invalid")
 
+// PrepareRecipient builds the queued delivery and its delivery Job for one
+// recipient of a Sitting mail fan-out. It takes the bundle content for key in
+// the recipient's locale, falling back to the base language and then the
+// default locale, and dates the delivery at the occurrence's creation time
+// with the fan-out's deadline. It returns ErrSittingMailRecipientInvalid when
+// the recipient's account cannot be addressed.
 func (p *SittingComposer) PrepareRecipient(
 	fanout *store.ExamSittingMailFanoutSnapshot,
 	recipient *model.User,

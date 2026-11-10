@@ -26,6 +26,10 @@ type Execution struct {
 	reserveWork func(context.Context, int, int) (bool, error)
 }
 
+// NewExecution builds the Execution a handler runs with and validates nothing.
+// checkpoint and reserveWork back Execution.Checkpoint and
+// Execution.ReserveWork; when one is nil, that method returns an error instead
+// of acting.
 func NewExecution(
 	record *model.Job,
 	attempt *model.JobAttempt,

@@ -317,6 +317,10 @@ type managerExamIntegrityDiscrepancyData struct {
 	RecordedAt    string `json:"recorded_at"`
 }
 
+// NewExamIntegrityDiscrepancyRecordedEvent tells viewers of a Submission that
+// an Integrity Discrepancy was recorded against it: a Focus Loss claim that
+// arrived after the Attempt or Sitting had ended. The payload carries
+// identities and the receipt time only, not the claim's duration or source.
 func NewExamIntegrityDiscrepancyRecordedEvent(
 	submissionID model.SubmissionID,
 	sittingID model.ExamSittingID,
@@ -458,6 +462,11 @@ func newManagerExamIntegrityReviewEvent(name string, fact ExamIntegrityReviewEve
 	}, nil
 }
 
+// NewExamAttemptSubmittedEvent tells Sitting viewers that an Attempt was
+// submitted; provenance says whether the candidate submitted, a manager ended
+// the Attempt, or the Sitting closed. Unlike the candidate event of the same
+// wire name, its payload identifies the candidate. manifestDigest must be a
+// lowercase hex SHA-256.
 func NewExamAttemptSubmittedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
@@ -502,6 +511,10 @@ func NewExamAttemptSubmittedEvent(
 	}, nil
 }
 
+// NewCandidateExamAttemptSubmittedEvent is the candidate's own copy of the
+// submission fact. It is addressed to candidateID alone, is authorized under
+// the participation action rather than the view action, and leaves the
+// candidate identity out of the payload.
 func NewCandidateExamAttemptSubmittedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
@@ -554,6 +567,10 @@ func validEventSHA256(value string) bool {
 	return err == nil && len(decoded) == 32
 }
 
+// NewCandidateExamAttemptFocusLossWarningEvent warns the candidate alone that
+// their Focus Loss crossed the policy threshold under a flag-and-warn
+// outcome. The payload carries a fixed warning code and no counts,
+// thresholds, or evidence.
 func NewCandidateExamAttemptFocusLossWarningEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
@@ -583,6 +600,11 @@ func NewCandidateExamAttemptFocusLossWarningEvent(
 	}, nil
 }
 
+// NewExamAttemptIntegrityFlaggedEvent tells Sitting viewers that a Focus Loss
+// Integrity Flag was raised on an Attempt. The payload gives the policy
+// outcome and how many evidence episodes were retained and how many
+// overflowed, not the evidence itself. Focus Loss is the only policy kind it
+// reports.
 func NewExamAttemptIntegrityFlaggedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
@@ -707,6 +729,9 @@ func NewCandidateExamAttemptSuspendedEvent(
 	)
 }
 
+// NewCandidateExamAttemptReallowedEvent tells the candidate alone that their
+// suspended Attempt was re-allowed and is active again. Unlike the suspension
+// event it carries no reason code.
 func NewCandidateExamAttemptReallowedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
@@ -844,6 +869,10 @@ func newExamAttemptSuspendedEvent(
 	}, nil
 }
 
+// NewExamAttemptReallowedEvent tells Sitting viewers that an Attempt
+// Suspension was closed and the Attempt returned to active. It names the
+// closed suspension and the Attempt's revision after the change; the
+// manager's private reason is not included.
 func NewExamAttemptReallowedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
@@ -881,6 +910,9 @@ func NewExamAttemptReallowedEvent(
 	}, nil
 }
 
+// NewExamAttemptConnectionOpenedEvent tells Sitting viewers that a candidate's
+// desktop was admitted to the Sitting and now holds an open Attempt
+// Connection. It is addressed to viewers of the Sitting, not to the candidate.
 func NewExamAttemptConnectionOpenedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
@@ -900,6 +932,11 @@ func NewExamAttemptConnectionOpenedEvent(
 	)
 }
 
+// NewExamAttemptConnectionClosedEvent tells Sitting viewers that an Attempt
+// Connection closed and why: reason separates, for example, a dropped
+// transport or expired lease from a policy suspension, a kick, a submission,
+// or the Sitting closing. It is addressed to viewers of the Sitting, not to
+// the candidate.
 func NewExamAttemptConnectionClosedEvent(
 	sittingID model.ExamSittingID,
 	attemptID model.ExamAttemptID,
@@ -1153,6 +1190,10 @@ func validExamSittingLifecycleEventReason(value string) bool {
 	}
 }
 
+// NewExamSittingScheduledEvent tells subscribers holding the view action on a
+// Sitting that it was scheduled. The payload carries the Sitting's state and
+// revision but nothing of the schedule itself: no times, Class, or Exam
+// Revision. state must be Scheduled.
 func NewExamSittingScheduledEvent(
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
@@ -1166,6 +1207,10 @@ func NewExamSittingScheduledEvent(
 	return newExamSittingChangedEvent("exam_sitting_scheduled", examID, sittingID, state, revision, changedAt)
 }
 
+// NewExamSittingScheduleUpdatedEvent tells Sitting viewers that a Scheduled
+// Sitting's Exam Revision, Class, start, or end was changed. The payload
+// carries the new Sitting revision but not which of those changed or their
+// new values.
 func NewExamSittingScheduleUpdatedEvent(
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
@@ -1179,6 +1224,9 @@ func NewExamSittingScheduleUpdatedEvent(
 	return newExamSittingChangedEvent("exam_sitting_schedule_updated", examID, sittingID, state, revision, changedAt)
 }
 
+// NewExamSittingCanceledEvent tells Sitting viewers that a Sitting was
+// canceled before it opened. state must be Canceled, and the payload carries
+// no cancellation reason.
 func NewExamSittingCanceledEvent(
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
@@ -1223,6 +1271,10 @@ func newExamSittingChangedEvent(
 	}, nil
 }
 
+// NewExamRevisionPublishedEvent tells viewers of an Exam that a new Exam
+// Revision was published. The payload carries the Revision's number,
+// publication kind, and policy digest, and none of the published content.
+// policyDigest must be 64 characters long.
 func NewExamRevisionPublishedEvent(
 	revisionID model.ExamRevisionID,
 	examID model.ExamID,
@@ -1352,6 +1404,10 @@ func NewExamArchivedEvent(examID model.ExamID, revision int64, archivedAt time.T
 	}, nil
 }
 
+// NewExamManagerChangedEvent tells viewers of an Exam that userID was added
+// as an Exam Manager (present true) or removed (present false). revision is
+// the Exam's revision after the change. An ownership transfer is announced by
+// NewExamOwnerTransferredEvent instead.
 func NewExamManagerChangedEvent(
 	examID model.ExamID,
 	userID model.UserID,

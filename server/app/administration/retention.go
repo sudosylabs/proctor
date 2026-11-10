@@ -34,6 +34,11 @@ type ChangeRetentionControlCommand struct {
 	IdempotencyKey         string
 }
 
+// RetentionRecordPage is one page of retention records. Paging counts
+// Submissions, and each Submission contributes one record per retention
+// category, so Items can hold up to four times the requested limit; HasMore
+// means further Submissions follow. AsOf is the time eligibility was evaluated
+// at and PolicyRevision the retention policy revision it was evaluated under.
 type RetentionRecordPage struct {
 	PolicyRevision int64
 	AsOf           time.Time
@@ -41,6 +46,9 @@ type RetentionRecordPage struct {
 	HasMore        bool
 }
 
+// RetentionRecordView pairs one retention record with its Eligibility at the
+// page's AsOf time. Retirement is nil unless the Submission has a retirement
+// for the record's category that has not been canceled.
 type RetentionRecordView struct {
 	Record      model.RetentionRecord
 	Eligibility model.RetentionEligibility

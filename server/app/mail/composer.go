@@ -433,6 +433,11 @@ func (p *Composer) PrepareInvitation(invitation *model.Invitation, actionURL str
 	)
 }
 
+// PrepareInvitationResend freezes another copy of a pending Invitation's
+// message for its target address, with actionURL as the claim link. Each
+// resend is a new mail occurrence recorded against actor, and its delivery
+// deadline remains the Invitation's expiry. It fails when mail sending is
+// disabled or at is not before that expiry.
 func (p *Composer) PrepareInvitationResend(
 	invitation *model.Invitation,
 	actionURL string,
@@ -471,6 +476,10 @@ func (p *Composer) PrepareInvitationResend(
 	)
 }
 
+// PrepareInvitationRevocation freezes the notice that tells an Invitation's
+// target address the Invitation was revoked. The Invitation must still be
+// pending when it is called, and the notice carries no action link. When mail
+// sending is disabled it returns a suppressed delivery rather than an error.
 func (p *Composer) PrepareInvitationRevocation(
 	invitation *model.Invitation,
 	actor model.UserID,
@@ -840,6 +849,10 @@ func (p *Composer) PrepareResultReleaseMail(request ResultReleasePreparation) (*
 	)
 }
 
+// PreparePublicRegistrationVerification freezes the verify-email message for
+// an account created by public registration, with actionURL as its
+// verification link. Public registration passes the verification token's ID
+// as occurrenceID and the token's expiry as deadline.
 func (p *Composer) PreparePublicRegistrationVerification(
 	recipient *model.User,
 	occurrenceID model.MailOccurrenceID,

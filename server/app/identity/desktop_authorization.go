@@ -22,6 +22,12 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// DesktopAuthorizationPolicy bounds hosted Desktop authorization. Issuer is
+// the installation's public origin, under which the hosted authorization page
+// lives; it must be HTTPS unless AllowLoopbackHTTPDevelopment permits HTTP on
+// a loopback host. TransactionLifetime limits the whole browser transaction
+// and CodeLifetime the one-use code: zero selects the model maximum (five
+// minutes and one minute) and a longer value is refused.
 type DesktopAuthorizationPolicy struct {
 	Issuer                       string
 	AllowLoopbackHTTPDevelopment bool
@@ -104,6 +110,11 @@ type StartDesktopAuthorizationCommand struct {
 	Source           string
 }
 
+// DesktopAuthorizationStart is what the Desktop receives for a started
+// authorization. AuthorizationURL is the hosted page to open in a browser; it
+// carries the one-use handle and the state in its query and the browser proof
+// in its fragment. ExpiresAt is the transaction deadline in Unix milliseconds.
+// DPoPNonce is bound to this authorization and the Desktop's proposed key.
 type DesktopAuthorizationStart struct {
 	AuthorizationURL string
 	ExpiresAt        int64
@@ -111,11 +122,19 @@ type DesktopAuthorizationStart struct {
 }
 
 type BindDesktopAuthorizationCommand struct{ Handle, BrowserProof, State string }
+
+// DesktopAuthorizationBinding is the browser's credential for one bound
+// Desktop authorization or reauthentication. Binding is the raw secret, of
+// which only a hash is stored; the HTTP layer returns it as a cookie.
+// ExpiresAt is Unix milliseconds.
 type DesktopAuthorizationBinding struct {
 	Binding   string
 	ExpiresAt int64
 }
 
+// DesktopAuthorizationAccount identifies the account a bound Desktop
+// authorization has authenticated, for the hosted page to show before the
+// person approves signing the Desktop in as it.
 type DesktopAuthorizationAccount struct {
 	ID          model.UserID
 	Username    string
@@ -125,6 +144,11 @@ type DesktopAuthorizationAccount struct {
 	Email string
 }
 
+// DesktopAuthorizationBrowserContext is what the hosted page shows for a bound
+// Desktop authorization. Once the transaction is authenticated, Account is
+// set and the sign-in fields stay empty. Before that, Account is nil and
+// LocalLoginEnabled and ExternalProviders name the sign-in methods the access
+// policy allows for Desktop authorization. ExpiresAt is Unix milliseconds.
 type DesktopAuthorizationBrowserContext struct {
 	State             model.BrowserAuthenticationState
 	Account           *DesktopAuthorizationAccount
@@ -145,6 +169,11 @@ type AuthenticateDesktopAuthorizationLocallyCommand struct {
 	Source   string
 }
 type ApproveDesktopAuthorizationCommand struct{ Binding, State string }
+
+// DesktopAuthorizationApproval is the outcome of approving a Desktop
+// authorization or reauthentication. RedirectURL is the Desktop's callback
+// URL with the one-use code and the state added as query parameters.
+// ExpiresAt is the code's deadline in Unix milliseconds.
 type DesktopAuthorizationApproval struct {
 	RedirectURL string
 	ExpiresAt   int64
@@ -158,6 +187,11 @@ type ExchangeDesktopAuthorizationCommand struct {
 	Architecture                      model.DesktopArchitecture
 	RealtimeProtocol                  int
 }
+
+// DesktopAuthorizationExchangeResult is what a redeemed authorization code
+// yields: the Desktop Session, its Desktop Registration, and the raw access
+// and refresh tokens, whose token type is DPoP. DPoPNonce is a fresh nonce
+// bound to that Session, Registration, and DPoP key.
 type DesktopAuthorizationExchangeResult struct {
 	Session      *model.Session
 	Registration *model.DesktopRegistration

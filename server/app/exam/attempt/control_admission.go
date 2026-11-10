@@ -55,8 +55,13 @@ var (
 	// cadence: one renewal plus one security-coverage update or exact retry)
 	// with a burst of three intervals, so a few callers cannot hold its
 	// workers or queue while an honest candidate never reaches the bound.
-	liveControlLane = controlLane{workers: controlWorkers, waiters: liveControlWaiters, wait: liveControlWait,
-		interval: model.AttemptParticipationRenewalInterval / 2, burst: 6}
+	liveControlLane = controlLane{
+		workers:  controlWorkers,
+		waiters:  liveControlWaiters,
+		wait:     liveControlWait,
+		interval: model.AttemptParticipationRenewalInterval / 2,
+		burst:    6,
+	}
 )
 
 // controlAllowance is one User's refill credit, in milliseconds of lane
@@ -89,31 +94,37 @@ func (a *controlAdmission) enter(ctx context.Context, user model.UserID, now tim
 	if !user.IsValid() {
 		return nil, apperror.New("authentication.token_invalid")
 	}
+
 	a.mu.Lock()
 	lane := a.shape()
 	if a.slots == nil {
 		a.slots = make(chan struct{}, lane.workers)
 	}
+
 	slots := a.slots
 	if lane.waiters == 0 && len(slots) >= lane.workers {
 		a.mu.Unlock()
 		return nil, apperror.New("exam.delivery.control_rate_limited")
 	}
+
 	if !a.spend(user, now, lane) {
 		a.mu.Unlock()
 		return nil, apperror.New("exam.delivery.control_rate_limited")
 	}
+
 	select {
 	case slots <- struct{}{}:
 		a.mu.Unlock()
 		return releaseControl(slots), nil
 	default:
 	}
+
 	if a.waiting >= lane.waiters {
 		a.refund(user, lane)
 		a.mu.Unlock()
 		return nil, apperror.New("exam.delivery.control_rate_limited")
 	}
+
 	a.waiting++
 	a.mu.Unlock()
 	timer := time.NewTimer(lane.wait)
@@ -126,15 +137,18 @@ func (a *controlAdmission) enter(ctx context.Context, user model.UserID, now tim
 	case <-timer.C:
 		err = apperror.New("exam.delivery.control_rate_limited")
 	}
+
 	a.mu.Lock()
 	a.waiting--
 	if err != nil {
 		a.refund(user, lane)
 	}
+
 	a.mu.Unlock()
 	if err != nil {
 		return nil, err
 	}
+
 	return releaseControl(slots), nil
 }
 

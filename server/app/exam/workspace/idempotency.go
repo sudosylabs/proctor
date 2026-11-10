@@ -22,8 +22,15 @@ const (
 	idempotencyOperationRemoveEntry     = "exam.starter_workspace.entry.remove"
 )
 
-func prepareWorkspaceIdempotency(invocation invocation.Invocation, operation, key string, examID model.ExamID, revision int64,
-	expectedContentVersion model.WorkspaceContentVersion, entryID, path, mediaType string, size int64, sha256 string,
+func prepareWorkspaceIdempotency(
+	invocation invocation.Invocation,
+	operation, key string,
+	examID model.ExamID,
+	revision int64,
+	expectedContentVersion model.WorkspaceContentVersion,
+	entryID, path, mediaType string,
+	size int64,
+	sha256 string,
 ) (*store.CommandIdempotency, error) {
 	return idempotency.Require(invocation, operation, key, struct {
 		ExamID                 string `json:"exam_id"`

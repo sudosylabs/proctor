@@ -21,8 +21,13 @@ import (
 // The caller validates its inputs and supplies non-nil access, access.Exam,
 // and memberships.
 // Lookup failures are returned unchanged for the owning use case to present.
-func SelectAction(ctx context.Context, memberships store.AcademicUnitMemberStore, userID model.UserID, access *store.ExamAccessSnapshot,
-	at time.Time, ordinaryAction, overrideAction model.Action,
+func SelectAction(
+	ctx context.Context,
+	memberships store.AcademicUnitMemberStore,
+	userID model.UserID,
+	access *store.ExamAccessSnapshot,
+	at time.Time,
+	ordinaryAction, overrideAction model.Action,
 ) (model.Action, error) {
 	if access.ActorIsManager {
 		ordinary, err := HasCurrentMembership(ctx, memberships, userID, access.Exam.AcademicUnitID, at)
@@ -33,20 +38,29 @@ func SelectAction(ctx context.Context, memberships store.AcademicUnitMemberStore
 			return ordinaryAction, nil
 		}
 	}
+
 	return overrideAction, nil
 }
 
 // HasCurrentMembership checks the exact Academic Unit at the supplied time.
 // It grants no role permission and implies no Exam Manager relationship.
-func HasCurrentMembership(ctx context.Context, memberships store.AcademicUnitMemberStore, userID model.UserID, unitID model.AcademicUnitID, at time.Time) (bool, error) {
+func HasCurrentMembership(
+	ctx context.Context,
+	memberships store.AcademicUnitMemberStore,
+	userID model.UserID,
+	unitID model.AcademicUnitID,
+	at time.Time,
+) (bool, error) {
 	items, err := memberships.ListActiveByUser(ctx, userID, model.TimeUTC(at))
 	if err != nil {
 		return false, err
 	}
+
 	for _, item := range items {
 		if item != nil && item.AcademicUnitID == unitID {
 			return true, nil
 		}
 	}
+
 	return false, nil
 }

@@ -36,68 +36,126 @@ type CorrectionAcknowledgementResult struct {
 // live Attempt Participation has received a Sitting correction. It is fenced
 // by the participation generation and by ExpectedCurrentRevisionID matching
 // the Attempt's current Exam Revision.
-func (s *Service) AcknowledgeExamAttemptCorrection(ctx context.Context, invocation invocation.Invocation, command AcknowledgeCorrectionCommand) (_ CorrectionAcknowledgementResult, resultErr error) {
+func (s *Service) AcknowledgeExamAttemptCorrection(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command AcknowledgeCorrectionCommand,
+) (_ CorrectionAcknowledgementResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	selector, err := candidateSelector(invocation, command.Access.CandidateAccess)
-	if err != nil || !command.Access.ParticipationID.IsValid() || command.Access.Generation < 1 ||
-		!command.CorrectionRevisionID.IsValid() || !command.ExpectedCurrentRevisionID.IsValid() {
+	if err != nil ||
+		!command.Access.ParticipationID.IsValid() ||
+		command.Access.Generation < 1 ||
+		!command.CorrectionRevisionID.IsValid() ||
+		!command.ExpectedCurrentRevisionID.IsValid() {
 		return CorrectionAcknowledgementResult{}, apperror.Invalid("exam.attempt.invalid", "correction_acknowledgement")
 	}
+
 	idempotency, err := idempotency.Require(invocation, store.ExamAttemptCorrectionAcknowledgementOperation, command.IdempotencyKey, struct {
 		AttemptID                 string `json:"exam_attempt_id"`
 		ParticipationID           string `json:"participation_id"`
 		Generation                int64  `json:"generation"`
 		CorrectionRevisionID      string `json:"correction_revision_id"`
 		ExpectedCurrentRevisionID string `json:"expected_current_revision_id"`
-	}{selector.AttemptID.String(), command.Access.ParticipationID.String(), command.Access.Generation,
-		command.CorrectionRevisionID.String(), command.ExpectedCurrentRevisionID.String()})
+	}{
+		selector.AttemptID.String(),
+		command.Access.ParticipationID.String(),
+		command.Access.Generation,
+		command.CorrectionRevisionID.String(),
+		command.ExpectedCurrentRevisionID.String(),
+	})
 	if err != nil {
 		return CorrectionAcknowledgementResult{}, err
 	}
-	input := store.ExamAttemptCorrectionAcknowledgement{Access: selector, ParticipationID: command.Access.ParticipationID,
-		Generation: command.Access.Generation, CorrectionRevisionID: command.CorrectionRevisionID,
-		ExpectedCurrentRevisionID: command.ExpectedCurrentRevisionID}
+
+	input := store.ExamAttemptCorrectionAcknowledgement{
+		Access:                    selector,
+		ParticipationID:           command.Access.ParticipationID,
+		Generation:                command.Access.Generation,
+		CorrectionRevisionID:      command.CorrectionRevisionID,
+		ExpectedCurrentRevisionID: command.ExpectedCurrentRevisionID,
+	}
 	target, err := s.deps.Persistence.ResolveCorrectionAcknowledgementTarget(ctx, input)
 	if err != nil {
 		return CorrectionAcknowledgementResult{}, storeError(storeErrors, err)
 	}
-	if target == nil || target.AttemptID != selector.AttemptID || target.CandidateUserID != selector.CandidateUserID ||
-		target.CorrectionRevisionID != command.CorrectionRevisionID || target.CurrentRevisionID != command.ExpectedCurrentRevisionID ||
-		!target.SittingID.IsValid() || !target.ClassID.IsValid() {
-		return CorrectionAcknowledgementResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent correction acknowledgement target"))
+
+	if target == nil ||
+		target.AttemptID != selector.AttemptID ||
+		target.CandidateUserID != selector.CandidateUserID ||
+		target.CorrectionRevisionID != command.CorrectionRevisionID ||
+		target.CurrentRevisionID != command.ExpectedCurrentRevisionID ||
+		!target.SittingID.IsValid() ||
+		!target.ClassID.IsValid() {
+		return CorrectionAcknowledgementResult{}, apperror.New("exam.attempt.unavailable").Wrap(
+			errors.New("inconsistent correction acknowledgement target"),
+		)
 	}
+
 	resource := model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()}
-	if err = s.deps.Auditor.RecordAuthorizationDecision(ctx, invocation, model.ActionExamSittingParticipate,
-		resource, model.RoleScopeClass, target.ClassID.String(), true); err != nil {
+	if err = s.deps.Auditor.RecordAuthorizationDecision(
+		ctx,
+		invocation,
+		model.ActionExamSittingParticipate,
+		resource,
+		model.RoleScopeClass,
+		target.ClassID.String(),
+		true,
+	); err != nil {
 		return CorrectionAcknowledgementResult{}, err
 	}
-	auditEvent, err := s.deps.Auditor.PrepareAtScope(ctx, invocation, model.ActionExamSittingParticipate,
-		resource, model.RoleScopeClass,
-		target.ClassID.String(), store.ExamAttemptCorrectionAcknowledgementOperation,
-		map[string]any{"exam_attempt_id": target.AttemptID.String(), "correction_revision_id": target.CorrectionRevisionID.String(),
-			"expected_current_revision_id": target.CurrentRevisionID.String()})
+
+	auditEvent, err := s.deps.Auditor.PrepareAtScope(
+		ctx,
+		invocation,
+		model.ActionExamSittingParticipate,
+		resource,
+		model.RoleScopeClass,
+		target.ClassID.String(),
+		store.ExamAttemptCorrectionAcknowledgementOperation,
+		map[string]any{
+			"exam_attempt_id":              target.AttemptID.String(),
+			"correction_revision_id":       target.CorrectionRevisionID.String(),
+			"expected_current_revision_id": target.CurrentRevisionID.String(),
+		},
+	)
 	if err != nil {
 		return CorrectionAcknowledgementResult{}, err
 	}
+
 	input.AuditEvent = auditEvent
 	stored, err := s.deps.Persistence.AcknowledgeCorrection(ctx, &input, idempotency)
 	if err != nil {
 		return CorrectionAcknowledgementResult{}, storeError(storeErrors, err)
 	}
-	if stored == nil || stored.AttemptID != selector.AttemptID || stored.CorrectionRevisionID != command.CorrectionRevisionID ||
-		stored.CurrentRevisionID != command.ExpectedCurrentRevisionID || stored.AcknowledgedAt.IsZero() {
-		return CorrectionAcknowledgementResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent correction acknowledgement outcome"))
+
+	if stored == nil ||
+		stored.AttemptID != selector.AttemptID ||
+		stored.CorrectionRevisionID != command.CorrectionRevisionID ||
+		stored.CurrentRevisionID != command.ExpectedCurrentRevisionID ||
+		stored.AcknowledgedAt.IsZero() {
+		return CorrectionAcknowledgementResult{}, apperror.New("exam.attempt.unavailable").Wrap(
+			errors.New("inconsistent correction acknowledgement outcome"),
+		)
 	}
+
 	// The receipt is immutable; the gates are freshly resolved after commit,
 	// including an exact replay or another correction published in the meantime.
 	presentation, err := s.GetCandidateExamPresentation(ctx, invocation, command.Access.CandidateAccess)
 	if err != nil {
 		return CorrectionAcknowledgementResult{}, err
 	}
+
 	if presentation.AttemptID != target.AttemptID || presentation.SittingID != target.SittingID {
-		return CorrectionAcknowledgementResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent current acknowledgement presentation"))
+		return CorrectionAcknowledgementResult{}, apperror.New("exam.attempt.unavailable").Wrap(
+			errors.New("inconsistent current acknowledgement presentation"),
+		)
 	}
-	return CorrectionAcknowledgementResult{CorrectionRevisionID: stored.CorrectionRevisionID,
-		CurrentRevisionID: presentation.RuntimeCapabilities.ExamRevision.CurrentRevisionID,
-		AcknowledgedAt:    model.OptionalTimeFrom(stored.AcknowledgedAt), RuntimeCapabilities: presentation.RuntimeCapabilities}, nil
+
+	return CorrectionAcknowledgementResult{
+		CorrectionRevisionID: stored.CorrectionRevisionID,
+		CurrentRevisionID:    presentation.RuntimeCapabilities.ExamRevision.CurrentRevisionID,
+		AcknowledgedAt:       model.OptionalTimeFrom(stored.AcknowledgedAt),
+		RuntimeCapabilities:  presentation.RuntimeCapabilities,
+	}, nil
 }

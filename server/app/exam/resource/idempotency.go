@@ -22,7 +22,17 @@ const (
 	idempotencyOperationRemoveResource         = "exam.resource.remove"
 )
 
-func prepareResourceIdempotency(invocation invocation.Invocation, operation, key string, examID model.ExamID, revision int64, resourceID, name, description string, media model.ExamResourceMediaType, size int64, sha string, ids []string) (*store.CommandIdempotency, error) {
+func prepareResourceIdempotency(
+	invocation invocation.Invocation,
+	operation, key string,
+	examID model.ExamID,
+	revision int64,
+	resourceID, name, description string,
+	media model.ExamResourceMediaType,
+	size int64,
+	sha string,
+	ids []string,
+) (*store.CommandIdempotency, error) {
 	return idempotency.Require(invocation, operation, key, struct {
 		ExamID                string   `json:"exam_id"`
 		ExpectedDraftRevision int64    `json:"expected_draft_revision"`

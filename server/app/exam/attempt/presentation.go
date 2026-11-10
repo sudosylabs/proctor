@@ -49,32 +49,56 @@ type Resource struct {
 // GetCandidateExamPresentation returns what the candidate's live Attempt
 // displays: title, sanitized Exam Instructions, Exam Resources, runtime
 // capabilities, browser policy, and live corrections.
-func (s *Service) GetCandidateExamPresentation(ctx context.Context, invocation invocation.Invocation, access CandidateAccess) (_ Presentation, resultErr error) {
+func (s *Service) GetCandidateExamPresentation(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	access CandidateAccess,
+) (_ Presentation, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	selector, err := candidateSelector(invocation, access)
 	if err != nil {
 		return Presentation{}, err
 	}
+
 	stored, err := s.deps.Persistence.GetCandidatePresentation(ctx, selector)
 	if err != nil {
 		return Presentation{}, storeError(storeErrors, err)
 	}
-	if stored == nil || stored.Capacity.Validate() != nil || stored.RuntimeCapabilities.Validate() != nil || !validCandidateBrowserPolicy(stored.RuntimeCapabilities, stored.BrowserPolicy) ||
+
+	if stored == nil ||
+		stored.Capacity.Validate() != nil ||
+		stored.RuntimeCapabilities.Validate() != nil ||
+		!validCandidateBrowserPolicy(stored.RuntimeCapabilities, stored.BrowserPolicy) ||
 		!validCandidateLiveCorrections(stored.RuntimeCapabilities, stored.LiveCorrections) ||
 		stored.RuntimeCapabilities.ExamRevision.AdmissionRevisionID.IsZero() ||
 		stored.RuntimeCapabilities.ExamRevision.CurrentRevisionID.IsZero() {
 		return Presentation{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("missing candidate presentation"))
 	}
-	result := Presentation{AttemptID: stored.AttemptID, SittingID: stored.SittingID, ClassID: stored.ClassID,
-		Title: stored.Title, InstructionsMarkdown: safemarkdown.Sanitize(stored.InstructionsMarkdown), Capacity: stored.Capacity,
-		RuntimeCapabilities: stored.RuntimeCapabilities, BrowserPolicy: cloneCandidateBrowserPolicy(stored.BrowserPolicy),
-		LiveCorrections: model.CloneCandidateLiveCorrections(stored.LiveCorrections),
-		Resources:       make([]Resource, len(stored.Resources))}
-	for index, item := range stored.Resources {
-		result.Resources[index] = Resource{ResourceID: item.ResourceID, DisplayName: item.DisplayName,
-			DescriptionMarkdown: safemarkdown.Sanitize(item.DescriptionMarkdown), Position: item.Position, MediaType: item.MediaType,
-			SizeBytes: item.SizeBytes, SHA256: item.SHA256}
+
+	result := Presentation{
+		AttemptID:            stored.AttemptID,
+		SittingID:            stored.SittingID,
+		ClassID:              stored.ClassID,
+		Title:                stored.Title,
+		InstructionsMarkdown: safemarkdown.Sanitize(stored.InstructionsMarkdown),
+		Capacity:             stored.Capacity,
+		RuntimeCapabilities:  stored.RuntimeCapabilities,
+		BrowserPolicy:        cloneCandidateBrowserPolicy(stored.BrowserPolicy),
+		LiveCorrections:      model.CloneCandidateLiveCorrections(stored.LiveCorrections),
+		Resources:            make([]Resource, len(stored.Resources)),
 	}
+	for index, item := range stored.Resources {
+		result.Resources[index] = Resource{
+			ResourceID:          item.ResourceID,
+			DisplayName:         item.DisplayName,
+			DescriptionMarkdown: safemarkdown.Sanitize(item.DescriptionMarkdown),
+			Position:            item.Position,
+			MediaType:           item.MediaType,
+			SizeBytes:           item.SizeBytes,
+			SHA256:              item.SHA256,
+		}
+	}
+
 	return result, nil
 }
 
@@ -87,7 +111,11 @@ type OpenResourceQuery struct {
 
 // OpenCandidateExamResource opens the content of one Exam Resource presented
 // to the candidate's live Attempt.
-func (s *Service) OpenCandidateExamResource(ctx context.Context, invocation invocation.Invocation, query OpenResourceQuery) (_ OpenedContent, resultErr error) {
+func (s *Service) OpenCandidateExamResource(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	query OpenResourceQuery,
+) (_ OpenedContent, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	selector, err := candidateSelector(invocation, query.Access)
 	if err != nil {
@@ -96,16 +124,28 @@ func (s *Service) OpenCandidateExamResource(ctx context.Context, invocation invo
 	if !query.ResourceID.IsValid() {
 		return OpenedContent{}, apperror.Invalid("exam.attempt.invalid", "exam_resource_id")
 	}
+
 	resolved, err := s.deps.Persistence.ResolveCandidateResource(ctx, selector, query.ResourceID)
 	if err != nil {
 		return OpenedContent{}, storeError(storeErrors, err)
 	}
-	if resolved == nil || resolved.Resource.ResourceID != query.ResourceID || !resolved.FileRevisionID.IsValid() || !resolved.RenditionID.IsValid() {
+
+	if resolved == nil ||
+		resolved.Resource.ResourceID != query.ResourceID ||
+		!resolved.FileRevisionID.IsValid() ||
+		!resolved.RenditionID.IsValid() {
 		return OpenedContent{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("incomplete candidate Resource selector"))
 	}
+
 	body, err := s.deps.Content.OpenExamResource(ctx, resolved.FileRevisionID, resolved.RenditionID)
 	if err != nil {
 		return OpenedContent{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
-	return OpenedContent{Body: body, MediaType: string(resolved.Resource.MediaType), SizeBytes: resolved.Resource.SizeBytes, SHA256: resolved.Resource.SHA256}, nil
+
+	return OpenedContent{
+		Body:      body,
+		MediaType: string(resolved.Resource.MediaType),
+		SizeBytes: resolved.Resource.SizeBytes,
+		SHA256:    resolved.Resource.SHA256,
+	}, nil
 }

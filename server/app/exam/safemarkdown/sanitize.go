@@ -85,31 +85,37 @@ func removeActiveHTMLElements(value string) string {
 			if start < 0 {
 				break
 			}
+
 			openEnd := strings.IndexByte(lower[start:], '>')
 			if openEnd < 0 {
 				value = value[:start]
 				break
 			}
+
 			openEnd += start
 			if openEnd > start && lower[openEnd-1] == '/' {
 				value = value[:start] + value[openEnd+1:]
 				continue
 			}
+
 			closeStart := strings.Index(lower[openEnd+1:], "</"+tag)
 			if closeStart < 0 {
 				value = value[:start]
 				break
 			}
+
 			closeStart += openEnd + 1
 			closeEnd := strings.IndexByte(lower[closeStart:], '>')
 			if closeEnd < 0 {
 				value = value[:start]
 				break
 			}
+
 			closeEnd += closeStart
 			value = value[:start] + value[closeEnd+1:]
 		}
 	}
+
 	return value
 }
 
@@ -206,6 +212,7 @@ func sanitizeMarkdownDestinations(value string) string {
 				continue
 			}
 		}
+
 		image := value[index] == '!' && index+1 < len(value) && value[index+1] == '['
 		link := value[index] == '['
 		if image || link {
@@ -213,6 +220,7 @@ func sanitizeMarkdownDestinations(value string) string {
 			if image {
 				labelStart++
 			}
+
 			labelEnd := findUnescaped(value, ']', labelStart)
 			if labelEnd >= 0 {
 				label := value[labelStart:labelEnd]
@@ -231,11 +239,13 @@ func sanitizeMarkdownDestinations(value string) string {
 								continue
 							}
 						}
+
 						output.WriteString(label)
 						index = end + 1
 						continue
 					}
 				}
+
 				if next < len(value) && value[next] == '[' {
 					if referenceEnd := findUnescaped(value, ']', next+1); referenceEnd >= 0 {
 						output.WriteString(label)
@@ -243,6 +253,7 @@ func sanitizeMarkdownDestinations(value string) string {
 						continue
 					}
 				}
+
 				if image {
 					output.WriteString(label)
 					index = labelEnd + 1
@@ -250,9 +261,11 @@ func sanitizeMarkdownDestinations(value string) string {
 				}
 			}
 		}
+
 		output.WriteByte(value[index])
 		index++
 	}
+
 	return output.String()
 }
 
@@ -304,16 +317,21 @@ func safeMarkdownDestination(raw string) (string, bool) {
 	} else if split := strings.IndexFunc(destination, unicode.IsSpace); split >= 0 {
 		destination = destination[:split]
 	}
+
 	destination = html.UnescapeString(strings.ReplaceAll(destination, "\\", ""))
-	if destination == "" || strings.IndexFunc(destination, func(character rune) bool {
-		return unicode.IsControl(character) || unicode.IsSpace(character)
-	}) >= 0 || strings.HasPrefix(destination, "//") {
+	if destination == "" ||
+		strings.IndexFunc(destination, func(character rune) bool {
+			return unicode.IsControl(character) || unicode.IsSpace(character)
+		}) >= 0 ||
+		strings.HasPrefix(destination, "//") {
 		return "", false
 	}
+
 	parsed, err := url.Parse(destination)
 	if err != nil {
 		return "", false
 	}
+
 	switch strings.ToLower(parsed.Scheme) {
 	case "":
 		return destination, !strings.Contains(strings.Split(destination, "/")[0], ":")

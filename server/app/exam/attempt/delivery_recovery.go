@@ -46,14 +46,20 @@ func (s *Service) browserDeliveryFailure(ctx context.Context, access store.Brows
 	if errors.Is(err, store.ErrDeliveryAdmissionFull) || !errors.As(mapped, &fault) || !SupportsDeliveryRecovery(fault.Code()) {
 		return mapped
 	}
+
 	status, readErr := s.deps.Persistence.BrowserSourceStatus(ctx, access)
 	if readErr != nil || status == nil || status.SourceSessionID != access.SourceSessionID {
 		return mapped
 	}
-	budget, readErr := s.deps.Persistence.DeliveryBudget(ctx, store.DeliveryBudgetAccess{Access: access.Access, ParticipationID: status.ParticipationID})
+
+	budget, readErr := s.deps.Persistence.DeliveryBudget(
+		ctx,
+		store.DeliveryBudgetAccess{Access: access.Access, ParticipationID: status.ParticipationID},
+	)
 	if readErr != nil || budget == nil {
 		return mapped
 	}
+
 	return withDeliveryRecovery(fault, model.DeliveryRecovery{Family: "browser", Budget: *budget, Browser: status})
 }
 
@@ -90,10 +96,14 @@ func (c deliveryRecoveryCause) DeliveryRecovery() *model.DeliveryRecovery {
 // SupportsDeliveryRecovery identifies the application failures with bounded repair context.
 func SupportsDeliveryRecovery(code string) bool {
 	switch code {
-	case "exam.delivery.pending_capacity", "exam.delivery.replay_window_exceeded",
-		"exam.delivery.detail_budget_exhausted", "exam.delivery.sequence_limit",
-		"exam.delivery.declaration_conflict", "exam.delivery.upload_expired",
-		"exam.delivery.append_rate_limited", "exam.delivery.summary_rate_limited":
+	case "exam.delivery.pending_capacity",
+		"exam.delivery.replay_window_exceeded",
+		"exam.delivery.detail_budget_exhausted",
+		"exam.delivery.sequence_limit",
+		"exam.delivery.declaration_conflict",
+		"exam.delivery.upload_expired",
+		"exam.delivery.append_rate_limited",
+		"exam.delivery.summary_rate_limited":
 		return true
 	default:
 		return false

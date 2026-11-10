@@ -33,7 +33,17 @@ type Authorizer interface {
 }
 
 type Auditor interface {
-	BeginAtScope(context.Context, invocation.Invocation, model.Action, model.Resource, model.RoleScopeType, string, string, map[string]any, map[string]any) (model.AuditEventID, error)
+	BeginAtScope(
+		context.Context,
+		invocation.Invocation,
+		model.Action,
+		model.Resource,
+		model.RoleScopeType,
+		string,
+		string,
+		map[string]any,
+		map[string]any,
+	) (model.AuditEventID, error)
 	Fail(context.Context, model.AuditEventID, string) error
 }
 
@@ -79,10 +89,17 @@ type Dependencies struct {
 type Service struct{ deps Dependencies }
 
 func New(deps Dependencies) (*Service, error) {
-	if deps.Persistence == nil || deps.Authorizer == nil || deps.Auditor == nil || deps.Effects == nil ||
-		deps.Mail == nil || deps.Now == nil || deps.NewReviewID == nil || deps.NewDecisionID == nil {
+	if deps.Persistence == nil ||
+		deps.Authorizer == nil ||
+		deps.Auditor == nil ||
+		deps.Effects == nil ||
+		deps.Mail == nil ||
+		deps.Now == nil ||
+		deps.NewReviewID == nil ||
+		deps.NewDecisionID == nil {
 		return nil, errors.New("Exam Integrity Review dependencies are required")
 	}
+
 	return &Service{deps: deps}, nil
 }
 
@@ -108,55 +125,95 @@ type SaveDecisionCommand struct {
 // one Integrity Flag, creating the Submission Review when
 // ExpectedReviewRevision is zero. It is fenced by the expected Review and
 // decision revisions.
-func (s *Service) SaveExamIntegrityDecision(ctx context.Context, invocation invocation.Invocation, command SaveDecisionCommand) (_ Result, resultErr error) {
+func (s *Service) SaveExamIntegrityDecision(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command SaveDecisionCommand,
+) (_ Result, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	if !command.SubmissionID.IsValid() || !command.FlagID.IsValid() ||
-		command.ExpectedReviewRevision < 0 || command.ExpectedDecisionRevision < 0 ||
+	if !command.SubmissionID.IsValid() ||
+		!command.FlagID.IsValid() ||
+		command.ExpectedReviewRevision < 0 ||
+		command.ExpectedDecisionRevision < 0 ||
 		(command.ExpectedReviewRevision == 0 && !command.ReviewID.IsZero()) ||
 		(command.ExpectedReviewRevision > 0 && !command.ReviewID.IsValid()) {
 		return Result{}, apperror.Invalid("exam.integrity_review.invalid", "decision")
 	}
+
 	principal := invocation.Principal()
 	if principal.Validate() != nil {
 		return Result{}, apperror.Invalid("exam.integrity_review.invalid", "principal")
 	}
+
 	idempotency, err := prepareDecisionIdempotency(invocation, command)
 	if err != nil {
 		return Result{}, err
 	}
+
 	reviewID := command.ReviewID
 	if reviewID.IsZero() {
 		reviewID = s.deps.NewReviewID()
 	}
+
 	decisionID := s.deps.NewDecisionID()
-	if _, err := model.NewIntegrityReviewDecision(decisionID, reviewID, command.FlagID, command.Outcome,
-		principal.UserID, command.PrivateRationale, s.deps.Now()); err != nil {
+	if _, err := model.NewIntegrityReviewDecision(
+		decisionID,
+		reviewID,
+		command.FlagID,
+		command.Outcome,
+		principal.UserID,
+		command.PrivateRationale,
+		s.deps.Now(),
+	); err != nil {
 		return Result{}, apperror.Invalid("exam.integrity_review.invalid", "decision").Wrap(err)
 	}
+
 	override, authorization, err := s.authorizeReviewMutation(ctx, invocation, command.SubmissionID)
 	if err != nil {
 		return Result{}, err
 	}
+
 	at := model.TimeUTC(s.deps.Now())
-	auditID, err := s.deps.Auditor.BeginAtScope(ctx, invocation, model.ActionSubmissionReview,
-		model.Resource{Type: model.ResourceSubmission, ID: command.SubmissionID.String()}, model.RoleScopeAcademicUnit,
-		authorization.AcademicUnitID.String(), store.ExamIntegrityReviewDecisionOperation, map[string]any{
-			"submission_id": command.SubmissionID.String(), "integrity_flag_id": command.FlagID.String(),
+	auditID, err := s.deps.Auditor.BeginAtScope(
+		ctx,
+		invocation,
+		model.ActionSubmissionReview,
+		model.Resource{Type: model.ResourceSubmission, ID: command.SubmissionID.String()},
+		model.RoleScopeAcademicUnit,
+		authorization.AcademicUnitID.String(),
+		store.ExamIntegrityReviewDecisionOperation,
+		map[string]any{
+			"submission_id":              command.SubmissionID.String(),
+			"integrity_flag_id":          command.FlagID.String(),
 			"expected_review_revision":   command.ExpectedReviewRevision,
-			"expected_decision_revision": command.ExpectedDecisionRevision, "outcome": string(command.Outcome),
-		}, nil)
+			"expected_decision_revision": command.ExpectedDecisionRevision,
+			"outcome":                    string(command.Outcome),
+		},
+		nil,
+	)
 	if err != nil {
 		return Result{}, err
 	}
+
 	stored, err := s.deps.Persistence.SaveDecision(ctx, &store.ExamIntegrityReviewDecisionMutation{
-		SubmissionID: command.SubmissionID, ReviewID: reviewID, DecisionID: decisionID, FlagID: command.FlagID,
-		ActorUserID: principal.UserID, ManagerOverride: override, ExpectedReviewRevision: command.ExpectedReviewRevision,
-		ExpectedRevision: command.ExpectedDecisionRevision, Outcome: command.Outcome,
-		PrivateRationale: command.PrivateRationale, ChangedAt: at, AuditEventID: auditID, AuditAt: at,
+		SubmissionID:           command.SubmissionID,
+		ReviewID:               reviewID,
+		DecisionID:             decisionID,
+		FlagID:                 command.FlagID,
+		ActorUserID:            principal.UserID,
+		ManagerOverride:        override,
+		ExpectedReviewRevision: command.ExpectedReviewRevision,
+		ExpectedRevision:       command.ExpectedDecisionRevision,
+		Outcome:                command.Outcome,
+		PrivateRationale:       command.PrivateRationale,
+		ChangedAt:              at,
+		AuditEventID:           auditID,
+		AuditAt:                at,
 	}, idempotency)
 	if err != nil {
 		return Result{}, s.failAudit(ctx, auditID, err)
 	}
+
 	result, err := projectMutation(stored, command.SubmissionID)
 	if err != nil {
 		return Result{}, err
@@ -164,6 +221,7 @@ func (s *Service) SaveExamIntegrityDecision(ctx context.Context, invocation invo
 	if !result.Replayed && (result.Review.ID != reviewID || result.Decision == nil || result.Decision.ID != decisionID) {
 		return Result{}, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("unexpected fresh Review decision identities"))
 	}
+
 	s.effect(ctx, "exam_integrity_review_changed", result, result.Replayed, s.deps.Effects.ReviewChanged)
 	return result, nil
 }
@@ -179,25 +237,34 @@ type UpdateDraftCommand struct {
 
 // UpdateExamIntegrityReview idempotently saves the draft remarks of a
 // Submission Review, creating the Review when ExpectedReviewRevision is zero.
-func (s *Service) UpdateExamIntegrityReview(ctx context.Context, invocation invocation.Invocation, command UpdateDraftCommand) (_ Result, resultErr error) {
+func (s *Service) UpdateExamIntegrityReview(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command UpdateDraftCommand,
+) (_ Result, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	if !command.SubmissionID.IsValid() || command.ExpectedReviewRevision < 0 ||
+	if !command.SubmissionID.IsValid() ||
+		command.ExpectedReviewRevision < 0 ||
 		(command.ExpectedReviewRevision == 0 && !command.ReviewID.IsZero()) ||
 		(command.ExpectedReviewRevision > 0 && !command.ReviewID.IsValid()) {
 		return Result{}, apperror.Invalid("exam.integrity_review.invalid", "draft")
 	}
+
 	principal := invocation.Principal()
 	if principal.Validate() != nil {
 		return Result{}, apperror.Invalid("exam.integrity_review.invalid", "principal")
 	}
+
 	idempotency, err := prepareDraftIdempotency(invocation, command)
 	if err != nil {
 		return Result{}, err
 	}
+
 	reviewID := command.ReviewID
 	if reviewID.IsZero() {
 		reviewID = s.deps.NewReviewID()
 	}
+
 	probe, err := model.NewSubmissionReview(reviewID, command.SubmissionID, principal.UserID, s.deps.Now())
 	if err != nil {
 		return Result{}, apperror.Invalid("exam.integrity_review.invalid", "draft").Wrap(err)
@@ -205,27 +272,44 @@ func (s *Service) UpdateExamIntegrityReview(ctx context.Context, invocation invo
 	if err = probe.UpdateDraft(1, command.ManagerNotes, command.StudentRemarksMarkdown, s.deps.Now()); err != nil {
 		return Result{}, apperror.Invalid("exam.integrity_review.invalid", "draft").Wrap(err)
 	}
+
 	override, authorization, err := s.authorizeReviewMutation(ctx, invocation, command.SubmissionID)
 	if err != nil {
 		return Result{}, err
 	}
+
 	at := model.TimeUTC(s.deps.Now())
-	auditID, err := s.deps.Auditor.BeginAtScope(ctx, invocation, model.ActionSubmissionReview,
-		model.Resource{Type: model.ResourceSubmission, ID: command.SubmissionID.String()}, model.RoleScopeAcademicUnit,
-		authorization.AcademicUnitID.String(), store.ExamIntegrityReviewDraftOperation,
-		map[string]any{"submission_id": command.SubmissionID.String(), "expected_review_revision": command.ExpectedReviewRevision}, nil)
+	auditID, err := s.deps.Auditor.BeginAtScope(
+		ctx,
+		invocation,
+		model.ActionSubmissionReview,
+		model.Resource{Type: model.ResourceSubmission, ID: command.SubmissionID.String()},
+		model.RoleScopeAcademicUnit,
+		authorization.AcademicUnitID.String(),
+		store.ExamIntegrityReviewDraftOperation,
+		map[string]any{"submission_id": command.SubmissionID.String(), "expected_review_revision": command.ExpectedReviewRevision},
+		nil,
+	)
 	if err != nil {
 		return Result{}, err
 	}
+
 	stored, err := s.deps.Persistence.UpdateDraft(ctx, &store.ExamIntegrityReviewDraftMutation{
-		SubmissionID: command.SubmissionID, ReviewID: reviewID, ActorUserID: principal.UserID, ManagerOverride: override,
-		ExpectedRevision: command.ExpectedReviewRevision, ManagerNotes: command.ManagerNotes,
-		StudentRemarksMarkdown: command.StudentRemarksMarkdown, ChangedAt: at, AuditEventID: auditID,
-		AuditAt: at,
+		SubmissionID:           command.SubmissionID,
+		ReviewID:               reviewID,
+		ActorUserID:            principal.UserID,
+		ManagerOverride:        override,
+		ExpectedRevision:       command.ExpectedReviewRevision,
+		ManagerNotes:           command.ManagerNotes,
+		StudentRemarksMarkdown: command.StudentRemarksMarkdown,
+		ChangedAt:              at,
+		AuditEventID:           auditID,
+		AuditAt:                at,
 	}, idempotency)
 	if err != nil {
 		return Result{}, s.failAudit(ctx, auditID, err)
 	}
+
 	result, err := projectMutation(stored, command.SubmissionID)
 	if err != nil {
 		return Result{}, err
@@ -233,6 +317,7 @@ func (s *Service) UpdateExamIntegrityReview(ctx context.Context, invocation invo
 	if !result.Replayed && result.Review.ID != reviewID {
 		return Result{}, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("unexpected fresh Review identity"))
 	}
+
 	s.effect(ctx, "exam_integrity_review_changed", result, result.Replayed, s.deps.Effects.ReviewChanged)
 	return result, nil
 }
@@ -254,10 +339,21 @@ const (
 // FinalizeExamIntegrityReview idempotently finalizes a Submission Review,
 // fenced by ExpectedReviewRevision, for a caller authorized to review the
 // Submission.
-func (s *Service) FinalizeExamIntegrityReview(ctx context.Context, invocation invocation.Invocation, command FinalizeCommand) (_ Result, resultErr error) {
+func (s *Service) FinalizeExamIntegrityReview(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command FinalizeCommand,
+) (_ Result, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	return s.terminalMutation(ctx, invocation, command.SubmissionID, command.ReviewID,
-		command.ExpectedReviewRevision, command.IdempotencyKey, terminalFinalize)
+	return s.terminalMutation(
+		ctx,
+		invocation,
+		command.SubmissionID,
+		command.ReviewID,
+		command.ExpectedReviewRevision,
+		command.IdempotencyKey,
+		terminalFinalize,
+	)
 }
 
 // ReleaseCommand names the same target and expected revision as finalization.
@@ -266,32 +362,54 @@ type ReleaseCommand = FinalizeCommand
 // ReleaseStudentExamResult idempotently and irreversibly releases a finalized
 // Submission Review's student result to the candidate, fenced by
 // ExpectedReviewRevision, for a caller authorized to release results.
-func (s *Service) ReleaseStudentExamResult(ctx context.Context, invocation invocation.Invocation, command ReleaseCommand) (_ Result, resultErr error) {
+func (s *Service) ReleaseStudentExamResult(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command ReleaseCommand,
+) (_ Result, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	return s.terminalMutation(ctx, invocation, command.SubmissionID, command.ReviewID,
-		command.ExpectedReviewRevision, command.IdempotencyKey, terminalRelease)
+	return s.terminalMutation(
+		ctx,
+		invocation,
+		command.SubmissionID,
+		command.ReviewID,
+		command.ExpectedReviewRevision,
+		command.IdempotencyKey,
+		terminalRelease,
+	)
 }
 
-func (s *Service) terminalMutation(ctx context.Context, invocation invocation.Invocation, submissionID model.SubmissionID,
-	reviewID model.SubmissionReviewID, expectedRevision int64, idempotencyKey string,
+func (s *Service) terminalMutation(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	submissionID model.SubmissionID,
+	reviewID model.SubmissionReviewID,
+	expectedRevision int64,
+	idempotencyKey string,
 	kind terminalMutationKind,
 ) (Result, error) {
-	if !submissionID.IsValid() || !reviewID.IsValid() || expectedRevision < 1 ||
+	if !submissionID.IsValid() ||
+		!reviewID.IsValid() ||
+		expectedRevision < 1 ||
 		(kind != terminalFinalize && kind != terminalRelease) {
 		return Result{}, apperror.Invalid("exam.integrity_review.invalid", "review")
 	}
+
 	principal := invocation.Principal()
 	if principal.Validate() != nil {
 		return Result{}, apperror.Invalid("exam.integrity_review.invalid", "principal")
 	}
+
 	operation := store.ExamIntegrityReviewFinalizeOperation
 	if kind == terminalRelease {
 		operation = store.ExamIntegrityReviewReleaseOperation
 	}
+
 	idempotency, err := prepareTerminalIdempotency(invocation, operation, idempotencyKey, submissionID, reviewID, expectedRevision)
 	if err != nil {
 		return Result{}, err
 	}
+
 	var override bool
 	var authorization *store.ExamIntegrityReviewAuthorization
 	if kind == terminalRelease {
@@ -299,83 +417,141 @@ func (s *Service) terminalMutation(ctx context.Context, invocation invocation.In
 	} else {
 		override, authorization, err = s.authorizeReviewMutation(ctx, invocation, submissionID)
 	}
+
 	if err != nil {
 		return Result{}, err
 	}
+
 	action := model.ActionSubmissionReview
 	if kind == terminalRelease {
 		action = model.ActionSubmissionRelease
 	}
-	auditID, err := s.deps.Auditor.BeginAtScope(ctx, invocation, action,
-		model.Resource{Type: model.ResourceSubmission, ID: submissionID.String()}, model.RoleScopeAcademicUnit,
-		authorization.AcademicUnitID.String(), operation,
-		map[string]any{"submission_id": submissionID.String(), "submission_review_id": reviewID.String(), "expected_review_revision": expectedRevision}, nil)
+
+	auditID, err := s.deps.Auditor.BeginAtScope(
+		ctx,
+		invocation,
+		action,
+		model.Resource{Type: model.ResourceSubmission, ID: submissionID.String()},
+		model.RoleScopeAcademicUnit,
+		authorization.AcademicUnitID.String(),
+		operation,
+		map[string]any{
+			"submission_id":            submissionID.String(),
+			"submission_review_id":     reviewID.String(),
+			"expected_review_revision": expectedRevision,
+		},
+		nil,
+	)
 	if err != nil {
 		return Result{}, err
 	}
+
 	at := model.TimeUTC(s.deps.Now())
 	var releasePreparation *store.ExamIntegrityReviewReleasePreparation
 	if kind == terminalRelease {
 		// The release-time reservation is durable, so it follows the audit
 		// attempt like every other examination write.
-		releasePreparation, err = s.deps.Persistence.PrepareRelease(ctx, &store.ExamIntegrityReviewReleasePrepare{SubmissionID: submissionID, ReviewID: reviewID, ExpectedRevision: expectedRevision})
+		releasePreparation, err = s.deps.Persistence.PrepareRelease(ctx, &store.ExamIntegrityReviewReleasePrepare{
+			SubmissionID:     submissionID,
+			ReviewID:         reviewID,
+			ExpectedRevision: expectedRevision,
+		})
 		if err != nil {
 			return Result{}, s.failAudit(ctx, auditID, err)
 		}
+
 		if releasePreparation == nil || releasePreparation.ReleaseAt.IsZero() {
-			return Result{}, s.failAudit(ctx, auditID, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("invalid result release preparation")))
+			return Result{}, s.failAudit(
+				ctx,
+				auditID,
+				apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("invalid result release preparation")),
+			)
 		}
+
 		at = model.TimeUTC(releasePreparation.ReleaseAt)
 	}
+
 	var stored *store.ExamIntegrityReviewMutationResult
 	if kind == terminalRelease {
 		var notice *store.PreparedMail
 		var expectedRecipientRevision int64
 		if !releasePreparation.Replayed {
 			prepared, prepareErr := s.deps.Mail.PrepareResultRelease(ctx, ResultReleaseMailPreparation{
-				CandidateUserID: authorization.CandidateUserID, ExamID: authorization.ExamID,
-				SittingID: authorization.SittingID, ReviewID: reviewID, ExpectedReviewRevision: expectedRevision, ReleasedAt: at,
+				CandidateUserID:        authorization.CandidateUserID,
+				ExamID:                 authorization.ExamID,
+				SittingID:              authorization.SittingID,
+				ReviewID:               reviewID,
+				ExpectedReviewRevision: expectedRevision,
+				ReleasedAt:             at,
 			})
 			if prepareErr != nil || prepared == nil || prepared.Notice == nil || prepared.ExpectedRecipientRevision < 1 {
 				if prepareErr == nil {
 					prepareErr = errors.New("invalid result release mail preparation")
 				}
+
 				return Result{}, s.failAudit(ctx, auditID, apperror.New("exam.integrity_review.unavailable").Wrap(prepareErr))
 			}
+
 			notice, expectedRecipientRevision = prepared.Notice, prepared.ExpectedRecipientRevision
 		}
-		stored, err = s.deps.Persistence.Release(ctx, &store.ExamIntegrityReviewRelease{SubmissionID: submissionID,
-			ReviewID: reviewID, ActorUserID: principal.UserID, ManagerOverride: override,
-			ExpectedRevision: expectedRevision, ChangedAt: at, AuditEventID: auditID, AuditAt: at,
-			CandidateUserID: authorization.CandidateUserID, Notice: notice,
-			ExpectedRecipientRevision: expectedRecipientRevision}, idempotency)
+
+		stored, err = s.deps.Persistence.Release(ctx, &store.ExamIntegrityReviewRelease{
+			SubmissionID:              submissionID,
+			ReviewID:                  reviewID,
+			ActorUserID:               principal.UserID,
+			ManagerOverride:           override,
+			ExpectedRevision:          expectedRevision,
+			ChangedAt:                 at,
+			AuditEventID:              auditID,
+			AuditAt:                   at,
+			CandidateUserID:           authorization.CandidateUserID,
+			Notice:                    notice,
+			ExpectedRecipientRevision: expectedRecipientRevision,
+		}, idempotency)
 	} else {
-		stored, err = s.deps.Persistence.Finalize(ctx, &store.ExamIntegrityReviewFinalize{SubmissionID: submissionID,
-			ReviewID: reviewID, ActorUserID: principal.UserID, ManagerOverride: override,
-			ExpectedRevision: expectedRevision, ChangedAt: at, AuditEventID: auditID, AuditAt: at}, idempotency)
+		stored, err = s.deps.Persistence.Finalize(ctx, &store.ExamIntegrityReviewFinalize{
+			SubmissionID:     submissionID,
+			ReviewID:         reviewID,
+			ActorUserID:      principal.UserID,
+			ManagerOverride:  override,
+			ExpectedRevision: expectedRevision,
+			ChangedAt:        at,
+			AuditEventID:     auditID,
+			AuditAt:          at,
+		}, idempotency)
 	}
+
 	if err != nil {
 		return Result{}, s.failAudit(ctx, auditID, err)
 	}
+
 	result, err := projectMutation(stored, submissionID)
 	if err != nil {
 		return Result{}, err
 	}
-	if result.Review.ID != reviewID || (kind == terminalRelease && result.Review.ReleaseState != model.SubmissionReviewReleased) ||
+
+	if result.Review.ID != reviewID ||
+		(kind == terminalRelease && result.Review.ReleaseState != model.SubmissionReviewReleased) ||
 		(kind == terminalFinalize && result.Review.State != model.SubmissionReviewFinalized) {
 		return Result{}, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("inconsistent terminal Review result"))
 	}
+
 	if kind == terminalRelease {
 		s.effect(ctx, "exam_integrity_result_released", result, result.Replayed, s.deps.Effects.ResultReleased)
 	} else {
 		s.effect(ctx, "exam_integrity_review_finalized", result, result.Replayed, s.deps.Effects.ReviewFinalized)
 	}
+
 	return result, nil
 }
 
 // GetExamIntegrityReview returns the Submission Review snapshot of a
 // Submission to a caller authorized to view it.
-func (s *Service) GetExamIntegrityReview(ctx context.Context, invocation invocation.Invocation, submissionID model.SubmissionID) (_ *store.ExamSubmissionReviewSnapshot, resultErr error) {
+func (s *Service) GetExamIntegrityReview(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	submissionID model.SubmissionID,
+) (_ *store.ExamSubmissionReviewSnapshot, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	if !submissionID.IsValid() {
 		return nil, apperror.Invalid("exam.integrity_review.invalid", "submission_id")
@@ -383,6 +559,7 @@ func (s *Service) GetExamIntegrityReview(ctx context.Context, invocation invocat
 	if err := s.deps.Authorizer.AuthorizeSubmissionView(ctx, invocation, submissionID); err != nil {
 		return nil, err
 	}
+
 	snapshot, err := s.deps.Persistence.Get(ctx, submissionID)
 	if err != nil {
 		return nil, storeErrors.Translate(err)
@@ -390,6 +567,7 @@ func (s *Service) GetExamIntegrityReview(ctx context.Context, invocation invocat
 	if !validSnapshot(snapshot, submissionID) {
 		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("inconsistent Review snapshot"))
 	}
+
 	return cloneSnapshot(snapshot), nil
 }
 
@@ -401,7 +579,11 @@ type ListFlagsQuery struct {
 
 // ListExamIntegrityFlags returns one page of a Submission's Integrity Flags
 // to a caller authorized to view its Submission Review.
-func (s *Service) ListExamIntegrityFlags(ctx context.Context, invocation invocation.Invocation, query ListFlagsQuery) (_ *store.ExamIntegrityFlagPage, resultErr error) {
+func (s *Service) ListExamIntegrityFlags(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	query ListFlagsQuery,
+) (_ *store.ExamIntegrityFlagPage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	if !query.SubmissionID.IsValid() || query.Limit < 1 || query.Limit > store.ExamIntegrityReviewFlagReadMaximum {
 		return nil, apperror.Invalid("exam.integrity_review.invalid", "flag_list")
@@ -409,6 +591,7 @@ func (s *Service) ListExamIntegrityFlags(ctx context.Context, invocation invocat
 	if err := s.deps.Authorizer.AuthorizeSubmissionView(ctx, invocation, query.SubmissionID); err != nil {
 		return nil, err
 	}
+
 	page, err := s.deps.Persistence.ListFlags(ctx, store.ExamIntegrityFlagListOptions(query))
 	if err != nil {
 		return nil, storeErrors.Translate(err)
@@ -416,16 +599,19 @@ func (s *Service) ListExamIntegrityFlags(ctx context.Context, invocation invocat
 	if page == nil || len(page.Items) > query.Limit || (page.HasMore && len(page.Items) != query.Limit) {
 		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("inconsistent Flag page"))
 	}
+
 	clone := &store.ExamIntegrityFlagPage{Items: append([]store.ExamIntegrityFlagSummary(nil), page.Items...), HasMore: page.HasMore}
 	for i := range clone.Items {
 		if clone.Items[i].Browser != nil {
 			if clone.Items[i].Browser.Validate() != nil {
 				return nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("invalid Browser evidence group"))
 			}
+
 			v := clone.Items[i].Browser.Clone()
 			clone.Items[i].Browser = &v
 		}
 	}
+
 	return clone, nil
 }
 
@@ -439,14 +625,23 @@ type ListEvidenceQuery struct {
 // ListExamIntegrityEvidence returns one page of Integrity Evidence for one
 // Integrity Flag of a Submission to a caller authorized to view its
 // Submission Review.
-func (s *Service) ListExamIntegrityEvidence(ctx context.Context, invocation invocation.Invocation, query ListEvidenceQuery) (_ *store.ExamIntegrityEvidencePage, resultErr error) {
+func (s *Service) ListExamIntegrityEvidence(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	query ListEvidenceQuery,
+) (_ *store.ExamIntegrityEvidencePage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	if !query.SubmissionID.IsValid() || !query.FlagID.IsValid() || query.Limit < 1 || query.Limit > store.ExamIntegrityReviewEvidenceReadMaximum {
+	if !query.SubmissionID.IsValid() ||
+		!query.FlagID.IsValid() ||
+		query.Limit < 1 ||
+		query.Limit > store.ExamIntegrityReviewEvidenceReadMaximum {
 		return nil, apperror.Invalid("exam.integrity_review.invalid", "evidence_list")
 	}
+
 	if err := s.deps.Authorizer.AuthorizeSubmissionView(ctx, invocation, query.SubmissionID); err != nil {
 		return nil, err
 	}
+
 	page, err := s.deps.Persistence.ListEvidence(ctx, store.ExamIntegrityEvidenceListOptions(query))
 	if err != nil {
 		return nil, storeErrors.Translate(err)
@@ -454,16 +649,19 @@ func (s *Service) ListExamIntegrityEvidence(ctx context.Context, invocation invo
 	if page == nil || len(page.Items) > query.Limit || (page.HasMore && len(page.Items) != query.Limit) {
 		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("inconsistent Evidence page"))
 	}
+
 	clone := &store.ExamIntegrityEvidencePage{Items: append([]model.IntegrityEvidence(nil), page.Items...), HasMore: page.HasMore}
 	for i := range clone.Items {
 		if clone.Items[i].Browser != nil {
 			if clone.Items[i].Browser.Validate() != nil {
 				return nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("invalid Browser evidence copy"))
 			}
+
 			v := clone.Items[i].Browser.Clone()
 			clone.Items[i].Browser = &v
 		}
 	}
+
 	return clone, nil
 }
 
@@ -475,7 +673,9 @@ type ListDiscrepanciesQuery struct {
 
 // ListExamIntegrityDiscrepancies returns one page of a Submission's integrity
 // discrepancies to a caller authorized to view its Submission Review.
-func (s *Service) ListExamIntegrityDiscrepancies(ctx context.Context, invocation invocation.Invocation,
+func (s *Service) ListExamIntegrityDiscrepancies(
+	ctx context.Context,
+	invocation invocation.Invocation,
 	query ListDiscrepanciesQuery,
 ) (_ *store.ExamIntegrityDiscrepancyPage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -485,6 +685,7 @@ func (s *Service) ListExamIntegrityDiscrepancies(ctx context.Context, invocation
 	if err := s.deps.Authorizer.AuthorizeSubmissionView(ctx, invocation, query.SubmissionID); err != nil {
 		return nil, err
 	}
+
 	page, err := s.deps.Persistence.ListDiscrepancies(ctx, store.ExamIntegrityDiscrepancyListOptions(query))
 	if err != nil {
 		return nil, storeErrors.Translate(err)
@@ -492,6 +693,7 @@ func (s *Service) ListExamIntegrityDiscrepancies(ctx context.Context, invocation
 	if page == nil || len(page.Items) > query.Limit || (page.HasMore && len(page.Items) != query.Limit) {
 		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("inconsistent Discrepancy page"))
 	}
+
 	clone := &store.ExamIntegrityDiscrepancyPage{Items: append([]model.IntegrityDiscrepancy(nil), page.Items...),
 		HasMore: page.HasMore}
 	return clone, nil
@@ -499,46 +701,65 @@ func (s *Service) ListExamIntegrityDiscrepancies(ctx context.Context, invocation
 
 // GetStudentExamResult returns the caller's own released result for an
 // Attempt, with sanitized student remarks.
-func (s *Service) GetStudentExamResult(ctx context.Context, invocation invocation.Invocation, attemptID model.ExamAttemptID) (_ *model.StudentResult, resultErr error) {
+func (s *Service) GetStudentExamResult(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	attemptID model.ExamAttemptID,
+) (_ *model.StudentResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	principal := invocation.Principal()
 	if !attemptID.IsValid() || principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return nil, apperror.Invalid("exam.integrity_review.invalid", "student_result")
 	}
+
 	result, err := s.deps.Persistence.GetReleasedStudentResult(ctx, attemptID, principal.UserID)
 	if err != nil {
 		return nil, storeErrors.Translate(err)
 	}
-	if result == nil || result.ReviewID.IsZero() || result.SubmissionID.IsZero() || result.AttemptID != attemptID ||
-		result.CandidateUserID != principal.UserID || result.ReleasedAt.IsZero() {
+
+	if result == nil ||
+		result.ReviewID.IsZero() ||
+		result.SubmissionID.IsZero() ||
+		result.AttemptID != attemptID ||
+		result.CandidateUserID != principal.UserID ||
+		result.ReleasedAt.IsZero() {
 		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("inconsistent Student Result"))
 	}
+
 	clone := *result
 	clone.StudentRemarksMarkdown = safemarkdown.Sanitize(clone.StudentRemarksMarkdown)
 	return &clone, nil
 }
 
-func (s *Service) authorizeReviewMutation(ctx context.Context, invocation invocation.Invocation,
+func (s *Service) authorizeReviewMutation(
+	ctx context.Context,
+	invocation invocation.Invocation,
 	submissionID model.SubmissionID,
 ) (bool, *store.ExamIntegrityReviewAuthorization, error) {
 	management, err := s.deps.Authorizer.AuthorizeSubmissionReview(ctx, invocation, submissionID)
 	if err != nil {
 		return false, nil, err
 	}
+
 	return s.resolveMutationAuthorization(ctx, submissionID, management.Override)
 }
 
-func (s *Service) authorizeReleaseMutation(ctx context.Context, invocation invocation.Invocation,
+func (s *Service) authorizeReleaseMutation(
+	ctx context.Context,
+	invocation invocation.Invocation,
 	submissionID model.SubmissionID,
 ) (bool, *store.ExamIntegrityReviewAuthorization, error) {
 	management, err := s.deps.Authorizer.AuthorizeSubmissionRelease(ctx, invocation, submissionID)
 	if err != nil {
 		return false, nil, err
 	}
+
 	return s.resolveMutationAuthorization(ctx, submissionID, management.Override)
 }
 
-func (s *Service) resolveMutationAuthorization(ctx context.Context, submissionID model.SubmissionID,
+func (s *Service) resolveMutationAuthorization(
+	ctx context.Context,
+	submissionID model.SubmissionID,
 	override bool,
 ) (bool, *store.ExamIntegrityReviewAuthorization, error) {
 	authorization, err := s.deps.Persistence.Resolve(ctx, submissionID)
@@ -548,34 +769,52 @@ func (s *Service) resolveMutationAuthorization(ctx context.Context, submissionID
 	if !validAuthorization(authorization, submissionID) {
 		return false, nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("inconsistent Review authorization"))
 	}
+
 	return override, authorization, nil
 }
 
 func projectMutation(stored *store.ExamIntegrityReviewMutationResult, submissionID model.SubmissionID) (Result, error) {
-	if stored == nil || !validAuthorization(&stored.Authorization, submissionID) || stored.Review == nil ||
-		stored.Review.Validate() != nil || stored.Review.SubmissionID != submissionID ||
+	if stored == nil ||
+		!validAuthorization(&stored.Authorization, submissionID) ||
+		stored.Review == nil ||
+		stored.Review.Validate() != nil ||
+		stored.Review.SubmissionID != submissionID ||
 		(stored.Decision != nil && (stored.Decision.Validate() != nil || stored.Decision.ReviewID != stored.Review.ID)) {
 		return Result{}, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("inconsistent Review mutation result"))
 	}
+
 	review := *stored.Review
 	result := Result{Authorization: stored.Authorization, Review: &review, Replayed: stored.Replayed}
 	if stored.Decision != nil {
 		decision := *stored.Decision
 		result.Decision = &decision
 	}
+
 	return result, nil
 }
 
 func validAuthorization(value *store.ExamIntegrityReviewAuthorization, submissionID model.SubmissionID) bool {
-	return value != nil && value.SubmissionID == submissionID && value.ExamID.IsValid() && value.SittingID.IsValid() &&
-		value.AttemptID.IsValid() && value.CandidateUserID.IsValid() && value.AcademicUnitID.IsValid()
+	return value != nil &&
+		value.SubmissionID == submissionID &&
+		value.ExamID.IsValid() &&
+		value.SittingID.IsValid() &&
+		value.AttemptID.IsValid() &&
+		value.CandidateUserID.IsValid() &&
+		value.AcademicUnitID.IsValid()
 }
 
 func validSnapshot(snapshot *store.ExamSubmissionReviewSnapshot, submissionID model.SubmissionID) bool {
-	if snapshot == nil || snapshot.NativeConditions.Validate() != nil || snapshot.DeliveryInventoryRevision < 0 || !validAuthorization(&snapshot.Authorization, submissionID) || snapshot.Submission == nil ||
-		snapshot.Submission.Validate() != nil || snapshot.Submission.ID != submissionID || len(snapshot.Decisions) > model.SubmissionReviewMaximumFlags {
+	if snapshot == nil ||
+		snapshot.NativeConditions.Validate() != nil ||
+		snapshot.DeliveryInventoryRevision < 0 ||
+		!validAuthorization(&snapshot.Authorization, submissionID) ||
+		snapshot.Submission == nil ||
+		snapshot.Submission.Validate() != nil ||
+		snapshot.Submission.ID != submissionID ||
+		len(snapshot.Decisions) > model.SubmissionReviewMaximumFlags {
 		return false
 	}
+
 	if snapshot.BrowserEvidenceOverflow != nil && snapshot.BrowserEvidenceOverflow.Validate() != nil {
 		return false
 	}
@@ -585,11 +824,13 @@ func validSnapshot(snapshot *store.ExamSubmissionReviewSnapshot, submissionID mo
 	if snapshot.Review.Validate() != nil || snapshot.Review.SubmissionID != submissionID {
 		return false
 	}
+
 	for _, decision := range snapshot.Decisions {
 		if decision.Validate() != nil || decision.ReviewID != snapshot.Review.ID {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -609,12 +850,17 @@ func cloneSnapshot(snapshot *store.ExamSubmissionReviewSnapshot) *store.ExamSubm
 	return &clone
 }
 
-func (s *Service) effect(ctx context.Context, operation string, result Result, replayed bool,
+func (s *Service) effect(
+	ctx context.Context,
+	operation string,
+	result Result,
+	replayed bool,
 	deliver func(context.Context, Result) error,
 ) {
 	if replayed {
 		return
 	}
+
 	if err := deliver(ctx, result); err != nil {
 		s.deps.Effects.Report(ctx, operation, err)
 	}

@@ -48,8 +48,27 @@ type ManagerAuthorizer interface {
 }
 
 type Auditor interface {
-	BeginAtScope(context.Context, invocation.Invocation, model.Action, model.Resource, model.RoleScopeType, string, string, map[string]any, map[string]any) (model.AuditEventID, error)
-	PrepareAtScope(context.Context, invocation.Invocation, model.Action, model.Resource, model.RoleScopeType, string, string, map[string]any) (*model.AuditEvent, error)
+	BeginAtScope(
+		context.Context,
+		invocation.Invocation,
+		model.Action,
+		model.Resource,
+		model.RoleScopeType,
+		string,
+		string,
+		map[string]any,
+		map[string]any,
+	) (model.AuditEventID, error)
+	PrepareAtScope(
+		context.Context,
+		invocation.Invocation,
+		model.Action,
+		model.Resource,
+		model.RoleScopeType,
+		string,
+		string,
+		map[string]any,
+	) (*model.AuditEvent, error)
 	RecordAuthorizationDecision(context.Context, invocation.Invocation, model.Action, model.Resource, model.RoleScopeType, string, bool) error
 	Fail(context.Context, model.AuditEventID, string) error
 	Complete(context.Context, model.AuditEventID, map[string]any) error
@@ -82,7 +101,13 @@ type Effects interface {
 type Content interface {
 	OpenExamResource(context.Context, model.FileRevisionID, model.FileRenditionID) (io.ReadCloser, error)
 	OpenStarterWorkspaceObject(context.Context, model.StarterWorkspaceObjectID) (io.ReadCloser, error)
-	StageAttemptWorkspaceObject(context.Context, model.AttemptWorkspaceObjectID, io.Reader, int64, string) (*model.AttemptWorkspaceContent, error)
+	StageAttemptWorkspaceObject(
+		context.Context,
+		model.AttemptWorkspaceObjectID,
+		io.Reader,
+		int64,
+		string,
+	) (*model.AttemptWorkspaceContent, error)
 	OpenAttemptWorkspaceObject(context.Context, model.AttemptWorkspaceObjectID) (io.ReadCloser, error)
 }
 
@@ -176,12 +201,35 @@ func (s *Service) recordOperational(event string, err error) {
 }
 
 func New(deps Dependencies) (*Service, error) {
-	if deps.Persistence == nil || deps.Workspace == nil || deps.Submissions == nil || deps.Sittings == nil || deps.Managers == nil || deps.Auditor == nil || deps.SystemAuditor == nil || deps.Effects == nil ||
-		deps.Content == nil || deps.Mail == nil || deps.DesktopBuilds == nil || deps.Now == nil || deps.NewAttemptID == nil ||
-		deps.NewWorkspaceID == nil || deps.NewParticipation == nil || deps.NewConnection == nil || deps.NewEvidence == nil ||
-		deps.NewFlag == nil || deps.NewSuspension == nil || deps.NewFocusLossSignal == nil || deps.NewDiscrepancy == nil || deps.NewWorkspaceEntry == nil || deps.NewWorkspaceObject == nil || deps.NewWorkspaceVersion == nil || deps.NewSubmission == nil || deps.NewReceiptCode == nil {
+	if deps.Persistence == nil ||
+		deps.Workspace == nil ||
+		deps.Submissions == nil ||
+		deps.Sittings == nil ||
+		deps.Managers == nil ||
+		deps.Auditor == nil ||
+		deps.SystemAuditor == nil ||
+		deps.Effects == nil ||
+		deps.Content == nil ||
+		deps.Mail == nil ||
+		deps.DesktopBuilds == nil ||
+		deps.Now == nil ||
+		deps.NewAttemptID == nil ||
+		deps.NewWorkspaceID == nil ||
+		deps.NewParticipation == nil ||
+		deps.NewConnection == nil ||
+		deps.NewEvidence == nil ||
+		deps.NewFlag == nil ||
+		deps.NewSuspension == nil ||
+		deps.NewFocusLossSignal == nil ||
+		deps.NewDiscrepancy == nil ||
+		deps.NewWorkspaceEntry == nil ||
+		deps.NewWorkspaceObject == nil ||
+		deps.NewWorkspaceVersion == nil ||
+		deps.NewSubmission == nil ||
+		deps.NewReceiptCode == nil {
 		return nil, errors.New("Exam Attempt dependencies are required")
 	}
+
 	return &Service{deps: deps, liveControls: controlAdmission{lane: liveControlLane}}, nil
 }
 
@@ -189,9 +237,16 @@ func validActiveSuspension(view *store.ExamAttemptSuspensionView, attemptID mode
 	if view == nil {
 		return true
 	}
-	return view.ID.IsValid() && view.AttemptID == attemptID && view.ParticipationID.IsValid() && validSuspensionProvenance(view) &&
-		view.Generation > 0 && view.State == model.AttemptSuspensionActive && !view.StartedAt.IsZero() &&
-		!view.EndedAt.Valid && view.ReallowedByUserID.IsZero()
+
+	return view.ID.IsValid() &&
+		view.AttemptID == attemptID &&
+		view.ParticipationID.IsValid() &&
+		validSuspensionProvenance(view) &&
+		view.Generation > 0 &&
+		view.State == model.AttemptSuspensionActive &&
+		!view.StartedAt.IsZero() &&
+		!view.EndedAt.Valid &&
+		view.ReallowedByUserID.IsZero()
 }
 
 type ExpiryScanResult struct {
@@ -216,7 +271,8 @@ func validSuspensionProvenance(view *store.ExamAttemptSuspensionView) bool {
 	case model.AttemptSuspensionSourcePolicy:
 		return view.FlagID.IsValid() && reallowableSuspensionReason(view.CandidateReason) && view.SuspendedByUserID.IsZero()
 	case model.AttemptSuspensionSourceManual:
-		return view.FlagID.IsZero() && view.CandidateReason == model.AttemptSuspensionCandidateReasonManagerSuspended &&
+		return view.FlagID.IsZero() &&
+			view.CandidateReason == model.AttemptSuspensionCandidateReasonManagerSuspended &&
 			view.SuspendedByUserID.IsValid()
 	default:
 		return false
@@ -248,25 +304,42 @@ func candidateSelector(invocation invocation.Invocation, access CandidateAccess)
 	if !access.AttemptID.IsValid() || !access.ConnectionID.IsValid() || !model.IsValidCredentialToken(access.ContinuityCredential) {
 		return store.CandidateAttemptAccess{}, apperror.Invalid("exam.attempt.invalid", "candidate_access")
 	}
-	return store.CandidateAttemptAccess{AttemptID: access.AttemptID, CandidateUserID: principal.UserID,
-		SessionID: principal.SessionID, DesktopRegistrationID: principal.DesktopRegistrationID,
-		DPoPKeyThumbprint: principal.DPoPKeyThumbprint, ConnectionID: access.ConnectionID,
-		ContinuityCredentialHash: model.HashToken(access.ContinuityCredential)}, nil
+
+	return store.CandidateAttemptAccess{
+		AttemptID:                access.AttemptID,
+		CandidateUserID:          principal.UserID,
+		SessionID:                principal.SessionID,
+		DesktopRegistrationID:    principal.DesktopRegistrationID,
+		DPoPKeyThumbprint:        principal.DPoPKeyThumbprint,
+		ConnectionID:             access.ConnectionID,
+		ContinuityCredentialHash: model.HashToken(access.ContinuityCredential),
+	}, nil
 }
 
 func validCandidateBrowserPolicy(capabilities store.CandidateRuntimeCapabilities, policy *store.CandidateBrowserPolicy) bool {
 	if slices.Contains(capabilities.PendingCorrectionCapabilities, model.CandidateCapabilityBrowser) {
 		return policy == nil
 	}
-	if policy == nil || !policy.PolicyRevisionID.IsValid() || policy.PolicyRevisionID != capabilities.ExamRevision.CurrentRevisionID || policy.PolicyRevisionNumber < 1 || policy.Policy.Validate() != nil || policy.BrowserActivityDisclosure.Validate() != nil || policy.BrowserActivityDisclosure.MayCreateIntegrityEvidence != policy.Policy.MayCreateIntegrityEvidence() {
+
+	if policy == nil ||
+		!policy.PolicyRevisionID.IsValid() ||
+		policy.PolicyRevisionID != capabilities.ExamRevision.CurrentRevisionID ||
+		policy.PolicyRevisionNumber < 1 ||
+		policy.Policy.Validate() != nil ||
+		policy.BrowserActivityDisclosure.Validate() != nil ||
+		policy.BrowserActivityDisclosure.MayCreateIntegrityEvidence != policy.Policy.MayCreateIntegrityEvidence() {
 		return false
 	}
+
 	if policy.Policy.Enabled != (capabilities.Browser.State != store.CandidateBrowserDisabled) {
 		return false
 	}
-	if policy.Policy.Enabled && (policy.PolicyRevisionID != capabilities.Browser.PolicyRevisionID || policy.PolicyDigest != capabilities.Browser.PolicyDigest) {
+
+	if policy.Policy.Enabled &&
+		(policy.PolicyRevisionID != capabilities.Browser.PolicyRevisionID || policy.PolicyDigest != capabilities.Browser.PolicyDigest) {
 		return false
 	}
+
 	digest, err := model.BrowserPolicyDigest(policy.Policy)
 	return err == nil && policy.PolicyDigest == digest
 }
@@ -274,14 +347,18 @@ func validCandidateBrowserPolicy(capabilities store.CandidateRuntimeCapabilities
 func validCandidateLiveCorrections(capabilities store.CandidateRuntimeCapabilities, corrections []model.CandidateLiveCorrection) bool {
 	var previous int64
 	for _, correction := range corrections {
-		if correction.Validate() != nil || correction.RevisionNumber <= previous ||
+		if correction.Validate() != nil ||
+			correction.RevisionNumber <= previous ||
 			correction.RevisionID == capabilities.ExamRevision.AdmissionRevisionID {
 			return false
 		}
+
 		previous = correction.RevisionNumber
 	}
+
 	pending := model.PendingCorrectionCapabilities(corrections)
-	return slices.Equal(pending, capabilities.PendingCorrectionCapabilities) && (len(pending) != 0) == capabilities.ExamRevision.AcknowledgementRequired
+	return slices.Equal(pending, capabilities.PendingCorrectionCapabilities) &&
+		(len(pending) != 0) == capabilities.ExamRevision.AcknowledgementRequired
 }
 
 func cloneCandidateBrowserPolicy(value *store.CandidateBrowserPolicy) *store.CandidateBrowserPolicy {
@@ -294,17 +371,28 @@ func cloneCandidateBrowserPolicy(value *store.CandidateBrowserPolicy) *store.Can
 }
 
 func validParticipationView(view *store.ExamAttemptParticipationView) bool {
-	if view == nil || !view.ID.IsValid() || !view.AttemptID.IsValid() || view.Generation < 1 || view.RenewalSequence < 0 ||
-		view.StartedAt.IsZero() || view.UpdatedAt.IsZero() || view.UpdatedAt.Before(view.StartedAt) ||
-		view.LeaseExpiresAt.IsZero() || view.LeaseExpiresAt.Before(view.StartedAt) {
+	if view == nil ||
+		!view.ID.IsValid() ||
+		!view.AttemptID.IsValid() ||
+		view.Generation < 1 ||
+		view.RenewalSequence < 0 ||
+		view.StartedAt.IsZero() ||
+		view.UpdatedAt.IsZero() ||
+		view.UpdatedAt.Before(view.StartedAt) ||
+		view.LeaseExpiresAt.IsZero() ||
+		view.LeaseExpiresAt.Before(view.StartedAt) {
 		return false
 	}
+
 	switch view.State {
 	case model.AttemptParticipationActive:
 		return !view.EndedAt.Valid && view.EndReason == ""
 	case model.AttemptParticipationEnded:
-		return view.EndedAt.Valid && !view.EndedAt.Time.IsZero() && !view.EndedAt.Time.Before(view.StartedAt) &&
-			!view.EndedAt.Time.After(view.UpdatedAt) && view.EndReason != ""
+		return view.EndedAt.Valid &&
+			!view.EndedAt.Time.IsZero() &&
+			!view.EndedAt.Time.Before(view.StartedAt) &&
+			!view.EndedAt.Time.After(view.UpdatedAt) &&
+			view.EndReason != ""
 	default:
 		return false
 	}

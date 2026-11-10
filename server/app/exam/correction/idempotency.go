@@ -18,16 +18,30 @@ import (
 const idempotencyOperationApplyCorrection = "exam.sitting.correction.apply"
 
 func prepareStageIdempotency(invocation invocation.Invocation, command StageResourceContentCommand) (*store.CommandIdempotency, error) {
-	return idempotency.Require(invocation, store.ExamCorrectionResourceStageOperation, command.IdempotencyKey, struct {
-		ExamID         string `json:"exam_id"`
-		SittingID      string `json:"exam_sitting_id"`
-		BaseRevisionID string `json:"base_revision_id"`
-		Target         string `json:"target"`
-		ResourceID     string `json:"resource_id,omitempty"`
-		MediaType      string `json:"media_type"`
-		Size           int64  `json:"size"`
-		SHA256         string `json:"sha256"`
-	}{command.ExamID.String(), command.SittingID.String(), command.BaseRevisionID.String(), string(command.Target), command.ResourceID.String(), string(command.MediaType), command.Size, command.ExpectedSHA256})
+	return idempotency.Require(
+		invocation,
+		store.ExamCorrectionResourceStageOperation,
+		command.IdempotencyKey,
+		struct {
+			ExamID         string `json:"exam_id"`
+			SittingID      string `json:"exam_sitting_id"`
+			BaseRevisionID string `json:"base_revision_id"`
+			Target         string `json:"target"`
+			ResourceID     string `json:"resource_id,omitempty"`
+			MediaType      string `json:"media_type"`
+			Size           int64  `json:"size"`
+			SHA256         string `json:"sha256"`
+		}{
+			command.ExamID.String(),
+			command.SittingID.String(),
+			command.BaseRevisionID.String(),
+			string(command.Target),
+			command.ResourceID.String(),
+			string(command.MediaType),
+			command.Size,
+			command.ExpectedSHA256,
+		},
+	)
 }
 
 func prepareApplyIdempotency(invocation invocation.Invocation, command ApplyCommand) (*store.CommandIdempotency, error) {
@@ -37,8 +51,10 @@ func prepareApplyIdempotency(invocation invocation.Invocation, command ApplyComm
 		if err != nil {
 			return nil, apperror.New("request.invalid").Wrap(err)
 		}
+
 		browserPolicy = string(encoded)
 	}
+
 	resources := make([]struct {
 		ResourceID          string `json:"resource_id"`
 		DisplayName         string `json:"display_name"`
@@ -51,19 +67,39 @@ func prepareApplyIdempotency(invocation invocation.Invocation, command ApplyComm
 		resources[index].DescriptionMarkdown = item.DescriptionMarkdown
 		resources[index].StageID = item.StageID.String()
 	}
-	return idempotency.Require(invocation, idempotencyOperationApplyCorrection, command.IdempotencyKey, struct {
-		ExamID                    string                      `json:"exam_id"`
-		SittingID                 string                      `json:"exam_sitting_id"`
-		ExpectedSittingRevision   int64                       `json:"expected_sitting_revision"`
-		ExpectedCurrentRevisionID string                      `json:"expected_current_revision_id"`
-		InstructionsPresent       bool                        `json:"instructions_present"`
-		InstructionsMarkdown      string                      `json:"instructions_markdown"`
-		BrowserPolicyPresent      bool                        `json:"browser_policy_present"`
-		BrowserPolicy             string                      `json:"browser_policy"`
-		Resources                 any                         `json:"resources"`
-		CandidateSummary          string                      `json:"candidate_summary"`
-		AcknowledgementRequired   bool                        `json:"acknowledgement_required"`
-		AffectedCapabilities      []model.CandidateCapability `json:"affected_capabilities"`
-		PrivateReason             string                      `json:"private_reason"`
-	}{command.ExamID.String(), command.SittingID.String(), command.ExpectedSittingRevision, command.ExpectedCurrentRevisionID.String(), command.Instructions.Present, command.Instructions.Markdown, command.BrowserPolicy.Present, browserPolicy, resources, command.CandidateSummary, command.AcknowledgementRequired, command.AffectedCapabilities, command.PrivateReason})
+
+	return idempotency.Require(
+		invocation,
+		idempotencyOperationApplyCorrection,
+		command.IdempotencyKey,
+		struct {
+			ExamID                    string                      `json:"exam_id"`
+			SittingID                 string                      `json:"exam_sitting_id"`
+			ExpectedSittingRevision   int64                       `json:"expected_sitting_revision"`
+			ExpectedCurrentRevisionID string                      `json:"expected_current_revision_id"`
+			InstructionsPresent       bool                        `json:"instructions_present"`
+			InstructionsMarkdown      string                      `json:"instructions_markdown"`
+			BrowserPolicyPresent      bool                        `json:"browser_policy_present"`
+			BrowserPolicy             string                      `json:"browser_policy"`
+			Resources                 any                         `json:"resources"`
+			CandidateSummary          string                      `json:"candidate_summary"`
+			AcknowledgementRequired   bool                        `json:"acknowledgement_required"`
+			AffectedCapabilities      []model.CandidateCapability `json:"affected_capabilities"`
+			PrivateReason             string                      `json:"private_reason"`
+		}{
+			command.ExamID.String(),
+			command.SittingID.String(),
+			command.ExpectedSittingRevision,
+			command.ExpectedCurrentRevisionID.String(),
+			command.Instructions.Present,
+			command.Instructions.Markdown,
+			command.BrowserPolicy.Present,
+			browserPolicy,
+			resources,
+			command.CandidateSummary,
+			command.AcknowledgementRequired,
+			command.AffectedCapabilities,
+			command.PrivateReason,
+		},
+	)
 }

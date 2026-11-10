@@ -106,8 +106,9 @@ the parent application package or selects SQL, VFS, WebSocket, Jobs, or other
 infrastructure.
 
 A service is a struct whose fields are its collaborators: the `store`
-contracts it calls, the concrete `*access.Authorizer` and `*access.Auditor`,
-and whatever else it needs. Its constructor takes a `Dependencies` struct when
+contracts it calls, the area's `Authorizer` and `Auditor` (satisfied in
+production by `*access.Authorizer` and `*access.Auditor`), and whatever else it
+needs. Its constructor takes a `Dependencies` struct when
 there are more than a handful of collaborators, and plain arguments otherwise.
 A service generates identifiers with one `NewID func() string` (or calls
 `model.NewID` directly) and reads time from one `Now func() time.Time`.
@@ -208,10 +209,12 @@ time, proof destruction, and atomic terminal transitions.
 Interfaces normally live beside their consumer and expose only what it needs. Broad aggregates may exist at composition but are not daily dependencies. Prefer concrete types during construction and narrow interfaces at consumption.
 
 An interface exists only where something substitutes behind it: a second
-production implementation, a type-assertion or `errors.As` capability probe,
-or a port across a module boundary that the consumer cannot name concretely,
-such as a File Content capability. Otherwise the consumer holds the concrete
-type. A service never redeclares a Store contract: it holds `store.ClassStore`
+production implementation, a fake the consumer's tests pass in, a
+type-assertion or `errors.As` capability probe, or a port across a module
+boundary that the consumer cannot name concretely, such as a File Content
+capability. Otherwise the consumer holds the concrete type. An area package
+declares each such collaborator once (typically `Authorizer`, `Auditor` and
+`Effects`), not once per service. A service never redeclares a Store contract: it holds `store.ClassStore`
 (or the root `store.Store`) directly. A test fakes a Store contract by
 embedding it and overriding only the methods the test exercises:
 
@@ -226,9 +229,8 @@ Calling a method the fake does not override panics, which tells the test author
 exactly what to add.
 
 An adapter exists only where two packages genuinely disagree on a type and
-neither may import the other. Application code uses the interfaces of the
-reusable `packages/cache` and `packages/mail` modules and the `server/logging`
-logger directly, so it needs no adapter for them. An adapter translates one
+neither may import the other, such as the module root's translation of
+`platform.Cache` into the authentication cache port. An adapter translates one
 value at one seam and never wraps another adapter. Authorization uses the
 single `Authorize(ctx, Invocation, Action, Resource)` shape of
 `*access.Authorizer`.

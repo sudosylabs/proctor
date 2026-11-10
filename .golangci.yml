@@ -12,6 +12,7 @@ linters:
     - errcheck
     - errorlint
     - fatcontext
+    - funlen
     - gocheckcompilerdirectives
     - gosec
     - govet
@@ -26,6 +27,12 @@ linters:
     - unconvert
     - unused
   settings:
+    # A function is bounded by how much it does, not by how many lines it
+    # takes: a line limit rewards packing several fields onto one line.
+    funlen:
+      lines: -1
+      statements: 80
+      ignore-comments: true
     govet:
       enable-all: true
       disable:
@@ -71,6 +78,10 @@ linters:
       - linters:
           - revive
         path-except: "^(app|httpapi|store/sqlstore)/"
+      # Tests, conformance suites and developer commands may run long.
+      - linters:
+          - funlen
+        path: "(_test\\.go$|^store/storetest/|^testlib/|^cmd/ptool/devseed/|^cmd/mailpreview/)"
 
 formatters:
   enable:

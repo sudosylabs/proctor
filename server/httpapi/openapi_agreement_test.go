@@ -30,7 +30,7 @@ func TestOpenAPIAgreesWithRuntime(t *testing.T) {
 
 	document := readOpenAPIDocument(t)
 	runtimeAPI := newRoutingTestAPI(model.APIURLSuffix)
-	require.NoError(t, runtimeAPI.collectResources(model.APIURLSuffix, productionResources(agreementResourceApplications(), nil, BuildInfo{}, browserCookies{}, nil)...))
+	require.NoError(t, runtimeAPI.collectResources(model.APIURLSuffix, productionResources(completeHTTPApplication(), nil, BuildInfo{}, browserCookies{}, nil)...))
 
 	runtimeRoutes := make(map[string]Route)
 	runtimeOperations := make(map[string]AuthRequirement)

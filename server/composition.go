@@ -19,20 +19,9 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app"
-	"github.com/sudosylabs/proctor/server/app/academic"
-	"github.com/sudosylabs/proctor/server/app/administration"
-	"github.com/sudosylabs/proctor/server/app/exam"
-	"github.com/sudosylabs/proctor/server/app/exam/attempt"
-	"github.com/sudosylabs/proctor/server/app/exam/correction"
-	"github.com/sudosylabs/proctor/server/app/exam/resource"
-	"github.com/sudosylabs/proctor/server/app/exam/review"
-	"github.com/sudosylabs/proctor/server/app/exam/sitting"
-	"github.com/sudosylabs/proctor/server/app/exam/workspace"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/mail"
-	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/app/realtime"
-	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/filecontent"
 	"github.com/sudosylabs/proctor/server/httpapi"
@@ -63,52 +52,6 @@ type composedWebSocket interface {
 	realtime.Sink
 }
 
-var (
-	_ httpapi.SearchApplication                      = (*app.SearchService)(nil)
-	_ httpapi.AdministrationCountsApplication        = (*app.AdministrationCounts)(nil)
-	_ httpapi.JobOperationsApplication               = (*app.JobOperations)(nil)
-	_ websocket.Application                          = (*app.RealtimeAdmission)(nil)
-	_ httpapi.IdentityApplication                    = (*identity.Service)(nil)
-	_ httpapi.AcademicUnitApplication                = (*academic.Service)(nil)
-	_ httpapi.InstitutionApplication                 = (*academic.Service)(nil)
-	_ httpapi.ProgrammeApplication                   = (*academic.Service)(nil)
-	_ httpapi.ProgrammeLevelApplication              = (*academic.Service)(nil)
-	_ httpapi.AcademicPeriodApplication              = (*academic.Service)(nil)
-	_ httpapi.ClassApplication                       = (*academic.Service)(nil)
-	_ httpapi.AffiliationApplication                 = (*academic.Service)(nil)
-	_ httpapi.AcademicUnitMemberApplication          = (*academic.Service)(nil)
-	_ httpapi.ClassMemberApplication                 = (*academic.Service)(nil)
-	_ httpapi.InvitationApplication                  = (*onboarding.Service)(nil)
-	_ httpapi.BrowserInvitationApplication           = (*onboarding.Service)(nil)
-	_ httpapi.OnboardingImportApplication            = (*onboarding.Service)(nil)
-	_ httpapi.StudentProgressionApplication          = (*onboarding.Service)(nil)
-	_ httpapi.AcademicAdministrationBatchApplication = (*onboarding.Service)(nil)
-	_ httpapi.RegistrationApplication                = (*onboarding.Service)(nil)
-	_ httpapi.UserProfileApplication                 = (*user.Service)(nil)
-	_ httpapi.UserAccountApplication                 = (*attempt.Service)(nil)
-	_ httpapi.UserSettingsApplication                = (*user.Service)(nil)
-	_ httpapi.AccountStateApplication                = (*identity.Service)(nil)
-	_ httpapi.SessionAdministrationApplication       = (*identity.Service)(nil)
-	_ httpapi.RoleApplication                        = (*administration.Service)(nil)
-	_ httpapi.RoleBindingApplication                 = (*administration.Service)(nil)
-	_ httpapi.AuditListingApplication                = (*administration.Service)(nil)
-	_ httpapi.BootstrapApplication                   = (*identity.Service)(nil)
-	_ httpapi.AccessPolicyApplication                = (*administration.Service)(nil)
-	_ httpapi.RetentionPolicyApplication             = (*administration.Service)(nil)
-	_ httpapi.RetentionApplication                   = (*administration.Service)(nil)
-	_ httpapi.MailApplication                        = (*app.MailService)(nil)
-	_ httpapi.ExamApplication                        = (*exam.Authoring)(nil)
-	_ httpapi.ExamRevisionApplication                = (*exam.Publication)(nil)
-	_ httpapi.ExamSittingApplication                 = (*sitting.Service)(nil)
-	_ httpapi.ExamSittingCorrectionApplication       = (*correction.Service)(nil)
-	_ httpapi.ExamResourceApplication                = (*resource.Service)(nil)
-	_ httpapi.ExamStarterWorkspaceApplication        = (*workspace.Service)(nil)
-	_ httpapi.ExamAttemptApplication                 = (*attempt.Service)(nil)
-	_ httpapi.ExamIntegrityReviewApplication         = (*review.Service)(nil)
-	_ httpapi.ExamRecordsApplication                 = (*exam.Records)(nil)
-	_ httpapi.ExamExportsApplication                 = (*exam.Exports)(nil)
-)
-
 // consumerConstructors is a package-private failure seam used by composition
 // tests. Production and NewForTesting always use the same default constructor
 // set; no constructor substitution is exported.
@@ -120,7 +63,7 @@ type consumerConstructors struct {
 	attachRealtime func(*app.App, realtime.ClusterFanout) error
 	websocket      func(*app.App, *logging.Logger, string, string) (composedWebSocket, error)
 	attachSink     func(*app.App, realtime.Sink) error
-	http           func(httpapi.Options) (runtimeTransport, http.Handler, error)
+	http           func(*app.App, httpapi.Settings) (runtimeTransport, http.Handler, error)
 	webapp         func(webui.Options) (http.Handler, error)
 	jobs           func(*app.App) runtimeComponent
 }
@@ -185,9 +128,9 @@ func defaultConsumerConstructors(
 		attachSink: func(application *app.App, sink realtime.Sink) error {
 			return application.Realtime.AttachRealtimeSink(sink)
 		},
-		http: func(options httpapi.Options) (runtimeTransport, http.Handler, error) {
-			options.Localizer = localizer
-			transport, err := httpapi.New(options)
+		http: func(application *app.App, settings httpapi.Settings) (runtimeTransport, http.Handler, error) {
+			settings.Localizer = localizer
+			transport, err := httpapi.New(application, settings)
 			return transport, transport, err
 		},
 		webapp: func(options webui.Options) (http.Handler, error) {
@@ -304,11 +247,11 @@ func composeConsumers(
 	if err = constructors.attachSink(application, webSocketHub); err != nil {
 		return nil, release.fail(fmt.Errorf("attach realtime sink: %w", err))
 	}
-	httpOptions, err := httpAPIOptions(application, readiness, buildInfo, snapshot, capabilities, webSocketHub)
+	httpSettings, err := httpAPISettings(readiness, buildInfo, snapshot, capabilities, webSocketHub)
 	if err != nil {
 		return nil, release.fail(err)
 	}
-	httpTransport, httpAPI, err := constructors.http(httpOptions)
+	httpTransport, httpAPI, err := constructors.http(application, httpSettings)
 	if err != nil {
 		return nil, release.fail(fmt.Errorf("construct HTTP API: %w", err))
 	}
@@ -442,15 +385,14 @@ func applicationIdentity(application *app.App) *identity.Service {
 	return application.Identity
 }
 
-// httpAPIOptions projects the application, readiness, WebSocket hub and server settings into HTTP API options.
-func httpAPIOptions(
-	application *app.App,
+// httpAPISettings projects readiness, the WebSocket hub and server settings into the HTTP API settings.
+func httpAPISettings(
 	readiness *app.Health,
 	buildInfo httpapi.BuildInfo,
 	snapshot config.Config,
 	capabilities constructionCapabilities,
 	webSocketHub composedWebSocket,
-) (httpapi.Options, error) {
+) (httpapi.Settings, error) {
 	var httpMetrics httpapi.Metrics
 	if capabilities.metrics != nil && capabilities.metrics.Enabled() {
 		httpMetrics = capabilities.metrics
@@ -461,66 +403,13 @@ func httpAPIOptions(
 	}
 	trustedProxies, err := config.ParseTrustedProxies(snapshot.Server.TrustedProxies)
 	if err != nil {
-		return httpapi.Options{}, fmt.Errorf("parse trusted proxies: %w", err)
+		return httpapi.Settings{}, fmt.Errorf("parse trusted proxies: %w", err)
 	}
-	// A reduced composition test graph has no application; its typed nil
-	// still fills every capability, as the App itself does.
-	var academics *academic.Service
-	var administrations *administration.Service
-	var onboardings *onboarding.Service
-	var users *user.Service
-	var (
-		search            *app.SearchService
-		counts            *app.AdministrationCounts
-		jobs              *app.JobOperations
-		mail              *app.MailService
-		examAuthoring     *exam.Authoring
-		examPublication   *exam.Publication
-		examRecords       *exam.Records
-		examExports       *exam.Exports
-		sittings          *sitting.Service
-		attempts          *attempt.Service
-		reviews           *review.Service
-		resources         *resource.Service
-		corrections       *correction.Service
-		starterWorkspaces *workspace.Service
-	)
-	if application != nil {
-		academics = application.Academic
-		administrations = application.Administration
-		onboardings = application.Onboarding
-		users = application.Users
-		search, counts = application.Search, application.Counts
-		jobs, mail = application.Jobs, application.Mail
-		examAuthoring, examPublication = application.ExamAuthoring, application.ExamPublication
-		examRecords, examExports = application.ExamRecords, application.ExamExports
-		sittings, attempts, reviews = application.Sittings, application.Attempts, application.Reviews
-		resources, corrections = application.Resources, application.Corrections
-		starterWorkspaces = application.StarterWorkspaces
-	}
-	identities := applicationIdentity(application)
-	return httpapi.Options{
+	return httpapi.Settings{
 		Logger: capabilities.logger, Health: readiness,
-		Metrics:  httpMetrics,
-		Tracing:  httpTracer,
-		Identity: identities, Search: search, AdministrationCounts: counts, Jobs: jobs,
-		AcademicUnits: academics, Institutions: academics,
-		Programmes: academics, ProgrammeLevels: academics, AcademicPeriods: academics,
-		Classes: academics, Affiliations: academics, AcademicUnitMembers: academics,
-		ClassMembers: academics, UserProfiles: users, UserAccounts: attempts, UserSettings: users, AccountStates: identities,
-		Invitations:                   onboardings,
-		BrowserInvitations:            onboardings,
-		Registration:                  onboardings,
-		OnboardingImports:             onboardings,
-		StudentProgressions:           onboardings,
-		AcademicAdministrationBatches: onboardings,
-		SessionAdministrations:        identities, Roles: administrations, RoleBindings: administrations,
-		AuditListings: administrations, Bootstrap: identities, AccessPolicy: administrations,
-		RetentionPolicy: administrations, Retention: administrations, BuildInfo: buildInfo,
-		Mail:  mail,
-		Exams: examAuthoring, ExamRevisions: examPublication, ExamSittings: sittings,
-		ExamCorrections: corrections, ExamResources: resources, ExamStarterWorkspaces: starterWorkspaces,
-		ExamAttempts: attempts, ExamIntegrityReviews: reviews, ExamRecords: examRecords, ExamExports: examExports,
+		Metrics:   httpMetrics,
+		Tracing:   httpTracer,
+		BuildInfo: buildInfo,
 		PublicURL: snapshot.Server.PublicURL, MaxBodyBytes: snapshot.Server.MaxBodyBytes,
 		ReadTimeout: snapshot.Server.ReadTimeout.Duration, WriteTimeout: snapshot.Server.WriteTimeout.Duration,
 		TrustedProxies:          trustedProxies,

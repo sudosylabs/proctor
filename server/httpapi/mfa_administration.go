@@ -8,18 +8,12 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/identity"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 )
 
-type MFAAdministration interface {
-	ResetUserMFA(context.Context, invocation.Invocation, identity.ResetUserMFACommand) error
-}
-
-type mfaAdministrationResourceModule struct{ application MFAAdministration }
+type mfaAdministrationResourceModule struct{ application *identity.Service }
 
 type resetUserMFARequest struct {
 	IdentityVerified      bool   `json:"identity_verified"`
@@ -27,7 +21,7 @@ type resetUserMFARequest struct {
 	VerificationReference string `json:"verification_reference"`
 }
 
-func mfaAdministrationResource(application MFAAdministration) apiResource {
+func mfaAdministrationResource(application *identity.Service) apiResource {
 	module := mfaAdministrationResourceModule{application: application}
 	return newResource("mfa-administration", strongRecentSessionRoute(http.MethodPost, path("/users/{user_id}/mfa/reset"), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "authentication.mfa.reset_invalid", "authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "authentication.session_required"}, module.reset))
 }

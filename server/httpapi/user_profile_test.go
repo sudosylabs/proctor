@@ -137,34 +137,6 @@ func (a *roleHTTPApplication) ArchiveRole(_ context.Context, _ invocation.Invoca
 	return nil
 }
 
-type roleBindingHTTPApplication struct {
-	RoleBindingApplication
-	list   []*model.RoleBinding
-	result *model.RoleBinding
-}
-
-func (a *roleBindingHTTPApplication) ListRoleBindings(context.Context, invocation.Invocation, administration.ListRoleBindingsQuery) ([]*model.RoleBinding, error) {
-	return a.list, nil
-}
-
-func (a *roleBindingHTTPApplication) CreateRoleBinding(context.Context, invocation.Invocation, administration.CreateRoleBindingCommand) (*model.RoleBinding, error) {
-	return a.result, nil
-}
-
-func (a *roleBindingHTTPApplication) EndRoleBinding(context.Context, invocation.Invocation, administration.EndRoleBindingCommand) (*model.RoleBinding, error) {
-	return a.result, nil
-}
-
-type auditListingHTTPApplication struct {
-	AuditListingApplication
-	list []*model.AuditEvent
-}
-
-func (a *auditListingHTTPApplication) ListAuditEvents(_ context.Context, _ invocation.Invocation, query administration.ListAuditEventsQuery) (paging.Counted[*model.AuditEvent], error) {
-	return paging.Counted[*model.AuditEvent]{Page: paging.Page[*model.AuditEvent]{Items: a.list},
-		Total: paging.Total{Counted: query.BeforeID.IsZero(), Total: len(a.list)}}, nil
-}
-
 type bootstrapHTTPApplication struct {
 	BootstrapApplication
 	status *model.InstallationStatus

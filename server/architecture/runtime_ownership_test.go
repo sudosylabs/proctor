@@ -67,7 +67,7 @@ func TestConstructionProjectionRemainsRootPrivate(t *testing.T) {
 		"attachApplicationTelemetry":     true,
 		"composeApplicationDependencies": true,
 		"composeConsumers":               true,
-		"httpAPIOptions":                 true,
+		"httpAPISettings":                true,
 		"composeNode":                    true,
 		"defaultConsumerConstructors":    true,
 	}

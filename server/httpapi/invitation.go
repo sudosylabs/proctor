@@ -222,51 +222,6 @@ type invitationCursor struct {
 
 type invitationResourceModule struct{ invitations InvitationApplication }
 
-type unavailableInvitationApplication struct{}
-
-func (unavailableInvitationApplication) IssueStudentClassInvitation(context.Context, invocation.Invocation, onboarding.IssueStudentClassInvitationCommand) (onboarding.InvitationView, error) {
-	return onboarding.InvitationView{}, errUnpresentableResult
-}
-func (unavailableInvitationApplication) AcceptStudentClassInvitation(context.Context, invocation.Invocation, onboarding.AcceptStudentClassInvitationCommand) (*onboarding.InvitationAcceptanceView, error) {
-	return nil, errUnpresentableResult
-}
-func (unavailableInvitationApplication) IssueTeacherAcademicUnitInvitation(context.Context, invocation.Invocation, onboarding.IssueTeacherAcademicUnitInvitationCommand) (onboarding.InvitationView, error) {
-	return onboarding.InvitationView{}, errUnpresentableResult
-}
-func (unavailableInvitationApplication) AcceptTeacherAcademicUnitInvitation(context.Context, invocation.Invocation, onboarding.AcceptTeacherAcademicUnitInvitationCommand) (*onboarding.InvitationAcceptanceView, error) {
-	return nil, errUnpresentableResult
-}
-func (unavailableInvitationApplication) IssueAcademicUnitRoleInvitation(context.Context, invocation.Invocation, onboarding.IssueAcademicUnitRoleInvitationCommand) (onboarding.InvitationView, error) {
-	return onboarding.InvitationView{}, errUnpresentableResult
-}
-func (unavailableInvitationApplication) AcceptAcademicUnitRoleInvitation(context.Context, invocation.Invocation, onboarding.AcceptAcademicUnitRoleInvitationCommand) (*onboarding.InvitationAcceptanceView, error) {
-	return nil, errUnpresentableResult
-}
-func (unavailableInvitationApplication) IssueInstitutionRoleInvitation(context.Context, invocation.Invocation, onboarding.IssueInstitutionRoleInvitationCommand) (onboarding.InvitationView, error) {
-	return onboarding.InvitationView{}, errUnpresentableResult
-}
-func (unavailableInvitationApplication) AcceptInstitutionRoleInvitation(context.Context, invocation.Invocation, onboarding.AcceptInstitutionRoleInvitationCommand) (*onboarding.InvitationAcceptanceView, error) {
-	return nil, errUnpresentableResult
-}
-func (unavailableInvitationApplication) ListInvitations(context.Context, invocation.Invocation, onboarding.ListInvitationsQuery) (onboarding.InvitationAdministrationPage, error) {
-	return onboarding.InvitationAdministrationPage{}, errUnpresentableResult
-}
-func (unavailableInvitationApplication) GetInvitation(context.Context, invocation.Invocation, model.InvitationID) (onboarding.InvitationAdministrationView, error) {
-	return onboarding.InvitationAdministrationView{}, errUnpresentableResult
-}
-func (unavailableInvitationApplication) ResendInvitation(context.Context, invocation.Invocation, onboarding.ResendInvitationCommand) (onboarding.InvitationAdministrationView, error) {
-	return onboarding.InvitationAdministrationView{}, errUnpresentableResult
-}
-func (unavailableInvitationApplication) RevokeInvitation(context.Context, invocation.Invocation, onboarding.RevokeInvitationCommand) (onboarding.InvitationAdministrationView, error) {
-	return onboarding.InvitationAdministrationView{}, errUnpresentableResult
-}
-func (unavailableInvitationApplication) ReplaceInvitation(context.Context, invocation.Invocation, onboarding.ReplaceInvitationCommand) (onboarding.InvitationAdministrationView, error) {
-	return onboarding.InvitationAdministrationView{}, errUnpresentableResult
-}
-func (unavailableInvitationApplication) RunInvitationBatch(context.Context, invocation.Invocation, onboarding.RunInvitationBatchCommand) (onboarding.InvitationBatchResult, error) {
-	return onboarding.InvitationBatchResult{}, errUnpresentableResult
-}
-
 func invitationResource(invitations InvitationApplication) apiResource {
 	module := invitationResourceModule{invitations: invitations}
 	return newResource("invitations",

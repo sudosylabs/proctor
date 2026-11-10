@@ -25,6 +25,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/localization"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
@@ -49,66 +50,118 @@ type API struct {
 	middleware              middlewarePolicy
 }
 
-func New(options Options) (*API, error) {
-	if options.Logger == nil {
-		return nil, errors.New("logger is required")
+// New constructs the production API over the application. Each resource in
+// productionResources is built from the application service that owns its
+// use cases, and the Identity service authenticates every request.
+func New(application *app.App, settings Settings) (*API, error) {
+	if err := requireApplication(application); err != nil {
+		return nil, err
 	}
-	if options.Localizer == nil {
-		return nil, errors.New("localizer is required")
-	}
-	for _, definition := range LocalizationDefinitions() {
-		if _, err := options.Localizer.Translate("", definition.ID, nil); err != nil {
-			return nil, fmt.Errorf("validate localization %q: %w", definition.ID, err)
-		}
-	}
-	if options.Health == nil {
-		return nil, errors.New("health state is required")
-	}
-	if options.MaxBodyBytes <= 0 {
-		return nil, errors.New("maximum body size must be greater than zero")
-	}
-	if options.RecentAuthenticationTTL <= 0 {
-		return nil, errors.New("recent authentication TTL must be greater than zero")
-	}
-	if options.NodeID == "" {
-		return nil, errors.New("cluster node ID is required")
-	}
-	if options.WebSocket == nil {
-		return nil, errors.New("websocket transport is required")
-	}
-	cookies, err := newBrowserCookies(options.PublicURL)
+	cookies, err := newBrowserCookies(settings.PublicURL)
 	if err != nil {
 		return nil, fmt.Errorf("configure browser cookies: %w", err)
 	}
-	browserRequests, err := newBrowserRequestPolicy(options.PublicURL)
+	return newAPI(
+		settings, application.Identity,
+		productionResources(application, settings.Health, settings.BuildInfo, cookies, settings.WebSocket)...,
+	)
+}
+
+// requireApplication rejects an application missing a service a resource is
+// built from, reporting the first absent one. Jobs and Mail are absent in a
+// graph that has no Job store; their resources answer for that themselves.
+func requireApplication(application *app.App) error {
+	if application == nil {
+		return errors.New("application is required")
+	}
+	required := []struct {
+		missing bool
+		message string
+	}{
+		{application.Identity == nil, "identity application is required"},
+		{application.Onboarding == nil, "onboarding application is required"},
+		{application.Administration == nil, "administration application is required"},
+		{application.Academic == nil, "academic application is required"},
+		{application.Users == nil, "user application is required"},
+		{application.Search == nil, "search application is required"},
+		{application.Counts == nil, "administration counts application is required"},
+		{application.ExamAuthoring == nil, "exam application is required"},
+		{application.ExamPublication == nil, "exam revision application is required"},
+		{application.Sittings == nil, "exam sitting application is required"},
+		{application.Corrections == nil, "exam sitting correction application is required"},
+		{application.Resources == nil, "exam resource application is required"},
+		{application.StarterWorkspaces == nil, "exam starter workspace application is required"},
+		{application.Attempts == nil, "exam attempt application is required"},
+		{application.Reviews == nil, "exam integrity review application is required"},
+		{application.ExamRecords == nil, "exam records application is required"},
+		{application.ExamExports == nil, "exam exports application is required"},
+	}
+	for _, service := range required {
+		if service.missing {
+			return errors.New(service.message)
+		}
+	}
+	return nil
+}
+
+// newAPI validates the settings and compiles the resources into the sealed
+// route catalog. New passes the production inventory; handler tests pass
+// resources built over their fakes.
+func newAPI(settings Settings, authenticator Authenticator, resources ...apiResource) (*API, error) {
+	if settings.Logger == nil {
+		return nil, errors.New("logger is required")
+	}
+	if settings.Localizer == nil {
+		return nil, errors.New("localizer is required")
+	}
+	for _, definition := range LocalizationDefinitions() {
+		if _, err := settings.Localizer.Translate("", definition.ID, nil); err != nil {
+			return nil, fmt.Errorf("validate localization %q: %w", definition.ID, err)
+		}
+	}
+	if settings.Health == nil {
+		return nil, errors.New("health state is required")
+	}
+	if settings.MaxBodyBytes <= 0 {
+		return nil, errors.New("maximum body size must be greater than zero")
+	}
+	if settings.RecentAuthenticationTTL <= 0 {
+		return nil, errors.New("recent authentication TTL must be greater than zero")
+	}
+	if settings.NodeID == "" {
+		return nil, errors.New("cluster node ID is required")
+	}
+	if settings.WebSocket == nil {
+		return nil, errors.New("websocket transport is required")
+	}
+	cookies, err := newBrowserCookies(settings.PublicURL)
+	if err != nil {
+		return nil, fmt.Errorf("configure browser cookies: %w", err)
+	}
+	browserRequests, err := newBrowserRequestPolicy(settings.PublicURL)
 	if err != nil {
 		return nil, fmt.Errorf("configure browser request policy: %w", err)
 	}
-	applications, err := resolveResourceApplications(options)
-	if err != nil {
-		return nil, err
-	}
 
 	api := &API{
-		authenticator:           applications.authenticator,
-		logger:                  options.Logger,
-		metrics:                 options.Metrics,
-		localizer:               options.Localizer,
+		authenticator:           authenticator,
+		logger:                  settings.Logger,
+		metrics:                 settings.Metrics,
+		localizer:               settings.Localizer,
 		cookies:                 cookies,
 		browserRequests:         browserRequests,
-		recentAuthenticationTTL: options.RecentAuthenticationTTL,
-		webSocket:               options.WebSocket,
-		maxBodyBytes:            options.MaxBodyBytes,
-		transferDeadlines:       newTransferDeadlines(options.ReadTimeout, options.WriteTimeout),
+		recentAuthenticationTTL: settings.RecentAuthenticationTTL,
+		webSocket:               settings.WebSocket,
+		maxBodyBytes:            settings.MaxBodyBytes,
+		transferDeadlines:       newTransferDeadlines(settings.ReadTimeout, settings.WriteTimeout),
 		middleware: middlewarePolicy{
-			trustedProxies: trustedProxies(slices.Clone(options.TrustedProxies)),
-			tracing:        options.Tracing,
+			trustedProxies: trustedProxies(slices.Clone(settings.TrustedProxies)),
+			tracing:        settings.Tracing,
 		},
 	}
-	resources := productionResources(applications, options.Health, options.BuildInfo, cookies, api.webSocket)
 	if err := api.buildRoutingKernel(
 		model.APIURLSuffix,
-		options.MaxBodyBytes,
+		settings.MaxBodyBytes,
 		func() error { return api.collectResources(model.APIURLSuffix, resources...) },
 	); err != nil {
 		return nil, err

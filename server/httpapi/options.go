@@ -125,59 +125,18 @@ type routeMatcher struct {
 	pathRegexp *regexp.Regexp
 }
 
-// Options contains composition-owned dependencies. New validates the complete
-// set before compiling any resource route into the immutable HTTP manifest.
-type Options struct {
-	Logger                        *logging.Logger
-	Metrics                       Metrics
-	Tracing                       Tracing
-	Localizer                     Localizer
-	Health                        Health
-	Identity                      IdentityApplication
-	Search                        SearchApplication
-	AdministrationCounts          AdministrationCountsApplication
-	Jobs                          JobOperationsApplication
-	AcademicUnits                 AcademicUnitApplication
-	Institutions                  InstitutionApplication
-	Programmes                    ProgrammeApplication
-	ProgrammeLevels               ProgrammeLevelApplication
-	AcademicPeriods               AcademicPeriodApplication
-	Classes                       ClassApplication
-	Affiliations                  AffiliationApplication
-	AcademicUnitMembers           AcademicUnitMemberApplication
-	ClassMembers                  ClassMemberApplication
-	Invitations                   InvitationApplication
-	BrowserInvitations            BrowserInvitationApplication
-	Registration                  RegistrationApplication
-	OnboardingImports             OnboardingImportApplication
-	StudentProgressions           StudentProgressionApplication
-	AcademicAdministrationBatches AcademicAdministrationBatchApplication
-	UserProfiles                  UserProfileApplication
-	UserAccounts                  UserAccountApplication
-	UserSettings                  UserSettingsApplication
-	AccountStates                 AccountStateApplication
-	SessionAdministrations        SessionAdministrationApplication
-	Roles                         RoleApplication
-	RoleBindings                  RoleBindingApplication
-	AuditListings                 AuditListingApplication
-	Bootstrap                     BootstrapApplication
-	AccessPolicy                  AccessPolicyApplication
-	RetentionPolicy               RetentionPolicyApplication
-	Retention                     RetentionApplication
-	Mail                          MailApplication
-	Exams                         ExamApplication
-	ExamRevisions                 ExamRevisionApplication
-	ExamSittings                  ExamSittingApplication
-	ExamCorrections               ExamSittingCorrectionApplication
-	ExamResources                 ExamResourceApplication
-	ExamStarterWorkspaces         ExamStarterWorkspaceApplication
-	ExamAttempts                  ExamAttemptApplication
-	ExamIntegrityReviews          ExamIntegrityReviewApplication
-	ExamRecords                   ExamRecordsApplication
-	ExamExports                   ExamExportsApplication
-	BuildInfo                     BuildInfo
-	PublicURL                     string
-	MaxBodyBytes                  int64
+// Settings holds what composition supplies beside the application: logging,
+// observation and localization ports, node health, build information, and
+// the server's request limits. New validates it before compiling any route.
+type Settings struct {
+	Logger       *logging.Logger
+	Metrics      Metrics
+	Tracing      Tracing
+	Localizer    Localizer
+	Health       Health
+	BuildInfo    BuildInfo
+	PublicURL    string
+	MaxBodyBytes int64
 	// ReadTimeout and WriteTimeout repeat the server-wide connection
 	// deadlines. Streaming upload and binary download routes extend them by
 	// the time their declared size takes at the minimum admitted throughput.
@@ -208,25 +167,4 @@ type WebSocketTransport interface {
 		sequence int64,
 		allowMissingOrigin bool,
 	) error
-}
-
-// IdentityApplication is the identity area's use cases: credential
-// resolution, sign-in and recovery, Sessions, two-step verification, personal
-// access tokens, Desktop authorization and compatibility, and email changes.
-type IdentityApplication interface {
-	Authenticator
-	authenticationEntryApplication
-	DesktopAuthorization
-	DesktopReauthentication
-	DesktopRegistrations
-	externalAuthenticationEntryApplication
-	authenticationMethodApplication
-	Sessions
-	SessionReauthentication
-	PersonalAccessTokens
-	MFA
-	MFAAdministration
-	MFAKeyApplication
-	DesktopCompatibilityApplication
-	UserEmailApplication
 }

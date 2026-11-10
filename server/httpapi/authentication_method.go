@@ -8,25 +8,13 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/identity"
-	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/model"
 )
 
-type authenticationMethodApplication interface {
-	AuthenticationMethods(context.Context, invocation.Invocation) (identity.AuthenticationMethodView, error)
-	EnrollPassword(context.Context, invocation.Invocation, string) error
-	ChangePassword(context.Context, invocation.Invocation, identity.ChangePasswordCommand) error
-	RemovePassword(context.Context, invocation.Invocation) error
-	BeginProviderConnection(context.Context, invocation.Invocation, identity.BeginProviderConnectionCommand) (*model.ExternalAuthenticationStart, error)
-	UnlinkExternalIdentity(context.Context, invocation.Invocation, model.ExternalIdentityID) error
-}
-
 type authenticationMethodResourceModule struct {
-	application authenticationMethodApplication
+	application *identity.Service
 	cookies     browserCookies
 }
 
@@ -54,7 +42,7 @@ type providerConnectionResponse struct {
 	ExpiresAt   string `json:"expires_at"`
 }
 
-func authenticationMethodResource(application authenticationMethodApplication, cookies browserCookies) apiResource {
+func authenticationMethodResource(application *identity.Service, cookies browserCookies) apiResource {
 	m := authenticationMethodResourceModule{application: application, cookies: cookies}
 	base := path("/authentication-methods")
 	password := path("/authentication-methods/password")

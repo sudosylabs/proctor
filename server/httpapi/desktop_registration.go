@@ -8,18 +8,11 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/identity"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-type DesktopRegistrations interface {
-	ListDesktopRegistrations(context.Context, invocation.Invocation, identity.ListDesktopRegistrationsQuery) ([]*model.DesktopRegistration, error)
-	RevokeDesktopRegistration(context.Context, invocation.Invocation, identity.RevokeDesktopRegistrationCommand) error
-}
 
 type desktopRegistrationResponse struct {
 	ID               string `json:"id"`
@@ -36,10 +29,10 @@ type desktopRegistrationResponse struct {
 }
 
 type desktopRegistrationResourceModule struct {
-	application DesktopRegistrations
+	application *identity.Service
 }
 
-func desktopRegistrationResource(application DesktopRegistrations) apiResource {
+func desktopRegistrationResource(application *identity.Service) apiResource {
 	module := desktopRegistrationResourceModule{application: application}
 	collection := path("/users/me/desktop-registrations")
 	item := path("/users/me/desktop-registrations/{desktop_registration_id}")

@@ -25,21 +25,6 @@ type AccessPolicyApplication interface {
 	DiscoverAccess(context.Context, invocation.Invocation) (administration.PublicAccessDiscovery, error)
 }
 
-type unavailableAccessPolicyApplication struct{}
-
-func (unavailableAccessPolicyApplication) GetAccessPolicy(context.Context, invocation.Invocation) (administration.AccessPolicyView, error) {
-	return administration.AccessPolicyView{}, errUnpresentableResult
-}
-func (unavailableAccessPolicyApplication) PreflightAccessPolicy(context.Context, invocation.Invocation, administration.PreflightAccessPolicyCommand) (administration.AccessPolicyPreflightResult, error) {
-	return administration.AccessPolicyPreflightResult{}, errUnpresentableResult
-}
-func (unavailableAccessPolicyApplication) ReplaceAccessPolicy(context.Context, invocation.Invocation, administration.ReplaceAccessPolicyCommand) (administration.AccessPolicyView, error) {
-	return administration.AccessPolicyView{}, errUnpresentableResult
-}
-func (unavailableAccessPolicyApplication) DiscoverAccess(context.Context, invocation.Invocation) (administration.PublicAccessDiscovery, error) {
-	return administration.PublicAccessDiscovery{}, errUnpresentableResult
-}
-
 type accessPolicySettingsRequest struct {
 	ExpectedRevision                 int64                                            `json:"expected_revision"`
 	RevokeExistingSessions           Optional[bool]                                   `json:"revoke_existing_sessions"`

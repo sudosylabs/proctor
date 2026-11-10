@@ -54,20 +54,6 @@ type browserInvitationResourceModule struct {
 	cookies     browserCookies
 }
 
-type unavailableBrowserInvitationApplication struct{}
-
-func (unavailableBrowserInvitationApplication) StartBrowserInvitation(context.Context, invocation.Invocation, onboarding.StartBrowserInvitationCommand) (*onboarding.BrowserInvitationStart, error) {
-	return nil, errUnpresentableResult
-}
-
-func (unavailableBrowserInvitationApplication) AcceptBrowserInvitation(context.Context, invocation.Invocation, onboarding.BrowserInvitationAcceptanceCommand) (*onboarding.InvitationAcceptanceView, error) {
-	return nil, errUnpresentableResult
-}
-
-func (unavailableBrowserInvitationApplication) AcceptBrowserInvitationWithSession(context.Context, invocation.Invocation, onboarding.BrowserInvitationSessionAcceptanceCommand) (*onboarding.InvitationAcceptanceView, error) {
-	return nil, errUnpresentableResult
-}
-
 func browserInvitationResource(application BrowserInvitationApplication, cookies browserCookies) apiResource {
 	module := browserInvitationResourceModule{application: application, cookies: cookies}
 	return newResource(

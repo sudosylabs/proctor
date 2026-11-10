@@ -227,13 +227,9 @@ func TestClassSearchMapsMissingAcademicUnit(t *testing.T) {
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
 	classes := &classHTTPApplication{searchErr: apperror.New("resource.not_found").WithField("resource", "academic_unit")}
 	transport := &academicUnitHTTPApplication{principal: principal}
-	options := validHTTPOptions(t)
-	options.Logger = logger
-	options.Identity = transport
-	options.AcademicUnits = transport
-	options.Institutions = transport
-	options.Classes = classes
-	httpAPI, err := New(options)
+	settings := validHTTPSettings(t)
+	settings.Logger = logger
+	httpAPI, err := newAPI(settings, transport, academicUnitResource(transport), institutionResource(transport), classResource(classes))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = httpAPI.Close() })
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/academic-units/"+model.NewID()+"/classes", nil)
@@ -262,13 +258,9 @@ func TestClassHTTPMapsBothParentsFromRouteAndBody(t *testing.T) {
 	class := &model.Class{ID: model.ClassID(model.NewID()), ProgrammeLevelID: model.ProgrammeLevelID(model.NewID()), AcademicPeriodID: model.AcademicPeriodID(model.NewID()), Name: "class-a", DisplayName: "Class A"}
 	classes := &classHTTPApplication{result: class}
 	transport := &academicUnitHTTPApplication{principal: principal}
-	options := validHTTPOptions(t)
-	options.Logger = logger
-	options.Identity = transport
-	options.AcademicUnits = transport
-	options.Institutions = transport
-	options.Classes = classes
-	httpAPI, err := New(options)
+	settings := validHTTPSettings(t)
+	settings.Logger = logger
+	httpAPI, err := newAPI(settings, transport, academicUnitResource(transport), institutionResource(transport), classResource(classes))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = httpAPI.Close() })
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/programme-levels/"+class.ProgrammeLevelID.String()+"/classes", strings.NewReader(`{"academic_period_id":"`+class.AcademicPeriodID.String()+`","name":"class-a","display_name":"Class A"}`))

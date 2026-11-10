@@ -42,7 +42,7 @@ func TestRouteErrorTablesMatchReachableCodes(t *testing.T) {
 	require.NoError(t, err)
 
 	var routes []errorflow.Route
-	for _, resource := range productionResources(agreementResourceApplications(), nil, BuildInfo{}, browserCookies{}, nil) {
+	for _, resource := range productionResources(completeHTTPApplication(), nil, BuildInfo{}, browserCookies{}, nil) {
 		for _, definition := range resource.routes {
 			template, _, compileErr := definition.path.compile(model.APIURLSuffix)
 			require.NoError(t, compileErr)

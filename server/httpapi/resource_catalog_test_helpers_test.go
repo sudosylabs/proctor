@@ -13,18 +13,26 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
+	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/administration"
+	"github.com/sudosylabs/proctor/server/app/exam"
+	"github.com/sudosylabs/proctor/server/app/exam/attempt"
+	"github.com/sudosylabs/proctor/server/app/exam/correction"
+	"github.com/sudosylabs/proctor/server/app/exam/resource"
+	"github.com/sudosylabs/proctor/server/app/exam/review"
+	"github.com/sudosylabs/proctor/server/app/exam/sitting"
+	"github.com/sudosylabs/proctor/server/app/exam/workspace"
+	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
+// testHTTPApplication authenticates every request as its principal.
 type testHTTPApplication struct {
-	SearchApplication
-	AdministrationCountsApplication
-	JobOperationsApplication
-	MailApplication
-	IdentityApplication
-	RetentionPolicyApplication
-	RetentionApplication
-	RegistrationApplication
 	principal *model.Principal
 }
 
@@ -34,21 +42,6 @@ func (a *testHTTPApplication) AuthenticateAccess(context.Context, string) (*mode
 
 func (a *testHTTPApplication) AuthenticateBearer(context.Context, string) (*model.Principal, error) {
 	return a.principal, nil
-}
-
-// testExamApplications satisfies every Exam resource port with no behavior;
-// a test that reaches an Exam handler supplies its own fake instead.
-type testExamApplications struct {
-	ExamApplication
-	ExamRevisionApplication
-	ExamSittingApplication
-	ExamSittingCorrectionApplication
-	ExamResourceApplication
-	ExamStarterWorkspaceApplication
-	ExamAttemptApplication
-	ExamIntegrityReviewApplication
-	ExamRecordsApplication
-	ExamExportsApplication
 }
 
 type testHTTPHealth struct{}
@@ -62,40 +55,47 @@ func (testWebSocketTransport) Accept(http.ResponseWriter, *http.Request, model.P
 	return nil
 }
 
-func validHTTPOptions(t *testing.T) Options {
+func validHTTPSettings(t *testing.T) Settings {
 	t.Helper()
 	logger, _ := newTestLogger(t)
-	application := &testHTTPApplication{}
-	examApplications := &testExamApplications{}
-	return Options{
-		Logger: logger, Localizer: newTestLocalizer(t), Health: testHTTPHealth{}, Identity: application,
-		Search: application, AdministrationCounts: application, Jobs: application,
-		AcademicUnits: &academicUnitHTTPApplication{}, Institutions: &institutionHTTPApplication{},
-		Programmes: &programmeHTTPApplication{}, ProgrammeLevels: &programmeLevelHTTPApplication{},
-		AcademicPeriods: &academicPeriodHTTPApplication{}, Classes: &classHTTPApplication{},
-		Affiliations: &affiliationHTTPApplication{}, AcademicUnitMembers: &academicUnitMemberHTTPApplication{},
-		ClassMembers: &classMemberHTTPApplication{}, Invitations: unavailableInvitationApplication{},
-		BrowserInvitations: unavailableBrowserInvitationApplication{}, Registration: application, OnboardingImports: unavailableOnboardingImportApplication{},
-		StudentProgressions:           unavailableStudentProgressionApplication{},
-		AcademicAdministrationBatches: unavailableAcademicAdministrationBatchApplication{},
-		UserProfiles:                  &userProfileHTTPApplication{}, UserAccounts: &userProfileHTTPApplication{}, UserSettings: &userSettingsHTTPApplication{},
-		AccountStates: &accountStateHTTPApplication{}, SessionAdministrations: &sessionAdministrationHTTPApplication{},
-		Roles: &roleHTTPApplication{}, RoleBindings: &roleBindingHTTPApplication{},
-		AuditListings: &auditListingHTTPApplication{}, Bootstrap: &bootstrapHTTPApplication{},
-		AccessPolicy: unavailableAccessPolicyApplication{}, RetentionPolicy: application, Retention: application, Mail: application,
-		Exams: examApplications, ExamRevisions: examApplications, ExamSittings: examApplications,
-		ExamCorrections: examApplications, ExamResources: examApplications, ExamStarterWorkspaces: examApplications,
-		ExamAttempts: examApplications, ExamIntegrityReviews: examApplications, ExamRecords: examApplications,
-		ExamExports: examApplications,
-		BuildInfo:   BuildInfo{Version: "test"}, PublicURL: "http://localhost:8065",
+	return Settings{
+		Logger: logger, Localizer: newTestLocalizer(t), Health: testHTTPHealth{},
+		BuildInfo: BuildInfo{Version: "test"}, PublicURL: "http://localhost:8065",
 		MaxBodyBytes: 1 << 20, RecentAuthenticationTTL: time.Minute, NodeID: "node-a",
 		WebSocket: testWebSocketTransport{},
 	}
 }
 
-// agreementResourceApplications intentionally returns a zero-valued resolved
-// graph. Resource constructors only declare handlers while compiling the route
-// catalog; agreement tests never invoke those handlers.
-func agreementResourceApplications() resourceApplications {
-	return resourceApplications{}
+// completeHTTPApplication names every service New builds a resource from,
+// each with no collaborators. Resource constructors only declare handlers
+// while the route catalog compiles, so a test may compile and inspect the
+// production catalog over it but must never invoke one of its handlers.
+func completeHTTPApplication() *app.App {
+	return &app.App{
+		Identity: &identity.Service{}, Onboarding: &onboarding.Service{},
+		Administration: &administration.Service{}, Academic: &academic.Service{},
+		Users: &user.Service{}, Search: &app.SearchService{}, Counts: &app.AdministrationCounts{},
+		ExamAuthoring: &exam.Authoring{}, ExamPublication: &exam.Publication{},
+		Sittings: &sitting.Service{}, Corrections: &correction.Service{},
+		Resources: &resource.Service{}, StarterWorkspaces: &workspace.Service{},
+		Attempts: &attempt.Service{}, Reviews: &review.Service{},
+		ExamRecords: &exam.Records{}, ExamExports: &exam.Exports{},
+	}
+}
+
+// newProductionCatalogAPI compiles the production route catalog through New.
+func newProductionCatalogAPI(t *testing.T) *API {
+	t.Helper()
+	api, err := New(completeHTTPApplication(), validHTTPSettings(t))
+	require.NoError(t, err)
+	return api
+}
+
+// newResourceAPI compiles resources built over a test's fakes through the
+// same constructor New uses, authenticating every request as principal.
+func newResourceAPI(t *testing.T, principal model.Principal, resources ...apiResource) *API {
+	t.Helper()
+	api, err := newAPI(validHTTPSettings(t), &testHTTPApplication{principal: &principal}, resources...)
+	require.NoError(t, err)
+	return api
 }

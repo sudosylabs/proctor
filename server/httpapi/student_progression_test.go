@@ -204,10 +204,5 @@ func studentProgressionListAPI(t *testing.T, fake *studentProgressionApplication
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		AuthenticatedAt: time.Now().UTC(), MFACompletedAt: model.OptionalTimeFrom(time.Now().UTC()), ClientType: model.SessionClientWeb,
 	}
-	options := validHTTPOptions(t)
-	options.StudentProgressions = fake
-	options.Identity.(*testHTTPApplication).principal = &principal
-	httpAPI, err := New(options)
-	require.NoError(t, err)
-	return httpAPI
+	return newResourceAPI(t, principal, studentProgressionResource(fake))
 }

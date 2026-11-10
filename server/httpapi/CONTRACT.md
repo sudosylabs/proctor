@@ -159,11 +159,12 @@ kernel-owned. After a successful upgrade, the sibling transport owns the
 connection lifecycle. The catalog exposes no mutable router or late-registration
 seam.
 
-`httpapi.New` requires the complete resource capability graph and an explicit
-WebSocket transport. It resolves and validates those dependencies once before
-catalog compilation; production has no no-op transport or application-capability
-fallback. `resource_catalog.go` is a pure ordered resource inventory and must
-contain neither dependency selection nor runtime type assertions.
+`httpapi.New` takes the application and a `Settings` value that names an
+explicit WebSocket transport. It refuses a missing application service or
+setting before it compiles the catalog; production has no no-op transport or
+application fallback. `resource_catalog.go` is a pure ordered resource
+inventory: it builds each resource from the application service that owns its
+use cases and contains no runtime type assertions.
 
 Catalog completion exposed two existing pre-upgrade outcomes that the prior
 OpenAPI entry omitted: invalid origin (403) and unavailable WebSocket service
@@ -963,17 +964,25 @@ clients present an unknown value generically.
 
 ## Ownership and extension workflow
 
-`httpapi.New` is the production construction boundary. Its broad `Options` value
-exists only at composition: construction projects each application capability
-through the exact narrow interface accepted by its resource constructor. A
-resource may retain that focused application capability, but never `Options`,
-`*API`, a router, `store.Store`, SQL, `platform.Service`, or concrete adapters.
+`httpapi.New(application, settings)` is the production construction boundary.
+It builds each resource from one named service of `app.App`. A resource
+constructor takes the one interface its tests fake, or the concrete service
+when no test fakes it. `Settings` carries only what is not the application:
+logging, metrics, tracing, localization, health, build information, request
+limits, and the WebSocket transport. A resource may retain its application
+service, but never `Settings`, `*app.App`, `*API`, a router, `store.Store`,
+SQL, `platform.Service`, or concrete adapters.
+
+The unexported `newAPI` validates the settings and compiles the resources it
+is given. `New` passes it the production inventory, and handler tests pass it
+resources built over their fakes, so there is one compile path.
 
 The production route trace is intentionally linear and searchable:
 
 ~~~text
 httpapi.New
     -> productionResources             (resource_catalog.go)
+    -> newAPI                          (api.go)
     -> <domain>Resource                (for example institutionResource)
     -> principalRoute/sessionRoute/... (route_definition.go)
     -> collectResources + validation   (catalog_compiler.go)

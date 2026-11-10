@@ -222,24 +222,3 @@ func (m studentProgressionModule) report(request operationRequest) (protocolResu
 	headers.Set("X-Content-Type-Options", "nosniff")
 	return binaryDownloadProtocolResult(io.NopCloser(bytes.NewReader(body.Bytes())), int64(body.Len())).withHeaders(headers), nil
 }
-
-type unavailableStudentProgressionApplication struct{}
-
-func (unavailableStudentProgressionApplication) DryRunStudentProgression(context.Context, invocation.Invocation, onboarding.DryRunStudentProgressionCommand) (onboarding.OnboardingImportView, error) {
-	return onboarding.OnboardingImportView{}, errUnpresentableResult
-}
-func (unavailableStudentProgressionApplication) GetStudentProgression(context.Context, invocation.Invocation, model.OnboardingImportID) (onboarding.OnboardingImportView, []onboarding.OnboardingImportRowView, error) {
-	return onboarding.OnboardingImportView{}, nil, errUnpresentableResult
-}
-func (unavailableStudentProgressionApplication) ListStudentProgressions(context.Context, invocation.Invocation, onboarding.ListStudentProgressionsQuery) (paging.Counted[onboarding.OnboardingImportView], error) {
-	return paging.Counted[onboarding.OnboardingImportView]{}, errUnpresentableResult
-}
-func (unavailableStudentProgressionApplication) CommitStudentProgression(context.Context, invocation.Invocation, onboarding.CommitStudentProgressionCommand) (onboarding.OnboardingImportView, error) {
-	return onboarding.OnboardingImportView{}, errUnpresentableResult
-}
-func (unavailableStudentProgressionApplication) CancelStudentProgression(context.Context, invocation.Invocation, model.OnboardingImportID) (onboarding.OnboardingImportView, error) {
-	return onboarding.OnboardingImportView{}, errUnpresentableResult
-}
-func (unavailableStudentProgressionApplication) StudentProgressionReport(context.Context, invocation.Invocation, model.OnboardingImportID, io.Writer) error {
-	return errUnpresentableResult
-}

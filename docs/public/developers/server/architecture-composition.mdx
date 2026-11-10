@@ -135,8 +135,9 @@ important ownership transfers are:
 5. Translate configuration into small immutable policies or narrow dynamic
    providers.
 6. Call the sole `app.New` constructor.
-7. Construct HTTP and WebSocket transports from narrow application
-   capabilities.
+7. Construct the WebSocket hub from the services it needs, then call
+   `httpapi.New(application, settings)`, which builds each HTTP resource from
+   the application service that owns its use cases.
 8. Attach local sinks and cluster fan-out once, then discard temporary wiring
    projections.
 

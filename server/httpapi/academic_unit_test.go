@@ -26,7 +26,6 @@ import (
 )
 
 type academicUnitHTTPApplication struct {
-	IdentityApplication
 	InstitutionApplication
 	principal      model.Principal
 	unit           *model.AcademicUnit
@@ -256,12 +255,9 @@ func TestAcademicUnitHTTPCreateMapsCommandWithoutPermissionPreflight(t *testing.
 				},
 				unit: created, created: created,
 			}
-			options := validHTTPOptions(t)
-			options.Logger = logger
-			options.Identity = fakeApplication
-			options.AcademicUnits = fakeApplication
-			options.Institutions = fakeApplication
-			httpAPI, err := New(options)
+			settings := validHTTPSettings(t)
+			settings.Logger = logger
+			httpAPI, err := newAPI(settings, fakeApplication, academicUnitResource(fakeApplication), institutionResource(fakeApplication))
 			require.NoError(t, err)
 			t.Cleanup(func() { _ = httpAPI.Close() })
 
@@ -310,12 +306,9 @@ func TestAcademicUnitHTTPMutationsMapCommandsWithoutPermissionPreflight(t *testi
 		unit: unit,
 	}
 	logger, _ := newTestLogger(t)
-	options := validHTTPOptions(t)
-	options.Logger = logger
-	options.Identity = fakeApplication
-	options.AcademicUnits = fakeApplication
-	options.Institutions = fakeApplication
-	httpAPI, err := New(options)
+	settings := validHTTPSettings(t)
+	settings.Logger = logger
+	httpAPI, err := newAPI(settings, fakeApplication, academicUnitResource(fakeApplication), institutionResource(fakeApplication))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = httpAPI.Close() })
 

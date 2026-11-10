@@ -258,9 +258,10 @@ Migrations are by vertical slice. A package or capability is introduced only whe
 Every use case is declared once, as an exported method on the area service that
 owns its policy, under its public use-case name (`CreateClass`, not `Create`).
 `app.App` exposes the area services as named fields and declares no use case of
-its own. Transports call `app.Academic.CreateClass` and so on; an `httpapi`
-resource receives the area service it serves, so an `httpapi` consumer interface
-lists the methods of one service. The WebSocket hub receives WebSocket
+its own. Transports call `app.Academic.CreateClass` and so on.
+`httpapi.New(application, settings)` builds each resource from the area
+service it serves, so an `httpapi` consumer interface lists the methods of one
+service and exists only where the resource's tests fake it. The WebSocket hub receives WebSocket
 admission (`app.RealtimeAdmission`) and the Attempt service (`app.Attempts`)
 as its typed dependencies.
 

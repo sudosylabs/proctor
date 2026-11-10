@@ -20,12 +20,6 @@ type AcademicAdministrationBatchApplication interface {
 	RunAcademicAdministrationBatch(context.Context, invocation.Invocation, onboarding.RunAcademicAdministrationBatchCommand) (onboarding.AcademicAdministrationBatchResult, error)
 }
 
-type unavailableAcademicAdministrationBatchApplication struct{}
-
-func (unavailableAcademicAdministrationBatchApplication) RunAcademicAdministrationBatch(context.Context, invocation.Invocation, onboarding.RunAcademicAdministrationBatchCommand) (onboarding.AcademicAdministrationBatchResult, error) {
-	return onboarding.AcademicAdministrationBatchResult{}, errUnpresentableResult
-}
-
 type academicAdministrationBatchItemRequest struct {
 	Key             string `json:"key"`
 	UserID          string `json:"user_id,omitempty"`

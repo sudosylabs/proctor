@@ -19,6 +19,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/app/paging"
@@ -65,86 +66,77 @@ func (*recordingOnboardingImportApplication) OnboardingImportReport(context.Cont
 	return nil
 }
 
-func TestResolveResourceApplicationsRequiresCompleteGraph(t *testing.T) {
+func TestNewRequiresCompleteApplication(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name    string
 		message string
-		remove  func(*Options)
+		remove  func(*app.App)
 	}{
-		{"academic units", "academic unit reads are required", func(options *Options) { options.AcademicUnits = nil }},
-		{"institutions", "institution application is required", func(options *Options) { options.Institutions = nil }},
-		{"programmes", "programme application is required", func(options *Options) { options.Programmes = nil }},
-		{"programme levels", "programme level application is required", func(options *Options) { options.ProgrammeLevels = nil }},
-		{"academic periods", "academic period application is required", func(options *Options) { options.AcademicPeriods = nil }},
-		{"classes", "class application is required", func(options *Options) { options.Classes = nil }},
-		{"affiliations", "affiliation application is required", func(options *Options) { options.Affiliations = nil }},
-		{"academic unit members", "academic unit member application is required", func(options *Options) { options.AcademicUnitMembers = nil }},
-		{"class members", "class member application is required", func(options *Options) { options.ClassMembers = nil }},
-		{"invitations", "invitation application is required", func(options *Options) { options.Invitations = nil }},
-		{"browser invitations", "browser invitation application is required", func(options *Options) { options.BrowserInvitations = nil }},
-		{"onboarding imports", "onboarding import application is required", func(options *Options) { options.OnboardingImports = nil }},
-		{"student progressions", "student progression application is required", func(options *Options) { options.StudentProgressions = nil }},
-		{"academic administration batches", "academic administration batch application is required", func(options *Options) { options.AcademicAdministrationBatches = nil }},
-		{"user profiles", "user profile application is required", func(options *Options) { options.UserProfiles = nil }},
-		{"user accounts", "user account application is required", func(options *Options) { options.UserAccounts = nil }},
-		{"user settings", "user settings application is required", func(options *Options) { options.UserSettings = nil }},
-		{"account states", "account state application is required", func(options *Options) { options.AccountStates = nil }},
-		{"session administration", "session administration application is required", func(options *Options) { options.SessionAdministrations = nil }},
-		{"roles", "role application is required", func(options *Options) { options.Roles = nil }},
-		{"role bindings", "role binding application is required", func(options *Options) { options.RoleBindings = nil }},
-		{"audit", "audit listing application is required", func(options *Options) { options.AuditListings = nil }},
-		{"bootstrap", "bootstrap application is required", func(options *Options) { options.Bootstrap = nil }},
-		{"access policy", "access policy application is required", func(options *Options) { options.AccessPolicy = nil }},
-		{"search", "search application is required", func(options *Options) { options.Search = nil }},
-		{"administration counts", "administration counts application is required", func(options *Options) { options.AdministrationCounts = nil }},
-		{"job operations", "job operations application is required", func(options *Options) { options.Jobs = nil }},
-		{"mail", "mail application is required", func(options *Options) { options.Mail = nil }},
+		{"identity", "identity application is required", func(application *app.App) { application.Identity = nil }},
+		{"onboarding", "onboarding application is required", func(application *app.App) { application.Onboarding = nil }},
+		{"administration", "administration application is required", func(application *app.App) { application.Administration = nil }},
+		{"academic", "academic application is required", func(application *app.App) { application.Academic = nil }},
+		{"users", "user application is required", func(application *app.App) { application.Users = nil }},
+		{"search", "search application is required", func(application *app.App) { application.Search = nil }},
+		{"administration counts", "administration counts application is required", func(application *app.App) { application.Counts = nil }},
+		{"exam authoring", "exam application is required", func(application *app.App) { application.ExamAuthoring = nil }},
+		{"exam publication", "exam revision application is required", func(application *app.App) { application.ExamPublication = nil }},
+		{"exam sittings", "exam sitting application is required", func(application *app.App) { application.Sittings = nil }},
+		{"exam corrections", "exam sitting correction application is required", func(application *app.App) { application.Corrections = nil }},
+		{"exam resources", "exam resource application is required", func(application *app.App) { application.Resources = nil }},
+		{"exam starter workspaces", "exam starter workspace application is required", func(application *app.App) { application.StarterWorkspaces = nil }},
+		{"exam attempts", "exam attempt application is required", func(application *app.App) { application.Attempts = nil }},
+		{"exam integrity reviews", "exam integrity review application is required", func(application *app.App) { application.Reviews = nil }},
+		{"exam records", "exam records application is required", func(application *app.App) { application.ExamRecords = nil }},
+		{"exam exports", "exam exports application is required", func(application *app.App) { application.ExamExports = nil }},
 	}
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			options := validHTTPOptions(t)
-			test.remove(&options)
-			_, err := resolveResourceApplications(options)
-			require.Error(t, err, "resolve error")
-			require.Equal(t, test.message, err.Error(), "resolve error")
+			application := completeHTTPApplication()
+			test.remove(application)
+			_, err := New(application, validHTTPSettings(t))
+			require.Error(t, err, "New error")
+			require.Equal(t, test.message, err.Error(), "New error")
 		})
 	}
 }
 
+func TestNewRequiresApplication(t *testing.T) {
+	t.Parallel()
+	_, err := New(nil, validHTTPSettings(t))
+	require.Error(t, err)
+	require.Equal(t, "application is required", err.Error())
+}
+
+// A graph without a Job store has no Job operations and no operator mail
+// controls; their resources answer for the absence themselves.
+func TestNewAcceptsApplicationWithoutJobsAndMail(t *testing.T) {
+	t.Parallel()
+	application := completeHTTPApplication()
+	require.Nil(t, application.Jobs)
+	require.Nil(t, application.Mail)
+	_, err := New(application, validHTTPSettings(t))
+	require.NoError(t, err)
+}
+
 func TestNewRequiresExplicitWebSocketTransport(t *testing.T) {
 	t.Parallel()
-	options := validHTTPOptions(t)
-	options.WebSocket = nil
-	_, err := New(options)
+	settings := validHTTPSettings(t)
+	settings.WebSocket = nil
+	_, err := New(completeHTTPApplication(), settings)
 	require.Error(t, err)
 	require.Equal(t, "websocket transport is required", err.Error())
 }
 
-func TestResolveResourceApplicationsUsesExplicitCapabilities(t *testing.T) {
+func TestNewAuthenticatesThroughApplicationIdentity(t *testing.T) {
 	t.Parallel()
-	options := validHTTPOptions(t)
-	invitations := &invitationHTTPApplication{}
-	browserInvitations := &browserInvitationHTTPApplication{}
-	onboardingImports := unavailableOnboardingImportApplication{}
-	studentProgressions := &studentProgressionApplicationFake{}
-	batches := &academicAdministrationBatchHTTPApplication{}
-	options.Invitations = invitations
-	options.BrowserInvitations = browserInvitations
-	options.OnboardingImports = onboardingImports
-	options.StudentProgressions = studentProgressions
-	options.AcademicAdministrationBatches = batches
-
-	resolved, err := resolveResourceApplications(options)
+	application := completeHTTPApplication()
+	api, err := New(application, validHTTPSettings(t))
 	require.NoError(t, err)
-	require.Equal(t, resolved.invitations, invitations, "resolver did not preserve explicit resource capabilities")
-	require.Equal(t, resolved.browserInvitations, browserInvitations, "resolver did not preserve explicit resource capabilities")
-	require.Equal(t, resolved.onboardingImports, onboardingImports, "resolver did not preserve explicit resource capabilities")
-	require.Equal(t, resolved.studentProgressions, studentProgressions, "resolver did not preserve explicit resource capabilities")
-	require.Equal(t, resolved.academicAdministrationBatches, batches, "resolver did not preserve explicit resource capabilities")
-	require.Equal(t, resolved.authenticator, options.Identity, "resolver did not project the configured Identity authenticator")
+	require.Same(t, application.Identity, api.authenticator, "New did not take the application's Identity service as authenticator")
 }
 
 func TestNewInvokesEveryExplicitFormerFallbackCapability(t *testing.T) {
@@ -154,18 +146,19 @@ func TestNewInvokesEveryExplicitFormerFallbackCapability(t *testing.T) {
 		AuthenticatedAt: time.Now().UTC(), MFACompletedAt: model.OptionalTimeFrom(time.Now().UTC()), ClientType: model.SessionClientWeb,
 	}
 
+	cookies, err := newBrowserCookies(validHTTPSettings(t).PublicURL)
+	require.NoError(t, err)
+
 	tests := []struct {
 		name      string
-		configure func(*Options) func(*testing.T)
+		configure func() (apiResource, func(*testing.T))
 		request   func() *http.Request
 	}{
 		{
 			name: "access policy",
-			configure: func(options *Options) func(*testing.T) {
+			configure: func() (apiResource, func(*testing.T)) {
 				fake := &replayingAccessPolicyHTTPApplication{}
-				options.AccessPolicy = fake
-				options.Identity.(*testHTTPApplication).principal = &principal
-				return func(t *testing.T) {
+				return accessPolicyResource(fake), func(t *testing.T) {
 					require.Equal(t, 1, fake.discoveries, "DiscoverAccess calls")
 				}
 			},
@@ -173,11 +166,9 @@ func TestNewInvokesEveryExplicitFormerFallbackCapability(t *testing.T) {
 		},
 		{
 			name: "invitations",
-			configure: func(options *Options) func(*testing.T) {
+			configure: func() (apiResource, func(*testing.T)) {
 				fake := &invitationHTTPApplication{}
-				options.Invitations = fake
-				options.Identity.(*testHTTPApplication).principal = &principal
-				return func(t *testing.T) {
+				return invitationResource(fake), func(t *testing.T) {
 					require.NotEqual(t, 0, fake.list.Limit, "ListInvitations was not invoked")
 				}
 			},
@@ -185,11 +176,9 @@ func TestNewInvokesEveryExplicitFormerFallbackCapability(t *testing.T) {
 		},
 		{
 			name: "browser invitations",
-			configure: func(options *Options) func(*testing.T) {
+			configure: func() (apiResource, func(*testing.T)) {
 				fake := &browserInvitationHTTPApplication{}
-				options.BrowserInvitations = fake
-				options.Identity.(*testHTTPApplication).principal = &principal
-				return func(t *testing.T) {
+				return browserInvitationResource(fake, cookies), func(t *testing.T) {
 					require.NotEmpty(t, fake.start.Claim, "StartBrowserInvitation was not invoked")
 				}
 			},
@@ -201,11 +190,9 @@ func TestNewInvokesEveryExplicitFormerFallbackCapability(t *testing.T) {
 		},
 		{
 			name: "onboarding imports",
-			configure: func(options *Options) func(*testing.T) {
+			configure: func() (apiResource, func(*testing.T)) {
 				fake := &recordingOnboardingImportApplication{}
-				options.OnboardingImports = fake
-				options.Identity.(*testHTTPApplication).principal = &principal
-				return func(t *testing.T) {
+				return onboardingImportResource(fake), func(t *testing.T) {
 					require.NotEmpty(t, fake.getID, "GetOnboardingImport was not invoked")
 				}
 			},
@@ -215,11 +202,9 @@ func TestNewInvokesEveryExplicitFormerFallbackCapability(t *testing.T) {
 		},
 		{
 			name: "student progressions",
-			configure: func(options *Options) func(*testing.T) {
+			configure: func() (apiResource, func(*testing.T)) {
 				fake := &studentProgressionApplicationFake{}
-				options.StudentProgressions = fake
-				options.Identity.(*testHTTPApplication).principal = &principal
-				return func(t *testing.T) {
+				return studentProgressionResource(fake), func(t *testing.T) {
 					require.NotEmpty(t, fake.getID, "GetStudentProgression was not invoked")
 				}
 			},
@@ -229,11 +214,9 @@ func TestNewInvokesEveryExplicitFormerFallbackCapability(t *testing.T) {
 		},
 		{
 			name: "academic administration batches",
-			configure: func(options *Options) func(*testing.T) {
+			configure: func() (apiResource, func(*testing.T)) {
 				fake := &academicAdministrationBatchHTTPApplication{}
-				options.AcademicAdministrationBatches = fake
-				options.Identity.(*testHTTPApplication).principal = &principal
-				return func(t *testing.T) {
+				return academicAdministrationBatchResource(fake), func(t *testing.T) {
 					require.Equal(t, "catalog-explicit-batch", fake.command.IdempotencyKey)
 				}
 			},
@@ -249,10 +232,8 @@ func TestNewInvokesEveryExplicitFormerFallbackCapability(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			options := validHTTPOptions(t)
-			assertCall := test.configure(&options)
-			httpAPI, err := New(options)
-			require.NoError(t, err)
+			resource, assertCall := test.configure()
+			httpAPI := newResourceAPI(t, principal, resource)
 			response := httptest.NewRecorder()
 			httpAPI.ServeHTTP(response, test.request())
 			require.GreaterOrEqual(t, response.Code, http.StatusOK, "route response = %d: %s", response.Code, response.Body.String())

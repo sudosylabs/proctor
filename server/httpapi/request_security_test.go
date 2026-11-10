@@ -109,8 +109,7 @@ func TestBrowserRequestPolicyPreservesProviderGETAndConfiguredOrigin(t *testing.
 
 func TestProductionRoutesDeclareBrowserRequestRejection(t *testing.T) {
 	t.Parallel()
-	api, err := New(validHTTPOptions(t))
-	require.NoError(t, err)
+	api := newProductionCatalogAPI(t)
 	for _, route := range api.Routes() {
 		if !requiresCSRF(route.Method) {
 			continue

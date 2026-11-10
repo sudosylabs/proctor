@@ -34,13 +34,9 @@ func TestRoleHTTPCreateUsesApplicationCommandWithoutPreflight(t *testing.T) {
 		Permissions: []string{string(model.ActionClassView)},
 	}}
 	transport := &academicUnitHTTPApplication{principal: principal}
-	options := validHTTPOptions(t)
-	options.Logger = logger
-	options.Identity = transport
-	options.AcademicUnits = transport
-	options.Institutions = transport
-	options.Roles = roles
-	httpAPI, err := New(options)
+	settings := validHTTPSettings(t)
+	settings.Logger = logger
+	httpAPI, err := newAPI(settings, transport, academicUnitResource(transport), institutionResource(transport), roleResource(roles))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = httpAPI.Close() })
 	body, _ := json.Marshal(map[string]any{

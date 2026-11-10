@@ -263,24 +263,3 @@ func onboardingImportResponseFromView(view onboarding.OnboardingImportView, rows
 	}
 	return response
 }
-
-type unavailableOnboardingImportApplication struct{}
-
-func (unavailableOnboardingImportApplication) UploadOnboardingImport(context.Context, invocation.Invocation, onboarding.UploadOnboardingImportCommand) (onboarding.OnboardingImportView, error) {
-	return onboarding.OnboardingImportView{}, errUnpresentableResult
-}
-func (unavailableOnboardingImportApplication) GetOnboardingImport(context.Context, invocation.Invocation, model.OnboardingImportID) (onboarding.OnboardingImportView, []onboarding.OnboardingImportRowView, error) {
-	return onboarding.OnboardingImportView{}, nil, errUnpresentableResult
-}
-func (unavailableOnboardingImportApplication) ListOnboardingImports(context.Context, invocation.Invocation, onboarding.ListOnboardingImportsQuery) (paging.Page[onboarding.OnboardingImportView], error) {
-	return paging.Page[onboarding.OnboardingImportView]{}, errUnpresentableResult
-}
-func (unavailableOnboardingImportApplication) CommitOnboardingImport(context.Context, invocation.Invocation, onboarding.CommitOnboardingImportCommand) (onboarding.OnboardingImportView, error) {
-	return onboarding.OnboardingImportView{}, errUnpresentableResult
-}
-func (unavailableOnboardingImportApplication) CancelOnboardingImport(context.Context, invocation.Invocation, model.OnboardingImportID) (onboarding.OnboardingImportView, error) {
-	return onboarding.OnboardingImportView{}, errUnpresentableResult
-}
-func (unavailableOnboardingImportApplication) OnboardingImportReport(context.Context, invocation.Invocation, model.OnboardingImportID, io.Writer) error {
-	return errUnpresentableResult
-}

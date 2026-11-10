@@ -100,7 +100,7 @@ func TestNewRequiresLocalizer(t *testing.T) {
 	t.Parallel()
 
 	logger, _ := newTestLogger(t)
-	_, err := New(Options{Logger: logger})
+	_, err := New(completeHTTPApplication(), Settings{Logger: logger, PublicURL: "http://localhost:8065"})
 	require.Error(t, err, "New without localizer error")
 	require.Contains(t, err.Error(), "localizer is required", "New without localizer error")
 }

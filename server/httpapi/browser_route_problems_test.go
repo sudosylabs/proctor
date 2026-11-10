@@ -18,8 +18,7 @@ import (
 
 func TestBrowserRouteProblemHandlersWriteProblemDetails(t *testing.T) {
 	t.Parallel()
-	api, err := New(validHTTPOptions(t))
-	require.NoError(t, err)
+	api := newProductionCatalogAPI(t)
 	tests := []struct {
 		name    string
 		handler http.Handler

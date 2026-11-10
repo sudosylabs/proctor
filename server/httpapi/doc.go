@@ -15,11 +15,14 @@
 // Every route declares the credential and assurance it requires, as an
 // AuthRequirement such as AuthSessionRequired or
 // AuthStrongRecentSessionRequired, and the exact error codes it can return.
-// New compiles every route into one fixed catalog and fails on an ambiguous
-// or invalid route, so nothing is registered after construction.
+// New takes the application and a Settings value. It builds each resource
+// from the application service that owns its use cases, compiles every route
+// into one fixed catalog and fails on an ambiguous or invalid route, so
+// nothing is registered after construction.
 //
 // Where to look:
-//   - api.go: API and New
+//   - api.go: API, New, and newAPI, which handler tests call with fakes
+//   - options.go: Settings and the ports composition supplies
 //   - resource_catalog.go: every resource in the production API, in order
 //   - route_definition.go and route_path.go: how a route is declared
 //   - problem.go and error_catalog.yaml: Problem Details and error codes

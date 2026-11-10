@@ -61,8 +61,7 @@ func TestOnlyExpensiveWorkRoutesDeclareCapacityRefusal(t *testing.T) {
 		"PUT /api/v1/exams/{exam_id}/draft/resources/{exam_resource_id}/content":             true,
 		"POST /api/v1/exams/{exam_id}/sittings/{exam_sitting_id}/correction-resource-stages": true,
 	}
-	api, err := New(validHTTPOptions(t))
-	require.NoError(t, err)
+	api := newProductionCatalogAPI(t)
 	for _, route := range api.Routes() {
 		key := route.Method + " " + normalizeRuntimeRoutePath(route.Path)
 		assert.Equal(t, expected[key], slices.Contains(route.ErrorCodes, "service.busy"), "%s has incorrect capacity error declaration", key)

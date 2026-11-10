@@ -72,8 +72,8 @@ func (s *Service) CreateAcademicUnitMember(
 	}
 	at := model.TimeUTC(s.now())
 	candidate.PrepareCreate(memberID, at)
-	if err := candidate.Validate(); err != nil {
-		return nil, apperror.DomainInvalid("academic_unit_member.invalid", err)
+	if validateErr := candidate.Validate(); validateErr != nil {
+		return nil, apperror.DomainInvalid("academic_unit_member.invalid", validateErr)
 	}
 
 	recipient := &model.User{ID: userID, Revision: 1}

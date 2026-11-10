@@ -232,7 +232,7 @@ func (s SQLSessionStore) ReauthenticateExternal(
 		}
 
 		var exact bool
-		if err := tx.Get(
+		if getErr := tx.Get(
 			ctx,
 			&exact,
 			`SELECT true FROM external_identities WHERE id = ? AND user_id = ? AND provider = ? AND subject = ? AND archived_at IS NULL FOR SHARE`,
@@ -240,8 +240,8 @@ func (s SQLSessionStore) ReauthenticateExternal(
 			state.TargetUserID.String(),
 			input.ProviderID,
 			input.Subject,
-		); err != nil {
-			return nil, translateError("external_identity", "", err)
+		); getErr != nil {
+			return nil, translateError("external_identity", "", getErr)
 		}
 
 		var row sessionRow

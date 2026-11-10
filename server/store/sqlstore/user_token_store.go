@@ -884,7 +884,7 @@ func (s SQLUserTokenStore) ConsumeEmailVerification(
 			return nil, err
 		}
 
-		if _, err := tx.Exec(
+		if _, execErr := tx.Exec(
 			ctx,
 			`
 		UPDATE users
@@ -893,8 +893,8 @@ func (s SQLUserTokenStore) ConsumeEmailVerification(
 			at,
 			mailEligibilityRevision,
 			user.ID,
-		); err != nil {
-			return nil, fmt.Errorf("verify user email: %w", err)
+		); execErr != nil {
+			return nil, fmt.Errorf("verify user email: %w", execErr)
 		}
 
 		if err := consumeUserTokens(
@@ -1015,7 +1015,7 @@ func (s SQLUserTokenStore) ConsumePasswordReset(
 		}
 
 		var credential passwordCredentialRow
-		if err := tx.Get(
+		if getErr := tx.Get(
 			ctx,
 			&credential,
 			`
@@ -1025,8 +1025,8 @@ func (s SQLUserTokenStore) ConsumePasswordReset(
 		 WHERE user_id = ? AND archived_at IS NULL
 		 FOR UPDATE`,
 			token.UserID,
-		); err != nil {
-			return nil, translateError("password_credential", token.UserID, err)
+		); getErr != nil {
+			return nil, translateError("password_credential", token.UserID, getErr)
 		}
 
 		resetUser, err := model.ParseUserID(token.UserID)
@@ -1075,7 +1075,7 @@ func (s SQLUserTokenStore) ConsumePasswordReset(
 		credential.PasswordHash = input.PasswordHash
 		credential.PasswordChangedAt = latestTime(credential.PasswordChangedAt, at)
 		credential.UpdatedAt = latestTime(credential.UpdatedAt, at)
-		if _, err := tx.Exec(
+		if _, execErr := tx.Exec(
 			ctx,
 			`
 			UPDATE password_credentials
@@ -1089,8 +1089,8 @@ func (s SQLUserTokenStore) ConsumePasswordReset(
 			at,
 			credential.ID,
 			token.UserID,
-		); err != nil {
-			return nil, fmt.Errorf("update reset password: %w", err)
+		); execErr != nil {
+			return nil, fmt.Errorf("update reset password: %w", execErr)
 		}
 
 		sessionRows, hashes, err := revokeAllUserSessionsAt(

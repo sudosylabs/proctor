@@ -1252,7 +1252,7 @@ func (s *SQLExamAttemptStore) ResolveNativeDeliveryTarget(
 			SittingID string `db:"sitting_id"`
 			ClassID   string `db:"class_id"`
 		}
-		if err := tx.Get(
+		if getErr := tx.Get(
 			ctx,
 			&row,
 			`SELECT s.id AS sitting_id, s.class_id
@@ -1260,8 +1260,8 @@ func (s *SQLExamAttemptStore) ResolveNativeDeliveryTarget(
 			JOIN exam_sittings s ON s.id = a.exam_sitting_id
 			WHERE a.id = ?`,
 			access.Access.AttemptID.String(),
-		); err != nil {
-			return nil, err
+		); getErr != nil {
+			return nil, getErr
 		}
 
 		sittingID, err := model.ParseExamSittingID(row.SittingID)

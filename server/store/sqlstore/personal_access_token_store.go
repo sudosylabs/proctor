@@ -85,14 +85,14 @@ func (s SQLPersonalAccessTokenStore) Create(
 			return nil, err
 		}
 
-		if err := requirePersonalAccessTokenPreparation(
+		if preparationErr := requirePersonalAccessTokenPreparation(
 			preparation,
 			store.PersonalAccessTokenMutationCreate,
 			candidate.UserID.String(),
 			"",
 			databaseAt,
-		); err != nil {
-			return nil, err
+		); preparationErr != nil {
+			return nil, preparationErr
 		}
 
 		if err := requireMFARecoveryPATSource(ctx, tx, preparation.UserID, preparation.SessionID.String, databaseAt); err != nil {
@@ -119,15 +119,15 @@ func (s SQLPersonalAccessTokenStore) Create(
 			return nil, err
 		}
 
-		if err := enforcePersonalAccessTokenMaximum(
+		if maximumErr := enforcePersonalAccessTokenMaximum(
 			ctx,
 			tx,
 			candidate.UserID.String(),
 			"",
 			candidate.CreatedAt,
 			input.MaximumActive,
-		); err != nil {
-			return nil, err
+		); maximumErr != nil {
+			return nil, maximumErr
 		}
 
 		if err := insertPersonalAccessToken(ctx, tx, candidate); err != nil {
@@ -374,7 +374,7 @@ func (s SQLPersonalAccessTokenStore) ChangeState(
 		}
 
 		notice, payloadKeyID, err := validatePersonalAccessTokenSecurityNotice(
-			model.UserID(input.UserID),
+			input.UserID,
 			input.Notice,
 			key,
 			current.ExpiresAt,
@@ -489,7 +489,7 @@ func (s SQLPersonalAccessTokenStore) Revoke(
 			return &store.PersonalAccessTokenMutationResult{Token: current, Fresh: false}, nil
 		}
 
-		if err := tx.Get(
+		if getErr := tx.Get(
 			ctx,
 			&row,
 			`UPDATE personal_access_tokens
@@ -500,8 +500,8 @@ func (s SQLPersonalAccessTokenStore) Revoke(
 			actionAt,
 			input.ID,
 			input.UserID,
-		); err != nil {
-			return nil, translateError("personal_access_token", input.ID.String(), err)
+		); getErr != nil {
+			return nil, translateError("personal_access_token", input.ID.String(), getErr)
 		}
 
 		revoked, err := row.model()
@@ -510,7 +510,7 @@ func (s SQLPersonalAccessTokenStore) Revoke(
 		}
 
 		notice, payloadKeyID, err := validatePersonalAccessTokenSecurityNotice(
-			model.UserID(input.UserID),
+			input.UserID,
 			input.Notice,
 			model.MailTemplateIdentityPersonalAccessTokenRevoked,
 			revoked.ExpiresAt,

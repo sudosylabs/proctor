@@ -930,13 +930,13 @@ func (s SQLBrowserAuthenticationStore) IssueCode(
 		}
 
 		var activeUserID string
-		if err := tx.Get(ctx, &activeUserID, `SELECT id
+		if getErr := tx.Get(ctx, &activeUserID, `SELECT id
 			FROM users
 			WHERE id = ?
 				AND archived_at IS NULL
 				AND disabled_at IS NULL
-			FOR UPDATE`, transaction.UserID.String()); err != nil {
-			return nil, translateError("user", transaction.UserID.String(), err)
+			FOR UPDATE`, transaction.UserID.String()); getErr != nil {
+			return nil, translateError("user", transaction.UserID.String(), getErr)
 		}
 
 		var row browserAuthenticationRow

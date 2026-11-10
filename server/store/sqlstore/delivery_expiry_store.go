@@ -186,35 +186,35 @@ func expireDeliveryOwner(ctx context.Context, tx *sqlxTxWrapper, d store.Deliver
 	if changed {
 		if d.Family == "browser" {
 			var before, after int64
-			if err := tx.Get(
+			if getErr := tx.Get(
 				ctx,
 				&before,
 				`SELECT browser_inventory_revision
 				FROM exam_attempt_delivery_budgets
 				WHERE exam_attempt_id = ?`,
 				d.AttemptID.String(),
-			); err != nil {
-				return false, err
+			); getErr != nil {
+				return false, getErr
 			}
 
 			if _, err := settleBrowserSource(ctx, tx, model.BrowserSourceSessionID(d.SourceID)); err != nil {
 				return false, err
 			}
-			if _, err := tx.Exec(ctx, `UPDATE browser_activity_sources
+			if _, execErr := tx.Exec(ctx, `UPDATE browser_activity_sources
 				SET upload_expired = true
-				WHERE id = ?::uuid`, d.SourceID); err != nil {
-				return false, err
+				WHERE id = ?::uuid`, d.SourceID); execErr != nil {
+				return false, execErr
 			}
 
-			if err := tx.Get(
+			if getErr := tx.Get(
 				ctx,
 				&after,
 				`SELECT browser_inventory_revision
 				FROM exam_attempt_delivery_budgets
 				WHERE exam_attempt_id = ?`,
 				d.AttemptID.String(),
-			); err != nil {
-				return false, err
+			); getErr != nil {
+				return false, getErr
 			}
 
 			if after != before {

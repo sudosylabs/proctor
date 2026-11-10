@@ -45,6 +45,8 @@ const liveDesktopSessionCondition = `sessions.client_type = 'desktop'
 
 // liveAccessCredentialCondition requires the Desktop Session's exact current
 // access credential. The caller supplies the credential and the instant.
+//
+//nolint:gosec // an SQL predicate over credential columns with bound parameters, not a credential
 const liveAccessCredentialCondition = `EXISTS (
 		SELECT 1
 		FROM session_credentials credential

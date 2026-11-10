@@ -562,7 +562,7 @@ func insertExamRevision(ctx context.Context, tx *sqlxTxWrapper, revision *model.
 		correctionAcknowledgement = revision.CandidateCorrection.AcknowledgementRequired
 	}
 
-	if _, err := tx.Exec(
+	if _, execErr := tx.Exec(
 		ctx,
 		`INSERT INTO exam_revisions (
 			id, exam_id, number, snapshot_schema_version, source_draft_revision, title,
@@ -612,12 +612,12 @@ func insertExamRevision(ctx context.Context, tx *sqlxTxWrapper, revision *model.
 		revision.PublishedAt,
 		nullableString(revision.BaseRevisionID.String()),
 		string(revision.Kind),
-	); err != nil {
-		return fmt.Errorf("insert Exam Revision: %w", translateError("exam_revision", revision.ID.String(), err))
+	); execErr != nil {
+		return fmt.Errorf("insert Exam Revision: %w", translateError("exam_revision", revision.ID.String(), execErr))
 	}
 
 	for _, resource := range revision.Resources {
-		if _, err := tx.Exec(
+		if _, execErr := tx.Exec(
 			ctx,
 			`INSERT INTO exam_revision_resources (
 				exam_revision_id, exam_id, resource_id, file_entry_id, file_revision_id,
@@ -637,13 +637,13 @@ func insertExamRevision(ctx context.Context, tx *sqlxTxWrapper, revision *model.
 			string(resource.MediaType),
 			resource.SizeBytes,
 			resource.SHA256,
-		); err != nil {
-			return fmt.Errorf("insert Exam Revision resource: %w", translateError("exam_revision_resource", resource.ResourceID.String(), err))
+		); execErr != nil {
+			return fmt.Errorf("insert Exam Revision resource: %w", translateError("exam_revision_resource", resource.ResourceID.String(), execErr))
 		}
 	}
 
 	for _, entry := range revision.StarterWorkspace {
-		if _, err := tx.Exec(
+		if _, execErr := tx.Exec(
 			ctx,
 			`INSERT INTO exam_revision_starter_workspace_entries (
 				exam_revision_id, exam_id, entry_id, kind, path, object_id, content_version,
@@ -660,10 +660,10 @@ func insertExamRevision(ctx context.Context, tx *sqlxTxWrapper, revision *model.
 			nullableString(entry.MediaType),
 			nullableInt64(entry.Kind == model.StarterWorkspaceEntryFile, entry.SizeBytes),
 			nullableString(entry.SHA256),
-		); err != nil {
+		); execErr != nil {
 			return fmt.Errorf(
 				"insert Exam Revision Starter Workspace entry: %w",
-				translateError("exam_revision_workspace", entry.EntryID.String(), err),
+				translateError("exam_revision_workspace", entry.EntryID.String(), execErr),
 			)
 		}
 	}

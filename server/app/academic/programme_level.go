@@ -240,8 +240,8 @@ func (s *Service) ArchiveProgrammeLevel(ctx context.Context, invocation invocati
 	if err != nil {
 		return err
 	}
-	if err := checkAcademicRevision(command.ExpectedRevision, current.Revision, "programme_level.conflict"); err != nil {
-		return err
+	if revisionErr := checkAcademicRevision(command.ExpectedRevision, current.Revision, "programme_level.conflict"); revisionErr != nil {
+		return revisionErr
 	}
 
 	resource := model.Resource{Type: model.ResourceProgrammeLevel, ID: current.ID.String()}

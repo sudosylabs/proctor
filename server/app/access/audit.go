@@ -221,8 +221,8 @@ func (s *Auditor) BeginAuthentication(
 	metadata model.RequestMetadata,
 	institutionID model.InstitutionID,
 ) (*model.AuditEvent, error) {
-	if !model.UserID(userID).IsValid() ||
-		!model.InstitutionID(institutionID).IsValid() ||
+	if !userID.IsValid() ||
+		!institutionID.IsValid() ||
 		!clientType.IsValid() ||
 		method == "" {
 		return nil, apperror.New("audit.internal")

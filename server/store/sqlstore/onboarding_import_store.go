@@ -850,7 +850,7 @@ func (s SQLInvitationStore) CommitOnboardingImport(
 			return nil, translateError("job", input.ExecutionJob.ID.String(), err)
 		}
 
-		if _, err := tx.Exec(
+		if _, execErr := tx.Exec(
 			ctx,
 			`UPDATE onboarding_import_rows
 			SET status = CASE WHEN preview_status = 'valid' THEN 'pending' ELSE 'skipped' END,
@@ -858,12 +858,12 @@ func (s SQLInvitationStore) CommitOnboardingImport(
 			WHERE import_id = ?`,
 			input.At,
 			input.ID.String(),
-		); err != nil {
-			return nil, err
+		); execErr != nil {
+			return nil, execErr
 		}
 
 		var updated onboardingImportRow
-		if err := tx.Get(
+		if getErr := tx.Get(
 			ctx,
 			&updated,
 			`UPDATE onboarding_imports
@@ -880,8 +880,8 @@ func (s SQLInvitationStore) CommitOnboardingImport(
 			input.ExecutionJob.ID.String(),
 			input.At,
 			input.ID.String(),
-		); err != nil {
-			return nil, translateError("onboarding_import", input.ID.String(), err)
+		); getErr != nil {
+			return nil, translateError("onboarding_import", input.ID.String(), getErr)
 		}
 
 		auditData, err := onboardingImportAuditData(updated)
@@ -1819,7 +1819,7 @@ func (s SQLInvitationStore) CancelOnboardingImport(
 			jobID = current.ExecutionJobID.String
 		}
 
-		if _, err := tx.Exec(
+		if _, execErr := tx.Exec(
 			ctx,
 			`UPDATE jobs
 			SET status = CASE WHEN status = 'queued' THEN 'canceled' WHEN status = 'running' THEN 'cancel_requested' ELSE status END,
@@ -1831,11 +1831,11 @@ func (s SQLInvitationStore) CancelOnboardingImport(
 			at,
 			at,
 			jobID,
-		); err != nil {
-			return nil, err
+		); execErr != nil {
+			return nil, execErr
 		}
 
-		if _, err := tx.Exec(
+		if _, execErr := tx.Exec(
 			ctx,
 			`UPDATE onboarding_import_rows
 			SET status = 'canceled', updated_at = ?
@@ -1843,12 +1843,12 @@ func (s SQLInvitationStore) CancelOnboardingImport(
 				AND status = 'pending'`,
 			at,
 			id.String(),
-		); err != nil {
-			return nil, err
+		); execErr != nil {
+			return nil, execErr
 		}
 
 		var updated onboardingImportRow
-		if err := tx.Get(
+		if getErr := tx.Get(
 			ctx,
 			&updated,
 			`UPDATE onboarding_imports
@@ -1864,8 +1864,8 @@ func (s SQLInvitationStore) CancelOnboardingImport(
 			id.String(),
 			at,
 			id.String(),
-		); err != nil {
-			return nil, err
+		); getErr != nil {
+			return nil, getErr
 		}
 
 		auditData, err := onboardingImportAuditData(updated)

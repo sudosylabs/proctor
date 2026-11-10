@@ -36,15 +36,15 @@ func (s *SQLExamAttemptStore) debitNativeAppend(ctx context.Context, access stor
 			Tokens int64        `db:"native_rate_tokens"`
 			At     sql.NullTime `db:"native_rate_at"`
 		}
-		if err := tx.Get(
+		if getErr := tx.Get(
 			ctx,
 			&rate,
 			`SELECT native_rate_tokens, native_rate_at
 			FROM exam_attempt_delivery_budgets
 			WHERE exam_attempt_id = ?`,
 			access.Access.AttemptID.String(),
-		); err != nil {
-			return false, err
+		); getErr != nil {
+			return false, getErr
 		}
 
 		if rate.At.Valid {

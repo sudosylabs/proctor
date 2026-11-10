@@ -837,15 +837,15 @@ func (s *SQLExamAttemptStore) UpdateBrowserDeliverySummary(
 				Received sql.NullTime `db:"summary_received_at"`
 				Final    bool         `db:"summary_final"`
 			}
-			if err := tx.Get(
+			if getErr := tx.Get(
 				ctx,
 				&row,
 				`SELECT summary_canonical, summary_received_at, summary_final
 				FROM browser_activity_sources
 				WHERE id = ?::uuid`,
 				string(input.Access.SourceSessionID),
-			); err != nil {
-				return nil, err
+			); getErr != nil {
+				return nil, getErr
 			}
 
 			replay := false

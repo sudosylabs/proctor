@@ -45,7 +45,7 @@ func retireSubmissionBrowserActivity(ctx context.Context, tx *sqlxTxWrapper, sub
 		ID      string `db:"id"`
 		Closure []byte `db:"closure_canonical"`
 	}
-	if err := tx.Select(
+	if selectErr := tx.Select(
 		ctx,
 		&rows,
 		`SELECT id::text, closure_canonical
@@ -56,8 +56,8 @@ func retireSubmissionBrowserActivity(ctx context.Context, tx *sqlxTxWrapper, sub
 		FOR UPDATE`,
 		attempt.String(),
 		maximumAttemptBrowserSources+1,
-	); err != nil {
-		return err
+	); selectErr != nil {
+		return selectErr
 	}
 
 	if int64(len(rows)) > maximumAttemptBrowserSources {
@@ -79,10 +79,10 @@ func retireSubmissionBrowserActivity(ctx context.Context, tx *sqlxTxWrapper, sub
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE browser_activity_sources
+		if _, execErr := tx.Exec(ctx, `UPDATE browser_activity_sources
 			SET closure_canonical = ?
-			WHERE id = ?::uuid`, raw, row.ID); err != nil {
-			return err
+			WHERE id = ?::uuid`, raw, row.ID); execErr != nil {
+			return execErr
 		}
 
 		status, err := browserSourceStatus(ctx, tx, model.BrowserSourceSessionID(row.ID))
@@ -96,7 +96,7 @@ func retireSubmissionBrowserActivity(ctx context.Context, tx *sqlxTxWrapper, sub
 
 	// Keep only the ownership selector needed to refuse late retries. No policy,
 	// location, receipt, reset reason, timing inventory or content is copied here.
-	if _, err := tx.Exec(
+	if _, execErr := tx.Exec(
 		ctx,
 		`INSERT INTO browser_delivery_retired_sources(
 			source_session_id, exam_attempt_id, participation_id, candidate_user_id,
@@ -107,8 +107,8 @@ func retireSubmissionBrowserActivity(ctx context.Context, tx *sqlxTxWrapper, sub
 		FROM browser_activity_sources
 		WHERE exam_attempt_id = ?`,
 		attempt.String(),
-	); err != nil {
-		return err
+	); execErr != nil {
+		return execErr
 	}
 
 	for _, q := range []string{
@@ -152,14 +152,14 @@ func retireSubmissionSecurityOperational(ctx context.Context, tx *sqlxTxWrapper,
 		"exam_native_delivery_declarations",
 		"exam_native_source_resets",
 	} {
-		if _, err := tx.Exec(
+		if _, execErr := tx.Exec(
 			ctx,
 			`DELETE FROM `+table+` WHERE participation_id IN (
 				SELECT participation_id FROM exam_attempt_security_owners WHERE exam_attempt_id = ?
 			)`,
 			attempt.String(),
-		); err != nil {
-			return err
+		); execErr != nil {
+			return execErr
 		}
 	}
 
@@ -178,7 +178,7 @@ func retireSubmissionSecurityOperational(ctx context.Context, tx *sqlxTxWrapper,
 		return err
 	}
 
-	if _, err := tx.Exec(
+	if _, execErr := tx.Exec(
 		ctx,
 		`DELETE FROM exam_security_preflights
 		WHERE attempt_id = ?
@@ -189,13 +189,13 @@ func retireSubmissionSecurityOperational(ctx context.Context, tx *sqlxTxWrapper,
 		attempt.String(),
 		attempt.String(),
 		attempt.String(),
-	); err != nil {
-		return err
+	); execErr != nil {
+		return execErr
 	}
 
 	// The fixed owner remains for lifetime quotas and current-key authorization;
 	// health, occurrence, reset and gap documents have a separate expiry purpose.
-	if _, err := tx.Exec(
+	if _, execErr := tx.Exec(
 		ctx,
 		`UPDATE exam_attempt_security_owners
 		SET binding_canonical = '{}', latest_report_canonical = '{}',
@@ -204,8 +204,8 @@ func retireSubmissionSecurityOperational(ctx context.Context, tx *sqlxTxWrapper,
 			summary_received_at = NULL
 		WHERE exam_attempt_id = ?`,
 		attempt.String(),
-	); err != nil {
-		return err
+	); execErr != nil {
+		return execErr
 	}
 
 	if err := deleteDeliveryRetryCopies(ctx, tx, attempt, false); err != nil {

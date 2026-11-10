@@ -671,7 +671,7 @@ func scheduleExamSitting(ctx context.Context, tx *sqlxTxWrapper, input *store.Ex
 		return nil, err
 	}
 
-	if err := guardExamSittingSelection(
+	if selectionErr := guardExamSittingSelection(
 		ctx,
 		tx,
 		candidate.ExamID,
@@ -681,8 +681,8 @@ func scheduleExamSitting(ctx context.Context, tx *sqlxTxWrapper, input *store.Ex
 		candidate.ClassID,
 		candidate.ScheduledStartAt,
 		candidate.ScheduledEndAt,
-	); err != nil {
-		return nil, err
+	); selectionErr != nil {
+		return nil, selectionErr
 	}
 
 	_, err = tx.Exec(
@@ -746,7 +746,7 @@ func updateExamSittingSchedule(ctx context.Context, tx *sqlxTxWrapper, input *st
 	}
 
 	priorClassID := current.ClassID
-	if err := guardExamSittingLineage(
+	if lineageErr := guardExamSittingLineage(
 		ctx,
 		tx,
 		input.ExamID,
@@ -754,8 +754,8 @@ func updateExamSittingSchedule(ctx context.Context, tx *sqlxTxWrapper, input *st
 		input.ClassID,
 		input.ScheduledStartAt,
 		input.ScheduledEndAt,
-	); err != nil {
-		return nil, err
+	); lineageErr != nil {
+		return nil, lineageErr
 	}
 
 	changedAt, err := examSittingStatementTime(ctx, tx)

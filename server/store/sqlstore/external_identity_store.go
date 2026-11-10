@@ -343,7 +343,7 @@ func resolveExternalIdentity(
 		return nil, nil, fmt.Errorf("resolve external identity: %w", err)
 	}
 
-	if _, err := tx.Exec(
+	if _, execErr := tx.Exec(
 		ctx,
 		`
 		UPDATE external_identities
@@ -353,8 +353,8 @@ func resolveExternalIdentity(
 		at,
 		at,
 		identityRow.ID,
-	); err != nil {
-		return nil, nil, fmt.Errorf("update external identity last seen: %w", err)
+	); execErr != nil {
+		return nil, nil, fmt.Errorf("update external identity last seen: %w", execErr)
 	}
 
 	if identityRow.UpdatedAt.Before(at) {
@@ -365,7 +365,7 @@ func resolveExternalIdentity(
 	}
 
 	var row userRow
-	if err := tx.Get(
+	if getErr := tx.Get(
 		ctx,
 		&row,
 		`
@@ -377,8 +377,8 @@ func resolveExternalIdentity(
 		WHERE id = ?
 			AND archived_at IS NULL`,
 		identityRow.UserID,
-	); err != nil {
-		return nil, nil, translateError("user", identityRow.UserID, err)
+	); getErr != nil {
+		return nil, nil, translateError("user", identityRow.UserID, getErr)
 	}
 
 	user, err := row.model()

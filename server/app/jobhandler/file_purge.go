@@ -651,7 +651,7 @@ func (p filePurgeExpiredContentProposer) Propose(ctx context.Context, occurrence
 	job, err := model.NewJobWithDedupePolicy(
 		model.NewJobID(),
 		model.JobTypeFilePurgeExpiredContent,
-		json.RawMessage(command),
+		command,
 		key,
 		model.JobDedupePermanent,
 		at,

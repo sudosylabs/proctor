@@ -156,7 +156,7 @@ func (s *Service) SaveExamIntegrityDecision(
 	}
 
 	decisionID := s.deps.NewDecisionID()
-	if _, err := model.NewIntegrityReviewDecision(
+	if _, decisionErr := model.NewIntegrityReviewDecision(
 		decisionID,
 		reviewID,
 		command.FlagID,
@@ -164,8 +164,8 @@ func (s *Service) SaveExamIntegrityDecision(
 		principal.UserID,
 		command.PrivateRationale,
 		s.deps.Now(),
-	); err != nil {
-		return Result{}, apperror.Invalid("exam.integrity_review.invalid", "decision").Wrap(err)
+	); decisionErr != nil {
+		return Result{}, apperror.Invalid("exam.integrity_review.invalid", "decision").Wrap(decisionErr)
 	}
 
 	override, authorization, err := s.authorizeReviewMutation(ctx, invocation, command.SubmissionID)

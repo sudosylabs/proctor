@@ -164,7 +164,7 @@ func (s *SQLExamAttemptStore) prepareConnectSecurity(
 
 	var used int64
 	if !first {
-		if err := tx.Get(
+		if getErr := tx.Get(
 			ctx,
 			&used,
 			`SELECT control_metadata_bytes
@@ -172,8 +172,8 @@ func (s *SQLExamAttemptStore) prepareConnectSecurity(
 			WHERE exam_attempt_id = ?
 			FOR UPDATE`,
 			attemptID.String(),
-		); err != nil {
-			return zero, err
+		); getErr != nil {
+			return zero, getErr
 		}
 	}
 
@@ -294,7 +294,7 @@ func persistConnectSecurity(
 		return err
 	}
 
-	if _, err := tx.Exec(
+	if _, execErr := tx.Exec(
 		ctx,
 		`INSERT INTO exam_attempt_security_owners(
 			participation_id, exam_attempt_id, delivery_stream_id, security_session_id, session_id,
@@ -314,17 +314,17 @@ func persistConnectSecurity(
 		ledger,
 		model.NativeOwnerReservationBytes,
 		allocation.now,
-	); err != nil {
-		return err
+	); execErr != nil {
+		return execErr
 	}
 
-	if _, err := tx.Exec(
+	if _, execErr := tx.Exec(
 		ctx,
 		`UPDATE exam_attempt_delivery_budgets SET control_metadata_bytes = ? WHERE exam_attempt_id = ?`,
 		next,
 		attemptID,
-	); err != nil {
-		return err
+	); execErr != nil {
+		return execErr
 	}
 
 	result, err := tx.Exec(

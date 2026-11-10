@@ -149,7 +149,7 @@ func resetMFAUserAccess(ctx context.Context, tx *sqlxTxWrapper, userID model.Use
 	}
 
 	for _, table := range []string{"mfa_credentials", "mfa_recovery_codes"} {
-		if _, err := tx.Exec(
+		if _, execErr := tx.Exec(
 			ctx,
 			`UPDATE `+table+` SET updated_at = GREATEST(updated_at, ?), archived_at = ?
 			WHERE user_id = ?
@@ -157,12 +157,12 @@ func resetMFAUserAccess(ctx context.Context, tx *sqlxTxWrapper, userID model.Use
 			at,
 			at,
 			userID.String(),
-		); err != nil {
-			return nil, fmt.Errorf("retire reset MFA material: %w", err)
+		); execErr != nil {
+			return nil, fmt.Errorf("retire reset MFA material: %w", execErr)
 		}
 	}
 
-	if _, err := tx.Exec(
+	if _, execErr := tx.Exec(
 		ctx,
 		`INSERT INTO user_mfa_recovery(user_id, generation, reset_at, reenrollment_required,
 			updated_at)
@@ -173,8 +173,8 @@ func resetMFAUserAccess(ctx context.Context, tx *sqlxTxWrapper, userID model.Use
 		userID.String(),
 		at,
 		at,
-	); err != nil {
-		return nil, err
+	); execErr != nil {
+		return nil, execErr
 	}
 
 	rows, hashes, err := revokeAllUserSessionsAt(ctx, tx, userID.String(), at, model.SessionRevocationMFAReset)
@@ -199,7 +199,7 @@ func resetMFAUserAccess(ctx context.Context, tx *sqlxTxWrapper, userID model.Use
 		sessions = append(sessions, session)
 	}
 
-	if _, err := tx.Exec(
+	if _, execErr := tx.Exec(
 		ctx,
 		`UPDATE personal_access_tokens
 		SET updated_at = GREATEST(updated_at, ?), revoked_at = ?
@@ -208,12 +208,12 @@ func resetMFAUserAccess(ctx context.Context, tx *sqlxTxWrapper, userID model.Use
 		at,
 		at,
 		userID.String(),
-	); err != nil {
-		return nil, err
+	); execErr != nil {
+		return nil, execErr
 	}
 
 	preparations := []personalAccessTokenPreparationRow{}
-	if err := tx.Select(
+	if selectErr := tx.Select(
 		ctx,
 		&preparations,
 		`SELECT `+personalAccessTokenPreparationColumns+` FROM personal_access_token_mutation_preparations
@@ -221,20 +221,20 @@ func resetMFAUserAccess(ctx context.Context, tx *sqlxTxWrapper, userID model.Use
 		ORDER BY id
 		FOR UPDATE`,
 		userID.String(),
-	); err != nil {
-		return nil, err
+	); selectErr != nil {
+		return nil, selectErr
 	}
 
 	for i := range preparations {
-		if err := terminalizePersonalAccessTokenPreparation(
+		if terminalizeErr := terminalizePersonalAccessTokenPreparation(
 			ctx,
 			tx,
 			&preparations[i],
 			model.AuditStatusFail,
 			"authentication.mfa.reenrollment_required",
 			nil,
-		); err != nil {
-			return nil, err
+		); terminalizeErr != nil {
+			return nil, terminalizeErr
 		}
 	}
 
@@ -252,7 +252,7 @@ func resetMFAUserAccess(ctx context.Context, tx *sqlxTxWrapper, userID model.Use
 		return nil, err
 	}
 
-	if _, err := tx.Exec(
+	if _, execErr := tx.Exec(
 		ctx,
 		`UPDATE audit_events a
 		SET updated_at = GREATEST(a.updated_at, ?), status = 'fail',
@@ -263,11 +263,11 @@ func resetMFAUserAccess(ctx context.Context, tx *sqlxTxWrapper, userID model.Use
 			AND a.status = 'attempt'`,
 		at,
 		userID.String(),
-	); err != nil {
-		return nil, err
+	); execErr != nil {
+		return nil, execErr
 	}
 
-	if _, err := tx.Exec(
+	if _, execErr := tx.Exec(
 		ctx,
 		`UPDATE external_login_states
 		SET updated_at = GREATEST(updated_at, ?),
@@ -277,8 +277,8 @@ func resetMFAUserAccess(ctx context.Context, tx *sqlxTxWrapper, userID model.Use
 		at,
 		at,
 		userID.String(),
-	); err != nil {
-		return nil, err
+	); execErr != nil {
+		return nil, execErr
 	}
 
 	if _, err = tx.Exec(

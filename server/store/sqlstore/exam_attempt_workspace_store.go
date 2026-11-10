@@ -845,8 +845,8 @@ func (s *SQLExamAttemptWorkspaceStore) ApplyMutation(
 				if decodeErr := decodeOutcome(encoded, &outcome); decodeErr != nil {
 					return outcome, decodeErr
 				}
-				if err := validateAttemptWorkspaceMutationOutcome(outcome); err != nil {
-					return outcome, err
+				if outcomeErr := validateAttemptWorkspaceMutationOutcome(outcome); outcomeErr != nil {
+					return outcome, outcomeErr
 				}
 
 				return outcome, nil

@@ -39,7 +39,7 @@ func updateBrowserSourceSettlement(ctx context.Context, tx *sqlxTxWrapper, statu
 		return invalidPersistedState("browser_submission", "settlement", err)
 	}
 
-	if _, err := tx.Exec(
+	if _, execErr := tx.Exec(
 		ctx,
 		`UPDATE browser_activity_sources
 		SET settlement_pending = ?, settlement_incomplete = ?
@@ -47,8 +47,8 @@ func updateBrowserSourceSettlement(ctx context.Context, tx *sqlxTxWrapper, statu
 		pending,
 		incomplete,
 		string(status.SourceSessionID),
-	); err != nil {
-		return err
+	); execErr != nil {
+		return execErr
 	}
 
 	var counts struct {
@@ -56,7 +56,7 @@ func updateBrowserSourceSettlement(ctx context.Context, tx *sqlxTxWrapper, statu
 		Pending    int64 `db:"pending"`
 		Incomplete int64 `db:"incomplete"`
 	}
-	if err := tx.Get(
+	if getErr := tx.Get(
 		ctx,
 		&counts,
 		`SELECT count(*) AS sources, count(*) FILTER(WHERE settlement_pending) AS pending,
@@ -64,8 +64,8 @@ func updateBrowserSourceSettlement(ctx context.Context, tx *sqlxTxWrapper, statu
 		FROM browser_activity_sources
 		WHERE exam_attempt_id = ?`,
 		status.AttemptID.String(),
-	); err != nil {
-		return err
+	); getErr != nil {
+		return getErr
 	}
 
 	if counts.Sources > maximumAttemptBrowserSources {

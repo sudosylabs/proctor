@@ -247,10 +247,10 @@ func (s *SQLExamIntegrityReviewStore) Get(
 			return nil, err
 		}
 
-		if err := tx.Get(ctx, &snapshot.DeliveryInventoryRevision, `SELECT review_inventory_revision
+		if getErr := tx.Get(ctx, &snapshot.DeliveryInventoryRevision, `SELECT review_inventory_revision
 			FROM exam_attempt_delivery_budgets
-			WHERE exam_attempt_id = ?`, authorization.AttemptID.String()); err != nil {
-			return nil, err
+			WHERE exam_attempt_id = ?`, authorization.AttemptID.String()); getErr != nil {
+			return nil, getErr
 		}
 
 		var overflow struct {
@@ -1154,8 +1154,8 @@ func lockReviewScope(
 	}
 
 	var row examIntegrityReviewAuthorizationRow
-	if err := tx.Get(ctx, &row, examIntegrityReviewAuthorizationSelect+` FOR UPDATE OF sub, a`, submissionID.String()); err != nil {
-		return nil, translateError("submission", submissionID.String(), err)
+	if getErr := tx.Get(ctx, &row, examIntegrityReviewAuthorizationSelect+` FOR UPDATE OF sub, a`, submissionID.String()); getErr != nil {
+		return nil, translateError("submission", submissionID.String(), getErr)
 	}
 
 	auth, err := row.value()

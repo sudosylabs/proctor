@@ -163,7 +163,7 @@ func (s SQLMFAStore) SavePending(ctx context.Context, input *store.MFAPendingEnr
 		}
 
 		var active bool
-		if err := tx.Get(
+		if getErr := tx.Get(
 			ctx,
 			&active,
 			`SELECT EXISTS(
@@ -174,8 +174,8 @@ func (s SQLMFAStore) SavePending(ctx context.Context, input *store.MFAPendingEnr
 					AND state = 'active'
 			)`,
 			input.Principal.UserID.String(),
-		); err != nil {
-			return nil, err
+		); getErr != nil {
+			return nil, getErr
 		}
 
 		if active {
@@ -189,7 +189,7 @@ func (s SQLMFAStore) SavePending(ctx context.Context, input *store.MFAPendingEnr
 			return nil, err
 		}
 
-		if _, err := tx.Exec(
+		if _, execErr := tx.Exec(
 			ctx,
 			`UPDATE mfa_credentials
 			SET updated_at = GREATEST(updated_at, ?), archived_at = ?
@@ -198,8 +198,8 @@ func (s SQLMFAStore) SavePending(ctx context.Context, input *store.MFAPendingEnr
 			at,
 			at,
 			candidate.UserID.String(),
-		); err != nil {
-			return nil, err
+		); execErr != nil {
+			return nil, execErr
 		}
 
 		if err := insertMFACredential(ctx, tx, &candidate); err != nil {
@@ -248,7 +248,7 @@ func (s SQLMFAStore) Challenge(ctx context.Context, input *store.MFAChallenge) (
 			return nil, store.NewErrConflict("mfa_credential", "verification_expired", nil)
 		}
 
-		if err := consumeExactMFAFactor(
+		if consumeErr := consumeExactMFAFactor(
 			ctx,
 			tx,
 			input.Principal.UserID,
@@ -256,8 +256,8 @@ func (s SQLMFAStore) Challenge(ctx context.Context, input *store.MFAChallenge) (
 			input.TimeStep,
 			input.RecoveryCodeHash,
 			at,
-		); err != nil {
-			return nil, err
+		); consumeErr != nil {
+			return nil, consumeErr
 		}
 
 		session, err := upgradeSessionAuthentication(ctx, tx, input.Principal.SessionID.String(), input.Principal.UserID.String(), at)

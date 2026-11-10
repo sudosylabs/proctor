@@ -941,15 +941,15 @@ func (s *SQLExamRecordsStore) WaiveReview(
 			}
 
 			var deliveryRevision int64
-			if err := tx.Get(
+			if getErr := tx.Get(
 				ctx,
 				&deliveryRevision,
 				`SELECT review_inventory_revision
 				FROM exam_attempt_delivery_budgets
 				WHERE exam_attempt_id = ?`,
 				scope.AttemptID.String(),
-			); err != nil {
-				return nil, err
+			); getErr != nil {
+				return nil, getErr
 			}
 
 			if deliveryRevision != input.ExpectedDeliveryInventoryRevision {

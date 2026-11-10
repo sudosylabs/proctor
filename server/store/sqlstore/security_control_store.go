@@ -378,13 +378,13 @@ func resolveSecurityControlContinuity(
 		return model.NativeContinuityDecision{}, err
 	}
 	var historyRaw [][]byte
-	if err := tx.Select(
+	if selectErr := tx.Select(
 		ctx,
 		&historyRaw,
 		`SELECT reset_canonical FROM exam_native_source_resets WHERE participation_id = ? ORDER BY reset_id`,
 		input.ParticipationID.String(),
-	); err != nil {
-		return model.NativeContinuityDecision{}, err
+	); selectErr != nil {
+		return model.NativeContinuityDecision{}, selectErr
 	}
 	history := make([]model.NativeSourceReset, 0, len(historyRaw))
 	for _, encoded := range historyRaw {
@@ -400,7 +400,7 @@ func resolveSecurityControlContinuity(
 	resetBelowEvidence := false
 	for _, reset := range control.SourceResets {
 		var observed int64
-		if err := tx.Get(
+		if getErr := tx.Get(
 			ctx,
 			&observed,
 			`SELECT COALESCE(MAX((r->>'last_sequence')::bigint), 0)
@@ -414,8 +414,8 @@ func resolveSecurityControlContinuity(
 			input.ParticipationID.String(),
 			string(reset.SourceID),
 			reset.PreviousSourceInstanceID,
-		); err != nil {
-			return model.NativeContinuityDecision{}, err
+		); getErr != nil {
+			return model.NativeContinuityDecision{}, getErr
 		}
 		if reset.PreviousFinalSequence < observed {
 			resetBelowEvidence = true

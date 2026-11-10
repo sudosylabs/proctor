@@ -466,7 +466,7 @@ func (s SQLAffiliationStore) endAffiliation(
 
 	if current.Kind == model.AffiliationStudent {
 		var activeEnrollment bool
-		if err := tx.Get(
+		if getErr := tx.Get(
 			ctx,
 			&activeEnrollment,
 			`SELECT EXISTS (
@@ -477,8 +477,8 @@ func (s SQLAffiliationStore) endAffiliation(
 					AND end_at IS NULL
 			)`,
 			current.UserID.String(),
-		); err != nil {
-			return nil, fmt.Errorf("check affiliation enrollment dependencies: %w", err)
+		); getErr != nil {
+			return nil, fmt.Errorf("check affiliation enrollment dependencies: %w", getErr)
 		}
 
 		if activeEnrollment {

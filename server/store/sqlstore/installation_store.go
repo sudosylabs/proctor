@@ -219,7 +219,7 @@ func (s SQLInstallationStore) ReconcileSystemAdministratorRole(
 		}
 
 		updated := newRoleRow(candidate)
-		if _, err := tx.Exec(
+		if _, execErr := tx.Exec(
 			ctx,
 			`
 			UPDATE roles
@@ -230,8 +230,8 @@ func (s SQLInstallationStore) ReconcileSystemAdministratorRole(
 			updated.UpdatedAt,
 			updated.Permissions,
 			updated.ID,
-		); err != nil {
-			return nil, fmt.Errorf("update protected role reconciliation: %w", translateError("role", candidate.ID.String(), err))
+		); execErr != nil {
+			return nil, fmt.Errorf("update protected role reconciliation: %w", translateError("role", candidate.ID.String(), execErr))
 		}
 
 		event := input.AuditEvent.Clone()

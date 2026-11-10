@@ -609,7 +609,7 @@ func (s SQLMFAStore) Disable(
 		}
 
 		hashes := []string{}
-		if err := tx.Select(
+		if selectErr := tx.Select(
 			ctx,
 			&hashes,
 			`
@@ -622,11 +622,11 @@ func (s SQLMFAStore) Disable(
 		   AND credential.archived_at IS NULL AND credential.revoked_at IS NULL
 		 FOR UPDATE OF credential`,
 			input.UserID,
-		); err != nil {
-			return nil, fmt.Errorf("select MFA session credentials: %w", err)
+		); selectErr != nil {
+			return nil, fmt.Errorf("select MFA session credentials: %w", selectErr)
 		}
 
-		if _, err := tx.Exec(
+		if _, execErr := tx.Exec(
 			ctx,
 			`
 		UPDATE sessions
@@ -636,8 +636,8 @@ func (s SQLMFAStore) Disable(
 		 WHERE user_id = ? AND archived_at IS NULL AND revoked_at IS NULL`,
 			at,
 			input.UserID,
-		); err != nil {
-			return nil, fmt.Errorf("downgrade MFA sessions: %w", err)
+		); execErr != nil {
+			return nil, fmt.Errorf("downgrade MFA sessions: %w", execErr)
 		}
 
 		if err := insertSecurityNoticeMail(ctx, tx, input.Notice.Occurrence, input.Notice.Delivery, input.Notice.Job, payloadKeyID); err != nil {

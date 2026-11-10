@@ -306,8 +306,8 @@ func (s *Service) planClassEnrollment(
 		EndsAt:           model.OptionalTimeFromMillis(command.EndAt),
 	}
 	candidate.PrepareCreate(memberID, at)
-	if err := candidate.Validate(); err != nil {
-		return classEnrollmentPlan{}, apperror.DomainInvalid("class_member.invalid", err)
+	if validateErr := candidate.Validate(); validateErr != nil {
+		return classEnrollmentPlan{}, apperror.DomainInvalid("class_member.invalid", validateErr)
 	}
 
 	previous, err := s.findTransferSource(ctx, command, candidate)

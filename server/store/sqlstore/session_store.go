@@ -613,7 +613,7 @@ func (s SQLSessionStore) Revoke(
 	} else {
 		var err error
 		payloadKeyID, err = validateSecurityNoticeMail(
-			model.UserID(input.UserID),
+			input.UserID,
 			input.Occurrence,
 			input.Delivery,
 			input.DeliveryJob,

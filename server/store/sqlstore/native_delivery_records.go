@@ -486,7 +486,7 @@ func advanceNativeInterpretation(ctx context.Context, tx *sqlxTxWrapper, owner n
 	}
 
 	var rows []nativeStoredRecord
-	if err := tx.Select(
+	if selectErr := tx.Select(
 		ctx,
 		&rows,
 		`SELECT r.batch_sequence, r.record_index, r.kind, r.record_canonical, r.metadata_canonical
@@ -498,8 +498,8 @@ func advanceNativeInterpretation(ctx context.Context, tx *sqlxTxWrapper, owner n
 		ORDER BY r.batch_sequence, r.record_index`,
 		owner.ParticipationID,
 		progress.SettledThrough,
-	); err != nil {
-		return err
+	); selectErr != nil {
+		return selectErr
 	}
 
 	for _, row := range rows {
@@ -517,7 +517,7 @@ func advanceNativeInterpretation(ctx context.Context, tx *sqlxTxWrapper, owner n
 			Unresolved bool   `db:"unresolved_opener"`
 		}
 		var prior *model.NativeOccurrenceProgress
-		err := tx.Get(
+		recordErr := tx.Get(
 			ctx,
 			&previous,
 			`SELECT r.record_canonical, o.unresolved_opener
@@ -528,25 +528,25 @@ func advanceNativeInterpretation(ctx context.Context, tx *sqlxTxWrapper, owner n
 			owner.ParticipationID,
 			record.Occurrence.OccurrenceID,
 		)
-		if err == nil {
+		if recordErr == nil {
 			var r model.NativeRecord
 			if json.Unmarshal(previous.Raw, &r) != nil || r.Occurrence == nil {
 				return invalidPersistedState("native_delivery", "record", model.ErrNativeDeliveryInvalid)
 			}
 
 			prior = &model.NativeOccurrenceProgress{Latest: *r.Occurrence, UnresolvedOpener: previous.Unresolved}
-		} else if !errors.Is(err, sql.ErrNoRows) {
-			return err
+		} else if !errors.Is(recordErr, sql.ErrNoRows) {
+			return recordErr
 		}
 
 		missingBefore := owner.TerminalThrough > 0 && row.Sequence > 1 ||
 			slices.ContainsFunc(gaps, func(r model.SequenceRange) bool { return r.First < row.Sequence })
-		value, err := model.AdvanceNativeOccurrence(prior, *record.Occurrence, missingBefore)
-		if err != nil {
-			return invalidPersistedState("native_delivery", "occurrence_transition", err)
+		value, recordErr := model.AdvanceNativeOccurrence(prior, *record.Occurrence, missingBefore)
+		if recordErr != nil {
+			return invalidPersistedState("native_delivery", "occurrence_transition", recordErr)
 		}
 
-		if _, err := tx.Exec(
+		if _, execErr := tx.Exec(
 			ctx,
 			`INSERT INTO exam_native_occurrences(participation_id, occurrence_id, batch_sequence,
 				record_index, unresolved_opener)
@@ -559,8 +559,8 @@ func advanceNativeInterpretation(ctx context.Context, tx *sqlxTxWrapper, owner n
 			row.Sequence,
 			row.Index,
 			value.UnresolvedOpener,
-		); err != nil {
-			return err
+		); execErr != nil {
+			return execErr
 		}
 
 		if err := retainNativeCondition(ctx, tx, owner, row, *record.Occurrence, value.UnresolvedOpener); err != nil {
@@ -597,7 +597,7 @@ func advanceNativeInterpretation(ctx context.Context, tx *sqlxTxWrapper, owner n
 	}
 
 	var released int64
-	if err := tx.Get(
+	if getErr := tx.Get(
 		ctx,
 		&released,
 		`SELECT COALESCE(SUM(counted_bytes), 0)
@@ -607,11 +607,11 @@ func advanceNativeInterpretation(ctx context.Context, tx *sqlxTxWrapper, owner n
 			AND batch_sequence <= ?`,
 		owner.ParticipationID,
 		progress.SettledThrough,
-	); err != nil {
-		return err
+	); getErr != nil {
+		return getErr
 	}
 
-	if _, err := tx.Exec(
+	if _, execErr := tx.Exec(
 		ctx,
 		`UPDATE exam_native_delivery_batches
 		SET processed = true
@@ -620,11 +620,11 @@ func advanceNativeInterpretation(ctx context.Context, tx *sqlxTxWrapper, owner n
 			AND NOT processed`,
 		owner.ParticipationID,
 		progress.SettledThrough,
-	); err != nil {
-		return err
+	); execErr != nil {
+		return execErr
 	}
 
-	if _, err := tx.Exec(
+	if _, execErr := tx.Exec(
 		ctx,
 		`UPDATE exam_attempt_delivery_budgets
 		SET native_pending_bytes = native_pending_bytes-?
@@ -635,8 +635,8 @@ func advanceNativeInterpretation(ctx context.Context, tx *sqlxTxWrapper, owner n
 		)`,
 		released,
 		owner.ParticipationID,
-	); err != nil {
-		return err
+	); execErr != nil {
+		return execErr
 	}
 
 	_, err = tx.Exec(

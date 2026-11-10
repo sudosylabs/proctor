@@ -260,8 +260,9 @@ owns its policy, under its public use-case name (`CreateClass`, not `Create`).
 `app.App` exposes the area services as named fields and declares no use case of
 its own. Transports call `app.Academic.CreateClass` and so on.
 `httpapi.New(application, settings)` builds each resource from the area
-service it serves, so an `httpapi` consumer interface lists the methods of one
-service and exists only where the resource's tests fake it. The WebSocket hub receives WebSocket
+services it serves, usually one. An `httpapi` consumer interface lists the
+methods a resource calls and is there for the resource's tests to fake; a
+resource no test fakes takes the concrete service. The WebSocket hub receives WebSocket
 admission (`app.RealtimeAdmission`) and the Attempt service (`app.Attempts`)
 as its typed dependencies.
 

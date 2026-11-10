@@ -18,7 +18,7 @@ import (
 var (
 	// ErrAttemptAdmissionMembership means the Sitting's Class is no longer
 	// in the Academic Period the candidate's enrollment was locked for.
-	ErrAttemptAdmissionMembership = errors.New("candidate is not enrolled in the Sitting's Academic Period")
+	ErrAttemptAdmissionMembership = errors.New("sitting's class changed academic period during admission")
 	// ErrAttemptAdmissionSittingState means the Sitting is not Open.
 	ErrAttemptAdmissionSittingState = errors.New("sitting does not admit candidates in its current state")
 	// ErrAttemptAdmissionManagementAuthority means the candidate manages
@@ -42,8 +42,8 @@ type AttemptAdmissionSitting struct {
 }
 
 // CheckAttemptAdmissionSitting decides the rules that need only the Sitting.
-// Admission runs it before it locks the candidate's Session, so a Sitting
-// that cannot admit anyone takes no further locks.
+// Admission runs it before it locks the candidate's Session, so a refusal
+// takes no further locks.
 func CheckAttemptAdmissionSitting(facts AttemptAdmissionSitting) error {
 	if !facts.PeriodMatches {
 		return ErrAttemptAdmissionMembership

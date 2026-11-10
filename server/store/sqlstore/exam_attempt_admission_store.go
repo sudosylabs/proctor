@@ -59,8 +59,8 @@ func (s *SQLExamAttemptStore) lockExamAttemptEligibility(ctx context.Context, tx
 		WHERE s.id=? AND s.exam_id=? FOR SHARE OF s,c`, input.SittingID.String(), initial.ExamID); err != nil {
 		return zero, translateError("exam_sitting", input.SittingID.String(), err)
 	}
-	// The Sitting's own rules are decided before the Session is locked, so
-	// a Sitting that admits nobody takes no further locks.
+	// These rules need only the Sitting and its Class, so they are decided
+	// before the Session is locked and a refusal takes no further locks.
 	if err = model.CheckAttemptAdmissionSitting(model.AttemptAdmissionSitting{
 		PeriodMatches: guard.PeriodID == initial.PeriodID,
 		State:         model.ExamSittingState(guard.State),
@@ -105,7 +105,7 @@ func examAttemptAdmissionConflict(err error) error {
 	case errors.Is(err, model.ErrAttemptAdmissionDeadlineReached):
 		return store.NewErrConflict("exam_sitting", "exam_sitting_deadline_reached", nil)
 	default:
-		return err
+		return fmt.Errorf("unmapped Exam Attempt admission refusal: %w", err)
 	}
 }
 

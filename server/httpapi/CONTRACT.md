@@ -162,7 +162,9 @@ seam.
 `httpapi.New` takes the application and a `Settings` value that names an
 explicit WebSocket transport. It refuses a missing application service or
 setting before it compiles the catalog; production has no no-op transport or
-application fallback. `resource_catalog.go` is a pure ordered resource
+application fallback. The Job and mail operator services are the exception:
+they are absent in a graph without a Job store, and answer `job.unavailable`
+and `mail.unavailable` themselves. `resource_catalog.go` is a pure ordered resource
 inventory: it builds each resource from the application service that owns its
 use cases and contains no runtime type assertions.
 
@@ -965,9 +967,10 @@ clients present an unknown value generically.
 ## Ownership and extension workflow
 
 `httpapi.New(application, settings)` is the production construction boundary.
-It builds each resource from one named service of `app.App`. A resource
-constructor takes the one interface its tests fake, or the concrete service
-when no test fakes it. `Settings` carries only what is not the application:
+It builds each resource from the named services of `app.App` that own its use
+cases, usually one. A resource constructor takes a consumer interface that
+lists the methods it calls; where no test needs a fake, it takes the concrete
+service instead. `Settings` carries only what is not the application:
 logging, metrics, tracing, localization, health, build information, request
 limits, and the WebSocket transport. A resource may retain its application
 service, but never `Settings`, `*app.App`, `*API`, a router, `store.Store`,
@@ -982,9 +985,9 @@ The production route trace is intentionally linear and searchable:
 ~~~text
 httpapi.New
     -> productionResources             (resource_catalog.go)
-    -> newAPI                          (api.go)
     -> <domain>Resource                (for example institutionResource)
     -> principalRoute/sessionRoute/... (route_definition.go)
+    -> newAPI                          (api.go)
     -> collectResources + validation   (catalog_compiler.go)
     -> application capability method   (for example GetInstitution)
 ~~~

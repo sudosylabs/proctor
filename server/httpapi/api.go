@@ -69,7 +69,8 @@ func New(application *app.App, settings Settings) (*API, error) {
 
 // requireApplication rejects an application missing a service a resource is
 // built from, reporting the first absent one. Jobs and Mail are absent in a
-// graph that has no Job store; their resources answer for that themselves.
+// graph that has no Job store; those services answer job.unavailable and
+// mail.unavailable on a nil receiver.
 func requireApplication(application *app.App) error {
 	if application == nil {
 		return errors.New("application is required")

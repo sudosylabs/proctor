@@ -8,12 +8,14 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/invocation"
 )
 
 // searchResponse is one bounded page per requested type. Search never
@@ -74,7 +76,7 @@ func searchResource(search SearchApplication) apiResource {
 	module := searchResourceModule{search: search}
 	return newResource(
 		"search",
-		principalRoute(http.MethodGet, apiPath(literal("search")), []string{
+		principalRoute(http.MethodGet, path("/search"), []string{
 			"authorization.denied", "authorization.request.invalid", "authorization.unavailable",
 			"request.invalid", "search.query.invalid", "exam.invalid", "exam.unavailable",
 			"administration.unavailable", "resource.not_found",
@@ -132,4 +134,10 @@ func searchResponseFromResult(result app.SearchResult) searchResponse {
 		}})
 	}
 	return response
+}
+
+// SearchApplication finds Exams, Classes and Users within the caller's own
+// list visibility for each type.
+type SearchApplication interface {
+	Search(context.Context, invocation.Invocation, app.SearchQuery) (app.SearchResult, error)
 }

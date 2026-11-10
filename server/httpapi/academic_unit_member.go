@@ -8,9 +8,11 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -67,19 +69,19 @@ func academicUnitMemberResource(members AcademicUnitMemberApplication) apiResour
 		"academic-unit-members",
 		principalRoute(
 			http.MethodGet,
-			apiPath(literal("academic-units"), canonicalID("academic_unit_id"), literal("members")),
+			path("/academic-units/{academic_unit_id}/members"),
 			academicRelationshipReadErrorCodes(),
 			module.list,
 		),
 		principalRoute(
 			http.MethodPost,
-			apiPath(literal("academic-units"), canonicalID("academic_unit_id"), literal("members")),
+			path("/academic-units/{academic_unit_id}/members"),
 			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "academic_unit_member.invalid", "academic_unit_member.conflict", "administration.unavailable", "mail.unavailable"},
 			module.create,
 		),
 		principalRoute(
 			http.MethodDelete,
-			apiPath(literal("academic-unit-members"), canonicalID("academic_unit_member_id")),
+			path("/academic-unit-members/{academic_unit_member_id}"),
 			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "academic_unit_member.conflict", "administration.unavailable", "mail.unavailable"},
 			module.end,
 		),
@@ -174,4 +176,10 @@ func academicUnitMemberListItemResponseFromPage(page *academic.AcademicUnitMembe
 		item.RolesHere = append(item.RolesHere, academicUnitMemberRoleResponse{RoleID: binding.RoleID.String(), DisplayName: binding.DisplayName})
 	}
 	return item
+}
+
+type AcademicUnitMemberApplication interface {
+	ListAcademicUnitMembersPage(context.Context, invocation.Invocation, academic.ListAcademicUnitMembersPageQuery) (*academic.AcademicUnitMemberPage, error)
+	CreateAcademicUnitMember(context.Context, invocation.Invocation, academic.CreateAcademicUnitMemberCommand) (*model.AcademicUnitMember, error)
+	EndAcademicUnitMember(context.Context, invocation.Invocation, academic.EndAcademicUnitMemberCommand) (*model.AcademicUnitMember, error)
 }

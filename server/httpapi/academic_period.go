@@ -8,9 +8,12 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -54,8 +57,8 @@ type academicPeriodResourceModule struct {
 
 func academicPeriodResource(academicPeriods AcademicPeriodApplication) apiResource {
 	module := academicPeriodResourceModule{academicPeriods: academicPeriods}
-	collection := apiPath(literal("academic-periods"))
-	member := apiPath(literal("academic-periods"), canonicalID("academic_period_id"))
+	collection := path("/academic-periods")
+	member := path("/academic-periods/{academic_period_id}")
 	return newResource(
 		"academic-periods",
 		principalRoute(
@@ -232,4 +235,12 @@ func academicPeriodResponseFromModel(period *model.AcademicPeriod) academicPerio
 		StartAt:     model.FormatRFC3339(period.StartsAt),
 		EndAt:       model.FormatRFC3339(period.EndsAt),
 	}
+}
+
+type AcademicPeriodApplication interface {
+	GetAcademicPeriod(context.Context, invocation.Invocation, academic.GetAcademicPeriodQuery) (*model.AcademicPeriod, error)
+	ListAcademicPeriods(context.Context, invocation.Invocation, academic.ListAcademicPeriodsQuery) (paging.Page[*model.AcademicPeriod], error)
+	CreateAcademicPeriod(context.Context, invocation.Invocation, academic.CreateAcademicPeriodCommand) (*model.AcademicPeriod, error)
+	UpdateAcademicPeriod(context.Context, invocation.Invocation, academic.UpdateAcademicPeriodCommand) (*model.AcademicPeriod, error)
+	ArchiveAcademicPeriod(context.Context, invocation.Invocation, academic.ArchiveAcademicPeriodCommand) error
 }

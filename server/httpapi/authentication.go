@@ -298,7 +298,7 @@ func authenticationResource(registration RegistrationApplication, authentication
 	return newResource(
 		"authentication",
 		publicRoute(
-			http.MethodPost, apiPath(literal("auth"), literal("register")),
+			http.MethodPost, path("/auth/register"),
 			[]string{
 				"request.invalid", "authentication.password.invalid", "authentication.password.pattern_invalid", "authentication.password.common_invalid", "authentication.password.identity_invalid", "service.busy", "authentication.registration.invalid",
 				"authentication.registration.invitation_required", "authentication.registration.unavailable",
@@ -306,12 +306,12 @@ func authenticationResource(registration RegistrationApplication, authentication
 			},
 			module.register,
 		),
-		publicRoute(http.MethodPost, apiPath(literal("auth"), literal("login")), []string{"request.invalid", "authentication.mfa.enrollment_required", "authentication.client_type.invalid", "authentication.password.invalid", "service.busy", "authentication.credentials_invalid", "authentication.mfa.required", "authentication.mfa.code_invalid", "authentication.mfa.unavailable", "authentication.sessions.maximum_reached", "authentication.desktop_authorization.account_session_locked", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.internal", "audit.unavailable", "authentication.external.invalid", "authentication.session.invalid"}, module.login),
-		refreshCredentialRoute(http.MethodPost, apiPath(literal("auth"), literal("refresh")), []string{"authentication.token_invalid", "authentication.mfa.enrollment_required", "authentication.internal", "authentication.dpop.invalid", "authentication.dpop.replayed", "authentication.dpop.use_nonce", "authentication.dpop.unavailable"}, module.refresh),
-		mfaRecoverySessionRoute(http.MethodPost, apiPath(literal("auth"), literal("logout")), []string{"authentication.internal", "audit.unavailable"}, module.logout),
+		publicRoute(http.MethodPost, path("/auth/login"), []string{"request.invalid", "authentication.mfa.enrollment_required", "authentication.client_type.invalid", "authentication.password.invalid", "service.busy", "authentication.credentials_invalid", "authentication.mfa.required", "authentication.mfa.code_invalid", "authentication.mfa.unavailable", "authentication.sessions.maximum_reached", "authentication.desktop_authorization.account_session_locked", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.internal", "audit.unavailable", "authentication.external.invalid", "authentication.session.invalid"}, module.login),
+		refreshCredentialRoute(http.MethodPost, path("/auth/refresh"), []string{"authentication.token_invalid", "authentication.mfa.enrollment_required", "authentication.internal", "authentication.dpop.invalid", "authentication.dpop.replayed", "authentication.dpop.use_nonce", "authentication.dpop.unavailable"}, module.refresh),
+		mfaRecoverySessionRoute(http.MethodPost, path("/auth/logout"), []string{"authentication.internal", "audit.unavailable"}, module.logout),
 		sessionRoute(
 			http.MethodPost,
-			apiPath(literal("auth"), literal("email-verification"), literal("request")),
+			path("/auth/email-verification/request"),
 			sessionAuthenticationMutationErrorCodes(
 				"authentication.rate_limited", "authentication.rate_limit_unavailable",
 				"authentication.account_recovery.unavailable",
@@ -320,7 +320,7 @@ func authenticationResource(registration RegistrationApplication, authentication
 		),
 		publicRoute(
 			http.MethodPost,
-			apiPath(literal("auth"), literal("email-verification"), literal("complete")),
+			path("/auth/email-verification/complete"),
 			[]string{
 				"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable",
 				"authentication.account_token.invalid", "authentication.account_recovery.unavailable",
@@ -329,7 +329,7 @@ func authenticationResource(registration RegistrationApplication, authentication
 		),
 		publicRoute(
 			http.MethodPost,
-			apiPath(literal("auth"), literal("email-verification"), literal("inspect")),
+			path("/auth/email-verification/inspect"),
 			[]string{
 				"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable",
 				"authentication.account_token.invalid", "authentication.account_recovery.unavailable",
@@ -338,7 +338,7 @@ func authenticationResource(registration RegistrationApplication, authentication
 		),
 		publicRoute(
 			http.MethodPost,
-			apiPath(literal("auth"), literal("email-change"), literal("undo")),
+			path("/auth/email-change/undo"),
 			[]string{
 				"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable",
 				"authentication.account_token.invalid", "authentication.account_recovery.unavailable",
@@ -348,7 +348,7 @@ func authenticationResource(registration RegistrationApplication, authentication
 		),
 		publicRoute(
 			http.MethodPost,
-			apiPath(literal("auth"), literal("email-change"), literal("undo"), literal("inspect")),
+			path("/auth/email-change/undo/inspect"),
 			[]string{
 				"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable",
 				"authentication.account_token.invalid", "authentication.account_recovery.unavailable",
@@ -357,7 +357,7 @@ func authenticationResource(registration RegistrationApplication, authentication
 		),
 		publicRoute(
 			http.MethodPost,
-			apiPath(literal("auth"), literal("password-reset"), literal("request")),
+			path("/auth/password-reset/request"),
 			[]string{
 				"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable",
 				"authentication.account_recovery.unavailable",
@@ -366,7 +366,7 @@ func authenticationResource(registration RegistrationApplication, authentication
 		),
 		publicRoute(
 			http.MethodPost,
-			apiPath(literal("auth"), literal("password-reset"), literal("complete")),
+			path("/auth/password-reset/complete"),
 			[]string{
 				"request.invalid", "authentication.password.invalid", "authentication.password.pattern_invalid", "authentication.password.common_invalid", "authentication.password.identity_invalid", "authentication.password.reused", "service.busy", "authentication.rate_limited",
 				"authentication.rate_limit_unavailable", "authentication.account_token.invalid",

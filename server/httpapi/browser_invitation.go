@@ -74,7 +74,7 @@ func browserInvitationResource(application BrowserInvitationApplication, cookies
 		"browser-invitations",
 		publicRoute(
 			http.MethodPost,
-			apiPath(literal("auth"), literal("browser"), literal("invitations")),
+			path("/auth/browser/invitations"),
 			[]string{
 				"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable",
 				"invitation.invalid", "invitation.unavailable",
@@ -83,7 +83,7 @@ func browserInvitationResource(application BrowserInvitationApplication, cookies
 		),
 		publicRoute(
 			http.MethodPost,
-			apiPath(literal("auth"), literal("browser"), literal("invitations"), literal("accept")),
+			path("/auth/browser/invitations/accept"),
 			[]string{
 				"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable",
 				"invitation.invalid", "invitation.user_invalid", "invitation.mail_unavailable",
@@ -93,7 +93,7 @@ func browserInvitationResource(application BrowserInvitationApplication, cookies
 		),
 		sessionRoute(
 			http.MethodPost,
-			apiPath(literal("auth"), literal("browser"), literal("invitations"), literal("accept-session")),
+			path("/auth/browser/invitations/accept-session"),
 			[]string{"authentication.rate_limited", "authentication.rate_limit_unavailable", "invitation.invalid", "invitation.unavailable", "audit.unavailable", "request.invalid"},
 			module.acceptWithSession,
 		),

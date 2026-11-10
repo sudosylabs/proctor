@@ -26,7 +26,7 @@ func TestRoutingKernelCentralizesAPIVersionRegexAndParams(t *testing.T) {
 	httpAPI := newCompiledRoutingTestAPI(t, "/api/testing", newResource("role",
 		publicRoute(
 			http.MethodGet,
-			apiPath(literal("roles"), canonicalID("role_id")),
+			path("/roles/{role_id}"),
 			nil,
 			func(request operationRequest) (operationResult, error) {
 				roleID, err := request.params.RequireRoleID()
@@ -62,7 +62,7 @@ func TestRouteMetadataRetainsVersionRegexAndPolicyContract(t *testing.T) {
 	httpAPI := newCompiledRoutingTestAPI(t, "/api/testing", newResource("role",
 		sessionRoute(
 			http.MethodDelete,
-			apiPath(literal("roles"), canonicalID("role_id")),
+			path("/roles/{role_id}"),
 			[]string{"resource.not_found"},
 			func(operationRequest) (operationResult, error) { return noContentResult(), nil },
 		),

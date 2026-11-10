@@ -8,9 +8,11 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -41,19 +43,19 @@ func affiliationResource(affiliations AffiliationApplication) apiResource {
 		"affiliations",
 		principalRoute(
 			http.MethodGet,
-			apiPath(literal("users"), canonicalID("user_id"), literal("affiliations")),
+			path("/users/{user_id}/affiliations"),
 			academicRelationshipReadErrorCodes(),
 			module.list,
 		),
 		principalRoute(
 			http.MethodPost,
-			apiPath(literal("users"), canonicalID("user_id"), literal("affiliations")),
+			path("/users/{user_id}/affiliations"),
 			academicRelationshipMutationErrorCodes("affiliation.invalid", "affiliation.conflict"),
 			module.create,
 		),
 		principalRoute(
 			http.MethodDelete,
-			apiPath(literal("affiliations"), canonicalID("affiliation_id")),
+			path("/affiliations/{affiliation_id}"),
 			academicRelationshipMutationErrorCodes("affiliation.student_has_active_enrollment", "affiliation.conflict"),
 			module.end,
 		),
@@ -154,4 +156,10 @@ func affiliationResponseFromModel(value *model.Affiliation) affiliationResponse 
 		StartAt:    model.FormatRFC3339(value.StartsAt),
 		EndAt:      value.EndsAt.FormatRFC3339(),
 	}
+}
+
+type AffiliationApplication interface {
+	ListAffiliations(context.Context, invocation.Invocation, academic.ListAffiliationsQuery) ([]*model.Affiliation, error)
+	CreateAffiliation(context.Context, invocation.Invocation, academic.CreateAffiliationCommand) (*model.Affiliation, error)
+	EndAffiliation(context.Context, invocation.Invocation, academic.EndAffiliationCommand) (*model.Affiliation, error)
 }

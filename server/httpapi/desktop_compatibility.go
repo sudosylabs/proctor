@@ -72,7 +72,7 @@ func desktopCompatibilityPolicyResource(application DesktopCompatibilityApplicat
 	module := desktopCompatibilityPolicyResourceModule{application: application}
 	replace := strongRecentSessionRoute(
 		http.MethodPut,
-		apiPath(literal("desktop-compatibility-policy")),
+		path("/desktop-compatibility-policy"),
 		[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "request.invalid", "desktop_compatibility_policy.invalid", "desktop_compatibility_policy.revision_conflict", "desktop_compatibility_policy.unavailable", "resource.not_found"},
 		module.replace,
 	)
@@ -81,7 +81,7 @@ func desktopCompatibilityPolicyResource(application DesktopCompatibilityApplicat
 		"desktop-compatibility-policy",
 		principalRoute(
 			http.MethodGet,
-			apiPath(literal("desktop-compatibility-policy")),
+			path("/desktop-compatibility-policy"),
 			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "desktop_compatibility_policy.unavailable", "desktop_compatibility_policy.revision_conflict", "resource.not_found"},
 			module.get,
 		),
@@ -208,4 +208,23 @@ func desktopCompatibilityPolicyResponseFromModel(
 	response.CreatedAt = model.FormatRFC3339(policy.CreatedAt)
 	response.UpdatedAt = model.FormatRFC3339(policy.UpdatedAt)
 	return response
+}
+
+// DesktopCompatibilityApplication is the Desktop compatibility policy use
+// cases. It serves this resource and the system routes in system.go.
+type DesktopCompatibilityApplication interface {
+	EvaluateDesktopCompatibility(
+		context.Context,
+		invocation.Invocation,
+		identity.DesktopCompatibilityQuery,
+	) (identity.DesktopCompatibilityResult, error)
+	GetDesktopCompatibilityPolicy(
+		context.Context,
+		invocation.Invocation,
+	) (*model.DesktopCompatibilityPolicy, error)
+	ReplaceDesktopCompatibilityPolicy(
+		context.Context,
+		invocation.Invocation,
+		identity.ReplaceDesktopCompatibilityPolicyCommand,
+	) (*model.DesktopCompatibilityPolicy, error)
 }

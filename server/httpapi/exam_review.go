@@ -324,22 +324,20 @@ type studentExamResultResponse struct {
 
 func examIntegrityReviewResource(application ExamIntegrityReviewApplication) apiResource {
 	module := examIntegrityReviewHTTPModule{application: application}
-	base := apiPath(literal("submissions"), canonicalID("submission_id"))
-	flags := appendRoutePath(base, literal("integrity-flags"))
-	discrepancies := appendRoutePath(base, literal("integrity-discrepancies"))
-	flag := appendRoutePath(flags, canonicalID("integrity_flag_id"))
-	evidence := appendRoutePath(flag, literal("evidence"))
-	review := appendRoutePath(base, literal("review"))
-	decision := appendRoutePath(review, literal("decisions"), canonicalID("integrity_flag_id"))
-	finalize := appendRoutePath(review, literal("finalize"))
-	release := appendRoutePath(review, literal("release"))
-	candidateResult := apiPath(literal("exam-attempts"), canonicalID("exam_attempt_id"), literal("result"))
+	flags := path("/submissions/{submission_id}/integrity-flags")
+	discrepancies := path("/submissions/{submission_id}/integrity-discrepancies")
+	evidence := path("/submissions/{submission_id}/integrity-flags/{integrity_flag_id}/evidence")
+	review := path("/submissions/{submission_id}/review")
+	decision := path("/submissions/{submission_id}/review/decisions/{integrity_flag_id}")
+	finalize := path("/submissions/{submission_id}/review/finalize")
+	release := path("/submissions/{submission_id}/review/release")
+	candidateResult := path("/exam-attempts/{exam_attempt_id}/result")
 	studentErrors := personalAccessTokenSessionCodes("request.invalid", "resource.not_found",
 		"exam.integrity_review.invalid", "exam.integrity_review.unavailable")
 	return newResource("exam-integrity-reviews",
 		principalRoute(http.MethodGet, flags, []string{"authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "exam.integrity_review.invalid", "exam.integrity_review.unavailable", "exam.sitting.invalid", "exam.sitting.unavailable"}, module.listFlags),
 		principalRoute(http.MethodGet, evidence, []string{"authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "exam.integrity_review.invalid", "exam.integrity_review.unavailable", "exam.sitting.invalid", "exam.sitting.unavailable"}, module.listEvidence),
-		principalRoute(http.MethodGet, appendRoutePath(base, literal("native-conditions")), []string{"authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "exam.integrity_review.invalid", "exam.integrity_review.unavailable", "exam.sitting.invalid", "exam.sitting.unavailable"}, module.listNativeConditions),
+		principalRoute(http.MethodGet, path("/submissions/{submission_id}/native-conditions"), []string{"authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "exam.integrity_review.invalid", "exam.integrity_review.unavailable", "exam.sitting.invalid", "exam.sitting.unavailable"}, module.listNativeConditions),
 		principalRoute(http.MethodGet, discrepancies, []string{"authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "exam.integrity_review.invalid", "exam.integrity_review.unavailable", "exam.sitting.invalid", "exam.sitting.unavailable"}, module.listDiscrepancies),
 		principalRoute(http.MethodGet, review, []string{"authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "exam.integrity_review.invalid", "exam.integrity_review.unavailable", "exam.sitting.invalid", "exam.sitting.unavailable"}, module.get),
 		idempotentPrincipalRoute(IdempotencyRequired, http.MethodPut, review, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.integrity_review.invalid", "exam.integrity_review.revision_conflict", "exam.integrity_review.state_conflict", "exam.integrity_review.incomplete", "exam.integrity_review.too_large", "exam.integrity_review.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "exam.sitting.invalid", "exam.sitting.unavailable"}, module.update),

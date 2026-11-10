@@ -32,10 +32,10 @@ type examRecordsHTTPModule struct{ application ExamRecordsApplication }
 
 func examRecordsResource(application ExamRecordsApplication) apiResource {
 	m := examRecordsHTTPModule{application: application}
-	completion := apiPath(literal("exams"), canonicalID("exam_id"), literal("sittings"), canonicalID("exam_sitting_id"), literal("records-completion"))
-	waiver := apiPath(literal("exams"), canonicalID("exam_id"), literal("sittings"), canonicalID("exam_sitting_id"), literal("submissions"), canonicalID("submission_id"), literal("review-waiver"))
-	holds := apiPath(literal("exams"), canonicalID("exam_id"), literal("retention-holds"))
-	release := apiPath(literal("exams"), canonicalID("exam_id"), literal("retention-holds"), canonicalID("retention_hold_id"), literal("release"))
+	completion := path("/exams/{exam_id}/sittings/{exam_sitting_id}/records-completion")
+	waiver := path("/exams/{exam_id}/sittings/{exam_sitting_id}/submissions/{submission_id}/review-waiver")
+	holds := path("/exams/{exam_id}/retention-holds")
+	release := path("/exams/{exam_id}/retention-holds/{retention_hold_id}/release")
 	completeRoute := sessionRoute(http.MethodPost, completion, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.invalid", "exam.conflict", "exam.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress"}, m.complete)
 	waiveRoute := sessionRoute(http.MethodPost, waiver, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.invalid", "exam.conflict", "exam.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress"}, m.waive)
 	createRoute := sessionRoute(http.MethodPost, holds, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.invalid", "exam.conflict", "exam.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress"}, m.createHold)

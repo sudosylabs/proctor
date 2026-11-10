@@ -253,3 +253,10 @@ func requiresCSRF(method string) bool {
 		return true
 	}
 }
+
+// Authenticator resolves the credentials presented to the HTTP handler. The
+// API composition in api.go stores it.
+type Authenticator interface {
+	AuthenticateAccess(context.Context, string) (*model.Principal, error)
+	AuthenticateBearer(context.Context, string) (*model.Principal, error)
+}

@@ -86,11 +86,11 @@ type examStarterWorkspaceListItemResponse struct {
 
 func examStarterWorkspaceHTTPResource(application ExamStarterWorkspaceApplication) apiResource {
 	module := examStarterWorkspaceHTTPModule{application: application}
-	collection := apiPath(literal("exams"), canonicalID("exam_id"), literal("draft"), literal("starter-workspace"))
-	directories := apiPath(literal("exams"), canonicalID("exam_id"), literal("draft"), literal("starter-workspace"), literal("directories"))
-	files := apiPath(literal("exams"), canonicalID("exam_id"), literal("draft"), literal("starter-workspace"), literal("files"))
-	entry := apiPath(literal("exams"), canonicalID("exam_id"), literal("draft"), literal("starter-workspace"), literal("entries"), canonicalID("starter_workspace_entry_id"))
-	fileContent := apiPath(literal("exams"), canonicalID("exam_id"), literal("draft"), literal("starter-workspace"), literal("files"), canonicalID("starter_workspace_entry_id"), literal("content"))
+	collection := path("/exams/{exam_id}/draft/starter-workspace")
+	directories := path("/exams/{exam_id}/draft/starter-workspace/directories")
+	files := path("/exams/{exam_id}/draft/starter-workspace/files")
+	entry := path("/exams/{exam_id}/draft/starter-workspace/entries/{starter_workspace_entry_id}")
+	fileContent := path("/exams/{exam_id}/draft/starter-workspace/files/{starter_workspace_entry_id}/content")
 	return newResource("exam-starter-workspace",
 		principalRoute(http.MethodGet, collection, []string{"authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "exam.starter_workspace.invalid", "exam.starter_workspace.unavailable"}, module.list),
 		idempotentPrincipalRoute(IdempotencyRequired, http.MethodPost, directories, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.archived", "exam.draft.revision_conflict", "exam.starter_workspace.invalid", "exam.starter_workspace.conflict", "exam.starter_workspace.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "exam.starter_workspace.path_conflict", "exam.starter_workspace.parent_not_found", "exam.starter_workspace.entry_limit"}, module.createDirectory),

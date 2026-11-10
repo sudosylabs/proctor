@@ -139,15 +139,15 @@ type mailResourceModule struct{ mail MailApplication }
 func mailResource(application MailApplication) apiResource {
 	module := mailResourceModule{mail: application}
 	return newResource("mail",
-		strongRecentSessionRoute(http.MethodGet, apiPath(literal("mail"), literal("keys")), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "mail.unavailable", "resource.not_found"}, module.getKeyState),
-		strongRecentSessionRoute(http.MethodPost, apiPath(literal("mail"), literal("rekey")), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "mail.rekey.invalid", "mail.rekey.conflict", "mail.unavailable", "resource.not_found"}, module.startRekey),
-		strongRecentSessionRoute(http.MethodGet, apiPath(literal("mail"), literal("rekey"), canonicalID("job_id")), operatorReadErrorCodes("request.invalid", "resource.not_found", "mail.unavailable"), module.getRekeyStatus),
-		recentSessionRoute(http.MethodPost, apiPath(literal("mail"), literal("test")), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "mail.recipient_unverified", "mail.recipient_ineligible", "mail.test.rate_limited", "mail.conflict", "mail.unavailable", "resource.not_found"}, module.sendTest),
-		principalRoute(http.MethodGet, apiPath(literal("mail"), literal("metrics")), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "mail.unavailable", "resource.not_found"}, module.getMetrics),
-		principalRoute(http.MethodGet, apiPath(literal("mail"), literal("deliveries")), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "mail.query.invalid", "mail.unavailable", "request.invalid", "resource.not_found"}, module.listDeliveries),
-		principalRoute(http.MethodGet, apiPath(literal("mail"), literal("deliveries"), canonicalID("mail_delivery_id")), operatorReadErrorCodes("request.invalid", "resource.not_found", "mail.unavailable"), module.getDelivery),
-		recentSessionRoute(http.MethodPost, apiPath(literal("mail"), literal("deliveries"), canonicalID("mail_delivery_id"), literal("cancel")), operatorMutationErrorCodes("request.invalid", "resource.not_found", "mail.conflict", "mail.unavailable"), module.cancelDelivery),
-		recentSessionRoute(http.MethodPost, apiPath(literal("mail"), literal("deliveries"), canonicalID("mail_delivery_id"), literal("retry")), operatorMutationErrorCodes("request.invalid", "resource.not_found", "mail.conflict", "mail.unavailable"), module.retryDelivery),
+		strongRecentSessionRoute(http.MethodGet, path("/mail/keys"), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "mail.unavailable", "resource.not_found"}, module.getKeyState),
+		strongRecentSessionRoute(http.MethodPost, path("/mail/rekey"), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "mail.rekey.invalid", "mail.rekey.conflict", "mail.unavailable", "resource.not_found"}, module.startRekey),
+		strongRecentSessionRoute(http.MethodGet, path("/mail/rekey/{job_id}"), operatorReadErrorCodes("request.invalid", "resource.not_found", "mail.unavailable"), module.getRekeyStatus),
+		recentSessionRoute(http.MethodPost, path("/mail/test"), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "mail.recipient_unverified", "mail.recipient_ineligible", "mail.test.rate_limited", "mail.conflict", "mail.unavailable", "resource.not_found"}, module.sendTest),
+		principalRoute(http.MethodGet, path("/mail/metrics"), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "mail.unavailable", "resource.not_found"}, module.getMetrics),
+		principalRoute(http.MethodGet, path("/mail/deliveries"), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "mail.query.invalid", "mail.unavailable", "request.invalid", "resource.not_found"}, module.listDeliveries),
+		principalRoute(http.MethodGet, path("/mail/deliveries/{mail_delivery_id}"), operatorReadErrorCodes("request.invalid", "resource.not_found", "mail.unavailable"), module.getDelivery),
+		recentSessionRoute(http.MethodPost, path("/mail/deliveries/{mail_delivery_id}/cancel"), operatorMutationErrorCodes("request.invalid", "resource.not_found", "mail.conflict", "mail.unavailable"), module.cancelDelivery),
+		recentSessionRoute(http.MethodPost, path("/mail/deliveries/{mail_delivery_id}/retry"), operatorMutationErrorCodes("request.invalid", "resource.not_found", "mail.conflict", "mail.unavailable"), module.retryDelivery),
 	)
 }
 
@@ -450,4 +450,16 @@ func mailResponse(view app.MailDeliveryView) mailDeliveryResponse {
 		result.FailedAt = view.FailedAt.FormatRFC3339()
 	}
 	return result
+}
+
+type MailApplication interface {
+	GetMailKeyState(context.Context, invocation.Invocation) (app.MailKeyStateView, error)
+	StartMailRekey(context.Context, invocation.Invocation, string) (app.MailRekeyView, error)
+	GetMailRekeyStatus(context.Context, invocation.Invocation, model.JobID) (app.MailRekeyStatusView, error)
+	SendTestMail(context.Context, invocation.Invocation) (app.MailDeliveryView, error)
+	GetMailMetrics(context.Context, invocation.Invocation) (app.MailMetricsSnapshot, error)
+	GetMailDelivery(context.Context, invocation.Invocation, model.MailDeliveryID) (app.MailDeliveryView, error)
+	ListMailDeliveries(context.Context, invocation.Invocation, app.ListMailDeliveriesQuery) (app.MailDeliveryPage, error)
+	CancelMailDelivery(context.Context, invocation.Invocation, model.MailDeliveryID) (app.MailDeliveryView, error)
+	RetryMailDelivery(context.Context, invocation.Invocation, model.MailDeliveryID) (app.MailDeliveryView, error)
 }

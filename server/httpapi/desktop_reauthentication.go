@@ -65,18 +65,18 @@ type desktopReauthenticationResourceModule struct {
 
 func desktopReauthenticationResource(application DesktopReauthentication, cookies browserCookies) apiResource {
 	m := desktopReauthenticationResourceModule{application: application, cookies: cookies}
-	base := apiPath(literal("auth"), literal("desktop"), literal("reauthentications"))
+	base := path("/auth/desktop/reauthentications")
 	return newResource("desktop_reauthentication",
 		sessionRoute(http.MethodPost, base, []string{"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.desktop_reauthentication.invalid", "authentication.internal"}, m.start),
-		publicRoute(http.MethodPost, appendRoutePath(base, literal("bind")), []string{"request.invalid", "authentication.desktop_reauthentication.invalid", "authentication.internal"}, m.bind),
-		publicRoute(http.MethodGet, appendRoutePath(base, literal("context")), []string{"authentication.desktop_reauthentication.invalid", "authentication.internal", "authentication.credential_ambiguous"}, m.context),
-		publicRoute(http.MethodPost, appendRoutePath(base, literal("authenticate"), literal("password")), []string{"request.invalid", "authentication.desktop_reauthentication.invalid", "authentication.reauthentication_method_required", "authentication.desktop_reauthentication.denied", "authentication.credentials_invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.internal", "authentication.credential_ambiguous", "audit.unavailable", "service.busy"}, m.authenticatePassword),
+		publicRoute(http.MethodPost, path("/auth/desktop/reauthentications/bind"), []string{"request.invalid", "authentication.desktop_reauthentication.invalid", "authentication.internal"}, m.bind),
+		publicRoute(http.MethodGet, path("/auth/desktop/reauthentications/context"), []string{"authentication.desktop_reauthentication.invalid", "authentication.internal", "authentication.credential_ambiguous"}, m.context),
+		publicRoute(http.MethodPost, path("/auth/desktop/reauthentications/authenticate/password"), []string{"request.invalid", "authentication.desktop_reauthentication.invalid", "authentication.reauthentication_method_required", "authentication.desktop_reauthentication.denied", "authentication.credentials_invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.internal", "authentication.credential_ambiguous", "audit.unavailable", "service.busy"}, m.authenticatePassword),
 		protocolRoute("desktop-reauthentication-external-login", RouteProtocolRedirect, AuthPublic, http.MethodGet,
-			appendRoutePath(base, literal("authenticate"), literal("providers"), providerID("provider_id"), literal("login")),
+			path("/auth/desktop/reauthentications/authenticate/providers/{provider_id:provider}/login"),
 			[]string{"request.invalid", "authentication.desktop_reauthentication.invalid", "authentication.reauthentication_method_required", "authentication.internal", "authentication.external.provider_not_found", "authentication.external.request.invalid", "authentication.external.unavailable", "authentication.external.account_not_linked", "authentication.external.rejected", "authentication.desktop_authorization.invalid", "authentication.token_invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.credential_ambiguous"}, m.authenticateExternal),
-		publicRoute(http.MethodPost, appendRoutePath(base, literal("approve")), []string{"request.invalid", "authentication.desktop_reauthentication.invalid", "authentication.internal", "authentication.credential_ambiguous"}, m.approve),
-		publicRoute(http.MethodPost, appendRoutePath(base, literal("cancel")), []string{"request.invalid", "authentication.desktop_reauthentication.invalid", "authentication.internal", "authentication.credential_ambiguous"}, m.cancel),
-		sessionRoute(http.MethodPost, appendRoutePath(base, literal("complete")), []string{"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.desktop_reauthentication.invalid", "authentication.credentials_invalid", "authentication.internal", "audit.unavailable"}, m.complete),
+		publicRoute(http.MethodPost, path("/auth/desktop/reauthentications/approve"), []string{"request.invalid", "authentication.desktop_reauthentication.invalid", "authentication.internal", "authentication.credential_ambiguous"}, m.approve),
+		publicRoute(http.MethodPost, path("/auth/desktop/reauthentications/cancel"), []string{"request.invalid", "authentication.desktop_reauthentication.invalid", "authentication.internal", "authentication.credential_ambiguous"}, m.cancel),
+		sessionRoute(http.MethodPost, path("/auth/desktop/reauthentications/complete"), []string{"request.invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.desktop_reauthentication.invalid", "authentication.credentials_invalid", "authentication.internal", "audit.unavailable"}, m.complete),
 	)
 }
 

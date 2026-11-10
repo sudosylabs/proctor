@@ -229,3 +229,24 @@ type WebSocketTransport interface {
 		allowMissingOrigin bool,
 	) error
 }
+
+// IdentityApplication is the identity area's use cases: credential
+// resolution, sign-in and recovery, Sessions, two-step verification, personal
+// access tokens, Desktop authorization and compatibility, and email changes.
+type IdentityApplication interface {
+	Authenticator
+	authenticationEntryApplication
+	DesktopAuthorization
+	DesktopReauthentication
+	DesktopRegistrations
+	externalAuthenticationEntryApplication
+	authenticationMethodApplication
+	Sessions
+	SessionReauthentication
+	PersonalAccessTokens
+	MFA
+	MFAAdministration
+	MFAKeyApplication
+	DesktopCompatibilityApplication
+	UserEmailApplication
+}

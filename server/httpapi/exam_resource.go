@@ -78,10 +78,10 @@ type examResourceResponse struct {
 
 func examResourceHTTPResource(application ExamResourceApplication) apiResource {
 	m := examResourceHTTPModule{application: application}
-	collection := apiPath(literal("exams"), canonicalID("exam_id"), literal("draft"), literal("resources"))
-	member := apiPath(literal("exams"), canonicalID("exam_id"), literal("draft"), literal("resources"), canonicalID("exam_resource_id"))
-	order := apiPath(literal("exams"), canonicalID("exam_id"), literal("draft"), literal("resources"), literal("order"))
-	content := apiPath(literal("exams"), canonicalID("exam_id"), literal("draft"), literal("resources"), canonicalID("exam_resource_id"), literal("content"))
+	collection := path("/exams/{exam_id}/draft/resources")
+	member := path("/exams/{exam_id}/draft/resources/{exam_resource_id}")
+	order := path("/exams/{exam_id}/draft/resources/order")
+	content := path("/exams/{exam_id}/draft/resources/{exam_resource_id}/content")
 	return newResource("exam-resources",
 		principalRoute(http.MethodGet, collection, []string{"authorization.request.invalid", "authorization.unavailable", "request.invalid", "resource.not_found", "exam.resource.invalid", "exam.resource.unavailable"}, m.list),
 		idempotentProtocolRoute(IdempotencyRequired, examResourceUploadBodyLimit, "exam-resource-upload", RouteProtocolStreamingUpload, AuthPrincipalRequired, http.MethodPost, collection, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.archived", "exam.draft.revision_conflict", "exam.resource.invalid", "exam.resource.conflict", "exam.resource.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "service.busy", "exam.resource.content_invalid", "exam.resource.limit", "exam.resource.upload_invalid", "exam.resource.revision_conflict"}, m.create),

@@ -8,6 +8,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -20,6 +21,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -200,21 +203,21 @@ type userProfileResourceModule struct {
 
 func userProfileResource(profiles UserProfileApplication, accounts UserAccountApplication, emails UserEmailApplication) apiResource {
 	module := userProfileResourceModule{profiles: profiles, accounts: accounts, emails: emails}
-	userPath := apiPath(literal("users"), canonicalID("user_id"))
-	picture := appendRoutePath(userPath, literal("profile-picture"))
-	email := appendRoutePath(userPath, literal("email"))
+	userPath := path("/users/{user_id}")
+	picture := path("/users/{user_id}/profile-picture")
+	email := path("/users/{user_id}/email")
 	return newResource(
 		"user-profiles",
-		principalRoute(http.MethodGet, apiPath(literal("users")), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "request.invalid", "user.invalid", "administration.unavailable", "resource.not_found"}, module.search),
-		principalRoute(http.MethodGet, apiPath(literal("users"), literal("me")), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "resource.not_found", "administration.unavailable", "request.invalid"}, module.current),
-		sessionRoute(http.MethodGet, apiPath(literal("users"), literal("me"), literal("context")),
+		principalRoute(http.MethodGet, path("/users"), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "request.invalid", "user.invalid", "administration.unavailable", "resource.not_found"}, module.search),
+		principalRoute(http.MethodGet, path("/users/me"), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "resource.not_found", "administration.unavailable", "request.invalid"}, module.current),
+		sessionRoute(http.MethodGet, path("/users/me/context"),
 			currentUserContextSessionCodes("administration.unavailable"), module.context),
-		sessionRoute(http.MethodGet, apiPath(literal("users"), literal("me"), literal("exam-activity")),
+		sessionRoute(http.MethodGet, path("/users/me/exam-activity"),
 			[]string{"request.invalid", "exam.attempt.unavailable", "exam.attempt.invalid", "exam.delivery.metadata_capacity"}, module.examActivity),
 		principalRoute(http.MethodGet, userPath, userProfileReadCodes("request.invalid", "resource.not_found"), module.get),
 		principalRoute(http.MethodPatch, userPath, userProfileMutationCodes("request.invalid", "resource.not_found", "user.invalid", "user.conflict"), module.update),
 		strongRecentSessionRoute(http.MethodPut, email, userProfileMutationCodes("request.invalid", "resource.not_found", "user.invalid", "user.conflict", "authentication.account_recovery.unavailable", "authentication.rate_limited", "authentication.rate_limit_unavailable"), module.changeEmail),
-		strongRecentSessionRoute(http.MethodPost, appendRoutePath(email, literal("verify")), userProfileMutationCodes("request.invalid", "resource.not_found", "user.conflict", "authentication.account_recovery.unavailable"), module.verifyEmail),
+		strongRecentSessionRoute(http.MethodPost, path("/users/{user_id}/email/verify"), userProfileMutationCodes("request.invalid", "resource.not_found", "user.conflict", "authentication.account_recovery.unavailable"), module.verifyEmail),
 		protocolRoute("profile-picture-download", RouteProtocolBinaryDownload, AuthPrincipalRequired, http.MethodGet, picture, []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "service.busy", "request.invalid", "resource.not_found", "profile_picture.unavailable", "administration.unavailable"}, module.downloadPicture),
 		protocolRoute("profile-picture-upload", RouteProtocolStreamingUpload, AuthPrincipalRequired, http.MethodPut, picture, []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "service.busy", "request.invalid", "resource.not_found", "profile_picture.invalid", "profile_picture.unavailable", "user.conflict", "administration.unavailable"}, module.uploadPicture),
 		principalRoute(http.MethodDelete, picture, []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "profile_picture.unavailable", "user.conflict", "administration.unavailable"}, module.removePicture),
@@ -659,4 +662,28 @@ func userProfileResponseFromModel(account *model.User) userProfileResponse {
 		response.Timezone = &account.Timezone
 	}
 	return response
+}
+
+// UserProfileApplication is the User directory, profile and profile-picture
+// use cases of the user area.
+type UserProfileApplication interface {
+	GetCurrentUserContext(context.Context, invocation.Invocation) (*user.CurrentUserContextView, error)
+	SearchUsers(context.Context, invocation.Invocation, user.SearchUsersQuery) (paging.Counted[user.UserDirectoryEntry], error)
+	GetUserProfile(context.Context, invocation.Invocation, user.GetUserProfileQuery) (*model.User, error)
+	UpdateUserProfile(context.Context, invocation.Invocation, user.UpdateUserProfileCommand) (*model.User, error)
+	UploadProfilePicture(context.Context, invocation.Invocation, user.UploadProfilePictureCommand) (*model.User, error)
+	RemoveProfilePicture(context.Context, invocation.Invocation, user.RemoveProfilePictureCommand) (*model.User, error)
+	GetProfilePicture(context.Context, invocation.Invocation, user.GetProfilePictureQuery) (*user.ProfilePictureContent, error)
+}
+
+// UserAccountApplication is the User use case that stays on the application
+// root: a candidate's own exam activity.
+type UserAccountApplication interface {
+	ListCandidateExamActivity(context.Context, invocation.Invocation, attempt.CandidateActivityQuery) (attempt.CandidateActivityPage, error)
+}
+
+// UserEmailApplication is the email address changes of the identity area.
+type UserEmailApplication interface {
+	ChangeUserEmail(context.Context, invocation.Invocation, identity.ChangeUserEmailCommand) (*identity.UserEmailState, error)
+	VerifyUserEmailPrivileged(context.Context, invocation.Invocation, identity.VerifyUserEmailPrivilegedCommand) (*identity.UserEmailState, error)
 }

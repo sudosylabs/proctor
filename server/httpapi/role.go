@@ -14,9 +14,11 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
+	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -71,15 +73,15 @@ func roleResource(roles RoleApplication) apiResource {
 	module := roleResourceModule{roles: roles}
 	return newResource(
 		"roles",
-		principalRoute(http.MethodGet, apiPath(literal("roles")),
+		principalRoute(http.MethodGet, path("/roles"),
 			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "administration.unavailable", "request.invalid", "resource.not_found"}, module.list),
-		principalRoute(http.MethodPost, apiPath(literal("roles")),
+		principalRoute(http.MethodPost, path("/roles"),
 			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "role.invalid", "role.conflict", "role.permission.invalid", "administration.unavailable", "resource.not_found"}, module.create),
-		principalRoute(http.MethodGet, apiPath(literal("roles"), canonicalID("role_id")),
+		principalRoute(http.MethodGet, path("/roles/{role_id}"),
 			operatorReadErrorCodes("request.invalid", "resource.not_found", "administration.unavailable"), module.get),
-		principalRoute(http.MethodPatch, apiPath(literal("roles"), canonicalID("role_id")),
+		principalRoute(http.MethodPatch, path("/roles/{role_id}"),
 			operatorMutationErrorCodes("request.invalid", "resource.not_found", "role.invalid", "role.conflict", "role.built_in.protected", "role.permission.invalid", "administration.unavailable"), module.patch),
-		principalRoute(http.MethodDelete, apiPath(literal("roles"), canonicalID("role_id")),
+		principalRoute(http.MethodDelete, path("/roles/{role_id}"),
 			operatorMutationErrorCodes("request.invalid", "resource.not_found", "role.built_in.protected", "role.conflict", "administration.unavailable"), module.archive),
 	)
 }
@@ -187,4 +189,12 @@ func (m roleResourceModule) archive(request operationRequest) (operationResult, 
 		return operationResult{}, err
 	}
 	return noContentResult(), nil
+}
+
+type RoleApplication interface {
+	ListRoles(context.Context, invocation.Invocation, administration.ListRolesQuery) ([]*model.Role, error)
+	GetRole(context.Context, invocation.Invocation, administration.GetRoleQuery) (*model.Role, error)
+	CreateRole(context.Context, invocation.Invocation, administration.CreateRoleCommand) (*model.Role, error)
+	UpdateRole(context.Context, invocation.Invocation, administration.UpdateRoleCommand) (*model.Role, error)
+	ArchiveRole(context.Context, invocation.Invocation, administration.ArchiveRoleCommand) error
 }

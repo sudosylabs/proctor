@@ -65,7 +65,7 @@ type academicAdministrationBatchResourceModule struct {
 func academicAdministrationBatchResource(batches AcademicAdministrationBatchApplication) apiResource {
 	module := academicAdministrationBatchResourceModule{batches: batches}
 	return newResource("academic-administration-batches",
-		idempotentPrincipalRoute(IdempotencyRequired, http.MethodPost, apiPath(literal("academic-administration-batches")),
+		idempotentPrincipalRoute(IdempotencyRequired, http.MethodPost, path("/academic-administration-batches"),
 			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "authentication.strong_required", "authentication.reauthentication_required", "idempotency.key_required", "idempotency.key_invalid", "administration.unavailable", "invitation.unavailable"}, module.run),
 	)
 }

@@ -8,8 +8,10 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
+	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -43,7 +45,7 @@ type userSettingsResourceModule struct {
 
 func userSettingsResource(settings UserSettingsApplication) apiResource {
 	module := userSettingsResourceModule{settings: settings}
-	path := apiPath(literal("users"), literal("me"), literal("settings"))
+	path := path("/users/me/settings")
 	replace := sessionRoute(
 		http.MethodPut,
 		path,
@@ -109,4 +111,9 @@ func (m userSettingsResourceModule) replace(request operationRequest) (operation
 		Revision: result.Revision.String(), FormatVersion: result.FormatVersion,
 		UpdatedAt: model.FormatRFC3339(result.UpdatedAt), Changed: result.Changed,
 	}).withHeaders(http.Header{"Cache-Control": []string{"private, no-store"}}), nil
+}
+
+type UserSettingsApplication interface {
+	ReadOwnUserSettings(context.Context, invocation.Invocation) (user.UserSettingsView, error)
+	ReplaceOwnUserSettings(context.Context, invocation.Invocation, user.ReplaceOwnUserSettingsCommand) (user.UserSettingsReplacementResult, error)
 }

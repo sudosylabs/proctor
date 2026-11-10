@@ -8,9 +8,12 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -51,37 +54,37 @@ func classResource(classes ClassApplication) apiResource {
 		"classes",
 		principalRoute(
 			http.MethodGet,
-			apiPath(literal("academic-units"), canonicalID("academic_unit_id"), literal("classes")),
+			path("/academic-units/{academic_unit_id}/classes"),
 			classReadErrorCodes(),
 			module.search,
 		),
 		principalRoute(
 			http.MethodGet,
-			apiPath(literal("programme-levels"), canonicalID("programme_level_id"), literal("classes")),
+			path("/programme-levels/{programme_level_id}/classes"),
 			classReadErrorCodes(),
 			module.list,
 		),
 		principalRoute(
 			http.MethodPost,
-			apiPath(literal("programme-levels"), canonicalID("programme_level_id"), literal("classes")),
+			path("/programme-levels/{programme_level_id}/classes"),
 			classMutationErrorCodes("class.invalid", "class.conflict"),
 			module.create,
 		),
 		principalRoute(
 			http.MethodGet,
-			apiPath(literal("classes"), canonicalID("class_id")),
+			path("/classes/{class_id}"),
 			classReadErrorCodes(),
 			module.get,
 		),
 		principalRoute(
 			http.MethodPatch,
-			apiPath(literal("classes"), canonicalID("class_id")),
+			path("/classes/{class_id}"),
 			classMutationErrorCodes("class.invalid", "class.conflict"),
 			module.patch,
 		),
 		principalRoute(
 			http.MethodDelete,
-			apiPath(literal("classes"), canonicalID("class_id")),
+			path("/classes/{class_id}"),
 			classMutationErrorCodes("class.conflict"),
 			module.archive,
 		),
@@ -266,4 +269,13 @@ func classResponseFromModel(class *model.Class) classResponse {
 		DisplayName:      class.DisplayName,
 		Description:      class.Description,
 	}
+}
+
+type ClassApplication interface {
+	GetClass(context.Context, invocation.Invocation, academic.GetClassQuery) (*model.Class, error)
+	ListClasses(context.Context, invocation.Invocation, academic.ListClassesQuery) (paging.Page[*model.Class], error)
+	SearchClasses(context.Context, invocation.Invocation, academic.SearchClassesQuery) (paging.Page[*model.Class], error)
+	CreateClass(context.Context, invocation.Invocation, academic.CreateClassCommand) (*model.Class, error)
+	UpdateClass(context.Context, invocation.Invocation, academic.UpdateClassCommand) (*model.Class, error)
+	ArchiveClass(context.Context, invocation.Invocation, academic.ArchiveClassCommand) error
 }

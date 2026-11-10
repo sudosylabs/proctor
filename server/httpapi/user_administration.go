@@ -8,12 +8,15 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -29,11 +32,11 @@ func userAdministrationResource(
 	module := userAdministrationResourceModule{accounts: accounts, sessions: sessions}
 	return newResource(
 		"user-administration",
-		principalRoute(http.MethodPost, apiPath(literal("users"), canonicalID("user_id"), literal("disable")), userAdministrationMutationCodes("user.invalid", "user.conflict", "user.last_system_admin"), module.disable),
-		principalRoute(http.MethodPost, apiPath(literal("users"), canonicalID("user_id"), literal("enable")), userAdministrationMutationCodes("user.invalid", "user.conflict", "user.last_system_admin"), module.enable),
-		principalRoute(http.MethodGet, apiPath(literal("users"), canonicalID("user_id"), literal("sessions")), userAdministrationReadCodes("session.not_found"), module.listSessions),
-		principalRoute(http.MethodPost, apiPath(literal("users"), canonicalID("user_id"), literal("sessions"), literal("revoke-all")), userAdministrationMutationCodes("session.not_found"), module.revokeAllSessions),
-		principalRoute(http.MethodDelete, apiPath(literal("users"), canonicalID("user_id"), literal("sessions"), canonicalID("session_id")), userAdministrationMutationCodes("session.not_found"), module.revokeSession),
+		principalRoute(http.MethodPost, path("/users/{user_id}/disable"), userAdministrationMutationCodes("user.invalid", "user.conflict", "user.last_system_admin"), module.disable),
+		principalRoute(http.MethodPost, path("/users/{user_id}/enable"), userAdministrationMutationCodes("user.invalid", "user.conflict", "user.last_system_admin"), module.enable),
+		principalRoute(http.MethodGet, path("/users/{user_id}/sessions"), userAdministrationReadCodes("session.not_found"), module.listSessions),
+		principalRoute(http.MethodPost, path("/users/{user_id}/sessions/revoke-all"), userAdministrationMutationCodes("session.not_found"), module.revokeAllSessions),
+		principalRoute(http.MethodDelete, path("/users/{user_id}/sessions/{session_id}"), userAdministrationMutationCodes("session.not_found"), module.revokeSession),
 	)
 }
 
@@ -222,4 +225,14 @@ func defaultQuery(r *http.Request, key, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+type AccountStateApplication interface {
+	SetUserEnabled(context.Context, invocation.Invocation, identity.SetUserEnabledCommand) (*model.User, error)
+}
+
+type SessionAdministrationApplication interface {
+	ListUserSessions(context.Context, invocation.Invocation, identity.ListUserSessionsQuery) (paging.Page[*model.Session], error)
+	RevokeUserSession(context.Context, invocation.Invocation, identity.RevokeUserSessionCommand) error
+	RevokeUserSessions(context.Context, invocation.Invocation, identity.RevokeUserSessionsCommand) error
 }

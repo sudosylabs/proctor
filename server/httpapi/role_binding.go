@@ -8,9 +8,11 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
+	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -54,11 +56,11 @@ func roleBindingResource(bindings RoleBindingApplication) apiResource {
 	module := roleBindingResourceModule{bindings: bindings}
 	return newResource(
 		"role-bindings",
-		principalRoute(http.MethodGet, apiPath(literal("role-bindings")),
+		principalRoute(http.MethodGet, path("/role-bindings"),
 			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "request.invalid", "administration.unavailable", "resource.not_found"}, module.list),
-		strongRecentSessionRoute(http.MethodPost, apiPath(literal("role-bindings")),
+		strongRecentSessionRoute(http.MethodPost, path("/role-bindings"),
 			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "role_binding.invalid", "role_binding.conflict", "role_binding.system_admin_scope_invalid", "administration.unavailable", "mail.unavailable"}, module.create),
-		strongRecentSessionRoute(http.MethodDelete, apiPath(literal("role-bindings"), canonicalID("role_binding_id")),
+		strongRecentSessionRoute(http.MethodDelete, path("/role-bindings/{role_binding_id}"),
 			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "role_binding.conflict", "role_binding.last_system_admin", "administration.unavailable", "mail.unavailable"}, module.end),
 	)
 }
@@ -123,4 +125,10 @@ func (m roleBindingResourceModule) end(request operationRequest) (operationResul
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, roleBindingResponseFromModel(ended)), nil
+}
+
+type RoleBindingApplication interface {
+	ListRoleBindings(context.Context, invocation.Invocation, administration.ListRoleBindingsQuery) ([]*model.RoleBinding, error)
+	CreateRoleBinding(context.Context, invocation.Invocation, administration.CreateRoleBindingCommand) (*model.RoleBinding, error)
+	EndRoleBinding(context.Context, invocation.Invocation, administration.EndRoleBindingCommand) (*model.RoleBinding, error)
 }

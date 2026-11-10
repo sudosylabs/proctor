@@ -12,12 +12,15 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -81,9 +84,9 @@ func auditResource(audits AuditListingApplication) apiResource {
 	module := auditResourceModule{audits: audits}
 	return newResource(
 		"audits",
-		principalRoute(http.MethodGet, apiPath(literal("audits")),
+		principalRoute(http.MethodGet, path("/audits"),
 			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.query.invalid", "audit.unavailable", "request.invalid", "resource.not_found"}, module.list),
-		sessionRoute(http.MethodGet, apiPath(literal("users"), literal("me"), literal("audits")),
+		sessionRoute(http.MethodGet, path("/users/me/audits"),
 			[]string{"audit.query.invalid", "audit.unavailable", "request.invalid"}, module.listSelf),
 	)
 }
@@ -189,4 +192,9 @@ func auditCursorSpec() opaqueCursorSpec[auditCursor] {
 			return nil
 		},
 	}
+}
+
+type AuditListingApplication interface {
+	ListAuditEvents(context.Context, invocation.Invocation, administration.ListAuditEventsQuery) (paging.Counted[*model.AuditEvent], error)
+	ListSelfAuditEvents(context.Context, invocation.Invocation, administration.ListSelfAuditEventsQuery) (administration.SelfAuditPage, error)
 }

@@ -63,8 +63,8 @@ type examRevisionHTTPModule struct{ application ExamRevisionApplication }
 
 func examRevisionResource(application ExamRevisionApplication) apiResource {
 	module := examRevisionHTTPModule{application: application}
-	collection := apiPath(literal("exams"), canonicalID("exam_id"), literal("revisions"))
-	member := apiPath(literal("exams"), canonicalID("exam_id"), literal("revisions"), canonicalID("exam_revision_id"))
+	collection := path("/exams/{exam_id}/revisions")
+	member := path("/exams/{exam_id}/revisions/{exam_revision_id}")
 	return newResource(
 		"exam-revisions",
 		idempotentPrincipalRoute(IdempotencyRequired, http.MethodPost, collection, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.invalid", "exam.archived", "exam.conflict", "exam.draft.revision_conflict", "exam.revision.no_changes", "exam.revision.capacity_exceeded", "exam.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress"}, module.publish),

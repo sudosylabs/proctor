@@ -99,11 +99,11 @@ func TestTransferRoutesOutliveServerTimeouts(t *testing.T) {
 		"transfers",
 		idempotentProtocolRoute(
 			IdempotencyNone, uploadLimit, "slow-upload", RouteProtocolStreamingUpload,
-			AuthPrincipalRequired, http.MethodPost, apiPath(literal("upload")), nil, upload,
+			AuthPrincipalRequired, http.MethodPost, path("/upload"), nil, upload,
 		),
 		protocolRoute(
 			"slow-download", RouteProtocolBinaryDownload,
-			AuthPrincipalRequired, http.MethodGet, apiPath(literal("download")), nil, download,
+			AuthPrincipalRequired, http.MethodGet, path("/download"), nil, download,
 		),
 	)}
 	cookies, err := newBrowserCookies("http://localhost:8065")

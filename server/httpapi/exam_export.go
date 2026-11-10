@@ -33,14 +33,13 @@ func examExportsResource(application ExamExportsApplication) apiResource {
 	var routes []routeDefinition
 	for _, submission := range []bool{false, true} {
 		m := examExportsHTTPModule{application: application, submission: submission}
-		parts := []pathPart{literal("exams"), canonicalID("exam_id"), literal("sittings"), canonicalID("exam_sitting_id")}
+		base := "/exams/{exam_id}/sittings/{exam_sitting_id}"
 		if submission {
-			parts = append(parts, literal("submissions"), canonicalID("submission_id"))
+			base += "/submissions/{submission_id}"
 		}
-		parts = append(parts, literal("exports"))
-		collection := apiPath(parts...)
-		member := apiPath(append(slices.Clone(parts), canonicalID("exam_export_id"))...)
-		content := apiPath(append(slices.Clone(member.parts), literal("content"))...)
+		collection := path(base + "/exports")
+		member := path(base + "/exports/{exam_export_id}")
+		content := path(base + "/exports/{exam_export_id}/content")
 		create := sessionRoute(http.MethodPost, collection, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.invalid", "exam.unavailable", "exam.export.not_found", "exam.export.conflict", "exam.export.unavailable", "exam.export.policy_unconfigured", "exam.export.limit", "exam.export.source_retired", "exam.export.scope_changed", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress"}, m.create)
 		create.idempotency = IdempotencyRequired
 		protocol := "sitting-export-content"

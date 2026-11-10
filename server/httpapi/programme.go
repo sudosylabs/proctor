@@ -8,9 +8,12 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -45,8 +48,8 @@ type programmeResourceModule struct {
 
 func programmeResource(programmes ProgrammeApplication) apiResource {
 	module := programmeResourceModule{programmes: programmes}
-	collection := apiPath(literal("academic-units"), canonicalID("academic_unit_id"), literal("programmes"))
-	member := apiPath(literal("programmes"), canonicalID("programme_id"))
+	collection := path("/academic-units/{academic_unit_id}/programmes")
+	member := path("/programmes/{programme_id}")
 	return newResource(
 		"programmes",
 		principalRoute(http.MethodGet, collection, academicReadErrorCodes("request.invalid", "resource.not_found"), module.list),
@@ -167,4 +170,12 @@ func programmeResponseFromModel(programme *model.Programme) programmeResponse {
 		DisplayName:    programme.DisplayName,
 		Description:    programme.Description,
 	}
+}
+
+type ProgrammeApplication interface {
+	GetProgramme(context.Context, invocation.Invocation, academic.GetProgrammeQuery) (*model.Programme, error)
+	ListProgrammes(context.Context, invocation.Invocation, academic.ListProgrammesQuery) (paging.Page[*model.Programme], error)
+	CreateProgramme(context.Context, invocation.Invocation, academic.CreateProgrammeCommand) (*model.Programme, error)
+	UpdateProgramme(context.Context, invocation.Invocation, academic.UpdateProgrammeCommand) (*model.Programme, error)
+	ArchiveProgramme(context.Context, invocation.Invocation, academic.ArchiveProgrammeCommand) error
 }

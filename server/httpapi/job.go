@@ -95,15 +95,15 @@ func jobResource(jobs JobOperationsApplication) apiResource {
 	module := jobResourceModule{jobs: jobs}
 	return newResource(
 		"jobs",
-		principalRoute(http.MethodGet, apiPath(literal("jobs")),
+		principalRoute(http.MethodGet, path("/jobs"),
 			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "job.query.invalid", "job.unavailable", "request.invalid", "resource.not_found"}, module.list),
-		principalRoute(http.MethodGet, apiPath(literal("jobs"), canonicalID("job_id")),
+		principalRoute(http.MethodGet, path("/jobs/{job_id}"),
 			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "resource.not_found", "job.unavailable", "request.invalid"}, module.get),
-		principalRoute(http.MethodGet, apiPath(literal("jobs"), canonicalID("job_id"), literal("attempts")),
+		principalRoute(http.MethodGet, path("/jobs/{job_id}/attempts"),
 			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "job.query.invalid", "request.invalid", "resource.not_found", "job.unavailable"}, module.listAttempts),
-		principalRoute(http.MethodPost, apiPath(literal("jobs"), canonicalID("job_id"), literal("cancel")),
+		principalRoute(http.MethodPost, path("/jobs/{job_id}/cancel"),
 			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "resource.not_found", "job.cancel.unsupported", "job.conflict", "job.unavailable", "request.invalid"}, module.cancel),
-		principalRoute(http.MethodPost, apiPath(literal("jobs"), canonicalID("job_id"), literal("retry")),
+		principalRoute(http.MethodPost, path("/jobs/{job_id}/retry"),
 			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "resource.not_found", "job.retry.unsupported", "job.conflict", "job.unavailable", "request.invalid"}, module.retry),
 	)
 }

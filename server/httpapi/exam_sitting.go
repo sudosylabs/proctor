@@ -209,14 +209,14 @@ type examSittingHTTPModule struct{ application ExamSittingApplication }
 
 func examSittingResource(application ExamSittingApplication) apiResource {
 	module := examSittingHTTPModule{application: application}
-	collection := apiPath(literal("exams"), canonicalID("exam_id"), literal("sittings"))
-	member := apiPath(literal("exams"), canonicalID("exam_id"), literal("sittings"), canonicalID("exam_sitting_id"))
-	cancel := apiPath(literal("exams"), canonicalID("exam_id"), literal("sittings"), canonicalID("exam_sitting_id"), literal("cancel"))
-	pause := apiPath(literal("exams"), canonicalID("exam_id"), literal("sittings"), canonicalID("exam_sitting_id"), literal("pause"))
-	resume := apiPath(literal("exams"), canonicalID("exam_id"), literal("sittings"), canonicalID("exam_sitting_id"), literal("resume"))
-	extend := apiPath(literal("exams"), canonicalID("exam_id"), literal("sittings"), canonicalID("exam_sitting_id"), literal("extend"))
-	closeSitting := apiPath(literal("exams"), canonicalID("exam_id"), literal("sittings"), canonicalID("exam_sitting_id"), literal("close"))
-	noShows := apiPath(literal("exams"), canonicalID("exam_id"), literal("sittings"), canonicalID("exam_sitting_id"), literal("no-shows"))
+	collection := path("/exams/{exam_id}/sittings")
+	member := path("/exams/{exam_id}/sittings/{exam_sitting_id}")
+	cancel := path("/exams/{exam_id}/sittings/{exam_sitting_id}/cancel")
+	pause := path("/exams/{exam_id}/sittings/{exam_sitting_id}/pause")
+	resume := path("/exams/{exam_id}/sittings/{exam_sitting_id}/resume")
+	extend := path("/exams/{exam_id}/sittings/{exam_sitting_id}/extend")
+	closeSitting := path("/exams/{exam_id}/sittings/{exam_sitting_id}/close")
+	noShows := path("/exams/{exam_id}/sittings/{exam_sitting_id}/no-shows")
 	return newResource(
 		"exam-sittings",
 		idempotentPrincipalRoute(IdempotencyRequired, http.MethodPost, collection, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.sitting.invalid", "exam.sitting.conflict", "exam.sitting.unavailable", "exam.archived", "exam.sitting.class_ineligible", "exam.sitting.schedule_outside_period", "exam.sitting.schedule_not_future", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress"}, module.schedule),

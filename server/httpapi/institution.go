@@ -8,9 +8,11 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -81,13 +83,13 @@ func institutionResource(institutions InstitutionApplication) apiResource {
 		"institution",
 		principalRoute(
 			http.MethodGet,
-			apiPath(literal("institution")),
+			path("/institution"),
 			academicReadErrorCodes("resource.not_found"),
 			module.get,
 		),
 		principalRoute(
 			http.MethodPatch,
-			apiPath(literal("institution")),
+			path("/institution"),
 			academicMutationErrorCodes(
 				"request.invalid", "resource.not_found", "institution.invalid",
 				"institution.conflict",
@@ -169,4 +171,9 @@ func institutionResponseFromModel(institution *model.Institution) institutionRes
 		Description:  institution.Description,
 		ExamCapacity: examCapacityPolicyResponseFromModel(institution.ExamCapacity),
 	}
+}
+
+type InstitutionApplication interface {
+	GetInstitution(context.Context, invocation.Invocation, academic.GetInstitutionQuery) (*model.Institution, error)
+	UpdateInstitution(context.Context, invocation.Invocation, academic.UpdateInstitutionCommand) (*model.Institution, error)
 }

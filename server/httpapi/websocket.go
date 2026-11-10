@@ -31,7 +31,7 @@ func webSocketResource(transport WebSocketTransport) apiResource {
 			webSocketProtocolName,
 			AuthSessionRequired,
 			http.MethodGet,
-			apiPath(literal(webSocketPathLiteral)),
+			path("/"+webSocketPathLiteral),
 			[]string{
 				"request.invalid",
 				"websocket.origin.invalid",

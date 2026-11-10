@@ -14,9 +14,11 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -51,13 +53,13 @@ type sessionResourceModule struct {
 
 func sessionResource(sessions Sessions, cookies browserCookies) apiResource {
 	module := sessionResourceModule{sessions: sessions, cookies: cookies}
-	base := apiPath(literal("users"), literal("me"), literal("sessions"))
+	base := path("/users/me/sessions")
 	return newResource(
 		"sessions",
 		sessionRoute(http.MethodGet, base, []string{"authentication.internal", "request.invalid"}, module.list),
-		sessionRoute(http.MethodPost, appendRoutePath(base, literal("revoke")), []string{"request.invalid", "session.id.invalid", "session.not_found", "authentication.internal", "audit.unavailable"}, module.revoke),
-		sessionRoute(http.MethodPost, appendRoutePath(base, literal("revoke-all")), []string{"authentication.internal", "audit.unavailable"}, module.revokeAll),
-		sessionRoute(http.MethodPost, appendRoutePath(base, literal("revoke-others")), []string{"authentication.internal", "audit.unavailable"}, module.revokeOthers),
+		sessionRoute(http.MethodPost, path("/users/me/sessions/revoke"), []string{"request.invalid", "session.id.invalid", "session.not_found", "authentication.internal", "audit.unavailable"}, module.revoke),
+		sessionRoute(http.MethodPost, path("/users/me/sessions/revoke-all"), []string{"authentication.internal", "audit.unavailable"}, module.revokeAll),
+		sessionRoute(http.MethodPost, path("/users/me/sessions/revoke-others"), []string{"authentication.internal", "audit.unavailable"}, module.revokeOthers),
 	)
 }
 
@@ -138,4 +140,11 @@ func (m sessionResourceModule) revokeOthers(request operationRequest) (operation
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, revokeOtherSessionsResponse{RevokedSessionCount: result.RevokedSessionCount}), nil
+}
+
+type Sessions interface {
+	ListSessions(context.Context, invocation.Invocation, identity.ListSessionsQuery) ([]*model.Session, error)
+	RevokeSession(context.Context, invocation.Invocation, identity.RevokeSessionCommand) error
+	RevokeAllSessions(context.Context, invocation.Invocation, identity.RevokeAllSessionsCommand) error
+	RevokeOtherSessions(context.Context, invocation.Invocation, identity.RevokeOtherSessionsCommand) (*identity.RevokeOtherSessionsResult, error)
 }

@@ -8,6 +8,7 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -139,13 +140,13 @@ func bootstrapResource(bootstrap BootstrapApplication) apiResource {
 		"bootstrap",
 		publicRoute(
 			http.MethodGet,
-			apiPath(literal("bootstrap")),
+			path("/bootstrap"),
 			[]string{"installation.unavailable"},
 			module.status,
 		),
 		publicRoute(
 			http.MethodPost,
-			apiPath(literal("bootstrap")),
+			path("/bootstrap"),
 			[]string{"request.invalid", "installation.already_initialized", "installation.unavailable", "installation.bootstrap_denied", "authentication.password.invalid", "authentication.password.pattern_invalid", "authentication.password.common_invalid", "authentication.password.identity_invalid", "service.busy", "authentication.rate_limited", "administration.unavailable"},
 			module.install,
 		),
@@ -191,4 +192,9 @@ func (m bootstrapResourceModule) install(request operationRequest) (operationRes
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusCreated, installationBootstrapResponseFromModel(request.request, result)), nil
+}
+
+type BootstrapApplication interface {
+	GetInstallationStatus(context.Context, invocation.Invocation, identity.GetInstallationStatusQuery) (*model.InstallationStatus, error)
+	BootstrapInstallation(context.Context, invocation.Invocation, identity.BootstrapInstallationCommand) (*model.InstallationBootstrapResult, error)
 }

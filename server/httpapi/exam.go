@@ -9,6 +9,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/exam"
+	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -342,16 +344,16 @@ type examResourceModule struct{ exams ExamApplication }
 
 func examResource(exams ExamApplication) apiResource {
 	module := examResourceModule{exams: exams}
-	collection := apiPath(literal("exams"))
-	member := apiPath(literal("exams"), canonicalID("exam_id"))
-	draft := apiPath(literal("exams"), canonicalID("exam_id"), literal("draft"))
-	nativePolicy := apiPath(literal("exams"), canonicalID("exam_id"), literal("draft"), literal("policies"), literal("native"))
-	focusLossPolicy := apiPath(literal("exams"), canonicalID("exam_id"), literal("draft"), literal("policies"), literal("focus-loss"))
-	browserPolicy := apiPath(literal("exams"), canonicalID("exam_id"), literal("draft"), literal("browser-policy"))
-	archive := apiPath(literal("exams"), canonicalID("exam_id"), literal("archive"))
-	managers := apiPath(literal("exams"), canonicalID("exam_id"), literal("managers"))
-	manager := apiPath(literal("exams"), canonicalID("exam_id"), literal("managers"), canonicalID("user_id"))
-	owner := apiPath(literal("exams"), canonicalID("exam_id"), literal("owner"))
+	collection := path("/exams")
+	member := path("/exams/{exam_id}")
+	draft := path("/exams/{exam_id}/draft")
+	nativePolicy := path("/exams/{exam_id}/draft/policies/native")
+	focusLossPolicy := path("/exams/{exam_id}/draft/policies/focus-loss")
+	browserPolicy := path("/exams/{exam_id}/draft/browser-policy")
+	archive := path("/exams/{exam_id}/archive")
+	managers := path("/exams/{exam_id}/managers")
+	manager := path("/exams/{exam_id}/managers/{user_id}")
+	owner := path("/exams/{exam_id}/owner")
 	return newResource(
 		"exams",
 		principalRoute(http.MethodGet, collection, []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "request.invalid", "exam.invalid", "exam.unavailable", "resource.not_found"}, module.list),
@@ -904,4 +906,19 @@ func (r *configureExamDraftNativePolicyRequest) UnmarshalJSON(data []byte) error
 	}
 	*r = configureExamDraftNativePolicyRequest(decoded)
 	return nil
+}
+
+type ExamApplication interface {
+	CreateExam(context.Context, invocation.Invocation, exam.CreateCommand) (exam.View, error)
+	GetExam(context.Context, invocation.Invocation, exam.GetQuery) (exam.View, error)
+	EditExamDraftText(context.Context, invocation.Invocation, exam.EditDraftTextCommand) (exam.View, error)
+	ConfigureExamDraftNativePolicy(context.Context, invocation.Invocation, exam.ConfigureDraftNativePolicyCommand) (exam.View, error)
+	ConfigureExamDraftFocusLoss(context.Context, invocation.Invocation, exam.ConfigureDraftFocusLossCommand) (exam.View, error)
+	ConfigureExamDraftBrowserPolicy(context.Context, invocation.Invocation, exam.ConfigureDraftBrowserPolicyCommand) (exam.View, error)
+	ListExams(context.Context, invocation.Invocation, exam.ListQuery) (exam.CatalogPage, error)
+	ArchiveExam(context.Context, invocation.Invocation, exam.ArchiveCommand) (model.Exam, error)
+	ListExamManagers(context.Context, invocation.Invocation, exam.ListManagersQuery) (exam.ManagerPage, error)
+	AddExamManager(context.Context, invocation.Invocation, exam.AddManagerCommand) (store.ExamManagerCommandResult, error)
+	RemoveExamManager(context.Context, invocation.Invocation, exam.RemoveManagerCommand) (store.ExamManagerCommandResult, error)
+	TransferExamOwnership(context.Context, invocation.Invocation, exam.TransferOwnerCommand) (store.ExamManagerCommandResult, error)
 }

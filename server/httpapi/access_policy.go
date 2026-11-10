@@ -135,12 +135,12 @@ type accessPolicyResourceModule struct{ application AccessPolicyApplication }
 
 func accessPolicyResource(application AccessPolicyApplication) apiResource {
 	module := accessPolicyResourceModule{application: application}
-	replace := strongRecentSessionRoute(http.MethodPut, apiPath(literal("access-policy")), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "request.invalid", "access_policy.invalid", "access_policy.revision_conflict", "access_policy.blocked", "access_policy.unavailable", "resource.not_found"}, module.replace)
+	replace := strongRecentSessionRoute(http.MethodPut, path("/access-policy"), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "request.invalid", "access_policy.invalid", "access_policy.revision_conflict", "access_policy.blocked", "access_policy.unavailable", "resource.not_found"}, module.replace)
 	replace.idempotency = IdempotencyRequired
 	return newResource("access-policy",
-		publicRoute(http.MethodGet, apiPath(literal("discovery")), []string{"access_policy.unavailable", "access_policy.blocked", "access_policy.revision_conflict"}, module.discover),
-		principalRoute(http.MethodGet, apiPath(literal("access-policy")), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "access_policy.unavailable", "access_policy.blocked", "access_policy.revision_conflict", "resource.not_found"}, module.get),
-		strongRecentSessionRoute(http.MethodPost, apiPath(literal("access-policy"), literal("preflight")), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "request.invalid", "access_policy.invalid", "access_policy.revision_conflict", "access_policy.unavailable", "access_policy.blocked", "resource.not_found"}, module.preflight),
+		publicRoute(http.MethodGet, path("/discovery"), []string{"access_policy.unavailable", "access_policy.blocked", "access_policy.revision_conflict"}, module.discover),
+		principalRoute(http.MethodGet, path("/access-policy"), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "access_policy.unavailable", "access_policy.blocked", "access_policy.revision_conflict", "resource.not_found"}, module.get),
+		strongRecentSessionRoute(http.MethodPost, path("/access-policy/preflight"), []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "request.invalid", "access_policy.invalid", "access_policy.revision_conflict", "access_policy.unavailable", "access_policy.blocked", "resource.not_found"}, module.preflight),
 		replace,
 	)
 }

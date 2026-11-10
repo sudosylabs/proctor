@@ -8,9 +8,11 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -47,19 +49,19 @@ func classMemberResource(members ClassMemberApplication) apiResource {
 		"class-members",
 		principalRoute(
 			http.MethodGet,
-			apiPath(literal("classes"), canonicalID("class_id"), literal("members")),
+			path("/classes/{class_id}/members"),
 			academicRelationshipReadErrorCodes(),
 			module.list,
 		),
 		principalRoute(
 			http.MethodPost,
-			apiPath(literal("classes"), canonicalID("class_id"), literal("members")),
+			path("/classes/{class_id}/members"),
 			academicRelationshipMutationErrorCodes("class_member.invalid", "class_member.student_affiliation_required", "class.enrollment_conflict", "mail.unavailable"),
 			module.enroll,
 		),
 		principalRoute(
 			http.MethodDelete,
-			apiPath(literal("class-members"), canonicalID("class_member_id")),
+			path("/class-members/{class_member_id}"),
 			academicRelationshipMutationErrorCodes("class.enrollment_conflict", "mail.unavailable"),
 			module.end,
 		),
@@ -147,4 +149,10 @@ func classEnrollmentResponseFromModel(enrollment *model.ClassEnrollment) classEn
 		response.Previous = &previous
 	}
 	return response
+}
+
+type ClassMemberApplication interface {
+	ListClassMembersPage(context.Context, invocation.Invocation, academic.ListClassMembersPageQuery) (*academic.ClassMemberPage, error)
+	EnrollClassMember(context.Context, invocation.Invocation, academic.EnrollClassMemberCommand) (*model.ClassEnrollment, error)
+	EndClassMember(context.Context, invocation.Invocation, academic.EndClassMemberCommand) (*model.ClassMember, error)
 }

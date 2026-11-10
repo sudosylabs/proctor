@@ -41,8 +41,8 @@ type desktopRegistrationResourceModule struct {
 
 func desktopRegistrationResource(application DesktopRegistrations) apiResource {
 	module := desktopRegistrationResourceModule{application: application}
-	collection := apiPath(literal("users"), literal("me"), literal("desktop-registrations"))
-	item := appendRoutePath(collection, canonicalID("desktop_registration_id"))
+	collection := path("/users/me/desktop-registrations")
+	item := path("/users/me/desktop-registrations/{desktop_registration_id}")
 	return newResource(
 		"desktop-registrations",
 		sessionRoute(http.MethodGet, collection, []string{"desktop_registration.unavailable", "authentication.reauthentication_required", "authentication.session_required", "request.invalid"}, module.list),

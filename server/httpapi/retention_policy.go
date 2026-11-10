@@ -58,7 +58,7 @@ func retentionPolicyResource(application RetentionPolicyApplication) apiResource
 	module := retentionPolicyResourceModule{application: application}
 	replace := strongRecentSessionRoute(
 		http.MethodPut,
-		apiPath(literal("retention-policy")),
+		path("/retention-policy"),
 		[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress", "request.invalid", "retention_policy.invalid", "retention_policy.revision_conflict", "retention_policy.unavailable", "resource.not_found"},
 		module.replace,
 	)
@@ -67,7 +67,7 @@ func retentionPolicyResource(application RetentionPolicyApplication) apiResource
 		"retention-policy",
 		principalRoute(
 			http.MethodGet,
-			apiPath(literal("retention-policy")),
+			path("/retention-policy"),
 			[]string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "retention_policy.unavailable", "resource.not_found", "retention_policy.revision_conflict"},
 			module.get,
 		),

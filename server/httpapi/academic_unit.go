@@ -8,9 +8,11 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -48,9 +50,9 @@ type academicUnitResourceModule struct {
 
 func academicUnitResource(academicUnits AcademicUnitApplication) apiResource {
 	module := academicUnitResourceModule{academicUnits: academicUnits}
-	collection := apiPath(literal("academic-units"))
-	member := apiPath(literal("academic-units"), canonicalID("academic_unit_id"))
-	children := apiPath(literal("academic-units"), canonicalID("academic_unit_id"), literal("children"))
+	collection := path("/academic-units")
+	member := path("/academic-units/{academic_unit_id}")
+	children := path("/academic-units/{academic_unit_id}/children")
 	return newResource(
 		"academic-units",
 		principalRoute(http.MethodGet, collection, []string{"authorization.denied", "authorization.request.invalid", "authorization.unavailable", "request.invalid", "administration.unavailable", "resource.not_found"}, module.listRoot),
@@ -229,4 +231,13 @@ func academicUnitResponseFromModel(unit *model.AcademicUnit) academicUnitRespons
 		DisplayName:   unit.DisplayName,
 		Description:   unit.Description,
 	}
+}
+
+type AcademicUnitApplication interface {
+	GetAcademicUnit(context.Context, invocation.Invocation, academic.GetAcademicUnitQuery) (*model.AcademicUnit, error)
+	ListAcademicUnits(context.Context, invocation.Invocation, academic.ListAcademicUnitsQuery) (paging.Page[*model.AcademicUnit], error)
+	SearchAcademicUnits(context.Context, invocation.Invocation, academic.SearchAcademicUnitsQuery) (paging.Page[*model.AcademicUnit], error)
+	CreateAcademicUnit(context.Context, invocation.Invocation, academic.CreateAcademicUnitCommand) (*model.AcademicUnit, error)
+	UpdateAcademicUnit(context.Context, invocation.Invocation, academic.UpdateAcademicUnitCommand) (*model.AcademicUnit, error)
+	ArchiveAcademicUnit(context.Context, invocation.Invocation, academic.ArchiveAcademicUnitCommand) error
 }

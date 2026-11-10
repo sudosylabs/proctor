@@ -88,20 +88,77 @@ func (p pathParameter) compile() (string, string, error) {
 	return "{" + p.name + ":" + pattern + "}", "{" + normalized + "}", nil
 }
 
+// routePath is a canonical route path. Resource modules build it with path or
+// rootPath from a readable template such as
+// "/programme-levels/{programme_level_id}/classes".
 type routePath struct {
 	parts       []pathPart
 	rootMounted bool
+	// err records a malformed template. The catalog compiler reports it when
+	// the route is compiled, so a bad template fails New rather than package
+	// initialisation.
+	err error
 }
 
-func apiPath(parts ...pathPart) routePath {
-	return routePath{parts: append([]pathPart(nil), parts...)}
+// path parses a route template relative to the API root. The template starts
+// with "/" and has no trailing slash. A plain segment is a canonical literal;
+// "{name}" is a canonical identifier parameter; "{name:uuid}",
+// "{name:sequence}" and "{name:provider}" select a canonical UUID, a positive
+// sequence number and a provider identifier. Malformed templates are reported
+// by the catalog compiler.
+func path(template string) routePath {
+	parts, err := parsePathTemplate(template)
+	return routePath{parts: parts, err: err}
 }
 
-func rootPath(parts ...pathPart) routePath {
-	return routePath{parts: append([]pathPart(nil), parts...), rootMounted: true}
+// rootPath parses a route template like path but mounts it at the server root
+// instead of under the API prefix.
+func rootPath(template string) routePath {
+	parts, err := parsePathTemplate(template)
+	return routePath{parts: parts, err: err, rootMounted: true}
+}
+
+func parsePathTemplate(template string) ([]pathPart, error) {
+	if !strings.HasPrefix(template, "/") {
+		return nil, fmt.Errorf("route template %q must start with /", template)
+	}
+	segments := strings.Split(template[1:], "/")
+	parts := make([]pathPart, 0, len(segments))
+	for _, segment := range segments {
+		if segment == "" {
+			return nil, fmt.Errorf("route template %q has an empty segment", template)
+		}
+		if !strings.ContainsAny(segment, "{}") {
+			parts = append(parts, literal(segment))
+			continue
+		}
+		if !strings.HasPrefix(segment, "{") || !strings.HasSuffix(segment, "}") {
+			return nil, fmt.Errorf("route template %q has a malformed parameter %q", template, segment)
+		}
+		name, kind, hasKind := strings.Cut(segment[1:len(segment)-1], ":")
+		if strings.ContainsAny(name, "{}:") || strings.ContainsAny(kind, "{}:") {
+			return nil, fmt.Errorf("route template %q has a malformed parameter %q", template, segment)
+		}
+		switch {
+		case !hasKind:
+			parts = append(parts, canonicalID(name))
+		case kind == "uuid":
+			parts = append(parts, canonicalUUID(name))
+		case kind == "sequence":
+			parts = append(parts, positiveSequence(name))
+		case kind == "provider":
+			parts = append(parts, providerID(name))
+		default:
+			return nil, fmt.Errorf("route template %q has unknown parameter kind %q", template, kind)
+		}
+	}
+	return parts, nil
 }
 
 func (p routePath) compile(apiPrefix string) (string, string, error) {
+	if p.err != nil {
+		return "", "", p.err
+	}
 	if apiPrefix == "" || !strings.HasPrefix(apiPrefix, "/") || strings.HasSuffix(apiPrefix, "/") {
 		return "", "", fmt.Errorf("API prefix %q is not canonical", apiPrefix)
 	}

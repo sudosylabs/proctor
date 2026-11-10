@@ -149,8 +149,8 @@ func decodeDuplicateFreeExamCorrectionObject(encoded []byte, target any) error {
 
 func examSittingCorrectionResource(application ExamSittingCorrectionApplication) apiResource {
 	module := examSittingCorrectionHTTPModule{application: application}
-	stages := apiPath(literal("exams"), canonicalID("exam_id"), literal("sittings"), canonicalID("exam_sitting_id"), literal("correction-resource-stages"))
-	corrections := apiPath(literal("exams"), canonicalID("exam_id"), literal("sittings"), canonicalID("exam_sitting_id"), literal("corrections"))
+	stages := path("/exams/{exam_id}/sittings/{exam_sitting_id}/correction-resource-stages")
+	corrections := path("/exams/{exam_id}/sittings/{exam_sitting_id}/corrections")
 	return newResource(
 		"exam-sitting-corrections",
 		idempotentProtocolRoute(IdempotencyRequired, examSittingCorrectionUploadBodyLimit, "exam-sitting-correction-resource-stage", RouteProtocolStreamingUpload, AuthPrincipalRequired, http.MethodPost, stages, []string{"authorization.request.invalid", "authorization.unavailable", "audit.unavailable", "request.invalid", "resource.not_found", "exam.sitting.correction.invalid", "exam.sitting.correction.conflict", "exam.sitting.correction.unavailable", "exam.archived", "exam.sitting.revision_conflict", "exam.sitting.state_conflict", "exam.sitting.deadline_reached", "service.busy", "exam.sitting.correction.content_invalid", "exam.sitting.correction.stage_conflict", "idempotency.key_required", "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress"}, module.stage),

@@ -14,10 +14,12 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -68,15 +70,15 @@ type mfaResourceModule struct {
 
 func mfaResource(mfa MFA) apiResource {
 	module := mfaResourceModule{mfa: mfa}
-	base := apiPath(literal("users"), literal("me"), literal("mfa"))
+	base := path("/users/me/mfa")
 	return newResource(
 		"multi-factor-authentication",
 		mfaRecoverySessionRoute(http.MethodGet, base, []string{"authentication.mfa.unavailable", "authentication.reauthentication_required", "authentication.session_required"}, module.status),
-		recentMFARecoverySessionRoute(http.MethodPost, appendRoutePath(base, literal("setup")), []string{"authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.session_required"}, module.setup),
-		recentMFARecoverySessionRoute(http.MethodPost, appendRoutePath(base, literal("activate")), []string{"request.invalid", "authentication.mfa.code_invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.session_required"}, module.activate),
-		mfaEnrollmentSessionRoute(http.MethodPost, appendRoutePath(base, literal("challenge")), []string{"request.invalid", "authentication.mfa.code_invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.reauthentication_required", "authentication.session_required"}, module.challenge),
-		strongRecentSessionRoute(http.MethodPost, appendRoutePath(base, literal("recovery-codes"), literal("regenerate")), []string{"authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.session_required"}, module.regenerateRecoveryCodes),
-		strongRecentSessionRoute(http.MethodPost, appendRoutePath(base, literal("disable")), []string{"mfa.required_by_policy", "authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "audit.unavailable", "authentication.session_required"}, module.disable),
+		recentMFARecoverySessionRoute(http.MethodPost, path("/users/me/mfa/setup"), []string{"authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.session_required"}, module.setup),
+		recentMFARecoverySessionRoute(http.MethodPost, path("/users/me/mfa/activate"), []string{"request.invalid", "authentication.mfa.code_invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.session_required"}, module.activate),
+		mfaEnrollmentSessionRoute(http.MethodPost, path("/users/me/mfa/challenge"), []string{"request.invalid", "authentication.mfa.code_invalid", "authentication.rate_limited", "authentication.rate_limit_unavailable", "authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.reauthentication_required", "authentication.session_required"}, module.challenge),
+		strongRecentSessionRoute(http.MethodPost, path("/users/me/mfa/recovery-codes/regenerate"), []string{"authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "authentication.internal", "audit.unavailable", "authentication.session_required"}, module.regenerateRecoveryCodes),
+		strongRecentSessionRoute(http.MethodPost, path("/users/me/mfa/disable"), []string{"mfa.required_by_policy", "authentication.mfa.disabled", "authentication.mfa.not_found", "authentication.mfa.conflict", "authentication.mfa.unavailable", "audit.unavailable", "authentication.session_required"}, module.disable),
 	)
 }
 
@@ -189,4 +191,13 @@ func mfaCode(request operationRequest) (string, error) {
 		return "", err
 	}
 	return input.Code, nil
+}
+
+type MFA interface {
+	GetMFAStatus(context.Context, invocation.Invocation, identity.GetMFAStatusQuery) (*identity.MFAStatus, error)
+	SetupMFA(context.Context, invocation.Invocation, identity.SetupMFACommand) (*identity.MFASetup, error)
+	ActivateMFA(context.Context, invocation.Invocation, identity.ActivateMFACommand) (*identity.MFAActivation, error)
+	ChallengeMFA(context.Context, invocation.Invocation, identity.ChallengeMFACommand) (*model.Session, error)
+	RegenerateMFARecoveryCodes(context.Context, invocation.Invocation, identity.RegenerateMFARecoveryCodesCommand) ([]string, error)
+	DisableMFA(context.Context, invocation.Invocation, identity.DisableMFACommand) error
 }

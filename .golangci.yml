@@ -17,6 +17,7 @@ linters:
     - gosec
     - govet
     - ineffassign
+    - lll
     - misspell
     - noctx
     - nolintlint
@@ -33,6 +34,8 @@ linters:
       lines: -1
       statements: 80
       ignore-comments: true
+    lll:
+      line-length: 160
     govet:
       enable-all: true
       disable:
@@ -78,6 +81,15 @@ linters:
       - linters:
           - revive
         path-except: "^(app|httpapi|store/sqlstore)/"
+      # A line may run long only where breaking it would change its text:
+      # a comment, or one long string literal. Tests, conformance suites,
+      # seed fixtures and generated code are not held to the limit.
+      - linters:
+          - lll
+        source: '^\s*//|"[^"]{100,}"|`[^`]{100,}'
+      - linters:
+          - lll
+        path: "(_test\\.go$|_gen\\.go$|^store/storetest/|^testlib/|^cmd/ptool/devseed/|^model/attempt_configuration_manifest\\.go$)"
       # Tests, conformance suites and developer commands may run long.
       - linters:
           - funlen

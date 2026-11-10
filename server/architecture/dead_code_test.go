@@ -38,6 +38,7 @@ var reachableOnlyFromTests = map[string]string{
 	// Cross-package test seams: other packages' tests construct real values
 	// through them, so they cannot move into a _test.go file.
 	"server.NewForTesting":                                 "the testlib entry into the real server.New graph",
+	"server.testingCompositionInput":                       "the test defaults NewForTesting composes with",
 	"server.testingWebappFiles":                            "the webapp assets NewForTesting serves",
 	"config.NewMemoryStore":                                "the in-memory configuration backing other packages' tests load",
 	"config.MemoryStore.Load":                              "MemoryStore implements the configuration backing store",

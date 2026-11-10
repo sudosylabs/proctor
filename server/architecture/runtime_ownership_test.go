@@ -69,18 +69,16 @@ func TestConstructionProjectionRemainsRootPrivate(t *testing.T) {
 		"composeConsumers":               true,
 		"httpAPISettings":                true,
 		"composeNode":                    true,
-		"defaultConsumerConstructors":    true,
 	}
 	allowedTypes := map[string]bool{
 		"constructionCapabilities": true,
-		"consumerConstructors":     true,
 	}
 	root := filepath.Join("..")
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		if entry.IsDir() || filepath.Ext(path) != ".go" || filepath.Base(path) == "runtime_ownership_test.go" || filepath.Base(path) == "composition_test.go" {
+		if entry.IsDir() || filepath.Ext(path) != ".go" || filepath.Base(path) == "runtime_ownership_test.go" {
 			return nil
 		}
 		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)

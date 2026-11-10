@@ -86,6 +86,21 @@ type TestingRuntime struct {
 // so startup, readiness, shutdown, and cleanup behavior is identical to
 // production.
 func NewForTesting(ctx context.Context, overrides TestingOverrides) (*TestingRuntime, error) {
+	result, err := composeNode(ctx, testingCompositionInput(overrides))
+	if err != nil {
+		return nil, err
+	}
+	return &TestingRuntime{
+		Server:      result.server,
+		Application: result.test.application,
+		Handler:     result.test.handler,
+	}, nil
+}
+
+// testingCompositionInput completes overrides with the test defaults: the
+// test service environment, a discarded bootstrap secret, and a minimal
+// build-matched webapp.
+func testingCompositionInput(overrides TestingOverrides) compositionInput {
 	if overrides.ServiceEnvironment == "" {
 		overrides.ServiceEnvironment = ServiceEnvironmentTest
 	}
@@ -95,19 +110,10 @@ func NewForTesting(ctx context.Context, overrides TestingOverrides) (*TestingRun
 	if overrides.WebappFiles == nil {
 		overrides.WebappFiles = testingWebappFiles(overrides.BuildInfo)
 	}
-	result, err := composeNode(ctx, compositionInput{
+	return compositionInput{
 		serviceEnvironment: overrides.ServiceEnvironment,
 		overrides:          overrides,
-		allowMissingJobs:   overrides.AllowMissingJobs,
-	})
-	if err != nil {
-		return nil, err
 	}
-	return &TestingRuntime{
-		Server:      result.server,
-		Application: result.test.application,
-		Handler:     result.test.handler,
-	}, nil
 }
 
 func testingWebappFiles(build httpapi.BuildInfo) fs.FS {

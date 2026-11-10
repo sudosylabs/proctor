@@ -310,6 +310,10 @@ type hookCluster struct {
 	startedCount atomic.Int64
 	closedCount  atomic.Int64
 	closeEvents  *hookCloseEvents
+	// registrationErr fails the registration of the named events.
+	registrationErr map[cluster.Event]error
+	mu              sync.Mutex
+	registrations   []cluster.Event
 }
 
 func (c *hookCluster) NodeID() string { return "hook-node" }
@@ -318,11 +322,19 @@ func (c *hookCluster) Start(context.Context) error {
 	return nil
 }
 func (c *hookCluster) Ping(context.Context) error { return nil }
-func (c *hookCluster) RegisterHandler(cluster.Event, cluster.Handler) error {
+func (c *hookCluster) RegisterHandler(event cluster.Event, _ cluster.Handler) error {
 	if c.cancel != nil {
 		c.cancel()
 	}
-	return nil
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.registrations = append(c.registrations, event)
+	return c.registrationErr[event]
+}
+func (c *hookCluster) registered() []cluster.Event {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.registrations)
 }
 func (c *hookCluster) Stop(context.Context) error {
 	c.closedCount.Add(1)

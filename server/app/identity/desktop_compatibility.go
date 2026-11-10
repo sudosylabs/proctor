@@ -14,7 +14,6 @@ import (
 	"slices"
 	"sort"
 	"strconv"
-	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -67,29 +66,6 @@ type desktopBuildCatalog struct {
 	entries []model.DesktopBuildTuple
 }
 
-type desktopCompatibilityInstitutionStore interface {
-	GetSingleton(context.Context) (*model.Institution, error)
-}
-
-// desktopCompatibilityServiceDependencies are the collaborators of desktopCompatibilityService;
-// newDesktopCompatibilityService validates them once and desktopCompatibilityService keeps them in deps.
-type desktopCompatibilityServiceDependencies struct {
-	Policies                store.DesktopCompatibilityPolicyStore
-	Institutions            desktopCompatibilityInstitutionStore
-	Authorization           resourceAuthorizer
-	Audit                   access.MutationAuditor
-	Builds                  []model.DesktopBuildTuple
-	SkipBuildChecks         bool
-	RecentAuthenticationTTL time.Duration
-	Now                     func() time.Time
-}
-
-type desktopCompatibilityService struct {
-	deps desktopCompatibilityServiceDependencies
-
-	catalog *desktopBuildCatalog
-}
-
 // ReplaceDesktopCompatibilityPolicyCommand completely replaces the
 // Institution policy behind optimistic revision and idempotency fences.
 type ReplaceDesktopCompatibilityPolicyCommand struct {
@@ -129,29 +105,33 @@ func newDesktopBuildCatalog(entries []model.DesktopBuildTuple) (*desktopBuildCat
 	return &desktopBuildCatalog{entries: cloned}, nil
 }
 
-func newDesktopCompatibilityService(deps desktopCompatibilityServiceDependencies) (*desktopCompatibilityService, error) {
-	if deps.Policies == nil || deps.Institutions == nil || deps.Authorization == nil || deps.Audit == nil ||
-		deps.RecentAuthenticationTTL <= 0 || deps.Now == nil {
-		return nil, errors.New("desktop compatibility service dependencies are invalid")
+// requireDesktopCompatibility refuses a Service whose Desktop compatibility
+// collaborators are incomplete and builds the immutable Desktop build catalog.
+// New calls it first, before any sign-in collaborator is set up.
+func (s *Service) requireDesktopCompatibility(builds []model.DesktopBuildTuple) error {
+	if s.desktopCompatibilityPolicies == nil || s.institutions == nil || s.authorizer == nil || s.auditor == nil ||
+		s.recentAuthenticationTTL <= 0 || s.now == nil {
+		return errors.New("desktop compatibility service dependencies are invalid")
 	}
-	catalog, err := newDesktopBuildCatalog(deps.Builds)
+	catalog, err := newDesktopBuildCatalog(builds)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return &desktopCompatibilityService{deps: deps, catalog: catalog}, nil
+	s.desktopBuilds = catalog
+	return nil
 }
 
 // EvaluateDesktopCompatibility checks untrusted build declarations against
 // the current authoritative Institution policy and immutable server catalog.
-func (s *desktopCompatibilityService) EvaluateDesktopCompatibility(
+func (s *Service) EvaluateDesktopCompatibility(
 	ctx context.Context,
 	_ invocation.Invocation,
 	query DesktopCompatibilityQuery,
 ) (DesktopCompatibilityResult, error) {
-	return s.evaluate(ctx, query, s.deps.SkipBuildChecks)
+	return s.evaluateDesktopBuild(ctx, query, s.skipDesktopBuildChecks)
 }
 
-func (s *desktopCompatibilityService) evaluate(
+func (s *Service) evaluateDesktopBuild(
 	ctx context.Context,
 	query DesktopCompatibilityQuery,
 	skipBuildChecks bool,
@@ -159,7 +139,7 @@ func (s *desktopCompatibilityService) evaluate(
 	if err := validateDesktopCompatibilityQuery(query); err != nil {
 		return DesktopCompatibilityResult{}, err
 	}
-	policy, err := s.deps.Policies.Get(ctx)
+	policy, err := s.desktopCompatibilityPolicies.Get(ctx)
 	if err != nil || policy == nil {
 		return DesktopCompatibilityResult{}, desktopCompatibilityPolicyError(err)
 	}
@@ -174,12 +154,12 @@ func (s *desktopCompatibilityService) evaluate(
 			AdministratorMessage: policy.AdministratorMessage,
 		}
 	} else {
-		result, err = s.catalog.evaluate(policy, query)
+		result, err = s.desktopBuilds.evaluate(policy, query)
 	}
 	if err != nil {
 		return DesktopCompatibilityResult{}, err
 	}
-	if result.RetryAt.Valid && !result.RetryAt.Time.After(model.TimeUTC(s.deps.Now())) {
+	if result.RetryAt.Valid && !result.RetryAt.Time.After(model.TimeUTC(s.now())) {
 		result.RetryAt = model.OptionalTime{}
 	}
 	result.PolicyRevision = policy.Revision
@@ -190,7 +170,7 @@ func (s *desktopCompatibilityService) evaluate(
 // selectors established the authenticated Desktop Session. Institution policy
 // may narrow the embedded catalog, so Attempt entry rechecks it at the time of
 // admission without trusting request-body build metadata.
-func (s *desktopCompatibilityService) ResolveAttemptDesktopBuild(
+func (s *Service) ResolveAttemptDesktopBuild(
 	ctx context.Context,
 	principal model.Principal,
 ) (attempt.DesktopBuildResolution, error) {
@@ -202,12 +182,12 @@ func (s *desktopCompatibilityService) ResolveAttemptDesktopBuild(
 		Platform: string(principal.DesktopPlatform), Architecture: string(principal.DesktopArchitecture),
 		RealtimeProtocol: principal.DesktopRealtimeProtocol,
 	}
-	result, err := s.evaluate(ctx, query, false)
+	result, err := s.evaluateDesktopBuild(ctx, query, false)
 	if err != nil || result.Availability != model.DesktopAvailabilityReady ||
 		result.Compatibility != DesktopCompatibilityCompatible {
 		return attempt.DesktopBuildResolution{}, errors.New("Desktop build is not compatible")
 	}
-	for _, entry := range s.catalog.entries {
+	for _, entry := range s.desktopBuilds.entries {
 		if entry.DesktopRelease == query.DesktopRelease && entry.DesktopBuildID == query.DesktopBuildID &&
 			entry.Platform == principal.DesktopPlatform && entry.Architecture == principal.DesktopArchitecture &&
 			entry.RealtimeProtocol == query.RealtimeProtocol {
@@ -218,14 +198,14 @@ func (s *desktopCompatibilityService) ResolveAttemptDesktopBuild(
 }
 
 // GetDesktopCompatibilityPolicy returns the current administrative policy.
-func (s *desktopCompatibilityService) GetDesktopCompatibilityPolicy(
+func (s *Service) GetDesktopCompatibilityPolicy(
 	ctx context.Context,
 	invocation invocation.Invocation,
 ) (*model.DesktopCompatibilityPolicy, error) {
-	if _, _, err := s.authorize(ctx, invocation, model.ActionAccessPolicyView); err != nil {
+	if _, _, err := s.authorizeInstitutionAction(ctx, invocation, model.ActionAccessPolicyView); err != nil {
 		return nil, err
 	}
-	policy, err := s.deps.Policies.Get(ctx)
+	policy, err := s.desktopCompatibilityPolicies.Get(ctx)
 	if err != nil || policy == nil {
 		return nil, desktopCompatibilityPolicyError(err)
 	}
@@ -233,19 +213,19 @@ func (s *desktopCompatibilityService) GetDesktopCompatibilityPolicy(
 }
 
 // ReplaceDesktopCompatibilityPolicy replaces the current policy.
-func (s *desktopCompatibilityService) ReplaceDesktopCompatibilityPolicy(
+func (s *Service) ReplaceDesktopCompatibilityPolicy(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	command ReplaceDesktopCompatibilityPolicyCommand,
 ) (*model.DesktopCompatibilityPolicy, error) {
 	if err := RequireStrongRecentSession(
 		invocation.Principal(),
-		s.deps.Now(),
-		s.deps.RecentAuthenticationTTL,
+		s.now(),
+		s.recentAuthenticationTTL,
 	); err != nil {
 		return nil, err
 	}
-	institution, resource, err := s.authorize(
+	institution, resource, err := s.authorizeInstitutionAction(
 		ctx,
 		invocation,
 		model.ActionDesktopCompatibilityPolicyManage,
@@ -276,7 +256,7 @@ func (s *desktopCompatibilityService) ReplaceDesktopCompatibilityPolicy(
 	}
 	stored, err := access.RunAudited(
 		ctx,
-		s.deps.Audit,
+		s.auditor,
 		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionDesktopCompatibilityPolicyManage,
@@ -293,12 +273,12 @@ func (s *desktopCompatibilityService) ReplaceDesktopCompatibilityPolicy(
 				"retry_at_set":              command.Settings.RetryAt.Valid,
 			},
 		},
-		s.deps.Now,
+		s.now,
 		func(
 			ctx context.Context,
 			reference access.MutationReference,
 		) (*store.DesktopCompatibilityPolicyReplacementResult, error) {
-			return s.deps.Policies.Replace(
+			return s.desktopCompatibilityPolicies.Replace(
 				ctx,
 				&store.DesktopCompatibilityPolicyReplacement{
 					ActorID:          invocation.Principal().UserID,
@@ -321,17 +301,17 @@ func (s *desktopCompatibilityService) ReplaceDesktopCompatibilityPolicy(
 	return stored.Policy.Clone(), nil
 }
 
-func (s *desktopCompatibilityService) authorize(
+func (s *Service) authorizeInstitutionAction(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	action model.Action,
 ) (*model.Institution, model.Resource, error) {
-	institution, err := s.deps.Institutions.GetSingleton(ctx)
+	institution, err := s.institutions.GetSingleton(ctx)
 	if err != nil || institution == nil || !institution.ID.IsValid() {
 		return nil, model.Resource{}, desktopCompatibilityPolicyError(err)
 	}
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
-	if err := s.deps.Authorization.Authorize(ctx, invocation, action, resource); err != nil {
+	if err := s.authorizer.Authorize(ctx, invocation, action, resource); err != nil {
 		return nil, model.Resource{}, err
 	}
 	return institution, resource, nil
@@ -472,8 +452,8 @@ func desktopCompatibilityBounds(
 // a retained stream even after its owning key authenticates a newer Desktop.
 // It grants no live admission; source ownership is checked by the use case and
 // atomically again by the delivery Store.
-func (s *desktopCompatibilityService) ResolveNativeDeliveryBuild(_ context.Context, identity attempt.NativeDeliveryBuildIdentity) (model.DesktopBuildTuple, error) {
-	for _, entry := range s.catalog.entries {
+func (s *Service) ResolveNativeDeliveryBuild(_ context.Context, identity attempt.NativeDeliveryBuildIdentity) (model.DesktopBuildTuple, error) {
+	for _, entry := range s.desktopBuilds.entries {
 		agreement := entry.NativeAgreement
 		if agreement == nil {
 			continue

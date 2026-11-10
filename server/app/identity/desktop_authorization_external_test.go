@@ -163,8 +163,8 @@ func TestExternalAuthenticationCompletionIsolatesDesktopPurpose(t *testing.T) {
 
 func newDesktopExternalAuthenticationFixture(t *testing.T, transactions *desktopAuthorizationStoreFake) *externalAuthenticationService {
 	t.Helper()
-	desktop, err := newDesktopAuthorizationService(desktopAuthorizationServiceDependencies{Transactions: transactions, Institutions: desktopAuthorizationInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, AccessPolicy: desktopAuthorizationAccessPolicyFake{enabled: true}, Capabilities: &accessPolicyCapabilitiesFake{}, Audit: desktopAuthorizationAuditorFake{}, Attempts: &desktopAuthorizationAttemptLimiterFake{}, SessionPolicy: testDesktopSessionPolicy(), Policy: DesktopAuthorizationPolicy{Issuer: "https://proctor.example.test"}, NewCredential: model.NewCredentialToken, Now: time.Now, Identity: testDesktopAuthorizationIdentity(t, "https://proctor.example.test", time.Now)})
-	require.NoError(t, err)
+	desktop := newTestDesktopAuthorizationService(t, transactions, time.Now)
+	desktop.desktopPolicy.Issuer = "https://proctor.example.test"
 	service, err := (externalAuthenticationConstructorArgs{
 		registry: externalProviderSourceFake{provider: externalProviderFake{}}, loginStates: &externalLoginStateStoreFake{},
 		institutions: providerConnectionInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}},

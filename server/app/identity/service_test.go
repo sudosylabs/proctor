@@ -353,7 +353,10 @@ func (a *accessPolicyAuditFake) Fail(_ context.Context, id model.AuditEventID, c
 	return a.failErr
 }
 
-type accessPolicyInstitutionFake struct{ institution *model.Institution }
+type accessPolicyInstitutionFake struct {
+	store.InstitutionStore
+	institution *model.Institution
+}
 
 func (s *accessPolicyInstitutionFake) GetSingleton(context.Context) (*model.Institution, error) {
 	return s.institution, nil

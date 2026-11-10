@@ -22,36 +22,67 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type localLoginAuditRecord struct {
+// securityAuditRecord is one security audit event as *access.Auditor
+// received it: who acted for which resource and scope, with the request
+// identity, and how the event ended.
+type securityAuditRecord struct {
+	id         model.AuditEventID
 	status     model.AuditStatus
 	actor      model.UserID
+	sessionID  model.SessionID
 	target     model.UserID
 	clientType model.SessionClientType
+	action     model.Action
+	resource   model.Resource
+	scopeType  model.RoleScopeType
+	scopeID    string
 	metadata   model.RequestMetadata
+	parameters any
 	errorCode  string
 	result     any
 }
 
-// localLoginAuditorFake stands in for *access.Auditor and keeps the terminal
-// outcome of every local login audit, with the request metadata it received,
-// so tests assert what became durable rather than which calls were made.
-type localLoginAuditorFake struct {
-	pending     map[string]*localLoginAuditRecord
-	terminal    []localLoginAuditRecord
+// operation is the "operation" parameter the event was begun with.
+func (r *securityAuditRecord) operation() string {
+	parameters, _ := r.parameters.(map[string]any)
+	operation, _ := parameters["operation"].(string)
+	return operation
+}
+
+// securityAuditorFake stands in for *access.Auditor. It keeps every security
+// audit event it received, in order, with the request metadata, and the
+// terminal outcome of each, so tests assert what became durable rather than
+// which calls were made.
+type securityAuditorFake struct {
+	events      []*securityAuditRecord
+	pending     map[string]*securityAuditRecord
+	terminal    []securityAuditRecord
 	completeErr error
 }
 
-func (f *localLoginAuditorFake) BeginLocalLogin(_ context.Context, userID model.UserID, clientType model.SessionClientType, metadata model.RequestMetadata) (*model.AuditEvent, error) {
+func (f *securityAuditorFake) begin(record *securityAuditRecord) *model.AuditEvent {
 	if f.pending == nil {
-		f.pending = map[string]*localLoginAuditRecord{}
+		f.pending = map[string]*securityAuditRecord{}
 	}
-	id := model.NewAuditEventID()
-	f.pending[id.String()] = &localLoginAuditRecord{status: model.AuditStatusAttempt, actor: userID, target: userID,
-		clientType: clientType, metadata: metadata}
-	return &model.AuditEvent{ID: id}, nil
+	record.id, record.status = model.NewAuditEventID(), model.AuditStatusAttempt
+	f.pending[record.id.String()] = record
+	f.events = append(f.events, record)
+	return &model.AuditEvent{ID: record.id}
 }
 
-func (f *localLoginAuditorFake) CompleteCriticalAction(_ context.Context, auditID model.AuditEventID, status model.AuditStatus, errorCode string, result any) (*model.AuditEvent, error) {
+func (f *securityAuditorFake) BeginLocalLogin(_ context.Context, userID model.UserID, clientType model.SessionClientType, metadata model.RequestMetadata) (*model.AuditEvent, error) {
+	return f.begin(&securityAuditRecord{actor: userID, target: userID, clientType: clientType, metadata: metadata}), nil
+}
+
+func (f *securityAuditorFake) BeginAccountActionAtScope(_ context.Context, actor access.AccountAuditActor, action model.Action,
+	resource model.Resource, scopeType model.RoleScopeType, scopeID string, metadata model.RequestMetadata, parameters any,
+) (*model.AuditEvent, error) {
+	return f.begin(&securityAuditRecord{actor: actor.UserID, sessionID: actor.SessionID, target: model.UserID(resource.ID),
+		clientType: actor.ClientType, action: action, resource: resource, scopeType: scopeType, scopeID: scopeID,
+		metadata: metadata, parameters: parameters}), nil
+}
+
+func (f *securityAuditorFake) CompleteCriticalAction(_ context.Context, auditID model.AuditEventID, status model.AuditStatus, errorCode string, result any) (*model.AuditEvent, error) {
 	if f.completeErr != nil {
 		return nil, f.completeErr
 	}
@@ -65,11 +96,34 @@ func (f *localLoginAuditorFake) CompleteCriticalAction(_ context.Context, auditI
 	return &model.AuditEvent{ID: auditID, Status: status, ErrorCode: errorCode}, nil
 }
 
-func (f *localLoginAuditorFake) RecordLocalLoginFailure(_ context.Context, target model.UserID,
+func (f *securityAuditorFake) RecordLocalLoginFailure(_ context.Context, target model.UserID,
 	clientType model.SessionClientType, metadata model.RequestMetadata, errorCode string,
 ) error {
-	f.terminal = append(f.terminal, localLoginAuditRecord{status: model.AuditStatusFail, target: target,
-		clientType: clientType, metadata: metadata, errorCode: errorCode})
+	record := securityAuditRecord{id: model.NewAuditEventID(), status: model.AuditStatusFail, target: target,
+		clientType: clientType, metadata: metadata, errorCode: errorCode}
+	f.events = append(f.events, &record)
+	f.terminal = append(f.terminal, record)
+	return nil
+}
+
+// withOperation returns the events begun with operation, in order.
+func (f *securityAuditorFake) withOperation(operation string) []*securityAuditRecord {
+	var matched []*securityAuditRecord
+	for _, record := range f.events {
+		if record.operation() == operation {
+			matched = append(matched, record)
+		}
+	}
+	return matched
+}
+
+// lastFailure returns the last event that ended as a failure, or nil.
+func (f *securityAuditorFake) lastFailure() *securityAuditRecord {
+	for index := len(f.terminal) - 1; index >= 0; index-- {
+		if f.terminal[index].status == model.AuditStatusFail {
+			return &f.terminal[index]
+		}
+	}
 	return nil
 }
 
@@ -81,12 +135,12 @@ func (failingLoginMFAVerifier) verifyLogin(context.Context, string, string, time
 	return "", 0, apperror.New("authentication.mfa.code_invalid")
 }
 
-func newLocalLoginAuditFixture(t *testing.T, mfa authenticationMFAVerifier) (*Service, *authenticationStoreFake, *localLoginAuditorFake, *model.User) {
+func newLocalLoginAuditFixture(t *testing.T, mfa authenticationMFAVerifier) (*Service, *authenticationStoreFake, *securityAuditorFake, *model.User) {
 	t.Helper()
 	persistence := newAuthenticationStoreFake()
 	service := newTestAuthenticationServiceWithPorts(t, persistence, newAuthenticationCacheFake(), mfa,
 		discardPersonalAccessTokenStore{}, model.NewCredentialToken, time.Now)
-	audit := &localLoginAuditorFake{}
+	audit := &securityAuditorFake{}
 	service.securityAudit = audit
 	user, err := service.CreateLocalUser(context.Background(), CreateLocalUserCommand{
 		User: &model.User{Username: "audited-user", Email: "audited-user@example.edu"}, Password: "CorrectHorseBatteryStaple1!",

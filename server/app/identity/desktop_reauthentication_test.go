@@ -40,6 +40,7 @@ func (externalDesktopReauthenticationFake) authenticateExternalReauthentication(
 }
 
 type desktopReauthenticationStoreFake struct {
+	store.BrowserAuthenticationStore
 	context        *store.DesktopReauthenticationContext
 	created        *store.DesktopReauthenticationCreation
 	authentication *store.DesktopReauthenticationAuthentication
@@ -86,47 +87,39 @@ func (s *desktopReauthenticationStoreFake) CompleteDesktopReauthentication(_ con
 	return s.completed, s.completeErr
 }
 
-type desktopReauthenticationAuditorFake struct {
-	rejections []desktopReauthenticationRejection
-}
-
-func (a *desktopReauthenticationAuditorFake) RecordRejectedReauthentication(_ context.Context, _ invocation.Invocation, rejection desktopReauthenticationRejection) error {
-	a.rejections = append(a.rejections, rejection)
-	return nil
-}
-
 type desktopReauthenticationTestHarness struct {
-	service      *desktopReauthenticationService
-	transactions *desktopReauthenticationStoreFake
-	audit        *desktopReauthenticationAuditorFake
-	mutations    *mutationAttemptAuditorFake
-	user         *model.User
+	service       *Service
+	transactions  *desktopReauthenticationStoreFake
+	audit         *securityAuditorFake
+	mutations     *mutationAttemptAuditorFake
+	user          *model.User
+	institutionID model.InstitutionID
 }
 
 func newDesktopReauthenticationTestHarness(t *testing.T) desktopReauthenticationTestHarness {
 	t.Helper()
 	persistence := newAuthenticationStoreFake()
-	authentication := newTestAuthenticationService(t, persistence)
-	user, err := authentication.CreateLocalUser(context.Background(), CreateLocalUserCommand{
+	service := newTestAuthenticationService(t, persistence)
+	user, err := service.CreateLocalUser(context.Background(), CreateLocalUserCommand{
 		User: &model.User{Username: "desktop-reauthentication", Email: "desktop-reauthentication@example.edu", DisplayName: "Ada Candidate"}, Password: desktopReauthenticationTestPassword,
 	})
 	require.NoError(t, err)
 	events := []string{}
 	mutations := &mutationAttemptAuditorFake{events: &events, beginID: model.NewID()}
-	authentication.auditor = mutations
+	service.auditor = mutations
 	transactions := &desktopReauthenticationStoreFake{}
-	audit := &desktopReauthenticationAuditorFake{}
-	service, err := newDesktopReauthenticationService(desktopReauthenticationServiceDependencies{
-		Transactions: transactions, Institutions: desktopAuthorizationInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}},
-		Users: authentication.users, Capabilities: &accessPolicyCapabilitiesFake{snapshot: AccessPolicyCapabilitySnapshot{Providers: []AccessPolicyProviderCapability{
-			{Descriptor: model.ExternalAuthenticationProvider{ID: "campus", DisplayName: "Campus sign-in", Type: "oidc"}},
-		}}},
-		Audit: audit, Attempts: &desktopAuthorizationAttemptLimiterFake{}, Authentication: authentication,
-		Policy: DesktopAuthorizationPolicy{Issuer: "https://proctor.example.edu"}, RecentAuthenticationTTL: 15 * time.Minute,
-		NewCredential: model.NewCredentialToken, Now: time.Now,
-	})
-	require.NoError(t, err)
-	return desktopReauthenticationTestHarness{service: service, transactions: transactions, audit: audit, mutations: mutations, user: user}
+	audit := &securityAuditorFake{}
+	institutionID := model.NewInstitutionID()
+	service.browserAuthentications, service.securityAudit = transactions, audit
+	service.institutions = desktopAuthorizationInstitutionStoreFake{institution: &model.Institution{ID: institutionID}}
+	service.capabilities = &accessPolicyCapabilitiesFake{snapshot: AccessPolicyCapabilitySnapshot{Providers: []AccessPolicyProviderCapability{
+		{Descriptor: model.ExternalAuthenticationProvider{ID: "campus", DisplayName: "Campus sign-in", Type: "oidc"}},
+	}}}
+	service.desktopPolicy = DesktopAuthorizationPolicy{Issuer: "https://proctor.example.edu"}
+	service.recentAuthenticationTTL = 15 * time.Minute
+	require.NoError(t, service.requireDesktopReauthentication())
+	return desktopReauthenticationTestHarness{service: service, transactions: transactions, audit: audit, mutations: mutations, user: user,
+		institutionID: institutionID}
 }
 
 func desktopReauthenticationPrincipal(userID model.UserID, client model.SessionClientType) model.Principal {
@@ -238,9 +231,17 @@ func TestDesktopReauthenticationDeniesAndAuditsAnotherAccount(t *testing.T) {
 		model.NewBrowserAuthenticationTransactionID(), identity, "oidc",
 		&model.ExternalAuthenticationAssertion{ProviderID: "campus", AuthenticatedAt: time.Now().UnixMilli()})
 	require.True(t, apperror.Is(err, "authentication.desktop_reauthentication.denied"), "mismatch error = %v", err)
-	require.Equal(t, []desktopReauthenticationRejection{{actor: harness.user.ID, target: owner,
-		institutionID: harness.audit.rejections[0].institutionID, operation: "desktop_external",
-		errorCode: "authentication.desktop_reauthentication.denied"}}, harness.audit.rejections)
+	require.Len(t, harness.audit.terminal, 1)
+	rejection := harness.audit.terminal[0]
+	require.Equal(t, harness.user.ID, rejection.actor)
+	require.Equal(t, owner, rejection.target)
+	require.Equal(t, model.ActionAuthenticationReauthenticate, rejection.action)
+	require.Equal(t, model.SessionClientWeb, rejection.clientType)
+	require.Equal(t, model.RoleScopeInstitution, rejection.scopeType)
+	require.Equal(t, harness.institutionID.String(), rejection.scopeID)
+	require.Equal(t, "desktop_external", rejection.operation())
+	require.Equal(t, model.AuditStatusFail, rejection.status)
+	require.Equal(t, "authentication.desktop_reauthentication.denied", rejection.errorCode)
 }
 
 func TestDesktopReauthenticationCompletesFromTheSameDesktopSession(t *testing.T) {

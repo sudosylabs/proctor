@@ -68,7 +68,7 @@ func TestAuthenticationServiceRequiresSecurityDependencies(t *testing.T) {
 		service := &Service{users: deps.users, passwords: deps.passwords, sessions: deps.sessions, sessionCredentials: deps.sessionCredentials,
 			desktopRegistrations: authenticationDesktopRegistrationLookupFake{}, personalAccessTokens: deps.personalTokens,
 			accessPolicy: allowAllAuthenticationAccessPolicy(), dpop: dpop, cache: cache, attempts: deps.attempts, hasher: hasher,
-			auditor: deps.audit, securityAudit: &localLoginAuditorFake{}, effects: deps.effects, mfa: deps.mfa,
+			auditor: deps.audit, securityAudit: &securityAuditorFake{}, effects: deps.effects, mfa: deps.mfa,
 			diagnostics: newDiscardLogger(t), newCredential: deps.newCredential, now: time.Now}
 		return service.requireSessionAuthentication()
 	}

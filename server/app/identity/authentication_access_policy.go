@@ -29,6 +29,9 @@ type authenticationAccessPolicy interface {
 	AllowsLocalLogin(context.Context) (bool, error)
 	ExternalProviderAdmission(context.Context, string) (externalProviderAdmissionPolicy, error)
 	AvailableExternalProviders(context.Context, []model.ExternalAuthenticationProvider) ([]model.ExternalAuthenticationProvider, error)
+	// AllowsDesktopAuthorization reports whether Desktop authorization may use
+	// the password, or the provider protocol type and identifier.
+	AllowsDesktopAuthorization(context.Context, string, string) (bool, error)
 }
 
 // roleHolderMFARequirement answers whether the current Access Policy requires the

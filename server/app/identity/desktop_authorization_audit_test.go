@@ -22,18 +22,18 @@ import (
 )
 
 func newAuditedDesktopAuthorizationService(t *testing.T, persistence *desktopAuthorizationStoreFake,
-	auditor desktopAuthorizationAuditor, at time.Time,
-) *desktopAuthorizationService {
+	auditor securityAuditor, at time.Time,
+) *Service {
 	t.Helper()
-	service, err := newDesktopAuthorizationService(desktopAuthorizationServiceDependencies{Transactions: persistence, Institutions: desktopAuthorizationInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, AccessPolicy: desktopAuthorizationAccessPolicyFake{enabled: true}, Capabilities: &accessPolicyCapabilitiesFake{snapshot: AccessPolicyCapabilitySnapshot{}}, Audit: auditor, Attempts: &desktopAuthorizationAttemptLimiterFake{}, SessionPolicy: testDesktopSessionPolicy(), Policy: DesktopAuthorizationPolicy{Issuer: "https://proctor.example.edu"}, NewCredential: model.NewCredentialToken, Now: func() time.Time { return at }, Identity: testDesktopAuthorizationIdentity(t, "https://proctor.example.edu", func() time.Time { return at })})
-	require.NoError(t, err)
+	service := newTestDesktopAuthorizationService(t, persistence, func() time.Time { return at })
+	service.securityAudit = auditor
 	return service
 }
 
 func TestDesktopAuthorizationApproveRejectsForeignPrincipal(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
-	auditor := &recordingDesktopAuthorizationAuditor{}
+	auditor := &securityAuditorFake{}
 	persistence := &desktopAuthorizationStoreFake{contextUserID: model.NewUserID(),
 		issueResult: &store.DesktopAuthorizationCodeIssued{CallbackURL: "http://127.0.0.1:49152/" + model.NewCredentialToken(), CodeExpiresAt: at.Add(time.Minute)}}
 	service := newAuditedDesktopAuthorizationService(t, persistence, auditor, at)
@@ -47,13 +47,17 @@ func TestDesktopAuthorizationApproveRejectsForeignPrincipal(t *testing.T) {
 	require.Nil(t, approval, "foreign approval = %#v, %v", approval, err)
 	require.True(t, apperror.Is(err, "authentication.desktop_authorization.rejected"), "foreign approval = %#v, %v", approval, err)
 	require.Nil(t, persistence.issued, "foreign approval issued")
-	require.Equal(t, 0, auditor.prepareIssue, "foreign approval issued")
+	// The one issue event is the refused approval by the foreign account.
+	issues := auditor.withOperation("issue_code")
+	require.Len(t, issues, 1, "foreign approval issued")
+	require.Equal(t, foreign.UserID, issues[0].actor, "foreign approval issued")
+	require.Equal(t, model.AuditStatusFail, issues[0].status, "foreign approval issued")
 }
 
 func TestDesktopAuthorizationApproveAndExchangeAuditTheApprovingAccount(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
-	auditor := &recordingDesktopAuthorizationAuditor{}
+	auditor := &securityAuditorFake{}
 	account := model.NewUserID()
 	persistence := &desktopAuthorizationStoreFake{contextUserID: account, exchangeUserID: account,
 		issueResult: &store.DesktopAuthorizationCodeIssued{CallbackURL: "http://127.0.0.1:49152/" + model.NewCredentialToken(), CodeExpiresAt: at.Add(time.Minute)},
@@ -64,27 +68,31 @@ func TestDesktopAuthorizationApproveAndExchangeAuditTheApprovingAccount(t *testi
 	_, err := service.ApproveDesktopAuthorization(context.Background(), invocation.New(model.Principal{}, browser),
 		ApproveDesktopAuthorizationCommand{Binding: model.NewCredentialToken(), State: model.NewCredentialToken()})
 	require.NoError(t, err)
-	require.Equal(t, account, auditor.issueActor, "approval audit actor")
-	require.Equal(t, browser, auditor.issueRequest, "approval audit actor")
+	issues := auditor.withOperation("issue_code")
+	require.Len(t, issues, 1, "approval audit actor")
+	require.Equal(t, account, issues[0].actor, "approval audit actor")
+	require.Equal(t, browser, issues[0].metadata, "approval audit actor")
 	exchangeCommand := testDesktopAuthorizationExchangeCommand(
 		t, service, at, model.NewCredentialToken(), model.NewCredentialToken(), model.NewCredentialToken(), "",
 	)
 	desktop := model.RequestMetadata{RequestID: "exchange-request", IPAddress: "192.0.2.31", UserAgent: "desktop"}
 	_, err = service.ExchangeDesktopAuthorization(context.Background(), invocation.New(model.Principal{}, desktop), exchangeCommand)
 	require.True(t, apperror.Is(err, "authentication.desktop_authorization.rejected"), "exchange err = %v", err)
-	require.Equal(t, account, auditor.exchangeActor, "exchange audit actor")
-	require.Equal(t, desktop, auditor.exchangeRequest, "exchange audit actor")
+	exchanges := auditor.withOperation("exchange")
+	require.Len(t, exchanges, 1, "exchange audit actor")
+	require.Equal(t, account, exchanges[0].actor, "exchange audit actor")
+	require.Equal(t, desktop, exchanges[0].metadata, "exchange audit actor")
 }
 
 func TestDesktopAuthorizationAuditAdapterRecordsActorSessionAndRequest(t *testing.T) {
 	t.Parallel()
 	audits := &systemAuditStoreFake{}
-	service, err := access.NewAuditor(access.AuditorDependencies{Audits: audits, Institutions: loginAuditInstitutionStore{id: model.NewInstitutionID()}, NodeID: "node-desktop"})
+	auditor, err := access.NewAuditor(access.AuditorDependencies{Audits: audits, Institutions: loginAuditInstitutionStore{id: model.NewInstitutionID()}, NodeID: "node-desktop"})
 	require.NoError(t, err)
-	adapter := desktopAuthorizationAuditAdapter{audit: service}
+	service := &Service{securityAudit: auditor}
 	account, sessionID, institutionID := model.NewUserID(), model.NewSessionID(), model.NewInstitutionID()
 	metadata := model.RequestMetadata{RequestID: "request-desktop", IPAddress: "192.0.2.40", UserAgent: "agent"}
-	issue, err := adapter.PrepareIssue(context.Background(),
+	issue, err := service.beginDesktopIssueAudit(context.Background(),
 		invocation.New(model.Principal{UserID: account, SessionID: sessionID}, metadata), account, institutionID)
 	require.NoError(t, err)
 	require.Equal(t, account, issue.ActorID)
@@ -95,7 +103,7 @@ func TestDesktopAuthorizationAuditAdapterRecordsActorSessionAndRequest(t *testin
 	require.Equal(t, string(model.SessionClientWeb), issue.ClientType)
 	require.Equal(t, institutionID.String(), issue.ScopeID)
 	require.Equal(t, model.AuditStatusAttempt, issue.Status)
-	exchange, err := adapter.PrepareExchange(context.Background(), invocation.New(model.Principal{}, metadata), account, institutionID)
+	exchange, err := service.beginDesktopExchangeAudit(context.Background(), invocation.New(model.Principal{}, metadata), account, institutionID)
 	require.NoError(t, err)
 	require.Equal(t, account, exchange.ActorID)
 	require.Empty(t, exchange.SessionID)

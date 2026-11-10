@@ -583,7 +583,7 @@ func newTestAuthenticationServiceWithEffects(
 		accessPolicy: allowAllAuthenticationAccessPolicy(), dpop: testAuthenticationDPoP(t, cache), cache: cache,
 		attempts: mustAuthenticationAttemptAccounting(t, cache), hasher: hasher,
 		auditor:       &mutationAttemptAuditorFake{events: &[]string{}, beginID: model.NewID()},
-		securityAudit: &localLoginAuditorFake{}, effects: effects, mfa: mfa, diagnostics: newDiscardLogger(t),
+		securityAudit: &securityAuditorFake{}, effects: effects, mfa: mfa, diagnostics: newDiscardLogger(t),
 		sessionPolicy: SessionPolicy{
 			AccessTTL:              time.Hour,
 			RefreshTTL:             24 * time.Hour,

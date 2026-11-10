@@ -72,6 +72,8 @@ type authenticationAccessPolicyFake struct {
 	providers                   map[string]bool
 	providerModes               map[string]model.ProviderAdmissionMode
 	invitationAdmissionDisabled bool
+	// desktop answers every Desktop authorization method.
+	desktop bool
 	// roleHolderMFA lists the Users the policy requires to use two-step
 	// verification.
 	roleHolderMFA map[model.UserID]bool
@@ -97,6 +99,10 @@ func allowAllAuthenticationAccessPolicy() authenticationAccessPolicy {
 
 func (p authenticationAccessPolicyFake) AllowsLocalLogin(context.Context) (bool, error) {
 	return p.local, p.err
+}
+
+func (p authenticationAccessPolicyFake) AllowsDesktopAuthorization(context.Context, string, string) (bool, error) {
+	return p.desktop, p.err
 }
 
 func (p authenticationAccessPolicyFake) ExternalProviderAdmission(_ context.Context, providerID string) (externalProviderAdmissionPolicy, error) {

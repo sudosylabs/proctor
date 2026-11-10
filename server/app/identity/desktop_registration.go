@@ -11,9 +11,7 @@ import (
 	"context"
 	"errors"
 	"strings"
-	"time"
 
-	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -26,58 +24,49 @@ type RevokeDesktopRegistrationCommand struct {
 	RegistrationID model.DesktopRegistrationID
 }
 
-// desktopRegistrationServiceDependencies are the collaborators of desktopRegistrationService;
-// newDesktopRegistrationService validates them once and desktopRegistrationService keeps them in deps.
-type desktopRegistrationServiceDependencies struct {
-	Registrations           store.DesktopRegistrationStore
-	Audit                   access.MutationAuditor
-	Effects                 SecurityEffects
-	RecentAuthenticationTTL time.Duration
-	Now                     func() time.Time
-}
-
-type desktopRegistrationService struct {
-	deps desktopRegistrationServiceDependencies
-}
-
-func newDesktopRegistrationService(deps desktopRegistrationServiceDependencies) (*desktopRegistrationService, error) {
-	if deps.Registrations == nil || deps.Audit == nil || deps.Effects == nil || deps.RecentAuthenticationTTL <= 0 || deps.Now == nil {
-		return nil, errors.New("Desktop Registration dependencies are invalid")
+// requireDesktopRegistration refuses a Service whose Desktop Registration
+// collaborators are incomplete. New calls it once, with the account services.
+func (s *Service) requireDesktopRegistration() error {
+	if s.desktopRegistrations == nil || s.auditor == nil || s.effects == nil || s.recentAuthenticationTTL <= 0 || s.now == nil {
+		return errors.New("Desktop Registration dependencies are invalid")
 	}
-	return &desktopRegistrationService{deps: deps}, nil
+	return nil
 }
 
-func (s *desktopRegistrationService) ListDesktopRegistrations(
+// ListDesktopRegistrations lists the calling User's Desktop Registrations.
+func (s *Service) ListDesktopRegistrations(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	_ ListDesktopRegistrationsQuery,
 ) ([]*model.DesktopRegistration, error) {
 	principal := invocation.Principal()
-	if err := requireInteractiveSession(principal, false, s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
+	if err := requireInteractiveSession(principal, false, s.now(), s.recentAuthenticationTTL); err != nil {
 		return nil, err
 	}
-	registrations, err := s.deps.Registrations.ListByUser(ctx, principal.UserID)
+	registrations, err := s.desktopRegistrations.ListByUser(ctx, principal.UserID)
 	if err != nil {
 		return nil, apperror.New("desktop_registration.unavailable").Wrap(err)
 	}
 	return registrations, nil
 }
 
-func (s *desktopRegistrationService) RevokeDesktopRegistration(
+// RevokeDesktopRegistration revokes one of the calling User's Desktop
+// Registrations and the Sessions it holds, from a recent interactive Session.
+func (s *Service) RevokeDesktopRegistration(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	command RevokeDesktopRegistrationCommand,
 ) error {
 	principal := invocation.Principal()
-	at := model.TimeUTC(s.deps.Now())
-	if err := requireInteractiveSession(principal, true, at, s.deps.RecentAuthenticationTTL); err != nil {
+	at := model.TimeUTC(s.now())
+	if err := requireInteractiveSession(principal, true, at, s.recentAuthenticationTTL); err != nil {
 		return err
 	}
 	registrationID, err := model.ParseDesktopRegistrationID(strings.TrimSpace(command.RegistrationID.String()))
 	if err != nil {
 		return apperror.New("request.invalid").WithField("field", "desktop_registration_id")
 	}
-	auditID, err := s.deps.Audit.Begin(
+	auditID, err := s.auditor.Begin(
 		ctx, invocation, model.ActionDesktopRegistrationRevoke,
 		model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 		"revoke", map[string]any{"registration_id": registrationID.String()}, nil,
@@ -85,19 +74,19 @@ func (s *desktopRegistrationService) RevokeDesktopRegistration(
 	if err != nil {
 		return err
 	}
-	result, err := s.deps.Registrations.Revoke(ctx, &store.DesktopRegistrationRevocation{
+	result, err := s.desktopRegistrations.Revoke(ctx, &store.DesktopRegistrationRevocation{
 		RegistrationID: registrationID, UserID: principal.UserID,
 		RevokedAt: at, AuditEventID: auditID, AuditAt: at,
 	})
 	if err != nil {
 		failure := desktopRegistrationStoreErrors.Translate(err)
-		if auditErr := s.deps.Audit.Fail(ctx, auditID, apperror.CodeOf(failure, "desktop_registration.unavailable")); auditErr != nil {
+		if auditErr := s.auditor.Fail(ctx, auditID, apperror.CodeOf(failure, "desktop_registration.unavailable")); auditErr != nil {
 			return apperror.New("audit.unavailable").Wrap(auditErr)
 		}
 		return failure
 	}
 	if !result.AlreadyRevoked && len(result.Sessions) > 0 {
-		s.deps.Effects.SessionsRevoked(
+		s.effects.SessionsRevoked(
 			ctx, principal.UserID, sessionIDs(result.Sessions), result.TokenHashes,
 		)
 	}

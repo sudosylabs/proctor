@@ -122,8 +122,8 @@ func TestDesktopAuthorizationRefusesSingleFactorProofOfRoleHolder(t *testing.T) 
 	at := time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC)
 	userID := model.NewUserID()
 	persistence := &desktopAuthorizationStoreFake{contextUserID: userID}
-	service, err := newDesktopAuthorizationService(desktopAuthorizationServiceDependencies{Transactions: persistence, Institutions: desktopAuthorizationInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, AccessPolicy: desktopAuthorizationAccessPolicyFake{enabled: true, roleHolderMFA: map[model.UserID]bool{userID: true}}, Capabilities: &accessPolicyCapabilitiesFake{}, Audit: desktopAuthorizationAuditorFake{}, Attempts: &desktopAuthorizationAttemptLimiterFake{}, SessionPolicy: testDesktopSessionPolicy(), Policy: DesktopAuthorizationPolicy{Issuer: "https://proctor.example.edu"}, NewCredential: model.NewCredentialToken, Now: func() time.Time { return at }, Identity: testDesktopAuthorizationIdentity(t, "https://proctor.example.edu", func() time.Time { return at })})
-	require.NoError(t, err)
+	service := newTestDesktopAuthorizationService(t, persistence, func() time.Time { return at })
+	service.accessPolicy = authenticationAccessPolicyFake{local: true, desktop: true, roleHolderMFA: map[model.UserID]bool{userID: true}}
 	principal := model.Principal{UserID: userID, SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: at}
@@ -153,10 +153,10 @@ func TestDesktopExchangeCarriesRoleHolderMFARequirementToTheStore(t *testing.T) 
 	at := time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC)
 	userID := model.NewUserID()
 	persistence := &desktopAuthorizationStoreFake{exchangeUserID: userID, exchangeErr: store.ErrMFAEnrollmentRequired}
-	service, err := newDesktopAuthorizationService(desktopAuthorizationServiceDependencies{Transactions: persistence, Institutions: desktopAuthorizationInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, AccessPolicy: desktopAuthorizationAccessPolicyFake{enabled: true, roleHolderMFA: map[model.UserID]bool{userID: true}}, Capabilities: &accessPolicyCapabilitiesFake{}, Audit: desktopAuthorizationAuditorFake{}, Attempts: &desktopAuthorizationAttemptLimiterFake{}, SessionPolicy: testDesktopSessionPolicy(), Policy: DesktopAuthorizationPolicy{Issuer: "https://proctor.example.edu"}, NewCredential: model.NewCredentialToken, Now: func() time.Time { return at }, Identity: testDesktopAuthorizationIdentity(t, "https://proctor.example.edu", func() time.Time { return at })})
-	require.NoError(t, err)
+	service := newTestDesktopAuthorizationService(t, persistence, func() time.Time { return at })
+	service.accessPolicy = authenticationAccessPolicyFake{local: true, desktop: true, roleHolderMFA: map[model.UserID]bool{userID: true}}
 	command := testDesktopAuthorizationExchangeCommand(t, service, at, model.NewCredentialToken(), model.NewCredentialToken(), model.NewCredentialToken(), "")
-	_, err = service.ExchangeDesktopAuthorization(context.Background(), invocation.Invocation{}, command)
+	_, err := service.ExchangeDesktopAuthorization(context.Background(), invocation.Invocation{}, command)
 	require.True(t, apperror.Is(err, "authentication.mfa.enrollment_required"), "err=%v", err)
 	require.NotNil(t, persistence.exchanged)
 	require.True(t, persistence.exchanged.MFARequiredByPolicy)

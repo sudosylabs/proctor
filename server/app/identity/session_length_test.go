@@ -77,8 +77,8 @@ func TestDesktopExchangeUsesThePolicySessionLengths(t *testing.T) {
 	at := time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC)
 	persistence := &desktopAuthorizationStoreFake{exchangeErr: store.ErrAuthenticationGenerationChanged}
 	shortened := sessionLifetimes{Idle: 20 * time.Minute, Absolute: 40 * time.Minute}
-	service, err := newDesktopAuthorizationService(desktopAuthorizationServiceDependencies{Transactions: persistence, Institutions: desktopAuthorizationInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, AccessPolicy: desktopAuthorizationAccessPolicyFake{enabled: true, lifetimes: &shortened}, Capabilities: &accessPolicyCapabilitiesFake{}, Audit: desktopAuthorizationAuditorFake{}, Attempts: &desktopAuthorizationAttemptLimiterFake{}, SessionPolicy: testDesktopSessionPolicy(), Policy: DesktopAuthorizationPolicy{Issuer: "https://proctor.example.edu"}, NewCredential: model.NewCredentialToken, Now: func() time.Time { return at }, Identity: testDesktopAuthorizationIdentity(t, "https://proctor.example.edu", func() time.Time { return at })})
-	require.NoError(t, err)
+	service := newTestDesktopAuthorizationService(t, persistence, func() time.Time { return at })
+	service.accessPolicy = authenticationAccessPolicyFake{local: true, desktop: true, lifetimes: &shortened}
 	command := testDesktopAuthorizationExchangeCommand(t, service, at, model.NewCredentialToken(), model.NewCredentialToken(), model.NewCredentialToken(), "")
 	_, _ = service.ExchangeDesktopAuthorization(context.Background(), invocation.Invocation{}, command)
 	require.NotNil(t, persistence.exchanged)

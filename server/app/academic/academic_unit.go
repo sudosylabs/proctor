@@ -50,7 +50,10 @@ func (s *Service) GetAcademicUnit(
 	}
 	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: id.String()}
 	if err := s.authorizer.Authorize(
-		ctx, invocation, model.ActionAcademicUnitView, resource,
+		ctx,
+		invocation,
+		model.ActionAcademicUnitView,
+		resource,
 	); err != nil {
 		return nil, err
 	}
@@ -72,14 +75,19 @@ func (s *Service) ListAcademicUnits(
 	if parentID != "" && !parentID.IsValid() {
 		return paging.Page[*model.AcademicUnit]{}, apperror.New("request.invalid").WithField("field", "parent_id")
 	}
+
 	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
 	if err != nil {
 		return paging.Page[*model.AcademicUnit]{}, err
 	}
+
 	if parentID != "" {
 		resource := model.Resource{Type: model.ResourceAcademicUnit, ID: parentID.String()}
 		if err = s.authorizer.Authorize(
-			ctx, invocation, model.ActionAcademicUnitView, resource,
+			ctx,
+			invocation,
+			model.ActionAcademicUnitView,
+			resource,
 		); err != nil {
 			return paging.Page[*model.AcademicUnit]{}, err
 		}
@@ -88,20 +96,27 @@ func (s *Service) ListAcademicUnits(
 	var institution model.Resource
 	if parentID == "" {
 		institution, err = s.authorizer.AuthorizeInstitution(
-			ctx, invocation, model.ActionAcademicUnitView,
+			ctx,
+			invocation,
+			model.ActionAcademicUnitView,
 		)
 	} else {
 		institution, err = s.authorizer.InstitutionResource(ctx)
 	}
+
 	if err != nil {
 		return paging.Page[*model.AcademicUnit]{}, err
 	}
+
 	units, err := s.academicUnits.ListChildren(ctx, model.InstitutionID(institution.ID), parentID, store.AcademicNameListOptions{
-		AfterName: query.AfterName, AfterID: query.AfterID, Limit: probe,
+		AfterName: query.AfterName,
+		AfterID:   query.AfterID,
+		Limit:     probe,
 	})
 	if err != nil {
 		return paging.Page[*model.AcademicUnit]{}, academicUnitStoreErrors.Translate(err)
 	}
+
 	return paging.New(units, limit), nil
 }
 
@@ -116,18 +131,26 @@ func (s *Service) SearchAcademicUnits(
 	if err != nil {
 		return paging.Page[*model.AcademicUnit]{}, err
 	}
+
 	institution, err := s.authorizer.AuthorizeInstitution(
-		ctx, invocation, model.ActionAcademicUnitView,
+		ctx,
+		invocation,
+		model.ActionAcademicUnitView,
 	)
 	if err != nil {
 		return paging.Page[*model.AcademicUnit]{}, err
 	}
+
 	units, err := s.academicUnits.Search(ctx, model.InstitutionID(institution.ID), store.AcademicNameListOptions{
-		Term: strings.TrimSpace(query.Query), AfterName: query.AfterName, AfterID: query.AfterID, Limit: probe,
+		Term:      strings.TrimSpace(query.Query),
+		AfterName: query.AfterName,
+		AfterID:   query.AfterID,
+		Limit:     probe,
 	})
 	if err != nil {
 		return paging.Page[*model.AcademicUnit]{}, academicUnitStoreErrors.Translate(err)
 	}
+
 	return paging.New(units, limit), nil
 }
 

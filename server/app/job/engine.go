@@ -170,6 +170,7 @@ func (r *Engine) Start(ctx context.Context) error {
 	if r.started {
 		return errors.New("job engine is already started")
 	}
+
 	runCtx, cancel := context.WithCancel(ctx)
 	r.cancel = cancel
 	r.started = true
@@ -179,11 +180,13 @@ func (r *Engine) Start(ctx context.Context) error {
 			cancel()
 			return err
 		}
+
 		for range descriptor.Concurrency {
 			r.wg.Add(1)
 			go r.worker(runCtx, descriptor)
 		}
 	}
+
 	for _, recurrence := range r.deps.Recurrences {
 		r.wg.Add(1)
 		go func(value Recurrence) {
@@ -191,6 +194,7 @@ func (r *Engine) Start(ctx context.Context) error {
 			runRecurrenceProposal(runCtx, value, r.deps.Diagnostics, r.deps.Clock, r.deps.Policy.ProposalRetryDelay, r.Wake, r.deps.Recorder)
 		}(recurrence)
 	}
+
 	for _, task := range r.deps.PeriodicTasks {
 		r.wg.Add(1)
 		go func(value PeriodicTask) {
@@ -198,6 +202,7 @@ func (r *Engine) Start(ctx context.Context) error {
 			runPeriodicTask(runCtx, value, r.deps.Diagnostics, r.deps.Clock, r.deps.Recorder)
 		}(task)
 	}
+
 	return nil
 }
 
@@ -251,14 +256,21 @@ func (r *Engine) worker(ctx context.Context, descriptor Descriptor) {
 		case <-r.wake:
 		case <-timer.C:
 		}
+
 		token, err := model.NewJobClaimToken()
 		if err != nil {
 			r.deps.Diagnostics.ErrorContext(ctx, "generate job claim token", logging.Err(err))
 			resetTimer(timer, r.deps.Policy.PollInterval)
 			continue
 		}
+
 		startedClaim := time.Now()
-		claim, err := r.deps.Store.ClaimNext(ctx, &store.JobClaimRequest{Types: []model.JobType{descriptor.Type}, NodeID: r.deps.NodeID, ClaimToken: token, LeaseDuration: descriptor.LeaseDuration})
+		claim, err := r.deps.Store.ClaimNext(ctx, &store.JobClaimRequest{
+			Types:         []model.JobType{descriptor.Type},
+			NodeID:        r.deps.NodeID,
+			ClaimToken:    token,
+			LeaseDuration: descriptor.LeaseDuration,
+		})
 		claimDuration := time.Since(startedClaim)
 		if err != nil {
 			result := "error"
@@ -267,24 +279,36 @@ func (r *Engine) worker(ctx context.Context, descriptor Descriptor) {
 			} else if errors.Is(err, context.Canceled) {
 				result = "canceled"
 			}
+
 			r.record(Activity{Kind: "job", Name: string(descriptor.Type), Operation: "claim", Outcome: result, Duration: claimDuration})
 			if !store.IsNotFound(err) && !errors.Is(err, context.Canceled) {
 				r.deps.Diagnostics.ErrorContext(ctx, "claim durable job", logging.Err(err))
 			}
+
 			resetTimer(timer, r.deps.Policy.PollInterval)
 			continue
 		}
+
 		queueLatency := time.Since(claim.Job.AvailableAt)
 		if queueLatency < 0 {
 			queueLatency = 0
 		}
-		r.record(Activity{Kind: "job", Name: string(descriptor.Type), Operation: "claim", Outcome: "success", Duration: claimDuration, QueueLatency: queueLatency})
+
+		r.record(Activity{
+			Kind:         "job",
+			Name:         string(descriptor.Type),
+			Operation:    "claim",
+			Outcome:      "success",
+			Duration:     claimDuration,
+			QueueLatency: queueLatency,
+		})
 		resolved, err := r.registry.Descriptor(claim.Job.Type)
 		if err != nil {
 			r.completeUnsupported(ctx, descriptor, claim, err)
 		} else {
 			r.execute(ctx, resolved, claim)
 		}
+
 		resetTimer(timer, 0)
 	}
 }
@@ -322,6 +346,7 @@ func (r *Engine) execute(parent context.Context, descriptor Descriptor, claim *s
 			r.deps.Recorder.Finished(descriptor.Type, metricOutcome, time.Since(startedAt))
 		}()
 	}
+
 	handlerCtx, cancelHandler := context.WithTimeout(parent, descriptor.Timeout)
 	defer cancelHandler()
 	heartbeatDone := make(chan struct{})
@@ -329,8 +354,16 @@ func (r *Engine) execute(parent context.Context, descriptor Descriptor, claim *s
 	claimLost := make(chan struct{}, 1)
 	go func() {
 		defer close(heartbeatStopped)
-		r.heartbeatClaim(claimHeartbeat{parent: parent, handlerCtx: handlerCtx, cancelHandler: cancelHandler, descriptor: descriptor,
-			claim: claim, startedAt: startedAt, done: heartbeatDone, claimLost: claimLost})
+		r.heartbeatClaim(claimHeartbeat{
+			parent:        parent,
+			handlerCtx:    handlerCtx,
+			cancelHandler: cancelHandler,
+			descriptor:    descriptor,
+			claim:         claim,
+			startedAt:     startedAt,
+			done:          heartbeatDone,
+			claimLost:     claimLost,
+		})
 	}()
 	execution := r.newClaimExecution(descriptor, claim)
 	outcome := runHandler(handlerCtx, descriptor.Handler, execution)
@@ -343,15 +376,18 @@ func (r *Engine) execute(parent context.Context, descriptor Descriptor, claim *s
 		return
 	default:
 	}
+
 	if errors.Is(parent.Err(), context.Canceled) {
 		metricOutcome = ExecutionShutdown
 		return
 	}
+
 	// A handler that returned success has committed its work, even when it
 	// finished as its timeout elapsed; only an unfinished outcome is a timeout.
 	if outcome.Kind != OutcomeSucceeded && errors.Is(handlerCtx.Err(), context.DeadlineExceeded) {
 		outcome = RetryableFailure("job.timeout", handlerCtx.Err())
 	}
+
 	metricOutcome = executionOutcomeFromHandler(outcome.Kind)
 	r.complete(parent, descriptor, claim, outcome)
 }
@@ -386,43 +422,84 @@ func (r *Engine) heartbeatClaim(h claimHeartbeat) {
 			return
 		case <-ticker.C:
 			heartbeatStarted := time.Now()
-			if _, err := r.deps.Store.Heartbeat(h.handlerCtx, &store.JobHeartbeat{AttemptID: claim.Attempt.ID, ClaimToken: claim.Attempt.ClaimToken, LeaseDuration: descriptor.LeaseDuration}); err != nil {
-				r.record(Activity{Kind: "job", Name: string(descriptor.Type), Operation: "heartbeat", Outcome: "error", Duration: time.Since(heartbeatStarted)})
+			if _, err := r.deps.Store.Heartbeat(h.handlerCtx, &store.JobHeartbeat{
+				AttemptID:     claim.Attempt.ID,
+				ClaimToken:    claim.Attempt.ClaimToken,
+				LeaseDuration: descriptor.LeaseDuration,
+			}); err != nil {
+				r.record(Activity{
+					Kind:      "job",
+					Name:      string(descriptor.Type),
+					Operation: "heartbeat",
+					Outcome:   "error",
+					Duration:  time.Since(heartbeatStarted),
+				})
 				r.deps.Diagnostics.ErrorContext(h.parent, "heartbeat durable job", logging.Err(err))
 				if !heartbeatClaimLost(err) && time.Since(renewedAt)+descriptor.HeartbeatInterval < descriptor.LeaseDuration {
 					continue
 				}
+
 				select {
 				case h.claimLost <- struct{}{}:
 				default:
 				}
+
 				h.cancelHandler()
 				return
 			}
+
 			renewedAt = heartbeatStarted
-			r.record(Activity{Kind: "job", Name: string(descriptor.Type), Operation: "heartbeat", Outcome: "success", Duration: time.Since(heartbeatStarted)})
+			r.record(Activity{
+				Kind:      "job",
+				Name:      string(descriptor.Type),
+				Operation: "heartbeat",
+				Outcome:   "success",
+				Duration:  time.Since(heartbeatStarted),
+			})
 			if descriptor.Cancelable {
 				cancellationStarted := time.Now()
 				requested, err := r.deps.Store.CancellationRequested(h.handlerCtx, claim.Attempt.ID, claim.Attempt.ClaimToken)
 				if err != nil {
-					r.record(Activity{Kind: "job", Name: string(descriptor.Type), Operation: "cancellation_check", Outcome: "error", Duration: time.Since(cancellationStarted)})
+					r.record(Activity{
+						Kind:      "job",
+						Name:      string(descriptor.Type),
+						Operation: "cancellation_check",
+						Outcome:   "error",
+						Duration:  time.Since(cancellationStarted),
+					})
 					r.deps.Diagnostics.ErrorContext(h.parent, "observe durable job cancellation", logging.Err(err))
 					if !heartbeatClaimLost(err) && time.Since(renewedAt)+descriptor.HeartbeatInterval < descriptor.LeaseDuration {
 						continue
 					}
+
 					select {
 					case h.claimLost <- struct{}{}:
 					default:
 					}
+
 					h.cancelHandler()
 					return
 				}
+
 				if requested {
-					r.record(Activity{Kind: "job", Name: string(descriptor.Type), Operation: "cancellation_check", Outcome: "requested", Duration: time.Since(cancellationStarted)})
+					r.record(Activity{
+						Kind:      "job",
+						Name:      string(descriptor.Type),
+						Operation: "cancellation_check",
+						Outcome:   "requested",
+						Duration:  time.Since(cancellationStarted),
+					})
 					h.cancelHandler()
 					return
 				}
-				r.record(Activity{Kind: "job", Name: string(descriptor.Type), Operation: "cancellation_check", Outcome: "clear", Duration: time.Since(cancellationStarted)})
+
+				r.record(Activity{
+					Kind:      "job",
+					Name:      string(descriptor.Type),
+					Operation: "cancellation_check",
+					Outcome:   "clear",
+					Duration:  time.Since(cancellationStarted),
+				})
 			}
 		}
 	}
@@ -433,29 +510,62 @@ func (r *Engine) newClaimExecution(descriptor Descriptor, claim *store.JobClaim)
 	execution := NewExecution(claim.Job, claim.Attempt, nil, nil)
 	execution.reserveWork = func(ctx context.Context, units, limit int) (bool, error) {
 		started := time.Now()
-		result, err := r.deps.Store.ReserveWork(ctx, &store.JobWorkReservation{AttemptID: claim.Attempt.ID, ClaimToken: claim.Attempt.ClaimToken, Units: units, Limit: limit})
+		result, err := r.deps.Store.ReserveWork(ctx, &store.JobWorkReservation{
+			AttemptID:  claim.Attempt.ID,
+			ClaimToken: claim.Attempt.ClaimToken,
+			Units:      units,
+			Limit:      limit,
+		})
 		activityOutcome := "error"
 		if err == nil && result.Reserved {
 			activityOutcome = "reserved"
 		} else if err == nil {
 			activityOutcome = "limit"
 		}
-		r.record(Activity{Kind: "job", Name: string(descriptor.Type), Operation: "reserve_work", Outcome: activityOutcome, Duration: time.Since(started)})
+
+		r.record(Activity{
+			Kind:      "job",
+			Name:      string(descriptor.Type),
+			Operation: "reserve_work",
+			Outcome:   activityOutcome,
+			Duration:  time.Since(started),
+		})
 		if err != nil {
 			return false, err
 		}
+
 		return result.Reserved, nil
 	}
 	execution.checkpoint = func(ctx context.Context, value CheckpointValue) error {
-		if !descriptor.Checkpoints || len(value.Document) == 0 || len(value.Document) > model.JobMaximumDocumentBytes || !json.Valid(value.Document) {
+		if !descriptor.Checkpoints ||
+			len(value.Document) == 0 ||
+			len(value.Document) > model.JobMaximumDocumentBytes ||
+			!json.Valid(value.Document) {
 			return errors.New("job type does not declare checkpoints")
 		}
-		if value.Progress != nil && (value.Progress.Current < 0 || value.Progress.Total <= 0 || value.Progress.Current > value.Progress.Total || !descriptor.SupportsProgressStage(value.Progress.Stage)) {
+
+		if value.Progress != nil &&
+			(value.Progress.Current < 0 ||
+				value.Progress.Total <= 0 ||
+				value.Progress.Current > value.Progress.Total ||
+				!descriptor.SupportsProgressStage(value.Progress.Stage)) {
 			return errors.New("job progress stage is not declared")
 		}
+
 		started := time.Now()
-		_, err := r.deps.Store.Checkpoint(ctx, &store.JobCheckpoint{AttemptID: claim.Attempt.ID, ClaimToken: claim.Attempt.ClaimToken, Progress: value.Progress, Checkpoint: value.Document})
-		r.record(Activity{Kind: "job", Name: string(descriptor.Type), Operation: "checkpoint", Outcome: simpleJobOutcome(err), Duration: time.Since(started)})
+		_, err := r.deps.Store.Checkpoint(ctx, &store.JobCheckpoint{
+			AttemptID:  claim.Attempt.ID,
+			ClaimToken: claim.Attempt.ClaimToken,
+			Progress:   value.Progress,
+			Checkpoint: value.Document,
+		})
+		r.record(Activity{
+			Kind:      "job",
+			Name:      string(descriptor.Type),
+			Operation: "checkpoint",
+			Outcome:   simpleJobOutcome(err),
+			Duration:  time.Since(started),
+		})
 		return err
 	}
 	return execution
@@ -478,11 +588,20 @@ func runHandler(ctx context.Context, handler Handler, execution Execution) (outc
 }
 
 func (r *Engine) complete(ctx context.Context, descriptor Descriptor, claim *store.JobClaim, outcome Outcome) {
-	failureWithoutCode := (outcome.Kind == OutcomeRetryableFailure || outcome.Kind == OutcomeRelinquished || outcome.Kind == OutcomePermanentFailure) && outcome.PublicErrorCode == ""
+	failureWithoutCode := (outcome.Kind == OutcomeRetryableFailure ||
+		outcome.Kind == OutcomeRelinquished ||
+		outcome.Kind == OutcomePermanentFailure) &&
+		outcome.PublicErrorCode == ""
 	if failureWithoutCode || !descriptor.SupportsPublicErrorCode(outcome.PublicErrorCode) {
 		outcome = PermanentFailure("job.outcome.invalid", errors.New("handler returned an undeclared public error code"))
 	}
-	completion := &store.JobCompletion{AttemptID: claim.Attempt.ID, ClaimToken: claim.Attempt.ClaimToken, Result: outcome.Result, PublicErrorCode: outcome.PublicErrorCode}
+
+	completion := &store.JobCompletion{
+		AttemptID:       claim.Attempt.ID,
+		ClaimToken:      claim.Attempt.ClaimToken,
+		Result:          outcome.Result,
+		PublicErrorCode: outcome.PublicErrorCode,
+	}
 	switch outcome.Kind {
 	case OutcomeSucceeded:
 		if outcome.Err != nil || len(outcome.Result) == 0 {
@@ -505,9 +624,16 @@ func (r *Engine) complete(ctx context.Context, descriptor Descriptor, claim *sto
 		completion.Kind = store.JobCompletionPermanentFailure
 		completion.PublicErrorCode = "job.outcome.invalid"
 	}
+
 	started := time.Now()
 	_, err := r.deps.Store.Complete(ctx, completion)
-	r.record(Activity{Kind: "job", Name: string(descriptor.Type), Operation: "complete", Outcome: simpleJobOutcome(err), Duration: time.Since(started)})
+	r.record(Activity{
+		Kind:      "job",
+		Name:      string(descriptor.Type),
+		Operation: "complete",
+		Outcome:   simpleJobOutcome(err),
+		Duration:  time.Since(started),
+	})
 	if err != nil && !errors.Is(err, context.Canceled) {
 		r.deps.Diagnostics.ErrorContext(ctx, "complete durable job", logging.Err(err))
 	}

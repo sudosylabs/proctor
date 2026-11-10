@@ -86,17 +86,22 @@ func (s *Service) ReplaceOwnUserSettings(
 	if !command.ExpectedRevision.IsValid() {
 		return UserSettingsReplacementResult{}, apperror.New("request.invalid").WithField("field", "expected_revision")
 	}
+
 	diagnostics := validateUserSettingsSource(command.Source)
 	if len(diagnostics) != 0 {
 		public := make([]UserSettingsDiagnostic, len(diagnostics))
 		for index, diagnostic := range diagnostics {
 			public[index] = UserSettingsDiagnostic{
-				Code: diagnostic.Code, Line: diagnostic.Line, Column: diagnostic.Column,
+				Code:   diagnostic.Code,
+				Line:   diagnostic.Line,
+				Column: diagnostic.Column,
 			}
 		}
+
 		encoded, _ := json.Marshal(public)
 		return UserSettingsReplacementResult{}, apperror.New("user_settings.invalid").WithField("diagnostics", string(encoded))
 	}
+
 	current, err := s.settings.Get(ctx, principal.UserID)
 	if err != nil || current == nil || current.UserID != principal.UserID || current.Validate() != nil {
 		if err == nil {
@@ -104,14 +109,17 @@ func (s *Service) ReplaceOwnUserSettings(
 		}
 		return UserSettingsReplacementResult{}, userSettingsUnavailable(err)
 	}
+
 	if current.FormatVersion != model.UserSettingsFormatVersion1 {
 		return UserSettingsReplacementResult{}, apperror.New("user_settings.format_unsupported")
 	}
+
 	nextRevision := model.NewUserSettingsRevision()
 	updatedAt := model.TimeUTC(s.now())
 	if !updatedAt.After(current.UpdatedAt) {
 		updatedAt = current.UpdatedAt.Add(time.Millisecond)
 	}
+
 	idempotency, err := idempotency.Prepare(
 		invocation,
 		"user_settings.replace",
@@ -125,22 +133,31 @@ func (s *Service) ReplaceOwnUserSettings(
 	if err != nil {
 		return UserSettingsReplacementResult{}, err
 	}
+
 	var audit *model.AuditEvent
 	if current.Revision == command.ExpectedRevision &&
 		(current.Source != command.Source || current.FormatVersion != command.FormatVersion) {
 		audit, err = s.settingsAuditor.PrepareReplacement(ctx, access.UserSettingsAuditInput{
-			Invocation: invocation, UserID: principal.UserID,
-			PreviousRevision: current.Revision, ResultingRevision: nextRevision,
-			FormatVersion: command.FormatVersion, SourceBytes: len(command.Source),
+			Invocation:        invocation,
+			UserID:            principal.UserID,
+			PreviousRevision:  current.Revision,
+			ResultingRevision: nextRevision,
+			FormatVersion:     command.FormatVersion,
+			SourceBytes:       len(command.Source),
 		})
 		if err != nil {
 			return UserSettingsReplacementResult{}, err
 		}
 	}
+
 	stored, err := s.settings.Replace(ctx, &store.UserSettingsReplacement{
-		UserID: principal.UserID, Source: command.Source, FormatVersion: command.FormatVersion,
-		ExpectedRevision: command.ExpectedRevision, NextRevision: nextRevision,
-		UpdatedAt: updatedAt, AuditEvent: audit,
+		UserID:           principal.UserID,
+		Source:           command.Source,
+		FormatVersion:    command.FormatVersion,
+		ExpectedRevision: command.ExpectedRevision,
+		NextRevision:     nextRevision,
+		UpdatedAt:        updatedAt,
+		AuditEvent:       audit,
 	}, idempotency)
 	if err != nil {
 		return UserSettingsReplacementResult{}, userSettingsReplacementError(err)
@@ -148,18 +165,25 @@ func (s *Service) ReplaceOwnUserSettings(
 	if stored == nil || !stored.Revision.IsValid() || stored.FormatVersion <= 0 || stored.UpdatedAt.IsZero() {
 		return UserSettingsReplacementResult{}, userSettingsUnavailable(errors.New("invalid settings replacement result"))
 	}
+
 	result := UserSettingsReplacementResult{
-		Revision: stored.Revision, FormatVersion: stored.FormatVersion,
-		UpdatedAt: stored.UpdatedAt, Changed: stored.Changed, Replayed: stored.Replayed,
+		Revision:      stored.Revision,
+		FormatVersion: stored.FormatVersion,
+		UpdatedAt:     stored.UpdatedAt,
+		Changed:       stored.Changed,
+		Replayed:      stored.Replayed,
 	}
 	if result.Changed && !result.Replayed {
 		if effectErr := s.effects.SettingsChanged(ctx, SettingsChange{
-			UserID: principal.UserID, Revision: result.Revision,
-			FormatVersion: result.FormatVersion, ChangedAt: result.UpdatedAt,
+			UserID:        principal.UserID,
+			Revision:      result.Revision,
+			FormatVersion: result.FormatVersion,
+			ChangedAt:     result.UpdatedAt,
 		}); effectErr != nil {
 			s.effects.Report(ctx, "user_settings_changed", effectErr)
 		}
 	}
+
 	return result, nil
 }
 

@@ -56,52 +56,77 @@ func (h retentionHandler) Run(ctx context.Context, e job.Execution) job.Outcome 
 	if e.Job == nil || h.records == nil || h.jobs == nil || h.now == nil || (!h.purge && h.audit == nil) || (h.purge && h.content == nil) {
 		return job.PermanentFailure("job.command.invalid", errors.New("retention dependencies are unavailable"))
 	}
+
 	var command RetentionCommand
-	if decodeStrictJobDocument(e.Job.Command, &command) != nil || command.BatchSize < 1 || command.BatchSize > retentionJobMaximumBatch ||
-		(!command.AfterSubmissionID.IsZero() && !command.AfterSubmissionID.IsValid()) || (h.purge && !command.AfterSubmissionID.IsZero()) {
+	if decodeStrictJobDocument(e.Job.Command, &command) != nil ||
+		command.BatchSize < 1 ||
+		command.BatchSize > retentionJobMaximumBatch ||
+		(!command.AfterSubmissionID.IsZero() && !command.AfterSubmissionID.IsValid()) ||
+		(h.purge && !command.AfterSubmissionID.IsZero()) {
 		return job.PermanentFailure("job.command.invalid", errors.New("invalid retention command"))
 	}
+
 	cp := RetentionCheckpoint{AfterSubmissionID: command.AfterSubmissionID}
 	if len(e.Job.Checkpoint) > 0 && (decodeStrictJobDocument(e.Job.Checkpoint, &cp) != nil) {
 		return job.PermanentFailure("job.checkpoint.invalid", errors.New("invalid retention checkpoint"))
 	}
-	if cp.Examined < 0 || cp.Examined > command.BatchSize || cp.Changed < 0 || cp.Changed > cp.Examined ||
-		(!cp.AfterSubmissionID.IsZero() && !cp.AfterSubmissionID.IsValid()) || cp.AfterSubmissionID < command.AfterSubmissionID ||
-		e.Job.WorkReserved < cp.Examined || e.Job.WorkReserved > command.BatchSize || (h.purge && !cp.AfterSubmissionID.IsZero()) {
+
+	if cp.Examined < 0 ||
+		cp.Examined > command.BatchSize ||
+		cp.Changed < 0 ||
+		cp.Changed > cp.Examined ||
+		(!cp.AfterSubmissionID.IsZero() && !cp.AfterSubmissionID.IsValid()) ||
+		cp.AfterSubmissionID < command.AfterSubmissionID ||
+		e.Job.WorkReserved < cp.Examined ||
+		e.Job.WorkReserved > command.BatchSize ||
+		(h.purge && !cp.AfterSubmissionID.IsZero()) {
 		return job.PermanentFailure("job.checkpoint.invalid", errors.New("retention work or cursor is invalid"))
 	}
+
 	remaining := command.BatchSize - e.Job.WorkReserved
 	if cp.Done || remaining == 0 {
 		return h.finish(ctx, e.Job, command, cp)
 	}
+
 	var err error
 	if h.purge {
 		err = h.purgePage(ctx, e, command, &cp, remaining)
 	} else {
 		err = h.reconcilePage(ctx, e, command, &cp, remaining)
 	}
+
 	if err != nil {
 		return job.RetryableFailure("retention.unavailable", errors.New("retention maintenance did not complete"))
 	}
+
 	return h.finish(ctx, e.Job, command, cp)
 }
 
-func (h retentionHandler) reconcilePage(ctx context.Context, e job.Execution, command RetentionCommand, cp *RetentionCheckpoint, limit int) error {
+func (h retentionHandler) reconcilePage(
+	ctx context.Context,
+	e job.Execution,
+	command RetentionCommand,
+	cp *RetentionCheckpoint,
+	limit int,
+) error {
 	control, err := h.records.GetControl(ctx)
 	if store.IsNotFound(err) {
 		cp.Done = true
 		return saveRetentionCheckpoint(ctx, e, *cp)
 	}
+
 	if err != nil {
 		return err
 	}
 	if control.Validate() != nil {
 		return errors.New("invalid retention control")
 	}
+
 	if control.State != model.RetentionControlEnabled {
 		cp.Done = true
 		return saveRetentionCheckpoint(ctx, e, *cp)
 	}
+
 	page, err := h.records.ListRecords(ctx, store.RetentionRecordListOptions{AfterSubmissionID: cp.AfterSubmissionID, Limit: limit})
 	if err != nil {
 		return err
@@ -109,12 +134,22 @@ func (h retentionHandler) reconcilePage(ctx context.Context, e job.Execution, co
 	if page == nil || len(page.Items) > 4*limit || len(page.Items)%4 != 0 || (page.HasMore && len(page.Items) == 0) {
 		return errors.New("invalid retention page")
 	}
+
 	for i := 0; i < len(page.Items); i += 4 {
 		work, integrity, browser, security := page.Items[i], page.Items[i+1], page.Items[i+2], page.Items[i+3]
 		id := work.Record.Scope.SubmissionID
-		if !id.IsValid() || id <= cp.AfterSubmissionID || integrity.Record.Scope != work.Record.Scope || work.Record.Category != model.RetentionCategoryWork || integrity.Record.Category != model.RetentionCategoryIntegrity || browser.Record.Scope != work.Record.Scope || security.Record.Scope != work.Record.Scope || browser.Record.Category != model.RetentionCategoryBrowserActivity || security.Record.Category != model.RetentionCategorySecurityOperational {
+		if !id.IsValid() ||
+			id <= cp.AfterSubmissionID ||
+			integrity.Record.Scope != work.Record.Scope ||
+			work.Record.Category != model.RetentionCategoryWork ||
+			integrity.Record.Category != model.RetentionCategoryIntegrity ||
+			browser.Record.Scope != work.Record.Scope ||
+			security.Record.Scope != work.Record.Scope ||
+			browser.Record.Category != model.RetentionCategoryBrowserActivity ||
+			security.Record.Category != model.RetentionCategorySecurityOperational {
 			return errors.New("invalid retention category ordering")
 		}
+
 		reserved, err := e.ReserveWork(ctx, 1, command.BatchSize)
 		if err != nil {
 			return err
@@ -122,37 +157,62 @@ func (h retentionHandler) reconcilePage(ctx context.Context, e job.Execution, co
 		if !reserved {
 			return nil
 		}
+
 		needed := false
 		for _, item := range page.Items[i : i+4] {
-			needed = needed || item.Eligibility.Blocker == model.RetentionBlockerNone || item.Retirement != nil && item.Retirement.State == model.RetentionRetirementGrace
+			needed = needed ||
+				item.Eligibility.Blocker == model.RetentionBlockerNone ||
+				item.Retirement != nil && item.Retirement.State == model.RetentionRetirementGrace
 		}
+
 		if needed {
 			auditID, err := h.audit.BeginRetention(ctx, control.InstitutionID, id)
 			if err != nil {
 				return err
 			}
-			result, err := h.records.ReconcileSubmission(ctx, &store.RetentionReconciliation{SubmissionID: id, AuditEventID: auditID, AuditAt: h.now()})
+
+			result, err := h.records.ReconcileSubmission(ctx, &store.RetentionReconciliation{
+				SubmissionID: id,
+				AuditEventID: auditID,
+				AuditAt:      h.now(),
+			})
 			if err != nil {
 				return errors.Join(err, h.audit.FailRetention(ctx, auditID))
 			}
-			if result == nil || result.Scheduled < 0 || result.Canceled < 0 || result.Retired < 0 || result.Scheduled > 4 || result.Canceled > 4 || result.Retired > 4 {
+
+			if result == nil ||
+				result.Scheduled < 0 ||
+				result.Canceled < 0 ||
+				result.Retired < 0 ||
+				result.Scheduled > 4 ||
+				result.Canceled > 4 ||
+				result.Retired > 4 {
 				return errors.New("invalid retention result")
 			}
+
 			if result.Scheduled+result.Canceled+result.Retired > 0 {
 				cp.Changed++
 			}
 		}
+
 		cp.Examined++
 		cp.AfterSubmissionID = id
 		if err = saveRetentionCheckpoint(ctx, e, *cp); err != nil {
 			return err
 		}
 	}
+
 	cp.Done = !page.HasMore
 	return saveRetentionCheckpoint(ctx, e, *cp)
 }
 
-func (h retentionHandler) purgePage(ctx context.Context, e job.Execution, command RetentionCommand, cp *RetentionCheckpoint, limit int) error {
+func (h retentionHandler) purgePage(
+	ctx context.Context,
+	e job.Execution,
+	command RetentionCommand,
+	cp *RetentionCheckpoint,
+	limit int,
+) error {
 	// Beginning a batch is itself a durable mutation. Reserve its complete
 	// bounded cost first; an unknown result cannot reset this Job's budget.
 	reserved, err := e.ReserveWork(ctx, limit, command.BatchSize)
@@ -162,6 +222,7 @@ func (h retentionHandler) purgePage(ctx context.Context, e job.Execution, comman
 	if !reserved {
 		return nil
 	}
+
 	objects, err := h.records.BeginPurgeBatch(ctx, limit)
 	if err != nil {
 		return err
@@ -169,6 +230,7 @@ func (h retentionHandler) purgePage(ctx context.Context, e job.Execution, comman
 	if len(objects) > limit {
 		return errors.New("invalid retention purge page")
 	}
+
 	seen := make(map[store.RetentionPurgeObject]struct{}, len(objects))
 	for _, object := range objects {
 		if !object.RetirementID.IsValid() || !object.ObjectID.IsValid() {
@@ -177,25 +239,33 @@ func (h retentionHandler) purgePage(ctx context.Context, e job.Execution, comman
 		if _, duplicate := seen[object]; duplicate {
 			return errors.New("duplicate retention purge identity")
 		}
+
 		seen[object] = struct{}{}
 	}
+
 	failed := false
 	for _, object := range objects {
 		if err = ctx.Err(); err != nil {
 			return err
 		}
+
 		cp.Examined++
 		if err = h.content.PurgeRetiredAttemptWorkspaceObject(ctx, object.ObjectID); err != nil {
 			failed = true
-		} else if err = h.records.CompletePurge(ctx, &store.RetentionPurgeCompletion{RetirementID: object.RetirementID, ObjectID: object.ObjectID}); err != nil {
+		} else if err = h.records.CompletePurge(
+			ctx,
+			&store.RetentionPurgeCompletion{RetirementID: object.RetirementID, ObjectID: object.ObjectID},
+		); err != nil {
 			failed = true
 		} else {
 			cp.Changed++
 		}
+
 		if err = saveRetentionCheckpoint(ctx, e, *cp); err != nil {
 			return err
 		}
 	}
+
 	cp.Done = len(objects) < limit
 	if err = saveRetentionCheckpoint(ctx, e, *cp); err != nil {
 		return err
@@ -203,6 +273,7 @@ func (h retentionHandler) purgePage(ctx context.Context, e job.Execution, comman
 	if failed {
 		return errors.New("retention purge attempts remain incomplete")
 	}
+
 	return nil
 }
 
@@ -223,16 +294,27 @@ func (h retentionHandler) finish(ctx context.Context, parent *model.Job, command
 	if h.purge && (cp.Changed != cp.Examined || (!cp.Done && cp.Examined != command.BatchSize)) {
 		return job.PermanentFailure("retention.unavailable", errors.New("retention purge batch did not complete"))
 	}
+
 	if !cp.Done {
 		command.AfterSubmissionID = cp.AfterSubmissionID
 		document, err := json.Marshal(command)
 		if err != nil {
 			return job.PermanentFailure("job.invariant_failed", err)
 		}
+
 		at := model.TimeUTC(h.now())
 		// A short delay avoids an unbounded tight retry chain after repeated
 		// uncertainty, while each permanent dedupe key has one successor.
-		successor, err := model.NewJobWithDedupePolicy(model.NewJobID(), parent.Type, document, string(parent.Type)+":after:"+parent.ID.String(), model.JobDedupePermanent, at, at.Add(time.Second), 5)
+		successor, err := model.NewJobWithDedupePolicy(
+			model.NewJobID(),
+			parent.Type,
+			document,
+			string(parent.Type)+":after:"+parent.ID.String(),
+			model.JobDedupePermanent,
+			at,
+			at.Add(time.Second),
+			5,
+		)
 		if err != nil {
 			return job.PermanentFailure("job.invariant_failed", err)
 		}
@@ -240,6 +322,7 @@ func (h retentionHandler) finish(ctx context.Context, parent *model.Job, command
 			return job.RetryableFailure("retention.unavailable", errors.New("retention maintenance did not complete"))
 		}
 	}
+
 	document, err := json.Marshal(cp)
 	return job.Outcome{Kind: job.OutcomeSucceeded, Result: document, Err: err}
 }
@@ -255,42 +338,93 @@ func (p retentionProposer) Propose(ctx context.Context, occurrence time.Time) er
 	if err != nil {
 		return err
 	}
+
 	at := model.TimeUTC(p.now())
 	interval := time.Hour
 	if p.jobType == model.JobTypeRetentionNotices {
 		interval = 10 * time.Minute
 	}
-	job, err := model.NewJobWithDedupePolicy(model.NewJobID(), p.jobType, document, string(p.jobType)+":"+model.TimeUTC(occurrence).Truncate(interval).Format(time.RFC3339), model.JobDedupePermanent, at, at, 5)
+
+	job, err := model.NewJobWithDedupePolicy(
+		model.NewJobID(),
+		p.jobType,
+		document,
+		string(p.jobType)+":"+model.TimeUTC(occurrence).Truncate(interval).Format(time.RFC3339),
+		model.JobDedupePermanent,
+		at,
+		at,
+		5,
+	)
 	if err != nil {
 		return err
 	}
+
 	_, _, err = p.jobs.Enqueue(ctx, &store.JobEnqueue{Job: job})
 	return err
 }
 
 func retentionDescriptor(jobType model.JobType, handler job.Handler) job.Descriptor {
-	return job.Descriptor{Type: jobType, Checkpoints: true, PublicErrorCodes: []string{"retention.unavailable", "job.command.invalid", "job.checkpoint.invalid", "job.invariant_failed"}, Timeout: 10 * time.Minute, Concurrency: 1, MaximumAttempts: 5, LeaseDuration: time.Minute, HeartbeatInterval: 15 * time.Second, BaseRetryDelay: time.Second, MaximumRetryDelay: time.Minute, Visibility: job.VisibilityOperator, SuccessRetention: 30 * 24 * time.Hour, FailureRetention: 90 * 24 * time.Hour, Handler: handler}
+	return job.Descriptor{
+		Type:              jobType,
+		Checkpoints:       true,
+		PublicErrorCodes:  []string{"retention.unavailable", "job.command.invalid", "job.checkpoint.invalid", "job.invariant_failed"},
+		Timeout:           10 * time.Minute,
+		Concurrency:       1,
+		MaximumAttempts:   5,
+		LeaseDuration:     time.Minute,
+		HeartbeatInterval: 15 * time.Second,
+		BaseRetryDelay:    time.Second,
+		MaximumRetryDelay: time.Minute,
+		Visibility:        job.VisibilityOperator,
+		SuccessRetention:  30 * 24 * time.Hour,
+		FailureRetention:  90 * 24 * time.Hour,
+		Handler:           handler,
+	}
 }
 
 // NewRetentionReconcileDescriptor registers the reconciliation of retention
 // state against current policy.
-func NewRetentionReconcileDescriptor(records store.RetentionStore, audit RetentionSystemAuditor, jobs store.JobStore, now func() time.Time) job.Descriptor {
+func NewRetentionReconcileDescriptor(
+	records store.RetentionStore,
+	audit RetentionSystemAuditor,
+	jobs store.JobStore,
+	now func() time.Time,
+) job.Descriptor {
 	return retentionDescriptor(model.JobTypeRetentionReconcile, retentionHandler{records: records, audit: audit, jobs: jobs, now: now})
 }
 
 // NewRetentionPurgeDescriptor registers the purge of content whose retention
 // has ended.
-func NewRetentionPurgeDescriptor(records store.RetentionStore, content RetentionContentPurger, jobs store.JobStore, now func() time.Time) job.Descriptor {
-	return retentionDescriptor(model.JobTypeRetentionPurge, retentionHandler{records: records, content: content, jobs: jobs, now: now, purge: true})
+func NewRetentionPurgeDescriptor(
+	records store.RetentionStore,
+	content RetentionContentPurger,
+	jobs store.JobStore,
+	now func() time.Time,
+) job.Descriptor {
+	return retentionDescriptor(model.JobTypeRetentionPurge, retentionHandler{
+		records: records,
+		content: content,
+		jobs:    jobs,
+		now:     now,
+		purge:   true,
+	})
 }
 
 // NewRetentionReconcileRecurrence proposes the hourly retention
 // reconciliation Job.
 func NewRetentionReconcileRecurrence(jobs store.JobStore, now func() time.Time) job.Recurrence {
-	return job.Recurrence{Name: "retention-reconcile", Interval: time.Hour, Proposer: retentionProposer{jobs: jobs, now: now, jobType: model.JobTypeRetentionReconcile}}
+	return job.Recurrence{
+		Name:     "retention-reconcile",
+		Interval: time.Hour,
+		Proposer: retentionProposer{jobs: jobs, now: now, jobType: model.JobTypeRetentionReconcile},
+	}
 }
 
 // NewRetentionPurgeRecurrence proposes the hourly retention purge Job.
 func NewRetentionPurgeRecurrence(jobs store.JobStore, now func() time.Time) job.Recurrence {
-	return job.Recurrence{Name: "retention-purge", Interval: time.Hour, Proposer: retentionProposer{jobs: jobs, now: now, jobType: model.JobTypeRetentionPurge}}
+	return job.Recurrence{
+		Name:     "retention-purge",
+		Interval: time.Hour,
+		Proposer: retentionProposer{jobs: jobs, now: now, jobType: model.JobTypeRetentionPurge},
+	}
 }

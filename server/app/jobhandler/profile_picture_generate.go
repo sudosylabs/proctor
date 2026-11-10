@@ -46,6 +46,7 @@ func PrepareUserDefaultProfilePictureJob(account *model.User, at time.Time) (*mo
 	if account == nil {
 		return nil, nil, errors.New("user is missing")
 	}
+
 	candidate := *account
 	candidate.ID = ""
 	candidate.CreatedAt = time.Time{}
@@ -62,17 +63,25 @@ func PrepareUserDefaultProfilePictureJob(account *model.User, at time.Time) (*mo
 	if err := candidate.Validate(); err != nil {
 		return nil, nil, err
 	}
+
 	command, err := model.EncodeDefaultProfilePictureCommand(model.DefaultProfilePictureCommand{UserID: candidate.ID})
 	if err != nil {
 		return nil, nil, err
 	}
+
 	job, err := model.NewJob(
-		model.NewJobID(), model.JobTypeProfilePictureGenerateDefault,
-		command, candidate.ID.String(), candidate.CreatedAt, candidate.CreatedAt, 8,
+		model.NewJobID(),
+		model.JobTypeProfilePictureGenerateDefault,
+		command,
+		candidate.ID.String(),
+		candidate.CreatedAt,
+		candidate.CreatedAt,
+		8,
 	)
 	if err != nil {
 		return nil, nil, err
 	}
+
 	return &candidate, job, nil
 }
 
@@ -140,7 +149,23 @@ func defaultProfilePictureJobSucceeded(fileEntryID model.FileEntryID) job.Outcom
 }
 
 func defaultProfilePictureDescriptor(handler job.Handler) job.Descriptor {
-	return job.Descriptor{Type: model.JobTypeProfilePictureGenerateDefault, PublicErrorCodes: []string{"dependency.unavailable", "job.command.invalid", "job.invariant_failed", "user.not_found"}, Timeout: time.Minute, Concurrency: 1, MaximumAttempts: 8, LeaseDuration: time.Minute, HeartbeatInterval: 15 * time.Second, BaseRetryDelay: time.Second, MaximumRetryDelay: 30 * time.Second, Cancelable: true, ExplicitRetryStatuses: []model.JobStatus{model.JobStatusFailed}, Visibility: job.VisibilityOperator, SuccessRetention: 30 * 24 * time.Hour, FailureRetention: 90 * 24 * time.Hour, Handler: handler}
+	return job.Descriptor{
+		Type:                  model.JobTypeProfilePictureGenerateDefault,
+		PublicErrorCodes:      []string{"dependency.unavailable", "job.command.invalid", "job.invariant_failed", "user.not_found"},
+		Timeout:               time.Minute,
+		Concurrency:           1,
+		MaximumAttempts:       8,
+		LeaseDuration:         time.Minute,
+		HeartbeatInterval:     15 * time.Second,
+		BaseRetryDelay:        time.Second,
+		MaximumRetryDelay:     30 * time.Second,
+		Cancelable:            true,
+		ExplicitRetryStatuses: []model.JobStatus{model.JobStatusFailed},
+		Visibility:            job.VisibilityOperator,
+		SuccessRetention:      30 * 24 * time.Hour,
+		FailureRetention:      90 * 24 * time.Hour,
+		Handler:               handler,
+	}
 }
 
 // NewDefaultProfilePictureDescriptor registers generation of a User's default

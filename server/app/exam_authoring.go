@@ -22,42 +22,70 @@ import (
 
 type examAuthorizationAdapter struct{ authorization *access.Authorizer }
 
-func (a examAuthorizationAdapter) Authorize(ctx context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource) error {
+func (a examAuthorizationAdapter) Authorize(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	action model.Action,
+	resource model.Resource,
+) error {
 	return a.authorization.Authorize(ctx, invocation, action, resource)
 }
 
-func (a examAuthorizationAdapter) AuthorizeList(ctx context.Context, invocation invocation.Invocation, _ model.AcademicUnitID) (store.ExamListVisibility, error) {
+func (a examAuthorizationAdapter) AuthorizeList(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	_ model.AcademicUnitID,
+) (store.ExamListVisibility, error) {
 	principal := invocation.Principal()
 	decisionAt := model.TimeUTC(a.authorization.Now())
 	ordinary, err := a.authorization.GrantedScopesAt(ctx, principal, model.ActionExamView, model.ResourceExam, decisionAt)
 	if err != nil {
 		return store.ExamListVisibility{}, err
 	}
+
 	override, err := a.authorization.GrantedScopesAt(ctx, principal, model.ActionExamViewOverride, model.ResourceExam, decisionAt)
 	if err != nil {
 		return store.ExamListVisibility{}, err
 	}
+
 	hasOrdinary := ordinary.InstitutionWide || len(ordinary.AcademicUnitRootIDs) > 0
 	hasOverride := override.InstitutionWide || len(override.AcademicUnitRootIDs) > 0
 	institution, err := a.authorization.Institution(ctx)
 	if err != nil {
 		return store.ExamListVisibility{}, access.ResourceError("institution", err)
 	}
+
 	action := model.ActionExamView
 	if hasOverride {
 		action = model.ActionExamViewOverride
 	}
+
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
-	if err := a.authorization.RecordAuthorizationDecision(ctx, principal, action, resource, model.RoleScopeInstitution, institution.ID.String(), invocation.RequestMetadata(), hasOrdinary || hasOverride); err != nil {
+	if err := a.authorization.RecordAuthorizationDecision(
+		ctx,
+		principal,
+		action,
+		resource,
+		model.RoleScopeInstitution,
+		institution.ID.String(),
+		invocation.RequestMetadata(),
+		hasOrdinary || hasOverride,
+	); err != nil {
 		return store.ExamListVisibility{}, err
 	}
+
 	if !hasOrdinary && !hasOverride {
 		return store.ExamListVisibility{}, access.DeniedError()
 	}
-	return store.ExamListVisibility{ActorUserID: principal.UserID,
-		OrdinaryMembershipAt:    decisionAt,
-		OrdinaryInstitutionWide: ordinary.InstitutionWide, OrdinaryAcademicUnitRootIDs: append([]model.AcademicUnitID(nil), ordinary.AcademicUnitRootIDs...),
-		OverrideInstitutionWide: override.InstitutionWide, OverrideAcademicUnitRootIDs: append([]model.AcademicUnitID(nil), override.AcademicUnitRootIDs...)}, nil
+
+	return store.ExamListVisibility{
+		ActorUserID:                 principal.UserID,
+		OrdinaryMembershipAt:        decisionAt,
+		OrdinaryInstitutionWide:     ordinary.InstitutionWide,
+		OrdinaryAcademicUnitRootIDs: append([]model.AcademicUnitID(nil), ordinary.AcademicUnitRootIDs...),
+		OverrideInstitutionWide:     override.InstitutionWide,
+		OverrideAcademicUnitRootIDs: append([]model.AcademicUnitID(nil), override.AcademicUnitRootIDs...),
+	}, nil
 }
 
 type examRealtimeEffects struct {
@@ -86,19 +114,34 @@ func (e examRealtimeEffects) Archived(ctx context.Context, examID model.ExamID, 
 	}
 	return errors.Join(e.realtime.PublishRealtimeEvent(ctx, event), e.collections.ExamArchived(ctx, examID))
 }
-func (e examRealtimeEffects) ManagerChanged(ctx context.Context, examID model.ExamID, userID model.UserID, present bool, revision int64, changedAt time.Time) error {
+func (e examRealtimeEffects) ManagerChanged(
+	ctx context.Context,
+	examID model.ExamID,
+	userID model.UserID,
+	present bool,
+	revision int64,
+	changedAt time.Time,
+) error {
 	event, err := realtime.NewExamManagerChangedEvent(examID, userID, present, revision, changedAt)
 	if err != nil {
 		return err
 	}
+
 	e.realtime.InvalidateAuthorization(ctx, userID)
 	return e.realtime.PublishRealtimeEvent(ctx, event)
 }
-func (e examRealtimeEffects) OwnerTransferred(ctx context.Context, examID model.ExamID, ownerID model.UserID, revision int64, changedAt time.Time) error {
+func (e examRealtimeEffects) OwnerTransferred(
+	ctx context.Context,
+	examID model.ExamID,
+	ownerID model.UserID,
+	revision int64,
+	changedAt time.Time,
+) error {
 	event, err := realtime.NewExamOwnerTransferredEvent(examID, ownerID, revision, changedAt)
 	if err != nil {
 		return err
 	}
+
 	return e.realtime.PublishRealtimeEvent(ctx, event)
 }
 func (e examRealtimeEffects) Report(ctx context.Context, operation string, err error) {

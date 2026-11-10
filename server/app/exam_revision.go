@@ -16,10 +16,18 @@ import (
 )
 
 func (e examRealtimeEffects) RevisionPublished(ctx context.Context, revision store.ExamRevisionSummary) error {
-	event, err := realtime.NewExamRevisionPublishedEvent(revision.ID, revision.ExamID, revision.Number, revision.PolicyDigest, revision.Kind, revision.PublishedAt)
+	event, err := realtime.NewExamRevisionPublishedEvent(
+		revision.ID,
+		revision.ExamID,
+		revision.Number,
+		revision.PolicyDigest,
+		revision.Kind,
+		revision.PublishedAt,
+	)
 	if err != nil {
 		return err
 	}
+
 	return e.realtime.PublishRealtimeEvent(ctx, event)
 }
 

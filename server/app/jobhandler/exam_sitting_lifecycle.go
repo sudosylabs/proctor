@@ -44,25 +44,34 @@ type examSittingLifecycleHandler struct {
 }
 
 func (h examSittingLifecycleHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
-	if h.sittings == nil || execution.Job == nil || execution.Attempt == nil ||
-		!execution.Job.ID.IsValid() || !execution.Attempt.ID.IsValid() {
+	if h.sittings == nil ||
+		execution.Job == nil ||
+		execution.Attempt == nil ||
+		!execution.Job.ID.IsValid() ||
+		!execution.Attempt.ID.IsValid() {
 		return job.PermanentFailure("job.command.invalid", errors.New("Exam Sitting lifecycle Job execution is incomplete"))
 	}
+
 	command, err := model.DecodeExamSittingLifecycleCommand(execution.Job.Command)
 	if err != nil {
 		return job.PermanentFailure("job.command.invalid", err)
 	}
+
 	advanced, err := h.sittings.AdvanceDue(ctx, invocation.Job(execution.Job.ID, execution.Attempt.ID), command.ExamSittingID)
 	if err != nil {
 		return examSittingLifecycleFailure(err)
 	}
+
 	result := &advanced
 	if err = validateExamSittingLifecycleJobResult(command.ExamSittingID, result); err != nil {
 		return job.PermanentFailure("job.invariant_failed", err)
 	}
+
 	document, err := json.Marshal(ExamSittingLifecycleJobResult{
-		Changed: result.Changed, Transition: result.Transition,
-		State: result.Value.Sitting.State, Revision: result.Value.Sitting.Revision,
+		Changed:    result.Changed,
+		Transition: result.Transition,
+		State:      result.Value.Sitting.State,
+		Revision:   result.Value.Sitting.Revision,
 	})
 	return job.Outcome{Kind: job.OutcomeSucceeded, Result: document, Err: err}
 }
@@ -111,15 +120,20 @@ func examSittingLifecycleFailure(err error) job.Outcome {
 
 func examSittingLifecycleDescriptor(handler job.Handler) job.Descriptor {
 	return job.Descriptor{
-		Type:             model.JobTypeExamSittingLifecycle,
-		PublicErrorCodes: []string{"dependency.unavailable", "job.command.invalid", "job.invariant_failed"},
-		Timeout:          time.Minute, Concurrency: 4, MaximumAttempts: 8,
-		LeaseDuration: time.Minute, HeartbeatInterval: 15 * time.Second,
-		BaseRetryDelay: time.Second, MaximumRetryDelay: 30 * time.Second,
+		Type:                  model.JobTypeExamSittingLifecycle,
+		PublicErrorCodes:      []string{"dependency.unavailable", "job.command.invalid", "job.invariant_failed"},
+		Timeout:               time.Minute,
+		Concurrency:           4,
+		MaximumAttempts:       8,
+		LeaseDuration:         time.Minute,
+		HeartbeatInterval:     15 * time.Second,
+		BaseRetryDelay:        time.Second,
+		MaximumRetryDelay:     30 * time.Second,
 		ExplicitRetryStatuses: []model.JobStatus{model.JobStatusFailed},
 		Visibility:            job.VisibilityOperator,
-		SuccessRetention:      30 * 24 * time.Hour, FailureRetention: 90 * 24 * time.Hour,
-		Handler: handler,
+		SuccessRetention:      30 * 24 * time.Hour,
+		FailureRetention:      90 * 24 * time.Hour,
+		Handler:               handler,
 	}
 }
 
@@ -135,49 +149,76 @@ func NewExamSittingLifecycleJobFactory(now func() time.Time, newID func() model.
 // BoundaryJobs returns the Sitting's open Job, available at startAt, and its
 // deadline Job, available at endAt, deduplicated by Sitting, phase, and
 // resultingRevision.
-func (f ExamSittingLifecycleJobFactory) BoundaryJobs(sittingID model.ExamSittingID, resultingRevision int64, startAt, endAt time.Time) (*model.Job, *model.Job, error) {
+func (f ExamSittingLifecycleJobFactory) BoundaryJobs(
+	sittingID model.ExamSittingID,
+	resultingRevision int64,
+	startAt,
+	endAt time.Time,
+) (*model.Job, *model.Job, error) {
 	openJob, err := f.job(sittingID, model.ExamSittingLifecycleJobOpen, resultingRevision, startAt)
 	if err != nil {
 		return nil, nil, err
 	}
+
 	deadlineJob, err := f.job(sittingID, model.ExamSittingLifecycleJobDeadline, resultingRevision, endAt)
 	if err != nil {
 		return nil, nil, err
 	}
+
 	return openJob, deadlineJob, nil
 }
 
 // DeadlineJob returns a Sitting deadline Job available at deadline,
 // deduplicated by Sitting and resultingRevision.
-func (f ExamSittingLifecycleJobFactory) DeadlineJob(sittingID model.ExamSittingID, resultingRevision int64, deadline time.Time) (*model.Job, error) {
+func (f ExamSittingLifecycleJobFactory) DeadlineJob(
+	sittingID model.ExamSittingID,
+	resultingRevision int64,
+	deadline time.Time,
+) (*model.Job, error) {
 	return f.job(sittingID, model.ExamSittingLifecycleJobDeadline, resultingRevision, deadline)
 }
 
 // FinalizeJob returns the Sitting sealing Job that finalizes a closing
 // Sitting, available at availableAt and deduplicated by Sitting and
 // resultingRevision.
-func (f ExamSittingLifecycleJobFactory) FinalizeJob(sittingID model.ExamSittingID, resultingRevision int64, availableAt time.Time) (*model.Job, error) {
+func (f ExamSittingLifecycleJobFactory) FinalizeJob(
+	sittingID model.ExamSittingID,
+	resultingRevision int64,
+	availableAt time.Time,
+) (*model.Job, error) {
 	return f.jobOfType(sittingID, model.ExamSittingLifecycleJobFinalize, resultingRevision, availableAt, model.JobTypeExamSittingSealing)
 }
 
-func (f ExamSittingLifecycleJobFactory) job(sittingID model.ExamSittingID, phase model.ExamSittingLifecycleJobPhase, resultingRevision int64, availableAt time.Time) (*model.Job, error) {
+func (f ExamSittingLifecycleJobFactory) job(
+	sittingID model.ExamSittingID,
+	phase model.ExamSittingLifecycleJobPhase,
+	resultingRevision int64,
+	availableAt time.Time,
+) (*model.Job, error) {
 	return f.jobOfType(sittingID, phase, resultingRevision, availableAt, model.JobTypeExamSittingLifecycle)
 }
 
-func (f ExamSittingLifecycleJobFactory) jobOfType(sittingID model.ExamSittingID, phase model.ExamSittingLifecycleJobPhase,
-	resultingRevision int64, availableAt time.Time, jobType model.JobType,
+func (f ExamSittingLifecycleJobFactory) jobOfType(
+	sittingID model.ExamSittingID,
+	phase model.ExamSittingLifecycleJobPhase,
+	resultingRevision int64,
+	availableAt time.Time,
+	jobType model.JobType,
 ) (*model.Job, error) {
 	if f.now == nil || f.newID == nil {
 		return nil, errors.New("Exam Sitting lifecycle Job dependencies are required")
 	}
+
 	command, err := model.EncodeExamSittingLifecycleCommand(model.ExamSittingLifecycleCommand{ExamSittingID: sittingID})
 	if err != nil {
 		return nil, err
 	}
+
 	dedupeKey, err := model.ExamSittingLifecycleDedupeKey(sittingID, phase, resultingRevision)
 	if err != nil {
 		return nil, err
 	}
+
 	at := model.TimeUTC(f.now())
 	return model.NewJob(f.newID(), jobType, command, dedupeKey, at, model.TimeUTC(availableAt), 8)
 }

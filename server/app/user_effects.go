@@ -22,7 +22,10 @@ type userRealtimeEffects struct{ realtime *RealtimeService }
 
 func (e userRealtimeEffects) SettingsChanged(ctx context.Context, change user.SettingsChange) error {
 	event, err := realtime.NewUserSettingsChangedEvent(
-		change.UserID, change.Revision, change.FormatVersion, change.ChangedAt,
+		change.UserID,
+		change.Revision,
+		change.FormatVersion,
+		change.ChangedAt,
 	)
 	if err != nil {
 		return err
@@ -39,7 +42,12 @@ func (e userRealtimeEffects) PictureChanged(ctx context.Context, change user.Pic
 	if err != nil {
 		return err
 	}
-	return e.realtime.PublishRealtimeEvent(ctx, realtime.RealtimeEvent{Name: "user_profile_picture_changed", UserID: change.UserID, Data: data})
+
+	return e.realtime.PublishRealtimeEvent(ctx, realtime.RealtimeEvent{
+		Name:   "user_profile_picture_changed",
+		UserID: change.UserID,
+		Data:   data,
+	})
 }
 
 func (e userRealtimeEffects) Report(ctx context.Context, operation string, err error) {

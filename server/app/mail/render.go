@@ -149,42 +149,55 @@ func newRenderer(deps templateRendererDependencies) (*templateRenderer, error) {
 	if deps.Files == nil || deps.Localizer == nil {
 		return nil, errors.New("mail renderer dependencies are invalid")
 	}
+
 	assets, err := NewInlineAssets(deps.Files)
 	if err != nil {
 		return nil, fmt.Errorf("load mail inline assets: %w", err)
 	}
-	renderer := &templateRenderer{deps: deps, displayLocation: time.UTC,
-		html: make(map[model.MailTemplateKey]*htmltemplate.Template), text: make(map[model.MailTemplateKey]*texttemplate.Template)}
+
+	renderer := &templateRenderer{
+		deps:            deps,
+		displayLocation: time.UTC,
+		html:            make(map[model.MailTemplateKey]*htmltemplate.Template),
+		text:            make(map[model.MailTemplateKey]*texttemplate.Template),
+	}
 	for _, key := range model.AllMailTemplateKeys() {
 		if deps.ValidateCompleteCatalog {
 			if _, _, _, err := resolveCopy(deps.Localizer, key, localization.EnglishLocale, representativeCopyData); err != nil {
 				return nil, fmt.Errorf("validate localized mail copy %q: %w", key, err)
 			}
 		}
+
 		name := string(key)
 		htmlSource, err := fs.ReadFile(deps.Files, name+".html")
 		if err != nil {
 			return nil, fmt.Errorf("read HTML mail template %q: %w", key, err)
 		}
+
 		images, err := assets.ForHTML(string(htmlSource))
 		if err != nil || len(images) != 1 {
 			return nil, fmt.Errorf("mail template %q must reference one released inline logo", key)
 		}
+
 		htmlValue, err := parseMailHTMLTemplate(name, string(htmlSource))
 		if err != nil {
 			return nil, fmt.Errorf("parse HTML mail template %q: %w", key, err)
 		}
+
 		textSource, err := fs.ReadFile(deps.Files, name+".txt")
 		if err != nil {
 			return nil, fmt.Errorf("read text mail template %q: %w", key, err)
 		}
+
 		textValue, err := texttemplate.New(name).Option("missingkey=error").Parse(string(textSource))
 		if err != nil {
 			return nil, fmt.Errorf("parse text mail template %q: %w", key, err)
 		}
+
 		renderer.html[key] = htmlValue
 		renderer.text[key] = textValue
 	}
+
 	return renderer, nil
 }
 
@@ -208,36 +221,51 @@ func (r *templateRenderer) render(request renderRequest) (renderedMessage, error
 	if r == nil || r.deps.Localizer == nil {
 		return renderedMessage{}, errors.New("mail template renderer is nil")
 	}
+
 	c := r.clockFor(request.RecipientTimezone)
-	data := copyData{Name: firstName(request.RecipientName), Institution: strings.TrimSpace(request.Institution),
-		Address: r.supportAddress}
+	data := copyData{
+		Name:        firstName(request.RecipientName),
+		Institution: strings.TrimSpace(request.Institution),
+		Address:     r.supportAddress,
+	}
 	if !request.Deadline.IsZero() {
 		data.Deadline = c.dateTime(request.Deadline)
 	}
+
 	build, err := buildLayout(request, c, &data)
 	if err != nil {
 		return renderedMessage{}, err
 	}
+
 	copy, resolver, locale, err := resolveCopy(r.deps.Localizer, request.Key, request.RecipientLocale, data)
 	if err != nil {
 		return renderedMessage{}, err
 	}
+
 	actionURL := strings.TrimSpace(request.ActionURL)
 	if copy.ActionLabel == "" {
 		actionURL = ""
 	} else if err = validateActionURL(actionURL, r.allowLoopbackHTTPDevelopment); err != nil {
 		return renderedMessage{}, err
 	}
+
 	built := build(copy, resolver)
 	if resolver.failure != nil {
 		return renderedMessage{}, fmt.Errorf("resolve mail copy %q: %w", request.Key, resolver.failure)
 	}
-	properties := templateProperties{Copy: copy, ActionURL: actionURL, Hero: built.Hero, Facts: built.Facts,
-		AsideAlert: kindFor(request.Key) == kindSecurity}
+
+	properties := templateProperties{
+		Copy:       copy,
+		ActionURL:  actionURL,
+		Hero:       built.Hero,
+		Facts:      built.Facts,
+		AsideAlert: kindFor(request.Key) == kindSecurity,
+	}
 	text, html, err := r.executeTemplates(request.Key, properties)
 	if err != nil {
 		return renderedMessage{}, err
 	}
+
 	return renderedMessage{Key: request.Key, Locale: locale, Subject: copy.Subject, Text: text, HTML: html}, nil
 }
 
@@ -284,10 +312,17 @@ func (r *templateRenderer) executeTemplates(key model.MailTemplateKey, propertie
 }
 
 func (r *templateRenderer) Render(request RenderRequest) (FrozenContent, error) {
-	internal := renderRequest{Key: request.Key, RecipientLocale: request.Locale, ActionURL: request.ActionURL,
-		RecipientName: request.RecipientName, RecipientAddress: request.RecipientAddress,
-		RecipientTimezone: request.RecipientTimezone, Institution: request.Institution,
-		At: request.At, Deadline: request.Deadline}
+	internal := renderRequest{
+		Key:               request.Key,
+		RecipientLocale:   request.Locale,
+		ActionURL:         request.ActionURL,
+		RecipientName:     request.RecipientName,
+		RecipientAddress:  request.RecipientAddress,
+		RecipientTimezone: request.RecipientTimezone,
+		Institution:       request.Institution,
+		At:                request.At,
+		Deadline:          request.Deadline,
+	}
 	switch presentation := request.Presentation.(type) {
 	case nil:
 	case PersonalAccessTokenDetails:
@@ -309,6 +344,7 @@ func (r *templateRenderer) Render(request RenderRequest) (FrozenContent, error) 
 	default:
 		return FrozenContent{}, errors.New("mail presentation is invalid")
 	}
+
 	return r.renderContent(internal)
 }
 
@@ -330,17 +366,23 @@ func isPersonalAccessTokenTemplate(key model.MailTemplateKey) bool {
 }
 
 func validPersonalAccessTokenDetails(details *PersonalAccessTokenDetails) bool {
-	if details == nil || strings.TrimSpace(details.Description) == "" ||
-		!utf8.ValidString(details.Description) || utf8.RuneCountInString(details.Description) > 255 ||
-		details.ExpiresAt.IsZero() || details.ActionAt.IsZero() ||
-		details.ActionCount < 1 || details.ActionCount > 128 {
+	if details == nil ||
+		strings.TrimSpace(details.Description) == "" ||
+		!utf8.ValidString(details.Description) ||
+		utf8.RuneCountInString(details.Description) > 255 ||
+		details.ExpiresAt.IsZero() ||
+		details.ActionAt.IsZero() ||
+		details.ActionCount < 1 ||
+		details.ActionCount > 128 {
 		return false
 	}
+
 	for _, character := range details.Description {
 		if unicode.IsControl(character) {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -414,14 +456,18 @@ func validClassTransitionDetails(key model.MailTemplateKey, details *ClassTransi
 	if details == nil || details.StartsAt.IsZero() || (!details.EndsAt.IsZero() && !details.StartsAt.Before(details.EndsAt)) {
 		return false
 	}
+
 	previous := strings.TrimSpace(details.PreviousClassDisplayName)
-	if (key == model.MailTemplateAcademicClassTransferred) != (previous != "") || !validBoundedMailLabel(details.ClassDisplayName) ||
+	if (key == model.MailTemplateAcademicClassTransferred) != (previous != "") ||
+		!validBoundedMailLabel(details.ClassDisplayName) ||
 		(previous != "" && !validBoundedMailLabel(previous)) {
 		return false
 	}
+
 	if key == model.MailTemplateAcademicClassEnrollmentEnded && details.EndsAt.IsZero() {
 		return false
 	}
+
 	return true
 }
 

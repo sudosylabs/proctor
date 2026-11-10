@@ -27,7 +27,9 @@ type examIntegrityReviewAuthorizationAdapter struct {
 	audit    access.DecisionAudit
 }
 
-func (a examIntegrityReviewAuthorizationAdapter) AuthorizeSubmissionView(ctx context.Context, invocation invocation.Invocation,
+func (a examIntegrityReviewAuthorizationAdapter) AuthorizeSubmissionView(
+	ctx context.Context,
+	invocation invocation.Invocation,
 	submissionID model.SubmissionID,
 ) error {
 	authorization, err := a.resolve(ctx, submissionID)
@@ -37,11 +39,18 @@ func (a examIntegrityReviewAuthorizationAdapter) AuthorizeSubmissionView(ctx con
 	if authorization.CandidateUserID == invocation.Principal().UserID {
 		return a.denySelf(ctx, invocation, authorization, model.ActionSubmissionView)
 	}
-	return a.sittings.AuthorizeSubmissionView(ctx,
-		invocation, authorization.ExamID, submissionID)
+
+	return a.sittings.AuthorizeSubmissionView(
+		ctx,
+		invocation,
+		authorization.ExamID,
+		submissionID,
+	)
 }
 
-func (a examIntegrityReviewAuthorizationAdapter) AuthorizeSubmissionReview(ctx context.Context, invocation invocation.Invocation,
+func (a examIntegrityReviewAuthorizationAdapter) AuthorizeSubmissionReview(
+	ctx context.Context,
+	invocation invocation.Invocation,
 	submissionID model.SubmissionID,
 ) (review.ManagerAuthorization, error) {
 	authorization, err := a.resolve(ctx, submissionID)
@@ -51,15 +60,23 @@ func (a examIntegrityReviewAuthorizationAdapter) AuthorizeSubmissionReview(ctx c
 	if authorization.CandidateUserID == invocation.Principal().UserID {
 		return review.ManagerAuthorization{}, a.denySelf(ctx, invocation, authorization, model.ActionSubmissionReview)
 	}
-	management, err := a.sittings.AuthorizeSubmissionReview(ctx,
-		invocation, authorization.ExamID, submissionID)
+
+	management, err := a.sittings.AuthorizeSubmissionReview(
+		ctx,
+		invocation,
+		authorization.ExamID,
+		submissionID,
+	)
 	if err != nil {
 		return review.ManagerAuthorization{}, err
 	}
+
 	return review.ManagerAuthorization{Override: management.Override}, nil
 }
 
-func (a examIntegrityReviewAuthorizationAdapter) AuthorizeSubmissionRelease(ctx context.Context, invocation invocation.Invocation,
+func (a examIntegrityReviewAuthorizationAdapter) AuthorizeSubmissionRelease(
+	ctx context.Context,
+	invocation invocation.Invocation,
 	submissionID model.SubmissionID,
 ) (review.ManagerAuthorization, error) {
 	authorization, err := a.resolve(ctx, submissionID)
@@ -69,11 +86,17 @@ func (a examIntegrityReviewAuthorizationAdapter) AuthorizeSubmissionRelease(ctx 
 	if authorization.CandidateUserID == invocation.Principal().UserID {
 		return review.ManagerAuthorization{}, a.denySelf(ctx, invocation, authorization, model.ActionSubmissionRelease)
 	}
-	management, err := a.sittings.AuthorizeSubmissionRelease(ctx,
-		invocation, authorization.ExamID, submissionID)
+
+	management, err := a.sittings.AuthorizeSubmissionRelease(
+		ctx,
+		invocation,
+		authorization.ExamID,
+		submissionID,
+	)
 	if err != nil {
 		return review.ManagerAuthorization{}, err
 	}
+
 	return review.ManagerAuthorization{Override: management.Override}, nil
 }
 
@@ -83,6 +106,7 @@ func (a examIntegrityReviewAuthorizationAdapter) resolve(ctx context.Context,
 	if a.reviews == nil || a.sittings == nil || a.audit == nil || !submissionID.IsValid() {
 		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("Review authorization dependencies are invalid"))
 	}
+
 	authorization, err := a.reviews.Resolve(ctx, submissionID)
 	if err != nil {
 		if store.IsNotFound(err) {
@@ -90,23 +114,40 @@ func (a examIntegrityReviewAuthorizationAdapter) resolve(ctx context.Context,
 		}
 		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(err)
 	}
-	if authorization == nil || authorization.SubmissionID != submissionID || !authorization.ExamID.IsValid() ||
-		!authorization.SittingID.IsValid() || !authorization.AttemptID.IsValid() || !authorization.CandidateUserID.IsValid() ||
+
+	if authorization == nil ||
+		authorization.SubmissionID != submissionID ||
+		!authorization.ExamID.IsValid() ||
+		!authorization.SittingID.IsValid() ||
+		!authorization.AttemptID.IsValid() ||
+		!authorization.CandidateUserID.IsValid() ||
 		!authorization.AcademicUnitID.IsValid() {
 		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("Review authorization projection is incomplete"))
 	}
+
 	return authorization, nil
 }
 
-func (a examIntegrityReviewAuthorizationAdapter) denySelf(ctx context.Context, invocation invocation.Invocation,
-	authorization *store.ExamIntegrityReviewAuthorization, action model.Action,
+func (a examIntegrityReviewAuthorizationAdapter) denySelf(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	authorization *store.ExamIntegrityReviewAuthorization,
+	action model.Action,
 ) error {
-	err := a.audit.RecordAuthorizationDecision(ctx, invocation.Principal(), action,
+	err := a.audit.RecordAuthorizationDecision(
+		ctx,
+		invocation.Principal(),
+		action,
 		model.Resource{Type: model.ResourceSubmission, ID: authorization.SubmissionID.String()},
-		model.RoleScopeAcademicUnit, authorization.AcademicUnitID.String(), invocation.RequestMetadata(), false)
+		model.RoleScopeAcademicUnit,
+		authorization.AcademicUnitID.String(),
+		invocation.RequestMetadata(),
+		false,
+	)
 	if err != nil {
 		return err
 	}
+
 	return apperror.New("exam.integrity_review.not_found")
 }
 
@@ -124,10 +165,16 @@ func (e examIntegrityReviewRealtimeEffects) publishManagerBoardInvalidation(ctx 
 }
 
 func examIntegrityReviewEventFact(result review.Result) realtime.ExamIntegrityReviewEventFact {
-	return realtime.ExamIntegrityReviewEventFact{SubmissionID: result.Authorization.SubmissionID,
-		AttemptID: result.Authorization.AttemptID, CandidateID: result.Authorization.CandidateUserID,
-		ReviewID: result.Review.ID, State: result.Review.State, Revision: result.Review.Revision,
-		ReleaseState: result.Review.ReleaseState, ChangedAt: result.Review.UpdatedAt}
+	return realtime.ExamIntegrityReviewEventFact{
+		SubmissionID: result.Authorization.SubmissionID,
+		AttemptID:    result.Authorization.AttemptID,
+		CandidateID:  result.Authorization.CandidateUserID,
+		ReviewID:     result.Review.ID,
+		State:        result.Review.State,
+		Revision:     result.Review.Revision,
+		ReleaseState: result.Review.ReleaseState,
+		ChangedAt:    result.Review.UpdatedAt,
+	}
 }
 
 func (e examIntegrityReviewRealtimeEffects) ReviewChanged(ctx context.Context, result review.Result) error {
@@ -152,16 +199,23 @@ func (e examIntegrityReviewRealtimeEffects) ResultReleased(ctx context.Context, 
 	if err != nil {
 		return err
 	}
+
 	candidate, err := realtime.NewCandidateStudentResultReleasedEvent(fact)
 	if err != nil {
 		return err
 	}
+
 	activity, err := realtime.NewCandidateExamActivityChangedEvent(result.Authorization.CandidateUserID)
 	if err != nil {
 		return err
 	}
-	return errors.Join(e.realtime.PublishRealtimeEvent(ctx, manager), e.realtime.PublishRealtimeEvent(ctx, candidate),
-		e.realtime.PublishRealtimeEvent(ctx, activity), e.publishManagerBoardInvalidation(ctx, result))
+
+	return errors.Join(
+		e.realtime.PublishRealtimeEvent(ctx, manager),
+		e.realtime.PublishRealtimeEvent(ctx, candidate),
+		e.realtime.PublishRealtimeEvent(ctx, activity),
+		e.publishManagerBoardInvalidation(ctx, result),
+	)
 }
 
 func (e examIntegrityReviewRealtimeEffects) Report(ctx context.Context, operation string, err error) {

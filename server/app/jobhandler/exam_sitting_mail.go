@@ -27,6 +27,7 @@ func (h sittingMailExpansionHandler) Run(ctx context.Context, execution job.Exec
 	if execution.Job == nil {
 		return job.PermanentFailure("job.command.invalid", errors.New("Sitting mail expansion Job is missing"))
 	}
+
 	command, err := model.DecodeSittingMailExpansionCommand(execution.Job.Command)
 	if err != nil {
 		return job.PermanentFailure("job.command.invalid", err)
@@ -34,6 +35,7 @@ func (h sittingMailExpansionHandler) Run(ctx context.Context, execution job.Exec
 	if h.sittings == nil || h.mail == nil {
 		return job.RetryableFailure("mail.sitting.unavailable", errors.New("Sitting mail expansion dependencies are unavailable"))
 	}
+
 	checkpoint := model.SittingMailExpansionCheckpoint{}
 	if len(execution.Job.Checkpoint) != 0 {
 		checkpoint, err = model.DecodeSittingMailExpansionCheckpoint(execution.Job.Checkpoint)
@@ -41,6 +43,7 @@ func (h sittingMailExpansionHandler) Run(ctx context.Context, execution job.Exec
 			return job.PermanentFailure("job.checkpoint.invalid", err)
 		}
 	}
+
 	fanout, err := h.sittings.GetMailFanout(ctx, command.OccurrenceID)
 	if err != nil {
 		return sittingMailExpansionDependencyOutcome(err)
@@ -48,21 +51,29 @@ func (h sittingMailExpansionHandler) Run(ctx context.Context, execution job.Exec
 	if fanout.CompletedAt.Valid {
 		return sittingMailExpansionSucceeded(checkpoint)
 	}
+
 	bundle, err := h.mail.OpenBundle(fanout.Bundle)
 	if err != nil {
 		return job.RetryableFailure("mail.sitting.bundle_unavailable", err)
 	}
+
 	for {
 		page, pageErr := h.sittings.ListMailRecipients(ctx, store.ExamSittingMailRecipientPageRequest{
-			OccurrenceID: command.OccurrenceID, AfterUserID: checkpoint.AfterUserID, Limit: model.SittingMailExpansionPageSize,
+			OccurrenceID: command.OccurrenceID,
+			AfterUserID:  checkpoint.AfterUserID,
+			Limit:        model.SittingMailExpansionPageSize,
 		})
 		if pageErr != nil {
 			return sittingMailExpansionDependencyOutcome(pageErr)
 		}
+
 		for index := range page.Recipients {
 			recipient := page.Recipients[index]
-			commit := &store.ExamSittingMailRecipientCommit{OccurrenceID: command.OccurrenceID,
-				SittingRevision: fanout.SittingRevision, Recipient: recipient.User}
+			commit := &store.ExamSittingMailRecipientCommit{
+				OccurrenceID:    command.OccurrenceID,
+				SittingRevision: fanout.SittingRevision,
+				Recipient:       recipient.User,
+			}
 			if recipient.TemplateKey.IsValid() {
 				commit.Delivery, commit.DeliveryJob, err = h.mail.PrepareRecipient(fanout, recipient.User, recipient.TemplateKey, bundle)
 				if errors.Is(err, mail.ErrSittingMailRecipientInvalid) {
@@ -71,48 +82,69 @@ func (h sittingMailExpansionHandler) Run(ctx context.Context, execution job.Exec
 					checkpoint.Undeliverable++
 					continue
 				}
+
 				if err != nil {
 					return job.RetryableFailure("mail.sitting.recipient_unavailable", err)
 				}
 			}
+
 			result, commitErr := h.sittings.CommitMailRecipient(ctx, commit)
 			if commitErr != nil {
 				if store.IsConflict(commitErr) || store.IsNotFound(commitErr) {
 					checkpoint.Suppressed++
 					continue
 				}
+
 				return sittingMailExpansionDependencyOutcome(commitErr)
 			}
+
 			if result.Inserted {
 				checkpoint.Expanded++
 			} else {
 				checkpoint.Suppressed++
 			}
 		}
+
 		if len(page.Recipients) != 0 {
 			checkpoint.AfterUserID = page.Recipients[len(page.Recipients)-1].User.ID
 			document, encodeErr := model.EncodeSittingMailExpansionCheckpoint(checkpoint)
 			if encodeErr != nil {
 				return job.PermanentFailure("job.checkpoint.invalid", encodeErr)
 			}
-			if checkpointErr := execution.Checkpoint(ctx, job.CheckpointValue{Progress: &model.JobProgress{Current: checkpoint.Expanded + checkpoint.Suppressed + checkpoint.Undeliverable,
-				Total: checkpoint.Expanded + checkpoint.Suppressed + checkpoint.Undeliverable, Stage: "expanding"}, Document: document}); checkpointErr != nil {
+
+			if checkpointErr := execution.Checkpoint(
+				ctx,
+				job.CheckpointValue{Progress: &model.JobProgress{
+					Current: checkpoint.Expanded + checkpoint.Suppressed + checkpoint.Undeliverable,
+					Total:   checkpoint.Expanded + checkpoint.Suppressed + checkpoint.Undeliverable,
+					Stage:   "expanding",
+				}, Document: document},
+			); checkpointErr != nil {
 				return job.RetryableFailure("mail.sitting.unavailable", checkpointErr)
 			}
 		}
+
 		if !page.More {
 			break
 		}
 	}
-	if _, err = h.sittings.CompleteMailExpansion(ctx, &store.ExamSittingMailExpansionCompletion{OccurrenceID: command.OccurrenceID}); err != nil {
+
+	if _, err = h.sittings.CompleteMailExpansion(
+		ctx,
+		&store.ExamSittingMailExpansionCompletion{OccurrenceID: command.OccurrenceID},
+	); err != nil {
 		return sittingMailExpansionDependencyOutcome(err)
 	}
+
 	return sittingMailExpansionSucceeded(checkpoint)
 }
 
 func sittingMailExpansionSucceeded(checkpoint model.SittingMailExpansionCheckpoint) job.Outcome {
 	document, err := model.EncodeSittingMailExpansionResult(model.SittingMailExpansionResult{
-		Expanded: checkpoint.Expanded, Suppressed: checkpoint.Suppressed, Undeliverable: checkpoint.Undeliverable})
+		Expanded:      checkpoint.Expanded,
+		Suppressed:    checkpoint.Suppressed,
+		Undeliverable: checkpoint.Undeliverable,
+	})
 	return job.Outcome{Kind: job.OutcomeSucceeded, Result: document, Err: err}
 }
 
@@ -121,13 +153,28 @@ func sittingMailExpansionDependencyOutcome(err error) job.Outcome {
 }
 
 func sittingMailExpansionDescriptor(handler sittingMailExpansionHandler) job.Descriptor {
-	return job.Descriptor{Type: model.JobTypeMailExpandSitting, Checkpoints: true,
-		ProgressStages:   []string{"expanding"},
-		PublicErrorCodes: []string{"mail.sitting.bundle_unavailable", "mail.sitting.invalid", "mail.sitting.recipient_unavailable", "mail.sitting.unavailable"},
-		Timeout:          30 * time.Minute, Concurrency: 2, MaximumAttempts: model.MailMaximumAttempts,
-		LeaseDuration: time.Minute, HeartbeatInterval: 15 * time.Second, BaseRetryDelay: 30 * time.Second,
-		MaximumRetryDelay: 30 * time.Minute, Visibility: job.VisibilityOperator,
-		SuccessRetention: 90 * 24 * time.Hour, FailureRetention: 180 * 24 * time.Hour, Handler: handler}
+	return job.Descriptor{
+		Type:           model.JobTypeMailExpandSitting,
+		Checkpoints:    true,
+		ProgressStages: []string{"expanding"},
+		PublicErrorCodes: []string{
+			"mail.sitting.bundle_unavailable",
+			"mail.sitting.invalid",
+			"mail.sitting.recipient_unavailable",
+			"mail.sitting.unavailable",
+		},
+		Timeout:           30 * time.Minute,
+		Concurrency:       2,
+		MaximumAttempts:   model.MailMaximumAttempts,
+		LeaseDuration:     time.Minute,
+		HeartbeatInterval: 15 * time.Second,
+		BaseRetryDelay:    30 * time.Second,
+		MaximumRetryDelay: 30 * time.Minute,
+		Visibility:        job.VisibilityOperator,
+		SuccessRetention:  90 * 24 * time.Hour,
+		FailureRetention:  180 * 24 * time.Hour,
+		Handler:           handler,
+	}
 }
 
 // NewSittingMailExpansionDescriptor registers the expansion of a Sitting's

@@ -22,14 +22,30 @@ type examCorrectionRealtimeEffects struct {
 }
 
 func (e examCorrectionRealtimeEffects) Corrected(ctx context.Context, result correction.Result) error {
-	managerEvent, err := realtime.NewExamSittingContentCorrectedEvent(result.ExamID, result.SittingID, result.PreviousRevisionID, result.RevisionID, result.SittingRevision, result.EffectiveAt)
+	managerEvent, err := realtime.NewExamSittingContentCorrectedEvent(
+		result.ExamID,
+		result.SittingID,
+		result.PreviousRevisionID,
+		result.RevisionID,
+		result.SittingRevision,
+		result.EffectiveAt,
+	)
 	if err != nil {
 		return err
 	}
-	candidateEvent, err := realtime.NewCandidateExamSittingContentCorrectedEvent(result.ExamID, result.SittingID, result.PreviousRevisionID, result.RevisionID, result.SittingRevision, result.EffectiveAt)
+
+	candidateEvent, err := realtime.NewCandidateExamSittingContentCorrectedEvent(
+		result.ExamID,
+		result.SittingID,
+		result.PreviousRevisionID,
+		result.RevisionID,
+		result.SittingRevision,
+		result.EffectiveAt,
+	)
 	if err != nil {
 		return err
 	}
+
 	return errors.Join(
 		e.realtime.PublishRealtimeEvent(ctx, managerEvent),
 		e.realtime.PublishRealtimeEvent(ctx, candidateEvent),

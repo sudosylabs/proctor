@@ -85,16 +85,19 @@ func (h onboardingImportExecuteHandler) Run(ctx context.Context, execution job.E
 	if err != nil || h.service == nil {
 		return job.PermanentFailure("job.command.invalid", errors.New("onboarding import execution command is invalid"))
 	}
+
 	checkpoint := onboardingImportCheckpoint{}
 	if len(execution.Job.Checkpoint) != 0 {
 		if decodeStrictJobDocument(execution.Job.Checkpoint, &checkpoint) != nil || checkpoint.AfterRow < 0 || checkpoint.Processed < 0 {
 			return job.PermanentFailure("job.checkpoint.invalid", errors.New("onboarding import checkpoint is invalid"))
 		}
 	}
+
 	current, err := h.service.Get(ctx, model.OnboardingImportID(command.ImportID))
 	if err != nil {
 		return job.RetryableFailure("dependency.unavailable", err)
 	}
+
 	total := max(current.ValidRows, 1)
 	lastAfter, lastProcessed := checkpoint.AfterRow, checkpoint.Processed
 	err = h.service.Execute(ctx, model.OnboardingImportID(command.ImportID), checkpoint.AfterRow, func(after, processed int) error {
@@ -103,6 +106,7 @@ func (h onboardingImportExecuteHandler) Run(ctx context.Context, execution job.E
 		if marshalErr != nil {
 			return marshalErr
 		}
+
 		return execution.Checkpoint(ctx, job.CheckpointValue{Document: document,
 			Progress: &model.JobProgress{Current: int64(lastProcessed), Total: int64(total), Stage: "executing"}})
 	})
@@ -112,15 +116,20 @@ func (h onboardingImportExecuteHandler) Run(ctx context.Context, execution job.E
 		}
 		return job.RetryableFailure("dependency.unavailable", err)
 	}
+
 	result, _ := json.Marshal(onboardingImportCheckpoint{AfterRow: lastAfter, Processed: lastProcessed})
 	return job.Outcome{Kind: job.OutcomeSucceeded, Result: result}
 }
 
 func decodeOnboardingImportJob(execution job.Execution, expected model.JobType) (onboardingImportJobCommand, error) {
 	var command onboardingImportJobCommand
-	if execution.Job == nil || execution.Job.Type != expected || decodeStrictJobDocument(execution.Job.Command, &command) != nil || !model.OnboardingImportID(command.ImportID).IsValid() {
+	if execution.Job == nil ||
+		execution.Job.Type != expected ||
+		decodeStrictJobDocument(execution.Job.Command, &command) != nil ||
+		!model.OnboardingImportID(command.ImportID).IsValid() {
 		return command, errors.New("invalid onboarding import job")
 	}
+
 	return command, nil
 }
 
@@ -149,10 +158,29 @@ func NewOnboardingImportExecuteDescriptor(service OnboardingImportService) job.D
 }
 
 func onboardingImportDescriptor(kind model.JobType, handler job.Handler, cancelable bool) job.Descriptor {
-	return job.Descriptor{Type: kind, PublicErrorCodes: []string{"dependency.unavailable", "job.canceled", "job.checkpoint.invalid", "job.command.invalid", "onboarding_import.authorization_lost", "onboarding_import.file_invalid"},
-		Timeout: 10 * time.Minute, Concurrency: 2, MaximumAttempts: 8, LeaseDuration: time.Minute, HeartbeatInterval: 15 * time.Second,
-		BaseRetryDelay: 10 * time.Second, MaximumRetryDelay: 5 * time.Minute, Cancelable: cancelable, Visibility: job.VisibilityDomain,
-		SuccessRetention: 7 * 24 * time.Hour, FailureRetention: 7 * 24 * time.Hour, Handler: handler}
+	return job.Descriptor{
+		Type: kind,
+		PublicErrorCodes: []string{
+			"dependency.unavailable",
+			"job.canceled",
+			"job.checkpoint.invalid",
+			"job.command.invalid",
+			"onboarding_import.authorization_lost",
+			"onboarding_import.file_invalid",
+		},
+		Timeout:           10 * time.Minute,
+		Concurrency:       2,
+		MaximumAttempts:   8,
+		LeaseDuration:     time.Minute,
+		HeartbeatInterval: 15 * time.Second,
+		BaseRetryDelay:    10 * time.Second,
+		MaximumRetryDelay: 5 * time.Minute,
+		Cancelable:        cancelable,
+		Visibility:        job.VisibilityDomain,
+		SuccessRetention:  7 * 24 * time.Hour,
+		FailureRetention:  7 * 24 * time.Hour,
+		Handler:           handler,
+	}
 }
 
 // NewOnboardingImportDescriptors registers the onboarding import parse,

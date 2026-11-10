@@ -64,16 +64,19 @@ func (s *Service) CreateAcademicUnit(
 		if err != nil {
 			return nil, err
 		}
+
 		authorized = institution
 	} else {
 		if !parentID.IsValid() {
 			return nil, apperror.New("request.invalid").WithField("field", "parent_id")
 		}
+
 		action = model.ActionAcademicUnitManage
 		authorized = model.Resource{Type: model.ResourceAcademicUnit, ID: parentID.String()}
 		if err := s.authorizer.Authorize(ctx, invocation, action, authorized); err != nil {
 			return nil, err
 		}
+
 		var err error
 		institution, err = s.authorizer.InstitutionResource(ctx)
 		if err != nil {
@@ -85,10 +88,12 @@ func (s *Service) CreateAcademicUnit(
 	if err != nil {
 		return nil, apperror.New("request.invalid").WithField("field", "academic_unit_id").Wrap(err)
 	}
+
 	institutionID, err := model.ParseInstitutionID(institution.ID)
 	if err != nil {
 		return nil, apperror.New("administration.unavailable").WithField("resource", "institution").Wrap(err)
 	}
+
 	parentUnitID := parentID
 	candidate := &model.AcademicUnit{
 		InstitutionID: model.InstitutionID(institutionID),
@@ -101,12 +106,14 @@ func (s *Service) CreateAcademicUnit(
 	if err := candidate.Validate(); err != nil {
 		return nil, apperror.DomainInvalid("academic_unit.invalid", err)
 	}
+
 	idempotency, err := idempotency.Prepare(invocation, "academic_unit.create", command.IdempotencyKey, struct {
 		ParentID, Name, DisplayName, Description string
 	}{command.ParentID.String(), command.Name, command.DisplayName, command.Description})
 	if err != nil {
 		return nil, err
 	}
+
 	saved, err := access.RunAudited(
 		ctx,
 		s.auditor,
@@ -120,18 +127,22 @@ func (s *Service) CreateAcademicUnit(
 		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.AcademicUnitCommandResult, error) {
 			input := &store.AcademicUnitCreation{
-				Unit: candidate, AuditEventID: reference.ID, AuditAt: reference.MutationAt,
+				Unit:         candidate,
+				AuditEventID: reference.ID,
+				AuditAt:      reference.MutationAt,
 			}
 			if idempotency == nil {
 				unit, createErr := s.academicUnits.Create(ctx, input)
 				return &store.AcademicUnitCommandResult{Value: unit}, createErr
 			}
+
 			idempotentStore, ok := s.academicUnits.(interface {
 				CreateIdempotently(context.Context, *store.AcademicUnitCreation, *store.CommandIdempotency) (*store.AcademicUnitCommandResult, error)
 			})
 			if !ok {
 				return nil, errors.New("academic unit store does not support idempotent creation")
 			}
+
 			return idempotentStore.CreateIdempotently(ctx, input, idempotency)
 		},
 		academicUnitStoreErrors.Translate,
@@ -139,6 +150,7 @@ func (s *Service) CreateAcademicUnit(
 	if err != nil {
 		return nil, err
 	}
+
 	// The unit and success audit are committed before transient fan-out.
 	// Publication remains best effort so callers do not retry committed work.
 	if !saved.Replayed {
@@ -146,6 +158,7 @@ func (s *Service) CreateAcademicUnit(
 			s.effects.Report(ctx, "academic_unit_created", err)
 		}
 	}
+
 	return saved.Value, nil
 }
 
@@ -158,12 +171,17 @@ func (s *Service) UpdateAcademicUnit(
 	if !command.ID.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "academic_unit_id")
 	}
+
 	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: command.ID.String()}
 	if err := s.authorizer.Authorize(
-		ctx, invocation, model.ActionAcademicUnitManage, resource,
+		ctx,
+		invocation,
+		model.ActionAcademicUnitManage,
+		resource,
 	); err != nil {
 		return nil, err
 	}
+
 	current, err := s.academicUnits.Get(ctx, command.ID)
 	if err != nil {
 		return nil, academicUnitStoreErrors.Translate(err)
@@ -171,6 +189,7 @@ func (s *Service) UpdateAcademicUnit(
 	if err := checkAcademicRevision(command.ExpectedRevision, current.Revision, "academic_unit.conflict"); err != nil {
 		return nil, err
 	}
+
 	candidate := *current
 	if command.ParentID != nil {
 		parentID := strings.TrimSpace(command.ParentID.String())
@@ -181,9 +200,11 @@ func (s *Service) UpdateAcademicUnit(
 			if parseErr != nil {
 				return nil, apperror.New("request.invalid").WithField("field", "parent_id").Wrap(parseErr)
 			}
+
 			candidate.ParentID = parentUnitID
 		}
 	}
+
 	if command.Name != nil {
 		candidate.Name = *command.Name
 	}
@@ -193,21 +214,28 @@ func (s *Service) UpdateAcademicUnit(
 	if command.Description != nil {
 		candidate.Description = *command.Description
 	}
+
 	candidate.PrepareUpdate(s.now())
 	if err := candidate.Validate(); err != nil {
 		return nil, apperror.DomainInvalid("academic_unit.invalid", err)
 	}
+
 	if command.ParentID != nil && candidate.ParentID != current.ParentID {
 		destination := model.Resource{Type: model.ResourceAcademicUnit, ID: candidate.ParentID.String()}
 		if candidate.ParentID.IsZero() {
 			destination = model.Resource{Type: model.ResourceInstitution, ID: current.InstitutionID.String()}
 		}
+
 		if err = s.authorizer.Authorize(
-			ctx, invocation, model.ActionAcademicUnitManage, destination,
+			ctx,
+			invocation,
+			model.ActionAcademicUnitManage,
+			destination,
 		); err != nil {
 			return nil, err
 		}
 	}
+
 	updated, err := access.RunAudited(
 		ctx,
 		s.auditor,
@@ -222,7 +250,9 @@ func (s *Service) UpdateAcademicUnit(
 		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.AcademicUnit, error) {
 			return s.academicUnits.Update(ctx, &store.AcademicUnitUpdate{
-				Unit: &candidate, AuditEventID: reference.ID, AuditAt: reference.MutationAt,
+				Unit:         &candidate,
+				AuditEventID: reference.ID,
+				AuditAt:      reference.MutationAt,
 			})
 		},
 		func(err error) error { return academicUnitStoreErrors.Translate(err) },
@@ -233,6 +263,7 @@ func (s *Service) UpdateAcademicUnit(
 	if err := s.effects.Updated(ctx, updated.ID); err != nil {
 		s.effects.Report(ctx, "academic_unit_updated", err)
 	}
+
 	return updated, nil
 }
 
@@ -245,12 +276,17 @@ func (s *Service) ArchiveAcademicUnit(
 	if !command.ID.IsValid() {
 		return apperror.New("request.invalid").WithField("field", "academic_unit_id")
 	}
+
 	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: command.ID.String()}
 	if err := s.authorizer.Authorize(
-		ctx, invocation, model.ActionAcademicUnitManage, resource,
+		ctx,
+		invocation,
+		model.ActionAcademicUnitManage,
+		resource,
 	); err != nil {
 		return err
 	}
+
 	current, err := s.academicUnits.Get(ctx, command.ID)
 	if err != nil {
 		return academicUnitStoreErrors.Translate(err)
@@ -258,6 +294,7 @@ func (s *Service) ArchiveAcademicUnit(
 	if err := checkAcademicRevision(command.ExpectedRevision, current.Revision, "academic_unit.conflict"); err != nil {
 		return err
 	}
+
 	archived, err := access.RunAudited(
 		ctx,
 		s.auditor,
@@ -273,8 +310,10 @@ func (s *Service) ArchiveAcademicUnit(
 		func(ctx context.Context, reference access.MutationReference) (*model.AcademicUnit, error) {
 			return s.academicUnits.Archive(ctx, &store.AcademicUnitArchive{
 				ExpectedRevision: current.Revision,
-				ID:               command.ID, ArchiveAt: reference.MutationAt,
-				AuditEventID: reference.ID, AuditAt: reference.MutationAt,
+				ID:               command.ID,
+				ArchiveAt:        reference.MutationAt,
+				AuditEventID:     reference.ID,
+				AuditAt:          reference.MutationAt,
 			})
 		},
 		func(err error) error { return academicUnitStoreErrors.Translate(err) },
@@ -285,5 +324,6 @@ func (s *Service) ArchiveAcademicUnit(
 	if err := s.effects.Archived(ctx, archived.ID); err != nil {
 		s.effects.Report(ctx, "academic_unit_archived", err)
 	}
+
 	return nil
 }

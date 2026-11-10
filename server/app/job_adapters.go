@@ -24,8 +24,11 @@ func (a jobMailDeliveryRecorder) RecordJobMailDelivery(ctx context.Context, metr
 	if a.recorder == nil {
 		return
 	}
+
 	a.recorder.RecordMailDelivery(ctx, MailDeliveryMetric{
-		TemplateKey: metric.TemplateKey, State: metric.State, OutcomeCode: metric.OutcomeCode,
+		TemplateKey:       metric.TemplateKey,
+		State:             metric.State,
+		OutcomeCode:       metric.OutcomeCode,
 		ProcessingLatency: metric.ProcessingLatency,
 	})
 }

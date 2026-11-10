@@ -61,7 +61,10 @@ func (s *Service) SessionsRevoked(
 	}
 	s.applySessionRevocation(ctx, message)
 	s.broadcastSecurityInvalidation(
-		ctx, securityOperationSessionRevocation, clusterEventSessionRevoked, message,
+		ctx,
+		securityOperationSessionRevocation,
+		clusterEventSessionRevoked,
+		message,
 	)
 }
 
@@ -82,7 +85,10 @@ func (s *Service) AuthenticationCacheInvalidated(
 	}
 	s.applySessionRevocation(ctx, message)
 	s.broadcastSecurityInvalidation(
-		ctx, securityOperationAuthenticationCache, clusterEventSessionRevoked, message,
+		ctx,
+		securityOperationAuthenticationCache,
+		clusterEventSessionRevoked,
+		message,
 	)
 }
 

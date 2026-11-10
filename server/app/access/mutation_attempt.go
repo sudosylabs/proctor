@@ -36,8 +36,15 @@ type Mutation struct {
 
 type scopedMutationAuditor interface {
 	BeginAtScope(
-		context.Context, invocation.Invocation, model.Action, model.Resource,
-		model.RoleScopeType, string, string, map[string]any, map[string]any,
+		context.Context,
+		invocation.Invocation,
+		model.Action,
+		model.Resource,
+		model.RoleScopeType,
+		string,
+		string,
+		map[string]any,
+		map[string]any,
 	) (model.AuditEventID, error)
 }
 
@@ -72,20 +79,30 @@ func RunAudited[T any](
 	var err error
 	if !attempt.Subject.IsZero() {
 		subjectAuditor, ok := auditor.(subjectMutationAuditor)
-		if !ok || !attempt.Subject.IsValid() || (attempt.ScopeType != "" || attempt.ScopeID != "") &&
-			(!attempt.ScopeType.IsValid() || !model.IsValidOpaqueID(attempt.ScopeID)) {
+		if !ok ||
+			!attempt.Subject.IsValid() ||
+			(attempt.ScopeType != "" || attempt.ScopeID != "") &&
+				(!attempt.ScopeType.IsValid() || !model.IsValidOpaqueID(attempt.ScopeID)) {
 			return zero, apperror.New("audit.internal")
 		}
+
 		auditID, err = subjectAuditor.BeginForSubject(ctx, attempt)
 	} else if attempt.ScopeType != "" || attempt.ScopeID != "" {
 		scoped, ok := auditor.(scopedMutationAuditor)
 		if !ok || !attempt.ScopeType.IsValid() || !model.IsValidOpaqueID(attempt.ScopeID) {
 			return zero, apperror.New("audit.internal")
 		}
+
 		auditID, err = scoped.BeginAtScope(
-			ctx, attempt.Invocation, attempt.Action, attempt.Resource,
-			attempt.ScopeType, attempt.ScopeID, attempt.Operation,
-			attempt.Value, attempt.Prior,
+			ctx,
+			attempt.Invocation,
+			attempt.Action,
+			attempt.Resource,
+			attempt.ScopeType,
+			attempt.ScopeID,
+			attempt.Operation,
+			attempt.Value,
+			attempt.Prior,
 		)
 	} else {
 		auditID, err = auditor.Begin(
@@ -98,6 +115,7 @@ func RunAudited[T any](
 			attempt.Prior,
 		)
 	}
+
 	if err != nil {
 		return zero, err
 	}
@@ -118,8 +136,10 @@ func RunAudited[T any](
 		)
 		failure, _ = apperror.As(mapped)
 	}
+
 	if auditErr := auditor.Fail(ctx, auditID, failure.Code()); auditErr != nil {
 		return zero, errors.Join(mapped, auditErr)
 	}
+
 	return zero, mapped
 }

@@ -53,7 +53,11 @@ type MailRekeyStatusView struct {
 }
 
 // GetMailRekeyStatus reports the progress of one mail rekey Job.
-func (s *MailService) GetMailRekeyStatus(ctx context.Context, invocation invocation.Invocation, jobID model.JobID) (MailRekeyStatusView, error) {
+func (s *MailService) GetMailRekeyStatus(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	jobID model.JobID,
+) (MailRekeyStatusView, error) {
 	if s == nil {
 		return MailRekeyStatusView{}, apperror.New("mail.unavailable")
 	}
@@ -66,6 +70,7 @@ func (s *MailService) GetMailRekeyStatus(ctx context.Context, invocation invocat
 	if s.rekeyJobs == nil || !jobID.IsValid() {
 		return MailRekeyStatusView{}, apperror.New("mail.unavailable")
 	}
+
 	job, err := s.rekeyJobs.Get(ctx, jobID)
 	if err != nil {
 		if store.IsNotFound(err) {
@@ -73,6 +78,7 @@ func (s *MailService) GetMailRekeyStatus(ctx context.Context, invocation invocat
 		}
 		return MailRekeyStatusView{}, apperror.New("mail.unavailable").Wrap(err)
 	}
+
 	// Job identities are shared across domains. A caller with mail.rekey must
 	// not learn whether a valid identifier belongs to some unrelated Job type.
 	if job == nil {
@@ -81,10 +87,12 @@ func (s *MailService) GetMailRekeyStatus(ctx context.Context, invocation invocat
 	if job.Type != model.JobTypeMailRekey {
 		return MailRekeyStatusView{}, apperror.New("resource.not_found")
 	}
+
 	view, err := projectMailRekeyStatus(job)
 	if err != nil {
 		return MailRekeyStatusView{}, apperror.New("mail.unavailable").Wrap(err)
 	}
+
 	return view, nil
 }
 
@@ -92,44 +100,73 @@ func projectMailRekeyStatus(job *model.Job) (MailRekeyStatusView, error) {
 	if job == nil || job.Validate() != nil || job.Type != model.JobTypeMailRekey {
 		return MailRekeyStatusView{}, errors.New("mail rekey Job is invalid")
 	}
+
 	command, commandErr := jobhandler.DecodeMailRekeyCommand(job.Command)
-	if commandErr != nil || !identity.ValidRekeyKeyID(command.PrimaryKeyID) ||
-		!identity.ValidRekeyKeyID(command.RetiringKeyID) || command.PrimaryKeyID == command.RetiringKeyID {
+	if commandErr != nil ||
+		!identity.ValidRekeyKeyID(command.PrimaryKeyID) ||
+		!identity.ValidRekeyKeyID(command.RetiringKeyID) ||
+		command.PrimaryKeyID == command.RetiringKeyID {
 		return MailRekeyStatusView{}, errors.New("mail rekey command is invalid")
 	}
-	view := MailRekeyStatusView{JobID: job.ID, Status: job.Status, PrimaryKeyID: command.PrimaryKeyID,
-		RetiringKeyID: command.RetiringKeyID, CreatedAt: job.CreatedAt, UpdatedAt: job.UpdatedAt,
-		CompletedAt: job.CompletedAt, PublicErrorCode: job.PublicErrorCode,
-		AttemptCount: job.AttemptCount, MaximumAttempts: job.MaximumAttempts}
+
+	view := MailRekeyStatusView{
+		JobID:           job.ID,
+		Status:          job.Status,
+		PrimaryKeyID:    command.PrimaryKeyID,
+		RetiringKeyID:   command.RetiringKeyID,
+		CreatedAt:       job.CreatedAt,
+		UpdatedAt:       job.UpdatedAt,
+		CompletedAt:     job.CompletedAt,
+		PublicErrorCode: job.PublicErrorCode,
+		AttemptCount:    job.AttemptCount,
+		MaximumAttempts: job.MaximumAttempts,
+	}
 	if len(job.Checkpoint) > 0 {
 		checkpoint, err := jobhandler.DecodeMailRekeyCheckpoint(job.Checkpoint)
-		if err != nil || job.Progress == nil || job.Progress.Current != checkpoint.Processed ||
-			job.Progress.Total < checkpoint.Processed || job.Progress.Stage != "reencrypting" {
+		if err != nil ||
+			job.Progress == nil ||
+			job.Progress.Current != checkpoint.Processed ||
+			job.Progress.Total < checkpoint.Processed ||
+			job.Progress.Stage != "reencrypting" {
 			return MailRekeyStatusView{}, errors.New("mail rekey checkpoint projection is invalid")
 		}
+
 		view.Processed, view.Reencrypted = checkpoint.Processed, checkpoint.Reencrypted
 		view.Progress = &MailRekeyProgressView{Current: job.Progress.Current, Total: job.Progress.Total, Stage: job.Progress.Stage}
 	} else if job.Progress != nil {
 		return MailRekeyStatusView{}, errors.New("mail rekey progress has no checkpoint")
 	}
+
 	if len(job.Result) > 0 {
 		if job.Status != model.JobStatusSucceeded {
 			return MailRekeyStatusView{}, errors.New("mail rekey result state is invalid")
 		}
+
 		result, resultErr := jobhandler.DecodeMailRekeyResult(job.Result)
 		if resultErr != nil ||
-			result.PrimaryKeyID != command.PrimaryKeyID || result.RetiringKeyID != command.RetiringKeyID ||
-			result.Processed < view.Processed || result.Reencrypted < view.Reencrypted || result.Reencrypted > result.Processed ||
-			result.NonPrimaryReferences < 0 || result.RetiringReferences < 0 ||
-			result.RetiringReferences > result.NonPrimaryReferences || !result.RetirementSafe ||
-			result.NonPrimaryReferences != 0 || result.RetiringReferences != 0 {
+			result.PrimaryKeyID != command.PrimaryKeyID ||
+			result.RetiringKeyID != command.RetiringKeyID ||
+			result.Processed < view.Processed ||
+			result.Reencrypted < view.Reencrypted ||
+			result.Reencrypted > result.Processed ||
+			result.NonPrimaryReferences < 0 ||
+			result.RetiringReferences < 0 ||
+			result.RetiringReferences > result.NonPrimaryReferences ||
+			!result.RetirementSafe ||
+			result.NonPrimaryReferences != 0 ||
+			result.RetiringReferences != 0 {
 			return MailRekeyStatusView{}, errors.New("mail rekey retirement proof is invalid")
 		}
+
 		view.Processed, view.Reencrypted = result.Processed, result.Reencrypted
-		view.Proof = &MailRekeyProofView{NonPrimaryReferences: result.NonPrimaryReferences,
-			RetiringReferences: result.RetiringReferences, RetirementSafe: result.RetirementSafe}
+		view.Proof = &MailRekeyProofView{
+			NonPrimaryReferences: result.NonPrimaryReferences,
+			RetiringReferences:   result.RetiringReferences,
+			RetirementSafe:       result.RetirementSafe,
+		}
 	} else if job.Status == model.JobStatusSucceeded {
 		return MailRekeyStatusView{}, errors.New("successful mail rekey has no proof")
 	}
+
 	return view, nil
 }

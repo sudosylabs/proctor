@@ -29,15 +29,19 @@ func (c deploymentAccessPolicyCapabilities) Snapshot() identity.AccessPolicyCapa
 	if c.providers == nil {
 		return result
 	}
+
 	for _, descriptor := range c.providers.Descriptors() {
 		provider, available := c.providers.Provider(descriptor.ID)
 		if !available || provider == nil {
 			continue
 		}
+
 		result.Providers = append(result.Providers, identity.AccessPolicyProviderCapability{
-			Descriptor: descriptor, AutoProvision: provider.AutoProvision(),
+			Descriptor:    descriptor,
+			AutoProvision: provider.AutoProvision(),
 		})
 	}
+
 	sort.Slice(result.Providers, func(i, j int) bool {
 		return result.Providers[i].Descriptor.ID < result.Providers[j].Descriptor.ID
 	})

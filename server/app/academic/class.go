@@ -70,59 +70,88 @@ func (s *Service) GetClass(ctx context.Context, invocation invocation.Invocation
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "class_id")
 	}
-	if err := s.authorizer.Authorize(ctx, invocation, model.ActionClassView, model.Resource{Type: model.ResourceClass, ID: id.String()}); err != nil {
+
+	if err := s.authorizer.Authorize(
+		ctx,
+		invocation,
+		model.ActionClassView,
+		model.Resource{Type: model.ResourceClass, ID: id.String()},
+	); err != nil {
 		return nil, err
 	}
+
 	class, err := s.classes.Get(ctx, id)
 	if err != nil {
 		return nil, classStoreErrors.Translate(err)
 	}
+
 	return class, nil
 }
 
 // ListClasses lists Classes after authorizing the caller.
-func (s *Service) ListClasses(ctx context.Context, invocation invocation.Invocation, query ListClassesQuery) (paging.Page[*model.Class], error) {
+func (s *Service) ListClasses(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	query ListClassesQuery,
+) (paging.Page[*model.Class], error) {
 	levelID := query.ProgrammeLevelID
 	if !levelID.IsValid() {
 		return paging.Page[*model.Class]{}, apperror.New("request.invalid").WithField("field", "programme_level_id")
 	}
+
 	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
 	if err != nil {
 		return paging.Page[*model.Class]{}, err
 	}
+
 	resource := model.Resource{Type: model.ResourceProgrammeLevel, ID: levelID.String()}
 	if err = s.authorizer.Authorize(ctx, invocation, model.ActionClassView, resource); err != nil {
 		return paging.Page[*model.Class]{}, err
 	}
+
 	classes, err := s.classes.ListByProgrammeLevel(ctx, levelID, store.AcademicNameListOptions{
-		AfterName: query.AfterName, AfterID: query.AfterID, Limit: probe,
+		AfterName: query.AfterName,
+		AfterID:   query.AfterID,
+		Limit:     probe,
 	})
 	if err != nil {
 		return paging.Page[*model.Class]{}, classStoreErrors.Translate(err)
 	}
+
 	return paging.New(classes, limit), nil
 }
 
 // SearchClasses searches Classes after authorizing the caller.
-func (s *Service) SearchClasses(ctx context.Context, invocation invocation.Invocation, query SearchClassesQuery) (paging.Page[*model.Class], error) {
+func (s *Service) SearchClasses(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	query SearchClassesQuery,
+) (paging.Page[*model.Class], error) {
 	unitID := query.AcademicUnitID
 	if !unitID.IsValid() {
 		return paging.Page[*model.Class]{}, apperror.New("request.invalid").WithField("field", "academic_unit_id")
 	}
+
 	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
 	if err != nil {
 		return paging.Page[*model.Class]{}, err
 	}
+
 	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()}
 	if err = s.authorizer.Authorize(ctx, invocation, model.ActionClassView, resource); err != nil {
 		return paging.Page[*model.Class]{}, err
 	}
+
 	classes, err := s.classes.SearchByAcademicUnit(ctx, unitID, store.AcademicNameListOptions{
-		Term: strings.TrimSpace(query.Query), AfterName: query.AfterName, AfterID: query.AfterID, Limit: probe,
+		Term:      strings.TrimSpace(query.Query),
+		AfterName: query.AfterName,
+		AfterID:   query.AfterID,
+		Limit:     probe,
 	})
 	if err != nil {
 		return paging.Page[*model.Class]{}, classStoreErrors.Translate(err)
 	}
+
 	return paging.New(classes, limit), nil
 }
 
@@ -132,21 +161,25 @@ func (s *Service) CreateClass(ctx context.Context, invocation invocation.Invocat
 	if !levelID.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "programme_level_id")
 	}
+
 	resource := model.Resource{Type: model.ResourceProgrammeLevel, ID: levelID.String()}
 	scope, err := s.authorizer.AuthorizeWithScope(ctx, invocation, model.ActionClassManage, resource)
 	scopeType, scopeID := scope.ScopeType, scope.ScopeID
 	if err != nil {
 		return nil, err
 	}
+
 	classID, err := model.ParseClassID(s.newID())
 	if err != nil {
 		return nil, apperror.New("request.invalid").WithField("field", "class_id").Wrap(err)
 	}
+
 	programmeLevelID := levelID
 	academicPeriodID, err := model.ParseAcademicPeriodID(strings.TrimSpace(command.AcademicPeriodID.String()))
 	if err != nil {
 		return nil, apperror.New("request.invalid").WithField("field", "academic_period_id").Wrap(err)
 	}
+
 	candidate := &model.Class{
 		ProgrammeLevelID: programmeLevelID,
 		AcademicPeriodID: academicPeriodID,
@@ -158,6 +191,7 @@ func (s *Service) CreateClass(ctx context.Context, invocation invocation.Invocat
 	if err := candidate.Validate(); err != nil {
 		return nil, apperror.DomainInvalid("class.invalid", err)
 	}
+
 	return access.RunAudited(
 		ctx,
 		s.auditor,
@@ -173,7 +207,9 @@ func (s *Service) CreateClass(ctx context.Context, invocation invocation.Invocat
 		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.Class, error) {
 			return s.classes.Create(ctx, &store.ClassCreation{
-				Class: candidate, AuditEventID: reference.ID, AuditAt: reference.MutationAt,
+				Class:        candidate,
+				AuditEventID: reference.ID,
+				AuditAt:      reference.MutationAt,
 			})
 		},
 		classStoreErrors.Translate,
@@ -186,14 +222,17 @@ func (s *Service) UpdateClass(ctx context.Context, invocation invocation.Invocat
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "class_id")
 	}
+
 	resource := model.Resource{Type: model.ResourceClass, ID: id.String()}
 	if err := s.authorizer.Authorize(ctx, invocation, model.ActionClassManage, resource); err != nil {
 		return nil, err
 	}
+
 	unitID, err := s.classes.GetAcademicUnitID(ctx, id)
 	if err != nil {
 		return nil, classStoreErrors.Translate(err)
 	}
+
 	current, err := s.classes.Get(ctx, id)
 	if err != nil {
 		return nil, classStoreErrors.Translate(err)
@@ -201,21 +240,26 @@ func (s *Service) UpdateClass(ctx context.Context, invocation invocation.Invocat
 	if err := checkAcademicRevision(command.ExpectedRevision, current.Revision, "class.conflict"); err != nil {
 		return nil, err
 	}
+
 	candidate := *current
 	if command.ProgrammeLevelID != nil {
 		levelID, err := model.ParseProgrammeLevelID(strings.TrimSpace(command.ProgrammeLevelID.String()))
 		if err != nil {
 			return nil, apperror.New("request.invalid").WithField("field", "programme_level_id").Wrap(err)
 		}
+
 		candidate.ProgrammeLevelID = levelID
 	}
+
 	if command.AcademicPeriodID != nil {
 		periodID, err := model.ParseAcademicPeriodID(strings.TrimSpace(command.AcademicPeriodID.String()))
 		if err != nil {
 			return nil, apperror.New("request.invalid").WithField("field", "academic_period_id").Wrap(err)
 		}
+
 		candidate.AcademicPeriodID = periodID
 	}
+
 	if command.Name != nil {
 		candidate.Name = *command.Name
 	}
@@ -225,20 +269,24 @@ func (s *Service) UpdateClass(ctx context.Context, invocation invocation.Invocat
 	if command.Description != nil {
 		candidate.Description = *command.Description
 	}
+
 	if candidate.ProgrammeLevelID != current.ProgrammeLevelID {
 		destination := model.Resource{Type: model.ResourceProgrammeLevel, ID: candidate.ProgrammeLevelID.String()}
 		if err := s.authorizer.Authorize(ctx, invocation, model.ActionClassManage, destination); err != nil {
 			return nil, err
 		}
 	}
+
 	at := s.now()
 	if !at.After(current.UpdatedAt) {
 		at = current.UpdatedAt.Add(time.Millisecond)
 	}
+
 	candidate.PrepareUpdate(at)
 	if err := candidate.Validate(); err != nil {
 		return nil, apperror.DomainInvalid("class.invalid", err)
 	}
+
 	return access.RunAudited(
 		ctx,
 		s.auditor,
@@ -270,14 +318,17 @@ func (s *Service) ArchiveClass(ctx context.Context, invocation invocation.Invoca
 	if !id.IsValid() {
 		return apperror.New("request.invalid").WithField("field", "class_id")
 	}
+
 	resource := model.Resource{Type: model.ResourceClass, ID: id.String()}
 	if err := s.authorizer.Authorize(ctx, invocation, model.ActionClassManage, resource); err != nil {
 		return err
 	}
+
 	unitID, err := s.classes.GetAcademicUnitID(ctx, id)
 	if err != nil {
 		return classStoreErrors.Translate(err)
 	}
+
 	current, err := s.classes.Get(ctx, id)
 	if err != nil {
 		return classStoreErrors.Translate(err)
@@ -285,6 +336,7 @@ func (s *Service) ArchiveClass(ctx context.Context, invocation invocation.Invoca
 	if err := checkAcademicRevision(command.ExpectedRevision, current.Revision, "class.conflict"); err != nil {
 		return err
 	}
+
 	_, err = access.RunAudited(
 		ctx,
 		s.auditor,
@@ -300,6 +352,7 @@ func (s *Service) ArchiveClass(ctx context.Context, invocation invocation.Invoca
 			if !at.After(current.UpdatedAt) {
 				return current.UpdatedAt.Add(time.Millisecond)
 			}
+
 			return at
 		},
 		func(ctx context.Context, reference access.MutationReference) (*model.Class, error) {

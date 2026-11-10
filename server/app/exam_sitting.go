@@ -22,18 +22,35 @@ import (
 
 type examSittingSystemAuditAdapter struct{ audit *access.Auditor }
 
-func (a examSittingSystemAuditAdapter) Begin(ctx context.Context, call invocation.System, action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID, operation string, value map[string]any) (model.AuditEventID, error) {
+func (a examSittingSystemAuditAdapter) Begin(
+	ctx context.Context,
+	call invocation.System,
+	action model.Action,
+	resource model.Resource,
+	scopeType model.RoleScopeType,
+	scopeID,
+	operation string,
+	value map[string]any,
+) (model.AuditEventID, error) {
 	auditValue := make(map[string]any, len(value)+2)
 	for key, item := range value {
 		auditValue[key] = item
 	}
+
 	auditValue["job_id"] = call.JobID.String()
 	auditValue["job_attempt_id"] = call.AttemptID.String()
-	event, err := a.audit.BeginSystemCriticalActionAtScope(ctx, action, resource, scopeType, scopeID,
-		map[string]any{"operation": operation, "value": auditValue})
+	event, err := a.audit.BeginSystemCriticalActionAtScope(
+		ctx,
+		action,
+		resource,
+		scopeType,
+		scopeID,
+		map[string]any{"operation": operation, "value": auditValue},
+	)
 	if err != nil {
 		return "", err
 	}
+
 	return event.ID, nil
 }
 
@@ -47,19 +64,27 @@ type examSittingRealtimeEffects struct {
 	collections examCollectionInvalidationEffects
 }
 
-func (e examSittingRealtimeEffects) publishBoardInvalidation(ctx context.Context, examID model.ExamID,
+func (e examSittingRealtimeEffects) publishBoardInvalidation(
+	ctx context.Context,
+	examID model.ExamID,
 	sittingID model.ExamSittingID,
 ) error {
 	return e.collections.SittingBoardChanged(ctx, examID, sittingID)
 }
 
-func (e examSittingRealtimeEffects) Scheduled(ctx context.Context, examID model.ExamID, sittingID model.ExamSittingID,
-	state model.ExamSittingState, revision int64, at time.Time,
+func (e examSittingRealtimeEffects) Scheduled(
+	ctx context.Context,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	state model.ExamSittingState,
+	revision int64,
+	at time.Time,
 ) error {
 	event, err := realtime.NewExamSittingScheduledEvent(examID, sittingID, state, revision, at)
 	if err != nil {
 		return err
 	}
+
 	return errors.Join(
 		e.realtime.PublishRealtimeEvent(ctx, event),
 		e.publishBoardInvalidation(ctx, examID, sittingID),
@@ -67,13 +92,19 @@ func (e examSittingRealtimeEffects) Scheduled(ctx context.Context, examID model.
 	)
 }
 
-func (e examSittingRealtimeEffects) ScheduleUpdated(ctx context.Context, examID model.ExamID, sittingID model.ExamSittingID,
-	state model.ExamSittingState, revision int64, at time.Time,
+func (e examSittingRealtimeEffects) ScheduleUpdated(
+	ctx context.Context,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	state model.ExamSittingState,
+	revision int64,
+	at time.Time,
 ) error {
 	event, err := realtime.NewExamSittingScheduleUpdatedEvent(examID, sittingID, state, revision, at)
 	if err != nil {
 		return err
 	}
+
 	return errors.Join(
 		e.realtime.PublishRealtimeEvent(ctx, event),
 		e.publishBoardInvalidation(ctx, examID, sittingID),
@@ -81,13 +112,19 @@ func (e examSittingRealtimeEffects) ScheduleUpdated(ctx context.Context, examID 
 	)
 }
 
-func (e examSittingRealtimeEffects) Canceled(ctx context.Context, examID model.ExamID, sittingID model.ExamSittingID,
-	state model.ExamSittingState, revision int64, at time.Time,
+func (e examSittingRealtimeEffects) Canceled(
+	ctx context.Context,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	state model.ExamSittingState,
+	revision int64,
+	at time.Time,
 ) error {
 	event, err := realtime.NewExamSittingCanceledEvent(examID, sittingID, state, revision, at)
 	if err != nil {
 		return err
 	}
+
 	return errors.Join(
 		e.realtime.PublishRealtimeEvent(ctx, event),
 		e.publishBoardInvalidation(ctx, examID, sittingID),
@@ -95,18 +132,42 @@ func (e examSittingRealtimeEffects) Canceled(ctx context.Context, examID model.E
 	)
 }
 
-func (e examSittingRealtimeEffects) LifecycleChanged(ctx context.Context, examID model.ExamID, sittingID model.ExamSittingID,
-	state model.ExamSittingState, revision int64, transition store.ExamSittingLifecycleTransitionCode,
-	scheduledEndAt, changedAt time.Time,
+func (e examSittingRealtimeEffects) LifecycleChanged(
+	ctx context.Context,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	state model.ExamSittingState,
+	revision int64,
+	transition store.ExamSittingLifecycleTransitionCode,
+	scheduledEndAt,
+	changedAt time.Time,
 ) error {
-	managerEvent, err := realtime.NewExamSittingLifecycleChangedEvent(examID, sittingID, state, revision, string(transition), scheduledEndAt, changedAt)
+	managerEvent, err := realtime.NewExamSittingLifecycleChangedEvent(
+		examID,
+		sittingID,
+		state,
+		revision,
+		string(transition),
+		scheduledEndAt,
+		changedAt,
+	)
 	if err != nil {
 		return err
 	}
-	candidateEvent, err := realtime.NewCandidateExamSittingLifecycleChangedEvent(examID, sittingID, state, revision, string(transition), scheduledEndAt, changedAt)
+
+	candidateEvent, err := realtime.NewCandidateExamSittingLifecycleChangedEvent(
+		examID,
+		sittingID,
+		state,
+		revision,
+		string(transition),
+		scheduledEndAt,
+		changedAt,
+	)
 	if err != nil {
 		return err
 	}
+
 	return errors.Join(
 		e.realtime.PublishRealtimeEvent(ctx, managerEvent),
 		e.realtime.PublishRealtimeEvent(ctx, candidateEvent),

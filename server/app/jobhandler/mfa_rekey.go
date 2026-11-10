@@ -79,23 +79,38 @@ type mfaRekeyHandler struct {
 }
 
 func (h mfaRekeyHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
-	if execution.Job == nil || execution.Attempt == nil || !execution.Job.ID.IsValid() || !execution.Attempt.ID.IsValid() ||
-		h.credentials == nil || h.sealer == nil {
+	if execution.Job == nil ||
+		execution.Attempt == nil ||
+		!execution.Job.ID.IsValid() ||
+		!execution.Attempt.ID.IsValid() ||
+		h.credentials == nil ||
+		h.sealer == nil {
 		return job.PermanentFailure("job.command.invalid", errors.New("MFA rekey execution is incomplete"))
 	}
+
 	command, err := DecodeMFARekeyCommand(execution.Job.Command)
-	if err != nil || command.PrimaryKeyID == "" || command.RetiringKeyID == "" || command.RetiringKeyID == command.PrimaryKeyID ||
+	if err != nil ||
+		command.PrimaryKeyID == "" ||
+		command.RetiringKeyID == "" ||
+		command.RetiringKeyID == command.PrimaryKeyID ||
 		!h.sealer.HasKey(command.RetiringKeyID) {
 		return job.PermanentFailure("job.command.invalid", errors.New("MFA rekey command is invalid for this key ring"))
 	}
+
 	if command.PrimaryKeyID != h.sealer.PrimaryKeyID() {
 		return job.Relinquished("mfa.rekey.primary_mismatch", errors.New("MFA rekey command requires a different configured primary key"))
 	}
+
 	checkpoint, err := decodeMFARekeyCheckpoint(execution.Job.Checkpoint)
 	if err != nil {
 		return job.PermanentFailure("job.checkpoint.invalid", err)
 	}
-	proofRequest := &store.MFARekeyProofRequest{JobID: execution.Job.ID, PrimaryKeyID: command.PrimaryKeyID, RetiringKeyID: command.RetiringKeyID}
+
+	proofRequest := &store.MFARekeyProofRequest{
+		JobID:         execution.Job.ID,
+		PrimaryKeyID:  command.PrimaryKeyID,
+		RetiringKeyID: command.RetiringKeyID,
+	}
 	initialProof, err := h.credentials.ProveRekey(ctx, proofRequest)
 	if err != nil {
 		return mfaRekeyOutcome(err)
@@ -106,29 +121,40 @@ func (h mfaRekeyHandler) Run(ctx context.Context, execution job.Execution) job.O
 	if initialProof.NonPrimaryReferences > math.MaxInt64-checkpoint.Processed {
 		return job.PermanentFailure("mfa.rekey.invariant_failed", errors.New("MFA rekey progress exceeds its bound"))
 	}
+
 	progressTotal := checkpoint.Processed + initialProof.NonPrimaryReferences
 	for {
-		page, listErr := h.credentials.ListRekeyTargets(ctx, &store.MFARekeyTargetPageRequest{JobID: execution.Job.ID,
-			PrimaryKeyID: command.PrimaryKeyID, AfterCredentialID: checkpoint.AfterCredentialID, Limit: mfaRekeyPageSize})
+		page, listErr := h.credentials.ListRekeyTargets(ctx, &store.MFARekeyTargetPageRequest{
+			JobID:             execution.Job.ID,
+			PrimaryKeyID:      command.PrimaryKeyID,
+			AfterCredentialID: checkpoint.AfterCredentialID,
+			Limit:             mfaRekeyPageSize,
+		})
 		if listErr != nil {
 			return mfaRekeyOutcome(listErr)
 		}
 		if page == nil || len(page.Targets) > mfaRekeyPageSize || (page.More && len(page.Targets) == 0) {
 			return job.PermanentFailure("mfa.rekey.invariant_failed", errors.New("MFA rekey page is invalid"))
 		}
+
 		for _, target := range page.Targets {
-			if !target.CredentialID.IsValid() || target.CredentialID.String() <= checkpoint.AfterCredentialID.String() ||
-				target.KeyID == command.PrimaryKeyID || !h.sealer.HasKey(target.KeyID) {
+			if !target.CredentialID.IsValid() ||
+				target.CredentialID.String() <= checkpoint.AfterCredentialID.String() ||
+				target.KeyID == command.PrimaryKeyID ||
+				!h.sealer.HasKey(target.KeyID) {
 				return job.PermanentFailure("mfa.rekey.invariant_failed", errors.New("MFA rekey target is invalid"))
 			}
+
 			replacement, sealErr := h.reseal(target, execution.Job.ID, command.PrimaryKeyID)
 			if sealErr != nil {
 				return job.PermanentFailure("mfa.rekey.secret_unavailable", sealErr)
 			}
+
 			applied, replaceErr := h.credentials.ReplaceRekeyTarget(ctx, replacement)
 			if replaceErr != nil {
 				return mfaRekeyOutcome(replaceErr)
 			}
+
 			checkpoint.AfterCredentialID = target.CredentialID
 			checkpoint.Processed++
 			if applied {
@@ -138,10 +164,12 @@ func (h mfaRekeyHandler) Run(ctx context.Context, execution job.Execution) job.O
 				return job.RetryableFailure("dependency.unavailable", checkpointErr)
 			}
 		}
+
 		if !page.More {
 			break
 		}
 	}
+
 	proof, err := h.credentials.ProveRekey(ctx, proofRequest)
 	if err != nil {
 		return mfaRekeyOutcome(err)
@@ -149,14 +177,22 @@ func (h mfaRekeyHandler) Run(ctx context.Context, execution job.Execution) job.O
 	if err = validateMFARekeyProof(proof, command); err != nil {
 		return job.PermanentFailure("mfa.rekey.invariant_failed", err)
 	}
+
 	if proof.NonPrimaryReferences != 0 || !proof.RetirementSafe {
 		// A credential the scan passed was replaced meanwhile by one sealed
 		// with an older key only if the fence was bypassed; retry rescans.
 		return job.RetryableFailure("mfa.rekey.incomplete", errors.New("live MFA secrets still use a non-primary key"))
 	}
-	result, err := json.Marshal(MFARekeyResult{PrimaryKeyID: proof.PrimaryKeyID, RetiringKeyID: proof.RetiringKeyID,
-		Processed: checkpoint.Processed, Resealed: checkpoint.Resealed, NonPrimaryReferences: proof.NonPrimaryReferences,
-		RetiringReferences: proof.RetiringReferences, RetirementSafe: proof.RetirementSafe})
+
+	result, err := json.Marshal(MFARekeyResult{
+		PrimaryKeyID:         proof.PrimaryKeyID,
+		RetiringKeyID:        proof.RetiringKeyID,
+		Processed:            checkpoint.Processed,
+		Resealed:             checkpoint.Resealed,
+		NonPrimaryReferences: proof.NonPrimaryReferences,
+		RetiringReferences:   proof.RetiringReferences,
+		RetirementSafe:       proof.RetirementSafe,
+	})
 	return job.Outcome{Kind: job.OutcomeSucceeded, Result: result, Err: err}
 }
 
@@ -164,26 +200,36 @@ func (h mfaRekeyHandler) reseal(target store.MFARekeyTarget, jobID model.JobID, 
 	if !target.UserID.IsValid() || target.EncryptedSecret == "" {
 		return nil, errors.New("MFA rekey target identity is invalid")
 	}
+
 	var envelope secretseal.Envelope
 	if json.Unmarshal([]byte(target.EncryptedSecret), &envelope) != nil || envelope.KeyID != target.KeyID {
 		return nil, errors.New("MFA rekey envelope is invalid")
 	}
+
 	binding := secretseal.Binding{Purpose: MFASealingPurpose, Owner: target.UserID.String()}
 	plaintext, err := h.sealer.Open(binding, envelope)
 	if err != nil {
 		return nil, err
 	}
+
 	defer clear(plaintext)
 	rotated, err := h.sealer.Seal(binding, plaintext)
 	if err != nil || rotated.KeyID != primaryKeyID {
 		return nil, errors.New("MFA rekey could not use the fenced primary key")
 	}
+
 	document, err := json.Marshal(rotated)
 	if err != nil {
 		return nil, err
 	}
-	return &store.MFARekeyReplacement{JobID: jobID, CredentialID: target.CredentialID, ExpectedKeyID: target.KeyID,
-		PrimaryKeyID: primaryKeyID, EncryptedSecret: string(document)}, nil
+
+	return &store.MFARekeyReplacement{
+		JobID:           jobID,
+		CredentialID:    target.CredentialID,
+		ExpectedKeyID:   target.KeyID,
+		PrimaryKeyID:    primaryKeyID,
+		EncryptedSecret: string(document),
+	}, nil
 }
 
 func decodeMFARekeyCheckpoint(document json.RawMessage) (MFARekeyCheckpoint, error) {
@@ -191,10 +237,15 @@ func decodeMFARekeyCheckpoint(document json.RawMessage) (MFARekeyCheckpoint, err
 	if len(document) == 0 {
 		return checkpoint, nil
 	}
-	if decodeStrictUniqueJobDocument(document, &checkpoint) != nil || checkpoint.Processed < 1 || checkpoint.Resealed < 0 ||
-		checkpoint.Resealed > checkpoint.Processed || !checkpoint.AfterCredentialID.IsValid() {
+
+	if decodeStrictUniqueJobDocument(document, &checkpoint) != nil ||
+		checkpoint.Processed < 1 ||
+		checkpoint.Resealed < 0 ||
+		checkpoint.Resealed > checkpoint.Processed ||
+		!checkpoint.AfterCredentialID.IsValid() {
 		return checkpoint, errors.New("MFA rekey checkpoint is invalid")
 	}
+
 	return checkpoint, nil
 }
 
@@ -208,11 +259,16 @@ func checkpointMFARekey(ctx context.Context, execution job.Execution, checkpoint
 }
 
 func validateMFARekeyProof(proof *store.MFARekeyProof, command MFARekeyCommand) error {
-	if proof == nil || proof.PrimaryKeyID != command.PrimaryKeyID || proof.RetiringKeyID != command.RetiringKeyID ||
-		proof.NonPrimaryReferences < 0 || proof.RetiringReferences < 0 || proof.RetiringReferences > proof.NonPrimaryReferences ||
+	if proof == nil ||
+		proof.PrimaryKeyID != command.PrimaryKeyID ||
+		proof.RetiringKeyID != command.RetiringKeyID ||
+		proof.NonPrimaryReferences < 0 ||
+		proof.RetiringReferences < 0 ||
+		proof.RetiringReferences > proof.NonPrimaryReferences ||
 		proof.RetirementSafe != (proof.RetiringReferences == 0) {
 		return errors.New("MFA rekey proof is invalid")
 	}
+
 	return nil
 }
 
@@ -224,12 +280,32 @@ func mfaRekeyOutcome(err error) job.Outcome {
 }
 
 func mfaRekeyDescriptor(handler job.Handler) job.Descriptor {
-	return job.Descriptor{Type: model.JobTypeMFARekey, Checkpoints: true,
-		ProgressStages: []string{"resealing"}, PublicErrorCodes: []string{"dependency.unavailable", "job.checkpoint.invalid", "job.command.invalid", "mfa.rekey.fenced", "mfa.rekey.incomplete", "mfa.rekey.invariant_failed", "mfa.rekey.primary_mismatch", "mfa.rekey.secret_unavailable"},
-		Timeout: 5 * time.Minute, Concurrency: 1, MaximumAttempts: 10, LeaseDuration: time.Minute,
-		HeartbeatInterval: 15 * time.Second, BaseRetryDelay: time.Minute, MaximumRetryDelay: 30 * time.Minute,
-		Visibility: job.VisibilityOperator, SuccessRetention: 90 * 24 * time.Hour,
-		FailureRetention: 180 * 24 * time.Hour, Handler: handler}
+	return job.Descriptor{
+		Type:           model.JobTypeMFARekey,
+		Checkpoints:    true,
+		ProgressStages: []string{"resealing"},
+		PublicErrorCodes: []string{
+			"dependency.unavailable",
+			"job.checkpoint.invalid",
+			"job.command.invalid",
+			"mfa.rekey.fenced",
+			"mfa.rekey.incomplete",
+			"mfa.rekey.invariant_failed",
+			"mfa.rekey.primary_mismatch",
+			"mfa.rekey.secret_unavailable",
+		},
+		Timeout:           5 * time.Minute,
+		Concurrency:       1,
+		MaximumAttempts:   10,
+		LeaseDuration:     time.Minute,
+		HeartbeatInterval: 15 * time.Second,
+		BaseRetryDelay:    time.Minute,
+		MaximumRetryDelay: 30 * time.Minute,
+		Visibility:        job.VisibilityOperator,
+		SuccessRetention:  90 * 24 * time.Hour,
+		FailureRetention:  180 * 24 * time.Hour,
+		Handler:           handler,
+	}
 }
 
 // NewMFARekeyDescriptor registers the re-sealing of MFA credentials under a

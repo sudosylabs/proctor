@@ -104,11 +104,15 @@ func newAdministrationCountsService(deps administrationCountsServiceDependencies
 // administration reads. Each count runs its resource's own list
 // authorization, which records the decision as that list does; a count the
 // caller may not list is left out rather than failing the summary.
-func (s *AdministrationCounts) AdministrationCounts(ctx context.Context, invocation invocation.Invocation) (AdministrationCountsResult, error) {
+func (s *AdministrationCounts) AdministrationCounts(
+	ctx context.Context,
+	invocation invocation.Invocation,
+) (AdministrationCountsResult, error) {
 	principal := invocation.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return AdministrationCountsResult{}, access.InvalidTokenAppError()
 	}
+
 	var counts AdministrationCountsResult
 	var err error
 	if counts.PendingInvitations, err = administrationCount(s.deps.Invitations != nil, func() (int, error) {
@@ -116,21 +120,25 @@ func (s *AdministrationCounts) AdministrationCounts(ctx context.Context, invocat
 	}); err != nil {
 		return AdministrationCountsResult{}, err
 	}
+
 	if counts.FailedJobs, err = administrationCount(s.deps.Jobs != nil, func() (int, error) {
 		return s.deps.Jobs.countRecentJobFailures(ctx, invocation, administrationFailedJobWindow, MaximumAdministrationCount)
 	}); err != nil {
 		return AdministrationCountsResult{}, err
 	}
+
 	if counts.FailedMailDeliveries, err = administrationCount(s.deps.Mail != nil, func() (int, error) {
 		return s.deps.Mail.countFailedMailDeliveries(ctx, invocation, MaximumAdministrationCount)
 	}); err != nil {
 		return AdministrationCountsResult{}, err
 	}
+
 	if counts.OpenOnboardingImports, err = administrationCount(s.deps.Imports != nil, func() (int, error) {
 		return s.deps.Imports.countOpenOnboardingImports(ctx, invocation, MaximumAdministrationCount)
 	}); err != nil {
 		return AdministrationCountsResult{}, err
 	}
+
 	return counts, nil
 }
 

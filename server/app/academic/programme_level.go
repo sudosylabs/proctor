@@ -53,59 +53,94 @@ type ArchiveProgrammeLevelCommand struct {
 }
 
 // GetProgrammeLevel reads one Programme Level after authorizing the caller.
-func (s *Service) GetProgrammeLevel(ctx context.Context, invocation invocation.Invocation, query GetProgrammeLevelQuery) (*model.ProgrammeLevel, error) {
+func (s *Service) GetProgrammeLevel(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	query GetProgrammeLevelQuery,
+) (*model.ProgrammeLevel, error) {
 	id := query.ID
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "programme_level_id")
 	}
-	if err := s.authorizer.Authorize(ctx, invocation, model.ActionProgrammeLevelView, model.Resource{Type: model.ResourceProgrammeLevel, ID: id.String()}); err != nil {
+
+	if err := s.authorizer.Authorize(
+		ctx,
+		invocation,
+		model.ActionProgrammeLevelView,
+		model.Resource{Type: model.ResourceProgrammeLevel, ID: id.String()},
+	); err != nil {
 		return nil, err
 	}
+
 	level, err := s.programmeLevels.Get(ctx, id)
 	if err != nil {
 		return nil, programmeLevelStoreErrors.Translate(err)
 	}
+
 	return level, nil
 }
 
 // ListProgrammeLevels lists Programme Levels after authorizing the caller.
-func (s *Service) ListProgrammeLevels(ctx context.Context, invocation invocation.Invocation, query ListProgrammeLevelsQuery) (paging.Page[*model.ProgrammeLevel], error) {
+func (s *Service) ListProgrammeLevels(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	query ListProgrammeLevelsQuery,
+) (paging.Page[*model.ProgrammeLevel], error) {
 	programmeID := query.ProgrammeID
 	if !programmeID.IsValid() {
 		return paging.Page[*model.ProgrammeLevel]{}, apperror.New("request.invalid").WithField("field", "programme_id")
 	}
+
 	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
 	if err != nil {
 		return paging.Page[*model.ProgrammeLevel]{}, err
 	}
-	if err = s.authorizer.Authorize(ctx, invocation, model.ActionProgrammeLevelView, model.Resource{Type: model.ResourceProgramme, ID: programmeID.String()}); err != nil {
+
+	if err = s.authorizer.Authorize(
+		ctx,
+		invocation,
+		model.ActionProgrammeLevelView,
+		model.Resource{Type: model.ResourceProgramme, ID: programmeID.String()},
+	); err != nil {
 		return paging.Page[*model.ProgrammeLevel]{}, err
 	}
+
 	levels, err := s.programmeLevels.SearchByProgramme(ctx, programmeID, store.AcademicNameListOptions{
-		Term: strings.TrimSpace(query.Query), AfterName: query.AfterName, AfterID: query.AfterID, Limit: probe,
+		Term:      strings.TrimSpace(query.Query),
+		AfterName: query.AfterName,
+		AfterID:   query.AfterID,
+		Limit:     probe,
 	})
 	if err != nil {
 		return paging.Page[*model.ProgrammeLevel]{}, programmeLevelStoreErrors.Translate(err)
 	}
+
 	return paging.New(levels, limit), nil
 }
 
 // CreateProgrammeLevel creates a Programme Level after authorizing the caller.
-func (s *Service) CreateProgrammeLevel(ctx context.Context, invocation invocation.Invocation, command CreateProgrammeLevelCommand) (*model.ProgrammeLevel, error) {
+func (s *Service) CreateProgrammeLevel(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command CreateProgrammeLevelCommand,
+) (*model.ProgrammeLevel, error) {
 	programmeID := command.ProgrammeID
 	if !programmeID.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "programme_id")
 	}
+
 	resource := model.Resource{Type: model.ResourceProgramme, ID: programmeID.String()}
 	scope, err := s.authorizer.AuthorizeWithScope(ctx, invocation, model.ActionProgrammeLevelManage, resource)
 	scopeType, scopeID := scope.ScopeType, scope.ScopeID
 	if err != nil {
 		return nil, err
 	}
+
 	levelID, err := model.ParseProgrammeLevelID(s.newID())
 	if err != nil {
 		return nil, apperror.New("request.invalid").WithField("field", "programme_level_id").Wrap(err)
 	}
+
 	programmeTypedID := programmeID
 	candidate := &model.ProgrammeLevel{
 		ProgrammeID: programmeTypedID,
@@ -117,6 +152,7 @@ func (s *Service) CreateProgrammeLevel(ctx context.Context, invocation invocatio
 	if err := candidate.Validate(); err != nil {
 		return nil, apperror.DomainInvalid("programme_level.invalid", err)
 	}
+
 	return access.RunAudited(
 		ctx,
 		s.auditor,
@@ -132,7 +168,9 @@ func (s *Service) CreateProgrammeLevel(ctx context.Context, invocation invocatio
 		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.ProgrammeLevel, error) {
 			return s.programmeLevels.Create(ctx, &store.ProgrammeLevelCreation{
-				Level: candidate, AuditEventID: reference.ID, AuditAt: reference.MutationAt,
+				Level:        candidate,
+				AuditEventID: reference.ID,
+				AuditAt:      reference.MutationAt,
 			})
 		},
 		programmeLevelStoreErrors.Translate,
@@ -140,15 +178,21 @@ func (s *Service) CreateProgrammeLevel(ctx context.Context, invocation invocatio
 }
 
 // UpdateProgrammeLevel updates a Programme Level after authorizing the caller.
-func (s *Service) UpdateProgrammeLevel(ctx context.Context, invocation invocation.Invocation, command UpdateProgrammeLevelCommand) (*model.ProgrammeLevel, error) {
+func (s *Service) UpdateProgrammeLevel(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command UpdateProgrammeLevelCommand,
+) (*model.ProgrammeLevel, error) {
 	current, scopeType, scopeID, err := s.levelForMutation(ctx, invocation, command.ID)
 	if err != nil {
 		return nil, err
 	}
+
 	resource := model.Resource{Type: model.ResourceProgrammeLevel, ID: current.ID.String()}
 	if err := checkAcademicRevision(command.ExpectedRevision, current.Revision, "programme_level.conflict"); err != nil {
 		return nil, err
 	}
+
 	candidate := *current
 	if command.Name != nil {
 		candidate.Name = *command.Name
@@ -159,10 +203,12 @@ func (s *Service) UpdateProgrammeLevel(ctx context.Context, invocation invocatio
 	if command.Description != nil {
 		candidate.Description = *command.Description
 	}
+
 	candidate.PrepareUpdate(s.now())
 	if err := candidate.Validate(); err != nil {
 		return nil, apperror.DomainInvalid("programme_level.invalid", err)
 	}
+
 	return access.RunAudited(
 		ctx,
 		s.auditor,
@@ -179,7 +225,9 @@ func (s *Service) UpdateProgrammeLevel(ctx context.Context, invocation invocatio
 		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.ProgrammeLevel, error) {
 			return s.programmeLevels.Update(ctx, &store.ProgrammeLevelUpdate{
-				Level: &candidate, AuditEventID: reference.ID, AuditAt: reference.MutationAt,
+				Level:        &candidate,
+				AuditEventID: reference.ID,
+				AuditAt:      reference.MutationAt,
 			})
 		},
 		programmeLevelStoreErrors.Translate,
@@ -195,6 +243,7 @@ func (s *Service) ArchiveProgrammeLevel(ctx context.Context, invocation invocati
 	if err := checkAcademicRevision(command.ExpectedRevision, current.Revision, "programme_level.conflict"); err != nil {
 		return err
 	}
+
 	resource := model.Resource{Type: model.ResourceProgrammeLevel, ID: current.ID.String()}
 	_, err = access.RunAudited(
 		ctx,
@@ -212,8 +261,10 @@ func (s *Service) ArchiveProgrammeLevel(ctx context.Context, invocation invocati
 		func(ctx context.Context, reference access.MutationReference) (*model.ProgrammeLevel, error) {
 			return s.programmeLevels.Archive(ctx, &store.ProgrammeLevelArchive{
 				ExpectedRevision: current.Revision,
-				ID:               current.ID, ArchiveAt: reference.MutationAt,
-				AuditEventID: reference.ID, AuditAt: reference.MutationAt,
+				ID:               current.ID,
+				ArchiveAt:        reference.MutationAt,
+				AuditEventID:     reference.ID,
+				AuditAt:          reference.MutationAt,
 			})
 		},
 		programmeLevelStoreErrors.Translate,
@@ -221,20 +272,37 @@ func (s *Service) ArchiveProgrammeLevel(ctx context.Context, invocation invocati
 	return err
 }
 
-func (s *Service) levelForMutation(ctx context.Context, invocation invocation.Invocation, id model.ProgrammeLevelID) (*model.ProgrammeLevel, model.RoleScopeType, string, error) {
+func (s *Service) levelForMutation(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	id model.ProgrammeLevelID,
+) (*model.ProgrammeLevel, model.RoleScopeType, string, error) {
 	if !id.IsValid() {
 		return nil, "", "", apperror.New("request.invalid").WithField("field", "programme_level_id")
 	}
-	scope, err := s.authorizer.AuthorizeWithScope(ctx, invocation, model.ActionProgrammeLevelManage, model.Resource{Type: model.ResourceProgrammeLevel, ID: id.String()})
+
+	scope, err := s.authorizer.AuthorizeWithScope(
+		ctx,
+		invocation,
+		model.ActionProgrammeLevelManage,
+		model.Resource{Type: model.ResourceProgrammeLevel, ID: id.String()},
+	)
 	scopeType, scopeID := scope.ScopeType, scope.ScopeID
 	if err != nil {
 		return nil, "", "", err
 	}
+
 	level, err := s.programmeLevels.Get(ctx, id)
 	if err != nil {
 		return nil, "", "", programmeLevelStoreErrors.Translate(err)
 	}
+
 	return level, scopeType, scopeID, nil
 }
 
-var programmeLevelStoreErrors = apperror.AdministrationStoreTable("programme_level", "programme_level.conflict", "programme_level.invalid", nil)
+var programmeLevelStoreErrors = apperror.AdministrationStoreTable(
+	"programme_level",
+	"programme_level.conflict",
+	"programme_level.invalid",
+	nil,
+)

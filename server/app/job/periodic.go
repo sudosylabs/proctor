@@ -51,18 +51,27 @@ func runPeriodicTask(ctx context.Context, task PeriodicTask, diagnostics *loggin
 	if task.Name == "" || task.Interval <= 0 || task.Runner == nil || diagnostics == nil || clock == nil {
 		return
 	}
+
 	for {
 		started := time.Now()
 		err := task.Runner.Run(ctx)
 		if recorder != nil {
-			recorder.Record(Activity{Kind: "periodic", Name: task.Name, Operation: "run", Outcome: simpleJobOutcome(err), Duration: time.Since(started)})
+			recorder.Record(Activity{
+				Kind:      "periodic",
+				Name:      task.Name,
+				Operation: "run",
+				Outcome:   simpleJobOutcome(err),
+				Duration:  time.Since(started),
+			})
 		}
+
 		if err != nil && !errors.Is(err, context.Canceled) {
 			diagnostics.ErrorContext(ctx, "run periodic runtime task "+task.Name, logging.Err(err))
 		}
 		if ctx.Err() != nil {
 			return
 		}
+
 		timer := clock.NewTimer(task.Interval)
 		select {
 		case <-ctx.Done():
@@ -72,6 +81,7 @@ func runPeriodicTask(ctx context.Context, task PeriodicTask, diagnostics *loggin
 				default:
 				}
 			}
+
 			return
 		case <-timer.C():
 		}

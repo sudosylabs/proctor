@@ -43,7 +43,16 @@ type Authorizer interface {
 	// GrantedScopes reports where the caller holds an Action; a scoped list
 	// records its one decision with RecordAuthorizationDecision.
 	GrantedScopes(context.Context, model.Principal, model.Action, model.ResourceType) (access.AuthorizedScopeConstraint, error)
-	RecordAuthorizationDecision(context.Context, model.Principal, model.Action, model.Resource, model.RoleScopeType, string, model.RequestMetadata, bool) error
+	RecordAuthorizationDecision(
+		context.Context,
+		model.Principal,
+		model.Action,
+		model.Resource,
+		model.RoleScopeType,
+		string,
+		model.RequestMetadata,
+		bool,
+	) error
 	// CanDelegateActionsAtScope reports whether the caller may grant every
 	// Action at the scope.
 	CanDelegateActionsAtScope(context.Context, model.Principal, []string, model.RoleScopeType, string) (bool, error)
@@ -121,20 +130,35 @@ func New(deps Dependencies) (*Service, error) {
 	if deps.Store == nil {
 		return nil, errors.New("administration store catalog is required")
 	}
+
 	catalog := deps.Store
 	parsed, err := url.Parse(deps.CanonicalOrigin)
 	supportAddress := strings.ToLower(strings.TrimSpace(deps.SupportAddress))
 	if deps.PasswordMinimumLength < 1 || (supportAddress != "" && !model.IsValidEmail(supportAddress)) {
 		return nil, errors.New("access policy public presentation is invalid")
 	}
-	if catalog.AccessPolicy() == nil || catalog.Institution() == nil || deps.Authorizer == nil || deps.Capabilities == nil || deps.Auditor == nil ||
-		deps.Effects == nil || deps.Now == nil || deps.RecentAuthenticationTTL <= 0 || err != nil || parsed.Scheme == "" ||
-		parsed.Host == "" || parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+
+	if catalog.AccessPolicy() == nil ||
+		catalog.Institution() == nil ||
+		deps.Authorizer == nil ||
+		deps.Capabilities == nil ||
+		deps.Auditor == nil ||
+		deps.Effects == nil ||
+		deps.Now == nil ||
+		deps.RecentAuthenticationTTL <= 0 ||
+		err != nil ||
+		parsed.Scheme == "" ||
+		parsed.Host == "" ||
+		parsed.Path != "" ||
+		parsed.RawQuery != "" ||
+		parsed.Fragment != "" {
 		return nil, errors.New("access policy service dependencies are invalid")
 	}
+
 	if catalog.RetentionPolicy() == nil || catalog.Retention() == nil {
 		return nil, errors.New("retention policy service dependencies are invalid")
 	}
+
 	return &Service{
 		roles:                   catalog.Role(),
 		roleBindings:            catalog.RoleBinding(),

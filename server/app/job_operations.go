@@ -75,15 +75,21 @@ type jobOperationsAuthorization struct {
 	institutions  store.InstitutionStore
 }
 
-func (a jobOperationsAuthorization) AuthorizeInstitution(ctx context.Context, invocation invocation.Invocation, action model.Action) (model.Resource, error) {
+func (a jobOperationsAuthorization) AuthorizeInstitution(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	action model.Action,
+) (model.Resource, error) {
 	institution, err := a.institutions.GetSingleton(ctx)
 	if err != nil {
 		return model.Resource{}, jobOperationsStoreErrors.Translate(err)
 	}
+
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
 	if err = a.authorization.Authorize(ctx, invocation, action, resource); err != nil {
 		return model.Resource{}, err
 	}
+
 	return resource, nil
 }
 
@@ -118,9 +124,12 @@ func (s *JobOperations) ListJobs(ctx context.Context, invocation invocation.Invo
 	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionJobView); err != nil {
 		return job.Page{}, err
 	}
+
 	page, err := s.deps.Jobs.List(ctx, job.ListQuery{
-		Statuses: query.Statuses, BeforeCreatedAt: query.BeforeCreatedAt,
-		BeforeID: query.BeforeID, Limit: query.Limit,
+		Statuses:        query.Statuses,
+		BeforeCreatedAt: query.BeforeCreatedAt,
+		BeforeID:        query.BeforeID,
+		Limit:           query.Limit,
 	})
 	if err != nil {
 		return job.Page{}, jobOperationsStoreErrors.Translate(err)
@@ -128,23 +137,31 @@ func (s *JobOperations) ListJobs(ctx context.Context, invocation invocation.Invo
 	if err = s.present(ctx, page.Items); err != nil {
 		return job.Page{}, jobOperationsStoreErrors.Translate(err)
 	}
+
 	return page, nil
 }
 
 // countRecentJobFailures counts the operator-visible Jobs that failed within
 // the span, authorized and audited exactly as ListJobs is, stopping at
 // maximum.
-func (s *JobOperations) countRecentJobFailures(ctx context.Context, invocation invocation.Invocation, within time.Duration, maximum int) (int, error) {
+func (s *JobOperations) countRecentJobFailures(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	within time.Duration,
+	maximum int,
+) (int, error) {
 	if s == nil {
 		return 0, apperror.New("job.unavailable")
 	}
 	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionJobView); err != nil {
 		return 0, err
 	}
+
 	total, err := s.deps.Jobs.CountRecentFailures(ctx, within, maximum)
 	if err != nil {
 		return 0, jobOperationsStoreErrors.Translate(err)
 	}
+
 	return total, nil
 }
 
@@ -181,28 +198,34 @@ func (s *JobOperations) present(ctx context.Context, views []job.View) error {
 			subjectJobs[view.Type] = append(subjectJobs[view.Type], view.ID)
 		}
 	}
+
 	names := make(map[model.UserID]string)
 	if len(userIDs) > 0 {
 		found, err := s.deps.Users.ListDisplayNames(ctx, userIDs)
 		if err != nil {
 			return err
 		}
+
 		for _, name := range found {
 			names[name.UserID] = name.DisplayName
 		}
 	}
+
 	subjects := make(map[model.JobID]string)
 	for jobType, ids := range subjectJobs {
 		found, err := s.subjectResolver(jobType)(ctx, ids)
 		if err != nil {
 			return err
 		}
+
 		maps.Copy(subjects, found)
 	}
+
 	for index := range views {
 		views[index].CreatedByDisplayName = names[views[index].CreatedByUserID]
 		views[index].Subject = boundJobSubject(subjects[views[index].ID])
 	}
+
 	return nil
 }
 
@@ -243,19 +266,27 @@ func boundJobSubject(subject string) string {
 }
 
 // ListJobAttempts lists the execution attempts of one Job.
-func (s *JobOperations) ListJobAttempts(ctx context.Context, invocation invocation.Invocation, query ListJobAttemptsQuery) (job.AttemptPage, error) {
+func (s *JobOperations) ListJobAttempts(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	query ListJobAttemptsQuery,
+) (job.AttemptPage, error) {
 	if s == nil {
 		return job.AttemptPage{}, apperror.New("job.unavailable")
 	}
 	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionJobView); err != nil {
 		return job.AttemptPage{}, err
 	}
+
 	page, err := s.deps.Jobs.Attempts(ctx, job.AttemptListQuery{
-		JobID: query.JobID, BeforeNumber: query.BeforeNumber, Limit: query.Limit,
+		JobID:        query.JobID,
+		BeforeNumber: query.BeforeNumber,
+		Limit:        query.Limit,
 	})
 	if err != nil {
 		return job.AttemptPage{}, jobOperationsStoreErrors.Translate(err)
 	}
+
 	return page, nil
 }
 
@@ -276,25 +307,44 @@ func (s *JobOperations) RetryJob(ctx context.Context, invocation invocation.Invo
 	return s.mutate(ctx, invocation, "retry", command.ID, s.deps.Jobs.PrepareRetry, s.deps.Jobs.Retry)
 }
 
-func (s *JobOperations) mutate(ctx context.Context, invocation invocation.Invocation, operation string, id model.JobID, prepare func(context.Context, model.JobID) (job.ControlTarget, error), apply func(context.Context, job.ControlTarget, job.AuditReference) (job.View, error)) (job.View, error) {
+func (s *JobOperations) mutate(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	operation string,
+	id model.JobID,
+	prepare func(context.Context, model.JobID) (job.ControlTarget, error),
+	apply func(context.Context, job.ControlTarget, job.AuditReference) (job.View, error),
+) (job.View, error) {
 	resource, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionJobManage)
 	if err != nil {
 		return job.View{}, err
 	}
+
 	target, err := prepare(ctx, id)
 	if err != nil {
 		return job.View{}, jobOperationsStoreErrors.Translate(err)
 	}
+
 	view := target.View()
-	auditID, err := s.deps.Audit.Begin(ctx, invocation, model.ActionJobManage, resource, operation, map[string]any{"job_id": view.ID.String(), "type": string(view.Type), "status": string(view.Status)}, nil)
+	auditID, err := s.deps.Audit.Begin(
+		ctx,
+		invocation,
+		model.ActionJobManage,
+		resource,
+		operation,
+		map[string]any{"job_id": view.ID.String(), "type": string(view.Type), "status": string(view.Status)},
+		nil,
+	)
 	if err != nil {
 		return job.View{}, err
 	}
+
 	updated, err := apply(ctx, target, job.AuditReference{EventID: auditID, At: s.deps.Now()})
 	if err != nil {
 		_ = s.deps.Audit.Fail(ctx, auditID, "job.conflict")
 		return job.View{}, jobOperationsStoreErrors.Translate(err)
 	}
+
 	return updated, nil
 }
 

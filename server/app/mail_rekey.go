@@ -55,18 +55,25 @@ func (s *MailService) GetMailKeyState(ctx context.Context, invocation invocation
 	if s.deps.Mail == nil || s.deps.Sealer == nil {
 		return MailKeyStateView{}, apperror.New("mail.unavailable")
 	}
+
 	state, err := s.deps.Mail.InspectKeyState(ctx)
 	if err != nil || state == nil {
 		return MailKeyStateView{}, apperror.New("mail.unavailable").Wrap(err)
 	}
-	view := MailKeyStateView{PrimaryKeyID: s.deps.Sealer.PrimaryKeyID(), RequiredPrimaryKeyID: state.RequiredPrimaryKeyID,
-		Active: make([]MailPayloadKeyUsageView, 0, len(state.Active))}
+
+	view := MailKeyStateView{
+		PrimaryKeyID:         s.deps.Sealer.PrimaryKeyID(),
+		RequiredPrimaryKeyID: state.RequiredPrimaryKeyID,
+		Active:               make([]MailPayloadKeyUsageView, 0, len(state.Active)),
+	}
 	for _, usage := range state.Active {
 		if usage.KeyID == "" || usage.ActiveReferences <= 0 {
 			return MailKeyStateView{}, apperror.New("mail.unavailable").Wrap(errors.New("mail key state is invalid"))
 		}
+
 		view.Active = append(view.Active, MailPayloadKeyUsageView{KeyID: usage.KeyID, ActiveReferences: usage.ActiveReferences})
 	}
+
 	return view, nil
 }
 
@@ -79,6 +86,7 @@ func (s *MailService) StartMailRekey(ctx context.Context, invocation invocation.
 	if err := identity.RequireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
 		return MailRekeyView{}, err
 	}
+
 	resource, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionMailRekey)
 	if err != nil {
 		return MailRekeyView{}, err
@@ -86,39 +94,75 @@ func (s *MailService) StartMailRekey(ctx context.Context, invocation invocation.
 	if s.deps.Mail == nil || s.rekeyAudit == nil || s.deps.Sealer == nil || s.wake == nil {
 		return MailRekeyView{}, apperror.New("mail.unavailable")
 	}
+
 	primaryKeyID := s.deps.Sealer.PrimaryKeyID()
 	if retiringKeyID == "" || retiringKeyID == primaryKeyID || !s.deps.Sealer.HasKey(retiringKeyID) {
 		return MailRekeyView{}, apperror.New("mail.rekey.invalid")
 	}
+
 	command, err := json.Marshal(jobhandler.MailRekeyCommand{PrimaryKeyID: primaryKeyID, RetiringKeyID: retiringKeyID})
 	if err != nil {
 		return MailRekeyView{}, apperror.New("mail.unavailable").Wrap(err)
 	}
+
 	now := model.TimeUTC(s.deps.Now())
-	job, err := model.NewJob(model.NewJobID(), model.JobTypeMailRekey, command,
-		"mail-rekey:"+primaryKeyID+":"+retiringKeyID, now, now, 10)
+	job, err := model.NewJob(
+		model.NewJobID(),
+		model.JobTypeMailRekey,
+		command,
+		"mail-rekey:"+primaryKeyID+":"+retiringKeyID,
+		now,
+		now,
+		10,
+	)
 	if err != nil {
 		return MailRekeyView{}, apperror.New("mail.unavailable").Wrap(err)
 	}
+
 	job.CreatedByUserID = invocation.Principal().UserID
-	operation, err := access.RunAudited(ctx, s.rekeyAudit, access.Mutation{
-		Invocation: invocation, Action: model.ActionMailRekey, Resource: resource,
-		ScopeType: model.RoleScopeInstitution, ScopeID: resource.ID, Operation: "start_rekey",
-		Value: map[string]any{"job_id": job.ID.String(), "primary_key_id": primaryKeyID, "retiring_key_id": retiringKeyID},
-	}, s.deps.Now, func(ctx context.Context, reference access.MutationReference) (*store.MailRekeyOperation, error) {
-		return s.deps.Mail.StartRekey(ctx, &store.MailRekeyStart{PrimaryKeyID: primaryKeyID,
-			RetiringKeyID: retiringKeyID, Job: job, AuditEventID: reference.ID, AuditAt: reference.MutationAt})
-	}, mailRekeyStoreErrors.Translate)
+	operation, err := access.RunAudited(
+		ctx,
+		s.rekeyAudit,
+		access.Mutation{
+			Invocation: invocation,
+			Action:     model.ActionMailRekey,
+			Resource:   resource,
+			ScopeType:  model.RoleScopeInstitution,
+			ScopeID:    resource.ID,
+			Operation:  "start_rekey",
+			Value:      map[string]any{"job_id": job.ID.String(), "primary_key_id": primaryKeyID, "retiring_key_id": retiringKeyID},
+		},
+		s.deps.Now,
+		func(ctx context.Context, reference access.MutationReference) (*store.MailRekeyOperation, error) {
+			return s.deps.Mail.StartRekey(ctx, &store.MailRekeyStart{
+				PrimaryKeyID:  primaryKeyID,
+				RetiringKeyID: retiringKeyID,
+				Job:           job,
+				AuditEventID:  reference.ID,
+				AuditAt:       reference.MutationAt,
+			})
+		},
+		mailRekeyStoreErrors.Translate,
+	)
 	if err != nil {
 		return MailRekeyView{}, err
 	}
-	if operation == nil || !operation.JobID.IsValid() || operation.PrimaryKeyID != primaryKeyID ||
-		operation.RetiringKeyID != retiringKeyID || operation.CreatedAt.IsZero() {
+
+	if operation == nil ||
+		!operation.JobID.IsValid() ||
+		operation.PrimaryKeyID != primaryKeyID ||
+		operation.RetiringKeyID != retiringKeyID ||
+		operation.CreatedAt.IsZero() {
 		return MailRekeyView{}, apperror.New("mail.unavailable").Wrap(errors.New("mail rekey persistence returned an invalid operation"))
 	}
+
 	s.wake()
-	return MailRekeyView{JobID: operation.JobID, PrimaryKeyID: operation.PrimaryKeyID,
-		RetiringKeyID: operation.RetiringKeyID, CreatedAt: operation.CreatedAt}, nil
+	return MailRekeyView{
+		JobID:         operation.JobID,
+		PrimaryKeyID:  operation.PrimaryKeyID,
+		RetiringKeyID: operation.RetiringKeyID,
+		CreatedAt:     operation.CreatedAt,
+	}, nil
 }
 
 var mailRekeyStoreErrors = apperror.StoreTable{

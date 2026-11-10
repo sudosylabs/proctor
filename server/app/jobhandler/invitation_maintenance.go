@@ -50,10 +50,16 @@ func (h invitationMaintenanceHandler) Run(ctx context.Context, execution job.Exe
 	if execution.Job == nil || h.invitations == nil || h.imports == nil || h.content == nil || h.now == nil {
 		return job.PermanentFailure("job.command.invalid", errors.New("Invitation maintenance job is invalid"))
 	}
+
 	var command InvitationMaintenanceCommand
-	if decodeStrictJobDocument(execution.Job.Command, &command) != nil || command.PageSize < 1 || command.PageSize > invitationMaintenancePageSize || command.MaxPages < 1 || command.MaxPages > invitationMaintenanceMaximumPages {
+	if decodeStrictJobDocument(execution.Job.Command, &command) != nil ||
+		command.PageSize < 1 ||
+		command.PageSize > invitationMaintenancePageSize ||
+		command.MaxPages < 1 ||
+		command.MaxPages > invitationMaintenanceMaximumPages {
 		return job.PermanentFailure("job.command.invalid", errors.New("Invitation maintenance command is invalid"))
 	}
+
 	result := InvitationMaintenanceResult{}
 	fileCursor := ""
 	for page := 0; page < command.MaxPages; page++ {
@@ -61,6 +67,7 @@ func (h invitationMaintenanceHandler) Run(ctx context.Context, execution job.Exe
 		if err != nil {
 			return job.RetryableFailure("dependency.unavailable", err)
 		}
+
 		result.Expired += maintained.Expired
 		result.Purged += maintained.Purged
 		at := model.TimeUTC(h.now())
@@ -68,10 +75,12 @@ func (h invitationMaintenanceHandler) Run(ctx context.Context, execution job.Exe
 		if err != nil {
 			return job.RetryableFailure("dependency.unavailable", err)
 		}
+
 		for _, id := range expiredImports {
 			if err = h.content.RemoveOnboardingImport(ctx, id); err != nil {
 				return job.RetryableFailure("dependency.unavailable", err)
 			}
+
 			purged, purgeErr := h.imports.PurgeOnboardingImport(ctx, &store.OnboardingImportPurge{ID: id, At: at})
 			if purgeErr != nil {
 				return job.RetryableFailure("dependency.unavailable", purgeErr)
@@ -80,26 +89,37 @@ func (h invitationMaintenanceHandler) Run(ctx context.Context, execution job.Exe
 				result.OnboardingPurged++
 			}
 		}
-		staged, nextCursor, err := h.content.ListOnboardingImportFiles(ctx, fileCursor, command.PageSize, at.Add(-onboardingImportOrphanSafetyWindow))
+
+		staged, nextCursor, err := h.content.ListOnboardingImportFiles(
+			ctx,
+			fileCursor,
+			command.PageSize,
+			at.Add(-onboardingImportOrphanSafetyWindow),
+		)
 		if err != nil {
 			return job.RetryableFailure("dependency.unavailable", err)
 		}
+
 		for _, id := range staged {
 			current, getErr := h.imports.GetOnboardingImport(ctx, id)
 			if getErr != nil && !store.IsNotFound(getErr) {
 				return job.RetryableFailure("dependency.unavailable", getErr)
 			}
-			if store.IsNotFound(getErr) || (current != nil && current.State != model.OnboardingImportUploading && current.State != model.OnboardingImportParsing) {
+
+			if store.IsNotFound(getErr) ||
+				(current != nil && current.State != model.OnboardingImportUploading && current.State != model.OnboardingImportParsing) {
 				if removeErr := h.content.RemoveOnboardingImport(ctx, id); removeErr != nil {
 					return job.RetryableFailure("dependency.unavailable", removeErr)
 				}
 			}
 		}
+
 		fileCursor = nextCursor
 		if !maintained.More && len(expiredImports) < command.PageSize && fileCursor == "" {
 			break
 		}
 	}
+
 	document, err := json.Marshal(result)
 	return job.Outcome{Kind: job.OutcomeSucceeded, Result: document, Err: err}
 }
@@ -113,31 +133,66 @@ func (p invitationMaintenanceProposer) Propose(ctx context.Context, occurrence t
 	if p.jobs == nil || p.now == nil {
 		return errors.New("Invitation maintenance proposer dependencies are unavailable")
 	}
-	command, err := json.Marshal(InvitationMaintenanceCommand{PageSize: invitationMaintenancePageSize, MaxPages: invitationMaintenanceMaximumPages})
+
+	command, err := json.Marshal(InvitationMaintenanceCommand{
+		PageSize: invitationMaintenancePageSize,
+		MaxPages: invitationMaintenanceMaximumPages,
+	})
 	if err != nil {
 		return err
 	}
+
 	at := model.TimeUTC(p.now())
-	job, err := model.NewJobWithDedupePolicy(model.NewJobID(), model.JobTypeInvitationMaintenance, command,
-		"invitation-maintenance:"+model.TimeUTC(occurrence).Format("2006-01-02"), model.JobDedupePermanent, at, at, 5)
+	job, err := model.NewJobWithDedupePolicy(
+		model.NewJobID(),
+		model.JobTypeInvitationMaintenance,
+		command,
+		"invitation-maintenance:"+model.TimeUTC(occurrence).Format("2006-01-02"),
+		model.JobDedupePermanent,
+		at,
+		at,
+		5,
+	)
 	if err != nil {
 		return err
 	}
+
 	_, _, err = p.jobs.Enqueue(ctx, &store.JobEnqueue{Job: job})
 	return err
 }
 
 func invitationMaintenanceDescriptor(handler job.Handler) job.Descriptor {
-	return job.Descriptor{Type: model.JobTypeInvitationMaintenance, PublicErrorCodes: []string{"dependency.unavailable", "job.command.invalid"}, Timeout: 5 * time.Minute, Concurrency: 1,
-		MaximumAttempts: 5, LeaseDuration: time.Minute, HeartbeatInterval: 15 * time.Second, BaseRetryDelay: time.Minute,
-		MaximumRetryDelay: 30 * time.Minute, Visibility: job.VisibilityOperator, SuccessRetention: 30 * 24 * time.Hour,
-		FailureRetention: 90 * 24 * time.Hour, Handler: handler}
+	return job.Descriptor{
+		Type:              model.JobTypeInvitationMaintenance,
+		PublicErrorCodes:  []string{"dependency.unavailable", "job.command.invalid"},
+		Timeout:           5 * time.Minute,
+		Concurrency:       1,
+		MaximumAttempts:   5,
+		LeaseDuration:     time.Minute,
+		HeartbeatInterval: 15 * time.Second,
+		BaseRetryDelay:    time.Minute,
+		MaximumRetryDelay: 30 * time.Minute,
+		Visibility:        job.VisibilityOperator,
+		SuccessRetention:  30 * 24 * time.Hour,
+		FailureRetention:  90 * 24 * time.Hour,
+		Handler:           handler,
+	}
 }
 
 // NewInvitationMaintenanceDescriptor registers the expiry of Invitations and
 // the cleanup of onboarding import files.
-func NewInvitationMaintenanceDescriptor(invitations store.InvitationStore, imports store.OnboardingImportStore, content OnboardingImportMaintenanceFiles, now func() time.Time) job.Descriptor {
-	return invitationMaintenanceDescriptor(invitationMaintenanceHandler{invitations: invitations, imports: imports, content: content, now: now})
+func NewInvitationMaintenanceDescriptor(
+	invitations store.InvitationStore,
+	imports store.OnboardingImportStore,
+	content OnboardingImportMaintenanceFiles,
+	now func() time.Time,
+) job.Descriptor {
+	return invitationMaintenanceDescriptor(invitationMaintenanceHandler{
+		invitations: invitations,
+		imports:     imports,
+		content:     content,
+		now:         now,
+	})
 }
 
 // NewInvitationMaintenanceRecurrence proposes the daily Invitation

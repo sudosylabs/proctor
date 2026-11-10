@@ -253,13 +253,34 @@ func (p *Composer) Enabled() bool {
 func (p *Composer) prepareDirect(request directPreparation) (*store.PreparedMail, error) {
 	user := request.Recipient
 	definition, defined := definitionFor(request.TemplateKey)
-	if p == nil || p.deps.Sender == nil || user == nil || user.Validate() != nil || !user.IsActive() ||
-		!request.OccurrenceID.IsValid() || !defined ||
-		request.At.IsZero() || !request.Deadline.After(request.At) || definition.actionRequired != (strings.TrimSpace(request.ActionURL) != "") {
+	if p == nil ||
+		p.deps.Sender == nil ||
+		user == nil ||
+		user.Validate() != nil ||
+		!user.IsActive() ||
+		!request.OccurrenceID.IsValid() ||
+		!defined ||
+		request.At.IsZero() ||
+		!request.Deadline.After(request.At) ||
+		definition.actionRequired != (strings.TrimSpace(request.ActionURL) != "") {
 		return nil, errors.New("direct mail input is invalid")
 	}
-	return p.prepareRecipient(user.DisplayName, user.Email, user.Locale, user.Timezone, user.ID, user.ID, "", request.OccurrenceID,
-		request.TemplateKey, request.ActionURL, request.At, request.Deadline, request.Presentation)
+
+	return p.prepareRecipient(
+		user.DisplayName,
+		user.Email,
+		user.Locale,
+		user.Timezone,
+		user.ID,
+		user.ID,
+		"",
+		request.OccurrenceID,
+		request.TemplateKey,
+		request.ActionURL,
+		request.At,
+		request.Deadline,
+		request.Presentation,
+	)
 }
 
 func (p *Composer) PrepareEmailVerification(request AccountTokenPreparation) (*store.PreparedMail, error) {
@@ -275,8 +296,14 @@ func (p *Composer) PrepareEmailChangeVerification(request AccountTokenPreparatio
 }
 
 func (p *Composer) prepareAccountToken(request AccountTokenPreparation, key model.MailTemplateKey) (*store.PreparedMail, error) {
-	return p.prepareDirect(directPreparation{Recipient: request.Recipient, OccurrenceID: request.OccurrenceID,
-		TemplateKey: key, ActionURL: request.ActionURL, At: request.At, Deadline: request.Deadline})
+	return p.prepareDirect(directPreparation{
+		Recipient:    request.Recipient,
+		OccurrenceID: request.OccurrenceID,
+		TemplateKey:  key,
+		ActionURL:    request.ActionURL,
+		At:           request.At,
+		Deadline:     request.Deadline,
+	})
 }
 
 func (p *Composer) PreparePasswordChanged(request NoticePreparation) (*store.PreparedMail, error) {
@@ -290,9 +317,15 @@ func (p *Composer) PrepareEmailChangeWarning(request AccountTokenPreparation) (*
 	if !model.IsValidEmail(request.NewAddress) {
 		return nil, errors.New("email change warning requires the new address")
 	}
-	return p.prepareDirect(directPreparation{Recipient: request.Recipient, OccurrenceID: request.OccurrenceID,
-		TemplateKey: model.MailTemplateIdentityEmailChangeWarningOld, ActionURL: request.ActionURL,
-		At: request.At, Deadline: request.Deadline, Presentation: EmailChangeDetails{NewAddress: request.NewAddress}})
+	return p.prepareDirect(directPreparation{
+		Recipient:    request.Recipient,
+		OccurrenceID: request.OccurrenceID,
+		TemplateKey:  model.MailTemplateIdentityEmailChangeWarningOld,
+		ActionURL:    request.ActionURL,
+		At:           request.At,
+		Deadline:     request.Deadline,
+		Presentation: EmailChangeDetails{NewAddress: request.NewAddress},
+	})
 }
 
 func (p *Composer) PrepareEmailVerifiedByAdministrator(request NoticePreparation) (*store.PreparedMail, error) {
@@ -347,9 +380,15 @@ func (p *Composer) PrepareRetentionScheduled(request NoticePreparation, retireAf
 	if !deadline.After(request.At) {
 		return nil, errors.New("retention notice is no longer current")
 	}
-	return p.prepareDirect(directPreparation{Recipient: request.Recipient, OccurrenceID: model.NewMailOccurrenceID(),
-		TemplateKey: model.MailTemplateExamRetentionScheduled, At: request.At, Deadline: deadline,
-		Presentation: RetentionDetails{RetireAfter: retireAfter}})
+
+	return p.prepareDirect(directPreparation{
+		Recipient:    request.Recipient,
+		OccurrenceID: model.NewMailOccurrenceID(),
+		TemplateKey:  model.MailTemplateExamRetentionScheduled,
+		At:           request.At,
+		Deadline:     deadline,
+		Presentation: RetentionDetails{RetireAfter: retireAfter},
+	})
 }
 
 func (p *Composer) prepareNotice(request NoticePreparation, key model.MailTemplateKey) (*store.PreparedMail, error) {
@@ -357,47 +396,115 @@ func (p *Composer) prepareNotice(request NoticePreparation, key model.MailTempla
 	if !ok || definition.defaultLifetime <= 0 || definition.jobType != model.JobTypeMailDeliver || definition.actionRequired {
 		return nil, errors.New("mail notice definition is invalid")
 	}
-	return p.prepareDirect(directPreparation{Recipient: request.Recipient, OccurrenceID: model.NewMailOccurrenceID(),
-		TemplateKey: key, At: request.At, Deadline: request.At.Add(definition.defaultLifetime)})
+
+	return p.prepareDirect(directPreparation{
+		Recipient:    request.Recipient,
+		OccurrenceID: model.NewMailOccurrenceID(),
+		TemplateKey:  key,
+		At:           request.At,
+		Deadline:     request.At.Add(definition.defaultLifetime),
+	})
 }
 
 func (p *Composer) PrepareInvitation(invitation *model.Invitation, actionURL string) (*store.PreparedMail, error) {
 	if !p.Enabled() || invitation == nil || invitation.Validate() != nil || invitation.State != model.InvitationPending {
 		return nil, errors.New("invitation mail input is invalid")
 	}
+
 	key, err := InvitationTemplateKey(invitation.Purpose)
 	if err != nil {
 		return nil, err
 	}
-	return p.prepareRecipient(invitation.Suggestions.DisplayName, invitation.TargetEmail, invitation.Suggestions.Locale, "",
-		invitation.InviterUserID, "", invitation.ID, model.MailOccurrenceID(invitation.ID.String()),
-		key, actionURL, invitation.CreatedAt, invitation.ExpiresAt, nil)
+
+	return p.prepareRecipient(
+		invitation.Suggestions.DisplayName,
+		invitation.TargetEmail,
+		invitation.Suggestions.Locale,
+		"",
+		invitation.InviterUserID,
+		"",
+		invitation.ID,
+		model.MailOccurrenceID(invitation.ID.String()),
+		key,
+		actionURL,
+		invitation.CreatedAt,
+		invitation.ExpiresAt,
+		nil,
+	)
 }
 
-func (p *Composer) PrepareInvitationResend(invitation *model.Invitation, actionURL string, actor model.UserID, at time.Time) (*store.PreparedMail, error) {
-	if !p.Enabled() || invitation == nil || invitation.Validate() != nil || invitation.State != model.InvitationPending ||
-		!actor.IsValid() || at.IsZero() || !model.TimeUTC(at).Before(invitation.ExpiresAt) {
+func (p *Composer) PrepareInvitationResend(
+	invitation *model.Invitation,
+	actionURL string,
+	actor model.UserID,
+	at time.Time,
+) (*store.PreparedMail, error) {
+	if !p.Enabled() ||
+		invitation == nil ||
+		invitation.Validate() != nil ||
+		invitation.State != model.InvitationPending ||
+		!actor.IsValid() ||
+		at.IsZero() ||
+		!model.TimeUTC(at).Before(invitation.ExpiresAt) {
 		return nil, errors.New("invitation resend mail input is invalid")
 	}
+
 	key, err := InvitationTemplateKey(invitation.Purpose)
 	if err != nil {
 		return nil, err
 	}
-	return p.prepareRecipient(invitation.Suggestions.DisplayName, invitation.TargetEmail, invitation.Suggestions.Locale, "",
-		actor, "", invitation.ID, model.NewMailOccurrenceID(), key, actionURL, at, invitation.ExpiresAt, nil)
+
+	return p.prepareRecipient(
+		invitation.Suggestions.DisplayName,
+		invitation.TargetEmail,
+		invitation.Suggestions.Locale,
+		"",
+		actor,
+		"",
+		invitation.ID,
+		model.NewMailOccurrenceID(),
+		key,
+		actionURL,
+		at,
+		invitation.ExpiresAt,
+		nil,
+	)
 }
 
-func (p *Composer) PrepareInvitationRevocation(invitation *model.Invitation, actor model.UserID, at time.Time) (*store.PreparedMail, error) {
-	if p == nil || invitation == nil || invitation.Validate() != nil || invitation.State != model.InvitationPending || !actor.IsValid() || at.IsZero() {
+func (p *Composer) PrepareInvitationRevocation(
+	invitation *model.Invitation,
+	actor model.UserID,
+	at time.Time,
+) (*store.PreparedMail, error) {
+	if p == nil ||
+		invitation == nil ||
+		invitation.Validate() != nil ||
+		invitation.State != model.InvitationPending ||
+		!actor.IsValid() ||
+		at.IsZero() {
 		return nil, errors.New("invitation revocation mail input is invalid")
 	}
+
 	lifetime, ok := defaultLifetimeFor(model.MailTemplateAccessInvitationRevoked)
 	if !ok {
 		return nil, errors.New("invitation revocation mail definition is invalid")
 	}
-	return p.prepareRecipient(invitation.Suggestions.DisplayName, invitation.TargetEmail, invitation.Suggestions.Locale, "",
-		actor, "", invitation.ID, model.NewMailOccurrenceID(), model.MailTemplateAccessInvitationRevoked,
-		"", at, model.TimeUTC(at).Add(lifetime), nil)
+
+	return p.prepareRecipient(
+		invitation.Suggestions.DisplayName,
+		invitation.TargetEmail,
+		invitation.Suggestions.Locale,
+		"",
+		actor,
+		"",
+		invitation.ID,
+		model.NewMailOccurrenceID(),
+		model.MailTemplateAccessInvitationRevoked,
+		"",
+		at,
+		model.TimeUTC(at).Add(lifetime),
+		nil,
+	)
 }
 
 func InvitationTemplateKey(purpose model.InvitationPurpose) (model.MailTemplateKey, error) {
@@ -416,19 +523,40 @@ func InvitationTemplateKey(purpose model.InvitationPurpose) (model.MailTemplateK
 }
 
 func (p *Composer) PreparePersonalAccessTokenSecurityNotice(request PersonalAccessTokenPreparation) (*store.PreparedMail, error) {
-	if request.Recipient == nil || request.Recipient.Validate() != nil || !request.Recipient.IsActive() || !isPATTemplate(request.TemplateKey) {
+	if request.Recipient == nil ||
+		request.Recipient.Validate() != nil ||
+		!request.Recipient.IsActive() ||
+		!isPATTemplate(request.TemplateKey) {
 		return nil, errors.New("personal access token mail template is invalid")
 	}
+
 	at := model.TimeUTC(request.ActionAt)
 	lifetime, ok := defaultLifetimeFor(request.TemplateKey)
 	if !ok {
 		return nil, errors.New("personal access token mail definition is invalid")
 	}
-	return p.prepareRecipient(request.Recipient.DisplayName, request.Recipient.Email, request.Recipient.Locale, request.Recipient.Timezone,
-		request.Recipient.ID, request.Recipient.ID, "", model.NewMailOccurrenceID(), request.TemplateKey,
-		"", at, at.Add(lifetime),
-		PersonalAccessTokenDetails{Description: request.Description, ExpiresAt: request.ExpiresAt, ActionAt: at,
-			ActionCount: request.ActionCount, AcademicUnitScoped: request.AcademicUnitScoped})
+
+	return p.prepareRecipient(
+		request.Recipient.DisplayName,
+		request.Recipient.Email,
+		request.Recipient.Locale,
+		request.Recipient.Timezone,
+		request.Recipient.ID,
+		request.Recipient.ID,
+		"",
+		model.NewMailOccurrenceID(),
+		request.TemplateKey,
+		"",
+		at,
+		at.Add(lifetime),
+		PersonalAccessTokenDetails{
+			Description:        request.Description,
+			ExpiresAt:          request.ExpiresAt,
+			ActionAt:           at,
+			ActionCount:        request.ActionCount,
+			AcademicUnitScoped: request.AcademicUnitScoped,
+		},
+	)
 }
 
 func isPATTemplate(key model.MailTemplateKey) bool {
@@ -437,22 +565,49 @@ func isPATTemplate(key model.MailTemplateKey) bool {
 }
 
 func (p *Composer) PrepareClassTransition(request ClassTransitionPreparation) (*store.PreparedMail, error) {
-	if request.Recipient == nil || request.Recipient.Validate() != nil || !request.OccurrenceID.IsValid() ||
-		!validClassTransition(request.TemplateKey, request.Details) || request.ActionAt.IsZero() {
+	if request.Recipient == nil ||
+		request.Recipient.Validate() != nil ||
+		!request.OccurrenceID.IsValid() ||
+		!validClassTransition(request.TemplateKey, request.Details) ||
+		request.ActionAt.IsZero() {
 		return nil, errors.New("class transition mail input is invalid")
 	}
+
 	at := model.TimeUTC(request.ActionAt)
 	lifetime, ok := defaultLifetimeFor(request.TemplateKey)
 	if !ok {
 		return nil, errors.New("class transition mail definition is invalid")
 	}
+
 	if !request.Recipient.IsActive() {
-		return p.prepareSuppressedRecipient(request.Recipient.Email, request.Recipient.ID, request.Recipient.ID, "", request.OccurrenceID,
-			request.TemplateKey, at, at.Add(lifetime), model.MailDeliveryRecipientIneligibleCode)
+		return p.prepareSuppressedRecipient(
+			request.Recipient.Email,
+			request.Recipient.ID,
+			request.Recipient.ID,
+			"",
+			request.OccurrenceID,
+			request.TemplateKey,
+			at,
+			at.Add(lifetime),
+			model.MailDeliveryRecipientIneligibleCode,
+		)
 	}
-	return p.prepareRecipient(request.Recipient.DisplayName, request.Recipient.Email, request.Recipient.Locale, request.Recipient.Timezone,
-		request.Recipient.ID, request.Recipient.ID, "", request.OccurrenceID,
-		request.TemplateKey, "", at, at.Add(lifetime), request.Details)
+
+	return p.prepareRecipient(
+		request.Recipient.DisplayName,
+		request.Recipient.Email,
+		request.Recipient.Locale,
+		request.Recipient.Timezone,
+		request.Recipient.ID,
+		request.Recipient.ID,
+		"",
+		request.OccurrenceID,
+		request.TemplateKey,
+		"",
+		at,
+		at.Add(lifetime),
+		request.Details,
+	)
 }
 
 func validClassTransition(key model.MailTemplateKey, value ClassTransitionDetails) bool {
@@ -472,29 +627,59 @@ func validClassTransition(key model.MailTemplateKey, value ClassTransitionDetail
 }
 
 func (p *Composer) PrepareRelationshipTransition(request RelationshipTransitionPreparation) (*store.PreparedMail, error) {
-	if request.Recipient == nil || request.Recipient.Validate() != nil || !request.OccurrenceID.IsValid() ||
-		!isRelationshipTemplate(request.TemplateKey) || request.ActionAt.IsZero() {
+	if request.Recipient == nil ||
+		request.Recipient.Validate() != nil ||
+		!request.OccurrenceID.IsValid() ||
+		!isRelationshipTemplate(request.TemplateKey) ||
+		request.ActionAt.IsZero() {
 		return nil, errors.New("relationship transition mail input is invalid")
 	}
+
 	at := model.TimeUTC(request.ActionAt)
 	lifetime, ok := defaultLifetimeFor(request.TemplateKey)
 	if !ok {
 		return nil, errors.New("relationship transition mail definition is invalid")
 	}
+
 	if !request.Recipient.IsActive() {
-		return p.prepareSuppressedRecipient(request.Recipient.Email, request.Recipient.ID, request.Recipient.ID, "", request.OccurrenceID,
-			request.TemplateKey, at, at.Add(lifetime), model.MailDeliveryRecipientIneligibleCode)
+		return p.prepareSuppressedRecipient(
+			request.Recipient.Email,
+			request.Recipient.ID,
+			request.Recipient.ID,
+			"",
+			request.OccurrenceID,
+			request.TemplateKey,
+			at,
+			at.Add(lifetime),
+			model.MailDeliveryRecipientIneligibleCode,
+		)
 	}
-	return p.prepareRecipient(request.Recipient.DisplayName, request.Recipient.Email, request.Recipient.Locale, request.Recipient.Timezone,
-		request.Recipient.ID, request.Recipient.ID, "", request.OccurrenceID,
-		request.TemplateKey, "", at, at.Add(lifetime), nil)
+
+	return p.prepareRecipient(
+		request.Recipient.DisplayName,
+		request.Recipient.Email,
+		request.Recipient.Locale,
+		request.Recipient.Timezone,
+		request.Recipient.ID,
+		request.Recipient.ID,
+		"",
+		request.OccurrenceID,
+		request.TemplateKey,
+		"",
+		at,
+		at.Add(lifetime),
+		nil,
+	)
 }
 
 func isRelationshipTemplate(key model.MailTemplateKey) bool {
 	switch key {
-	case model.MailTemplateAcademicUnitAssigned, model.MailTemplateAcademicUnitAssignmentEnded,
-		model.MailTemplateAuthorizationScopedRoleAssigned, model.MailTemplateAuthorizationScopedRoleEnded,
-		model.MailTemplateAuthorizationInstitutionRoleAssigned, model.MailTemplateAuthorizationInstitutionRoleEnded:
+	case model.MailTemplateAcademicUnitAssigned,
+		model.MailTemplateAcademicUnitAssignmentEnded,
+		model.MailTemplateAuthorizationScopedRoleAssigned,
+		model.MailTemplateAuthorizationScopedRoleEnded,
+		model.MailTemplateAuthorizationInstitutionRoleAssigned,
+		model.MailTemplateAuthorizationInstitutionRoleEnded:
 		return true
 	default:
 		return false
@@ -504,21 +689,38 @@ func isRelationshipTemplate(key model.MailTemplateKey) bool {
 // PrepareManagerMail freezes the notice to one Exam Manager about a manager
 // relationship change.
 func (p *Composer) PrepareManagerMail(request exam.ManagerMailPreparation) (*store.ExamManagerMail, error) {
-	if request.Recipient == nil || request.Recipient.Validate() != nil || !request.OccurrenceID.IsValid() ||
-		!validManagerMeaning(request.TemplateKey, request.Relationship) || request.ActionAt.IsZero() {
+	if request.Recipient == nil ||
+		request.Recipient.Validate() != nil ||
+		!request.OccurrenceID.IsValid() ||
+		!validManagerMeaning(request.TemplateKey, request.Relationship) ||
+		request.ActionAt.IsZero() {
 		return nil, errors.New("exam manager mail input is invalid")
 	}
+
 	lifetime, ok := defaultLifetimeFor(request.TemplateKey)
 	if !ok {
 		return nil, errors.New("exam manager mail definition is invalid")
 	}
-	prepared, err := p.prepareRecipient(request.Recipient.DisplayName, request.Recipient.Email, request.Recipient.Locale, request.Recipient.Timezone,
-		request.Recipient.ID, request.Recipient.ID, "", request.OccurrenceID,
-		request.TemplateKey, "", request.ActionAt, request.ActionAt.Add(lifetime),
-		ExamManagerDetails{Title: request.ExamTitle, Relationship: string(request.Relationship), ActionAt: request.ActionAt})
+
+	prepared, err := p.prepareRecipient(
+		request.Recipient.DisplayName,
+		request.Recipient.Email,
+		request.Recipient.Locale,
+		request.Recipient.Timezone,
+		request.Recipient.ID,
+		request.Recipient.ID,
+		"",
+		request.OccurrenceID,
+		request.TemplateKey,
+		"",
+		request.ActionAt,
+		request.ActionAt.Add(lifetime),
+		ExamManagerDetails{Title: request.ExamTitle, Relationship: string(request.Relationship), ActionAt: request.ActionAt},
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	return &store.ExamManagerMail{Occurrence: prepared.Occurrence, Delivery: prepared.Delivery, Job: prepared.Job}, nil
 }
 
@@ -538,146 +740,307 @@ func validManagerMeaning(key model.MailTemplateKey, relationship exam.ManagerMai
 }
 
 func (p *Composer) PrepareSubmissionReceiptMail(request SubmissionReceiptPreparation) (*store.PreparedMail, error) {
-	if request.Recipient == nil || request.Recipient.Validate() != nil || !request.OccurrenceID.IsValid() ||
-		request.Details.ExamTitle == "" || !request.Details.SittingID.IsValid() || !request.Details.SubmissionID.IsValid() ||
-		!request.Details.ReceiptCode.IsValid() || request.Details.SealedAt.IsZero() || request.ActionAt.IsZero() ||
+	if request.Recipient == nil ||
+		request.Recipient.Validate() != nil ||
+		!request.OccurrenceID.IsValid() ||
+		request.Details.ExamTitle == "" ||
+		!request.Details.SittingID.IsValid() ||
+		!request.Details.SubmissionID.IsValid() ||
+		!request.Details.ReceiptCode.IsValid() ||
+		request.Details.SealedAt.IsZero() ||
+		request.ActionAt.IsZero() ||
 		request.TemplateKey != model.MailTemplateExamSubmissionReceived &&
 			request.TemplateKey != model.MailTemplateExamSubmissionManagerEnded &&
 			request.TemplateKey != model.MailTemplateExamSubmissionAutomaticallySealed {
 		return nil, errors.New("submission receipt mail input is invalid")
 	}
+
 	at := model.TimeUTC(request.ActionAt)
 	lifetime, ok := defaultLifetimeFor(request.TemplateKey)
 	if !ok {
 		return nil, errors.New("submission receipt mail definition is invalid")
 	}
+
 	if !request.Recipient.IsActive() {
-		return p.prepareSuppressedRecipient(request.Recipient.Email, request.Recipient.ID, request.Recipient.ID, "", request.OccurrenceID,
-			request.TemplateKey, at, at.Add(lifetime), model.MailDeliveryRecipientIneligibleCode)
+		return p.prepareSuppressedRecipient(
+			request.Recipient.Email,
+			request.Recipient.ID,
+			request.Recipient.ID,
+			"",
+			request.OccurrenceID,
+			request.TemplateKey,
+			at,
+			at.Add(lifetime),
+			model.MailDeliveryRecipientIneligibleCode,
+		)
 	}
-	return p.prepareRecipient(request.Recipient.DisplayName, request.Recipient.Email, request.Recipient.Locale, request.Recipient.Timezone,
-		request.Recipient.ID, request.Recipient.ID, "", request.OccurrenceID,
-		request.TemplateKey, "", at, at.Add(lifetime), request.Details)
+
+	return p.prepareRecipient(
+		request.Recipient.DisplayName,
+		request.Recipient.Email,
+		request.Recipient.Locale,
+		request.Recipient.Timezone,
+		request.Recipient.ID,
+		request.Recipient.ID,
+		"",
+		request.OccurrenceID,
+		request.TemplateKey,
+		"",
+		at,
+		at.Add(lifetime),
+		request.Details,
+	)
 }
 
 func (p *Composer) PrepareResultReleaseMail(request ResultReleasePreparation) (*store.PreparedMail, error) {
-	if request.Recipient == nil || request.Recipient.Validate() != nil || !request.OccurrenceID.IsValid() ||
-		request.Details.ExamTitle == "" || request.Details.ReleasedAt.IsZero() || request.ReleasedAt.IsZero() ||
+	if request.Recipient == nil ||
+		request.Recipient.Validate() != nil ||
+		!request.OccurrenceID.IsValid() ||
+		request.Details.ExamTitle == "" ||
+		request.Details.ReleasedAt.IsZero() ||
+		request.ReleasedAt.IsZero() ||
 		!request.Details.ReleasedAt.Equal(request.ReleasedAt) {
 		return nil, errors.New("result release mail input is invalid")
 	}
+
 	at := model.TimeUTC(request.ReleasedAt)
 	lifetime, ok := defaultLifetimeFor(model.MailTemplateExamResultReleased)
 	if !ok {
 		return nil, errors.New("result release mail definition is invalid")
 	}
+
 	if !request.Recipient.IsActive() {
-		return p.prepareSuppressedRecipient(request.Recipient.Email, request.Recipient.ID, request.Recipient.ID, "", request.OccurrenceID,
-			model.MailTemplateExamResultReleased, at, at.Add(lifetime), model.MailDeliveryRecipientIneligibleCode)
+		return p.prepareSuppressedRecipient(
+			request.Recipient.Email,
+			request.Recipient.ID,
+			request.Recipient.ID,
+			"",
+			request.OccurrenceID,
+			model.MailTemplateExamResultReleased,
+			at,
+			at.Add(lifetime),
+			model.MailDeliveryRecipientIneligibleCode,
+		)
 	}
-	return p.prepareRecipient(request.Recipient.DisplayName, request.Recipient.Email, request.Recipient.Locale, request.Recipient.Timezone,
-		request.Recipient.ID, request.Recipient.ID, "", request.OccurrenceID,
-		model.MailTemplateExamResultReleased, "", at, at.Add(lifetime), request.Details)
+
+	return p.prepareRecipient(
+		request.Recipient.DisplayName,
+		request.Recipient.Email,
+		request.Recipient.Locale,
+		request.Recipient.Timezone,
+		request.Recipient.ID,
+		request.Recipient.ID,
+		"",
+		request.OccurrenceID,
+		model.MailTemplateExamResultReleased,
+		"",
+		at,
+		at.Add(lifetime),
+		request.Details,
+	)
 }
 
-func (p *Composer) PreparePublicRegistrationVerification(recipient *model.User, occurrenceID model.MailOccurrenceID,
-	actionURL string, at, deadline time.Time,
+func (p *Composer) PreparePublicRegistrationVerification(
+	recipient *model.User,
+	occurrenceID model.MailOccurrenceID,
+	actionURL string,
+	at,
+	deadline time.Time,
 ) (*store.PreparedMail, error) {
-	return p.prepareDirect(directPreparation{Recipient: recipient, OccurrenceID: occurrenceID,
-		TemplateKey: model.MailTemplateIdentityVerifyEmail, ActionURL: actionURL, At: at, Deadline: deadline})
+	return p.prepareDirect(directPreparation{
+		Recipient:    recipient,
+		OccurrenceID: occurrenceID,
+		TemplateKey:  model.MailTemplateIdentityVerifyEmail,
+		ActionURL:    actionURL,
+		At:           at,
+		Deadline:     deadline,
+	})
 }
 
-func (p *Composer) prepareRecipient(recipientName, recipientAddress, locale, timezone string, actorUserID, targetUserID model.UserID,
-	targetInvitationID model.InvitationID, occurrenceID model.MailOccurrenceID, key model.MailTemplateKey,
-	actionURL string, at, deadline time.Time, detail Presentation,
+func (p *Composer) prepareRecipient(
+	recipientName,
+	recipientAddress,
+	locale,
+	timezone string,
+	actorUserID,
+	targetUserID model.UserID,
+	targetInvitationID model.InvitationID,
+	occurrenceID model.MailOccurrenceID,
+	key model.MailTemplateKey,
+	actionURL string,
+	at,
+	deadline time.Time,
+	detail Presentation,
 ) (*store.PreparedMail, error) {
 	definition, defined := definitionFor(key)
-	if p == nil || p.deps.Sender == nil || p.deps.Renderer == nil || !model.IsValidEmail(recipientAddress) || !actorUserID.IsValid() ||
-		!occurrenceID.IsValid() || targetUserID.IsValid() == targetInvitationID.IsValid() || !defined ||
-		definition.actionRequired != (strings.TrimSpace(actionURL) != "") || at.IsZero() || !deadline.After(at) {
+	if p == nil ||
+		p.deps.Sender == nil ||
+		p.deps.Renderer == nil ||
+		!model.IsValidEmail(recipientAddress) ||
+		!actorUserID.IsValid() ||
+		!occurrenceID.IsValid() ||
+		targetUserID.IsValid() == targetInvitationID.IsValid() ||
+		!defined ||
+		definition.actionRequired != (strings.TrimSpace(actionURL) != "") ||
+		at.IsZero() ||
+		!deadline.After(at) {
 		return nil, errors.New("direct mail recipient is invalid")
 	}
+
 	at, deadline = model.TimeUTC(at), model.TimeUTC(deadline)
 	if !p.deps.Sender.Enabled() {
-		return p.prepareSuppressedRecipient(recipientAddress, actorUserID, targetUserID, targetInvitationID, occurrenceID,
-			key, at, deadline, model.MailDeliveryDisabledCode)
+		return p.prepareSuppressedRecipient(
+			recipientAddress,
+			actorUserID,
+			targetUserID,
+			targetInvitationID,
+			occurrenceID,
+			key,
+			at,
+			deadline,
+			model.MailDeliveryDisabledCode,
+		)
 	}
+
 	deliveryID, jobID := model.NewMailDeliveryID(), model.NewJobID()
 	command, err := model.EncodeMailDeliveryCommand(model.MailDeliveryCommand{DeliveryID: deliveryID})
 	if err != nil {
 		return nil, err
 	}
+
 	job, err := model.NewJob(jobID, definition.jobType, command, deliveryID.String(), at, at, model.MailMaximumAttempts)
 	if err != nil {
 		return nil, err
 	}
+
 	occurrence := &model.MailOccurrence{ID: occurrenceID, Kind: definition.kind, TemplateKey: key, ActorUserID: actorUserID, CreatedAt: at}
 	institution := ""
 	if p.deps.Institution != nil {
 		institution = p.deps.Institution()
 	}
-	rendered, err := p.deps.Renderer.Render(RenderRequest{Key: key, Locale: locale, ActionURL: actionURL, Presentation: detail,
-		RecipientName: recipientName, RecipientAddress: recipientAddress, RecipientTimezone: timezone,
-		Institution: institution, At: at, Deadline: deadline})
+
+	rendered, err := p.deps.Renderer.Render(RenderRequest{
+		Key:               key,
+		Locale:            locale,
+		ActionURL:         actionURL,
+		Presentation:      detail,
+		RecipientName:     recipientName,
+		RecipientAddress:  recipientAddress,
+		RecipientTimezone: timezone,
+		Institution:       institution,
+		At:                at,
+		Deadline:          deadline,
+	})
 	if err != nil {
 		return nil, err
 	}
+
 	from := p.deps.Sender.From()
 	if err = ValidateAddress(from); err != nil {
 		return nil, err
 	}
+
 	frozen, err := freezeDeliveryPayload(p.deps.Sealer, deliveryID, from, Address{Name: recipientName, Address: recipientAddress}, rendered)
 	if err != nil {
 		return nil, err
 	}
-	delivery := &model.MailDelivery{ID: deliveryID, OccurrenceID: occurrenceID, JobID: jobID, TargetUserID: targetUserID,
-		TargetInvitationID: targetInvitationID, TemplateKey: key, TemplateDigest: frozen.templateDigest,
-		MaskedRecipient: MaskAddress(recipientAddress), State: model.MailDeliveryQueued, CreatedAt: at, UpdatedAt: at,
-		MessageDate: at, Deadline: deadline, MessageID: frozen.messageID, EncryptedPayload: frozen.encrypted, Revision: 1}
+
+	delivery := &model.MailDelivery{
+		ID:                 deliveryID,
+		OccurrenceID:       occurrenceID,
+		JobID:              jobID,
+		TargetUserID:       targetUserID,
+		TargetInvitationID: targetInvitationID,
+		TemplateKey:        key,
+		TemplateDigest:     frozen.templateDigest,
+		MaskedRecipient:    MaskAddress(recipientAddress),
+		State:              model.MailDeliveryQueued,
+		CreatedAt:          at,
+		UpdatedAt:          at,
+		MessageDate:        at,
+		Deadline:           deadline,
+		MessageID:          frozen.messageID,
+		EncryptedPayload:   frozen.encrypted,
+		Revision:           1,
+	}
 	if err = occurrence.Validate(); err != nil {
 		return nil, err
 	}
 	if err = delivery.Validate(); err != nil {
 		return nil, err
 	}
+
 	return &store.PreparedMail{Occurrence: occurrence, Delivery: delivery, Job: job}, nil
 }
 
-func (p *Composer) prepareSuppressedRecipient(recipientAddress string, actorUserID, targetUserID model.UserID,
-	targetInvitationID model.InvitationID, occurrenceID model.MailOccurrenceID, key model.MailTemplateKey,
-	at, deadline time.Time, publicCode string,
+func (p *Composer) prepareSuppressedRecipient(
+	recipientAddress string,
+	actorUserID,
+	targetUserID model.UserID,
+	targetInvitationID model.InvitationID,
+	occurrenceID model.MailOccurrenceID,
+	key model.MailTemplateKey,
+	at,
+	deadline time.Time,
+	publicCode string,
 ) (*store.PreparedMail, error) {
 	definition, defined := definitionFor(key)
-	if p == nil || p.deps.Sender == nil || !model.IsValidEmail(recipientAddress) || !actorUserID.IsValid() ||
-		targetUserID.IsValid() == targetInvitationID.IsValid() || !occurrenceID.IsValid() || !defined || at.IsZero() || !deadline.After(at) ||
+	if p == nil ||
+		p.deps.Sender == nil ||
+		!model.IsValidEmail(recipientAddress) ||
+		!actorUserID.IsValid() ||
+		targetUserID.IsValid() == targetInvitationID.IsValid() ||
+		!occurrenceID.IsValid() ||
+		!defined ||
+		at.IsZero() ||
+		!deadline.After(at) ||
 		publicCode != model.MailDeliveryDisabledCode && publicCode != model.MailDeliveryRecipientIneligibleCode {
 		return nil, errors.New("direct mail suppression input is invalid")
 	}
+
 	at, deadline = model.TimeUTC(at), model.TimeUTC(deadline)
 	deliveryID, jobID := model.NewMailDeliveryID(), model.NewJobID()
 	command, err := model.EncodeMailDeliveryCommand(model.MailDeliveryCommand{DeliveryID: deliveryID})
 	if err != nil {
 		return nil, err
 	}
+
 	job, err := model.NewJob(jobID, definition.jobType, command, deliveryID.String(), at, at, model.MailMaximumAttempts)
 	if err != nil {
 		return nil, err
 	}
+
 	job, err = job.RequestCancellation(at)
 	if err != nil {
 		return nil, err
 	}
+
 	occurrence := &model.MailOccurrence{ID: occurrenceID, Kind: definition.kind, TemplateKey: key, ActorUserID: actorUserID, CreatedAt: at}
-	delivery := &model.MailDelivery{ID: deliveryID, OccurrenceID: occurrenceID, JobID: jobID, TargetUserID: targetUserID,
-		TargetInvitationID: targetInvitationID, TemplateKey: key, TemplateDigest: Digest("", "", ""),
-		MaskedRecipient: MaskAddress(recipientAddress), State: model.MailDeliverySuppressed, CreatedAt: at, UpdatedAt: at,
-		MessageDate: at, Deadline: deadline, MessageID: StableMessageID(deliveryID, ""), PublicFailureCode: publicCode, Revision: 1}
+	delivery := &model.MailDelivery{
+		ID:                 deliveryID,
+		OccurrenceID:       occurrenceID,
+		JobID:              jobID,
+		TargetUserID:       targetUserID,
+		TargetInvitationID: targetInvitationID,
+		TemplateKey:        key,
+		TemplateDigest:     Digest("", "", ""),
+		MaskedRecipient:    MaskAddress(recipientAddress),
+		State:              model.MailDeliverySuppressed,
+		CreatedAt:          at,
+		UpdatedAt:          at,
+		MessageDate:        at,
+		Deadline:           deadline,
+		MessageID:          StableMessageID(deliveryID, ""),
+		PublicFailureCode:  publicCode,
+		Revision:           1,
+	}
 	if err = occurrence.Validate(); err != nil {
 		return nil, err
 	}
 	if err = delivery.Validate(); err != nil {
 		return nil, err
 	}
+
 	return &store.PreparedMail{Occurrence: occurrence, Delivery: delivery, Job: job}, nil
 }
 

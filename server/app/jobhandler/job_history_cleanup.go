@@ -68,9 +68,12 @@ func decodeJobHistoryCleanupCheckpoint(document json.RawMessage) (JobHistoryClea
 }
 
 func validateJobHistoryCleanupCheckpoint(value JobHistoryCleanupCheckpoint) error {
-	if value.Deleted < 0 || value.AfterCompletedAt.IsZero() != value.AfterJobID.IsZero() || (!value.AfterJobID.IsZero() && !value.AfterJobID.IsValid()) {
+	if value.Deleted < 0 ||
+		value.AfterCompletedAt.IsZero() != value.AfterJobID.IsZero() ||
+		(!value.AfterJobID.IsZero() && !value.AfterJobID.IsValid()) {
 		return errors.New("job history cleanup checkpoint is invalid")
 	}
+
 	return nil
 }
 
@@ -85,6 +88,7 @@ func (h jobHistoryCleanupHandler) Run(ctx context.Context, execution job.Executi
 	if execution.Job == nil || !execution.Job.ID.IsValid() || h.jobs == nil || h.continuations == nil || h.now == nil {
 		return job.PermanentFailure("job.command.invalid", errors.New("job history cleanup dependencies or execution are missing"))
 	}
+
 	command, err := DecodeJobHistoryCleanupCommand(execution.Job.Command)
 	if err != nil {
 		return job.PermanentFailure("job.command.invalid", err)
@@ -92,14 +96,17 @@ func (h jobHistoryCleanupHandler) Run(ctx context.Context, execution job.Executi
 	if execution.Job.WorkReserved < 0 || execution.Job.WorkReserved > command.BatchSize {
 		return job.PermanentFailure("job.invariant_failed", errors.New("job history cleanup reservation exceeds its work bound"))
 	}
+
 	checkpoint := JobHistoryCleanupCheckpoint{}
 	if len(execution.Job.Checkpoint) != 0 {
 		checkpoint, err = decodeJobHistoryCleanupCheckpoint(execution.Job.Checkpoint)
 		if err != nil {
 			return job.PermanentFailure("job.checkpoint.invalid", err)
 		}
+
 		return h.finish(ctx, execution.Job, command, checkpoint)
 	}
+
 	remaining := command.BatchSize - execution.Job.WorkReserved
 	if remaining <= 0 {
 		// A reservation survives a crash or failure before deletion or
@@ -109,6 +116,7 @@ func (h jobHistoryCleanupHandler) Run(ctx context.Context, execution job.Executi
 		// occurrence starts from the oldest remaining history.
 		return job.PermanentFailure("dependency.unavailable", errors.New("job history cleanup batch did not complete"))
 	}
+
 	reserved, reserveErr := execution.ReserveWork(ctx, remaining, command.BatchSize)
 	if reserveErr != nil {
 		return job.RetryableFailure("dependency.unavailable", reserveErr)
@@ -116,13 +124,19 @@ func (h jobHistoryCleanupHandler) Run(ctx context.Context, execution job.Executi
 	if !reserved {
 		return job.PermanentFailure("dependency.unavailable", errors.New("job history cleanup batch did not complete"))
 	}
-	page, deleteErr := h.jobs.DeleteTerminalHistory(ctx, &store.JobHistoryCleanup{ExcludeJobID: execution.Job.ID, Policies: h.policies, Limit: remaining})
+
+	page, deleteErr := h.jobs.DeleteTerminalHistory(ctx, &store.JobHistoryCleanup{
+		ExcludeJobID: execution.Job.ID,
+		Policies:     h.policies,
+		Limit:        remaining,
+	})
 	if deleteErr != nil {
 		return job.RetryableFailure("dependency.unavailable", deleteErr)
 	}
 	if page == nil || page.Deleted < 0 || page.Deleted > int64(remaining) {
 		return job.PermanentFailure("job.invariant_failed", errors.New("job history cleanup returned an invalid page"))
 	}
+
 	checkpoint.Deleted = page.Deleted
 	checkpoint.AfterCompletedAt = page.LastCompletedAt
 	checkpoint.AfterJobID = page.LastJobID
@@ -130,10 +144,12 @@ func (h jobHistoryCleanupHandler) Run(ctx context.Context, execution job.Executi
 	if err := validateJobHistoryCleanupCheckpoint(checkpoint); err != nil {
 		return job.PermanentFailure("job.invariant_failed", err)
 	}
+
 	document, encodeErr := json.Marshal(checkpoint)
 	if encodeErr != nil {
 		return job.PermanentFailure("job.invariant_failed", encodeErr)
 	}
+
 	var progress *model.JobProgress
 	if checkpoint.Deleted > 0 {
 		progress = &model.JobProgress{Current: checkpoint.Deleted, Total: checkpoint.Deleted, Stage: "completed"}
@@ -141,19 +157,34 @@ func (h jobHistoryCleanupHandler) Run(ctx context.Context, execution job.Executi
 	if checkpointErr := execution.Checkpoint(ctx, job.CheckpointValue{Progress: progress, Document: document}); checkpointErr != nil {
 		return job.RetryableFailure("dependency.unavailable", checkpointErr)
 	}
+
 	return h.finish(ctx, execution.Job, command, checkpoint)
 }
 
-func (h jobHistoryCleanupHandler) finish(ctx context.Context, parent *model.Job, command JobHistoryCleanupCommand, checkpoint JobHistoryCleanupCheckpoint) job.Outcome {
+func (h jobHistoryCleanupHandler) finish(
+	ctx context.Context,
+	parent *model.Job,
+	command JobHistoryCleanupCommand,
+	checkpoint JobHistoryCleanupCheckpoint,
+) job.Outcome {
 	// Only a completed, nonempty batch creates an immediate successor.
 	if !checkpoint.Done && checkpoint.Deleted > 0 {
 		document, err := EncodeJobHistoryCleanupCommand(command)
 		if err != nil {
 			return job.PermanentFailure("job.invariant_failed", err)
 		}
+
 		at := model.TimeUTC(h.now())
-		successor, err := model.NewJobWithDedupePolicy(model.NewJobID(), model.JobTypeCleanup, document,
-			"job-history-cleanup:after:"+parent.ID.String(), model.JobDedupePermanent, at, at, 5)
+		successor, err := model.NewJobWithDedupePolicy(
+			model.NewJobID(),
+			model.JobTypeCleanup,
+			document,
+			"job-history-cleanup:after:"+parent.ID.String(),
+			model.JobDedupePermanent,
+			at,
+			at,
+			5,
+		)
 		if err != nil {
 			return job.PermanentFailure("job.invariant_failed", err)
 		}
@@ -161,6 +192,7 @@ func (h jobHistoryCleanupHandler) finish(ctx context.Context, parent *model.Job,
 			return job.RetryableFailure("dependency.unavailable", err)
 		}
 	}
+
 	document, marshalErr := json.Marshal(JobHistoryCleanupResult{Deleted: checkpoint.Deleted})
 	return job.Outcome{Kind: job.OutcomeSucceeded, Result: document, Err: marshalErr}
 }
@@ -186,18 +218,43 @@ func (p jobHistoryCleanupProposer) Propose(ctx context.Context, occurrence time.
 }
 
 func jobHistoryCleanupDescriptor(handler job.Handler) job.Descriptor {
-	return job.Descriptor{Type: model.JobTypeCleanup, Checkpoints: true, ProgressStages: []string{"completed"}, PublicErrorCodes: []string{"dependency.unavailable", "job.checkpoint.invalid", "job.command.invalid", "job.invariant_failed"}, Timeout: 10 * time.Minute, Concurrency: 1, MaximumAttempts: 5, LeaseDuration: time.Minute, HeartbeatInterval: 15 * time.Second, BaseRetryDelay: time.Second, MaximumRetryDelay: time.Minute, Visibility: job.VisibilityOperator, SuccessRetention: 30 * 24 * time.Hour, FailureRetention: 90 * 24 * time.Hour, Handler: handler}
+	return job.Descriptor{
+		Type:              model.JobTypeCleanup,
+		Checkpoints:       true,
+		ProgressStages:    []string{"completed"},
+		PublicErrorCodes:  []string{"dependency.unavailable", "job.checkpoint.invalid", "job.command.invalid", "job.invariant_failed"},
+		Timeout:           10 * time.Minute,
+		Concurrency:       1,
+		MaximumAttempts:   5,
+		LeaseDuration:     time.Minute,
+		HeartbeatInterval: 15 * time.Second,
+		BaseRetryDelay:    time.Second,
+		MaximumRetryDelay: time.Minute,
+		Visibility:        job.VisibilityOperator,
+		SuccessRetention:  30 * 24 * time.Hour,
+		FailureRetention:  90 * 24 * time.Hour,
+		Handler:           handler,
+	}
 }
 
 // NewJobHistoryCleanupDescriptor registers the deletion of terminal Job
 // history. Each Job type is kept for the retention its descriptor in
 // registered declares, and the cleanup Job for its own, so this descriptor
 // is built after all the others.
-func NewJobHistoryCleanupDescriptor(jobs store.JobStore, continuations store.JobStore, now func() time.Time, registered []job.Descriptor) job.Descriptor {
+func NewJobHistoryCleanupDescriptor(
+	jobs store.JobStore,
+	continuations store.JobStore,
+	now func() time.Time,
+	registered []job.Descriptor,
+) job.Descriptor {
 	return jobHistoryCleanupDescriptor(jobHistoryCleanupHandler{
-		jobs: jobs, continuations: continuations, now: now,
+		jobs:          jobs,
+		continuations: continuations,
+		now:           now,
 		policies: append(retentionPolicies(registered), store.JobRetentionPolicy{
-			Type: model.JobTypeCleanup, SucceededCanceledAge: 30 * 24 * time.Hour, FailedAge: 90 * 24 * time.Hour,
+			Type:                 model.JobTypeCleanup,
+			SucceededCanceledAge: 30 * 24 * time.Hour,
+			FailedAge:            90 * 24 * time.Hour,
 		}),
 	})
 }
@@ -211,8 +268,11 @@ func retentionPolicies(descriptors []job.Descriptor) []store.JobRetentionPolicy 
 	policies := make([]store.JobRetentionPolicy, 0, len(descriptors))
 	for _, descriptor := range descriptors {
 		policies = append(policies, store.JobRetentionPolicy{
-			Type: descriptor.Type, SucceededCanceledAge: descriptor.SuccessRetention, FailedAge: descriptor.FailureRetention,
+			Type:                 descriptor.Type,
+			SucceededCanceledAge: descriptor.SuccessRetention,
+			FailedAge:            descriptor.FailureRetention,
 		})
 	}
+
 	return policies
 }

@@ -68,14 +68,19 @@ func cloneRecurrences(values []Recurrence) ([]Recurrence, error) {
 		if !jobContractCode.MatchString(recurrence.Name) || recurrence.Proposer == nil {
 			return nil, errors.New("invalid job recurrence")
 		}
-		if recurrence.Interval != 0 && (recurrence.Interval < time.Minute || recurrence.Interval > 24*time.Hour || 24*time.Hour%recurrence.Interval != 0) {
+
+		if recurrence.Interval != 0 &&
+			(recurrence.Interval < time.Minute || recurrence.Interval > 24*time.Hour || 24*time.Hour%recurrence.Interval != 0) {
 			return nil, errors.New("invalid job recurrence interval")
 		}
+
 		if _, exists := names[recurrence.Name]; exists {
 			return nil, errors.New("duplicate job recurrence")
 		}
+
 		names[recurrence.Name] = struct{}{}
 	}
+
 	return cloned, nil
 }
 
@@ -91,31 +96,51 @@ func nextRecurrenceOccurrence(now time.Time, interval time.Duration) time.Time {
 	return now.UTC().Truncate(interval).Add(interval)
 }
 
-func runRecurrenceProposal(ctx context.Context, recurrence Recurrence, diagnostics *logging.Logger, clock Clock, retryDelay time.Duration, wake func(), recorder Recorder) {
+func runRecurrenceProposal(
+	ctx context.Context,
+	recurrence Recurrence,
+	diagnostics *logging.Logger,
+	clock Clock,
+	retryDelay time.Duration,
+	wake func(),
+	recorder Recorder,
+) {
 	if recurrence.Name == "" || recurrence.Proposer == nil || diagnostics == nil || clock == nil || retryDelay <= 0 {
 		return
 	}
+
 	occurrence := clock.Now().UTC()
 	for {
 		started := time.Now()
 		err := recurrence.Proposer.Propose(ctx, occurrence)
 		if recorder != nil {
-			recorder.Record(Activity{Kind: "recurrence", Name: recurrence.Name, Operation: "propose", Outcome: simpleJobOutcome(err), Duration: time.Since(started)})
+			recorder.Record(Activity{
+				Kind:      "recurrence",
+				Name:      recurrence.Name,
+				Operation: "propose",
+				Outcome:   simpleJobOutcome(err),
+				Duration:  time.Since(started),
+			})
 		}
+
 		if err != nil && !errors.Is(err, context.Canceled) {
 			diagnostics.ErrorContext(ctx, "propose durable job "+recurrence.Name, logging.Err(err))
 		}
+
 		delay := retryDelay
 		if err == nil {
 			if wake != nil {
 				wake()
 			}
+
 			delay = nextRecurrenceOccurrence(occurrence, recurrence.Interval).Sub(clock.Now().UTC())
 		}
+
 		if delay <= 0 {
 			occurrence = clock.Now().UTC()
 			continue
 		}
+
 		timer := clock.NewTimer(delay)
 		select {
 		case <-ctx.Done():
@@ -125,6 +150,7 @@ func runRecurrenceProposal(ctx context.Context, recurrence Recurrence, diagnosti
 				default:
 				}
 			}
+
 			return
 		case <-timer.C():
 			if err == nil {

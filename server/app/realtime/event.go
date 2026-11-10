@@ -90,14 +90,22 @@ func NewManagerSittingBoardChangedEvent(examID model.ExamID, sittingID model.Exa
 	if !examID.IsValid() || !sittingID.IsValid() {
 		return RealtimeEvent{}, errors.New("manager Sitting board invalidation requires valid Exam and Sitting identities")
 	}
+
 	data, err := json.Marshal(sittingBoardInvalidationData{
-		SchemaVersion: 1, ExamID: examID.String(), ExamSittingID: sittingID.String(),
+		SchemaVersion: 1,
+		ExamID:        examID.String(),
+		ExamSittingID: sittingID.String(),
 	})
 	if err != nil {
 		return RealtimeEvent{}, fmt.Errorf("encode manager Sitting board invalidation: %w", err)
 	}
-	return RealtimeEvent{Name: "manager.sitting_board.changed", Action: model.ActionExamSittingView,
-		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()}, Data: data}, nil
+
+	return RealtimeEvent{
+		Name:     "manager.sitting_board.changed",
+		Action:   model.ActionExamSittingView,
+		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
+		Data:     data,
+	}, nil
 }
 
 // NewUserSettingsChangedEvent constructs the content-free refetch hint sent to
@@ -112,15 +120,20 @@ func NewUserSettingsChangedEvent(
 	if !userID.IsValid() || !revision.IsValid() || formatVersion <= 0 || changedAt.IsZero() {
 		return RealtimeEvent{}, errors.New("User Settings change event requires valid bounded metadata")
 	}
+
 	data, err := json.Marshal(userSettingsChangedData{
-		Revision: revision.String(), FormatVersion: formatVersion,
-		ChangedAt: model.FormatRFC3339(changedAt),
+		Revision:      revision.String(),
+		FormatVersion: formatVersion,
+		ChangedAt:     model.FormatRFC3339(changedAt),
 	})
 	if err != nil {
 		return RealtimeEvent{}, fmt.Errorf("encode User Settings change event: %w", err)
 	}
+
 	return RealtimeEvent{
-		Name: "user_settings_changed", UserID: userID, Data: data,
+		Name:   "user_settings_changed",
+		UserID: userID,
+		Data:   data,
 	}, nil
 }
 
@@ -304,22 +317,41 @@ type managerExamIntegrityDiscrepancyData struct {
 	RecordedAt    string `json:"recorded_at"`
 }
 
-func NewExamIntegrityDiscrepancyRecordedEvent(submissionID model.SubmissionID, sittingID model.ExamSittingID,
-	attemptID model.ExamAttemptID, candidateID model.UserID, discrepancyID model.IntegrityDiscrepancyID,
+func NewExamIntegrityDiscrepancyRecordedEvent(
+	submissionID model.SubmissionID,
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
+	discrepancyID model.IntegrityDiscrepancyID,
 	recordedAt time.Time,
 ) (RealtimeEvent, error) {
-	if !submissionID.IsValid() || !sittingID.IsValid() || !attemptID.IsValid() || !candidateID.IsValid() ||
-		!discrepancyID.IsValid() || recordedAt.IsZero() {
+	if !submissionID.IsValid() ||
+		!sittingID.IsValid() ||
+		!attemptID.IsValid() ||
+		!candidateID.IsValid() ||
+		!discrepancyID.IsValid() ||
+		recordedAt.IsZero() {
 		return RealtimeEvent{}, errors.New("manager Integrity Discrepancy event requires valid bounded metadata")
 	}
-	data, err := json.Marshal(managerExamIntegrityDiscrepancyData{SubmissionID: submissionID.String(),
-		ExamSittingID: sittingID.String(), ExamAttemptID: attemptID.String(), CandidateID: candidateID.String(),
-		DiscrepancyID: discrepancyID.String(), RecordedAt: model.FormatRFC3339(recordedAt)})
+
+	data, err := json.Marshal(managerExamIntegrityDiscrepancyData{
+		SubmissionID:  submissionID.String(),
+		ExamSittingID: sittingID.String(),
+		ExamAttemptID: attemptID.String(),
+		CandidateID:   candidateID.String(),
+		DiscrepancyID: discrepancyID.String(),
+		RecordedAt:    model.FormatRFC3339(recordedAt),
+	})
 	if err != nil {
 		return RealtimeEvent{}, fmt.Errorf("encode manager Integrity Discrepancy event: %w", err)
 	}
-	return RealtimeEvent{Name: "exam_integrity_discrepancy_recorded", Action: model.ActionSubmissionView,
-		Resource: model.Resource{Type: model.ResourceSubmission, ID: submissionID.String()}, Data: data}, nil
+
+	return RealtimeEvent{
+		Name:     "exam_integrity_discrepancy_recorded",
+		Action:   model.ActionSubmissionView,
+		Resource: model.Resource{Type: model.ResourceSubmission, ID: submissionID.String()},
+		Data:     data,
+	}, nil
 }
 
 type candidateStudentResultReleasedData struct {
@@ -365,75 +397,153 @@ func NewExamStudentResultReleasedEvent(fact ExamIntegrityReviewEventFact) (Realt
 }
 
 func NewCandidateStudentResultReleasedEvent(fact ExamIntegrityReviewEventFact) (RealtimeEvent, error) {
-	if !fact.SubmissionID.IsValid() || !fact.AttemptID.IsValid() || !fact.CandidateID.IsValid() || !fact.ReviewID.IsValid() ||
-		fact.State != model.SubmissionReviewFinalized || fact.ReleaseState != model.SubmissionReviewReleased ||
-		fact.Revision < 1 || fact.ChangedAt.IsZero() {
+	if !fact.SubmissionID.IsValid() ||
+		!fact.AttemptID.IsValid() ||
+		!fact.CandidateID.IsValid() ||
+		!fact.ReviewID.IsValid() ||
+		fact.State != model.SubmissionReviewFinalized ||
+		fact.ReleaseState != model.SubmissionReviewReleased ||
+		fact.Revision < 1 ||
+		fact.ChangedAt.IsZero() {
 		return RealtimeEvent{}, errors.New("candidate Student Result event requires valid released Review metadata")
 	}
-	data, err := json.Marshal(candidateStudentResultReleasedData{SubmissionID: fact.SubmissionID.String(),
-		ExamAttemptID: fact.AttemptID.String(), ReviewID: fact.ReviewID.String(), ReviewState: string(fact.State), Revision: fact.Revision,
-		ReleaseState: string(fact.ReleaseState), ChangedAt: model.FormatRFC3339(fact.ChangedAt)})
+
+	data, err := json.Marshal(candidateStudentResultReleasedData{
+		SubmissionID:  fact.SubmissionID.String(),
+		ExamAttemptID: fact.AttemptID.String(),
+		ReviewID:      fact.ReviewID.String(),
+		ReviewState:   string(fact.State),
+		Revision:      fact.Revision,
+		ReleaseState:  string(fact.ReleaseState),
+		ChangedAt:     model.FormatRFC3339(fact.ChangedAt),
+	})
 	if err != nil {
 		return RealtimeEvent{}, fmt.Errorf("encode candidate Student Result event: %w", err)
 	}
+
 	return RealtimeEvent{Name: "exam_student_result_released", UserID: fact.CandidateID, Data: data}, nil
 }
 
 func newManagerExamIntegrityReviewEvent(name string, fact ExamIntegrityReviewEventFact) (RealtimeEvent, error) {
-	if !fact.SubmissionID.IsValid() || !fact.AttemptID.IsValid() || !fact.CandidateID.IsValid() || !fact.ReviewID.IsValid() ||
-		fact.Revision < 1 || fact.ChangedAt.IsZero() ||
+	if !fact.SubmissionID.IsValid() ||
+		!fact.AttemptID.IsValid() ||
+		!fact.CandidateID.IsValid() ||
+		!fact.ReviewID.IsValid() ||
+		fact.Revision < 1 ||
+		fact.ChangedAt.IsZero() ||
 		(fact.State != model.SubmissionReviewDraft && fact.State != model.SubmissionReviewFinalized) ||
 		(fact.ReleaseState != model.SubmissionReviewWithheld && fact.ReleaseState != model.SubmissionReviewReleased) {
 		return RealtimeEvent{}, errors.New("manager Integrity Review event requires valid bounded metadata")
 	}
-	data, err := json.Marshal(managerExamIntegrityReviewChangedData{SubmissionID: fact.SubmissionID.String(),
-		ExamAttemptID: fact.AttemptID.String(), CandidateID: fact.CandidateID.String(), ReviewID: fact.ReviewID.String(),
-		ReviewState: string(fact.State), Revision: fact.Revision, ReleaseState: string(fact.ReleaseState),
-		ChangedAt: model.FormatRFC3339(fact.ChangedAt)})
+
+	data, err := json.Marshal(managerExamIntegrityReviewChangedData{
+		SubmissionID:  fact.SubmissionID.String(),
+		ExamAttemptID: fact.AttemptID.String(),
+		CandidateID:   fact.CandidateID.String(),
+		ReviewID:      fact.ReviewID.String(),
+		ReviewState:   string(fact.State),
+		Revision:      fact.Revision,
+		ReleaseState:  string(fact.ReleaseState),
+		ChangedAt:     model.FormatRFC3339(fact.ChangedAt),
+	})
 	if err != nil {
 		return RealtimeEvent{}, fmt.Errorf("encode manager Integrity Review event: %w", err)
 	}
-	return RealtimeEvent{Name: name, Action: model.ActionSubmissionView,
-		Resource: model.Resource{Type: model.ResourceSubmission, ID: fact.SubmissionID.String()}, Data: data}, nil
+
+	return RealtimeEvent{
+		Name:     name,
+		Action:   model.ActionSubmissionView,
+		Resource: model.Resource{Type: model.ResourceSubmission, ID: fact.SubmissionID.String()},
+		Data:     data,
+	}, nil
 }
 
-func NewExamAttemptSubmittedEvent(sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
-	candidateID model.UserID, submissionID model.SubmissionID, workspaceCursor int64, manifestDigest string,
-	provenance model.ExamSubmissionProvenance, submittedAt time.Time,
+func NewExamAttemptSubmittedEvent(
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
+	submissionID model.SubmissionID,
+	workspaceCursor int64,
+	manifestDigest string,
+	provenance model.ExamSubmissionProvenance,
+	submittedAt time.Time,
 ) (RealtimeEvent, error) {
-	if !sittingID.IsValid() || !attemptID.IsValid() || !candidateID.IsValid() || !submissionID.IsValid() ||
-		workspaceCursor < 0 || !validEventSHA256(manifestDigest) || !provenance.IsValid() || submittedAt.IsZero() {
+	if !sittingID.IsValid() ||
+		!attemptID.IsValid() ||
+		!candidateID.IsValid() ||
+		!submissionID.IsValid() ||
+		workspaceCursor < 0 ||
+		!validEventSHA256(manifestDigest) ||
+		!provenance.IsValid() ||
+		submittedAt.IsZero() {
 		return RealtimeEvent{}, errors.New("manager Exam Attempt submitted event requires valid bounded metadata")
 	}
-	data, err := json.Marshal(managerExamAttemptSubmittedData{ExamSittingID: sittingID.String(),
-		ExamAttemptID: attemptID.String(), CandidateID: candidateID.String(), SubmissionID: submissionID.String(),
-		State: string(model.ExamAttemptSubmitted), Provenance: string(provenance), WorkspaceCursor: workspaceCursor, ManifestDigest: manifestDigest,
-		SubmittedAt: model.FormatRFC3339(submittedAt)})
+
+	data, err := json.Marshal(managerExamAttemptSubmittedData{
+		ExamSittingID:   sittingID.String(),
+		ExamAttemptID:   attemptID.String(),
+		CandidateID:     candidateID.String(),
+		SubmissionID:    submissionID.String(),
+		State:           string(model.ExamAttemptSubmitted),
+		Provenance:      string(provenance),
+		WorkspaceCursor: workspaceCursor,
+		ManifestDigest:  manifestDigest,
+		SubmittedAt:     model.FormatRFC3339(submittedAt),
+	})
 	if err != nil {
 		return RealtimeEvent{}, err
 	}
-	return RealtimeEvent{Name: "exam_attempt_submitted", Action: model.ActionExamSittingView,
-		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()}, Data: data}, nil
+
+	return RealtimeEvent{
+		Name:     "exam_attempt_submitted",
+		Action:   model.ActionExamSittingView,
+		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
+		Data:     data,
+	}, nil
 }
 
-func NewCandidateExamAttemptSubmittedEvent(sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
-	candidateID model.UserID, submissionID model.SubmissionID, workspaceCursor int64, manifestDigest string,
-	provenance model.ExamSubmissionProvenance, submittedAt time.Time,
+func NewCandidateExamAttemptSubmittedEvent(
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
+	submissionID model.SubmissionID,
+	workspaceCursor int64,
+	manifestDigest string,
+	provenance model.ExamSubmissionProvenance,
+	submittedAt time.Time,
 ) (RealtimeEvent, error) {
-	if !sittingID.IsValid() || !attemptID.IsValid() || !candidateID.IsValid() || !submissionID.IsValid() ||
-		workspaceCursor < 0 || !validEventSHA256(manifestDigest) || !provenance.IsValid() || submittedAt.IsZero() {
+	if !sittingID.IsValid() ||
+		!attemptID.IsValid() ||
+		!candidateID.IsValid() ||
+		!submissionID.IsValid() ||
+		workspaceCursor < 0 ||
+		!validEventSHA256(manifestDigest) ||
+		!provenance.IsValid() ||
+		submittedAt.IsZero() {
 		return RealtimeEvent{}, errors.New("candidate Exam Attempt submitted event requires valid bounded metadata")
 	}
-	data, err := json.Marshal(candidateExamAttemptSubmittedData{ExamSittingID: sittingID.String(),
-		ExamAttemptID: attemptID.String(), SubmissionID: submissionID.String(), State: string(model.ExamAttemptSubmitted),
+
+	data, err := json.Marshal(candidateExamAttemptSubmittedData{
+		ExamSittingID:   sittingID.String(),
+		ExamAttemptID:   attemptID.String(),
+		SubmissionID:    submissionID.String(),
+		State:           string(model.ExamAttemptSubmitted),
 		Provenance:      string(provenance),
-		WorkspaceCursor: workspaceCursor, ManifestDigest: manifestDigest,
-		SubmittedAt: model.FormatRFC3339(submittedAt)})
+		WorkspaceCursor: workspaceCursor,
+		ManifestDigest:  manifestDigest,
+		SubmittedAt:     model.FormatRFC3339(submittedAt),
+	})
 	if err != nil {
 		return RealtimeEvent{}, err
 	}
-	return RealtimeEvent{Name: "exam_attempt_submitted", UserID: candidateID, Action: model.ActionExamSittingParticipate,
-		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()}, Data: data}, nil
+
+	return RealtimeEvent{
+		Name:     "exam_attempt_submitted",
+		UserID:   candidateID,
+		Action:   model.ActionExamSittingParticipate,
+		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
+		Data:     data,
+	}, nil
 }
 
 func validEventSHA256(value string) bool {
@@ -444,76 +554,139 @@ func validEventSHA256(value string) bool {
 	return err == nil && len(decoded) == 32
 }
 
-func NewCandidateExamAttemptFocusLossWarningEvent(sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
-	candidateID model.UserID, changedAt time.Time,
+func NewCandidateExamAttemptFocusLossWarningEvent(
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
+	changedAt time.Time,
 ) (RealtimeEvent, error) {
 	if !sittingID.IsValid() || !attemptID.IsValid() || !candidateID.IsValid() || changedAt.IsZero() {
 		return RealtimeEvent{}, errors.New("candidate Exam Attempt Focus Loss warning requires valid bounded metadata")
 	}
-	data, err := json.Marshal(candidateExamAttemptFocusLossWarningData{ExamSittingID: sittingID.String(),
-		ExamAttemptID: attemptID.String(), WarningCode: "focus_loss_policy_warning",
-		ChangedAt: model.FormatRFC3339(changedAt)})
+
+	data, err := json.Marshal(candidateExamAttemptFocusLossWarningData{
+		ExamSittingID: sittingID.String(),
+		ExamAttemptID: attemptID.String(),
+		WarningCode:   "focus_loss_policy_warning",
+		ChangedAt:     model.FormatRFC3339(changedAt),
+	})
 	if err != nil {
 		return RealtimeEvent{}, err
 	}
-	return RealtimeEvent{Name: "exam_attempt_focus_warning", UserID: candidateID,
+
+	return RealtimeEvent{
+		Name:     "exam_attempt_focus_warning",
+		UserID:   candidateID,
 		Action:   model.ActionExamSittingParticipate,
-		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()}, Data: data}, nil
+		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
+		Data:     data,
+	}, nil
 }
 
-func NewExamAttemptIntegrityFlaggedEvent(sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
-	candidateID model.UserID, flagID model.IntegrityFlagID, outcome model.IntegrityThresholdOutcome,
-	retainedEvidence int, evidenceOverflow int64, changedAt time.Time,
+func NewExamAttemptIntegrityFlaggedEvent(
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
+	flagID model.IntegrityFlagID,
+	outcome model.IntegrityThresholdOutcome,
+	retainedEvidence int,
+	evidenceOverflow int64,
+	changedAt time.Time,
 ) (RealtimeEvent, error) {
-	if !sittingID.IsValid() || !attemptID.IsValid() || !candidateID.IsValid() || !flagID.IsValid() ||
-		retainedEvidence < 0 || retainedEvidence > model.FocusLossMaximumEvidenceEpisodes || evidenceOverflow < 0 ||
-		(retainedEvidence == 0 && evidenceOverflow == 0) || changedAt.IsZero() {
+	if !sittingID.IsValid() ||
+		!attemptID.IsValid() ||
+		!candidateID.IsValid() ||
+		!flagID.IsValid() ||
+		retainedEvidence < 0 ||
+		retainedEvidence > model.FocusLossMaximumEvidenceEpisodes ||
+		evidenceOverflow < 0 ||
+		(retainedEvidence == 0 && evidenceOverflow == 0) ||
+		changedAt.IsZero() {
 		return RealtimeEvent{}, errors.New("manager Exam Attempt integrity Flag event requires valid bounded metadata")
 	}
+
 	switch outcome {
 	case model.IntegrityOutcomeFlag, model.IntegrityOutcomeFlagAndWarn, model.IntegrityOutcomeFlagAndSuspend:
 	default:
 		return RealtimeEvent{}, errors.New("manager Exam Attempt integrity Flag event requires a valid outcome")
 	}
-	data, err := json.Marshal(managerExamAttemptIntegrityFlaggedData{ExamSittingID: sittingID.String(),
-		ExamAttemptID: attemptID.String(), CandidateID: candidateID.String(), FlagID: flagID.String(),
-		PolicyKind: string(model.IntegrityPolicyFocusLoss), Outcome: string(outcome), RetainedEvidence: retainedEvidence,
-		EvidenceOverflow: evidenceOverflow, EvidenceAvailable: true,
-		ChangedAt: model.FormatRFC3339(changedAt)})
+
+	data, err := json.Marshal(managerExamAttemptIntegrityFlaggedData{
+		ExamSittingID:     sittingID.String(),
+		ExamAttemptID:     attemptID.String(),
+		CandidateID:       candidateID.String(),
+		FlagID:            flagID.String(),
+		PolicyKind:        string(model.IntegrityPolicyFocusLoss),
+		Outcome:           string(outcome),
+		RetainedEvidence:  retainedEvidence,
+		EvidenceOverflow:  evidenceOverflow,
+		EvidenceAvailable: true,
+		ChangedAt:         model.FormatRFC3339(changedAt),
+	})
 	if err != nil {
 		return RealtimeEvent{}, err
 	}
-	return RealtimeEvent{Name: "exam_attempt_integrity_flagged", Action: model.ActionExamSittingView,
-		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()}, Data: data}, nil
+
+	return RealtimeEvent{
+		Name:     "exam_attempt_integrity_flagged",
+		Action:   model.ActionExamSittingView,
+		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
+		Data:     data,
+	}, nil
 }
 
 // NewCandidateExamAttemptWorkspaceChangedEvent publishes only a targeted
 // refetch hint. Logical paths, content metadata, object selectors, continuity
 // selectors, and mutation bodies remain confined to protected HTTP responses.
-func NewCandidateExamAttemptWorkspaceChangedEvent(sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
-	candidateID model.UserID, entryID model.AttemptWorkspaceEntryID, operation model.AttemptWorkspaceMutationKind,
-	cursor int64, changedAt time.Time,
+func NewCandidateExamAttemptWorkspaceChangedEvent(
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
+	entryID model.AttemptWorkspaceEntryID,
+	operation model.AttemptWorkspaceMutationKind,
+	cursor int64,
+	changedAt time.Time,
 ) (RealtimeEvent, error) {
-	if !sittingID.IsValid() || !attemptID.IsValid() || !candidateID.IsValid() || !entryID.IsValid() ||
-		!operation.IsValid() || cursor < 1 || changedAt.IsZero() {
+	if !sittingID.IsValid() ||
+		!attemptID.IsValid() ||
+		!candidateID.IsValid() ||
+		!entryID.IsValid() ||
+		!operation.IsValid() ||
+		cursor < 1 ||
+		changedAt.IsZero() {
 		return RealtimeEvent{}, errors.New("candidate Exam Attempt Workspace event requires valid bounded metadata")
 	}
-	data, err := json.Marshal(candidateExamAttemptWorkspaceChangedData{ExamSittingID: sittingID.String(),
-		ExamAttemptID: attemptID.String(), EntryID: entryID.String(), Operation: string(operation), Cursor: cursor,
-		ChangedAt: model.FormatRFC3339(changedAt)})
+
+	data, err := json.Marshal(candidateExamAttemptWorkspaceChangedData{
+		ExamSittingID: sittingID.String(),
+		ExamAttemptID: attemptID.String(),
+		EntryID:       entryID.String(),
+		Operation:     string(operation),
+		Cursor:        cursor,
+		ChangedAt:     model.FormatRFC3339(changedAt),
+	})
 	if err != nil {
 		return RealtimeEvent{}, err
 	}
-	return RealtimeEvent{Name: "exam_attempt_workspace_changed", UserID: candidateID,
-		Action: model.ActionExamSittingParticipate, Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
-		Data: data}, nil
+
+	return RealtimeEvent{
+		Name:     "exam_attempt_workspace_changed",
+		UserID:   candidateID,
+		Action:   model.ActionExamSittingParticipate,
+		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
+		Data:     data,
+	}, nil
 }
 
 // NewCandidateExamAttemptSuspendedEvent tells the candidate their Attempt is
 // suspended with the safe reason that belongs to the episode's source: a
 // policy reason for automatic enforcement, manager_suspended for a kick.
-func NewCandidateExamAttemptSuspendedEvent(sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
-	candidateID model.UserID, source model.AttemptSuspensionSource, reason model.AttemptSuspensionCandidateReason,
+func NewCandidateExamAttemptSuspendedEvent(
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
+	source model.AttemptSuspensionSource,
+	reason model.AttemptSuspensionCandidateReason,
 	changedAt time.Time,
 ) (RealtimeEvent, error) {
 	switch {
@@ -522,40 +695,85 @@ func NewCandidateExamAttemptSuspendedEvent(sittingID model.ExamSittingID, attemp
 	default:
 		return RealtimeEvent{}, errors.New("candidate Exam Attempt suspension event requires the safe reason of its source")
 	}
-	return newCandidateExamAttemptAccessEvent("exam_attempt_access_suspended", sittingID, attemptID, candidateID,
-		model.ExamAttemptSuspended, string(reason), changedAt)
+
+	return newCandidateExamAttemptAccessEvent(
+		"exam_attempt_access_suspended",
+		sittingID,
+		attemptID,
+		candidateID,
+		model.ExamAttemptSuspended,
+		string(reason),
+		changedAt,
+	)
 }
 
-func NewCandidateExamAttemptReallowedEvent(sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
-	candidateID model.UserID, changedAt time.Time,
+func NewCandidateExamAttemptReallowedEvent(
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
+	changedAt time.Time,
 ) (RealtimeEvent, error) {
-	return newCandidateExamAttemptAccessEvent("exam_attempt_access_reallowed", sittingID, attemptID, candidateID,
-		model.ExamAttemptActive, "", changedAt)
+	return newCandidateExamAttemptAccessEvent(
+		"exam_attempt_access_reallowed",
+		sittingID,
+		attemptID,
+		candidateID,
+		model.ExamAttemptActive,
+		"",
+		changedAt,
+	)
 }
 
-func newCandidateExamAttemptAccessEvent(name string, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
-	candidateID model.UserID, state model.ExamAttemptState, reason string, changedAt time.Time,
+func newCandidateExamAttemptAccessEvent(
+	name string,
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
+	state model.ExamAttemptState,
+	reason string,
+	changedAt time.Time,
 ) (RealtimeEvent, error) {
-	if !sittingID.IsValid() || !attemptID.IsValid() || !candidateID.IsValid() || changedAt.IsZero() ||
+	if !sittingID.IsValid() ||
+		!attemptID.IsValid() ||
+		!candidateID.IsValid() ||
+		changedAt.IsZero() ||
 		(state != model.ExamAttemptSuspended && state != model.ExamAttemptActive) {
 		return RealtimeEvent{}, errors.New("candidate Exam Attempt access event requires valid bounded metadata")
 	}
-	data, err := json.Marshal(candidateExamAttemptAccessChangedData{ExamSittingID: sittingID.String(), ExamAttemptID: attemptID.String(),
-		State: string(state), ReasonCode: reason, ChangedAt: model.FormatRFC3339(changedAt)})
+
+	data, err := json.Marshal(candidateExamAttemptAccessChangedData{
+		ExamSittingID: sittingID.String(),
+		ExamAttemptID: attemptID.String(),
+		State:         string(state),
+		ReasonCode:    reason,
+		ChangedAt:     model.FormatRFC3339(changedAt),
+	})
 	if err != nil {
 		return RealtimeEvent{}, err
 	}
-	return RealtimeEvent{Name: name, UserID: candidateID, Action: model.ActionExamSittingParticipate,
-		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()}, Data: data}, nil
+
+	return RealtimeEvent{
+		Name:     name,
+		UserID:   candidateID,
+		Action:   model.ActionExamSittingParticipate,
+		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
+		Data:     data,
+	}, nil
 }
 
 // NewExamAttemptPolicySuspendedEvent announces an automatic policy
 // suspension (Connection Loss or Focus Loss) to Sitting viewers. Policy
 // enforcement always links its Integrity Flag and the Connection the
 // enforced generation held, so both are required.
-func NewExamAttemptPolicySuspendedEvent(sittingID model.ExamSittingID, attemptID model.ExamAttemptID, candidateID model.UserID,
-	connectionID model.AttemptConnectionID, flagID model.IntegrityFlagID, suspensionID model.AttemptSuspensionID,
-	revision int64, changedAt time.Time,
+func NewExamAttemptPolicySuspendedEvent(
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
+	connectionID model.AttemptConnectionID,
+	flagID model.IntegrityFlagID,
+	suspensionID model.AttemptSuspensionID,
+	revision int64,
+	changedAt time.Time,
 ) (RealtimeEvent, error) {
 	if !connectionID.IsValid() || !flagID.IsValid() {
 		return RealtimeEvent{}, errors.New("policy Exam Attempt suspension event requires its Connection and Integrity Flag")
@@ -567,8 +785,14 @@ func NewExamAttemptPolicySuspendedEvent(sittingID model.ExamSittingID, attemptID
 // viewers. A kick is a manager control, not suspicion, so it links no
 // Integrity Flag; connectionID is zero when the kicked generation had no
 // open Connection (a reconnecting candidate).
-func NewExamAttemptKickedEvent(sittingID model.ExamSittingID, attemptID model.ExamAttemptID, candidateID model.UserID,
-	connectionID model.AttemptConnectionID, suspensionID model.AttemptSuspensionID, revision int64, changedAt time.Time,
+func NewExamAttemptKickedEvent(
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
+	connectionID model.AttemptConnectionID,
+	suspensionID model.AttemptSuspensionID,
+	revision int64,
+	changedAt time.Time,
 ) (RealtimeEvent, error) {
 	if !connectionID.IsValid() && !connectionID.IsZero() {
 		return RealtimeEvent{}, errors.New("manual Exam Attempt suspension event requires a valid Connection when present")
@@ -579,207 +803,456 @@ func NewExamAttemptKickedEvent(sittingID model.ExamSittingID, attemptID model.Ex
 // newExamAttemptSuspendedEvent builds the exam_attempt_suspended payload;
 // attempt_connection_id and integrity_flag_id are omitted when absent, as the
 // source-specific constructors allow.
-func newExamAttemptSuspendedEvent(sittingID model.ExamSittingID, attemptID model.ExamAttemptID, candidateID model.UserID,
-	connectionID model.AttemptConnectionID, flagID model.IntegrityFlagID, suspensionID model.AttemptSuspensionID,
-	revision int64, changedAt time.Time,
+func newExamAttemptSuspendedEvent(
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
+	connectionID model.AttemptConnectionID,
+	flagID model.IntegrityFlagID,
+	suspensionID model.AttemptSuspensionID,
+	revision int64,
+	changedAt time.Time,
 ) (RealtimeEvent, error) {
-	if !sittingID.IsValid() || !attemptID.IsValid() || !candidateID.IsValid() ||
-		!suspensionID.IsValid() || revision < 1 || changedAt.IsZero() {
+	if !sittingID.IsValid() ||
+		!attemptID.IsValid() ||
+		!candidateID.IsValid() ||
+		!suspensionID.IsValid() ||
+		revision < 1 ||
+		changedAt.IsZero() {
 		return RealtimeEvent{}, errors.New("manager Exam Attempt suspension event requires valid bounded metadata")
 	}
-	data, err := json.Marshal(managerExamAttemptSuspendedData{ExamSittingID: sittingID.String(), ExamAttemptID: attemptID.String(),
-		CandidateID: candidateID.String(), ConnectionID: connectionID.String(), FlagID: flagID.String(),
-		SuspensionID: suspensionID.String(), Revision: revision, ChangedAt: model.FormatRFC3339(changedAt)})
+
+	data, err := json.Marshal(managerExamAttemptSuspendedData{
+		ExamSittingID: sittingID.String(),
+		ExamAttemptID: attemptID.String(),
+		CandidateID:   candidateID.String(),
+		ConnectionID:  connectionID.String(),
+		FlagID:        flagID.String(),
+		SuspensionID:  suspensionID.String(),
+		Revision:      revision,
+		ChangedAt:     model.FormatRFC3339(changedAt),
+	})
 	if err != nil {
 		return RealtimeEvent{}, err
 	}
-	return RealtimeEvent{Name: "exam_attempt_suspended", Action: model.ActionExamSittingView,
-		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()}, Data: data}, nil
+
+	return RealtimeEvent{
+		Name:     "exam_attempt_suspended",
+		Action:   model.ActionExamSittingView,
+		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
+		Data:     data,
+	}, nil
 }
 
-func NewExamAttemptReallowedEvent(sittingID model.ExamSittingID, attemptID model.ExamAttemptID, candidateID model.UserID,
-	suspensionID model.AttemptSuspensionID, revision int64, changedAt time.Time,
+func NewExamAttemptReallowedEvent(
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
+	suspensionID model.AttemptSuspensionID,
+	revision int64,
+	changedAt time.Time,
 ) (RealtimeEvent, error) {
-	if !sittingID.IsValid() || !attemptID.IsValid() || !candidateID.IsValid() || !suspensionID.IsValid() || revision < 1 || changedAt.IsZero() {
+	if !sittingID.IsValid() ||
+		!attemptID.IsValid() ||
+		!candidateID.IsValid() ||
+		!suspensionID.IsValid() ||
+		revision < 1 ||
+		changedAt.IsZero() {
 		return RealtimeEvent{}, errors.New("manager Exam Attempt re-allow event requires valid bounded metadata")
 	}
-	data, err := json.Marshal(managerExamAttemptReallowedData{ExamSittingID: sittingID.String(), ExamAttemptID: attemptID.String(),
-		CandidateID: candidateID.String(), SuspensionID: suspensionID.String(), Revision: revision,
-		ChangedAt: model.FormatRFC3339(changedAt)})
+
+	data, err := json.Marshal(managerExamAttemptReallowedData{
+		ExamSittingID: sittingID.String(),
+		ExamAttemptID: attemptID.String(),
+		CandidateID:   candidateID.String(),
+		SuspensionID:  suspensionID.String(),
+		Revision:      revision,
+		ChangedAt:     model.FormatRFC3339(changedAt),
+	})
 	if err != nil {
 		return RealtimeEvent{}, err
 	}
-	return RealtimeEvent{Name: "exam_attempt_reallowed", Action: model.ActionExamSittingView,
-		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()}, Data: data}, nil
+
+	return RealtimeEvent{
+		Name:     "exam_attempt_reallowed",
+		Action:   model.ActionExamSittingView,
+		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
+		Data:     data,
+	}, nil
 }
 
-func NewExamAttemptConnectionOpenedEvent(sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
-	candidateID model.UserID, connectionID model.AttemptConnectionID, openedAt time.Time,
+func NewExamAttemptConnectionOpenedEvent(
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
+	connectionID model.AttemptConnectionID,
+	openedAt time.Time,
 ) (RealtimeEvent, error) {
-	return newExamAttemptConnectionChangedEvent("exam_attempt_connection_opened", sittingID, attemptID, candidateID,
-		connectionID, model.AttemptConnectionOpen, "", openedAt)
+	return newExamAttemptConnectionChangedEvent(
+		"exam_attempt_connection_opened",
+		sittingID,
+		attemptID,
+		candidateID,
+		connectionID,
+		model.AttemptConnectionOpen,
+		"",
+		openedAt,
+	)
 }
 
-func NewExamAttemptConnectionClosedEvent(sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
-	candidateID model.UserID, connectionID model.AttemptConnectionID, reason model.AttemptConnectionCloseReason, closedAt time.Time,
+func NewExamAttemptConnectionClosedEvent(
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
+	connectionID model.AttemptConnectionID,
+	reason model.AttemptConnectionCloseReason,
+	closedAt time.Time,
 ) (RealtimeEvent, error) {
 	if !reason.IsValid() {
 		return RealtimeEvent{}, errors.New("Exam Attempt Connection closed event requires a valid reason")
 	}
-	return newExamAttemptConnectionChangedEvent("exam_attempt_connection_closed", sittingID, attemptID, candidateID,
-		connectionID, model.AttemptConnectionClosed, reason, closedAt)
+	return newExamAttemptConnectionChangedEvent(
+		"exam_attempt_connection_closed",
+		sittingID,
+		attemptID,
+		candidateID,
+		connectionID,
+		model.AttemptConnectionClosed,
+		reason,
+		closedAt,
+	)
 }
 
-func newExamAttemptConnectionChangedEvent(name string, sittingID model.ExamSittingID, attemptID model.ExamAttemptID,
-	candidateID model.UserID, connectionID model.AttemptConnectionID, state model.AttemptConnectionState,
-	reason model.AttemptConnectionCloseReason, changedAt time.Time,
+func newExamAttemptConnectionChangedEvent(
+	name string,
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+	candidateID model.UserID,
+	connectionID model.AttemptConnectionID,
+	state model.AttemptConnectionState,
+	reason model.AttemptConnectionCloseReason,
+	changedAt time.Time,
 ) (RealtimeEvent, error) {
-	if !sittingID.IsValid() || !attemptID.IsValid() || !candidateID.IsValid() || !connectionID.IsValid() ||
-		changedAt.IsZero() || (state != model.AttemptConnectionOpen && state != model.AttemptConnectionClosed) {
+	if !sittingID.IsValid() ||
+		!attemptID.IsValid() ||
+		!candidateID.IsValid() ||
+		!connectionID.IsValid() ||
+		changedAt.IsZero() ||
+		(state != model.AttemptConnectionOpen && state != model.AttemptConnectionClosed) {
 		return RealtimeEvent{}, errors.New("Exam Attempt Connection event requires valid bounded metadata")
 	}
-	data, err := json.Marshal(examAttemptConnectionChangedData{ExamSittingID: sittingID.String(), ExamAttemptID: attemptID.String(),
-		CandidateID: candidateID.String(), ConnectionID: connectionID.String(), State: string(state), CloseReason: string(reason),
-		ChangedAt: model.FormatRFC3339(changedAt)})
+
+	data, err := json.Marshal(examAttemptConnectionChangedData{
+		ExamSittingID: sittingID.String(),
+		ExamAttemptID: attemptID.String(),
+		CandidateID:   candidateID.String(),
+		ConnectionID:  connectionID.String(),
+		State:         string(state),
+		CloseReason:   string(reason),
+		ChangedAt:     model.FormatRFC3339(changedAt),
+	})
 	if err != nil {
 		return RealtimeEvent{}, fmt.Errorf("encode Exam Attempt Connection event: %w", err)
 	}
-	return RealtimeEvent{Name: name, Action: model.ActionExamSittingView,
-		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()}, Data: data}, nil
+
+	return RealtimeEvent{
+		Name:     name,
+		Action:   model.ActionExamSittingView,
+		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
+		Data:     data,
+	}, nil
 }
 
 // NewExamSittingContentCorrectedEvent constructs the content-free fact that
 // tells authorized Sitting subscribers to refetch authoritative presentation.
-func NewExamSittingContentCorrectedEvent(examID model.ExamID, sittingID model.ExamSittingID,
-	previousRevisionID, revisionID model.ExamRevisionID, sittingRevision int64, effectiveAt time.Time,
+func NewExamSittingContentCorrectedEvent(
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	previousRevisionID,
+	revisionID model.ExamRevisionID,
+	sittingRevision int64,
+	effectiveAt time.Time,
 ) (RealtimeEvent, error) {
-	return newExamSittingContentCorrectedEvent(model.ActionExamSittingView, examID, sittingID,
-		previousRevisionID, revisionID, sittingRevision, effectiveAt)
+	return newExamSittingContentCorrectedEvent(
+		model.ActionExamSittingView,
+		examID,
+		sittingID,
+		previousRevisionID,
+		revisionID,
+		sittingRevision,
+		effectiveAt,
+	)
 }
 
 // NewCandidateExamSittingContentCorrectedEvent constructs the independently
 // authorized candidate fact for the same committed correction. Candidate and
 // manager subscriptions deliberately use different actions so later manager
 // payloads cannot become candidate-visible by accident.
-func NewCandidateExamSittingContentCorrectedEvent(examID model.ExamID, sittingID model.ExamSittingID,
-	previousRevisionID, revisionID model.ExamRevisionID, sittingRevision int64, effectiveAt time.Time,
+func NewCandidateExamSittingContentCorrectedEvent(
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	previousRevisionID,
+	revisionID model.ExamRevisionID,
+	sittingRevision int64,
+	effectiveAt time.Time,
 ) (RealtimeEvent, error) {
-	return newExamSittingContentCorrectedEvent(model.ActionExamSittingParticipate, examID, sittingID,
-		previousRevisionID, revisionID, sittingRevision, effectiveAt)
+	return newExamSittingContentCorrectedEvent(
+		model.ActionExamSittingParticipate,
+		examID,
+		sittingID,
+		previousRevisionID,
+		revisionID,
+		sittingRevision,
+		effectiveAt,
+	)
 }
 
-func newExamSittingContentCorrectedEvent(action model.Action, examID model.ExamID, sittingID model.ExamSittingID,
-	previousRevisionID, revisionID model.ExamRevisionID, sittingRevision int64, effectiveAt time.Time,
+func newExamSittingContentCorrectedEvent(
+	action model.Action,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	previousRevisionID,
+	revisionID model.ExamRevisionID,
+	sittingRevision int64,
+	effectiveAt time.Time,
 ) (RealtimeEvent, error) {
-	if !examID.IsValid() || !sittingID.IsValid() || !previousRevisionID.IsValid() || !revisionID.IsValid() ||
-		previousRevisionID == revisionID || sittingRevision < 1 || effectiveAt.IsZero() ||
+	if !examID.IsValid() ||
+		!sittingID.IsValid() ||
+		!previousRevisionID.IsValid() ||
+		!revisionID.IsValid() ||
+		previousRevisionID == revisionID ||
+		sittingRevision < 1 ||
+		effectiveAt.IsZero() ||
 		(action != model.ActionExamSittingView && action != model.ActionExamSittingParticipate) {
 		return RealtimeEvent{}, errors.New("Exam Sitting correction event requires valid bounded metadata")
 	}
+
 	data, err := json.Marshal(examSittingContentCorrectedData{
-		ExamID: examID.String(), ExamSittingID: sittingID.String(), PreviousRevisionID: previousRevisionID.String(),
-		RevisionID: revisionID.String(), SittingRevision: sittingRevision, EffectiveAt: model.FormatRFC3339(effectiveAt),
+		ExamID:             examID.String(),
+		ExamSittingID:      sittingID.String(),
+		PreviousRevisionID: previousRevisionID.String(),
+		RevisionID:         revisionID.String(),
+		SittingRevision:    sittingRevision,
+		EffectiveAt:        model.FormatRFC3339(effectiveAt),
 	})
 	if err != nil {
 		return RealtimeEvent{}, fmt.Errorf("encode Exam Sitting correction event: %w", err)
 	}
-	return RealtimeEvent{Name: "exam_sitting_content_corrected", Action: action,
-		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()}, Data: data}, nil
+
+	return RealtimeEvent{
+		Name:     "exam_sitting_content_corrected",
+		Action:   action,
+		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
+		Data:     data,
+	}, nil
 }
 
 // NewExamSittingLifecycleChangedEvent constructs the safe authoritative fact
 // emitted after one committed lifecycle transition or deadline extension.
-func NewExamSittingLifecycleChangedEvent(examID model.ExamID, sittingID model.ExamSittingID, state model.ExamSittingState,
-	revision int64, reasonCode string, scheduledEndAt, changedAt time.Time,
+func NewExamSittingLifecycleChangedEvent(
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	state model.ExamSittingState,
+	revision int64,
+	reasonCode string,
+	scheduledEndAt,
+	changedAt time.Time,
 ) (RealtimeEvent, error) {
-	return newExamSittingLifecycleChangedEvent(model.ActionExamSittingView, examID, sittingID, state,
-		revision, reasonCode, scheduledEndAt, changedAt)
+	return newExamSittingLifecycleChangedEvent(
+		model.ActionExamSittingView,
+		examID,
+		sittingID,
+		state,
+		revision,
+		reasonCode,
+		scheduledEndAt,
+		changedAt,
+	)
 }
 
 // NewCandidateExamSittingLifecycleChangedEvent constructs the candidate-safe
 // lifecycle fact under the relationship-only participation action.
-func NewCandidateExamSittingLifecycleChangedEvent(examID model.ExamID, sittingID model.ExamSittingID, state model.ExamSittingState,
-	revision int64, reasonCode string, scheduledEndAt, changedAt time.Time,
+func NewCandidateExamSittingLifecycleChangedEvent(
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	state model.ExamSittingState,
+	revision int64,
+	reasonCode string,
+	scheduledEndAt,
+	changedAt time.Time,
 ) (RealtimeEvent, error) {
-	return newExamSittingLifecycleChangedEvent(model.ActionExamSittingParticipate, examID, sittingID, state,
-		revision, reasonCode, scheduledEndAt, changedAt)
+	return newExamSittingLifecycleChangedEvent(
+		model.ActionExamSittingParticipate,
+		examID,
+		sittingID,
+		state,
+		revision,
+		reasonCode,
+		scheduledEndAt,
+		changedAt,
+	)
 }
 
-func newExamSittingLifecycleChangedEvent(action model.Action, examID model.ExamID, sittingID model.ExamSittingID, state model.ExamSittingState,
-	revision int64, reasonCode string, scheduledEndAt, changedAt time.Time,
+func newExamSittingLifecycleChangedEvent(
+	action model.Action,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	state model.ExamSittingState,
+	revision int64,
+	reasonCode string,
+	scheduledEndAt,
+	changedAt time.Time,
 ) (RealtimeEvent, error) {
-	if !examID.IsValid() || !sittingID.IsValid() || !state.IsValid() || revision < 1 ||
-		!validExamSittingLifecycleEventReason(reasonCode) || scheduledEndAt.IsZero() || changedAt.IsZero() ||
+	if !examID.IsValid() ||
+		!sittingID.IsValid() ||
+		!state.IsValid() ||
+		revision < 1 ||
+		!validExamSittingLifecycleEventReason(reasonCode) ||
+		scheduledEndAt.IsZero() ||
+		changedAt.IsZero() ||
 		(action != model.ActionExamSittingView && action != model.ActionExamSittingParticipate) {
 		return RealtimeEvent{}, errors.New("Exam Sitting lifecycle event requires valid bounded metadata")
 	}
+
 	data, err := json.Marshal(examSittingLifecycleChangedData{
-		ExamID: examID.String(), ExamSittingID: sittingID.String(), State: string(state), Revision: revision,
-		ReasonCode: reasonCode, ScheduledEnd: model.FormatRFC3339(scheduledEndAt),
-		ChangedAt: model.FormatRFC3339(changedAt),
+		ExamID:        examID.String(),
+		ExamSittingID: sittingID.String(),
+		State:         string(state),
+		Revision:      revision,
+		ReasonCode:    reasonCode,
+		ScheduledEnd:  model.FormatRFC3339(scheduledEndAt),
+		ChangedAt:     model.FormatRFC3339(changedAt),
 	})
 	if err != nil {
 		return RealtimeEvent{}, fmt.Errorf("encode Exam Sitting lifecycle event: %w", err)
 	}
-	return RealtimeEvent{Name: "exam_sitting_lifecycle_changed", Action: action,
-		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()}, Data: data}, nil
+
+	return RealtimeEvent{
+		Name:     "exam_sitting_lifecycle_changed",
+		Action:   action,
+		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
+		Data:     data,
+	}, nil
 }
 
 func validExamSittingLifecycleEventReason(value string) bool {
 	switch value {
-	case "scheduled_start_reached", "manager_paused", "manager_resumed", "manager_extended", "manager_closed",
-		"scheduled_end_reached", "schedule_elapsed", "academic_structure_invalid", "closed_no_attempts", "sealing_completed":
+	case "scheduled_start_reached",
+		"manager_paused",
+		"manager_resumed",
+		"manager_extended",
+		"manager_closed",
+		"scheduled_end_reached",
+		"schedule_elapsed",
+		"academic_structure_invalid",
+		"closed_no_attempts",
+		"sealing_completed":
 		return true
 	default:
 		return false
 	}
 }
 
-func NewExamSittingScheduledEvent(examID model.ExamID, sittingID model.ExamSittingID, state model.ExamSittingState, revision int64, changedAt time.Time) (RealtimeEvent, error) {
+func NewExamSittingScheduledEvent(
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	state model.ExamSittingState,
+	revision int64,
+	changedAt time.Time,
+) (RealtimeEvent, error) {
 	if state != model.ExamSittingScheduled {
 		return RealtimeEvent{}, errors.New("scheduled Exam Sitting event requires Scheduled state")
 	}
 	return newExamSittingChangedEvent("exam_sitting_scheduled", examID, sittingID, state, revision, changedAt)
 }
 
-func NewExamSittingScheduleUpdatedEvent(examID model.ExamID, sittingID model.ExamSittingID, state model.ExamSittingState, revision int64, changedAt time.Time) (RealtimeEvent, error) {
+func NewExamSittingScheduleUpdatedEvent(
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	state model.ExamSittingState,
+	revision int64,
+	changedAt time.Time,
+) (RealtimeEvent, error) {
 	if state != model.ExamSittingScheduled {
 		return RealtimeEvent{}, errors.New("Exam Sitting schedule update event requires Scheduled state")
 	}
 	return newExamSittingChangedEvent("exam_sitting_schedule_updated", examID, sittingID, state, revision, changedAt)
 }
 
-func NewExamSittingCanceledEvent(examID model.ExamID, sittingID model.ExamSittingID, state model.ExamSittingState, revision int64, changedAt time.Time) (RealtimeEvent, error) {
+func NewExamSittingCanceledEvent(
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	state model.ExamSittingState,
+	revision int64,
+	changedAt time.Time,
+) (RealtimeEvent, error) {
 	if state != model.ExamSittingCanceled {
 		return RealtimeEvent{}, errors.New("canceled Exam Sitting event requires Canceled state")
 	}
 	return newExamSittingChangedEvent("exam_sitting_canceled", examID, sittingID, state, revision, changedAt)
 }
 
-func newExamSittingChangedEvent(name string, examID model.ExamID, sittingID model.ExamSittingID, state model.ExamSittingState, revision int64, changedAt time.Time) (RealtimeEvent, error) {
+func newExamSittingChangedEvent(
+	name string,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	state model.ExamSittingState,
+	revision int64,
+	changedAt time.Time,
+) (RealtimeEvent, error) {
 	if !examID.IsValid() || !sittingID.IsValid() || !state.IsValid() || revision < 1 || changedAt.IsZero() {
 		return RealtimeEvent{}, errors.New("Exam Sitting event requires valid bounded metadata")
 	}
-	data, err := json.Marshal(examSittingChangedData{ExamID: examID.String(), ExamSittingID: sittingID.String(), State: string(state),
-		Revision: revision, ChangedAt: model.FormatRFC3339(changedAt)})
+
+	data, err := json.Marshal(examSittingChangedData{
+		ExamID:        examID.String(),
+		ExamSittingID: sittingID.String(),
+		State:         string(state),
+		Revision:      revision,
+		ChangedAt:     model.FormatRFC3339(changedAt),
+	})
 	if err != nil {
 		return RealtimeEvent{}, fmt.Errorf("encode Exam Sitting event: %w", err)
 	}
-	return RealtimeEvent{Name: name, Action: model.ActionExamSittingView,
-		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()}, Data: data}, nil
+
+	return RealtimeEvent{
+		Name:     name,
+		Action:   model.ActionExamSittingView,
+		Resource: model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
+		Data:     data,
+	}, nil
 }
 
-func NewExamRevisionPublishedEvent(revisionID model.ExamRevisionID, examID model.ExamID, number int64, policyDigest string, kind model.ExamRevisionPublicationKind, publishedAt time.Time) (RealtimeEvent, error) {
+func NewExamRevisionPublishedEvent(
+	revisionID model.ExamRevisionID,
+	examID model.ExamID,
+	number int64,
+	policyDigest string,
+	kind model.ExamRevisionPublicationKind,
+	publishedAt time.Time,
+) (RealtimeEvent, error) {
 	if !revisionID.IsValid() || !examID.IsValid() || number < 1 || len(policyDigest) != 64 || !kind.IsValid() || publishedAt.IsZero() {
 		return RealtimeEvent{}, errors.New("Exam Revision published event requires valid bounded metadata")
 	}
-	data, err := json.Marshal(examRevisionPublishedData{ExamID: examID.String(), RevisionID: revisionID.String(), Number: number,
-		PolicyDigest: policyDigest, Kind: string(kind), PublishedAt: model.FormatRFC3339(publishedAt)})
+
+	data, err := json.Marshal(examRevisionPublishedData{
+		ExamID:       examID.String(),
+		RevisionID:   revisionID.String(),
+		Number:       number,
+		PolicyDigest: policyDigest,
+		Kind:         string(kind),
+		PublishedAt:  model.FormatRFC3339(publishedAt),
+	})
 	if err != nil {
 		return RealtimeEvent{}, fmt.Errorf("encode Exam Revision published event: %w", err)
 	}
-	return RealtimeEvent{Name: "exam_revision_published", Action: model.ActionExamView,
-		Resource: model.Resource{Type: model.ResourceExam, ID: examID.String()}, Data: data}, nil
+
+	return RealtimeEvent{
+		Name:     "exam_revision_published",
+		Action:   model.ActionExamView,
+		Resource: model.Resource{Type: model.ResourceExam, ID: examID.String()},
+		Data:     data,
+	}, nil
 }
 
 // NewExamCreatedEvent constructs the stable, content-free authoring event.
@@ -787,8 +1260,11 @@ func NewExamCreatedEvent(examID model.ExamID) (RealtimeEvent, error) {
 	if !examID.IsValid() {
 		return RealtimeEvent{}, errors.New("exam created event requires a valid Exam ID")
 	}
-	return RealtimeEvent{Name: "exam_created", Action: model.ActionExamView,
-		Resource: model.Resource{Type: model.ResourceExam, ID: examID.String()}}, nil
+	return RealtimeEvent{
+		Name:     "exam_created",
+		Action:   model.ActionExamView,
+		Resource: model.Resource{Type: model.ResourceExam, ID: examID.String()},
+	}, nil
 }
 
 // NewExamDraftUpdatedEvent owns the bounded wire projection for a Draft text
@@ -797,28 +1273,51 @@ func NewExamDraftUpdatedEvent(examID model.ExamID, revision int64) (RealtimeEven
 	if !examID.IsValid() || revision < 1 {
 		return RealtimeEvent{}, errors.New("exam Draft update event requires a valid identity and revision")
 	}
+
 	data, err := json.Marshal(examDraftUpdatedData{ExamID: examID.String(), DraftRevision: revision})
 	if err != nil {
 		return RealtimeEvent{}, fmt.Errorf("encode exam Draft update event: %w", err)
 	}
-	return RealtimeEvent{Name: "exam_draft_updated", Action: model.ActionExamView,
-		Resource: model.Resource{Type: model.ResourceExam, ID: examID.String()}, Data: data}, nil
+
+	return RealtimeEvent{
+		Name:     "exam_draft_updated",
+		Action:   model.ActionExamView,
+		Resource: model.Resource{Type: model.ResourceExam, ID: examID.String()},
+		Data:     data,
+	}, nil
 }
 
 // NewExamStarterWorkspaceChangedEvent constructs the content-free fact emitted
 // after one Starter Workspace hierarchy/content mutation commits. Logical
 // paths, opaque object identities, checksums, and authored bytes are absent.
-func NewExamStarterWorkspaceChangedEvent(examID model.ExamID, entryID model.StarterWorkspaceEntryID, revision int64, operation string, changedAt time.Time) (RealtimeEvent, error) {
+func NewExamStarterWorkspaceChangedEvent(
+	examID model.ExamID,
+	entryID model.StarterWorkspaceEntryID,
+	revision int64,
+	operation string,
+	changedAt time.Time,
+) (RealtimeEvent, error) {
 	if !examID.IsValid() || !entryID.IsValid() || revision < 1 || !validExamStarterWorkspaceOperation(operation) || changedAt.IsZero() {
 		return RealtimeEvent{}, errors.New("Starter Workspace change event requires valid identities, operation, revision, and time")
 	}
-	data, err := json.Marshal(examStarterWorkspaceChangedData{ExamID: examID.String(), EntryID: entryID.String(), Operation: operation,
-		DraftRevision: revision, ChangedAt: model.FormatRFC3339(changedAt)})
+
+	data, err := json.Marshal(examStarterWorkspaceChangedData{
+		ExamID:        examID.String(),
+		EntryID:       entryID.String(),
+		Operation:     operation,
+		DraftRevision: revision,
+		ChangedAt:     model.FormatRFC3339(changedAt),
+	})
 	if err != nil {
 		return RealtimeEvent{}, fmt.Errorf("encode Starter Workspace change event: %w", err)
 	}
-	return RealtimeEvent{Name: "exam_starter_workspace_changed", Action: model.ActionExamView,
-		Resource: model.Resource{Type: model.ResourceExam, ID: examID.String()}, Data: data}, nil
+
+	return RealtimeEvent{
+		Name:     "exam_starter_workspace_changed",
+		Action:   model.ActionExamView,
+		Resource: model.Resource{Type: model.ResourceExam, ID: examID.String()},
+		Data:     data,
+	}, nil
 }
 
 func validExamStarterWorkspaceOperation(operation string) bool {
@@ -835,39 +1334,75 @@ func NewExamArchivedEvent(examID model.ExamID, revision int64, archivedAt time.T
 	if !examID.IsValid() || revision < 1 || archivedAt.IsZero() {
 		return RealtimeEvent{}, errors.New("exam archived event requires a valid identity, revision, and time")
 	}
-	data, err := json.Marshal(examArchivedData{ExamID: examID.String(), ExamRevision: revision,
-		ArchivedAt: model.FormatRFC3339(archivedAt)})
+
+	data, err := json.Marshal(examArchivedData{
+		ExamID:       examID.String(),
+		ExamRevision: revision,
+		ArchivedAt:   model.FormatRFC3339(archivedAt),
+	})
 	if err != nil {
 		return RealtimeEvent{}, fmt.Errorf("encode exam archived event: %w", err)
 	}
-	return RealtimeEvent{Name: "exam_archived", Action: model.ActionExamView,
-		Resource: model.Resource{Type: model.ResourceExam, ID: examID.String()}, Data: data}, nil
+
+	return RealtimeEvent{
+		Name:     "exam_archived",
+		Action:   model.ActionExamView,
+		Resource: model.Resource{Type: model.ResourceExam, ID: examID.String()},
+		Data:     data,
+	}, nil
 }
 
-func NewExamManagerChangedEvent(examID model.ExamID, userID model.UserID, present bool, revision int64, changedAt time.Time) (RealtimeEvent, error) {
+func NewExamManagerChangedEvent(
+	examID model.ExamID,
+	userID model.UserID,
+	present bool,
+	revision int64,
+	changedAt time.Time,
+) (RealtimeEvent, error) {
 	if !examID.IsValid() || !userID.IsValid() || revision < 1 || changedAt.IsZero() {
 		return RealtimeEvent{}, errors.New("Exam Manager change event requires valid identities, revision, and time")
 	}
-	data, err := json.Marshal(examManagerChangedData{ExamID: examID.String(), UserID: userID.String(), Present: present,
-		ExamRevision: revision, ChangedAt: model.FormatRFC3339(changedAt)})
+
+	data, err := json.Marshal(examManagerChangedData{
+		ExamID:       examID.String(),
+		UserID:       userID.String(),
+		Present:      present,
+		ExamRevision: revision,
+		ChangedAt:    model.FormatRFC3339(changedAt),
+	})
 	if err != nil {
 		return RealtimeEvent{}, fmt.Errorf("encode Exam Manager change event: %w", err)
 	}
-	return RealtimeEvent{Name: "exam_manager_changed", Action: model.ActionExamView,
-		Resource: model.Resource{Type: model.ResourceExam, ID: examID.String()}, Data: data}, nil
+
+	return RealtimeEvent{
+		Name:     "exam_manager_changed",
+		Action:   model.ActionExamView,
+		Resource: model.Resource{Type: model.ResourceExam, ID: examID.String()},
+		Data:     data,
+	}, nil
 }
 
 func NewExamOwnerTransferredEvent(examID model.ExamID, ownerID model.UserID, revision int64, changedAt time.Time) (RealtimeEvent, error) {
 	if !examID.IsValid() || !ownerID.IsValid() || revision < 1 || changedAt.IsZero() {
 		return RealtimeEvent{}, errors.New("Exam owner transfer event requires valid identities, revision, and time")
 	}
-	data, err := json.Marshal(examOwnerTransferredData{ExamID: examID.String(), OwnerUserID: ownerID.String(),
-		ExamRevision: revision, ChangedAt: model.FormatRFC3339(changedAt)})
+
+	data, err := json.Marshal(examOwnerTransferredData{
+		ExamID:       examID.String(),
+		OwnerUserID:  ownerID.String(),
+		ExamRevision: revision,
+		ChangedAt:    model.FormatRFC3339(changedAt),
+	})
 	if err != nil {
 		return RealtimeEvent{}, fmt.Errorf("encode Exam owner transfer event: %w", err)
 	}
-	return RealtimeEvent{Name: "exam_owner_transferred", Action: model.ActionExamView,
-		Resource: model.Resource{Type: model.ResourceExam, ID: examID.String()}, Data: data}, nil
+
+	return RealtimeEvent{
+		Name:     "exam_owner_transferred",
+		Action:   model.ActionExamView,
+		Resource: model.Resource{Type: model.ResourceExam, ID: examID.String()},
+		Data:     data,
+	}, nil
 }
 
 // Clone returns a deep copy safe for concurrent local and cluster delivery.
@@ -884,13 +1419,17 @@ func (e RealtimeEvent) ValidateForPublish() error {
 	if e.ID != "" && !model.IsValidOpaqueID(e.ID) {
 		return errors.New("realtime event ID is invalid")
 	}
-	if len(e.Name) == 0 || len(e.Name) > maxRealtimeEventNameBytes ||
+
+	if len(e.Name) == 0 ||
+		len(e.Name) > maxRealtimeEventNameBytes ||
 		!validRealtimeName(e.Name) {
 		return fmt.Errorf("invalid realtime event %q", e.Name)
 	}
+
 	if e.UserID != "" && !model.UserID(e.UserID).IsValid() {
 		return errors.New("realtime event user ID is invalid")
 	}
+
 	if e.Action == "" && e.Resource == (model.Resource{}) {
 		if e.UserID == "" {
 			return errors.New("realtime event requires a user target or authorized resource")
@@ -901,12 +1440,14 @@ func (e RealtimeEvent) ValidateForPublish() error {
 			return errors.New("realtime event authorization target is invalid")
 		}
 	}
+
 	if len(e.Data) > maxRealtimeEventDataBytes {
 		return fmt.Errorf("realtime event data exceeds %d bytes", maxRealtimeEventDataBytes)
 	}
 	if len(e.Data) != 0 && !json.Valid(e.Data) {
 		return errors.New("realtime event data is not valid JSON")
 	}
+
 	return nil
 }
 
@@ -924,9 +1465,13 @@ func validRealtimeName(value string) bool {
 		if (character < 'a' || character > 'z') &&
 			(character < 'A' || character > 'Z') &&
 			(character < '0' || character > '9') &&
-			character != '.' && character != '_' && character != '-' && character != ':' {
+			character != '.' &&
+			character != '_' &&
+			character != '-' &&
+			character != ':' {
 			return false
 		}
 	}
+
 	return true
 }

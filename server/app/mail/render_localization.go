@@ -72,10 +72,18 @@ type copyData struct {
 // representativeCopyData fills every placeholder so startup validation proves
 // each catalog entry renders.
 var representativeCopyData = copyData{
-	Name: "Representative", Institution: "Representative institution", Address: "support@example.test",
-	ExamTitle: "Representative exam", Class: "Representative class", PreviousClass: "Previous class",
-	When: "Wed 1 Sep at 08:30", Day: "Wed 1 Sep", Token: "Representative token",
-	Deadline: "Wednesday 1 September 2026, 08:30 UTC", Hours: "2 hours", Minutes: "30 minutes",
+	Name:          "Representative",
+	Institution:   "Representative institution",
+	Address:       "support@example.test",
+	ExamTitle:     "Representative exam",
+	Class:         "Representative class",
+	PreviousClass: "Previous class",
+	When:          "Wed 1 Sep at 08:30",
+	Day:           "Wed 1 Sep",
+	Token:         "Representative token",
+	Deadline:      "Wednesday 1 September 2026, 08:30 UTC",
+	Hours:         "2 hours",
+	Minutes:       "30 minutes",
 }
 
 type copyResolver struct {
@@ -87,53 +95,90 @@ type copyResolver struct {
 	failure        error
 }
 
-func resolveCopy(localizer *localization.Localizer, key model.MailTemplateKey, locale string, data copyData) (templateCopy, *copyResolver, string, error) {
+func resolveCopy(
+	localizer *localization.Localizer,
+	key model.MailTemplateKey,
+	locale string,
+	data copyData,
+) (templateCopy, *copyResolver, string, error) {
 	r := &copyResolver{localizer: localizer, key: key, locale: locale, data: data}
 	institution := strings.TrimSpace(data.Institution)
 	if strings.TrimSpace(r.data.Institution) == "" {
 		r.data.Institution = r.common("institution_fallback", nil)
 	}
+
 	copy := templateCopy{
-		Subject: r.required("subject"), Preheader: r.required("preheader"), Institution: institution,
-		Kind: r.common("kind."+string(kindFor(key)), nil), Heading: r.required("heading"),
-		Paragraphs:  splitParagraphs(r.required("body")),
-		ActionLabel: r.optional("action_label"), ActionNote: r.optional("action_note"),
-		ActionFallback: r.common("action_fallback", nil), ActionFallbackLink: r.common("action_fallback_link", nil),
-		AsideTitle: r.optional("aside_title"), AsideText: r.optional("aside_text"),
-		Why:          r.required("why"),
-		SentBy:       r.common("sent_by", r.data),
-		addressLabel: r.optional("address_label"), atLabel: r.optional("at_label"), expiresLabel: r.optional("expires_label"),
+		Subject:            r.required("subject"),
+		Preheader:          r.required("preheader"),
+		Institution:        institution,
+		Kind:               r.common("kind."+string(kindFor(key)), nil),
+		Heading:            r.required("heading"),
+		Paragraphs:         splitParagraphs(r.required("body")),
+		ActionLabel:        r.optional("action_label"),
+		ActionNote:         r.optional("action_note"),
+		ActionFallback:     r.common("action_fallback", nil),
+		ActionFallbackLink: r.common("action_fallback_link", nil),
+		AsideTitle:         r.optional("aside_title"),
+		AsideText:          r.optional("aside_text"),
+		Why:                r.required("why"),
+		SentBy:             r.common("sent_by", r.data),
+		addressLabel:       r.optional("address_label"),
+		atLabel:            r.optional("at_label"),
+		expiresLabel:       r.optional("expires_label"),
 	}
 	if (copy.AsideTitle == "") != (copy.AsideText == "") {
 		return templateCopy{}, nil, "", fmt.Errorf("resolve mail copy %q: aside title and text must both be present", key)
 	}
+
 	if strings.TrimSpace(data.Name) == "" {
 		copy.Greeting = r.common("greeting_anonymous", nil)
 	} else {
 		copy.Greeting = r.common("greeting", r.data)
 	}
+
 	if strings.TrimSpace(data.Address) == "" {
 		copy.Support = r.common("support_fallback", r.data)
 	} else {
 		copy.Support = r.common("support", r.data)
 	}
+
 	copy.labels = commonLabels{
-		Exam: r.label("exam"), Class: r.label("class"), PreviousClass: r.label("previous_class"),
-		FromClass: r.label("from_class"), ToClass: r.label("to_class"), When: r.label("when"),
-		WasScheduled: r.label("was_scheduled"), EnrolledFrom: r.label("enrolled_from"),
-		EnrolledUntil: r.label("enrolled_until"), NoEnd: r.label("no_end"), YourRole: r.label("your_role"),
-		Since: r.label("since"), Token: r.label("token"), Access: r.label("access"), Expires: r.label("expires"),
-		Released: r.label("released"), Submitted: r.label("submitted"), Ended: r.label("ended"),
-		Sealed: r.label("sealed"), ReceiptCode: r.label("receipt_code"),
-		PATCreated: r.label("pat_created"), PATDisabled: r.label("pat_disabled"),
-		PATEnabled: r.label("pat_enabled"), PATRevoked: r.label("pat_revoked"),
-		NewAddress: r.label("new_address"), DeletionDate: r.label("deletion_date"),
-		InstitutionScope: r.value("institution_scope"), AcademicUnitScope: r.value("academic_unit_scope"),
-		Manager: r.value("manager"), Owner: r.value("owner"), NoLongerManager: r.value("no_longer_manager"),
+		Exam:              r.label("exam"),
+		Class:             r.label("class"),
+		PreviousClass:     r.label("previous_class"),
+		FromClass:         r.label("from_class"),
+		ToClass:           r.label("to_class"),
+		When:              r.label("when"),
+		WasScheduled:      r.label("was_scheduled"),
+		EnrolledFrom:      r.label("enrolled_from"),
+		EnrolledUntil:     r.label("enrolled_until"),
+		NoEnd:             r.label("no_end"),
+		YourRole:          r.label("your_role"),
+		Since:             r.label("since"),
+		Token:             r.label("token"),
+		Access:            r.label("access"),
+		Expires:           r.label("expires"),
+		Released:          r.label("released"),
+		Submitted:         r.label("submitted"),
+		Ended:             r.label("ended"),
+		Sealed:            r.label("sealed"),
+		ReceiptCode:       r.label("receipt_code"),
+		PATCreated:        r.label("pat_created"),
+		PATDisabled:       r.label("pat_disabled"),
+		PATEnabled:        r.label("pat_enabled"),
+		PATRevoked:        r.label("pat_revoked"),
+		NewAddress:        r.label("new_address"),
+		DeletionDate:      r.label("deletion_date"),
+		InstitutionScope:  r.value("institution_scope"),
+		AcademicUnitScope: r.value("academic_unit_scope"),
+		Manager:           r.value("manager"),
+		Owner:             r.value("owner"),
+		NoLongerManager:   r.value("no_longer_manager"),
 	}
 	if r.failure != nil {
 		return templateCopy{}, nil, "", fmt.Errorf("resolve mail copy %q: %w", key, r.failure)
 	}
+
 	return copy, r, r.resolvedLocale, nil
 }
 

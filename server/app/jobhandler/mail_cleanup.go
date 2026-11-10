@@ -50,43 +50,57 @@ func (h mailCleanupHandler) Run(ctx context.Context, execution job.Execution) jo
 	if execution.Job == nil {
 		return job.PermanentFailure("job.command.invalid", errors.New("mail cleanup job is invalid"))
 	}
+
 	var command MailCleanupCommand
-	if decodeStrictJobDocument(execution.Job.Command, &command) != nil || command.PageSize < 1 || command.PageSize > mailCleanupPageSize || command.MaxPages < 1 || command.MaxPages > mailCleanupMaximumPages || h.mail == nil || h.sittings == nil {
+	if decodeStrictJobDocument(execution.Job.Command, &command) != nil ||
+		command.PageSize < 1 ||
+		command.PageSize > mailCleanupPageSize ||
+		command.MaxPages < 1 ||
+		command.MaxPages > mailCleanupMaximumPages ||
+		h.mail == nil ||
+		h.sittings == nil {
 		return job.PermanentFailure("job.command.invalid", errors.New("mail cleanup command is invalid"))
 	}
+
 	result := MailCleanupResult{}
 	for page := 0; page < command.MaxPages; page++ {
 		terminalized, err := h.sittings.MaintainMailExpansions(ctx, command.PageSize)
 		if err != nil {
 			return job.RetryableFailure("dependency.unavailable", err)
 		}
+
 		result.FanoutsTerminalized += terminalized.FanoutsTerminalized
 		result.FanoutDeliveriesSuppressed += terminalized.DeliveriesSuppressed
 		if !terminalized.More {
 			break
 		}
 	}
+
 	for page := 0; page < command.MaxPages; page++ {
 		deleted, err := h.mail.CleanupTerminal(ctx, command.PageSize)
 		if err != nil {
 			return job.RetryableFailure("dependency.unavailable", err)
 		}
+
 		result.Deleted += deleted.Affected
 		if !deleted.More {
 			break
 		}
 	}
+
 	for page := 0; page < command.MaxPages; page++ {
 		expired, err := h.mail.SuppressExpired(ctx, command.PageSize)
 		if err != nil {
 			return job.RetryableFailure("dependency.unavailable", err)
 		}
+
 		result.Expired += expired.Affected
 		recordMailMaintenanceDeliveries(ctx, h.recorder, expired)
 		if !expired.More {
 			break
 		}
 	}
+
 	document, err := json.Marshal(result)
 	return job.Outcome{Kind: job.OutcomeSucceeded, Result: document, Err: err}
 }
@@ -95,9 +109,12 @@ func recordMailMaintenanceDeliveries(ctx context.Context, recorder MailDeliveryR
 	if recorder == nil || result == nil {
 		return
 	}
+
 	for _, delivery := range result.Deliveries {
 		recorder.RecordJobMailDelivery(ctx, MailDeliveryMetric{
-			TemplateKey: delivery.TemplateKey, State: delivery.State, OutcomeCode: delivery.PublicFailureCode,
+			TemplateKey:       delivery.TemplateKey,
+			State:             delivery.State,
+			OutcomeCode:       delivery.PublicFailureCode,
 			ProcessingLatency: delivery.ProcessingLatency,
 		})
 	}
@@ -112,25 +129,47 @@ func (p mailCleanupProposer) Propose(ctx context.Context, occurrence time.Time) 
 	if p.jobs == nil || p.now == nil {
 		return errors.New("mail cleanup proposer dependencies are unavailable")
 	}
+
 	command, err := json.Marshal(MailCleanupCommand{PageSize: mailCleanupPageSize, MaxPages: mailCleanupMaximumPages})
 	if err != nil {
 		return err
 	}
+
 	at := model.TimeUTC(p.now())
-	job, err := model.NewJobWithDedupePolicy(model.NewJobID(), model.JobTypeMailCleanup, command,
-		"mail-cleanup:"+model.TimeUTC(occurrence).Format("2006-01-02"), model.JobDedupePermanent, at, at, 5)
+	job, err := model.NewJobWithDedupePolicy(
+		model.NewJobID(),
+		model.JobTypeMailCleanup,
+		command,
+		"mail-cleanup:"+model.TimeUTC(occurrence).Format("2006-01-02"),
+		model.JobDedupePermanent,
+		at,
+		at,
+		5,
+	)
 	if err != nil {
 		return err
 	}
+
 	_, _, err = p.jobs.Enqueue(ctx, &store.JobEnqueue{Job: job})
 	return err
 }
 
 func mailCleanupDescriptor(handler job.Handler) job.Descriptor {
-	return job.Descriptor{Type: model.JobTypeMailCleanup, PublicErrorCodes: []string{"dependency.unavailable", "job.command.invalid"}, Timeout: 5 * time.Minute,
-		Concurrency: 1, MaximumAttempts: 5, LeaseDuration: time.Minute, HeartbeatInterval: 15 * time.Second,
-		BaseRetryDelay: time.Minute, MaximumRetryDelay: 30 * time.Minute, Visibility: job.VisibilityOperator,
-		SuccessRetention: 30 * 24 * time.Hour, FailureRetention: 90 * 24 * time.Hour, Handler: handler}
+	return job.Descriptor{
+		Type:              model.JobTypeMailCleanup,
+		PublicErrorCodes:  []string{"dependency.unavailable", "job.command.invalid"},
+		Timeout:           5 * time.Minute,
+		Concurrency:       1,
+		MaximumAttempts:   5,
+		LeaseDuration:     time.Minute,
+		HeartbeatInterval: 15 * time.Second,
+		BaseRetryDelay:    time.Minute,
+		MaximumRetryDelay: 30 * time.Minute,
+		Visibility:        job.VisibilityOperator,
+		SuccessRetention:  30 * 24 * time.Hour,
+		FailureRetention:  90 * 24 * time.Hour,
+		Handler:           handler,
+	}
 }
 
 // NewMailCleanupDescriptor registers the bounded cleanup of terminal mail

@@ -27,23 +27,37 @@ type examSubmissionMailPreparationAdapter struct {
 func (a examSubmissionMailPreparationAdapter) PrepareSubmissionReceipt(ctx context.Context,
 	request attempt.SubmissionMailPreparation,
 ) (*attempt.PreparedSubmissionMail, error) {
-	if a.preparer == nil || a.users == nil || a.sittings == nil || a.revisions == nil ||
-		!request.CandidateUserID.IsValid() || !request.ExamID.IsValid() || !request.SittingID.IsValid() ||
-		!request.SubmissionID.IsValid() || !request.ReceiptCode.IsValid() || request.SealedAt.IsZero() {
+	if a.preparer == nil ||
+		a.users == nil ||
+		a.sittings == nil ||
+		a.revisions == nil ||
+		!request.CandidateUserID.IsValid() ||
+		!request.ExamID.IsValid() ||
+		!request.SittingID.IsValid() ||
+		!request.SubmissionID.IsValid() ||
+		!request.ReceiptCode.IsValid() ||
+		request.SealedAt.IsZero() {
 		return nil, errors.New("Submission receipt dependencies or request are invalid")
 	}
+
 	recipient, err := a.users.Get(ctx, request.CandidateUserID)
 	if err != nil {
 		return nil, err
 	}
+
 	snapshot, err := a.sittings.Get(ctx, request.ExamID, request.SittingID)
 	if err != nil {
 		return nil, err
 	}
-	if snapshot == nil || snapshot.Sitting == nil || snapshot.Sitting.Validate() != nil ||
-		snapshot.Sitting.ID != request.SittingID || snapshot.Sitting.ExamID != request.ExamID {
+
+	if snapshot == nil ||
+		snapshot.Sitting == nil ||
+		snapshot.Sitting.Validate() != nil ||
+		snapshot.Sitting.ID != request.SittingID ||
+		snapshot.Sitting.ExamID != request.ExamID {
 		return nil, errors.New("Submission receipt Sitting projection is inconsistent")
 	}
+
 	revision, err := a.revisions.GetSummary(ctx, request.ExamID, snapshot.Sitting.ExamRevisionID)
 	if err != nil {
 		return nil, err
@@ -51,6 +65,7 @@ func (a examSubmissionMailPreparationAdapter) PrepareSubmissionReceipt(ctx conte
 	if revision == nil || revision.ID != snapshot.Sitting.ExamRevisionID || revision.ExamID != request.ExamID || revision.Title == "" {
 		return nil, errors.New("Submission receipt Exam revision projection is inconsistent")
 	}
+
 	key := model.MailTemplateExamSubmissionReceived
 	switch request.Provenance {
 	case model.ExamSubmissionCandidateSubmitted:
@@ -61,14 +76,27 @@ func (a examSubmissionMailPreparationAdapter) PrepareSubmissionReceipt(ctx conte
 	default:
 		return nil, errors.New("Submission receipt provenance is invalid")
 	}
+
 	prepared, err := a.preparer.PrepareSubmissionReceiptMail(mail.SubmissionReceiptPreparation{
-		Recipient: recipient, OccurrenceID: model.MailOccurrenceID(request.SubmissionID.String()), TemplateKey: key,
-		Details: mail.SubmissionReceiptDetails{ExamTitle: revision.Title, SittingID: request.SittingID,
-			SubmissionID: request.SubmissionID, ReceiptCode: request.ReceiptCode, SealedAt: request.SealedAt}, ActionAt: request.SealedAt,
+		Recipient:    recipient,
+		OccurrenceID: model.MailOccurrenceID(request.SubmissionID.String()),
+		TemplateKey:  key,
+		Details: mail.SubmissionReceiptDetails{
+			ExamTitle:    revision.Title,
+			SittingID:    request.SittingID,
+			SubmissionID: request.SubmissionID,
+			ReceiptCode:  request.ReceiptCode,
+			SealedAt:     request.SealedAt,
+		},
+		ActionAt: request.SealedAt,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &attempt.PreparedSubmissionMail{Notice: &store.PreparedMail{Occurrence: prepared.Occurrence,
-		Delivery: prepared.Delivery, Job: prepared.Job}, ExpectedRecipientRevision: recipient.Revision}, nil
+
+	return &attempt.PreparedSubmissionMail{Notice: &store.PreparedMail{
+		Occurrence: prepared.Occurrence,
+		Delivery:   prepared.Delivery,
+		Job:        prepared.Job,
+	}, ExpectedRecipientRevision: recipient.Revision}, nil
 }

@@ -64,7 +64,11 @@ func (s *Service) GetRetentionControl(ctx context.Context, invocation invocation
 }
 
 // GetRetentionPreview returns one retention preview.
-func (s *Service) GetRetentionPreview(ctx context.Context, invocation invocation.Invocation, id model.RetentionPreviewID) (*model.RetentionPreview, error) {
+func (s *Service) GetRetentionPreview(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	id model.RetentionPreviewID,
+) (*model.RetentionPreview, error) {
 	inst, _, err := s.authorizeRetentionPolicy(ctx, invocation, model.ActionRetentionPolicyView)
 	if err != nil {
 		return nil, err
@@ -72,6 +76,7 @@ func (s *Service) GetRetentionPreview(ctx context.Context, invocation invocation
 	if !id.IsValid() {
 		return nil, apperror.New("retention.invalid")
 	}
+
 	preview, err := s.retention.GetPreview(ctx, id)
 	if err != nil {
 		return nil, retentionError(err)
@@ -79,12 +84,17 @@ func (s *Service) GetRetentionPreview(ctx context.Context, invocation invocation
 	if preview.Validate() != nil || preview.InstitutionID != inst.ID {
 		return nil, apperror.New("retention.unavailable")
 	}
+
 	return preview, nil
 }
 
 // CreateRetentionPreview records an audited preview of what the expected
 // Retention Policy revision would retire.
-func (s *Service) CreateRetentionPreview(ctx context.Context, invocation invocation.Invocation, command CreateRetentionPreviewCommand) (*model.RetentionPreview, error) {
+func (s *Service) CreateRetentionPreview(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command CreateRetentionPreviewCommand,
+) (*model.RetentionPreview, error) {
 	inst, resource, err := s.authorizeRetentionPolicy(ctx, invocation, model.ActionRetentionPolicyView)
 	if err != nil {
 		return nil, err
@@ -95,52 +105,89 @@ func (s *Service) CreateRetentionPreview(ctx context.Context, invocation invocat
 	if command.IdempotencyKey == "" {
 		return nil, apperror.New("idempotency.key_required")
 	}
-	idempotency, err := idempotency.Prepare(invocation, store.RetentionPreviewOperation, command.IdempotencyKey,
+
+	idempotency, err := idempotency.Prepare(
+		invocation,
+		store.RetentionPreviewOperation,
+		command.IdempotencyKey,
 		struct {
 			InstitutionID  model.InstitutionID
 			PolicyRevision int64
-		}{inst.ID, command.ExpectedPolicyRevision})
+		}{inst.ID, command.ExpectedPolicyRevision},
+	)
 	if err != nil {
 		return nil, err
 	}
-	preview, err := access.RunAudited(ctx, s.auditor, access.Mutation{
-		Invocation: invocation, Action: model.ActionRetentionPolicyView, Resource: resource, ScopeType: model.RoleScopeInstitution,
-		ScopeID: inst.ID.String(), Operation: "preview", Value: map[string]any{"policy_revision": command.ExpectedPolicyRevision}}, s.now,
+
+	preview, err := access.RunAudited(
+		ctx,
+		s.auditor,
+		access.Mutation{
+			Invocation: invocation,
+			Action:     model.ActionRetentionPolicyView,
+			Resource:   resource,
+			ScopeType:  model.RoleScopeInstitution,
+			ScopeID:    inst.ID.String(),
+			Operation:  "preview",
+			Value:      map[string]any{"policy_revision": command.ExpectedPolicyRevision},
+		},
+		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.RetentionPreview, error) {
 			return s.retention.CreatePreview(ctx, &store.RetentionPreviewCreation{
-				RetentionMutation: store.RetentionMutation{Principal: invocation.Principal(), AuditEventID: reference.ID, AuditAt: reference.MutationAt},
-				PreviewID:         model.NewRetentionPreviewID(), ExpectedPolicyRevision: command.ExpectedPolicyRevision}, idempotency)
-		}, retentionError)
+				RetentionMutation: store.RetentionMutation{
+					Principal:    invocation.Principal(),
+					AuditEventID: reference.ID,
+					AuditAt:      reference.MutationAt,
+				},
+				PreviewID:              model.NewRetentionPreviewID(),
+				ExpectedPolicyRevision: command.ExpectedPolicyRevision,
+			}, idempotency)
+		},
+		retentionError,
+	)
 	if err != nil {
 		return nil, err
 	}
 	if preview.Validate() != nil || preview.InstitutionID != inst.ID {
 		return nil, apperror.New("retention.unavailable")
 	}
+
 	return preview, nil
 }
 
 // ChangeRetentionControl enables retention cleanup against a reviewed
 // preview, or pauses it. It needs a strong, recent Session and
 // retention_cleanup.manage.
-func (s *Service) ChangeRetentionControl(ctx context.Context, invocation invocation.Invocation, command ChangeRetentionControlCommand) (*model.RetentionControl, error) {
+func (s *Service) ChangeRetentionControl(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command ChangeRetentionControlCommand,
+) (*model.RetentionControl, error) {
 	if err := identity.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 		return nil, err
 	}
+
 	inst, resource, err := s.authorizeRetentionPolicy(ctx, invocation, model.ActionRetentionCleanupManage)
 	if err != nil {
 		return nil, err
 	}
-	if command.ExpectedRevision < 1 || command.ExpectedPolicyRevision < 1 ||
+
+	if command.ExpectedRevision < 1 ||
+		command.ExpectedPolicyRevision < 1 ||
 		(command.State != model.RetentionControlEnabled && command.State != model.RetentionControlPaused) ||
 		(command.State == model.RetentionControlEnabled && !command.PreviewID.IsValid()) ||
 		(command.State == model.RetentionControlPaused && !command.PreviewID.IsZero()) {
 		return nil, apperror.New("retention.invalid")
 	}
+
 	if command.IdempotencyKey == "" {
 		return nil, apperror.New("idempotency.key_required")
 	}
-	idempotency, err := idempotency.Prepare(invocation, store.RetentionControlOperation, command.IdempotencyKey,
+
+	idempotency, err := idempotency.Prepare(
+		invocation,
+		store.RetentionControlOperation,
+		command.IdempotencyKey,
 		struct {
 			InstitutionID  model.InstitutionID
 			Revision       int64
@@ -148,37 +195,79 @@ func (s *Service) ChangeRetentionControl(ctx context.Context, invocation invocat
 			State          model.RetentionControlState
 			PreviewID      model.RetentionPreviewID
 		}{
-			inst.ID, command.ExpectedRevision, command.ExpectedPolicyRevision, command.State, command.PreviewID})
+			inst.ID,
+			command.ExpectedRevision,
+			command.ExpectedPolicyRevision,
+			command.State,
+			command.PreviewID,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
-	result, err := access.RunAudited(ctx, s.auditor, access.Mutation{
-		Invocation: invocation, Action: model.ActionRetentionCleanupManage, Resource: resource, ScopeType: model.RoleScopeInstitution,
-		ScopeID: inst.ID.String(), Operation: "control", Value: map[string]any{"policy_revision": command.ExpectedPolicyRevision,
-			"control_revision": command.ExpectedRevision, "state": string(command.State)}}, s.now,
+
+	result, err := access.RunAudited(
+		ctx,
+		s.auditor,
+		access.Mutation{
+			Invocation: invocation,
+			Action:     model.ActionRetentionCleanupManage,
+			Resource:   resource,
+			ScopeType:  model.RoleScopeInstitution,
+			ScopeID:    inst.ID.String(),
+			Operation:  "control",
+			Value: map[string]any{
+				"policy_revision":  command.ExpectedPolicyRevision,
+				"control_revision": command.ExpectedRevision,
+				"state":            string(command.State),
+			},
+		},
+		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.RetentionControlResult, error) {
-			return s.retention.ChangeControl(ctx, &store.RetentionControlChange{
-				RetentionMutation: store.RetentionMutation{Principal: invocation.Principal(), AuditEventID: reference.ID, AuditAt: reference.MutationAt, RecentAuthenticationTTL: s.recentAuthenticationTTL},
-				ExpectedRevision:  command.ExpectedRevision, ExpectedPolicyRevision: command.ExpectedPolicyRevision, State: command.State, PreviewID: command.PreviewID}, idempotency)
-		}, retentionError)
+			return s.retention.ChangeControl(
+				ctx,
+				&store.RetentionControlChange{
+					RetentionMutation: store.RetentionMutation{
+						Principal:               invocation.Principal(),
+						AuditEventID:            reference.ID,
+						AuditAt:                 reference.MutationAt,
+						RecentAuthenticationTTL: s.recentAuthenticationTTL,
+					},
+					ExpectedRevision:       command.ExpectedRevision,
+					ExpectedPolicyRevision: command.ExpectedPolicyRevision,
+					State:                  command.State,
+					PreviewID:              command.PreviewID,
+				},
+				idempotency,
+			)
+		},
+		retentionError,
+	)
 	if err != nil {
 		return nil, err
 	}
 	if result == nil || result.Control.Validate() != nil || result.Control.InstitutionID != inst.ID {
 		return nil, apperror.New("retention.unavailable")
 	}
+
 	return result.Control, nil
 }
 
 // ListRetentionRecords returns a page of retention records with their
 // eligibility.
-func (s *Service) ListRetentionRecords(ctx context.Context, invocation invocation.Invocation, after model.SubmissionID, limit int) (*RetentionRecordPage, error) {
+func (s *Service) ListRetentionRecords(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	after model.SubmissionID,
+	limit int,
+) (*RetentionRecordPage, error) {
 	if _, _, err := s.authorizeRetentionPolicy(ctx, invocation, model.ActionRetentionPolicyView); err != nil {
 		return nil, err
 	}
 	if limit < 1 || limit > model.RetentionMaximumPageSize || !after.IsZero() && !after.IsValid() {
 		return nil, apperror.New("retention.invalid")
 	}
+
 	stored, err := s.retention.ListRecords(ctx, store.RetentionRecordListOptions{AfterSubmissionID: after, Limit: limit})
 	if err != nil {
 		return nil, retentionError(err)
@@ -186,10 +275,17 @@ func (s *Service) ListRetentionRecords(ctx context.Context, invocation invocatio
 	if stored == nil || stored.PolicyRevision < 1 || stored.AsOf.IsZero() || len(stored.Items) > 4*limit {
 		return nil, apperror.New("retention.unavailable")
 	}
-	page := &RetentionRecordPage{PolicyRevision: stored.PolicyRevision, AsOf: stored.AsOf, Items: make([]RetentionRecordView, len(stored.Items)), HasMore: stored.HasMore}
+
+	page := &RetentionRecordPage{
+		PolicyRevision: stored.PolicyRevision,
+		AsOf:           stored.AsOf,
+		Items:          make([]RetentionRecordView, len(stored.Items)),
+		HasMore:        stored.HasMore,
+	}
 	for i, item := range stored.Items {
 		page.Items[i] = RetentionRecordView{Record: item.Record, Eligibility: item.Eligibility, Retirement: item.Retirement}
 	}
+
 	return page, nil
 }
 

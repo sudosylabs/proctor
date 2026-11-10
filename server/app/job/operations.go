@@ -123,16 +123,25 @@ func (r *Engine) List(ctx context.Context, query ListQuery) (Page, error) {
 	if query.Limit < 1 || query.Limit > 200 || (!query.BeforeID.IsZero() && (!query.BeforeID.IsValid() || query.BeforeCreatedAt.IsZero())) {
 		return Page{}, ErrQueryInvalid
 	}
+
 	for _, status := range query.Statuses {
 		if !publicStatus(status) {
 			return Page{}, ErrQueryInvalid
 		}
 	}
-	options := store.JobListOptions{Types: r.operatorTypes(), Statuses: query.Statuses, BeforeCreatedAt: query.BeforeCreatedAt, BeforeID: query.BeforeID, Limit: query.Limit + 1}
+
+	options := store.JobListOptions{
+		Types:           r.operatorTypes(),
+		Statuses:        query.Statuses,
+		BeforeCreatedAt: query.BeforeCreatedAt,
+		BeforeID:        query.BeforeID,
+		Limit:           query.Limit + 1,
+	}
 	records, err := r.deps.Store.List(ctx, options)
 	if err != nil {
 		return Page{}, err
 	}
+
 	page := Page{HasMore: len(records) > query.Limit}
 	records = records[:min(len(records), query.Limit)]
 	page.Items = make([]View, 0, len(records))
@@ -144,6 +153,7 @@ func (r *Engine) List(ctx context.Context, query ListQuery) (Page, error) {
 			page.Items = append(page.Items, project(record))
 		}
 	}
+
 	if !query.BeforeID.IsZero() {
 		return page, nil
 	}
@@ -153,6 +163,7 @@ func (r *Engine) List(ctx context.Context, query ListQuery) (Page, error) {
 	if page.Total < len(page.Items) || page.Total > store.MaximumListCount {
 		return Page{}, errors.New("job store count contradicts its page")
 	}
+
 	page.Counted, page.TotalIsLowerBound = true, page.Total == store.MaximumListCount
 	return page, nil
 }
@@ -163,8 +174,12 @@ func (r *Engine) CountRecentFailures(ctx context.Context, within time.Duration, 
 	if within <= 0 || maximum < 1 || maximum > store.MaximumListCount {
 		return 0, ErrQueryInvalid
 	}
-	return r.deps.Store.Count(ctx, store.JobListOptions{Types: r.operatorTypes(), Statuses: []model.JobStatus{model.JobStatusFailed},
-		UpdatedWithin: within, Limit: 1}, maximum)
+	return r.deps.Store.Count(ctx, store.JobListOptions{
+		Types:         r.operatorTypes(),
+		Statuses:      []model.JobStatus{model.JobStatusFailed},
+		UpdatedWithin: within,
+		Limit:         1,
+	}, maximum)
 }
 
 func (r *Engine) Get(ctx context.Context, id model.JobID) (View, error) {
@@ -185,16 +200,23 @@ func (r *Engine) Attempts(ctx context.Context, query AttemptListQuery) (AttemptP
 	if query.Limit < 1 || query.Limit > 200 || query.BeforeNumber < 0 {
 		return AttemptPage{}, ErrQueryInvalid
 	}
-	records, err := r.deps.Store.ListAttemptsPage(ctx, store.JobAttemptListOptions{JobID: query.JobID, BeforeNumber: query.BeforeNumber, Limit: query.Limit + 1})
+
+	records, err := r.deps.Store.ListAttemptsPage(ctx, store.JobAttemptListOptions{
+		JobID:        query.JobID,
+		BeforeNumber: query.BeforeNumber,
+		Limit:        query.Limit + 1,
+	})
 	if err != nil {
 		return AttemptPage{}, err
 	}
+
 	page := AttemptPage{HasMore: len(records) > query.Limit}
 	records = records[:min(len(records), query.Limit)]
 	page.Items = make([]AttemptView, 0, len(records))
 	for _, record := range records {
 		page.Items = append(page.Items, projectAttempt(record))
 	}
+
 	return page, nil
 }
 
@@ -226,10 +248,17 @@ func (r *Engine) Cancel(ctx context.Context, target ControlTarget, audit AuditRe
 	if target.kind != controlCancel || !validAuditReference(audit) {
 		return View{}, ErrCancelUnsupported
 	}
-	record, err := r.deps.Store.Cancel(ctx, &store.JobMutation{ID: target.id, ExpectedRevision: target.revision, AuditEventID: audit.EventID, AuditAt: audit.At})
+
+	record, err := r.deps.Store.Cancel(ctx, &store.JobMutation{
+		ID:               target.id,
+		ExpectedRevision: target.revision,
+		AuditEventID:     audit.EventID,
+		AuditAt:          audit.At,
+	})
 	if err != nil {
 		return View{}, err
 	}
+
 	return project(record), nil
 }
 
@@ -237,10 +266,17 @@ func (r *Engine) Retry(ctx context.Context, target ControlTarget, audit AuditRef
 	if target.kind != controlRetry || !validAuditReference(audit) {
 		return View{}, ErrRetryUnsupported
 	}
-	record, err := r.deps.Store.Retry(ctx, &store.JobMutation{ID: target.id, ExpectedRevision: target.revision, AuditEventID: audit.EventID, AuditAt: audit.At})
+
+	record, err := r.deps.Store.Retry(ctx, &store.JobMutation{
+		ID:               target.id,
+		ExpectedRevision: target.revision,
+		AuditEventID:     audit.EventID,
+		AuditAt:          audit.At,
+	})
 	if err != nil {
 		return View{}, err
 	}
+
 	return project(record), nil
 }
 
@@ -271,11 +307,26 @@ func (r *Engine) operatorVisible(jobType model.JobType) bool {
 }
 
 func project(record *model.Job) View {
-	view := View{ID: record.ID, Type: record.Type, Status: record.Status, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt, AvailableAt: record.AvailableAt, StartedAt: record.StartedAt, CompletedAt: record.CompletedAt, PublicErrorCode: record.PublicErrorCode, AttemptCount: record.AttemptCount, MaximumAttempts: record.MaximumAttempts, Revision: record.Revision, CreatedByUserID: record.CreatedByUserID}
+	view := View{
+		ID:              record.ID,
+		Type:            record.Type,
+		Status:          record.Status,
+		CreatedAt:       record.CreatedAt,
+		UpdatedAt:       record.UpdatedAt,
+		AvailableAt:     record.AvailableAt,
+		StartedAt:       record.StartedAt,
+		CompletedAt:     record.CompletedAt,
+		PublicErrorCode: record.PublicErrorCode,
+		AttemptCount:    record.AttemptCount,
+		MaximumAttempts: record.MaximumAttempts,
+		Revision:        record.Revision,
+		CreatedByUserID: record.CreatedByUserID,
+	}
 	if record.Progress != nil {
 		progress := *record.Progress
 		view.Progress = &progress
 	}
+
 	return view
 }
 
@@ -288,14 +339,28 @@ func cloneView(view View) View {
 }
 
 func projectAttempt(record model.JobAttempt) AttemptView {
-	return AttemptView{ID: record.ID, Number: record.Number, Status: record.Status, StartedAt: record.StartedAt, HeartbeatAt: record.HeartbeatAt, LeaseExpiresAt: record.LeaseExpiresAt, CompletedAt: record.CompletedAt, PublicErrorCode: record.PublicErrorCode}
+	return AttemptView{
+		ID:              record.ID,
+		Number:          record.Number,
+		Status:          record.Status,
+		StartedAt:       record.StartedAt,
+		HeartbeatAt:     record.HeartbeatAt,
+		LeaseExpiresAt:  record.LeaseExpiresAt,
+		CompletedAt:     record.CompletedAt,
+		PublicErrorCode: record.PublicErrorCode,
+	}
 }
 
 func validAuditReference(audit AuditReference) bool { return audit.EventID != "" && !audit.At.IsZero() }
 
 func publicStatus(status model.JobStatus) bool {
 	switch status {
-	case model.JobStatusQueued, model.JobStatusRunning, model.JobStatusCancelRequested, model.JobStatusSucceeded, model.JobStatusFailed, model.JobStatusCanceled:
+	case model.JobStatusQueued,
+		model.JobStatusRunning,
+		model.JobStatusCancelRequested,
+		model.JobStatusSucceeded,
+		model.JobStatusFailed,
+		model.JobStatusCanceled:
 		return true
 	default:
 		return false

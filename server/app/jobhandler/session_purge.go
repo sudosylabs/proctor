@@ -43,38 +43,47 @@ func (h sessionPurgeHandler) Run(ctx context.Context, execution job.Execution) j
 	if execution.Job == nil {
 		return job.PermanentFailure("job.command.invalid", errors.New("job is missing"))
 	}
+
 	var command SessionPurgeCommand
 	if err := decodeStrictJobDocument(execution.Job.Command, &command); err != nil ||
-		command.BatchSize < 1 || command.BatchSize > store.MaximumSessionPurgeBatch {
+		command.BatchSize < 1 ||
+		command.BatchSize > store.MaximumSessionPurgeBatch {
 		return job.PermanentFailure("job.command.invalid", errors.New("session purge command is invalid"))
 	}
+
 	if h.retention <= 0 {
 		return job.PermanentFailure("job.command.invalid", errors.New("session retention is not configured"))
 	}
+
 	var result SessionPurgeResult
 	for range maximumSessionPurgeBatches {
 		deleted, err := h.credentials.PurgeRetired(ctx, &store.SessionCredentialPurge{Grace: h.retention, Limit: command.BatchSize})
 		if err != nil {
 			return job.RetryableFailure("dependency.unavailable", err)
 		}
+
 		result.Credentials += deleted
 		if deleted < int64(command.BatchSize) {
 			break
 		}
 	}
+
 	var after store.SessionPurgePosition
 	for range maximumSessionPurgeBatches {
 		pass, err := h.sessions.PurgeRetired(ctx, &store.SessionPurge{Grace: h.retention, Limit: command.BatchSize, After: after})
 		if err != nil {
 			return job.RetryableFailure("dependency.unavailable", err)
 		}
+
 		result.Sessions += pass.Sessions
 		result.Credentials += pass.Credentials
 		if pass.Examined < command.BatchSize {
 			break
 		}
+
 		after = pass.Next
 	}
+
 	document, err := json.Marshal(result)
 	return job.Outcome{Kind: job.OutcomeSucceeded, Result: document, Err: err}
 }
@@ -89,23 +98,52 @@ func (p sessionPurgeProposer) Propose(ctx context.Context, occurrence time.Time)
 	if err != nil {
 		return err
 	}
+
 	at := model.TimeUTC(p.now())
 	key := "session-purge-retired:" + model.TimeUTC(occurrence).Format("2006-01-02T15")
-	job, err := model.NewJobWithDedupePolicy(model.NewJobID(), model.JobTypeSessionPurgeRetired, command, key, model.JobDedupePermanent, at, at, 5)
+	job, err := model.NewJobWithDedupePolicy(
+		model.NewJobID(),
+		model.JobTypeSessionPurgeRetired,
+		command,
+		key,
+		model.JobDedupePermanent,
+		at,
+		at,
+		5,
+	)
 	if err != nil {
 		return err
 	}
+
 	_, _, err = p.jobs.Enqueue(ctx, &store.JobEnqueue{Job: job})
 	return err
 }
 
 func sessionPurgeDescriptor(handler job.Handler) job.Descriptor {
-	return job.Descriptor{Type: model.JobTypeSessionPurgeRetired, PublicErrorCodes: []string{"dependency.unavailable", "job.command.invalid"}, Timeout: 10 * time.Minute, Concurrency: 1, MaximumAttempts: 5, LeaseDuration: time.Minute, HeartbeatInterval: 15 * time.Second, BaseRetryDelay: time.Second, MaximumRetryDelay: time.Minute, Visibility: job.VisibilityOperator, SuccessRetention: 7 * 24 * time.Hour, FailureRetention: 90 * 24 * time.Hour, Handler: handler}
+	return job.Descriptor{
+		Type:              model.JobTypeSessionPurgeRetired,
+		PublicErrorCodes:  []string{"dependency.unavailable", "job.command.invalid"},
+		Timeout:           10 * time.Minute,
+		Concurrency:       1,
+		MaximumAttempts:   5,
+		LeaseDuration:     time.Minute,
+		HeartbeatInterval: 15 * time.Second,
+		BaseRetryDelay:    time.Second,
+		MaximumRetryDelay: time.Minute,
+		Visibility:        job.VisibilityOperator,
+		SuccessRetention:  7 * 24 * time.Hour,
+		FailureRetention:  90 * 24 * time.Hour,
+		Handler:           handler,
+	}
 }
 
 // NewSessionPurgeDescriptor registers the purge of Sessions and credentials
 // that have been retired for longer than retention.
-func NewSessionPurgeDescriptor(sessions store.SessionStore, credentials store.SessionCredentialStore, retention time.Duration) job.Descriptor {
+func NewSessionPurgeDescriptor(
+	sessions store.SessionStore,
+	credentials store.SessionCredentialStore,
+	retention time.Duration,
+) job.Descriptor {
 	return sessionPurgeDescriptor(sessionPurgeHandler{sessions: sessions, credentials: credentials, retention: retention})
 }
 

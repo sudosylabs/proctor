@@ -70,43 +70,66 @@ func (s *Service) GetProgramme(ctx context.Context, invocation invocation.Invoca
 }
 
 // ListProgrammes lists Programmes after authorizing the caller.
-func (s *Service) ListProgrammes(ctx context.Context, invocation invocation.Invocation, query ListProgrammesQuery) (paging.Page[*model.Programme], error) {
+func (s *Service) ListProgrammes(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	query ListProgrammesQuery,
+) (paging.Page[*model.Programme], error) {
 	unitID := query.AcademicUnitID
 	if !unitID.IsValid() {
 		return paging.Page[*model.Programme]{}, apperror.New("request.invalid").WithField("field", "academic_unit_id")
 	}
+
 	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
 	if err != nil {
 		return paging.Page[*model.Programme]{}, err
 	}
-	if err = s.authorizer.Authorize(ctx, invocation, model.ActionProgrammeView, model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()}); err != nil {
+
+	if err = s.authorizer.Authorize(
+		ctx,
+		invocation,
+		model.ActionProgrammeView,
+		model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()},
+	); err != nil {
 		return paging.Page[*model.Programme]{}, err
 	}
+
 	programmes, err := s.programmes.SearchByAcademicUnit(ctx, unitID, store.AcademicNameListOptions{
-		Term: strings.TrimSpace(query.Query), AfterName: query.AfterName, AfterID: query.AfterID, Limit: probe,
+		Term:      strings.TrimSpace(query.Query),
+		AfterName: query.AfterName,
+		AfterID:   query.AfterID,
+		Limit:     probe,
 	})
 	if err != nil {
 		return paging.Page[*model.Programme]{}, programmeStoreErrors.Translate(err)
 	}
+
 	return paging.New(programmes, limit), nil
 }
 
 // CreateProgramme creates a Programme after authorizing the caller.
-func (s *Service) CreateProgramme(ctx context.Context, invocation invocation.Invocation, command CreateProgrammeCommand) (*model.Programme, error) {
+func (s *Service) CreateProgramme(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command CreateProgrammeCommand,
+) (*model.Programme, error) {
 	unitID := command.AcademicUnitID
 	if !unitID.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "academic_unit_id")
 	}
+
 	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()}
 	scope, err := s.authorizer.AuthorizeWithScope(ctx, invocation, model.ActionProgrammeManage, resource)
 	scopeType, scopeID := scope.ScopeType, scope.ScopeID
 	if err != nil {
 		return nil, err
 	}
+
 	programmeID, err := model.ParseProgrammeID(s.newID())
 	if err != nil {
 		return nil, apperror.New("request.invalid").WithField("field", "programme_id").Wrap(err)
 	}
+
 	academicUnitID := unitID
 	candidate := &model.Programme{
 		AcademicUnitID: academicUnitID,
@@ -118,6 +141,7 @@ func (s *Service) CreateProgramme(ctx context.Context, invocation invocation.Inv
 	if err := candidate.Validate(); err != nil {
 		return nil, apperror.DomainInvalid("programme.invalid", err)
 	}
+
 	return access.RunAudited(
 		ctx,
 		s.auditor,
@@ -133,7 +157,9 @@ func (s *Service) CreateProgramme(ctx context.Context, invocation invocation.Inv
 		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.Programme, error) {
 			return s.programmes.Create(ctx, &store.ProgrammeCreation{
-				Programme: candidate, AuditEventID: reference.ID, AuditAt: reference.MutationAt,
+				Programme:    candidate,
+				AuditEventID: reference.ID,
+				AuditAt:      reference.MutationAt,
 			})
 		},
 		programmeStoreErrors.Translate,
@@ -141,7 +167,11 @@ func (s *Service) CreateProgramme(ctx context.Context, invocation invocation.Inv
 }
 
 // UpdateProgramme updates a Programme after authorizing the caller.
-func (s *Service) UpdateProgramme(ctx context.Context, invocation invocation.Invocation, command UpdateProgrammeCommand) (*model.Programme, error) {
+func (s *Service) UpdateProgramme(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command UpdateProgrammeCommand,
+) (*model.Programme, error) {
 	current, scopeType, scopeID, err := s.getForMutation(ctx, invocation, command.ID)
 	if err != nil {
 		return nil, err
@@ -149,6 +179,7 @@ func (s *Service) UpdateProgramme(ctx context.Context, invocation invocation.Inv
 	if err := checkAcademicRevision(command.ExpectedRevision, current.Revision, "programme.conflict"); err != nil {
 		return nil, err
 	}
+
 	candidate := *current
 	if command.Name != nil {
 		candidate.Name = *command.Name
@@ -159,10 +190,12 @@ func (s *Service) UpdateProgramme(ctx context.Context, invocation invocation.Inv
 	if command.Description != nil {
 		candidate.Description = *command.Description
 	}
+
 	candidate.PrepareUpdate(s.now())
 	if err := candidate.Validate(); err != nil {
 		return nil, apperror.DomainInvalid("programme.invalid", err)
 	}
+
 	resource := model.Resource{Type: model.ResourceProgramme, ID: current.ID.String()}
 	return access.RunAudited(
 		ctx,
@@ -180,7 +213,9 @@ func (s *Service) UpdateProgramme(ctx context.Context, invocation invocation.Inv
 		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.Programme, error) {
 			return s.programmes.Update(ctx, &store.ProgrammeUpdate{
-				Programme: &candidate, AuditEventID: reference.ID, AuditAt: reference.MutationAt,
+				Programme:    &candidate,
+				AuditEventID: reference.ID,
+				AuditAt:      reference.MutationAt,
 			})
 		},
 		programmeStoreErrors.Translate,
@@ -196,6 +231,7 @@ func (s *Service) ArchiveProgramme(ctx context.Context, invocation invocation.In
 	if err := checkAcademicRevision(command.ExpectedRevision, current.Revision, "programme.conflict"); err != nil {
 		return err
 	}
+
 	resource := model.Resource{Type: model.ResourceProgramme, ID: current.ID.String()}
 	_, err = access.RunAudited(
 		ctx,
@@ -213,8 +249,10 @@ func (s *Service) ArchiveProgramme(ctx context.Context, invocation invocation.In
 		func(ctx context.Context, reference access.MutationReference) (*model.Programme, error) {
 			return s.programmes.Archive(ctx, &store.ProgrammeArchive{
 				ExpectedRevision: current.Revision,
-				ID:               current.ID, ArchiveAt: reference.MutationAt,
-				AuditEventID: reference.ID, AuditAt: reference.MutationAt,
+				ID:               current.ID,
+				ArchiveAt:        reference.MutationAt,
+				AuditEventID:     reference.ID,
+				AuditAt:          reference.MutationAt,
 			})
 		},
 		programmeStoreErrors.Translate,
@@ -222,19 +260,31 @@ func (s *Service) ArchiveProgramme(ctx context.Context, invocation invocation.In
 	return err
 }
 
-func (s *Service) getForMutation(ctx context.Context, invocation invocation.Invocation, id model.ProgrammeID) (*model.Programme, model.RoleScopeType, string, error) {
+func (s *Service) getForMutation(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	id model.ProgrammeID,
+) (*model.Programme, model.RoleScopeType, string, error) {
 	if !id.IsValid() {
 		return nil, "", "", apperror.New("request.invalid").WithField("field", "programme_id")
 	}
-	scope, err := s.authorizer.AuthorizeWithScope(ctx, invocation, model.ActionProgrammeManage, model.Resource{Type: model.ResourceProgramme, ID: id.String()})
+
+	scope, err := s.authorizer.AuthorizeWithScope(
+		ctx,
+		invocation,
+		model.ActionProgrammeManage,
+		model.Resource{Type: model.ResourceProgramme, ID: id.String()},
+	)
 	scopeType, scopeID := scope.ScopeType, scope.ScopeID
 	if err != nil {
 		return nil, "", "", err
 	}
+
 	programme, err := s.programmes.Get(ctx, id)
 	if err != nil {
 		return nil, "", "", programmeStoreErrors.Translate(err)
 	}
+
 	return programme, scopeType, scopeID, nil
 }
 

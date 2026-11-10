@@ -76,29 +76,44 @@ func (s *Service) GetCurrentUserContext(ctx context.Context, invocation invocati
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return nil, apperror.New("authentication.token_invalid")
 	}
+
 	value, err := s.users.GetCurrentContext(ctx, principal.UserID, 21)
 	if err != nil {
 		return nil, StoreErrors.Translate(err)
 	}
-	if value == nil || value.UserID != principal.UserID || value.Username == "" || value.DisplayName == "" ||
+
+	if value == nil ||
+		value.UserID != principal.UserID ||
+		value.Username == "" ||
+		value.DisplayName == "" ||
 		(value.ProfilePictureKind != model.ProfilePictureCustom && value.ProfilePictureKind != model.ProfilePictureDefault) ||
-		len(value.AvailableProductAreas) < 2 || len(value.ManagementScopes) > 20 {
+		len(value.AvailableProductAreas) < 2 ||
+		len(value.ManagementScopes) > 20 {
 		return nil, apperror.New("administration.unavailable").Wrap(errors.New("current User context projection is incomplete"))
 	}
-	view := &CurrentUserContextView{UserID: value.UserID, Username: value.Username, DisplayName: value.DisplayName,
-		ProfilePictureReference: "/api/v1/users/" + value.UserID.String() + "/profile-picture",
-		ProfilePictureKind:      value.ProfilePictureKind,
-		NoCurrentAffiliation:    value.NoCurrentAffiliation, NoAssignedAccess: value.NoAssignedAccess,
-		AvailableProductAreas:   append([]store.CurrentUserProductArea(nil), value.AvailableProductAreas...),
-		ManagementScopes:        append([]store.CurrentUserManagementScope(nil), value.ManagementScopes...),
-		ManagementScopesHasMore: value.ManagementScopesHasMore, SessionManagementAvailable: true}
+
+	view := &CurrentUserContextView{
+		UserID:                     value.UserID,
+		Username:                   value.Username,
+		DisplayName:                value.DisplayName,
+		ProfilePictureReference:    "/api/v1/users/" + value.UserID.String() + "/profile-picture",
+		ProfilePictureKind:         value.ProfilePictureKind,
+		NoCurrentAffiliation:       value.NoCurrentAffiliation,
+		NoAssignedAccess:           value.NoAssignedAccess,
+		AvailableProductAreas:      append([]store.CurrentUserProductArea(nil), value.AvailableProductAreas...),
+		ManagementScopes:           append([]store.CurrentUserManagementScope(nil), value.ManagementScopes...),
+		ManagementScopesHasMore:    value.ManagementScopesHasMore,
+		SessionManagementAvailable: true,
+	}
 	if value.UnresolvedAttempt != nil {
 		attempt := *value.UnresolvedAttempt
 		view.UnresolvedAttempt = &attempt
 	}
+
 	if principal.ClientType == model.SessionClientDesktop {
 		view.CurrentDesktopRegistrationID = principal.DesktopRegistrationID
 	}
+
 	return view, nil
 }
 
@@ -123,11 +138,16 @@ type UserDirectoryEntry struct {
 // SearchUsers reads one page of the User directory with each User's summary.
 // The first page, read without a keyset, also counts every User the filters
 // match within the same visibility.
-func (s *Service) SearchUsers(ctx context.Context, invocation invocation.Invocation, query SearchUsersQuery) (paging.Counted[UserDirectoryEntry], error) {
+func (s *Service) SearchUsers(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	query SearchUsersQuery,
+) (paging.Counted[UserDirectoryEntry], error) {
 	page, options, err := s.listUsers(ctx, invocation, query)
 	if err != nil {
 		return paging.Counted[UserDirectoryEntry]{}, err
 	}
+
 	total, consistent, err := paging.CountFirst(query.AfterID == "", len(page.Items), func(maximum int) (int, error) {
 		return s.users.Count(ctx, options, maximum)
 	})
@@ -137,10 +157,12 @@ func (s *Service) SearchUsers(ctx context.Context, invocation invocation.Invocat
 	if !consistent {
 		return paging.Counted[UserDirectoryEntry]{}, apperror.New("administration.unavailable").WithField("resource", "user")
 	}
+
 	entries, err := s.summarizeUsers(ctx, invocation, page.Items, options.Visibility)
 	if err != nil {
 		return paging.Counted[UserDirectoryEntry]{}, err
 	}
+
 	return paging.Counted[UserDirectoryEntry]{Page: paging.Page[UserDirectoryEntry]{Items: entries, HasMore: page.HasMore}, Total: total}, nil
 }
 
@@ -148,7 +170,12 @@ func (s *Service) SearchUsers(ctx context.Context, invocation invocation.Invocat
 // half at the visibility's own instant so the summary and the page agree on
 // what is current. Role Bindings are read only within the caller's
 // role_binding.view scopes, resolved once for the page.
-func (s *Service) summarizeUsers(ctx context.Context, invocation invocation.Invocation, users []*model.User, visibility store.UserVisibilityScope) ([]UserDirectoryEntry, error) {
+func (s *Service) summarizeUsers(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	users []*model.User,
+	visibility store.UserVisibilityScope,
+) ([]UserDirectoryEntry, error) {
 	entries := make([]UserDirectoryEntry, 0, len(users))
 	if len(users) == 0 {
 		return entries, nil
@@ -156,39 +183,50 @@ func (s *Service) summarizeUsers(ctx context.Context, invocation invocation.Invo
 	if visibility.ActiveAt.IsZero() {
 		visibility.ActiveAt = model.TimeUTC(s.now())
 	}
+
 	userIDs := make([]model.UserID, 0, len(users))
 	for _, user := range users {
 		userIDs = append(userIDs, user.ID)
 	}
+
 	memberships, err := s.users.ListDirectorySummaries(ctx, store.UserDirectorySummaryOptions{
-		UserIDs: userIDs, Visibility: visibility,
-		AffiliationLimit: userDirectorySummaryAffiliations, AcademicUnitLimit: userDirectorySummaryAcademicUnits,
+		UserIDs:           userIDs,
+		Visibility:        visibility,
+		AffiliationLimit:  userDirectorySummaryAffiliations,
+		AcademicUnitLimit: userDirectorySummaryAcademicUnits,
 	})
 	if err != nil {
 		return nil, StoreErrors.Translate(err)
 	}
+
 	membershipsByUser := make(map[model.UserID]store.UserDirectorySummary, len(memberships))
 	for _, summary := range memberships {
 		membershipsByUser[summary.UserID] = summary
 	}
+
 	roleScope, err := s.authorizer.RoleBindingViewScope(ctx, invocation, visibility.ActiveAt)
 	if err != nil {
 		return nil, err
 	}
+
 	rolesVisible := roleScope.InstitutionWide || len(roleScope.AcademicUnitRootIDs) > 0 || len(roleScope.ClassIDs) > 0
 	rolesByUser := map[model.UserID]store.UserRoleBindingSummary{}
 	if rolesVisible {
 		roleScope.ActiveAt = visibility.ActiveAt
 		roles, roleErr := s.roleBindings.ListVisibleSummariesByUsers(ctx, store.RoleBindingSummaryOptions{
-			UserIDs: userIDs, Visibility: roleScope, Limit: userDirectorySummaryRoles,
+			UserIDs:    userIDs,
+			Visibility: roleScope,
+			Limit:      userDirectorySummaryRoles,
 		})
 		if roleErr != nil {
 			return nil, StoreErrors.Translate(roleErr)
 		}
+
 		for _, summary := range roles {
 			rolesByUser[summary.UserID] = summary
 		}
 	}
+
 	for _, user := range users {
 		entry := UserDirectoryEntry{User: user, Memberships: membershipsByUser[user.ID]}
 		entry.Memberships.UserID = user.ID
@@ -197,13 +235,19 @@ func (s *Service) summarizeUsers(ctx context.Context, invocation invocation.Invo
 			roles.UserID = user.ID
 			entry.Roles = &roles
 		}
+
 		entries = append(entries, entry)
 	}
+
 	return entries, nil
 }
 
 // SearchUserPage is the uncounted directory read that global search composes.
-func (s *Service) SearchUserPage(ctx context.Context, invocation invocation.Invocation, query SearchUsersQuery) (paging.Page[*model.User], error) {
+func (s *Service) SearchUserPage(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	query SearchUsersQuery,
+) (paging.Page[*model.User], error) {
 	page, _, err := s.listUsers(ctx, invocation, query)
 	return page, err
 }
@@ -211,11 +255,16 @@ func (s *Service) SearchUserPage(ctx context.Context, invocation invocation.Invo
 // listUsers authorizes and reads one directory page, returning the Store
 // options it read with so a count runs through the same filters and
 // visibility.
-func (s *Service) listUsers(ctx context.Context, invocation invocation.Invocation, query SearchUsersQuery) (paging.Page[*model.User], store.UserListOptions, error) {
+func (s *Service) listUsers(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	query SearchUsersQuery,
+) (paging.Page[*model.User], store.UserListOptions, error) {
 	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
 	if err != nil {
 		return paging.Page[*model.User]{}, store.UserListOptions{}, err
 	}
+
 	affiliations, err := userDirectoryAffiliations(query.Affiliations)
 	if err != nil {
 		return paging.Page[*model.User]{}, store.UserListOptions{}, err
@@ -223,27 +272,37 @@ func (s *Service) listUsers(ctx context.Context, invocation invocation.Invocatio
 	if query.AcademicUnitID != "" && !query.AcademicUnitID.IsValid() {
 		return paging.Page[*model.User]{}, store.UserListOptions{}, apperror.Invalid("request.invalid", "academic_unit_id")
 	}
+
 	visibility, err := s.authorizer.AuthorizeUserSearch(ctx, invocation)
 	if err != nil {
 		return paging.Page[*model.User]{}, store.UserListOptions{}, err
 	}
+
 	includeDisabled := query.IncludeDisabled && visibility.InstitutionWide
 	if visibility.ActiveAt.IsZero() && (len(affiliations) > 0 || query.AcademicUnitID != "") {
 		visibility.ActiveAt = model.TimeUTC(s.now())
 	}
+
 	options := store.UserListOptions{
-		Query: query.Query, AfterUsername: query.AfterUsername, AfterID: query.AfterID, Limit: probe,
-		IncludeDisabled: includeDisabled, AffiliationKinds: affiliations, AcademicUnitID: query.AcademicUnitID,
-		Visibility: visibility,
+		Query:            query.Query,
+		AfterUsername:    query.AfterUsername,
+		AfterID:          query.AfterID,
+		Limit:            probe,
+		IncludeDisabled:  includeDisabled,
+		AffiliationKinds: affiliations,
+		AcademicUnitID:   query.AcademicUnitID,
+		Visibility:       visibility,
 	}
 	users, err := s.users.List(ctx, options)
 	if err != nil {
 		return paging.Page[*model.User]{}, store.UserListOptions{}, StoreErrors.Translate(err)
 	}
+
 	page := paging.New(users, limit)
 	if !visibility.InstitutionWide {
 		page.Items = scopedUserDirectoryProjection(page.Items)
 	}
+
 	return page, options, nil
 }
 
@@ -315,19 +374,38 @@ func scopedUserProjection(user *model.User) *model.User {
 
 // UpdateUserProfile changes a User's profile fields after authorizing the
 // caller to manage that User, and audits the change.
-func (s *Service) UpdateUserProfile(ctx context.Context, invocation invocation.Invocation, command UpdateUserProfileCommand) (*model.User, error) {
+func (s *Service) UpdateUserProfile(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command UpdateUserProfileCommand,
+) (*model.User, error) {
 	id := command.ID
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "user_id")
 	}
-	if err := s.authorizer.Authorize(ctx, invocation, model.ActionUserManage, model.Resource{Type: model.ResourceUser, ID: id.String()}); err != nil {
+
+	if err := s.authorizer.Authorize(
+		ctx,
+		invocation,
+		model.ActionUserManage,
+		model.Resource{Type: model.ResourceUser, ID: id.String()},
+	); err != nil {
 		return nil, err
 	}
+
 	current, err := s.users.Get(ctx, id)
 	if err != nil {
 		return nil, StoreErrors.Translate(err)
 	}
-	changes := model.UserProfileChanges{Username: command.Username, DisplayName: command.DisplayName, FirstName: command.FirstName, LastName: command.LastName, Locale: command.Locale, Timezone: command.Timezone}
+
+	changes := model.UserProfileChanges{
+		Username:    command.Username,
+		DisplayName: command.DisplayName,
+		FirstName:   command.FirstName,
+		LastName:    command.LastName,
+		Locale:      command.Locale,
+		Timezone:    command.Timezone,
+	}
 	candidate := *current
 	expectedRevision := current.Revision
 	candidate.ApplyProfileChanges(&changes)
@@ -336,6 +414,7 @@ func (s *Service) UpdateUserProfile(ctx context.Context, invocation invocation.I
 	if err := candidate.Validate(); err != nil {
 		return nil, apperror.DomainInvalid("user.invalid", err)
 	}
+
 	resource := model.Resource{Type: model.ResourceUser, ID: id.String()}
 	return access.RunAudited(
 		ctx,
@@ -351,8 +430,11 @@ func (s *Service) UpdateUserProfile(ctx context.Context, invocation invocation.I
 		func() time.Time { return at },
 		func(ctx context.Context, reference access.MutationReference) (*model.User, error) {
 			return s.users.UpdateProfile(ctx, &store.UserProfileUpdate{
-				UserID: current.ID, Changes: changes, ExpectedRevision: expectedRevision,
-				AuditEventID: reference.ID, AuditAt: reference.MutationAt,
+				UserID:           current.ID,
+				Changes:          changes,
+				ExpectedRevision: expectedRevision,
+				AuditEventID:     reference.ID,
+				AuditAt:          reference.MutationAt,
 			})
 		},
 		StoreErrors.Translate,

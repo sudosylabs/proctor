@@ -245,6 +245,7 @@ func (p *userSettingsJSONCParser) parseString() (string, bool) {
 	if p.offset >= len(p.source) || p.source[p.offset] != '"' {
 		return "", false
 	}
+
 	start, line, column := p.offset, p.line, p.column
 	p.advance()
 	for p.offset < len(p.source) {
@@ -256,26 +257,33 @@ func (p *userSettingsJSONCParser) parseString() (string, bool) {
 				p.fail("invalid_string", line, column)
 				return "", false
 			}
+
 			if len(decoded) > userSettingsStringMaxBytes {
 				p.fail("string_too_large", line, column)
 				return "", false
 			}
+
 			return decoded, true
 		}
+
 		if value < 0x20 {
 			p.fail("invalid_string", p.line, p.column)
 			return "", false
 		}
+
 		if value == '\\' {
 			p.advance()
 			if p.offset >= len(p.source) {
 				break
 			}
+
 			p.advance()
 			continue
 		}
+
 		p.advance()
 	}
+
 	p.fail("unterminated_string", line, column)
 	return "", false
 }
@@ -318,6 +326,7 @@ func (p *userSettingsJSONCParser) skipSpaceAndComments() {
 			if p.offset+1 >= len(p.source) {
 				return
 			}
+
 			switch p.source[p.offset+1] {
 			case '/':
 				p.advance()
@@ -336,8 +345,10 @@ func (p *userSettingsJSONCParser) skipSpaceAndComments() {
 						closed = true
 						break
 					}
+
 					p.advance()
 				}
+
 				if !closed {
 					p.fail("unterminated_comment", line, column)
 				}
@@ -409,8 +420,11 @@ func isUserSettingsIdentifier(value string) bool {
 }
 
 func isUserSettingsIdentifierCharacter(value rune) bool {
-	return value >= 'a' && value <= 'z' || value >= 'A' && value <= 'Z' ||
-		value >= '0' && value <= '9' || value == '_' || value == '-'
+	return value >= 'a' && value <= 'z' ||
+		value >= 'A' && value <= 'Z' ||
+		value >= '0' && value <= '9' ||
+		value == '_' ||
+		value == '-'
 }
 
 func isUserSettingsLanguageBlock(value string) bool {

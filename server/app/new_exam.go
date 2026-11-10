@@ -48,7 +48,10 @@ type examServices struct {
 // Draft content services, then records and exports. desktopBuilds resolves
 // Desktop builds for Attempt admission.
 func newExamServices(
-	deps Dependencies, shared sharedMechanics, authorizer *access.Authorizer, desktopBuilds *identity.Service,
+	deps Dependencies,
+	shared sharedMechanics,
+	authorizer *access.Authorizer,
+	desktopBuilds *identity.Service,
 ) (examServices, error) {
 	collections := examCollectionInvalidationEffects{sittings: deps.Store.ExamSitting(), realtime: shared.realtime}
 	effects := examRealtimeEffects{realtime: shared.realtime, collections: collections}
@@ -63,8 +66,12 @@ func newExamServices(
 	if built.publication, err = newExamPublication(deps, shared, authorizer, effects); err != nil {
 		return examServices{}, err
 	}
-	built.sittingMailPreparation = sittingScheduleMailPreparationAdapter{preparer: built.sittingMail,
-		revisions: deps.Store.ExamRevision(), classes: deps.Store.Class()}
+
+	built.sittingMailPreparation = sittingScheduleMailPreparationAdapter{
+		preparer:  built.sittingMail,
+		revisions: deps.Store.ExamRevision(),
+		classes:   deps.Store.Class(),
+	}
 	if built.sittings, err = newSittings(deps, shared, authorizer, collections, built.sittingMailPreparation); err != nil {
 		return examServices{}, err
 	}
@@ -89,10 +96,16 @@ func newExamServices(
 	if built.exports, err = newExamExports(deps, shared, authorizer); err != nil {
 		return examServices{}, err
 	}
+
 	return built, nil
 }
 
-func newExamAuthoring(deps Dependencies, shared sharedMechanics, authorizer *access.Authorizer, effects examRealtimeEffects) (*exam.Authoring, error) {
+func newExamAuthoring(
+	deps Dependencies,
+	shared sharedMechanics,
+	authorizer *access.Authorizer,
+	effects examRealtimeEffects,
+) (*exam.Authoring, error) {
 	return exam.NewAuthoring(exam.AuthoringDependencies{
 		Persistence:       deps.Store.ExamAuthoring(),
 		Memberships:       deps.Store.AcademicUnitMember(),
@@ -116,11 +129,22 @@ func newSittingMail(deps Dependencies) (*mail.SittingComposer, error) {
 	if !ok {
 		return nil, errors.New("Sitting mail template renderer is unavailable")
 	}
-	return newSittingMailPreparer(sittingRenderer, deps.MailDeliverySender, deps.MailSecretSealer, time.Now,
-		(&institutionNameCache{institutions: deps.Store.Institution(), now: time.Now}).Name)
+
+	return newSittingMailPreparer(
+		sittingRenderer,
+		deps.MailDeliverySender,
+		deps.MailSecretSealer,
+		time.Now,
+		(&institutionNameCache{institutions: deps.Store.Institution(), now: time.Now}).Name,
+	)
 }
 
-func newExamPublication(deps Dependencies, shared sharedMechanics, authorizer *access.Authorizer, effects examRealtimeEffects) (*exam.Publication, error) {
+func newExamPublication(
+	deps Dependencies,
+	shared sharedMechanics,
+	authorizer *access.Authorizer,
+	effects examRealtimeEffects,
+) (*exam.Publication, error) {
 	return exam.NewPublication(exam.PublicationDependencies{
 		Persistence:       deps.Store.ExamRevision(),
 		Access:            deps.Store.ExamAuthoring(),
@@ -136,8 +160,11 @@ func newExamPublication(deps Dependencies, shared sharedMechanics, authorizer *a
 }
 
 func newSittings(
-	deps Dependencies, shared sharedMechanics, authorizer *access.Authorizer,
-	collections examCollectionInvalidationEffects, scheduleMail sittingScheduleMailPreparationAdapter,
+	deps Dependencies,
+	shared sharedMechanics,
+	authorizer *access.Authorizer,
+	collections examCollectionInvalidationEffects,
+	scheduleMail sittingScheduleMailPreparationAdapter,
 ) (*sitting.Service, error) {
 	effects := examSittingRealtimeEffects{realtime: shared.realtime, collections: collections}
 	return sitting.New(sitting.Dependencies{
@@ -156,24 +183,47 @@ func newSittings(
 	})
 }
 
-func newAttempts(deps Dependencies, shared sharedMechanics, sittings *sitting.Service, desktopBuilds *identity.Service) (*attempt.Service, error) {
+func newAttempts(
+	deps Dependencies,
+	shared sharedMechanics,
+	sittings *sitting.Service,
+	desktopBuilds *identity.Service,
+) (*attempt.Service, error) {
 	effects := examAttemptRealtimeEffects{realtime: shared.realtime}
-	submissionMail := examSubmissionMailPreparationAdapter{preparer: shared.mail, users: deps.Store.User(),
-		sittings: deps.Store.ExamSitting(), revisions: deps.Store.ExamRevision()}
+	submissionMail := examSubmissionMailPreparationAdapter{
+		preparer:  shared.mail,
+		users:     deps.Store.User(),
+		sittings:  deps.Store.ExamSitting(),
+		revisions: deps.Store.ExamRevision(),
+	}
 	return attempt.New(attempt.Dependencies{
-		Persistence: deps.Store.ExamAttempt(), Workspace: deps.Store.ExamAttemptWorkspace(),
-		Submissions: deps.Store.ExamSubmission(), Sittings: deps.Store.ExamSitting(),
-		Managers:      examAttemptManagerAuthorizationAdapter{sittings: sittings, submissions: deps.Store.ExamSubmission(), audit: shared.audit},
-		Auditor:       shared.audit.MutationAudit(),
-		SystemAuditor: examAttemptSystemAuditAdapter{audit: shared.audit},
-		Effects:       effects, Content: deps.FileContent, Mail: submissionMail,
-		DesktopBuilds: desktopBuilds,
-		Now:           time.Now, NewAttemptID: model.NewExamAttemptID, NewWorkspaceID: model.NewExamAttemptWorkspaceID,
-		NewParticipation: model.NewAttemptParticipationID, NewConnection: model.NewAttemptConnectionID,
-		NewEvidence: model.NewIntegrityEvidenceID, NewFlag: model.NewIntegrityFlagID,
-		NewSuspension: model.NewAttemptSuspensionID, NewFocusLossSignal: model.NewFocusLossSignalID,
-		NewDiscrepancy:    model.NewIntegrityDiscrepancyID,
-		NewWorkspaceEntry: model.NewAttemptWorkspaceEntryID, NewWorkspaceObject: model.NewAttemptWorkspaceObjectID,
+		Persistence: deps.Store.ExamAttempt(),
+		Workspace:   deps.Store.ExamAttemptWorkspace(),
+		Submissions: deps.Store.ExamSubmission(),
+		Sittings:    deps.Store.ExamSitting(),
+		Managers: examAttemptManagerAuthorizationAdapter{
+			sittings:    sittings,
+			submissions: deps.Store.ExamSubmission(),
+			audit:       shared.audit,
+		},
+		Auditor:             shared.audit.MutationAudit(),
+		SystemAuditor:       examAttemptSystemAuditAdapter{audit: shared.audit},
+		Effects:             effects,
+		Content:             deps.FileContent,
+		Mail:                submissionMail,
+		DesktopBuilds:       desktopBuilds,
+		Now:                 time.Now,
+		NewAttemptID:        model.NewExamAttemptID,
+		NewWorkspaceID:      model.NewExamAttemptWorkspaceID,
+		NewParticipation:    model.NewAttemptParticipationID,
+		NewConnection:       model.NewAttemptConnectionID,
+		NewEvidence:         model.NewIntegrityEvidenceID,
+		NewFlag:             model.NewIntegrityFlagID,
+		NewSuspension:       model.NewAttemptSuspensionID,
+		NewFocusLossSignal:  model.NewFocusLossSignalID,
+		NewDiscrepancy:      model.NewIntegrityDiscrepancyID,
+		NewWorkspaceEntry:   model.NewAttemptWorkspaceEntryID,
+		NewWorkspaceObject:  model.NewAttemptWorkspaceObjectID,
 		NewWorkspaceVersion: model.NewWorkspaceContentVersion,
 		NewSubmission:       model.NewSubmissionID,
 		NewReceiptCode:      model.NewSubmissionReceiptCode,
@@ -183,14 +233,26 @@ func newAttempts(deps Dependencies, shared sharedMechanics, sittings *sitting.Se
 
 func newReviews(deps Dependencies, shared sharedMechanics, sittings *sitting.Service) (*review.Service, error) {
 	effects := examIntegrityReviewRealtimeEffects{realtime: shared.realtime}
-	resultReleaseMail := examResultReleaseMailPreparationAdapter{preparer: shared.mail, users: deps.Store.User(),
-		sittings: deps.Store.ExamSitting(), revisions: deps.Store.ExamRevision()}
-	return review.New(review.Dependencies{Persistence: deps.Store.ExamIntegrityReview(),
-		Authorizer: examIntegrityReviewAuthorizationAdapter{reviews: deps.Store.ExamIntegrityReview(), sittings: sittings,
-			audit: shared.audit},
-		Auditor: shared.audit.MutationAudit(),
-		Effects: effects, Mail: resultReleaseMail, Now: time.Now,
-		NewReviewID: model.NewSubmissionReviewID, NewDecisionID: model.NewIntegrityReviewDecisionID})
+	resultReleaseMail := examResultReleaseMailPreparationAdapter{
+		preparer:  shared.mail,
+		users:     deps.Store.User(),
+		sittings:  deps.Store.ExamSitting(),
+		revisions: deps.Store.ExamRevision(),
+	}
+	return review.New(review.Dependencies{
+		Persistence: deps.Store.ExamIntegrityReview(),
+		Authorizer: examIntegrityReviewAuthorizationAdapter{
+			reviews:  deps.Store.ExamIntegrityReview(),
+			sittings: sittings,
+			audit:    shared.audit,
+		},
+		Auditor:       shared.audit.MutationAudit(),
+		Effects:       effects,
+		Mail:          resultReleaseMail,
+		Now:           time.Now,
+		NewReviewID:   model.NewSubmissionReviewID,
+		NewDecisionID: model.NewIntegrityReviewDecisionID,
+	})
 }
 
 func newExamResources(deps Dependencies, shared sharedMechanics, authorizer *access.Authorizer) (*resource.Service, error) {
@@ -212,7 +274,10 @@ func newExamResources(deps Dependencies, shared sharedMechanics, authorizer *acc
 }
 
 func newCorrections(
-	deps Dependencies, shared sharedMechanics, authorizer *access.Authorizer, collections examCollectionInvalidationEffects,
+	deps Dependencies,
+	shared sharedMechanics,
+	authorizer *access.Authorizer,
+	collections examCollectionInvalidationEffects,
 ) (*correction.Service, error) {
 	effects := examCorrectionRealtimeEffects{realtime: shared.realtime, collections: collections}
 	return correction.New(correction.Dependencies{
@@ -282,16 +347,32 @@ func newExamExports(deps Dependencies, shared sharedMechanics, authorizer *acces
 
 type examAttemptSystemAuditAdapter struct{ audit *access.Auditor }
 
-func (a examAttemptSystemAuditAdapter) Begin(ctx context.Context, action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID, operation string, value map[string]any) (model.AuditEventID, error) {
+func (a examAttemptSystemAuditAdapter) Begin(
+	ctx context.Context,
+	action model.Action,
+	resource model.Resource,
+	scopeType model.RoleScopeType,
+	scopeID,
+	operation string,
+	value map[string]any,
+) (model.AuditEventID, error) {
 	auditValue := make(map[string]any, len(value))
 	for key, item := range value {
 		auditValue[key] = item
 	}
-	event, err := a.audit.BeginSystemCriticalActionAtScope(ctx, action, resource, scopeType, scopeID,
-		map[string]any{"operation": operation, "value": auditValue})
+
+	event, err := a.audit.BeginSystemCriticalActionAtScope(
+		ctx,
+		action,
+		resource,
+		scopeType,
+		scopeID,
+		map[string]any{"operation": operation, "value": auditValue},
+	)
 	if err != nil {
 		return "", err
 	}
+
 	return event.ID, nil
 }
 

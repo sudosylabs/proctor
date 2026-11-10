@@ -26,7 +26,12 @@ type Execution struct {
 	reserveWork func(context.Context, int, int) (bool, error)
 }
 
-func NewExecution(record *model.Job, attempt *model.JobAttempt, checkpoint func(context.Context, CheckpointValue) error, reserveWork func(context.Context, int, int) (bool, error)) Execution {
+func NewExecution(
+	record *model.Job,
+	attempt *model.JobAttempt,
+	checkpoint func(context.Context, CheckpointValue) error,
+	reserveWork func(context.Context, int, int) (bool, error),
+) Execution {
 	return Execution{Job: record, Attempt: attempt, checkpoint: checkpoint, reserveWork: reserveWork}
 }
 
@@ -128,30 +133,48 @@ func NewRegistry(values []Descriptor) (*Registry, error) {
 	if len(values) == 0 {
 		return nil, errors.New("job registry requires at least one descriptor")
 	}
+
 	registry := &Registry{descriptors: make(map[model.JobType]Descriptor, len(values)), types: make([]model.JobType, 0, len(values))}
 	for _, value := range values {
-		if value.Handler == nil || value.Timeout <= 0 || value.Concurrency <= 0 || value.MaximumAttempts <= 0 || value.LeaseDuration <= 0 || value.HeartbeatInterval <= 0 || value.HeartbeatInterval >= value.LeaseDuration || value.BaseRetryDelay <= 0 || value.MaximumRetryDelay < value.BaseRetryDelay || (value.Visibility != VisibilityOperator && value.Visibility != VisibilityDomain) || value.SuccessRetention <= 0 || value.FailureRetention < value.SuccessRetention {
+		if value.Handler == nil ||
+			value.Timeout <= 0 ||
+			value.Concurrency <= 0 ||
+			value.MaximumAttempts <= 0 ||
+			value.LeaseDuration <= 0 ||
+			value.HeartbeatInterval <= 0 ||
+			value.HeartbeatInterval >= value.LeaseDuration ||
+			value.BaseRetryDelay <= 0 ||
+			value.MaximumRetryDelay < value.BaseRetryDelay ||
+			(value.Visibility != VisibilityOperator && value.Visibility != VisibilityDomain) ||
+			value.SuccessRetention <= 0 ||
+			value.FailureRetention < value.SuccessRetention {
 			return nil, fmt.Errorf("invalid descriptor for job type %q", value.Type)
 		}
+
 		if _, exists := registry.descriptors[value.Type]; exists {
 			return nil, fmt.Errorf("duplicate job type %q", value.Type)
 		}
+
 		var normalizeErr error
 		value.ProgressStages, normalizeErr = normalizedCodes(value.ProgressStages)
 		if normalizeErr != nil {
 			return nil, fmt.Errorf("invalid progress stages for job type %q: %w", value.Type, normalizeErr)
 		}
+
 		value.PublicErrorCodes, normalizeErr = normalizedCodes(value.PublicErrorCodes)
 		if normalizeErr != nil {
 			return nil, fmt.Errorf("invalid public error codes for job type %q: %w", value.Type, normalizeErr)
 		}
+
 		value.ExplicitRetryStatuses, normalizeErr = normalizedTerminalJobStatuses(value.ExplicitRetryStatuses)
 		if normalizeErr != nil {
 			return nil, fmt.Errorf("invalid explicit retry statuses for job type %q: %w", value.Type, normalizeErr)
 		}
+
 		registry.descriptors[value.Type] = value
 		registry.types = append(registry.types, value.Type)
 	}
+
 	slices.Sort(registry.types)
 	return registry, nil
 }

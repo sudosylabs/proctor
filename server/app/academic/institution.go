@@ -38,12 +38,16 @@ func (s *Service) GetInstitution(
 	if err != nil {
 		return nil, access.InstitutionStoreErrors.Translate(err)
 	}
+
 	if err := s.authorizer.Authorize(
-		ctx, invocation, model.ActionInstitutionManage,
+		ctx,
+		invocation,
+		model.ActionInstitutionManage,
 		model.Resource{Type: model.ResourceInstitution, ID: institution.ResourceID()},
 	); err != nil {
 		return nil, err
 	}
+
 	return institution, nil
 }
 
@@ -57,12 +61,17 @@ func (s *Service) UpdateInstitution(
 	if err != nil {
 		return nil, access.InstitutionStoreErrors.Translate(err)
 	}
+
 	resource := model.Resource{Type: model.ResourceInstitution, ID: current.ResourceID()}
 	if err := s.authorizer.Authorize(
-		ctx, invocation, model.ActionInstitutionManage, resource,
+		ctx,
+		invocation,
+		model.ActionInstitutionManage,
+		resource,
 	); err != nil {
 		return nil, err
 	}
+
 	candidate := *current
 	if command.Name != nil {
 		candidate.Name = *command.Name
@@ -76,10 +85,12 @@ func (s *Service) UpdateInstitution(
 	if command.ExamCapacity != nil {
 		candidate.ExamCapacity = *command.ExamCapacity
 	}
+
 	candidate.PrepareUpdate(s.now())
 	if err := candidate.Validate(); err != nil {
 		return nil, apperror.DomainInvalid("institution.invalid", err)
 	}
+
 	return access.RunAudited(
 		ctx,
 		s.auditor,
@@ -94,7 +105,9 @@ func (s *Service) UpdateInstitution(
 		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.Institution, error) {
 			return s.institutions.Update(ctx, &store.InstitutionUpdate{
-				Institution: &candidate, AuditEventID: reference.ID, AuditAt: reference.MutationAt,
+				Institution:  &candidate,
+				AuditEventID: reference.ID,
+				AuditAt:      reference.MutationAt,
 			})
 		},
 		access.InstitutionStoreErrors.Translate,

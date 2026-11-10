@@ -37,8 +37,14 @@ type jobRuntime struct {
 // connects the wakes that services built earlier hold, and builds the
 // operator Job and mail services on it.
 func newJobRuntime(
-	deps Dependencies, shared sharedMechanics, authorizer *access.Authorizer, exams examServices,
-	users *user.Service, defaultPictureJobs *jobhandler.DefaultProfilePictureJobs, onboardingPorts onboarding.Ports, wake *jobWake,
+	deps Dependencies,
+	shared sharedMechanics,
+	authorizer *access.Authorizer,
+	exams examServices,
+	users *user.Service,
+	defaultPictureJobs *jobhandler.DefaultProfilePictureJobs,
+	onboardingPorts onboarding.Ports,
+	wake *jobWake,
 ) (jobRuntime, error) {
 	if deps.Store.Job() == nil {
 		return jobRuntime{}, nil
@@ -46,6 +52,7 @@ func newJobRuntime(
 	if exams.sittings == nil || exams.attempts == nil {
 		return jobRuntime{}, errors.New("Examination lifecycle use cases are required when Jobs are enabled")
 	}
+
 	// Enabled workers must be able to open every active payload before runtime
 	// construction. Disabled workers suppress payloads before decryption, so a
 	// deliberately absent or retired ring must not prevent that convergence.
@@ -54,13 +61,17 @@ func newJobRuntime(
 			return jobRuntime{}, err
 		}
 	}
+
 	mailHealth := shared.mailHealth
 	if mailHealth == nil {
 		mailHealth = newMailHealth(deps.MailDeliverySender != nil && deps.MailDeliverySender.Enabled())
 	}
+
 	definitions := buildApplicationJobDefinitions(deps, shared, exams, users, defaultPictureJobs, onboardingPorts, mailHealth)
 	engine, err := job.New(job.Dependencies{
-		Store: deps.Store.Job(), Descriptors: definitions.descriptors, NodeID: deps.NodeID,
+		Store:         deps.Store.Job(),
+		Descriptors:   definitions.descriptors,
+		NodeID:        deps.NodeID,
 		Diagnostics:   deps.RecoveryDiagnostics,
 		Recorder:      deps.JobRecorder,
 		Tracer:        deps.JobTracer,
@@ -77,22 +88,44 @@ func newJobRuntime(
 	if wake != nil {
 		wake.wake = engine.Wake
 	}
+
 	var mailOperations *MailService
 	if deps.Store.Mail() != nil {
-		mailOperations, err = newMailService(mailServiceDependencies{Mail: deps.Store.Mail(), Users: deps.Store.User(), Authorization: mailAuthorizationAdapter{authorization: authorizer, institutions: deps.Store.Institution()}, Audit: shared.audit.MailAudit(), Attempts: shared.attempts, Renderer: deps.MailTemplateRenderer, Sender: deps.MailDeliverySender, Metrics: deps.MailMetricsReader, Sealer: deps.MailSecretSealer, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Now: time.Now,
-			InstitutionName: (&institutionNameCache{institutions: deps.Store.Institution(), now: time.Now}).Name})
+		mailOperations, err = newMailService(mailServiceDependencies{
+			Mail:                    deps.Store.Mail(),
+			Users:                   deps.Store.User(),
+			Authorization:           mailAuthorizationAdapter{authorization: authorizer, institutions: deps.Store.Institution()},
+			Audit:                   shared.audit.MailAudit(),
+			Attempts:                shared.attempts,
+			Renderer:                deps.MailTemplateRenderer,
+			Sender:                  deps.MailDeliverySender,
+			Metrics:                 deps.MailMetricsReader,
+			Sealer:                  deps.MailSecretSealer,
+			RecentAuthenticationTTL: deps.RecentAuthenticationTTL,
+			Now:                     time.Now,
+			InstitutionName:         (&institutionNameCache{institutions: deps.Store.Institution(), now: time.Now}).Name,
+		})
 		if err != nil {
 			return jobRuntime{}, err
 		}
+
 		mailOperations.rekeyJobs = deps.Store.Job()
 		mailOperations.rekeyAudit = shared.audit.MutationAudit()
 		mailOperations.wake = engine.Wake
 	}
-	operations, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: engine, Authorization: jobOperationsAuthorization{authorization: authorizer, institutions: deps.Store.Institution()}, Audit: shared.audit.MutationAudit(),
-		Users: deps.Store.User(), ExamExports: deps.Store.ExamExport(), Now: time.Now})
+
+	operations, err := newJobOperationsService(jobOperationsServiceDependencies{
+		Jobs:          engine,
+		Authorization: jobOperationsAuthorization{authorization: authorizer, institutions: deps.Store.Institution()},
+		Audit:         shared.audit.MutationAudit(),
+		Users:         deps.Store.User(),
+		ExamExports:   deps.Store.ExamExport(),
+		Now:           time.Now,
+	})
 	if err != nil {
 		return jobRuntime{}, err
 	}
+
 	return jobRuntime{engine: engine, operations: operations, mail: mailOperations}, nil
 }
 
@@ -103,6 +136,7 @@ func validateActiveMailPayloadKeys(ctx context.Context, persistence store.MailSt
 	if persistence == nil {
 		return errors.New("mail payload-key persistence is unavailable")
 	}
+
 	state, err := persistence.InspectKeyState(ctx)
 	if err != nil {
 		return fmt.Errorf("inspect active mail payload keys: %w", err)
@@ -110,6 +144,7 @@ func validateActiveMailPayloadKeys(ctx context.Context, persistence store.MailSt
 	if state == nil {
 		return errors.New("mail payload-key state is unavailable")
 	}
+
 	if state.RequiredPrimaryKeyID != "" {
 		if sealer == nil {
 			return fmt.Errorf("required mail primary key %s is unavailable", state.RequiredPrimaryKeyID)
@@ -121,17 +156,20 @@ func validateActiveMailPayloadKeys(ctx context.Context, persistence store.MailSt
 			return fmt.Errorf("required mail primary key %s is unavailable", state.RequiredPrimaryKeyID)
 		}
 	}
+
 	if len(state.Active) == 0 {
 		return nil
 	}
 	if sealer == nil {
 		return errors.New("active mail payload key ring is unavailable")
 	}
+
 	for _, usage := range state.Active {
 		if !sealer.HasKey(usage.KeyID) {
 			return fmt.Errorf("active mail payload key %s is unavailable for %d references", usage.KeyID, usage.ActiveReferences)
 		}
 	}
+
 	return nil
 }
 
@@ -156,10 +194,15 @@ func buildApplicationJobDefinitions(
 	if mailHealth == nil {
 		mailHealth = newMailHealth(deps.MailDeliverySender != nil && deps.MailDeliverySender.Enabled())
 	}
+
 	mailDelivery := jobhandler.MailDeliveryDependencies{
-		Deliveries: deps.Store.Mail(), Sender: deps.MailDeliverySender, Sealer: deps.MailSecretSealer,
-		Recorder: jobMailDeliveryRecorder{recorder: deps.MailDeliveryRecorder}, Health: jobMailHealth{health: mailHealth},
-		Relevance: jobMailDeliveryIsRelevant, Now: time.Now,
+		Deliveries: deps.Store.Mail(),
+		Sender:     deps.MailDeliverySender,
+		Sealer:     deps.MailSecretSealer,
+		Recorder:   jobMailDeliveryRecorder{recorder: deps.MailDeliveryRecorder},
+		Health:     jobMailHealth{health: mailHealth},
+		Relevance:  jobMailDeliveryIsRelevant,
+		Now:        time.Now,
 	}
 	retentionJobs := administration.NewRetentionJobs(shared.audit, deps.Store.Retention(), deps.Store.User(), shared.mail, time.Now)
 	jobs, now := deps.Store.Job(), time.Now
@@ -169,10 +212,14 @@ func buildApplicationJobDefinitions(
 		jobhandler.NewDefaultProfilePictureDescriptor(users),
 		jobhandler.NewDefaultProfilePictureReconciliationDescriptor(deps.Store.User(), defaultPictureJobs, now),
 		jobhandler.NewFilePurgeDescriptor(jobhandler.FilePurgeDependencies{
-			Files: deps.Store.File(), Content: deps.FileContent,
-			StarterWorkspaces: deps.Store.ExamStarterWorkspace(), StarterWorkspaceContent: deps.FileContent,
-			AttemptWorkspaces: deps.Store.ExamAttemptWorkspace(), AttemptWorkspaceContent: deps.FileContent,
-			Continuations: jobs, Now: now,
+			Files:                   deps.Store.File(),
+			Content:                 deps.FileContent,
+			StarterWorkspaces:       deps.Store.ExamStarterWorkspace(),
+			StarterWorkspaceContent: deps.FileContent,
+			AttemptWorkspaces:       deps.Store.ExamAttemptWorkspace(),
+			AttemptWorkspaceContent: deps.FileContent,
+			Continuations:           jobs,
+			Now:                     now,
 		}),
 		jobhandler.NewCommandOutcomeCleanupDescriptor(deps.Store.CommandOutcome()),
 		jobhandler.NewAuditAttemptSweepDescriptor(deps.Store.Audit()),
@@ -197,6 +244,7 @@ func buildApplicationJobDefinitions(
 	if onboardingPorts.ImportJobs != nil {
 		descriptors = append(descriptors, jobhandler.NewOnboardingImportDescriptors(onboardingPorts.ImportJobs)...)
 	}
+
 	// Job history cleanup keeps each Job type for the retention its
 	// descriptor declares, so it is built after the rest.
 	descriptors = append(descriptors, jobhandler.NewJobHistoryCleanupDescriptor(jobs, jobs, now, descriptors))
@@ -218,16 +266,34 @@ func buildApplicationJobDefinitions(
 		jobhandler.NewRetentionNoticeRecurrence(jobs, now),
 	}
 	periodicTasks := []job.PeriodicTask{
-		{Name: examAttemptExpiryPeriodicTaskName, Interval: examAttemptExpiryScanInterval, Runner: examAttemptExpiryPeriodicRunner{attempts: exams.attempts}},
+		{
+			Name:     examAttemptExpiryPeriodicTaskName,
+			Interval: examAttemptExpiryScanInterval,
+			Runner:   examAttemptExpiryPeriodicRunner{attempts: exams.attempts},
+		},
 	}
 	periodicTasks = append(periodicTasks, identity.MaintenanceTasks(deps.Store)...)
 	periodicTasks = append(periodicTasks, []job.PeriodicTask{
-		{Name: "exam-sitting-mail-reconciliation", Interval: sittingMailReconciliationInterval,
-			Runner: sittingMailReconciliationPeriodicRunner{sittings: deps.Store.ExamSitting(), mail: exams.sittingMailPreparation}},
+		{
+			Name:     "exam-sitting-mail-reconciliation",
+			Interval: sittingMailReconciliationInterval,
+			Runner:   sittingMailReconciliationPeriodicRunner{sittings: deps.Store.ExamSitting(), mail: exams.sittingMailPreparation},
+		},
 	}...)
 	if deps.Store.Mail() != nil && deps.MailDeliverySender != nil {
-		periodicTasks = append(periodicTasks, job.PeriodicTask{Name: "mail-maintenance-monitor", Interval: time.Minute, Runner: mailMaintenanceMonitor{mail: deps.Store.Mail(), sender: deps.MailDeliverySender, health: mailHealth, recorder: deps.MailDeliveryRecorder, now: time.Now}})
+		periodicTasks = append(periodicTasks, job.PeriodicTask{
+			Name:     "mail-maintenance-monitor",
+			Interval: time.Minute,
+			Runner: mailMaintenanceMonitor{
+				mail:     deps.Store.Mail(),
+				sender:   deps.MailDeliverySender,
+				health:   mailHealth,
+				recorder: deps.MailDeliveryRecorder,
+				now:      time.Now,
+			},
+		})
 	}
+
 	return applicationJobDefinitions{descriptors: descriptors, recurrences: recurrences, periodicTasks: periodicTasks}
 }
 

@@ -63,35 +63,84 @@ func (a MailAuditAdapter) Fail(ctx context.Context, auditID model.AuditEventID, 
 }
 
 // PrepareControl begins the audit attempt of canceling or retrying a delivery.
-func (a MailAuditAdapter) PrepareControl(ctx context.Context, invocation invocation.Invocation, institution model.Resource, delivery *model.MailDelivery, operation string) (model.AuditEventID, error) {
-	if a.audit == nil || institution.Type != model.ResourceInstitution || !model.InstitutionID(institution.ID).IsValid() ||
-		delivery == nil || delivery.Validate() != nil || (operation != "cancel" && operation != "retry") {
+func (a MailAuditAdapter) PrepareControl(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	institution model.Resource,
+	delivery *model.MailDelivery,
+	operation string,
+) (model.AuditEventID, error) {
+	if a.audit == nil ||
+		institution.Type != model.ResourceInstitution ||
+		!model.InstitutionID(institution.ID).IsValid() ||
+		delivery == nil ||
+		delivery.Validate() != nil ||
+		(operation != "cancel" && operation != "retry") {
 		return "", AuditUnavailable(errors.New("mail control audit dependencies are invalid"))
 	}
-	event, appErr := a.audit.BeginCriticalActionAtScope(ctx, invocation.Principal(), model.ActionMailManage,
-		model.Resource{Type: model.ResourceMailDelivery, ID: delivery.ID.String()}, model.RoleScopeInstitution, institution.ID,
-		invocation.RequestMetadata(), map[string]any{"operation": operation, "value": delivery.Auditable()}, delivery.Auditable())
+
+	event, appErr := a.audit.BeginCriticalActionAtScope(
+		ctx,
+		invocation.Principal(),
+		model.ActionMailManage,
+		model.Resource{Type: model.ResourceMailDelivery, ID: delivery.ID.String()},
+		model.RoleScopeInstitution,
+		institution.ID,
+		invocation.RequestMetadata(),
+		map[string]any{"operation": operation, "value": delivery.Auditable()},
+		delivery.Auditable(),
+	)
 	if appErr != nil {
 		return "", appErr
 	}
+
 	return event.ID, nil
 }
 
 // PrepareTest builds the audit event of sending a test message.
-func (a MailAuditAdapter) PrepareTest(ctx context.Context, invocation invocation.Invocation, institution model.Resource, deliveryID model.MailDeliveryID) (*model.AuditEvent, error) {
-	if a.audit == nil || institution.Type != model.ResourceInstitution || !model.InstitutionID(institution.ID).IsValid() || !deliveryID.IsValid() {
+func (a MailAuditAdapter) PrepareTest(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	institution model.Resource,
+	deliveryID model.MailDeliveryID,
+) (*model.AuditEvent, error) {
+	if a.audit == nil ||
+		institution.Type != model.ResourceInstitution ||
+		!model.InstitutionID(institution.ID).IsValid() ||
+		!deliveryID.IsValid() {
 		return nil, AuditUnavailable(errors.New("mail audit dependencies are invalid"))
 	}
+
 	principal := invocation.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return nil, InvalidTokenAppError()
 	}
-	parameters, err := model.EncodeAuditData(map[string]string{"delivery_id": deliveryID.String(), "template_key": string(model.MailTemplateSystemTest)})
+
+	parameters, err := model.EncodeAuditData(map[string]string{
+		"delivery_id":  deliveryID.String(),
+		"template_key": string(model.MailTemplateSystemTest),
+	})
 	if err != nil {
 		return nil, apperror.DomainInvalid("audit.internal", err)
 	}
+
 	metadata := invocation.RequestMetadata()
-	return &model.AuditEvent{ActorID: principal.UserID, SessionID: principal.SessionID, Action: string(model.ActionMailManage), Resource: model.Resource{Type: model.ResourceMailDelivery, ID: deliveryID.String()}, ScopeType: model.RoleScopeInstitution, ScopeID: institution.ID, Status: model.AuditStatusSuccess, RequestID: metadata.RequestID, NodeID: a.audit.deps.NodeID, ClientType: string(principal.ClientType), AuthMethod: principal.AuthenticationMethod, IPAddress: metadata.IPAddress, UserAgent: metadata.UserAgent, Parameters: parameters}, nil
+	return &model.AuditEvent{
+		ActorID:    principal.UserID,
+		SessionID:  principal.SessionID,
+		Action:     string(model.ActionMailManage),
+		Resource:   model.Resource{Type: model.ResourceMailDelivery, ID: deliveryID.String()},
+		ScopeType:  model.RoleScopeInstitution,
+		ScopeID:    institution.ID,
+		Status:     model.AuditStatusSuccess,
+		RequestID:  metadata.RequestID,
+		NodeID:     a.audit.deps.NodeID,
+		ClientType: string(principal.ClientType),
+		AuthMethod: principal.AuthenticationMethod,
+		IPAddress:  metadata.IPAddress,
+		UserAgent:  metadata.UserAgent,
+		Parameters: parameters,
+	}, nil
 }
 
 // PrepareReplacement builds the audit event of a User Settings replacement.
@@ -102,16 +151,23 @@ func (a UserSettingsAuditAdapter) PrepareReplacement(
 	if a.audit == nil {
 		return nil, AuditUnavailable(errors.New("user settings audit service is unavailable"))
 	}
+
 	principal := input.Invocation.Principal()
-	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess ||
-		principal.UserID != input.UserID || !input.PreviousRevision.IsValid() ||
-		!input.ResultingRevision.IsValid() || input.FormatVersion <= 0 || input.SourceBytes < 0 {
+	if principal.Validate() != nil ||
+		principal.CredentialType != model.CredentialSessionAccess ||
+		principal.UserID != input.UserID ||
+		!input.PreviousRevision.IsValid() ||
+		!input.ResultingRevision.IsValid() ||
+		input.FormatVersion <= 0 ||
+		input.SourceBytes < 0 {
 		return nil, apperror.New("audit.internal")
 	}
+
 	institution, err := a.audit.deps.Institutions.GetSingleton(ctx)
 	if err != nil {
 		return nil, AuditUnavailable(err)
 	}
+
 	parameters, err := model.EncodeAuditData(map[string]any{
 		"previous_revision":  input.PreviousRevision.String(),
 		"resulting_revision": input.ResultingRevision.String(),
@@ -121,16 +177,23 @@ func (a UserSettingsAuditAdapter) PrepareReplacement(
 	if err != nil {
 		return nil, apperror.DomainInvalid("audit.internal", err)
 	}
+
 	metadata := input.Invocation.RequestMetadata()
 	return &model.AuditEvent{
-		ActorID: principal.UserID, SessionID: principal.SessionID,
-		Action:    string(model.ActionUserSettingsReplace),
-		Resource:  model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
-		ScopeType: model.RoleScopeInstitution, ScopeID: institution.ID.String(),
-		Status: model.AuditStatusSuccess, RequestID: metadata.RequestID,
-		NodeID: a.audit.deps.NodeID, ClientType: string(principal.ClientType),
-		AuthMethod: principal.AuthenticationMethod, IPAddress: metadata.IPAddress,
-		UserAgent: metadata.UserAgent, Parameters: parameters,
+		ActorID:    principal.UserID,
+		SessionID:  principal.SessionID,
+		Action:     string(model.ActionUserSettingsReplace),
+		Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
+		ScopeType:  model.RoleScopeInstitution,
+		ScopeID:    institution.ID.String(),
+		Status:     model.AuditStatusSuccess,
+		RequestID:  metadata.RequestID,
+		NodeID:     a.audit.deps.NodeID,
+		ClientType: string(principal.ClientType),
+		AuthMethod: principal.AuthenticationMethod,
+		IPAddress:  metadata.IPAddress,
+		UserAgent:  metadata.UserAgent,
+		Parameters: parameters,
 	}, nil
 }
 
@@ -158,19 +221,24 @@ func (s *Auditor) BeginAuthentication(
 	metadata model.RequestMetadata,
 	institutionID model.InstitutionID,
 ) (*model.AuditEvent, error) {
-	if !model.UserID(userID).IsValid() || !model.InstitutionID(institutionID).IsValid() ||
-		!clientType.IsValid() || method == "" {
+	if !model.UserID(userID).IsValid() ||
+		!model.InstitutionID(institutionID).IsValid() ||
+		!clientType.IsValid() ||
+		method == "" {
 		return nil, apperror.New("audit.internal")
 	}
+
 	if s.deps.Audits == nil {
 		return nil, AuditUnavailable(store.NewErrNotFound("audit_store", ""))
 	}
+
 	parameters, err := model.EncodeAuditData(map[string]string{
 		"provider": providerID,
 	})
 	if err != nil {
 		return nil, apperror.DomainInvalid("audit.internal", err)
 	}
+
 	event := &model.AuditEvent{
 		ActorID: model.UserID(userID),
 		Action:  string(model.ActionAuthenticationExternalLogin),
@@ -193,6 +261,7 @@ func (s *Auditor) BeginAuthentication(
 	if err != nil {
 		return nil, AuditUnavailable(err)
 	}
+
 	return saved, nil
 }
 
@@ -260,15 +329,22 @@ func (s *Auditor) RecordLocalLoginFailure(
 	return nil
 }
 
-func localLoginAuditEvent(nodeID, institutionID string, clientType model.SessionClientType,
+func localLoginAuditEvent(
+	nodeID,
+	institutionID string,
+	clientType model.SessionClientType,
 	metadata model.RequestMetadata,
 ) *model.AuditEvent {
 	return &model.AuditEvent{
-		Action:    string(model.ActionAuthenticationLogin),
-		ScopeType: model.RoleScopeInstitution, ScopeID: institutionID,
-		RequestID: metadata.RequestID, NodeID: nodeID,
-		ClientType: string(clientType), AuthMethod: "password",
-		IPAddress: metadata.IPAddress, UserAgent: metadata.UserAgent,
+		Action:     string(model.ActionAuthenticationLogin),
+		ScopeType:  model.RoleScopeInstitution,
+		ScopeID:    institutionID,
+		RequestID:  metadata.RequestID,
+		NodeID:     nodeID,
+		ClientType: string(clientType),
+		AuthMethod: "password",
+		IPAddress:  metadata.IPAddress,
+		UserAgent:  metadata.UserAgent,
 	}
 }
 
@@ -284,6 +360,7 @@ func (s *Auditor) RecordExternalAuthenticationFailure(
 	if method == "" {
 		return apperror.New("audit.internal")
 	}
+
 	parameters, err := model.EncodeAuditData(map[string]string{
 		"provider": providerID,
 	})
@@ -293,6 +370,7 @@ func (s *Auditor) RecordExternalAuthenticationFailure(
 	if s.deps.Audits == nil {
 		return AuditUnavailable(store.NewErrNotFound("audit_store", ""))
 	}
+
 	event := &model.AuditEvent{
 		Action: string(model.ActionAuthenticationExternalLogin),
 		Resource: model.Resource{
@@ -313,6 +391,7 @@ func (s *Auditor) RecordExternalAuthenticationFailure(
 	if _, err := s.deps.Audits.Save(ctx, event); err != nil {
 		return AuditUnavailable(err)
 	}
+
 	return nil
 }
 
@@ -437,20 +516,26 @@ func (s *Auditor) BeginSystemCriticalActionAtScope(
 	if s.deps.Audits == nil {
 		return nil, AuditUnavailable(store.NewErrNotFound("audit_store", ""))
 	}
+
 	encodedParameters, err := model.EncodeAuditData(parameters)
 	if err != nil {
 		return nil, apperror.DomainInvalid("audit.internal", err)
 	}
+
 	event := &model.AuditEvent{
-		Action: string(action), Resource: resource,
-		ScopeType: scopeType, ScopeID: scopeID,
-		Status: model.AuditStatusAttempt, NodeID: s.deps.NodeID,
+		Action:     string(action),
+		Resource:   resource,
+		ScopeType:  scopeType,
+		ScopeID:    scopeID,
+		Status:     model.AuditStatusAttempt,
+		NodeID:     s.deps.NodeID,
 		Parameters: encodedParameters,
 	}
 	saved, err := s.deps.Audits.Save(ctx, event)
 	if err != nil {
 		return nil, AuditUnavailable(err)
 	}
+
 	return saved, nil
 }
 
@@ -481,22 +566,31 @@ func (s *Auditor) BeginAccountActionAtScope(
 	if s.deps.Audits == nil {
 		return nil, AuditUnavailable(store.NewErrNotFound("audit_store", ""))
 	}
+
 	encodedParameters, err := model.EncodeAuditData(parameters)
 	if err != nil {
 		return nil, apperror.DomainInvalid("audit.internal", err)
 	}
+
 	saved, err := s.deps.Audits.Save(ctx, &model.AuditEvent{
-		ActorID: actor.UserID, SessionID: actor.SessionID,
-		Action: string(action), Resource: resource,
-		ScopeType: scopeType, ScopeID: scopeID,
-		Status: model.AuditStatusAttempt, RequestID: metadata.RequestID,
-		NodeID: s.deps.NodeID, ClientType: string(actor.ClientType),
-		IPAddress: metadata.IPAddress, UserAgent: metadata.UserAgent,
+		ActorID:    actor.UserID,
+		SessionID:  actor.SessionID,
+		Action:     string(action),
+		Resource:   resource,
+		ScopeType:  scopeType,
+		ScopeID:    scopeID,
+		Status:     model.AuditStatusAttempt,
+		RequestID:  metadata.RequestID,
+		NodeID:     s.deps.NodeID,
+		ClientType: string(actor.ClientType),
+		IPAddress:  metadata.IPAddress,
+		UserAgent:  metadata.UserAgent,
 		Parameters: encodedParameters,
 	})
 	if err != nil {
 		return nil, AuditUnavailable(err)
 	}
+
 	return saved, nil
 }
 
@@ -538,19 +632,29 @@ func (s *Auditor) prepareCriticalActionAtScope(
 	if err != nil {
 		return nil, apperror.DomainInvalid("audit.internal", err)
 	}
+
 	encodedPriorState, err := model.EncodeAuditData(priorState)
 	if err != nil {
 		return nil, apperror.DomainInvalid("audit.internal", err)
 	}
+
 	event := &model.AuditEvent{
-		ActorID: principal.UserID, SessionID: principal.SessionID, SubjectUserID: subject,
-		Action: string(action), Resource: resource,
-		ScopeType: scopeType, ScopeID: scopeID,
-		Status: model.AuditStatusAttempt, RequestID: metadata.RequestID,
-		NodeID: s.deps.NodeID, ClientType: string(principal.ClientType),
-		AuthMethod: principal.AuthenticationMethod, IPAddress: metadata.IPAddress,
-		UserAgent: metadata.UserAgent, Parameters: encodedParameters,
-		PriorState: encodedPriorState,
+		ActorID:       principal.UserID,
+		SessionID:     principal.SessionID,
+		SubjectUserID: subject,
+		Action:        string(action),
+		Resource:      resource,
+		ScopeType:     scopeType,
+		ScopeID:       scopeID,
+		Status:        model.AuditStatusAttempt,
+		RequestID:     metadata.RequestID,
+		NodeID:        s.deps.NodeID,
+		ClientType:    string(principal.ClientType),
+		AuthMethod:    principal.AuthenticationMethod,
+		IPAddress:     metadata.IPAddress,
+		UserAgent:     metadata.UserAgent,
+		Parameters:    encodedParameters,
+		PriorState:    encodedPriorState,
 	}
 	return event, nil
 }
@@ -576,7 +680,8 @@ func (s *Auditor) CompleteCriticalAction(
 		return nil, apperror.DomainInvalid("audit.internal", err)
 	}
 	event, err := s.deps.Audits.Complete(
-		ctx, &store.AuditCompletion{ID: eventID, Status: status, ErrorCode: errorCode, Result: encodedResult, UpdateAt: s.now()},
+		ctx,
+		&store.AuditCompletion{ID: eventID, Status: status, ErrorCode: errorCode, Result: encodedResult, UpdateAt: s.now()},
 	)
 	if err != nil {
 		return nil, AuditUnavailable(err)
@@ -611,8 +716,14 @@ func (s *Auditor) RecordUserSearchDecision(
 	allowed bool,
 ) error {
 	return s.recordDecision(
-		ctx, principal, string(model.ActionUserSearch), resource,
-		scopeType, scopeID, metadata, allowed,
+		ctx,
+		principal,
+		string(model.ActionUserSearch),
+		resource,
+		scopeType,
+		scopeID,
+		metadata,
+		allowed,
 	)
 }
 
@@ -632,15 +743,22 @@ func (s *Auditor) recordDecision(
 		status = model.AuditStatusSuccess
 		errorCode = ""
 	}
+
 	event := &model.AuditEvent{
-		ActorID: principal.UserID, SessionID: principal.SessionID,
-		Action: action, Resource: resource,
-		ScopeType: scopeType, ScopeID: scopeID, Status: status,
-		RequestID: metadata.RequestID, NodeID: s.deps.NodeID,
+		ActorID:    principal.UserID,
+		SessionID:  principal.SessionID,
+		Action:     action,
+		Resource:   resource,
+		ScopeType:  scopeType,
+		ScopeID:    scopeID,
+		Status:     status,
+		RequestID:  metadata.RequestID,
+		NodeID:     s.deps.NodeID,
 		ClientType: string(principal.ClientType),
 		AuthMethod: principal.AuthenticationMethod,
-		IPAddress:  metadata.IPAddress, UserAgent: metadata.UserAgent,
-		ErrorCode: errorCode,
+		IPAddress:  metadata.IPAddress,
+		UserAgent:  metadata.UserAgent,
+		ErrorCode:  errorCode,
 	}
 	// An authorization decision that cannot be recorded leaves the request
 	// unauthorized, so it is presented as the authorization step failing.
@@ -650,6 +768,7 @@ func (s *Auditor) recordDecision(
 	if _, err := s.deps.Audits.Save(ctx, event); err != nil {
 		return apperror.New("authorization.unavailable").Wrap(err)
 	}
+
 	return nil
 }
 
@@ -658,20 +777,27 @@ func (s *Auditor) List(
 	ctx context.Context,
 	query model.AuditQuery,
 ) ([]*model.AuditEvent, error) {
-	if query.Limit < 1 || query.Limit > 200 ||
+	if query.Limit < 1 ||
+		query.Limit > 200 ||
 		(query.ActorID != "" && !model.UserID(query.ActorID).IsValid()) ||
 		(query.BeforeID != "" && !model.AuditEventID(query.BeforeID).IsValid()) ||
 		(query.Resource != nil && query.Resource.Validate() != nil) {
 		return nil, apperror.New("audit.query.invalid")
 	}
+
 	events, err := s.deps.Audits.List(ctx, store.AuditListOptions{
-		ActorID: model.UserID(query.ActorID), Action: query.Action, Resource: query.Resource,
-		BeforeCreatedAt: query.BeforeCreatedAt, BeforeID: model.AuditEventID(query.BeforeID), Limit: query.Limit,
-		Visibility: store.AuditVisibilityScope{InstitutionWide: true},
+		ActorID:         model.UserID(query.ActorID),
+		Action:          query.Action,
+		Resource:        query.Resource,
+		BeforeCreatedAt: query.BeforeCreatedAt,
+		BeforeID:        model.AuditEventID(query.BeforeID),
+		Limit:           query.Limit,
+		Visibility:      store.AuditVisibilityScope{InstitutionWide: true},
 	})
 	if err != nil {
 		return nil, AuditUnavailable(err)
 	}
+
 	return events, nil
 }
 

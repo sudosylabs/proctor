@@ -34,7 +34,10 @@ func (e examCollectionInvalidationEffects) CandidateActivityChangedForSitting(
 	var errs []error
 	for {
 		candidateIDs, err := e.sittings.ListCandidateInvalidationTargetsBySitting(
-			ctx, sittingID, after, examCollectionInvalidationPageSize,
+			ctx,
+			sittingID,
+			after,
+			examCollectionInvalidationPageSize,
 		)
 		if err != nil {
 			return errors.Join(append(errs, err)...)
@@ -80,7 +83,10 @@ func (e examCollectionInvalidationEffects) ExamArchived(
 	var errs []error
 	for {
 		targets, err := e.sittings.ListInvalidationTargetsByExam(
-			ctx, examID, after, examCollectionInvalidationPageSize,
+			ctx,
+			examID,
+			after,
+			examCollectionInvalidationPageSize,
 		)
 		if err != nil {
 			return errors.Join(append(errs, err)...)

@@ -101,6 +101,7 @@ func (s *SearchService) Search(ctx context.Context, invocation invocation.Invoca
 	if err != nil {
 		return SearchResult{}, err
 	}
+
 	result := SearchResult{Exams: []store.ExamSummary{}, Classes: []*model.Class{}, Users: []*model.User{}}
 	denied := 0
 	for _, kind := range types {
@@ -121,29 +122,40 @@ func (s *SearchService) Search(ctx context.Context, invocation invocation.Invoca
 				result.Users = page.Items
 			}
 		}
+
 		if apperror.Is(searchErr, "authorization.denied") {
 			denied++
 			continue
 		}
+
 		if searchErr != nil {
 			return SearchResult{}, searchErr
 		}
 	}
+
 	if denied == len(types) {
 		return SearchResult{}, access.DeniedError()
 	}
+
 	return result, nil
 }
 
-func (s *SearchService) searchClasses(ctx context.Context, invocation invocation.Invocation, term string, limit int) ([]*model.Class, error) {
+func (s *SearchService) searchClasses(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	term string,
+	limit int,
+) ([]*model.Class, error) {
 	visibility, err := s.deps.ClassAuthorization.AuthorizeClassSearch(ctx, invocation)
 	if err != nil {
 		return nil, err
 	}
+
 	classes, err := s.deps.Classes.SearchVisible(ctx, store.ClassSearchOptions{Term: term, Limit: limit, Visibility: visibility})
 	if err != nil {
 		return nil, classSearchStoreErrors.Translate(err)
 	}
+
 	return classes, nil
 }
 

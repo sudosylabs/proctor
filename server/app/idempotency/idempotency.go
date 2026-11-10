@@ -66,8 +66,11 @@ func identity(userID model.UserID, operation, key string, canonical []byte) *sto
 	fingerprintInput := append([]byte(operation+"\x00"), canonical...)
 	fingerprint := sha256.Sum256(fingerprintInput)
 	return &store.CommandIdempotency{
-		UserID: userID, Operation: operation, KeyDigest: keyDigest,
+		UserID:      userID,
+		Operation:   operation,
+		KeyDigest:   keyDigest,
 		Fingerprint: fingerprint,
-		Retention:   Retention, Wait: Wait,
+		Retention:   Retention,
+		Wait:        Wait,
 	}
 }

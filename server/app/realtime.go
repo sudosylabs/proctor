@@ -116,11 +116,13 @@ func (s *RealtimeService) SessionsRevoked(
 	if s.attempts == nil || len(sessionIDs) == 0 {
 		return
 	}
+
 	candidateID, err := model.ParseUserID(userID.String())
 	if err != nil {
 		s.reportTransientFailure(ctx, "session_revocation.attempt_invalidations", err)
 		return
 	}
+
 	parsedSessionIDs := make([]model.SessionID, len(sessionIDs))
 	for index, sessionID := range sessionIDs {
 		parsedSessionIDs[index], err = model.ParseSessionID(sessionID.String())
@@ -129,11 +131,13 @@ func (s *RealtimeService) SessionsRevoked(
 			return
 		}
 	}
+
 	targets, err := s.attempts.ListSessionRevocationInvalidationTargets(ctx, candidateID, parsedSessionIDs)
 	if err != nil {
 		s.reportTransientFailure(ctx, "session_revocation.attempt_invalidations", err)
 		return
 	}
+
 	for _, target := range targets {
 		candidateEvent, candidateErr := realtime.NewCandidateExamActivityChangedEvent(target.CandidateUserID)
 		managerEvent, managerErr := realtime.NewManagerSittingBoardChangedEvent(target.ExamID, target.SittingID)
@@ -144,6 +148,7 @@ func (s *RealtimeService) SessionsRevoked(
 		if managerErr == nil {
 			publishErr = errors.Join(publishErr, s.PublishRealtimeEvent(ctx, managerEvent))
 		}
+
 		publishErr = errors.Join(publishErr, s.InvalidateCurrentUserContext(ctx, target.CandidateUserID))
 		if publishErr != nil {
 			s.reportTransientFailure(ctx, "session_revocation.attempt_invalidations", publishErr)

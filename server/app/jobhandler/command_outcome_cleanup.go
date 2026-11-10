@@ -36,14 +36,20 @@ func (h commandOutcomeCleanupHandler) Run(ctx context.Context, execution job.Exe
 	if execution.Job == nil {
 		return job.PermanentFailure("job.command.invalid", errors.New("job is missing"))
 	}
+
 	var command CommandOutcomeCleanupCommand
-	if err := decodeStrictJobDocument(execution.Job.Command, &command); err != nil || command.BatchSize < 1 || command.BatchSize > maximumCommandOutcomeCleanupBatch {
+	if err := decodeStrictJobDocument(
+		execution.Job.Command,
+		&command,
+	); err != nil || command.BatchSize < 1 || command.BatchSize > maximumCommandOutcomeCleanupBatch {
 		return job.PermanentFailure("job.command.invalid", errors.New("command outcome cleanup command is invalid"))
 	}
+
 	deleted, err := h.outcomes.DeleteExpired(ctx, command.BatchSize)
 	if err != nil {
 		return job.RetryableFailure("dependency.unavailable", err)
 	}
+
 	document, err := json.Marshal(CommandOutcomeCleanupResult{Deleted: deleted})
 	return job.Outcome{Kind: job.OutcomeSucceeded, Result: document, Err: err}
 }
@@ -58,18 +64,43 @@ func (p commandOutcomeCleanupProposer) Propose(ctx context.Context, occurrence t
 	if err != nil {
 		return err
 	}
+
 	at := model.TimeUTC(p.now())
 	key := "command-outcome-cleanup:" + model.TimeUTC(occurrence).Format("2006-01-02")
-	job, err := model.NewJobWithDedupePolicy(model.NewJobID(), model.JobTypeCommandOutcomeCleanup, command, key, model.JobDedupePermanent, at, at, 5)
+	job, err := model.NewJobWithDedupePolicy(
+		model.NewJobID(),
+		model.JobTypeCommandOutcomeCleanup,
+		command,
+		key,
+		model.JobDedupePermanent,
+		at,
+		at,
+		5,
+	)
 	if err != nil {
 		return err
 	}
+
 	_, _, err = p.jobs.Enqueue(ctx, &store.JobEnqueue{Job: job})
 	return err
 }
 
 func commandOutcomeCleanupDescriptor(handler job.Handler) job.Descriptor {
-	return job.Descriptor{Type: model.JobTypeCommandOutcomeCleanup, PublicErrorCodes: []string{"dependency.unavailable", "job.command.invalid"}, Timeout: 5 * time.Minute, Concurrency: 1, MaximumAttempts: 5, LeaseDuration: time.Minute, HeartbeatInterval: 15 * time.Second, BaseRetryDelay: time.Second, MaximumRetryDelay: time.Minute, Visibility: job.VisibilityOperator, SuccessRetention: 30 * 24 * time.Hour, FailureRetention: 90 * 24 * time.Hour, Handler: handler}
+	return job.Descriptor{
+		Type:              model.JobTypeCommandOutcomeCleanup,
+		PublicErrorCodes:  []string{"dependency.unavailable", "job.command.invalid"},
+		Timeout:           5 * time.Minute,
+		Concurrency:       1,
+		MaximumAttempts:   5,
+		LeaseDuration:     time.Minute,
+		HeartbeatInterval: 15 * time.Second,
+		BaseRetryDelay:    time.Second,
+		MaximumRetryDelay: time.Minute,
+		Visibility:        job.VisibilityOperator,
+		SuccessRetention:  30 * 24 * time.Hour,
+		FailureRetention:  90 * 24 * time.Hour,
+		Handler:           handler,
+	}
 }
 
 // NewCommandOutcomeCleanupDescriptor registers the deletion of expired

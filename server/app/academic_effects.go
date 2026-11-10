@@ -62,10 +62,12 @@ func (e academicRealtimeEffects) MembershipChanged(
 	if e.sittings == nil || e.realtime == nil {
 		return errors.New("Class Membership realtime dependencies are invalid")
 	}
+
 	candidateEvent, err := realtime.NewCandidateExamActivityChangedEvent(candidateID)
 	if err != nil {
 		return err
 	}
+
 	errs := []error{e.realtime.PublishRealtimeEvent(ctx, candidateEvent),
 		e.realtime.InvalidateCurrentUserContext(ctx, candidateID)}
 	seen := make(map[model.ClassID]struct{}, len(classIDs))
@@ -74,9 +76,11 @@ func (e academicRealtimeEffects) MembershipChanged(
 			errs = append(errs, errors.New("Class Membership invalidation requires a valid Class identity"))
 			continue
 		}
+
 		if _, exists := seen[classID]; exists {
 			continue
 		}
+
 		seen[classID] = struct{}{}
 		var after model.ExamSittingID
 		for {
@@ -85,20 +89,25 @@ func (e academicRealtimeEffects) MembershipChanged(
 				errs = append(errs, listErr)
 				break
 			}
+
 			for _, target := range targets {
 				event, eventErr := realtime.NewManagerSittingBoardChangedEvent(target.ExamID, target.SittingID)
 				if eventErr != nil {
 					errs = append(errs, eventErr)
 					continue
 				}
+
 				errs = append(errs, e.realtime.PublishRealtimeEvent(ctx, event))
 			}
+
 			if len(targets) < 200 {
 				break
 			}
+
 			after = targets[len(targets)-1].SittingID
 		}
 	}
+
 	return errors.Join(errs...)
 }
 

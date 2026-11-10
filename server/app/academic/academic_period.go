@@ -60,51 +60,79 @@ type ArchiveAcademicPeriodCommand struct {
 }
 
 // GetAcademicPeriod reads one Academic Period after authorizing the caller.
-func (s *Service) GetAcademicPeriod(ctx context.Context, invocation invocation.Invocation, query GetAcademicPeriodQuery) (*model.AcademicPeriod, error) {
+func (s *Service) GetAcademicPeriod(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	query GetAcademicPeriodQuery,
+) (*model.AcademicPeriod, error) {
 	id := query.ID
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "academic_period_id")
 	}
-	if err := s.authorizer.Authorize(ctx, invocation, model.ActionAcademicPeriodView, model.Resource{Type: model.ResourceAcademicPeriod, ID: id.String()}); err != nil {
+
+	if err := s.authorizer.Authorize(
+		ctx,
+		invocation,
+		model.ActionAcademicPeriodView,
+		model.Resource{Type: model.ResourceAcademicPeriod, ID: id.String()},
+	); err != nil {
 		return nil, err
 	}
+
 	period, err := s.get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
+
 	return period, nil
 }
 
 // ListAcademicPeriods lists Academic Periods after authorizing the caller.
-func (s *Service) ListAcademicPeriods(ctx context.Context, invocation invocation.Invocation, query ListAcademicPeriodsQuery) (paging.Page[*model.AcademicPeriod], error) {
+func (s *Service) ListAcademicPeriods(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	query ListAcademicPeriodsQuery,
+) (paging.Page[*model.AcademicPeriod], error) {
 	limit, probe, err := paging.ResolveLimit(query.Limit, "limit")
 	if err != nil {
 		return paging.Page[*model.AcademicPeriod]{}, err
 	}
+
 	visibility, err := s.authorizer.AuthorizeAcademicPeriodList(ctx, invocation)
 	if err != nil {
 		return paging.Page[*model.AcademicPeriod]{}, err
 	}
+
 	periods, err := s.academicPeriods.ListVisible(ctx, visibility, store.AcademicPeriodListOptions{
-		Term: strings.TrimSpace(query.Query), AfterStartAt: query.AfterStartAt, AfterName: query.AfterName,
-		AfterID: query.AfterID, Limit: probe,
+		Term:         strings.TrimSpace(query.Query),
+		AfterStartAt: query.AfterStartAt,
+		AfterName:    query.AfterName,
+		AfterID:      query.AfterID,
+		Limit:        probe,
 	})
 	if err != nil {
 		return paging.Page[*model.AcademicPeriod]{}, academicPeriodStoreErrors.Translate(err)
 	}
+
 	return paging.New(periods, limit), nil
 }
 
 // CreateAcademicPeriod creates an Academic Period after authorizing the caller.
-func (s *Service) CreateAcademicPeriod(ctx context.Context, invocation invocation.Invocation, command CreateAcademicPeriodCommand) (*model.AcademicPeriod, error) {
+func (s *Service) CreateAcademicPeriod(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command CreateAcademicPeriodCommand,
+) (*model.AcademicPeriod, error) {
 	periodID, err := model.ParseAcademicPeriodID(s.newID())
 	if err != nil {
 		return nil, apperror.New("request.invalid").WithField("field", "academic_period_id").Wrap(err)
 	}
+
 	owner, err := parseAcademicPeriodOwner(command.OwnerType, command.OwnerID)
 	if err != nil {
 		return nil, err
 	}
+
 	candidate := &model.AcademicPeriod{
 		Owner:       owner,
 		Name:        command.Name,
@@ -120,18 +148,24 @@ func (s *Service) CreateAcademicPeriod(ctx context.Context, invocation invocatio
 	if err = s.authorizer.AuthorizeAcademicPeriodOwner(ctx, invocation, model.ActionAcademicPeriodManage, candidate); err != nil {
 		return nil, err
 	}
+
 	idempotency, err := idempotency.Prepare(invocation, "academic_period.create", command.IdempotencyKey, struct {
 		OwnerType, OwnerID             string
 		Name, DisplayName, Description string
 		StartAt, EndAt                 int64
 	}{
-		string(candidate.Owner.Type()), candidate.Owner.ID(),
-		candidate.Name, candidate.DisplayName, candidate.Description,
-		model.MillisFromTime(candidate.StartsAt), model.MillisFromTime(candidate.EndsAt),
+		string(candidate.Owner.Type()),
+		candidate.Owner.ID(),
+		candidate.Name,
+		candidate.DisplayName,
+		candidate.Description,
+		model.MillisFromTime(candidate.StartsAt),
+		model.MillisFromTime(candidate.EndsAt),
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	result, err := access.RunAudited(
 		ctx,
 		s.auditor,
@@ -147,18 +181,26 @@ func (s *Service) CreateAcademicPeriod(ctx context.Context, invocation invocatio
 		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.AcademicPeriodCommandResult, error) {
 			input := &store.AcademicPeriodCreation{
-				Period: candidate, AuditEventID: reference.ID, AuditAt: reference.MutationAt,
+				Period:       candidate,
+				AuditEventID: reference.ID,
+				AuditAt:      reference.MutationAt,
 			}
 			if idempotency == nil {
 				period, createErr := s.academicPeriods.Create(ctx, input)
 				return &store.AcademicPeriodCommandResult{Value: period}, createErr
 			}
+
 			idempotentStore, ok := s.academicPeriods.(interface {
-				CreateIdempotently(context.Context, *store.AcademicPeriodCreation, *store.CommandIdempotency) (*store.AcademicPeriodCommandResult, error)
+				CreateIdempotently(
+					context.Context,
+					*store.AcademicPeriodCreation,
+					*store.CommandIdempotency,
+				) (*store.AcademicPeriodCommandResult, error)
 			})
 			if !ok {
 				return nil, errors.New("academic period store does not support idempotent creation")
 			}
+
 			return idempotentStore.CreateIdempotently(ctx, input, idempotency)
 		},
 		academicPeriodStoreErrors.Translate,
@@ -166,19 +208,26 @@ func (s *Service) CreateAcademicPeriod(ctx context.Context, invocation invocatio
 	if err != nil {
 		return nil, err
 	}
+
 	return result.Value, nil
 }
 
 // UpdateAcademicPeriod updates an Academic Period after authorizing the caller.
-func (s *Service) UpdateAcademicPeriod(ctx context.Context, invocation invocation.Invocation, command UpdateAcademicPeriodCommand) (*model.AcademicPeriod, error) {
+func (s *Service) UpdateAcademicPeriod(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command UpdateAcademicPeriodCommand,
+) (*model.AcademicPeriod, error) {
 	id := command.ID
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "academic_period_id")
 	}
+
 	resource := model.Resource{Type: model.ResourceAcademicPeriod, ID: id.String()}
 	if err := s.authorizer.Authorize(ctx, invocation, model.ActionAcademicPeriodManage, resource); err != nil {
 		return nil, err
 	}
+
 	current, err := s.get(ctx, id)
 	if err != nil {
 		return nil, err
@@ -186,6 +235,7 @@ func (s *Service) UpdateAcademicPeriod(ctx context.Context, invocation invocatio
 	if err := checkAcademicRevision(command.ExpectedRevision, current.Revision, "academic_period.conflict"); err != nil {
 		return nil, err
 	}
+
 	candidate := *current
 	if command.Name != nil {
 		candidate.Name = *command.Name
@@ -202,10 +252,12 @@ func (s *Service) UpdateAcademicPeriod(ctx context.Context, invocation invocatio
 	if command.EndAt != nil {
 		candidate.EndsAt = model.TimeFromMillis(*command.EndAt)
 	}
+
 	candidate.PrepareUpdate(s.now())
 	if err := candidate.Validate(); err != nil {
 		return nil, apperror.DomainInvalid("academic_period.invalid", err)
 	}
+
 	return access.RunAudited(
 		ctx,
 		s.auditor,
@@ -222,7 +274,9 @@ func (s *Service) UpdateAcademicPeriod(ctx context.Context, invocation invocatio
 		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.AcademicPeriod, error) {
 			return s.academicPeriods.Update(ctx, &store.AcademicPeriodUpdate{
-				Period: &candidate, AuditEventID: reference.ID, AuditAt: reference.MutationAt,
+				Period:       &candidate,
+				AuditEventID: reference.ID,
+				AuditAt:      reference.MutationAt,
 			})
 		},
 		academicPeriodStoreErrors.Translate,
@@ -235,10 +289,12 @@ func (s *Service) ArchiveAcademicPeriod(ctx context.Context, invocation invocati
 	if !id.IsValid() {
 		return apperror.New("request.invalid").WithField("field", "academic_period_id")
 	}
+
 	resource := model.Resource{Type: model.ResourceAcademicPeriod, ID: id.String()}
 	if err := s.authorizer.Authorize(ctx, invocation, model.ActionAcademicPeriodManage, resource); err != nil {
 		return err
 	}
+
 	current, err := s.get(ctx, id)
 	if err != nil {
 		return err
@@ -246,6 +302,7 @@ func (s *Service) ArchiveAcademicPeriod(ctx context.Context, invocation invocati
 	if err := checkAcademicRevision(command.ExpectedRevision, current.Revision, "academic_period.conflict"); err != nil {
 		return err
 	}
+
 	_, err = access.RunAudited(
 		ctx,
 		s.auditor,
@@ -262,8 +319,10 @@ func (s *Service) ArchiveAcademicPeriod(ctx context.Context, invocation invocati
 		func(ctx context.Context, reference access.MutationReference) (*model.AcademicPeriod, error) {
 			return s.academicPeriods.Archive(ctx, &store.AcademicPeriodArchive{
 				ExpectedRevision: current.Revision,
-				ID:               current.ID, ArchiveAt: reference.MutationAt,
-				AuditEventID: reference.ID, AuditAt: reference.MutationAt,
+				ID:               current.ID,
+				ArchiveAt:        reference.MutationAt,
+				AuditEventID:     reference.ID,
+				AuditAt:          reference.MutationAt,
 			})
 		},
 		academicPeriodStoreErrors.Translate,
@@ -309,4 +368,9 @@ func (s *Service) get(ctx context.Context, id model.AcademicPeriodID) (*model.Ac
 	return period, nil
 }
 
-var academicPeriodStoreErrors = apperror.AdministrationStoreTable("academic_period", "academic_period.conflict", "academic_period.invalid", nil)
+var academicPeriodStoreErrors = apperror.AdministrationStoreTable(
+	"academic_period",
+	"academic_period.conflict",
+	"academic_period.invalid",
+	nil,
+)

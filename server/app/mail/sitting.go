@@ -72,17 +72,29 @@ func NewSittingComposer(deps SittingComposerDependencies) (*SittingComposer, err
 	return &SittingComposer{deps: deps}, nil
 }
 
-func (p *SittingComposer) Prepare(actorID model.UserID, sitting *model.ExamSitting, change store.ExamSittingMailChangeKind,
+func (p *SittingComposer) Prepare(
+	actorID model.UserID,
+	sitting *model.ExamSitting,
+	change store.ExamSittingMailChangeKind,
 	details SittingScheduleDetails,
 ) (*store.ExamSittingMailFanout, error) {
-	if p == nil || !actorID.IsValid() || sitting == nil || !sitting.ID.IsValid() || !sitting.ExamID.IsValid() ||
-		!sitting.ExamRevisionID.IsValid() || !sitting.ClassID.IsValid() || sitting.Revision < 1 ||
-		!sitting.ScheduledStartAt.Before(sitting.ScheduledEndAt) || !validSittingDetails(details) {
+	if p == nil ||
+		!actorID.IsValid() ||
+		sitting == nil ||
+		!sitting.ID.IsValid() ||
+		!sitting.ExamID.IsValid() ||
+		!sitting.ExamRevisionID.IsValid() ||
+		!sitting.ClassID.IsValid() ||
+		sitting.Revision < 1 ||
+		!sitting.ScheduledStartAt.Before(sitting.ScheduledEndAt) ||
+		!validSittingDetails(details) {
 		return nil, errors.New("sitting mail preparation is invalid")
 	}
+
 	if details.StartsAt.IsZero() && details.EndsAt.IsZero() {
 		details.StartsAt, details.EndsAt = sitting.ScheduledStartAt, sitting.ScheduledEndAt
 	}
+
 	primaryKey := model.MailTemplateExamSittingScheduled
 	switch change {
 	case store.ExamSittingMailScheduled:
@@ -94,50 +106,76 @@ func (p *SittingComposer) Prepare(actorID model.UserID, sitting *model.ExamSitti
 	default:
 		return nil, errors.New("sitting mail change is invalid")
 	}
+
 	at, occurrenceID := model.TimeUTC(p.deps.Now()), model.NewMailOccurrenceID()
-	occurrence := &model.MailOccurrence{ID: occurrenceID, Kind: model.MailOccurrenceSittingSchedule, TemplateKey: primaryKey,
-		ActorUserID: actorID, CreatedAt: at}
+	occurrence := &model.MailOccurrence{
+		ID:          occurrenceID,
+		Kind:        model.MailOccurrenceSittingSchedule,
+		TemplateKey: primaryKey,
+		ActorUserID: actorID,
+		CreatedAt:   at,
+	}
 	command, err := model.EncodeSittingMailExpansionCommand(model.SittingMailExpansionCommand{OccurrenceID: occurrenceID})
 	if err != nil {
 		return nil, err
 	}
+
 	dedupe, err := model.SittingMailExpansionDedupeKey(occurrenceID)
 	if err != nil {
 		return nil, err
 	}
-	job, err := model.NewJobWithDedupePolicy(model.NewJobID(), model.JobTypeMailExpandSitting, command, dedupe,
-		model.JobDedupePermanent, at, at, model.MailMaximumAttempts)
+
+	job, err := model.NewJobWithDedupePolicy(
+		model.NewJobID(),
+		model.JobTypeMailExpandSitting,
+		command,
+		dedupe,
+		model.JobDedupePermanent,
+		at,
+		at,
+		model.MailMaximumAttempts,
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	deliveryLifetime, ok := defaultLifetimeFor(primaryKey)
 	if !ok {
 		return nil, errors.New("sitting mail definition is invalid")
 	}
+
 	prepared := &store.ExamSittingMailFanout{Occurrence: occurrence, ExpansionJob: job, ChangeKind: change, DeliveryLifetime: deliveryLifetime}
 	if !p.deps.Sender.Enabled() {
 		job, err = job.RequestCancellation(at)
 		if err != nil {
 			return nil, err
 		}
+
 		prepared.ExpansionJob = job
 		return prepared, nil
 	}
+
 	from := p.deps.Sender.From()
 	if err = ValidateAddress(from); err != nil {
 		return nil, err
 	}
+
 	defaultLocale, locales := p.deps.Renderer.SittingLocales()
 	locales = normalizedSittingLocales(defaultLocale, locales)
 	if len(locales) == 0 || len(locales) > 64 {
 		return nil, errors.New("sitting mail locales are invalid")
 	}
-	bundle := FrozenSittingBundle{From: from, DefaultLocale: normalizeSittingLocale(defaultLocale),
-		Messages: make(map[string]map[model.MailTemplateKey]FrozenContent, len(locales))}
+
+	bundle := FrozenSittingBundle{
+		From:          from,
+		DefaultLocale: normalizeSittingLocale(defaultLocale),
+		Messages:      make(map[string]map[model.MailTemplateKey]FrozenContent, len(locales)),
+	}
 	institution := ""
 	if p.deps.Institution != nil {
 		institution = p.deps.Institution()
 	}
+
 	for _, locale := range locales {
 		messages := make(map[model.MailTemplateKey]FrozenContent, 4)
 		for _, key := range sittingTemplateKeys() {
@@ -145,33 +183,45 @@ func (p *SittingComposer) Prepare(actorID model.UserID, sitting *model.ExamSitti
 			if key == model.MailTemplateExamSittingAssignmentRemoved && details.PriorClassDisplayName != "" {
 				variant.ClassDisplayName = details.PriorClassDisplayName
 			}
+
 			// A fan-out bundle is frozen once for every recipient, so it carries
 			// no recipient name and uses the installation display time zone.
-			rendered, renderErr := p.deps.Renderer.Render(RenderRequest{Key: key, Locale: locale, Presentation: variant,
-				Institution: institution})
+			rendered, renderErr := p.deps.Renderer.Render(RenderRequest{
+				Key:          key,
+				Locale:       locale,
+				Presentation: variant,
+				Institution:  institution,
+			})
 			if renderErr != nil || rendered.Subject == "" || rendered.Text == "" || rendered.HTML == "" {
 				return nil, errors.New("render sitting mail bundle")
 			}
+
 			messages[key] = rendered
 		}
+
 		bundle.Messages[locale] = messages
 	}
+
 	plaintext, err := json.Marshal(bundle)
 	if err != nil || len(plaintext) > model.MailRenderedPayloadMaximumBytes*4 {
 		return nil, errors.New("sitting mail bundle is too large")
 	}
+
 	envelope, err := p.deps.Sealer.Seal(secretseal.Binding{Purpose: FanoutBundleSealingPurpose, Owner: occurrenceID.String()}, plaintext)
 	if err != nil {
 		return nil, err
 	}
+
 	encrypted, err := json.Marshal(envelope)
 	if err != nil {
 		return nil, err
 	}
+
 	prepared.Bundle = &model.MailFanoutBundle{ID: occurrenceID, EncryptedPayload: encrypted, CreatedAt: at, Revision: 1}
 	if prepared.Bundle.Validate() != nil {
 		return nil, errors.New("prepared sitting mail bundle is invalid")
 	}
+
 	return prepared, nil
 }
 
@@ -200,48 +250,94 @@ func (p *SittingComposer) OpenBundle(bundle *model.MailFanoutBundle) (FrozenSitt
 // skips that recipient rather than stopping mail to everyone after it.
 var ErrSittingMailRecipientInvalid = errors.New("sitting mail recipient is invalid")
 
-func (p *SittingComposer) PrepareRecipient(fanout *store.ExamSittingMailFanoutSnapshot, recipient *model.User,
-	key model.MailTemplateKey, bundle FrozenSittingBundle,
+func (p *SittingComposer) PrepareRecipient(
+	fanout *store.ExamSittingMailFanoutSnapshot,
+	recipient *model.User,
+	key model.MailTemplateKey,
+	bundle FrozenSittingBundle,
 ) (*model.MailDelivery, *model.Job, error) {
-	if recipient == nil || recipient.Validate() != nil || ValidateAddress(Address{Name: recipient.DisplayName, Address: recipient.Email}) != nil {
+	if recipient == nil ||
+		recipient.Validate() != nil ||
+		ValidateAddress(Address{Name: recipient.DisplayName, Address: recipient.Email}) != nil {
 		return nil, nil, ErrSittingMailRecipientInvalid
 	}
+
 	definition, defined := definitionFor(key)
 	content, ok := bundle.contentFor(recipient.Locale, key)
-	if p == nil || p.deps.Sealer == nil || fanout == nil || fanout.Occurrence == nil || !defined ||
-		definition.presentation != presentationSittingSchedule || !ok ||
-		content.Subject == "" || content.Text == "" || content.HTML == "" {
+	if p == nil ||
+		p.deps.Sealer == nil ||
+		fanout == nil ||
+		fanout.Occurrence == nil ||
+		!defined ||
+		definition.presentation != presentationSittingSchedule ||
+		!ok ||
+		content.Subject == "" ||
+		content.Text == "" ||
+		content.HTML == "" {
 		return nil, nil, errors.New("sitting mail fan-out is invalid")
 	}
+
 	deliveryID, jobID := model.NewMailDeliveryID(), model.NewJobID()
 	command, err := model.EncodeMailDeliveryCommand(model.MailDeliveryCommand{DeliveryID: deliveryID})
 	if err != nil {
 		return nil, nil, err
 	}
-	job, err := model.NewJob(jobID, definition.jobType, command, deliveryID.String(),
-		fanout.Occurrence.CreatedAt, fanout.Occurrence.CreatedAt, model.MailMaximumAttempts)
+
+	job, err := model.NewJob(
+		jobID,
+		definition.jobType,
+		command,
+		deliveryID.String(),
+		fanout.Occurrence.CreatedAt,
+		fanout.Occurrence.CreatedAt,
+		model.MailMaximumAttempts,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
-	frozen, err := freezeDeliveryPayload(p.deps.Sealer, deliveryID, bundle.From,
-		Address{Name: recipient.DisplayName, Address: recipient.Email}, content)
+
+	frozen, err := freezeDeliveryPayload(
+		p.deps.Sealer,
+		deliveryID,
+		bundle.From,
+		Address{Name: recipient.DisplayName, Address: recipient.Email},
+		content,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
-	delivery := &model.MailDelivery{ID: deliveryID, OccurrenceID: fanout.Occurrence.ID, JobID: jobID, TargetUserID: recipient.ID,
-		TemplateKey: key, TemplateDigest: frozen.templateDigest, MaskedRecipient: MaskAddress(recipient.Email),
-		State: model.MailDeliveryQueued, CreatedAt: fanout.Occurrence.CreatedAt, UpdatedAt: fanout.Occurrence.CreatedAt,
-		MessageDate: fanout.Occurrence.CreatedAt, Deadline: fanout.Deadline, MessageID: frozen.messageID,
-		EncryptedPayload: frozen.encrypted, Revision: 1}
+
+	delivery := &model.MailDelivery{
+		ID:               deliveryID,
+		OccurrenceID:     fanout.Occurrence.ID,
+		JobID:            jobID,
+		TargetUserID:     recipient.ID,
+		TemplateKey:      key,
+		TemplateDigest:   frozen.templateDigest,
+		MaskedRecipient:  MaskAddress(recipient.Email),
+		State:            model.MailDeliveryQueued,
+		CreatedAt:        fanout.Occurrence.CreatedAt,
+		UpdatedAt:        fanout.Occurrence.CreatedAt,
+		MessageDate:      fanout.Occurrence.CreatedAt,
+		Deadline:         fanout.Deadline,
+		MessageID:        frozen.messageID,
+		EncryptedPayload: frozen.encrypted,
+		Revision:         1,
+	}
 	if err = delivery.Validate(); err != nil {
 		return nil, nil, err
 	}
+
 	return delivery, job, nil
 }
 
 func sittingTemplateKeys() []model.MailTemplateKey {
-	return []model.MailTemplateKey{model.MailTemplateExamSittingScheduled, model.MailTemplateExamSittingRescheduled,
-		model.MailTemplateExamSittingCanceled, model.MailTemplateExamSittingAssignmentRemoved}
+	return []model.MailTemplateKey{
+		model.MailTemplateExamSittingScheduled,
+		model.MailTemplateExamSittingRescheduled,
+		model.MailTemplateExamSittingCanceled,
+		model.MailTemplateExamSittingAssignmentRemoved,
+	}
 }
 
 func normalizeSittingLocale(locale string) string {
@@ -268,17 +364,22 @@ func normalizedSittingLocales(defaultLocale string, locales []string) []string {
 }
 
 func validFrozenSittingBundle(bundle FrozenSittingBundle) bool {
-	if ValidateAddress(bundle.From) != nil || bundle.DefaultLocale == "" ||
-		len(bundle.Messages) == 0 || len(bundle.Messages) > 64 {
+	if ValidateAddress(bundle.From) != nil ||
+		bundle.DefaultLocale == "" ||
+		len(bundle.Messages) == 0 ||
+		len(bundle.Messages) > 64 {
 		return false
 	}
+
 	if _, ok := bundle.Messages[bundle.DefaultLocale]; !ok {
 		return false
 	}
+
 	for locale, messages := range bundle.Messages {
 		if locale != normalizeSittingLocale(locale) || len(messages) != len(sittingTemplateKeys()) {
 			return false
 		}
+
 		for _, key := range sittingTemplateKeys() {
 			content, ok := messages[key]
 			if !ok || content.Subject == "" || content.Text == "" || content.HTML == "" {
@@ -286,6 +387,7 @@ func validFrozenSittingBundle(bundle FrozenSittingBundle) bool {
 			}
 		}
 	}
+
 	return true
 }
 
@@ -324,9 +426,13 @@ func validSittingDetails(details SittingScheduleDetails) bool {
 			return false
 		}
 	}
-	if details.PriorClassDisplayName != "" && (details.PriorClassDisplayName != strings.TrimSpace(details.PriorClassDisplayName) ||
-		!utf8.ValidString(details.PriorClassDisplayName) || utf8.RuneCountInString(details.PriorClassDisplayName) > 255) {
+
+	if details.PriorClassDisplayName != "" &&
+		(details.PriorClassDisplayName != strings.TrimSpace(details.PriorClassDisplayName) ||
+			!utf8.ValidString(details.PriorClassDisplayName) ||
+			utf8.RuneCountInString(details.PriorClassDisplayName) > 255) {
 		return false
 	}
+
 	return details.StartsAt.IsZero() && details.EndsAt.IsZero() || !details.StartsAt.IsZero() && details.StartsAt.Before(details.EndsAt)
 }

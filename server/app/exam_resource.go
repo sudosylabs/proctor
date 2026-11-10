@@ -18,11 +18,18 @@ import (
 
 type examResourceRealtimeEffects struct{ realtime *RealtimeService }
 
-func (e examResourceRealtimeEffects) Changed(ctx context.Context, examID model.ExamID, _ model.ExamResourceID, draftRevision int64, _ string) error {
+func (e examResourceRealtimeEffects) Changed(
+	ctx context.Context,
+	examID model.ExamID,
+	_ model.ExamResourceID,
+	draftRevision int64,
+	_ string,
+) error {
 	event, err := realtime.NewExamDraftUpdatedEvent(examID, draftRevision)
 	if err != nil {
 		return err
 	}
+
 	return e.realtime.PublishRealtimeEvent(ctx, event)
 }
 func (e examResourceRealtimeEffects) Report(ctx context.Context, operation string, err error) {

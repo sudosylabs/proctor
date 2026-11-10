@@ -40,23 +40,31 @@ type EndAcademicUnitMemberCommand struct {
 }
 
 // CreateAcademicUnitMember creates an Academic Unit Membership after authorizing the caller.
-func (s *Service) CreateAcademicUnitMember(ctx context.Context, invocation invocation.Invocation, command CreateAcademicUnitMemberCommand) (*model.AcademicUnitMember, error) {
+func (s *Service) CreateAcademicUnitMember(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command CreateAcademicUnitMemberCommand,
+) (*model.AcademicUnitMember, error) {
 	resource, err := s.authorizeUnit(ctx, invocation, command.AcademicUnitID, model.ActionAcademicUnitMembersManage)
 	if err != nil {
 		return nil, err
 	}
+
 	unitID, err := model.ParseAcademicUnitID(resource.ID)
 	if err != nil {
 		return nil, apperror.New("request.invalid").WithField("field", "academic_unit_id").Wrap(err)
 	}
+
 	userID, err := model.ParseUserID(strings.TrimSpace(command.UserID.String()))
 	if err != nil {
 		return nil, apperror.New("request.invalid").WithField("field", "user_id").Wrap(err)
 	}
+
 	memberID, err := model.ParseAcademicUnitMemberID(s.newID())
 	if err != nil {
 		return nil, apperror.New("request.invalid").WithField("field", "academic_unit_member_id").Wrap(err)
 	}
+
 	candidate := &model.AcademicUnitMember{
 		AcademicUnitID: unitID,
 		UserID:         userID,
@@ -67,6 +75,7 @@ func (s *Service) CreateAcademicUnitMember(ctx context.Context, invocation invoc
 	if err := candidate.Validate(); err != nil {
 		return nil, apperror.DomainInvalid("academic_unit_member.invalid", err)
 	}
+
 	recipient := &model.User{ID: userID, Revision: 1}
 	var notice *store.PreparedMail
 	if !command.Batch.Fields().RetainedOutcome {
@@ -74,14 +83,18 @@ func (s *Service) CreateAcademicUnitMember(ctx context.Context, invocation invoc
 		if err != nil {
 			return nil, AcademicUnitMemberStoreErrors.Translate(err)
 		}
+
 		notice, err = s.mail.PrepareRelationshipTransition(mail.RelationshipTransitionPreparation{
-			Recipient: recipient, OccurrenceID: model.NewMailOccurrenceID(),
-			TemplateKey: model.MailTemplateAcademicUnitAssigned, ActionAt: at,
+			Recipient:    recipient,
+			OccurrenceID: model.NewMailOccurrenceID(),
+			TemplateKey:  model.MailTemplateAcademicUnitAssigned,
+			ActionAt:     at,
 		})
 		if err != nil {
 			return nil, apperror.New("mail.unavailable").Wrap(err)
 		}
 	}
+
 	idempotency, err := idempotency.Prepare(invocation, "academic_unit_member.add", command.IdempotencyKey, struct {
 		AcademicUnitID string `json:"academic_unit_id"`
 		UserID         string `json:"user_id"`
@@ -90,6 +103,7 @@ func (s *Service) CreateAcademicUnitMember(ctx context.Context, invocation invoc
 	if err != nil {
 		return nil, err
 	}
+
 	batchitem.BindOnboardingImport(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
 	batchitem.BindAuthorization(idempotency, command.Batch.Fields().Authorization)
 	batchitem.BindBatch(idempotency, command.Batch.Fields().Metadata)
@@ -107,13 +121,20 @@ func (s *Service) CreateAcademicUnitMember(ctx context.Context, invocation invoc
 		},
 		func() time.Time { return at },
 		func(ctx context.Context, reference access.MutationReference) (*model.AcademicUnitMember, error) {
-			input := &store.AcademicUnitMemberCreation{Member: candidate, ExpectedRecipientRevision: recipient.Revision,
-				Notice: notice, AuditEventID: reference.ID, AuditAt: reference.MutationAt, Command: idempotency}
+			input := &store.AcademicUnitMemberCreation{
+				Member:                    candidate,
+				ExpectedRecipientRevision: recipient.Revision,
+				Notice:                    notice,
+				AuditEventID:              reference.ID,
+				AuditAt:                   reference.MutationAt,
+				Command:                   idempotency,
+			}
 			value, storeErr := s.academicUnitMembers.Create(ctx, input)
 			changed = storeErr == nil && !input.Replayed && !input.NoOp
 			if command.Batch.Fields().Replayed != nil {
 				*command.Batch.Fields().Replayed = input.Replayed || input.NoOp
 			}
+
 			return value, storeErr
 		},
 		AcademicUnitMemberStoreErrors.Translate,
@@ -121,24 +142,35 @@ func (s *Service) CreateAcademicUnitMember(ctx context.Context, invocation invoc
 	if err == nil && changed {
 		s.effects.InvalidateAuthorization(ctx, userID)
 	}
+
 	return result, err
 }
 
 // EndAcademicUnitMember ends an Academic Unit Membership after authorizing the caller.
-func (s *Service) EndAcademicUnitMember(ctx context.Context, invocation invocation.Invocation, command EndAcademicUnitMemberCommand) (*model.AcademicUnitMember, error) {
+func (s *Service) EndAcademicUnitMember(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command EndAcademicUnitMemberCommand,
+) (*model.AcademicUnitMember, error) {
 	id := command.ID
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "academic_unit_member_id")
 	}
+
 	if err := s.authorizer.AuthorizePreflight(
-		ctx, invocation, model.ActionAcademicUnitMembersManage, model.ResourceAcademicUnit,
+		ctx,
+		invocation,
+		model.ActionAcademicUnitMembersManage,
+		model.ResourceAcademicUnit,
 	); err != nil {
 		return nil, err
 	}
+
 	current, err := s.academicUnitMembers.Get(ctx, id)
 	if err != nil {
 		return nil, AcademicUnitMemberStoreErrors.Translate(err)
 	}
+
 	resource, err := s.authorizeUnit(ctx, invocation, current.AcademicUnitID, model.ActionAcademicUnitMembersManage)
 	if err != nil {
 		return nil, concealMembershipAuthorizationError(err, "academic_unit_member")
@@ -146,6 +178,7 @@ func (s *Service) EndAcademicUnitMember(ctx context.Context, invocation invocati
 	if command.BatchScopeID != "" && strings.TrimSpace(command.BatchScopeID) != current.AcademicUnitID.String() {
 		return nil, apperror.New("resource.not_found").WithField("resource", "academic_unit_member")
 	}
+
 	idempotency, err := idempotency.Prepare(invocation, "academic_unit_member.end", command.IdempotencyKey, struct {
 		ID      string `json:"id"`
 		ScopeID string `json:"scope_id,omitempty"`
@@ -153,6 +186,7 @@ func (s *Service) EndAcademicUnitMember(ctx context.Context, invocation invocati
 	if err != nil {
 		return nil, err
 	}
+
 	batchitem.BindOnboardingImport(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
 	batchitem.BindAuthorization(idempotency, command.Batch.Fields().Authorization)
 	batchitem.BindBatch(idempotency, command.Batch.Fields().Metadata)
@@ -164,14 +198,18 @@ func (s *Service) EndAcademicUnitMember(ctx context.Context, invocation invocati
 		if err != nil {
 			return nil, AcademicUnitMemberStoreErrors.Translate(err)
 		}
+
 		notice, err = s.mail.PrepareRelationshipTransition(mail.RelationshipTransitionPreparation{
-			Recipient: recipient, OccurrenceID: model.NewMailOccurrenceID(),
-			TemplateKey: model.MailTemplateAcademicUnitAssignmentEnded, ActionAt: at,
+			Recipient:    recipient,
+			OccurrenceID: model.NewMailOccurrenceID(),
+			TemplateKey:  model.MailTemplateAcademicUnitAssignmentEnded,
+			ActionAt:     at,
 		})
 		if err != nil {
 			return nil, apperror.New("mail.unavailable").Wrap(err)
 		}
 	}
+
 	changed := false
 	result, err := access.RunAudited(
 		ctx,
@@ -187,15 +225,21 @@ func (s *Service) EndAcademicUnitMember(ctx context.Context, invocation invocati
 		func() time.Time { return at },
 		func(ctx context.Context, reference access.MutationReference) (*model.AcademicUnitMember, error) {
 			input := &store.AcademicUnitMemberEnd{
-				ID: id, ExpectedRevision: current.Revision, EndAt: reference.MutationAt,
-				ExpectedRecipientRevision: recipient.Revision, Notice: notice,
-				AuditEventID: reference.ID, AuditAt: reference.MutationAt, Command: idempotency,
+				ID:                        id,
+				ExpectedRevision:          current.Revision,
+				EndAt:                     reference.MutationAt,
+				ExpectedRecipientRevision: recipient.Revision,
+				Notice:                    notice,
+				AuditEventID:              reference.ID,
+				AuditAt:                   reference.MutationAt,
+				Command:                   idempotency,
 			}
 			value, storeErr := s.academicUnitMembers.End(ctx, input)
 			changed = storeErr == nil && !input.Replayed && !input.NoOp
 			if command.Batch.Fields().Replayed != nil {
 				*command.Batch.Fields().Replayed = input.Replayed || input.NoOp
 			}
+
 			return value, storeErr
 		},
 		AcademicUnitMemberStoreErrors.Translate,
@@ -203,6 +247,7 @@ func (s *Service) EndAcademicUnitMember(ctx context.Context, invocation invocati
 	if err == nil && changed {
 		s.effects.InvalidateAuthorization(ctx, current.UserID)
 	}
+
 	return result, err
 }
 
@@ -213,22 +258,34 @@ func concealMembershipAuthorizationError(err error, resource string) error {
 	return err
 }
 
-func (s *Service) authorizeUnit(ctx context.Context, invocation invocation.Invocation, unitID model.AcademicUnitID, action model.Action) (model.Resource, error) {
+func (s *Service) authorizeUnit(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	unitID model.AcademicUnitID,
+	action model.Action,
+) (model.Resource, error) {
 	if !unitID.IsValid() {
 		return model.Resource{}, apperror.New("request.invalid").WithField("field", "academic_unit_id")
 	}
+
 	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()}
 	if err := s.authorizer.Authorize(ctx, invocation, action, resource); err != nil {
 		return model.Resource{}, err
 	}
+
 	return resource, nil
 }
 
 // AcademicUnitMemberStoreErrors translates Academic Unit Membership Store
 // failures; onboarding imports present them the same way.
-var AcademicUnitMemberStoreErrors = apperror.AdministrationStoreTable("academic_unit_member", "academic_unit_member.conflict", "academic_unit_member.invalid", map[string]apperror.Code{
-	"academic_unit_member_end_time": "resource.not_found",
-})
+var AcademicUnitMemberStoreErrors = apperror.AdministrationStoreTable(
+	"academic_unit_member",
+	"academic_unit_member.conflict",
+	"academic_unit_member.invalid",
+	map[string]apperror.Code{
+		"academic_unit_member_end_time": "resource.not_found",
+	},
+)
 
 // ListAcademicUnitMembersPageQuery opts into bounded membership enumeration. Each page is
 // authorized independently and explicit selectors preserve its effective filter.
@@ -256,29 +313,45 @@ type AcademicUnitMemberPage struct {
 const academicUnitMemberRolesHere = 5
 
 // ListAcademicUnitMembersPage lists a page of Academic Unit Memberships after authorizing the caller.
-func (s *Service) ListAcademicUnitMembersPage(ctx context.Context, invocation invocation.Invocation, query ListAcademicUnitMembersPageQuery) (*AcademicUnitMemberPage, error) {
+func (s *Service) ListAcademicUnitMembersPage(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	query ListAcademicUnitMembersPageQuery,
+) (*AcademicUnitMemberPage, error) {
 	resource, err := s.authorizeUnit(ctx, invocation, query.AcademicUnitID, model.ActionAcademicUnitMembersView)
 	if err != nil {
 		return nil, err
 	}
+
 	now := model.TimeUTC(s.now())
 	activeAt, limit, err := resolveMembershipPage(query.MembershipPageQuery, now)
 	if err != nil {
 		return nil, err
 	}
+
 	scopeID, err := model.ParseAcademicUnitID(resource.ID)
 	if err != nil {
 		return nil, apperror.New("request.invalid").WithField("field", "academic_unit_id")
 	}
-	if query.AfterID.IsZero() != query.AfterUserID.IsZero() || (!query.AfterID.IsZero() && (!query.AfterID.IsValid() || !query.AfterUserID.IsValid())) {
+
+	if query.AfterID.IsZero() != query.AfterUserID.IsZero() ||
+		(!query.AfterID.IsZero() && (!query.AfterID.IsValid() || !query.AfterUserID.IsValid())) {
 		return nil, apperror.New("request.invalid").WithField("field", "cursor")
 	}
-	options := store.AcademicUnitMemberPageOptions{AcademicUnitID: scopeID, ActiveAt: model.TimeFromMillis(activeAt), Limit: limit, AfterID: query.AfterID, AfterUserID: query.AfterUserID}
+
+	options := store.AcademicUnitMemberPageOptions{
+		AcademicUnitID: scopeID,
+		ActiveAt:       model.TimeFromMillis(activeAt),
+		Limit:          limit,
+		AfterID:        query.AfterID,
+		AfterUserID:    query.AfterUserID,
+	}
 
 	page, err := s.academicUnitMembers.ListPageByAcademicUnit(ctx, options)
 	if err != nil {
 		return nil, AcademicUnitMemberStoreErrors.Translate(err)
 	}
+
 	result := &AcademicUnitMemberPage{Members: page.Members, ActiveAt: activeAt, HasMore: page.HasMore}
 	if result.Members == nil {
 		result.Members = []*model.AcademicUnitMember{}
@@ -286,6 +359,7 @@ func (s *Service) ListAcademicUnitMembersPage(ctx context.Context, invocation in
 	if err := s.describeMembers(ctx, invocation, resource, result, now); err != nil {
 		return nil, err
 	}
+
 	return result, nil
 }
 
@@ -293,11 +367,18 @@ func (s *Service) ListAcademicUnitMembersPage(ctx context.Context, invocation in
 // holding role_binding.view on the unit, reads their current Role Bindings
 // scoped exactly to it in another. Seeing a unit's members shows who they
 // are; email stays with Institution-wide user.view, as in the User directory.
-func (s *Service) describeMembers(ctx context.Context, invocation invocation.Invocation, unit model.Resource, page *AcademicUnitMemberPage, now time.Time) error {
+func (s *Service) describeMembers(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	unit model.Resource,
+	page *AcademicUnitMemberPage,
+	now time.Time,
+) error {
 	page.Users = map[model.UserID]store.UserIdentity{}
 	if len(page.Members) == 0 {
 		return nil
 	}
+
 	userIDs := make([]model.UserID, 0, len(page.Members))
 	for _, member := range page.Members {
 		if _, seen := page.Users[member.UserID]; !seen {
@@ -305,44 +386,56 @@ func (s *Service) describeMembers(ctx context.Context, invocation invocation.Inv
 			userIDs = append(userIDs, member.UserID)
 		}
 	}
+
 	identities, err := s.users.ListIdentities(ctx, userIDs)
 	if err != nil {
 		return AcademicUnitMemberStoreErrors.Translate(err)
 	}
+
 	showEmail, err := s.authorizer.CanViewInstitutionUsers(ctx, invocation)
 	if err != nil {
 		return err
 	}
+
 	for _, identity := range identities {
 		if !showEmail {
 			identity.Email = ""
 		}
+
 		page.Users[identity.ID] = identity
 	}
+
 	for _, userID := range userIDs {
 		if page.Users[userID].ID != userID {
 			return apperror.New("administration.unavailable").WithField("resource", "academic_unit_member")
 		}
 	}
+
 	showRoles, err := s.authorizer.CanViewRoleBindings(ctx, invocation, unit)
 	if err != nil || !showRoles {
 		return err
 	}
+
 	unitID := model.AcademicUnitID(unit.ID)
 	roles, err := s.roleBindings.ListVisibleSummariesByUsers(ctx, store.RoleBindingSummaryOptions{
-		UserIDs: userIDs, Limit: academicUnitMemberRolesHere,
+		UserIDs:    userIDs,
+		Limit:      academicUnitMemberRolesHere,
 		Visibility: store.UserVisibilityScope{AcademicUnitRootIDs: []model.AcademicUnitID{unitID}, ActiveAt: now},
-		ScopeType:  model.RoleScopeAcademicUnit, ScopeID: unit.ID,
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    unit.ID,
 	})
 	if err != nil {
 		return AcademicUnitMemberStoreErrors.Translate(err)
 	}
+
 	page.RolesHere = make(map[model.UserID]store.UserRoleBindingSummary, len(userIDs))
 	for _, userID := range userIDs {
 		page.RolesHere[userID] = store.UserRoleBindingSummary{UserID: userID}
 	}
+
 	for _, summary := range roles {
 		page.RolesHere[summary.UserID] = summary
 	}
+
 	return nil
 }

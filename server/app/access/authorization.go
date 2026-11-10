@@ -47,7 +47,16 @@ type Authorizer struct {
 // DecisionAudit durably records authorization decisions. Auditor implements
 // it; tests substitute a recorder.
 type DecisionAudit interface {
-	RecordAuthorizationDecision(context.Context, model.Principal, model.Action, model.Resource, model.RoleScopeType, string, model.RequestMetadata, bool) error
+	RecordAuthorizationDecision(
+		context.Context,
+		model.Principal,
+		model.Action,
+		model.Resource,
+		model.RoleScopeType,
+		string,
+		model.RequestMetadata,
+		bool,
+	) error
 	RecordUserSearchDecision(context.Context, model.Principal, model.Resource, model.RoleScopeType, string, model.RequestMetadata, bool) error
 }
 
@@ -133,16 +142,21 @@ func (s *Authorizer) evaluateResolved(
 		!personalAccessTokenAllows(principal, action, resource, resolved) {
 		return false, nil
 	}
+
 	if (action == model.ActionUserView || action == model.ActionUserProfilePictureManage) &&
 		principal.UserID.String() == resource.ID {
 		return true, nil
 	}
+
 	bindings, err := s.deps.Bindings.ListActiveByUser(
-		ctx, principal.UserID, model.TimeUTC(s.now()),
+		ctx,
+		principal.UserID,
+		model.TimeUTC(s.now()),
 	)
 	if err != nil {
 		return false, UnavailableError(err)
 	}
+
 	roleIDs := make([]model.RoleID, 0, len(bindings))
 	seen := make(map[model.RoleID]struct{}, len(bindings))
 	for _, binding := range bindings {
@@ -151,18 +165,22 @@ func (s *Authorizer) evaluateResolved(
 			roleIDs = append(roleIDs, binding.RoleID)
 		}
 	}
+
 	roles, err := s.deps.Roles.GetByIDs(ctx, roleIDs)
 	if err != nil {
 		return false, UnavailableError(err)
 	}
+
 	permissionByRole := make(map[string]map[string]struct{}, len(roles))
 	for _, role := range roles {
 		permissions := make(map[string]struct{}, len(role.Permissions))
 		for _, permission := range role.Permissions {
 			permissions[permission] = struct{}{}
 		}
+
 		permissionByRole[role.ID.String()] = permissions
 	}
+
 	for _, binding := range bindings {
 		if !roleBindingApplies(binding, definition, resource, resolved) {
 			continue
@@ -171,6 +189,7 @@ func (s *Authorizer) evaluateResolved(
 			return true, nil
 		}
 	}
+
 	return false, nil
 }
 
@@ -184,6 +203,7 @@ func (s *Authorizer) AuthorizeAcademicPeriodOwner(
 	if period == nil || period.Validate() != nil {
 		return apperror.New("authorization.request.invalid")
 	}
+
 	resource := model.Resource{Type: model.ResourceAcademicPeriod, ID: period.ID.String()}
 	definition, known := model.DefinitionForAction(action)
 	if !known || definition.ResourceType != model.ResourceAcademicPeriod {
@@ -192,25 +212,36 @@ func (s *Authorizer) AuthorizeAcademicPeriodOwner(
 	if appErr := s.authorizeAcademicPeriodPreflight(ctx, invocation, action, resource); appErr != nil {
 		return appErr
 	}
+
 	principal := invocation.Principal()
 	resolved, appErr := s.deps.Resolver.resolve(ctx, period.Owner.Resource())
 	if appErr != nil {
 		return appErr
 	}
+
 	allowed, appErr := s.evaluateResolved(ctx, principal, action, resource, definition, resolved)
 	if appErr != nil {
 		return appErr
 	}
+
 	scopeType, scopeID := authorizationAuditScope(resource, resolved)
 	if appErr = s.deps.Audit.RecordAuthorizationDecision(
-		ctx, principal, action, resource, scopeType, scopeID,
-		invocation.RequestMetadata(), allowed,
+		ctx,
+		principal,
+		action,
+		resource,
+		scopeType,
+		scopeID,
+		invocation.RequestMetadata(),
+		allowed,
 	); appErr != nil {
 		return appErr
 	}
+
 	if !allowed {
 		return DeniedError()
 	}
+
 	return nil
 }
 
@@ -229,17 +260,25 @@ func personalAccessTokenAllows(
 			break
 		}
 	}
+
 	if !scoped {
 		return false
 	}
 	if principal.AcademicUnitID.IsZero() {
 		return true
 	}
+
 	switch resource.Type {
-	case model.ResourceAcademicUnit, model.ResourceProgramme, model.ResourceProgrammeLevel, model.ResourceAcademicPeriod, model.ResourceClass, model.ResourceExam:
+	case model.ResourceAcademicUnit,
+		model.ResourceProgramme,
+		model.ResourceProgrammeLevel,
+		model.ResourceAcademicPeriod,
+		model.ResourceClass,
+		model.ResourceExam:
 		if resource.Type == model.ResourceAcademicPeriod && resolved.academicPeriodInstitutionOwned {
 			return action == model.ActionAcademicPeriodView
 		}
+
 		_, applies := resolved.academicUnitID[principal.AcademicUnitID]
 		return applies
 	default:
@@ -324,8 +363,16 @@ func (s *Authorizer) RecordDenial(
 	resource model.Resource,
 	unitID model.AcademicUnitID,
 ) error {
-	return s.deps.Audit.RecordAuthorizationDecision(ctx, invocation.Principal(), action, resource,
-		model.RoleScopeAcademicUnit, unitID.String(), invocation.RequestMetadata(), false)
+	return s.deps.Audit.RecordAuthorizationDecision(
+		ctx,
+		invocation.Principal(),
+		action,
+		resource,
+		model.RoleScopeAcademicUnit,
+		unitID.String(),
+		invocation.RequestMetadata(),
+		false,
+	)
 }
 
 // authorizeCurrentState performs and audits a fresh authorization decision for
@@ -358,6 +405,7 @@ func (s *Authorizer) AuthorizeAccountStateManage(
 	if !known || resource.Validate() != nil || !definition.AcceptsResource(resource.Type) {
 		return apperror.New("authorization.request.invalid")
 	}
+
 	user, err := s.deps.Resolver.deps.Users.Get(ctx, model.UserID(userID))
 	if err != nil {
 		return ResourceError("user", err)
@@ -365,6 +413,7 @@ func (s *Authorizer) AuthorizeAccountStateManage(
 	if user.IsArchived() {
 		return apperror.New("resource.not_found").WithField("resource", "user")
 	}
+
 	institution, err := s.deps.Resolver.deps.Institutions.GetSingleton(ctx)
 	if err != nil {
 		return ResourceError("institution", err)
@@ -372,6 +421,7 @@ func (s *Authorizer) AuthorizeAccountStateManage(
 	if institution.IsArchived() {
 		return apperror.New("resource.not_found").WithField("resource", "institution")
 	}
+
 	resolved := resolvedAuthorizationResource{
 		institutionID:  institution.ID,
 		academicUnitID: make(map[model.AcademicUnitID]struct{}),
@@ -380,15 +430,24 @@ func (s *Authorizer) AuthorizeAccountStateManage(
 	if appErr != nil {
 		return appErr
 	}
+
 	if appErr = s.deps.Audit.RecordAuthorizationDecision(
-		ctx, principal, model.ActionUserManage, resource,
-		model.RoleScopeInstitution, institution.ID.String(), invocation.RequestMetadata(), allowed,
+		ctx,
+		principal,
+		model.ActionUserManage,
+		resource,
+		model.RoleScopeInstitution,
+		institution.ID.String(),
+		invocation.RequestMetadata(),
+		allowed,
 	); appErr != nil {
 		return appErr
 	}
+
 	if !allowed {
 		return DeniedError()
 	}
+
 	return nil
 }
 
@@ -408,7 +467,14 @@ func (s *Authorizer) authorizeCurrentStateWithScope(
 	}
 	scopeType, scopeID := authorizationAuditScope(resource, resolved)
 	if appErr = s.deps.Audit.RecordAuthorizationDecision(
-		ctx, principal, action, resource, scopeType, scopeID, metadata, allowed,
+		ctx,
+		principal,
+		action,
+		resource,
+		scopeType,
+		scopeID,
+		metadata,
+		allowed,
 	); appErr != nil {
 		return "", "", appErr
 	}
@@ -432,39 +498,55 @@ func (s *Authorizer) authorizeUserRead(
 	if appErr != nil {
 		return false, appErr
 	}
+
 	if visibility.InstitutionWide {
 		appErr = s.authorizeCurrentState(ctx, principal, model.ActionUserView, userResource, invocation.RequestMetadata())
 		return appErr == nil, appErr
 	}
+
 	allowed := false
 	match := store.UserVisibilityMatch{}
-	if visibility.ClassMemberInstitutionWide || len(visibility.AcademicUnitRootIDs) > 0 ||
-		len(visibility.ClassMemberAcademicUnitRootIDs) > 0 || len(visibility.ClassIDs) > 0 {
+	if visibility.ClassMemberInstitutionWide ||
+		len(visibility.AcademicUnitRootIDs) > 0 ||
+		len(visibility.ClassMemberAcademicUnitRootIDs) > 0 ||
+		len(visibility.ClassIDs) > 0 {
 		var err error
 		match, err = s.deps.Resolver.deps.Users.MatchVisibility(ctx, model.UserID(userID), visibility)
 		if err != nil {
 			return false, UnavailableError(err)
 		}
+
 		allowed = (match.ScopeType == model.RoleScopeAcademicUnit || match.ScopeType == model.RoleScopeClass) &&
 			model.IsValidOpaqueID(match.ScopeID)
 	}
+
 	institution, err := s.deps.Resolver.deps.Institutions.GetSingleton(ctx)
 	if err != nil {
 		return false, ResourceError("institution", err)
 	}
+
 	scopeType, scopeID := model.RoleScopeInstitution, institution.ID.String()
 	if allowed {
 		scopeType, scopeID = match.ScopeType, match.ScopeID
 	}
+
 	if err := s.deps.Audit.RecordAuthorizationDecision(
-		ctx, principal, model.ActionUserView, userResource,
-		scopeType, scopeID, invocation.RequestMetadata(), allowed,
+		ctx,
+		principal,
+		model.ActionUserView,
+		userResource,
+		scopeType,
+		scopeID,
+		invocation.RequestMetadata(),
+		allowed,
 	); err != nil {
 		return false, err
 	}
+
 	if allowed {
 		return false, nil
 	}
+
 	return false, DeniedError()
 }
 
@@ -548,7 +630,11 @@ type ProfileReadAuthorization struct {
 
 // AuthorizeProfileRead authorizes reading a User profile and reports whether
 // the caller may read all of it.
-func (s *Authorizer) AuthorizeProfileRead(ctx context.Context, invocation invocation.Invocation, userID model.UserID) (ProfileReadAuthorization, error) {
+func (s *Authorizer) AuthorizeProfileRead(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	userID model.UserID,
+) (ProfileReadAuthorization, error) {
 	principal := invocation.Principal()
 	if principal.Validate() != nil {
 		return ProfileReadAuthorization{}, InvalidTokenAppError()
@@ -556,21 +642,34 @@ func (s *Authorizer) AuthorizeProfileRead(ctx context.Context, invocation invoca
 	if principal.UserID == userID {
 		return ProfileReadAuthorization{FullProfile: true}, nil
 	}
+
 	fullProfile, err := s.authorizeUserRead(ctx, invocation, userID.String())
 	if err != nil {
 		return ProfileReadAuthorization{}, err
 	}
+
 	return ProfileReadAuthorization{FullProfile: fullProfile}, nil
 }
 
 // RoleBindingViewScope reports, without recording a decision, the scopes in
 // which the caller holds role_binding.view at the instant. It narrows what a
 // User directory summary shows; it never admits a request.
-func (s *Authorizer) RoleBindingViewScope(ctx context.Context, invocation invocation.Invocation, at time.Time) (store.UserVisibilityScope, error) {
-	constraint, err := s.GrantedScopesAt(ctx, invocation.Principal(), model.ActionRoleBindingView, model.ResourceInstitution, model.TimeUTC(at))
+func (s *Authorizer) RoleBindingViewScope(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	at time.Time,
+) (store.UserVisibilityScope, error) {
+	constraint, err := s.GrantedScopesAt(
+		ctx,
+		invocation.Principal(),
+		model.ActionRoleBindingView,
+		model.ResourceInstitution,
+		model.TimeUTC(at),
+	)
 	if err != nil {
 		return store.UserVisibilityScope{}, err
 	}
+
 	return store.UserVisibilityScope{
 		InstitutionWide:     constraint.InstitutionWide,
 		AcademicUnitRootIDs: append([]model.AcademicUnitID(nil), constraint.AcademicUnitRootIDs...),

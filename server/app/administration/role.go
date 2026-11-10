@@ -84,19 +84,28 @@ func (s *Service) CreateRole(ctx context.Context, invocation invocation.Invocati
 	if err != nil {
 		return nil, err
 	}
+
 	candidate := &model.Role{
-		Name: command.Name, DisplayName: command.DisplayName,
-		Description: command.Description, Permissions: append([]string(nil), command.Permissions...),
-		BuiltIn: false,
+		Name:        command.Name,
+		DisplayName: command.DisplayName,
+		Description: command.Description,
+		Permissions: append([]string(nil), command.Permissions...),
+		BuiltIn:     false,
 	}
 	if err := validateKnownPermissions(candidate.Permissions); err != nil {
 		return nil, err
 	}
+
 	if err := s.authorizeActionDelegation(
-		ctx, invocation, candidate.Permissions, model.RoleScopeInstitution, resource.ID,
+		ctx,
+		invocation,
+		candidate.Permissions,
+		model.RoleScopeInstitution,
+		resource.ID,
 	); err != nil {
 		return nil, err
 	}
+
 	return access.RunAudited(
 		ctx,
 		s.auditor,
@@ -110,7 +119,9 @@ func (s *Service) CreateRole(ctx context.Context, invocation invocation.Invocati
 		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.Role, error) {
 			return s.roles.Save(ctx, &store.RoleCreation{
-				Role: candidate, AuditEventID: reference.ID, AuditAt: reference.MutationAt,
+				Role:         candidate,
+				AuditEventID: reference.ID,
+				AuditAt:      reference.MutationAt,
 			})
 		},
 		roleStoreErrors.Translate,
@@ -125,10 +136,12 @@ func (s *Service) UpdateRole(ctx context.Context, invocation invocation.Invocati
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "role_id")
 	}
+
 	resource, err := s.authorizeRoles(ctx, invocation, model.ActionRoleManage)
 	if err != nil {
 		return nil, err
 	}
+
 	current, err := s.roles.Get(ctx, id)
 	if err != nil {
 		return nil, roleStoreErrors.Translate(err)
@@ -136,6 +149,7 @@ func (s *Service) UpdateRole(ctx context.Context, invocation invocation.Invocati
 	if current.BuiltIn {
 		return nil, apperror.New("role.built_in.protected").WithField("resource", "role")
 	}
+
 	patch := &model.RolePatch{
 		DisplayName: command.DisplayName,
 		Description: command.Description,
@@ -144,18 +158,25 @@ func (s *Service) UpdateRole(ctx context.Context, invocation invocation.Invocati
 	if patch.IsEmpty() {
 		return current, nil
 	}
+
 	candidate := current.Clone()
 	candidate.Patch(patch)
 	if err = validatePatchedPermissions(current.Permissions, command.Permissions); err != nil {
 		return nil, err
 	}
+
 	if added := addedRolePermissions(current.Permissions, candidate.Permissions); len(added) > 0 {
 		if err = s.authorizeActionDelegation(
-			ctx, invocation, added, model.RoleScopeInstitution, resource.ID,
+			ctx,
+			invocation,
+			added,
+			model.RoleScopeInstitution,
+			resource.ID,
 		); err != nil {
 			return nil, err
 		}
 	}
+
 	updated, err := access.RunAudited(
 		ctx,
 		s.auditor,
@@ -170,7 +191,9 @@ func (s *Service) UpdateRole(ctx context.Context, invocation invocation.Invocati
 		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.Role, error) {
 			return s.roles.Update(ctx, &store.RoleUpdate{
-				Role: candidate, AuditEventID: reference.ID, AuditAt: reference.MutationAt,
+				Role:         candidate,
+				AuditEventID: reference.ID,
+				AuditAt:      reference.MutationAt,
 			})
 		},
 		roleStoreErrors.Translate,
@@ -178,6 +201,7 @@ func (s *Service) UpdateRole(ctx context.Context, invocation invocation.Invocati
 	if err != nil {
 		return nil, err
 	}
+
 	s.effects.InvalidateAuthorization(ctx, "")
 	return updated, nil
 }
@@ -203,10 +227,12 @@ func (s *Service) ArchiveRole(ctx context.Context, invocation invocation.Invocat
 	if !id.IsValid() {
 		return apperror.New("request.invalid").WithField("field", "role_id")
 	}
+
 	resource, err := s.authorizeRoles(ctx, invocation, model.ActionRoleManage)
 	if err != nil {
 		return err
 	}
+
 	current, err := s.roles.Get(ctx, id)
 	if err != nil {
 		return roleStoreErrors.Translate(err)
@@ -214,6 +240,7 @@ func (s *Service) ArchiveRole(ctx context.Context, invocation invocation.Invocat
 	if current.BuiltIn {
 		return apperror.New("role.built_in.protected").WithField("resource", "role")
 	}
+
 	_, err = access.RunAudited(
 		ctx,
 		s.auditor,
@@ -228,8 +255,10 @@ func (s *Service) ArchiveRole(ctx context.Context, invocation invocation.Invocat
 		s.now,
 		func(ctx context.Context, reference access.MutationReference) (*model.Role, error) {
 			return s.roles.Archive(ctx, &store.RoleArchive{
-				ID: id, ArchiveAt: reference.MutationAt,
-				AuditEventID: reference.ID, AuditAt: reference.MutationAt,
+				ID:           id,
+				ArchiveAt:    reference.MutationAt,
+				AuditEventID: reference.ID,
+				AuditAt:      reference.MutationAt,
 			})
 		},
 		roleStoreErrors.Translate,
@@ -237,6 +266,7 @@ func (s *Service) ArchiveRole(ctx context.Context, invocation invocation.Invocat
 	if err != nil {
 		return err
 	}
+
 	s.effects.InvalidateAuthorization(ctx, "")
 	return nil
 }

@@ -123,6 +123,7 @@ func New(deps Dependencies) (*Service, error) {
 	if deps.Now == nil {
 		return nil, errors.New("user clock is required")
 	}
+
 	return &Service{
 		users:           deps.Store.User(),
 		roleBindings:    deps.Store.RoleBinding(),

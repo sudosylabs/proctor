@@ -80,9 +80,14 @@ func DecodeDefaultProfilePictureReconciliationCheckpoint(document json.RawMessag
 }
 
 func validateDefaultProfilePictureReconciliationCheckpoint(value DefaultProfilePictureReconciliationCheckpoint) error {
-	if value.Processed < 0 || value.Proposed < 0 || value.Proposed > value.Processed || (value.AfterUsername == "") != value.AfterUserID.IsZero() || (!value.AfterUserID.IsZero() && !value.AfterUserID.IsValid()) {
+	if value.Processed < 0 ||
+		value.Proposed < 0 ||
+		value.Proposed > value.Processed ||
+		(value.AfterUsername == "") != value.AfterUserID.IsZero() ||
+		(!value.AfterUserID.IsZero() && !value.AfterUserID.IsValid()) {
 		return errors.New("default profile-picture reconciliation checkpoint is invalid")
 	}
+
 	return nil
 }
 
@@ -116,26 +121,37 @@ func (h defaultProfilePictureReconciliationHandler) Run(ctx context.Context, exe
 	if execution.Job == nil {
 		return job.PermanentFailure("job.command.invalid", errors.New("job is missing"))
 	}
+
 	command, err := DecodeDefaultProfilePictureReconciliationCommand(execution.Job.Command)
 	if err != nil {
 		return job.PermanentFailure("job.command.invalid", err)
 	}
+
 	checkpoint := DefaultProfilePictureReconciliationCheckpoint{}
 	if len(execution.Job.Checkpoint) != 0 {
 		checkpoint, err = DecodeDefaultProfilePictureReconciliationCheckpoint(execution.Job.Checkpoint)
 		if err != nil {
 			return job.PermanentFailure("job.checkpoint.invalid", err)
 		}
+
 		return defaultProfilePictureReconciliationSucceeded(checkpoint)
 	}
+
 	remaining := command.BatchSize - execution.Job.WorkReserved
 	if remaining <= 0 {
 		return defaultProfilePictureReconciliationSucceeded(checkpoint)
 	}
-	users, listErr := h.users.List(ctx, store.UserListOptions{Limit: remaining, IncludeDisabled: true, MissingDefaultProfilePicture: true, Visibility: store.UserVisibilityScope{InstitutionWide: true}})
+
+	users, listErr := h.users.List(ctx, store.UserListOptions{
+		Limit:                        remaining,
+		IncludeDisabled:              true,
+		MissingDefaultProfilePicture: true,
+		Visibility:                   store.UserVisibilityScope{InstitutionWide: true},
+	})
 	if listErr != nil {
 		return job.RetryableFailure("dependency.unavailable", listErr)
 	}
+
 	for _, user := range users {
 		if user == nil || !user.ID.IsValid() {
 			return job.PermanentFailure("job.invariant_failed", errors.New("reconciliation returned an invalid user"))
@@ -143,6 +159,7 @@ func (h defaultProfilePictureReconciliationHandler) Run(ctx context.Context, exe
 		if !user.DefaultProfilePictureFileID.IsZero() {
 			continue
 		}
+
 		reserved, reserveErr := execution.ReserveWork(ctx, 1, command.BatchSize)
 		if reserveErr != nil {
 			return job.RetryableFailure("dependency.unavailable", reserveErr)
@@ -150,23 +167,34 @@ func (h defaultProfilePictureReconciliationHandler) Run(ctx context.Context, exe
 		if !reserved {
 			break
 		}
+
 		checkpoint.Processed++
 		checkpoint.AfterUsername = user.Username
 		checkpoint.AfterUserID = user.ID
 		if proposeErr := h.defaults.ProposeDefaultProfilePicture(ctx, user.ID, model.TimeUTC(h.now())); proposeErr != nil {
 			return job.RetryableFailure("dependency.unavailable", proposeErr)
 		}
+
 		checkpoint.Proposed++
 	}
+
 	if len(users) > 0 {
 		document, encodeErr := EncodeDefaultProfilePictureReconciliationCheckpoint(checkpoint)
 		if encodeErr != nil {
 			return job.PermanentFailure("job.invariant_failed", encodeErr)
 		}
-		if checkpointErr := execution.Checkpoint(ctx, job.CheckpointValue{Progress: &model.JobProgress{Current: checkpoint.Processed, Total: checkpoint.Processed, Stage: "completed"}, Document: document}); checkpointErr != nil {
+
+		if checkpointErr := execution.Checkpoint(
+			ctx,
+			job.CheckpointValue{
+				Progress: &model.JobProgress{Current: checkpoint.Processed, Total: checkpoint.Processed, Stage: "completed"},
+				Document: document,
+			},
+		); checkpointErr != nil {
 			return job.RetryableFailure("dependency.unavailable", checkpointErr)
 		}
 	}
+
 	return defaultProfilePictureReconciliationSucceeded(checkpoint)
 }
 
@@ -186,27 +214,65 @@ func (p defaultProfilePictureReconciliationJobProposer) Propose(ctx context.Cont
 	if err != nil {
 		return err
 	}
+
 	key := "reconcile-default-profile-pictures:" + model.TimeUTC(occurrence).Format("2006-01-02")
-	job, err := model.NewJobWithDedupePolicy(model.NewJobID(), model.JobTypeProfilePictureReconcile, command, key, model.JobDedupePermanent, at, at, 5)
+	job, err := model.NewJobWithDedupePolicy(
+		model.NewJobID(),
+		model.JobTypeProfilePictureReconcile,
+		command,
+		key,
+		model.JobDedupePermanent,
+		at,
+		at,
+		5,
+	)
 	if err != nil {
 		return err
 	}
+
 	_, _, err = p.jobs.Enqueue(ctx, &store.JobEnqueue{Job: job})
 	return err
 }
 
 func defaultProfilePictureReconciliationDescriptor(handler job.Handler) job.Descriptor {
-	return job.Descriptor{Type: model.JobTypeProfilePictureReconcile, Checkpoints: true, ProgressStages: []string{"completed"}, PublicErrorCodes: []string{"dependency.unavailable", "job.checkpoint.invalid", "job.command.invalid", "job.invariant_failed"}, Timeout: 10 * time.Minute, Concurrency: 1, MaximumAttempts: 5, LeaseDuration: time.Minute, HeartbeatInterval: 15 * time.Second, BaseRetryDelay: time.Second, MaximumRetryDelay: time.Minute, Visibility: job.VisibilityOperator, SuccessRetention: 30 * 24 * time.Hour, FailureRetention: 90 * 24 * time.Hour, Handler: handler}
+	return job.Descriptor{
+		Type:              model.JobTypeProfilePictureReconcile,
+		Checkpoints:       true,
+		ProgressStages:    []string{"completed"},
+		PublicErrorCodes:  []string{"dependency.unavailable", "job.checkpoint.invalid", "job.command.invalid", "job.invariant_failed"},
+		Timeout:           10 * time.Minute,
+		Concurrency:       1,
+		MaximumAttempts:   5,
+		LeaseDuration:     time.Minute,
+		HeartbeatInterval: 15 * time.Second,
+		BaseRetryDelay:    time.Second,
+		MaximumRetryDelay: time.Minute,
+		Visibility:        job.VisibilityOperator,
+		SuccessRetention:  30 * 24 * time.Hour,
+		FailureRetention:  90 * 24 * time.Hour,
+		Handler:           handler,
+	}
 }
 
 // NewDefaultProfilePictureReconciliationDescriptor registers the sweep that
 // proposes default profile pictures for Users that lack one.
-func NewDefaultProfilePictureReconciliationDescriptor(users store.UserStore, defaults ProfilePictureDefaultJobs, now func() time.Time) job.Descriptor {
-	return defaultProfilePictureReconciliationDescriptor(defaultProfilePictureReconciliationHandler{users: users, defaults: defaults, now: now})
+func NewDefaultProfilePictureReconciliationDescriptor(
+	users store.UserStore,
+	defaults ProfilePictureDefaultJobs,
+	now func() time.Time,
+) job.Descriptor {
+	return defaultProfilePictureReconciliationDescriptor(defaultProfilePictureReconciliationHandler{
+		users:    users,
+		defaults: defaults,
+		now:      now,
+	})
 }
 
 // NewDefaultProfilePictureReconciliationRecurrence proposes the daily default
 // profile picture reconciliation Job.
 func NewDefaultProfilePictureReconciliationRecurrence(jobs store.JobStore, now func() time.Time) job.Recurrence {
-	return job.Recurrence{Name: "profile-picture-default-reconciliation", Proposer: defaultProfilePictureReconciliationJobProposer{jobs: jobs, now: now}}
+	return job.Recurrence{
+		Name:     "profile-picture-default-reconciliation",
+		Proposer: defaultProfilePictureReconciliationJobProposer{jobs: jobs, now: now},
+	}
 }

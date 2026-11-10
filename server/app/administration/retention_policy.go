@@ -58,6 +58,7 @@ func (s *Service) ReplaceRetentionPolicy(
 	); err != nil {
 		return nil, err
 	}
+
 	institution, resource, err := s.authorizeRetentionPolicy(
 		ctx,
 		invocation,
@@ -72,6 +73,7 @@ func (s *Service) ReplaceRetentionPolicy(
 	if command.IdempotencyKey == "" {
 		return nil, apperror.New("idempotency.key_required")
 	}
+
 	idempotency, err := idempotency.Prepare(
 		invocation,
 		"retention_policy.replace",
@@ -89,6 +91,7 @@ func (s *Service) ReplaceRetentionPolicy(
 	if err != nil {
 		return nil, err
 	}
+
 	stored, err := access.RunAudited(
 		ctx,
 		s.auditor,
@@ -120,8 +123,10 @@ func (s *Service) ReplaceRetentionPolicy(
 				ctx,
 				&store.RetentionPolicyReplacement{
 					RetentionMutation: store.RetentionMutation{
-						Principal: invocation.Principal(), RecentAuthenticationTTL: s.recentAuthenticationTTL,
-						AuditEventID: reference.ID, AuditAt: reference.MutationAt,
+						Principal:               invocation.Principal(),
+						RecentAuthenticationTTL: s.recentAuthenticationTTL,
+						AuditEventID:            reference.ID,
+						AuditAt:                 reference.MutationAt,
 					},
 					ExpectedRevision: command.ExpectedRevision,
 					Settings:         command.Settings,
@@ -137,6 +142,7 @@ func (s *Service) ReplaceRetentionPolicy(
 	if stored == nil || stored.Policy == nil || stored.Policy.Validate() != nil || stored.Policy.InstitutionID != institution.ID {
 		return nil, apperror.New("retention_policy.unavailable")
 	}
+
 	return stored.Policy.Clone(), nil
 }
 

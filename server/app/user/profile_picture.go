@@ -101,14 +101,25 @@ type PictureChange struct {
 
 // UploadProfilePicture normalizes the image into private renditions and then
 // publishes them as the User's custom profile picture in one audited step.
-func (s *Service) UploadProfilePicture(ctx context.Context, invocation invocation.Invocation, command UploadProfilePictureCommand) (*model.User, error) {
+func (s *Service) UploadProfilePicture(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command UploadProfilePictureCommand,
+) (*model.User, error) {
 	userID := command.UserID
-	if !userID.IsValid() || command.ExpectedRevision < 0 || command.Body == nil || command.Size == 0 || command.Size < -1 || command.Size > maximumProfilePictureBytes {
+	if !userID.IsValid() ||
+		command.ExpectedRevision < 0 ||
+		command.Body == nil ||
+		command.Size == 0 ||
+		command.Size < -1 ||
+		command.Size > maximumProfilePictureBytes {
 		return nil, apperror.New("request.invalid").WithField("field", "profile_picture")
 	}
+
 	if err := s.authorizer.AuthorizeProfilePictureWrite(ctx, invocation, userID); err != nil {
 		return nil, err
 	}
+
 	current, err := s.users.Get(ctx, userID)
 	if err != nil {
 		return nil, StoreErrors.Translate(err)
@@ -116,29 +127,45 @@ func (s *Service) UploadProfilePicture(ctx context.Context, invocation invocatio
 	if command.ExpectedRevision > 0 && current.Revision != command.ExpectedRevision {
 		return nil, apperror.New("user.conflict").WithField("resource", "user")
 	}
+
 	currentState, err := s.checkProfilePicturePrecondition(ctx, command, current)
 	if err != nil {
 		return nil, err
 	}
+
 	at := model.TimeUTC(s.now())
 	staged, err := s.stageProfilePictureUpload(ctx, invocation, current, at)
 	if err != nil {
 		return nil, err
 	}
+
 	renditions, err := s.uploads.NormalizeAndStoreProfilePicture(ctx, staged.revision.ID, command.Body, command.Size, at)
 	if err != nil {
 		return nil, profilePictureNormalizationError(err)
 	}
+
 	if currentState != nil && sameNormalizedProfilePicture(currentState, renditions) {
 		if err = s.uploads.RemoveProfilePictureRenditions(ctx, staged.revision.ID, renditions); err != nil {
 			return nil, apperror.New("profile_picture.unavailable").Wrap(err)
 		}
-		err = s.files.DiscardProfilePictureUpload(ctx, &store.ProfilePictureUploadDiscard{ActorID: invocation.Principal().UserID, UserID: current.ID, ExpectedUserRevision: current.Revision, ExpectedActiveEntryID: currentState.EntryID, ExpectedCurrentRevisionID: currentState.RevisionID, UploadEntryID: staged.entryID, RevisionID: staged.revision.ID, LeaseID: staged.lease.ID})
+
+		err = s.files.DiscardProfilePictureUpload(ctx, &store.ProfilePictureUploadDiscard{
+			ActorID:                   invocation.Principal().UserID,
+			UserID:                    current.ID,
+			ExpectedUserRevision:      current.Revision,
+			ExpectedActiveEntryID:     currentState.EntryID,
+			ExpectedCurrentRevisionID: currentState.RevisionID,
+			UploadEntryID:             staged.entryID,
+			RevisionID:                staged.revision.ID,
+			LeaseID:                   staged.lease.ID,
+		})
 		if err != nil {
 			return nil, profilePictureStoreErrors.Translate(err)
 		}
+
 		return current, nil
 	}
+
 	return s.publishProfilePicture(ctx, invocation, current, staged, renditions, at)
 }
 
@@ -151,10 +178,16 @@ type stagedProfilePictureUpload struct {
 
 // checkProfilePicturePrecondition verifies the caller's If-Match checksum against the active profile picture and
 // returns the active state, or nil when the user has no profile picture.
-func (s *Service) checkProfilePicturePrecondition(ctx context.Context, command UploadProfilePictureCommand, current *model.User) (*store.ProfilePictureState, error) {
-	if (!current.CustomProfilePictureFileID.IsZero() || !current.DefaultProfilePictureFileID.IsZero()) && strings.TrimSpace(command.ExpectedSHA256) == "" {
+func (s *Service) checkProfilePicturePrecondition(
+	ctx context.Context,
+	command UploadProfilePictureCommand,
+	current *model.User,
+) (*store.ProfilePictureState, error) {
+	if (!current.CustomProfilePictureFileID.IsZero() || !current.DefaultProfilePictureFileID.IsZero()) &&
+		strings.TrimSpace(command.ExpectedSHA256) == "" {
 		return nil, apperror.New("request.invalid").WithField("field", "if_match")
 	}
+
 	var currentState *store.ProfilePictureState
 	activeState, stateErr := s.files.GetProfilePictureState(ctx, current.ID)
 	if stateErr == nil {
@@ -172,12 +205,18 @@ func (s *Service) checkProfilePicturePrecondition(ctx context.Context, command U
 	} else if !store.IsNotFound(stateErr) || !current.CustomProfilePictureFileID.IsZero() || !current.DefaultProfilePictureFileID.IsZero() {
 		return nil, profilePictureStoreErrors.Translate(stateErr)
 	}
+
 	return currentState, nil
 }
 
 // stageProfilePictureUpload creates the pending revision and upload lease, with a new custom file entry when the user
 // has none yet.
-func (s *Service) stageProfilePictureUpload(ctx context.Context, invocation invocation.Invocation, current *model.User, at time.Time) (stagedProfilePictureUpload, error) {
+func (s *Service) stageProfilePictureUpload(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	current *model.User,
+	at time.Time,
+) (stagedProfilePictureUpload, error) {
 	entryID := current.CustomProfilePictureFileID
 	var entry *model.FileEntry
 	var err error
@@ -186,24 +225,36 @@ func (s *Service) stageProfilePictureUpload(ctx context.Context, invocation invo
 		if err != nil {
 			return stagedProfilePictureUpload{}, profilePictureStoreErrors.Translate(err)
 		}
+
 		entryID = entry.ID
 	}
-	revision, err := model.NewFileRevision(model.NewFileRevisionID(), entryID, model.FileAvailabilityPending, model.FileIndexingNotRequired, at)
+
+	revision, err := model.NewFileRevision(
+		model.NewFileRevisionID(),
+		entryID,
+		model.FileAvailabilityPending,
+		model.FileIndexingNotRequired,
+		at,
+	)
 	if err != nil {
 		return stagedProfilePictureUpload{}, profilePictureStoreErrors.Translate(err)
 	}
+
 	lease, err := model.NewUploadLease(model.NewUploadLeaseID(), revision.ID, invocation.Principal().UserID, at, at.Add(time.Hour))
 	if err != nil {
 		return stagedProfilePictureUpload{}, profilePictureStoreErrors.Translate(err)
 	}
+
 	if entry != nil {
 		_, err = s.files.CreateUpload(ctx, &store.FileUploadCreation{Entry: entry, Revision: revision, Lease: lease})
 	} else {
 		_, err = s.files.CreateRevisionUpload(ctx, &store.FileRevisionUploadCreation{EntryID: entryID, Revision: revision, Lease: lease})
 	}
+
 	if err != nil {
 		return stagedProfilePictureUpload{}, profilePictureStoreErrors.Translate(err)
 	}
+
 	return stagedProfilePictureUpload{entryID: entryID, revision: revision, lease: lease}, nil
 }
 
@@ -221,17 +272,25 @@ func profilePictureNormalizationError(err error) error {
 
 // publishProfilePicture publishes the staged renditions as the user's custom profile picture under audit and reports
 // the change effect.
-func (s *Service) publishProfilePicture(ctx context.Context, invocation invocation.Invocation, current *model.User,
-	staged stagedProfilePictureUpload, renditions []model.FileRendition, at time.Time) (*model.User, error) {
+func (s *Service) publishProfilePicture(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	current *model.User,
+	staged stagedProfilePictureUpload,
+	renditions []model.FileRendition,
+	at time.Time,
+) (*model.User, error) {
 	entryID := staged.entryID
 	changedAt := model.TimeUTC(s.now())
 	if changedAt.Before(at) {
 		changedAt = at
 	}
+
 	action := model.ActionUserManage
 	if invocation.Principal().UserID == current.ID {
 		action = model.ActionUserProfilePictureManage
 	}
+
 	published, err := access.RunAudited(
 		ctx,
 		s.auditor,
@@ -246,10 +305,16 @@ func (s *Service) publishProfilePicture(ctx context.Context, invocation invocati
 		func() time.Time { return changedAt },
 		func(ctx context.Context, reference access.MutationReference) (*store.ProfilePicturePublicationResult, error) {
 			return s.files.PublishProfilePicture(ctx, &store.ProfilePicturePublication{
-				ActorID: invocation.Principal().UserID, UserID: current.ID,
-				ExpectedUserRevision: current.Revision, EntryID: entryID, RevisionID: staged.revision.ID,
-				LeaseID: staged.lease.ID, Renditions: renditions, ChangedAt: changedAt,
-				AuditEventID: reference.ID, AuditAt: reference.MutationAt,
+				ActorID:              invocation.Principal().UserID,
+				UserID:               current.ID,
+				ExpectedUserRevision: current.Revision,
+				EntryID:              entryID,
+				RevisionID:           staged.revision.ID,
+				LeaseID:              staged.lease.ID,
+				Renditions:           renditions,
+				ChangedAt:            changedAt,
+				AuditEventID:         reference.ID,
+				AuditAt:              reference.MutationAt,
 			})
 		},
 		profilePictureStoreErrors.Translate,
@@ -259,10 +324,17 @@ func (s *Service) publishProfilePicture(ctx context.Context, invocation invocati
 		// lost. Leave staged bytes for authoritative reconciliation/lease cleanup.
 		return nil, err
 	}
-	change := PictureChange{UserID: published.User.ID, ActiveFileEntryID: published.User.CustomProfilePictureFileID, Revision: published.User.Revision, ChangedAt: published.User.ProfilePictureChangedAt.Time}
+
+	change := PictureChange{
+		UserID:            published.User.ID,
+		ActiveFileEntryID: published.User.CustomProfilePictureFileID,
+		Revision:          published.User.Revision,
+		ChangedAt:         published.User.ProfilePictureChangedAt.Time,
+	}
 	if err := s.effects.PictureChanged(ctx, change); err != nil {
 		s.effects.Report(ctx, "user_profile_picture_changed", err)
 	}
+
 	return published.User, nil
 }
 
@@ -283,27 +355,40 @@ func sameNormalizedProfilePicture(state *store.ProfilePictureState, renditions [
 	if state == nil || len(state.Renditions) != len(renditions) {
 		return false
 	}
+
 	currentByName := make(map[string]model.FileRendition, len(state.Renditions))
 	for _, rendition := range state.Renditions {
 		if _, duplicate := currentByName[rendition.Name]; duplicate {
 			return false
 		}
+
 		currentByName[rendition.Name] = rendition
 	}
+
 	for _, rendition := range renditions {
 		current, found := currentByName[rendition.Name]
-		if !found || current.MediaType != rendition.MediaType || current.Size != rendition.Size ||
-			current.Width != rendition.Width || current.Height != rendition.Height || current.SHA256 != rendition.SHA256 {
+		if !found ||
+			current.MediaType != rendition.MediaType ||
+			current.Size != rendition.Size ||
+			current.Width != rendition.Width ||
+			current.Height != rendition.Height ||
+			current.SHA256 != rendition.SHA256 {
 			return false
 		}
+
 		delete(currentByName, rendition.Name)
 	}
+
 	return len(currentByName) == 0
 }
 
 // RemoveProfilePicture removes the User's custom profile picture, which
 // reverts to the default one.
-func (s *Service) RemoveProfilePicture(ctx context.Context, invocation invocation.Invocation, command RemoveProfilePictureCommand) (*model.User, error) {
+func (s *Service) RemoveProfilePicture(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command RemoveProfilePictureCommand,
+) (*model.User, error) {
 	userID := command.UserID
 	expectedSHA256 := strings.TrimSpace(command.ExpectedSHA256)
 	if !userID.IsValid() || expectedSHA256 == "" {
@@ -312,6 +397,7 @@ func (s *Service) RemoveProfilePicture(ctx context.Context, invocation invocatio
 	if err := s.authorizer.AuthorizeProfilePictureWrite(ctx, invocation, userID); err != nil {
 		return nil, err
 	}
+
 	current, err := s.users.Get(ctx, userID)
 	if err != nil {
 		return nil, StoreErrors.Translate(err)
@@ -319,6 +405,7 @@ func (s *Service) RemoveProfilePicture(ctx context.Context, invocation invocatio
 	if current.CustomProfilePictureFileID.IsZero() {
 		return nil, apperror.New("user.conflict").WithField("resource", "profile_picture")
 	}
+
 	state, err := s.files.GetProfilePictureState(ctx, current.ID)
 	if err != nil {
 		return nil, profilePictureStoreErrors.Translate(err)
@@ -326,10 +413,12 @@ func (s *Service) RemoveProfilePicture(ctx context.Context, invocation invocatio
 	if state.EntryID != current.CustomProfilePictureFileID || !profilePictureChecksumMatches(state, expectedSHA256) {
 		return nil, apperror.New("user.conflict").WithField("resource", "profile_picture")
 	}
+
 	action := model.ActionUserManage
 	if invocation.Principal().UserID == current.ID {
 		action = model.ActionUserProfilePictureManage
 	}
+
 	var changedAt time.Time
 	updated, err := access.RunAudited(
 		ctx,
@@ -348,10 +437,15 @@ func (s *Service) RemoveProfilePicture(ctx context.Context, invocation invocatio
 		},
 		func(ctx context.Context, reference access.MutationReference) (*model.User, error) {
 			return s.files.RemoveProfilePicture(ctx, &store.ProfilePictureRemoval{
-				ActorID: invocation.Principal().UserID, UserID: current.ID,
-				ExpectedUserRevision: current.Revision, EntryID: state.EntryID,
-				ExpectedCurrentRevisionID: state.RevisionID, ExpectedSHA256: expectedSHA256,
-				ChangedAt: changedAt, AuditEventID: reference.ID, AuditAt: reference.MutationAt,
+				ActorID:                   invocation.Principal().UserID,
+				UserID:                    current.ID,
+				ExpectedUserRevision:      current.Revision,
+				EntryID:                   state.EntryID,
+				ExpectedCurrentRevisionID: state.RevisionID,
+				ExpectedSHA256:            expectedSHA256,
+				ChangedAt:                 changedAt,
+				AuditEventID:              reference.ID,
+				AuditAt:                   reference.MutationAt,
 			})
 		},
 		profilePictureStoreErrors.Translate,
@@ -359,16 +453,27 @@ func (s *Service) RemoveProfilePicture(ctx context.Context, invocation invocatio
 	if err != nil {
 		return nil, err
 	}
-	change := PictureChange{UserID: updated.ID, ActiveFileEntryID: updated.DefaultProfilePictureFileID, Revision: updated.Revision, ChangedAt: updated.ProfilePictureChangedAt.Time}
+
+	change := PictureChange{
+		UserID:            updated.ID,
+		ActiveFileEntryID: updated.DefaultProfilePictureFileID,
+		Revision:          updated.Revision,
+		ChangedAt:         updated.ProfilePictureChangedAt.Time,
+	}
 	if err := s.effects.PictureChanged(ctx, change); err != nil {
 		s.effects.Report(ctx, "user_profile_picture_changed", err)
 	}
+
 	return updated, nil
 }
 
 // GetProfilePicture opens one rendition of the User's profile picture, or
 // renders the default one and proposes its durable generation.
-func (s *Service) GetProfilePicture(ctx context.Context, invocation invocation.Invocation, query GetProfilePictureQuery) (*ProfilePictureContent, error) {
+func (s *Service) GetProfilePicture(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	query GetProfilePictureQuery,
+) (*ProfilePictureContent, error) {
 	id := query.UserID
 	if !id.IsValid() || (query.Size != 128 && query.Size != 256 && query.Size != 512) {
 		return nil, apperror.New("request.invalid")
@@ -376,10 +481,12 @@ func (s *Service) GetProfilePicture(ctx context.Context, invocation invocation.I
 	if _, err := s.authorizer.AuthorizeProfileRead(ctx, invocation, id); err != nil {
 		return nil, err
 	}
+
 	user, err := s.users.Get(ctx, id)
 	if err != nil {
 		return nil, StoreErrors.Translate(err)
 	}
+
 	rendition, err := s.files.GetProfilePictureRendition(ctx, model.UserID(id), fmt.Sprintf("profile_%d", query.Size))
 	if err != nil {
 		if store.IsNotFound(err) && user.CustomProfilePictureFileID.IsZero() && user.DefaultProfilePictureFileID.IsZero() {
@@ -389,21 +496,32 @@ func (s *Service) GetProfilePicture(ctx context.Context, invocation invocation.I
 				if errors.As(renderErr, &capacity) {
 					return nil, apperror.New("service.busy").Wrap(renderErr)
 				}
+
 				return nil, apperror.New("profile_picture.unavailable").Wrap(renderErr)
 			}
+
 			if s.defaultJobs != nil {
 				if proposeErr := s.defaultJobs.ProposeDefaultProfilePicture(ctx, user.ID, model.TimeUTC(s.now())); proposeErr != nil {
 					s.effects.Report(ctx, "propose_default_profile_picture", proposeErr)
 				}
 			}
-			return &ProfilePictureContent{Body: rendered.Body, MediaType: rendered.MediaType, Size: rendered.Size, ETag: `"` + rendered.SHA256 + `"`}, nil
+
+			return &ProfilePictureContent{
+				Body:      rendered.Body,
+				MediaType: rendered.MediaType,
+				Size:      rendered.Size,
+				ETag:      `"` + rendered.SHA256 + `"`,
+			}, nil
 		}
+
 		return nil, profilePictureStoreErrors.Translate(err)
 	}
+
 	body, err := s.reads.OpenProfilePictureRendition(ctx, rendition.RevisionID, rendition.ID)
 	if err != nil {
 		return nil, apperror.New("profile_picture.unavailable").Wrap(err)
 	}
+
 	return &ProfilePictureContent{Body: body, MediaType: rendition.MediaType, Size: rendition.Size, ETag: `"` + rendition.SHA256 + `"`}, nil
 }
 
@@ -411,7 +529,11 @@ func (s *Service) GetProfilePicture(ctx context.Context, invocation invocation.I
 // the durable handler. It is idempotent across retries and publishes the
 // complete default relationship in one named persistence operation. system
 // names the durable Job execution.
-func (s *Service) EnsureDefaultProfilePicture(ctx context.Context, system invocation.System, userID model.UserID) (model.FileEntryID, error) {
+func (s *Service) EnsureDefaultProfilePicture(
+	ctx context.Context,
+	system invocation.System,
+	userID model.UserID,
+) (model.FileEntryID, error) {
 	if !system.Valid() || system.Task != "" {
 		return "", fmt.Errorf("%w: default profile picture requires its Job identity", ErrDefaultProfilePictureInvariant)
 	}
@@ -426,18 +548,28 @@ func (s *Service) ensureDefaultProfilePicture(ctx context.Context, userID model.
 		}
 		return "", err
 	}
+
 	if !user.DefaultProfilePictureFileID.IsZero() {
 		return user.DefaultProfilePictureFileID, nil
 	}
+
 	at := model.TimeUTC(s.now())
 	entry, err := model.NewFileEntryForPurpose(model.NewFileEntryID(), model.FilePurposeProfilePictureDefault, model.FileIndexingNone, at)
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", ErrDefaultProfilePictureInvariant, err)
 	}
-	revision, err := model.NewFileRevision(model.NewFileRevisionID(), entry.ID, model.FileAvailabilityPending, model.FileIndexingNotRequired, at)
+
+	revision, err := model.NewFileRevision(
+		model.NewFileRevisionID(),
+		entry.ID,
+		model.FileAvailabilityPending,
+		model.FileIndexingNotRequired,
+		at,
+	)
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", ErrDefaultProfilePictureInvariant, err)
 	}
+
 	lease, err := model.NewUploadLease(model.NewUploadLeaseID(), revision.ID, user.ID, at, at.Add(time.Hour))
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", ErrDefaultProfilePictureInvariant, err)
@@ -445,6 +577,7 @@ func (s *Service) ensureDefaultProfilePicture(ctx context.Context, userID model.
 	if _, err = s.files.CreateUpload(ctx, &store.FileUploadCreation{Entry: entry, Revision: revision, Lease: lease}); err != nil {
 		return "", err
 	}
+
 	renditions, err := s.defaults.GenerateAndStoreDefaultProfilePicture(ctx, revision.ID, user.DefaultProfilePictureSeed, at)
 	if err != nil {
 		return "", err
@@ -452,12 +585,21 @@ func (s *Service) ensureDefaultProfilePicture(ctx context.Context, userID model.
 	if err = ctx.Err(); err != nil {
 		return "", err
 	}
+
 	// Publication is the non-cancelable atomic commit section. A cancellation
 	// observed before it prevents entry; once entered, the transaction reaches
 	// one authoritative outcome and is never partially interrupted.
 	commitCtx, cancelCommit := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancelCommit()
-	published, err := s.files.PublishDefaultProfilePicture(commitCtx, &store.DefaultProfilePicturePublication{UserID: user.ID, ExpectedUserRevision: user.Revision, EntryID: entry.ID, RevisionID: revision.ID, LeaseID: lease.ID, Renditions: renditions, AttachedAt: model.TimeUTC(s.now())})
+	published, err := s.files.PublishDefaultProfilePicture(commitCtx, &store.DefaultProfilePicturePublication{
+		UserID:               user.ID,
+		ExpectedUserRevision: user.Revision,
+		EntryID:              entry.ID,
+		RevisionID:           revision.ID,
+		LeaseID:              lease.ID,
+		Renditions:           renditions,
+		AttachedAt:           model.TimeUTC(s.now()),
+	})
 	if err != nil {
 		if store.IsConflict(err) {
 			current, getErr := s.users.Get(ctx, userID)
@@ -465,8 +607,10 @@ func (s *Service) ensureDefaultProfilePicture(ctx context.Context, userID model.
 				return current.DefaultProfilePictureFileID, nil
 			}
 		}
+
 		return "", err
 	}
+
 	return published.User.DefaultProfilePictureFileID, nil
 }
 

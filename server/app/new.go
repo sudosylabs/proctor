@@ -37,26 +37,33 @@ func New(deps Dependencies) (*App, error) {
 	if err := validateApplicationDependencies(deps); err != nil {
 		return nil, err
 	}
+
 	shared, err := newSharedMechanics(deps)
 	if err != nil {
 		return nil, err
 	}
+
 	authorizer, err := newAuthorizer(deps, shared)
 	if err != nil {
 		return nil, err
 	}
+
 	capabilities := deploymentAccessPolicyCapabilities{
-		providers: deps.Registry, mail: deps.MailDeliverySender, health: shared.mailHealth,
+		providers:  deps.Registry,
+		mail:       deps.MailDeliverySender,
+		health:     shared.mailHealth,
 		mfaEnabled: deps.MFA.Enabled,
 	}
 	administrations, err := newAdministration(deps, shared, authorizer, capabilities)
 	if err != nil {
 		return nil, err
 	}
+
 	academics, err := newAcademic(deps, shared, authorizer)
 	if err != nil {
 		return nil, err
 	}
+
 	// The Job runtime that a default profile picture proposal wakes is built
 	// last, so newJobRuntime attaches its wake to these proposals.
 	defaultPictureJobs := newDefaultProfilePictureJobs(deps)
@@ -64,6 +71,7 @@ func New(deps Dependencies) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	// External sign-in admits an External Identity through an Invitation, and
 	// MFA rekey proposes Jobs. Onboarding and the Job runtime are built after
 	// identity, so it receives handles that are connected once they exist.
@@ -72,24 +80,31 @@ func New(deps Dependencies) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	exams, err := newExamServices(deps, shared, authorizer, identities)
 	if err != nil {
 		return nil, err
 	}
+
 	onboardings, onboardingPorts, err := newOnboarding(deps, shared, authorizer, identities, academics, administrations, wake)
 	if err != nil {
 		return nil, err
 	}
+
 	acceptor.accept = onboardingPorts.AcceptExternalIdentity
 	jobs, err := newJobRuntime(deps, shared, authorizer, exams, users, defaultPictureJobs, onboardingPorts, wake)
 	if err != nil {
 		return nil, err
 	}
+
 	// Search spans Exams, Users and Classes, and the administration counts
 	// span Invitations, Jobs, mail and onboarding imports, so both are built
 	// once every one of those services exists.
 	search := newSearchService(searchServiceDependencies{
-		Exams: exams.authoring, Users: users, ClassAuthorization: authorizer, Classes: deps.Store.Class(),
+		Exams:              exams.authoring,
+		Users:              users,
+		ClassAuthorization: authorizer,
+		Classes:            deps.Store.Class(),
 	})
 	counts := newAdministrationCountsService(administrationCountsDependencies(onboardingPorts, jobs))
 	return &App{
@@ -112,8 +127,11 @@ func New(deps Dependencies) (*App, error) {
 		Counts:            counts,
 		Realtime:          shared.realtime,
 		RealtimeAdmission: &RealtimeAdmission{
-			principals: identities, exams: exams.authoring, sittings: exams.sittings,
-			authorization: authorizer, operational: deps.OperationalRecorder,
+			principals:    identities,
+			exams:         exams.authoring,
+			sittings:      exams.sittings,
+			authorization: authorizer,
+			operational:   deps.OperationalRecorder,
 		},
 		Jobs:      jobs.operations,
 		Mail:      jobs.mail,
@@ -152,6 +170,7 @@ func validateApplicationDependencies(deps Dependencies) error {
 	if deps.RecoveryDiagnostics == nil {
 		return errors.New("recovery diagnostics is required")
 	}
+
 	return nil
 }
 
@@ -170,36 +189,53 @@ type sharedMechanics struct {
 }
 
 func newSharedMechanics(deps Dependencies) (sharedMechanics, error) {
-	hasher, err := identity.NewPasswordHasher(identity.PasswordHasherDependencies{Settings: deps.Password, Recorder: deps.PasswordWorkRecorder})
+	hasher, err := identity.NewPasswordHasher(identity.PasswordHasherDependencies{
+		Settings: deps.Password,
+		Recorder: deps.PasswordWorkRecorder,
+	})
 	if err != nil {
 		return sharedMechanics{}, err
 	}
+
 	attempts, err := identity.NewAttemptAccounting(identity.AttemptAccountingDependencies{Cache: deps.Cache})
 	if err != nil {
 		return sharedMechanics{}, err
 	}
-	invalidator, err := identity.NewCacheInvalidator(identity.CacheInvalidatorDependencies{Cache: deps.Cache, Diagnostics: deps.AuthenticationDiagnostics})
+
+	invalidator, err := identity.NewCacheInvalidator(identity.CacheInvalidatorDependencies{
+		Cache:       deps.Cache,
+		Diagnostics: deps.AuthenticationDiagnostics,
+	})
 	if err != nil {
 		return sharedMechanics{}, err
 	}
+
 	delivery, err := realtime.New(realtime.Dependencies{AuthenticationInvalidator: invalidator, Diagnostics: deps.RealtimeDiagnostics})
 	if err != nil {
 		return sharedMechanics{}, err
 	}
+
 	publication, err := newRealtimeServiceWithDelivery(realtimeServiceDependencies{Delivery: delivery, Diagnostics: deps.RealtimeDiagnostics})
 	if err != nil {
 		return sharedMechanics{}, err
 	}
+
 	publication.attempts = deps.Store.ExamAttempt()
-	audit, err := access.NewAuditor(access.AuditorDependencies{Audits: deps.Store.Audit(), Institutions: deps.Store.Institution(), NodeID: deps.NodeID})
+	audit, err := access.NewAuditor(access.AuditorDependencies{
+		Audits:       deps.Store.Audit(),
+		Institutions: deps.Store.Institution(),
+		NodeID:       deps.NodeID,
+	})
 	if err != nil {
 		return sharedMechanics{}, err
 	}
+
 	institutionName := &institutionNameCache{institutions: deps.Store.Institution(), now: time.Now}
 	composer, err := newDirectMailPreparer(deps.MailTemplateRenderer, deps.MailDeliverySender, deps.MailSecretSealer, institutionName.Name)
 	if err != nil {
 		return sharedMechanics{}, err
 	}
+
 	return sharedMechanics{
 		hasher:      hasher,
 		attempts:    attempts,
@@ -214,29 +250,62 @@ func newSharedMechanics(deps Dependencies) (sharedMechanics, error) {
 // newAuthorizer builds Access Control over the Role and Role Binding stores
 // and the scope resolver that places each Resource in its scopes.
 func newAuthorizer(deps Dependencies, shared sharedMechanics) (*access.Authorizer, error) {
-	scopeResolver, err := access.NewScopeResolver(access.ScopeResolverDependencies{Institutions: deps.Store.Institution(), AcademicUnits: deps.Store.AcademicUnit(), Classes: deps.Store.Class(), Users: deps.Store.User(), ClassMembers: deps.Store.ClassMember(), Exams: deps.Store.ExamAuthoring(), Sittings: deps.Store.ExamSitting(), Submissions: deps.Store.ExamSubmission(), AcademicPeriods: deps.Store.AcademicPeriod(), Programmes: deps.Store.Programme(), ProgrammeLevels: deps.Store.ProgrammeLevel()})
+	scopeResolver, err := access.NewScopeResolver(access.ScopeResolverDependencies{
+		Institutions:    deps.Store.Institution(),
+		AcademicUnits:   deps.Store.AcademicUnit(),
+		Classes:         deps.Store.Class(),
+		Users:           deps.Store.User(),
+		ClassMembers:    deps.Store.ClassMember(),
+		Exams:           deps.Store.ExamAuthoring(),
+		Sittings:        deps.Store.ExamSitting(),
+		Submissions:     deps.Store.ExamSubmission(),
+		AcademicPeriods: deps.Store.AcademicPeriod(),
+		Programmes:      deps.Store.Programme(),
+		ProgrammeLevels: deps.Store.ProgrammeLevel(),
+	})
 	if err != nil {
 		return nil, err
 	}
-	return access.NewAuthorizer(access.AuthorizerDependencies{Roles: deps.Store.Role(), Bindings: deps.Store.RoleBinding(), Resolver: scopeResolver, Audit: shared.audit})
+
+	return access.NewAuthorizer(access.AuthorizerDependencies{
+		Roles:    deps.Store.Role(),
+		Bindings: deps.Store.RoleBinding(),
+		Resolver: scopeResolver,
+		Audit:    shared.audit,
+	})
 }
 
 func newAdministration(
-	deps Dependencies, shared sharedMechanics, authorizer *access.Authorizer, capabilities deploymentAccessPolicyCapabilities,
+	deps Dependencies,
+	shared sharedMechanics,
+	authorizer *access.Authorizer,
+	capabilities deploymentAccessPolicyCapabilities,
 ) (*administration.Service, error) {
 	return administration.New(administration.Dependencies{
-		Store: deps.Store, Authorizer: authorizer, Auditor: shared.audit.MutationAudit(), Capabilities: capabilities,
-		Mail: shared.mail, Effects: administrationRealtimeEffects{realtime: shared.realtime},
-		CanonicalOrigin: deps.PublicURL, SupportAddress: deps.SupportAddress, PasswordMinimumLength: deps.Password.MinimumLength,
-		RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Sessions: deps.Sessions, Now: time.Now,
+		Store:                   deps.Store,
+		Authorizer:              authorizer,
+		Auditor:                 shared.audit.MutationAudit(),
+		Capabilities:            capabilities,
+		Mail:                    shared.mail,
+		Effects:                 administrationRealtimeEffects{realtime: shared.realtime},
+		CanonicalOrigin:         deps.PublicURL,
+		SupportAddress:          deps.SupportAddress,
+		PasswordMinimumLength:   deps.Password.MinimumLength,
+		RecentAuthenticationTTL: deps.RecentAuthenticationTTL,
+		Sessions:                deps.Sessions,
+		Now:                     time.Now,
 	})
 }
 
 func newAcademic(deps Dependencies, shared sharedMechanics, authorizer *access.Authorizer) (*academic.Service, error) {
 	return academic.New(academic.Dependencies{
-		Store: deps.Store, Authorizer: authorizer, Auditor: shared.audit.MutationAudit(), Mail: shared.mail,
-		Effects: academicRealtimeEffects{sittings: deps.Store.ExamSitting(), realtime: shared.realtime},
-		Now:     time.Now, NewID: model.NewID,
+		Store:      deps.Store,
+		Authorizer: authorizer,
+		Auditor:    shared.audit.MutationAudit(),
+		Mail:       shared.mail,
+		Effects:    academicRealtimeEffects{sittings: deps.Store.ExamSitting(), realtime: shared.realtime},
+		Now:        time.Now,
+		NewID:      model.NewID,
 	})
 }
 
@@ -250,40 +319,70 @@ func newDefaultProfilePictureJobs(deps Dependencies) *jobhandler.DefaultProfileP
 }
 
 func newUsers(
-	deps Dependencies, shared sharedMechanics, authorizer *access.Authorizer, defaultPictureJobs *jobhandler.DefaultProfilePictureJobs,
+	deps Dependencies,
+	shared sharedMechanics,
+	authorizer *access.Authorizer,
+	defaultPictureJobs *jobhandler.DefaultProfilePictureJobs,
 ) (*user.Service, error) {
 	var proposals user.DefaultPictureJobs
 	if defaultPictureJobs != nil {
 		proposals = defaultPictureJobs
 	}
+
 	return user.New(user.Dependencies{
-		Store: deps.Store, Authorizer: authorizer, Auditor: shared.audit.MutationAudit(),
-		SettingsAuditor: shared.audit.UserSettingsAudit(), Effects: userRealtimeEffects{realtime: shared.realtime},
-		DefaultJobs: proposals,
-		Uploads:     deps.FileContent, Reads: deps.FileContent, Fallback: deps.FileContent, Defaults: deps.FileContent,
-		Now: time.Now,
+		Store:           deps.Store,
+		Authorizer:      authorizer,
+		Auditor:         shared.audit.MutationAudit(),
+		SettingsAuditor: shared.audit.UserSettingsAudit(),
+		Effects:         userRealtimeEffects{realtime: shared.realtime},
+		DefaultJobs:     proposals,
+		Uploads:         deps.FileContent,
+		Reads:           deps.FileContent,
+		Fallback:        deps.FileContent,
+		Defaults:        deps.FileContent,
+		Now:             time.Now,
 	})
 }
 
 func newIdentity(
-	deps Dependencies, shared sharedMechanics, authorizer *access.Authorizer, capabilities identity.AccessPolicyCapabilitySource,
-	invitations *externalInvitationAcceptor, wake *jobWake,
+	deps Dependencies,
+	shared sharedMechanics,
+	authorizer *access.Authorizer,
+	capabilities identity.AccessPolicyCapabilitySource,
+	invitations *externalInvitationAcceptor,
+	wake *jobWake,
 ) (*identity.Service, error) {
 	return identity.New(identity.Dependencies{
-		Store: deps.Store, Cache: deps.Cache, Registry: deps.Registry,
-		Authorizer: authorizer, Auditor: shared.audit, Capabilities: capabilities,
-		Effects: shared.realtime, Mail: shared.mail,
-		Hasher: shared.hasher, Attempts: shared.attempts, Invalidator: shared.invalidator,
-		Invitations:     invitations,
-		Operational:     operationalRecorderAdapter{recorder: deps.OperationalRecorder},
-		MFASecretSealer: deps.MFASecretSealer, MFARekeyWake: wake.Wake,
-		DesktopBuildCatalog: deps.DesktopBuildCatalog, SkipDesktopCompatibility: deps.SkipDesktopCompatibility,
-		NodeID: deps.NodeID, PublicURL: deps.PublicURL, LoopbackHTTPDevelopment: deps.LoopbackHTTPDevelopment,
-		MFA: deps.MFA, Sessions: deps.Sessions, LoginRateLimit: deps.LoginRateLimit,
-		BootstrapProtection: deps.BootstrapProtection, PersonalAccessToken: deps.PersonalAccessToken,
-		AccountRecovery: deps.AccountRecovery, ExternalAuth: deps.ExternalAuth,
+		Store:                     deps.Store,
+		Cache:                     deps.Cache,
+		Registry:                  deps.Registry,
+		Authorizer:                authorizer,
+		Auditor:                   shared.audit,
+		Capabilities:              capabilities,
+		Effects:                   shared.realtime,
+		Mail:                      shared.mail,
+		Hasher:                    shared.hasher,
+		Attempts:                  shared.attempts,
+		Invalidator:               shared.invalidator,
+		Invitations:               invitations,
+		Operational:               operationalRecorderAdapter{recorder: deps.OperationalRecorder},
+		MFASecretSealer:           deps.MFASecretSealer,
+		MFARekeyWake:              wake.Wake,
+		DesktopBuildCatalog:       deps.DesktopBuildCatalog,
+		SkipDesktopCompatibility:  deps.SkipDesktopCompatibility,
+		NodeID:                    deps.NodeID,
+		PublicURL:                 deps.PublicURL,
+		LoopbackHTTPDevelopment:   deps.LoopbackHTTPDevelopment,
+		MFA:                       deps.MFA,
+		Sessions:                  deps.Sessions,
+		LoginRateLimit:            deps.LoginRateLimit,
+		BootstrapProtection:       deps.BootstrapProtection,
+		PersonalAccessToken:       deps.PersonalAccessToken,
+		AccountRecovery:           deps.AccountRecovery,
+		ExternalAuth:              deps.ExternalAuth,
 		RecentAuthenticationTTL:   deps.RecentAuthenticationTTL,
-		AuthenticationDiagnostics: deps.AuthenticationDiagnostics, RecoveryDiagnostics: deps.RecoveryDiagnostics,
+		AuthenticationDiagnostics: deps.AuthenticationDiagnostics,
+		RecoveryDiagnostics:       deps.RecoveryDiagnostics,
 	})
 }
 
@@ -291,16 +390,30 @@ func newIdentity(
 // administration areas. New connects external sign-in to the Invitation
 // acceptance its Ports return.
 func newOnboarding(
-	deps Dependencies, shared sharedMechanics, authorizer *access.Authorizer, identities *identity.Service,
-	academics *academic.Service, administrations *administration.Service, wake *jobWake,
+	deps Dependencies,
+	shared sharedMechanics,
+	authorizer *access.Authorizer,
+	identities *identity.Service,
+	academics *academic.Service,
+	administrations *administration.Service,
+	wake *jobWake,
 ) (*onboarding.Service, onboarding.Ports, error) {
 	return onboarding.New(onboarding.Dependencies{
-		Store: deps.Store, Content: deps.FileContent, Authorizer: authorizer, Auditor: shared.audit.MutationAudit(),
-		Mail: shared.mail, Hasher: shared.hasher, Attempts: shared.attempts,
-		Identity: identities, Academic: academics, Administration: administrations,
-		MembershipEffects: academicRealtimeEffects{sittings: deps.Store.ExamSitting(), realtime: shared.realtime},
-		Wake:              wake.Wake,
-		NodeID:            deps.NodeID, PublicURL: deps.PublicURL, AccountRecovery: deps.AccountRecovery,
+		Store:                   deps.Store,
+		Content:                 deps.FileContent,
+		Authorizer:              authorizer,
+		Auditor:                 shared.audit.MutationAudit(),
+		Mail:                    shared.mail,
+		Hasher:                  shared.hasher,
+		Attempts:                shared.attempts,
+		Identity:                identities,
+		Academic:                academics,
+		Administration:          administrations,
+		MembershipEffects:       academicRealtimeEffects{sittings: deps.Store.ExamSitting(), realtime: shared.realtime},
+		Wake:                    wake.Wake,
+		NodeID:                  deps.NodeID,
+		PublicURL:               deps.PublicURL,
+		AccountRecovery:         deps.AccountRecovery,
 		RecentAuthenticationTTL: deps.RecentAuthenticationTTL,
 	})
 }
@@ -309,13 +422,23 @@ func newOnboarding(
 // an External Identity through the Invitation its login state carries. The
 // identity area is built first, so New connects it to the onboarding area.
 type externalInvitationAcceptor struct {
-	accept func(context.Context, *model.ExternalLoginState, *model.ExternalAuthenticationAssertion,
-		store.AccessDeploymentCapabilities, model.RequestMetadata, string) (*store.ExternalIdentityInvitationAcceptanceResult, error)
+	accept func(
+		context.Context,
+		*model.ExternalLoginState,
+		*model.ExternalAuthenticationAssertion,
+		store.AccessDeploymentCapabilities,
+		model.RequestMetadata,
+		string,
+	) (*store.ExternalIdentityInvitationAcceptanceResult, error)
 }
 
-func (a *externalInvitationAcceptor) AcceptExternalIdentity(ctx context.Context, state *model.ExternalLoginState,
-	assertion *model.ExternalAuthenticationAssertion, capabilities store.AccessDeploymentCapabilities,
-	metadata model.RequestMetadata, sessionClientType string,
+func (a *externalInvitationAcceptor) AcceptExternalIdentity(
+	ctx context.Context,
+	state *model.ExternalLoginState,
+	assertion *model.ExternalAuthenticationAssertion,
+	capabilities store.AccessDeploymentCapabilities,
+	metadata model.RequestMetadata,
+	sessionClientType string,
 ) (*store.ExternalIdentityInvitationAcceptanceResult, error) {
 	return a.accept(ctx, state, assertion, capabilities, metadata, sessionClientType)
 }

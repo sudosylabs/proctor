@@ -31,39 +31,53 @@ func (r sittingMailReconciliationPeriodicRunner) Run(ctx context.Context) error 
 	if r.sittings == nil || r.mail == nil {
 		return errors.New("Sitting mail reconciliation dependencies are unavailable")
 	}
+
 	options := store.ExamSittingMailReconciliationOptions{Limit: sittingMailReconciliationPageSize}
 	for page := 0; page < sittingMailReconciliationMaximumPages; page++ {
 		candidates, err := r.sittings.ListMailReconciliationDue(ctx, options)
 		if err != nil {
 			return err
 		}
+
 		for index := range candidates {
 			candidate := candidates[index]
 			if candidate.Sitting == nil {
 				return errors.New("Sitting mail reconciliation returned an invalid candidate")
 			}
+
 			prepared, prepareErr := r.mail.Prepare(ctx, sitting.ScheduleMailRequest{
-				ActorUserID: candidate.ActorUserID, ExamID: candidate.Sitting.ExamID,
-				ExamRevisionID: candidate.Sitting.ExamRevisionID, SittingID: candidate.Sitting.ID,
-				SittingRevision: candidate.Sitting.Revision, ClassID: candidate.Sitting.ClassID,
-				PriorClassID: candidate.Sitting.ClassID, StartsAt: candidate.Sitting.ScheduledStartAt,
-				EndsAt: candidate.Sitting.ScheduledEndAt, ChangeKind: store.ExamSittingMailReconciled,
+				ActorUserID:     candidate.ActorUserID,
+				ExamID:          candidate.Sitting.ExamID,
+				ExamRevisionID:  candidate.Sitting.ExamRevisionID,
+				SittingID:       candidate.Sitting.ID,
+				SittingRevision: candidate.Sitting.Revision,
+				ClassID:         candidate.Sitting.ClassID,
+				PriorClassID:    candidate.Sitting.ClassID,
+				StartsAt:        candidate.Sitting.ScheduledStartAt,
+				EndsAt:          candidate.Sitting.ScheduledEndAt,
+				ChangeKind:      store.ExamSittingMailReconciled,
 			})
 			if prepareErr != nil || prepared == nil {
 				return errors.Join(errors.New("prepare Sitting mail reconciliation"), prepareErr)
 			}
+
 			if _, reconcileErr := r.sittings.ReconcileMail(ctx, &store.ExamSittingMailReconciliation{
-				SittingID: candidate.Sitting.ID, ExpectedRevision: candidate.Sitting.Revision,
-				ActorUserID: candidate.ActorUserID, Mail: prepared,
+				SittingID:        candidate.Sitting.ID,
+				ExpectedRevision: candidate.Sitting.Revision,
+				ActorUserID:      candidate.ActorUserID,
+				Mail:             prepared,
 			}); reconcileErr != nil && !store.IsConflict(reconcileErr) && !store.IsNotFound(reconcileErr) {
 				return reconcileErr
 			}
 		}
+
 		if len(candidates) < options.Limit {
 			return nil
 		}
+
 		last := candidates[len(candidates)-1].Sitting
 		options.AfterScheduledStartAt, options.AfterSittingID = last.ScheduledStartAt, last.ID
 	}
+
 	return nil
 }

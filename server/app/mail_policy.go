@@ -32,6 +32,7 @@ func evaluateMailDeliveryRelevance(_ context.Context, delivery *model.MailDelive
 	if delivery == nil || delivery.Validate() != nil {
 		return 0, errors.New("mail delivery relevance target is invalid")
 	}
+
 	switch delivery.TemplateKey {
 	case model.MailTemplateSystemTest,
 		model.MailTemplateIdentityVerifyEmail,
@@ -203,6 +204,7 @@ func (m mailMaintenanceMonitor) Run(ctx context.Context) error {
 	if m.mail == nil || m.sender == nil || m.health == nil || m.now == nil {
 		return errors.New("mail maintenance dependencies are unavailable")
 	}
+
 	enabled := m.sender.Enabled()
 	healthCode := MailHealthDisabled
 	if !enabled {
@@ -210,19 +212,23 @@ func (m mailMaintenanceMonitor) Run(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+
 		recordMailMaintenanceDeliveries(ctx, m.recorder, suppressed)
 	} else {
 		healthCode = MailHealthHealthy
 	}
+
 	if prober, ok := m.sender.(mailDeliveryProber); enabled && ok {
 		if err := prober.Probe(ctx); err != nil {
 			healthCode = MailHealthSMTPOutage
 		}
 	}
+
 	snapshot, err := m.mail.QueueSnapshot(ctx)
 	if err != nil {
 		return err
 	}
+
 	now := model.TimeUTC(m.now())
 	oldestAge := time.Duration(0)
 	if snapshot != nil && !snapshot.OldestQueuedAt.IsZero() && now.After(snapshot.OldestQueuedAt) {
@@ -231,10 +237,12 @@ func (m mailMaintenanceMonitor) Run(ctx context.Context) error {
 			healthCode = MailHealthQueueDelayed
 		}
 	}
+
 	m.health.set(healthCode)
 	if m.recorder != nil {
 		m.recorder.RecordMailHealth(ctx, MailHealthMetric{Code: healthCode})
 	}
+
 	if m.recorder != nil {
 		metrics := make([]MailQueueMetric, 0)
 		if snapshot != nil {
@@ -244,11 +252,22 @@ func (m mailMaintenanceMonitor) Run(ctx context.Context) error {
 				if !count.OldestObservedAt.IsZero() && now.After(count.OldestObservedAt) {
 					itemAge = now.Sub(count.OldestObservedAt)
 				}
-				metrics = append(metrics, MailQueueMetric{TemplateKey: count.TemplateKey, State: count.State, Count: count.Count, OldestAge: itemAge, HealthCode: healthCode, OutcomeCode: count.PublicFailureCode, Truncated: snapshot.More})
+
+				metrics = append(metrics, MailQueueMetric{
+					TemplateKey: count.TemplateKey,
+					State:       count.State,
+					Count:       count.Count,
+					OldestAge:   itemAge,
+					HealthCode:  healthCode,
+					OutcomeCode: count.PublicFailureCode,
+					Truncated:   snapshot.More,
+				})
 			}
 		}
+
 		m.recorder.RecordMailQueueSnapshot(ctx, metrics)
 	}
+
 	return nil
 }
 
@@ -256,9 +275,12 @@ func recordMailMaintenanceDeliveries(ctx context.Context, recorder MailDeliveryR
 	if recorder == nil || result == nil {
 		return
 	}
+
 	for _, delivery := range result.Deliveries {
 		recorder.RecordMailDelivery(ctx, MailDeliveryMetric{
-			TemplateKey: delivery.TemplateKey, State: delivery.State, OutcomeCode: delivery.PublicFailureCode,
+			TemplateKey:       delivery.TemplateKey,
+			State:             delivery.State,
+			OutcomeCode:       delivery.PublicFailureCode,
 			ProcessingLatency: delivery.ProcessingLatency,
 		})
 	}

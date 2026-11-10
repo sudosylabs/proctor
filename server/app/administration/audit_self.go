@@ -86,7 +86,11 @@ type SelfAuditPage struct {
 // history. It is the caller's own record, like other /users/me reads, so it
 // records no authorization decision; Personal Access Tokens are refused
 // because the history includes credential and Session changes.
-func (s *Service) ListSelfAuditEvents(ctx context.Context, invocation invocation.Invocation, query ListSelfAuditEventsQuery) (SelfAuditPage, error) {
+func (s *Service) ListSelfAuditEvents(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	query ListSelfAuditEventsQuery,
+) (SelfAuditPage, error) {
 	principal := invocation.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return SelfAuditPage{}, apperror.New("authentication.required")
@@ -97,16 +101,23 @@ func (s *Service) ListSelfAuditEvents(ctx context.Context, invocation invocation
 	if !validSelfAuditQuery(query) {
 		return SelfAuditPage{}, apperror.New("audit.query.invalid")
 	}
+
 	counted := query.BeforeID.IsZero()
 	keys := model.AuditSelfEventKeys(query.Events, query.Status)
 	if len(keys) == 0 {
 		return SelfAuditPage{Page: paging.New[SelfAuditEvent](nil, query.Limit), Counted: counted}, nil
 	}
+
 	options := store.AuditSelfListOptions{
-		UserID: principal.UserID, Relation: query.Relation, Events: keys,
-		Since: query.Since, Until: query.Until, Ascending: query.Ascending,
-		BeforeCreatedAt: query.BeforeCreatedAt, BeforeID: query.BeforeID,
-		Limit: query.Limit + 1,
+		UserID:          principal.UserID,
+		Relation:        query.Relation,
+		Events:          keys,
+		Since:           query.Since,
+		Until:           query.Until,
+		Ascending:       query.Ascending,
+		BeforeCreatedAt: query.BeforeCreatedAt,
+		BeforeID:        query.BeforeID,
+		Limit:           query.Limit + 1,
 	}
 	entries, err := s.audits.ListSelf(ctx, options)
 	if err != nil {
@@ -115,14 +126,17 @@ func (s *Service) ListSelfAuditEvents(ctx context.Context, invocation invocation
 	if len(entries) > query.Limit+1 {
 		return SelfAuditPage{}, apperror.New("audit.unavailable").WithField("resource", "audit")
 	}
+
 	items := make([]SelfAuditEvent, 0, len(entries))
 	for _, entry := range entries {
 		item, ok := selfAuditProjection(principal.UserID, entry)
 		if !ok {
 			return SelfAuditPage{}, apperror.New("audit.unavailable").WithField("resource", "audit")
 		}
+
 		items = append(items, item)
 	}
+
 	page := SelfAuditPage{Page: paging.New(items, query.Limit), Counted: counted}
 	if !counted {
 		return page, nil
@@ -133,6 +147,7 @@ func (s *Service) ListSelfAuditEvents(ctx context.Context, invocation invocation
 	if page.Total < len(page.Items) || page.Total > store.MaximumAuditSelfCount {
 		return SelfAuditPage{}, apperror.New("audit.unavailable").WithField("resource", "audit")
 	}
+
 	page.TotalIsLowerBound = page.Total == store.MaximumAuditSelfCount
 	return page, nil
 }
@@ -172,13 +187,19 @@ func selfAuditProjection(caller model.UserID, entry *store.AuditSelfEntry) (Self
 	if entry == nil {
 		return SelfAuditEvent{}, false
 	}
+
 	event, known := model.AuditSelfEventFor(entry.Action, entry.Operation, entry.Status)
 	if !known {
 		return SelfAuditEvent{}, false
 	}
+
 	item := SelfAuditEvent{
-		ID: entry.ID, CreatedAt: entry.CreatedAt, Event: event, Status: entry.Status,
-		Resource: model.Resource{Type: entry.Resource.Type}, ErrorCode: entry.ErrorCode,
+		ID:         entry.ID,
+		CreatedAt:  entry.CreatedAt,
+		Event:      event,
+		Status:     entry.Status,
+		Resource:   model.Resource{Type: entry.Resource.Type},
+		ErrorCode:  entry.ErrorCode,
 		ClientType: entry.ClientType,
 	}
 	switch {
@@ -189,6 +210,7 @@ func selfAuditProjection(caller model.UserID, entry *store.AuditSelfEntry) (Self
 	default:
 		return SelfAuditEvent{}, false
 	}
+
 	switch {
 	case entry.ActorID == caller:
 		item.ActorKind = SelfAuditActorSelf
@@ -198,8 +220,10 @@ func selfAuditProjection(caller model.UserID, entry *store.AuditSelfEntry) (Self
 	default:
 		item.ActorKind = SelfAuditActorAdministrator
 	}
+
 	if entry.ResourceRelated {
 		item.Resource.ID = entry.Resource.ID
 	}
+
 	return item, true
 }

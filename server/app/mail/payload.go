@@ -43,32 +43,52 @@ type frozenDeliveryPayload struct {
 	messageID      string
 }
 
-func freezeDeliveryPayload(sealer *secretseal.Sealer, deliveryID model.MailDeliveryID, from, recipient Address,
+func freezeDeliveryPayload(
+	sealer *secretseal.Sealer,
+	deliveryID model.MailDeliveryID,
+	from,
+	recipient Address,
 	content FrozenContent,
 ) (frozenDeliveryPayload, error) {
 	if sealer == nil || !deliveryID.IsValid() {
 		return frozenDeliveryPayload{}, errors.New("mail delivery payload input is invalid")
 	}
-	payload := frozenPayload{RecipientName: recipient.Name, RecipientAddress: recipient.Address,
-		FromName: from.Name, FromAddress: from.Address, Subject: content.Subject, Text: content.Text, HTML: content.HTML,
-		AutoSubmitted: "auto-generated", AutoResponseSuppress: "All"}
+
+	payload := frozenPayload{
+		RecipientName:        recipient.Name,
+		RecipientAddress:     recipient.Address,
+		FromName:             from.Name,
+		FromAddress:          from.Address,
+		Subject:              content.Subject,
+		Text:                 content.Text,
+		HTML:                 content.HTML,
+		AutoSubmitted:        "auto-generated",
+		AutoResponseSuppress: "All",
+	}
 	if err := payload.validate(); err != nil {
 		return frozenDeliveryPayload{}, err
 	}
+
 	plaintext, err := json.Marshal(payload)
 	if err != nil || len(plaintext) > model.MailRenderedPayloadMaximumBytes {
 		return frozenDeliveryPayload{}, errors.New("rendered mail payload is invalid")
 	}
+
 	envelope, err := sealer.Seal(secretseal.Binding{Purpose: DeliverySealingPurpose, Owner: deliveryID.String()}, plaintext)
 	if err != nil {
 		return frozenDeliveryPayload{}, err
 	}
+
 	encrypted, err := json.Marshal(envelope)
 	if err != nil {
 		return frozenDeliveryPayload{}, err
 	}
-	return frozenDeliveryPayload{encrypted: encrypted, templateDigest: Digest(content.Subject, content.Text, content.HTML),
-		messageID: StableMessageID(deliveryID, from.Address)}, nil
+
+	return frozenDeliveryPayload{
+		encrypted:      encrypted,
+		templateDigest: Digest(content.Subject, content.Text, content.HTML),
+		messageID:      StableMessageID(deliveryID, from.Address),
+	}, nil
 }
 
 // OpenDelivery reopens and validates one immutable prepared delivery for Sender.
@@ -77,11 +97,15 @@ func freezeDeliveryPayload(sealer *secretseal.Sealer, deliveryID model.MailDeliv
 // It neither resolves current recipient details nor renders templates again.
 func OpenDelivery(sealer *secretseal.Sealer, delivery *model.MailDelivery) (Outbound, error) {
 	var envelope secretseal.Envelope
-	if sealer == nil || delivery == nil || !delivery.ID.IsValid() || len(delivery.EncryptedPayload) == 0 ||
+	if sealer == nil ||
+		delivery == nil ||
+		!delivery.ID.IsValid() ||
+		len(delivery.EncryptedPayload) == 0 ||
 		len(delivery.EncryptedPayload) > model.MailEncryptedPayloadMaximumBytes ||
 		json.Unmarshal(delivery.EncryptedPayload, &envelope) != nil {
 		return Outbound{}, errors.New("encrypted mail payload is invalid")
 	}
+
 	plaintext, err := sealer.Open(secretseal.Binding{Purpose: DeliverySealingPurpose, Owner: delivery.ID.String()}, envelope)
 	if err != nil {
 		return Outbound{}, err
@@ -89,6 +113,7 @@ func OpenDelivery(sealer *secretseal.Sealer, delivery *model.MailDelivery) (Outb
 	if len(plaintext) > model.MailRenderedPayloadMaximumBytes {
 		return Outbound{}, errors.New("rendered mail payload is invalid")
 	}
+
 	var payload frozenPayload
 	decoder := json.NewDecoder(bytes.NewReader(plaintext))
 	decoder.DisallowUnknownFields()
@@ -98,28 +123,42 @@ func OpenDelivery(sealer *secretseal.Sealer, delivery *model.MailDelivery) (Outb
 	if err = payload.validate(); err != nil {
 		return Outbound{}, err
 	}
-	if delivery.MessageID == "" || len(delivery.MessageID) > model.MailMessageIDMaximumBytes ||
-		strings.ContainsAny(delivery.MessageID, "\x00\r\n") || delivery.MessageDate.IsZero() {
+
+	if delivery.MessageID == "" ||
+		len(delivery.MessageID) > model.MailMessageIDMaximumBytes ||
+		strings.ContainsAny(delivery.MessageID, "\x00\r\n") ||
+		delivery.MessageDate.IsZero() {
 		return Outbound{}, ErrInvalidMessage
 	}
+
 	return Outbound{
-		From: Address{Name: payload.FromName, Address: payload.FromAddress}, EnvelopeFrom: payload.FromAddress,
-		To:      Address{Name: payload.RecipientName, Address: payload.RecipientAddress},
-		Subject: payload.Subject, Text: payload.Text, HTML: payload.HTML,
-		Headers:   map[string][]string{"Auto-Submitted": {payload.AutoSubmitted}, "X-Auto-Response-Suppress": {payload.AutoResponseSuppress}},
-		MessageID: delivery.MessageID, Date: delivery.MessageDate,
+		From:         Address{Name: payload.FromName, Address: payload.FromAddress},
+		EnvelopeFrom: payload.FromAddress,
+		To:           Address{Name: payload.RecipientName, Address: payload.RecipientAddress},
+		Subject:      payload.Subject,
+		Text:         payload.Text,
+		HTML:         payload.HTML,
+		Headers:      map[string][]string{"Auto-Submitted": {payload.AutoSubmitted}, "X-Auto-Response-Suppress": {payload.AutoResponseSuppress}},
+		MessageID:    delivery.MessageID,
+		Date:         delivery.MessageDate,
 	}, nil
 }
 
 func (p frozenPayload) validate() error {
-	if p.RecipientAddress == "" || p.FromAddress == "" || p.Subject == "" ||
-		(p.Text == "" && p.HTML == "") || p.AutoSubmitted != "auto-generated" || p.AutoResponseSuppress != "All" {
+	if p.RecipientAddress == "" ||
+		p.FromAddress == "" ||
+		p.Subject == "" ||
+		(p.Text == "" && p.HTML == "") ||
+		p.AutoSubmitted != "auto-generated" ||
+		p.AutoResponseSuppress != "All" {
 		return errors.New("frozen mail payload is invalid")
 	}
+
 	if ValidateAddress(Address{Name: p.FromName, Address: p.FromAddress}) != nil ||
 		ValidateAddress(Address{Name: p.RecipientName, Address: p.RecipientAddress}) != nil ||
 		strings.ContainsAny(p.Subject, "\x00\r\n") {
 		return ErrInvalidMessage
 	}
+
 	return nil
 }

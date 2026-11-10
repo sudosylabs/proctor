@@ -18,8 +18,13 @@ import (
 // MutationAuditor begins and fails the audit attempt of one named Store mutation.
 type MutationAuditor interface {
 	Begin(
-		context.Context, invocation.Invocation, model.Action, model.Resource, string,
-		map[string]any, map[string]any,
+		context.Context,
+		invocation.Invocation,
+		model.Action,
+		model.Resource,
+		string,
+		map[string]any,
+		map[string]any,
 	) (model.AuditEventID, error)
 	Fail(context.Context, model.AuditEventID, string) error
 }
@@ -30,28 +35,58 @@ type MutationAuditor interface {
 type MutationAuditAdapter struct{ audit *Auditor }
 
 // Begin persists the attempt of a mutation at the resource's own scope.
-func (a MutationAuditAdapter) Begin(ctx context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource, operation string, value, prior map[string]any) (model.AuditEventID, error) {
+func (a MutationAuditAdapter) Begin(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	action model.Action,
+	resource model.Resource,
+	operation string,
+	value,
+	prior map[string]any,
+) (model.AuditEventID, error) {
 	event, appErr := a.audit.BeginCriticalAction(
-		ctx, invocation.Principal(), action, resource,
+		ctx,
+		invocation.Principal(),
+		action,
+		resource,
 		invocation.RequestMetadata(),
-		map[string]any{"operation": operation, "value": value}, prior,
+		map[string]any{"operation": operation, "value": value},
+		prior,
 	)
 	if appErr != nil {
 		return "", appErr
 	}
+
 	return event.ID, nil
 }
 
 // BeginAtScope persists the attempt of a mutation at an explicit authorization scope.
-func (a MutationAuditAdapter) BeginAtScope(ctx context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID, operation string, value, prior map[string]any) (model.AuditEventID, error) {
+func (a MutationAuditAdapter) BeginAtScope(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	action model.Action,
+	resource model.Resource,
+	scopeType model.RoleScopeType,
+	scopeID,
+	operation string,
+	value,
+	prior map[string]any,
+) (model.AuditEventID, error) {
 	event, appErr := a.audit.BeginCriticalActionAtScope(
-		ctx, invocation.Principal(), action, resource, scopeType, scopeID,
+		ctx,
+		invocation.Principal(),
+		action,
+		resource,
+		scopeType,
+		scopeID,
 		invocation.RequestMetadata(),
-		map[string]any{"operation": operation, "value": value}, prior,
+		map[string]any{"operation": operation, "value": value},
+		prior,
 	)
 	if appErr != nil {
 		return "", appErr
 	}
+
 	return event.ID, nil
 }
 
@@ -65,6 +100,7 @@ func (a MutationAuditAdapter) BeginForSubject(ctx context.Context, attempt Mutat
 	if a.audit == nil || a.audit.deps.Audits == nil {
 		return "", AuditUnavailable(store.NewErrNotFound("audit_store", ""))
 	}
+
 	scopeType, scopeID := attempt.ScopeType, attempt.ScopeID
 	if scopeType == "" && scopeID == "" {
 		var err error
@@ -72,39 +108,82 @@ func (a MutationAuditAdapter) BeginForSubject(ctx context.Context, attempt Mutat
 			return "", err
 		}
 	}
+
 	event, err := a.audit.beginCriticalActionAtScope(
-		ctx, principal, attempt.Subject, attempt.Action, attempt.Resource, scopeType, scopeID,
+		ctx,
+		principal,
+		attempt.Subject,
+		attempt.Action,
+		attempt.Resource,
+		scopeType,
+		scopeID,
 		attempt.Invocation.RequestMetadata(),
-		map[string]any{"operation": attempt.Operation, "value": attempt.Value}, attempt.Prior,
+		map[string]any{"operation": attempt.Operation, "value": attempt.Value},
+		attempt.Prior,
 	)
 	if err != nil {
 		return "", err
 	}
+
 	return event.ID, nil
 }
 
 // Fail completes an attempt as failed with the error code.
 func (a MutationAuditAdapter) Fail(ctx context.Context, auditID model.AuditEventID, errorCode string) error {
 	_, appErr := a.audit.CompleteCriticalAction(
-		ctx, auditID, model.AuditStatusFail, errorCode, nil,
+		ctx,
+		auditID,
+		model.AuditStatusFail,
+		errorCode,
+		nil,
 	)
 	return appErr
 }
 
 // PrepareAtScope builds the audit draft of a mutation that a Store aggregate inserts itself.
-func (a MutationAuditAdapter) PrepareAtScope(_ context.Context, invocation invocation.Invocation, action model.Action,
-	resource model.Resource, scopeType model.RoleScopeType, scopeID, operation string, value map[string]any,
+func (a MutationAuditAdapter) PrepareAtScope(
+	_ context.Context,
+	invocation invocation.Invocation,
+	action model.Action,
+	resource model.Resource,
+	scopeType model.RoleScopeType,
+	scopeID,
+	operation string,
+	value map[string]any,
 ) (*model.AuditEvent, error) {
-	return a.audit.prepareCriticalActionAtScope(invocation.Principal(), "", action, resource, scopeType, scopeID,
-		invocation.RequestMetadata(), map[string]any{"operation": operation, "value": value}, nil)
+	return a.audit.prepareCriticalActionAtScope(
+		invocation.Principal(),
+		"",
+		action,
+		resource,
+		scopeType,
+		scopeID,
+		invocation.RequestMetadata(),
+		map[string]any{"operation": operation, "value": value},
+		nil,
+	)
 }
 
 // RecordAuthorizationDecision persists an authorization decision for the invocation.
-func (a MutationAuditAdapter) RecordAuthorizationDecision(ctx context.Context, invocation invocation.Invocation,
-	action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID string, allowed bool,
+func (a MutationAuditAdapter) RecordAuthorizationDecision(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	action model.Action,
+	resource model.Resource,
+	scopeType model.RoleScopeType,
+	scopeID string,
+	allowed bool,
 ) error {
-	return a.audit.RecordAuthorizationDecision(ctx, invocation.Principal(), action, resource, scopeType, scopeID,
-		invocation.RequestMetadata(), allowed)
+	return a.audit.RecordAuthorizationDecision(
+		ctx,
+		invocation.Principal(),
+		action,
+		resource,
+		scopeType,
+		scopeID,
+		invocation.RequestMetadata(),
+		allowed,
+	)
 }
 
 // Complete completes an attempt as successful with its result.

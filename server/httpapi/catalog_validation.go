@@ -16,6 +16,9 @@ import (
 	"strings"
 )
 
+// validProtocolName is the kebab-case name a protocol or upgrade route carries.
+var validProtocolName = regexp.MustCompile(`^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`)
+
 func validateResourceCatalog(apiPrefix string, resources []apiResource) error {
 	if err := validateDeclaredKernelCodes(resources); err != nil {
 		return err
@@ -61,7 +64,7 @@ func validateResourceCatalog(apiPrefix string, resources []apiResource) error {
 			if countTrue(ordinary, protocol, upgrade) != 1 {
 				return fmt.Errorf("resource %q %s operation is required", resource.name, route.method)
 			}
-			if (protocol || upgrade) && !regexp.MustCompile(`^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`).MatchString(route.protocolName) {
+			if (protocol || upgrade) && !validProtocolName.MatchString(route.protocolName) {
 				return fmt.Errorf("resource %q %s protocol operation name %q is invalid", resource.name, route.method, route.protocolName)
 			}
 			if (protocol || upgrade) && !validRouteProtocolKind(route.protocolKind) {

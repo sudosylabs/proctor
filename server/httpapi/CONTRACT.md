@@ -988,7 +988,7 @@ httpapi.New
     -> <domain>Resource                (for example institutionResource)
     -> principalRoute/sessionRoute/... (route_definition.go)
     -> newAPI                          (api.go)
-    -> collectResources + validation   (catalog_compiler.go)
+    -> compileRoutes + validation      (catalog_compiler.go)
     -> application capability method   (for example GetInstitution)
 ~~~
 

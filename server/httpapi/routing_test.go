@@ -121,13 +121,6 @@ func TestPrincipalAssuranceRequirements(t *testing.T) {
 	))
 }
 
-func newRoutingTestAPI(_ string) *API {
-	return &API{
-		catalog:                 newRouteCatalogBuilder(),
-		recentAuthenticationTTL: 15 * time.Minute,
-	}
-}
-
 func newCompiledRoutingTestAPI(t *testing.T, apiURLSuffix string, resources ...apiResource) *API {
 	t.Helper()
 	logger, _ := newTestLogger(t)
@@ -137,9 +130,7 @@ func newCompiledRoutingTestAPI(t *testing.T, apiURLSuffix string, resources ...a
 		localizer:               newTestLocalizer(t),
 		recentAuthenticationTTL: 15 * time.Minute,
 	}
-	require.NoError(t, httpAPI.buildRoutingKernel(apiURLSuffix, 1<<20, func() error {
-		return httpAPI.collectResources(apiURLSuffix, resources...)
-	}))
+	require.NoError(t, httpAPI.compileRoutes(apiURLSuffix, 1<<20, resources...))
 	return httpAPI
 }
 

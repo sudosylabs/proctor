@@ -43,7 +43,6 @@ type API struct {
 	recentAuthenticationTTL time.Duration
 	routes                  []Route
 	routeMatchers           []routeMatcher
-	catalog                 *routeCatalogBuilder
 	webSocket               WebSocketTransport
 	maxBodyBytes            int64
 	transferDeadlines       transferDeadlines
@@ -165,11 +164,7 @@ func newAPI(settings Settings, authenticator Authenticator, resources ...apiReso
 			tracing:        settings.Tracing,
 		},
 	}
-	if err := api.buildRoutingKernel(
-		model.APIURLSuffix,
-		settings.MaxBodyBytes,
-		func() error { return api.collectResources(model.APIURLSuffix, resources...) },
-	); err != nil {
+	if err := api.compileRoutes(model.APIURLSuffix, settings.MaxBodyBytes, resources...); err != nil {
 		return nil, err
 	}
 	return api, nil
@@ -215,12 +210,8 @@ func (a *API) MethodNotAllowedHandler(allowed ...string) http.Handler {
 }
 
 func (a *API) Routes() []Route {
-	source := a.routes
-	if a.catalog != nil {
-		source = a.catalog.routes
-	}
-	routes := make([]Route, len(source))
-	for index, route := range source {
+	routes := make([]Route, len(a.routes))
+	for index, route := range a.routes {
 		routes[index] = route
 		routes[index].ErrorCodes = append([]string(nil), route.ErrorCodes...)
 	}

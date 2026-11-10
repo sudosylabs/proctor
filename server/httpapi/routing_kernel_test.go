@@ -193,9 +193,7 @@ func TestRoutingKernelAppliesPerRouteBodyLimitsAndProtocolIdempotency(t *testing
 	cookies, err := newBrowserCookies("http://localhost:8065")
 	require.NoError(t, err)
 	httpAPI := &API{authenticator: authenticator, logger: logger, localizer: newTestLocalizer(t), cookies: cookies, recentAuthenticationTTL: time.Minute}
-	require.NoError(t, httpAPI.buildRoutingKernel(model.APIURLSuffix, 4, func() error {
-		return httpAPI.collectResources(model.APIURLSuffix, resources...)
-	}))
+	require.NoError(t, httpAPI.compileRoutes(model.APIURLSuffix, 4, resources...))
 
 	large := httptest.NewRequest(http.MethodPost, "/api/v1/large", strings.NewReader("12345678"))
 	large.Header.Set("Authorization", "Bearer test")

@@ -43,9 +43,7 @@ func TestOversizedJSONBodyReturnsContentTooLargeProblem(t *testing.T) {
 	cookies, err := newBrowserCookies("http://localhost:8065")
 	require.NoError(t, err)
 	httpAPI := &API{authenticator: classRouteAuthenticator{}, logger: logger, localizer: newTestLocalizer(t), cookies: cookies, recentAuthenticationTTL: time.Minute}
-	require.NoError(t, httpAPI.buildRoutingKernel(model.APIURLSuffix, 1024, func() error {
-		return httpAPI.collectResources(model.APIURLSuffix, resources...)
-	}))
+	require.NoError(t, httpAPI.compileRoutes(model.APIURLSuffix, 1024, resources...))
 
 	for name, configure := range map[string]func(*http.Request){
 		"declared length": func(*http.Request) {},

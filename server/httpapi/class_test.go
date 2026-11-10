@@ -201,13 +201,7 @@ func newFocusedResourceAPI(
 		browserRequests:         browserRequestPolicy{origin: "http://localhost:8065"},
 		recentAuthenticationTTL: time.Minute,
 	}
-	require.NoError(t, httpAPI.buildRoutingKernel(
-		model.APIURLSuffix,
-		1<<20,
-		func() error {
-			return httpAPI.collectResources(model.APIURLSuffix, resources...)
-		},
-	))
+	require.NoError(t, httpAPI.compileRoutes(model.APIURLSuffix, 1<<20, resources...))
 	return httpAPI
 }
 

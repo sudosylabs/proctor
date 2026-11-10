@@ -112,9 +112,7 @@ func TestTransferRoutesOutliveServerTimeouts(t *testing.T) {
 		recentAuthenticationTTL: time.Minute,
 		transferDeadlines:       newTransferDeadlines(serverTimeout, serverTimeout),
 	}
-	require.NoError(t, httpAPI.buildRoutingKernel(model.APIURLSuffix, 1024, func() error {
-		return httpAPI.collectResources(model.APIURLSuffix, resources...)
-	}))
+	require.NoError(t, httpAPI.compileRoutes(model.APIURLSuffix, 1024, resources...))
 	server := httptest.NewUnstartedServer(httpAPI)
 	server.Config.ReadTimeout = serverTimeout
 	server.Config.WriteTimeout = serverTimeout

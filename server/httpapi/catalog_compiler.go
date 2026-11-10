@@ -17,23 +17,6 @@ import (
 	"github.com/gorilla/mux"
 )
 
-type pendingCatalogRoute struct {
-	method  string
-	path    string
-	handler http.Handler
-}
-
-type routeCatalogBuilder struct {
-	routeKeys     map[string]struct{}
-	pendingRoutes []pendingCatalogRoute
-	routes        []Route
-	routeMatchers []routeMatcher
-}
-
-func newRouteCatalogBuilder() *routeCatalogBuilder {
-	return &routeCatalogBuilder{routeKeys: make(map[string]struct{})}
-}
-
 type routeErrorPolicy map[string]struct{}
 
 func newRouteErrorPolicy(codes []string) routeErrorPolicy {
@@ -44,7 +27,15 @@ func newRouteErrorPolicy(codes []string) routeErrorPolicy {
 	return policy
 }
 
-func (a *API) buildRoutingKernel(apiPrefix string, maxBodyBytes int64, collect func() error) error {
+// compileRoutes validates the resources and builds everything the API serves
+// from: the router, the sorted route manifest, and the matchers that answer
+// "which methods does this path allow". It runs once; a failure leaves the
+// API without routes.
+//
+// Each route's handler is wrapped, innermost first, as: the operation,
+// idempotency key, authentication and assurance, body limit, request
+// metrics, and span naming.
+func (a *API) compileRoutes(apiPrefix string, maxBodyBytes int64, resources ...apiResource) error {
 	if a.authenticator == nil {
 		return errors.New("routing kernel authenticator is required")
 	}
@@ -54,33 +45,20 @@ func (a *API) buildRoutingKernel(apiPrefix string, maxBodyBytes int64, collect f
 	if maxBodyBytes <= 0 {
 		return errors.New("routing kernel maximum body size must be greater than zero")
 	}
-	if collect == nil {
-		return errors.New("routing kernel catalog collector is required")
-	}
-	if a.catalog != nil || a.handler != nil {
+	if a.handler != nil {
 		return errors.New("routing kernel is already built")
-	}
-	a.catalog = newRouteCatalogBuilder()
-	a.maxBodyBytes = maxBodyBytes
-	if err := collect(); err != nil {
-		a.catalog = nil
-		return err
-	}
-	if err := a.sealRouteCatalog(); err != nil {
-		a.catalog = nil
-		return err
-	}
-	a.handler = withMiddleware(http.HandlerFunc(a.serveRoutes), a.logger, a.middleware)
-	return nil
-}
-
-func (a *API) collectResources(apiPrefix string, resources ...apiResource) error {
-	if a.catalog == nil {
-		return errors.New("collect resources after route catalog was sealed")
 	}
 	if err := validateResourceCatalog(apiPrefix, resources); err != nil {
 		return err
 	}
+
+	a.maxBodyBytes = maxBodyBytes
+	router := mux.NewRouter()
+	routeKeys := make(map[string]struct{})
+	var (
+		routes   []Route
+		matchers []routeMatcher
+	)
 
 	for _, resource := range resources {
 		for _, definition := range resource.routes {
@@ -116,12 +94,12 @@ func (a *API) collectResources(apiPrefix string, resources ...apiResource) error
 				handler = nameRequestSpan(handler, path)
 			}
 
-			probe := mux.NewRouter().NewRoute().Path(path).Methods(definition.method)
-			if err := probe.GetError(); err != nil {
-				return fmt.Errorf("compile resource %q %s %s: %w", resource.name, definition.method, path, err)
+			registered := router.Handle(path, handler).Methods(definition.method)
+			if registerErr := registered.GetError(); registerErr != nil {
+				return fmt.Errorf("compile resource %q %s %s: %w", resource.name, definition.method, path, registerErr)
 			}
 
-			pathRegexp, err := probe.GetPathRegexp()
+			pathRegexp, err := registered.GetPathRegexp()
 			if err != nil {
 				return fmt.Errorf("compile resource %q %s %s matcher: %w", resource.name, definition.method, path, err)
 			}
@@ -132,7 +110,7 @@ func (a *API) collectResources(apiPrefix string, resources ...apiResource) error
 			}
 
 			key := definition.method + " " + pathRegexp
-			if _, exists := a.catalog.routeKeys[key]; exists {
+			if _, exists := routeKeys[key]; exists {
 				return fmt.Errorf("compile resource %q %s %s: duplicate route shape", resource.name, definition.method, path)
 			}
 
@@ -146,35 +124,16 @@ func (a *API) collectResources(apiPrefix string, resources ...apiResource) error
 				Idempotency:  definition.idempotency,
 			}
 			sort.Strings(route.ErrorCodes)
-			a.catalog.routeKeys[key] = struct{}{}
-			a.catalog.routes = append(a.catalog.routes, route)
-			a.catalog.routeMatchers = append(a.catalog.routeMatchers, routeMatcher{route: route, pathRegexp: compiledRegexp})
-			a.catalog.pendingRoutes = append(a.catalog.pendingRoutes, pendingCatalogRoute{
-				method:  definition.method,
-				path:    path,
-				handler: handler,
-			})
+			routeKeys[key] = struct{}{}
+			routes = append(routes, route)
+			matchers = append(matchers, routeMatcher{route: route, pathRegexp: compiledRegexp})
 		}
 	}
 
-	return nil
-}
-
-func (a *API) sealRouteCatalog() error {
-	if a.catalog == nil {
-		return errors.New("route catalog is already sealed")
-	}
-	router := mux.NewRouter()
-	for _, route := range a.catalog.pendingRoutes {
-		registered := router.Handle(route.path, route.handler).Methods(route.method)
-		if err := registered.GetError(); err != nil {
-			return fmt.Errorf("compile %s %s: %w", route.method, route.path, err)
-		}
-	}
-	sortRoutes(a.catalog.routes)
+	sortRoutes(routes)
 	a.router = router
-	a.routes = a.catalog.routes
-	a.routeMatchers = a.catalog.routeMatchers
-	a.catalog = nil
+	a.routes = routes
+	a.routeMatchers = matchers
+	a.handler = withMiddleware(http.HandlerFunc(a.serveRoutes), a.logger, a.middleware)
 	return nil
 }

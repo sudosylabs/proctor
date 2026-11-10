@@ -16,8 +16,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/sudosylabs/proctor/server/model"
 )
 
 // TestOpenAPIAgreesWithRuntime derives every route's documented contract from
@@ -29,8 +27,7 @@ func TestOpenAPIAgreesWithRuntime(t *testing.T) {
 	t.Parallel()
 
 	document := readOpenAPIDocument(t)
-	runtimeAPI := newRoutingTestAPI(model.APIURLSuffix)
-	require.NoError(t, runtimeAPI.collectResources(model.APIURLSuffix, productionResources(completeHTTPApplication(), nil, BuildInfo{}, browserCookies{}, nil)...))
+	runtimeAPI := newProductionCatalogAPI(t)
 
 	runtimeRoutes := make(map[string]Route)
 	runtimeOperations := make(map[string]AuthRequirement)

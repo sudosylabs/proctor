@@ -165,6 +165,7 @@ func authenticateAccessCredential(
 ) (*model.Principal, error) {
 	var principal *model.Principal
 	var authErr error
+	spec, _ := specFor(requirement)
 	if credential.source == credentialSourceDPoP {
 		dpop, ok := application.(dpopAuthenticator)
 		if !ok {
@@ -177,7 +178,7 @@ func authenticateAccessCredential(
 				principal, authErr = dpop.AuthenticateDPoP(request.Context(), credential.token, proof, request.Method, request.URL.EscapedPath())
 			}
 		}
-	} else if requirement == AuthPrincipalRequired &&
+	} else if spec.personalAccessToken &&
 		credential.source == credentialSourceBearer {
 		principal, authErr = application.AuthenticateBearer(
 			request.Context(),
@@ -237,11 +238,11 @@ func requirePrincipalAssurance(
 	// A restricted Web Session reaches only the routes that declare the
 	// restriction. Both restrictions share the recovery routes; the Access
 	// Policy enrollment restriction also reaches the second-factor challenge.
-	spec := authSpecs[requirement]
-	if principal.MFARecoveryRequired && !spec.mfaRecovery {
+	spec, _ := specFor(requirement)
+	if principal.MFARecoveryRequired && !spec.admitsRecoverySession {
 		return apperror.New("authentication.token_invalid")
 	}
-	if principal.MFAEnrollmentRequired && !spec.mfaRecovery && !spec.mfaEnrollment {
+	if principal.MFAEnrollmentRequired && !spec.admitsEnrollmentSession {
 		return apperror.New("authentication.token_invalid")
 	}
 

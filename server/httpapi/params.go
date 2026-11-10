@@ -24,8 +24,10 @@ type paramsContextKey struct{}
 
 // Params holds the path variables of the matched route, keyed by the names
 // its path template declares. The route's parameter kinds have already
-// constrained each value's shape; handlers read them through pathID and its
-// sibling helpers instead of reaching into mux or parsing URL paths.
+// constrained each value's shape. Handlers read typed IDs through pathID,
+// provider and opaque IDs through its sibling helpers, and the few values
+// that are not identifiers (a batch sequence, a source Session UUID) directly
+// by name; none reaches into mux or parses the URL path.
 type Params map[string]string
 
 func ParamsFromRequest(request *http.Request) Params {

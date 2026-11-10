@@ -986,7 +986,7 @@ The production route trace is intentionally linear and searchable:
 httpapi.New
     -> productionResources             (resource_catalog.go)
     -> <domain>Resource                (for example institutionResource)
-    -> endpoint{...} literals          (route_definition.go)
+    -> endpoint{...} literals          (endpoint.go)
     -> newAPI                          (api.go)
     -> compileRoutes + validation      (catalog_compiler.go)
     -> application capability method   (for example GetInstitution)

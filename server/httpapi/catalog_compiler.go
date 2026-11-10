@@ -30,7 +30,7 @@ func newRouteErrorPolicy(codes []string) routeErrorPolicy {
 // compileRoutes validates the resources and builds everything the API serves
 // from: the router, the sorted route manifest, and the matchers that answer
 // "which methods does this path allow". It runs once; a failure leaves the
-// API without routes.
+// API without a router.
 //
 // Each route's handler is wrapped, innermost first, as: the operation,
 // idempotency key, authentication and assurance, body limit, request
@@ -110,6 +110,9 @@ func (a *API) compileRoutes(apiPrefix string, maxBodyBytes int64, resources ...a
 				return fmt.Errorf("compile resource %q %s %s regexp: %w", resource.name, definition.Method, path, err)
 			}
 
+			// Validation already refused two routes with the same normalized
+			// template. This refuses two whose compiled patterns are equal,
+			// which different templates can produce.
 			key := definition.Method + " " + pathRegexp
 			if _, exists := routeKeys[key]; exists {
 				return fmt.Errorf("compile resource %q %s %s: duplicate route shape", resource.name, definition.Method, path)

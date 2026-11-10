@@ -26,7 +26,7 @@
 //   - api.go: API, New, and newAPI, which handler tests call with fakes
 //   - options.go: Settings and the ports composition supplies
 //   - resource_catalog.go: every resource in the production API, in order
-//   - route_definition.go and route_path.go: the endpoint type and the path
+//   - endpoint.go and route_path.go: the endpoint type and the path
 //     template syntax
 //   - problem.go and error_catalog.yaml: Problem Details and error codes
 //   - CONTRACT.md: the rules every route follows

@@ -44,7 +44,13 @@ func validateResourceCatalog(apiPrefix string, resources []apiResource) error {
 				return fmt.Errorf("resource %q HTTP method %q is invalid", resource.name, route.Method)
 			}
 			if !validAuthRequirement(route.Auth) {
-				return fmt.Errorf("resource %q authentication requirement is invalid", resource.name)
+				return fmt.Errorf(
+					"resource %q %s %s authentication requirement is invalid: Auth is %q",
+					resource.name,
+					route.Method,
+					route.Path,
+					route.Auth,
+				)
 			}
 			if !validIdempotencyRequirement(route.Idempotency) {
 				return fmt.Errorf("resource %q %s idempotency requirement is invalid", resource.name, route.Method)

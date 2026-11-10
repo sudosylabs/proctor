@@ -30,14 +30,19 @@ const (
 // Session. Only the second-factor challenge declares it.
 const AuthMFAEnrollmentSessionRequired AuthRequirement = "mfa_enrollment_session_required"
 
-// authSpec says what an AuthRequirement demands of a request. Everything the
-// kernel decides from a requirement reads this one table: which credential it
-// extracts, which assurance it checks, which restricted Sessions it admits,
-// and which error codes it can therefore return.
+// authSpec says what an AuthRequirement demands of a request. The kernel reads
+// this one table to decide which credential it extracts, whether a Personal
+// Access Token may stand in for a Session, which assurance it checks, which
+// restricted Sessions it admits, and which error codes it can therefore
+// return.
 type authSpec struct {
 	// principal requires an access credential that authenticates a
 	// Principal.
 	principal bool
+	// personalAccessToken also admits a Personal Access Token presented as
+	// a bearer credential. Without it, only a Session's access credential
+	// authenticates.
+	personalAccessToken bool
 	// refresh requires a refresh credential instead; the operation itself
 	// redeems it.
 	refresh bool
@@ -45,28 +50,40 @@ type authSpec struct {
 	strong bool
 	// recent requires authentication within the recent-authentication TTL.
 	recent bool
-	// mfaRecovery admits a Session restricted to MFA recovery, and one
-	// restricted to MFA enrollment.
-	mfaRecovery bool
-	// mfaEnrollment admits a Session restricted to MFA enrollment.
-	mfaEnrollment bool
+	// admitsRecoverySession admits a Session restricted to MFA recovery. A
+	// requirement that does also admits the enrollment restriction.
+	admitsRecoverySession bool
+	// admitsEnrollmentSession admits a Session the Access Policy restricts
+	// to MFA enrollment.
+	admitsEnrollmentSession bool
 }
 
 // authSpecs is the closed set of requirements a route may declare.
 var authSpecs = map[AuthRequirement]authSpec{
-	AuthPublic:                           {},
-	AuthRefreshCredentialRequired:        {refresh: true},
-	AuthPrincipalRequired:                {principal: true},
-	AuthSessionRequired:                  {principal: true},
-	AuthStrongSessionRequired:            {principal: true, strong: true},
-	AuthRecentSessionRequired:            {principal: true, recent: true},
-	AuthStrongRecentSessionRequired:      {principal: true, strong: true, recent: true},
-	AuthMFAEnrollmentSessionRequired:     {principal: true, mfaEnrollment: true},
-	AuthMFARecoverySessionRequired:       {principal: true, mfaRecovery: true},
-	AuthRecentMFARecoverySessionRequired: {principal: true, mfaRecovery: true, recent: true},
+	AuthPublic:                       {},
+	AuthRefreshCredentialRequired:    {refresh: true},
+	AuthPrincipalRequired:            {principal: true, personalAccessToken: true},
+	AuthSessionRequired:              {principal: true},
+	AuthStrongSessionRequired:        {principal: true, strong: true},
+	AuthRecentSessionRequired:        {principal: true, recent: true},
+	AuthStrongRecentSessionRequired:  {principal: true, strong: true, recent: true},
+	AuthMFAEnrollmentSessionRequired: {principal: true, admitsEnrollmentSession: true},
+	AuthMFARecoverySessionRequired: {
+		principal:               true,
+		admitsRecoverySession:   true,
+		admitsEnrollmentSession: true,
+	},
+	AuthRecentMFARecoverySessionRequired: {
+		principal:               true,
+		admitsRecoverySession:   true,
+		admitsEnrollmentSession: true,
+		recent:                  true,
+	},
 }
 
 // specFor returns the requirement's spec and whether a route may declare it.
+// An undeclared requirement reads as the zero spec; catalog validation
+// rejects it before any route is served.
 func specFor(requirement AuthRequirement) (authSpec, bool) {
 	spec, ok := authSpecs[requirement]
 	return spec, ok
@@ -75,5 +92,6 @@ func specFor(requirement AuthRequirement) (authSpec, bool) {
 // authRequiresPrincipal reports whether a request that reaches the operation
 // carries an authenticated Principal.
 func authRequiresPrincipal(requirement AuthRequirement) bool {
-	return authSpecs[requirement].principal
+	spec, _ := specFor(requirement)
+	return spec.principal
 }

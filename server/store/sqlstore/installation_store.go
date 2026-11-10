@@ -45,8 +45,8 @@ func (s SQLInstallationStore) Get(ctx context.Context) (*model.InstallationState
 	var row installationStateRow
 	if err := s.GetMaster().Get(ctx, &row, `
 		SELECT initialized_at, institution_id, administrator_user_id
-		  FROM installation_states
-		 WHERE singleton = 1`); err != nil {
+		FROM installation_states
+		WHERE singleton = 1`); err != nil {
 		return nil, translateError("installation", "singleton", err)
 	}
 	return row.model()
@@ -61,10 +61,14 @@ func (s SQLInstallationStore) Bootstrap(
 		return nil, err
 	}
 
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "installation bootstrap", func(ctx context.Context, tx *sqlxTxWrapper) (*model.InstallationBootstrapResult, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "installation bootstrap", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*model.InstallationBootstrapResult, error) {
 		if err := lockAdvisory(ctx, tx, installationBootstrapLock); err != nil {
 			return nil, fmt.Errorf("lock installation bootstrap: %w", err)
 		}
+
 		pristine, err := installationIsPristine(ctx, tx)
 		if err != nil {
 			return nil, err
@@ -72,7 +76,6 @@ func (s SQLInstallationStore) Bootstrap(
 		if !pristine {
 			return replayInstallationBootstrap(ctx, tx, input)
 		}
-
 		if err := insertInstallationInstitution(ctx, tx, prepared.Institution); err != nil {
 			return nil, err
 		}
@@ -85,9 +88,14 @@ func (s SQLInstallationStore) Bootstrap(
 		if err := insertPasswordCredential(ctx, tx, prepared.credential); err != nil {
 			return nil, err
 		}
+
 		if _, err := insertQueuedJob(ctx, tx, prepared.DefaultProfilePictureJob, false); err != nil {
-			return nil, fmt.Errorf("enqueue bootstrap default profile picture generation: %w", translateError("job", prepared.DefaultProfilePictureJob.ID.String(), err))
+			return nil, fmt.Errorf(
+				"enqueue bootstrap default profile picture generation: %w",
+				translateError("job", prepared.DefaultProfilePictureJob.ID.String(), err),
+			)
 		}
+
 		if err := insertInstallationRole(ctx, tx, prepared.Role); err != nil {
 			return nil, err
 		}
@@ -106,16 +114,20 @@ func (s SQLInstallationStore) Bootstrap(
 		if err := insertInstallationAudit(ctx, tx, prepared.auditEvent); err != nil {
 			return nil, err
 		}
+
 		bootstrapResult, err := json.Marshal(prepared.InstallationBootstrapResult)
 		if err != nil {
 			return nil, fmt.Errorf("encode retained bootstrap result: %w", err)
 		}
-		if _, err := tx.Exec(ctx, `
-		INSERT INTO installation_states (
-			singleton, initialized_at, institution_id, administrator_user_id,
-			access_policy_id, bootstrap_secret_digest, bootstrap_command_fingerprint,
-			bootstrap_result
-		) VALUES (1, ?, ?, ?, ?, ?, ?, ?)`,
+
+		if _, err := tx.Exec(
+			ctx,
+			`
+			INSERT INTO installation_states (
+				singleton, initialized_at, institution_id, administrator_user_id, access_policy_id,
+				bootstrap_secret_digest, bootstrap_command_fingerprint, bootstrap_result
+			)
+			VALUES (1, ?, ?, ?, ?, ?, ?, ?)`,
 			prepared.State.InitializedAt,
 			prepared.State.InstitutionID.String(),
 			prepared.State.AdministratorUserID.String(),
@@ -126,6 +138,7 @@ func (s SQLInstallationStore) Bootstrap(
 		); err != nil {
 			return nil, fmt.Errorf("save installation state: %w", translateError("installation", "singleton", err))
 		}
+
 		return prepared.InstallationBootstrapResult, nil
 	})
 }
@@ -137,13 +150,16 @@ func (s SQLInstallationStore) ReconcileSystemAdministratorRole(
 	if err := validateSystemAdministratorRoleReconciliation(input); err != nil {
 		return nil, err
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "reconcile system-administrator role", func(ctx context.Context, tx *sqlxTxWrapper) (*store.SystemAdministratorRoleReconciliationResult, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "reconcile system-administrator role", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.SystemAdministratorRoleReconciliationResult, error) {
 		var state installationStateRow
 		if err := tx.Get(ctx, &state, `
 			SELECT initialized_at, institution_id, administrator_user_id
-			  FROM installation_states
-			 WHERE singleton = 1
-			 FOR UPDATE`); err != nil {
+			FROM installation_states
+			WHERE singleton = 1
+			FOR UPDATE`); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				pristine, pristineErr := installationIsPristine(ctx, tx)
 				if pristineErr != nil {
@@ -152,10 +168,13 @@ func (s SQLInstallationStore) ReconcileSystemAdministratorRole(
 				if pristine {
 					return &store.SystemAdministratorRoleReconciliationResult{}, nil
 				}
+
 				return nil, store.NewErrConflict("installation", "initialized_state_missing", nil)
 			}
+
 			return nil, fmt.Errorf("get installation for role reconciliation: %w", err)
 		}
+
 		installation, err := state.model()
 		if err != nil {
 			return nil, err
@@ -163,13 +182,17 @@ func (s SQLInstallationStore) ReconcileSystemAdministratorRole(
 
 		var row roleRow
 		if err := tx.Get(ctx, &row, `
-			SELECT id, created_at, updated_at, archived_at, name, display_name,
-			       description, permissions, built_in
-			  FROM roles
-			 WHERE name = ?
-			 FOR UPDATE`, model.SystemAdministratorRoleName); err != nil {
-			return nil, fmt.Errorf("get protected role for reconciliation: %w", translateError("role", "name="+model.SystemAdministratorRoleName, err))
+			SELECT id, created_at, updated_at, archived_at, name, display_name, description,
+				permissions, built_in
+			FROM roles
+			WHERE name = ?
+			FOR UPDATE`, model.SystemAdministratorRoleName); err != nil {
+			return nil, fmt.Errorf(
+				"get protected role for reconciliation: %w",
+				translateError("role", "name="+model.SystemAdministratorRoleName, err),
+			)
 		}
+
 		role, err := row.model()
 		if err != nil {
 			return nil, err
@@ -182,22 +205,31 @@ func (s SQLInstallationStore) ReconcileSystemAdministratorRole(
 		if len(added) == 0 {
 			return &store.SystemAdministratorRoleReconciliationResult{Role: role}, nil
 		}
+
 		candidate := role.Clone()
 		candidate.Permissions = permissions
 		at := model.TimeUTC(input.ReconciledAt)
 		if !at.After(candidate.UpdatedAt) {
 			at = candidate.UpdatedAt.Add(time.Microsecond)
 		}
+
 		candidate.PrepareUpdate(at)
 		if err := candidate.Validate(); err != nil {
 			return nil, store.NewErrInvalidInput("role", "reconciliation", nil).Wrap(err)
 		}
+
 		updated := newRoleRow(candidate)
-		if _, err := tx.Exec(ctx, `
+		if _, err := tx.Exec(
+			ctx,
+			`
 			UPDATE roles
-			   SET updated_at = ?, permissions = ?
-			 WHERE id = ? AND built_in = TRUE AND archived_at IS NULL`,
-			updated.UpdatedAt, updated.Permissions, updated.ID,
+			SET updated_at = ?, permissions = ?
+			WHERE id = ?
+				AND built_in = TRUE
+				AND archived_at IS NULL`,
+			updated.UpdatedAt,
+			updated.Permissions,
+			updated.ID,
 		); err != nil {
 			return nil, fmt.Errorf("update protected role reconciliation: %w", translateError("role", candidate.ID.String(), err))
 		}
@@ -207,11 +239,13 @@ func (s SQLInstallationStore) ReconcileSystemAdministratorRole(
 		event.ScopeType = model.RoleScopeInstitution
 		event.ScopeID = installation.InstitutionID.String()
 		event.Result, err = model.EncodeAuditData(map[string]any{
-			"role_id": candidate.ID.String(), "added_permissions": added,
+			"role_id":           candidate.ID.String(),
+			"added_permissions": added,
 		})
 		if err != nil {
 			return nil, err
 		}
+
 		event.PrepareCreate(model.NewAuditEventID(), at)
 		if err := event.Validate(); err != nil {
 			return nil, store.NewErrInvalidInput("audit_event", "reconciliation", nil).Wrap(err)
@@ -219,20 +253,29 @@ func (s SQLInstallationStore) ReconcileSystemAdministratorRole(
 		if err := insertInstallationAudit(ctx, tx, event); err != nil {
 			return nil, fmt.Errorf("save protected role reconciliation audit: %w", err)
 		}
+
 		return &store.SystemAdministratorRoleReconciliationResult{
-			Role: candidate, Changed: true, AddedPermissions: added,
+			Role:             candidate,
+			Changed:          true,
+			AddedPermissions: added,
 		}, nil
 	})
 }
 
 func validateSystemAdministratorRoleReconciliation(input *store.SystemAdministratorRoleReconciliation) error {
-	if input == nil || input.ReconciledAt.IsZero() || input.AuditEvent == nil ||
-		!input.AuditEvent.ID.IsZero() || input.AuditEvent.Action != string(model.ActionRoleSystemAdminReconcile) ||
-		input.AuditEvent.Status != model.AuditStatusSuccess || input.AuditEvent.NodeID == "" ||
-		!input.AuditEvent.ActorID.IsZero() || !input.AuditEvent.SessionID.IsZero() ||
+	if input == nil ||
+		input.ReconciledAt.IsZero() ||
+		input.AuditEvent == nil ||
+		!input.AuditEvent.ID.IsZero() ||
+		input.AuditEvent.Action != string(model.ActionRoleSystemAdminReconcile) ||
+		input.AuditEvent.Status != model.AuditStatusSuccess ||
+		input.AuditEvent.NodeID == "" ||
+		!input.AuditEvent.ActorID.IsZero() ||
+		!input.AuditEvent.SessionID.IsZero() ||
 		len(input.RequiredPermissions) == 0 {
 		return store.NewErrInvalidInput("role", "system_administrator_reconciliation", nil)
 	}
+
 	seen := make(map[string]struct{}, len(input.RequiredPermissions))
 	for _, permission := range input.RequiredPermissions {
 		if !model.IsSystemAdministratorAction(permission) {
@@ -241,8 +284,10 @@ func validateSystemAdministratorRoleReconciliation(input *store.SystemAdministra
 		if _, exists := seen[permission]; exists {
 			return store.NewErrInvalidInput("role", "duplicate_required_permission", permission)
 		}
+
 		seen[permission] = struct{}{}
 	}
+
 	return nil
 }
 
@@ -281,33 +326,46 @@ type preparedInstallationBootstrap struct {
 func prepareInstallationBootstrap(
 	input *store.InstallationBootstrap,
 ) (*preparedInstallationBootstrap, error) {
-	if input == nil || input.Institution == nil || input.Administrator == nil ||
-		input.Role == nil || input.RoleBinding == nil || input.AuditEvent == nil ||
-		input.AccessPolicy == nil || input.AdministratorSettings == nil ||
-		input.DefaultProfilePictureJob == nil || input.PasswordHash == "" ||
-		input.BootstrapSecretDigest == ([32]byte{}) || input.CommandFingerprint == ([32]byte{}) {
+	if input == nil ||
+		input.Institution == nil ||
+		input.Administrator == nil ||
+		input.Role == nil ||
+		input.RoleBinding == nil ||
+		input.AuditEvent == nil ||
+		input.AccessPolicy == nil ||
+		input.AdministratorSettings == nil ||
+		input.DefaultProfilePictureJob == nil ||
+		input.PasswordHash == "" ||
+		input.BootstrapSecretDigest == ([32]byte{}) ||
+		input.CommandFingerprint == ([32]byte{}) {
 		return nil, store.NewErrInvalidInput("installation", "bootstrap", nil)
 	}
+
 	institution, err := prepareBootstrapInstitution(input)
 	if err != nil {
 		return nil, err
 	}
+
 	administrator, administratorSettings, err := prepareBootstrapAdministrator(input)
 	if err != nil {
 		return nil, err
 	}
+
 	at := administrator.CreatedAt
 	credential := &model.PasswordCredential{
-		UserID: administrator.ID, PasswordHash: input.PasswordHash,
+		UserID:       administrator.ID,
+		PasswordHash: input.PasswordHash,
 	}
 	credential.PrepareCreate(model.NewPasswordCredentialID(), at)
 	if err = credential.Validate(); err != nil {
 		return nil, err
 	}
+
 	role, err := prepareBootstrapAdministratorRole(input, at)
 	if err != nil {
 		return nil, err
 	}
+
 	binding, err := prepareBootstrapRoleBinding(input, administrator.ID, role.ID, institution.ID, at)
 	if err != nil {
 		return nil, err
@@ -315,9 +373,12 @@ func prepareInstallationBootstrap(
 	if err = validateInitialAccessPolicyInput(input.AccessPolicy); err != nil {
 		return nil, err
 	}
+
 	result := &model.InstallationBootstrapResult{
-		Institution: institution, Administrator: administrator,
-		Role: role, RoleBinding: binding,
+		Institution:                institution,
+		Administrator:              administrator,
+		Role:                       role,
+		RoleBinding:                binding,
 		AccessPolicy:               model.NewInitialAccessPolicy(model.NewAccessPolicyID(), at),
 		DesktopCompatibilityPolicy: model.NewInitialDesktopCompatibilityPolicy(institution.ID, at),
 		RetentionPolicy:            model.NewInitialRetentionPolicy(institution.ID, at),
@@ -326,6 +387,7 @@ func prepareInstallationBootstrap(
 	if err != nil {
 		return nil, err
 	}
+
 	result.State = &model.InstallationState{
 		InitializedAt:       event.CreatedAt,
 		InstitutionID:       institution.ID,
@@ -397,8 +459,12 @@ func prepareBootstrapAdministratorRole(input *store.InstallationBootstrap, at ti
 }
 
 // prepareBootstrapRoleBinding binds the administrator to the System Administrator Role across the Institution.
-func prepareBootstrapRoleBinding(input *store.InstallationBootstrap, administratorID model.UserID, roleID model.RoleID,
-	institutionID model.InstitutionID, at time.Time,
+func prepareBootstrapRoleBinding(
+	input *store.InstallationBootstrap,
+	administratorID model.UserID,
+	roleID model.RoleID,
+	institutionID model.InstitutionID,
+	at time.Time,
 ) (*model.RoleBinding, error) {
 	binding := *input.RoleBinding
 	binding.ID = ""
@@ -414,11 +480,16 @@ func prepareBootstrapRoleBinding(input *store.InstallationBootstrap, administrat
 	if err := binding.Validate(); err != nil {
 		return nil, err
 	}
+
 	return &binding, nil
 }
 
 // prepareBootstrapAuditEvent builds the successful bootstrap audit event describing every created resource.
-func prepareBootstrapAuditEvent(input *store.InstallationBootstrap, result *model.InstallationBootstrapResult, at time.Time) (*model.AuditEvent, error) {
+func prepareBootstrapAuditEvent(
+	input *store.InstallationBootstrap,
+	result *model.InstallationBootstrapResult,
+	at time.Time,
+) (*model.AuditEvent, error) {
 	event := input.AuditEvent.Clone()
 	event.ID = ""
 	event.CreatedAt = time.Time{}
@@ -443,11 +514,13 @@ func prepareBootstrapAuditEvent(input *store.InstallationBootstrap, result *mode
 	if appErr != nil {
 		return nil, appErr
 	}
+
 	event.Parameters = parameters
 	event.PrepareCreate(model.NewAuditEventID(), at)
 	if err := event.Validate(); err != nil {
 		return nil, err
 	}
+
 	return event, nil
 }
 
@@ -455,12 +528,17 @@ func validateInitialAccessPolicyInput(policy *model.AccessPolicy) error {
 	if err := policy.Validate(); err != nil {
 		return store.NewErrInvalidInput("access_policy", "initial", nil).Wrap(err)
 	}
-	if policy.Revision != 1 || !policy.LocalLoginEnabled ||
-		policy.PublicRegistrationEnabled || !policy.InvitationAdmissionEnabled ||
-		!policy.InvitationLocalCredentialEnabled || !policy.DesktopAuthorizationEnabled ||
+
+	if policy.Revision != 1 ||
+		!policy.LocalLoginEnabled ||
+		policy.PublicRegistrationEnabled ||
+		!policy.InvitationAdmissionEnabled ||
+		!policy.InvitationLocalCredentialEnabled ||
+		!policy.DesktopAuthorizationEnabled ||
 		len(policy.ProviderAdmissions) != 0 {
 		return store.NewErrInvalidInput("access_policy", "initial", nil)
 	}
+
 	return nil
 }
 
@@ -473,20 +551,30 @@ func insertInitialAccessPolicy(
 	if err != nil {
 		return store.NewErrInvalidInput("access_policy", "provider_admissions", nil).Wrap(err)
 	}
-	if _, err := executor.Exec(ctx, `
+
+	if _, err := executor.Exec(
+		ctx,
+		`
 		INSERT INTO access_policies (
-			singleton, id, revision, created_at, updated_at,
-			local_login_enabled, public_registration_enabled,
-			invitation_admission_enabled, invitation_local_credential_enabled,
-			desktop_authorization_enabled, provider_admissions
-		) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		policy.ID.String(), policy.Revision, policy.CreatedAt, policy.UpdatedAt,
-		policy.LocalLoginEnabled, policy.PublicRegistrationEnabled,
-		policy.InvitationAdmissionEnabled, policy.InvitationLocalCredentialEnabled,
-		policy.DesktopAuthorizationEnabled, providers,
+			singleton, id, revision, created_at, updated_at, local_login_enabled,
+			public_registration_enabled, invitation_admission_enabled,
+			invitation_local_credential_enabled, desktop_authorization_enabled, provider_admissions
+		)
+		VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		policy.ID.String(),
+		policy.Revision,
+		policy.CreatedAt,
+		policy.UpdatedAt,
+		policy.LocalLoginEnabled,
+		policy.PublicRegistrationEnabled,
+		policy.InvitationAdmissionEnabled,
+		policy.InvitationLocalCredentialEnabled,
+		policy.DesktopAuthorizationEnabled,
+		providers,
 	); err != nil {
 		return fmt.Errorf("save initial access policy: %w", translateError("access_policy", policy.ID.String(), err))
 	}
+
 	return nil
 }
 
@@ -495,22 +583,39 @@ func insertInitialDesktopCompatibilityPolicy(
 	executor sqlxExecutor,
 	policy *model.DesktopCompatibilityPolicy,
 ) error {
-	if policy == nil || policy.Validate() != nil || policy.Revision != 1 ||
-		policy.MinimumDesktopRelease != "" || len(policy.RevokedDesktopBuildIDs) != 0 ||
-		policy.AdministratorMessage != "" || policy.Availability != model.DesktopAvailabilityReady || policy.RetryAt.Valid {
+	if policy == nil ||
+		policy.Validate() != nil ||
+		policy.Revision != 1 ||
+		policy.MinimumDesktopRelease != "" ||
+		len(policy.RevokedDesktopBuildIDs) != 0 ||
+		policy.AdministratorMessage != "" ||
+		policy.Availability != model.DesktopAvailabilityReady ||
+		policy.RetryAt.Valid {
 		return store.NewErrInvalidInput("desktop_compatibility_policy", "initial", nil)
 	}
+
 	revokedBuildIDs, err := json.Marshal(policy.RevokedDesktopBuildIDs)
 	if err != nil {
 		return store.NewErrInvalidInput("desktop_compatibility_policy", "revoked_build_ids", nil).Wrap(err)
 	}
-	if _, err := executor.Exec(ctx, `
+
+	if _, err := executor.Exec(
+		ctx,
+		`
 		INSERT INTO desktop_compatibility_policies (
-			singleton, institution_id, revision, minimum_desktop_release,
-			revoked_desktop_build_ids, administrator_message, availability, retry_at, created_at, updated_at
-		) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		policy.InstitutionID.String(), policy.Revision, policy.MinimumDesktopRelease,
-		revokedBuildIDs, policy.AdministratorMessage, policy.Availability, policy.RetryAt.Ptr(), policy.CreatedAt, policy.UpdatedAt,
+			singleton, institution_id, revision, minimum_desktop_release, revoked_desktop_build_ids,
+			administrator_message, availability, retry_at, created_at, updated_at
+		)
+		VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		policy.InstitutionID.String(),
+		policy.Revision,
+		policy.MinimumDesktopRelease,
+		revokedBuildIDs,
+		policy.AdministratorMessage,
+		policy.Availability,
+		policy.RetryAt.Ptr(),
+		policy.CreatedAt,
+		policy.UpdatedAt,
 	); err != nil {
 		return fmt.Errorf("save initial desktop compatibility policy: %w", translateError(
 			"desktop_compatibility_policy",
@@ -518,6 +623,7 @@ func insertInitialDesktopCompatibilityPolicy(
 			err,
 		))
 	}
+
 	return nil
 }
 
@@ -528,11 +634,10 @@ func replayInstallationBootstrap(
 ) (*model.InstallationBootstrapResult, error) {
 	var state installationStateRow
 	if err := executor.Get(ctx, &state, `
-		SELECT initialized_at, institution_id, administrator_user_id,
-		       access_policy_id, bootstrap_secret_digest,
-		       bootstrap_command_fingerprint, bootstrap_result
-		  FROM installation_states
-		 WHERE singleton = 1`); err != nil {
+		SELECT initialized_at, institution_id, administrator_user_id, access_policy_id,
+			bootstrap_secret_digest, bootstrap_command_fingerprint, bootstrap_result
+		FROM installation_states
+		WHERE singleton = 1`); err != nil {
 		return nil, store.NewErrConflict("installation", "installation_not_pristine", err)
 	}
 	if subtle.ConstantTimeCompare(state.BootstrapSecretDigest, input.BootstrapSecretDigest[:]) != 1 ||
@@ -551,18 +656,31 @@ func replayInstallationBootstrap(
 }
 
 func validateRetainedBootstrapResult(result *model.InstallationBootstrapResult, row installationStateRow) error {
-	if result == nil || result.State == nil || result.Institution == nil ||
-		result.Administrator == nil || result.Role == nil || result.RoleBinding == nil ||
-		result.AccessPolicy == nil || result.DesktopCompatibilityPolicy == nil || result.RetentionPolicy == nil || result.State.Validate() != nil ||
-		result.Institution.Validate() != nil || result.Administrator.Validate() != nil ||
-		result.Role.Validate() != nil || result.RoleBinding.Validate() != nil ||
-		result.AccessPolicy.Validate() != nil || result.DesktopCompatibilityPolicy.Validate() != nil || result.RetentionPolicy.Validate() != nil ||
+	if result == nil ||
+		result.State == nil ||
+		result.Institution == nil ||
+		result.Administrator == nil ||
+		result.Role == nil ||
+		result.RoleBinding == nil ||
+		result.AccessPolicy == nil ||
+		result.DesktopCompatibilityPolicy == nil ||
+		result.RetentionPolicy == nil ||
+		result.State.Validate() != nil ||
+		result.Institution.Validate() != nil ||
+		result.Administrator.Validate() != nil ||
+		result.Role.Validate() != nil ||
+		result.RoleBinding.Validate() != nil ||
+		result.AccessPolicy.Validate() != nil ||
+		result.DesktopCompatibilityPolicy.Validate() != nil ||
+		result.RetentionPolicy.Validate() != nil ||
 		result.State.InstitutionID.String() != row.InstitutionID ||
 		result.State.AdministratorUserID.String() != row.AdministratorUserID ||
 		result.AccessPolicy.ID.String() != row.AccessPolicyID ||
-		result.DesktopCompatibilityPolicy.InstitutionID != result.State.InstitutionID || result.RetentionPolicy.InstitutionID != result.State.InstitutionID {
+		result.DesktopCompatibilityPolicy.InstitutionID != result.State.InstitutionID ||
+		result.RetentionPolicy.InstitutionID != result.State.InstitutionID {
 		return store.NewErrConflict("installation", "retained_bootstrap_result_invalid", nil)
 	}
+
 	return nil
 }
 
@@ -570,12 +688,12 @@ func installationIsPristine(ctx context.Context, executor sqlxExecutor) (bool, e
 	var present bool
 	if err := executor.Get(ctx, &present, `
 		SELECT EXISTS (SELECT 1 FROM installation_states)
-		    OR EXISTS (SELECT 1 FROM institutions)
-		    OR EXISTS (SELECT 1 FROM users)
-		    OR EXISTS (SELECT 1 FROM roles)
-		    OR EXISTS (SELECT 1 FROM role_bindings)
-		    OR EXISTS (SELECT 1 FROM access_policies)
-		    OR EXISTS (SELECT 1 FROM desktop_compatibility_policies)`); err != nil {
+			OR EXISTS (SELECT 1 FROM institutions)
+			OR EXISTS (SELECT 1 FROM users)
+			OR EXISTS (SELECT 1 FROM roles)
+			OR EXISTS (SELECT 1 FROM role_bindings)
+			OR EXISTS (SELECT 1 FROM access_policies)
+			OR EXISTS (SELECT 1 FROM desktop_compatibility_policies)`); err != nil {
 		return false, fmt.Errorf("check installation state: %w", err)
 	}
 	return !present, nil
@@ -589,15 +707,14 @@ func insertInstallationInstitution(
 	row := newInstitutionRow(institution)
 	if _, err := executor.NamedExec(ctx, `
 		INSERT INTO institutions (
-			id, created_at, updated_at, archived_at, name, display_name,
-			description, exam_resource_max_count, exam_resource_max_bytes,
-			exam_workspace_max_entries, exam_workspace_max_file_bytes,
-			exam_workspace_max_total_bytes
-		) VALUES (
-			:id, :created_at, :updated_at, :archived_at, :name, :display_name,
-			:description, :exam_resource_max_count, :exam_resource_max_bytes,
-			:exam_workspace_max_entries, :exam_workspace_max_file_bytes,
-			:exam_workspace_max_total_bytes
+			id, created_at, updated_at, archived_at, name, display_name, description,
+			exam_resource_max_count, exam_resource_max_bytes, exam_workspace_max_entries,
+			exam_workspace_max_file_bytes, exam_workspace_max_total_bytes
+		)
+		VALUES (
+			:id, :created_at, :updated_at, :archived_at, :name, :display_name, :description,
+			:exam_resource_max_count, :exam_resource_max_bytes, :exam_workspace_max_entries,
+			:exam_workspace_max_file_bytes, :exam_workspace_max_total_bytes
 		)`, &row); err != nil {
 		return fmt.Errorf(
 			"save bootstrap institution: %w",
@@ -615,11 +732,12 @@ func insertInstallationRole(
 	row := newRoleRow(role)
 	if _, err := executor.NamedExec(ctx, `
 		INSERT INTO roles (
-			id, created_at, updated_at, archived_at, name, display_name,
-			description, permissions, built_in
-		) VALUES (
-			:id, :created_at, :updated_at, :archived_at, :name, :display_name,
-			:description, :permissions, :built_in
+			id, created_at, updated_at, archived_at, name, display_name, description, permissions,
+			built_in
+		)
+		VALUES (
+			:id, :created_at, :updated_at, :archived_at, :name, :display_name, :description,
+			:permissions, :built_in
 		)`, &row); err != nil {
 		return fmt.Errorf(
 			"save bootstrap role: %w",
@@ -640,11 +758,12 @@ func insertInstallationRoleBinding(
 	row := newRoleBindingRow(binding)
 	if _, err := executor.NamedExec(ctx, `
 		INSERT INTO role_bindings (
-			id, created_at, updated_at, archived_at, user_id, role_id, origin_invitation_id, origin_academic_unit_member_id,
-			scope_type, scope_id, start_at, end_at
-		) VALUES (
-			:id, :created_at, :updated_at, :archived_at, :user_id, :role_id, :origin_invitation_id, :origin_academic_unit_member_id,
-			:scope_type, :scope_id, :start_at, :end_at
+			id, created_at, updated_at, archived_at, user_id, role_id, origin_invitation_id,
+			origin_academic_unit_member_id, scope_type, scope_id, start_at, end_at
+		)
+		VALUES (
+			:id, :created_at, :updated_at, :archived_at, :user_id, :role_id, :origin_invitation_id,
+			:origin_academic_unit_member_id, :scope_type, :scope_id, :start_at, :end_at
 		)`, &row); err != nil {
 		return fmt.Errorf(
 			"save bootstrap role binding: %w",
@@ -663,14 +782,15 @@ func insertInstallationAudit(
 	if _, err := executor.NamedExec(ctx, `
 		INSERT INTO audit_events (
 			id, created_at, updated_at, actor_id, session_id, subject_user_id, action,
-			resource_type, resource_id, scope_type, scope_id, status,
-			request_id, node_id, client_type, authentication_method,
-			ip_address, user_agent, error_code, parameters, prior_state, result
-		) VALUES (
+			resource_type, resource_id, scope_type, scope_id, status, request_id, node_id,
+			client_type, authentication_method, ip_address, user_agent, error_code, parameters,
+			prior_state, result
+		)
+		VALUES (
 			:id, :created_at, :updated_at, :actor_id, :session_id, :subject_user_id, :action,
-			:resource_type, :resource_id, :scope_type, :scope_id, :status,
-			:request_id, :node_id, :client_type, :authentication_method,
-			:ip_address, :user_agent, :error_code, :parameters, :prior_state, :result
+			:resource_type, :resource_id, :scope_type, :scope_id, :status, :request_id, :node_id,
+			:client_type, :authentication_method, :ip_address, :user_agent, :error_code,
+			:parameters, :prior_state, :result
 		)`, &row); err != nil {
 		return fmt.Errorf(
 			"save installation audit event: %w",

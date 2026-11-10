@@ -65,12 +65,19 @@ func (m *Migrator) Down(ctx context.Context, steps int) (_ int, resultErr error)
 	}
 	defer func() { resultErr = errors.Join(resultErr, fence.Close()) }()
 
-	return runSQLTransaction(ctx, fence.GetMaster().Begin, "migration rollback fence", func(ctx context.Context, tx *sqlxTxWrapper) (int, error) {
+	return runSQLTransaction(ctx, fence.GetMaster().Begin, "migration rollback fence", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (int, error) {
 		if err := lockServingNodeLeaseFence(ctx, tx); err != nil {
 			return 0, err
 		}
 		var live bool
-		err := fence.GetMaster().Get(ctx, &live, `SELECT EXISTS(SELECT 1 FROM serving_node_leases WHERE expires_at > clock_timestamp())`)
+		err := fence.GetMaster().Get(ctx, &live, `SELECT EXISTS(
+				SELECT 1
+				FROM serving_node_leases
+				WHERE expires_at > clock_timestamp()
+			)`)
 		var pqErr *pq.Error
 		if errors.As(err, &pqErr) && string(pqErr.Code) == postgresUndefinedTable {
 			live, err = false, nil

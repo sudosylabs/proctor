@@ -137,32 +137,47 @@ func (s SQLExternalIdentityStore) ResolveOrProvision(
 	if request == nil {
 		return nil, store.NewErrInvalidInput("external_identity", "resolution", nil)
 	}
+
 	identity := request.Identity
-	if identity == nil || !identity.ID.IsZero() ||
-		identity.Provider == "" || identity.Subject == "" ||
-		!identity.LastSeenAt.Valid || !validAccessDeploymentCapabilities(request.Capabilities) {
+	if identity == nil ||
+		!identity.ID.IsZero() ||
+		identity.Provider == "" ||
+		identity.Subject == "" ||
+		!identity.LastSeenAt.Valid ||
+		!validAccessDeploymentCapabilities(request.Capabilities) {
 		return nil, store.NewErrInvalidInput("external_identity", "resolution", nil)
 	}
+
 	provider := strings.ToLower(strings.TrimSpace(identity.Provider))
 	capability, configured := request.Capabilities.Providers[provider]
 	if !configured {
 		return nil, store.ErrAuthenticationMethodDisabled
 	}
+
 	lastSeenAt := model.TimeUTC(identity.LastSeenAt.Time)
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "external identity resolution", func(ctx context.Context, tx *sqlxTxWrapper) (*store.ExternalIdentityResolution, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "external identity resolution", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.ExternalIdentityResolution, error) {
 		return resolveOrProvisionExternalIdentity(ctx, tx, request, provider, capability, lastSeenAt)
 	})
 }
 
 // resolveOrProvisionExternalIdentity resolves a linked external identity or provisions a new User inside the resolution transaction.
-func resolveOrProvisionExternalIdentity(ctx context.Context, tx *sqlxTxWrapper, request *store.ExternalIdentityResolutionRequest,
-	provider string, capability store.AccessProviderCapability, lastSeenAt time.Time,
+func resolveOrProvisionExternalIdentity(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	request *store.ExternalIdentityResolutionRequest,
+	provider string,
+	capability store.AccessProviderCapability,
+	lastSeenAt time.Time,
 ) (*store.ExternalIdentityResolution, error) {
 	identity := request.Identity
 	policy, err := getAccessPolicy(ctx, tx, "FOR SHARE")
 	if err != nil {
 		return nil, err
 	}
+
 	admission, allowed := policy.ProviderAdmissions[provider]
 	if !allowed {
 		return nil, store.ErrAuthenticationMethodDisabled
@@ -184,17 +199,23 @@ func resolveOrProvisionExternalIdentity(ctx context.Context, tx *sqlxTxWrapper, 
 			User:     resolvedUser,
 		}, nil
 	}
+
 	if !store.IsNotFound(err) {
 		return nil, err
 	}
 	if err := requireExternalIdentityAutoProvision(admission, capability, provider); err != nil {
 		return nil, err
 	}
+
 	return provisionExternalIdentity(ctx, tx, request, provider, lastSeenAt)
 }
 
 // requireExternalIdentityAutoProvision rejects provisioning an unlinked identity unless the provider admits automatic provisioning.
-func requireExternalIdentityAutoProvision(admission model.ProviderAdmissionMode, capability store.AccessProviderCapability, provider string) error {
+func requireExternalIdentityAutoProvision(
+	admission model.ProviderAdmissionMode,
+	capability store.AccessProviderCapability,
+	provider string,
+) error {
 	switch admission {
 	case model.ProviderAdmissionAutoProvision:
 		if !capability.AutoProvision {
@@ -207,21 +228,31 @@ func requireExternalIdentityAutoProvision(admission model.ProviderAdmissionMode,
 	default:
 		return store.ErrAuthenticationMethodDisabled
 	}
+
 	return nil
 }
 
 // provisionExternalIdentity inserts the prepared User, settings, external identity, profile picture Job and audit event.
-func provisionExternalIdentity(ctx context.Context, tx *sqlxTxWrapper, request *store.ExternalIdentityResolutionRequest,
-	provider string, lastSeenAt time.Time,
+func provisionExternalIdentity(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	request *store.ExternalIdentityResolutionRequest,
+	provider string,
+	lastSeenAt time.Time,
 ) (*store.ExternalIdentityResolution, error) {
-	if request.User == nil || request.Settings == nil || request.AuditEvent == nil ||
-		!request.AuditEvent.ID.IsZero() || request.DefaultProfilePictureJob == nil {
+	if request.User == nil ||
+		request.Settings == nil ||
+		request.AuditEvent == nil ||
+		!request.AuditEvent.ID.IsZero() ||
+		request.DefaultProfilePictureJob == nil {
 		return nil, store.NewErrInvalidInput("external_identity", "provisioning", nil)
 	}
+
 	at := lastSeenAt
 	if at.IsZero() {
 		at = model.NowUTC()
 	}
+
 	userCandidate := *request.User
 	if err := userCandidate.Validate(); err != nil {
 		return nil, err
@@ -229,10 +260,12 @@ func provisionExternalIdentity(ctx context.Context, tx *sqlxTxWrapper, request *
 	if err := validateUserDefaultProfilePictureJob(&userCandidate, request.DefaultProfilePictureJob); err != nil {
 		return nil, err
 	}
+
 	settingsCandidate := request.Settings.Clone()
 	if err := validateInitialUserSettingsDocument(&userCandidate, settingsCandidate); err != nil {
 		return nil, err
 	}
+
 	identityCandidate := *request.Identity
 	identityCandidate.Provider = provider
 	identityCandidate.UserID = userCandidate.ID
@@ -249,9 +282,14 @@ func provisionExternalIdentity(ctx context.Context, tx *sqlxTxWrapper, request *
 	if err := insertExternalIdentity(ctx, tx, &identityCandidate); err != nil {
 		return nil, err
 	}
+
 	if _, err := insertQueuedJob(ctx, tx, request.DefaultProfilePictureJob, false); err != nil {
-		return nil, fmt.Errorf("enqueue external user default profile picture generation: %w", translateError("job", request.DefaultProfilePictureJob.ID.String(), err))
+		return nil, fmt.Errorf(
+			"enqueue external user default profile picture generation: %w",
+			translateError("job", request.DefaultProfilePictureJob.ID.String(), err),
+		)
 	}
+
 	auditCandidate := request.AuditEvent.Clone()
 	auditCandidate.ActorID = userCandidate.ID
 	auditCandidate.Resource = model.Resource{
@@ -261,6 +299,7 @@ func provisionExternalIdentity(ctx context.Context, tx *sqlxTxWrapper, request *
 	if _, err := insertAuditEvent(ctx, tx, auditCandidate); err != nil {
 		return nil, err
 	}
+
 	return &store.ExternalIdentityResolution{
 		Identity:    &identityCandidate,
 		User:        &userCandidate,
@@ -284,11 +323,16 @@ func resolveExternalIdentity(
 ) (*model.ExternalIdentity, *model.User, error) {
 	at := model.TimeUTC(lastSeenAt)
 	var identityRow externalIdentityRow
-	err := tx.Get(ctx, &identityRow, `
+	err := tx.Get(
+		ctx,
+		&identityRow,
+		`
 		SELECT id, created_at, updated_at, archived_at, user_id, provider, subject, last_seen_at
-		  FROM external_identities
-		 WHERE provider = ? AND subject = ? AND archived_at IS NULL
-		 FOR UPDATE`,
+		FROM external_identities
+		WHERE provider = ?
+			AND subject = ?
+			AND archived_at IS NULL
+		FOR UPDATE`,
 		provider,
 		subject,
 	)
@@ -298,17 +342,21 @@ func resolveExternalIdentity(
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolve external identity: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `
+
+	if _, err := tx.Exec(
+		ctx,
+		`
 		UPDATE external_identities
-		   SET updated_at = GREATEST(updated_at, ?),
-		       last_seen_at = GREATEST(last_seen_at, ?)
-		 WHERE id = ? AND archived_at IS NULL`,
+		SET updated_at = GREATEST(updated_at, ?), last_seen_at = GREATEST(last_seen_at, ?)
+		WHERE id = ?
+			AND archived_at IS NULL`,
 		at,
 		at,
 		identityRow.ID,
 	); err != nil {
 		return nil, nil, fmt.Errorf("update external identity last seen: %w", err)
 	}
+
 	if identityRow.UpdatedAt.Before(at) {
 		identityRow.UpdatedAt = at
 	}
@@ -317,26 +365,32 @@ func resolveExternalIdentity(
 	}
 
 	var row userRow
-	if err := tx.Get(ctx, &row, `
-		SELECT id, created_at, updated_at, archived_at, revision, username, email,
-		       email_verified, display_name, first_name, last_name, locale,
-		       timezone, last_login_at, last_activity_at, disabled_at
-		       , default_profile_picture_seed, default_profile_picture_file_id,
-		       custom_profile_picture_file_id, profile_picture_changed_at
-		  FROM users
-		 WHERE id = ? AND archived_at IS NULL`,
+	if err := tx.Get(
+		ctx,
+		&row,
+		`
+		SELECT id, created_at, updated_at, archived_at, revision, username, email, email_verified,
+			display_name, first_name, last_name, locale, timezone, last_login_at, last_activity_at,
+			disabled_at , default_profile_picture_seed, default_profile_picture_file_id,
+			custom_profile_picture_file_id, profile_picture_changed_at
+		FROM users
+		WHERE id = ?
+			AND archived_at IS NULL`,
 		identityRow.UserID,
 	); err != nil {
 		return nil, nil, translateError("user", identityRow.UserID, err)
 	}
+
 	user, err := row.model()
 	if err != nil {
 		return nil, nil, err
 	}
+
 	identity, err := identityRow.model()
 	if err != nil {
 		return nil, nil, err
 	}
+
 	return identity, user, nil
 }
 
@@ -348,11 +402,11 @@ func insertExternalIdentity(
 	row := newExternalIdentityRow(identity)
 	if _, err := executor.NamedExec(ctx, `
 		INSERT INTO external_identities (
-			id, created_at, updated_at, archived_at, user_id, provider, subject,
-			last_seen_at
-		) VALUES (
-			:id, :created_at, :updated_at, :archived_at, :user_id, :provider,
-			:subject, :last_seen_at
+			id, created_at, updated_at, archived_at, user_id, provider, subject, last_seen_at
+		)
+		VALUES (
+			:id, :created_at, :updated_at, :archived_at, :user_id, :provider, :subject,
+			:last_seen_at
 		)`, &row); err != nil {
 		return fmt.Errorf(
 			"save external identity: %w",

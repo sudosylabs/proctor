@@ -45,6 +45,7 @@ func (s SQLClusterDiscoveryStore) Upsert(
 	if err != nil {
 		return err
 	}
+
 	query, args, err := s.getQueryBuilder().
 		Insert("cluster_discovery_nodes").
 		Columns(
@@ -81,6 +82,7 @@ ON CONFLICT (node_id) DO UPDATE SET
 	if _, err := s.GetMaster().Exec(ctx, query, args...); err != nil {
 		return translateError("cluster_discovery", "upsert", err)
 	}
+
 	return nil
 }
 
@@ -91,6 +93,7 @@ func (s SQLClusterDiscoveryStore) ListLive(
 	if nowMillis.IsZero() {
 		return nil, fmt.Errorf("cluster discovery now is invalid")
 	}
+
 	query, args, err := s.getQueryBuilder().
 		Select(
 			"node_id",
@@ -108,18 +111,22 @@ func (s SQLClusterDiscoveryStore) ListLive(
 	if err != nil {
 		return nil, fmt.Errorf("build cluster discovery list: %w", err)
 	}
+
 	var rows []clusterDiscoveryNodeRow
 	if err := s.GetMaster().Select(ctx, &rows, query, args...); err != nil {
 		return nil, translateError("cluster_discovery", "list_live", err)
 	}
+
 	nodes := make([]*store.ClusterDiscoveryNode, 0, len(rows))
 	for _, row := range rows {
 		node := row.model()
 		if err := node.Validate(); err != nil {
 			return nil, fmt.Errorf("cluster discovery integrity: %w", err)
 		}
+
 		nodes = append(nodes, node)
 	}
+
 	return nodes, nil
 }
 

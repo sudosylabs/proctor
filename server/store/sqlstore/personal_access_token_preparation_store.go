@@ -49,21 +49,29 @@ type personalAccessTokenPreparationRow struct {
 	PriorState   jsonValue                             `db:"prior_state"`
 }
 
-func (s SQLPersonalAccessTokenStore) PrepareMutation(ctx context.Context, input *store.PersonalAccessTokenMutationPreparation) (*store.PreparedPersonalAccessTokenMutation, error) {
+func (s SQLPersonalAccessTokenStore) PrepareMutation(
+	ctx context.Context,
+	input *store.PersonalAccessTokenMutationPreparation,
+) (*store.PreparedPersonalAccessTokenMutation, error) {
 	if err := validatePersonalAccessTokenPreparationInput(input); err != nil {
 		return nil, err
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "prepare personal access token mutation", func(ctx context.Context, tx *sqlxTxWrapper) (*store.PreparedPersonalAccessTokenMutation, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "prepare personal access token mutation", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.PreparedPersonalAccessTokenMutation, error) {
 		// Serialize first, then derive the bounded preparation lifecycle from
 		// PostgreSQL time. A contender must not persist an already-stale attempt
 		// after waiting behind another transition for this user.
 		if err := lockPersonalAccessTokensForUser(ctx, tx, input.UserID.String()); err != nil {
 			return nil, err
 		}
+
 		at, err := personalAccessTokenDatabaseNow(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
+
 		candidate := input.AuditEvent.Clone()
 		candidate.PrepareCreate(model.NewAuditEventID(), at)
 		if err := candidate.Validate(); err != nil {
@@ -75,36 +83,74 @@ func (s SQLPersonalAccessTokenStore) PrepareMutation(ctx context.Context, input 
 		if err := requireMFARecoveryPATSource(ctx, tx, input.UserID.String(), candidate.SessionID.String(), at); err != nil {
 			return nil, err
 		}
+
 		if input.Kind == store.PersonalAccessTokenMutationCreate {
 			var active bool
-			if err := tx.Get(ctx, &active, `SELECT archived_at IS NULL AND disabled_at IS NULL FROM users WHERE id=? FOR SHARE`, input.UserID); err != nil {
+			if err := tx.Get(
+				ctx,
+				&active,
+				`SELECT archived_at IS NULL AND disabled_at IS NULL FROM users WHERE id = ? FOR SHARE`,
+				input.UserID,
+			); err != nil {
 				return nil, translateError("user", input.UserID.String(), err)
 			}
+
 			if !active {
 				return nil, store.NewErrNotFound("user", input.UserID.String())
 			}
 		} else {
 			var exists bool
-			if err := tx.Get(ctx, &exists, `SELECT TRUE FROM personal_access_tokens WHERE id=? AND user_id=? AND archived_at IS NULL FOR SHARE`, input.TokenID, input.UserID); err != nil {
+			if err := tx.Get(
+				ctx,
+				&exists,
+				`SELECT TRUE FROM personal_access_tokens WHERE id = ? AND user_id = ? AND archived_at IS NULL FOR SHARE`,
+				input.TokenID,
+				input.UserID,
+			); err != nil {
 				return nil, translateError("personal_access_token", input.TokenID.String(), err)
 			}
 		}
+
 		id := model.NewID()
 		expiresAt := at.Add(input.Lifetime)
-		if _, err := tx.Exec(ctx, `
+		if _, err := tx.Exec(
+			ctx,
+			`
 			INSERT INTO personal_access_token_mutation_preparations (
 				id, created_at, expires_at, user_id, token_id, kind,
 				actor_id, session_id, action, resource_type, resource_id,
 				scope_type, scope_id, request_id, node_id, client_type,
 				authentication_method, ip_address, user_agent, parameters, prior_state
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			id, at, expiresAt, input.UserID, nullablePersonalAccessTokenPreparationID(input.TokenID.String()), input.Kind,
-			nullableAuditString(candidate.ActorID.String()), nullableAuditString(candidate.SessionID.String()), candidate.Action,
-			candidate.Resource.Type, candidate.Resource.ID, candidate.ScopeType, candidate.ScopeID,
-			candidate.RequestID, candidate.NodeID, candidate.ClientType, candidate.AuthMethod,
-			candidate.IPAddress, candidate.UserAgent, nullableJSON(candidate.Parameters), nullableJSON(candidate.PriorState)); err != nil {
-			return nil, fmt.Errorf("insert personal access token mutation preparation: %w", translateError("personal_access_token_mutation_preparation", id, err))
+			)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			id,
+			at,
+			expiresAt,
+			input.UserID,
+			nullablePersonalAccessTokenPreparationID(input.TokenID.String()),
+			input.Kind,
+			nullableAuditString(candidate.ActorID.String()),
+			nullableAuditString(candidate.SessionID.String()),
+			candidate.Action,
+			candidate.Resource.Type,
+			candidate.Resource.ID,
+			candidate.ScopeType,
+			candidate.ScopeID,
+			candidate.RequestID,
+			candidate.NodeID,
+			candidate.ClientType,
+			candidate.AuthMethod,
+			candidate.IPAddress,
+			candidate.UserAgent,
+			nullableJSON(candidate.Parameters),
+			nullableJSON(candidate.PriorState),
+		); err != nil {
+			return nil, fmt.Errorf(
+				"insert personal access token mutation preparation: %w",
+				translateError("personal_access_token_mutation_preparation", id, err),
+			)
 		}
+
 		return &store.PreparedPersonalAccessTokenMutation{ID: model.PersonalAccessTokenPreparationID(id), ActionAt: at, ExpiresAt: expiresAt}, nil
 	})
 }
@@ -113,12 +159,22 @@ func (s SQLPersonalAccessTokenStore) FailMutation(ctx context.Context, input *st
 	if input == nil || !input.PreparationID.IsValid() || strings.TrimSpace(input.ErrorCode) == "" || len(input.ErrorCode) > 128 {
 		return store.NewErrInvalidInput("personal_access_token", "mutation_failure", nil)
 	}
-	_, err := runSQLTransaction(ctx, s.GetMaster().Begin, "fail personal access token mutation preparation", func(ctx context.Context, tx *sqlxTxWrapper) (struct{}, error) {
+	_, err := runSQLTransaction(ctx, s.GetMaster().Begin, "fail personal access token mutation preparation", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (struct{}, error) {
 		row, _, err := lockPersonalAccessTokenPreparation(ctx, tx, input.PreparationID.String())
 		if err != nil {
 			return struct{}{}, err
 		}
-		if err := terminalizePersonalAccessTokenPreparation(ctx, tx, row, model.AuditStatusFail, strings.TrimSpace(input.ErrorCode), nil); err != nil {
+		if err := terminalizePersonalAccessTokenPreparation(
+			ctx,
+			tx,
+			row,
+			model.AuditStatusFail,
+			strings.TrimSpace(input.ErrorCode),
+			nil,
+		); err != nil {
 			return struct{}{}, err
 		}
 		return struct{}{}, nil
@@ -126,30 +182,52 @@ func (s SQLPersonalAccessTokenStore) FailMutation(ctx context.Context, input *st
 	return err
 }
 
-func (s SQLPersonalAccessTokenStore) MaintainMutationPreparations(ctx context.Context, limit int) (*store.PersonalAccessTokenPreparationMaintenanceResult, error) {
+func (s SQLPersonalAccessTokenStore) MaintainMutationPreparations(
+	ctx context.Context,
+	limit int,
+) (*store.PersonalAccessTokenPreparationMaintenanceResult, error) {
 	if limit < 1 || limit > 1000 {
 		return nil, store.NewErrInvalidInput("personal_access_token", "maintenance_limit", limit)
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "maintain personal access token mutation preparations", func(ctx context.Context, tx *sqlxTxWrapper) (*store.PersonalAccessTokenPreparationMaintenanceResult, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "maintain personal access token mutation preparations", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.PersonalAccessTokenPreparationMaintenanceResult, error) {
 		databaseAt, err := personalAccessTokenDatabaseNow(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
+
 		var rows []personalAccessTokenPreparationRow
 		if err := tx.Select(ctx, &rows, `SELECT `+personalAccessTokenPreparationColumns+`
 			FROM personal_access_token_mutation_preparations
-			WHERE expires_at<=? ORDER BY expires_at,id FOR UPDATE SKIP LOCKED LIMIT ?`, databaseAt, limit); err != nil {
+			WHERE expires_at <= ? ORDER BY expires_at, id FOR UPDATE SKIP LOCKED LIMIT ?`, databaseAt, limit); err != nil {
 			return nil, fmt.Errorf("select expired personal access token mutation preparations: %w", err)
 		}
+
 		for i := range rows {
-			if err := terminalizePersonalAccessTokenPreparation(ctx, tx, &rows[i], model.AuditStatusFail, personalAccessTokenPreparationFailureCode, nil); err != nil {
+			if err := terminalizePersonalAccessTokenPreparation(
+				ctx,
+				tx,
+				&rows[i],
+				model.AuditStatusFail,
+				personalAccessTokenPreparationFailureCode,
+				nil,
+			); err != nil {
 				return nil, err
 			}
 		}
+
 		var more bool
-		if err := tx.Get(ctx, &more, `SELECT EXISTS (SELECT 1 FROM personal_access_token_mutation_preparations WHERE expires_at<=?)`, databaseAt); err != nil {
+		if err := tx.Get(
+			ctx,
+			&more,
+			`SELECT EXISTS (SELECT 1 FROM personal_access_token_mutation_preparations WHERE expires_at <= ?)`,
+			databaseAt,
+		); err != nil {
 			return nil, fmt.Errorf("inspect personal access token mutation preparation continuation: %w", err)
 		}
+
 		return &store.PersonalAccessTokenPreparationMaintenanceResult{Failed: len(rows), More: more}, nil
 	})
 }
@@ -158,9 +236,18 @@ const personalAccessTokenPreparationColumns = `id,created_at,expires_at,user_id,
 	actor_id,session_id,action,resource_type,resource_id,scope_type,scope_id,
 	request_id,node_id,client_type,authentication_method,ip_address,user_agent,parameters,prior_state`
 
-func lockPersonalAccessTokenPreparation(ctx context.Context, tx *sqlxTxWrapper, id string) (*personalAccessTokenPreparationRow, time.Time, error) {
+func lockPersonalAccessTokenPreparation(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	id string,
+) (*personalAccessTokenPreparationRow, time.Time, error) {
 	var row personalAccessTokenPreparationRow
-	if err := tx.Get(ctx, &row, `SELECT `+personalAccessTokenPreparationColumns+` FROM personal_access_token_mutation_preparations WHERE id=? FOR UPDATE`, id); err != nil {
+	if err := tx.Get(
+		ctx,
+		&row,
+		`SELECT `+personalAccessTokenPreparationColumns+` FROM personal_access_token_mutation_preparations WHERE id = ? FOR UPDATE`,
+		id,
+	); err != nil {
 		return nil, time.Time{}, translateError("personal_access_token_mutation_preparation", id, err)
 	}
 	// Sample authoritative time only after acquiring the preparation lock. A
@@ -172,7 +259,12 @@ func lockPersonalAccessTokenPreparation(ctx context.Context, tx *sqlxTxWrapper, 
 	return &row, databaseAt, nil
 }
 
-func requirePersonalAccessTokenPreparation(row *personalAccessTokenPreparationRow, kind store.PersonalAccessTokenMutationKind, userID, tokenID string, databaseAt time.Time) error {
+func requirePersonalAccessTokenPreparation(
+	row *personalAccessTokenPreparationRow,
+	kind store.PersonalAccessTokenMutationKind,
+	userID, tokenID string,
+	databaseAt time.Time,
+) error {
 	if row == nil || row.Kind != kind || row.UserID != userID || row.TokenID.String != tokenID || row.TokenID.Valid != (tokenID != "") {
 		return store.NewErrInvalidInput("personal_access_token_mutation_preparation", "binding", nil)
 	}
@@ -182,7 +274,14 @@ func requirePersonalAccessTokenPreparation(row *personalAccessTokenPreparationRo
 	return nil
 }
 
-func terminalizePersonalAccessTokenPreparation(ctx context.Context, tx *sqlxTxWrapper, row *personalAccessTokenPreparationRow, status model.AuditStatus, errorCode string, result json.RawMessage) error {
+func terminalizePersonalAccessTokenPreparation(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	row *personalAccessTokenPreparationRow,
+	status model.AuditStatus,
+	errorCode string,
+	result json.RawMessage,
+) error {
 	if row == nil || (status != model.AuditStatusSuccess && status != model.AuditStatusFail) {
 		return store.NewErrInvalidInput("personal_access_token_mutation_preparation", "terminal", nil)
 	}
@@ -201,7 +300,7 @@ func terminalizePersonalAccessTokenPreparation(ctx context.Context, tx *sqlxTxWr
 }
 
 func deletePersonalAccessTokenPreparation(ctx context.Context, tx *sqlxTxWrapper, id string) error {
-	result, err := tx.Exec(ctx, `DELETE FROM personal_access_token_mutation_preparations WHERE id=?`, id)
+	result, err := tx.Exec(ctx, `DELETE FROM personal_access_token_mutation_preparations WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("delete personal access token mutation preparation: %w", err)
 	}
@@ -212,28 +311,52 @@ func deletePersonalAccessTokenPreparation(ctx context.Context, tx *sqlxTxWrapper
 	return nil
 }
 
-func (row personalAccessTokenPreparationRow) auditEvent(status model.AuditStatus, errorCode string, result json.RawMessage) (*model.AuditEvent, error) {
+func (row personalAccessTokenPreparationRow) auditEvent(
+	status model.AuditStatus,
+	errorCode string,
+	result json.RawMessage,
+) (*model.AuditEvent, error) {
 	audit := auditRow{
-		ID: row.ID, CreatedAt: row.CreatedAt, UpdatedAt: row.CreatedAt,
+		ID:        row.ID,
+		CreatedAt: row.CreatedAt,
+		UpdatedAt: row.CreatedAt,
 		// A token mutation always concerns the preparing User's own account.
-		ActorID: row.ActorID, SessionID: row.SessionID, SubjectID: nullableAuditString(row.UserID), Action: row.Action,
-		ResourceType: row.ResourceType, ResourceID: row.ResourceID,
-		ScopeType: row.ScopeType, ScopeID: row.ScopeID, Status: status,
-		RequestID: row.RequestID, NodeID: row.NodeID, ClientType: row.ClientType,
-		AuthMethod: row.AuthMethod, IPAddress: row.IPAddress, UserAgent: row.UserAgent,
-		ErrorCode: errorCode, Parameters: row.Parameters, PriorState: row.PriorState, Result: jsonValue(result),
+		ActorID:      row.ActorID,
+		SessionID:    row.SessionID,
+		SubjectID:    nullableAuditString(row.UserID),
+		Action:       row.Action,
+		ResourceType: row.ResourceType,
+		ResourceID:   row.ResourceID,
+		ScopeType:    row.ScopeType,
+		ScopeID:      row.ScopeID,
+		Status:       status,
+		RequestID:    row.RequestID,
+		NodeID:       row.NodeID,
+		ClientType:   row.ClientType,
+		AuthMethod:   row.AuthMethod,
+		IPAddress:    row.IPAddress,
+		UserAgent:    row.UserAgent,
+		ErrorCode:    errorCode,
+		Parameters:   row.Parameters,
+		PriorState:   row.PriorState,
+		Result:       jsonValue(result),
 	}
 	event, err := audit.model()
 	if err != nil {
 		return nil, err
 	}
+
 	event.ID = ""
 	return event, nil
 }
 
 func validatePersonalAccessTokenPreparationInput(input *store.PersonalAccessTokenMutationPreparation) error {
-	if input == nil || !input.UserID.IsValid() || input.AuditEvent == nil || input.Lifetime < personalAccessTokenPreparationMinimumLifetime ||
-		input.Lifetime > personalAccessTokenPreparationMaximumLifetime || input.Lifetime%time.Millisecond != 0 {
+	if input == nil ||
+		!input.UserID.IsValid() ||
+		input.AuditEvent == nil ||
+		input.Lifetime < personalAccessTokenPreparationMinimumLifetime ||
+		input.Lifetime > personalAccessTokenPreparationMaximumLifetime ||
+		input.Lifetime%time.Millisecond != 0 {
 		return store.NewErrInvalidInput("personal_access_token", "mutation_preparation", nil)
 	}
 	switch input.Kind {
@@ -258,9 +381,17 @@ func validatePersonalAccessTokenPreparationAudit(input *store.PersonalAccessToke
 		store.PersonalAccessTokenMutationDisable: model.ActionPersonalAccessTokenDisable,
 		store.PersonalAccessTokenMutationRevoke:  model.ActionPersonalAccessTokenRevoke,
 	}[input.Kind]
-	if event.ActorID != input.UserID || (!event.SubjectUserID.IsZero() && event.SubjectUserID != input.UserID) || !event.SessionID.IsValid() || event.Status != model.AuditStatusAttempt || expectedAction == "" || event.Action != string(expectedAction) ||
-		event.Resource.Type != model.ResourceInstitution || event.ScopeType != model.RoleScopeInstitution || event.Resource.ID != event.ScopeID ||
-		event.ErrorCode != "" || len(event.Result) != 0 {
+	if event.ActorID != input.UserID ||
+		(!event.SubjectUserID.IsZero() && event.SubjectUserID != input.UserID) ||
+		!event.SessionID.IsValid() ||
+		event.Status != model.AuditStatusAttempt ||
+		expectedAction == "" ||
+		event.Action != string(expectedAction) ||
+		event.Resource.Type != model.ResourceInstitution ||
+		event.ScopeType != model.RoleScopeInstitution ||
+		event.Resource.ID != event.ScopeID ||
+		event.ErrorCode != "" ||
+		len(event.Result) != 0 {
 		return store.NewErrInvalidInput("personal_access_token", "audit", nil)
 	}
 	return nil

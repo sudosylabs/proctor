@@ -80,8 +80,15 @@ func (s SQLProgrammeLevelStore) Create(ctx context.Context, input *store.Program
 	return s.createProgrammeLevel(ctx, &candidate, &academicMutationAudit{eventID: input.AuditEventID, at: input.AuditAt})
 }
 
-func (s SQLProgrammeLevelStore) createProgrammeLevel(ctx context.Context, candidate *model.ProgrammeLevel, audit *academicMutationAudit) (*model.ProgrammeLevel, error) {
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "programme level creation", func(ctx context.Context, tx *sqlxTxWrapper) (*model.ProgrammeLevel, error) {
+func (s SQLProgrammeLevelStore) createProgrammeLevel(
+	ctx context.Context,
+	candidate *model.ProgrammeLevel,
+	audit *academicMutationAudit,
+) (*model.ProgrammeLevel, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "programme level creation", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*model.ProgrammeLevel, error) {
 		if err := lockProgrammeLifecycle(ctx, tx); err != nil {
 			return nil, err
 		}
@@ -93,7 +100,8 @@ func (s SQLProgrammeLevelStore) createProgrammeLevel(ctx context.Context, candid
 			INSERT INTO programme_levels (
 				id, created_at, updated_at, archived_at, revision, programme_id,
 				name, display_name, description
-			) VALUES (
+			)
+			VALUES (
 				:id, :created_at, :updated_at, :archived_at, :revision, :programme_id,
 				:name, :display_name, :description
 			)`, &row); err != nil {
@@ -161,7 +169,11 @@ func (s SQLProgrammeLevelStore) ListByProgramme(ctx context.Context, programmeID
 
 // SearchByProgramme returns one page of unarchived Programme Levels of the
 // Programme selected and ordered by options.
-func (s SQLProgrammeLevelStore) SearchByProgramme(ctx context.Context, programmeID model.ProgrammeID, options store.AcademicNameListOptions) ([]*model.ProgrammeLevel, error) {
+func (s SQLProgrammeLevelStore) SearchByProgramme(
+	ctx context.Context,
+	programmeID model.ProgrammeID,
+	options store.AcademicNameListOptions,
+) ([]*model.ProgrammeLevel, error) {
 	query, valid := academicNamePage(s.programmeLevelsQuery.Where(sq.Eq{
 		"programme_levels.programme_id": programmeID,
 		"programme_levels.archived_at":  nil,
@@ -184,14 +196,23 @@ func (s SQLProgrammeLevelStore) SearchByProgramme(ctx context.Context, programme
 	return result, nil
 }
 
-func (s SQLProgrammeLevelStore) updateProgrammeLevel(ctx context.Context, candidate *model.ProgrammeLevel, expectedOwner string, audit *academicMutationAudit) (*model.ProgrammeLevel, error) {
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "programme level update", func(ctx context.Context, tx *sqlxTxWrapper) (*model.ProgrammeLevel, error) {
+func (s SQLProgrammeLevelStore) updateProgrammeLevel(
+	ctx context.Context,
+	candidate *model.ProgrammeLevel,
+	expectedOwner string,
+	audit *academicMutationAudit,
+) (*model.ProgrammeLevel, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "programme level update", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*model.ProgrammeLevel, error) {
 		if err := lockProgrammeLifecycle(ctx, tx); err != nil {
 			return nil, err
 		}
 		if err := validateActiveProgramme(ctx, tx, candidate.ProgrammeID.String()); err != nil {
 			return nil, err
 		}
+
 		row := newProgrammeLevelRow(candidate)
 		result, err := tx.NamedExec(ctx, `
 			UPDATE programme_levels
@@ -204,10 +225,15 @@ func (s SQLProgrammeLevelStore) updateProgrammeLevel(ctx context.Context, candid
 			 WHERE id = :id AND archived_at IS NULL
 			   AND (:expected_owner = '' OR programme_id = :expected_owner)
 			   AND revision = :expected_revision`, map[string]any{
-			"expected_owner": expectedOwner, "id": candidate.ID.String(), "updated_at": row.UpdatedAt,
-			"revision": candidate.Revision, "programme_id": row.ProgrammeID,
-			"name": row.Name, "display_name": row.DisplayName,
-			"description": row.Description, "expected_revision": candidate.Revision - 1,
+			"expected_owner":    expectedOwner,
+			"id":                candidate.ID.String(),
+			"updated_at":        row.UpdatedAt,
+			"revision":          candidate.Revision,
+			"programme_id":      row.ProgrammeID,
+			"name":              row.Name,
+			"display_name":      row.DisplayName,
+			"description":       row.Description,
+			"expected_revision": candidate.Revision - 1,
 		})
 		if err != nil {
 			return nil, fmt.Errorf(
@@ -215,16 +241,28 @@ func (s SQLProgrammeLevelStore) updateProgrammeLevel(ctx context.Context, candid
 				translateError("programme_level", candidate.ID.String(), err),
 			)
 		}
+
 		if expectedOwner != "" {
-			if err := requireOwnedRevisionAffected(ctx, tx, result, "programme_level", "programme_levels", "programme_id", candidate.ID.String(), expectedOwner); err != nil {
+			if err := requireOwnedRevisionAffected(
+				ctx,
+				tx,
+				result,
+				"programme_level",
+				"programme_levels",
+				"programme_id",
+				candidate.ID.String(),
+				expectedOwner,
+			); err != nil {
 				return nil, err
 			}
 		} else if err := requireRevisionAffected(ctx, tx, result, "programme_level", "programme_levels", candidate.ID.String()); err != nil {
 			return nil, err
 		}
+
 		if err := audit.complete(ctx, tx, candidate.Auditable()); err != nil {
 			return nil, err
 		}
+
 		return candidate, nil
 	})
 }
@@ -239,24 +277,50 @@ func (s SQLProgrammeLevelStore) Update(ctx context.Context, input *store.Program
 	if err := candidate.Validate(); err != nil {
 		return nil, store.NewErrInvalidInput("programme_level", "value", nil).Wrap(err)
 	}
-	return s.updateProgrammeLevel(ctx, &candidate, candidate.ProgrammeID.String(), &academicMutationAudit{eventID: input.AuditEventID, at: input.AuditAt})
+	return s.updateProgrammeLevel(
+		ctx,
+		&candidate,
+		candidate.ProgrammeID.String(),
+		&academicMutationAudit{eventID: input.AuditEventID, at: input.AuditAt},
+	)
 }
 
 // Archive archives the Programme Level and completes its audit event. A
 // positive ExpectedRevision must match the stored revision, and active Classes
 // make it a conflict.
 func (s SQLProgrammeLevelStore) Archive(ctx context.Context, input *store.ProgrammeLevelArchive) (*model.ProgrammeLevel, error) {
-	if input == nil || !input.ID.IsValid() || input.ArchiveAt.IsZero() || input.ExpectedRevision < 0 || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		!input.ID.IsValid() ||
+		input.ArchiveAt.IsZero() ||
+		input.ExpectedRevision < 0 ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("programme_level", "archive", nil)
 	}
-	return s.archiveProgrammeLevel(ctx, input.ID, input.ArchiveAt, input.ExpectedRevision, &academicMutationAudit{eventID: input.AuditEventID, at: input.AuditAt})
+	return s.archiveProgrammeLevel(
+		ctx,
+		input.ID,
+		input.ArchiveAt,
+		input.ExpectedRevision,
+		&academicMutationAudit{eventID: input.AuditEventID, at: input.AuditAt},
+	)
 }
 
-func (s SQLProgrammeLevelStore) archiveProgrammeLevel(ctx context.Context, id model.ProgrammeLevelID, archiveAt time.Time, expectedRevision int64, audit *academicMutationAudit) (*model.ProgrammeLevel, error) {
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "programme level archive", func(ctx context.Context, tx *sqlxTxWrapper) (*model.ProgrammeLevel, error) {
+func (s SQLProgrammeLevelStore) archiveProgrammeLevel(
+	ctx context.Context,
+	id model.ProgrammeLevelID,
+	archiveAt time.Time,
+	expectedRevision int64,
+	audit *academicMutationAudit,
+) (*model.ProgrammeLevel, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "programme level archive", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*model.ProgrammeLevel, error) {
 		if err := lockProgrammeLevelLifecycle(ctx, tx); err != nil {
 			return nil, err
 		}
+
 		var row programmeLevelRow
 		query := s.programmeLevelsQuery.Where(sq.Eq{"programme_levels.id": id, "programme_levels.archived_at": nil})
 		if err := tx.GetBuilder(ctx, &row, query); err != nil {
@@ -265,14 +329,34 @@ func (s SQLProgrammeLevelStore) archiveProgrammeLevel(ctx context.Context, id mo
 		if err := requireAcademicRevision("programme_level", expectedRevision, row.Revision); err != nil {
 			return nil, err
 		}
+
 		var dependent bool
-		if err := tx.Get(ctx, &dependent, `SELECT EXISTS (SELECT 1 FROM classes WHERE programme_level_id = ? AND archived_at IS NULL)`, id); err != nil {
+		if err := tx.Get(
+			ctx,
+			&dependent,
+			`SELECT EXISTS (SELECT 1 FROM classes WHERE programme_level_id = ? AND archived_at IS NULL)`,
+			id,
+		); err != nil {
 			return nil, fmt.Errorf("check programme level archive dependencies: %w", err)
 		}
+
 		if dependent {
 			return nil, store.NewErrConflict("programme_level", "programme_level_has_active_classes", nil)
 		}
-		result, err := tx.Exec(ctx, `UPDATE programme_levels SET updated_at = GREATEST(updated_at, ?), archived_at = GREATEST(created_at, ?), revision = revision + 1 WHERE id = ? AND archived_at IS NULL AND revision = ?`, model.TimeUTC(archiveAt), model.TimeUTC(archiveAt), id, row.Revision)
+
+		result, err := tx.Exec(
+			ctx,
+			`UPDATE programme_levels
+			SET updated_at = GREATEST(updated_at, ?), archived_at = GREATEST(created_at, ?),
+				revision = revision + 1
+			WHERE id = ?
+				AND archived_at IS NULL
+				AND revision = ?`,
+			model.TimeUTC(archiveAt),
+			model.TimeUTC(archiveAt),
+			id,
+			row.Revision,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("archive programme level: %w", err)
 		}
@@ -282,6 +366,7 @@ func (s SQLProgrammeLevelStore) archiveProgrammeLevel(ctx context.Context, id mo
 		if err := tx.GetBuilder(ctx, &row, s.programmeLevelsQuery.Where(sq.Eq{"programme_levels.id": id})); err != nil {
 			return nil, fmt.Errorf("read archived programme level: %w", err)
 		}
+
 		level, err := row.model()
 		if err != nil {
 			return nil, err
@@ -289,6 +374,7 @@ func (s SQLProgrammeLevelStore) archiveProgrammeLevel(ctx context.Context, id mo
 		if err := audit.complete(ctx, tx, level.Auditable()); err != nil {
 			return nil, err
 		}
+
 		return level, nil
 	})
 }
@@ -302,7 +388,12 @@ func lockProgrammeLevelLifecycle(ctx context.Context, tx sqlxExecutor) error {
 
 func validateActiveProgrammeLevel(ctx context.Context, executor sqlxExecutor, id string) error {
 	var exists bool
-	if err := executor.Get(ctx, &exists, `SELECT EXISTS (SELECT 1 FROM programme_levels WHERE id = ? AND archived_at IS NULL)`, id); err != nil {
+	if err := executor.Get(
+		ctx,
+		&exists,
+		`SELECT EXISTS (SELECT 1 FROM programme_levels WHERE id = ? AND archived_at IS NULL)`,
+		id,
+	); err != nil {
 		return fmt.Errorf("validate class programme level: %w", err)
 	}
 	if !exists {

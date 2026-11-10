@@ -26,27 +26,107 @@ func (stopDeliveryDetailsOutcome) outcomeDocument() {}
 
 func lockDeliveryParticipationOwner(ctx context.Context, tx *sqlxTxWrapper, access store.DeliveryBudgetAccess) error {
 	a := access.Access
-	if !a.AttemptID.IsValid() || !a.CandidateUserID.IsValid() || !a.SessionID.IsValid() || !a.DesktopRegistrationID.IsValid() || !model.IsValidDPoPKeyThumbprint(a.DPoPKeyThumbprint) || !access.ParticipationID.IsValid() {
+	if !a.AttemptID.IsValid() ||
+		!a.CandidateUserID.IsValid() ||
+		!a.SessionID.IsValid() ||
+		!a.DesktopRegistrationID.IsValid() ||
+		!model.IsValidDPoPKeyThumbprint(a.DPoPKeyThumbprint) ||
+		!access.ParticipationID.IsValid() {
 		return store.NewErrInvalidInput("browser_activity", "owner", nil)
 	}
+
 	var id string
-	if err := tx.Get(ctx, &id, `SELECT sit.id FROM exam_sittings sit JOIN exam_attempts a ON a.exam_sitting_id=sit.id WHERE a.id=? AND a.candidate_user_id=? FOR UPDATE OF sit`, a.AttemptID.String(), a.CandidateUserID.String()); err != nil {
+	if err := tx.Get(
+		ctx,
+		&id,
+		`SELECT sit.id
+		FROM exam_sittings sit
+		JOIN exam_attempts a ON a.exam_sitting_id = sit.id
+		WHERE a.id = ?
+			AND a.candidate_user_id = ?
+		FOR UPDATE OF sit`,
+		a.AttemptID.String(),
+		a.CandidateUserID.String(),
+	); err != nil {
 		return translateError("browser_activity_source", access.ParticipationID.String(), err)
 	}
-	if err := tx.Get(ctx, &id, `SELECT id FROM exam_attempts WHERE id=? FOR UPDATE`, a.AttemptID.String()); err != nil {
+
+	if err := tx.Get(ctx, &id, `SELECT id
+		FROM exam_attempts
+		WHERE id = ?
+		FOR UPDATE`, a.AttemptID.String()); err != nil {
 		return err
 	}
-	if err := tx.Get(ctx, &id, `SELECT se.id FROM sessions se JOIN users u ON u.id=se.user_id JOIN desktop_registrations dr ON dr.id=se.desktop_registration_id AND dr.user_id=u.id WHERE se.id=? AND se.user_id=? AND se.desktop_registration_id=? AND se.dpop_key_thumbprint=? AND dr.key_thumbprint=? AND dr.revoked_at IS NULL AND se.archived_at IS NULL AND se.revoked_at IS NULL AND se.expires_at>clock_timestamp() AND se.idle_expires_at>clock_timestamp() AND u.archived_at IS NULL AND u.disabled_at IS NULL FOR SHARE OF se,u,dr`, a.SessionID.String(), a.CandidateUserID.String(), a.DesktopRegistrationID.String(), a.DPoPKeyThumbprint, a.DPoPKeyThumbprint); err != nil {
+
+	if err := tx.Get(
+		ctx,
+		&id,
+		`SELECT se.id
+		FROM sessions se
+		JOIN users u ON u.id = se.user_id
+		JOIN desktop_registrations dr ON dr.id = se.desktop_registration_id
+			AND dr.user_id = u.id
+		WHERE se.id = ?
+			AND se.user_id = ?
+			AND se.desktop_registration_id = ?
+			AND se.dpop_key_thumbprint = ?
+			AND dr.key_thumbprint = ?
+			AND dr.revoked_at IS NULL
+			AND se.archived_at IS NULL
+			AND se.revoked_at IS NULL
+			AND se.expires_at > clock_timestamp()
+			AND se.idle_expires_at > clock_timestamp()
+			AND u.archived_at IS NULL
+			AND u.disabled_at IS NULL
+		FOR SHARE OF se, u, dr`,
+		a.SessionID.String(),
+		a.CandidateUserID.String(),
+		a.DesktopRegistrationID.String(),
+		a.DPoPKeyThumbprint,
+		a.DPoPKeyThumbprint,
+	); err != nil {
 		return translateError("browser_activity_source", access.ParticipationID.String(), err)
 	}
-	if err := tx.Get(ctx, &id, `SELECT participation_id FROM exam_attempt_security_owners WHERE participation_id=? AND exam_attempt_id=? AND registration_id=? AND key_thumbprint=? FOR UPDATE`, access.ParticipationID.String(), a.AttemptID.String(), a.DesktopRegistrationID.String(), a.DPoPKeyThumbprint); err != nil {
+
+	if err := tx.Get(
+		ctx,
+		&id,
+		`SELECT participation_id
+		FROM exam_attempt_security_owners
+		WHERE participation_id = ?
+			AND exam_attempt_id = ?
+			AND registration_id = ?
+			AND key_thumbprint = ?
+		FOR UPDATE`,
+		access.ParticipationID.String(),
+		a.AttemptID.String(),
+		a.DesktopRegistrationID.String(),
+		a.DPoPKeyThumbprint,
+	); err != nil {
 		return translateError("browser_activity_source", access.ParticipationID.String(), err)
 	}
+
 	return nil
 }
 
-func deliveryBudgetSnapshot(ctx context.Context, tx *sqlxTxWrapper, access store.DeliveryBudgetAccess) (*model.DeliveryBudgetSnapshot, error) {
-	value := &model.DeliveryBudgetSnapshot{ParticipationID: access.ParticipationID, Native: model.DeliveryFamilyBudget{Participation: model.NewDeliveryQuotaUsage(true, false), Attempt: model.NewDeliveryQuotaUsage(true, true), PendingByteLimit: model.DeliveryPendingByteLimit}, Browser: model.DeliveryFamilyBudget{Participation: model.NewDeliveryQuotaUsage(false, false), Attempt: model.NewDeliveryQuotaUsage(false, true), PendingByteLimit: model.DeliveryPendingByteLimit}}
+func deliveryBudgetSnapshot(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	access store.DeliveryBudgetAccess,
+) (*model.DeliveryBudgetSnapshot, error) {
+	value := &model.DeliveryBudgetSnapshot{
+		ParticipationID: access.ParticipationID,
+		Native: model.DeliveryFamilyBudget{
+			Participation:    model.NewDeliveryQuotaUsage(true, false),
+			Attempt:          model.NewDeliveryQuotaUsage(true, true),
+			PendingByteLimit: model.DeliveryPendingByteLimit,
+		},
+		Browser: model.DeliveryFamilyBudget{
+			Participation:    model.NewDeliveryQuotaUsage(false, false),
+			Attempt:          model.NewDeliveryQuotaUsage(false, true),
+			PendingByteLimit: model.DeliveryPendingByteLimit,
+		},
+	}
 	var counts struct {
 		Generation     int64     `db:"generation"`
 		NativePending  int64     `db:"native_pending_bytes"`
@@ -58,9 +138,22 @@ func deliveryBudgetSnapshot(ctx context.Context, tx *sqlxTxWrapper, access store
 		Metadata       int64     `db:"control_metadata_bytes"`
 		Now            time.Time `db:"server_time"`
 	}
-	if err := tx.Get(ctx, &counts, `SELECT p.generation,b.native_pending_bytes,b.browser_pending_bytes,b.browser_flag_groups,b.browser_evidence_records,b.browser_evidence_bytes,b.explicit_missing_intervals,b.control_metadata_bytes,clock_timestamp() AS server_time FROM exam_attempt_participations p JOIN exam_attempt_delivery_budgets b ON b.exam_attempt_id=p.exam_attempt_id WHERE p.id=? AND p.exam_attempt_id=?`, access.ParticipationID.String(), access.Access.AttemptID.String()); err != nil {
+	if err := tx.Get(
+		ctx,
+		&counts,
+		`SELECT p.generation, b.native_pending_bytes, b.browser_pending_bytes,
+			b.browser_flag_groups, b.browser_evidence_records, b.browser_evidence_bytes,
+			b.explicit_missing_intervals, b.control_metadata_bytes, clock_timestamp() AS server_time
+		FROM exam_attempt_participations p
+		JOIN exam_attempt_delivery_budgets b ON b.exam_attempt_id = p.exam_attempt_id
+		WHERE p.id = ?
+			AND p.exam_attempt_id = ?`,
+		access.ParticipationID.String(),
+		access.Access.AttemptID.String(),
+	); err != nil {
 		return nil, err
 	}
+
 	value.Generation = counts.Generation
 	value.ServerTime = counts.Now.UTC().Truncate(time.Millisecond)
 	value.Native.PendingBytes = counts.NativePending
@@ -75,10 +168,41 @@ func deliveryBudgetSnapshot(ctx context.Context, tx *sqlxTxWrapper, access store
 		selector string
 		usage    *model.DeliveryQuotaUsage
 	}{
-		{`SELECT retained_records,retained_bytes,allocated_through_sequence AS positions,summary_only,stop_reason FROM exam_attempt_security_owners WHERE participation_id=?`, access.ParticipationID.String(), &value.Native.Participation},
-		{`SELECT native_retained_records AS retained_records,native_retained_bytes AS retained_bytes,native_allocated_positions AS positions,native_summary_only AS summary_only,native_stop_reason AS stop_reason FROM exam_attempt_delivery_budgets WHERE exam_attempt_id=?`, access.Access.AttemptID.String(), &value.Native.Attempt},
-		{`SELECT browser_retained_records AS retained_records,browser_retained_bytes AS retained_bytes,browser_allocated_positions AS positions,browser_summary_only AS summary_only,browser_stop_reason AS stop_reason FROM exam_attempt_security_owners WHERE participation_id=?`, access.ParticipationID.String(), &value.Browser.Participation},
-		{`SELECT browser_retained_records AS retained_records,browser_retained_bytes AS retained_bytes,browser_allocated_positions AS positions,browser_summary_only AS summary_only,browser_stop_reason AS stop_reason FROM exam_attempt_delivery_budgets WHERE exam_attempt_id=?`, access.Access.AttemptID.String(), &value.Browser.Attempt},
+		{
+			`SELECT retained_records, retained_bytes, allocated_through_sequence AS positions,
+				summary_only, stop_reason
+			FROM exam_attempt_security_owners
+			WHERE participation_id = ?`,
+			access.ParticipationID.String(),
+			&value.Native.Participation,
+		},
+		{
+			`SELECT native_retained_records AS retained_records,
+				native_retained_bytes AS retained_bytes, native_allocated_positions AS positions,
+				native_summary_only AS summary_only, native_stop_reason AS stop_reason
+			FROM exam_attempt_delivery_budgets
+			WHERE exam_attempt_id = ?`,
+			access.Access.AttemptID.String(),
+			&value.Native.Attempt,
+		},
+		{
+			`SELECT browser_retained_records AS retained_records,
+				browser_retained_bytes AS retained_bytes, browser_allocated_positions AS positions,
+				browser_summary_only AS summary_only, browser_stop_reason AS stop_reason
+			FROM exam_attempt_security_owners
+			WHERE participation_id = ?`,
+			access.ParticipationID.String(),
+			&value.Browser.Participation,
+		},
+		{
+			`SELECT browser_retained_records AS retained_records,
+				browser_retained_bytes AS retained_bytes, browser_allocated_positions AS positions,
+				browser_summary_only AS summary_only, browser_stop_reason AS stop_reason
+			FROM exam_attempt_delivery_budgets
+			WHERE exam_attempt_id = ?`,
+			access.Access.AttemptID.String(),
+			&value.Browser.Attempt,
+		},
 	} {
 		var row struct {
 			Records   int64          `db:"retained_records"`
@@ -90,6 +214,7 @@ func deliveryBudgetSnapshot(ctx context.Context, tx *sqlxTxWrapper, access store
 		if err := tx.Get(ctx, &row, item.q, item.selector); err != nil {
 			return nil, err
 		}
+
 		item.usage.RetainedRecords = row.Records
 		item.usage.RetainedBytes = row.Bytes
 		item.usage.AllocatedPositions = row.Positions
@@ -99,9 +224,11 @@ func deliveryBudgetSnapshot(ctx context.Context, tx *sqlxTxWrapper, access store
 			item.usage.StopReason = &reason
 		}
 	}
+
 	if err := validatePersistedModel("delivery_budget", value); err != nil {
 		return nil, err
 	}
+
 	raw, err := canonicalPreflightValue(value)
 	if err != nil {
 		return nil, err
@@ -109,27 +236,51 @@ func deliveryBudgetSnapshot(ctx context.Context, tx *sqlxTxWrapper, access store
 	if len(raw) > 8192 {
 		return nil, invalidPersistedState("delivery_budget", "value", model.ErrDeliveryInvalid)
 	}
+
 	return value, nil
 }
 
 // DeliveryBudget returns the current delivery budget snapshot of the
 // Participation named by access.
-func (s *SQLExamAttemptStore) DeliveryBudget(ctx context.Context, access store.DeliveryBudgetAccess) (*model.DeliveryBudgetSnapshot, error) {
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "delivery budget", func(ctx context.Context, tx *sqlxTxWrapper) (*model.DeliveryBudgetSnapshot, error) {
+func (s *SQLExamAttemptStore) DeliveryBudget(
+	ctx context.Context,
+	access store.DeliveryBudgetAccess,
+) (*model.DeliveryBudgetSnapshot, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "delivery budget", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*model.DeliveryBudgetSnapshot, error) {
 		if err := lockDeliveryParticipationOwner(ctx, tx, access); err != nil {
 			return nil, err
 		}
 		return deliveryBudgetSnapshot(ctx, tx, access)
 	})
 }
-func (s *SQLExamAttemptStore) lockDeliveryStop(ctx context.Context, tx *sqlxTxWrapper, access store.CandidateAttemptAccess) (store.DeliveryBudgetAccess, error) {
+func (s *SQLExamAttemptStore) lockDeliveryStop(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	access store.CandidateAttemptAccess,
+) (store.DeliveryBudgetAccess, error) {
 	var part string
 	if !access.ConnectionID.IsValid() {
 		return store.DeliveryBudgetAccess{}, store.NewErrInvalidInput("delivery_budget", "connection", nil)
 	}
-	if err := tx.Get(ctx, &part, `SELECT participation_id FROM exam_attempt_connections WHERE id=? AND exam_attempt_id=? AND session_id=?`, access.ConnectionID.String(), access.AttemptID.String(), access.SessionID.String()); err != nil {
+
+	if err := tx.Get(
+		ctx,
+		&part,
+		`SELECT participation_id
+		FROM exam_attempt_connections
+		WHERE id = ?
+			AND exam_attempt_id = ?
+			AND session_id = ?`,
+		access.ConnectionID.String(),
+		access.AttemptID.String(),
+		access.SessionID.String(),
+	); err != nil {
 		return store.DeliveryBudgetAccess{}, translateError("delivery_budget", access.AttemptID.String(), err)
 	}
+
 	value := store.DeliveryBudgetAccess{Access: access, ParticipationID: model.AttemptParticipationID(part)}
 	if err := lockDeliveryParticipationOwner(ctx, tx, value); err != nil {
 		return value, err
@@ -137,6 +288,7 @@ func (s *SQLExamAttemptStore) lockDeliveryStop(ctx context.Context, tx *sqlxTxWr
 	if _, err := s.lockCandidateGuard(ctx, tx, access); err != nil {
 		return value, err
 	}
+
 	return value, nil
 }
 
@@ -144,50 +296,81 @@ func (s *SQLExamAttemptStore) lockDeliveryStop(ctx context.Context, tx *sqlxTxWr
 // Participation so no further detail is accepted, and returns the settled
 // delivery status and budget. It requires a DeliveryStopDetailsOperation
 // command owned by the Candidate; replays return the retained result.
-func (s *SQLExamAttemptStore) StopDeliveryDetails(ctx context.Context, input *store.DeliveryDetailsStop, command *store.CommandIdempotency) (*model.StopDeliveryDetailsResult, error) {
-	if input == nil || input.Request.Validate() != nil || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() || command == nil || command.Operation != store.DeliveryStopDetailsOperation || command.UserID != input.Access.CandidateUserID {
+func (s *SQLExamAttemptStore) StopDeliveryDetails(
+	ctx context.Context,
+	input *store.DeliveryDetailsStop,
+	command *store.CommandIdempotency,
+) (*model.StopDeliveryDetailsResult, error) {
+	if input == nil ||
+		input.Request.Validate() != nil ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() ||
+		command == nil ||
+		command.Operation != store.DeliveryStopDetailsOperation ||
+		command.UserID != input.Access.CandidateUserID {
 		return nil, store.NewErrInvalidInput("delivery_budget", "stop", nil)
 	}
-	result, err := runIdempotentMutation(ctx, s.SQLStore, "stop delivery details", idempotentMutation[*model.StopDeliveryDetailsResult]{command: command, auditEventID: input.AuditEventID,
+
+	result, err := runIdempotentMutation(ctx, s.SQLStore, "stop delivery details", idempotentMutation[*model.StopDeliveryDetailsResult]{
+		command:      command,
+		auditEventID: input.AuditEventID,
 		execute: func(ctx context.Context, tx *sqlxTxWrapper) (*model.StopDeliveryDetailsResult, error) {
 			return s.executeDeliveryStop(ctx, tx, input)
-		}, encode: func(v *model.StopDeliveryDetailsResult) ([]byte, error) {
+		},
+		encode: func(v *model.StopDeliveryDetailsResult) ([]byte, error) {
 			if err := v.Validate(input.Request.Family); err != nil {
 				return nil, err
 			}
 			return encodeOutcome(stopDeliveryDetailsOutcome{Result: *v})
-		}, decode: func(raw []byte) (*model.StopDeliveryDetailsResult, error) {
+		},
+		decode: func(raw []byte) (*model.StopDeliveryDetailsResult, error) {
 			var outcome stopDeliveryDetailsOutcome
 			if err := decodeOutcome(raw, &outcome); err != nil {
 				return nil, err
 			}
+
 			return &outcome.Result, nil
-		}, hydrateReplay: func(ctx context.Context, tx *sqlxTxWrapper, prior *model.StopDeliveryDetailsResult) (*model.StopDeliveryDetailsResult, error) {
+		},
+		hydrateReplay: func(
+			ctx context.Context,
+			tx *sqlxTxWrapper,
+			prior *model.StopDeliveryDetailsResult,
+		) (*model.StopDeliveryDetailsResult, error) {
 			return s.projectDeliveryStop(ctx, tx, input, prior)
-		}, completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, _ *model.StopDeliveryDetailsResult, _ string) error {
+		},
+		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, _ *model.StopDeliveryDetailsResult, _ string) error {
 			return completeDeliveryStopAudit(ctx, tx, input, true)
-		}})
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
+
 	return result.Value, nil
 }
 
 // executeDeliveryStop latches the requested delivery family and projects and
 // audits the resulting stop inside the mutation's transaction.
-func (s *SQLExamAttemptStore) executeDeliveryStop(ctx context.Context, tx *sqlxTxWrapper, input *store.DeliveryDetailsStop) (*model.StopDeliveryDetailsResult, error) {
+func (s *SQLExamAttemptStore) executeDeliveryStop(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.DeliveryDetailsStop,
+) (*model.StopDeliveryDetailsResult, error) {
 	access, err := s.lockDeliveryStop(ctx, tx, input.Access)
 	if err != nil {
 		return nil, err
 	}
+
 	if input.Request.Family == "native" {
 		err = latchNativeDelivery(ctx, tx, input.Access.AttemptID, access.ParticipationID.String(), input.Request.Reason, false)
 	} else {
 		err = latchBrowserDelivery(ctx, tx, input.Access.AttemptID, access.ParticipationID, input.Request.Reason, false)
 	}
+
 	if err != nil {
 		return nil, err
 	}
+
 	value, err := s.projectDeliveryStop(ctx, tx, input, nil)
 	if err != nil {
 		return nil, err
@@ -195,12 +378,18 @@ func (s *SQLExamAttemptStore) executeDeliveryStop(ctx context.Context, tx *sqlxT
 	if err = completeDeliveryStopAudit(ctx, tx, input, false); err != nil {
 		return nil, err
 	}
+
 	return value, nil
 }
 
 // projectDeliveryStop builds the stop result from the current delivery status
 // and budget, settling Browser sources only on first execution.
-func (s *SQLExamAttemptStore) projectDeliveryStop(ctx context.Context, tx *sqlxTxWrapper, input *store.DeliveryDetailsStop, prior *model.StopDeliveryDetailsResult) (*model.StopDeliveryDetailsResult, error) {
+func (s *SQLExamAttemptStore) projectDeliveryStop(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input *store.DeliveryDetailsStop,
+	prior *model.StopDeliveryDetailsResult,
+) (*model.StopDeliveryDetailsResult, error) {
 	access, err := s.lockDeliveryStop(ctx, tx, input.Access)
 	if err != nil {
 		return nil, err
@@ -208,44 +397,71 @@ func (s *SQLExamAttemptStore) projectDeliveryStop(ctx context.Context, tx *sqlxT
 	if prior != nil && prior.Budget.ParticipationID != access.ParticipationID {
 		return nil, store.NewErrNotFound("delivery_budget", access.ParticipationID.String())
 	}
+
 	value := &model.StopDeliveryDetailsResult{Browser: []model.BrowserSourceStatus{}}
 	if input.Request.Family == "native" {
 		var stream string
-		if err = tx.Get(ctx, &stream, `SELECT delivery_stream_id FROM exam_attempt_security_owners WHERE participation_id=?`, access.ParticipationID.String()); err != nil {
+		if err = tx.Get(
+			ctx,
+			&stream,
+			`SELECT delivery_stream_id FROM exam_attempt_security_owners WHERE participation_id = ?`,
+			access.ParticipationID.String(),
+		); err != nil {
 			return nil, err
 		}
-		owner, ownerErr := s.lockNativeDelivery(ctx, tx, store.NativeDeliveryAccess{Access: input.Access, StreamID: stream, ParticipationID: access.ParticipationID})
+
+		owner, ownerErr := s.lockNativeDelivery(ctx, tx, store.NativeDeliveryAccess{
+			Access:          input.Access,
+			StreamID:        stream,
+			ParticipationID: access.ParticipationID,
+		})
 		if ownerErr != nil {
 			return nil, ownerErr
 		}
+
 		value.Native, err = nativeDeliveryStatus(ctx, tx, owner, stream)
 		if err != nil {
 			return nil, err
 		}
 	} else {
 		var ids []string
-		if err = tx.Select(ctx, &ids, `SELECT id::text FROM browser_activity_sources WHERE participation_id=? ORDER BY start_ordinal LIMIT 50`, access.ParticipationID.String()); err != nil {
+		if err = tx.Select(
+			ctx,
+			&ids,
+			`SELECT id::text
+			FROM browser_activity_sources
+			WHERE participation_id = ?
+			ORDER BY start_ordinal
+			LIMIT 50`,
+			access.ParticipationID.String(),
+		); err != nil {
 			return nil, err
 		}
+
 		if len(ids) > 49 {
 			return nil, invalidPersistedState("delivery_budget", "value", model.ErrDeliveryInvalid)
 		}
+
 		for _, id := range ids {
 			project := browserSourceStatus
 			if prior == nil {
 				project = settleBrowserSource
 			}
+
 			v, projectErr := project(ctx, tx, model.BrowserSourceSessionID(id))
 			if projectErr != nil {
 				return nil, projectErr
 			}
+
 			value.Browser = append(value.Browser, *v)
 		}
 	}
+
 	budget, err := deliveryBudgetSnapshot(ctx, tx, access)
 	if err != nil {
 		return nil, err
 	}
+
 	value.Budget = *budget
 	raw, err := canonicalPreflightValue(value)
 	if err != nil {
@@ -254,15 +470,22 @@ func (s *SQLExamAttemptStore) projectDeliveryStop(ctx context.Context, tx *sqlxT
 	if len(raw) > 1<<20 {
 		return nil, invalidPersistedState("delivery_budget", "value", model.ErrDeliveryInvalid)
 	}
+
 	return value, nil
 }
 
 // completeDeliveryStopAudit completes the stop's audit event.
 func completeDeliveryStopAudit(ctx context.Context, tx *sqlxTxWrapper, input *store.DeliveryDetailsStop, replay bool) error {
-	raw, err := model.EncodeAuditData(map[string]any{"exam_attempt_id": input.Access.AttemptID.String(), "family": input.Request.Family, "reason": string(input.Request.Reason), "idempotency_replayed": replay})
+	raw, err := model.EncodeAuditData(map[string]any{
+		"exam_attempt_id":      input.Access.AttemptID.String(),
+		"family":               input.Request.Family,
+		"reason":               string(input.Request.Reason),
+		"idempotency_replayed": replay,
+	})
 	if err != nil {
 		return err
 	}
+
 	_, err = completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", raw, input.AuditAt)
 	return err
 }

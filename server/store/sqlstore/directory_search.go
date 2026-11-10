@@ -14,9 +14,12 @@ import "strings"
 // syntax: %, _, and the selected escape character are ordinary input.
 func directorySearchPattern(term string) string {
 	escaped := strings.NewReplacer(
-		"!", "!!",
-		"%", "!%",
-		"_", "!_",
+		"!",
+		"!!",
+		"%",
+		"!%",
+		"_",
+		"!_",
 	).Replace(strings.TrimSpace(term))
 	return "%" + escaped + "%"
 }

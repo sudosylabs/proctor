@@ -59,17 +59,31 @@ func (academicUnitOutcome) outcomeDocument() {}
 func newAcademicUnitOutcome(unit *model.AcademicUnit) academicUnitOutcome {
 	row := newAcademicUnitRow(unit)
 	return academicUnitOutcome{
-		ID: row.ID, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt, ArchivedAt: OptionalTimeFromNullTime(row.ArchivedAt),
-		Revision: row.Revision, InstitutionID: row.InstitutionID, ParentID: outcomeString(row.ParentID),
-		Name: row.Name, DisplayName: row.DisplayName, Description: row.Description,
+		ID:            row.ID,
+		CreatedAt:     row.CreatedAt,
+		UpdatedAt:     row.UpdatedAt,
+		ArchivedAt:    OptionalTimeFromNullTime(row.ArchivedAt),
+		Revision:      row.Revision,
+		InstitutionID: row.InstitutionID,
+		ParentID:      outcomeString(row.ParentID),
+		Name:          row.Name,
+		DisplayName:   row.DisplayName,
+		Description:   row.Description,
 	}
 }
 
 func (o academicUnitOutcome) model() (*model.AcademicUnit, error) {
 	return academicUnitRow{
-		ID: o.ID, CreatedAt: o.CreatedAt, UpdatedAt: o.UpdatedAt, ArchivedAt: NullTimeFromOptional(o.ArchivedAt),
-		Revision: o.Revision, InstitutionID: o.InstitutionID, ParentID: outcomeNullString(o.ParentID),
-		Name: o.Name, DisplayName: o.DisplayName, Description: o.Description,
+		ID:            o.ID,
+		CreatedAt:     o.CreatedAt,
+		UpdatedAt:     o.UpdatedAt,
+		ArchivedAt:    NullTimeFromOptional(o.ArchivedAt),
+		Revision:      o.Revision,
+		InstitutionID: o.InstitutionID,
+		ParentID:      outcomeNullString(o.ParentID),
+		Name:          o.Name,
+		DisplayName:   o.DisplayName,
+		Description:   o.Description,
 	}.model()
 }
 
@@ -109,6 +123,7 @@ func (s SQLAcademicUnitStore) Create(
 	if !input.Unit.ID.IsValid() {
 		return nil, store.NewErrInvalidInput("academic_unit", "id", input.Unit.ID.String())
 	}
+
 	candidate := *input.Unit
 	if err := candidate.Validate(); err != nil {
 		return nil, store.NewErrInvalidInput(
@@ -116,15 +131,23 @@ func (s SQLAcademicUnitStore) Create(
 		).Wrap(err)
 	}
 
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "academic unit creation", func(ctx context.Context, tx *sqlxTxWrapper) (*model.AcademicUnit, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "academic unit creation", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*model.AcademicUnit, error) {
 		return createAcademicUnit(ctx, tx, &candidate, &academicMutationAudit{eventID: input.AuditEventID, at: input.AuditAt})
 	})
 }
 
-func (s SQLAcademicUnitStore) CreateIdempotently(ctx context.Context, input *store.AcademicUnitCreation, command *store.CommandIdempotency) (*store.AcademicUnitCommandResult, error) {
+func (s SQLAcademicUnitStore) CreateIdempotently(
+	ctx context.Context,
+	input *store.AcademicUnitCreation,
+	command *store.CommandIdempotency,
+) (*store.AcademicUnitCommandResult, error) {
 	if input == nil || input.Unit == nil || command == nil || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("academic_unit", "idempotent_creation", nil)
 	}
+
 	candidate := *input.Unit
 	if !candidate.ID.IsValid() {
 		return nil, store.NewErrInvalidInput("academic_unit", "id", candidate.ID.String())
@@ -132,8 +155,10 @@ func (s SQLAcademicUnitStore) CreateIdempotently(ctx context.Context, input *sto
 	if err := candidate.Validate(); err != nil {
 		return nil, store.NewErrInvalidInput("academic_unit", "value", nil).Wrap(err)
 	}
+
 	result, err := runIdempotentMutation(ctx, s.SQLStore, "idempotent academic unit creation", idempotentMutation[*model.AcademicUnit]{
-		command: command, auditEventID: input.AuditEventID,
+		command:      command,
+		auditEventID: input.AuditEventID,
 		execute: func(ctx context.Context, tx *sqlxTxWrapper) (*model.AcademicUnit, error) {
 			return createAcademicUnit(ctx, tx, &candidate, &academicMutationAudit{eventID: input.AuditEventID, at: input.AuditAt})
 		},
@@ -143,6 +168,7 @@ func (s SQLAcademicUnitStore) CreateIdempotently(ctx context.Context, input *sto
 			if err := decodeOutcome(data, &outcome); err != nil {
 				return nil, err
 			}
+
 			return outcome.model()
 		},
 		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, unit *model.AcademicUnit, originalAuditID string) error {
@@ -153,6 +179,7 @@ func (s SQLAcademicUnitStore) CreateIdempotently(ctx context.Context, input *sto
 			if err != nil {
 				return err
 			}
+
 			_, err = completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", encoded, input.AuditAt)
 			return err
 		},
@@ -160,38 +187,50 @@ func (s SQLAcademicUnitStore) CreateIdempotently(ctx context.Context, input *sto
 	if err != nil {
 		return nil, err
 	}
+
 	return &store.AcademicUnitCommandResult{Value: result.Value, Replayed: result.Replayed}, nil
 }
 
-func createAcademicUnit(ctx context.Context, tx *sqlxTxWrapper, candidate *model.AcademicUnit, audit *academicMutationAudit) (*model.AcademicUnit, error) {
+func createAcademicUnit(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	candidate *model.AcademicUnit,
+	audit *academicMutationAudit,
+) (*model.AcademicUnit, error) {
 	if err := lockAcademicUnitHierarchy(ctx, tx); err != nil {
 		return nil, err
 	}
+
 	if err := validateAcademicUnitParent(
-		ctx, tx,
+		ctx,
+		tx,
 		candidate.ID.String(),
 		candidate.InstitutionID.String(),
 		candidate.ParentID.String(),
 	); err != nil {
 		return nil, err
 	}
+
 	row := newAcademicUnitRow(candidate)
 	if _, err := tx.NamedExec(ctx, `
-			INSERT INTO academic_units (
-				id, created_at, updated_at, archived_at, revision, institution_id, parent_id,
-				name, display_name, description
-			) VALUES (
-				:id, :created_at, :updated_at, :archived_at, :revision, :institution_id,
-				:parent_id, :name, :display_name, :description
-			)`, &row); err != nil {
+		INSERT INTO academic_units (
+			id, created_at, updated_at, archived_at, revision, institution_id, parent_id, name,
+			display_name, description
+		)
+		VALUES (
+			:id, :created_at, :updated_at, :archived_at, :revision, :institution_id, :parent_id,
+			:name, :display_name, :description
+		)`, &row); err != nil {
 		return nil, fmt.Errorf(
 			"create academic unit: %w",
 			translateError("academic_unit", candidate.ID.String(), err),
 		)
 	}
+
 	if err := audit.complete(ctx, tx, candidate.Auditable()); err != nil {
 		return nil, err
 	}
+
 	return candidate, nil
 }
 
@@ -216,40 +255,50 @@ func (s SQLAcademicUnitStore) ListAncestors(ctx context.Context, id model.Academ
 	if err := s.GetMaster().Select(ctx, &rows, `
 		WITH RECURSIVE ancestors AS (
 			SELECT id, created_at, updated_at, archived_at, revision, institution_id, parent_id,
-			       name, display_name, description, 0 AS depth
-			  FROM academic_units
-			 WHERE id = ? AND archived_at IS NULL
+				name, display_name, description, 0 AS depth
+			FROM academic_units
+			WHERE id = ?
+				AND archived_at IS NULL
 			UNION ALL
-			SELECT parent.id, parent.created_at, parent.updated_at, parent.archived_at, parent.revision,
-			       parent.institution_id, parent.parent_id, parent.name,
-			       parent.display_name, parent.description, ancestors.depth + 1
-			  FROM academic_units parent
-			  JOIN ancestors ON parent.id = ancestors.parent_id
-			 WHERE parent.archived_at IS NULL
+			SELECT parent.id, parent.created_at, parent.updated_at, parent.archived_at,
+				parent.revision, parent.institution_id, parent.parent_id, parent.name,
+				parent.display_name, parent.description, ancestors.depth + 1
+			FROM academic_units parent
+			JOIN ancestors ON parent.id = ancestors.parent_id
+			WHERE parent.archived_at IS NULL
 		)
-		SELECT id, created_at, updated_at, archived_at, revision, institution_id, parent_id,
-		       name, display_name, description
-		  FROM ancestors
-		 ORDER BY depth`, id); err != nil {
+		SELECT id, created_at, updated_at, archived_at, revision, institution_id, parent_id, name,
+			display_name, description
+		FROM ancestors
+		ORDER BY depth`, id); err != nil {
 		return nil, fmt.Errorf("list academic unit ancestors: %w", err)
 	}
+
 	if len(rows) == 0 {
 		return nil, store.NewErrNotFound("academic_unit", id.String())
 	}
+
 	units := make([]*model.AcademicUnit, 0, len(rows))
 	for _, row := range rows {
 		unit, err := row.model()
 		if err != nil {
 			return nil, err
 		}
+
 		units = append(units, unit)
 	}
+
 	return units, nil
 }
 
 // ListChildren returns the unarchived Academic Units of the Institution whose
 // parent is parentID, ordered by name; an empty parentID lists the root units.
-func (s SQLAcademicUnitStore) ListChildren(ctx context.Context, institutionID model.InstitutionID, parentID model.AcademicUnitID, options store.AcademicNameListOptions) ([]*model.AcademicUnit, error) {
+func (s SQLAcademicUnitStore) ListChildren(
+	ctx context.Context,
+	institutionID model.InstitutionID,
+	parentID model.AcademicUnitID,
+	options store.AcademicNameListOptions,
+) ([]*model.AcademicUnit, error) {
 	query, valid := academicNamePage(s.academicUnitsQuery.
 		Where(sq.Eq{
 			"academic_units.institution_id": institutionID,
@@ -264,20 +313,27 @@ func (s SQLAcademicUnitStore) ListChildren(ctx context.Context, institutionID mo
 	if err := s.GetMaster().SelectBuilder(ctx, &rows, query); err != nil {
 		return nil, fmt.Errorf("list academic unit children: %w", err)
 	}
+
 	units := make([]*model.AcademicUnit, 0, len(rows))
 	for _, row := range rows {
 		unit, err := row.model()
 		if err != nil {
 			return nil, err
 		}
+
 		units = append(units, unit)
 	}
+
 	return units, nil
 }
 
 // Search returns one page of unarchived Academic Units of the Institution
 // selected and ordered by options.
-func (s SQLAcademicUnitStore) Search(ctx context.Context, institutionID model.InstitutionID, options store.AcademicNameListOptions) ([]*model.AcademicUnit, error) {
+func (s SQLAcademicUnitStore) Search(
+	ctx context.Context,
+	institutionID model.InstitutionID,
+	options store.AcademicNameListOptions,
+) ([]*model.AcademicUnit, error) {
 	query, valid := academicNamePage(s.academicUnitsQuery.
 		Where(sq.Eq{
 			"academic_units.institution_id": institutionID,
@@ -286,18 +342,22 @@ func (s SQLAcademicUnitStore) Search(ctx context.Context, institutionID model.In
 	if !valid {
 		return nil, store.NewErrInvalidInput("academic_unit", "list_options", options)
 	}
+
 	rows := []academicUnitRow{}
 	if err := s.GetMaster().SelectBuilder(ctx, &rows, query); err != nil {
 		return nil, fmt.Errorf("search academic units: %w", err)
 	}
+
 	units := make([]*model.AcademicUnit, 0, len(rows))
 	for _, row := range rows {
 		unit, err := row.model()
 		if err != nil {
 			return nil, err
 		}
+
 		units = append(units, unit)
 	}
+
 	return units, nil
 }
 
@@ -307,11 +367,17 @@ func (s SQLAcademicUnitStore) GetByName(ctx context.Context, institutionID model
 	if !institutionID.IsValid() || name == "" {
 		return nil, store.NewErrInvalidInput("academic_unit", "name", nil)
 	}
+
 	var row academicUnitRow
-	query := s.academicUnitsQuery.Where(sq.Eq{"academic_units.institution_id": institutionID, "academic_units.name": name, "academic_units.archived_at": nil})
+	query := s.academicUnitsQuery.Where(sq.Eq{
+		"academic_units.institution_id": institutionID,
+		"academic_units.name":           name,
+		"academic_units.archived_at":    nil,
+	})
 	if err := s.GetMaster().GetBuilder(ctx, &row, query); err != nil {
 		return nil, translateError("academic_unit", name, err)
 	}
+
 	return row.model()
 }
 
@@ -322,16 +388,21 @@ func (s SQLAcademicUnitStore) Update(
 	ctx context.Context,
 	input *store.AcademicUnitUpdate,
 ) (*model.AcademicUnit, error) {
-	if input == nil || input.Unit == nil ||
-		!input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		input.Unit == nil ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("academic_unit", "update", nil)
 	}
+
 	candidate := *input.Unit
 	if err := candidate.Validate(); err != nil {
 		return nil, store.NewErrInvalidInput("academic_unit", "value", nil).Wrap(err)
 	}
+
 	return s.updateAcademicUnit(ctx, &candidate, &academicMutationAudit{
-		eventID: input.AuditEventID, at: input.AuditAt,
+		eventID: input.AuditEventID,
+		at:      input.AuditAt,
 	})
 }
 
@@ -340,33 +411,41 @@ func (s SQLAcademicUnitStore) updateAcademicUnit(
 	candidate *model.AcademicUnit,
 	audit *academicMutationAudit,
 ) (*model.AcademicUnit, error) {
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "academic unit update", func(ctx context.Context, tx *sqlxTxWrapper) (*model.AcademicUnit, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "academic unit update", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*model.AcademicUnit, error) {
 		if err := lockAcademicUnitHierarchy(ctx, tx); err != nil {
 			return nil, err
 		}
+
 		if err := validateAcademicUnitParent(
-			ctx, tx,
+			ctx,
+			tx,
 			candidate.ID.String(),
 			candidate.InstitutionID.String(),
 			candidate.ParentID.String(),
 		); err != nil {
 			return nil, err
 		}
+
 		row := newAcademicUnitRow(candidate)
 		result, err := tx.NamedExec(ctx, `
 			UPDATE academic_units
-			   SET updated_at = :updated_at,
-			       revision = :revision,
-			       parent_id = :parent_id,
-			       name = :name,
-			       display_name = :display_name,
-			       description = :description
-			 WHERE id = :id AND institution_id = :institution_id AND archived_at IS NULL
-			   AND revision = :expected_revision`, map[string]any{
-			"id": candidate.ID.String(), "updated_at": row.UpdatedAt,
-			"revision": candidate.Revision, "institution_id": row.InstitutionID,
-			"parent_id": row.ParentID, "name": row.Name,
-			"display_name": row.DisplayName, "description": row.Description,
+			SET updated_at = :updated_at, revision = :revision, parent_id = :parent_id,
+				name = :name, display_name = :display_name, description = :description
+			WHERE id = :id
+				AND institution_id = :institution_id
+				AND archived_at IS NULL
+				AND revision = :expected_revision`, map[string]any{
+			"id":                candidate.ID.String(),
+			"updated_at":        row.UpdatedAt,
+			"revision":          candidate.Revision,
+			"institution_id":    row.InstitutionID,
+			"parent_id":         row.ParentID,
+			"name":              row.Name,
+			"display_name":      row.DisplayName,
+			"description":       row.Description,
 			"expected_revision": candidate.Revision - 1,
 		})
 		if err != nil {
@@ -375,15 +454,24 @@ func (s SQLAcademicUnitStore) updateAcademicUnit(
 				translateError("academic_unit", candidate.ID.String(), err),
 			)
 		}
+
 		if err := requireOwnedRevisionAffected(
-			ctx, tx, result, "academic_unit", "academic_units", "institution_id",
-			candidate.ID.String(), candidate.InstitutionID.String(),
+			ctx,
+			tx,
+			result,
+			"academic_unit",
+			"academic_units",
+			"institution_id",
+			candidate.ID.String(),
+			candidate.InstitutionID.String(),
 		); err != nil {
 			return nil, err
 		}
+
 		if err := audit.complete(ctx, tx, candidate.Auditable()); err != nil {
 			return nil, err
 		}
+
 		return candidate, nil
 	})
 }
@@ -395,12 +483,20 @@ func (s SQLAcademicUnitStore) Archive(
 	ctx context.Context,
 	input *store.AcademicUnitArchive,
 ) (*model.AcademicUnit, error) {
-	if input == nil || !input.ID.IsValid() || input.ArchiveAt.IsZero() || input.ExpectedRevision < 0 ||
-		!input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		!input.ID.IsValid() ||
+		input.ArchiveAt.IsZero() ||
+		input.ExpectedRevision < 0 ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("academic_unit", "archive", nil)
 	}
+
 	return s.archiveAcademicUnit(
-		ctx, input.ID, input.ArchiveAt, input.ExpectedRevision,
+		ctx,
+		input.ID,
+		input.ArchiveAt,
+		input.ExpectedRevision,
 		&academicMutationAudit{eventID: input.AuditEventID, at: input.AuditAt},
 	)
 }
@@ -412,10 +508,14 @@ func (s SQLAcademicUnitStore) archiveAcademicUnit(
 	expectedRevision int64,
 	audit *academicMutationAudit,
 ) (*model.AcademicUnit, error) {
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "academic unit archive", func(ctx context.Context, tx *sqlxTxWrapper) (*model.AcademicUnit, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "academic unit archive", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*model.AcademicUnit, error) {
 		if err := lockAcademicUnitHierarchy(ctx, tx); err != nil {
 			return nil, err
 		}
+
 		current, err := academicUnitFromExecutor(ctx, tx, id.String())
 		if err != nil {
 			return nil, err
@@ -423,35 +523,59 @@ func (s SQLAcademicUnitStore) archiveAcademicUnit(
 		if err := requireAcademicRevision("academic_unit", expectedRevision, current.Revision); err != nil {
 			return nil, err
 		}
+
 		var dependent bool
 		if err := tx.Get(ctx, &dependent, `
 			SELECT EXISTS (
-				SELECT 1 FROM academic_units WHERE parent_id = ? AND archived_at IS NULL
+				SELECT 1
+				FROM academic_units
+				WHERE parent_id = ?
+					AND archived_at IS NULL
 				UNION ALL
-				SELECT 1 FROM programmes WHERE academic_unit_id = ? AND archived_at IS NULL
+				SELECT 1
+				FROM programmes
+				WHERE academic_unit_id = ?
+					AND archived_at IS NULL
 				UNION ALL
-				SELECT 1 FROM academic_unit_members WHERE academic_unit_id = ? AND archived_at IS NULL AND end_at IS NULL
+				SELECT 1
+				FROM academic_unit_members
+				WHERE academic_unit_id = ?
+					AND archived_at IS NULL
+					AND end_at IS NULL
 				UNION ALL
-				SELECT 1 FROM role_bindings WHERE scope_type = 'academic_unit' AND scope_id = ? AND archived_at IS NULL AND end_at IS NULL
+				SELECT 1
+				FROM role_bindings
+				WHERE scope_type = 'academic_unit'
+					AND scope_id = ?
+					AND archived_at IS NULL
+					AND end_at IS NULL
 			)`, id, id, id, id); err != nil {
 			return nil, fmt.Errorf("check academic unit archive dependencies: %w", err)
 		}
+
 		if dependent {
 			return nil, store.NewErrConflict("academic_unit", "academic_unit_has_active_dependents", nil)
 		}
+
 		result, err := tx.Exec(ctx, `
-			UPDATE academic_units SET updated_at = GREATEST(updated_at, ?), archived_at = GREATEST(created_at, ?), revision = revision + 1
-			 WHERE id = ? AND archived_at IS NULL AND revision = ?`, model.TimeUTC(archiveAt), model.TimeUTC(archiveAt), id, current.Revision)
+			UPDATE academic_units
+			SET updated_at = GREATEST(updated_at, ?), archived_at = GREATEST(created_at, ?),
+				revision = revision + 1
+			WHERE id = ?
+				AND archived_at IS NULL
+				AND revision = ?`, model.TimeUTC(archiveAt), model.TimeUTC(archiveAt), id, current.Revision)
 		if err != nil {
 			return nil, fmt.Errorf("archive academic unit: %w", err)
 		}
 		if err = requireRevisionAffected(ctx, tx, result, "academic_unit", "academic_units", id.String()); err != nil {
 			return nil, err
 		}
+
 		var row academicUnitRow
 		if err := tx.GetBuilder(ctx, &row, s.academicUnitsQuery.Where(sq.Eq{"academic_units.id": id})); err != nil {
 			return nil, fmt.Errorf("read archived academic unit: %w", err)
 		}
+
 		current, err = row.model()
 		if err != nil {
 			return nil, err
@@ -459,6 +583,7 @@ func (s SQLAcademicUnitStore) archiveAcademicUnit(
 		if err := audit.complete(ctx, tx, current.Auditable()); err != nil {
 			return nil, err
 		}
+
 		return current, nil
 	})
 }
@@ -470,9 +595,12 @@ func academicUnitFromExecutor(
 ) (*model.AcademicUnit, error) {
 	var row academicUnitRow
 	if err := executor.Get(ctx, &row, `
-		SELECT id, created_at, updated_at, archived_at, revision, institution_id, parent_id,
-		       name, display_name, description
-		  FROM academic_units WHERE id = ? AND archived_at IS NULL FOR UPDATE`, id); err != nil {
+		SELECT id, created_at, updated_at, archived_at, revision, institution_id, parent_id, name,
+			display_name, description
+		FROM academic_units
+		WHERE id = ?
+			AND archived_at IS NULL
+		FOR UPDATE`, id); err != nil {
 		return nil, translateError("academic_unit", id, err)
 	}
 	return row.model()
@@ -495,6 +623,7 @@ func validateAcademicUnitParent(
 	if parentID == "" {
 		return nil
 	}
+
 	var parentInstitutionID string
 	err := executor.Get(
 		ctx,
@@ -513,14 +642,20 @@ func validateAcademicUnitParent(
 	}
 
 	var createsCycle bool
-	err = executor.Get(ctx, &createsCycle, `
+	err = executor.Get(
+		ctx,
+		&createsCycle,
+		`
 		WITH RECURSIVE descendants AS (
-			SELECT id FROM academic_units WHERE parent_id = ? AND archived_at IS NULL
+			SELECT id
+			FROM academic_units
+			WHERE parent_id = ?
+				AND archived_at IS NULL
 			UNION ALL
 			SELECT child.id
-			  FROM academic_units child
-			  JOIN descendants parent ON child.parent_id = parent.id
-			 WHERE child.archived_at IS NULL
+			FROM academic_units child
+			JOIN descendants parent ON child.parent_id = parent.id
+			WHERE child.archived_at IS NULL
 		)
 		SELECT EXISTS (SELECT 1 FROM descendants WHERE id = ?)`,
 		unitID,
@@ -532,6 +667,7 @@ func validateAcademicUnitParent(
 	if createsCycle {
 		return store.NewErrConflict("academic_unit", "academic_units_acyclic", nil)
 	}
+
 	return nil
 }
 

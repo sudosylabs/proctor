@@ -46,8 +46,12 @@ func lockSystemAdministratorAuthenticationPaths(ctx context.Context, tx *sqlxTxW
 	return nil
 }
 
-func hasUsableSystemAdministratorAuthenticationPath(ctx context.Context, executor sqlxExecutor,
-	settings model.AccessPolicySettings, capabilities store.AccessDeploymentCapabilities, at time.Time,
+func hasUsableSystemAdministratorAuthenticationPath(
+	ctx context.Context,
+	executor sqlxExecutor,
+	settings model.AccessPolicySettings,
+	capabilities store.AccessDeploymentCapabilities,
+	at time.Time,
 	scope systemAdministratorAuthenticationPathScope,
 ) (bool, error) {
 	providerIDs := make([]string, 0, len(settings.ProviderAdmissions))
@@ -56,32 +60,55 @@ func hasUsableSystemAdministratorAuthenticationPath(ctx context.Context, executo
 			providerIDs = append(providerIDs, providerID)
 		}
 	}
+
 	sort.Strings(providerIDs)
 	var found bool
-	if err := executor.Get(ctx, &found, `SELECT EXISTS (
+	if err := executor.Get(
+		ctx,
+		&found,
+		`SELECT EXISTS (
 		SELECT 1 FROM role_bindings rb
-		JOIN roles r ON r.id=rb.role_id
-		JOIN users u ON u.id=rb.user_id
-		WHERE r.name=$1 AND r.built_in=TRUE AND r.archived_at IS NULL
-		AND rb.scope_type='institution' AND rb.archived_at IS NULL
-		AND rb.start_at<=$2 AND (rb.end_at IS NULL OR rb.end_at>$2)
-		AND u.archived_at IS NULL AND u.disabled_at IS NULL
-		AND NOT EXISTS(SELECT 1 FROM user_mfa_recovery mr WHERE mr.user_id=u.id AND mr.reenrollment_required)
-		AND ($3='' OR u.id=$3) AND ($4='' OR rb.id=$4)
-		AND ($5='' OR u.id<>$5) AND ($6='' OR rb.id<>$6)
-		AND (
-			($7 AND EXISTS (
-				SELECT 1 FROM password_credentials pc
-				WHERE pc.user_id=u.id AND pc.archived_at IS NULL
-			)) OR EXISTS (
-				SELECT 1 FROM external_identities ei
-				WHERE ei.user_id=u.id AND ei.archived_at IS NULL AND ei.provider=ANY($8)
+		JOIN roles r ON r.id = rb.role_id
+		JOIN users u ON u.id = rb.user_id
+		WHERE r.name = $1
+			AND r.built_in = TRUE
+			AND r.archived_at IS NULL
+			AND rb.scope_type = 'institution'
+			AND rb.archived_at IS NULL
+			AND rb.start_at <= $2
+			AND (rb.end_at IS NULL OR rb.end_at > $2)
+			AND u.archived_at IS NULL
+			AND u.disabled_at IS NULL
+			AND NOT EXISTS(SELECT 1 FROM user_mfa_recovery mr WHERE mr.user_id = u.id AND mr.reenrollment_required)
+			AND ($3 = '' OR u.id = $3)
+			AND ($4 = '' OR rb.id = $4)
+			AND ($5 = '' OR u.id <> $5)
+			AND ($6 = '' OR rb.id <> $6)
+			AND (
+				($7 AND EXISTS (
+					SELECT 1 FROM password_credentials pc
+					WHERE pc.user_id = u.id
+						AND pc.archived_at IS NULL
+				)) OR EXISTS (
+					SELECT 1 FROM external_identities ei
+					WHERE ei.user_id = u.id
+						AND ei.archived_at IS NULL
+						AND ei.provider = ANY($8)
+				)
 			)
-		)
-	)`, model.SystemAdministratorRoleName, at, scope.OnlyUserID, scope.OnlyRoleBindingID,
-		scope.ExcludedUserID, scope.ExcludedRoleBindingID, settings.LocalLoginEnabled, pq.Array(providerIDs)); err != nil {
+	)`,
+		model.SystemAdministratorRoleName,
+		at,
+		scope.OnlyUserID,
+		scope.OnlyRoleBindingID,
+		scope.ExcludedUserID,
+		scope.ExcludedRoleBindingID,
+		settings.LocalLoginEnabled,
+		pq.Array(providerIDs),
+	); err != nil {
 		return false, fmt.Errorf("check system administrator authentication paths: %w", err)
 	}
+
 	return found, nil
 }
 
@@ -89,12 +116,18 @@ func isActiveSystemAdministrator(ctx context.Context, executor sqlxExecutor, use
 	var found bool
 	if err := executor.Get(ctx, &found, `SELECT EXISTS (
 		SELECT 1 FROM role_bindings rb
-		JOIN roles r ON r.id=rb.role_id
-		JOIN users u ON u.id=rb.user_id
-		WHERE rb.user_id=$1 AND r.name=$2 AND r.built_in=TRUE AND r.archived_at IS NULL
-		AND rb.scope_type='institution' AND rb.archived_at IS NULL
-		AND rb.start_at<=$3 AND (rb.end_at IS NULL OR rb.end_at>$3)
-		AND u.archived_at IS NULL AND u.disabled_at IS NULL
+		JOIN roles r ON r.id = rb.role_id
+		JOIN users u ON u.id = rb.user_id
+		WHERE rb.user_id = $1
+			AND r.name = $2
+			AND r.built_in = TRUE
+			AND r.archived_at IS NULL
+			AND rb.scope_type = 'institution'
+			AND rb.archived_at IS NULL
+			AND rb.start_at <= $3
+			AND (rb.end_at IS NULL OR rb.end_at > $3)
+			AND u.archived_at IS NULL
+			AND u.disabled_at IS NULL
 	)`, userID, model.SystemAdministratorRoleName, at); err != nil {
 		return false, fmt.Errorf("check active system administrator: %w", err)
 	}

@@ -57,40 +57,56 @@ func (academicUnitMemberCommandOutcome) outcomeDocument() {}
 
 func academicUnitMemberColumns() []string {
 	return []string{
-		"academic_unit_members.id", "academic_unit_members.created_at",
-		"academic_unit_members.updated_at", "academic_unit_members.archived_at",
+		"academic_unit_members.id",
+		"academic_unit_members.created_at",
+		"academic_unit_members.updated_at",
+		"academic_unit_members.archived_at",
 		"academic_unit_members.revision",
-		"academic_unit_members.academic_unit_id", "academic_unit_members.user_id",
-		"academic_unit_members.start_at", "academic_unit_members.end_at",
+		"academic_unit_members.academic_unit_id",
+		"academic_unit_members.user_id",
+		"academic_unit_members.start_at",
+		"academic_unit_members.end_at",
 	}
 }
 
 const academicUnitMemberLifecycleLock = "proctor:academic-unit-member-lifecycle"
 
-func (s SQLAcademicUnitMemberStore) Create(ctx context.Context, input *store.AcademicUnitMemberCreation) (*model.AcademicUnitMember, error) {
+func (s SQLAcademicUnitMemberStore) Create(
+	ctx context.Context,
+	input *store.AcademicUnitMemberCreation,
+) (*model.AcademicUnitMember, error) {
 	if input == nil || input.Member == nil || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("academic_unit_member", "creation", nil)
 	}
 	if !input.Member.ID.IsValid() {
 		return nil, store.NewErrInvalidInput("academic_unit_member", "id", input.Member.ID.String())
 	}
+
 	candidate := *input.Member
 	if err := candidate.Validate(); err != nil {
 		return nil, store.NewErrInvalidInput("academic_unit_member", "value", nil).Wrap(err)
 	}
+
 	payloadKeyID := ""
 	if input.Notice != nil {
 		var err error
-		payloadKeyID, err = validateRelationshipTransitionMail("academic_unit_member", input.Notice, candidate.UserID,
-			candidate.CreatedAt, model.MailTemplateAcademicUnitAssigned)
+		payloadKeyID, err = validateRelationshipTransitionMail(
+			"academic_unit_member",
+			input.Notice,
+			candidate.UserID,
+			candidate.CreatedAt,
+			model.MailTemplateAcademicUnitAssigned,
+		)
 		if err != nil {
 			return nil, err
 		}
 	}
+
 	encoded, appErr := model.EncodeAuditData(candidate.Auditable())
 	if appErr != nil {
 		return nil, appErr
 	}
+
 	execute := func(ctx context.Context, tx *sqlxTxWrapper) (*academicUnitMemberMutationResult, error) {
 		if err := lockAcademicUnitMemberLifecycle(ctx, tx); err != nil {
 			return nil, err
@@ -98,50 +114,83 @@ func (s SQLAcademicUnitMemberStore) Create(ctx context.Context, input *store.Aca
 		if err := lockAcademicUnitMember(ctx, tx, candidate.AcademicUnitID.String(), candidate.UserID.String()); err != nil {
 			return nil, err
 		}
+
 		existing, err := findExactAcademicUnitMember(ctx, tx, &candidate)
 		if err != nil {
 			return nil, err
 		}
+
 		if existing != nil && input.Command != nil {
-			if err = completeAdministrativeNoOpAudit(ctx, tx, input.AuditEventID, input.AuditAt, "academic_unit_member_id", existing.ID.String()); err != nil {
+			if err = completeAdministrativeNoOpAudit(
+				ctx,
+				tx,
+				input.AuditEventID,
+				input.AuditAt,
+				"academic_unit_member_id",
+				existing.ID.String(),
+			); err != nil {
 				return nil, err
 			}
+
 			return &academicUnitMemberMutationResult{Value: existing, NoOp: true}, nil
 		}
+
 		if input.Notice != nil {
-			if err = lockPreparedMailRecipient(ctx, tx, "academic_unit_member", candidate.UserID,
-				input.ExpectedRecipientRevision, input.Notice); err != nil {
+			if err = lockPreparedMailRecipient(
+				ctx,
+				tx,
+				"academic_unit_member",
+				candidate.UserID,
+				input.ExpectedRecipientRevision,
+				input.Notice,
+			); err != nil {
 				return nil, err
 			}
+
 			if payloadKeyID != "" {
 				if err = requireMailPayloadPrimary(ctx, tx, payloadKeyID); err != nil {
 					return nil, err
 				}
 			}
 		}
+
 		if err := ensureAcademicUnitMemberRangeAvailable(ctx, tx, &candidate); err != nil {
 			return nil, err
 		}
+
 		row := newAcademicUnitMemberRow(&candidate)
 		if _, err := tx.NamedExec(ctx, `INSERT INTO academic_unit_members (
-			id, created_at, updated_at, archived_at, revision, academic_unit_id, user_id, start_at, end_at
-		) VALUES (
-			:id, :created_at, :updated_at, :archived_at, :revision, :academic_unit_id, :user_id, :start_at, :end_at
-		)`, &row); err != nil {
+				id, created_at, updated_at, archived_at, revision, academic_unit_id, user_id,
+				start_at, end_at
+			)
+			VALUES (
+				:id, :created_at, :updated_at, :archived_at, :revision, :academic_unit_id, :user_id,
+				:start_at, :end_at
+			)`, &row); err != nil {
 			return nil, fmt.Errorf("create academic unit member: %w", translateError("academic_unit_member", candidate.ID.String(), err))
 		}
+
 		if input.Notice != nil {
 			if err = insertRecoveryMail(ctx, tx, input.Notice.Occurrence, input.Notice.Delivery, input.Notice.Job, payloadKeyID); err != nil {
 				return nil, fmt.Errorf("insert Academic Unit assignment mail: %w", err)
 			}
 		}
+
 		if _, err := completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", encoded, input.AuditAt); err != nil {
 			return nil, fmt.Errorf("complete academic unit member creation audit: %w", err)
 		}
+
 		return &academicUnitMemberMutationResult{Value: &candidate}, nil
 	}
-	return s.runAcademicUnitMemberMutation(ctx, "academic unit member creation", input.Command, input.AuditEventID, input.AuditAt,
-		func(replayed, noOp bool) { input.Replayed, input.NoOp = replayed, noOp }, execute)
+	return s.runAcademicUnitMemberMutation(
+		ctx,
+		"academic unit member creation",
+		input.Command,
+		input.AuditEventID,
+		input.AuditAt,
+		func(replayed, noOp bool) { input.Replayed, input.NoOp = replayed, noOp },
+		execute,
+	)
 }
 
 func newSQLAcademicUnitMemberStore(ss *SQLStore) store.AcademicUnitMemberStore {
@@ -162,17 +211,23 @@ func (s SQLAcademicUnitMemberStore) Save(
 	if !member.ID.IsZero() {
 		return nil, store.NewErrInvalidInput("academic_unit_member", "id", member.ID.String())
 	}
+
 	id, err := model.ParseAcademicUnitMemberID(model.NewID())
 	if err != nil {
 		return nil, err
 	}
+
 	candidate := *member
 	candidate.PrepareCreate(id, model.NowUTC())
 	if err := candidate.Validate(); err != nil {
 		return nil, store.NewErrInvalidInput("academic_unit_member", "value", nil).Wrap(err)
 	}
+
 	row := newAcademicUnitMemberRow(&candidate)
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "academic unit member save", func(ctx context.Context, tx *sqlxTxWrapper) (*model.AcademicUnitMember, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "academic unit member save", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*model.AcademicUnitMember, error) {
 		if err := lockAcademicUnitMemberLifecycle(ctx, tx); err != nil {
 			return nil, err
 		}
@@ -182,19 +237,22 @@ func (s SQLAcademicUnitMemberStore) Save(
 		if err := ensureAcademicUnitMemberRangeAvailable(ctx, tx, &candidate); err != nil {
 			return nil, err
 		}
+
 		if _, err := tx.NamedExec(ctx, `
 			INSERT INTO academic_unit_members (
-				id, created_at, updated_at, archived_at, revision, academic_unit_id,
-				user_id, start_at, end_at
-			) VALUES (
-				:id, :created_at, :updated_at, :archived_at, :revision, :academic_unit_id,
-				:user_id, :start_at, :end_at
+				id, created_at, updated_at, archived_at, revision, academic_unit_id, user_id,
+				start_at, end_at
+			)
+			VALUES (
+				:id, :created_at, :updated_at, :archived_at, :revision, :academic_unit_id, :user_id,
+				:start_at, :end_at
 			)`, &row); err != nil {
 			return nil, fmt.Errorf(
 				"save academic unit member: %w",
 				translateError("academic_unit_member", candidate.ID.String(), err),
 			)
 		}
+
 		return &candidate, nil
 	})
 }
@@ -224,7 +282,11 @@ func (s SQLAcademicUnitMemberStore) ListByUser(ctx context.Context, userID model
 // ListByAcademicUnit returns the unarchived memberships of unitID. A non-zero
 // at restricts the result to memberships active at that
 // instant; zero returns all of them.
-func (s SQLAcademicUnitMemberStore) ListByAcademicUnit(ctx context.Context, unitID model.AcademicUnitID, at time.Time) ([]*model.AcademicUnitMember, error) {
+func (s SQLAcademicUnitMemberStore) ListByAcademicUnit(
+	ctx context.Context,
+	unitID model.AcademicUnitID,
+	at time.Time,
+) ([]*model.AcademicUnitMember, error) {
 	query := s.query.Where(sq.Eq{
 		"academic_unit_members.academic_unit_id": unitID,
 		"academic_unit_members.archived_at":      nil,
@@ -234,12 +296,17 @@ func (s SQLAcademicUnitMemberStore) ListByAcademicUnit(ctx context.Context, unit
 		query = query.Where(sq.LtOrEq{"academic_unit_members.start_at": activeAt}).
 			Where("(academic_unit_members.end_at IS NULL OR academic_unit_members.end_at > ?)", activeAt)
 	}
+
 	return s.selectMembers(ctx, query.OrderBy("academic_unit_members.user_id", "academic_unit_members.id"))
 }
 
 // ListActiveByUser returns the unarchived Academic Unit memberships of userID
 // that are active at at.
-func (s SQLAcademicUnitMemberStore) ListActiveByUser(ctx context.Context, userID model.UserID, at time.Time) ([]*model.AcademicUnitMember, error) {
+func (s SQLAcademicUnitMemberStore) ListActiveByUser(
+	ctx context.Context,
+	userID model.UserID,
+	at time.Time,
+) ([]*model.AcademicUnitMember, error) {
 	activeAt := model.TimeUTC(at)
 	return s.selectMembers(ctx, s.query.Where(sq.Eq{
 		"academic_unit_members.user_id":     userID,
@@ -255,52 +322,86 @@ func (s SQLAcademicUnitMemberStore) ListActiveByUser(ctx context.Context, userID
 // input.Command, and an audited no-op (input.NoOp set) under a command
 // idempotency key.
 func (s SQLAcademicUnitMemberStore) End(ctx context.Context, input *store.AcademicUnitMemberEnd) (*model.AcademicUnitMember, error) {
-	if input == nil || !input.ID.IsValid() || input.ExpectedRevision <= 0 || input.EndAt.IsZero() || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		!input.ID.IsValid() ||
+		input.ExpectedRevision <= 0 ||
+		input.EndAt.IsZero() ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("academic_unit_member", "end", nil)
 	}
+
 	execute := func(ctx context.Context, tx *sqlxTxWrapper) (*academicUnitMemberMutationResult, error) {
 		if err := lockAcademicUnitMemberLifecycle(ctx, tx); err != nil {
 			return nil, err
 		}
+
 		before, err := s.getAcademicUnitMemberInTransaction(ctx, tx, input.ID)
 		if err != nil {
 			return nil, err
 		}
+
 		if before.EndsAt.Valid {
 			if input.Command == nil {
 				return nil, store.NewErrConflict("academic_unit_member", "revision", nil)
 			}
-			if err = completeAdministrativeNoOpAudit(ctx, tx, input.AuditEventID, input.AuditAt, "academic_unit_member_id", before.ID.String()); err != nil {
+
+			if err = completeAdministrativeNoOpAudit(
+				ctx,
+				tx,
+				input.AuditEventID,
+				input.AuditAt,
+				"academic_unit_member_id",
+				before.ID.String(),
+			); err != nil {
 				return nil, err
 			}
+
 			return &academicUnitMemberMutationResult{Value: before, NoOp: true}, nil
 		}
+
 		payloadKeyID := ""
 		if input.Notice != nil {
-			if err = lockPreparedMailRecipient(ctx, tx, "academic_unit_member", before.UserID,
-				input.ExpectedRecipientRevision, input.Notice); err != nil {
+			if err = lockPreparedMailRecipient(
+				ctx,
+				tx,
+				"academic_unit_member",
+				before.UserID,
+				input.ExpectedRecipientRevision,
+				input.Notice,
+			); err != nil {
 				return nil, err
 			}
-			payloadKeyID, err = validateRelationshipTransitionMail("academic_unit_member", input.Notice, before.UserID,
-				model.TimeUTC(input.EndAt), model.MailTemplateAcademicUnitAssignmentEnded)
+
+			payloadKeyID, err = validateRelationshipTransitionMail(
+				"academic_unit_member",
+				input.Notice,
+				before.UserID,
+				model.TimeUTC(input.EndAt),
+				model.MailTemplateAcademicUnitAssignmentEnded,
+			)
 			if err != nil {
 				return nil, err
 			}
+
 			if payloadKeyID != "" {
 				if err = requireMailPayloadPrimary(ctx, tx, payloadKeyID); err != nil {
 					return nil, err
 				}
 			}
 		}
+
 		ended, err := s.endAcademicUnitMember(ctx, tx, input.ID, input.ExpectedRevision, input.EndAt)
 		if err != nil {
 			return nil, err
 		}
+
 		if input.Notice != nil {
 			if err = insertRecoveryMail(ctx, tx, input.Notice.Occurrence, input.Notice.Delivery, input.Notice.Job, payloadKeyID); err != nil {
 				return nil, fmt.Errorf("insert Academic Unit assignment-ended mail: %w", err)
 			}
 		}
+
 		encoded, appErr := model.EncodeAuditData(ended.Auditable())
 		if appErr != nil {
 			return nil, appErr
@@ -308,49 +409,100 @@ func (s SQLAcademicUnitMemberStore) End(ctx context.Context, input *store.Academ
 		if _, err := completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", encoded, input.AuditAt); err != nil {
 			return nil, fmt.Errorf("complete academic unit member end audit: %w", err)
 		}
+
 		return &academicUnitMemberMutationResult{Value: ended}, nil
 	}
-	return s.runAcademicUnitMemberMutation(ctx, "academic unit member audited end", input.Command, input.AuditEventID, input.AuditAt,
-		func(replayed, noOp bool) { input.Replayed, input.NoOp = replayed, noOp }, execute)
+	return s.runAcademicUnitMemberMutation(
+		ctx,
+		"academic unit member audited end",
+		input.Command,
+		input.AuditEventID,
+		input.AuditAt,
+		func(replayed, noOp bool) { input.Replayed, input.NoOp = replayed, noOp },
+		execute,
+	)
 }
 
-func (s SQLAcademicUnitMemberStore) runAcademicUnitMemberMutation(ctx context.Context, operation string, command *store.CommandIdempotency, auditID model.AuditEventID, auditAt time.Time, setOutput func(bool, bool), execute func(context.Context, *sqlxTxWrapper) (*academicUnitMemberMutationResult, error)) (*model.AcademicUnitMember, error) {
+func (s SQLAcademicUnitMemberStore) runAcademicUnitMemberMutation(
+	ctx context.Context,
+	operation string,
+	command *store.CommandIdempotency,
+	auditID model.AuditEventID,
+	auditAt time.Time,
+	setOutput func(bool, bool),
+	execute func(context.Context, *sqlxTxWrapper) (*academicUnitMemberMutationResult, error),
+) (*model.AcademicUnitMember, error) {
 	if command == nil {
 		result, err := runSQLTransaction(ctx, s.GetMaster().Begin, operation, execute)
 		if err != nil {
 			return nil, err
 		}
+
 		setOutput(false, result.NoOp)
 		return result.Value, nil
 	}
+
 	result, err := runIdempotentMutation(ctx, s.SQLStore, "idempotent "+operation, idempotentMutation[*academicUnitMemberMutationResult]{
-		command: command, auditEventID: auditID, execute: execute,
-		encode: encodeAcademicUnitMemberMutationOutcome, decode: decodeAcademicUnitMemberMutationOutcome,
+		command:       command,
+		auditEventID:  auditID,
+		execute:       execute,
+		encode:        encodeAcademicUnitMemberMutationOutcome,
+		decode:        decodeAcademicUnitMemberMutationOutcome,
 		hydrateReplay: s.hydrateAcademicUnitMemberMutationOutcome,
 		onboardingOutcome: func(value *academicUnitMemberMutationResult) (onboardingImportCommandResult, error) {
 			return administrativeOnboardingOutcome(value.Value.ID.String(), value.NoOp)
 		},
 		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, value *academicUnitMemberMutationResult, original string) error {
-			return completeAdministrativeReplayAudit(ctx, tx, auditID, auditAt, "academic_unit_member_id", value.Value.ID.String(), value.NoOp, original)
+			return completeAdministrativeReplayAudit(
+				ctx,
+				tx,
+				auditID,
+				auditAt,
+				"academic_unit_member_id",
+				value.Value.ID.String(),
+				value.NoOp,
+				original,
+			)
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	setOutput(result.Replayed, result.Value.NoOp)
 	return result.Value.Value, nil
 }
 
-func findExactAcademicUnitMember(ctx context.Context, tx sqlxExecutor, candidate *model.AcademicUnitMember) (*model.AcademicUnitMember, error) {
+func findExactAcademicUnitMember(
+	ctx context.Context,
+	tx sqlxExecutor,
+	candidate *model.AcademicUnitMember,
+) (*model.AcademicUnitMember, error) {
 	var row academicUnitMemberRow
-	err := tx.Get(ctx, &row, `SELECT id,created_at,updated_at,archived_at,revision,academic_unit_id,user_id,start_at,end_at
-		FROM academic_unit_members WHERE academic_unit_id=? AND user_id=? AND start_at=? AND end_at IS NULL AND archived_at IS NULL ORDER BY id LIMIT 1`, candidate.AcademicUnitID.String(), candidate.UserID.String(), candidate.StartsAt)
+	err := tx.Get(
+		ctx,
+		&row,
+		`SELECT id, created_at, updated_at, archived_at, revision, academic_unit_id, user_id,
+			start_at, end_at
+		FROM academic_unit_members
+		WHERE academic_unit_id = ?
+			AND user_id = ?
+			AND start_at = ?
+			AND end_at IS NULL
+			AND archived_at IS NULL
+		ORDER BY id
+		LIMIT 1`,
+		candidate.AcademicUnitID.String(),
+		candidate.UserID.String(),
+		candidate.StartsAt,
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("find exact academic unit member: %w", err)
 	}
+
 	return row.model()
 }
 
@@ -371,27 +523,52 @@ func decodeAcademicUnitMemberMutationOutcome(data []byte) (*academicUnitMemberMu
 	}
 	return &academicUnitMemberMutationResult{Value: &model.AcademicUnitMember{ID: id}, NoOp: outcome.NoOp}, nil
 }
-func (s SQLAcademicUnitMemberStore) hydrateAcademicUnitMemberMutationOutcome(ctx context.Context, tx *sqlxTxWrapper, value *academicUnitMemberMutationResult) (*academicUnitMemberMutationResult, error) {
+func (s SQLAcademicUnitMemberStore) hydrateAcademicUnitMemberMutationOutcome(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	value *academicUnitMemberMutationResult,
+) (*academicUnitMemberMutationResult, error) {
 	hydrated, err := s.getAcademicUnitMemberInTransaction(ctx, tx, value.Value.ID)
 	if err != nil {
 		return nil, err
 	}
+
 	value.Value = hydrated
 	return value, nil
 }
-func (s SQLAcademicUnitMemberStore) getAcademicUnitMemberInTransaction(ctx context.Context, tx sqlxExecutor, id model.AcademicUnitMemberID) (*model.AcademicUnitMember, error) {
+func (s SQLAcademicUnitMemberStore) getAcademicUnitMemberInTransaction(
+	ctx context.Context,
+	tx sqlxExecutor,
+	id model.AcademicUnitMemberID,
+) (*model.AcademicUnitMember, error) {
 	var row academicUnitMemberRow
-	if err := tx.GetBuilder(ctx, &row, s.query.Where(sq.Eq{"academic_unit_members.id": id, "academic_unit_members.archived_at": nil})); err != nil {
+	if err := tx.GetBuilder(
+		ctx,
+		&row,
+		s.query.Where(sq.Eq{"academic_unit_members.id": id, "academic_unit_members.archived_at": nil}),
+	); err != nil {
 		return nil, translateError("academic_unit_member", id.String(), err)
 	}
+
 	return row.model()
 }
 
-func (s SQLAcademicUnitMemberStore) endAcademicUnitMember(ctx context.Context, tx sqlxExecutor, id model.AcademicUnitMemberID, expectedRevision int64, endAt time.Time) (*model.AcademicUnitMember, error) {
+func (s SQLAcademicUnitMemberStore) endAcademicUnitMember(
+	ctx context.Context,
+	tx sqlxExecutor,
+	id model.AcademicUnitMemberID,
+	expectedRevision int64,
+	endAt time.Time,
+) (*model.AcademicUnitMember, error) {
 	var row academicUnitMemberRow
-	if err := tx.GetBuilder(ctx, &row, s.query.Where(sq.Eq{"academic_unit_members.id": id, "academic_unit_members.archived_at": nil})); err != nil {
+	if err := tx.GetBuilder(
+		ctx,
+		&row,
+		s.query.Where(sq.Eq{"academic_unit_members.id": id, "academic_unit_members.archived_at": nil}),
+	); err != nil {
 		return nil, translateError("academic_unit_member", id.String(), err)
 	}
+
 	current, err := row.model()
 	if err != nil {
 		return nil, err
@@ -399,28 +576,52 @@ func (s SQLAcademicUnitMemberStore) endAcademicUnitMember(ctx context.Context, t
 	if current.Revision != expectedRevision {
 		return nil, store.NewErrConflict("academic_unit_member", "academic_unit_member_changed", nil)
 	}
+
 	endAt = model.TimeUTC(endAt)
 	if !endAt.After(current.StartsAt) || (current.EndsAt.Valid && !endAt.Before(current.EndsAt.Time)) {
 		return nil, store.NewErrConflict("academic_unit_member", "academic_unit_member_end_time", nil)
 	}
+
 	at := model.TimeUTC(endAt)
-	result, err := tx.Exec(ctx, `UPDATE academic_unit_members SET updated_at = GREATEST(updated_at, ?), end_at = ?, revision = revision + 1 WHERE id = ? AND archived_at IS NULL AND revision = ?`, at, at, id, expectedRevision)
+	result, err := tx.Exec(
+		ctx,
+		`UPDATE academic_unit_members
+		SET updated_at = GREATEST(updated_at, ?), end_at = ?, revision = revision + 1
+		WHERE id = ?
+			AND archived_at IS NULL
+			AND revision = ?`,
+		at,
+		at,
+		id,
+		expectedRevision,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("end academic unit member: %w", err)
 	}
 	if err = requireAffected(result, "academic_unit_member", id.String()); err != nil {
 		return nil, err
 	}
-	if _, err = tx.Exec(ctx, `UPDATE role_bindings rb SET updated_at=GREATEST(rb.updated_at, ?),end_at=?
-		WHERE rb.origin_academic_unit_member_id=? AND rb.origin_invitation_id IS NOT NULL
-		AND rb.archived_at IS NULL AND rb.start_at<? AND (rb.end_at IS NULL OR rb.end_at>?)`, at, at, id, at, at); err != nil {
+
+	if _, err = tx.Exec(ctx, `UPDATE role_bindings rb
+		SET updated_at = GREATEST(rb.updated_at, ?), end_at = ?
+		WHERE rb.origin_academic_unit_member_id = ?
+			AND rb.origin_invitation_id IS NOT NULL
+			AND rb.archived_at IS NULL
+			AND rb.start_at < ?
+			AND (rb.end_at IS NULL OR rb.end_at > ?)`, at, at, id, at, at); err != nil {
 		return nil, fmt.Errorf("end Invitation-origin Role Bindings: %w", err)
 	}
-	if _, err = tx.Exec(ctx, `UPDATE role_bindings rb SET updated_at=GREATEST(rb.updated_at, ?),archived_at=?
-		WHERE rb.origin_academic_unit_member_id=? AND rb.origin_invitation_id IS NOT NULL
-		AND rb.archived_at IS NULL AND rb.start_at>=? AND (rb.end_at IS NULL OR rb.end_at>?)`, at, at, id, at, at); err != nil {
+
+	if _, err = tx.Exec(ctx, `UPDATE role_bindings rb
+		SET updated_at = GREATEST(rb.updated_at, ?), archived_at = ?
+		WHERE rb.origin_academic_unit_member_id = ?
+			AND rb.origin_invitation_id IS NOT NULL
+			AND rb.archived_at IS NULL
+			AND rb.start_at >= ?
+			AND (rb.end_at IS NULL OR rb.end_at > ?)`, at, at, id, at, at); err != nil {
 		return nil, fmt.Errorf("archive future Invitation-origin Role Bindings: %w", err)
 	}
+
 	current.UpdatedAt = latestTime(current.UpdatedAt, at)
 	current.EndsAt = model.OptionalTimeFrom(endAt)
 	current.Revision = expectedRevision + 1
@@ -446,9 +647,14 @@ func ensureAcademicUnitMemberRangeAvailable(ctx context.Context, executor sqlxEx
 	endAt := NullTimeFromOptional(candidate.EndsAt)
 	var overlaps bool
 	if err := executor.Get(ctx, &overlaps, `SELECT EXISTS (
-		SELECT 1 FROM academic_unit_members WHERE academic_unit_id = ? AND user_id = ? AND archived_at IS NULL
-		 AND (end_at IS NULL OR end_at > ?) AND (CAST(? AS timestamptz) IS NULL OR start_at < ?)
-	)`, candidate.AcademicUnitID.String(), candidate.UserID.String(), startAt, endAt, endAt); err != nil {
+			SELECT 1
+			FROM academic_unit_members
+			WHERE academic_unit_id = ?
+				AND user_id = ?
+				AND archived_at IS NULL
+				AND (end_at IS NULL OR end_at > ?)
+				AND (CAST(? AS timestamptz) IS NULL OR start_at < ?)
+		)`, candidate.AcademicUnitID.String(), candidate.UserID.String(), startAt, endAt, endAt); err != nil {
 		return fmt.Errorf("check academic unit member overlap: %w", err)
 	}
 	if overlaps {
@@ -522,28 +728,48 @@ func (r academicUnitMemberRow) model() (*model.AcademicUnitMember, error) {
 
 var _ store.AcademicUnitMemberStore = (*SQLAcademicUnitMemberStore)(nil)
 
-func (s SQLAcademicUnitMemberStore) ListPageByAcademicUnit(ctx context.Context, options store.AcademicUnitMemberPageOptions) (*store.AcademicUnitMemberPage, error) {
-	if !options.AcademicUnitID.IsValid() || options.Limit < 1 || options.Limit > 200 ||
+func (s SQLAcademicUnitMemberStore) ListPageByAcademicUnit(
+	ctx context.Context,
+	options store.AcademicUnitMemberPageOptions,
+) (*store.AcademicUnitMemberPage, error) {
+	if !options.AcademicUnitID.IsValid() ||
+		options.Limit < 1 ||
+		options.Limit > 200 ||
 		options.AfterID.IsZero() != options.AfterUserID.IsZero() ||
 		(!options.AfterID.IsZero() && (!options.AfterID.IsValid() || !options.AfterUserID.IsValid())) {
 		return nil, store.NewErrInvalidInput("academic_unit_member", "page", nil)
 	}
-	query := s.query.Where(sq.Eq{"academic_unit_members.academic_unit_id": options.AcademicUnitID.String(), "academic_unit_members.archived_at": nil})
+
+	query := s.query.Where(sq.Eq{
+		"academic_unit_members.academic_unit_id": options.AcademicUnitID.String(),
+		"academic_unit_members.archived_at":      nil,
+	})
 	if !options.ActiveAt.IsZero() {
 		at := model.TimeUTC(options.ActiveAt)
 		query = query.Where(sq.LtOrEq{"academic_unit_members.start_at": at}).
 			Where("(academic_unit_members.end_at IS NULL OR academic_unit_members.end_at > ?)", at)
 	}
+
 	if !options.AfterID.IsZero() {
-		query = query.Where("(academic_unit_members.user_id, academic_unit_members.id) > (?, ?)", options.AfterUserID.String(), options.AfterID.String())
+		query = query.Where(
+			"(academic_unit_members.user_id, academic_unit_members.id) > (?, ?)",
+			options.AfterUserID.String(),
+			options.AfterID.String(),
+		)
 	}
-	members, err := s.selectMembers(ctx, query.OrderBy("academic_unit_members.user_id", "academic_unit_members.id").Limit(uint64(options.Limit+1)))
+
+	members, err := s.selectMembers(
+		ctx,
+		query.OrderBy("academic_unit_members.user_id", "academic_unit_members.id").Limit(uint64(options.Limit+1)),
+	)
 	if err != nil {
 		return nil, err
 	}
+
 	more := len(members) > options.Limit
 	if more {
 		members = members[:options.Limit]
 	}
+
 	return &store.AcademicUnitMemberPage{Members: members, HasMore: more}, nil
 }

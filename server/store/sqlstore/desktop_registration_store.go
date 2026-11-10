@@ -47,10 +47,21 @@ type desktopRegistrationRow struct {
 
 func desktopRegistrationColumns() []string {
 	return []string{
-		"id", "created_at", "updated_at", "user_id", "institution_id",
-		"public_jwk", "key_thumbprint", "display_name", "desktop_release",
-		"desktop_build_id", "platform", "architecture", "realtime_protocol",
-		"last_used_at", "revoked_at",
+		"id",
+		"created_at",
+		"updated_at",
+		"user_id",
+		"institution_id",
+		"public_jwk",
+		"key_thumbprint",
+		"display_name",
+		"desktop_release",
+		"desktop_build_id",
+		"platform",
+		"architecture",
+		"realtime_protocol",
+		"last_used_at",
+		"revoked_at",
 	}
 }
 
@@ -102,7 +113,7 @@ func getOrCreateDesktopRegistration(
 	var row desktopRegistrationRow
 	err := tx.Get(ctx, &row, `SELECT `+strings.Join(desktopRegistrationColumns(), ",")+`
 	  FROM desktop_registrations
-	 WHERE user_id=? AND institution_id=? AND key_thumbprint=?
+	 WHERE user_id = ? AND institution_id = ? AND key_thumbprint = ?
 	 FOR UPDATE`, transaction.UserID.String(), transaction.InstitutionID.String(), transaction.ProposedKeyThumbprint)
 	if err == nil {
 		registration, modelErr := row.model()
@@ -112,6 +123,7 @@ func getOrCreateDesktopRegistration(
 		if registration.RevokedAt.Valid || registration.PublicJWK != transaction.ProposedPublicJWK {
 			return nil, store.NewErrConflict("desktop_registration", "desktop_registration_revoked", nil)
 		}
+
 		registration.DisplayName = transaction.DeviceName
 		registration.DesktopRelease = transaction.DesktopRelease
 		registration.DesktopBuildID = transaction.DesktopBuildID
@@ -123,44 +135,80 @@ func getOrCreateDesktopRegistration(
 		if registration.Validate() != nil {
 			return nil, store.NewErrInvalidInput("desktop_registration", "metadata", nil)
 		}
-		if _, err = tx.Exec(ctx, `UPDATE desktop_registrations
-		   SET updated_at=?,display_name=?,desktop_release=?,desktop_build_id=?,platform=?,architecture=?,
-		       realtime_protocol=?,last_used_at=?
-		 WHERE id=? AND revoked_at IS NULL`, now, registration.DisplayName, registration.DesktopRelease,
-			registration.DesktopBuildID, registration.Platform, registration.Architecture,
-			registration.RealtimeProtocol, now, registration.ID.String()); err != nil {
+
+		if _, err = tx.Exec(
+			ctx,
+			`UPDATE desktop_registrations
+		   SET updated_at = ?, display_name = ?, desktop_release = ?, desktop_build_id = ?, platform = ?, architecture = ?,
+		       realtime_protocol = ?, last_used_at = ?
+		 WHERE id = ? AND revoked_at IS NULL`,
+			now,
+			registration.DisplayName,
+			registration.DesktopRelease,
+			registration.DesktopBuildID,
+			registration.Platform,
+			registration.Architecture,
+			registration.RealtimeProtocol,
+			now,
+			registration.ID.String(),
+		); err != nil {
 			return nil, translateError("desktop_registration", registration.ID.String(), err)
 		}
+
 		return registration, nil
 	}
+
 	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, translateError("desktop_registration", transaction.ProposedKeyThumbprint, err)
 	}
+
 	candidate := &model.DesktopRegistration{
-		UserID: transaction.UserID, InstitutionID: transaction.InstitutionID,
-		PublicJWK: transaction.ProposedPublicJWK, KeyThumbprint: transaction.ProposedKeyThumbprint,
-		DisplayName: transaction.DeviceName, DesktopRelease: transaction.DesktopRelease,
-		DesktopBuildID: transaction.DesktopBuildID, Platform: transaction.DesktopPlatform,
-		Architecture: transaction.DesktopArchitecture, RealtimeProtocol: transaction.DesktopRealtimeProtocol,
+		UserID:           transaction.UserID,
+		InstitutionID:    transaction.InstitutionID,
+		PublicJWK:        transaction.ProposedPublicJWK,
+		KeyThumbprint:    transaction.ProposedKeyThumbprint,
+		DisplayName:      transaction.DeviceName,
+		DesktopRelease:   transaction.DesktopRelease,
+		DesktopBuildID:   transaction.DesktopBuildID,
+		Platform:         transaction.DesktopPlatform,
+		Architecture:     transaction.DesktopArchitecture,
+		RealtimeProtocol: transaction.DesktopRealtimeProtocol,
 	}
 	candidate.PrepareCreate(model.NewDesktopRegistrationID(), now)
 	if err = candidate.Validate(); err != nil {
 		return nil, err
 	}
+
 	encodedJWK, err := json.Marshal(candidate.PublicJWK)
 	if err != nil {
 		return nil, err
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO desktop_registrations (
-		id,created_at,updated_at,user_id,institution_id,public_jwk,key_thumbprint,display_name,
-		desktop_release,desktop_build_id,platform,architecture,realtime_protocol,last_used_at,revoked_at
-	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,
-		candidate.ID.String(), now, now, candidate.UserID.String(), candidate.InstitutionID.String(),
-		string(encodedJWK), candidate.KeyThumbprint, candidate.DisplayName, candidate.DesktopRelease,
-		candidate.DesktopBuildID, candidate.Platform, candidate.Architecture,
-		candidate.RealtimeProtocol, now); err != nil {
+
+	if _, err = tx.Exec(
+		ctx,
+		`INSERT INTO desktop_registrations (
+		id, created_at, updated_at, user_id, institution_id, public_jwk, key_thumbprint, display_name,
+		desktop_release, desktop_build_id, platform, architecture, realtime_protocol, last_used_at, revoked_at
+	)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+		candidate.ID.String(),
+		now,
+		now,
+		candidate.UserID.String(),
+		candidate.InstitutionID.String(),
+		string(encodedJWK),
+		candidate.KeyThumbprint,
+		candidate.DisplayName,
+		candidate.DesktopRelease,
+		candidate.DesktopBuildID,
+		candidate.Platform,
+		candidate.Architecture,
+		candidate.RealtimeProtocol,
+		now,
+	); err != nil {
 		return nil, translateError("desktop_registration", candidate.ID.String(), err)
 	}
+
 	return candidate, nil
 }
 
@@ -171,10 +219,15 @@ func (s SQLDesktopRegistrationStore) Revoke(
 	ctx context.Context,
 	input *store.DesktopRegistrationRevocation,
 ) (*store.DesktopRegistrationRevocationResult, error) {
-	if input == nil || !input.RegistrationID.IsValid() || !input.UserID.IsValid() ||
-		input.RevokedAt.IsZero() || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		!input.RegistrationID.IsValid() ||
+		!input.UserID.IsValid() ||
+		input.RevokedAt.IsZero() ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("desktop_registration", "revocation", nil)
 	}
+
 	return runSQLTransaction(ctx, s.GetMaster().Begin, "revoke Desktop Registration", func(
 		ctx context.Context,
 		tx *sqlxTxWrapper,
@@ -182,57 +235,90 @@ func (s SQLDesktopRegistrationStore) Revoke(
 		if err := lockUserSessions(ctx, tx, input.UserID.String()); err != nil {
 			return nil, err
 		}
+
 		var row desktopRegistrationRow
-		if err := tx.Get(ctx, &row, `SELECT `+strings.Join(desktopRegistrationColumns(), ",")+`
-		  FROM desktop_registrations WHERE id=? AND user_id=? FOR UPDATE`,
-			input.RegistrationID.String(), input.UserID.String()); err != nil {
+		if err := tx.Get(
+			ctx,
+			&row,
+			`SELECT `+strings.Join(desktopRegistrationColumns(), ",")+`
+		  FROM desktop_registrations WHERE id = ? AND user_id = ? FOR UPDATE`,
+			input.RegistrationID.String(),
+			input.UserID.String(),
+		); err != nil {
 			return nil, translateError("desktop_registration", input.RegistrationID.String(), err)
 		}
+
 		registration, err := row.model()
 		if err != nil {
 			return nil, err
 		}
+
 		at := model.TimeUTC(input.RevokedAt)
 		alreadyRevoked := registration.RevokedAt.Valid
 		sessionRows := []sessionRow{}
 		hashes := []string{}
 		if !alreadyRevoked {
 			if err = tx.Select(ctx, &sessionRows, `SELECT `+strings.Join(sessionSliceColumns(), ",")+`
-			  FROM sessions WHERE desktop_registration_id=? AND user_id=? AND archived_at IS NULL
+			  FROM sessions WHERE desktop_registration_id = ? AND user_id = ? AND archived_at IS NULL
 			    AND revoked_at IS NULL FOR UPDATE`, input.RegistrationID.String(), input.UserID.String()); err != nil {
 				return nil, fmt.Errorf("select Desktop Registration Sessions: %w", err)
 			}
+
 			if err = tx.Select(ctx, &hashes, `SELECT credential.token_hash
 			  FROM session_credentials credential
-			  JOIN sessions session ON session.id=credential.session_id
-			 WHERE session.desktop_registration_id=? AND session.user_id=?
+			  JOIN sessions session ON session.id = credential.session_id
+			 WHERE session.desktop_registration_id = ? AND session.user_id = ?
 			   AND credential.archived_at IS NULL AND credential.revoked_at IS NULL
 			 FOR UPDATE OF credential`, input.RegistrationID.String(), input.UserID.String()); err != nil {
 				return nil, fmt.Errorf("select Desktop Registration credentials: %w", err)
 			}
-			if _, err = tx.Exec(ctx, `UPDATE session_credentials credential
-			   SET updated_at=GREATEST(credential.updated_at,?),revoked_at=GREATEST(credential.created_at,?)
+
+			if _, err = tx.Exec(
+				ctx,
+				`UPDATE session_credentials credential
+			   SET updated_at = GREATEST(credential.updated_at, ?), revoked_at = GREATEST(credential.created_at, ?)
 			  FROM sessions session
-			 WHERE session.id=credential.session_id AND session.desktop_registration_id=? AND session.user_id=?
+			 WHERE session.id = credential.session_id AND session.desktop_registration_id = ? AND session.user_id = ?
 			   AND credential.archived_at IS NULL AND credential.revoked_at IS NULL`,
-				at, at, input.RegistrationID.String(), input.UserID.String()); err != nil {
+				at,
+				at,
+				input.RegistrationID.String(),
+				input.UserID.String(),
+			); err != nil {
 				return nil, fmt.Errorf("revoke Desktop Registration credentials: %w", err)
 			}
-			if _, err = tx.Exec(ctx, `UPDATE sessions SET updated_at=GREATEST(updated_at,?),revoked_at=GREATEST(created_at,?),
-				revocation_reason=? WHERE desktop_registration_id=? AND user_id=? AND archived_at IS NULL AND revoked_at IS NULL`,
-				at, at, model.SessionRevocationDesktopRegistration, input.RegistrationID.String(), input.UserID.String()); err != nil {
+
+			if _, err = tx.Exec(
+				ctx,
+				`UPDATE sessions SET updated_at = GREATEST(updated_at, ?), revoked_at = GREATEST(created_at, ?),
+				revocation_reason = ? WHERE desktop_registration_id = ? AND user_id = ? AND archived_at IS NULL AND revoked_at IS NULL`,
+				at,
+				at,
+				model.SessionRevocationDesktopRegistration,
+				input.RegistrationID.String(),
+				input.UserID.String(),
+			); err != nil {
 				return nil, fmt.Errorf("revoke Desktop Registration Sessions: %w", err)
 			}
-			if _, err = tx.Exec(ctx, `UPDATE desktop_registrations SET updated_at=GREATEST(updated_at,?),
-				revoked_at=GREATEST(created_at,?) WHERE id=? AND user_id=? AND revoked_at IS NULL`,
-				at, at, input.RegistrationID.String(), input.UserID.String()); err != nil {
+
+			if _, err = tx.Exec(
+				ctx,
+				`UPDATE desktop_registrations SET updated_at = GREATEST(updated_at, ?),
+				revoked_at = GREATEST(created_at, ?) WHERE id = ? AND user_id = ? AND revoked_at IS NULL`,
+				at,
+				at,
+				input.RegistrationID.String(),
+				input.UserID.String(),
+			); err != nil {
 				return nil, fmt.Errorf("revoke Desktop Registration: %w", err)
 			}
+
 			// The revocation instant never precedes rows stamped by PostgreSQL
 			// time or another node's clock; the model mirrors the stored values.
 			registration.UpdatedAt = latestTime(registration.UpdatedAt, at)
 			registration.RevokedAt = model.OptionalTimeFrom(latestTime(registration.CreatedAt, at))
 		}
+
 		encoded, err := model.EncodeAuditData(registration.Auditable())
 		if err != nil {
 			return nil, err
@@ -240,12 +326,17 @@ func (s SQLDesktopRegistrationStore) Revoke(
 		if _, err = completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", encoded, input.AuditAt); err != nil {
 			return nil, err
 		}
+
 		sessions, err := revokedSessionModelsAt(sessionRows, at, model.SessionRevocationDesktopRegistration)
 		if err != nil {
 			return nil, err
 		}
+
 		return &store.DesktopRegistrationRevocationResult{
-			Registration: registration, Sessions: sessions, TokenHashes: hashes, AlreadyRevoked: alreadyRevoked,
+			Registration:   registration,
+			Sessions:       sessions,
+			TokenHashes:    hashes,
+			AlreadyRevoked: alreadyRevoked,
 		}, nil
 	})
 }
@@ -255,21 +346,32 @@ func (row desktopRegistrationRow) model() (*model.DesktopRegistration, error) {
 	if err != nil {
 		return nil, store.NewErrInvalidInput("desktop_registration", "id", row.ID)
 	}
+
 	userID, err := model.ParseUserID(row.UserID)
 	if err != nil {
 		return nil, store.NewErrInvalidInput("desktop_registration", "user_id", row.UserID)
 	}
+
 	institutionID, err := model.ParseInstitutionID(row.InstitutionID)
 	if err != nil {
 		return nil, store.NewErrInvalidInput("desktop_registration", "institution_id", row.InstitutionID)
 	}
+
 	value := &model.DesktopRegistration{
-		ID: id, CreatedAt: row.CreatedAt.UTC(), UpdatedAt: row.UpdatedAt.UTC(),
-		UserID: userID, InstitutionID: institutionID, KeyThumbprint: row.KeyThumbprint,
-		DisplayName: row.DisplayName, DesktopRelease: row.DesktopRelease, DesktopBuildID: row.DesktopBuildID,
-		Platform: model.DesktopPlatform(row.Platform), Architecture: model.DesktopArchitecture(row.Architecture),
-		RealtimeProtocol: row.RealtimeProtocol, LastUsedAt: row.LastUsedAt.UTC(),
-		RevokedAt: OptionalTimeFromNullTime(row.RevokedAt),
+		ID:               id,
+		CreatedAt:        row.CreatedAt.UTC(),
+		UpdatedAt:        row.UpdatedAt.UTC(),
+		UserID:           userID,
+		InstitutionID:    institutionID,
+		KeyThumbprint:    row.KeyThumbprint,
+		DisplayName:      row.DisplayName,
+		DesktopRelease:   row.DesktopRelease,
+		DesktopBuildID:   row.DesktopBuildID,
+		Platform:         model.DesktopPlatform(row.Platform),
+		Architecture:     model.DesktopArchitecture(row.Architecture),
+		RealtimeProtocol: row.RealtimeProtocol,
+		LastUsedAt:       row.LastUsedAt.UTC(),
+		RevokedAt:        OptionalTimeFromNullTime(row.RevokedAt),
 	}
 	if err = json.Unmarshal(row.PublicJWK, &value.PublicJWK); err != nil {
 		return nil, store.NewErrInvalidInput("desktop_registration", "public_jwk", nil)
@@ -277,6 +379,7 @@ func (row desktopRegistrationRow) model() (*model.DesktopRegistration, error) {
 	if err = validatePersistedModel("desktop_registration", value); err != nil {
 		return nil, err
 	}
+
 	return value, nil
 }
 

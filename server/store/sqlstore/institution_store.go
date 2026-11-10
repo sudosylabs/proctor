@@ -84,6 +84,7 @@ func (s SQLInstitutionStore) Save(ctx context.Context, institution *model.Instit
 	if err != nil {
 		return nil, err
 	}
+
 	at := model.NowUTC()
 	created, err := model.NewInstitution(
 		id, institution.Name, institution.DisplayName, institution.Description, at,
@@ -92,33 +93,46 @@ func (s SQLInstitutionStore) Save(ctx context.Context, institution *model.Instit
 		return nil, store.NewErrInvalidInput("institution", "value", nil).Wrap(err)
 	}
 
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "institution creation", func(ctx context.Context, tx *sqlxTxWrapper) (*model.Institution, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "institution creation", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*model.Institution, error) {
 		row := newInstitutionRow(created)
 		if _, err := tx.NamedExec(ctx, `
 			INSERT INTO institutions (
 				id, created_at, updated_at, archived_at, revision, name, display_name, description,
 				exam_resource_max_count, exam_resource_max_bytes, exam_workspace_max_entries,
 				exam_workspace_max_file_bytes, exam_workspace_max_total_bytes
-			) VALUES (
-				:id, :created_at, :updated_at, :archived_at, :revision, :name, :display_name, :description,
-				:exam_resource_max_count, :exam_resource_max_bytes, :exam_workspace_max_entries,
-				:exam_workspace_max_file_bytes, :exam_workspace_max_total_bytes
+			)
+			VALUES (
+				:id, :created_at, :updated_at, :archived_at, :revision, :name, :display_name,
+				:description, :exam_resource_max_count, :exam_resource_max_bytes,
+				:exam_workspace_max_entries, :exam_workspace_max_file_bytes,
+				:exam_workspace_max_total_bytes
 			)`, &row); err != nil {
 			return nil, fmt.Errorf("save institution: %w", translateError("institution", created.ID.String(), err))
 		}
+
 		var policyExists bool
-		if err := tx.Get(ctx, &policyExists, `SELECT EXISTS(SELECT 1 FROM desktop_compatibility_policies WHERE singleton=1)`); err != nil {
+		if err := tx.Get(ctx, &policyExists, `SELECT EXISTS(
+				SELECT 1
+				FROM desktop_compatibility_policies
+				WHERE singleton = 1
+			)`); err != nil {
 			return nil, fmt.Errorf("inspect initial desktop compatibility policy: %w", err)
 		}
+
 		if !policyExists {
 			policy := model.NewInitialDesktopCompatibilityPolicy(created.ID, at)
 			if err := insertInitialDesktopCompatibilityPolicy(ctx, tx, policy); err != nil {
 				return nil, err
 			}
 		}
+
 		if err := insertInitialRetentionPolicy(ctx, tx, model.NewInitialRetentionPolicy(created.ID, at)); err != nil {
 			return nil, err
 		}
+
 		return created, nil
 	})
 }
@@ -154,14 +168,18 @@ func (s SQLInstitutionStore) Update(
 	ctx context.Context,
 	input *store.InstitutionUpdate,
 ) (*model.Institution, error) {
-	if input == nil || input.Institution == nil ||
-		!input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+	if input == nil ||
+		input.Institution == nil ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("institution", "update", nil)
 	}
+
 	candidate := *input.Institution
 	if err := candidate.Validate(); err != nil {
 		return nil, store.NewErrInvalidInput("institution", "value", nil).Wrap(err)
 	}
+
 	return s.updateInstitution(ctx, &candidate, input.AuditEventID, input.AuditAt)
 }
 
@@ -171,25 +189,30 @@ func (s SQLInstitutionStore) updateInstitution(
 	auditEventID model.AuditEventID,
 	auditAt time.Time,
 ) (*model.Institution, error) {
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "institution update", func(ctx context.Context, tx *sqlxTxWrapper) (*model.Institution, error) {
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "institution update", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*model.Institution, error) {
 		row := newInstitutionRow(candidate)
 		result, err := tx.NamedExec(ctx, `
 			UPDATE institutions
-			   SET updated_at = :updated_at,
-			       revision = :revision,
-			       name = :name,
-			       display_name = :display_name,
-			       description = :description,
-			       exam_resource_max_count = :exam_resource_max_count,
-			       exam_resource_max_bytes = :exam_resource_max_bytes,
-			       exam_workspace_max_entries = :exam_workspace_max_entries,
-			       exam_workspace_max_file_bytes = :exam_workspace_max_file_bytes,
-			       exam_workspace_max_total_bytes = :exam_workspace_max_total_bytes
-			 WHERE id = :id AND singleton = TRUE AND archived_at IS NULL
-			   AND revision = :expected_revision`, map[string]any{
-			"id": candidate.ID.String(), "updated_at": row.UpdatedAt,
-			"revision": candidate.Revision, "name": row.Name,
-			"display_name": row.DisplayName, "description": row.Description,
+			SET updated_at = :updated_at, revision = :revision, name = :name,
+				display_name = :display_name, description = :description,
+				exam_resource_max_count = :exam_resource_max_count,
+				exam_resource_max_bytes = :exam_resource_max_bytes,
+				exam_workspace_max_entries = :exam_workspace_max_entries,
+				exam_workspace_max_file_bytes = :exam_workspace_max_file_bytes,
+				exam_workspace_max_total_bytes = :exam_workspace_max_total_bytes
+			WHERE id = :id
+				AND singleton = TRUE
+				AND archived_at IS NULL
+				AND revision = :expected_revision`, map[string]any{
+			"id":                             candidate.ID.String(),
+			"updated_at":                     row.UpdatedAt,
+			"revision":                       candidate.Revision,
+			"name":                           row.Name,
+			"display_name":                   row.DisplayName,
+			"description":                    row.Description,
 			"exam_resource_max_count":        row.ResourceMaximumCount,
 			"exam_resource_max_bytes":        row.ResourceMaximumBytes,
 			"exam_workspace_max_entries":     row.WorkspaceMaximumEntries,
@@ -203,17 +226,20 @@ func (s SQLInstitutionStore) updateInstitution(
 		if err := requireRevisionAffected(ctx, tx, result, "institution", "institutions", candidate.ID.String()); err != nil {
 			return nil, err
 		}
+
 		if auditEventID != "" {
 			encoded, appErr := model.EncodeAuditData(candidate.Auditable())
 			if appErr != nil {
 				return nil, appErr
 			}
+
 			if _, err := completeAuditEvent(
 				ctx, tx, auditEventID, model.AuditStatusSuccess, "", encoded, auditAt,
 			); err != nil {
 				return nil, fmt.Errorf("complete institution update audit: %w", err)
 			}
 		}
+
 		return candidate, nil
 	})
 }
@@ -230,10 +256,10 @@ func (s SQLInstitutionStore) Archive(ctx context.Context, input *store.Instituti
 	result, err := s.GetMaster().Exec(
 		ctx,
 		`UPDATE institutions
-		    SET updated_at = GREATEST(created_at, ?),
-		        archived_at = GREATEST(created_at, ?),
-		        revision = revision + 1
-		  WHERE id = ? AND archived_at IS NULL`,
+		SET updated_at = GREATEST(created_at, ?), archived_at = GREATEST(created_at, ?),
+			revision = revision + 1
+		WHERE id = ?
+			AND archived_at IS NULL`,
 		at,
 		at,
 		id,

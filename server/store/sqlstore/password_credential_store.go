@@ -76,7 +76,6 @@ func (s SQLPasswordCredentialStore) Save(
 	if err := candidate.Validate(); err != nil {
 		return nil, err
 	}
-
 	if err := insertPasswordCredential(ctx, s.GetMaster(), &candidate); err != nil {
 		return nil, err
 	}
@@ -93,7 +92,8 @@ func insertPasswordCredential(
 		INSERT INTO password_credentials (
 			id, created_at, updated_at, archived_at, user_id,
 			revision, password_hash, password_changed_at
-		) VALUES (
+		)
+		VALUES (
 			:id, :created_at, :updated_at, :archived_at, :user_id,
 			:revision, :password_hash, :password_changed_at
 		)`, &row); err != nil {
@@ -123,16 +123,27 @@ func (s SQLPasswordCredentialStore) Rehash(
 	ctx context.Context,
 	input *store.PasswordCredentialRehash,
 ) error {
-	if input == nil || !input.ID.IsValid() || !input.UserID.IsValid() || input.ExpectedRevision < 1 ||
-		!model.IsValidPasswordHash(input.ExpectedHash) || !model.IsValidPasswordHash(input.PasswordHash) {
+	if input == nil ||
+		!input.ID.IsValid() ||
+		!input.UserID.IsValid() ||
+		input.ExpectedRevision < 1 ||
+		!model.IsValidPasswordHash(input.ExpectedHash) ||
+		!model.IsValidPasswordHash(input.PasswordHash) {
 		return store.NewErrInvalidInput("password_credential", "rehash", nil)
 	}
 
-	result, err := s.GetMaster().Exec(ctx, `
+	result, err := s.GetMaster().Exec(
+		ctx,
+		`
 		UPDATE password_credentials
 		   SET updated_at = GREATEST(updated_at, statement_timestamp()), password_hash = ?
 		 WHERE id = ? AND user_id = ? AND password_hash = ? AND revision = ? AND archived_at IS NULL`,
-		input.PasswordHash, input.ID.String(), input.UserID.String(), input.ExpectedHash, input.ExpectedRevision)
+		input.PasswordHash,
+		input.ID.String(),
+		input.UserID.String(),
+		input.ExpectedHash,
+		input.ExpectedRevision,
+	)
 	if err != nil {
 		return fmt.Errorf("rehash password credential: %w", err)
 	}
@@ -189,13 +200,18 @@ var _ store.PasswordCredentialStore = (*SQLPasswordCredentialStore)(nil)
 // The caller holds the per-User Session lock, also held by reset and removal.
 // Rehash does not advance Revision, so a work-factor upgrade cannot invalidate
 // independently collected proof of the same password.
-func requireCurrentPasswordProof(ctx context.Context, executor sqlxExecutor, userID model.UserID, proof store.PasswordCredentialProof) error {
+func requireCurrentPasswordProof(
+	ctx context.Context,
+	executor sqlxExecutor,
+	userID model.UserID,
+	proof store.PasswordCredentialProof,
+) error {
 	if !proof.IsValid() {
 		return store.ErrPasswordCredentialChanged
 	}
 	var current bool
 	if err := executor.Get(ctx, &current, `SELECT EXISTS(
-		SELECT 1 FROM password_credentials WHERE id=? AND user_id=? AND revision=? AND archived_at IS NULL
+		SELECT 1 FROM password_credentials WHERE id = ? AND user_id = ? AND revision = ? AND archived_at IS NULL
 	)`, proof.ID.String(), userID.String(), proof.Revision); err != nil {
 		return fmt.Errorf("check password proof: %w", err)
 	}

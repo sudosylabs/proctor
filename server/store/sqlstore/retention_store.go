@@ -34,9 +34,14 @@ type retentionControlRow struct {
 	UpdatedAt      time.Time      `db:"updated_at"`
 }
 
-func getRetentionControl(ctx context.Context, executor sqlxExecutor, institution model.InstitutionID, lock bool) (*model.RetentionControl, error) {
-	query := `SELECT institution_id,revision,state,approved_policy_revision,approved_preview_id,changed_by_user_id,updated_at
-		FROM retention_controls WHERE institution_id=?`
+func getRetentionControl(
+	ctx context.Context,
+	executor sqlxExecutor,
+	institution model.InstitutionID,
+	lock bool,
+) (*model.RetentionControl, error) {
+	query := `SELECT institution_id, revision, state, approved_policy_revision, approved_preview_id, changed_by_user_id, updated_at
+		FROM retention_controls WHERE institution_id = ?`
 	if lock {
 		query += " FOR UPDATE"
 	}
@@ -44,9 +49,15 @@ func getRetentionControl(ctx context.Context, executor sqlxExecutor, institution
 	if err := executor.Get(ctx, &row, query, institution.String()); err != nil {
 		return nil, translateError("retention_control", institution.String(), err)
 	}
-	value := &model.RetentionControl{InstitutionID: model.InstitutionID(row.InstitutionID), Revision: row.Revision,
-		State: model.RetentionControlState(row.State), ApprovedPolicyRevision: row.PolicyRevision.Int64,
-		ApprovedPreviewID: model.RetentionPreviewID(row.PreviewID.String), ChangedByUserID: model.UserID(row.ActorID.String), UpdatedAt: model.TimeUTC(row.UpdatedAt)}
+	value := &model.RetentionControl{
+		InstitutionID:          model.InstitutionID(row.InstitutionID),
+		Revision:               row.Revision,
+		State:                  model.RetentionControlState(row.State),
+		ApprovedPolicyRevision: row.PolicyRevision.Int64,
+		ApprovedPreviewID:      model.RetentionPreviewID(row.PreviewID.String),
+		ChangedByUserID:        model.UserID(row.ActorID.String),
+		UpdatedAt:              model.TimeUTC(row.UpdatedAt),
+	}
 	if err := value.Validate(); err != nil {
 		return nil, invalidPersistedState("retention_control", "value", err)
 	}
@@ -87,73 +98,150 @@ func getRetentionPreview(ctx context.Context, executor sqlxExecutor, id model.Re
 		ExpiresAt      time.Time `db:"expires_at"`
 		Counts         []byte    `db:"counts"`
 	}
-	err := executor.Get(ctx, &row, `SELECT p.id,p.institution_id,p.policy_revision,p.created_by_user_id,p.created_at,p.expires_at,p.counts
-		FROM retention_previews p JOIN institutions i ON i.id=p.institution_id WHERE p.id=? AND i.archived_at IS NULL`, id.String())
+	err := executor.Get(ctx, &row, `SELECT p.id, p.institution_id, p.policy_revision, p.created_by_user_id, p.created_at,
+			p.expires_at, p.counts
+		FROM retention_previews p
+		JOIN institutions i ON i.id = p.institution_id
+		WHERE p.id = ?
+			AND i.archived_at IS NULL`, id.String())
 	if err != nil {
 		return nil, translateError("retention_preview", id.String(), err)
 	}
+
 	var counts retentionPreviewCounts
 	if err = json.Unmarshal(row.Counts, &counts); err != nil {
 		return nil, invalidPersistedState("retention_preview", "counts", err)
 	}
-	p := &model.RetentionPreview{ID: model.RetentionPreviewID(row.ID), InstitutionID: model.InstitutionID(row.InstitutionID),
-		PolicyRevision: row.PolicyRevision, CreatedByUserID: model.UserID(row.ActorID), CreatedAt: model.TimeUTC(row.CreatedAt),
-		ExpiresAt: model.TimeUTC(row.ExpiresAt), Work: counts.Work, Integrity: counts.Integrity, BrowserActivity: counts.BrowserActivity, SecurityOperational: counts.SecurityOperational, Audit: counts.Audit, Receipts: counts.Receipts}
+
+	p := &model.RetentionPreview{
+		ID:                  model.RetentionPreviewID(row.ID),
+		InstitutionID:       model.InstitutionID(row.InstitutionID),
+		PolicyRevision:      row.PolicyRevision,
+		CreatedByUserID:     model.UserID(row.ActorID),
+		CreatedAt:           model.TimeUTC(row.CreatedAt),
+		ExpiresAt:           model.TimeUTC(row.ExpiresAt),
+		Work:                counts.Work,
+		Integrity:           counts.Integrity,
+		BrowserActivity:     counts.BrowserActivity,
+		SecurityOperational: counts.SecurityOperational,
+		Audit:               counts.Audit,
+		Receipts:            counts.Receipts,
+	}
 	if err = p.Validate(); err != nil {
 		return nil, invalidPersistedState("retention_preview", "value", err)
 	}
+
 	return p, nil
 }
 
 func validRetentionMutation(input store.RetentionMutation, command *store.CommandIdempotency, operation string) bool {
-	return input.Principal.Validate() == nil && input.Principal.CredentialType == model.CredentialSessionAccess &&
-		input.AuditEventID.IsValid() && !input.AuditAt.IsZero() && command != nil &&
-		command.UserID == input.Principal.UserID && command.Operation == operation &&
-		command.Authorization == nil && command.Batch == nil
+	return input.Principal.Validate() == nil &&
+		input.Principal.CredentialType == model.CredentialSessionAccess &&
+		input.AuditEventID.IsValid() &&
+		!input.AuditAt.IsZero() &&
+		command != nil &&
+		command.UserID == input.Principal.UserID &&
+		command.Operation == operation &&
+		command.Authorization == nil &&
+		command.Batch == nil
 }
 
 // Current assurance comes from the locked Session, not the request's earlier
 // Principal snapshot. Time is read after all potentially waiting row locks.
-func lockRetentionAuthority(ctx context.Context, tx *sqlxTxWrapper, input store.RetentionMutation, action model.Action) (*model.RetentionPolicy, time.Time, error) {
+func lockRetentionAuthority(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input store.RetentionMutation,
+	action model.Action,
+) (*model.RetentionPolicy, time.Time, error) {
 	if err := lockSystemAdministratorAuthenticationPaths(ctx, tx); err != nil {
 		return nil, time.Time{}, err
 	}
 	if _, err := requireCurrentPrincipalCredential(ctx, tx, input.Principal); err != nil {
 		return nil, time.Time{}, err
 	}
-	policy, err := getRetentionPolicy(ctx, tx, "FOR UPDATE OF p,i")
+
+	policy, err := getRetentionPolicy(ctx, tx, "FOR UPDATE OF p, i")
 	if err != nil {
 		return nil, time.Time{}, err
 	}
 	if _, err = getRetentionControl(ctx, tx, policy.InstitutionID, true); err != nil {
 		return nil, time.Time{}, err
 	}
+
 	var at time.Time
 	if err = tx.Get(ctx, &at, `SELECT clock_timestamp()`); err != nil {
 		return nil, time.Time{}, err
 	}
-	if err = requirePrincipalActionAtScope(ctx, tx, input.Principal, action, model.RoleScopeInstitution, policy.InstitutionID.String(), at, false); err != nil {
+
+	if err = requirePrincipalActionAtScope(
+		ctx,
+		tx,
+		input.Principal,
+		action,
+		model.RoleScopeInstitution,
+		policy.InstitutionID.String(),
+		at,
+		false,
+	); err != nil {
 		return nil, time.Time{}, err
 	}
+
 	if err = tx.Get(ctx, &at, `SELECT clock_timestamp()`); err != nil {
 		return nil, time.Time{}, err
 	}
+
 	at = model.TimeUTC(at)
-	if err = requirePrincipalActionAtScope(ctx, tx, input.Principal, action, model.RoleScopeInstitution, policy.InstitutionID.String(), at, false); err != nil {
+	if err = requirePrincipalActionAtScope(
+		ctx,
+		tx,
+		input.Principal,
+		action,
+		model.RoleScopeInstitution,
+		policy.InstitutionID.String(),
+		at,
+		false,
+	); err != nil {
 		return nil, time.Time{}, err
 	}
+
 	var active bool
-	err = tx.Get(ctx, &active, `SELECT true FROM sessions s JOIN session_credentials c ON c.session_id=s.id
-		WHERE s.id=? AND s.user_id=? AND c.id=? AND c.kind='access' AND s.archived_at IS NULL AND s.revoked_at IS NULL
-		AND c.archived_at IS NULL AND c.revoked_at IS NULL AND s.expires_at>? AND s.idle_expires_at>? AND c.expires_at>?
-		AND NOT s.mfa_recovery_required AND NOT s.mfa_enrollment_required AND s.authentication_generation=COALESCE((SELECT generation FROM user_mfa_recovery WHERE user_id=s.user_id),0)`,
-		input.Principal.SessionID.String(), input.Principal.UserID.String(), input.Principal.CredentialID.String(), at, at, at)
+	err = tx.Get(
+		ctx,
+		&active,
+		`SELECT true
+		FROM sessions s
+		JOIN session_credentials c ON c.session_id = s.id
+		WHERE s.id = ?
+			AND s.user_id = ?
+			AND c.id = ?
+			AND c.kind = 'access'
+			AND s.archived_at IS NULL
+			AND s.revoked_at IS NULL
+			AND c.archived_at IS NULL
+			AND c.revoked_at IS NULL
+			AND s.expires_at > ?
+			AND s.idle_expires_at > ?
+			AND c.expires_at > ?
+			AND NOT s.mfa_recovery_required
+			AND NOT s.mfa_enrollment_required
+			AND s.authentication_generation = COALESCE(
+				(SELECT generation FROM user_mfa_recovery WHERE user_id = s.user_id), 0
+			)`,
+		input.Principal.SessionID.String(),
+		input.Principal.UserID.String(),
+		input.Principal.CredentialID.String(),
+		at,
+		at,
+		at,
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, time.Time{}, store.NewErrConflict("authorization", "credential", nil)
 	}
 	if err != nil {
 		return nil, time.Time{}, err
 	}
+
 	if action == model.ActionRetentionCleanupManage || action == model.ActionRetentionPolicyManage {
 		admin, adminErr := isActiveSystemAdministrator(ctx, tx, input.Principal.UserID.String(), at)
 		if adminErr != nil {
@@ -166,10 +254,17 @@ func lockRetentionAuthority(ctx context.Context, tx *sqlxTxWrapper, input store.
 			return nil, time.Time{}, err
 		}
 	}
+
 	return policy, at, nil
 }
 
-func completeRetentionAudit(ctx context.Context, tx *sqlxTxWrapper, input store.RetentionMutation, data map[string]any, original string) error {
+func completeRetentionAudit(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	input store.RetentionMutation,
+	data map[string]any,
+	original string,
+) error {
 	if original != "" {
 		data["idempotency_replayed"], data["original_audit_event_id"] = true, original
 	}
@@ -181,13 +276,21 @@ func completeRetentionAudit(ctx context.Context, tx *sqlxTxWrapper, input store.
 	return err
 }
 
-func (s *SQLRetentionStore) CreatePreview(ctx context.Context, input *store.RetentionPreviewCreation, command *store.CommandIdempotency) (*model.RetentionPreview, error) {
-	if input == nil || !validRetentionMutation(input.RetentionMutation, command, store.RetentionPreviewOperation) ||
-		!input.PreviewID.IsValid() || input.ExpectedPolicyRevision < 1 {
+func (s *SQLRetentionStore) CreatePreview(
+	ctx context.Context,
+	input *store.RetentionPreviewCreation,
+	command *store.CommandIdempotency,
+) (*model.RetentionPreview, error) {
+	if input == nil ||
+		!validRetentionMutation(input.RetentionMutation, command, store.RetentionPreviewOperation) ||
+		!input.PreviewID.IsValid() ||
+		input.ExpectedPolicyRevision < 1 {
 		return nil, store.NewErrInvalidInput("retention_preview", "creation", nil)
 	}
+
 	result, err := runIdempotentMutation(ctx, s.SQLStore, "retention preview", idempotentMutation[*model.RetentionPreview]{
-		command: command, auditEventID: input.AuditEventID,
+		command:      command,
+		auditEventID: input.AuditEventID,
 		execute: func(ctx context.Context, tx *sqlxTxWrapper) (*model.RetentionPreview, error) {
 			policy, at, err := lockRetentionAuthority(ctx, tx, input.RetentionMutation, model.ActionRetentionPolicyView)
 			if err != nil {
@@ -196,6 +299,7 @@ func (s *SQLRetentionStore) CreatePreview(ctx context.Context, input *store.Rete
 			if policy.Revision != input.ExpectedPolicyRevision {
 				return nil, &store.ErrRetentionPolicyRevisionConflict{CurrentRevision: policy.Revision}
 			}
+
 			counts, err := countRetentionRecords(ctx, tx, policy, at)
 			if err != nil {
 				return nil, err
@@ -205,20 +309,54 @@ func (s *SQLRetentionStore) CreatePreview(ctx context.Context, input *store.Rete
 			if _, _, err = lockRetentionAuthority(ctx, tx, input.RetentionMutation, model.ActionRetentionPolicyView); err != nil {
 				return nil, err
 			}
-			p := &model.RetentionPreview{ID: input.PreviewID, InstitutionID: policy.InstitutionID, PolicyRevision: policy.Revision,
-				CreatedByUserID: input.Principal.UserID, CreatedAt: at, ExpiresAt: at.Add(model.RetentionPreviewLifetime), Work: counts.Work, Integrity: counts.Integrity, BrowserActivity: counts.BrowserActivity, SecurityOperational: counts.SecurityOperational, Audit: counts.Audit, Receipts: counts.Receipts}
+
+			p := &model.RetentionPreview{
+				ID:                  input.PreviewID,
+				InstitutionID:       policy.InstitutionID,
+				PolicyRevision:      policy.Revision,
+				CreatedByUserID:     input.Principal.UserID,
+				CreatedAt:           at,
+				ExpiresAt:           at.Add(model.RetentionPreviewLifetime),
+				Work:                counts.Work,
+				Integrity:           counts.Integrity,
+				BrowserActivity:     counts.BrowserActivity,
+				SecurityOperational: counts.SecurityOperational,
+				Audit:               counts.Audit,
+				Receipts:            counts.Receipts,
+			}
 			encoded, err := json.Marshal(counts)
 			if err != nil {
 				return nil, err
 			}
-			_, err = tx.Exec(ctx, `INSERT INTO retention_previews(id,institution_id,policy_revision,created_by_user_id,created_at,expires_at,counts) VALUES (?,?,?,?,?,?,?)`,
-				p.ID.String(), p.InstitutionID.String(), p.PolicyRevision, p.CreatedByUserID.String(), p.CreatedAt, p.ExpiresAt, string(encoded))
+
+			_, err = tx.Exec(
+				ctx,
+				`INSERT INTO retention_previews(
+					id, institution_id, policy_revision, created_by_user_id, created_at, expires_at, counts
+				)
+				VALUES (?, ?, ?, ?, ?, ?, ?)`,
+				p.ID.String(),
+				p.InstitutionID.String(),
+				p.PolicyRevision,
+				p.CreatedByUserID.String(),
+				p.CreatedAt,
+				p.ExpiresAt,
+				string(encoded),
+			)
 			if err != nil {
 				return nil, err
 			}
-			if err = completeRetentionAudit(ctx, tx, input.RetentionMutation, map[string]any{"preview_id": p.ID.String(), "policy_revision": p.PolicyRevision}, ""); err != nil {
+
+			if err = completeRetentionAudit(
+				ctx,
+				tx,
+				input.RetentionMutation,
+				map[string]any{"preview_id": p.ID.String(), "policy_revision": p.PolicyRevision},
+				"",
+			); err != nil {
 				return nil, err
 			}
+
 			return p, nil
 		},
 		encode: encodeRetentionPreviewOutcome,
@@ -231,32 +369,51 @@ func (s *SQLRetentionStore) CreatePreview(ctx context.Context, input *store.Rete
 			if policy.InstitutionID != p.InstitutionID {
 				return nil, store.NewErrNotFound("retention_preview", p.ID.String())
 			}
+
 			return p, nil
 		},
 		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, p *model.RetentionPreview, original string) error {
-			return completeRetentionAudit(ctx, tx, input.RetentionMutation, map[string]any{"preview_id": p.ID.String(), "policy_revision": p.PolicyRevision}, original)
+			return completeRetentionAudit(
+				ctx,
+				tx,
+				input.RetentionMutation,
+				map[string]any{"preview_id": p.ID.String(), "policy_revision": p.PolicyRevision},
+				original,
+			)
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	return result.Value, nil
 }
 
-func (s *SQLRetentionStore) ChangeControl(ctx context.Context, input *store.RetentionControlChange, command *store.CommandIdempotency) (*store.RetentionControlResult, error) {
-	if input == nil || !validRetentionMutation(input.RetentionMutation, command, store.RetentionControlOperation) || input.ExpectedRevision < 1 ||
-		input.ExpectedPolicyRevision < 1 || input.RecentAuthenticationTTL <= 0 ||
+func (s *SQLRetentionStore) ChangeControl(
+	ctx context.Context,
+	input *store.RetentionControlChange,
+	command *store.CommandIdempotency,
+) (*store.RetentionControlResult, error) {
+	if input == nil ||
+		!validRetentionMutation(input.RetentionMutation, command, store.RetentionControlOperation) ||
+		input.ExpectedRevision < 1 ||
+		input.ExpectedPolicyRevision < 1 ||
+		input.RecentAuthenticationTTL <= 0 ||
 		(input.State != model.RetentionControlEnabled && input.State != model.RetentionControlPaused) ||
-		(input.State == model.RetentionControlEnabled && !input.PreviewID.IsValid()) || (input.State == model.RetentionControlPaused && !input.PreviewID.IsZero()) {
+		(input.State == model.RetentionControlEnabled && !input.PreviewID.IsValid()) ||
+		(input.State == model.RetentionControlPaused && !input.PreviewID.IsZero()) {
 		return nil, store.NewErrInvalidInput("retention_control", "change", nil)
 	}
+
 	result, err := runIdempotentMutation(ctx, s.SQLStore, "retention control", idempotentMutation[*model.RetentionControl]{
-		command: command, auditEventID: input.AuditEventID,
+		command:      command,
+		auditEventID: input.AuditEventID,
 		execute: func(ctx context.Context, tx *sqlxTxWrapper) (*model.RetentionControl, error) {
 			policy, at, err := lockRetentionAuthority(ctx, tx, input.RetentionMutation, model.ActionRetentionCleanupManage)
 			if err != nil {
 				return nil, err
 			}
+
 			current, err := getRetentionControl(ctx, tx, policy.InstitutionID, true)
 			if err != nil {
 				return nil, err
@@ -270,22 +427,34 @@ func (s *SQLRetentionStore) ChangeControl(ctx context.Context, input *store.Rete
 			if current.Revision == math.MaxInt64 {
 				return nil, store.NewErrConflict("retention_control", "revision_exhausted", nil)
 			}
+
 			if input.State == model.RetentionControlEnabled {
 				preview, err := getRetentionPreview(ctx, tx, input.PreviewID)
 				if err != nil {
 					return nil, err
 				}
-				if preview.InstitutionID != policy.InstitutionID || preview.PolicyRevision != policy.Revision ||
-					preview.CreatedAt.After(at) || !preview.ExpiresAt.After(at) {
+
+				if preview.InstitutionID != policy.InstitutionID ||
+					preview.PolicyRevision != policy.Revision ||
+					preview.CreatedAt.After(at) ||
+					!preview.ExpiresAt.After(at) {
 					return nil, store.NewErrConflict("retention_control", "preview_stale", nil)
 				}
-				if policy.DeletionGraceDays <= 0 || (policy.SubmissionRetentionDays == 0 && policy.IntegrityRetentionDays == 0 && policy.BrowserActivityRetentionDays == 0 && policy.SecurityOperationalRetentionDays == 0 && policy.AuditRetentionDays == 0) {
+
+				if policy.DeletionGraceDays <= 0 ||
+					(policy.SubmissionRetentionDays == 0 &&
+						policy.IntegrityRetentionDays == 0 &&
+						policy.BrowserActivityRetentionDays == 0 &&
+						policy.SecurityOperationalRetentionDays == 0 &&
+						policy.AuditRetentionDays == 0) {
 					return nil, store.NewErrConflict("retention_control", "policy_unconfigured", nil)
 				}
+
 				current.ApprovedPolicyRevision, current.ApprovedPreviewID = policy.Revision, input.PreviewID
 			} else if current.State == model.RetentionControlDisabled {
 				return nil, store.NewErrConflict("retention_control", "not_enabled", nil)
 			}
+
 			current.Revision++
 			current.State, current.ChangedByUserID = input.State, input.Principal.UserID
 			if at.After(current.UpdatedAt) {
@@ -294,8 +463,21 @@ func (s *SQLRetentionStore) ChangeControl(ctx context.Context, input *store.Rete
 			if current.UpdatedAt.Before(policy.UpdatedAt) {
 				current.UpdatedAt = policy.UpdatedAt
 			}
-			_, err = tx.Exec(ctx, `UPDATE retention_controls SET revision=?,state=?,approved_policy_revision=?,approved_preview_id=?,changed_by_user_id=?,updated_at=? WHERE institution_id=?`,
-				current.Revision, current.State, current.ApprovedPolicyRevision, current.ApprovedPreviewID.String(), current.ChangedByUserID.String(), current.UpdatedAt, current.InstitutionID.String())
+
+			_, err = tx.Exec(
+				ctx,
+				`UPDATE retention_controls
+				SET revision = ?, state = ?, approved_policy_revision = ?, approved_preview_id = ?,
+					changed_by_user_id = ?, updated_at = ?
+				WHERE institution_id = ?`,
+				current.Revision,
+				current.State,
+				current.ApprovedPolicyRevision,
+				current.ApprovedPreviewID.String(),
+				current.ChangedByUserID.String(),
+				current.UpdatedAt,
+				current.InstitutionID.String(),
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -305,6 +487,7 @@ func (s *SQLRetentionStore) ChangeControl(ctx context.Context, input *store.Rete
 			if err = completeRetentionAudit(ctx, tx, input.RetentionMutation, retentionControlAudit(current), ""); err != nil {
 				return nil, err
 			}
+
 			return current, nil
 		},
 		encode: func(c *model.RetentionControl) ([]byte, error) { return encodeOutcome(retentionControlOutcome(*c)) },
@@ -313,6 +496,7 @@ func (s *SQLRetentionStore) ChangeControl(ctx context.Context, input *store.Rete
 			if err := decodeOutcome(data, &outcome); err != nil {
 				return nil, err
 			}
+
 			c := model.RetentionControl(outcome)
 			return &c, c.Validate()
 		},
@@ -324,6 +508,7 @@ func (s *SQLRetentionStore) ChangeControl(ctx context.Context, input *store.Rete
 			if policy.InstitutionID != c.InstitutionID {
 				return nil, store.NewErrNotFound("retention_control", c.InstitutionID.String())
 			}
+
 			return c, nil
 		},
 		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, c *model.RetentionControl, original string) error {
@@ -333,18 +518,43 @@ func (s *SQLRetentionStore) ChangeControl(ctx context.Context, input *store.Rete
 	if err != nil {
 		return nil, err
 	}
+
 	return &store.RetentionControlResult{Control: result.Value, Replayed: result.Replayed}, nil
 }
 
 func retentionControlAudit(c *model.RetentionControl) map[string]any {
-	return map[string]any{"institution_id": c.InstitutionID.String(), "control_revision": c.Revision,
-		"state": string(c.State), "policy_revision": c.ApprovedPolicyRevision, "preview_id": c.ApprovedPreviewID.String()}
+	return map[string]any{
+		"institution_id":   c.InstitutionID.String(),
+		"control_revision": c.Revision,
+		"state":            string(c.State),
+		"policy_revision":  c.ApprovedPolicyRevision,
+		"preview_id":       c.ApprovedPreviewID.String(),
+	}
 }
 
 func cancelInstitutionRetirements(ctx context.Context, tx *sqlxTxWrapper, id model.InstitutionID, at time.Time, reason string) error {
-	_, err := tx.Exec(ctx, `WITH canceled AS (UPDATE retention_retirements SET state='canceled',canceled_at=GREATEST(scheduled_at,?),cancellation_reason=?
-		WHERE institution_id=? AND state='grace' RETURNING id)
-		UPDATE retention_notices SET canceled_at=GREATEST(created_at,?),delivery_state=CASE WHEN mail_delivery_id IS NULL AND delivery_state='pending' THEN 'suppressed' ELSE delivery_state END WHERE retirement_id IN (SELECT id FROM canceled) AND canceled_at IS NULL`, at, reason, id.String(), at)
+	_, err := tx.Exec(
+		ctx,
+		`WITH canceled AS (
+			UPDATE retention_retirements
+			SET state = 'canceled', canceled_at = GREATEST(scheduled_at, ?), cancellation_reason = ?
+			WHERE institution_id = ?
+				AND state = 'grace'
+			RETURNING id
+		)
+		UPDATE retention_notices
+		SET canceled_at = GREATEST(created_at, ?),
+			delivery_state = CASE
+				WHEN mail_delivery_id IS NULL AND delivery_state = 'pending' THEN 'suppressed'
+				ELSE delivery_state
+			END
+		WHERE retirement_id IN (SELECT id FROM canceled)
+			AND canceled_at IS NULL`,
+		at,
+		reason,
+		id.String(),
+		at,
+	)
 	if err != nil {
 		return err
 	}
@@ -374,40 +584,119 @@ type retentionFactsRow struct {
 
 // One SELECT supplies a consistent snapshot, including current holds and source
 // protections. No student-authored value crosses this eligibility projection.
-const retentionFactsQuery = `SELECT sub.id AS submission_id,a.exam_id,a.exam_sitting_id AS sitting_id,
-	COALESCE(c.revision,0) AS completion_revision,c.completed_at,
-	(c.completed_at IS NOT NULL AND c.stale_at IS NULL AND c.completed_evidence_revision=c.evidence_revision AND sit.state='closed') AS completion_current,
-	(sub.integrity_retired_at IS NULL AND (EXISTS(SELECT 1 FROM integrity_flags WHERE exam_attempt_id=a.id) OR EXISTS(SELECT 1 FROM integrity_discrepancies WHERE submission_id=sub.id) OR
-	 EXISTS(SELECT 1 FROM submission_reviews WHERE submission_id=sub.id) OR EXISTS(SELECT 1 FROM submission_review_waivers WHERE submission_id=sub.id) OR
-	 EXISTS(SELECT 1 FROM exam_attempt_suspensions WHERE exam_attempt_id=a.id) OR EXISTS(SELECT 1 FROM exam_attempt_manager_end_actions WHERE exam_attempt_id=a.id))) AS has_integrity,
-	EXISTS(SELECT 1 FROM retention_holds h WHERE h.exam_id=a.exam_id AND h.released_at IS NULL AND
-	 (h.exam_sitting_id IS NULL OR h.exam_sitting_id=a.exam_sitting_id) AND (h.submission_id IS NULL OR h.submission_id=sub.id)) AS held,
-	(SELECT max(expires_at) FROM retention_source_protections WHERE submission_id=sub.id AND category='work') AS work_protection,
-	(SELECT max(expires_at) FROM retention_source_protections WHERE submission_id=sub.id AND category='integrity') AS integrity_protection,
-	sub.work_retired_at,sub.integrity_retired_at,
- (SELECT browser_retired_at FROM exam_attempt_delivery_budgets WHERE exam_attempt_id=a.id) AS browser_retired_at,
- (SELECT security_retired_at FROM exam_attempt_delivery_budgets WHERE exam_attempt_id=a.id) AS security_retired_at,
- (SELECT max(expires_at) FROM retention_source_protections WHERE submission_id=sub.id AND category='browser_activity') AS browser_protection,
- (SELECT max(expires_at) FROM retention_source_protections WHERE submission_id=sub.id AND category='security_operational') AS security_protection,
-	(SELECT count(*) FROM exam_submission_manifest_entries WHERE submission_id=sub.id AND storage_origin='starter') AS shared_objects
-	FROM exam_submissions sub JOIN exam_attempts a ON a.id=sub.exam_attempt_id
-	JOIN exam_sittings sit ON sit.id=a.exam_sitting_id JOIN exams e ON e.id=a.exam_id JOIN academic_units u ON u.id=e.academic_unit_id
-	LEFT JOIN exam_sitting_records_completions c ON c.exam_sitting_id=sit.id WHERE sub.sealed=true AND u.institution_id=?`
+const retentionFactsQuery = `SELECT sub.id AS submission_id, a.exam_id, a.exam_sitting_id AS sitting_id,
+		COALESCE(c.revision, 0) AS completion_revision, c.completed_at,
+		(
+			c.completed_at IS NOT NULL
+			AND c.stale_at IS NULL
+			AND c.completed_evidence_revision = c.evidence_revision
+			AND sit.state = 'closed'
+		) AS completion_current,
+		(
+			sub.integrity_retired_at IS NULL
+			AND (
+				EXISTS(SELECT 1 FROM integrity_flags WHERE exam_attempt_id = a.id)
+				OR EXISTS(SELECT 1 FROM integrity_discrepancies WHERE submission_id = sub.id)
+				OR EXISTS(SELECT 1 FROM submission_reviews WHERE submission_id = sub.id)
+				OR EXISTS(SELECT 1 FROM submission_review_waivers WHERE submission_id = sub.id)
+				OR EXISTS(SELECT 1 FROM exam_attempt_suspensions WHERE exam_attempt_id = a.id)
+				OR EXISTS(SELECT 1 FROM exam_attempt_manager_end_actions WHERE exam_attempt_id = a.id)
+			)
+		) AS has_integrity,
+		EXISTS(
+			SELECT 1
+			FROM retention_holds h
+			WHERE h.exam_id = a.exam_id
+				AND h.released_at IS NULL
+				AND (h.exam_sitting_id IS NULL OR h.exam_sitting_id = a.exam_sitting_id)
+				AND (h.submission_id IS NULL OR h.submission_id = sub.id)
+		) AS held,
+		(
+			SELECT max(expires_at)
+			FROM retention_source_protections
+			WHERE submission_id = sub.id
+				AND category = 'work'
+		) AS work_protection,
+		(
+			SELECT max(expires_at)
+			FROM retention_source_protections
+			WHERE submission_id = sub.id
+				AND category = 'integrity'
+		) AS integrity_protection,
+		sub.work_retired_at, sub.integrity_retired_at,
+		(
+			SELECT browser_retired_at
+			FROM exam_attempt_delivery_budgets
+			WHERE exam_attempt_id = a.id
+		) AS browser_retired_at,
+		(
+			SELECT security_retired_at
+			FROM exam_attempt_delivery_budgets
+			WHERE exam_attempt_id = a.id
+		) AS security_retired_at,
+		(
+			SELECT max(expires_at)
+			FROM retention_source_protections
+			WHERE submission_id = sub.id
+				AND category = 'browser_activity'
+		) AS browser_protection,
+		(
+			SELECT max(expires_at)
+			FROM retention_source_protections
+			WHERE submission_id = sub.id
+				AND category = 'security_operational'
+		) AS security_protection,
+		(
+			SELECT count(*)
+			FROM exam_submission_manifest_entries
+			WHERE submission_id = sub.id
+				AND storage_origin = 'starter'
+		) AS shared_objects
+	FROM exam_submissions sub
+	JOIN exam_attempts a ON a.id = sub.exam_attempt_id
+	JOIN exam_sittings sit ON sit.id = a.exam_sitting_id
+	JOIN exams e ON e.id = a.exam_id
+	JOIN academic_units u ON u.id = e.academic_unit_id
+	LEFT JOIN exam_sitting_records_completions c ON c.exam_sitting_id = sit.id
+	WHERE sub.sealed = true
+		AND u.institution_id = ?`
 
 func (r retentionFactsRow) records() [4]model.RetentionRecord {
-	base := model.RetentionRecord{Scope: model.RetentionHoldScope{ExamID: model.ExamID(r.ExamID), SittingID: model.ExamSittingID(r.SittingID), SubmissionID: model.SubmissionID(r.SubmissionID)},
-		CompletionRevision: r.CompletionRevision, CompletedAt: optionalTime(r.CompletedAt), CompletionCurrent: r.CompletionCurrent,
-		HasIntegrity: r.HasIntegrity, Held: r.Held}
+	base := model.RetentionRecord{
+		Scope: model.RetentionHoldScope{
+			ExamID:       model.ExamID(r.ExamID),
+			SittingID:    model.ExamSittingID(r.SittingID),
+			SubmissionID: model.SubmissionID(r.SubmissionID),
+		},
+		CompletionRevision: r.CompletionRevision,
+		CompletedAt:        optionalTime(r.CompletedAt),
+		CompletionCurrent:  r.CompletionCurrent,
+		HasIntegrity:       r.HasIntegrity,
+		Held:               r.Held,
+	}
 	work, integrity := base, base
-	work.Category, work.ExportProtectedUntil, work.RetiredAt, work.SharedPublishedObjects = model.RetentionCategoryWork, optionalTime(r.WorkProtection), optionalTime(r.WorkRetiredAt), r.SharedObjects
-	integrity.Category, integrity.ExportProtectedUntil, integrity.RetiredAt = model.RetentionCategoryIntegrity, optionalTime(r.IntegrityProtection), optionalTime(r.IntegrityRetiredAt)
+	work.Category, work.ExportProtectedUntil, work.RetiredAt, work.SharedPublishedObjects = model.RetentionCategoryWork, optionalTime(
+		r.WorkProtection,
+	), optionalTime(r.WorkRetiredAt), r.SharedObjects
+	integrity.Category, integrity.ExportProtectedUntil, integrity.RetiredAt = model.RetentionCategoryIntegrity, optionalTime(
+		r.IntegrityProtection,
+	), optionalTime(r.IntegrityRetiredAt)
 	browser, security := base, base
-	browser.Category, browser.ExportProtectedUntil, browser.RetiredAt = model.RetentionCategoryBrowserActivity, optionalTime(r.BrowserProtection), optionalTime(r.BrowserRetiredAt)
-	security.Category, security.ExportProtectedUntil, security.RetiredAt = model.RetentionCategorySecurityOperational, optionalTime(r.SecurityProtection), optionalTime(r.SecurityRetiredAt)
+	browser.Category, browser.ExportProtectedUntil, browser.RetiredAt = model.RetentionCategoryBrowserActivity, optionalTime(
+		r.BrowserProtection,
+	), optionalTime(r.BrowserRetiredAt)
+	security.Category, security.ExportProtectedUntil, security.RetiredAt = model.RetentionCategorySecurityOperational, optionalTime(
+		r.SecurityProtection,
+	), optionalTime(r.SecurityRetiredAt)
 	return [4]model.RetentionRecord{work, integrity, browser, security}
 }
 
-func countRetentionRecords(ctx context.Context, tx *sqlxTxWrapper, policy *model.RetentionPolicy, at time.Time) (retentionPreviewCounts, error) {
+func countRetentionRecords(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	policy *model.RetentionPolicy,
+	at time.Time,
+) (retentionPreviewCounts, error) {
 	var counts retentionPreviewCounts
 	queryCtx, cancel := tx.queryContext(ctx)
 	defer cancel()
@@ -415,17 +704,20 @@ func countRetentionRecords(ctx context.Context, tx *sqlxTxWrapper, policy *model
 	if err != nil {
 		return counts, err
 	}
+
 	defer rows.Close()
 	for rows.Next() {
 		var row retentionFactsRow
 		if err := rows.StructScan(&row); err != nil {
 			return counts, err
 		}
+
 		for _, record := range row.records() {
 			eligibility, err := record.Eligibility(policy, at)
 			if err != nil {
 				return counts, invalidPersistedState("retention_preview", "record", err)
 			}
+
 			counter := &counts.Work
 			switch record.Category {
 			case model.RetentionCategoryIntegrity:
@@ -435,6 +727,7 @@ func countRetentionRecords(ctx context.Context, tx *sqlxTxWrapper, policy *model
 			case model.RetentionCategorySecurityOperational:
 				counter = &counts.SecurityOperational
 			}
+
 			counter.Total++
 			switch eligibility.Blocker {
 			case model.RetentionBlockerNone:
@@ -458,70 +751,106 @@ func countRetentionRecords(ctx context.Context, tx *sqlxTxWrapper, policy *model
 			}
 		}
 	}
+
 	if err := rows.Err(); err != nil {
 		return counts, err
 	}
 	if err := rows.Close(); err != nil {
 		return counts, err
 	}
+
 	counts.Audit, counts.Receipts, err = countRetentionExpiry(ctx, tx, policy, at)
 	return counts, err
 }
 
 func (s *SQLRetentionStore) ListRecords(ctx context.Context, options store.RetentionRecordListOptions) (*store.RetentionRecordPage, error) {
-	if options.Limit < 1 || options.Limit > model.RetentionMaximumPageSize || !options.AfterSubmissionID.IsZero() && !options.AfterSubmissionID.IsValid() {
+	if options.Limit < 1 ||
+		options.Limit > model.RetentionMaximumPageSize ||
+		!options.AfterSubmissionID.IsZero() && !options.AfterSubmissionID.IsValid() {
 		return nil, store.NewErrInvalidInput("retention_records", "page", nil)
 	}
-	return runSQLTransaction(ctx, s.GetMaster().Begin, "retention eligibility page", func(ctx context.Context, tx *sqlxTxWrapper) (*store.RetentionRecordPage, error) {
+
+	return runSQLTransaction(ctx, s.GetMaster().Begin, "retention eligibility page", func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*store.RetentionRecordPage, error) {
 		// All rows and their policy use one read-only transaction snapshot.
 		if _, err := tx.Exec(ctx, `SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY`); err != nil {
 			return nil, err
 		}
+
 		policy, err := getRetentionPolicy(ctx, tx, "")
 		if err != nil {
 			return nil, err
 		}
+
 		var at time.Time
 		if err = tx.Get(ctx, &at, `SELECT clock_timestamp()`); err != nil {
 			return nil, err
 		}
+
 		var rows []retentionFactsRow
-		err = tx.Select(ctx, &rows, retentionFactsQuery+` AND sub.id>? ORDER BY sub.id LIMIT ?`, policy.InstitutionID.String(), options.AfterSubmissionID.String(), options.Limit+1)
+		err = tx.Select(
+			ctx,
+			&rows,
+			retentionFactsQuery+` AND sub.id > ? ORDER BY sub.id LIMIT ?`,
+			policy.InstitutionID.String(),
+			options.AfterSubmissionID.String(),
+			options.Limit+1,
+		)
 		if err != nil {
 			return nil, err
 		}
-		page := &store.RetentionRecordPage{PolicyRevision: policy.Revision, AsOf: model.TimeUTC(at), Items: make([]store.RetentionRecordItem, 0, len(rows)*4), HasMore: len(rows) > options.Limit}
+
+		page := &store.RetentionRecordPage{
+			PolicyRevision: policy.Revision,
+			AsOf:           model.TimeUTC(at),
+			Items:          make([]store.RetentionRecordItem, 0, len(rows)*4),
+			HasMore:        len(rows) > options.Limit,
+		}
 		if page.HasMore {
 			rows = rows[:options.Limit]
 		}
+
 		retirements := make(map[string]*model.RetentionRetirement, len(rows)*4)
 		if len(rows) > 0 {
 			placeholders, args := make([]string, len(rows)), make([]any, len(rows))
 			for i, row := range rows {
 				placeholders[i], args[i] = "?", row.SubmissionID
 			}
+
 			var values []retentionRetirementRow
-			if err := tx.Select(ctx, &values, retentionRetirementQuery+` WHERE r.state<>'canceled' AND r.submission_id IN (`+strings.Join(placeholders, ",")+`)`, args...); err != nil {
+			if err := tx.Select(
+				ctx,
+				&values,
+				retentionRetirementQuery+` WHERE r.state <> 'canceled' AND r.submission_id IN (`+strings.Join(placeholders, ",")+`)`,
+				args...,
+			); err != nil {
 				return nil, err
 			}
+
 			for _, row := range values {
 				value, err := row.retirement()
 				if err != nil {
 					return nil, err
 				}
+
 				retirements[row.SubmissionID+":"+row.Category] = value
 			}
 		}
+
 		for _, row := range rows {
 			for _, record := range row.records() {
 				eligibility, err := record.Eligibility(policy, at)
 				if err != nil {
 					return nil, err
 				}
+
 				retirement := retirements[record.Scope.SubmissionID.String()+":"+string(record.Category)]
 				page.Items = append(page.Items, store.RetentionRecordItem{Record: record, Eligibility: eligibility, Retirement: retirement})
 			}
 		}
+
 		return page, nil
 	})
 }
@@ -575,11 +904,18 @@ type retentionExpiryCountsDocument struct {
 
 func encodeRetentionPreviewOutcome(p *model.RetentionPreview) ([]byte, error) {
 	return encodeOutcome(retentionPreviewOutcome{
-		ID: p.ID, InstitutionID: p.InstitutionID, PolicyRevision: p.PolicyRevision, CreatedByUserID: p.CreatedByUserID,
-		CreatedAt: p.CreatedAt, ExpiresAt: p.ExpiresAt, Work: retentionPreviewCountsDocument(p.Work),
-		Integrity: retentionPreviewCountsDocument(p.Integrity), BrowserActivity: retentionPreviewCountsDocument(p.BrowserActivity),
+		ID:                  p.ID,
+		InstitutionID:       p.InstitutionID,
+		PolicyRevision:      p.PolicyRevision,
+		CreatedByUserID:     p.CreatedByUserID,
+		CreatedAt:           p.CreatedAt,
+		ExpiresAt:           p.ExpiresAt,
+		Work:                retentionPreviewCountsDocument(p.Work),
+		Integrity:           retentionPreviewCountsDocument(p.Integrity),
+		BrowserActivity:     retentionPreviewCountsDocument(p.BrowserActivity),
 		SecurityOperational: retentionPreviewCountsDocument(p.SecurityOperational),
-		Audit:               retentionExpiryCountsDocument(p.Audit), Receipts: retentionExpiryCountsDocument(p.Receipts),
+		Audit:               retentionExpiryCountsDocument(p.Audit),
+		Receipts:            retentionExpiryCountsDocument(p.Receipts),
 	})
 }
 
@@ -589,12 +925,18 @@ func decodeRetentionPreviewOutcome(data []byte) (*model.RetentionPreview, error)
 		return nil, err
 	}
 	p := &model.RetentionPreview{
-		ID: outcome.ID, InstitutionID: outcome.InstitutionID, PolicyRevision: outcome.PolicyRevision,
-		CreatedByUserID: outcome.CreatedByUserID, CreatedAt: outcome.CreatedAt, ExpiresAt: outcome.ExpiresAt,
-		Work: model.RetentionPreviewCounts(outcome.Work), Integrity: model.RetentionPreviewCounts(outcome.Integrity),
+		ID:                  outcome.ID,
+		InstitutionID:       outcome.InstitutionID,
+		PolicyRevision:      outcome.PolicyRevision,
+		CreatedByUserID:     outcome.CreatedByUserID,
+		CreatedAt:           outcome.CreatedAt,
+		ExpiresAt:           outcome.ExpiresAt,
+		Work:                model.RetentionPreviewCounts(outcome.Work),
+		Integrity:           model.RetentionPreviewCounts(outcome.Integrity),
 		BrowserActivity:     model.RetentionPreviewCounts(outcome.BrowserActivity),
 		SecurityOperational: model.RetentionPreviewCounts(outcome.SecurityOperational),
-		Audit:               model.RetentionExpiryCounts(outcome.Audit), Receipts: model.RetentionExpiryCounts(outcome.Receipts),
+		Audit:               model.RetentionExpiryCounts(outcome.Audit),
+		Receipts:            model.RetentionExpiryCounts(outcome.Receipts),
 	}
 	return p, p.Validate()
 }

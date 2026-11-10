@@ -63,10 +63,18 @@ type roleBindingRow struct {
 
 func roleBindingSliceColumns() []string {
 	return []string{
-		"role_bindings.id", "role_bindings.created_at", "role_bindings.updated_at",
-		"role_bindings.archived_at", "role_bindings.user_id", "role_bindings.role_id", "role_bindings.origin_invitation_id", "role_bindings.origin_academic_unit_member_id",
-		"role_bindings.scope_type", "role_bindings.scope_id",
-		"role_bindings.start_at", "role_bindings.end_at",
+		"role_bindings.id",
+		"role_bindings.created_at",
+		"role_bindings.updated_at",
+		"role_bindings.archived_at",
+		"role_bindings.user_id",
+		"role_bindings.role_id",
+		"role_bindings.origin_invitation_id",
+		"role_bindings.origin_academic_unit_member_id",
+		"role_bindings.scope_type",
+		"role_bindings.scope_id",
+		"role_bindings.start_at",
+		"role_bindings.end_at",
 	}
 }
 
@@ -82,34 +90,47 @@ func (s SQLRoleBindingStore) Save(
 	ctx context.Context,
 	input *store.RoleBindingCreation,
 ) (*model.RoleBinding, error) {
-	if input == nil || input.Binding == nil || !input.Binding.ID.IsZero() ||
+	if input == nil ||
+		input.Binding == nil ||
+		!input.Binding.ID.IsZero() ||
 		input.ExpectedRoleUpdatedAt.IsZero() ||
-		!input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("role_binding", "creation", nil)
 	}
+
 	candidate := *input.Binding
 	at := model.TimeUTC(input.AuditAt)
 	if at.IsZero() {
 		at = model.NowUTC()
 	}
+
 	// Explicit StartsAt from the application is preserved; zero uses audit time.
 	candidate.PrepareCreate(model.NewRoleBindingID(), at)
 	if err := candidate.Validate(); err != nil {
 		return nil, store.NewErrInvalidInput("role_binding", "value", nil).Wrap(err)
 	}
+
 	allowedCreated := model.MailTemplateAuthorizationScopedRoleAssigned
 	if candidate.ScopeType == model.RoleScopeInstitution {
 		allowedCreated = model.MailTemplateAuthorizationInstitutionRoleAssigned
 	}
+
 	payloadKeyID := ""
 	if input.Notice != nil {
 		var err error
-		payloadKeyID, err = validateRelationshipTransitionMail("role_binding", input.Notice, candidate.UserID,
-			candidate.CreatedAt, allowedCreated)
+		payloadKeyID, err = validateRelationshipTransitionMail(
+			"role_binding",
+			input.Notice,
+			candidate.UserID,
+			candidate.CreatedAt,
+			allowedCreated,
+		)
 		if err != nil {
 			return nil, err
 		}
 	}
+
 	execute := func(ctx context.Context, tx *sqlxTxWrapper) (*roleBindingMutationResult, error) {
 		// The grant tuple may take the Class lifecycle lock and the insert takes
 		// the Attempt admission fence; both follow the User row.
@@ -122,60 +143,101 @@ func (s SQLRoleBindingStore) Save(
 		if err := lockRoleBindingGrantTuple(ctx, tx, &candidate); err != nil {
 			return nil, err
 		}
+
 		existing, err := findExactRoleBinding(ctx, tx, &candidate)
 		if err != nil {
 			return nil, err
 		}
+
 		if existing != nil && input.Command != nil {
-			if err = completeAdministrativeNoOpAudit(ctx, tx, input.AuditEventID, input.AuditAt, "role_binding_id", existing.ID.String()); err != nil {
+			if err = completeAdministrativeNoOpAudit(
+				ctx,
+				tx,
+				input.AuditEventID,
+				input.AuditAt,
+				"role_binding_id",
+				existing.ID.String(),
+			); err != nil {
 				return nil, err
 			}
+
 			return &roleBindingMutationResult{Value: existing, NoOp: true}, nil
 		}
+
 		if input.Notice != nil {
-			if err = lockPreparedMailRecipient(ctx, tx, "role_binding", candidate.UserID,
-				input.ExpectedRecipientRevision, input.Notice); err != nil {
+			if err = lockPreparedMailRecipient(
+				ctx,
+				tx,
+				"role_binding",
+				candidate.UserID,
+				input.ExpectedRecipientRevision,
+				input.Notice,
+			); err != nil {
 				return nil, err
 			}
+
 			if payloadKeyID != "" {
 				if err = requireMailPayloadPrimary(ctx, tx, payloadKeyID); err != nil {
 					return nil, err
 				}
 			}
 		}
+
 		if err := insertRoleBinding(ctx, tx, &candidate); err != nil {
 			return nil, err
 		}
+
 		if input.Notice != nil {
 			if err = insertRecoveryMail(ctx, tx, input.Notice.Occurrence, input.Notice.Delivery, input.Notice.Job, payloadKeyID); err != nil {
 				return nil, fmt.Errorf("insert Role Binding assignment mail: %w", err)
 			}
 		}
+
 		encoded, appErr := model.EncodeAuditData(candidate.Auditable())
 		if appErr != nil {
 			return nil, appErr
 		}
+
 		if _, err := completeAuditEvent(
 			ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", encoded, input.AuditAt,
 		); err != nil {
 			return nil, fmt.Errorf("complete role binding creation audit: %w", err)
 		}
+
 		return &roleBindingMutationResult{Value: &candidate}, nil
 	}
-	return s.runRoleBindingMutation(ctx, "audited role binding save", input.Command, input.AuditEventID, input.AuditAt,
-		func(replayed, noOp bool) { input.Replayed, input.NoOp = replayed, noOp }, execute)
+	return s.runRoleBindingMutation(
+		ctx,
+		"audited role binding save",
+		input.Command,
+		input.AuditEventID,
+		input.AuditAt,
+		func(replayed, noOp bool) { input.Replayed, input.NoOp = replayed, noOp },
+		execute,
+	)
 }
 
 // lockExpectedRoleForBinding closes the read-check-write race between the
 // application delegation decision and the binding insert. Permission-changing
 // role updates take an exclusive lock on the same row; the exact snapshot is
 // rechecked while this shared lock is held through commit.
-func lockExpectedRoleForBinding(ctx context.Context, tx *sqlxTxWrapper, roleID model.RoleID, expectedUpdatedAt time.Time, expectedPermissions []string) error {
+func lockExpectedRoleForBinding(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	roleID model.RoleID,
+	expectedUpdatedAt time.Time,
+	expectedPermissions []string,
+) error {
 	var row struct {
 		UpdatedAt   time.Time      `db:"updated_at"`
 		Permissions pq.StringArray `db:"permissions"`
 	}
-	if err := tx.Get(ctx, &row, `SELECT updated_at,permissions FROM roles WHERE id=? AND archived_at IS NULL FOR SHARE`, roleID.String()); err != nil {
+	if err := tx.Get(
+		ctx,
+		&row,
+		`SELECT updated_at, permissions FROM roles WHERE id = ? AND archived_at IS NULL FOR SHARE`,
+		roleID.String(),
+	); err != nil {
 		return translateError("role", roleID.String(), err)
 	}
 	if !row.UpdatedAt.Equal(model.TimeUTC(expectedUpdatedAt)) || !slices.Equal([]string(row.Permissions), expectedPermissions) {
@@ -200,10 +262,14 @@ func insertRoleBinding(ctx context.Context, tx *sqlxTxWrapper, candidate *model.
 	if err := validateSystemAdministratorScope(ctx, tx, candidate); err != nil {
 		return err
 	}
+
 	startAt := candidate.StartsAt
 	endAt := NullTimeFromOptional(candidate.EndsAt)
 	var overlap bool
-	if err := tx.Get(ctx, &overlap, `
+	if err := tx.Get(
+		ctx,
+		&overlap,
+		`
 		SELECT EXISTS (
 			SELECT 1 FROM role_bindings
 			 WHERE user_id = $1 AND role_id = $2
@@ -211,21 +277,30 @@ func insertRoleBinding(ctx context.Context, tx *sqlxTxWrapper, candidate *model.
 			   AND archived_at IS NULL
 			   AND ($6::timestamptz IS NULL OR start_at < $6)
 			   AND (end_at IS NULL OR end_at > $5)
-		)`, candidate.UserID.String(), candidate.RoleID.String(), candidate.ScopeType,
-		candidate.ScopeID, startAt, endAt); err != nil {
+		)`,
+		candidate.UserID.String(),
+		candidate.RoleID.String(),
+		candidate.ScopeType,
+		candidate.ScopeID,
+		startAt,
+		endAt,
+	); err != nil {
 		return fmt.Errorf("check role binding overlap: %w", err)
 	}
+
 	if overlap {
 		return store.NewErrConflict(
 			"role_binding", "role_bindings_effective_range_key", nil,
 		)
 	}
+
 	row := newRoleBindingRow(candidate)
 	if _, err := tx.NamedExec(ctx, `
 		INSERT INTO role_bindings (
 			id, created_at, updated_at, archived_at, user_id, role_id, origin_invitation_id, origin_academic_unit_member_id,
 			scope_type, scope_id, start_at, end_at
-		) VALUES (
+		)
+		VALUES (
 			:id, :created_at, :updated_at, :archived_at, :user_id, :role_id, :origin_invitation_id, :origin_academic_unit_member_id,
 			:scope_type, :scope_id, :start_at, :end_at
 		)`, &row); err != nil {
@@ -234,6 +309,7 @@ func insertRoleBinding(ctx context.Context, tx *sqlxTxWrapper, candidate *model.
 			translateError("role_binding", candidate.ID.String(), err),
 		)
 	}
+
 	return nil
 }
 
@@ -246,42 +322,62 @@ func guardRoleBindingExamCandidateConflict(ctx context.Context, tx *sqlxTxWrappe
 	if err := lockAdvisory(ctx, tx, lockKey); err != nil {
 		return fmt.Errorf("lock Role Binding candidate fence: %w", err)
 	}
+
 	var conflicts bool
-	err := tx.Get(ctx, &conflicts, `WITH RECURSIVE input AS (
+	err := tx.Get(
+		ctx,
+		&conflicts,
+		`WITH RECURSIVE input AS (
 		SELECT ?::timestamptz AS end_at
 	), unresolved AS (
-		SELECT attempt.exam_id,exam.academic_unit_id
-		FROM exam_attempts attempt JOIN exams exam ON exam.id=attempt.exam_id
-		WHERE attempt.candidate_user_id=? AND attempt.state IN ('ready','active','suspended')
-	), covered_units(root_id,id) AS (
-		SELECT academic_unit_id,academic_unit_id FROM unresolved
+		SELECT attempt.exam_id, exam.academic_unit_id
+		FROM exam_attempts attempt JOIN exams exam ON exam.id = attempt.exam_id
+		WHERE attempt.candidate_user_id = ?
+			AND attempt.state IN ('ready', 'active', 'suspended')
+	), covered_units(root_id, id) AS (
+		SELECT academic_unit_id, academic_unit_id FROM unresolved
 		UNION
-		SELECT child.root_id,parent.parent_id FROM covered_units child
-		JOIN academic_units parent ON parent.id=child.id AND parent.parent_id IS NOT NULL AND parent.archived_at IS NULL
+		SELECT child.root_id, parent.parent_id FROM covered_units child
+		JOIN academic_units parent ON parent.id = child.id AND parent.parent_id IS NOT NULL AND parent.archived_at IS NULL
 	)
 	SELECT EXISTS (
 		SELECT 1 FROM roles role CROSS JOIN input binding
-		WHERE role.id=? AND role.archived_at IS NULL
-		AND (binding.end_at IS NULL OR binding.end_at>statement_timestamp()) AND (
-			(role.name=? AND ?=ANY(role.permissions) AND ?='institution' AND EXISTS (SELECT 1 FROM unresolved))
-			OR (
-				?=ANY(role.permissions) AND (?='institution' OR (?='academic_unit' AND ? IN (SELECT id FROM covered_units)))
-				AND EXISTS (SELECT 1 FROM unresolved attempt
-					JOIN exam_managers manager ON manager.exam_id=attempt.exam_id AND manager.user_id=?
-					JOIN academic_unit_members member ON member.academic_unit_id=attempt.academic_unit_id AND member.user_id=?
-					WHERE member.archived_at IS NULL AND member.start_at<=statement_timestamp()
-					AND (member.end_at IS NULL OR member.end_at>statement_timestamp()))
+		WHERE role.id = ?
+			AND role.archived_at IS NULL
+			AND (binding.end_at IS NULL OR binding.end_at > statement_timestamp())
+			AND (
+				(role.name = ? AND ? = ANY(role.permissions) AND ? = 'institution' AND EXISTS (SELECT 1 FROM unresolved))
+				OR (
+					? = ANY(role.permissions) AND (? = 'institution' OR (? = 'academic_unit' AND ? IN (SELECT id FROM covered_units)))
+					AND EXISTS (SELECT 1 FROM unresolved attempt
+						JOIN exam_managers manager ON manager.exam_id = attempt.exam_id AND manager.user_id = ?
+						JOIN academic_unit_members member ON member.academic_unit_id = attempt.academic_unit_id AND member.user_id = ?
+						WHERE member.archived_at IS NULL
+							AND member.start_at <= statement_timestamp()
+							AND (member.end_at IS NULL OR member.end_at > statement_timestamp()))
+				)
 			)
-		)
-	)`, NullTimeFromOptional(candidate.EndsAt), candidate.UserID.String(), candidate.RoleID.String(), model.SystemAdministratorRoleName,
-		string(model.ActionExamManageOverride), candidate.ScopeType, string(model.ActionExamManage), candidate.ScopeType,
-		candidate.ScopeType, candidate.ScopeID, candidate.UserID.String(), candidate.UserID.String())
+	)`,
+		NullTimeFromOptional(candidate.EndsAt),
+		candidate.UserID.String(),
+		candidate.RoleID.String(),
+		model.SystemAdministratorRoleName,
+		string(model.ActionExamManageOverride),
+		candidate.ScopeType,
+		string(model.ActionExamManage),
+		candidate.ScopeType,
+		candidate.ScopeType,
+		candidate.ScopeID,
+		candidate.UserID.String(),
+		candidate.UserID.String(),
+	)
 	if err != nil {
 		return fmt.Errorf("inspect Role Binding Exam candidate conflict: %w", err)
 	}
 	if conflicts {
 		return store.NewErrConflict("role_binding", "role_binding_candidate_conflict", nil)
 	}
+
 	return nil
 }
 
@@ -291,8 +387,13 @@ func lockRoleBindingGrantTuple(ctx context.Context, tx *sqlxTxWrapper, candidate
 			return err
 		}
 	}
-	lockKey := advisoryLockKey("role-binding-grant", candidate.UserID.String(), candidate.RoleID.String(),
-		string(candidate.ScopeType), candidate.ScopeID)
+	lockKey := advisoryLockKey(
+		"role-binding-grant",
+		candidate.UserID.String(),
+		candidate.RoleID.String(),
+		string(candidate.ScopeType),
+		candidate.ScopeID,
+	)
 	if err := lockAdvisory(ctx, tx, lockKey); err != nil {
 		return fmt.Errorf("lock role binding grant: %w", err)
 	}
@@ -312,30 +413,47 @@ func validateRoleBindingReferences(
 	}
 	if binding.OriginInvitationID.IsValid() {
 		var originExists bool
-		if err := executor.Get(ctx, &originExists, `SELECT EXISTS(SELECT 1 FROM invitations
-			WHERE id=$1 AND ((purpose='teacher_academic_unit' AND academic_unit_id=$4) OR
-				(purpose IN ('academic_unit_role','institution_role') AND role_id=$2 AND scope_type=$3 AND scope_id=$4)))`,
-			binding.OriginInvitationID.String(), binding.RoleID.String(), binding.ScopeType, binding.ScopeID); err != nil {
+		if err := executor.Get(
+			ctx,
+			&originExists,
+			`SELECT EXISTS(SELECT 1 FROM invitations
+			WHERE id = $1
+				AND ((purpose = 'teacher_academic_unit' AND academic_unit_id = $4) OR
+				(purpose IN ('academic_unit_role', 'institution_role') AND role_id = $2 AND scope_type = $3 AND scope_id = $4)))`,
+			binding.OriginInvitationID.String(),
+			binding.RoleID.String(),
+			binding.ScopeType,
+			binding.ScopeID,
+		); err != nil {
 			return fmt.Errorf("validate Role Binding Invitation origin: %w", err)
 		}
+
 		if !originExists {
 			return store.NewErrReference("role_binding", "role_bindings_origin_invitation_id_fkey", sql.ErrNoRows)
 		}
 	}
+
 	switch binding.ScopeType {
 	case model.RoleScopeInstitution:
 		checks = append(checks, struct{ table, id, constraint string }{
-			"institutions", binding.ScopeID, "role_bindings_institution_scope_fkey",
+			"institutions",
+			binding.ScopeID,
+			"role_bindings_institution_scope_fkey",
 		})
 	case model.RoleScopeAcademicUnit:
 		checks = append(checks, struct{ table, id, constraint string }{
-			"academic_units", binding.ScopeID, "role_bindings_academic_unit_scope_fkey",
+			"academic_units",
+			binding.ScopeID,
+			"role_bindings_academic_unit_scope_fkey",
 		})
 	case model.RoleScopeClass:
 		checks = append(checks, struct{ table, id, constraint string }{
-			"classes", binding.ScopeID, "role_bindings_class_scope_fkey",
+			"classes",
+			binding.ScopeID,
+			"role_bindings_class_scope_fkey",
 		})
 	}
+
 	for _, check := range checks {
 		var exists bool
 		query := fmt.Sprintf(`SELECT EXISTS (SELECT 1 FROM %s WHERE id = ? AND archived_at IS NULL)`, check.table)
@@ -346,6 +464,7 @@ func validateRoleBindingReferences(
 			return store.NewErrReference("role_binding", check.constraint, sql.ErrNoRows)
 		}
 	}
+
 	return nil
 }
 
@@ -378,7 +497,8 @@ func validateSystemAdministratorScope(
 func (s SQLRoleBindingStore) Get(ctx context.Context, id model.RoleBindingID) (*model.RoleBinding, error) {
 	var row roleBindingRow
 	query := s.bindingsQuery.Where(sq.Eq{
-		"role_bindings.id": id, "role_bindings.archived_at": nil,
+		"role_bindings.id":          id,
+		"role_bindings.archived_at": nil,
 	})
 	if err := s.GetMaster().GetBuilder(ctx, &row, query); err != nil {
 		return nil, translateError("role_binding", id.String(), err)
@@ -397,14 +517,20 @@ func (s SQLRoleBindingStore) ListByUser(ctx context.Context, userID model.UserID
 // ListVisibleByUser returns the unarchived role bindings of userID whose scope
 // lies within visibility: everything when InstitutionWide, otherwise bindings
 // on the listed Academic Unit subtrees or Classes (at most 256 IDs in total).
-func (s SQLRoleBindingStore) ListVisibleByUser(ctx context.Context, userID model.UserID, visibility store.UserVisibilityScope) ([]*model.RoleBinding, error) {
+func (s SQLRoleBindingStore) ListVisibleByUser(
+	ctx context.Context,
+	userID model.UserID,
+	visibility store.UserVisibilityScope,
+) ([]*model.RoleBinding, error) {
 	if !userID.IsValid() ||
 		len(visibility.AcademicUnitRootIDs)+len(visibility.ClassIDs) > 256 ||
-		!validVisibilityIDs(visibility.AcademicUnitRootIDs) || !validVisibilityIDs(visibility.ClassIDs) {
+		!validVisibilityIDs(visibility.AcademicUnitRootIDs) ||
+		!validVisibilityIDs(visibility.ClassIDs) {
 		return nil, store.NewErrInvalidInput("role_binding", "visibility", nil)
 	}
 	query := s.bindingsQuery.Where(sq.Eq{
-		"role_bindings.user_id": userID, "role_bindings.archived_at": nil,
+		"role_bindings.user_id":     userID,
+		"role_bindings.archived_at": nil,
 	})
 	if !visibility.InstitutionWide {
 		units, unitArgs, predicate, predicateArgs := roleBindingVisibilityPredicate(visibility)
@@ -421,7 +547,9 @@ func (s SQLRoleBindingStore) ListVisibleByUser(ctx context.Context, userID model
 // subtrees, on its Classes, and on Classes inside those subtrees. units is the
 // allowed_units CTE the predicate reads, empty with a predicate that matches
 // nothing when the visibility lists no scope.
-func roleBindingVisibilityPredicate(visibility store.UserVisibilityScope) (units string, unitArgs []any, predicate string, predicateArgs []any) {
+func roleBindingVisibilityPredicate(
+	visibility store.UserVisibilityScope,
+) (units string, unitArgs []any, predicate string, predicateArgs []any) {
 	if len(visibility.AcademicUnitRootIDs) == 0 && len(visibility.ClassIDs) == 0 {
 		return "", nil, "FALSE", nil
 	}
@@ -436,7 +564,8 @@ func roleBindingVisibilityPredicate(visibility store.UserVisibilityScope) (units
 				SELECT 1 FROM classes c
 				JOIN programme_levels pl ON pl.id = c.programme_level_id
 				JOIN programmes p ON p.id = pl.programme_id
-				WHERE c.id = role_bindings.scope_id AND p.academic_unit_id IN (SELECT id FROM allowed_units)
+				WHERE c.id = role_bindings.scope_id
+					AND p.academic_unit_id IN (SELECT id FROM allowed_units)
 			)
 		))
 	)`, []any{pq.Array(idStrings(visibility.ClassIDs))}
@@ -445,26 +574,37 @@ func roleBindingVisibilityPredicate(visibility store.UserVisibilityScope) (units
 // ListVisibleSummariesByUsers returns, for each listed User with any, the
 // current Role Bindings inside visibility, at most Limit each, with their
 // Role and scope display names and the count of further visible bindings.
-func (s SQLRoleBindingStore) ListVisibleSummariesByUsers(ctx context.Context, options store.RoleBindingSummaryOptions) ([]store.UserRoleBindingSummary, error) {
+func (s SQLRoleBindingStore) ListVisibleSummariesByUsers(
+	ctx context.Context,
+	options store.RoleBindingSummaryOptions,
+) ([]store.UserRoleBindingSummary, error) {
 	visibility := options.Visibility
-	if !validSummaryUserIDs(options.UserIDs) || options.Limit < 1 || options.Limit > 10 || visibility.ActiveAt.IsZero() ||
+	if !validSummaryUserIDs(options.UserIDs) ||
+		options.Limit < 1 ||
+		options.Limit > 10 ||
+		visibility.ActiveAt.IsZero() ||
 		len(visibility.AcademicUnitRootIDs)+len(visibility.ClassIDs) > 256 ||
-		!validVisibilityIDs(visibility.AcademicUnitRootIDs) || !validVisibilityIDs(visibility.ClassIDs) ||
+		!validVisibilityIDs(visibility.AcademicUnitRootIDs) ||
+		!validVisibilityIDs(visibility.ClassIDs) ||
 		(options.ScopeType != "" || options.ScopeID != "") && (!options.ScopeType.IsValid() || !model.IsValidOpaqueID(options.ScopeID)) {
 		return nil, store.NewErrInvalidInput("role_binding", "summary_options", nil)
 	}
+
 	if len(options.UserIDs) == 0 {
 		return []store.UserRoleBindingSummary{}, nil
 	}
+
 	activeAt := model.TimeUTC(visibility.ActiveAt)
 	units, unitArgs, predicate, predicateArgs := "", []any(nil), "TRUE", []any(nil)
 	if !visibility.InstitutionWide {
 		units, unitArgs, predicate, predicateArgs = roleBindingVisibilityPredicate(visibility)
 	}
+
 	prefix := "WITH RECURSIVE "
 	if units != "" {
 		prefix += units + ", "
 	}
+
 	args := append([]any(nil), unitArgs...)
 	args = append(args, pq.Array(idStrings(options.UserIDs)), activeAt, activeAt)
 	args = append(args, predicateArgs...)
@@ -488,31 +628,39 @@ func (s SQLRoleBindingStore) ListVisibleSummariesByUsers(ctx context.Context, op
 		FROM role_bindings
 		JOIN roles ON roles.id = role_bindings.role_id AND roles.archived_at IS NULL
 		LEFT JOIN institutions scope_institution ON role_bindings.scope_type = 'institution'
-			AND scope_institution.id = role_bindings.scope_id AND scope_institution.archived_at IS NULL
+			AND scope_institution.id = role_bindings.scope_id
+			AND scope_institution.archived_at IS NULL
 		LEFT JOIN academic_units scope_unit ON role_bindings.scope_type = 'academic_unit'
-			AND scope_unit.id = role_bindings.scope_id AND scope_unit.archived_at IS NULL
+			AND scope_unit.id = role_bindings.scope_id
+			AND scope_unit.archived_at IS NULL
 		LEFT JOIN classes scope_class ON role_bindings.scope_type = 'class'
-			AND scope_class.id = role_bindings.scope_id AND scope_class.archived_at IS NULL
-		WHERE role_bindings.user_id = ANY(?) AND role_bindings.archived_at IS NULL
-		AND role_bindings.start_at <= ? AND (role_bindings.end_at IS NULL OR role_bindings.end_at > ?)
-		AND COALESCE(scope_institution.id, scope_unit.id, scope_class.id) IS NOT NULL
-		AND `+predicate+`
+			AND scope_class.id = role_bindings.scope_id
+			AND scope_class.archived_at IS NULL
+		WHERE role_bindings.user_id = ANY(?)
+			AND role_bindings.archived_at IS NULL
+			AND role_bindings.start_at <= ?
+			AND (role_bindings.end_at IS NULL OR role_bindings.end_at > ?)
+			AND COALESCE(scope_institution.id, scope_unit.id, scope_class.id) IS NOT NULL
+			AND `+predicate+`
 		AND (?::text = '' OR (role_bindings.scope_type = ? AND role_bindings.scope_id = ?))
 	)
 	SELECT user_id, role_id, display_name, scope_type, scope_id, scope_name, total
 	FROM visible_bindings WHERE position <= ? ORDER BY user_id, position`, args...); err != nil {
 		return nil, fmt.Errorf("list visible role binding summaries: %w", err)
 	}
+
 	summaries := []store.UserRoleBindingSummary{}
 	for _, row := range rows {
 		userID, err := model.ParseUserID(row.UserID)
 		if err != nil {
 			return nil, invalidPersistedState("role_binding", "user_id", err)
 		}
+
 		roleID, err := model.ParseRoleID(row.RoleID)
 		if err != nil {
 			return nil, invalidPersistedState("role_binding", "role_id", err)
 		}
+
 		scopeType := model.RoleScopeType(row.ScopeType)
 		if !scopeType.IsValid() || !model.IsValidOpaqueID(row.ScopeID) {
 			return nil, invalidPersistedState("role_binding", "scope", errors.New("invalid Role Binding scope"))
@@ -520,11 +668,17 @@ func (s SQLRoleBindingStore) ListVisibleSummariesByUsers(ctx context.Context, op
 		if len(summaries) == 0 || summaries[len(summaries)-1].UserID != userID {
 			summaries = append(summaries, store.UserRoleBindingSummary{UserID: userID, More: max(row.Total-options.Limit, 0)})
 		}
+
 		last := &summaries[len(summaries)-1]
 		last.Bindings = append(last.Bindings, store.RoleBindingSummary{
-			RoleID: roleID, DisplayName: row.DisplayName, ScopeType: scopeType, ScopeID: row.ScopeID, ScopeName: row.ScopeName,
+			RoleID:      roleID,
+			DisplayName: row.DisplayName,
+			ScopeType:   scopeType,
+			ScopeID:     row.ScopeID,
+			ScopeName:   row.ScopeName,
 		})
 	}
+
 	return summaries, nil
 }
 
@@ -535,7 +689,8 @@ func (s SQLRoleBindingStore) ListByScope(
 ) ([]*model.RoleBinding, error) {
 	return s.selectBindings(ctx, s.bindingsQuery.
 		Where(sq.Eq{
-			"role_bindings.scope_type": scopeType, "role_bindings.scope_id": scopeID,
+			"role_bindings.scope_type":  scopeType,
+			"role_bindings.scope_id":    scopeID,
 			"role_bindings.archived_at": nil,
 		}).
 		OrderBy("role_bindings.start_at", "role_bindings.id"), "list role bindings by scope")
@@ -544,12 +699,15 @@ func (s SQLRoleBindingStore) ListByScope(
 // ListActiveByUser returns the unarchived role bindings of userID active at at.
 func (s SQLRoleBindingStore) ListActiveByUser(ctx context.Context, userID model.UserID, at time.Time) ([]*model.RoleBinding, error) {
 	at = model.TimeUTC(at)
-	return s.selectBindings(ctx, s.bindingsQuery.
-		Where(sq.Eq{"role_bindings.user_id": userID, "role_bindings.archived_at": nil}).
-		Where(sq.LtOrEq{"role_bindings.start_at": at}).
-		Where(sq.Or{sq.Eq{"role_bindings.end_at": nil}, sq.Gt{"role_bindings.end_at": at}}).
-		OrderBy("role_bindings.scope_type", "role_bindings.scope_id", "role_bindings.id"),
-		"list active role bindings by user")
+	return s.selectBindings(
+		ctx,
+		s.bindingsQuery.
+			Where(sq.Eq{"role_bindings.user_id": userID, "role_bindings.archived_at": nil}).
+			Where(sq.LtOrEq{"role_bindings.start_at": at}).
+			Where(sq.Or{sq.Eq{"role_bindings.end_at": nil}, sq.Gt{"role_bindings.end_at": at}}).
+			OrderBy("role_bindings.scope_type", "role_bindings.scope_id", "role_bindings.id"),
+		"list active role bindings by user",
+	)
 }
 
 func (s SQLRoleBindingStore) selectBindings(
@@ -576,82 +734,136 @@ func (s SQLRoleBindingStore) End(
 	ctx context.Context,
 	input *store.RoleBindingEnd,
 ) (*model.RoleBinding, error) {
-	if input == nil || !input.ID.IsValid() || input.EndAt.IsZero() ||
-		!input.AuditEventID.IsValid() || input.AuditAt.IsZero() ||
+	if input == nil ||
+		!input.ID.IsValid() ||
+		input.EndAt.IsZero() ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() ||
 		!validAccessDeploymentCapabilities(input.Capabilities) {
 		return nil, store.NewErrInvalidInput("role_binding", "end", nil)
 	}
+
 	execute := func(ctx context.Context, tx *sqlxTxWrapper) (*roleBindingMutationResult, error) {
 		current, err := getRoleBindingInTransaction(ctx, tx, input.ID.String())
 		if err != nil {
 			return nil, err
 		}
+
 		if current.EndsAt.Valid && !current.EndsAt.Time.After(model.TimeUTC(input.EndAt)) {
 			if input.Command == nil {
 				return nil, store.NewErrConflict("role_binding", "end_at", nil)
 			}
-			if err = completeAdministrativeNoOpAudit(ctx, tx, input.AuditEventID, input.AuditAt, "role_binding_id", current.ID.String()); err != nil {
+
+			if err = completeAdministrativeNoOpAudit(
+				ctx,
+				tx,
+				input.AuditEventID,
+				input.AuditAt,
+				"role_binding_id",
+				current.ID.String(),
+			); err != nil {
 				return nil, err
 			}
+
 			return &roleBindingMutationResult{Value: current, NoOp: true}, nil
 		}
+
 		payloadKeyID := ""
 		if input.Notice != nil {
-			if err = lockPreparedMailRecipient(ctx, tx, "role_binding", current.UserID,
-				input.ExpectedRecipientRevision, input.Notice); err != nil {
+			if err = lockPreparedMailRecipient(
+				ctx,
+				tx,
+				"role_binding",
+				current.UserID,
+				input.ExpectedRecipientRevision,
+				input.Notice,
+			); err != nil {
 				return nil, err
 			}
+
 			allowedEnded := model.MailTemplateAuthorizationScopedRoleEnded
 			if current.ScopeType == model.RoleScopeInstitution {
 				allowedEnded = model.MailTemplateAuthorizationInstitutionRoleEnded
 			}
-			payloadKeyID, err = validateRelationshipTransitionMail("role_binding", input.Notice, current.UserID,
-				model.TimeUTC(input.EndAt), allowedEnded)
+
+			payloadKeyID, err = validateRelationshipTransitionMail(
+				"role_binding",
+				input.Notice,
+				current.UserID,
+				model.TimeUTC(input.EndAt),
+				allowedEnded,
+			)
 			if err != nil {
 				return nil, err
 			}
+
 			if payloadKeyID != "" {
 				if err = requireMailPayloadPrimary(ctx, tx, payloadKeyID); err != nil {
 					return nil, err
 				}
 			}
 		}
+
 		ended, err := endRoleBinding(ctx, tx, input.ID.String(), input.EndAt, input.Capabilities)
 		if err != nil {
 			return nil, err
 		}
+
 		if input.Notice != nil {
 			if err = insertRecoveryMail(ctx, tx, input.Notice.Occurrence, input.Notice.Delivery, input.Notice.Job, payloadKeyID); err != nil {
 				return nil, fmt.Errorf("insert Role Binding ended mail: %w", err)
 			}
 		}
+
 		encoded, appErr := model.EncodeAuditData(ended.Auditable())
 		if appErr != nil {
 			return nil, appErr
 		}
+
 		if _, err := completeAuditEvent(
 			ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", encoded, input.AuditAt,
 		); err != nil {
 			return nil, fmt.Errorf("complete role binding end audit: %w", err)
 		}
+
 		return &roleBindingMutationResult{Value: ended}, nil
 	}
-	return s.runRoleBindingMutation(ctx, "audited role binding end", input.Command, input.AuditEventID, input.AuditAt,
-		func(replayed, noOp bool) { input.Replayed, input.NoOp = replayed, noOp }, execute)
+	return s.runRoleBindingMutation(
+		ctx,
+		"audited role binding end",
+		input.Command,
+		input.AuditEventID,
+		input.AuditAt,
+		func(replayed, noOp bool) { input.Replayed, input.NoOp = replayed, noOp },
+		execute,
+	)
 }
 
-func (s SQLRoleBindingStore) runRoleBindingMutation(ctx context.Context, operation string, command *store.CommandIdempotency, auditID model.AuditEventID, auditAt time.Time, setOutput func(bool, bool), execute func(context.Context, *sqlxTxWrapper) (*roleBindingMutationResult, error)) (*model.RoleBinding, error) {
+func (s SQLRoleBindingStore) runRoleBindingMutation(
+	ctx context.Context,
+	operation string,
+	command *store.CommandIdempotency,
+	auditID model.AuditEventID,
+	auditAt time.Time,
+	setOutput func(bool, bool),
+	execute func(context.Context, *sqlxTxWrapper) (*roleBindingMutationResult, error),
+) (*model.RoleBinding, error) {
 	if command == nil {
 		result, err := runSQLTransaction(ctx, s.GetMaster().Begin, operation, execute)
 		if err != nil {
 			return nil, err
 		}
+
 		setOutput(false, result.NoOp)
 		return result.Value, nil
 	}
+
 	result, err := runIdempotentMutation(ctx, s.SQLStore, "idempotent "+operation, idempotentMutation[*roleBindingMutationResult]{
-		command: command, auditEventID: auditID, execute: execute,
-		encode: encodeRoleBindingMutationOutcome, decode: decodeRoleBindingMutationOutcome,
+		command:      command,
+		auditEventID: auditID,
+		execute:      execute,
+		encode:       encodeRoleBindingMutationOutcome,
+		decode:       decodeRoleBindingMutationOutcome,
 		onboardingOutcome: func(value *roleBindingMutationResult) (onboardingImportCommandResult, error) {
 			return administrativeOnboardingOutcome(value.Value.ID.String(), value.NoOp)
 		},
@@ -660,6 +872,7 @@ func (s SQLRoleBindingStore) runRoleBindingMutation(ctx context.Context, operati
 			if hydrateErr != nil {
 				return nil, hydrateErr
 			}
+
 			value.Value = hydrated
 			return value, nil
 		},
@@ -670,6 +883,7 @@ func (s SQLRoleBindingStore) runRoleBindingMutation(ctx context.Context, operati
 	if err != nil {
 		return nil, err
 	}
+
 	setOutput(result.Replayed, result.Value.NoOp)
 	return result.Value.Value, nil
 }
@@ -679,16 +893,37 @@ func findExactRoleBinding(ctx context.Context, tx sqlxExecutor, candidate *model
 	if candidate.EndsAt.Valid {
 		endAt = candidate.EndsAt.Time
 	}
+
 	var row roleBindingRow
-	err := tx.Get(ctx, &row, `SELECT id,created_at,updated_at,archived_at,user_id,role_id,origin_invitation_id,origin_academic_unit_member_id,scope_type,scope_id,start_at,end_at
-		FROM role_bindings WHERE user_id=? AND role_id=? AND scope_type=? AND scope_id=? AND start_at=? AND end_at IS NOT DISTINCT FROM ? AND archived_at IS NULL ORDER BY id LIMIT 1`,
-		candidate.UserID.String(), candidate.RoleID.String(), candidate.ScopeType, candidate.ScopeID, candidate.StartsAt, endAt)
+	err := tx.Get(
+		ctx,
+		&row,
+		`SELECT id, created_at, updated_at, archived_at, user_id, role_id, origin_invitation_id,
+			origin_academic_unit_member_id, scope_type, scope_id, start_at, end_at
+		FROM role_bindings
+		WHERE user_id = ?
+			AND role_id = ?
+			AND scope_type = ?
+			AND scope_id = ?
+			AND start_at = ?
+			AND end_at IS NOT DISTINCT FROM ?
+			AND archived_at IS NULL
+		ORDER BY id
+		LIMIT 1`,
+		candidate.UserID.String(),
+		candidate.RoleID.String(),
+		candidate.ScopeType,
+		candidate.ScopeID,
+		candidate.StartsAt,
+		endAt,
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("find exact role binding: %w", err)
 	}
+
 	return row.model()
 }
 
@@ -712,13 +947,28 @@ func decodeRoleBindingMutationOutcome(data []byte) (*roleBindingMutationResult, 
 
 func getRoleBindingInTransaction(ctx context.Context, tx sqlxExecutor, id string) (*model.RoleBinding, error) {
 	var row roleBindingRow
-	if err := tx.Get(ctx, &row, `SELECT id,created_at,updated_at,archived_at,user_id,role_id,origin_invitation_id,origin_academic_unit_member_id,scope_type,scope_id,start_at,end_at FROM role_bindings WHERE id=? AND archived_at IS NULL`, id); err != nil {
+	if err := tx.Get(
+		ctx,
+		&row,
+		`SELECT id, created_at, updated_at, archived_at, user_id, role_id, origin_invitation_id,
+			origin_academic_unit_member_id, scope_type, scope_id, start_at, end_at
+		FROM role_bindings
+		WHERE id = ?
+			AND archived_at IS NULL`,
+		id,
+	); err != nil {
 		return nil, translateError("role_binding", id, err)
 	}
 	return row.model()
 }
 
-func endRoleBinding(ctx context.Context, tx *sqlxTxWrapper, id string, endAt time.Time, capabilities store.AccessDeploymentCapabilities) (*model.RoleBinding, error) {
+func endRoleBinding(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	id string,
+	endAt time.Time,
+	capabilities store.AccessDeploymentCapabilities,
+) (*model.RoleBinding, error) {
 	at := model.TimeUTC(endAt)
 	if err := lockSystemAdministratorAuthenticationPaths(ctx, tx); err != nil {
 		return nil, err
@@ -745,7 +995,11 @@ func endRoleBinding(ctx context.Context, tx *sqlxTxWrapper, id string, endAt tim
 			return nil, err
 		}
 		remaining, err := hasUsableSystemAdministratorAuthenticationPath(
-			ctx, tx, policy.Settings(), capabilities, at,
+			ctx,
+			tx,
+			policy.Settings(),
+			capabilities,
+			at,
 			systemAdministratorAuthenticationPathScope{ExcludedRoleBindingID: current.ID},
 		)
 		if err != nil {
@@ -774,13 +1028,18 @@ func endRoleBinding(ctx context.Context, tx *sqlxTxWrapper, id string, endAt tim
 
 func newRoleBindingRow(binding *model.RoleBinding) roleBindingRow {
 	return roleBindingRow{
-		ID: binding.ID.String(), CreatedAt: UTCTime(binding.CreatedAt),
-		UpdatedAt: UTCTime(binding.UpdatedAt), ArchivedAt: NullTimeFromOptional(binding.ArchivedAt),
-		UserID: binding.UserID.String(), RoleID: binding.RoleID.String(),
+		ID:                         binding.ID.String(),
+		CreatedAt:                  UTCTime(binding.CreatedAt),
+		UpdatedAt:                  UTCTime(binding.UpdatedAt),
+		ArchivedAt:                 NullTimeFromOptional(binding.ArchivedAt),
+		UserID:                     binding.UserID.String(),
+		RoleID:                     binding.RoleID.String(),
 		OriginInvitationID:         nullableID(binding.OriginInvitationID.String()),
 		OriginAcademicUnitMemberID: nullableID(binding.OriginAcademicUnitMemberID.String()),
-		ScopeType:                  binding.ScopeType, ScopeID: binding.ScopeID,
-		StartAt: UTCTime(binding.StartsAt), EndAt: NullTimeFromOptional(binding.EndsAt),
+		ScopeType:                  binding.ScopeType,
+		ScopeID:                    binding.ScopeID,
+		StartAt:                    UTCTime(binding.StartsAt),
+		EndAt:                      NullTimeFromOptional(binding.EndsAt),
 	}
 }
 
@@ -789,10 +1048,12 @@ func (row roleBindingRow) model() (*model.RoleBinding, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	userID, err := parsePersistedID("role_binding", "user_id", row.UserID, model.ParseUserID)
 	if err != nil {
 		return nil, err
 	}
+
 	roleID, err := parsePersistedID("role_binding", "role_id", row.RoleID, model.ParseRoleID)
 	if err != nil {
 		return nil, err
@@ -800,17 +1061,25 @@ func (row roleBindingRow) model() (*model.RoleBinding, error) {
 	if err := validatePersistedScopeID("role_binding", row.ScopeType, row.ScopeID); err != nil {
 		return nil, err
 	}
+
 	value := &model.RoleBinding{
-		ID: id, CreatedAt: row.CreatedAt.UTC(),
-		UpdatedAt: row.UpdatedAt.UTC(), ArchivedAt: OptionalTimeFromNullTime(row.ArchivedAt),
-		UserID: userID, RoleID: roleID, OriginInvitationID: model.InvitationID(row.OriginInvitationID.String),
+		ID:                         id,
+		CreatedAt:                  row.CreatedAt.UTC(),
+		UpdatedAt:                  row.UpdatedAt.UTC(),
+		ArchivedAt:                 OptionalTimeFromNullTime(row.ArchivedAt),
+		UserID:                     userID,
+		RoleID:                     roleID,
+		OriginInvitationID:         model.InvitationID(row.OriginInvitationID.String),
 		OriginAcademicUnitMemberID: model.AcademicUnitMemberID(row.OriginAcademicUnitMemberID.String),
-		ScopeType:                  row.ScopeType, ScopeID: row.ScopeID,
-		StartsAt: row.StartAt.UTC(), EndsAt: OptionalTimeFromNullTime(row.EndAt),
+		ScopeType:                  row.ScopeType,
+		ScopeID:                    row.ScopeID,
+		StartsAt:                   row.StartAt.UTC(),
+		EndsAt:                     OptionalTimeFromNullTime(row.EndAt),
 	}
 	if err := validatePersistedModel("role_binding", value); err != nil {
 		return nil, err
 	}
+
 	return value, nil
 }
 

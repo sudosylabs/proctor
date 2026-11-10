@@ -24,7 +24,8 @@ const maximumAcademicPageProbe = 201
 // filter, the exclusive (name, id) continuation, the (name, id) order, and the
 // limit. It reports false for invalid options.
 func academicNamePage(query sq.SelectBuilder, table string, options store.AcademicNameListOptions) (sq.SelectBuilder, bool) {
-	if options.Limit < 1 || options.Limit > maximumAcademicPageProbe ||
+	if options.Limit < 1 ||
+		options.Limit > maximumAcademicPageProbe ||
 		(options.AfterName == "") != (options.AfterID == "") ||
 		(options.AfterID != "" && !model.IsValidOpaqueID(options.AfterID)) {
 		return query, false

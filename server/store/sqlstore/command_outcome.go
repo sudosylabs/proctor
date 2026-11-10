@@ -37,18 +37,28 @@ func newSQLCommandOutcomeStore(sqlStore *SQLStore) store.CommandOutcomeStore {
 }
 
 func (s SQLCommandOutcomeStore) Has(ctx context.Context, command *store.CommandIdempotency) (bool, error) {
-	if command == nil || !command.UserID.IsValid() || command.Operation == "" || command.KeyDigest == ([sha256.Size]byte{}) ||
-		command.Retention <= 0 || command.Wait <= 0 {
+	if command == nil ||
+		!command.UserID.IsValid() ||
+		command.Operation == "" ||
+		command.KeyDigest == ([sha256.Size]byte{}) ||
+		command.Retention <= 0 ||
+		command.Wait <= 0 {
 		return false, store.NewErrInvalidInput("command_outcome", "lookup", nil)
 	}
+
 	return runSQLTransaction(ctx, s.GetMaster().Begin, "retain command outcome", func(ctx context.Context, tx *sqlxTxWrapper) (bool, error) {
 		if err := lockCommandIdempotency(ctx, tx, command); err != nil {
 			return false, err
 		}
+
 		var found bool
 		err := tx.Get(ctx, &found, `UPDATE command_outcomes
-			SET expires_at=GREATEST(expires_at, CURRENT_TIMESTAMP + (? * interval '1 millisecond'))
-			WHERE user_id=? AND operation=? AND key_digest=?
+			SET expires_at = GREATEST(
+				expires_at, CURRENT_TIMESTAMP + (? * interval '1 millisecond')
+			)
+			WHERE user_id = ?
+				AND operation = ?
+				AND key_digest = ?
 			RETURNING true`, command.Retention.Milliseconds(), command.UserID.String(), command.Operation, command.KeyDigest[:])
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil
@@ -56,6 +66,7 @@ func (s SQLCommandOutcomeStore) Has(ctx context.Context, command *store.CommandI
 		if err != nil {
 			return false, fmt.Errorf("retain command outcome: %w", err)
 		}
+
 		return found, nil
 	})
 }
@@ -65,12 +76,15 @@ func (s SQLCommandOutcomeStore) DeleteExpired(ctx context.Context, limit int) (i
 		return 0, store.NewErrInvalidInput("command_outcome", "limit", limit)
 	}
 	result, err := s.GetMaster().Exec(ctx, `WITH expired AS (
-		SELECT ctid FROM command_outcomes
-		WHERE expires_at <= CURRENT_TIMESTAMP
-		ORDER BY expires_at, user_id, operation
-		FOR UPDATE SKIP LOCKED LIMIT ?
-	) DELETE FROM command_outcomes AS outcomes USING expired
-	WHERE outcomes.ctid = expired.ctid`, limit)
+			SELECT ctid
+			FROM command_outcomes
+			WHERE expires_at <= CURRENT_TIMESTAMP
+			ORDER BY expires_at, user_id, operation
+			FOR UPDATE SKIP LOCKED
+			LIMIT ?
+		)
+		DELETE FROM command_outcomes AS outcomes USING expired
+		WHERE outcomes.ctid = expired.ctid`, limit)
 	if err != nil {
 		return 0, fmt.Errorf("delete expired command outcomes: %w", err)
 	}
@@ -99,18 +113,33 @@ type idempotentResult[T any] struct {
 	Replayed bool
 }
 
-func runIdempotentMutation[T any](ctx context.Context, sqlStore *SQLStore, operation string, mutation idempotentMutation[T]) (*idempotentResult[T], error) {
+func runIdempotentMutation[T any](
+	ctx context.Context,
+	sqlStore *SQLStore,
+	operation string,
+	mutation idempotentMutation[T],
+) (*idempotentResult[T], error) {
 	command := mutation.command
-	if command == nil || !command.UserID.IsValid() || command.Operation == "" ||
-		command.Retention <= 0 || command.Wait <= 0 || mutation.execute == nil ||
-		mutation.encode == nil || mutation.decode == nil ||
+	if command == nil ||
+		!command.UserID.IsValid() ||
+		command.Operation == "" ||
+		command.Retention <= 0 ||
+		command.Wait <= 0 ||
+		mutation.execute == nil ||
+		mutation.encode == nil ||
+		mutation.decode == nil ||
 		(command.OnboardingImportID.IsValid() != (command.OnboardingImportRowNumber > 0)) ||
-		!validCommandAuthorization(command.Authorization) || !validCommandBatch(command.Batch, command.KeyDigest) ||
+		!validCommandAuthorization(command.Authorization) ||
+		!validCommandBatch(command.Batch, command.KeyDigest) ||
 		(mutation.freshAuditEventID == nil &&
 			(mutation.completeReplay == nil || !mutation.auditEventID.IsValid())) {
 		return nil, store.NewErrInvalidInput("command_outcome", "mutation", nil)
 	}
-	return runSQLTransaction(ctx, sqlStore.GetMaster().Begin, operation, func(ctx context.Context, tx *sqlxTxWrapper) (*idempotentResult[T], error) {
+
+	return runSQLTransaction(ctx, sqlStore.GetMaster().Begin, operation, func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*idempotentResult[T], error) {
 		return runIdempotentMutationInTransaction(ctx, tx, mutation)
 	})
 }
@@ -118,17 +147,30 @@ func runIdempotentMutation[T any](ctx context.Context, sqlStore *SQLStore, opera
 // runIdempotentMutationInTransaction serializes the command namespace, then
 // replays its recorded outcome, records a duplicate batch member against its
 // canonical outcome, or executes the mutation and records its outcome.
-func runIdempotentMutationInTransaction[T any](ctx context.Context, tx *sqlxTxWrapper, mutation idempotentMutation[T]) (*idempotentResult[T], error) {
+func runIdempotentMutationInTransaction[T any](
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	mutation idempotentMutation[T],
+) (*idempotentResult[T], error) {
 	command := mutation.command
 	if err := lockIdempotentCommand(ctx, tx, command); err != nil {
 		return nil, err
 	}
 
 	var row commandOutcomeRow
-	err := tx.Get(ctx, &row, `SELECT fingerprint, outcome, original_audit_event_id,
-		batch_group_digest, duplicate_of_key_digest
-		FROM command_outcomes WHERE user_id = ? AND operation = ? AND key_digest = ?`,
-		command.UserID.String(), command.Operation, command.KeyDigest[:])
+	err := tx.Get(
+		ctx,
+		&row,
+		`SELECT fingerprint, outcome, original_audit_event_id, batch_group_digest,
+			duplicate_of_key_digest
+		FROM command_outcomes
+		WHERE user_id = ?
+			AND operation = ?
+			AND key_digest = ?`,
+		command.UserID.String(),
+		command.Operation,
+		command.KeyDigest[:],
+	)
 	switch {
 	case err == nil:
 		return replayRecordedOutcome(ctx, tx, mutation, row)
@@ -140,6 +182,7 @@ func runIdempotentMutationInTransaction[T any](ctx context.Context, tx *sqlxTxWr
 	if command.Batch != nil && command.Batch.DuplicateOfKeyDigest != ([sha256.Size]byte{}) {
 		return recordDuplicateBatchOutcome(ctx, tx, mutation)
 	}
+
 	return executeAndRecordOutcome(ctx, tx, mutation)
 }
 
@@ -163,25 +206,34 @@ func lockIdempotentCommand(ctx context.Context, tx *sqlxTxWrapper, command *stor
 // replayRecordedOutcome checks that the recorded outcome belongs to the same
 // request, decodes and hydrates it, and completes the replay or duplicate
 // audit.
-func replayRecordedOutcome[T any](ctx context.Context, tx *sqlxTxWrapper, mutation idempotentMutation[T], row commandOutcomeRow) (*idempotentResult[T], error) {
+func replayRecordedOutcome[T any](
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	mutation idempotentMutation[T],
+	row commandOutcomeRow,
+) (*idempotentResult[T], error) {
 	command := mutation.command
 	if !bytes.Equal(row.Fingerprint, command.Fingerprint[:]) {
 		return nil, &store.ErrIdempotencyConflict{}
 	}
+
 	if command.Batch != nil && !bytes.Equal(row.BatchGroupDigest, command.Batch.GroupDigest[:]) ||
 		command.Batch == nil && len(row.BatchGroupDigest) != 0 {
 		return nil, &store.ErrIdempotencyConflict{}
 	}
+
 	value, decodeErr := mutation.decode([]byte(row.Outcome))
 	if decodeErr != nil {
 		return nil, invalidPersistedState("command_outcome", "outcome", decodeErr)
 	}
+
 	if mutation.hydrateReplay != nil {
 		value, decodeErr = mutation.hydrateReplay(ctx, tx, value)
 		if decodeErr != nil {
 			return nil, fmt.Errorf("hydrate idempotent command outcome: %w", decodeErr)
 		}
 	}
+
 	var err error
 	duplicate := len(row.DuplicateOfDigest) == sha256.Size
 	if duplicate {
@@ -190,69 +242,106 @@ func replayRecordedOutcome[T any](ctx context.Context, tx *sqlxTxWrapper, mutati
 		} else {
 			err = completeCommandBatchDuplicateAudit(ctx, tx, mutation.auditEventID, row.OriginalAuditID.String)
 		}
+
 		if err != nil {
 			return nil, err
 		}
-	} else if mutation.completeReplay != nil && row.OriginalAuditID.Valid &&
+	} else if mutation.completeReplay != nil &&
+		row.OriginalAuditID.Valid &&
 		mutation.auditEventID.String() != row.OriginalAuditID.String {
 		if completeErr := mutation.completeReplay(ctx, tx, value, row.OriginalAuditID.String); completeErr != nil {
 			return nil, completeErr
 		}
 	}
+
 	if err = completeOnboardingImportCommand(ctx, tx, command, value, mutation.onboardingOutcome); err != nil {
 		return nil, err
 	}
 	if command.Batch != nil {
 		command.Batch.Duplicate = duplicate
 	}
+
 	return &idempotentResult[T]{Value: value, Replayed: true}, nil
 }
 
 // recordDuplicateBatchOutcome records a duplicate batch member against its
 // canonical member's outcome and completes the duplicate audit.
-func recordDuplicateBatchOutcome[T any](ctx context.Context, tx *sqlxTxWrapper, mutation idempotentMutation[T]) (*idempotentResult[T], error) {
+func recordDuplicateBatchOutcome[T any](
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	mutation idempotentMutation[T],
+) (*idempotentResult[T], error) {
 	command := mutation.command
 	var canonical commandOutcomeRow
-	if err := tx.Get(ctx, &canonical, `SELECT fingerprint, outcome, original_audit_event_id,
-		batch_group_digest, duplicate_of_key_digest FROM command_outcomes
-		WHERE user_id=? AND operation=? AND key_digest=?`, command.UserID.String(), command.Operation,
-		command.Batch.DuplicateOfKeyDigest[:]); err != nil {
+	if err := tx.Get(
+		ctx,
+		&canonical,
+		`SELECT fingerprint, outcome, original_audit_event_id, batch_group_digest,
+			duplicate_of_key_digest
+		FROM command_outcomes
+		WHERE user_id = ?
+			AND operation = ?
+			AND key_digest = ?`,
+		command.UserID.String(),
+		command.Operation,
+		command.Batch.DuplicateOfKeyDigest[:],
+	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, store.NewErrConflict("command_outcome", "batch_canonical_missing", nil)
 		}
 		return nil, fmt.Errorf("find canonical batch outcome: %w", err)
 	}
+
 	if len(canonical.DuplicateOfDigest) != 0 || !bytes.Equal(canonical.BatchGroupDigest, command.Batch.GroupDigest[:]) {
 		return nil, &store.ErrIdempotencyConflict{}
 	}
+
 	value, decodeErr := mutation.decode([]byte(canonical.Outcome))
 	if decodeErr != nil {
 		return nil, invalidPersistedState("command_outcome", "canonical_outcome", decodeErr)
 	}
+
 	if mutation.hydrateReplay != nil {
 		value, decodeErr = mutation.hydrateReplay(ctx, tx, value)
 		if decodeErr != nil {
 			return nil, fmt.Errorf("hydrate canonical batch outcome: %w", decodeErr)
 		}
 	}
+
 	var err error
 	if mutation.completeDuplicate != nil {
 		err = mutation.completeDuplicate(ctx, tx, value, "")
 	} else {
 		err = completeCommandBatchDuplicateAudit(ctx, tx, mutation.auditEventID, "")
 	}
+
 	if err != nil {
 		return nil, err
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO command_outcomes (
-		user_id, operation, key_digest, fingerprint, outcome,
-		batch_group_digest, duplicate_of_key_digest, original_audit_event_id, created_at, expires_at
-	) VALUES (?, ?, ?, ?, ?::jsonb, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + (? * interval '1 millisecond'))`,
-		command.UserID.String(), command.Operation, command.KeyDigest[:], command.Fingerprint[:],
-		canonical.Outcome, command.Batch.GroupDigest[:], command.Batch.DuplicateOfKeyDigest[:],
-		mutation.auditEventID, command.Retention.Milliseconds()); err != nil {
+
+	if _, err = tx.Exec(
+		ctx,
+		`INSERT INTO command_outcomes (
+			user_id, operation, key_digest, fingerprint, outcome, batch_group_digest,
+			duplicate_of_key_digest, original_audit_event_id, created_at, expires_at
+		)
+		VALUES (
+			?, ?, ?, ?, ?::jsonb, ?, ?, ?, CURRENT_TIMESTAMP,
+			CURRENT_TIMESTAMP + (? * interval '1 millisecond')
+		)`,
+		command.UserID.String(),
+		command.Operation,
+		command.KeyDigest[:],
+		command.Fingerprint[:],
+		canonical.Outcome,
+		command.Batch.GroupDigest[:],
+		command.Batch.DuplicateOfKeyDigest[:],
+		mutation.auditEventID,
+		command.Retention.Milliseconds(),
+	); err != nil {
 		return nil, fmt.Errorf("persist duplicate batch outcome: %w", err)
 	}
+
 	command.Batch.Duplicate = true
 	return &idempotentResult[T]{Value: value}, nil
 }
@@ -265,6 +354,7 @@ func executeAndRecordOutcome[T any](ctx context.Context, tx *sqlxTxWrapper, muta
 	if err != nil {
 		return nil, err
 	}
+
 	encoded, err := mutation.encode(value)
 	if err != nil {
 		return nil, fmt.Errorf("encode idempotent command outcome: %w", err)
@@ -272,6 +362,7 @@ func executeAndRecordOutcome[T any](ctx context.Context, tx *sqlxTxWrapper, muta
 	if len(encoded) == 0 || len(encoded) > store.CommandOutcomeMaxBytes || !json.Valid(encoded) {
 		return nil, store.NewErrInvalidInput("command_outcome", "outcome", len(encoded))
 	}
+
 	originalAuditID := mutation.auditEventID
 	if mutation.freshAuditEventID != nil {
 		originalAuditID, err = mutation.freshAuditEventID(value)
@@ -279,6 +370,7 @@ func executeAndRecordOutcome[T any](ctx context.Context, tx *sqlxTxWrapper, muta
 			return nil, fmt.Errorf("resolve idempotent command audit: %w", err)
 		}
 	}
+
 	var persistedAuditID any
 	switch {
 	case originalAuditID == "":
@@ -287,26 +379,47 @@ func executeAndRecordOutcome[T any](ctx context.Context, tx *sqlxTxWrapper, muta
 	default:
 		return nil, store.NewErrInvalidInput("command_outcome", "audit_event_id", nil)
 	}
+
 	var batchGroup any
 	if command.Batch != nil {
 		batchGroup = command.Batch.GroupDigest[:]
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO command_outcomes (
-		user_id, operation, key_digest, fingerprint,
-		outcome, batch_group_digest, original_audit_event_id, created_at, expires_at
-	) VALUES (?, ?, ?, ?, ?::jsonb, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + (? * interval '1 millisecond'))`,
-		command.UserID.String(), command.Operation, command.KeyDigest[:],
-		command.Fingerprint[:], encoded, batchGroup, persistedAuditID,
-		command.Retention.Milliseconds()); err != nil {
+
+	if _, err = tx.Exec(
+		ctx,
+		`INSERT INTO command_outcomes (
+			user_id, operation, key_digest, fingerprint, outcome, batch_group_digest,
+			original_audit_event_id, created_at, expires_at
+		)
+		VALUES (
+			?, ?, ?, ?, ?::jsonb, ?, ?, CURRENT_TIMESTAMP,
+			CURRENT_TIMESTAMP + (? * interval '1 millisecond')
+		)`,
+		command.UserID.String(),
+		command.Operation,
+		command.KeyDigest[:],
+		command.Fingerprint[:],
+		encoded,
+		batchGroup,
+		persistedAuditID,
+		command.Retention.Milliseconds(),
+	); err != nil {
 		return nil, fmt.Errorf("persist idempotent command outcome: %w", err)
 	}
+
 	if err = completeOnboardingImportCommand(ctx, tx, command, value, mutation.onboardingOutcome); err != nil {
 		return nil, err
 	}
+
 	return &idempotentResult[T]{Value: value}, nil
 }
 
-func replayIdempotentMutation[T any](ctx context.Context, sqlStore *SQLStore, operation string, mutation idempotentMutation[T]) (*idempotentResult[T], error) {
+func replayIdempotentMutation[T any](
+	ctx context.Context,
+	sqlStore *SQLStore,
+	operation string,
+	mutation idempotentMutation[T],
+) (*idempotentResult[T], error) {
 	var zero T
 	mutation.execute = func(context.Context, *sqlxTxWrapper) (T, error) {
 		return zero, store.NewErrNotFound("command_outcome", "idempotency_key")
@@ -390,7 +503,13 @@ func completeCommandBatchDuplicateAudit(ctx context.Context, tx *sqlxTxWrapper, 
 	return nil
 }
 
-func completeAdministrativeNoOpAudit(ctx context.Context, tx *sqlxTxWrapper, auditID model.AuditEventID, at time.Time, idField, id string) error {
+func completeAdministrativeNoOpAudit(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	auditID model.AuditEventID,
+	at time.Time,
+	idField, id string,
+) error {
 	data, err := model.EncodeAuditData(map[string]any{idField: id, "no_op": true})
 	if err != nil {
 		return err
@@ -398,14 +517,24 @@ func completeAdministrativeNoOpAudit(ctx context.Context, tx *sqlxTxWrapper, aud
 	if _, err = completeAuditEvent(ctx, tx, auditID, model.AuditStatusSuccess, "", data, at); err != nil {
 		return fmt.Errorf("complete administrative no-op audit: %w", err)
 	}
+
 	return nil
 }
 
-func completeAdministrativeReplayAudit(ctx context.Context, tx *sqlxTxWrapper, auditID model.AuditEventID, at time.Time, idField, id string, noOp bool, originalAuditID string) error {
+func completeAdministrativeReplayAudit(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	auditID model.AuditEventID,
+	at time.Time,
+	idField, id string,
+	noOp bool,
+	originalAuditID string,
+) error {
 	data := map[string]any{idField: id, "idempotency_replayed": true, "original_audit_event_id": originalAuditID}
 	if noOp {
 		data["no_op"] = true
 	}
+
 	encoded, err := model.EncodeAuditData(data)
 	if err != nil {
 		return err
@@ -413,5 +542,6 @@ func completeAdministrativeReplayAudit(ctx context.Context, tx *sqlxTxWrapper, a
 	if _, err = completeAuditEvent(ctx, tx, auditID, model.AuditStatusSuccess, "", encoded, at); err != nil {
 		return fmt.Errorf("complete administrative replay audit: %w", err)
 	}
+
 	return nil
 }

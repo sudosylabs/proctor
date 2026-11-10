@@ -21,10 +21,16 @@ import (
 )
 
 func validManagerEndRequest(request store.ExamSubmissionManagerEndRequest) bool {
-	return request.ExamID.IsValid() && request.SittingID.IsValid() && request.AttemptID.IsValid() &&
-		request.ActorUserID.IsValid() && request.ExpectedAttemptRevision > 0 && utf8.ValidString(request.PrivateReason) &&
-		request.PrivateReason == strings.TrimSpace(request.PrivateReason) && utf8.RuneCountInString(request.PrivateReason) >= 1 &&
-		utf8.RuneCountInString(request.PrivateReason) <= 1000 && len(request.PrivateReason) <= 4000
+	return request.ExamID.IsValid() &&
+		request.SittingID.IsValid() &&
+		request.AttemptID.IsValid() &&
+		request.ActorUserID.IsValid() &&
+		request.ExpectedAttemptRevision > 0 &&
+		utf8.ValidString(request.PrivateReason) &&
+		request.PrivateReason == strings.TrimSpace(request.PrivateReason) &&
+		utf8.RuneCountInString(request.PrivateReason) >= 1 &&
+		utf8.RuneCountInString(request.PrivateReason) <= 1000 &&
+		len(request.PrivateReason) <= 4000
 }
 
 func (s *SQLExamSubmissionStore) PrepareManagerEnd(ctx context.Context,
@@ -39,10 +45,12 @@ func (s *SQLExamSubmissionStore) PrepareManagerEnd(ctx context.Context,
 		if err := guardExamSittingManagerExam(ctx, tx, request.ExamID, request.ActorUserID, request.ManagerOverride, false); err != nil {
 			return nil, err
 		}
+
 		row, err := lockAutomaticExamSubmission(ctx, tx, request.AttemptID)
 		if err != nil {
 			return nil, err
 		}
+
 		target, err := automaticExamSubmissionTarget(row.automaticExamSubmissionTargetRow)
 		if err != nil {
 			return nil, err
@@ -53,52 +61,82 @@ func (s *SQLExamSubmissionStore) PrepareManagerEnd(ctx context.Context,
 		if target.CandidateUserID == request.ActorUserID {
 			return nil, store.NewErrNotFound("exam_attempt", request.AttemptID.String())
 		}
+
 		var decisionAt time.Time
 		if err = tx.Get(ctx, &decisionAt, `SELECT statement_timestamp()`); err != nil {
 			return nil, fmt.Errorf("read manager-ended Exam Submission time: %w", err)
 		}
+
 		sealAt := model.TimeFromMillis(model.MillisFromTime(decisionAt))
 		if row.AttemptState == string(model.ExamAttemptSubmitted) {
 			if row.AttemptRevision != request.ExpectedAttemptRevision+1 {
 				return nil, store.NewErrConflict("exam_attempt", "exam_attempt_revision", nil)
 			}
+
 			var provenance string
-			if err = tx.Get(ctx, &provenance, `SELECT provenance FROM exam_submissions
-				WHERE exam_attempt_id=? AND sealed=true FOR UPDATE`, request.AttemptID.String()); err != nil {
+			if err = tx.Get(ctx, &provenance, `SELECT provenance
+				FROM exam_submissions
+				WHERE exam_attempt_id = ?
+					AND sealed = true
+				FOR UPDATE`, request.AttemptID.String()); err != nil {
 				return nil, translateError("exam_submission", request.AttemptID.String(), err)
 			}
+
 			if provenance != string(model.ExamSubmissionManagerEndedAttempt) {
 				return nil, store.NewErrConflict("exam_attempt", "exam_attempt_state", nil)
 			}
-			return &store.ExamSubmissionManagerEndPreparation{Target: target,
-				ExpectedAttemptRevision: request.ExpectedAttemptRevision, Replayed: true, SealAt: sealAt}, nil
+
+			return &store.ExamSubmissionManagerEndPreparation{
+				Target:                  target,
+				ExpectedAttemptRevision: request.ExpectedAttemptRevision,
+				Replayed:                true,
+				SealAt:                  sealAt,
+			}, nil
 		}
+
 		if row.AttemptRevision != request.ExpectedAttemptRevision {
 			return nil, store.NewErrConflict("exam_attempt", "exam_attempt_revision", nil)
 		}
+
 		if !model.ExamAttemptState(row.AttemptState).IsUnresolved() ||
 			(row.SittingState != string(model.ExamSittingOpen) && row.SittingState != string(model.ExamSittingPaused)) ||
 			!sealAt.Before(row.ScheduledEndAt) {
 			return nil, store.NewErrConflict("exam_attempt", "exam_attempt_state", nil)
 		}
-		return &store.ExamSubmissionManagerEndPreparation{Target: target,
-			ExpectedAttemptRevision: request.ExpectedAttemptRevision, SealAt: sealAt}, nil
+
+		return &store.ExamSubmissionManagerEndPreparation{
+			Target:                  target,
+			ExpectedAttemptRevision: request.ExpectedAttemptRevision,
+			SealAt:                  sealAt,
+		}, nil
 	})
 }
 
-func (s *SQLExamSubmissionStore) EndByManager(ctx context.Context, input *store.ExamSubmissionManagerEnd,
+func (s *SQLExamSubmissionStore) EndByManager(
+	ctx context.Context,
+	input *store.ExamSubmissionManagerEnd,
 	command *store.CommandIdempotency,
 ) (*store.ExamSubmissionManagerEndResult, error) {
-	if input == nil || !validManagerEndRequest(input.Request) || !validAutomaticExamSubmissionTarget(input.Target) ||
-		input.Target.ExamID != input.Request.ExamID || input.Target.SittingID != input.Request.SittingID ||
-		input.Target.AttemptID != input.Request.AttemptID || !input.SubmissionID.IsValid() ||
-		!input.ReceiptCode.IsValid() || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() || command == nil ||
-		command.Operation != store.ExamSubmissionManagerEndOperation || command.UserID != input.Request.ActorUserID {
+	if input == nil ||
+		!validManagerEndRequest(input.Request) ||
+		!validAutomaticExamSubmissionTarget(input.Target) ||
+		input.Target.ExamID != input.Request.ExamID ||
+		input.Target.SittingID != input.Request.SittingID ||
+		input.Target.AttemptID != input.Request.AttemptID ||
+		!input.SubmissionID.IsValid() ||
+		!input.ReceiptCode.IsValid() ||
+		!input.AuditEventID.IsValid() ||
+		input.AuditAt.IsZero() ||
+		command == nil ||
+		command.Operation != store.ExamSubmissionManagerEndOperation ||
+		command.UserID != input.Request.ActorUserID {
 		return nil, store.NewErrInvalidInput("exam_submission", "manager_end", nil)
 	}
+
 	prepared := *input
 	result, err := runIdempotentMutation(ctx, s.SQLStore, "manager-end Exam Attempt", idempotentMutation[examSubmissionSealOutcome]{
-		command: command, auditEventID: prepared.AuditEventID,
+		command:      command,
+		auditEventID: prepared.AuditEventID,
 		execute: func(ctx context.Context, tx *sqlxTxWrapper) (examSubmissionSealOutcome, error) {
 			return endExamAttemptByManager(ctx, tx, &prepared)
 		},
@@ -111,17 +149,26 @@ func (s *SQLExamSubmissionStore) EndByManager(ctx context.Context, input *store.
 			if _, err := examSubmissionSealResult(outcome); err != nil {
 				return outcome, err
 			}
+
 			return outcome, nil
 		},
 		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, outcome examSubmissionSealOutcome, originalAuditID string) error {
-			if err := guardExamSittingManagerExam(ctx, tx, prepared.Request.ExamID, prepared.Request.ActorUserID,
-				prepared.Request.ManagerOverride, false); err != nil {
+			if err := guardExamSittingManagerExam(
+				ctx,
+				tx,
+				prepared.Request.ExamID,
+				prepared.Request.ActorUserID,
+				prepared.Request.ManagerOverride,
+				false,
+			); err != nil {
 				return err
 			}
+
 			row, err := lockAutomaticExamSubmission(ctx, tx, prepared.Request.AttemptID)
 			if err != nil {
 				return err
 			}
+
 			target, err := automaticExamSubmissionTarget(row.automaticExamSubmissionTargetRow)
 			if err != nil {
 				return err
@@ -129,35 +176,49 @@ func (s *SQLExamSubmissionStore) EndByManager(ctx context.Context, input *store.
 			if target.CandidateUserID == prepared.Request.ActorUserID {
 				return store.NewErrNotFound("exam_attempt", prepared.Request.AttemptID.String())
 			}
+
 			if row.AttemptState != string(model.ExamAttemptSubmitted) ||
-				row.AttemptRevision != prepared.Request.ExpectedAttemptRevision+1 || outcome.ExamID != prepared.Request.ExamID.String() ||
-				outcome.SittingID != prepared.Request.SittingID.String() || outcome.Receipt.AttemptID != prepared.Request.AttemptID {
+				row.AttemptRevision != prepared.Request.ExpectedAttemptRevision+1 ||
+				outcome.ExamID != prepared.Request.ExamID.String() ||
+				outcome.SittingID != prepared.Request.SittingID.String() ||
+				outcome.Receipt.AttemptID != prepared.Request.AttemptID {
 				return store.NewErrConflict("exam_attempt", "exam_attempt_state", nil)
 			}
+
 			var provenance string
-			if err = tx.Get(ctx, &provenance, `SELECT provenance FROM exam_submissions WHERE id=? AND sealed=true FOR UPDATE`,
-				outcome.Receipt.SubmissionID.String()); err != nil {
+			if err = tx.Get(
+				ctx,
+				&provenance,
+				`SELECT provenance FROM exam_submissions WHERE id = ? AND sealed = true FOR UPDATE`,
+				outcome.Receipt.SubmissionID.String(),
+			); err != nil {
 				return translateError("exam_submission", outcome.Receipt.SubmissionID.String(), err)
 			}
+
 			if provenance != string(model.ExamSubmissionManagerEndedAttempt) {
 				return store.NewErrConflict("exam_attempt", "exam_attempt_state", nil)
 			}
+
 			return completeExamSubmissionAudit(ctx, tx, outcome, prepared.AuditEventID, prepared.AuditAt, true, originalAuditID)
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	response, err := examSubmissionSealResult(result.Value)
 	if err != nil {
 		return nil, err
 	}
+
 	response.Replayed = result.Replayed
 	return &store.ExamSubmissionManagerEndResult{ExamSubmissionSealResult: *response,
 		ConnectionClosed: !result.Replayed && result.Value.ConnectionClosed}, nil
 }
 
-func endExamAttemptByManager(ctx context.Context, tx *sqlxTxWrapper,
+func endExamAttemptByManager(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
 	input *store.ExamSubmissionManagerEnd,
 ) (examSubmissionSealOutcome, error) {
 	var zero examSubmissionSealOutcome
@@ -165,70 +226,115 @@ func endExamAttemptByManager(ctx context.Context, tx *sqlxTxWrapper,
 	if err != nil {
 		return zero, err
 	}
+
 	row, target, err := lockManagerEndTarget(ctx, tx, input)
 	if err != nil {
 		return zero, err
 	}
+
 	sealAt := model.TimeUTC(input.AuditAt)
 	var databaseNow time.Time
 	if err = tx.Get(ctx, &databaseNow, `SELECT statement_timestamp()`); err != nil {
 		return zero, fmt.Errorf("read manager-ended Exam Submission decision time: %w", err)
 	}
+
 	databaseNow = model.TimeUTC(databaseNow)
 	if sealAt.After(databaseNow) || !databaseNow.Before(row.ScheduledEndAt) {
 		return zero, store.NewErrConflict("exam_sitting", "exam_sitting_deadline_reached", nil)
 	}
-	payloadKeyID, err := prepareAutomaticExamSubmissionReceipt(ctx, tx, input.Notice, recipient, input.ExpectedRecipientRevision,
-		input.SubmissionID, input.AuditAt, model.MailTemplateExamSubmissionManagerEnded)
+
+	payloadKeyID, err := prepareAutomaticExamSubmissionReceipt(
+		ctx,
+		tx,
+		input.Notice,
+		recipient,
+		input.ExpectedRecipientRevision,
+		input.SubmissionID,
+		input.AuditAt,
+		model.MailTemplateExamSubmissionManagerEnded,
+	)
 	if err != nil {
 		return zero, err
 	}
+
 	accounting, err := lockAutomaticExamSubmissionAccounting(ctx, tx, row, target.AttemptID, "current_policy")
 	if err != nil {
 		return zero, err
 	}
+
 	unresolved := accounting.Unresolved
-	browserUnresolved, browserActivity, err := settleSubmissionBrowserSources(ctx, tx, target.AttemptID, model.DeliveryClosedManagerEnd, sealAt)
+	browserUnresolved, browserActivity, err := settleSubmissionBrowserSources(
+		ctx,
+		tx,
+		target.AttemptID,
+		model.DeliveryClosedManagerEnd,
+		sealAt,
+	)
 	if err != nil {
 		return zero, err
 	}
 	if browserUnresolved > math.MaxInt64-unresolved {
 		return zero, invalidPersistedState("exam_submission", "integrity_gaps", errors.New("unresolved gap count overflows"))
 	}
+
 	unresolved += browserUnresolved
 	manifestRows, entries, err := loadAuthoritativeExamSubmissionManifest(ctx, tx, target.WorkspaceID.String())
 	if err != nil {
 		return zero, err
 	}
+
 	manifest, err := model.NewExamSubmissionManifest(row.WorkspaceCursor, entries)
 	if err != nil {
 		return zero, invalidPersistedState("exam_submission_manifest", "value", err)
 	}
+
 	attempt, participation, connection, err := row.domain(target)
 	if err != nil {
 		return zero, err
 	}
+
 	beforeParticipation, beforeConnection := participation.State, connection.State
 	if err = model.EndExamAttemptByManager(attempt, participation, connection, sealAt); err != nil {
 		return zero, store.NewErrConflict("exam_attempt", "exam_attempt_state", err)
 	}
-	submission, err := model.NewExamSubmission(model.ExamSubmissionSpecification{ID: input.SubmissionID,
-		ReceiptCode: input.ReceiptCode, AttemptID: target.AttemptID, ExamRevisionID: target.CurrentRevisionID, WorkspaceID: target.WorkspaceID,
-		Manifest: manifest, FinalFocusLossSequence: accounting.Integrity.LatestAcceptedSequence, BrowserActivity: browserActivity,
-		UnresolvedIntegrityCount: unresolved, Provenance: model.ExamSubmissionManagerEndedAttempt, SubmittedAt: sealAt})
+
+	submission, err := model.NewExamSubmission(model.ExamSubmissionSpecification{
+		ID:                       input.SubmissionID,
+		ReceiptCode:              input.ReceiptCode,
+		AttemptID:                target.AttemptID,
+		ExamRevisionID:           target.CurrentRevisionID,
+		WorkspaceID:              target.WorkspaceID,
+		Manifest:                 manifest,
+		FinalFocusLossSequence:   accounting.Integrity.LatestAcceptedSequence,
+		BrowserActivity:          browserActivity,
+		UnresolvedIntegrityCount: unresolved,
+		Provenance:               model.ExamSubmissionManagerEndedAttempt,
+		SubmittedAt:              sealAt,
+	})
 	if err != nil {
 		return zero, store.NewErrInvalidInput("exam_submission", "value", nil).Wrap(err)
 	}
 	if err = insertAutomaticExamSubmission(ctx, tx, submission, target, manifestRows, entries); err != nil {
 		return zero, err
 	}
-	if err = insertTerminalIntegrityDiscrepancies(ctx, tx, submission, automaticIntegrityDiscrepancyTarget(target),
-		terminalIntegrityDiscrepancies{FocusUnresolved: accounting.FocusUnresolved, FocusReason: accounting.focusLossReason(),
+
+	if err = insertTerminalIntegrityDiscrepancies(
+		ctx,
+		tx,
+		submission,
+		automaticIntegrityDiscrepancyTarget(target),
+		terminalIntegrityDiscrepancies{
+			FocusUnresolved:    accounting.FocusUnresolved,
+			FocusReason:        accounting.focusLossReason(),
 			BrowserUnresolved:  browserUnresolved,
-			MissingCorrections: accounting.MissingCorrections}); err != nil {
+			MissingCorrections: accounting.MissingCorrections,
+		},
+	); err != nil {
 		return zero, err
 	}
-	if _, err = tx.Exec(ctx, `DELETE FROM exam_attempt_focus_loss_pending WHERE exam_attempt_id=?`, target.AttemptID.String()); err != nil {
+
+	if _, err = tx.Exec(ctx, `DELETE FROM exam_attempt_focus_loss_pending
+		WHERE exam_attempt_id = ?`, target.AttemptID.String()); err != nil {
 		return zero, fmt.Errorf("clear manager-ended Exam Submission pending Focus Loss: %w", err)
 	}
 	if err = persistManagerEndedExamAttempt(ctx, tx, attempt, participation, connection, beforeParticipation, beforeConnection); err != nil {
@@ -237,6 +343,7 @@ func endExamAttemptByManager(ctx context.Context, tx *sqlxTxWrapper,
 	if err = recordManagerEndAction(ctx, tx, submission, input); err != nil {
 		return zero, err
 	}
+
 	outcome := automaticExamSubmissionOutcome(submission, target)
 	outcome.ConnectionClosed = beforeConnection == model.AttemptConnectionOpen
 	if err = completeExamSubmissionAudit(ctx, tx, outcome, input.AuditEventID, input.AuditAt, false, ""); err != nil {
@@ -245,6 +352,7 @@ func endExamAttemptByManager(ctx context.Context, tx *sqlxTxWrapper,
 	if err = insertExamSubmissionReceiptMail(ctx, tx, input.Notice, payloadKeyID); err != nil {
 		return zero, err
 	}
+
 	return outcome, nil
 }
 
@@ -255,14 +363,22 @@ func lockManagerEndTarget(ctx context.Context, tx *sqlxTxWrapper, input *store.E
 ) (automaticExamSubmissionRow, store.ExamSubmissionAutomaticSealTarget, error) {
 	var zeroRow automaticExamSubmissionRow
 	var zeroTarget store.ExamSubmissionAutomaticSealTarget
-	if err := guardExamSittingManagerExam(ctx, tx, input.Request.ExamID, input.Request.ActorUserID,
-		input.Request.ManagerOverride, false); err != nil {
+	if err := guardExamSittingManagerExam(
+		ctx,
+		tx,
+		input.Request.ExamID,
+		input.Request.ActorUserID,
+		input.Request.ManagerOverride,
+		false,
+	); err != nil {
 		return zeroRow, zeroTarget, err
 	}
+
 	row, err := lockAutomaticExamSubmission(ctx, tx, input.Request.AttemptID)
 	if err != nil {
 		return zeroRow, zeroTarget, err
 	}
+
 	target, err := automaticExamSubmissionTarget(row.automaticExamSubmissionTargetRow)
 	if err != nil {
 		return zeroRow, zeroTarget, err
@@ -273,51 +389,102 @@ func lockManagerEndTarget(ctx context.Context, tx *sqlxTxWrapper, input *store.E
 	if !sameManagerEndTargetIdentity(target, input.Target) || row.AttemptRevision != input.Request.ExpectedAttemptRevision {
 		return zeroRow, zeroTarget, store.NewErrConflict("exam_attempt", "exam_attempt_revision", nil)
 	}
+
 	if !model.ExamAttemptState(row.AttemptState).IsUnresolved() ||
 		(row.SittingState != string(model.ExamSittingOpen) && row.SittingState != string(model.ExamSittingPaused)) {
 		return zeroRow, zeroTarget, store.NewErrConflict("exam_attempt", "exam_attempt_state", nil)
 	}
+
 	return row, target, nil
 }
 
 // recordManagerEndAction records the manager's end action and private reason
 // against the sealed Submission.
-func recordManagerEndAction(ctx context.Context, tx *sqlxTxWrapper, submission *model.ExamSubmission,
+func recordManagerEndAction(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	submission *model.ExamSubmission,
 	input *store.ExamSubmissionManagerEnd,
 ) error {
-	if _, err := tx.Exec(ctx, `INSERT INTO exam_attempt_manager_end_actions
-		(submission_id,exam_attempt_id,actor_user_id,private_reason,audit_event_id,ended_at) VALUES (?,?,?,?,?,?)`,
-		submission.ID.String(), submission.AttemptID.String(), input.Request.ActorUserID.String(), input.Request.PrivateReason,
-		input.AuditEventID, submission.SubmittedAt); err != nil {
+	if _, err := tx.Exec(
+		ctx,
+		`INSERT INTO exam_attempt_manager_end_actions (
+			submission_id, exam_attempt_id, actor_user_id, private_reason, audit_event_id, ended_at
+		)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		submission.ID.String(),
+		submission.AttemptID.String(),
+		input.Request.ActorUserID.String(),
+		input.Request.PrivateReason,
+		input.AuditEventID,
+		submission.SubmittedAt,
+	); err != nil {
 		return fmt.Errorf("record manager-ended Exam Attempt action: %w", err)
 	}
+
 	return nil
 }
 
 func sameManagerEndTargetIdentity(left, right store.ExamSubmissionAutomaticSealTarget) bool {
-	return left.ExamID == right.ExamID && left.SittingID == right.SittingID && left.ClassID == right.ClassID &&
-		left.AcademicUnitID == right.AcademicUnitID && left.CandidateUserID == right.CandidateUserID &&
-		left.AttemptID == right.AttemptID && left.WorkspaceID == right.WorkspaceID &&
-		left.ParticipationID == right.ParticipationID && left.Generation == right.Generation && left.ConnectionID == right.ConnectionID
+	return left.ExamID == right.ExamID &&
+		left.SittingID == right.SittingID &&
+		left.ClassID == right.ClassID &&
+		left.AcademicUnitID == right.AcademicUnitID &&
+		left.CandidateUserID == right.CandidateUserID &&
+		left.AttemptID == right.AttemptID &&
+		left.WorkspaceID == right.WorkspaceID &&
+		left.ParticipationID == right.ParticipationID &&
+		left.Generation == right.Generation &&
+		left.ConnectionID == right.ConnectionID
 }
 
-func persistManagerEndedExamAttempt(ctx context.Context, tx *sqlxTxWrapper, attempt *model.ExamAttempt,
-	participation *model.AttemptParticipation, connection *model.AttemptConnection,
-	beforeParticipation model.AttemptParticipationState, beforeConnection model.AttemptConnectionState,
+func persistManagerEndedExamAttempt(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	attempt *model.ExamAttempt,
+	participation *model.AttemptParticipation,
+	connection *model.AttemptConnection,
+	beforeParticipation model.AttemptParticipationState,
+	beforeConnection model.AttemptConnectionState,
 ) error {
-	result, err := tx.Exec(ctx, `UPDATE exam_attempts SET state=?,updated_at=?,submitted_at=?,revision=?
-		WHERE id=? AND state IN ('active','ready','suspended') AND revision=?`, string(attempt.State), attempt.UpdatedAt,
-		attempt.SubmittedAt.Time, attempt.Revision, attempt.ID.String(), attempt.Revision-1)
+	result, err := tx.Exec(
+		ctx,
+		`UPDATE exam_attempts
+		SET state = ?, updated_at = ?, submitted_at = ?, revision = ?
+		WHERE id = ?
+			AND state IN ('active', 'ready', 'suspended')
+			AND revision = ?`,
+		string(attempt.State),
+		attempt.UpdatedAt,
+		attempt.SubmittedAt.Time,
+		attempt.Revision,
+		attempt.ID.String(),
+		attempt.Revision-1,
+	)
 	if err != nil {
 		return fmt.Errorf("manager-end Exam Attempt: %w", err)
 	}
 	if affected, rowsErr := result.RowsAffected(); rowsErr != nil || affected != 1 {
 		return store.NewErrConflict("exam_attempt", "exam_attempt_state", rowsErr)
 	}
+
 	if beforeParticipation == model.AttemptParticipationActive {
-		result, err = tx.Exec(ctx, `UPDATE exam_attempt_participations SET state=?,updated_at=?,ended_at=?,end_reason=?
-			WHERE id=? AND exam_attempt_id=? AND generation=? AND state='active'`, string(participation.State), participation.UpdatedAt,
-			participation.EndedAt.Time, string(participation.EndReason), participation.ID.String(), participation.AttemptID.String(), participation.Generation)
+		result, err = tx.Exec(
+			ctx,
+			`UPDATE exam_attempt_participations
+			SET state = ?, updated_at = ?, ended_at = ?, end_reason = ?
+			WHERE id = ?
+				AND exam_attempt_id = ?
+				AND generation = ?
+				AND state = 'active'`,
+			string(participation.State),
+			participation.UpdatedAt,
+			participation.EndedAt.Time,
+			string(participation.EndReason),
+			participation.ID.String(),
+			participation.AttemptID.String(),
+			participation.Generation,
+		)
 		if err != nil {
 			return fmt.Errorf("end manager-ended Attempt Participation: %w", err)
 		}
@@ -325,16 +492,29 @@ func persistManagerEndedExamAttempt(ctx context.Context, tx *sqlxTxWrapper, atte
 			return store.NewErrConflict("attempt_participation", "attempt_participation_expired", rowsErr)
 		}
 	}
+
 	if beforeParticipation == model.AttemptParticipationActive {
 		if err := closeNativeDelivery(ctx, tx, participation.ID, model.DeliveryClosedManagerEnd, participation.EndedAt.Time); err != nil {
 			return err
 		}
 	}
+
 	if beforeConnection == model.AttemptConnectionOpen {
-		result, err = tx.Exec(ctx, `UPDATE exam_attempt_connections SET state=?,closed_at=?,close_reason=?
-			WHERE id=? AND exam_attempt_id=? AND participation_id=? AND state='open'`, string(connection.State),
-			connection.ClosedAt.Time, string(connection.CloseReason), connection.ID.String(), connection.AttemptID.String(),
-			connection.ParticipationID.String())
+		result, err = tx.Exec(
+			ctx,
+			`UPDATE exam_attempt_connections
+			SET state = ?, closed_at = ?, close_reason = ?
+			WHERE id = ?
+				AND exam_attempt_id = ?
+				AND participation_id = ?
+				AND state = 'open'`,
+			string(connection.State),
+			connection.ClosedAt.Time,
+			string(connection.CloseReason),
+			connection.ID.String(),
+			connection.AttemptID.String(),
+			connection.ParticipationID.String(),
+		)
 		if err != nil {
 			return fmt.Errorf("close manager-ended Attempt Connection: %w", err)
 		}
@@ -342,5 +522,6 @@ func persistManagerEndedExamAttempt(ctx context.Context, tx *sqlxTxWrapper, atte
 			return store.NewErrConflict("attempt_connection", "attempt_connection_closed", rowsErr)
 		}
 	}
+
 	return nil
 }

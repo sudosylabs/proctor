@@ -107,6 +107,7 @@ func newMigrationEngine(ctx context.Context, store *SQLStore, settings Settings,
 	if err != nil {
 		return nil, fmt.Errorf("list embedded migrations: %w", err)
 	}
+
 	source, err := embeddedsrc.WithInstance(&embeddedsrc.AssetSource{
 		Names: names,
 		AssetFunc: func(name string) ([]byte, error) {
@@ -116,6 +117,7 @@ func newMigrationEngine(ctx context.Context, store *SQLStore, settings Settings,
 	if err != nil {
 		return nil, fmt.Errorf("construct migration source: %w", err)
 	}
+
 	driver, err := postgresdriver.WithInstance(store.GetMaster().DB().DB)
 	if err != nil {
 		return nil, fmt.Errorf("construct PostgreSQL migration driver: %w", err)
@@ -123,10 +125,12 @@ func newMigrationEngine(ctx context.Context, store *SQLStore, settings Settings,
 	if output == nil {
 		output = io.Discard
 	}
+
 	timeoutSeconds := int(settings.MigrationTimeout.Seconds())
 	if timeoutSeconds < 1 {
 		timeoutSeconds = 1
 	}
+
 	lockCtx, finishAcquisition, cancelLockContext := newMigrationLockContext(
 		ctx,
 		settings.MigrationTimeout,
@@ -145,6 +149,7 @@ func newMigrationEngine(ctx context.Context, store *SQLStore, settings Settings,
 		_ = driver.Close()
 		return nil, fmt.Errorf("construct migration engine: %w", err)
 	}
+
 	if acquisitionErr != nil {
 		closeErr := engine.Close()
 		cancelLockContext(context.Canceled)
@@ -153,6 +158,7 @@ func newMigrationEngine(ctx context.Context, store *SQLStore, settings Settings,
 			closeErr,
 		)
 	}
+
 	return &migrationEngine{
 		Morph:             engine,
 		cancelLockContext: cancelLockContext,

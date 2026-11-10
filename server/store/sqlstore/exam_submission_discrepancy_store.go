@@ -25,8 +25,12 @@ type integrityDiscrepancyTarget struct {
 }
 
 func automaticIntegrityDiscrepancyTarget(target store.ExamSubmissionAutomaticSealTarget) integrityDiscrepancyTarget {
-	return integrityDiscrepancyTarget{AttemptID: target.AttemptID, ParticipationID: target.ParticipationID,
-		Generation: target.Generation, ConnectionID: target.ConnectionID}
+	return integrityDiscrepancyTarget{
+		AttemptID:       target.AttemptID,
+		ParticipationID: target.ParticipationID,
+		Generation:      target.Generation,
+		ConnectionID:    target.ConnectionID,
+	}
 }
 
 type terminalIntegrityDiscrepancies struct {
@@ -48,17 +52,27 @@ func (v terminalIntegrityDiscrepancies) totalUnresolved() (int64, error) {
 	return total + int64(len(v.MissingCorrections)), nil
 }
 
-func insertTerminalIntegrityDiscrepancies(ctx context.Context, tx *sqlxTxWrapper, submission *model.ExamSubmission,
-	target integrityDiscrepancyTarget, value terminalIntegrityDiscrepancies,
+func insertTerminalIntegrityDiscrepancies(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	submission *model.ExamSubmission,
+	target integrityDiscrepancyTarget,
+	value terminalIntegrityDiscrepancies,
 ) error {
-	if submission == nil || !submission.ID.IsValid() || !target.AttemptID.IsValid() ||
-		!target.ParticipationID.IsValid() || target.Generation < 1 || !target.ConnectionID.IsValid() {
+	if submission == nil ||
+		!submission.ID.IsValid() ||
+		!target.AttemptID.IsValid() ||
+		!target.ParticipationID.IsValid() ||
+		target.Generation < 1 ||
+		!target.ConnectionID.IsValid() {
 		return store.NewErrInvalidInput("integrity_discrepancy", "terminal", nil)
 	}
+
 	total, err := value.totalUnresolved()
 	if err != nil || total != submission.UnresolvedIntegrityCount {
 		return invalidPersistedState("integrity_discrepancy", "terminal_count", errors.New("Submission gap accounting mismatch"))
 	}
+
 	recordCount := len(value.MissingCorrections)
 	if value.FocusUnresolved > 0 {
 		recordCount++
@@ -69,12 +83,18 @@ func insertTerminalIntegrityDiscrepancies(ctx context.Context, tx *sqlxTxWrapper
 	if recordCount > model.SubmissionReviewMaximumDiscrepancies {
 		return store.NewErrConflict("integrity_discrepancy", "integrity_discrepancy_limit", nil)
 	}
+
 	if value.FocusUnresolved > 0 {
 		discrepancy, createErr := model.NewIntegrityDiscrepancy(model.IntegrityDiscrepancySpecification{
-			ID: model.NewIntegrityDiscrepancyID(), SubmissionID: submission.ID, AttemptID: target.AttemptID,
-			ParticipationID: target.ParticipationID, Generation: target.Generation,
-			Kind:      model.IntegrityDiscrepancyFocusLossGap,
-			GapReason: string(value.FocusReason), UnresolvedCount: value.FocusUnresolved, ReceivedAt: submission.SubmittedAt,
+			ID:              model.NewIntegrityDiscrepancyID(),
+			SubmissionID:    submission.ID,
+			AttemptID:       target.AttemptID,
+			ParticipationID: target.ParticipationID,
+			Generation:      target.Generation,
+			Kind:            model.IntegrityDiscrepancyFocusLossGap,
+			GapReason:       string(value.FocusReason),
+			UnresolvedCount: value.FocusUnresolved,
+			ReceivedAt:      submission.SubmittedAt,
 		})
 		if createErr != nil {
 			return invalidPersistedState("integrity_discrepancy", "focus_loss_gap", createErr)
@@ -86,10 +106,15 @@ func insertTerminalIntegrityDiscrepancies(ctx context.Context, tx *sqlxTxWrapper
 
 	for _, revisionID := range value.MissingCorrections {
 		discrepancy, createErr := model.NewIntegrityDiscrepancy(model.IntegrityDiscrepancySpecification{
-			ID: model.NewIntegrityDiscrepancyID(), SubmissionID: submission.ID, AttemptID: target.AttemptID,
-			ParticipationID: target.ParticipationID, Generation: target.Generation,
+			ID:                   model.NewIntegrityDiscrepancyID(),
+			SubmissionID:         submission.ID,
+			AttemptID:            target.AttemptID,
+			ParticipationID:      target.ParticipationID,
+			Generation:           target.Generation,
 			Kind:                 model.IntegrityDiscrepancyCorrectionAcknowledgementMissing,
-			CorrectionRevisionID: revisionID, UnresolvedCount: 1, ReceivedAt: submission.SubmittedAt,
+			CorrectionRevisionID: revisionID,
+			UnresolvedCount:      1,
+			ReceivedAt:           submission.SubmittedAt,
 		})
 		if createErr != nil {
 			return invalidPersistedState("integrity_discrepancy", "correction_acknowledgement", createErr)
@@ -98,22 +123,41 @@ func insertTerminalIntegrityDiscrepancies(ctx context.Context, tx *sqlxTxWrapper
 			return err
 		}
 	}
+
 	return nil
 }
 
-func insertTerminalIntegrityDiscrepancy(ctx context.Context, tx *sqlxTxWrapper, value *model.IntegrityDiscrepancy,
+func insertTerminalIntegrityDiscrepancy(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	value *model.IntegrityDiscrepancy,
 	target integrityDiscrepancyTarget,
 ) error {
-	_, err := tx.Exec(ctx, `INSERT INTO integrity_discrepancies
-		(id,submission_id,exam_attempt_id,participation_id,connection_id,generation,kind,
-		 correction_revision_id,browser_activity_source_session_id,final_sequence,gap_reason,unresolved_count,received_at)
-		VALUES(?,?,?,?,?,?,?,?,?::uuid,?,?,?,?)`, value.ID.String(), value.SubmissionID.String(), value.AttemptID.String(),
-		value.ParticipationID.String(), target.ConnectionID.String(), value.Generation, string(value.Kind),
-		nullableString(value.CorrectionRevisionID.String()), nullableString(string(value.BrowserSourceSessionID)),
-		nullableInt64Pointer(value.FinalSequence), nullableString(value.GapReason), nullableInt64(value.UnresolvedCount > 0, value.UnresolvedCount),
-		value.ReceivedAt)
+	_, err := tx.Exec(
+		ctx,
+		`INSERT INTO integrity_discrepancies (
+			id, submission_id, exam_attempt_id, participation_id, connection_id, generation, kind,
+			correction_revision_id, browser_activity_source_session_id, final_sequence, gap_reason,
+			unresolved_count, received_at
+		)
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?::uuid, ?, ?, ?, ?)`,
+		value.ID.String(),
+		value.SubmissionID.String(),
+		value.AttemptID.String(),
+		value.ParticipationID.String(),
+		target.ConnectionID.String(),
+		value.Generation,
+		string(value.Kind),
+		nullableString(value.CorrectionRevisionID.String()),
+		nullableString(string(value.BrowserSourceSessionID)),
+		nullableInt64Pointer(value.FinalSequence),
+		nullableString(value.GapReason),
+		nullableInt64(value.UnresolvedCount > 0, value.UnresolvedCount),
+		value.ReceivedAt,
+	)
 	if err != nil {
 		return fmt.Errorf("insert terminal Integrity Discrepancy: %w", translateError("integrity_discrepancy", value.ID.String(), err))
 	}
+
 	return nil
 }

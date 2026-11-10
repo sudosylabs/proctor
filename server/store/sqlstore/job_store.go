@@ -118,8 +118,12 @@ type jobAttemptRow struct {
 	PublicErrorCode string       `db:"public_error_code"`
 }
 
-const jobColumns = `id, type, status, created_at, updated_at, available_at, started_at, completed_at, command, checkpoint, result, public_error_code, dedupe_key, dedupe_policy, attempt_count, maximum_attempts, work_reserved, progress_current, progress_total, progress_stage, revision, created_by_user_id`
-const jobAttemptColumns = `id, job_id, number, status, node_id, claim_token, started_at, heartbeat_at, lease_expires_at, completed_at, public_error_code`
+const jobColumns = `id, type, status, created_at, updated_at, available_at, started_at,
+		completed_at, command, checkpoint, result, public_error_code, dedupe_key, dedupe_policy,
+		attempt_count, maximum_attempts, work_reserved, progress_current, progress_total,
+		progress_stage, revision, created_by_user_id`
+const jobAttemptColumns = `id, job_id, number, status, node_id, claim_token, started_at,
+		heartbeat_at, lease_expires_at, completed_at, public_error_code`
 
 func newSQLJobStore(sqlStore *SQLStore) store.JobStore { return &SQLJobStore{SQLStore: sqlStore} }
 
@@ -133,18 +137,22 @@ func (s SQLJobStore) Enqueue(ctx context.Context, input *store.JobEnqueue) (*mod
 	if input.Job.DedupePolicy == model.JobDedupePermanent {
 		return s.enqueuePermanent(ctx, input.Job)
 	}
+
 	result, err := insertQueuedJob(ctx, s.GetMaster(), input.Job, true)
 	if err != nil {
 		return nil, false, fmt.Errorf("enqueue job: %w", translateError("job", input.Job.ID.String(), err))
 	}
+
 	affected, err := result.RowsAffected()
 	if err != nil {
 		return nil, false, fmt.Errorf("read enqueued job rows: %w", err)
 	}
+
 	if affected == 1 {
 		copy := *input.Job
 		return &copy, true, nil
 	}
+
 	var row jobRow
 	query := `SELECT ` + jobColumns + ` FROM jobs WHERE type = ? AND dedupe_key = ? AND dedupe_policy = ?`
 	if input.Job.DedupePolicy == model.JobDedupeActive {
@@ -153,35 +161,65 @@ func (s SQLJobStore) Enqueue(ctx context.Context, input *store.JobEnqueue) (*mod
 	if err = s.GetMaster().Get(ctx, &row, query, string(input.Job.Type), input.Job.DedupeKey, string(input.Job.DedupePolicy)); err != nil {
 		return nil, false, translateError("job", input.Job.DedupeKey, err)
 	}
+
 	job, err := row.model()
 	return job, false, err
 }
 
 func (s SQLJobStore) enqueuePermanent(ctx context.Context, proposed *model.Job) (*model.Job, bool, error) {
-	outcome, err := executeSQLTransaction(ctx, s.GetMaster().Begin, permanentJobTransactionPolicy(), func(ctx context.Context, tx *sqlxTxWrapper) (*permanentJobEnqueueOutcome, error) {
-		result, err := tx.Exec(ctx, `INSERT INTO job_permanent_occurrences (type, dedupe_key, job_id, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (type, dedupe_key) DO NOTHING`, string(proposed.Type), proposed.DedupeKey, proposed.ID.String(), proposed.CreatedAt)
+	outcome, err := executeSQLTransaction(ctx, s.GetMaster().Begin, permanentJobTransactionPolicy(), func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*permanentJobEnqueueOutcome, error) {
+		result, err := tx.Exec(
+			ctx,
+			`INSERT INTO job_permanent_occurrences (type, dedupe_key, job_id, created_at)
+			VALUES (?, ?, ?, ?)
+			ON CONFLICT (type, dedupe_key) DO NOTHING`,
+			string(proposed.Type),
+			proposed.DedupeKey,
+			proposed.ID.String(),
+			proposed.CreatedAt,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("reserve permanent job occurrence: %w", err)
 		}
+
 		affected, err := result.RowsAffected()
 		if err != nil {
 			return nil, fmt.Errorf("read permanent job occurrence rows: %w", err)
 		}
+
 		if affected == 1 {
 			if _, err = insertQueuedJob(ctx, tx, proposed, false); err != nil {
 				return nil, fmt.Errorf("enqueue permanent job: %w", translateError("job", proposed.ID.String(), err))
 			}
+
 			copy := *proposed
 			return &permanentJobEnqueueOutcome{job: &copy, created: true}, nil
 		}
+
 		var row jobRow
-		err = tx.Get(ctx, &row, `SELECT `+jobColumns+` FROM jobs WHERE id = (SELECT job_id FROM job_permanent_occurrences WHERE type = ? AND dedupe_key = ?)`, string(proposed.Type), proposed.DedupeKey)
+		err = tx.Get(
+			ctx,
+			&row,
+			`SELECT `+jobColumns+` FROM jobs
+			WHERE id = (
+				SELECT job_id
+				FROM job_permanent_occurrences
+				WHERE type = ?
+					AND dedupe_key = ?
+			)`,
+			string(proposed.Type),
+			proposed.DedupeKey,
+		)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("read permanent job occurrence: %w", err)
 		}
 		if errors.Is(err, sql.ErrNoRows) {
 			return &permanentJobEnqueueOutcome{}, nil
 		}
+
 		return &permanentJobEnqueueOutcome{row: &row}, nil
 	})
 	if err != nil {
@@ -193,6 +231,7 @@ func (s SQLJobStore) enqueuePermanent(ctx context.Context, proposed *model.Job) 
 	if outcome.row == nil {
 		return nil, false, nil
 	}
+
 	job, err := outcome.row.model()
 	return job, false, err
 }
@@ -207,7 +246,24 @@ func insertQueuedJob(ctx context.Context, executor sqlxExecutor, job *model.Job,
 			conflict = " ON CONFLICT (type, dedupe_key) WHERE dedupe_policy = 'permanent' DO NOTHING"
 		}
 	}
-	return executor.Exec(ctx, `INSERT INTO jobs (`+jobColumns+`) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, NULL, NULL, '', ?, ?, 0, ?, 0, NULL, NULL, NULL, ?, ?)`+conflict, job.ID.String(), string(job.Type), string(job.Status), job.CreatedAt, job.UpdatedAt, job.AvailableAt, job.Command, job.DedupeKey, string(job.DedupePolicy), job.MaximumAttempts, job.Revision, jobInitiator(job))
+	return executor.Exec(
+		ctx,
+		`INSERT INTO jobs (`+jobColumns+`)
+		VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, NULL, NULL, '', ?, ?, 0, ?, 0, NULL, NULL, NULL, ?,
+			?)`+conflict,
+		job.ID.String(),
+		string(job.Type),
+		string(job.Status),
+		job.CreatedAt,
+		job.UpdatedAt,
+		job.AvailableAt,
+		job.Command,
+		job.DedupeKey,
+		string(job.DedupePolicy),
+		job.MaximumAttempts,
+		job.Revision,
+		jobInitiator(job),
+	)
 }
 
 // jobInitiator is the persisted spelling of a Job's optional initiator.
@@ -219,47 +275,123 @@ func jobInitiator(job *model.Job) sql.NullString {
 // means its worker died. The delay starts at the expired lease's duration and
 // doubles with each attempt up to an hour, so work that crashes its worker
 // does not take down the next node at once.
-const leaseExpiryBackoff = `LEAST(COALESCE((SELECT a.lease_expires_at - a.heartbeat_at FROM job_attempts a
-	WHERE a.job_id = jobs.id AND a.status = 'lease_expired' ORDER BY a.number DESC LIMIT 1), interval '0') * power(2, LEAST(GREATEST(attempt_count - 1, 0), 10)),
-	interval '1 hour')`
+const leaseExpiryBackoff = `LEAST(COALESCE((
+		SELECT a.lease_expires_at - a.heartbeat_at
+		FROM job_attempts a
+		WHERE a.job_id = jobs.id
+			AND a.status = 'lease_expired'
+		ORDER BY a.number DESC
+		LIMIT 1
+	), interval '0') * power(2, LEAST(GREATEST(attempt_count - 1, 0), 10)), interval '1 hour')`
 
 func (s SQLJobStore) ClaimNext(ctx context.Context, request *store.JobClaimRequest) (*store.JobClaim, error) {
-	if request == nil || len(request.Types) == 0 || strings.TrimSpace(request.NodeID) == "" || !request.ClaimToken.IsValid() || request.LeaseDuration <= 0 || request.LeaseDuration > time.Hour {
+	if request == nil ||
+		len(request.Types) == 0 ||
+		strings.TrimSpace(request.NodeID) == "" ||
+		!request.ClaimToken.IsValid() ||
+		request.LeaseDuration <= 0 ||
+		request.LeaseDuration > time.Hour {
 		return nil, store.NewErrInvalidInput("job", "claim", nil)
 	}
+
 	types := make([]string, len(request.Types))
 	for index, jobType := range request.Types {
 		types[index] = string(jobType)
 	}
-	outcome, err := executeSQLTransaction(ctx, s.GetMaster().Begin, jobClaimSQLTransactionPolicy(), func(ctx context.Context, tx *sqlxTxWrapper) (*jobClaimTransactionOutcome, error) {
+
+	outcome, err := executeSQLTransaction(ctx, s.GetMaster().Begin, jobClaimSQLTransactionPolicy(), func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*jobClaimTransactionOutcome, error) {
 		databaseNow, err := jobDatabaseNow(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
+
 		leaseExpiresAt := databaseNow.Add(request.LeaseDuration)
 		var expiredJobIDs []string
-		if err = tx.Select(ctx, &expiredJobIDs, `UPDATE job_attempts SET status = 'lease_expired', completed_at = ? WHERE status = 'running' AND lease_expires_at <= ? RETURNING job_id`, databaseNow, databaseNow); err != nil {
+		if err = tx.Select(
+			ctx,
+			&expiredJobIDs,
+			`UPDATE job_attempts
+			SET status = 'lease_expired', completed_at = ?
+			WHERE status = 'running'
+				AND lease_expires_at <= ?
+			RETURNING job_id`,
+			databaseNow,
+			databaseNow,
+		); err != nil {
 			return nil, fmt.Errorf("expire lost job attempts: %w", err)
 		}
+
 		for _, jobID := range expiredJobIDs {
-			if _, err = tx.Exec(ctx, `UPDATE jobs SET status = CASE WHEN status = 'cancel_requested' THEN 'canceled' WHEN attempt_count >= maximum_attempts THEN 'failed' ELSE 'queued' END, completed_at = CASE WHEN status = 'cancel_requested' OR attempt_count >= maximum_attempts THEN CAST(? AS timestamptz) ELSE NULL END, public_error_code = CASE WHEN status = 'cancel_requested' THEN 'job.canceled' WHEN attempt_count >= maximum_attempts THEN 'job.lease_expired' ELSE public_error_code END, available_at = CAST(? AS timestamptz) + `+leaseExpiryBackoff+`, updated_at = GREATEST(updated_at, ?), revision = revision + 1 WHERE id = ? AND status IN ('running', 'cancel_requested')`, databaseNow, databaseNow, databaseNow, jobID); err != nil {
+			if _, err = tx.Exec(
+				ctx,
+				`UPDATE jobs
+				SET status = CASE
+						WHEN status = 'cancel_requested' THEN 'canceled'
+						WHEN attempt_count >= maximum_attempts THEN 'failed'
+						ELSE 'queued'
+					END,
+					completed_at = CASE
+						WHEN status = 'cancel_requested' OR attempt_count >= maximum_attempts THEN CAST(? AS timestamptz)
+						ELSE NULL
+					END,
+					public_error_code = CASE
+						WHEN status = 'cancel_requested' THEN 'job.canceled'
+						WHEN attempt_count >= maximum_attempts THEN 'job.lease_expired'
+						ELSE public_error_code
+					END,
+					available_at = CAST(? AS timestamptz) + `+leaseExpiryBackoff+`,
+					updated_at = GREATEST(updated_at, ?),
+					revision = revision + 1
+				WHERE id = ?
+					AND status IN ('running', 'cancel_requested')`,
+				databaseNow,
+				databaseNow,
+				databaseNow,
+				jobID,
+			); err != nil {
 				return nil, fmt.Errorf("recover expired job %s: %w", jobID, err)
 			}
 		}
+
 		var row jobRow
-		if err = tx.Get(ctx, &row, `SELECT `+jobColumns+` FROM jobs WHERE status = 'queued' AND available_at <= ? AND attempt_count < maximum_attempts AND type = ANY(?)
-			AND NOT EXISTS (SELECT 1 FROM job_attempts WHERE job_attempts.job_id = jobs.id AND job_attempts.node_id = ? AND job_attempts.status = 'incompatible')
-			ORDER BY available_at, created_at, id FOR UPDATE SKIP LOCKED LIMIT 1`, databaseNow, pq.Array(types), strings.TrimSpace(request.NodeID)); err != nil {
+		if err = tx.Get(
+			ctx,
+			&row,
+			`SELECT `+jobColumns+` FROM jobs
+			WHERE status = 'queued'
+				AND available_at <= ?
+				AND attempt_count < maximum_attempts
+				AND type = ANY(?)
+				AND NOT EXISTS (
+					SELECT 1
+					FROM job_attempts
+					WHERE job_attempts.job_id = jobs.id
+						AND job_attempts.node_id = ?
+						AND job_attempts.status = 'incompatible'
+				)
+			ORDER BY available_at, created_at, id
+			FOR UPDATE SKIP LOCKED
+			LIMIT 1`,
+			databaseNow,
+			pq.Array(types),
+			strings.TrimSpace(request.NodeID),
+		); err != nil {
 			claimableErr := translateError("job", "claimable", err)
 			if errors.Is(err, sql.ErrNoRows) && len(expiredJobIDs) > 0 {
 				return &jobClaimTransactionOutcome{postCommitErr: claimableErr}, nil
 			}
+
 			return nil, claimableErr
 		}
+
 		job, err := row.model()
 		if err != nil {
 			return nil, err
 		}
+
 		// CURRENT_TIMESTAMP decided claimability; the recorded transition never
 		// precedes the enqueueing node's clock or a later committed transition.
 		running, err := job.Start(latestTime(job.UpdatedAt, databaseNow))
@@ -269,13 +401,36 @@ func (s SQLJobStore) ClaimNext(ctx context.Context, request *store.JobClaimReque
 		if err = updateJob(ctx, tx, running); err != nil {
 			return nil, err
 		}
-		attempt, err := model.NewJobAttempt(model.NewJobAttemptID(), running.ID, running.AttemptCount, request.NodeID, request.ClaimToken, databaseNow, leaseExpiresAt)
+
+		attempt, err := model.NewJobAttempt(
+			model.NewJobAttemptID(),
+			running.ID,
+			running.AttemptCount,
+			request.NodeID,
+			request.ClaimToken,
+			databaseNow,
+			leaseExpiresAt,
+		)
 		if err != nil {
 			return nil, store.NewErrInvalidInput("job_attempt", "claim", err)
 		}
-		if _, err = tx.Exec(ctx, `INSERT INTO job_attempts (`+jobAttemptColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '')`, attempt.ID.String(), attempt.JobID.String(), attempt.Number, string(attempt.Status), attempt.NodeID, string(attempt.ClaimToken), attempt.StartedAt, attempt.HeartbeatAt, attempt.LeaseExpiresAt); err != nil {
+
+		if _, err = tx.Exec(
+			ctx,
+			`INSERT INTO job_attempts (`+jobAttemptColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '')`,
+			attempt.ID.String(),
+			attempt.JobID.String(),
+			attempt.Number,
+			string(attempt.Status),
+			attempt.NodeID,
+			string(attempt.ClaimToken),
+			attempt.StartedAt,
+			attempt.HeartbeatAt,
+			attempt.LeaseExpiresAt,
+		); err != nil {
 			return nil, fmt.Errorf("create job attempt: %w", translateError("job_attempt", attempt.ID.String(), err))
 		}
+
 		return &jobClaimTransactionOutcome{claim: &store.JobClaim{Job: running, Attempt: attempt}}, nil
 	})
 	if err != nil {
@@ -284,31 +439,57 @@ func (s SQLJobStore) ClaimNext(ctx context.Context, request *store.JobClaimReque
 	if outcome.postCommitErr != nil {
 		return nil, outcome.postCommitErr
 	}
+
 	return outcome.claim, nil
 }
 
 func (s SQLJobStore) Heartbeat(ctx context.Context, input *store.JobHeartbeat) (*model.JobAttempt, error) {
-	if input == nil || !input.AttemptID.IsValid() || !input.ClaimToken.IsValid() || input.LeaseDuration <= 0 || input.LeaseDuration > time.Hour {
+	if input == nil ||
+		!input.AttemptID.IsValid() ||
+		!input.ClaimToken.IsValid() ||
+		input.LeaseDuration <= 0 ||
+		input.LeaseDuration > time.Hour {
 		return nil, store.NewErrInvalidInput("job_attempt", "heartbeat", nil)
 	}
-	return executeSQLTransaction(ctx, s.GetMaster().Begin, rawSQLTransactionPolicy[*model.JobAttempt](true, func(_ *model.JobAttempt, err error) error { return err }), func(ctx context.Context, tx *sqlxTxWrapper) (*model.JobAttempt, error) {
+
+	return executeSQLTransaction(ctx, s.GetMaster().Begin, rawSQLTransactionPolicy[*model.JobAttempt](true, func(
+		_ *model.JobAttempt,
+		err error,
+	) error {
+		return err
+	}), func(ctx context.Context, tx *sqlxTxWrapper) (*model.JobAttempt, error) {
 		databaseNow, err := jobDatabaseNow(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
+
 		attempt, err := getFencedAttempt(ctx, tx, input.AttemptID, input.ClaimToken, databaseNow)
 		if err != nil {
 			return nil, err
 		}
+
 		// A concurrent heartbeat may have committed a later transaction start.
 		heartbeatAt := latestTime(attempt.HeartbeatAt, databaseNow)
 		heartbeat, err := attempt.Heartbeat(heartbeatAt, heartbeatAt.Add(input.LeaseDuration))
 		if err != nil {
 			return nil, store.NewErrConflict("job_attempt", "not_running", err)
 		}
-		if _, err = tx.Exec(ctx, `UPDATE job_attempts SET heartbeat_at = ?, lease_expires_at = ? WHERE id = ? AND claim_token = ? AND status = 'running'`, heartbeat.HeartbeatAt, heartbeat.LeaseExpiresAt, heartbeat.ID.String(), string(heartbeat.ClaimToken)); err != nil {
+
+		if _, err = tx.Exec(
+			ctx,
+			`UPDATE job_attempts
+			SET heartbeat_at = ?, lease_expires_at = ?
+			WHERE id = ?
+				AND claim_token = ?
+				AND status = 'running'`,
+			heartbeat.HeartbeatAt,
+			heartbeat.LeaseExpiresAt,
+			heartbeat.ID.String(),
+			string(heartbeat.ClaimToken),
+		); err != nil {
 			return nil, err
 		}
+
 		return heartbeat, nil
 	})
 }
@@ -317,19 +498,27 @@ func (s SQLJobStore) Checkpoint(ctx context.Context, input *store.JobCheckpoint)
 	if input == nil || !input.AttemptID.IsValid() || !input.ClaimToken.IsValid() {
 		return nil, store.NewErrInvalidInput("job", "checkpoint", nil)
 	}
-	return executeSQLTransaction(ctx, s.GetMaster().Begin, rawSQLTransactionPolicy[*model.Job](true, func(_ *model.Job, err error) error { return err }), func(ctx context.Context, tx *sqlxTxWrapper) (*model.Job, error) {
+	return executeSQLTransaction(ctx, s.GetMaster().Begin, rawSQLTransactionPolicy[*model.Job](true, func(
+		_ *model.Job,
+		err error,
+	) error {
+		return err
+	}), func(ctx context.Context, tx *sqlxTxWrapper) (*model.Job, error) {
 		databaseNow, err := jobDatabaseNow(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
+
 		attempt, err := getFencedAttempt(ctx, tx, input.AttemptID, input.ClaimToken, databaseNow)
 		if err != nil {
 			return nil, err
 		}
+
 		job, err := getJob(ctx, tx, attempt.JobID, true)
 		if err != nil {
 			return nil, err
 		}
+
 		updated, err := job.UpdateProgress(input.Progress, input.Checkpoint, latestTime(job.UpdatedAt, databaseNow))
 		if err != nil {
 			return nil, store.NewErrInvalidInput("job", "checkpoint", err)
@@ -337,27 +526,54 @@ func (s SQLJobStore) Checkpoint(ctx context.Context, input *store.JobCheckpoint)
 		if err = updateJob(ctx, tx, updated); err != nil {
 			return nil, err
 		}
+
 		return updated, nil
 	})
 }
 
 func (s SQLJobStore) ReserveWork(ctx context.Context, input *store.JobWorkReservation) (*store.JobWorkReservationResult, error) {
-	if input == nil || !input.AttemptID.IsValid() || !input.ClaimToken.IsValid() || input.Units <= 0 || input.Limit <= 0 || input.Units > input.Limit || input.Limit > 1_000_000 {
+	if input == nil ||
+		!input.AttemptID.IsValid() ||
+		!input.ClaimToken.IsValid() ||
+		input.Units <= 0 ||
+		input.Limit <= 0 ||
+		input.Units > input.Limit ||
+		input.Limit > 1_000_000 {
 		return nil, store.NewErrInvalidInput("job", "reserve_work", nil)
 	}
-	return executeSQLTransaction(ctx, s.GetMaster().Begin, rawSQLTransactionPolicy[*store.JobWorkReservationResult](true, func(_ *store.JobWorkReservationResult, err error) error {
+
+	return executeSQLTransaction(ctx, s.GetMaster().Begin, rawSQLTransactionPolicy[*store.JobWorkReservationResult](true, func(
+		_ *store.JobWorkReservationResult,
+		err error,
+	) error {
 		return fmt.Errorf("commit job work reservation: %w", err)
 	}), func(ctx context.Context, tx *sqlxTxWrapper) (*store.JobWorkReservationResult, error) {
 		databaseNow, err := jobDatabaseNow(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
+
 		attempt, err := getFencedAttempt(ctx, tx, input.AttemptID, input.ClaimToken, databaseNow)
 		if err != nil {
 			return nil, err
 		}
+
 		var consumed int
-		err = tx.Get(ctx, &consumed, `UPDATE jobs SET work_reserved = work_reserved + ?, updated_at = GREATEST(updated_at, ?), revision = revision + 1 WHERE id = ? AND work_reserved + ? <= ? RETURNING work_reserved`, input.Units, databaseNow, attempt.JobID.String(), input.Units, input.Limit)
+		err = tx.Get(
+			ctx,
+			&consumed,
+			`UPDATE jobs
+			SET work_reserved = work_reserved + ?, updated_at = GREATEST(updated_at, ?),
+				revision = revision + 1
+			WHERE id = ?
+				AND work_reserved + ? <= ?
+			RETURNING work_reserved`,
+			input.Units,
+			databaseNow,
+			attempt.JobID.String(),
+			input.Units,
+			input.Limit,
+		)
 		reserved := err == nil
 		if errors.Is(err, sql.ErrNoRows) {
 			err = tx.Get(ctx, &consumed, `SELECT work_reserved FROM jobs WHERE id = ?`, attempt.JobID.String())
@@ -365,6 +581,7 @@ func (s SQLJobStore) ReserveWork(ctx context.Context, input *store.JobWorkReserv
 		if err != nil {
 			return nil, fmt.Errorf("reserve job work: %w", translateError("job", attempt.JobID.String(), err))
 		}
+
 		return &store.JobWorkReservationResult{Reserved: reserved, Consumed: consumed}, nil
 	})
 }
@@ -373,19 +590,27 @@ func (s SQLJobStore) Complete(ctx context.Context, input *store.JobCompletion) (
 	if input == nil || !input.AttemptID.IsValid() || !input.ClaimToken.IsValid() || input.RetryDelay < 0 || input.RetryDelay > 24*time.Hour {
 		return nil, store.NewErrInvalidInput("job", "completion", nil)
 	}
-	return executeSQLTransaction(ctx, s.GetMaster().Begin, rawSQLTransactionPolicy[*model.Job](true, func(_ *model.Job, err error) error { return err }), func(ctx context.Context, tx *sqlxTxWrapper) (*model.Job, error) {
+	return executeSQLTransaction(ctx, s.GetMaster().Begin, rawSQLTransactionPolicy[*model.Job](true, func(
+		_ *model.Job,
+		err error,
+	) error {
+		return err
+	}), func(ctx context.Context, tx *sqlxTxWrapper) (*model.Job, error) {
 		databaseNow, err := jobDatabaseNow(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
+
 		attempt, err := getFencedAttempt(ctx, tx, input.AttemptID, input.ClaimToken, databaseNow)
 		if err != nil {
 			return nil, err
 		}
+
 		job, err := getJob(ctx, tx, attempt.JobID, true)
 		if err != nil {
 			return nil, err
 		}
+
 		// The lease fence above used CURRENT_TIMESTAMP. The recorded transition
 		// never precedes the Job's enqueueing node clock or a transition that a
 		// later-starting transaction committed before this one locked the rows.
@@ -393,12 +618,14 @@ func (s SQLJobStore) Complete(ctx context.Context, input *store.JobCompletion) (
 		var attemptStatus model.JobAttemptStatus
 		var updated *model.Job
 		kind, code := input.Kind, input.PublicErrorCode
-		if job.Status == model.JobStatusCancelRequested && (kind == store.JobCompletionRetryableFailure || kind == store.JobCompletionRelinquished) {
+		if job.Status == model.JobStatusCancelRequested &&
+			(kind == store.JobCompletionRetryableFailure || kind == store.JobCompletionRelinquished) {
 			// Cancellation was requested while the handler ran. A requeue cannot
 			// leave cancel_requested, so the attempt honors the cancellation as
 			// lease expiry does instead of failing to complete.
 			kind, code = store.JobCompletionCanceled, "job.canceled"
 		}
+
 		switch kind {
 		case store.JobCompletionSucceeded:
 			attemptStatus = model.JobAttemptStatusSucceeded
@@ -422,19 +649,36 @@ func (s SQLJobStore) Complete(ctx context.Context, input *store.JobCompletion) (
 		default:
 			err = fmt.Errorf("unknown completion kind %q", kind)
 		}
+
 		if err != nil {
 			return nil, store.NewErrInvalidInput("job", "completion", err)
 		}
+
 		completedAttempt, err := attempt.Complete(attemptStatus, code, latestTime(attempt.HeartbeatAt, databaseNow))
 		if err != nil {
 			return nil, store.NewErrInvalidInput("job_attempt", "completion", err)
 		}
-		if _, err = tx.Exec(ctx, `UPDATE job_attempts SET status = ?, completed_at = ?, public_error_code = ? WHERE id = ? AND claim_token = ? AND status = 'running'`, string(completedAttempt.Status), completedAttempt.CompletedAt.Time, completedAttempt.PublicErrorCode, completedAttempt.ID.String(), string(completedAttempt.ClaimToken)); err != nil {
+
+		if _, err = tx.Exec(
+			ctx,
+			`UPDATE job_attempts
+			SET status = ?, completed_at = ?, public_error_code = ?
+			WHERE id = ?
+				AND claim_token = ?
+				AND status = 'running'`,
+			string(completedAttempt.Status),
+			completedAttempt.CompletedAt.Time,
+			completedAttempt.PublicErrorCode,
+			completedAttempt.ID.String(),
+			string(completedAttempt.ClaimToken),
+		); err != nil {
 			return nil, err
 		}
+
 		if err = updateJob(ctx, tx, updated); err != nil {
 			return nil, err
 		}
+
 		return updated, nil
 	})
 }
@@ -448,7 +692,12 @@ func (s SQLJobStore) ListAttempts(ctx context.Context, jobID model.JobID) ([]mod
 		return nil, store.NewErrInvalidInput("job", "id", nil)
 	}
 	var rows []jobAttemptRow
-	if err := s.GetMaster().Select(ctx, &rows, `SELECT `+jobAttemptColumns+` FROM job_attempts WHERE job_id = ? ORDER BY number`, jobID.String()); err != nil {
+	if err := s.GetMaster().Select(
+		ctx,
+		&rows,
+		`SELECT `+jobAttemptColumns+` FROM job_attempts WHERE job_id = ? ORDER BY number`,
+		jobID.String(),
+	); err != nil {
 		return nil, err
 	}
 	result := make([]model.JobAttempt, 0, len(rows))
@@ -501,7 +750,10 @@ func (s SQLJobStore) Count(ctx context.Context, options store.JobListOptions, ma
 }
 
 func validJobListOptions(options store.JobListOptions) bool {
-	return options.Limit >= 1 && options.Limit <= 201 && len(options.Types) > 0 && options.UpdatedWithin >= 0 &&
+	return options.Limit >= 1 &&
+		options.Limit <= 201 &&
+		len(options.Types) > 0 &&
+		options.UpdatedWithin >= 0 &&
 		(options.BeforeID.IsZero() || (options.BeforeID.IsValid() && !options.BeforeCreatedAt.IsZero()))
 }
 
@@ -561,7 +813,10 @@ func (s SQLJobStore) CancellationRequested(ctx context.Context, attemptID model.
 	if !attemptID.IsValid() || !token.IsValid() {
 		return false, store.NewErrInvalidInput("job_attempt", "observe_cancellation", nil)
 	}
-	return executeSQLTransaction(ctx, s.GetMaster().Begin, rawSQLTransactionPolicy[bool](false, nil), func(ctx context.Context, tx *sqlxTxWrapper) (bool, error) {
+	return executeSQLTransaction(ctx, s.GetMaster().Begin, rawSQLTransactionPolicy[bool](
+		false,
+		nil,
+	), func(ctx context.Context, tx *sqlxTxWrapper) (bool, error) {
 		now, err := jobDatabaseNow(ctx, tx)
 		if err != nil {
 			return false, err
@@ -582,7 +837,12 @@ func (s SQLJobStore) CancellationRequested(ctx context.Context, attemptID model.
 // operator audit event. The Job must still be at ExpectedRevision, and a Job
 // whose status cannot be canceled is a conflict.
 func (s SQLJobStore) Cancel(ctx context.Context, input *store.JobMutation) (*model.Job, error) {
-	return s.mutateOperatorJob(ctx, input, "cancel", func(job *model.Job, at time.Time) (*model.Job, error) { return job.RequestCancellation(at) })
+	return s.mutateOperatorJob(ctx, input, "cancel", func(
+		job *model.Job,
+		at time.Time,
+	) (*model.Job, error) {
+		return job.RequestCancellation(at)
+	})
 }
 
 // Retry explicitly retries the Job for an operator and completes the operator
@@ -591,15 +851,26 @@ func (s SQLJobStore) Retry(ctx context.Context, input *store.JobMutation) (*mode
 	return s.mutateOperatorJob(ctx, input, "retry", func(job *model.Job, at time.Time) (*model.Job, error) { return job.ExplicitRetry(at) })
 }
 
-func (s SQLJobStore) mutateOperatorJob(ctx context.Context, input *store.JobMutation, operation string, mutate func(*model.Job, time.Time) (*model.Job, error)) (*model.Job, error) {
+func (s SQLJobStore) mutateOperatorJob(
+	ctx context.Context,
+	input *store.JobMutation,
+	operation string,
+	mutate func(*model.Job, time.Time) (*model.Job, error),
+) (*model.Job, error) {
 	if input == nil || !input.ID.IsValid() || input.ExpectedRevision <= 0 || !input.AuditEventID.IsValid() || input.AuditAt.IsZero() {
 		return nil, store.NewErrInvalidInput("job", operation, nil)
 	}
-	return executeSQLTransaction(ctx, s.GetMaster().Begin, rawSQLTransactionPolicy[*model.Job](true, func(_ *model.Job, err error) error { return err }), func(ctx context.Context, tx *sqlxTxWrapper) (*model.Job, error) {
+	return executeSQLTransaction(ctx, s.GetMaster().Begin, rawSQLTransactionPolicy[*model.Job](true, func(
+		_ *model.Job,
+		err error,
+	) error {
+		return err
+	}), func(ctx context.Context, tx *sqlxTxWrapper) (*model.Job, error) {
 		databaseNow, err := jobDatabaseNow(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
+
 		job, err := getJob(ctx, tx, input.ID, true)
 		if err != nil {
 			return nil, err
@@ -607,6 +878,7 @@ func (s SQLJobStore) mutateOperatorJob(ctx context.Context, input *store.JobMuta
 		if job.Revision != input.ExpectedRevision {
 			return nil, store.NewErrConflict("job", "job_changed", nil)
 		}
+
 		updated, err := mutate(job, latestTime(job.UpdatedAt, databaseNow))
 		if err != nil {
 			return nil, store.NewErrConflict("job", operation+"_unsupported", err)
@@ -614,13 +886,19 @@ func (s SQLJobStore) mutateOperatorJob(ctx context.Context, input *store.JobMuta
 		if err = updateJob(ctx, tx, updated); err != nil {
 			return nil, err
 		}
-		result, err := model.EncodeAuditData(map[string]any{"job_id": updated.ID.String(), "type": string(updated.Type), "status": string(updated.Status)})
+
+		result, err := model.EncodeAuditData(map[string]any{
+			"job_id": updated.ID.String(),
+			"type":   string(updated.Type),
+			"status": string(updated.Status),
+		})
 		if err != nil {
 			return nil, err
 		}
 		if _, err = completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", result, input.AuditAt); err != nil {
 			return nil, err
 		}
+
 		return updated, nil
 	})
 }
@@ -631,28 +909,51 @@ const unreferencedJob = `
 			AND NOT EXISTS (SELECT 1 FROM mail_deliveries WHERE job_id = jobs.id)`
 
 func (s SQLJobStore) DeleteTerminalHistory(ctx context.Context, input *store.JobHistoryCleanup) (*store.JobHistoryCleanupResult, error) {
-	if input == nil || !input.ExcludeJobID.IsValid() || input.Limit < 1 || input.Limit > 200 || len(input.Policies) == 0 || (input.AfterCompletedAt.IsZero() != input.AfterJobID.IsZero()) || (!input.AfterJobID.IsZero() && !input.AfterJobID.IsValid()) {
+	if input == nil ||
+		!input.ExcludeJobID.IsValid() ||
+		input.Limit < 1 ||
+		input.Limit > 200 ||
+		len(input.Policies) == 0 ||
+		(input.AfterCompletedAt.IsZero() != input.AfterJobID.IsZero()) ||
+		(!input.AfterJobID.IsZero() && !input.AfterJobID.IsValid()) {
 		return nil, store.NewErrInvalidInput("job", "history_cleanup", nil)
 	}
-	outcome, err := executeSQLTransaction(ctx, s.GetMaster().Begin, jobHistorySQLTransactionPolicy(), func(ctx context.Context, tx *sqlxTxWrapper) (*jobHistoryCleanupOutcome, error) {
+
+	outcome, err := executeSQLTransaction(ctx, s.GetMaster().Begin, jobHistorySQLTransactionPolicy(), func(
+		ctx context.Context,
+		tx *sqlxTxWrapper,
+	) (*jobHistoryCleanupOutcome, error) {
 		databaseNow, err := jobDatabaseNow(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
+
 		conditions := make([]string, 0, len(input.Policies))
 		arguments := []any{input.ExcludeJobID.String()}
 		if !input.AfterCompletedAt.IsZero() {
 			arguments = append(arguments, model.TimeUTC(input.AfterCompletedAt), model.TimeUTC(input.AfterCompletedAt), input.AfterJobID.String())
 		}
+
 		seenTypes := make(map[model.JobType]struct{}, len(input.Policies))
 		for _, policy := range input.Policies {
 			if _, exists := seenTypes[policy.Type]; exists || policy.SucceededCanceledAge <= 0 || policy.FailedAge < policy.SucceededCanceledAge {
 				return nil, store.NewErrInvalidInput("job", "retention_policy", nil)
 			}
+
 			seenTypes[policy.Type] = struct{}{}
-			conditions = append(conditions, `(type = ? AND ((status IN ('succeeded', 'canceled') AND completed_at <= ?) OR (status = 'failed' AND completed_at <= ?)))`)
+			conditions = append(
+				conditions,
+				`(
+					type = ?
+					AND (
+						(status IN ('succeeded', 'canceled') AND completed_at <= ?)
+						OR (status = 'failed' AND completed_at <= ?)
+					)
+				)`,
+			)
 			arguments = append(arguments, string(policy.Type), databaseNow.Add(-policy.SucceededCanceledAge), databaseNow.Add(-policy.FailedAge))
 		}
+
 		// A Job that an onboarding import or a mail delivery still references
 		// stays until that row is removed; its NO ACTION foreign key would
 		// otherwise fail every page that reaches it.
@@ -662,6 +963,7 @@ func (s SQLJobStore) DeleteTerminalHistory(ctx context.Context, input *store.Job
 		if !input.AfterCompletedAt.IsZero() {
 			query += ` AND (completed_at > ? OR (completed_at = ? AND id > ?))`
 		}
+
 		query += ` AND (` + strings.Join(conditions, ` OR `) + `) ORDER BY completed_at, id FOR UPDATE SKIP LOCKED LIMIT ?`
 		arguments = append(arguments, input.Limit)
 		var rows []struct {
@@ -671,32 +973,44 @@ func (s SQLJobStore) DeleteTerminalHistory(ctx context.Context, input *store.Job
 		if err = tx.Select(ctx, &rows, query, arguments...); err != nil {
 			return nil, fmt.Errorf("select job history cleanup page: %w", err)
 		}
+
 		result := &store.JobHistoryCleanupResult{Done: len(rows) < input.Limit}
 		if len(rows) == 0 {
 			return &jobHistoryCleanupOutcome{result: result, empty: true}, nil
 		}
+
 		ids := make([]string, len(rows))
 		for index, row := range rows {
 			ids[index] = row.ID
 		}
+
 		if _, err = tx.Exec(ctx, `DELETE FROM job_attempts WHERE job_id = ANY(?)`, pq.Array(ids)); err != nil {
 			return nil, fmt.Errorf("delete retained job attempts: %w", err)
 		}
-		deleted, err := tx.Exec(ctx, `DELETE FROM jobs WHERE id = ANY(?) AND id <> ? AND status IN ('succeeded', 'failed', 'canceled')
+
+		deleted, err := tx.Exec(
+			ctx,
+			`DELETE FROM jobs WHERE id = ANY(?) AND id <> ? AND status IN ('succeeded', 'failed', 'canceled')
 			AND id <> COALESCE((SELECT active_rekey_job_id FROM mail_key_state WHERE singleton = TRUE), '')
-			AND id <> COALESCE((SELECT active_rekey_job_id FROM mfa_key_state WHERE singleton = TRUE), '')`+unreferencedJob, pq.Array(ids), input.ExcludeJobID.String())
+			AND id <> COALESCE((SELECT active_rekey_job_id FROM mfa_key_state WHERE singleton = TRUE), '')`+unreferencedJob,
+			pq.Array(ids),
+			input.ExcludeJobID.String(),
+		)
 		if err != nil {
 			return nil, fmt.Errorf("delete retained jobs: %w", err)
 		}
+
 		result.Deleted, err = deleted.RowsAffected()
 		if err != nil {
 			return nil, fmt.Errorf("read deleted job count: %w", err)
 		}
+
 		last := rows[len(rows)-1]
 		lastID, err := parsePersistedID("job", "id", last.ID, parseJobID)
 		if err != nil {
 			return nil, err
 		}
+
 		result.LastCompletedAt = last.CompletedAt.UTC()
 		result.LastJobID = lastID
 		return &jobHistoryCleanupOutcome{result: result}, nil
@@ -704,10 +1018,17 @@ func (s SQLJobStore) DeleteTerminalHistory(ctx context.Context, input *store.Job
 	if err != nil {
 		return nil, err
 	}
+
 	return outcome.result, nil
 }
 
-func getFencedAttempt(ctx context.Context, tx *sqlxTxWrapper, id model.JobAttemptID, token model.JobClaimToken, at time.Time) (*model.JobAttempt, error) {
+func getFencedAttempt(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	id model.JobAttemptID,
+	token model.JobClaimToken,
+	at time.Time,
+) (*model.JobAttempt, error) {
 	var row jobAttemptRow
 	if err := tx.Get(ctx, &row, `SELECT `+jobAttemptColumns+` FROM job_attempts WHERE id = ? FOR UPDATE`, id.String()); err != nil {
 		return nil, translateError("job_attempt", id.String(), err)
@@ -750,18 +1071,48 @@ func updateJob(ctx context.Context, tx *sqlxTxWrapper, job *model.Job) error {
 	if job.StartedAt.Valid {
 		startedAt = job.StartedAt.Time
 	}
+
 	var completedAt any
 	if job.CompletedAt.Valid {
 		completedAt = job.CompletedAt.Time
 	}
+
 	var progressCurrent, progressTotal, progressStage any
 	if job.Progress != nil {
 		progressCurrent, progressTotal, progressStage = job.Progress.Current, job.Progress.Total, job.Progress.Stage
 	}
-	result, err := tx.Exec(ctx, `UPDATE jobs SET status = ?, updated_at = ?, available_at = ?, started_at = ?, completed_at = ?, checkpoint = ?, result = ?, public_error_code = ?, attempt_count = ?, maximum_attempts = ?, work_reserved = ?, progress_current = ?, progress_total = ?, progress_stage = ?, revision = ? WHERE id = ? AND revision = ?`, string(job.Status), job.UpdatedAt, job.AvailableAt, startedAt, completedAt, nullableJSON(job.Checkpoint), nullableJSON(job.Result), job.PublicErrorCode, job.AttemptCount, job.MaximumAttempts, job.WorkReserved, progressCurrent, progressTotal, progressStage, job.Revision, job.ID.String(), job.Revision-1)
+
+	result, err := tx.Exec(
+		ctx,
+		`UPDATE jobs
+		SET status = ?, updated_at = ?, available_at = ?, started_at = ?, completed_at = ?,
+			checkpoint = ?, result = ?, public_error_code = ?, attempt_count = ?,
+			maximum_attempts = ?, work_reserved = ?, progress_current = ?, progress_total = ?,
+			progress_stage = ?, revision = ?
+		WHERE id = ?
+			AND revision = ?`,
+		string(job.Status),
+		job.UpdatedAt,
+		job.AvailableAt,
+		startedAt,
+		completedAt,
+		nullableJSON(job.Checkpoint),
+		nullableJSON(job.Result),
+		job.PublicErrorCode,
+		job.AttemptCount,
+		job.MaximumAttempts,
+		job.WorkReserved,
+		progressCurrent,
+		progressTotal,
+		progressStage,
+		job.Revision,
+		job.ID.String(),
+		job.Revision-1,
+	)
 	if err != nil {
 		return fmt.Errorf("update job: %w", translateError("job", job.ID.String(), err))
 	}
+
 	affected, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("read job affected rows: %w", err)
@@ -769,6 +1120,7 @@ func updateJob(ctx context.Context, tx *sqlxTxWrapper, job *model.Job) error {
 	if affected == 0 {
 		return store.NewErrConflict("job", "job_changed", nil)
 	}
+
 	return nil
 }
 
@@ -777,7 +1129,26 @@ func (r jobRow) model() (*model.Job, error) {
 	if err != nil {
 		return nil, err
 	}
-	job := &model.Job{ID: id, Type: model.JobType(r.Type), Status: model.JobStatus(r.Status), CreatedAt: r.CreatedAt.UTC(), UpdatedAt: r.UpdatedAt.UTC(), AvailableAt: r.AvailableAt.UTC(), StartedAt: OptionalTimeFromNullTime(r.StartedAt), CompletedAt: OptionalTimeFromNullTime(r.CompletedAt), Command: append(json.RawMessage(nil), r.Command...), Checkpoint: append(json.RawMessage(nil), r.Checkpoint...), PublicErrorCode: r.PublicErrorCode, DedupeKey: r.DedupeKey, DedupePolicy: model.JobDedupePolicy(r.DedupePolicy), AttemptCount: r.AttemptCount, MaximumAttempts: r.MaximumAttempts, WorkReserved: r.WorkReserved, Revision: r.Revision}
+
+	job := &model.Job{
+		ID:              id,
+		Type:            model.JobType(r.Type),
+		Status:          model.JobStatus(r.Status),
+		CreatedAt:       r.CreatedAt.UTC(),
+		UpdatedAt:       r.UpdatedAt.UTC(),
+		AvailableAt:     r.AvailableAt.UTC(),
+		StartedAt:       OptionalTimeFromNullTime(r.StartedAt),
+		CompletedAt:     OptionalTimeFromNullTime(r.CompletedAt),
+		Command:         append(json.RawMessage(nil), r.Command...),
+		Checkpoint:      append(json.RawMessage(nil), r.Checkpoint...),
+		PublicErrorCode: r.PublicErrorCode,
+		DedupeKey:       r.DedupeKey,
+		DedupePolicy:    model.JobDedupePolicy(r.DedupePolicy),
+		AttemptCount:    r.AttemptCount,
+		MaximumAttempts: r.MaximumAttempts,
+		WorkReserved:    r.WorkReserved,
+		Revision:        r.Revision,
+	}
 	if len(r.Result) > 0 {
 		job.Result = append(json.RawMessage(nil), r.Result...)
 	}
@@ -790,6 +1161,7 @@ func (r jobRow) model() (*model.Job, error) {
 	if err := validatePersistedModel("job", job); err != nil {
 		return nil, err
 	}
+
 	return job, nil
 }
 
@@ -802,7 +1174,19 @@ func (r jobAttemptRow) model() (*model.JobAttempt, error) {
 	if err != nil {
 		return nil, err
 	}
-	attempt := &model.JobAttempt{ID: id, JobID: jobID, Number: r.Number, Status: model.JobAttemptStatus(r.Status), NodeID: r.NodeID, ClaimToken: model.JobClaimToken(r.ClaimToken), StartedAt: r.StartedAt.UTC(), HeartbeatAt: r.HeartbeatAt.UTC(), LeaseExpiresAt: r.LeaseExpiresAt.UTC(), CompletedAt: OptionalTimeFromNullTime(r.CompletedAt), PublicErrorCode: r.PublicErrorCode}
+	attempt := &model.JobAttempt{
+		ID:              id,
+		JobID:           jobID,
+		Number:          r.Number,
+		Status:          model.JobAttemptStatus(r.Status),
+		NodeID:          r.NodeID,
+		ClaimToken:      model.JobClaimToken(r.ClaimToken),
+		StartedAt:       r.StartedAt.UTC(),
+		HeartbeatAt:     r.HeartbeatAt.UTC(),
+		LeaseExpiresAt:  r.LeaseExpiresAt.UTC(),
+		CompletedAt:     OptionalTimeFromNullTime(r.CompletedAt),
+		PublicErrorCode: r.PublicErrorCode,
+	}
 	if err := validatePersistedModel("job_attempt", attempt); err != nil {
 		return nil, err
 	}

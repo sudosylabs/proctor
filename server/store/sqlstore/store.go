@@ -69,8 +69,10 @@ func (s Settings) validate() error {
 	if s.MaxIdleConnections < 0 || s.MaxIdleConnections > s.MaxOpenConnections {
 		return errors.New("database max idle connections must be between zero and max open connections")
 	}
-	if s.ConnectionMaxLifetime <= 0 || s.ConnectionMaxIdleTime <= 0 ||
-		s.QueryTimeout <= 0 || s.MigrationTimeout <= 0 {
+	if s.ConnectionMaxLifetime <= 0 ||
+		s.ConnectionMaxIdleTime <= 0 ||
+		s.QueryTimeout <= 0 ||
+		s.MigrationTimeout <= 0 {
 		return errors.New("database timeouts and connection lifetimes must be greater than zero")
 	}
 	return nil

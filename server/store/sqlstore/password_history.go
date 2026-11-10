@@ -67,10 +67,28 @@ func passwordChangeInstant(at, previousChange time.Time) time.Time {
 // User's history and prunes the history to limit entries, newest first, with
 // the same tie order as refusePasswordReuse. Limit zero discards the history
 // entirely.
-func retainSupersededPassword(ctx context.Context, tx *sqlxTxWrapper, userID model.UserID, supersededHash string, changedAt, at time.Time, limit int) error {
+func retainSupersededPassword(
+	ctx context.Context,
+	tx *sqlxTxWrapper,
+	userID model.UserID,
+	supersededHash string,
+	changedAt, at time.Time,
+	limit int,
+) error {
 	if limit > 0 {
-		if _, err := tx.Exec(ctx, `INSERT INTO password_history_entries (id, created_at, user_id, password_hash, password_changed_at) VALUES (?, GREATEST(?::timestamptz, ?::timestamptz), ?, ?, ?)`,
-			model.NewID(), model.TimeUTC(at), model.TimeUTC(changedAt), userID.String(), supersededHash, model.TimeUTC(changedAt)); err != nil {
+		if _, err := tx.Exec(
+			ctx,
+			`INSERT INTO password_history_entries (
+				id, created_at, user_id, password_hash, password_changed_at
+			)
+			VALUES (?, GREATEST(?::timestamptz, ?::timestamptz), ?, ?, ?)`,
+			model.NewID(),
+			model.TimeUTC(at),
+			model.TimeUTC(changedAt),
+			userID.String(),
+			supersededHash,
+			model.TimeUTC(changedAt),
+		); err != nil {
 			return fmt.Errorf("retain superseded password: %w", err)
 		}
 	}

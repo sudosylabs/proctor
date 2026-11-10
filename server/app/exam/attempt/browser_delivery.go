@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -42,10 +43,10 @@ type BrowserDeliveryAppendCommand struct {
 func (s *Service) beginBrowserDeliveryAudit(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	access store.BrowserDeliveryAccess,
+	deliveryAccess store.BrowserDeliveryAccess,
 	operation string,
 ) (model.AuditEventID, error) {
-	target, err := s.deps.Persistence.ResolveBrowserDeliveryTarget(ctx, access)
+	target, err := s.deps.Persistence.ResolveBrowserDeliveryTarget(ctx, deliveryAccess)
 	if err != nil {
 		return "", deliveryStoreError(err)
 	}
@@ -53,17 +54,15 @@ func (s *Service) beginBrowserDeliveryAudit(
 		return "", apperror.New("exam.attempt.unavailable").Wrap(model.ErrDeliveryInvalid)
 	}
 
-	return s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		model.ActionExamSittingParticipate,
-		model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
-		model.RoleScopeClass,
-		target.ClassID.String(),
-		operation,
-		map[string]any{"source_session_id": string(access.SourceSessionID)},
-		nil,
-	)
+	return s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     model.ActionExamSittingParticipate,
+		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
+		ScopeType:  model.RoleScopeClass,
+		ScopeID:    target.ClassID.String(),
+		Operation:  operation,
+		Value:      map[string]any{"source_session_id": string(deliveryAccess.SourceSessionID)},
+	})
 }
 
 // DeclareBrowserDeliveryGaps idempotently records Browser Activity the client

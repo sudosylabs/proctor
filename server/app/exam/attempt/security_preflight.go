@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -74,17 +75,15 @@ func (s *Service) beginPreflightAudit(
 		return "", apperror.New("exam.attempt.unavailable").Wrap(errors.New("preflight Sitting ownership is invalid"))
 	}
 
-	return s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		model.ActionExamSittingParticipate,
-		model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
-		model.RoleScopeClass,
-		snapshot.Sitting.ClassID.String(),
-		operation,
-		map[string]any{"exam_sitting_id": sittingID.String()},
-		nil,
-	)
+	return s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     model.ActionExamSittingParticipate,
+		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
+		ScopeType:  model.RoleScopeClass,
+		ScopeID:    snapshot.Sitting.ClassID.String(),
+		Operation:  operation,
+		Value:      map[string]any{"exam_sitting_id": sittingID.String()},
+	})
 }
 
 // PrepareExamSecurityPreflight idempotently starts a security preflight for

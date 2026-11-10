@@ -12,6 +12,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -81,21 +82,19 @@ func (s *Service) GetExamAttempt(
 
 	if snapshot.Attempt.CandidateUserID == invocation.Principal().UserID {
 		resource := model.Resource{Type: model.ResourceExamSitting, ID: snapshot.Attempt.SittingID.String()}
-		auditID, auditErr := s.deps.Auditor.BeginAtScope(
-			ctx,
-			invocation,
-			model.ActionExamSittingView,
-			resource,
-			model.RoleScopeAcademicUnit,
-			sitting.AcademicUnitID.String(),
-			"view_managed_attempt",
-			map[string]any{
+		auditID, auditErr := s.deps.Auditor.Begin(ctx, access.Mutation{
+			Invocation: invocation,
+			Action:     model.ActionExamSittingView,
+			Resource:   resource,
+			ScopeType:  model.RoleScopeAcademicUnit,
+			ScopeID:    sitting.AcademicUnitID.String(),
+			Operation:  "view_managed_attempt",
+			Value: map[string]any{
 				"exam_id":         snapshot.Attempt.ExamID.String(),
 				"exam_sitting_id": snapshot.Attempt.SittingID.String(),
 				"exam_attempt_id": snapshot.Attempt.ID.String(),
 			},
-			nil,
-		)
+		})
 		if auditErr != nil {
 			return store.ExamAttemptManagerSnapshot{}, auditErr
 		}

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -80,22 +81,20 @@ func (s *Service) EndExamAttemptByManager(
 		action = model.ActionExamSittingManageOverride
 	}
 
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		action,
-		model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
-		model.RoleScopeClass,
-		sitting.Sitting.ClassID.String(),
-		store.ExamSubmissionManagerEndOperation,
-		map[string]any{
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     action,
+		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
+		ScopeType:  model.RoleScopeClass,
+		ScopeID:    sitting.Sitting.ClassID.String(),
+		Operation:  store.ExamSubmissionManagerEndOperation,
+		Value: map[string]any{
 			"exam_id":                   command.ExamID.String(),
 			"exam_sitting_id":           command.SittingID.String(),
 			"exam_attempt_id":           command.AttemptID.String(),
 			"expected_attempt_revision": command.ExpectedAttemptRevision,
 		},
-		nil,
-	)
+	})
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, err
 	}

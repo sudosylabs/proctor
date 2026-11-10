@@ -326,15 +326,13 @@ func (s *JobOperations) mutate(
 	}
 
 	view := target.View()
-	auditID, err := s.deps.Audit.Begin(
-		ctx,
-		invocation,
-		model.ActionJobManage,
-		resource,
-		operation,
-		map[string]any{"job_id": view.ID.String(), "type": string(view.Type), "status": string(view.Status)},
-		nil,
-	)
+	auditID, err := s.deps.Audit.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     model.ActionJobManage,
+		Resource:   resource,
+		Operation:  operation,
+		Value:      map[string]any{"job_id": view.ID.String(), "type": string(view.Type), "status": string(view.Status)},
+	})
 	if err != nil {
 		return job.View{}, err
 	}

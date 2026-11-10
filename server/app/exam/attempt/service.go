@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -48,17 +49,7 @@ type ManagerAuthorizer interface {
 }
 
 type Auditor interface {
-	BeginAtScope(
-		context.Context,
-		invocation.Invocation,
-		model.Action,
-		model.Resource,
-		model.RoleScopeType,
-		string,
-		string,
-		map[string]any,
-		map[string]any,
-	) (model.AuditEventID, error)
+	Begin(context.Context, access.Mutation) (model.AuditEventID, error)
 	PrepareAtScope(
 		context.Context,
 		invocation.Invocation,

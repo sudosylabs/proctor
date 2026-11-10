@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -143,17 +144,15 @@ func (s *Service) ConnectExamAttempt(
 	credentialHash := model.HashToken(command.ContinuityCredential)
 	participationID, connectionID := s.deps.NewParticipation(), s.deps.NewConnection()
 
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		model.ActionExamSittingParticipate,
-		model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
-		model.RoleScopeClass,
-		sitting.ClassID.String(),
-		"exam_attempt_connect",
-		map[string]any{"exam_sitting_id": command.SittingID.String()},
-		nil,
-	)
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     model.ActionExamSittingParticipate,
+		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
+		ScopeType:  model.RoleScopeClass,
+		ScopeID:    sitting.ClassID.String(),
+		Operation:  "exam_attempt_connect",
+		Value:      map[string]any{"exam_sitting_id": command.SittingID.String()},
+	})
 	if err != nil {
 		return ConnectionResult{}, err
 	}
@@ -263,17 +262,15 @@ func (s *Service) CloseExamAttemptConnection(
 		return ConnectionClosedResult{}, apperror.Invalid("exam.attempt.invalid", "connection")
 	}
 
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		model.ActionExamSittingParticipate,
-		model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
-		model.RoleScopeClass,
-		command.ClassID.String(),
-		"exam_attempt_connection_close",
-		map[string]any{"exam_attempt_id": command.AttemptID.String(), "attempt_connection_id": command.ConnectionID.String()},
-		nil,
-	)
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     model.ActionExamSittingParticipate,
+		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
+		ScopeType:  model.RoleScopeClass,
+		ScopeID:    command.ClassID.String(),
+		Operation:  "exam_attempt_connection_close",
+		Value:      map[string]any{"exam_attempt_id": command.AttemptID.String(), "attempt_connection_id": command.ConnectionID.String()},
+	})
 	if err != nil {
 		return ConnectionClosedResult{}, err
 	}

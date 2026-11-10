@@ -12,6 +12,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/manageraccess"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
@@ -114,11 +115,11 @@ func (p *Publication) PublishExamRevision(
 		return store.ExamRevisionSummary{}, apperror.Invalid("exam.invalid", "revision_id")
 	}
 
-	access, err := p.deps.Access.Access(ctx, command.ExamID, principal.UserID)
+	examAccess, err := p.deps.Access.Access(ctx, command.ExamID, principal.UserID)
 	if err != nil {
 		return store.ExamRevisionSummary{}, examStoreErrors.Translate(err)
 	}
-	if access == nil || access.Exam == nil {
+	if examAccess == nil || examAccess.Exam == nil {
 		return store.ExamRevisionSummary{}, apperror.New("exam.unavailable").Wrap(errors.New("Exam access projection is incomplete"))
 	}
 
@@ -126,7 +127,7 @@ func (p *Publication) PublishExamRevision(
 		ctx,
 		p.deps.Memberships,
 		principal.UserID,
-		access,
+		examAccess,
 		at,
 		model.ActionExamPublish,
 		model.ActionExamPublishOverride,
@@ -140,20 +141,18 @@ func (p *Publication) PublishExamRevision(
 		return store.ExamRevisionSummary{}, err
 	}
 
-	auditID, err := p.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		action,
-		resource,
-		model.RoleScopeAcademicUnit,
-		access.Exam.AcademicUnitID.String(),
-		"publish",
-		map[string]any{
+	auditID, err := p.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     action,
+		Resource:   resource,
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    examAccess.Exam.AcademicUnitID.String(),
+		Operation:  "publish",
+		Value: map[string]any{
 			"exam_id":                 command.ExamID.String(),
 			"expected_draft_revision": command.ExpectedDraftRevision,
 		},
-		nil,
-	)
+	})
 	if err != nil {
 		return store.ExamRevisionSummary{}, err
 	}

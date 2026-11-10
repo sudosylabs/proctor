@@ -12,6 +12,7 @@ import (
 	"errors"
 	"io"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -320,7 +321,7 @@ func (s *Service) SubmitExamAttempt(
 		return store.ExamSubmissionReceipt{}, err
 	}
 
-	access := store.ExamSubmissionSealAccess{
+	sealAccess := store.ExamSubmissionSealAccess{
 		AttemptID:                 workspaceAccess.AttemptID,
 		ParticipationID:           workspaceAccess.ParticipationID,
 		Generation:                workspaceAccess.Generation,
@@ -332,11 +333,11 @@ func (s *Service) SubmitExamAttempt(
 		ExpectedWorkspaceCursor:   command.ExpectedWorkspaceCursor,
 		FinalFocusLossSequence:    command.FinalFocusLossSequence,
 	}
-	target, err := s.deps.Submissions.ResolveSealTarget(ctx, access)
+	target, err := s.deps.Submissions.ResolveSealTarget(ctx, sealAccess)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, storeError(storeErrors, err)
 	}
-	if !validSubmissionTarget(target, access) {
+	if !validSubmissionTarget(target, sealAccess) {
 		return store.ExamSubmissionReceipt{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Submission seal target"))
 	}
 
@@ -348,17 +349,15 @@ func (s *Service) SubmitExamAttempt(
 		return store.ExamSubmissionReceipt{}, apperror.Invalid("exam.attempt.invalid", "receipt_code")
 	}
 
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		model.ActionExamSittingParticipate,
-		model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
-		model.RoleScopeClass,
-		target.ClassID.String(),
-		store.ExamSubmissionSealOperation,
-		map[string]any{"exam_attempt_id": access.AttemptID.String()},
-		nil,
-	)
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     model.ActionExamSittingParticipate,
+		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
+		ScopeType:  model.RoleScopeClass,
+		ScopeID:    target.ClassID.String(),
+		Operation:  store.ExamSubmissionSealOperation,
+		Value:      map[string]any{"exam_attempt_id": sealAccess.AttemptID.String()},
+	})
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, err
 	}
@@ -389,7 +388,7 @@ func (s *Service) SubmitExamAttempt(
 	stored, err := s.deps.Submissions.Seal(ctx, &store.ExamSubmissionSeal{
 		SubmissionID:              submissionID,
 		ReceiptCode:               receiptCode,
-		Access:                    access,
+		Access:                    sealAccess,
 		AuditEventID:              auditID,
 		AuditAt:                   at,
 		Notice:                    notice,
@@ -399,7 +398,7 @@ func (s *Service) SubmitExamAttempt(
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, err)
 	}
 
-	result, err := projectSubmissionResult(stored, target, access, submissionID, receiptCode)
+	result, err := projectSubmissionResult(stored, target, sealAccess, submissionID, receiptCode)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, err
 	}

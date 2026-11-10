@@ -360,6 +360,7 @@ var dependencyRules = []dependencyRule{
 		},
 		deniedStandard: standardInfrastructure,
 		project: only(
+			exact(serverModule+"/app/access"),
 			exact(serverModule+"/app/apperror"),
 			exact(serverModule+"/app/idempotency"),
 			exact(serverModule+"/app/invocation"),
@@ -377,6 +378,7 @@ var dependencyRules = []dependencyRule{
 		},
 		deniedStandard: standardInfrastructure,
 		project: only(
+			exact(serverModule+"/app/access"),
 			exact(serverModule+"/app/apperror"),
 			exact(serverModule+"/app/idempotency"),
 			exact(serverModule+"/app/invocation"),

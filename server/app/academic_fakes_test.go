@@ -11,7 +11,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -32,11 +33,17 @@ type academicUnitMutationAudit struct {
 	prior     map[string]any
 }
 
-func (a *academicUnitCommandAuditor) Begin(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource, operation string, value, prior map[string]any) (model.AuditEventID, error) {
+func (a *academicUnitCommandAuditor) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
+	// This fake keeps neither a scope nor a subject, so it refuses a Mutation
+	// that names one instead of dropping it.
+	if attempt.ScopeType != "" || attempt.ScopeID != "" || !attempt.Subject.IsZero() {
+		return "", apperror.New("audit.internal")
+	}
+
 	*a.events = append(*a.events, "audit-begin")
 	a.beginData = academicUnitMutationAudit{
-		action: action, resource: resource, operation: operation,
-		value: value, prior: prior,
+		action: attempt.Action, resource: attempt.Resource, operation: attempt.Operation,
+		value: attempt.Value, prior: attempt.Prior,
 	}
 	return model.AuditEventID(a.beginID), a.beginErr
 }

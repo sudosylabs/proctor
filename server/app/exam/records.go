@@ -12,6 +12,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/manageraccess"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
@@ -254,17 +255,15 @@ func (r *Records) begin(
 		data["submission_id"] = scope.Scope.SubmissionID.String()
 	}
 
-	id, err := r.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		action,
-		scope.Scope.Resource(),
-		model.RoleScopeAcademicUnit,
-		scope.AcademicUnitID.String(),
-		operation,
-		data,
-		nil,
-	)
+	id, err := r.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     action,
+		Resource:   scope.Scope.Resource(),
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    scope.AcademicUnitID.String(),
+		Operation:  operation,
+		Value:      data,
+	})
 	if err != nil {
 		return store.ExamRecordsMutation{}, err
 	}

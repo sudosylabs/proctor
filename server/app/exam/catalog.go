@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -140,15 +141,15 @@ func (a *Authoring) ArchiveExam(
 	}
 
 	at := model.TimeUTC(a.deps.Now())
-	access, err := a.deps.Persistence.Access(ctx, command.ExamID, principal.UserID)
+	examAccess, err := a.deps.Persistence.Access(ctx, command.ExamID, principal.UserID)
 	if err != nil {
 		return model.Exam{}, examStoreErrors.Translate(err)
 	}
-	if access == nil || access.Exam == nil {
+	if examAccess == nil || examAccess.Exam == nil {
 		return model.Exam{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no access projection"))
 	}
 
-	action, err := a.actionForAccess(ctx, principal.UserID, access, at, model.ActionExamManage, model.ActionExamManageOverride)
+	action, err := a.actionForAccess(ctx, principal.UserID, examAccess, at, model.ActionExamManage, model.ActionExamManageOverride)
 	if err != nil {
 		return model.Exam{}, err
 	}
@@ -158,21 +159,19 @@ func (a *Authoring) ArchiveExam(
 		return model.Exam{}, err
 	}
 
-	auditID, err := a.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		action,
-		resource,
-		model.RoleScopeAcademicUnit,
-		access.Exam.AcademicUnitID.String(),
-		"archive",
-		map[string]any{
+	auditID, err := a.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     action,
+		Resource:   resource,
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    examAccess.Exam.AcademicUnitID.String(),
+		Operation:  "archive",
+		Value: map[string]any{
 			"exam_id":                command.ExamID.String(),
 			"expected_exam_revision": command.ExpectedExamRevision,
 			"exam_revision":          command.ExpectedExamRevision + 1,
 		},
-		nil,
-	)
+	})
 	if err != nil {
 		return model.Exam{}, err
 	}

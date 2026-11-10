@@ -18,6 +18,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -1538,10 +1539,10 @@ func (f *systemAuditFake) Fail(_ context.Context, _ model.AuditEventID, code str
 	return nil
 }
 
-func (f *auditFake) BeginAtScope(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID, operation string, values, _ map[string]any) (model.AuditEventID, error) {
+func (f *auditFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
 	f.f.order = append(f.f.order, "audit")
-	f.values = values
-	f.action, f.resource, f.scopeType, f.scopeID, f.operation = action, resource, scopeType, scopeID, operation
+	f.values = attempt.Value
+	f.action, f.resource, f.scopeType, f.scopeID, f.operation = attempt.Action, attempt.Resource, attempt.ScopeType, attempt.ScopeID, attempt.Operation
 	return model.NewAuditEventID(), nil
 }
 func (f *auditFake) PrepareAtScope(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource,

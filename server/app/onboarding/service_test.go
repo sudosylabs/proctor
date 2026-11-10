@@ -291,47 +291,18 @@ type mutationAttemptAuditorFake struct {
 	attempts []access.Mutation
 }
 
-func (a *mutationAttemptAuditorFake) BeginAtScope(_ context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID, operation string, value, prior map[string]any) (model.AuditEventID, error) {
-	*a.events = append(*a.events, "begin-at-scope")
-	a.attempt = access.Mutation{
-		Invocation: invocation,
-		Action:     action,
-		Resource:   resource,
-		ScopeType:  scopeType,
-		ScopeID:    scopeID,
-		Operation:  operation,
-		Value:      value,
-		Prior:      prior,
-	}
-	a.attempts = append(a.attempts, a.attempt)
-	return model.AuditEventID(a.nextBeginID()), a.beginErr
-}
-
-func (a *mutationAttemptAuditorFake) Begin(_ context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource, operation string, value, prior map[string]any) (model.AuditEventID, error) {
-	*a.events = append(*a.events, "begin")
-	a.attempt = access.Mutation{
-		Invocation: invocation,
-		Action:     action,
-		Resource:   resource,
-		Operation:  operation,
-		Value:      value,
-		Prior:      prior,
-	}
-	a.attempts = append(a.attempts, a.attempt)
-	return model.AuditEventID(a.nextBeginID()), a.beginErr
-}
-
-func (a *mutationAttemptAuditorFake) BeginForSubject(ctx context.Context, attempt access.Mutation) (model.AuditEventID, error) {
-	var id model.AuditEventID
-	var err error
+// Begin records the whole Mutation; the event names whether it carried an
+// explicit scope, as the two positional entry points once did.
+func (a *mutationAttemptAuditorFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
 	if attempt.ScopeType != "" {
-		id, err = a.BeginAtScope(ctx, attempt.Invocation, attempt.Action, attempt.Resource, attempt.ScopeType, attempt.ScopeID, attempt.Operation, attempt.Value, attempt.Prior)
+		*a.events = append(*a.events, "begin-at-scope")
 	} else {
-		id, err = a.Begin(ctx, attempt.Invocation, attempt.Action, attempt.Resource, attempt.Operation, attempt.Value, attempt.Prior)
+		*a.events = append(*a.events, "begin")
 	}
-	a.attempt.Subject = attempt.Subject
-	a.attempts[len(a.attempts)-1].Subject = attempt.Subject
-	return id, err
+
+	a.attempt = attempt
+	a.attempts = append(a.attempts, attempt)
+	return model.AuditEventID(a.nextBeginID()), a.beginErr
 }
 
 func (a *mutationAttemptAuditorFake) nextBeginID() string {

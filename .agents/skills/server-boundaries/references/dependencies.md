@@ -7,7 +7,7 @@ identityprovider ← {model, config}
 internal/canonicaljson ← model ← store ← app/job
 {model, store} ← app/apperror ← {app, app/idempotency, app/exam, httpapi, websocket}
 model ← app/invocation ← {app, app/idempotency, app/exam}
-{model, store, app/apperror, app/invocation} ← app/access ← {app, app/academic, app/user, app/identity, app/administration, app/onboarding}
+{model, store, app/apperror, app/invocation} ← app/access ← {app, app/academic, app/user, app/identity, app/administration, app/onboarding, app/exam}
 {store, app/apperror} ← app/paging ← {app, app/academic, app/user, app/identity, app/administration, app/onboarding, httpapi}
 {model, store} ← app/internal/batchitem ← {app, app/academic, app/identity, app/administration, app/onboarding}
 {model, store, app/access, app/paging, app/apperror, app/invocation, app/idempotency, app/mail, app/internal/batchitem} ← app/academic ← {app, httpapi}
@@ -67,7 +67,7 @@ inside `app/` are application-owned modules, not transports.
 | `app/academic` | `model`, `store`, `app/access`, `app/paging`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/mail`, `app/realtime`, `app/internal/batchitem`, standard library | parent `app`, `app/exam`, `app/job`, transports, platform, concrete adapters |
 | `app/jobhandler` | `model`, bounded `store` contracts, `app/invocation`, `app/job`, leaf `app/mail` capabilities, the `app/user`, `app/exam`, `app/exam/attempt` and `app/exam/sitting` services its handlers hold, `secretseal`, standard library | parent `app`, `store.Catalog`, transports, platform, concrete adapters |
 | `app/realtime` | `model`, `logging`, standard library, consumer-owned ports | parent `app`, HTTP, WebSocket libraries, cluster adapters |
-| `app/exam` | `model`, bounded `store` contracts, standard library, consumer-owned ports, `app/apperror`, `app/invocation`, `app/idempotency`, and explicitly shared leaf packages such as `app/exam/safemarkdown` | parent `app`, transports, platform, concrete adapters |
+| `app/exam` | `model`, bounded `store` contracts, standard library, consumer-owned ports, `app/apperror`, `app/invocation`, `app/idempotency`, `app/access` for the `access.Mutation` an audit attempt begins with, and explicitly shared leaf packages such as `app/exam/safemarkdown` | parent `app`, transports, platform, concrete adapters |
 | `app/exam/safemarkdown` | Standard library | model, store, parent `app`, transports, concrete adapters |
 | `app/exam/manageraccess` | `model`, bounded Store access projection, narrow membership port, standard library | parent `app` or `app/exam`, sibling use cases, transports, concrete adapters |
 | `app/mail` | `model`, bounded `store` mail records, `secretseal`, `localization`, the Exam Manager preparation contract, standard-library templating, and consumer-owned sending ports | parent `app`, transports, platform, SQL, configuration, concrete adapters |

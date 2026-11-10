@@ -34,27 +34,6 @@ type Mutation struct {
 	Subject model.UserID
 }
 
-type scopedMutationAuditor interface {
-	BeginAtScope(
-		context.Context,
-		invocation.Invocation,
-		model.Action,
-		model.Resource,
-		model.RoleScopeType,
-		string,
-		string,
-		map[string]any,
-		map[string]any,
-	) (model.AuditEventID, error)
-}
-
-// subjectMutationAuditor begins an attempt that names its subject User. An
-// auditor that cannot record the subject refuses such a mutation rather than
-// losing the User's own history.
-type subjectMutationAuditor interface {
-	BeginForSubject(context.Context, Mutation) (model.AuditEventID, error)
-}
-
 // MutationReference is the complete audit input a named Store mutation
 // needs to commit durable state and successful audit completion atomically.
 type MutationReference struct {
@@ -65,7 +44,9 @@ type MutationReference struct {
 // RunAudited owns the common attempt and failure protocol. Successful
 // completion remains inside the named Store mutation; post-commit effects
 // remain with the calling use case. The mapper may preserve contextual wrappers
-// but must return an error chain containing an application Error.
+// but must return an error chain containing an application Error. A Mutation
+// whose explicit scope or subject User is malformed is refused with
+// audit.internal before the auditor is asked to begin.
 func RunAudited[T any](
 	ctx context.Context,
 	auditor MutationAuditor,
@@ -75,47 +56,13 @@ func RunAudited[T any](
 	mapError func(error) error,
 ) (T, error) {
 	var zero T
-	var auditID model.AuditEventID
-	var err error
-	if !attempt.Subject.IsZero() {
-		subjectAuditor, ok := auditor.(subjectMutationAuditor)
-		if !ok ||
-			!attempt.Subject.IsValid() ||
-			(attempt.ScopeType != "" || attempt.ScopeID != "") &&
-				(!attempt.ScopeType.IsValid() || !model.IsValidOpaqueID(attempt.ScopeID)) {
-			return zero, apperror.New("audit.internal")
-		}
-
-		auditID, err = subjectAuditor.BeginForSubject(ctx, attempt)
-	} else if attempt.ScopeType != "" || attempt.ScopeID != "" {
-		scoped, ok := auditor.(scopedMutationAuditor)
-		if !ok || !attempt.ScopeType.IsValid() || !model.IsValidOpaqueID(attempt.ScopeID) {
-			return zero, apperror.New("audit.internal")
-		}
-
-		auditID, err = scoped.BeginAtScope(
-			ctx,
-			attempt.Invocation,
-			attempt.Action,
-			attempt.Resource,
-			attempt.ScopeType,
-			attempt.ScopeID,
-			attempt.Operation,
-			attempt.Value,
-			attempt.Prior,
-		)
-	} else {
-		auditID, err = auditor.Begin(
-			ctx,
-			attempt.Invocation,
-			attempt.Action,
-			attempt.Resource,
-			attempt.Operation,
-			attempt.Value,
-			attempt.Prior,
-		)
+	scoped := attempt.ScopeType != "" || attempt.ScopeID != ""
+	if !attempt.Subject.IsZero() && !attempt.Subject.IsValid() ||
+		scoped && (!attempt.ScopeType.IsValid() || !model.IsValidOpaqueID(attempt.ScopeID)) {
+		return zero, apperror.New("audit.internal")
 	}
 
+	auditID, err := auditor.Begin(ctx, attempt)
 	if err != nil {
 		return zero, err
 	}

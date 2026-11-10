@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/manageraccess"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -92,17 +93,7 @@ type Authorizer interface {
 }
 
 type Auditor interface {
-	BeginAtScope(
-		context.Context,
-		invocation.Invocation,
-		model.Action,
-		model.Resource,
-		model.RoleScopeType,
-		string,
-		string,
-		map[string]any,
-		map[string]any,
-	) (model.AuditEventID, error)
+	Begin(context.Context, access.Mutation) (model.AuditEventID, error)
 	Fail(context.Context, model.AuditEventID, string) error
 }
 
@@ -307,17 +298,15 @@ func (s *Service) ScheduleExamSitting(
 		"exam_revision_id": command.ExamRevisionID.String(),
 		"class_id":         command.ClassID.String(),
 	}
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		authorization.action,
-		model.Resource{Type: model.ResourceExam, ID: command.ExamID.String()},
-		model.RoleScopeAcademicUnit,
-		authorization.unitID.String(),
-		"schedule",
-		auditValue,
-		nil,
-	)
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     authorization.action,
+		Resource:   model.Resource{Type: model.ResourceExam, ID: command.ExamID.String()},
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    authorization.unitID.String(),
+		Operation:  "schedule",
+		Value:      auditValue,
+	})
 	if err != nil {
 		return store.ExamSittingSnapshot{}, err
 	}
@@ -818,17 +807,15 @@ func (s *Service) UpdateExamSittingSchedule(
 		"class_id":                  classID.String(),
 		"expected_sitting_revision": command.ExpectedRevision,
 	}
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		authorization.action,
-		resource,
-		model.RoleScopeAcademicUnit,
-		authorization.unitID.String(),
-		"update_schedule",
-		auditValue,
-		nil,
-	)
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     authorization.action,
+		Resource:   resource,
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    authorization.unitID.String(),
+		Operation:  "update_schedule",
+		Value:      auditValue,
+	})
 	if err != nil {
 		return store.ExamSittingSnapshot{}, err
 	}
@@ -944,17 +931,15 @@ func (s *Service) CancelExamSitting(
 		"expected_sitting_revision": command.ExpectedRevision,
 		"reason_code":               string(model.ExamSittingReasonManagerCanceled),
 	}
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		authorization.action,
-		resource,
-		model.RoleScopeAcademicUnit,
-		authorization.unitID.String(),
-		"cancel",
-		auditValue,
-		nil,
-	)
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     authorization.action,
+		Resource:   resource,
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    authorization.unitID.String(),
+		Operation:  "cancel",
+		Value:      auditValue,
+	})
 	if err != nil {
 		return store.ExamSittingSnapshot{}, err
 	}
@@ -1133,17 +1118,15 @@ func (s *Service) runManagerTransition(
 	}
 
 	auditValue := managerLifecycleAuditValue(command.ExamID, command.SittingID, command.ExpectedRevision, transition)
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		authorization.action,
-		resource,
-		model.RoleScopeAcademicUnit,
-		authorization.unitID.String(),
-		operation,
-		auditValue,
-		nil,
-	)
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     authorization.action,
+		Resource:   resource,
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    authorization.unitID.String(),
+		Operation:  operation,
+		Value:      auditValue,
+	})
 	if err != nil {
 		return store.ExamSittingSnapshot{}, err
 	}
@@ -1226,17 +1209,15 @@ func (s *Service) ExtendExamSitting(
 		command.ExpectedRevision,
 		store.ExamSittingTransitionManagerExtended,
 	)
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		authorization.action,
-		resource,
-		model.RoleScopeAcademicUnit,
-		authorization.unitID.String(),
-		"extend",
-		auditValue,
-		nil,
-	)
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     authorization.action,
+		Resource:   resource,
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    authorization.unitID.String(),
+		Operation:  "extend",
+		Value:      auditValue,
+	})
 	if err != nil {
 		return store.ExamSittingSnapshot{}, err
 	}

@@ -18,6 +18,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -418,8 +419,8 @@ func (f *fakeWorkspaceAuthorizer) Authorize(context.Context, invocation.Invocati
 
 type fakeWorkspaceAuditor struct{ values map[string]any }
 
-func (f *fakeWorkspaceAuditor) BeginAtScope(_ context.Context, _ invocation.Invocation, _ model.Action, _ model.Resource, _ model.RoleScopeType, _, _ string, values, _ map[string]any) (model.AuditEventID, error) {
-	f.values = values
+func (f *fakeWorkspaceAuditor) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
+	f.values = attempt.Value
 	return "iiiiiiiiiiiiiiiiiiiiiiiiii", nil
 }
 func (f *fakeWorkspaceAuditor) Fail(context.Context, model.AuditEventID, string) error { return nil }

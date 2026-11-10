@@ -12,6 +12,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -68,15 +69,13 @@ func (s *Service) RevokeDesktopRegistration(
 		return apperror.New("request.invalid").WithField("field", "desktop_registration_id")
 	}
 
-	auditID, err := s.auditor.Begin(
-		ctx,
-		invocation,
-		model.ActionDesktopRegistrationRevoke,
-		model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
-		"revoke",
-		map[string]any{"registration_id": registrationID.String()},
-		nil,
-	)
+	auditID, err := s.auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     model.ActionDesktopRegistrationRevoke,
+		Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
+		Operation:  "revoke",
+		Value:      map[string]any{"registration_id": registrationID.String()},
+	})
 	if err != nil {
 		return err
 	}

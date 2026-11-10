@@ -12,6 +12,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/manageraccess"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
@@ -195,14 +196,14 @@ func (a *Authoring) changeManager(
 	}
 
 	decisionAt := model.TimeUTC(a.deps.Now())
-	access, action, err := a.authorizeManagement(ctx, invocation, command.ExamID, decisionAt)
+	examAccess, action, err := a.authorizeManagement(ctx, invocation, command.ExamID, decisionAt)
 	if err != nil {
 		return store.ExamManagerCommandResult{}, err
 	}
 
 	eligible := false
 	if transition.eligibilityRequired {
-		eligible, err = a.isEligibleManager(ctx, command.UserID, access.Exam.AcademicUnitID, decisionAt)
+		eligible, err = a.isEligibleManager(ctx, command.UserID, examAccess.Exam.AcademicUnitID, decisionAt)
 		if err != nil {
 			return store.ExamManagerCommandResult{}, err
 		}
@@ -227,17 +228,15 @@ func (a *Authoring) changeManager(
 		auditData["target_eligible"] = eligible
 	}
 
-	auditID, err := a.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		action,
-		resource,
-		model.RoleScopeAcademicUnit,
-		access.Exam.AcademicUnitID.String(),
-		transition.operation,
-		auditData,
-		nil,
-	)
+	auditID, err := a.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     action,
+		Resource:   resource,
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    examAccess.Exam.AcademicUnitID.String(),
+		Operation:  transition.operation,
+		Value:      auditData,
+	})
 	if err != nil {
 		return store.ExamManagerCommandResult{}, err
 	}
@@ -245,7 +244,7 @@ func (a *Authoring) changeManager(
 	// Mail and mutation records retain their existing millisecond contract;
 	// current membership decisions above use the full domain precision.
 	at := model.TimeUTC(decisionAt)
-	notices, err := a.prepareManagerNotices(ctx, access.Exam.OwnerUserID, command.UserID, snapshot.Draft.Title, at, transition)
+	notices, err := a.prepareManagerNotices(ctx, examAccess.Exam.OwnerUserID, command.UserID, snapshot.Draft.Title, at, transition)
 	if err != nil {
 		mapped := apperror.New("exam.unavailable").Wrap(err)
 		if auditErr := a.deps.Auditor.Fail(ctx, auditID, apperror.CodeOf(mapped, "exam.unavailable")); auditErr != nil {

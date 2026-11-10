@@ -14,6 +14,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/manageraccess"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
@@ -285,17 +286,15 @@ func (s *Exports) CreateExamExport(
 		return nil, apperror.New("exam.export.unavailable").Wrap(errors.New("invalid export identities"))
 	}
 
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		action,
-		command.Scope.Resource(),
-		model.RoleScopeAcademicUnit,
-		unit.String(),
-		"create_exam_export",
-		map[string]any{"exam_export_id": exportID.String(), "submission_count": len(selected), "category_count": len(command.Categories)},
-		nil,
-	)
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     action,
+		Resource:   command.Scope.Resource(),
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    unit.String(),
+		Operation:  "create_exam_export",
+		Value:      map[string]any{"exam_export_id": exportID.String(), "submission_count": len(selected), "category_count": len(command.Categories)},
+	})
 	if err != nil {
 		return nil, err
 	}

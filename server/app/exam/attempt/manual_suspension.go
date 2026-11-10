@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -94,22 +95,20 @@ func (s *Service) SuspendExamAttempt(
 		action = model.ActionExamSittingManageOverride
 	}
 
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		action,
-		model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
-		model.RoleScopeClass,
-		sitting.Sitting.ClassID.String(),
-		store.ExamAttemptSuspendOperation,
-		map[string]any{
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     action,
+		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
+		ScopeType:  model.RoleScopeClass,
+		ScopeID:    sitting.Sitting.ClassID.String(),
+		Operation:  store.ExamAttemptSuspendOperation,
+		Value: map[string]any{
 			"exam_id":                   command.ExamID.String(),
 			"exam_sitting_id":           command.SittingID.String(),
 			"exam_attempt_id":           command.AttemptID.String(),
 			"expected_attempt_revision": command.ExpectedAttemptRevision,
 		},
-		nil,
-	)
+	})
 	if err != nil {
 		return ManualSuspensionResult{}, err
 	}

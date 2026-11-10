@@ -99,10 +99,16 @@ type jobOperationsAuditorFake struct {
 	failCalls int
 }
 
-func (f *jobOperationsAuditorFake) Begin(_ context.Context, _ invocation.Invocation, _ model.Action, _ model.Resource, operation string, params, _ map[string]any) (model.AuditEventID, error) {
+func (f *jobOperationsAuditorFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
+	// This fake keeps neither a scope nor a subject, so it refuses a Mutation
+	// that names one instead of dropping it.
+	if attempt.ScopeType != "" || attempt.ScopeID != "" || !attempt.Subject.IsZero() {
+		return "", apperror.New("audit.internal")
+	}
+
 	*f.events = append(*f.events, "audit")
-	f.operation = operation
-	f.params = params
+	f.operation = attempt.Operation
+	f.params = attempt.Value
 	return model.NewAuditEventID(), f.err
 }
 func (f *jobOperationsAuditorFake) Fail(context.Context, model.AuditEventID, string) error {

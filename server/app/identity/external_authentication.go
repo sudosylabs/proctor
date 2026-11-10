@@ -307,15 +307,13 @@ func (s *Service) BeginProviderConnection(
 		return nil, err
 	}
 
-	auditID, err := s.auditor.Begin(
-		ctx,
-		invocation,
-		model.ActionExternalIdentityManage,
-		model.Resource{Type: model.ResourceUser, ID: invocation.Principal().UserID.String()},
-		"connect_provider",
-		map[string]any{"provider": strings.ToLower(strings.TrimSpace(command.ProviderID))},
-		nil,
-	)
+	auditID, err := s.auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     model.ActionExternalIdentityManage,
+		Resource:   model.Resource{Type: model.ResourceUser, ID: invocation.Principal().UserID.String()},
+		Operation:  "connect_provider",
+		Value:      map[string]any{"provider": strings.ToLower(strings.TrimSpace(command.ProviderID))},
+	})
 	if err != nil {
 		return nil, err
 	}

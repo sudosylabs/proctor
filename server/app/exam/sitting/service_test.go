@@ -18,6 +18,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -866,8 +867,8 @@ type auditorFake struct {
 	failErr   error
 }
 
-func (f *auditorFake) BeginAtScope(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource, _ model.RoleScopeType, _, operation string, value, _ map[string]any) (model.AuditEventID, error) {
-	f.action, f.resource, f.operation, f.value = action, resource, operation, value
+func (f *auditorFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
+	f.action, f.resource, f.operation, f.value = attempt.Action, attempt.Resource, attempt.Operation, attempt.Value
 	return model.AuditEventID(f.id), f.err
 }
 

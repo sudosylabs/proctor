@@ -13,6 +13,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -94,23 +95,21 @@ func (s *Service) ReallowExamAttempt(
 		action = model.ActionExamSittingManageOverride
 	}
 
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		action,
-		model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
-		model.RoleScopeClass,
-		snapshot.Sitting.ClassID.String(),
-		store.ExamAttemptReallowOperation,
-		map[string]any{
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     action,
+		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
+		ScopeType:  model.RoleScopeClass,
+		ScopeID:    snapshot.Sitting.ClassID.String(),
+		Operation:  store.ExamAttemptReallowOperation,
+		Value: map[string]any{
 			"exam_id":                   command.ExamID.String(),
 			"exam_sitting_id":           command.SittingID.String(),
 			"exam_attempt_id":           command.AttemptID.String(),
 			"suspension_id":             command.SuspensionID.String(),
 			"expected_attempt_revision": command.ExpectedAttemptRevision,
 		},
-		nil,
-	)
+	})
 	if err != nil {
 		return ReallowResult{}, err
 	}

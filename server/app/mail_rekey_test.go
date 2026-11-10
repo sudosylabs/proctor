@@ -69,16 +69,21 @@ type mailRekeyAuditFake struct {
 	events   *[]string
 }
 
-func (f *mailRekeyAuditFake) Begin(context.Context, invocation.Invocation, model.Action, model.Resource, string, map[string]any, map[string]any) (model.AuditEventID, error) {
-	return "", errors.New("unscoped mail rekey audit is forbidden")
-}
+func (f *mailRekeyAuditFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
+	// This fake keeps no subject, so it refuses a Mutation that names one
+	// instead of dropping it.
+	if !attempt.Subject.IsZero() {
+		return "", apperror.New("audit.internal")
+	}
 
-func (f *mailRekeyAuditFake) BeginAtScope(_ context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID, operation string, value, prior map[string]any) (model.AuditEventID, error) {
+	if attempt.ScopeType == "" && attempt.ScopeID == "" {
+		return "", errors.New("unscoped mail rekey audit is forbidden")
+	}
+
 	if f.events != nil {
 		*f.events = append(*f.events, "audit")
 	}
-	f.attempt = access.Mutation{Invocation: invocation, Action: action, Resource: resource, ScopeType: scopeType,
-		ScopeID: scopeID, Operation: operation, Value: value, Prior: prior}
+	f.attempt = attempt
 	return model.AuditEventID(f.beginID), nil
 }
 

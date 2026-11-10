@@ -73,15 +73,14 @@ type accessPolicyAuditFake struct {
 	failCode string
 }
 
-func (a *accessPolicyAuditFake) Begin(_ context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource, operation string, value, prior map[string]any) (model.AuditEventID, error) {
-	a.attempt = access.Mutation{Invocation: invocation, Action: action, Resource: resource,
-		Operation: operation, Value: value, Prior: prior}
-	return model.AuditEventID(a.beginID), a.beginErr
-}
+func (a *accessPolicyAuditFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
+	// This fake keeps no subject, so it refuses a Mutation that names one
+	// instead of dropping it.
+	if !attempt.Subject.IsZero() {
+		return "", apperror.New("audit.internal")
+	}
 
-func (a *accessPolicyAuditFake) BeginAtScope(_ context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID, operation string, value, prior map[string]any) (model.AuditEventID, error) {
-	a.attempt = access.Mutation{Invocation: invocation, Action: action, Resource: resource,
-		ScopeType: scopeType, ScopeID: scopeID, Operation: operation, Value: value, Prior: prior}
+	a.attempt = attempt
 	return model.AuditEventID(a.beginID), a.beginErr
 }
 

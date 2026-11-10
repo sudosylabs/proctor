@@ -9,6 +9,7 @@ package attempt
 import (
 	"context"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -79,7 +80,7 @@ func (s *Service) StopDeliveryDetails(
 	}
 	defer release()
 
-	access, err := candidateSelector(invocation, command.Access)
+	candidateAccess, err := candidateSelector(invocation, command.Access)
 	if err != nil {
 		return nil, err
 	}
@@ -90,12 +91,12 @@ func (s *Service) StopDeliveryDetails(
 	idempotency, err := idempotency.Require(invocation, store.DeliveryStopDetailsOperation, command.IdempotencyKey, struct {
 		Attempt model.ExamAttemptID
 		Request model.StopDeliveryDetails
-	}{access.AttemptID, command.Request})
+	}{candidateAccess.AttemptID, command.Request})
 	if err != nil {
 		return nil, err
 	}
 
-	target, err := s.deps.Persistence.ResolveLiveDeliveryTarget(ctx, access)
+	target, err := s.deps.Persistence.ResolveLiveDeliveryTarget(ctx, candidateAccess)
 	if err != nil {
 		return nil, storeError(storeErrors, err)
 	}
@@ -103,24 +104,22 @@ func (s *Service) StopDeliveryDetails(
 		return nil, apperror.New("exam.attempt.unavailable").Wrap(model.ErrDeliveryInvalid)
 	}
 
-	audit, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		model.ActionExamSittingParticipate,
-		model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
-		model.RoleScopeClass,
-		target.ClassID.String(),
-		store.DeliveryStopDetailsOperation,
-		map[string]any{"family": command.Request.Family},
-		nil,
-	)
+	audit, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     model.ActionExamSittingParticipate,
+		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
+		ScopeType:  model.RoleScopeClass,
+		ScopeID:    target.ClassID.String(),
+		Operation:  store.DeliveryStopDetailsOperation,
+		Value:      map[string]any{"family": command.Request.Family},
+	})
 	if err != nil {
 		return nil, err
 	}
 
 	value, err := s.deps.Persistence.StopDeliveryDetails(
 		ctx,
-		&store.DeliveryDetailsStop{Access: access, Request: command.Request, AuditEventID: audit, AuditAt: s.deps.Now()},
+		&store.DeliveryDetailsStop{Access: candidateAccess, Request: command.Request, AuditEventID: audit, AuditAt: s.deps.Now()},
 		idempotency,
 	)
 	if err != nil {

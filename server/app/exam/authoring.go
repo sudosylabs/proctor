@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/manageraccess"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
@@ -71,17 +72,7 @@ type Authorizer interface {
 }
 
 type Auditor interface {
-	BeginAtScope(
-		context.Context,
-		invocation.Invocation,
-		model.Action,
-		model.Resource,
-		model.RoleScopeType,
-		string,
-		string,
-		map[string]any,
-		map[string]any,
-	) (model.AuditEventID, error)
+	Begin(context.Context, access.Mutation) (model.AuditEventID, error)
 	Fail(context.Context, model.AuditEventID, string) error
 }
 
@@ -229,21 +220,19 @@ func (a *Authoring) CreateExam(ctx context.Context, invocation invocation.Invoca
 		return View{}, err
 	}
 
-	auditID, err := a.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		action,
-		resource,
-		model.RoleScopeAcademicUnit,
-		command.AcademicUnitID.String(),
-		"create",
-		map[string]any{
+	auditID, err := a.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     action,
+		Resource:   resource,
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    command.AcademicUnitID.String(),
+		Operation:  "create",
+		Value: map[string]any{
 			"exam_id":          examID.String(),
 			"academic_unit_id": command.AcademicUnitID.String(),
 			"creator_user_id":  principal.UserID.String(),
 		},
-		nil,
-	)
+	})
 	if err != nil {
 		return View{}, err
 	}
@@ -391,15 +380,15 @@ func (a *Authoring) EditExamDraftText(
 
 	at := model.TimeUTC(a.deps.Now())
 
-	access, err := a.deps.Persistence.Access(ctx, command.ExamID, principal.UserID)
+	examAccess, err := a.deps.Persistence.Access(ctx, command.ExamID, principal.UserID)
 	if err != nil {
 		return View{}, examStoreErrors.Translate(err)
 	}
-	if access == nil || access.Exam == nil {
+	if examAccess == nil || examAccess.Exam == nil {
 		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no access projection"))
 	}
 
-	action, err := a.actionForAccess(ctx, principal.UserID, access, at, model.ActionExamManage, model.ActionExamManageOverride)
+	action, err := a.actionForAccess(ctx, principal.UserID, examAccess, at, model.ActionExamManage, model.ActionExamManageOverride)
 	if err != nil {
 		return View{}, err
 	}
@@ -432,21 +421,19 @@ func (a *Authoring) EditExamDraftText(
 		instructions = &candidate.InstructionsMarkdown
 	}
 
-	auditID, err := a.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		action,
-		resource,
-		model.RoleScopeAcademicUnit,
-		access.Exam.AcademicUnitID.String(),
-		"edit_draft_text",
-		map[string]any{
+	auditID, err := a.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     action,
+		Resource:   resource,
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    examAccess.Exam.AcademicUnitID.String(),
+		Operation:  "edit_draft_text",
+		Value: map[string]any{
 			"exam_id":                 command.ExamID.String(),
 			"expected_draft_revision": command.ExpectedDraftRevision,
 			"draft_revision":          command.ExpectedDraftRevision + 1,
 		},
-		nil,
-	)
+	})
 	if err != nil {
 		return View{}, err
 	}
@@ -535,15 +522,15 @@ func (a *Authoring) ConfigureExamDraftFocusLoss(
 	}
 
 	at := model.TimeUTC(a.deps.Now())
-	access, err := a.deps.Persistence.Access(ctx, command.ExamID, principal.UserID)
+	examAccess, err := a.deps.Persistence.Access(ctx, command.ExamID, principal.UserID)
 	if err != nil {
 		return View{}, examStoreErrors.Translate(err)
 	}
-	if access == nil || access.Exam == nil {
+	if examAccess == nil || examAccess.Exam == nil {
 		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no access projection"))
 	}
 
-	action, err := a.actionForAccess(ctx, principal.UserID, access, at, model.ActionExamManage, model.ActionExamManageOverride)
+	action, err := a.actionForAccess(ctx, principal.UserID, examAccess, at, model.ActionExamManage, model.ActionExamManageOverride)
 	if err != nil {
 		return View{}, err
 	}
@@ -570,21 +557,19 @@ func (a *Authoring) ConfigureExamDraftFocusLoss(
 		return View{}, apperror.New("exam.draft.no_changes")
 	}
 
-	auditID, err := a.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		action,
-		resource,
-		model.RoleScopeAcademicUnit,
-		access.Exam.AcademicUnitID.String(),
-		"configure_draft_focus_loss",
-		map[string]any{
+	auditID, err := a.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     action,
+		Resource:   resource,
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    examAccess.Exam.AcademicUnitID.String(),
+		Operation:  "configure_draft_focus_loss",
+		Value: map[string]any{
 			"exam_id":                 command.ExamID.String(),
 			"expected_draft_revision": command.ExpectedDraftRevision,
 			"draft_revision":          command.ExpectedDraftRevision + 1,
 		},
-		nil,
-	)
+	})
 	if err != nil {
 		return View{}, err
 	}
@@ -658,15 +643,15 @@ func (a *Authoring) ConfigureExamDraftBrowserPolicy(
 	}
 
 	at := model.TimeUTC(a.deps.Now())
-	access, err := a.deps.Persistence.Access(ctx, command.ExamID, principal.UserID)
+	examAccess, err := a.deps.Persistence.Access(ctx, command.ExamID, principal.UserID)
 	if err != nil {
 		return View{}, examStoreErrors.Translate(err)
 	}
-	if access == nil || access.Exam == nil {
+	if examAccess == nil || examAccess.Exam == nil {
 		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no access projection"))
 	}
 
-	action, err := a.actionForAccess(ctx, principal.UserID, access, at, model.ActionExamManage, model.ActionExamManageOverride)
+	action, err := a.actionForAccess(ctx, principal.UserID, examAccess, at, model.ActionExamManage, model.ActionExamManageOverride)
 	if err != nil {
 		return View{}, err
 	}
@@ -693,22 +678,20 @@ func (a *Authoring) ConfigureExamDraftBrowserPolicy(
 		return View{}, apperror.New("exam.draft.no_changes")
 	}
 
-	auditID, err := a.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		action,
-		resource,
-		model.RoleScopeAcademicUnit,
-		access.Exam.AcademicUnitID.String(),
-		"configure_draft_browser_policy",
-		map[string]any{
+	auditID, err := a.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     action,
+		Resource:   resource,
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    examAccess.Exam.AcademicUnitID.String(),
+		Operation:  "configure_draft_browser_policy",
+		Value: map[string]any{
 			"exam_id":                 command.ExamID.String(),
 			"expected_draft_revision": command.ExpectedDraftRevision,
 			"draft_revision":          command.ExpectedDraftRevision + 1,
 			"browser_policy_enabled":  policy.Enabled,
 		},
-		nil,
-	)
+	})
 	if err != nil {
 		return View{}, err
 	}
@@ -851,15 +834,15 @@ func (a *Authoring) ConfigureExamDraftNativePolicy(
 	}
 
 	at := model.TimeUTC(a.deps.Now())
-	access, err := a.deps.Persistence.Access(ctx, command.ExamID, principal.UserID)
+	examAccess, err := a.deps.Persistence.Access(ctx, command.ExamID, principal.UserID)
 	if err != nil {
 		return View{}, examStoreErrors.Translate(err)
 	}
-	if access == nil || access.Exam == nil {
+	if examAccess == nil || examAccess.Exam == nil {
 		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no access projection"))
 	}
 
-	action, err := a.actionForAccess(ctx, principal.UserID, access, at, model.ActionExamManage, model.ActionExamManageOverride)
+	action, err := a.actionForAccess(ctx, principal.UserID, examAccess, at, model.ActionExamManage, model.ActionExamManageOverride)
 	if err != nil {
 		return View{}, err
 	}
@@ -886,21 +869,19 @@ func (a *Authoring) ConfigureExamDraftNativePolicy(
 		return View{}, apperror.New("exam.draft.no_changes")
 	}
 
-	auditID, err := a.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		action,
-		resource,
-		model.RoleScopeAcademicUnit,
-		access.Exam.AcademicUnitID.String(),
-		"configure_draft_native_policy",
-		map[string]any{
+	auditID, err := a.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     action,
+		Resource:   resource,
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    examAccess.Exam.AcademicUnitID.String(),
+		Operation:  "configure_draft_native_policy",
+		Value: map[string]any{
 			"exam_id":                 command.ExamID.String(),
 			"expected_draft_revision": command.ExpectedDraftRevision,
 			"draft_revision":          command.ExpectedDraftRevision + 1,
 		},
-		nil,
-	)
+	})
 	if err != nil {
 		return View{}, err
 	}

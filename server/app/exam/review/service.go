@@ -12,6 +12,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/safemarkdown"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -33,17 +34,7 @@ type Authorizer interface {
 }
 
 type Auditor interface {
-	BeginAtScope(
-		context.Context,
-		invocation.Invocation,
-		model.Action,
-		model.Resource,
-		model.RoleScopeType,
-		string,
-		string,
-		map[string]any,
-		map[string]any,
-	) (model.AuditEventID, error)
+	Begin(context.Context, access.Mutation) (model.AuditEventID, error)
 	Fail(context.Context, model.AuditEventID, string) error
 }
 
@@ -174,23 +165,21 @@ func (s *Service) SaveExamIntegrityDecision(
 	}
 
 	at := model.TimeUTC(s.deps.Now())
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		model.ActionSubmissionReview,
-		model.Resource{Type: model.ResourceSubmission, ID: command.SubmissionID.String()},
-		model.RoleScopeAcademicUnit,
-		authorization.AcademicUnitID.String(),
-		store.ExamIntegrityReviewDecisionOperation,
-		map[string]any{
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     model.ActionSubmissionReview,
+		Resource:   model.Resource{Type: model.ResourceSubmission, ID: command.SubmissionID.String()},
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    authorization.AcademicUnitID.String(),
+		Operation:  store.ExamIntegrityReviewDecisionOperation,
+		Value: map[string]any{
 			"submission_id":              command.SubmissionID.String(),
 			"integrity_flag_id":          command.FlagID.String(),
 			"expected_review_revision":   command.ExpectedReviewRevision,
 			"expected_decision_revision": command.ExpectedDecisionRevision,
 			"outcome":                    string(command.Outcome),
 		},
-		nil,
-	)
+	})
 	if err != nil {
 		return Result{}, err
 	}
@@ -279,17 +268,15 @@ func (s *Service) UpdateExamIntegrityReview(
 	}
 
 	at := model.TimeUTC(s.deps.Now())
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		model.ActionSubmissionReview,
-		model.Resource{Type: model.ResourceSubmission, ID: command.SubmissionID.String()},
-		model.RoleScopeAcademicUnit,
-		authorization.AcademicUnitID.String(),
-		store.ExamIntegrityReviewDraftOperation,
-		map[string]any{"submission_id": command.SubmissionID.String(), "expected_review_revision": command.ExpectedReviewRevision},
-		nil,
-	)
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     model.ActionSubmissionReview,
+		Resource:   model.Resource{Type: model.ResourceSubmission, ID: command.SubmissionID.String()},
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    authorization.AcademicUnitID.String(),
+		Operation:  store.ExamIntegrityReviewDraftOperation,
+		Value:      map[string]any{"submission_id": command.SubmissionID.String(), "expected_review_revision": command.ExpectedReviewRevision},
+	})
 	if err != nil {
 		return Result{}, err
 	}
@@ -427,21 +414,19 @@ func (s *Service) terminalMutation(
 		action = model.ActionSubmissionRelease
 	}
 
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		action,
-		model.Resource{Type: model.ResourceSubmission, ID: submissionID.String()},
-		model.RoleScopeAcademicUnit,
-		authorization.AcademicUnitID.String(),
-		operation,
-		map[string]any{
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     action,
+		Resource:   model.Resource{Type: model.ResourceSubmission, ID: submissionID.String()},
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    authorization.AcademicUnitID.String(),
+		Operation:  operation,
+		Value: map[string]any{
 			"submission_id":            submissionID.String(),
 			"submission_review_id":     reviewID.String(),
 			"expected_review_revision": expectedRevision,
 		},
-		nil,
-	)
+	})
 	if err != nil {
 		return Result{}, err
 	}

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -97,21 +98,19 @@ func (s *Service) EvaluateExamAttemptFocusLoss(
 		return FocusLossEvaluation{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Focus Loss audit target"))
 	}
 
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		model.ActionExamSittingParticipate,
-		model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
-		model.RoleScopeClass,
-		target.ClassID.String(),
-		store.ExamAttemptFocusLossOperation,
-		map[string]any{
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     model.ActionExamSittingParticipate,
+		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
+		ScopeType:  model.RoleScopeClass,
+		ScopeID:    target.ClassID.String(),
+		Operation:  store.ExamAttemptFocusLossOperation,
+		Value: map[string]any{
 			"exam_attempt_id": command.AttemptID.String(),
 			"generation":      command.Generation,
 			"sequence":        command.Sequence,
 		},
-		nil,
-	)
+	})
 	if err != nil {
 		return FocusLossEvaluation{}, err
 	}
@@ -179,22 +178,20 @@ func (s *Service) evaluateEndedFocusLoss(
 		return FocusLossEvaluation{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent late Focus Loss audit target"))
 	}
 
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		model.ActionExamSittingParticipate,
-		model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
-		model.RoleScopeClass,
-		target.ClassID.String(),
-		store.ExamAttemptFocusLossDiscrepancyOperation,
-		map[string]any{
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     model.ActionExamSittingParticipate,
+		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
+		ScopeType:  model.RoleScopeClass,
+		ScopeID:    target.ClassID.String(),
+		Operation:  store.ExamAttemptFocusLossDiscrepancyOperation,
+		Value: map[string]any{
 			"exam_attempt_id": command.AttemptID.String(),
 			"submission_id":   target.SubmissionID.String(),
 			"generation":      command.Generation,
 			"sequence":        command.Sequence,
 		},
-		nil,
-	)
+	})
 	if err != nil {
 		return FocusLossEvaluation{}, err
 	}

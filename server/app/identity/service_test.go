@@ -17,6 +17,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/model"
@@ -41,30 +42,24 @@ type institutionAuditorFake struct {
 	values    []map[string]any
 }
 
-func (a *institutionAuditorFake) BeginForSubject(ctx context.Context, attempt access.Mutation) (model.AuditEventID, error) {
-	a.subjects = append(a.subjects, attempt.Subject)
-	if attempt.ScopeType != "" {
-		return a.BeginAtScope(ctx, attempt.Invocation, attempt.Action, attempt.Resource, attempt.ScopeType, attempt.ScopeID, attempt.Operation, attempt.Value, attempt.Prior)
+func (a *institutionAuditorFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
+	if !attempt.Subject.IsZero() {
+		a.subjects = append(a.subjects, attempt.Subject)
 	}
-	return a.Begin(ctx, attempt.Invocation, attempt.Action, attempt.Resource, attempt.Operation, attempt.Value, attempt.Prior)
-}
+	if attempt.ScopeType != "" || attempt.ScopeID != "" {
+		a.scopeType, a.scopeID = attempt.ScopeType, attempt.ScopeID
+	}
 
-func (a *institutionAuditorFake) Begin(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource, _ string, value, _ map[string]any) (model.AuditEventID, error) {
 	*a.events = append(*a.events, "audit-begin")
-	a.values = append(a.values, value)
-	a.action, a.resource = action, resource
-	a.resources = append(a.resources, resource)
+	a.values = append(a.values, attempt.Value)
+	a.action, a.resource = attempt.Action, attempt.Resource
+	a.resources = append(a.resources, attempt.Resource)
 	if len(a.beginIDs) > 0 {
 		id := a.beginIDs[0]
 		a.beginIDs = a.beginIDs[1:]
 		return model.AuditEventID(id), nil
 	}
 	return model.AuditEventID(a.beginID), nil
-}
-
-func (a *institutionAuditorFake) BeginAtScope(ctx context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID, operation string, value, prior map[string]any) (model.AuditEventID, error) {
-	a.scopeType, a.scopeID = scopeType, scopeID
-	return a.Begin(ctx, invocation, action, resource, operation, value, prior)
 }
 
 func (a *institutionAuditorFake) Fail(_ context.Context, _ model.AuditEventID, code string) error {
@@ -85,47 +80,18 @@ type mutationAttemptAuditorFake struct {
 	attempts []access.Mutation
 }
 
-func (a *mutationAttemptAuditorFake) BeginAtScope(_ context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID, operation string, value, prior map[string]any) (model.AuditEventID, error) {
-	*a.events = append(*a.events, "begin-at-scope")
-	a.attempt = access.Mutation{
-		Invocation: invocation,
-		Action:     action,
-		Resource:   resource,
-		ScopeType:  scopeType,
-		ScopeID:    scopeID,
-		Operation:  operation,
-		Value:      value,
-		Prior:      prior,
-	}
-	a.attempts = append(a.attempts, a.attempt)
-	return model.AuditEventID(a.nextBeginID()), a.beginErr
-}
-
-func (a *mutationAttemptAuditorFake) Begin(_ context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource, operation string, value, prior map[string]any) (model.AuditEventID, error) {
-	*a.events = append(*a.events, "begin")
-	a.attempt = access.Mutation{
-		Invocation: invocation,
-		Action:     action,
-		Resource:   resource,
-		Operation:  operation,
-		Value:      value,
-		Prior:      prior,
-	}
-	a.attempts = append(a.attempts, a.attempt)
-	return model.AuditEventID(a.nextBeginID()), a.beginErr
-}
-
-func (a *mutationAttemptAuditorFake) BeginForSubject(ctx context.Context, attempt access.Mutation) (model.AuditEventID, error) {
-	var id model.AuditEventID
-	var err error
+// Begin records the whole Mutation; the event names whether it carried an
+// explicit scope, as the two positional entry points once did.
+func (a *mutationAttemptAuditorFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
 	if attempt.ScopeType != "" {
-		id, err = a.BeginAtScope(ctx, attempt.Invocation, attempt.Action, attempt.Resource, attempt.ScopeType, attempt.ScopeID, attempt.Operation, attempt.Value, attempt.Prior)
+		*a.events = append(*a.events, "begin-at-scope")
 	} else {
-		id, err = a.Begin(ctx, attempt.Invocation, attempt.Action, attempt.Resource, attempt.Operation, attempt.Value, attempt.Prior)
+		*a.events = append(*a.events, "begin")
 	}
-	a.attempt.Subject = attempt.Subject
-	a.attempts[len(a.attempts)-1].Subject = attempt.Subject
-	return id, err
+
+	a.attempt = attempt
+	a.attempts = append(a.attempts, attempt)
+	return model.AuditEventID(a.nextBeginID()), a.beginErr
 }
 
 func (a *mutationAttemptAuditorFake) nextBeginID() string {
@@ -339,15 +305,14 @@ type accessPolicyAuditFake struct {
 	failCode string
 }
 
-func (a *accessPolicyAuditFake) Begin(_ context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource, operation string, value, prior map[string]any) (model.AuditEventID, error) {
-	a.attempt = access.Mutation{Invocation: invocation, Action: action, Resource: resource,
-		Operation: operation, Value: value, Prior: prior}
-	return model.AuditEventID(a.beginID), a.beginErr
-}
+func (a *accessPolicyAuditFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
+	// This fake keeps no subject, so it refuses a Mutation that names one
+	// instead of dropping it.
+	if !attempt.Subject.IsZero() {
+		return "", apperror.New("audit.internal")
+	}
 
-func (a *accessPolicyAuditFake) BeginAtScope(_ context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID, operation string, value, prior map[string]any) (model.AuditEventID, error) {
-	a.attempt = access.Mutation{Invocation: invocation, Action: action, Resource: resource,
-		ScopeType: scopeType, ScopeID: scopeID, Operation: operation, Value: value, Prior: prior}
+	a.attempt = attempt
 	return model.AuditEventID(a.beginID), a.beginErr
 }
 
@@ -417,16 +382,21 @@ type mailRekeyAuditFake struct {
 	events   *[]string
 }
 
-func (f *mailRekeyAuditFake) Begin(context.Context, invocation.Invocation, model.Action, model.Resource, string, map[string]any, map[string]any) (model.AuditEventID, error) {
-	return "", errors.New("unscoped mail rekey audit is forbidden")
-}
+func (f *mailRekeyAuditFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
+	// This fake keeps no subject, so it refuses a Mutation that names one
+	// instead of dropping it.
+	if !attempt.Subject.IsZero() {
+		return "", apperror.New("audit.internal")
+	}
 
-func (f *mailRekeyAuditFake) BeginAtScope(_ context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID, operation string, value, prior map[string]any) (model.AuditEventID, error) {
+	if attempt.ScopeType == "" && attempt.ScopeID == "" {
+		return "", errors.New("unscoped mail rekey audit is forbidden")
+	}
+
 	if f.events != nil {
 		*f.events = append(*f.events, "audit")
 	}
-	f.attempt = access.Mutation{Invocation: invocation, Action: action, Resource: resource, ScopeType: scopeType,
-		ScopeID: scopeID, Operation: operation, Value: value, Prior: prior}
+	f.attempt = attempt
 	return model.AuditEventID(f.beginID), nil
 }
 

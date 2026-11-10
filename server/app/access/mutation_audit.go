@@ -15,17 +15,11 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// MutationAuditor begins and fails the audit attempt of one named Store mutation.
+// MutationAuditor begins and fails the audit attempt of one named Store
+// mutation. Begin receives the whole Mutation, so every auditor is handed the
+// scope and the subject User the attempt must record.
 type MutationAuditor interface {
-	Begin(
-		context.Context,
-		invocation.Invocation,
-		model.Action,
-		model.Resource,
-		string,
-		map[string]any,
-		map[string]any,
-	) (model.AuditEventID, error)
+	Begin(context.Context, Mutation) (model.AuditEventID, error)
 	Fail(context.Context, model.AuditEventID, string) error
 }
 
@@ -34,82 +28,67 @@ type MutationAuditor interface {
 // principal-attributed mutation audit; it never wraps another adapter.
 type MutationAuditAdapter struct{ audit *Auditor }
 
-// Begin persists the attempt of a mutation at the resource's own scope.
-func (a MutationAuditAdapter) Begin(
-	ctx context.Context,
-	invocation invocation.Invocation,
-	action model.Action,
-	resource model.Resource,
-	operation string,
-	value,
-	prior map[string]any,
-) (model.AuditEventID, error) {
-	event, appErr := a.audit.BeginCriticalAction(
-		ctx,
-		invocation.Principal(),
-		action,
-		resource,
-		invocation.RequestMetadata(),
-		map[string]any{"operation": operation, "value": value},
-		prior,
-	)
-	if appErr != nil {
-		return "", appErr
+// Begin persists the attempt of a mutation. The Mutation's fields choose how
+// it is recorded: a Subject names the affected User, a ScopeType or ScopeID
+// records the explicit authorization scope, and neither records the
+// resource's own scope.
+func (a MutationAuditAdapter) Begin(ctx context.Context, attempt Mutation) (model.AuditEventID, error) {
+	var event *model.AuditEvent
+	var err error
+	switch {
+	case !attempt.Subject.IsZero():
+		event, err = a.beginForSubject(ctx, attempt)
+	case attempt.ScopeType != "" || attempt.ScopeID != "":
+		event, err = a.audit.BeginCriticalActionAtScope(
+			ctx,
+			attempt.Invocation.Principal(),
+			attempt.Action,
+			attempt.Resource,
+			attempt.ScopeType,
+			attempt.ScopeID,
+			attempt.Invocation.RequestMetadata(),
+			map[string]any{"operation": attempt.Operation, "value": attempt.Value},
+			attempt.Prior,
+		)
+	default:
+		event, err = a.audit.BeginCriticalAction(
+			ctx,
+			attempt.Invocation.Principal(),
+			attempt.Action,
+			attempt.Resource,
+			attempt.Invocation.RequestMetadata(),
+			map[string]any{"operation": attempt.Operation, "value": attempt.Value},
+			attempt.Prior,
+		)
+	}
+
+	if err != nil {
+		return "", err
 	}
 
 	return event.ID, nil
 }
 
-// BeginAtScope persists the attempt of a mutation at an explicit authorization scope.
-func (a MutationAuditAdapter) BeginAtScope(
-	ctx context.Context,
-	invocation invocation.Invocation,
-	action model.Action,
-	resource model.Resource,
-	scopeType model.RoleScopeType,
-	scopeID,
-	operation string,
-	value,
-	prior map[string]any,
-) (model.AuditEventID, error) {
-	event, appErr := a.audit.BeginCriticalActionAtScope(
-		ctx,
-		invocation.Principal(),
-		action,
-		resource,
-		scopeType,
-		scopeID,
-		invocation.RequestMetadata(),
-		map[string]any{"operation": operation, "value": value},
-		prior,
-	)
-	if appErr != nil {
-		return "", appErr
-	}
-
-	return event.ID, nil
-}
-
-// BeginForSubject begins the attempt of a mutation whose resource is not the
+// beginForSubject begins the attempt of a mutation whose resource is not the
 // affected User, naming that User as the event's subject.
-func (a MutationAuditAdapter) BeginForSubject(ctx context.Context, attempt Mutation) (model.AuditEventID, error) {
+func (a MutationAuditAdapter) beginForSubject(ctx context.Context, attempt Mutation) (*model.AuditEvent, error) {
 	principal := attempt.Invocation.Principal()
 	if principal.ValidateMFARecovery() != nil {
-		return "", InvalidTokenAppError()
+		return nil, InvalidTokenAppError()
 	}
 	if a.audit == nil || a.audit.deps.Audits == nil {
-		return "", AuditUnavailable(store.NewErrNotFound("audit_store", ""))
+		return nil, AuditUnavailable(store.NewErrNotFound("audit_store", ""))
 	}
 
 	scopeType, scopeID := attempt.ScopeType, attempt.ScopeID
 	if scopeType == "" && scopeID == "" {
 		var err error
 		if scopeType, scopeID, err = a.audit.resourceScope(ctx, attempt.Resource); err != nil {
-			return "", err
+			return nil, err
 		}
 	}
 
-	event, err := a.audit.beginCriticalActionAtScope(
+	return a.audit.beginCriticalActionAtScope(
 		ctx,
 		principal,
 		attempt.Subject,
@@ -121,11 +100,6 @@ func (a MutationAuditAdapter) BeginForSubject(ctx context.Context, attempt Mutat
 		map[string]any{"operation": attempt.Operation, "value": attempt.Value},
 		attempt.Prior,
 	)
-	if err != nil {
-		return "", err
-	}
-
-	return event.ID, nil
 }
 
 // Fail completes an attempt as failed with the error code.

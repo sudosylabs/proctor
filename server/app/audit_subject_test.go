@@ -42,6 +42,39 @@ func TestAuditedMutationWithSubjectRefusesAnAuditorThatWouldDropIt(t *testing.T)
 	}, func(err error) error { return err })
 	require.True(t, apperror.Is(err, "audit.internal"), "error = %v", err)
 	require.Empty(t, events)
+
+	// Begin takes the whole Mutation, so the production auditor is always
+	// handed the subject: it is durable before the mutation runs, and a
+	// subject that cannot be recorded stops the mutation before any write.
+	audits := &systemAuditStoreFake{}
+	service, err := access.NewAuditor(access.AuditorDependencies{Audits: audits, Institutions: securityInstitutionStore{}, NodeID: "node-subject"})
+	require.NoError(t, err)
+	subject := model.NewUserID()
+	attempt := access.Mutation{
+		Invocation: selfAuditSessionInvocation(), Action: model.ActionRoleBindingManage,
+		Resource: model.Resource{Type: model.ResourceInstitution, ID: model.NewID()}, Operation: "create_binding",
+		Subject: subject,
+	}
+	ran := false
+	_, err = access.RunAudited(context.Background(), service.MutationAudit(), attempt, time.Now,
+		func(context.Context, access.MutationReference) (struct{}, error) {
+			ran = true
+			require.NotNil(t, audits.saved, "the mutation ran before its audit attempt")
+			require.Equal(t, subject, audits.saved.SubjectUserID, "the mutation ran without a durable subject")
+			return struct{}{}, nil
+		}, func(err error) error { return err })
+	require.NoError(t, err)
+	require.True(t, ran)
+
+	audits.saved = nil
+	attempt.Subject = "not-a-user"
+	_, err = access.RunAudited(context.Background(), service.MutationAudit(), attempt, time.Now,
+		func(context.Context, access.MutationReference) (struct{}, error) {
+			require.Fail(t, "the mutation ran with a subject that cannot be recorded")
+			return struct{}{}, nil
+		}, func(err error) error { return err })
+	require.True(t, apperror.Is(err, "audit.internal"), "error = %v", err)
+	require.Nil(t, audits.saved)
 }
 
 func TestAuditEventUserResourceIsAlwaysItsSubject(t *testing.T) {

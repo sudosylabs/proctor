@@ -18,6 +18,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/manageraccess"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -29,17 +30,7 @@ type Authorizer interface {
 	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
 }
 type Auditor interface {
-	BeginAtScope(
-		context.Context,
-		invocation.Invocation,
-		model.Action,
-		model.Resource,
-		model.RoleScopeType,
-		string,
-		string,
-		map[string]any,
-		map[string]any,
-	) (model.AuditEventID, error)
+	Begin(context.Context, access.Mutation) (model.AuditEventID, error)
 	Fail(context.Context, model.AuditEventID, string) error
 }
 type Effects interface {
@@ -284,22 +275,20 @@ func (s *Service) StageExamSittingCorrectionResourceContent(
 		return ResourceStage{}, apperror.Invalid("exam.sitting.correction.invalid", "upload_lease").Wrap(e)
 	}
 
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		auth.action,
-		model.Resource{Type: model.ResourceExamSitting, ID: c.SittingID.String()},
-		model.RoleScopeAcademicUnit,
-		auth.academicUnitID.String(),
-		"exam_sitting_correction_resource_stage_reserve",
-		map[string]any{
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     auth.action,
+		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: c.SittingID.String()},
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    auth.academicUnitID.String(),
+		Operation:  "exam_sitting_correction_resource_stage_reserve",
+		Value: map[string]any{
 			"exam_id":          c.ExamID.String(),
 			"exam_sitting_id":  c.SittingID.String(),
 			"base_revision_id": c.BaseRevisionID.String(),
 			"target":           string(c.Target),
 		},
-		nil,
-	)
+	})
 	if err != nil {
 		return ResourceStage{}, err
 	}
@@ -473,17 +462,15 @@ func (s *Service) ApplyExamSittingCorrection(
 		"resource_count":               len(c.Resources),
 		"acknowledgement_required":     c.AcknowledgementRequired,
 	}
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		auth.action,
-		model.Resource{Type: model.ResourceExamSitting, ID: c.SittingID.String()},
-		model.RoleScopeAcademicUnit,
-		auth.academicUnitID.String(),
-		"exam_sitting_content_correct",
-		value,
-		nil,
-	)
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     auth.action,
+		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: c.SittingID.String()},
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    auth.academicUnitID.String(),
+		Operation:  "exam_sitting_content_correct",
+		Value:      value,
+	})
 	if err != nil {
 		return AppliedCorrection{}, err
 	}

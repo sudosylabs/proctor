@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/manageraccess"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -27,17 +28,7 @@ type Authorizer interface {
 	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
 }
 type Auditor interface {
-	BeginAtScope(
-		context.Context,
-		invocation.Invocation,
-		model.Action,
-		model.Resource,
-		model.RoleScopeType,
-		string,
-		string,
-		map[string]any,
-		map[string]any,
-	) (model.AuditEventID, error)
+	Begin(context.Context, access.Mutation) (model.AuditEventID, error)
 	Fail(context.Context, model.AuditEventID, string) error
 }
 type Effects interface {
@@ -452,21 +443,19 @@ func (s *Service) finalize(
 		action = model.ActionExamManageOverride
 	}
 
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		action,
-		model.Resource{Type: model.ResourceExam, ID: resource.ExamID.String()},
-		model.RoleScopeAcademicUnit,
-		authorization.academicUnitID.String(),
-		operation,
-		map[string]any{
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     action,
+		Resource:   model.Resource{Type: model.ResourceExam, ID: resource.ExamID.String()},
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    authorization.academicUnitID.String(),
+		Operation:  operation,
+		Value: map[string]any{
 			"exam_id":          resource.ExamID.String(),
 			"exam_resource_id": resource.ID.String(),
 			"file_revision_id": resource.SelectedFileRevisionID.String(),
 		},
-		nil,
-	)
+	})
 	if err != nil {
 		_ = s.deps.Content.RemoveExamResource(ctx, rendition.RevisionID, rendition.ID)
 		return store.ExamResourceRecord{}, err
@@ -572,17 +561,15 @@ func (s *Service) metadataMutation(
 		action = model.ActionExamManageOverride
 	}
 
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		action,
-		model.Resource{Type: model.ResourceExam, ID: c.ExamID.String()},
-		model.RoleScopeAcademicUnit,
-		authorization.academicUnitID.String(),
-		"edit_resource_metadata",
-		map[string]any{"exam_id": c.ExamID.String(), "exam_resource_id": c.ResourceID.String()},
-		nil,
-	)
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     action,
+		Resource:   model.Resource{Type: model.ResourceExam, ID: c.ExamID.String()},
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    authorization.academicUnitID.String(),
+		Operation:  "edit_resource_metadata",
+		Value:      map[string]any{"exam_id": c.ExamID.String(), "exam_resource_id": c.ResourceID.String()},
+	})
 	if err != nil {
 		return store.ExamResourceRecord{}, err
 	}
@@ -713,17 +700,15 @@ func (s *Service) ReorderExamResources(
 		action = model.ActionExamManageOverride
 	}
 
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		action,
-		model.Resource{Type: model.ResourceExam, ID: c.ExamID.String()},
-		model.RoleScopeAcademicUnit,
-		authorization.academicUnitID.String(),
-		"reorder_resources",
-		map[string]any{"exam_id": c.ExamID.String(), "resource_count": len(c.ResourceIDs)},
-		nil,
-	)
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     action,
+		Resource:   model.Resource{Type: model.ResourceExam, ID: c.ExamID.String()},
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    authorization.academicUnitID.String(),
+		Operation:  "reorder_resources",
+		Value:      map[string]any{"exam_id": c.ExamID.String(), "resource_count": len(c.ResourceIDs)},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -801,17 +786,15 @@ func (s *Service) RemoveExamResource(
 		action = model.ActionExamManageOverride
 	}
 
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		action,
-		model.Resource{Type: model.ResourceExam, ID: c.ExamID.String()},
-		model.RoleScopeAcademicUnit,
-		authorization.academicUnitID.String(),
-		"remove_resource",
-		map[string]any{"exam_id": c.ExamID.String(), "exam_resource_id": c.ResourceID.String()},
-		nil,
-	)
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     action,
+		Resource:   model.Resource{Type: model.ResourceExam, ID: c.ExamID.String()},
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    authorization.academicUnitID.String(),
+		Operation:  "remove_resource",
+		Value:      map[string]any{"exam_id": c.ExamID.String(), "exam_resource_id": c.ResourceID.String()},
+	})
 	if err != nil {
 		return store.ExamResourceRecord{}, err
 	}

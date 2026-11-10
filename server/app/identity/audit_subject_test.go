@@ -50,8 +50,10 @@ func TestAuditWritersNameTheSubjectUser(t *testing.T) {
 	require.Equal(t, target, audits.saved.SubjectUserID, "an administrator reset names its target")
 	require.Equal(t, me, audits.saved.ActorID)
 
-	_, err = (service.MutationAudit()).Begin(context.Background(), caller, model.ActionSessionManage,
-		model.Resource{Type: model.ResourceUser, ID: me.String()}, "revoke_own_sessions", nil, nil)
+	_, err = (service.MutationAudit()).Begin(context.Background(), access.Mutation{
+		Invocation: caller, Action: model.ActionSessionManage,
+		Resource: model.Resource{Type: model.ResourceUser, ID: me.String()}, Operation: "revoke_own_sessions",
+	})
 	require.NoError(t, err)
 	require.Equal(t, me, audits.saved.SubjectUserID, "a User resource is its own subject")
 

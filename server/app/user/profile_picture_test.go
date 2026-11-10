@@ -165,8 +165,14 @@ type profilePictureAuditorFake struct {
 	prior     map[string]any
 }
 
-func (a *profilePictureAuditorFake) Begin(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource, operation string, value, prior map[string]any) (model.AuditEventID, error) {
-	a.action, a.resource, a.operation, a.value, a.prior = action, resource, operation, value, prior
+func (a *profilePictureAuditorFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
+	// This fake keeps neither a scope nor a subject, so it refuses a Mutation
+	// that names one instead of dropping it.
+	if attempt.ScopeType != "" || attempt.ScopeID != "" || !attempt.Subject.IsZero() {
+		return "", apperror.New("audit.internal")
+	}
+
+	a.action, a.resource, a.operation, a.value, a.prior = attempt.Action, attempt.Resource, attempt.Operation, attempt.Value, attempt.Prior
 	if a.events != nil {
 		*a.events = append(*a.events, "audit-begin")
 	}

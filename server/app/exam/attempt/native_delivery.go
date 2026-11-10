@@ -12,6 +12,7 @@ import (
 	"errors"
 	"slices"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -142,10 +143,10 @@ func (s *Service) NativeDeliveryReceipt(
 func (s *Service) beginNativeDeliveryAudit(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	access store.NativeDeliveryAccess,
+	deliveryAccess store.NativeDeliveryAccess,
 	operation string,
 ) (model.AuditEventID, error) {
-	target, err := s.deps.Persistence.ResolveNativeDeliveryTarget(ctx, access)
+	target, err := s.deps.Persistence.ResolveNativeDeliveryTarget(ctx, deliveryAccess)
 	if err != nil {
 		return "", deliveryStoreError(err)
 	}
@@ -153,17 +154,15 @@ func (s *Service) beginNativeDeliveryAudit(
 		return "", apperror.New("exam.attempt.unavailable").Wrap(model.ErrNativeDeliveryInvalid)
 	}
 
-	return s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		model.ActionExamSittingParticipate,
-		model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
-		model.RoleScopeClass,
-		target.ClassID.String(),
-		operation,
-		map[string]any{"stream_id": access.StreamID},
-		nil,
-	)
+	return s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     model.ActionExamSittingParticipate,
+		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
+		ScopeType:  model.RoleScopeClass,
+		ScopeID:    target.ClassID.String(),
+		Operation:  operation,
+		Value:      map[string]any{"stream_id": deliveryAccess.StreamID},
+	})
 }
 
 // DeclareNativeDeliveryGaps idempotently records native security batches the

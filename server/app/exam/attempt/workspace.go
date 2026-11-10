@@ -14,6 +14,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -608,18 +609,16 @@ func (s *Service) applyWorkspaceMutation(
 	expectedKind model.StarterWorkspaceEntryKind,
 	expectedVersion model.WorkspaceContentVersion,
 ) (WorkspaceMutationResult, error) {
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		model.ActionExamSittingParticipate,
-		model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
-		model.RoleScopeClass,
-		target.ClassID.String(),
-		store.ExamAttemptWorkspaceMutationOperation,
-		map[string]any{"exam_attempt_id": mutation.Access.AttemptID.String(),
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     model.ActionExamSittingParticipate,
+		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
+		ScopeType:  model.RoleScopeClass,
+		ScopeID:    target.ClassID.String(),
+		Operation:  store.ExamAttemptWorkspaceMutationOperation,
+		Value: map[string]any{"exam_attempt_id": mutation.Access.AttemptID.String(),
 			"operation": string(mutation.Operation)},
-		nil,
-	)
+	})
 	if err != nil {
 		return WorkspaceMutationResult{}, err
 	}

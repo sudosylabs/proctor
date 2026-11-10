@@ -47,9 +47,8 @@ type Authorizer interface {
 	CanViewRoleBindings(context.Context, invocation.Invocation, model.Resource) (bool, error)
 }
 
-// Auditor records the attempt and failure of each audited mutation. The
-// production access.MutationAuditAdapter also begins the scoped and subject
-// attempts that access.RunAudited looks for.
+// Auditor records the attempt and failure of each audited mutation. Begin
+// takes the whole access.Mutation, its scope and subject User included.
 type Auditor interface {
 	access.MutationAuditor
 }

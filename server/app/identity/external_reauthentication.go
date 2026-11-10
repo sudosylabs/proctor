@@ -56,15 +56,13 @@ func (s *Service) BeginExternalReauthentication(
 		return nil, apperror.New("authentication.external.request.invalid")
 	}
 
-	auditID, err := s.auditor.Begin(
-		ctx,
-		invocation,
-		model.ActionAuthenticationReauthenticate,
-		model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
-		"external",
-		map[string]any{"session_id": principal.SessionID.String(), "provider": principal.AuthenticationProviderID, "task": command.Task},
-		nil,
-	)
+	auditID, err := s.auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     model.ActionAuthenticationReauthenticate,
+		Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
+		Operation:  "external",
+		Value:      map[string]any{"session_id": principal.SessionID.String(), "provider": principal.AuthenticationProviderID, "task": command.Task},
+	})
 	if err != nil {
 		return nil, err
 	}

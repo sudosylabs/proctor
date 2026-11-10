@@ -78,30 +78,24 @@ type institutionAuditorFake struct {
 	values    []map[string]any
 }
 
-func (a *institutionAuditorFake) BeginForSubject(ctx context.Context, attempt access.Mutation) (model.AuditEventID, error) {
-	a.subjects = append(a.subjects, attempt.Subject)
-	if attempt.ScopeType != "" {
-		return a.BeginAtScope(ctx, attempt.Invocation, attempt.Action, attempt.Resource, attempt.ScopeType, attempt.ScopeID, attempt.Operation, attempt.Value, attempt.Prior)
+func (a *institutionAuditorFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
+	if !attempt.Subject.IsZero() {
+		a.subjects = append(a.subjects, attempt.Subject)
 	}
-	return a.Begin(ctx, attempt.Invocation, attempt.Action, attempt.Resource, attempt.Operation, attempt.Value, attempt.Prior)
-}
+	if attempt.ScopeType != "" || attempt.ScopeID != "" {
+		a.scopeType, a.scopeID = attempt.ScopeType, attempt.ScopeID
+	}
 
-func (a *institutionAuditorFake) Begin(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource, _ string, value, _ map[string]any) (model.AuditEventID, error) {
 	*a.events = append(*a.events, "audit-begin")
-	a.values = append(a.values, value)
-	a.action, a.resource = action, resource
-	a.resources = append(a.resources, resource)
+	a.values = append(a.values, attempt.Value)
+	a.action, a.resource = attempt.Action, attempt.Resource
+	a.resources = append(a.resources, attempt.Resource)
 	if len(a.beginIDs) > 0 {
 		id := a.beginIDs[0]
 		a.beginIDs = a.beginIDs[1:]
 		return model.AuditEventID(id), nil
 	}
 	return model.AuditEventID(a.beginID), nil
-}
-
-func (a *institutionAuditorFake) BeginAtScope(ctx context.Context, invocation invocation.Invocation, action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID, operation string, value, prior map[string]any) (model.AuditEventID, error) {
-	a.scopeType, a.scopeID = scopeType, scopeID
-	return a.Begin(ctx, invocation, action, resource, operation, value, prior)
 }
 
 func (a *institutionAuditorFake) Fail(_ context.Context, _ model.AuditEventID, code string) error {

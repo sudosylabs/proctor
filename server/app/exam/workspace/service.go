@@ -14,6 +14,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/manageraccess"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
@@ -88,17 +89,7 @@ type Authorizer interface {
 }
 
 type Auditor interface {
-	BeginAtScope(
-		context.Context,
-		invocation.Invocation,
-		model.Action,
-		model.Resource,
-		model.RoleScopeType,
-		string,
-		string,
-		map[string]any,
-		map[string]any,
-	) (model.AuditEventID, error)
+	Begin(context.Context, access.Mutation) (model.AuditEventID, error)
 	Fail(context.Context, model.AuditEventID, string) error
 }
 
@@ -588,21 +579,19 @@ func (s *Service) runMutation(
 	idempotency *store.CommandIdempotency,
 	run mutationRunner,
 ) (Result, error) {
-	auditID, err := s.deps.Auditor.BeginAtScope(
-		ctx,
-		invocation,
-		authorization.action,
-		model.Resource{Type: model.ResourceExam, ID: mutation.ExamID.String()},
-		model.RoleScopeAcademicUnit,
-		authorization.unitID.String(),
-		auditOperation,
-		map[string]any{
+	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+		Invocation: invocation,
+		Action:     authorization.action,
+		Resource:   model.Resource{Type: model.ResourceExam, ID: mutation.ExamID.String()},
+		ScopeType:  model.RoleScopeAcademicUnit,
+		ScopeID:    authorization.unitID.String(),
+		Operation:  auditOperation,
+		Value: map[string]any{
 			"exam_id":                 mutation.ExamID.String(),
 			"entry_id":                mutation.EntryID.String(),
 			"expected_draft_revision": mutation.ExpectedDraftRevision,
 		},
-		nil,
-	)
+	})
 	if err != nil {
 		return Result{}, err
 	}

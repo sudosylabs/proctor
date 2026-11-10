@@ -103,14 +103,17 @@ func Parse(source []byte) (*Catalog, error) {
 	if len(parsed.Codes) == 0 {
 		return nil, errors.New("error catalog declares no codes")
 	}
+
 	var problems []string
 	vocabulary := conditionStatuses{statuses: parsed.Conditions, defaultStatus: parsed.DefaultStatus}
 	for word, status := range parsed.Conditions {
 		if !segmentGrammar.MatchString(word) || !errorStatusRange(status) {
 			problems = append(problems, fmt.Sprintf("condition %s: %d is not a snake_case condition with an HTTP error status", word, status))
 		}
+
 		vocabulary.words = append(vocabulary.words, word)
 	}
+
 	sort.Slice(vocabulary.words, func(i, j int) bool {
 		left, right := vocabulary.words[i], vocabulary.words[j]
 		return len(left) > len(right) || len(left) == len(right) && left < right
@@ -118,6 +121,7 @@ func Parse(source []byte) (*Catalog, error) {
 	if !errorStatusRange(parsed.DefaultStatus) {
 		problems = append(problems, fmt.Sprintf("default_status %d is not an HTTP error status", parsed.DefaultStatus))
 	}
+
 	seen := make(map[string]struct{}, len(parsed.Codes))
 	for index := range parsed.Codes {
 		entry := &parsed.Codes[index]
@@ -127,12 +131,15 @@ func Parse(source []byte) (*Catalog, error) {
 		if _, exists := seen[entry.Code]; exists {
 			continue
 		}
+
 		seen[entry.Code] = struct{}{}
 		problems = append(problems, validateEntry(entry, vocabulary.derive(entry.Code))...)
 	}
+
 	if len(problems) > 0 {
 		return nil, fmt.Errorf("invalid error catalog:\n  %s", strings.Join(problems, "\n  "))
 	}
+
 	return &Catalog{Entries: parsed.Codes}, nil
 }
 
@@ -141,6 +148,7 @@ func validateEntry(entry *Entry, derived int) []string {
 	if !codeGrammar.MatchString(entry.Code) {
 		problems = append(problems, fmt.Sprintf("%s: code is not <domain>[.<subdomain>].<condition> with snake_case segments", entry.Code))
 	}
+
 	switch {
 	case entry.Status == 0 && entry.Reason != "":
 		problems = append(problems, fmt.Sprintf("%s: reason documents no status exception", entry.Code))
@@ -151,8 +159,12 @@ func validateEntry(entry *Entry, derived int) []string {
 	case !errorStatusRange(entry.Status):
 		problems = append(problems, fmt.Sprintf("%s: status %d is not an HTTP error status", entry.Code, entry.Status))
 	case strings.TrimSpace(entry.Reason) == "":
-		problems = append(problems, fmt.Sprintf("%s: status %d differs from the condition's %d without a reason", entry.Code, entry.Status, derived))
+		problems = append(
+			problems,
+			fmt.Sprintf("%s: status %d differs from the condition's %d without a reason", entry.Code, entry.Status, derived),
+		)
 	}
+
 	if strings.TrimSpace(entry.Description) == "" {
 		problems = append(problems, fmt.Sprintf("%s: description is required", entry.Code))
 	}
@@ -162,6 +174,7 @@ func validateEntry(entry *Entry, derived int) []string {
 	if entry.WebSocketFallback && (entry.Transport || entry.Problem) {
 		problems = append(problems, fmt.Sprintf("%s: a WebSocket fallback is an application code, not a kernel code", entry.Code))
 	}
+
 	return problems
 }
 

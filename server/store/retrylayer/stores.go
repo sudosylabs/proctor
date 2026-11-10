@@ -34,7 +34,12 @@ func (s *institutionStore) GetSingleton(ctx context.Context) (*model.Institution
 func (s *academicUnitStore) Get(ctx context.Context, id model.AcademicUnitID) (*model.AcademicUnit, error) {
 	return retryCall1(ctx, s.layer, func() (*model.AcademicUnit, error) { return s.AcademicUnitStore.Get(ctx, id) })
 }
-func (s *academicUnitStore) ListChildren(ctx context.Context, institutionID model.InstitutionID, parentID model.AcademicUnitID, options store.AcademicNameListOptions) ([]*model.AcademicUnit, error) {
+func (s *academicUnitStore) ListChildren(
+	ctx context.Context,
+	institutionID model.InstitutionID,
+	parentID model.AcademicUnitID,
+	options store.AcademicNameListOptions,
+) ([]*model.AcademicUnit, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.AcademicUnit, error) {
 		return s.AcademicUnitStore.ListChildren(ctx, institutionID, parentID, options)
 	})
@@ -44,12 +49,20 @@ func (s *academicUnitStore) ListAncestors(ctx context.Context, id model.Academic
 		return s.AcademicUnitStore.ListAncestors(ctx, id)
 	})
 }
-func (s *academicUnitStore) Search(ctx context.Context, institutionID model.InstitutionID, options store.AcademicNameListOptions) ([]*model.AcademicUnit, error) {
+func (s *academicUnitStore) Search(
+	ctx context.Context,
+	institutionID model.InstitutionID,
+	options store.AcademicNameListOptions,
+) ([]*model.AcademicUnit, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.AcademicUnit, error) {
 		return s.AcademicUnitStore.Search(ctx, institutionID, options)
 	})
 }
-func (s *academicUnitStore) CreateIdempotently(ctx context.Context, input *store.AcademicUnitCreation, command *store.CommandIdempotency) (*store.AcademicUnitCommandResult, error) {
+func (s *academicUnitStore) CreateIdempotently(
+	ctx context.Context,
+	input *store.AcademicUnitCreation,
+	command *store.CommandIdempotency,
+) (*store.AcademicUnitCommandResult, error) {
 	if command == nil {
 		return s.AcademicUnitStore.CreateIdempotently(ctx, input, command)
 	}
@@ -71,7 +84,11 @@ func (s *programmeStore) ListByAcademicUnit(ctx context.Context, academicUnitID 
 		return s.ProgrammeStore.ListByAcademicUnit(ctx, academicUnitID)
 	})
 }
-func (s *programmeStore) SearchByAcademicUnit(ctx context.Context, academicUnitID model.AcademicUnitID, options store.AcademicNameListOptions) ([]*model.Programme, error) {
+func (s *programmeStore) SearchByAcademicUnit(
+	ctx context.Context,
+	academicUnitID model.AcademicUnitID,
+	options store.AcademicNameListOptions,
+) ([]*model.Programme, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.Programme, error) {
 		return s.ProgrammeStore.SearchByAcademicUnit(ctx, academicUnitID, options)
 	})
@@ -90,7 +107,11 @@ func (s *programmeLevelStore) ListByProgramme(ctx context.Context, programmeID m
 		return s.ProgrammeLevelStore.ListByProgramme(ctx, programmeID)
 	})
 }
-func (s *programmeLevelStore) SearchByProgramme(ctx context.Context, programmeID model.ProgrammeID, options store.AcademicNameListOptions) ([]*model.ProgrammeLevel, error) {
+func (s *programmeLevelStore) SearchByProgramme(
+	ctx context.Context,
+	programmeID model.ProgrammeID,
+	options store.AcademicNameListOptions,
+) ([]*model.ProgrammeLevel, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.ProgrammeLevel, error) {
 		return s.ProgrammeLevelStore.SearchByProgramme(ctx, programmeID, options)
 	})
@@ -104,12 +125,20 @@ func (s *academicPeriodStore) GetByOwnerName(ctx context.Context, owner model.Re
 		return s.AcademicPeriodStore.GetByOwnerName(ctx, owner, name)
 	})
 }
-func (s *academicPeriodStore) ListVisible(ctx context.Context, visibility store.AcademicPeriodVisibilityScope, options store.AcademicPeriodListOptions) ([]*model.AcademicPeriod, error) {
+func (s *academicPeriodStore) ListVisible(
+	ctx context.Context,
+	visibility store.AcademicPeriodVisibilityScope,
+	options store.AcademicPeriodListOptions,
+) ([]*model.AcademicPeriod, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.AcademicPeriod, error) {
 		return s.AcademicPeriodStore.ListVisible(ctx, visibility, options)
 	})
 }
-func (s *academicPeriodStore) CreateIdempotently(ctx context.Context, input *store.AcademicPeriodCreation, command *store.CommandIdempotency) (*store.AcademicPeriodCommandResult, error) {
+func (s *academicPeriodStore) CreateIdempotently(
+	ctx context.Context,
+	input *store.AcademicPeriodCreation,
+	command *store.CommandIdempotency,
+) (*store.AcademicPeriodCommandResult, error) {
 	if command == nil {
 		return s.AcademicPeriodStore.CreateIdempotently(ctx, input, command)
 	}
@@ -118,7 +147,11 @@ func (s *academicPeriodStore) CreateIdempotently(ctx context.Context, input *sto
 	})
 }
 
-func (s *invitationStore) IssueStudentClassIdempotently(ctx context.Context, input *store.StudentClassInvitationIssue, command *store.CommandIdempotency) (*store.InvitationCommandResult, error) {
+func (s *invitationStore) IssueStudentClassIdempotently(
+	ctx context.Context,
+	input *store.StudentClassInvitationIssue,
+	command *store.CommandIdempotency,
+) (*store.InvitationCommandResult, error) {
 	if command == nil {
 		return s.InvitationStore.IssueStudentClassIdempotently(ctx, input, command)
 	}
@@ -127,7 +160,11 @@ func (s *invitationStore) IssueStudentClassIdempotently(ctx context.Context, inp
 	})
 }
 
-func (s *invitationStore) IssueTeacherAcademicUnitIdempotently(ctx context.Context, input *store.TeacherAcademicUnitInvitationIssue, command *store.CommandIdempotency) (*store.InvitationCommandResult, error) {
+func (s *invitationStore) IssueTeacherAcademicUnitIdempotently(
+	ctx context.Context,
+	input *store.TeacherAcademicUnitInvitationIssue,
+	command *store.CommandIdempotency,
+) (*store.InvitationCommandResult, error) {
 	if command == nil {
 		return s.InvitationStore.IssueTeacherAcademicUnitIdempotently(ctx, input, command)
 	}
@@ -136,7 +173,11 @@ func (s *invitationStore) IssueTeacherAcademicUnitIdempotently(ctx context.Conte
 	})
 }
 
-func (s *invitationStore) IssueScopedRoleIdempotently(ctx context.Context, input *store.ScopedRoleInvitationIssue, command *store.CommandIdempotency) (*store.InvitationCommandResult, error) {
+func (s *invitationStore) IssueScopedRoleIdempotently(
+	ctx context.Context,
+	input *store.ScopedRoleInvitationIssue,
+	command *store.CommandIdempotency,
+) (*store.InvitationCommandResult, error) {
 	if command == nil {
 		return s.InvitationStore.IssueScopedRoleIdempotently(ctx, input, command)
 	}
@@ -145,7 +186,11 @@ func (s *invitationStore) IssueScopedRoleIdempotently(ctx context.Context, input
 	})
 }
 
-func (s *invitationStore) ResendIdempotently(ctx context.Context, input *store.InvitationResend, command *store.CommandIdempotency) (*store.InvitationAdministrationCommandResult, error) {
+func (s *invitationStore) ResendIdempotently(
+	ctx context.Context,
+	input *store.InvitationResend,
+	command *store.CommandIdempotency,
+) (*store.InvitationAdministrationCommandResult, error) {
 	if command == nil {
 		return s.InvitationStore.ResendIdempotently(ctx, input, command)
 	}
@@ -154,7 +199,11 @@ func (s *invitationStore) ResendIdempotently(ctx context.Context, input *store.I
 	})
 }
 
-func (s *invitationStore) RevokeIdempotently(ctx context.Context, input *store.InvitationRevocation, command *store.CommandIdempotency) (*store.InvitationAdministrationCommandResult, error) {
+func (s *invitationStore) RevokeIdempotently(
+	ctx context.Context,
+	input *store.InvitationRevocation,
+	command *store.CommandIdempotency,
+) (*store.InvitationAdministrationCommandResult, error) {
 	if command == nil {
 		return s.InvitationStore.RevokeIdempotently(ctx, input, command)
 	}
@@ -163,31 +212,50 @@ func (s *invitationStore) RevokeIdempotently(ctx context.Context, input *store.I
 	})
 }
 
-func (s *invitationStore) FindCommandOutcome(ctx context.Context, command *store.CommandIdempotency) (*store.InvitationCommandResult, error) {
+func (s *invitationStore) FindCommandOutcome(
+	ctx context.Context,
+	command *store.CommandIdempotency,
+) (*store.InvitationCommandResult, error) {
 	return retryCall1(ctx, s.layer, func() (*store.InvitationCommandResult, error) {
 		return s.InvitationStore.FindCommandOutcome(ctx, command)
 	})
 }
 
-func (s *invitationStore) ReplayIssue(ctx context.Context, input *store.InvitationReplay, command *store.CommandIdempotency) (*store.InvitationCommandResult, error) {
+func (s *invitationStore) ReplayIssue(
+	ctx context.Context,
+	input *store.InvitationReplay,
+	command *store.CommandIdempotency,
+) (*store.InvitationCommandResult, error) {
 	return retryCall1(ctx, s.layer, func() (*store.InvitationCommandResult, error) {
 		return s.InvitationStore.ReplayIssue(ctx, input, command)
 	})
 }
 
-func (s *invitationStore) ReplayAdministration(ctx context.Context, input *store.InvitationReplay, command *store.CommandIdempotency) (*store.InvitationAdministrationCommandResult, error) {
+func (s *invitationStore) ReplayAdministration(
+	ctx context.Context,
+	input *store.InvitationReplay,
+	command *store.CommandIdempotency,
+) (*store.InvitationAdministrationCommandResult, error) {
 	return retryCall1(ctx, s.layer, func() (*store.InvitationAdministrationCommandResult, error) {
 		return s.InvitationStore.ReplayAdministration(ctx, input, command)
 	})
 }
 
-func (s *invitationStore) RecordBatchDuplicate(ctx context.Context, input *store.InvitationBatchDuplicate, command *store.CommandIdempotency) (*store.InvitationBatchCommandResult, error) {
+func (s *invitationStore) RecordBatchDuplicate(
+	ctx context.Context,
+	input *store.InvitationBatchDuplicate,
+	command *store.CommandIdempotency,
+) (*store.InvitationBatchCommandResult, error) {
 	return retryCall1(ctx, s.layer, func() (*store.InvitationBatchCommandResult, error) {
 		return s.InvitationStore.RecordBatchDuplicate(ctx, input, command)
 	})
 }
 
-func (s *examAuthoringStore) Create(ctx context.Context, input *store.ExamAuthoringCreation, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
+func (s *examAuthoringStore) Create(
+	ctx context.Context,
+	input *store.ExamAuthoringCreation,
+	command *store.CommandIdempotency,
+) (*store.ExamAuthoringCommandResult, error) {
 	if command == nil {
 		return s.ExamAuthoringStore.Create(ctx, input, command)
 	}
@@ -196,7 +264,11 @@ func (s *examAuthoringStore) Create(ctx context.Context, input *store.ExamAuthor
 	})
 }
 
-func (s *examAuthoringStore) UpdateDraftText(ctx context.Context, input *store.ExamDraftTextUpdate, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
+func (s *examAuthoringStore) UpdateDraftText(
+	ctx context.Context,
+	input *store.ExamDraftTextUpdate,
+	command *store.CommandIdempotency,
+) (*store.ExamAuthoringCommandResult, error) {
 	if command == nil {
 		return s.ExamAuthoringStore.UpdateDraftText(ctx, input, command)
 	}
@@ -205,7 +277,11 @@ func (s *examAuthoringStore) UpdateDraftText(ctx context.Context, input *store.E
 	})
 }
 
-func (s *examAuthoringStore) UpdateDraftFocusLoss(ctx context.Context, input *store.ExamDraftFocusLossUpdate, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
+func (s *examAuthoringStore) UpdateDraftFocusLoss(
+	ctx context.Context,
+	input *store.ExamDraftFocusLossUpdate,
+	command *store.CommandIdempotency,
+) (*store.ExamAuthoringCommandResult, error) {
 	if command == nil {
 		return s.ExamAuthoringStore.UpdateDraftFocusLoss(ctx, input, command)
 	}
@@ -220,7 +296,11 @@ func (s *examAuthoringStore) List(ctx context.Context, options store.ExamListOpt
 	})
 }
 
-func (s *examAuthoringStore) Archive(ctx context.Context, input *store.ExamArchive, command *store.CommandIdempotency) (*store.ExamArchiveCommandResult, error) {
+func (s *examAuthoringStore) Archive(
+	ctx context.Context,
+	input *store.ExamArchive,
+	command *store.CommandIdempotency,
+) (*store.ExamArchiveCommandResult, error) {
 	if command == nil {
 		return s.ExamAuthoringStore.Archive(ctx, input, command)
 	}
@@ -247,7 +327,11 @@ func (s *examAuthoringStore) Resolve(ctx context.Context, examID model.ExamID) (
 	})
 }
 
-func (s *examRevisionStore) GetSummary(ctx context.Context, examID model.ExamID, revisionID model.ExamRevisionID) (*store.ExamRevisionSummary, error) {
+func (s *examRevisionStore) GetSummary(
+	ctx context.Context,
+	examID model.ExamID,
+	revisionID model.ExamRevisionID,
+) (*store.ExamRevisionSummary, error) {
 	return retryCall1(ctx, s.layer, func() (*store.ExamRevisionSummary, error) {
 		return s.ExamRevisionStore.GetSummary(ctx, examID, revisionID)
 	})
@@ -259,7 +343,11 @@ func (s *examRevisionStore) List(ctx context.Context, options store.ExamRevision
 	})
 }
 
-func (s *examRevisionStore) GetSnapshot(ctx context.Context, examID model.ExamID, revisionID model.ExamRevisionID) (*model.ExamRevision, error) {
+func (s *examRevisionStore) GetSnapshot(
+	ctx context.Context,
+	examID model.ExamID,
+	revisionID model.ExamRevisionID,
+) (*model.ExamRevision, error) {
 	return retryCall1(ctx, s.layer, func() (*model.ExamRevision, error) {
 		return s.ExamRevisionStore.GetSnapshot(ctx, examID, revisionID)
 	})
@@ -271,7 +359,11 @@ func (s *examSittingStore) Resolve(ctx context.Context, sittingID model.ExamSitt
 	})
 }
 
-func (s *examSittingStore) Get(ctx context.Context, examID model.ExamID, sittingID model.ExamSittingID) (*store.ExamSittingSnapshot, error) {
+func (s *examSittingStore) Get(
+	ctx context.Context,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+) (*store.ExamSittingSnapshot, error) {
 	return retryCall1(ctx, s.layer, func() (*store.ExamSittingSnapshot, error) {
 		return s.ExamSittingStore.Get(ctx, examID, sittingID)
 	})
@@ -283,49 +375,80 @@ func (s *examSittingStore) List(ctx context.Context, options store.ExamSittingLi
 	})
 }
 
-func (s *examSittingStore) Schedule(ctx context.Context, input *store.ExamSittingSchedule, command *store.CommandIdempotency) (*store.ExamSittingCommandResult, error) {
+func (s *examSittingStore) Schedule(
+	ctx context.Context,
+	input *store.ExamSittingSchedule,
+	command *store.CommandIdempotency,
+) (*store.ExamSittingCommandResult, error) {
 	return s.retryMutation(ctx, command, func() (*store.ExamSittingCommandResult, error) {
 		return s.ExamSittingStore.Schedule(ctx, input, command)
 	})
 }
 
-func (s *examSittingStore) UpdateSchedule(ctx context.Context, input *store.ExamSittingScheduleUpdate, command *store.CommandIdempotency) (*store.ExamSittingCommandResult, error) {
+func (s *examSittingStore) UpdateSchedule(
+	ctx context.Context,
+	input *store.ExamSittingScheduleUpdate,
+	command *store.CommandIdempotency,
+) (*store.ExamSittingCommandResult, error) {
 	return s.retryMutation(ctx, command, func() (*store.ExamSittingCommandResult, error) {
 		return s.ExamSittingStore.UpdateSchedule(ctx, input, command)
 	})
 }
 
-func (s *examSittingStore) Cancel(ctx context.Context, input *store.ExamSittingCancellation, command *store.CommandIdempotency) (*store.ExamSittingCommandResult, error) {
+func (s *examSittingStore) Cancel(
+	ctx context.Context,
+	input *store.ExamSittingCancellation,
+	command *store.CommandIdempotency,
+) (*store.ExamSittingCommandResult, error) {
 	return s.retryMutation(ctx, command, func() (*store.ExamSittingCommandResult, error) {
 		return s.ExamSittingStore.Cancel(ctx, input, command)
 	})
 }
 
-func (s *examSittingStore) ListLifecycleDue(ctx context.Context, options store.ExamSittingLifecycleDueOptions) ([]store.ExamSittingLifecycleDue, error) {
+func (s *examSittingStore) ListLifecycleDue(
+	ctx context.Context,
+	options store.ExamSittingLifecycleDueOptions,
+) ([]store.ExamSittingLifecycleDue, error) {
 	return retryCall1(ctx, s.layer, func() ([]store.ExamSittingLifecycleDue, error) {
 		return s.ExamSittingStore.ListLifecycleDue(ctx, options)
 	})
 }
 
-func (s *examSittingStore) Pause(ctx context.Context, input *store.ExamSittingManagerTransition, command *store.CommandIdempotency) (*store.ExamSittingLifecycleResult, error) {
+func (s *examSittingStore) Pause(
+	ctx context.Context,
+	input *store.ExamSittingManagerTransition,
+	command *store.CommandIdempotency,
+) (*store.ExamSittingLifecycleResult, error) {
 	return s.retryLifecycleMutation(ctx, command, func() (*store.ExamSittingLifecycleResult, error) {
 		return s.ExamSittingStore.Pause(ctx, input, command)
 	})
 }
 
-func (s *examSittingStore) Resume(ctx context.Context, input *store.ExamSittingManagerTransition, command *store.CommandIdempotency) (*store.ExamSittingLifecycleResult, error) {
+func (s *examSittingStore) Resume(
+	ctx context.Context,
+	input *store.ExamSittingManagerTransition,
+	command *store.CommandIdempotency,
+) (*store.ExamSittingLifecycleResult, error) {
 	return s.retryLifecycleMutation(ctx, command, func() (*store.ExamSittingLifecycleResult, error) {
 		return s.ExamSittingStore.Resume(ctx, input, command)
 	})
 }
 
-func (s *examSittingStore) Extend(ctx context.Context, input *store.ExamSittingExtension, command *store.CommandIdempotency) (*store.ExamSittingLifecycleResult, error) {
+func (s *examSittingStore) Extend(
+	ctx context.Context,
+	input *store.ExamSittingExtension,
+	command *store.CommandIdempotency,
+) (*store.ExamSittingLifecycleResult, error) {
 	return s.retryLifecycleMutation(ctx, command, func() (*store.ExamSittingLifecycleResult, error) {
 		return s.ExamSittingStore.Extend(ctx, input, command)
 	})
 }
 
-func (s *examSittingStore) EarlyClose(ctx context.Context, input *store.ExamSittingManagerTransition, command *store.CommandIdempotency) (*store.ExamSittingLifecycleResult, error) {
+func (s *examSittingStore) EarlyClose(
+	ctx context.Context,
+	input *store.ExamSittingManagerTransition,
+	command *store.CommandIdempotency,
+) (*store.ExamSittingLifecycleResult, error) {
 	return s.retryLifecycleMutation(ctx, command, func() (*store.ExamSittingLifecycleResult, error) {
 		return s.ExamSittingStore.EarlyClose(ctx, input, command)
 	})
@@ -335,21 +458,33 @@ func (s *examSittingStore) AdvanceDue(ctx context.Context, input *store.ExamSitt
 	return s.ExamSittingStore.AdvanceDue(ctx, input)
 }
 
-func (s *examSittingStore) retryLifecycleMutation(ctx context.Context, command *store.CommandIdempotency, operation func() (*store.ExamSittingLifecycleResult, error)) (*store.ExamSittingLifecycleResult, error) {
+func (s *examSittingStore) retryLifecycleMutation(
+	ctx context.Context,
+	command *store.CommandIdempotency,
+	operation func() (*store.ExamSittingLifecycleResult, error),
+) (*store.ExamSittingLifecycleResult, error) {
 	if command == nil {
 		return operation()
 	}
 	return retryCall1(ctx, s.layer, operation)
 }
 
-func (s *examSittingStore) retryMutation(ctx context.Context, command *store.CommandIdempotency, operation func() (*store.ExamSittingCommandResult, error)) (*store.ExamSittingCommandResult, error) {
+func (s *examSittingStore) retryMutation(
+	ctx context.Context,
+	command *store.CommandIdempotency,
+	operation func() (*store.ExamSittingCommandResult, error),
+) (*store.ExamSittingCommandResult, error) {
 	if command == nil {
 		return operation()
 	}
 	return retryCall1(ctx, s.layer, operation)
 }
 
-func (s *examAttemptStore) Connect(ctx context.Context, input *store.ExamAttemptConnect, command *store.CommandIdempotency) (*store.ExamAttemptConnectResult, error) {
+func (s *examAttemptStore) Connect(
+	ctx context.Context,
+	input *store.ExamAttemptConnect,
+	command *store.CommandIdempotency,
+) (*store.ExamAttemptConnectResult, error) {
 	if command == nil {
 		return s.ExamAttemptStore.Connect(ctx, input, command)
 	}
@@ -358,26 +493,40 @@ func (s *examAttemptStore) Connect(ctx context.Context, input *store.ExamAttempt
 	})
 }
 
-func (s *examAttemptStore) RenewParticipation(ctx context.Context, input *store.ExamAttemptParticipationRenewal) (*store.ExamAttemptParticipationRenewalResult, error) {
+func (s *examAttemptStore) RenewParticipation(
+	ctx context.Context,
+	input *store.ExamAttemptParticipationRenewal,
+) (*store.ExamAttemptParticipationRenewalResult, error) {
 	return retryCall1(ctx, s.layer, func() (*store.ExamAttemptParticipationRenewalResult, error) {
 		return s.ExamAttemptStore.RenewParticipation(ctx, input)
 	})
 }
 
-func (s *examAttemptStore) ResolveFocusLossTarget(ctx context.Context, access store.ExamAttemptFocusLossAccess) (*store.ExamAttemptFocusLossTarget, error) {
+func (s *examAttemptStore) ResolveFocusLossTarget(
+	ctx context.Context,
+	access store.ExamAttemptFocusLossAccess,
+) (*store.ExamAttemptFocusLossTarget, error) {
 	return retryCall1(ctx, s.layer, func() (*store.ExamAttemptFocusLossTarget, error) {
 		return s.ExamAttemptStore.ResolveFocusLossTarget(ctx, access)
 	})
 }
 
-func (s *examAttemptStore) RecordFocusLoss(ctx context.Context, input *store.ExamAttemptFocusLossSignal) (*store.ExamAttemptFocusLossResult, error) {
+func (s *examAttemptStore) RecordFocusLoss(
+	ctx context.Context,
+	input *store.ExamAttemptFocusLossSignal,
+) (*store.ExamAttemptFocusLossResult, error) {
 	// The sequence makes a later client request replayable, but an in-process
 	// retry would reuse the already-completed Audit Event after an unknown commit.
 	// Let the durable client retry begin a fresh audited decision instead.
 	return s.ExamAttemptStore.RecordFocusLoss(ctx, input)
 }
 
-func (s *examAttemptStore) ResolveParticipationExpiry(ctx context.Context, attemptID model.ExamAttemptID, participationID model.AttemptParticipationID, generation int64) (*store.ExamAttemptParticipationExpiryDue, error) {
+func (s *examAttemptStore) ResolveParticipationExpiry(
+	ctx context.Context,
+	attemptID model.ExamAttemptID,
+	participationID model.AttemptParticipationID,
+	generation int64,
+) (*store.ExamAttemptParticipationExpiryDue, error) {
 	return retryCall1(ctx, s.layer, func() (*store.ExamAttemptParticipationExpiryDue, error) {
 		return s.ExamAttemptStore.ResolveParticipationExpiry(ctx, attemptID, participationID, generation)
 	})
@@ -389,7 +538,11 @@ func (s *examAttemptStore) ListExpiredParticipations(ctx context.Context, limit 
 	})
 }
 
-func (s *examAttemptStore) SuspendAttempt(ctx context.Context, input *store.ExamAttemptManualSuspension, command *store.CommandIdempotency) (*store.ExamAttemptManualSuspensionResult, error) {
+func (s *examAttemptStore) SuspendAttempt(
+	ctx context.Context,
+	input *store.ExamAttemptManualSuspension,
+	command *store.CommandIdempotency,
+) (*store.ExamAttemptManualSuspensionResult, error) {
 	if command == nil {
 		return s.ExamAttemptStore.SuspendAttempt(ctx, input, command)
 	}
@@ -398,7 +551,11 @@ func (s *examAttemptStore) SuspendAttempt(ctx context.Context, input *store.Exam
 	})
 }
 
-func (s *examAttemptStore) ReallowAttempt(ctx context.Context, input *store.ExamAttemptReallow, command *store.CommandIdempotency) (*store.ExamAttemptReallowResult, error) {
+func (s *examAttemptStore) ReallowAttempt(
+	ctx context.Context,
+	input *store.ExamAttemptReallow,
+	command *store.CommandIdempotency,
+) (*store.ExamAttemptReallowResult, error) {
 	if command == nil {
 		return s.ExamAttemptStore.ReallowAttempt(ctx, input, command)
 	}
@@ -407,67 +564,104 @@ func (s *examAttemptStore) ReallowAttempt(ctx context.Context, input *store.Exam
 	})
 }
 
-func (s *examAttemptStore) Get(ctx context.Context, examID model.ExamID, attemptID model.ExamAttemptID) (*store.ExamAttemptManagerSnapshot, error) {
+func (s *examAttemptStore) Get(
+	ctx context.Context,
+	examID model.ExamID,
+	attemptID model.ExamAttemptID,
+) (*store.ExamAttemptManagerSnapshot, error) {
 	return retryCall1(ctx, s.layer, func() (*store.ExamAttemptManagerSnapshot, error) {
 		return s.ExamAttemptStore.Get(ctx, examID, attemptID)
 	})
 }
 
-func (s *examAttemptStore) List(ctx context.Context, options store.ExamAttemptManagerListOptions) ([]store.ExamAttemptManagerSnapshot, error) {
+func (s *examAttemptStore) List(
+	ctx context.Context,
+	options store.ExamAttemptManagerListOptions,
+) ([]store.ExamAttemptManagerSnapshot, error) {
 	return retryCall1(ctx, s.layer, func() ([]store.ExamAttemptManagerSnapshot, error) {
 		return s.ExamAttemptStore.List(ctx, options)
 	})
 }
 
-func (s *examAttemptStore) GetCandidatePresentation(ctx context.Context, access store.CandidateAttemptAccess) (*store.CandidateExamPresentation, error) {
+func (s *examAttemptStore) GetCandidatePresentation(
+	ctx context.Context,
+	access store.CandidateAttemptAccess,
+) (*store.CandidateExamPresentation, error) {
 	return retryCall1(ctx, s.layer, func() (*store.CandidateExamPresentation, error) {
 		return s.ExamAttemptStore.GetCandidatePresentation(ctx, access)
 	})
 }
 
-func (s *examAttemptStore) ResolveCandidateResource(ctx context.Context, access store.CandidateAttemptAccess, resourceID model.ExamResourceID) (*store.CandidateResourceContent, error) {
+func (s *examAttemptStore) ResolveCandidateResource(
+	ctx context.Context,
+	access store.CandidateAttemptAccess,
+	resourceID model.ExamResourceID,
+) (*store.CandidateResourceContent, error) {
 	return retryCall1(ctx, s.layer, func() (*store.CandidateResourceContent, error) {
 		return s.ExamAttemptStore.ResolveCandidateResource(ctx, access, resourceID)
 	})
 }
 
-func (s *examAttemptWorkspaceStore) List(ctx context.Context, options store.CandidateWorkspaceListOptions) (*store.CandidateAttemptWorkspacePage, error) {
+func (s *examAttemptWorkspaceStore) List(
+	ctx context.Context,
+	options store.CandidateWorkspaceListOptions,
+) (*store.CandidateAttemptWorkspacePage, error) {
 	return retryCall1(ctx, s.layer, func() (*store.CandidateAttemptWorkspacePage, error) {
 		return s.ExamAttemptWorkspaceStore.List(ctx, options)
 	})
 }
 
-func (s *examAttemptWorkspaceStore) ResolveFile(ctx context.Context, access store.CandidateAttemptAccess, entryID model.AttemptWorkspaceEntryID) (*store.CandidateWorkspaceContent, error) {
+func (s *examAttemptWorkspaceStore) ResolveFile(
+	ctx context.Context,
+	access store.CandidateAttemptAccess,
+	entryID model.AttemptWorkspaceEntryID,
+) (*store.CandidateWorkspaceContent, error) {
 	return retryCall1(ctx, s.layer, func() (*store.CandidateWorkspaceContent, error) {
 		return s.ExamAttemptWorkspaceStore.ResolveFile(ctx, access, entryID)
 	})
 }
 
-func (s *examAttemptWorkspaceStore) ListJournal(ctx context.Context, options store.CandidateWorkspaceJournalOptions) (*store.CandidateWorkspaceJournalPage, error) {
+func (s *examAttemptWorkspaceStore) ListJournal(
+	ctx context.Context,
+	options store.CandidateWorkspaceJournalOptions,
+) (*store.CandidateWorkspaceJournalPage, error) {
 	return retryCall1(ctx, s.layer, func() (*store.CandidateWorkspaceJournalPage, error) {
 		return s.ExamAttemptWorkspaceStore.ListJournal(ctx, options)
 	})
 }
 
-func (s *examAttemptWorkspaceStore) ResolveMutationTarget(ctx context.Context, access store.ExamAttemptWorkspaceMutationAccess) (*store.ExamAttemptWorkspaceMutationTarget, error) {
+func (s *examAttemptWorkspaceStore) ResolveMutationTarget(
+	ctx context.Context,
+	access store.ExamAttemptWorkspaceMutationAccess,
+) (*store.ExamAttemptWorkspaceMutationTarget, error) {
 	return retryCall1(ctx, s.layer, func() (*store.ExamAttemptWorkspaceMutationTarget, error) {
 		return s.ExamAttemptWorkspaceStore.ResolveMutationTarget(ctx, access)
 	})
 }
 
-func (s *examAttemptWorkspaceStore) ReserveObject(ctx context.Context, input *store.ExamAttemptWorkspaceObjectReservation) (*model.AttemptWorkspaceObject, error) {
+func (s *examAttemptWorkspaceStore) ReserveObject(
+	ctx context.Context,
+	input *store.ExamAttemptWorkspaceObjectReservation,
+) (*model.AttemptWorkspaceObject, error) {
 	return retryCall1(ctx, s.layer, func() (*model.AttemptWorkspaceObject, error) {
 		return s.ExamAttemptWorkspaceStore.ReserveObject(ctx, input)
 	})
 }
 
-func (s *examAttemptWorkspaceStore) MarkObjectReady(ctx context.Context, input *store.ExamAttemptWorkspaceObjectReady) (*model.AttemptWorkspaceObject, error) {
+func (s *examAttemptWorkspaceStore) MarkObjectReady(
+	ctx context.Context,
+	input *store.ExamAttemptWorkspaceObjectReady,
+) (*model.AttemptWorkspaceObject, error) {
 	return retryCall1(ctx, s.layer, func() (*model.AttemptWorkspaceObject, error) {
 		return s.ExamAttemptWorkspaceStore.MarkObjectReady(ctx, input)
 	})
 }
 
-func (s *examAttemptWorkspaceStore) ApplyMutation(ctx context.Context, input *store.ExamAttemptWorkspaceMutation, command *store.CommandIdempotency) (*store.ExamAttemptWorkspaceMutationResult, error) {
+func (s *examAttemptWorkspaceStore) ApplyMutation(
+	ctx context.Context,
+	input *store.ExamAttemptWorkspaceMutation,
+	command *store.CommandIdempotency,
+) (*store.ExamAttemptWorkspaceMutationResult, error) {
 	if command == nil {
 		return s.ExamAttemptWorkspaceStore.ApplyMutation(ctx, input, command)
 	}
@@ -480,7 +674,10 @@ func (s *examAttemptWorkspaceStore) MarkObjectReclaimable(ctx context.Context, o
 	return s.ExamAttemptWorkspaceStore.MarkObjectReclaimable(ctx, objectID)
 }
 
-func (s *examAttemptWorkspaceStore) ClaimObjectsForCleanup(ctx context.Context, input *store.AttemptWorkspaceCleanupClaim) ([]model.AttemptWorkspaceObject, error) {
+func (s *examAttemptWorkspaceStore) ClaimObjectsForCleanup(
+	ctx context.Context,
+	input *store.AttemptWorkspaceCleanupClaim,
+) ([]model.AttemptWorkspaceObject, error) {
 	limit := input.Limit
 	token := input.ClaimToken
 	return s.ExamAttemptWorkspaceStore.ClaimObjectsForCleanup(ctx, &store.AttemptWorkspaceCleanupClaim{Limit: limit, ClaimToken: token})
@@ -489,7 +686,10 @@ func (s *examAttemptWorkspaceStore) ClaimObjectsForCleanup(ctx context.Context, 
 func (s *examAttemptWorkspaceStore) CompleteObjectCleanup(ctx context.Context, input *store.AttemptWorkspaceCleanupCompletion) error {
 	objectID := input.ObjectID
 	token := input.ClaimToken
-	return s.ExamAttemptWorkspaceStore.CompleteObjectCleanup(ctx, &store.AttemptWorkspaceCleanupCompletion{ObjectID: objectID, ClaimToken: token})
+	return s.ExamAttemptWorkspaceStore.CompleteObjectCleanup(
+		ctx,
+		&store.AttemptWorkspaceCleanupCompletion{ObjectID: objectID, ClaimToken: token},
+	)
 }
 
 func (s *examAttemptWorkspaceStore) ReleaseObjectCleanup(ctx context.Context, input *store.AttemptWorkspaceCleanupRelease) error {
@@ -504,13 +704,21 @@ func (s *examResourceStore) List(ctx context.Context, examID model.ExamID) ([]st
 	})
 }
 
-func (s *examResourceStore) Get(ctx context.Context, examID model.ExamID, resourceID model.ExamResourceID) (*store.ExamResourceRecord, error) {
+func (s *examResourceStore) Get(
+	ctx context.Context,
+	examID model.ExamID,
+	resourceID model.ExamResourceID,
+) (*store.ExamResourceRecord, error) {
 	return retryCall1(ctx, s.layer, func() (*store.ExamResourceRecord, error) {
 		return s.ExamResourceStore.Get(ctx, examID, resourceID)
 	})
 }
 
-func (s *examResourceStore) FinalizeUpload(ctx context.Context, input *store.ExamResourceUploadFinalization, command *store.CommandIdempotency) (*store.ExamResourceCommandResult, error) {
+func (s *examResourceStore) FinalizeUpload(
+	ctx context.Context,
+	input *store.ExamResourceUploadFinalization,
+	command *store.CommandIdempotency,
+) (*store.ExamResourceCommandResult, error) {
 	if command == nil {
 		return s.ExamResourceStore.FinalizeUpload(ctx, input, command)
 	}
@@ -519,7 +727,11 @@ func (s *examResourceStore) FinalizeUpload(ctx context.Context, input *store.Exa
 	})
 }
 
-func (s *examResourceStore) UpdateMetadata(ctx context.Context, input *store.ExamResourceMetadataUpdate, command *store.CommandIdempotency) (*store.ExamResourceCommandResult, error) {
+func (s *examResourceStore) UpdateMetadata(
+	ctx context.Context,
+	input *store.ExamResourceMetadataUpdate,
+	command *store.CommandIdempotency,
+) (*store.ExamResourceCommandResult, error) {
 	if command == nil {
 		return s.ExamResourceStore.UpdateMetadata(ctx, input, command)
 	}
@@ -528,7 +740,11 @@ func (s *examResourceStore) UpdateMetadata(ctx context.Context, input *store.Exa
 	})
 }
 
-func (s *examResourceStore) Reorder(ctx context.Context, input *store.ExamResourceReorder, command *store.CommandIdempotency) (*store.ExamResourceCommandResult, error) {
+func (s *examResourceStore) Reorder(
+	ctx context.Context,
+	input *store.ExamResourceReorder,
+	command *store.CommandIdempotency,
+) (*store.ExamResourceCommandResult, error) {
 	if command == nil {
 		return s.ExamResourceStore.Reorder(ctx, input, command)
 	}
@@ -537,7 +753,11 @@ func (s *examResourceStore) Reorder(ctx context.Context, input *store.ExamResour
 	})
 }
 
-func (s *examResourceStore) Remove(ctx context.Context, input *store.ExamResourceRemoval, command *store.CommandIdempotency) (*store.ExamResourceCommandResult, error) {
+func (s *examResourceStore) Remove(
+	ctx context.Context,
+	input *store.ExamResourceRemoval,
+	command *store.CommandIdempotency,
+) (*store.ExamResourceCommandResult, error) {
 	if command == nil {
 		return s.ExamResourceStore.Remove(ctx, input, command)
 	}
@@ -552,29 +772,53 @@ func (s *examStarterWorkspaceStore) List(ctx context.Context, examID model.ExamI
 	})
 }
 
-func (s *examStarterWorkspaceStore) GetFile(ctx context.Context, examID model.ExamID, entryID model.StarterWorkspaceEntryID) (*store.ExamStarterWorkspaceItem, error) {
+func (s *examStarterWorkspaceStore) GetFile(
+	ctx context.Context,
+	examID model.ExamID,
+	entryID model.StarterWorkspaceEntryID,
+) (*store.ExamStarterWorkspaceItem, error) {
 	return retryCall1(ctx, s.layer, func() (*store.ExamStarterWorkspaceItem, error) {
 		return s.ExamStarterWorkspaceStore.GetFile(ctx, examID, entryID)
 	})
 }
 
-func (s *examStarterWorkspaceStore) CreateDirectory(ctx context.Context, input *store.ExamStarterWorkspaceMutation, command *store.CommandIdempotency) (*store.ExamStarterWorkspaceMutationResult, error) {
+func (s *examStarterWorkspaceStore) CreateDirectory(
+	ctx context.Context,
+	input *store.ExamStarterWorkspaceMutation,
+	command *store.CommandIdempotency,
+) (*store.ExamStarterWorkspaceMutationResult, error) {
 	return s.retryMutation(ctx, input, command, s.ExamStarterWorkspaceStore.CreateDirectory)
 }
 
-func (s *examStarterWorkspaceStore) CreateFile(ctx context.Context, input *store.ExamStarterWorkspaceMutation, command *store.CommandIdempotency) (*store.ExamStarterWorkspaceMutationResult, error) {
+func (s *examStarterWorkspaceStore) CreateFile(
+	ctx context.Context,
+	input *store.ExamStarterWorkspaceMutation,
+	command *store.CommandIdempotency,
+) (*store.ExamStarterWorkspaceMutationResult, error) {
 	return s.retryMutation(ctx, input, command, s.ExamStarterWorkspaceStore.CreateFile)
 }
 
-func (s *examStarterWorkspaceStore) MoveEntry(ctx context.Context, input *store.ExamStarterWorkspaceMutation, command *store.CommandIdempotency) (*store.ExamStarterWorkspaceMutationResult, error) {
+func (s *examStarterWorkspaceStore) MoveEntry(
+	ctx context.Context,
+	input *store.ExamStarterWorkspaceMutation,
+	command *store.CommandIdempotency,
+) (*store.ExamStarterWorkspaceMutationResult, error) {
 	return s.retryMutation(ctx, input, command, s.ExamStarterWorkspaceStore.MoveEntry)
 }
 
-func (s *examStarterWorkspaceStore) ReplaceFile(ctx context.Context, input *store.ExamStarterWorkspaceMutation, command *store.CommandIdempotency) (*store.ExamStarterWorkspaceMutationResult, error) {
+func (s *examStarterWorkspaceStore) ReplaceFile(
+	ctx context.Context,
+	input *store.ExamStarterWorkspaceMutation,
+	command *store.CommandIdempotency,
+) (*store.ExamStarterWorkspaceMutationResult, error) {
 	return s.retryMutation(ctx, input, command, s.ExamStarterWorkspaceStore.ReplaceFile)
 }
 
-func (s *examStarterWorkspaceStore) RemoveEntry(ctx context.Context, input *store.ExamStarterWorkspaceMutation, command *store.CommandIdempotency) (*store.ExamStarterWorkspaceMutationResult, error) {
+func (s *examStarterWorkspaceStore) RemoveEntry(
+	ctx context.Context,
+	input *store.ExamStarterWorkspaceMutation,
+	command *store.CommandIdempotency,
+) (*store.ExamStarterWorkspaceMutationResult, error) {
 	return s.retryMutation(ctx, input, command, s.ExamStarterWorkspaceStore.RemoveEntry)
 }
 
@@ -582,7 +826,11 @@ func (s *examStarterWorkspaceStore) retryMutation(
 	ctx context.Context,
 	input *store.ExamStarterWorkspaceMutation,
 	command *store.CommandIdempotency,
-	operation func(context.Context, *store.ExamStarterWorkspaceMutation, *store.CommandIdempotency) (*store.ExamStarterWorkspaceMutationResult, error),
+	operation func(
+		context.Context,
+		*store.ExamStarterWorkspaceMutation,
+		*store.CommandIdempotency,
+	) (*store.ExamStarterWorkspaceMutationResult, error),
 ) (*store.ExamStarterWorkspaceMutationResult, error) {
 	if command == nil {
 		return operation(ctx, input, command)
@@ -595,12 +843,21 @@ func (s *examStarterWorkspaceStore) retryMutation(
 func (s *classStore) Get(ctx context.Context, id model.ClassID) (*model.Class, error) {
 	return retryCall1(ctx, s.layer, func() (*model.Class, error) { return s.ClassStore.Get(ctx, id) })
 }
-func (s *classStore) GetByName(ctx context.Context, programmeLevelID model.ProgrammeLevelID, academicPeriodID model.AcademicPeriodID, name string) (*model.Class, error) {
+func (s *classStore) GetByName(
+	ctx context.Context,
+	programmeLevelID model.ProgrammeLevelID,
+	academicPeriodID model.AcademicPeriodID,
+	name string,
+) (*model.Class, error) {
 	return retryCall1(ctx, s.layer, func() (*model.Class, error) {
 		return s.ClassStore.GetByName(ctx, programmeLevelID, academicPeriodID, name)
 	})
 }
-func (s *classStore) ListByProgrammeLevel(ctx context.Context, programmeLevelID model.ProgrammeLevelID, options store.AcademicNameListOptions) ([]*model.Class, error) {
+func (s *classStore) ListByProgrammeLevel(
+	ctx context.Context,
+	programmeLevelID model.ProgrammeLevelID,
+	options store.AcademicNameListOptions,
+) ([]*model.Class, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.Class, error) {
 		return s.ClassStore.ListByProgrammeLevel(ctx, programmeLevelID, options)
 	})
@@ -610,7 +867,11 @@ func (s *classStore) ListByAcademicPeriod(ctx context.Context, academicPeriodID 
 		return s.ClassStore.ListByAcademicPeriod(ctx, academicPeriodID)
 	})
 }
-func (s *classStore) SearchByAcademicUnit(ctx context.Context, academicUnitID model.AcademicUnitID, options store.AcademicNameListOptions) ([]*model.Class, error) {
+func (s *classStore) SearchByAcademicUnit(
+	ctx context.Context,
+	academicUnitID model.AcademicUnitID,
+	options store.AcademicNameListOptions,
+) ([]*model.Class, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.Class, error) {
 		return s.ClassStore.SearchByAcademicUnit(ctx, academicUnitID, options)
 	})
@@ -637,7 +898,10 @@ func (s *userStore) List(ctx context.Context, options store.UserListOptions) ([]
 func (s *userStore) Count(ctx context.Context, options store.UserListOptions, maximum int) (int, error) {
 	return retryCall1(ctx, s.layer, func() (int, error) { return s.UserStore.Count(ctx, options, maximum) })
 }
-func (s *userStore) ListDirectorySummaries(ctx context.Context, options store.UserDirectorySummaryOptions) ([]store.UserDirectorySummary, error) {
+func (s *userStore) ListDirectorySummaries(
+	ctx context.Context,
+	options store.UserDirectorySummaryOptions,
+) ([]store.UserDirectorySummary, error) {
 	return retryCall1(ctx, s.layer, func() ([]store.UserDirectorySummary, error) {
 		return s.UserStore.ListDirectorySummaries(ctx, options)
 	})
@@ -645,7 +909,11 @@ func (s *userStore) ListDirectorySummaries(ctx context.Context, options store.Us
 func (s *userStore) ListIdentities(ctx context.Context, ids []model.UserID) ([]store.UserIdentity, error) {
 	return retryCall1(ctx, s.layer, func() ([]store.UserIdentity, error) { return s.UserStore.ListIdentities(ctx, ids) })
 }
-func (s *userStore) MatchVisibility(ctx context.Context, userID model.UserID, visibility store.UserVisibilityScope) (store.UserVisibilityMatch, error) {
+func (s *userStore) MatchVisibility(
+	ctx context.Context,
+	userID model.UserID,
+	visibility store.UserVisibilityScope,
+) (store.UserVisibilityMatch, error) {
 	return retryCall1(ctx, s.layer, func() (store.UserVisibilityMatch, error) {
 		return s.UserStore.MatchVisibility(ctx, userID, visibility)
 	})
@@ -723,12 +991,20 @@ func (s *academicUnitMemberStore) ListByUser(ctx context.Context, userID model.U
 		return s.AcademicUnitMemberStore.ListByUser(ctx, userID)
 	})
 }
-func (s *academicUnitMemberStore) ListByAcademicUnit(ctx context.Context, academicUnitID model.AcademicUnitID, at time.Time) ([]*model.AcademicUnitMember, error) {
+func (s *academicUnitMemberStore) ListByAcademicUnit(
+	ctx context.Context,
+	academicUnitID model.AcademicUnitID,
+	at time.Time,
+) ([]*model.AcademicUnitMember, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.AcademicUnitMember, error) {
 		return s.AcademicUnitMemberStore.ListByAcademicUnit(ctx, academicUnitID, at)
 	})
 }
-func (s *academicUnitMemberStore) ListActiveByUser(ctx context.Context, userID model.UserID, at time.Time) ([]*model.AcademicUnitMember, error) {
+func (s *academicUnitMemberStore) ListActiveByUser(
+	ctx context.Context,
+	userID model.UserID,
+	at time.Time,
+) ([]*model.AcademicUnitMember, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.AcademicUnitMember, error) {
 		return s.AcademicUnitMemberStore.ListActiveByUser(ctx, userID, at)
 	})
@@ -769,7 +1045,11 @@ func (s *sessionStore) ListActiveByUser(ctx context.Context, userID model.UserID
 	})
 }
 
-func (s *sessionCredentialStore) GetSessionByTokenHash(ctx context.Context, hash string, kind model.SessionCredentialKind) (*model.SessionCredential, *model.Session, error) {
+func (s *sessionCredentialStore) GetSessionByTokenHash(
+	ctx context.Context,
+	hash string,
+	kind model.SessionCredentialKind,
+) (*model.SessionCredential, *model.Session, error) {
 	return retryCall2(ctx, s.layer, func() (*model.SessionCredential, *model.Session, error) {
 		return s.SessionCredentialStore.GetSessionByTokenHash(ctx, hash, kind)
 	})
@@ -796,12 +1076,19 @@ func (s *roleBindingStore) ListByUser(ctx context.Context, userID model.UserID) 
 		return s.RoleBindingStore.ListByUser(ctx, userID)
 	})
 }
-func (s *roleBindingStore) ListVisibleByUser(ctx context.Context, userID model.UserID, visibility store.UserVisibilityScope) ([]*model.RoleBinding, error) {
+func (s *roleBindingStore) ListVisibleByUser(
+	ctx context.Context,
+	userID model.UserID,
+	visibility store.UserVisibilityScope,
+) ([]*model.RoleBinding, error) {
 	return retryCall1(ctx, s.layer, func() ([]*model.RoleBinding, error) {
 		return s.RoleBindingStore.ListVisibleByUser(ctx, userID, visibility)
 	})
 }
-func (s *roleBindingStore) ListVisibleSummariesByUsers(ctx context.Context, options store.RoleBindingSummaryOptions) ([]store.UserRoleBindingSummary, error) {
+func (s *roleBindingStore) ListVisibleSummariesByUsers(
+	ctx context.Context,
+	options store.RoleBindingSummaryOptions,
+) ([]store.UserRoleBindingSummary, error) {
 	return retryCall1(ctx, s.layer, func() ([]store.UserRoleBindingSummary, error) {
 		return s.RoleBindingStore.ListVisibleSummariesByUsers(ctx, options)
 	})
@@ -844,7 +1131,11 @@ func (s *clusterDiscoveryStore) ListLive(ctx context.Context, liveAt time.Time) 
 	})
 }
 
-func (s *examAuthoringStore) UpdateDraftNativePolicy(ctx context.Context, input *store.ExamDraftNativePolicyUpdate, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
+func (s *examAuthoringStore) UpdateDraftNativePolicy(
+	ctx context.Context,
+	input *store.ExamDraftNativePolicyUpdate,
+	command *store.CommandIdempotency,
+) (*store.ExamAuthoringCommandResult, error) {
 	if command == nil {
 		return s.ExamAuthoringStore.UpdateDraftNativePolicy(ctx, input, command)
 	}
@@ -853,7 +1144,11 @@ func (s *examAuthoringStore) UpdateDraftNativePolicy(ctx context.Context, input 
 	})
 }
 
-func (s *examAttemptStore) PrepareSecurityPreflight(ctx context.Context, input *store.SecurityPreflightPrepare, command *store.CommandIdempotency) (*store.SecurityPreflightPrepared, error) {
+func (s *examAttemptStore) PrepareSecurityPreflight(
+	ctx context.Context,
+	input *store.SecurityPreflightPrepare,
+	command *store.CommandIdempotency,
+) (*store.SecurityPreflightPrepared, error) {
 	if command == nil {
 		return s.ExamAttemptStore.PrepareSecurityPreflight(ctx, input, command)
 	}
@@ -861,7 +1156,11 @@ func (s *examAttemptStore) PrepareSecurityPreflight(ctx context.Context, input *
 		return s.ExamAttemptStore.PrepareSecurityPreflight(ctx, input, command)
 	})
 }
-func (s *examAttemptStore) ReportSecurityPreflight(ctx context.Context, input *store.SecurityPreflightReport, command *store.CommandIdempotency) (*model.SecurityPreflightResult, error) {
+func (s *examAttemptStore) ReportSecurityPreflight(
+	ctx context.Context,
+	input *store.SecurityPreflightReport,
+	command *store.CommandIdempotency,
+) (*model.SecurityPreflightResult, error) {
 	if command == nil {
 		return s.ExamAttemptStore.ReportSecurityPreflight(ctx, input, command)
 	}
@@ -870,19 +1169,31 @@ func (s *examAttemptStore) ReportSecurityPreflight(ctx context.Context, input *s
 	})
 }
 
-func (s *examAttemptStore) ResolveSecurityPreflightSitting(ctx context.Context, id string, userID model.UserID, sessionID model.SessionID) (model.ExamSittingID, error) {
+func (s *examAttemptStore) ResolveSecurityPreflightSitting(
+	ctx context.Context,
+	id string,
+	userID model.UserID,
+	sessionID model.SessionID,
+) (model.ExamSittingID, error) {
 	return retryCall1(ctx, s.layer, func() (model.ExamSittingID, error) {
 		return s.ExamAttemptStore.ResolveSecurityPreflightSitting(ctx, id, userID, sessionID)
 	})
 }
 
-func (s *examAttemptStore) RecoverSecurityPolicy(ctx context.Context, access store.SecurityPreflightAccess, attemptID model.ExamAttemptID) (*store.SecurityPolicyRecovery, error) {
+func (s *examAttemptStore) RecoverSecurityPolicy(
+	ctx context.Context,
+	access store.SecurityPreflightAccess,
+	attemptID model.ExamAttemptID,
+) (*store.SecurityPolicyRecovery, error) {
 	return retryCall1(ctx, s.layer, func() (*store.SecurityPolicyRecovery, error) {
 		return s.ExamAttemptStore.RecoverSecurityPolicy(ctx, access, attemptID)
 	})
 }
 
-func (s *examAttemptStore) UpdateSecurityCoverage(ctx context.Context, input *store.ExamAttemptSecurityCoverageUpdate) (model.SecurityCoverageResult, error) {
+func (s *examAttemptStore) UpdateSecurityCoverage(
+	ctx context.Context,
+	input *store.ExamAttemptSecurityCoverageUpdate,
+) (model.SecurityCoverageResult, error) {
 	return retryCall1(ctx, s.layer, func() (model.SecurityCoverageResult, error) {
 		return s.ExamAttemptStore.UpdateSecurityCoverage(ctx, input)
 	})

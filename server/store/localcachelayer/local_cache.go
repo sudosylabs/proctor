@@ -117,13 +117,18 @@ func New(
 	if invalidation == nil {
 		return nil, errors.New("local store cache invalidation fan-out is nil")
 	}
+
 	layer := &Layer{
-		Store: next, cache: cache, policy: policy, recorder: recorder,
+		Store:        next,
+		cache:        cache,
+		policy:       policy,
+		recorder:     recorder,
 		invalidation: invalidation,
 	}
 	if err := invalidation.RegisterAcademicPeriod(layer.invalidateAcademicPeriod); err != nil {
 		return nil, fmt.Errorf("register academic-period cache invalidation: %w", err)
 	}
+
 	return layer, nil
 }
 
@@ -134,6 +139,7 @@ func (s *academicPeriodStore) Get(ctx context.Context, id model.AcademicPeriodID
 	if !id.IsValid() {
 		return s.AcademicPeriodStore.Get(ctx, id)
 	}
+
 	key := academicPeriodKey(id.String())
 	s.layer.cacheMu.Lock()
 	generation := s.layer.generation
@@ -145,21 +151,26 @@ func (s *academicPeriodStore) Get(ctx context.Context, id model.AcademicPeriodID
 			s.layer.observe(Operation{name: "academic_period.get"}, OutcomeHit)
 			return &period, nil
 		}
+
 		_ = s.layer.cache.Delete(ctx, key)
 	}
+
 	s.layer.cacheMu.Unlock()
 	s.layer.observe(Operation{name: "academic_period.get"}, OutcomeMiss)
 	period, err := s.AcademicPeriodStore.Get(ctx, id)
 	if err != nil || period == nil {
 		return period, err
 	}
+
 	if data, marshalErr := json.Marshal(period); marshalErr == nil {
 		s.layer.cacheMu.Lock()
 		if generation == s.layer.generation {
 			_ = s.layer.cache.Set(ctx, key, data, s.layer.policy.TTL)
 		}
+
 		s.layer.cacheMu.Unlock()
 	}
+
 	return period, nil
 }
 

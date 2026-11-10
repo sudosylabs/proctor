@@ -129,7 +129,28 @@ func ResolveNativePolicy(input NativePolicyResolution) (ResolvedNativePolicy, er
 		return ResolvedNativePolicy{}, ErrNativeCoverageUnsupported
 	}
 	matrix := agreement.Matrix()
-	policy := EffectiveExamSecurityPolicy{PolicyID: input.PolicyID, Revision: input.Revision, Ordinal: input.Ordinal, InstitutionID: input.InstitutionID, ExamRevisionID: input.ExamRevisionID, SittingID: input.SittingID, Scope: input.Scope, IssuedAt: input.IssuedAt, ActiveFrom: input.ActiveFrom, ApplicationReleaseID: matrix.ReleaseID, MatrixID: matrix.MatrixID, TargetTuple: matrix.TargetTuple, RegistryDigest: agreement.RegistryDigest(), FocusLossMode: NativeModeDisabled, ConnectionLossMode: NativeModeEnforce, ResolvedExceptionRefs: []string{}, EvidenceClassID: "native_integrity", VisibilityClassID: "examiner_restricted", RetentionClassID: "native_minimized", Capabilities: slices.Clone(input.Selections.Native.Families)}
+	policy := EffectiveExamSecurityPolicy{
+		PolicyID:              input.PolicyID,
+		Revision:              input.Revision,
+		Ordinal:               input.Ordinal,
+		InstitutionID:         input.InstitutionID,
+		ExamRevisionID:        input.ExamRevisionID,
+		SittingID:             input.SittingID,
+		Scope:                 input.Scope,
+		IssuedAt:              input.IssuedAt,
+		ActiveFrom:            input.ActiveFrom,
+		ApplicationReleaseID:  matrix.ReleaseID,
+		MatrixID:              matrix.MatrixID,
+		TargetTuple:           matrix.TargetTuple,
+		RegistryDigest:        agreement.RegistryDigest(),
+		FocusLossMode:         NativeModeDisabled,
+		ConnectionLossMode:    NativeModeEnforce,
+		ResolvedExceptionRefs: []string{},
+		EvidenceClassID:       "native_integrity",
+		VisibilityClassID:     "examiner_restricted",
+		RetentionClassID:      "native_minimized",
+		Capabilities:          slices.Clone(input.Selections.Native.Families),
+	}
 	if input.Selections.FocusLoss.Enabled {
 		policy.FocusLossMode = NativeModeObserve
 		if input.Selections.FocusLoss.Outcome == IntegrityOutcomeFlagAndSuspend {

@@ -225,7 +225,20 @@ func resolvePreflightPolicy(ctx context.Context, tx *sqlxTxWrapper, input *store
 			return nil, model.ResolvedNativePolicy{}, err
 		}
 	}
-	resolved, err := model.ResolveNativePolicy(model.NativePolicyResolution{PolicyID: model.NewID(), Revision: guard.RevisionID, Ordinal: ordinal, InstitutionID: institutionID, ExamRevisionID: revisionID, SittingID: access.SittingID, Scope: scope, IssuedAt: now, ActiveFrom: now, ActivationTime: now, Selections: selections, Build: access.DesktopBuild})
+	resolved, err := model.ResolveNativePolicy(model.NativePolicyResolution{
+		PolicyID:       model.NewID(),
+		Revision:       guard.RevisionID,
+		Ordinal:        ordinal,
+		InstitutionID:  institutionID,
+		ExamRevisionID: revisionID,
+		SittingID:      access.SittingID,
+		Scope:          scope,
+		IssuedAt:       now,
+		ActiveFrom:     now,
+		ActivationTime: now,
+		Selections:     selections,
+		Build:          access.DesktopBuild,
+	})
 	if err != nil {
 		return nil, model.ResolvedNativePolicy{}, err
 	}

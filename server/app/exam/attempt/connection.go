@@ -56,6 +56,31 @@ type ConnectionResult struct {
 // desktop to a Sitting: it creates the Attempt and its Attempt Workspace on
 // first admission, or resumes the existing Attempt, and opens a new Attempt
 // Participation and Attempt Connection.
+//
+// Who may be admitted is decided in two places. This method checks what the
+// request itself carries:
+//   - a well-formed preflight or resume proof;
+//   - a desktop Session access credential bound to a registered desktop key;
+//   - a released, compatible desktop build;
+//   - a valid idempotency key.
+//
+// It then records audit for model.ActionExamSittingParticipate.
+//
+// The Store's Connect re-decides everything that depends on current rows,
+// inside one transaction that locks those rows, against PostgreSQL time. See
+// lockExamAttemptEligibility in store/sqlstore/exam_attempt_admission_store.go.
+// Admission requires all of the following:
+//   - the Sitting is Open (an exact replay may also find it Paused), and its
+//     scheduled end has not passed;
+//   - the candidate User is active;
+//   - the Session is unrevoked, unexpired and bound to the same desktop
+//     registration, DPoP key and build;
+//   - the candidate is a current member of the Sitting's Class in its
+//     Academic Period, and nothing in the academic lineage is archived;
+//   - the candidate holds no effective management authority over the Exam.
+//
+// The security preflight is evaluated against the frozen native policy in
+// the same transaction (store/sqlstore/connect_security.go).
 func (s *Service) ConnectExamAttempt(ctx context.Context, invocation invocation.Invocation, command ConnectCommand) (_ ConnectionResult, resultErr error) {
 	defer func() { s.recordOperational("connect", resultErr) }()
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()

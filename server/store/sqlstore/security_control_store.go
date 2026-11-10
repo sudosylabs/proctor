@@ -191,7 +191,20 @@ func resolveSecurityControlPolicy(ctx context.Context, tx *sqlxTxWrapper, input 
 		return model.ResolvedNativePolicy{}, nil, err
 	}
 	policy := admitted.Policy
-	resolved, err := model.ResolveNativePolicy(model.NativePolicyResolution{PolicyID: policy.PolicyID, Revision: policy.Revision, Ordinal: policy.Ordinal, InstitutionID: policy.InstitutionID, ExamRevisionID: policy.ExamRevisionID, SittingID: policy.SittingID, Scope: policy.Scope, IssuedAt: policy.IssuedAt, ActiveFrom: policy.ActiveFrom, ActivationTime: now.UTC().Truncate(time.Millisecond), Selections: selections, Build: input.DesktopBuild})
+	resolved, err := model.ResolveNativePolicy(model.NativePolicyResolution{
+		PolicyID:       policy.PolicyID,
+		Revision:       policy.Revision,
+		Ordinal:        policy.Ordinal,
+		InstitutionID:  policy.InstitutionID,
+		ExamRevisionID: policy.ExamRevisionID,
+		SittingID:      policy.SittingID,
+		Scope:          policy.Scope,
+		IssuedAt:       policy.IssuedAt,
+		ActiveFrom:     policy.ActiveFrom,
+		ActivationTime: now.UTC().Truncate(time.Millisecond),
+		Selections:     selections,
+		Build:          input.DesktopBuild,
+	})
 	if err != nil {
 		return model.ResolvedNativePolicy{}, nil, err
 	}

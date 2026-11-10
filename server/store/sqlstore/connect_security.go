@@ -79,7 +79,20 @@ func (s *SQLExamAttemptStore) prepareConnectSecurity(ctx context.Context, tx *sq
 	}
 	// Re-resolve the exact policy identity against current immutable catalogs and
 	// the locked current Revision. A prior accepted report cannot authorize drift.
-	current, err := model.ResolveNativePolicy(model.NativePolicyResolution{PolicyID: policy.PolicyID, Revision: policy.Revision, Ordinal: generation, InstitutionID: policy.InstitutionID, ExamRevisionID: revisionID, SittingID: input.SittingID, Scope: policy.Scope, IssuedAt: policy.IssuedAt, ActiveFrom: policy.ActiveFrom, ActivationTime: row.DatabaseNow, Selections: selections, Build: input.DesktopBuild})
+	current, err := model.ResolveNativePolicy(model.NativePolicyResolution{
+		PolicyID:       policy.PolicyID,
+		Revision:       policy.Revision,
+		Ordinal:        generation,
+		InstitutionID:  policy.InstitutionID,
+		ExamRevisionID: revisionID,
+		SittingID:      input.SittingID,
+		Scope:          policy.Scope,
+		IssuedAt:       policy.IssuedAt,
+		ActiveFrom:     policy.ActiveFrom,
+		ActivationTime: row.DatabaseNow,
+		Selections:     selections,
+		Build:          input.DesktopBuild,
+	})
 	if err != nil {
 		return zero, err
 	}

@@ -469,7 +469,20 @@ func resolveNativeDeliveryPolicy(ctx context.Context, tx *sqlxTxWrapper, owner n
 	if err != nil {
 		return binding, zero, err
 	}
-	resolved, err := model.ResolveNativePolicy(model.NativePolicyResolution{PolicyID: policy.PolicyID, Revision: policy.Revision, Ordinal: policy.Ordinal, InstitutionID: policy.InstitutionID, ExamRevisionID: policy.ExamRevisionID, SittingID: policy.SittingID, Scope: policy.Scope, IssuedAt: policy.IssuedAt, ActiveFrom: policy.ActiveFrom, ActivationTime: owner.Now, Selections: selections, Build: build})
+	resolved, err := model.ResolveNativePolicy(model.NativePolicyResolution{
+		PolicyID:       policy.PolicyID,
+		Revision:       policy.Revision,
+		Ordinal:        policy.Ordinal,
+		InstitutionID:  policy.InstitutionID,
+		ExamRevisionID: policy.ExamRevisionID,
+		SittingID:      policy.SittingID,
+		Scope:          policy.Scope,
+		IssuedAt:       policy.IssuedAt,
+		ActiveFrom:     policy.ActiveFrom,
+		ActivationTime: owner.Now,
+		Selections:     selections,
+		Build:          build,
+	})
 	if err != nil {
 		return binding, zero, err
 	}

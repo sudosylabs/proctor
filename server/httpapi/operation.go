@@ -511,22 +511,6 @@ func (a *API) logInvalidRouteError(request *http.Request, err error) {
 	)
 }
 
-func authRequiresPrincipal(requirement AuthRequirement) bool {
-	switch requirement {
-	case AuthMFARecoverySessionRequired,
-		AuthRecentMFARecoverySessionRequired,
-		AuthMFAEnrollmentSessionRequired,
-		AuthPrincipalRequired,
-		AuthSessionRequired,
-		AuthStrongSessionRequired,
-		AuthRecentSessionRequired,
-		AuthStrongRecentSessionRequired:
-		return true
-	default:
-		return false
-	}
-}
-
 func (r operationRequest) invocation() invocation.Invocation {
 	return invocation.New(r.principal, r.metadata)
 }

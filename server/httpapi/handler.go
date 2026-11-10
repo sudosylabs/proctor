@@ -65,19 +65,20 @@ func requireAuthentication(
 	recentAuthenticationTTL time.Duration,
 	errorPolicy routeErrorPolicy,
 ) http.Handler {
-	switch requirement {
-	case AuthPublic:
-		return next
-	case AuthRefreshCredentialRequired:
+	spec, known := specFor(requirement)
+	switch {
+	case !known:
+		return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			logger.ErrorContext(
+				request.Context(),
+				"route has unsupported authentication requirement",
+				logging.String("requirement", string(requirement)),
+			)
+			WriteProblem(writer, internalProblem(request))
+		})
+	case spec.refresh:
 		return requireRefreshCredential(next, logger, cookies, errorPolicy)
-	case AuthMFARecoverySessionRequired,
-		AuthRecentMFARecoverySessionRequired,
-		AuthMFAEnrollmentSessionRequired,
-		AuthPrincipalRequired,
-		AuthSessionRequired,
-		AuthStrongSessionRequired,
-		AuthRecentSessionRequired,
-		AuthStrongRecentSessionRequired:
+	case spec.principal:
 		return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			credential, appErr := requestAccessCredential(request)
 			if appErr != nil {
@@ -123,14 +124,8 @@ func requireAuthentication(
 			next.ServeHTTP(writer, request.WithContext(ctx))
 		})
 	default:
-		return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-			logger.ErrorContext(
-				request.Context(),
-				"route has unsupported authentication requirement",
-				logging.String("requirement", string(requirement)),
-			)
-			WriteProblem(writer, internalProblem(request))
-		})
+		// A public route.
+		return next
 	}
 }
 
@@ -242,24 +237,19 @@ func requirePrincipalAssurance(
 	// A restricted Web Session reaches only the routes that declare the
 	// restriction. Both restrictions share the recovery routes; the Access
 	// Policy enrollment restriction also reaches the second-factor challenge.
-	recoveryRoute := requirement == AuthMFARecoverySessionRequired || requirement == AuthRecentMFARecoverySessionRequired
-	if principal.MFARecoveryRequired && !recoveryRoute {
+	spec := authSpecs[requirement]
+	if principal.MFARecoveryRequired && !spec.mfaRecovery {
 		return apperror.New("authentication.token_invalid")
 	}
-	if principal.MFAEnrollmentRequired && !recoveryRoute && requirement != AuthMFAEnrollmentSessionRequired {
+	if principal.MFAEnrollmentRequired && !spec.mfaRecovery && !spec.mfaEnrollment {
 		return apperror.New("authentication.token_invalid")
 	}
 
-	strongRequired := requirement == AuthStrongSessionRequired ||
-		requirement == AuthStrongRecentSessionRequired
-	recentRequired := requirement == AuthRecentMFARecoverySessionRequired ||
-		requirement == AuthRecentSessionRequired ||
-		requirement == AuthStrongRecentSessionRequired
-	if strongRequired && !principal.HasStrongAuthentication() {
+	if spec.strong && !principal.HasStrongAuthentication() {
 		return apperror.New("authentication.strong_required")
 	}
 
-	if recentRequired &&
+	if spec.recent &&
 		!principal.IsRecentlyAuthenticated(now, recentAuthenticationTTL) {
 		return apperror.New("authentication.reauthentication_required")
 	}

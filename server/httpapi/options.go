@@ -74,26 +74,8 @@ type RequestSpan interface {
 	End(status int)
 }
 
-type AuthRequirement string
 type IdempotencyRequirement string
 type RouteProtocolKind string
-
-const (
-	AuthPublic                           AuthRequirement = "public"
-	AuthMFARecoverySessionRequired       AuthRequirement = "mfa_recovery_session_required"
-	AuthRecentMFARecoverySessionRequired AuthRequirement = "recent_mfa_recovery_session_required"
-	AuthPrincipalRequired                AuthRequirement = "principal_required"
-	AuthSessionRequired                  AuthRequirement = "session_required"
-	AuthStrongSessionRequired            AuthRequirement = "strong_session_required"
-	AuthRecentSessionRequired            AuthRequirement = "recent_session_required"
-	AuthStrongRecentSessionRequired      AuthRequirement = "strong_recent_session_required"
-	AuthRefreshCredentialRequired        AuthRequirement = "refresh_credential_required"
-)
-
-// AuthMFAEnrollmentSessionRequired admits an ordinary Session or one the
-// Access Policy restricts to MFA enrollment, never an assisted-recovery
-// Session. Only the second-factor challenge declares it.
-const AuthMFAEnrollmentSessionRequired AuthRequirement = "mfa_enrollment_session_required"
 
 const (
 	IdempotencyNone     IdempotencyRequirement = "none"

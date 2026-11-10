@@ -92,28 +92,20 @@ func routeErrorCodes(auth AuthRequirement, method string, errorCodes []string) [
 // credential extraction and DPoP failures, and the assurance refusals of the
 // requirement.
 func kernelErrorCodes(auth AuthRequirement, method string) []string {
-	unsafe := requiresCSRF(method)
-	switch auth {
-	case AuthPublic:
-		if unsafe {
-			return []string{"request.invalid"}
-		}
+	spec, ok := specFor(auth)
+	if !ok {
 		return nil
-	case AuthRefreshCredentialRequired:
+	}
+	unsafe := requiresCSRF(method)
+
+	switch {
+	case spec.refresh:
 		codes := []string{"authentication.required", "authentication.credential_ambiguous"}
 		if unsafe {
 			codes = append(codes, "authentication.csrf.invalid")
 		}
-
 		return codes
-	case AuthMFARecoverySessionRequired,
-		AuthRecentMFARecoverySessionRequired,
-		AuthMFAEnrollmentSessionRequired,
-		AuthPrincipalRequired,
-		AuthSessionRequired,
-		AuthStrongSessionRequired,
-		AuthRecentSessionRequired,
-		AuthStrongRecentSessionRequired:
+	case spec.principal:
 		codes := []string{
 			"authentication.required",
 			"authentication.token_invalid",
@@ -126,15 +118,18 @@ func kernelErrorCodes(auth AuthRequirement, method string) []string {
 		if unsafe {
 			codes = append(codes, "authentication.csrf.invalid")
 		}
-		if auth == AuthStrongSessionRequired || auth == AuthStrongRecentSessionRequired {
+		if spec.strong {
 			codes = append(codes, "authentication.strong_required")
 		}
-		if auth == AuthRecentMFARecoverySessionRequired || auth == AuthRecentSessionRequired || auth == AuthStrongRecentSessionRequired {
+		if spec.recent {
 			codes = append(codes, "authentication.reauthentication_required")
 		}
-
 		return codes
 	default:
+		// A public route.
+		if unsafe {
+			return []string{"request.invalid"}
+		}
 		return nil
 	}
 }

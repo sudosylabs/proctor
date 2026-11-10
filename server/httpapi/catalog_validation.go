@@ -51,7 +51,7 @@ func validateResourceCatalog(apiPrefix string, resources []apiResource) error {
 			}
 
 			if effectiveIdempotencyRequirement(route.idempotency) != IdempotencyNone &&
-				(!idempotencyPrincipalAuth(route.auth) || route.upgradeOperation != nil || route.operation == nil && route.protocolOperation == nil) {
+				(!authRequiresPrincipal(route.auth) || route.upgradeOperation != nil || route.operation == nil && route.protocolOperation == nil) {
 				return fmt.Errorf("resource %q %s idempotency requires a principal route", resource.name, route.method)
 			}
 
@@ -138,22 +138,6 @@ func validateDeclaredKernelCodes(resources []apiResource) error {
 	return nil
 }
 
-func idempotencyPrincipalAuth(requirement AuthRequirement) bool {
-	switch requirement {
-	case AuthMFARecoverySessionRequired,
-		AuthRecentMFARecoverySessionRequired,
-		AuthMFAEnrollmentSessionRequired,
-		AuthPrincipalRequired,
-		AuthSessionRequired,
-		AuthStrongSessionRequired,
-		AuthRecentSessionRequired,
-		AuthStrongRecentSessionRequired:
-		return true
-	default:
-		return false
-	}
-}
-
 func validIdempotencyRequirement(requirement IdempotencyRequirement) bool {
 	return requirement == "" || requirement == IdempotencyNone || requirement == IdempotencyOptional || requirement == IdempotencyRequired
 }
@@ -185,21 +169,8 @@ func countTrue(values ...bool) int {
 }
 
 func validAuthRequirement(requirement AuthRequirement) bool {
-	switch requirement {
-	case AuthPublic,
-		AuthMFARecoverySessionRequired,
-		AuthRecentMFARecoverySessionRequired,
-		AuthMFAEnrollmentSessionRequired,
-		AuthPrincipalRequired,
-		AuthSessionRequired,
-		AuthStrongSessionRequired,
-		AuthRecentSessionRequired,
-		AuthStrongRecentSessionRequired,
-		AuthRefreshCredentialRequired:
-		return true
-	default:
-		return false
-	}
+	_, ok := specFor(requirement)
+	return ok
 }
 
 func isHTTPMethod(method string) bool {

@@ -12,9 +12,11 @@
 // credentials and writes responses; deciding whether the caller may act on a
 // resource stays in the application use cases.
 //
-// Every route declares the credential and assurance it requires, as an
-// AuthRequirement such as AuthSessionRequired or
-// AuthStrongRecentSessionRequired, and the exact error codes it can return.
+// A route is one endpoint struct literal with named fields: Method, Path,
+// Auth, Errors and Handle. Auth is the credential and assurance the route
+// requires, an AuthRequirement such as AuthPublic, AuthSessionRequired or
+// AuthStrongRecentSessionRequired; it has no default. Errors lists the exact
+// codes the operation can return.
 // New takes the application and a Settings value. It builds each resource
 // from the application service that owns its use cases, compiles every route
 // into one fixed catalog and fails on an ambiguous or invalid route, so
@@ -24,7 +26,8 @@
 //   - api.go: API, New, and newAPI, which handler tests call with fakes
 //   - options.go: Settings and the ports composition supplies
 //   - resource_catalog.go: every resource in the production API, in order
-//   - route_definition.go and route_path.go: how a route is declared
+//   - route_definition.go and route_path.go: the endpoint type and the path
+//     template syntax
 //   - problem.go and error_catalog.yaml: Problem Details and error codes
 //   - CONTRACT.md: the rules every route follows
 //

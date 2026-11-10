@@ -215,21 +215,22 @@ type examSittingHTTPModule struct{ application ExamSittingApplication }
 
 func examSittingResource(application ExamSittingApplication) apiResource {
 	module := examSittingHTTPModule{application: application}
-	collection := path("/exams/{exam_id}/sittings")
-	member := path("/exams/{exam_id}/sittings/{exam_sitting_id}")
-	cancel := path("/exams/{exam_id}/sittings/{exam_sitting_id}/cancel")
-	pause := path("/exams/{exam_id}/sittings/{exam_sitting_id}/pause")
-	resume := path("/exams/{exam_id}/sittings/{exam_sitting_id}/resume")
-	extend := path("/exams/{exam_id}/sittings/{exam_sitting_id}/extend")
-	closeSitting := path("/exams/{exam_id}/sittings/{exam_sitting_id}/close")
-	noShows := path("/exams/{exam_id}/sittings/{exam_sitting_id}/no-shows")
+	collection := "/exams/{exam_id}/sittings"
+	member := "/exams/{exam_id}/sittings/{exam_sitting_id}"
+	cancel := "/exams/{exam_id}/sittings/{exam_sitting_id}/cancel"
+	pause := "/exams/{exam_id}/sittings/{exam_sitting_id}/pause"
+	resume := "/exams/{exam_id}/sittings/{exam_sitting_id}/resume"
+	extend := "/exams/{exam_id}/sittings/{exam_sitting_id}/extend"
+	closeSitting := "/exams/{exam_id}/sittings/{exam_sitting_id}/close"
+	noShows := "/exams/{exam_id}/sittings/{exam_sitting_id}/no-shows"
 	return newResource(
 		"exam-sittings",
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			collection,
-			[]string{
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        collection,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -247,12 +248,13 @@ func examSittingResource(application ExamSittingApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			module.schedule,
-		),
-		principalRoute(
-			http.MethodGet,
-			collection,
-			[]string{
+			Handle: module.schedule,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   collection,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -260,12 +262,13 @@ func examSittingResource(application ExamSittingApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			module.list,
-		),
-		principalRoute(
-			http.MethodGet,
-			member,
-			[]string{
+			Handle: module.list,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   member,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -273,13 +276,14 @@ func examSittingResource(application ExamSittingApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			module.get,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPatch,
-			member,
-			[]string{
+			Handle: module.get,
+		},
+		endpoint{
+			Method:      http.MethodPatch,
+			Path:        member,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -300,13 +304,14 @@ func examSittingResource(application ExamSittingApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			module.updateSchedule,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			cancel,
-			[]string{
+			Handle: module.updateSchedule,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        cancel,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -323,13 +328,14 @@ func examSittingResource(application ExamSittingApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			module.cancel,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			pause,
-			[]string{
+			Handle: module.cancel,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        pause,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -338,31 +344,6 @@ func examSittingResource(application ExamSittingApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.conflict",
 				"exam.sitting.unavailable",
-				"exam.sitting.revision_conflict",
-				"exam.sitting.state_conflict",
-				"exam.sitting.deadline_reached",
-				"idempotency.key_required",
-				"idempotency.key_invalid",
-				"idempotency.conflict",
-				"idempotency.in_progress",
-				"exam.archived",
-			},
-			module.pause,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			resume,
-			[]string{
-				"authorization.request.invalid",
-				"authorization.unavailable",
-				"audit.unavailable",
-				"request.invalid",
-				"resource.not_found",
-				"exam.sitting.invalid",
-				"exam.sitting.conflict",
-				"exam.sitting.unavailable",
-				"exam.archived",
 				"exam.sitting.revision_conflict",
 				"exam.sitting.state_conflict",
 				"exam.sitting.deadline_reached",
@@ -370,14 +351,41 @@ func examSittingResource(application ExamSittingApplication) apiResource {
 				"idempotency.key_invalid",
 				"idempotency.conflict",
 				"idempotency.in_progress",
+				"exam.archived",
 			},
-			module.resume,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			extend,
-			[]string{
+			Handle: module.pause,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        resume,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.sitting.invalid",
+				"exam.sitting.conflict",
+				"exam.sitting.unavailable",
+				"exam.archived",
+				"exam.sitting.revision_conflict",
+				"exam.sitting.state_conflict",
+				"exam.sitting.deadline_reached",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+			},
+			Handle: module.resume,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        extend,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -398,13 +406,14 @@ func examSittingResource(application ExamSittingApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			module.extend,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			closeSitting,
-			[]string{
+			Handle: module.extend,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        closeSitting,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -422,12 +431,13 @@ func examSittingResource(application ExamSittingApplication) apiResource {
 				"idempotency.in_progress",
 				"exam.archived",
 			},
-			module.close,
-		),
-		principalRoute(
-			http.MethodGet,
-			noShows,
-			[]string{
+			Handle: module.close,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   noShows,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -436,8 +446,8 @@ func examSittingResource(application ExamSittingApplication) apiResource {
 				"exam.sitting.unavailable",
 				"exam.sitting.state_conflict",
 			},
-			module.listNoShows,
-		),
+			Handle: module.listNoShows,
+		},
 	)
 }
 

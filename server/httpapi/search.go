@@ -76,17 +76,23 @@ func searchResource(search SearchApplication) apiResource {
 	module := searchResourceModule{search: search}
 	return newResource(
 		"search",
-		principalRoute(http.MethodGet, path("/search"), []string{
-			"authorization.denied",
-			"authorization.request.invalid",
-			"authorization.unavailable",
-			"request.invalid",
-			"search.query.invalid",
-			"exam.invalid",
-			"exam.unavailable",
-			"administration.unavailable",
-			"resource.not_found",
-		}, module.find),
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/search",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"request.invalid",
+				"search.query.invalid",
+				"exam.invalid",
+				"exam.unavailable",
+				"administration.unavailable",
+				"resource.not_found",
+			},
+			Handle: module.find,
+		},
 	)
 }
 

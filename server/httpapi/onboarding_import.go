@@ -130,15 +130,15 @@ type onboardingImportRowResponse struct {
 func onboardingImportResource(imports OnboardingImportApplication) apiResource {
 	module := onboardingImportModule{imports: imports}
 	return newResource("onboarding-imports",
-		idempotentProtocolRoute(
-			IdempotencyNone,
-			store.OnboardingImportMaximumBytes,
-			"onboarding-import-csv",
-			RouteProtocolStreamingUpload,
-			AuthPrincipalRequired,
-			http.MethodPost,
-			path("/onboarding-imports"),
-			[]string{
+		endpoint{
+			Method:       http.MethodPost,
+			Path:         "/onboarding-imports",
+			Auth:         AuthPrincipalRequired,
+			Idempotency:  IdempotencyNone,
+			MaxBodyBytes: store.OnboardingImportMaximumBytes,
+			ProtocolName: "onboarding-import-csv",
+			ProtocolKind: RouteProtocolStreamingUpload,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -155,12 +155,13 @@ func onboardingImportResource(imports OnboardingImportApplication) apiResource {
 				"student_progression.conflict",
 				"student_progression.unavailable",
 			},
-			module.upload,
-		),
-		principalRoute(
-			http.MethodGet,
-			path("/onboarding-imports"),
-			[]string{
+			Protocol: module.upload,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/onboarding-imports",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -169,12 +170,13 @@ func onboardingImportResource(imports OnboardingImportApplication) apiResource {
 				"onboarding_import.unavailable",
 				"invitation.unavailable",
 			},
-			module.list,
-		),
-		principalRoute(
-			http.MethodGet,
-			path("/onboarding-imports/{onboarding_import_id}"),
-			[]string{
+			Handle: module.list,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/onboarding-imports/{onboarding_import_id}",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -183,13 +185,14 @@ func onboardingImportResource(imports OnboardingImportApplication) apiResource {
 				"onboarding_import.unavailable",
 				"invitation.unavailable",
 			},
-			module.get,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			path("/onboarding-imports/{onboarding_import_id}/commit"),
-			[]string{
+			Handle: module.get,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        "/onboarding-imports/{onboarding_import_id}/commit",
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -207,12 +210,13 @@ func onboardingImportResource(imports OnboardingImportApplication) apiResource {
 				"student_progression.conflict",
 				"student_progression.unavailable",
 			},
-			module.commit,
-		),
-		principalRoute(
-			http.MethodPost,
-			path("/onboarding-imports/{onboarding_import_id}/cancel"),
-			[]string{
+			Handle: module.commit,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/onboarding-imports/{onboarding_import_id}/cancel",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -226,15 +230,15 @@ func onboardingImportResource(imports OnboardingImportApplication) apiResource {
 				"student_progression.conflict",
 				"student_progression.unavailable",
 			},
-			module.cancel,
-		),
-		protocolRoute(
-			"onboarding-import-report",
-			RouteProtocolBinaryDownload,
-			AuthPrincipalRequired,
-			http.MethodGet,
-			path("/onboarding-imports/{onboarding_import_id}/report"),
-			[]string{
+			Handle: module.cancel,
+		},
+		endpoint{
+			Method:       http.MethodGet,
+			Path:         "/onboarding-imports/{onboarding_import_id}/report",
+			Auth:         AuthPrincipalRequired,
+			ProtocolName: "onboarding-import-report",
+			ProtocolKind: RouteProtocolBinaryDownload,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -244,8 +248,8 @@ func onboardingImportResource(imports OnboardingImportApplication) apiResource {
 				"onboarding_import.unavailable",
 				"invitation.unavailable",
 			},
-			module.report,
-		),
+			Protocol: module.report,
+		},
 	)
 }
 

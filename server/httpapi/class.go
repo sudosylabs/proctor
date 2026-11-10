@@ -52,42 +52,48 @@ func classResource(classes ClassApplication) apiResource {
 	module := classResourceModule{classes: classes}
 	return newResource(
 		"classes",
-		principalRoute(
-			http.MethodGet,
-			path("/academic-units/{academic_unit_id}/classes"),
-			classReadErrorCodes(),
-			module.search,
-		),
-		principalRoute(
-			http.MethodGet,
-			path("/programme-levels/{programme_level_id}/classes"),
-			classReadErrorCodes(),
-			module.list,
-		),
-		principalRoute(
-			http.MethodPost,
-			path("/programme-levels/{programme_level_id}/classes"),
-			classMutationErrorCodes("class.invalid", "class.conflict"),
-			module.create,
-		),
-		principalRoute(
-			http.MethodGet,
-			path("/classes/{class_id}"),
-			classReadErrorCodes(),
-			module.get,
-		),
-		principalRoute(
-			http.MethodPatch,
-			path("/classes/{class_id}"),
-			classMutationErrorCodes("class.invalid", "class.conflict"),
-			module.patch,
-		),
-		principalRoute(
-			http.MethodDelete,
-			path("/classes/{class_id}"),
-			classMutationErrorCodes("class.conflict"),
-			module.archive,
-		),
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/academic-units/{academic_unit_id}/classes",
+			Auth:   AuthPrincipalRequired,
+			Errors: classReadErrorCodes(),
+			Handle: module.search,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/programme-levels/{programme_level_id}/classes",
+			Auth:   AuthPrincipalRequired,
+			Errors: classReadErrorCodes(),
+			Handle: module.list,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/programme-levels/{programme_level_id}/classes",
+			Auth:   AuthPrincipalRequired,
+			Errors: classMutationErrorCodes("class.invalid", "class.conflict"),
+			Handle: module.create,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/classes/{class_id}",
+			Auth:   AuthPrincipalRequired,
+			Errors: classReadErrorCodes(),
+			Handle: module.get,
+		},
+		endpoint{
+			Method: http.MethodPatch,
+			Path:   "/classes/{class_id}",
+			Auth:   AuthPrincipalRequired,
+			Errors: classMutationErrorCodes("class.invalid", "class.conflict"),
+			Handle: module.patch,
+		},
+		endpoint{
+			Method: http.MethodDelete,
+			Path:   "/classes/{class_id}",
+			Auth:   AuthPrincipalRequired,
+			Errors: classMutationErrorCodes("class.conflict"),
+			Handle: module.archive,
+		},
 	)
 }
 

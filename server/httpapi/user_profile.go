@@ -203,15 +203,16 @@ type userProfileResourceModule struct {
 
 func userProfileResource(profiles UserProfileApplication, accounts UserAccountApplication, emails UserEmailApplication) apiResource {
 	module := userProfileResourceModule{profiles: profiles, accounts: accounts, emails: emails}
-	userPath := path("/users/{user_id}")
-	picture := path("/users/{user_id}/profile-picture")
-	email := path("/users/{user_id}/email")
+	userPath := "/users/{user_id}"
+	picture := "/users/{user_id}/profile-picture"
+	email := "/users/{user_id}/email"
 	return newResource(
 		"user-profiles",
-		principalRoute(
-			http.MethodGet,
-			path("/users"),
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/users",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -220,12 +221,13 @@ func userProfileResource(profiles UserProfileApplication, accounts UserAccountAp
 				"administration.unavailable",
 				"resource.not_found",
 			},
-			module.search,
-		),
-		principalRoute(
-			http.MethodGet,
-			path("/users/me"),
-			[]string{
+			Handle: module.search,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/users/me",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -233,31 +235,41 @@ func userProfileResource(profiles UserProfileApplication, accounts UserAccountAp
 				"administration.unavailable",
 				"request.invalid",
 			},
-			module.current,
-		),
-		sessionRoute(
-			http.MethodGet,
-			path("/users/me/context"),
-			currentUserContextSessionCodes("administration.unavailable"),
-			module.context,
-		),
-		sessionRoute(
-			http.MethodGet,
-			path("/users/me/exam-activity"),
-			[]string{"request.invalid", "exam.attempt.unavailable", "exam.attempt.invalid", "exam.delivery.metadata_capacity"},
-			module.examActivity,
-		),
-		principalRoute(http.MethodGet, userPath, userProfileReadCodes("request.invalid", "resource.not_found"), module.get),
-		principalRoute(
-			http.MethodPatch,
-			userPath,
-			userProfileMutationCodes("request.invalid", "resource.not_found", "user.invalid", "user.conflict"),
-			module.update,
-		),
-		strongRecentSessionRoute(
-			http.MethodPut,
-			email,
-			userProfileMutationCodes(
+			Handle: module.current,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/users/me/context",
+			Auth:   AuthSessionRequired,
+			Errors: currentUserContextSessionCodes("administration.unavailable"),
+			Handle: module.context,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/users/me/exam-activity",
+			Auth:   AuthSessionRequired,
+			Errors: []string{"request.invalid", "exam.attempt.unavailable", "exam.attempt.invalid", "exam.delivery.metadata_capacity"},
+			Handle: module.examActivity,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   userPath,
+			Auth:   AuthPrincipalRequired,
+			Errors: userProfileReadCodes("request.invalid", "resource.not_found"),
+			Handle: module.get,
+		},
+		endpoint{
+			Method: http.MethodPatch,
+			Path:   userPath,
+			Auth:   AuthPrincipalRequired,
+			Errors: userProfileMutationCodes("request.invalid", "resource.not_found", "user.invalid", "user.conflict"),
+			Handle: module.update,
+		},
+		endpoint{
+			Method: http.MethodPut,
+			Path:   email,
+			Auth:   AuthStrongRecentSessionRequired,
+			Errors: userProfileMutationCodes(
 				"request.invalid",
 				"resource.not_found",
 				"user.invalid",
@@ -266,21 +278,22 @@ func userProfileResource(profiles UserProfileApplication, accounts UserAccountAp
 				"authentication.rate_limited",
 				"authentication.rate_limit_unavailable",
 			),
-			module.changeEmail,
-		),
-		strongRecentSessionRoute(
-			http.MethodPost,
-			path("/users/{user_id}/email/verify"),
-			userProfileMutationCodes("request.invalid", "resource.not_found", "user.conflict", "authentication.account_recovery.unavailable"),
-			module.verifyEmail,
-		),
-		protocolRoute(
-			"profile-picture-download",
-			RouteProtocolBinaryDownload,
-			AuthPrincipalRequired,
-			http.MethodGet,
-			picture,
-			[]string{
+			Handle: module.changeEmail,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/{user_id}/email/verify",
+			Auth:   AuthStrongRecentSessionRequired,
+			Errors: userProfileMutationCodes("request.invalid", "resource.not_found", "user.conflict", "authentication.account_recovery.unavailable"),
+			Handle: module.verifyEmail,
+		},
+		endpoint{
+			Method:       http.MethodGet,
+			Path:         picture,
+			Auth:         AuthPrincipalRequired,
+			ProtocolName: "profile-picture-download",
+			ProtocolKind: RouteProtocolBinaryDownload,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -290,15 +303,15 @@ func userProfileResource(profiles UserProfileApplication, accounts UserAccountAp
 				"profile_picture.unavailable",
 				"administration.unavailable",
 			},
-			module.downloadPicture,
-		),
-		protocolRoute(
-			"profile-picture-upload",
-			RouteProtocolStreamingUpload,
-			AuthPrincipalRequired,
-			http.MethodPut,
-			picture,
-			[]string{
+			Protocol: module.downloadPicture,
+		},
+		endpoint{
+			Method:       http.MethodPut,
+			Path:         picture,
+			Auth:         AuthPrincipalRequired,
+			ProtocolName: "profile-picture-upload",
+			ProtocolKind: RouteProtocolStreamingUpload,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -311,12 +324,13 @@ func userProfileResource(profiles UserProfileApplication, accounts UserAccountAp
 				"user.conflict",
 				"administration.unavailable",
 			},
-			module.uploadPicture,
-		),
-		principalRoute(
-			http.MethodDelete,
-			picture,
-			[]string{
+			Protocol: module.uploadPicture,
+		},
+		endpoint{
+			Method: http.MethodDelete,
+			Path:   picture,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -327,8 +341,8 @@ func userProfileResource(profiles UserProfileApplication, accounts UserAccountAp
 				"user.conflict",
 				"administration.unavailable",
 			},
-			module.removePicture,
-		),
+			Handle: module.removePicture,
+		},
 	)
 }
 

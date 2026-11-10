@@ -30,7 +30,7 @@ type examExportsHTTPModule struct {
 }
 
 func examExportsResource(application ExamExportsApplication) apiResource {
-	var routes []routeDefinition
+	var routes []endpoint
 	for _, submission := range []bool{false, true} {
 		m := examExportsHTTPModule{application: application, submission: submission}
 		base := "/exams/{exam_id}/sittings/{exam_sitting_id}"
@@ -38,13 +38,15 @@ func examExportsResource(application ExamExportsApplication) apiResource {
 			base += "/submissions/{submission_id}"
 		}
 
-		collection := path(base + "/exports")
-		member := path(base + "/exports/{exam_export_id}")
-		content := path(base + "/exports/{exam_export_id}/content")
-		create := sessionRoute(
-			http.MethodPost,
-			collection,
-			[]string{
+		collection := base + "/exports"
+		member := base + "/exports/{exam_export_id}"
+		content := base + "/exports/{exam_export_id}/content"
+		create := endpoint{
+			Method:      http.MethodPost,
+			Path:        collection,
+			Auth:        AuthSessionRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -64,9 +66,8 @@ func examExportsResource(application ExamExportsApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			m.create,
-		)
-		create.idempotency = IdempotencyRequired
+			Handle: m.create,
+		}
 		protocol := "sitting-export-content"
 		if submission {
 			protocol = "submission-export-content"
@@ -75,10 +76,11 @@ func examExportsResource(application ExamExportsApplication) apiResource {
 		routes = append(
 			routes,
 			create,
-			sessionRoute(
-				http.MethodGet,
-				member,
-				[]string{
+			endpoint{
+				Method: http.MethodGet,
+				Path:   member,
+				Auth:   AuthSessionRequired,
+				Errors: []string{
 					"authorization.request.invalid",
 					"authorization.unavailable",
 					"request.invalid",
@@ -89,15 +91,15 @@ func examExportsResource(application ExamExportsApplication) apiResource {
 					"exam.export.conflict",
 					"exam.export.unavailable",
 				},
-				m.get,
-			),
-			protocolRoute(
-				protocol,
-				RouteProtocolBinaryDownload,
-				AuthSessionRequired,
-				http.MethodGet,
-				content,
-				[]string{
+				Handle: m.get,
+			},
+			endpoint{
+				Method:       http.MethodGet,
+				Path:         content,
+				Auth:         AuthSessionRequired,
+				ProtocolName: protocol,
+				ProtocolKind: RouteProtocolBinaryDownload,
+				Errors: []string{
 					"authorization.request.invalid",
 					"authorization.unavailable",
 					"request.invalid",
@@ -110,8 +112,8 @@ func examExportsResource(application ExamExportsApplication) apiResource {
 					"exam.export.expired",
 					"exam.export.not_ready",
 				},
-				m.open,
-			),
+				Protocol: m.open,
+			},
 		)
 	}
 

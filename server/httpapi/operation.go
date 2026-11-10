@@ -100,11 +100,11 @@ func (r protocolResult) withHeaders(headers http.Header) protocolResult {
 func (a *API) prepareOperation(
 	writer http.ResponseWriter,
 	request *http.Request,
-	definition routeDefinition,
+	definition endpoint,
 	errorPolicy routeErrorPolicy,
 ) (operationRequest, bool) {
 	principal, hasPrincipal := Principal(request.Context())
-	if authRequiresPrincipal(definition.auth) && !hasPrincipal {
+	if authRequiresPrincipal(definition.Auth) && !hasPrincipal {
 		writeRouteApplicationError(writer, request, a.logger, errorPolicy, authenticationRequiredError())
 		return operationRequest{}, false
 	}
@@ -157,7 +157,7 @@ func (a *API) writeOperationError(
 }
 
 func (a *API) upgradeOperationHandler(
-	definition routeDefinition,
+	definition endpoint,
 	errorPolicy routeErrorPolicy,
 ) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -166,7 +166,7 @@ func (a *API) upgradeOperationHandler(
 			return
 		}
 
-		err := definition.upgradeOperation(writer, prepared)
+		err := definition.Upgrade(writer, prepared)
 		if err == nil {
 			return
 		}
@@ -255,7 +255,7 @@ func applyResponseHeaders(writer http.ResponseWriter, headers http.Header) {
 }
 
 func (a *API) operationHandler(
-	definition routeDefinition,
+	definition endpoint,
 	errorPolicy routeErrorPolicy,
 ) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -264,7 +264,7 @@ func (a *API) operationHandler(
 			return
 		}
 
-		result, err := definition.operation(prepared)
+		result, err := definition.Handle(prepared)
 		if err != nil {
 			a.writeOperationError(writer, request, errorPolicy, err, true)
 			return
@@ -328,7 +328,7 @@ func validateOperationResult(result operationResult, errorPolicy routeErrorPolic
 }
 
 func (a *API) protocolOperationHandler(
-	definition routeDefinition,
+	definition endpoint,
 	errorPolicy routeErrorPolicy,
 ) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -337,13 +337,13 @@ func (a *API) protocolOperationHandler(
 			return
 		}
 
-		if definition.protocolKind == RouteProtocolStreamingUpload {
-			if err := a.transferDeadlines.extendForUpload(writer, request.ContentLength, definition.maxBodyBytes); err != nil {
+		if definition.ProtocolKind == RouteProtocolStreamingUpload {
+			if err := a.transferDeadlines.extendForUpload(writer, request.ContentLength, definition.MaxBodyBytes); err != nil {
 				a.logger.ErrorContext(request.Context(), "extend upload transfer deadline", logging.Err(err))
 			}
 		}
 
-		result, err := definition.protocolOperation(prepared)
+		result, err := definition.Protocol(prepared)
 		if result.body != nil {
 			defer func() {
 				if err := result.body.Close(); err != nil {
@@ -357,7 +357,7 @@ func (a *API) protocolOperationHandler(
 			return
 		}
 
-		if err := validateProtocolResult(definition.protocolKind, result); err != nil {
+		if err := validateProtocolResult(definition.ProtocolKind, result); err != nil {
 			a.logger.ErrorContext(request.Context(), "route returned an invalid protocol result", logging.Err(err))
 			WriteProblem(writer, internalProblem(request))
 			return

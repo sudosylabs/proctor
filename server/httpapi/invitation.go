@@ -269,11 +269,12 @@ type invitationResourceModule struct{ invitations InvitationApplication }
 func invitationResource(invitations InvitationApplication) apiResource {
 	module := invitationResourceModule{invitations: invitations}
 	return newResource("invitations",
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			path("/invitation-batches"),
-			[]string{
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        "/invitation-batches",
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -286,12 +287,13 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"idempotency.key_required",
 				"idempotency.key_invalid",
 			},
-			module.batch,
-		),
-		principalRoute(
-			http.MethodGet,
-			path("/invitations"),
-			[]string{
+			Handle: module.batch,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/invitations",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -300,12 +302,13 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"invitation.query.invalid",
 				"invitation.unavailable",
 			},
-			module.list,
-		),
-		principalRoute(
-			http.MethodGet,
-			path("/invitations/{invitation_id}"),
-			[]string{
+			Handle: module.list,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/invitations/{invitation_id}",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -313,31 +316,13 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"resource.not_found",
 				"invitation.unavailable",
 			},
-			module.get,
-		),
-		principalRoute(
-			http.MethodPost,
-			path("/invitations/{invitation_id}/resend"),
-			[]string{
-				"authorization.denied",
-				"authorization.request.invalid",
-				"authorization.unavailable",
-				"audit.unavailable",
-				"request.invalid",
-				"resource.not_found",
-				"invitation.conflict",
-				"invitation.mail_unavailable",
-				"invitation.unavailable",
-				"authentication.reauthentication_required",
-				"authentication.strong_required",
-				"onboarding_batch.duplicate",
-			},
-			module.resend,
-		),
-		principalRoute(
-			http.MethodPost,
-			path("/invitations/{invitation_id}/revoke"),
-			[]string{
+			Handle: module.get,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/invitations/{invitation_id}/resend",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -351,12 +336,33 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"authentication.strong_required",
 				"onboarding_batch.duplicate",
 			},
-			module.revoke,
-		),
-		principalRoute(
-			http.MethodPost,
-			path("/invitations/{invitation_id}/replacement"),
-			[]string{
+			Handle: module.resend,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/invitations/{invitation_id}/revoke",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"invitation.conflict",
+				"invitation.mail_unavailable",
+				"invitation.unavailable",
+				"authentication.reauthentication_required",
+				"authentication.strong_required",
+				"onboarding_batch.duplicate",
+			},
+			Handle: module.revoke,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/invitations/{invitation_id}/replacement",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -371,12 +377,13 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"authentication.strong_required",
 				"authentication.reauthentication_required",
 			},
-			module.replace,
-		),
-		principalRoute(
-			http.MethodPost,
-			path("/classes/{class_id}/invitations/student"),
-			[]string{
+			Handle: module.replace,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/classes/{class_id}/invitations/student",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -390,12 +397,13 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"invitation.unavailable",
 				"onboarding_batch.duplicate",
 			},
-			module.issueStudentClass,
-		),
-		publicRoute(
-			http.MethodPost,
-			path("/invitations/student-class/accept"),
-			[]string{
+			Handle: module.issueStudentClass,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/invitations/student-class/accept",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"authentication.rate_limited",
 				"authentication.rate_limit_unavailable",
@@ -409,12 +417,13 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"authentication.password.identity_invalid",
 				"service.busy",
 			},
-			module.acceptStudentClass,
-		),
-		principalRoute(
-			http.MethodPost,
-			path("/academic-units/{academic_unit_id}/invitations/teacher"),
-			[]string{
+			Handle: module.acceptStudentClass,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/academic-units/{academic_unit_id}/invitations/teacher",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -428,12 +437,13 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"invitation.unavailable",
 				"onboarding_batch.duplicate",
 			},
-			module.issueTeacherAcademicUnit,
-		),
-		publicRoute(
-			http.MethodPost,
-			path("/invitations/teacher-academic-unit/accept"),
-			[]string{
+			Handle: module.issueTeacherAcademicUnit,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/invitations/teacher-academic-unit/accept",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"authentication.rate_limited",
 				"authentication.rate_limit_unavailable",
@@ -447,12 +457,13 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"authentication.password.identity_invalid",
 				"service.busy",
 			},
-			module.acceptTeacherAcademicUnit,
-		),
-		principalRoute(
-			http.MethodPost,
-			path("/academic-units/{academic_unit_id}/invitations/role"),
-			[]string{
+			Handle: module.acceptTeacherAcademicUnit,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/academic-units/{academic_unit_id}/invitations/role",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -466,24 +477,26 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"invitation.unavailable",
 				"onboarding_batch.duplicate",
 			},
-			module.issueAcademicUnitRole,
-		),
-		sessionRoute(
-			http.MethodPost,
-			path("/invitations/academic-unit-role/accept"),
-			[]string{
+			Handle: module.issueAcademicUnitRole,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/invitations/academic-unit-role/accept",
+			Auth:   AuthSessionRequired,
+			Errors: []string{
 				"authentication.rate_limited",
 				"authentication.rate_limit_unavailable",
 				"invitation.invalid",
 				"audit.unavailable",
 				"request.invalid",
 			},
-			module.acceptAcademicUnitRole,
-		),
-		strongRecentSessionRoute(
-			http.MethodPost,
-			path("/institutions/{institution_id}/invitations/role"),
-			[]string{
+			Handle: module.acceptAcademicUnitRole,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/institutions/{institution_id}/invitations/role",
+			Auth:   AuthStrongRecentSessionRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -497,20 +510,21 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"invitation.unavailable",
 				"onboarding_batch.duplicate",
 			},
-			module.issueInstitutionRole,
-		),
-		sessionRoute(
-			http.MethodPost,
-			path("/invitations/institution-role/accept"),
-			[]string{
+			Handle: module.issueInstitutionRole,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/invitations/institution-role/accept",
+			Auth:   AuthSessionRequired,
+			Errors: []string{
 				"authentication.rate_limited",
 				"authentication.rate_limit_unavailable",
 				"invitation.invalid",
 				"audit.unavailable",
 				"request.invalid",
 			},
-			module.acceptInstitutionRole,
-		),
+			Handle: module.acceptInstitutionRole,
+		},
 	)
 }
 

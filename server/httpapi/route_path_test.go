@@ -83,3 +83,14 @@ func TestPathRejectsMalformedTemplatesAtCompile(t *testing.T) {
 		})
 	}
 }
+
+func TestPathRejectsUnsupportedParameterKindAtCompile(t *testing.T) {
+	t.Parallel()
+
+	unsupported := routePath{parts: []pathPart{pathParameter{name: "id", kind: parameterKind(99)}}}
+
+	_, _, err := unsupported.compile("/api/v1")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported parameter kind")
+}

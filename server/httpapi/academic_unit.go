@@ -50,15 +50,16 @@ type academicUnitResourceModule struct {
 
 func academicUnitResource(academicUnits AcademicUnitApplication) apiResource {
 	module := academicUnitResourceModule{academicUnits: academicUnits}
-	collection := path("/academic-units")
-	member := path("/academic-units/{academic_unit_id}")
-	children := path("/academic-units/{academic_unit_id}/children")
+	collection := "/academic-units"
+	member := "/academic-units/{academic_unit_id}"
+	children := "/academic-units/{academic_unit_id}/children"
 	return newResource(
 		"academic-units",
-		principalRoute(
-			http.MethodGet,
-			collection,
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   collection,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -66,13 +67,14 @@ func academicUnitResource(academicUnits AcademicUnitApplication) apiResource {
 				"administration.unavailable",
 				"resource.not_found",
 			},
-			module.listRoot,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyOptional,
-			http.MethodPost,
-			collection,
-			[]string{
+			Handle: module.listRoot,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        collection,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyOptional,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -86,12 +88,13 @@ func academicUnitResource(academicUnits AcademicUnitApplication) apiResource {
 				"administration.unavailable",
 				"resource.not_found",
 			},
-			module.createRoot,
-		),
-		principalRoute(
-			http.MethodGet,
-			member,
-			[]string{
+			Handle: module.createRoot,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   member,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -99,24 +102,27 @@ func academicUnitResource(academicUnits AcademicUnitApplication) apiResource {
 				"administration.unavailable",
 				"request.invalid",
 			},
-			module.get,
-		),
-		principalRoute(
-			http.MethodPatch,
-			member,
-			academicMutationErrorCodes("request.invalid", "resource.not_found", "academic_unit.invalid", "academic_unit.conflict"),
-			module.patch,
-		),
-		principalRoute(
-			http.MethodDelete,
-			member,
-			academicMutationErrorCodes("request.invalid", "resource.not_found", "academic_unit.conflict"),
-			module.archive,
-		),
-		principalRoute(
-			http.MethodGet,
-			children,
-			[]string{
+			Handle: module.get,
+		},
+		endpoint{
+			Method: http.MethodPatch,
+			Path:   member,
+			Auth:   AuthPrincipalRequired,
+			Errors: academicMutationErrorCodes("request.invalid", "resource.not_found", "academic_unit.invalid", "academic_unit.conflict"),
+			Handle: module.patch,
+		},
+		endpoint{
+			Method: http.MethodDelete,
+			Path:   member,
+			Auth:   AuthPrincipalRequired,
+			Errors: academicMutationErrorCodes("request.invalid", "resource.not_found", "academic_unit.conflict"),
+			Handle: module.archive,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   children,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -124,14 +130,15 @@ func academicUnitResource(academicUnits AcademicUnitApplication) apiResource {
 				"administration.unavailable",
 				"request.invalid",
 			},
-			module.listChildren,
-		),
-		principalRoute(
-			http.MethodPost,
-			children,
-			academicMutationErrorCodes("request.invalid", "resource.not_found", "academic_unit.invalid", "academic_unit.conflict"),
-			module.createChild,
-		),
+			Handle: module.listChildren,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   children,
+			Auth:   AuthPrincipalRequired,
+			Errors: academicMutationErrorCodes("request.invalid", "resource.not_found", "academic_unit.invalid", "academic_unit.conflict"),
+			Handle: module.createChild,
+		},
 	)
 }
 

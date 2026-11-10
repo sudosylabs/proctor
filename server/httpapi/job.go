@@ -95,10 +95,11 @@ func jobResource(jobs JobOperationsApplication) apiResource {
 	module := jobResourceModule{jobs: jobs}
 	return newResource(
 		"jobs",
-		principalRoute(
-			http.MethodGet,
-			path("/jobs"),
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/jobs",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -107,12 +108,13 @@ func jobResource(jobs JobOperationsApplication) apiResource {
 				"request.invalid",
 				"resource.not_found",
 			},
-			module.list,
-		),
-		principalRoute(
-			http.MethodGet,
-			path("/jobs/{job_id}"),
-			[]string{
+			Handle: module.list,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/jobs/{job_id}",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -120,12 +122,13 @@ func jobResource(jobs JobOperationsApplication) apiResource {
 				"job.unavailable",
 				"request.invalid",
 			},
-			module.get,
-		),
-		principalRoute(
-			http.MethodGet,
-			path("/jobs/{job_id}/attempts"),
-			[]string{
+			Handle: module.get,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/jobs/{job_id}/attempts",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -134,12 +137,13 @@ func jobResource(jobs JobOperationsApplication) apiResource {
 				"resource.not_found",
 				"job.unavailable",
 			},
-			module.listAttempts,
-		),
-		principalRoute(
-			http.MethodPost,
-			path("/jobs/{job_id}/cancel"),
-			[]string{
+			Handle: module.listAttempts,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/jobs/{job_id}/cancel",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -150,12 +154,13 @@ func jobResource(jobs JobOperationsApplication) apiResource {
 				"job.unavailable",
 				"request.invalid",
 			},
-			module.cancel,
-		),
-		principalRoute(
-			http.MethodPost,
-			path("/jobs/{job_id}/retry"),
-			[]string{
+			Handle: module.cancel,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/jobs/{job_id}/retry",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -166,8 +171,8 @@ func jobResource(jobs JobOperationsApplication) apiResource {
 				"job.unavailable",
 				"request.invalid",
 			},
-			module.retry,
-		),
+			Handle: module.retry,
+		},
 	)
 }
 

@@ -128,10 +128,12 @@ type accessPolicyResourceModule struct{ application AccessPolicyApplication }
 
 func accessPolicyResource(application AccessPolicyApplication) apiResource {
 	module := accessPolicyResourceModule{application: application}
-	replace := strongRecentSessionRoute(
-		http.MethodPut,
-		path("/access-policy"),
-		[]string{
+	replace := endpoint{
+		Method:      http.MethodPut,
+		Path:        "/access-policy",
+		Auth:        AuthStrongRecentSessionRequired,
+		Idempotency: IdempotencyRequired,
+		Errors: []string{
 			"authorization.denied",
 			"authorization.request.invalid",
 			"authorization.unavailable",
@@ -147,20 +149,21 @@ func accessPolicyResource(application AccessPolicyApplication) apiResource {
 			"access_policy.unavailable",
 			"resource.not_found",
 		},
-		module.replace,
-	)
-	replace.idempotency = IdempotencyRequired
+		Handle: module.replace,
+	}
 	return newResource("access-policy",
-		publicRoute(
-			http.MethodGet,
-			path("/discovery"),
-			[]string{"access_policy.unavailable", "access_policy.blocked", "access_policy.revision_conflict"},
-			module.discover,
-		),
-		principalRoute(
-			http.MethodGet,
-			path("/access-policy"),
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/discovery",
+			Auth:   AuthPublic,
+			Errors: []string{"access_policy.unavailable", "access_policy.blocked", "access_policy.revision_conflict"},
+			Handle: module.discover,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/access-policy",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -169,12 +172,13 @@ func accessPolicyResource(application AccessPolicyApplication) apiResource {
 				"access_policy.revision_conflict",
 				"resource.not_found",
 			},
-			module.get,
-		),
-		strongRecentSessionRoute(
-			http.MethodPost,
-			path("/access-policy/preflight"),
-			[]string{
+			Handle: module.get,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/access-policy/preflight",
+			Auth:   AuthStrongRecentSessionRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -185,8 +189,8 @@ func accessPolicyResource(application AccessPolicyApplication) apiResource {
 				"access_policy.blocked",
 				"resource.not_found",
 			},
-			module.preflight,
-		),
+			Handle: module.preflight,
+		},
 		replace,
 	)
 }

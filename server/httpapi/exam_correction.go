@@ -156,19 +156,19 @@ func decodeDuplicateFreeExamCorrectionObject(encoded []byte, target any) error {
 
 func examSittingCorrectionResource(application ExamSittingCorrectionApplication) apiResource {
 	module := examSittingCorrectionHTTPModule{application: application}
-	stages := path("/exams/{exam_id}/sittings/{exam_sitting_id}/correction-resource-stages")
-	corrections := path("/exams/{exam_id}/sittings/{exam_sitting_id}/corrections")
+	stages := "/exams/{exam_id}/sittings/{exam_sitting_id}/correction-resource-stages"
+	corrections := "/exams/{exam_id}/sittings/{exam_sitting_id}/corrections"
 	return newResource(
 		"exam-sitting-corrections",
-		idempotentProtocolRoute(
-			IdempotencyRequired,
-			examSittingCorrectionUploadBodyLimit,
-			"exam-sitting-correction-resource-stage",
-			RouteProtocolStreamingUpload,
-			AuthPrincipalRequired,
-			http.MethodPost,
-			stages,
-			[]string{
+		endpoint{
+			Method:       http.MethodPost,
+			Path:         stages,
+			Auth:         AuthPrincipalRequired,
+			Idempotency:  IdempotencyRequired,
+			MaxBodyBytes: examSittingCorrectionUploadBodyLimit,
+			ProtocolName: "exam-sitting-correction-resource-stage",
+			ProtocolKind: RouteProtocolStreamingUpload,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -189,13 +189,14 @@ func examSittingCorrectionResource(application ExamSittingCorrectionApplication)
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			module.stage,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			corrections,
-			[]string{
+			Protocol: module.stage,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        corrections,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -217,8 +218,8 @@ func examSittingCorrectionResource(application ExamSittingCorrectionApplication)
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			module.apply,
-		),
+			Handle: module.apply,
+		},
 	)
 }
 

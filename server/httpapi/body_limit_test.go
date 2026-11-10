@@ -38,7 +38,13 @@ func TestOversizedJSONBodyReturnsContentTooLargeProblem(t *testing.T) {
 	}
 	resources := []apiResource{newResource(
 		"bounded",
-		route(AuthPublic, http.MethodPost, path("/bounded"), []string{"request.invalid"}, decode),
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/bounded",
+			Auth:   AuthPublic,
+			Errors: []string{"request.invalid"},
+			Handle: decode,
+		},
 	)}
 	cookies, err := newBrowserCookies("http://localhost:8065")
 	require.NoError(t, err)

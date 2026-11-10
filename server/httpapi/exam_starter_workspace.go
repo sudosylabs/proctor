@@ -86,16 +86,17 @@ type examStarterWorkspaceListItemResponse struct {
 
 func examStarterWorkspaceHTTPResource(application ExamStarterWorkspaceApplication) apiResource {
 	module := examStarterWorkspaceHTTPModule{application: application}
-	collection := path("/exams/{exam_id}/draft/starter-workspace")
-	directories := path("/exams/{exam_id}/draft/starter-workspace/directories")
-	files := path("/exams/{exam_id}/draft/starter-workspace/files")
-	entry := path("/exams/{exam_id}/draft/starter-workspace/entries/{starter_workspace_entry_id}")
-	fileContent := path("/exams/{exam_id}/draft/starter-workspace/files/{starter_workspace_entry_id}/content")
+	collection := "/exams/{exam_id}/draft/starter-workspace"
+	directories := "/exams/{exam_id}/draft/starter-workspace/directories"
+	files := "/exams/{exam_id}/draft/starter-workspace/files"
+	entry := "/exams/{exam_id}/draft/starter-workspace/entries/{starter_workspace_entry_id}"
+	fileContent := "/exams/{exam_id}/draft/starter-workspace/files/{starter_workspace_entry_id}/content"
 	return newResource("exam-starter-workspace",
-		principalRoute(
-			http.MethodGet,
-			collection,
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   collection,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -103,13 +104,14 @@ func examStarterWorkspaceHTTPResource(application ExamStarterWorkspaceApplicatio
 				"exam.starter_workspace.invalid",
 				"exam.starter_workspace.unavailable",
 			},
-			module.list,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			directories,
-			[]string{
+			Handle: module.list,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        directories,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -128,17 +130,17 @@ func examStarterWorkspaceHTTPResource(application ExamStarterWorkspaceApplicatio
 				"exam.starter_workspace.parent_not_found",
 				"exam.starter_workspace.entry_limit",
 			},
-			module.createDirectory,
-		),
-		idempotentProtocolRoute(
-			IdempotencyRequired,
-			examStarterWorkspaceUploadBodyLimit,
-			"exam-starter-workspace-file-upload",
-			RouteProtocolStreamingUpload,
-			AuthPrincipalRequired,
-			http.MethodPost,
-			files,
-			[]string{
+			Handle: module.createDirectory,
+		},
+		endpoint{
+			Method:       http.MethodPost,
+			Path:         files,
+			Auth:         AuthPrincipalRequired,
+			Idempotency:  IdempotencyRequired,
+			MaxBodyBytes: examStarterWorkspaceUploadBodyLimit,
+			ProtocolName: "exam-starter-workspace-file-upload",
+			ProtocolKind: RouteProtocolStreamingUpload,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -160,13 +162,14 @@ func examStarterWorkspaceHTTPResource(application ExamStarterWorkspaceApplicatio
 				"exam.starter_workspace.upload_expired",
 				"exam.starter_workspace.object_conflict",
 			},
-			module.createFile,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPatch,
-			entry,
-			[]string{
+			Protocol: module.createFile,
+		},
+		endpoint{
+			Method:      http.MethodPatch,
+			Path:        entry,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -186,17 +189,17 @@ func examStarterWorkspaceHTTPResource(application ExamStarterWorkspaceApplicatio
 				"exam.starter_workspace.no_changes",
 				"exam.starter_workspace.move_conflict",
 			},
-			module.moveEntry,
-		),
-		idempotentProtocolRoute(
-			IdempotencyRequired,
-			examStarterWorkspaceUploadBodyLimit,
-			"exam-starter-workspace-file-replacement",
-			RouteProtocolStreamingUpload,
-			AuthPrincipalRequired,
-			http.MethodPut,
-			fileContent,
-			[]string{
+			Handle: module.moveEntry,
+		},
+		endpoint{
+			Method:       http.MethodPut,
+			Path:         fileContent,
+			Auth:         AuthPrincipalRequired,
+			Idempotency:  IdempotencyRequired,
+			MaxBodyBytes: examStarterWorkspaceUploadBodyLimit,
+			ProtocolName: "exam-starter-workspace-file-replacement",
+			ProtocolKind: RouteProtocolStreamingUpload,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -217,13 +220,14 @@ func examStarterWorkspaceHTTPResource(application ExamStarterWorkspaceApplicatio
 				"exam.starter_workspace.content_conflict",
 				"exam.starter_workspace.entry_kind",
 			},
-			module.replaceFile,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodDelete,
-			entry,
-			[]string{
+			Protocol: module.replaceFile,
+		},
+		endpoint{
+			Method:      http.MethodDelete,
+			Path:        entry,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -240,15 +244,15 @@ func examStarterWorkspaceHTTPResource(application ExamStarterWorkspaceApplicatio
 				"idempotency.in_progress",
 				"exam.starter_workspace.directory_not_empty",
 			},
-			module.removeEntry,
-		),
-		protocolRoute(
-			"exam-starter-workspace-protected-content",
-			RouteProtocolBinaryDownload,
-			AuthPrincipalRequired,
-			http.MethodGet,
-			fileContent,
-			[]string{
+			Handle: module.removeEntry,
+		},
+		endpoint{
+			Method:       http.MethodGet,
+			Path:         fileContent,
+			Auth:         AuthPrincipalRequired,
+			ProtocolName: "exam-starter-workspace-protected-content",
+			ProtocolKind: RouteProtocolBinaryDownload,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -256,8 +260,8 @@ func examStarterWorkspaceHTTPResource(application ExamStarterWorkspaceApplicatio
 				"exam.starter_workspace.invalid",
 				"exam.starter_workspace.unavailable",
 			},
-			module.openFile,
-		),
+			Protocol: module.openFile,
+		},
 	)
 }
 

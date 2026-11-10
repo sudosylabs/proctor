@@ -65,10 +65,11 @@ type studentProgressionCommitRequest struct {
 func studentProgressionResource(progressions StudentProgressionApplication) apiResource {
 	module := studentProgressionModule{progressions: progressions}
 	return newResource("student-progressions",
-		principalRoute(
-			http.MethodPost,
-			path("/student-progressions"),
-			[]string{
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/student-progressions",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -86,12 +87,13 @@ func studentProgressionResource(progressions StudentProgressionApplication) apiR
 				"onboarding_import.file_invalid",
 				"onboarding_import.unavailable",
 			},
-			module.dryRun,
-		),
-		principalRoute(
-			http.MethodGet,
-			path("/student-progressions"),
-			[]string{
+			Handle: module.dryRun,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/student-progressions",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -101,12 +103,13 @@ func studentProgressionResource(progressions StudentProgressionApplication) apiR
 				"invitation.unavailable",
 				"student_progression.conflict",
 			},
-			module.list,
-		),
-		principalRoute(
-			http.MethodGet,
-			path("/student-progressions/{student_progression_id}"),
-			[]string{
+			Handle: module.list,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/student-progressions/{student_progression_id}",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -117,13 +120,14 @@ func studentProgressionResource(progressions StudentProgressionApplication) apiR
 				"onboarding_import.unavailable",
 				"student_progression.conflict",
 			},
-			module.get,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			path("/student-progressions/{student_progression_id}/commit"),
-			[]string{
+			Handle: module.get,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        "/student-progressions/{student_progression_id}/commit",
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -140,12 +144,13 @@ func studentProgressionResource(progressions StudentProgressionApplication) apiR
 				"onboarding_import.file_invalid",
 				"onboarding_import.unavailable",
 			},
-			module.commit,
-		),
-		principalRoute(
-			http.MethodPost,
-			path("/student-progressions/{student_progression_id}/cancel"),
-			[]string{
+			Handle: module.commit,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/student-progressions/{student_progression_id}/cancel",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -158,15 +163,15 @@ func studentProgressionResource(progressions StudentProgressionApplication) apiR
 				"onboarding_import.file_invalid",
 				"onboarding_import.unavailable",
 			},
-			module.cancel,
-		),
-		protocolRoute(
-			"student-progression-report",
-			RouteProtocolBinaryDownload,
-			AuthPrincipalRequired,
-			http.MethodGet,
-			path("/student-progressions/{student_progression_id}/report"),
-			[]string{
+			Handle: module.cancel,
+		},
+		endpoint{
+			Method:       http.MethodGet,
+			Path:         "/student-progressions/{student_progression_id}/report",
+			Auth:         AuthPrincipalRequired,
+			ProtocolName: "student-progression-report",
+			ProtocolKind: RouteProtocolBinaryDownload,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -175,8 +180,8 @@ func studentProgressionResource(progressions StudentProgressionApplication) apiR
 				"student_progression.unavailable",
 				"student_progression.conflict",
 			},
-			module.report,
-		),
+			Protocol: module.report,
+		},
 	)
 }
 

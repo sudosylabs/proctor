@@ -44,14 +44,20 @@ type providerConnectionResponse struct {
 
 func authenticationMethodResource(application *identity.Service, cookies browserCookies) apiResource {
 	m := authenticationMethodResourceModule{application: application, cookies: cookies}
-	base := path("/authentication-methods")
-	password := path("/authentication-methods/password")
+	base := "/authentication-methods"
+	password := "/authentication-methods/password"
 	return newResource("authentication-method",
-		sessionRoute(http.MethodGet, base, nil, m.list),
-		strongRecentSessionRoute(
-			http.MethodPut,
-			password,
-			strongRecentAuthenticationMethodCodes(
+		endpoint{
+			Method: http.MethodGet,
+			Path:   base,
+			Auth:   AuthSessionRequired,
+			Handle: m.list,
+		},
+		endpoint{
+			Method: http.MethodPut,
+			Path:   password,
+			Auth:   AuthStrongRecentSessionRequired,
+			Errors: strongRecentAuthenticationMethodCodes(
 				"request.invalid",
 				"authentication.password.invalid",
 				"authentication.password.pattern_invalid",
@@ -64,12 +70,13 @@ func authenticationMethodResource(application *identity.Service, cookies browser
 				"authentication.method.unavailable",
 				"audit.unavailable",
 			),
-			m.enrollPassword,
-		),
-		strongRecentSessionRoute(
-			http.MethodPost,
-			path("/authentication-methods/password/change"),
-			strongRecentAuthenticationMethodCodes(newPasswordErrorCodes(
+			Handle: m.enrollPassword,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/authentication-methods/password/change",
+			Auth:   AuthStrongRecentSessionRequired,
+			Errors: strongRecentAuthenticationMethodCodes(newPasswordErrorCodes(
 				"request.invalid",
 				"service.busy",
 				"authentication.password.reused",
@@ -79,24 +86,26 @@ func authenticationMethodResource(application *identity.Service, cookies browser
 				"authentication.method.unavailable",
 				"audit.unavailable",
 			)...),
-			m.changePassword,
-		),
-		strongRecentSessionRoute(
-			http.MethodDelete,
-			password,
-			[]string{
+			Handle: m.changePassword,
+		},
+		endpoint{
+			Method: http.MethodDelete,
+			Path:   password,
+			Auth:   AuthStrongRecentSessionRequired,
+			Errors: []string{
 				"authentication.method.last_usable",
 				"authentication.method.not_found",
 				"authentication.method.conflict",
 				"authentication.method.unavailable",
 				"audit.unavailable",
 			},
-			m.removePassword,
-		),
-		strongRecentSessionRoute(
-			http.MethodPost,
-			path("/authentication-methods/providers/{provider_id:provider}/connect"),
-			[]string{
+			Handle: m.removePassword,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/authentication-methods/providers/{provider_id:provider}/connect",
+			Auth:   AuthStrongRecentSessionRequired,
+			Errors: []string{
 				"request.invalid",
 				"authentication.external.provider_not_found",
 				"authentication.external.unavailable",
@@ -109,14 +118,15 @@ func authenticationMethodResource(application *identity.Service, cookies browser
 				"authentication.external.rejected",
 				"authentication.external.request.invalid",
 			},
-			m.connect,
-		),
-		strongRecentSessionRoute(
-			http.MethodDelete,
-			path("/authentication-methods/providers/{external_identity_id}"),
-			authenticationMethodRemovalCodes(),
-			m.unlink,
-		),
+			Handle: m.connect,
+		},
+		endpoint{
+			Method: http.MethodDelete,
+			Path:   "/authentication-methods/providers/{external_identity_id}",
+			Auth:   AuthStrongRecentSessionRequired,
+			Errors: authenticationMethodRemovalCodes(),
+			Handle: m.unlink,
+		},
 	)
 }
 

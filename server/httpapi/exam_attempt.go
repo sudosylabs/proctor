@@ -162,35 +162,32 @@ type examAttemptHTTPModule struct{ application ExamAttemptApplication }
 
 func examAttemptResource(application ExamAttemptApplication) apiResource {
 	module := examAttemptHTTPModule{application: application}
-	managerCollection := path("/exams/{exam_id}/sittings/{exam_sitting_id}/attempts")
-	managerMember := path("/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}")
-	managerBrowserActivity := path("/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/browser-activity")
-	managerEnd := path("/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/end")
-	candidateStatuses := path("/exams/{exam_id}/sittings/{exam_sitting_id}/candidate-statuses")
-	presentation := path("/exam-attempts/{exam_attempt_id}/presentation")
-	workspace := path("/exam-attempts/{exam_attempt_id}/workspace")
-	workspaceChanges := path("/exam-attempts/{exam_attempt_id}/workspace/changes")
-	workspaceDirectories := path("/exam-attempts/{exam_attempt_id}/workspace/directories")
-	workspaceFiles := path("/exam-attempts/{exam_attempt_id}/workspace/files")
-	workspaceEntry := path("/exam-attempts/{exam_attempt_id}/workspace/entries/{attempt_workspace_entry_id}")
-	resourceContent := path("/exam-attempts/{exam_attempt_id}/resources/{exam_resource_id}/content")
-	workspaceContent := path("/exam-attempts/{exam_attempt_id}/workspace/files/{attempt_workspace_entry_id}/content")
-	candidateSubmissions := path("/exam-attempts/{exam_attempt_id}/submissions")
-	correctionAcknowledgement := path("/exam-attempts/{exam_attempt_id}/corrections/{exam_revision_id}/acknowledgement")
-	managerSubmission := path("/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/submissions/{submission_id}")
-	managerSubmissionManifest := path(
-		"/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/submissions/{submission_id}/manifest",
-	)
-	managerSubmissionContent := path(
-		"/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/submissions/{submission_id}/files/{attempt_workspace_entry_id}/content",
-	)
-	reallow := path("/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/reallow")
-	suspend := path("/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/suspend")
+	managerCollection := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts"
+	managerMember := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}"
+	managerBrowserActivity := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/browser-activity"
+	managerEnd := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/end"
+	candidateStatuses := "/exams/{exam_id}/sittings/{exam_sitting_id}/candidate-statuses"
+	presentation := "/exam-attempts/{exam_attempt_id}/presentation"
+	workspace := "/exam-attempts/{exam_attempt_id}/workspace"
+	workspaceChanges := "/exam-attempts/{exam_attempt_id}/workspace/changes"
+	workspaceDirectories := "/exam-attempts/{exam_attempt_id}/workspace/directories"
+	workspaceFiles := "/exam-attempts/{exam_attempt_id}/workspace/files"
+	workspaceEntry := "/exam-attempts/{exam_attempt_id}/workspace/entries/{attempt_workspace_entry_id}"
+	resourceContent := "/exam-attempts/{exam_attempt_id}/resources/{exam_resource_id}/content"
+	workspaceContent := "/exam-attempts/{exam_attempt_id}/workspace/files/{attempt_workspace_entry_id}/content"
+	candidateSubmissions := "/exam-attempts/{exam_attempt_id}/submissions"
+	correctionAcknowledgement := "/exam-attempts/{exam_attempt_id}/corrections/{exam_revision_id}/acknowledgement"
+	managerSubmission := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/submissions/{submission_id}"
+	managerSubmissionManifest := managerSubmission + "/manifest"
+	managerSubmissionContent := managerSubmission + "/files/{attempt_workspace_entry_id}/content"
+	reallow := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/reallow"
+	suspend := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/suspend"
 	return newResource("exam-attempts",
-		principalRoute(
-			http.MethodGet,
-			managerCollection,
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   managerCollection,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -201,12 +198,13 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			module.listManaged,
-		),
-		principalRoute(
-			http.MethodGet,
-			candidateStatuses,
-			[]string{
+			Handle: module.listManaged,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   candidateStatuses,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -217,12 +215,13 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			module.listCandidateStatuses,
-		),
-		principalRoute(
-			http.MethodGet,
-			managerMember,
-			[]string{
+			Handle: module.listCandidateStatuses,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   managerMember,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -234,12 +233,13 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			module.getManaged,
-		),
-		principalRoute(
-			http.MethodGet,
-			managerBrowserActivity,
-			[]string{
+			Handle: module.getManaged,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   managerBrowserActivity,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -252,13 +252,14 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.sitting.not_found",
 				"exam.sitting.unavailable",
 			},
-			module.listBrowserActivity,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			managerEnd,
-			[]string{
+			Handle: module.listBrowserActivity,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        managerEnd,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -279,13 +280,14 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			module.endByManager,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			reallow,
-			[]string{
+			Handle: module.endByManager,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        reallow,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -306,13 +308,14 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			module.reallow,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			suspend,
-			[]string{
+			Handle: module.reallow,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        suspend,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -333,12 +336,13 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			module.suspend,
-		),
-		sessionRoute(
-			http.MethodGet,
-			presentation,
-			[]string{
+			Handle: module.suspend,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   presentation,
+			Auth:   AuthSessionRequired,
+			Errors: []string{
 				"request.invalid",
 				"resource.not_found",
 				"exam.attempt.invalid",
@@ -348,12 +352,13 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			module.presentation,
-		),
-		sessionRoute(
-			http.MethodGet,
-			workspace,
-			[]string{
+			Handle: module.presentation,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   workspace,
+			Auth:   AuthSessionRequired,
+			Errors: []string{
 				"request.invalid",
 				"resource.not_found",
 				"exam.attempt.invalid",
@@ -363,12 +368,13 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			module.workspace,
-		),
-		sessionRoute(
-			http.MethodGet,
-			workspaceChanges,
-			[]string{
+			Handle: module.workspace,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   workspaceChanges,
+			Auth:   AuthSessionRequired,
+			Errors: []string{
 				"request.invalid",
 				"resource.not_found",
 				"exam.attempt.invalid",
@@ -378,13 +384,14 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			module.workspaceChanges,
-		),
-		idempotentSessionRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			workspaceDirectories,
-			[]string{
+			Handle: module.workspaceChanges,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        workspaceDirectories,
+			Auth:        AuthSessionRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"audit.unavailable",
 				"request.invalid",
 				"resource.not_found",
@@ -404,17 +411,17 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			module.createWorkspaceDirectory,
-		),
-		idempotentProtocolRoute(
-			IdempotencyRequired,
-			model.AttemptWorkspaceMaximumRequestBytes,
-			"candidate-exam-workspace-file-upload",
-			RouteProtocolStreamingUpload,
-			AuthSessionRequired,
-			http.MethodPost,
-			workspaceFiles,
-			[]string{
+			Handle: module.createWorkspaceDirectory,
+		},
+		endpoint{
+			Method:       http.MethodPost,
+			Path:         workspaceFiles,
+			Auth:         AuthSessionRequired,
+			Idempotency:  IdempotencyRequired,
+			MaxBodyBytes: model.AttemptWorkspaceMaximumRequestBytes,
+			ProtocolName: "candidate-exam-workspace-file-upload",
+			ProtocolKind: RouteProtocolStreamingUpload,
+			Errors: []string{
 				"audit.unavailable",
 				"request.invalid",
 				"resource.not_found",
@@ -436,13 +443,14 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			module.createWorkspaceFile,
-		),
-		idempotentSessionRoute(
-			IdempotencyRequired,
-			http.MethodPatch,
-			workspaceEntry,
-			[]string{
+			Protocol: module.createWorkspaceFile,
+		},
+		endpoint{
+			Method:      http.MethodPatch,
+			Path:        workspaceEntry,
+			Auth:        AuthSessionRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"audit.unavailable",
 				"request.invalid",
 				"resource.not_found",
@@ -461,17 +469,17 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			module.moveWorkspaceEntry,
-		),
-		idempotentProtocolRoute(
-			IdempotencyRequired,
-			model.AttemptWorkspaceMaximumRequestBytes,
-			"candidate-exam-workspace-file-replacement",
-			RouteProtocolStreamingUpload,
-			AuthSessionRequired,
-			http.MethodPut,
-			workspaceContent,
-			[]string{
+			Handle: module.moveWorkspaceEntry,
+		},
+		endpoint{
+			Method:       http.MethodPut,
+			Path:         workspaceContent,
+			Auth:         AuthSessionRequired,
+			Idempotency:  IdempotencyRequired,
+			MaxBodyBytes: model.AttemptWorkspaceMaximumRequestBytes,
+			ProtocolName: "candidate-exam-workspace-file-replacement",
+			ProtocolKind: RouteProtocolStreamingUpload,
+			Errors: []string{
 				"audit.unavailable",
 				"request.invalid",
 				"resource.not_found",
@@ -493,13 +501,14 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			module.replaceWorkspaceFile,
-		),
-		idempotentSessionRoute(
-			IdempotencyRequired,
-			http.MethodDelete,
-			workspaceEntry,
-			[]string{
+			Protocol: module.replaceWorkspaceFile,
+		},
+		endpoint{
+			Method:      http.MethodDelete,
+			Path:        workspaceEntry,
+			Auth:        AuthSessionRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"audit.unavailable",
 				"request.invalid",
 				"resource.not_found",
@@ -521,15 +530,15 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			module.deleteWorkspaceEntry,
-		),
-		protocolRoute(
-			"candidate-exam-resource-content",
-			RouteProtocolBinaryDownload,
-			AuthSessionRequired,
-			http.MethodGet,
-			resourceContent,
-			[]string{
+			Handle: module.deleteWorkspaceEntry,
+		},
+		endpoint{
+			Method:       http.MethodGet,
+			Path:         resourceContent,
+			Auth:         AuthSessionRequired,
+			ProtocolName: "candidate-exam-resource-content",
+			ProtocolKind: RouteProtocolBinaryDownload,
+			Errors: []string{
 				"request.invalid",
 				"resource.not_found",
 				"exam.attempt.invalid",
@@ -539,15 +548,15 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			module.openResource,
-		),
-		protocolRoute(
-			"candidate-exam-workspace-content",
-			RouteProtocolBinaryDownload,
-			AuthSessionRequired,
-			http.MethodGet,
-			workspaceContent,
-			[]string{
+			Protocol: module.openResource,
+		},
+		endpoint{
+			Method:       http.MethodGet,
+			Path:         workspaceContent,
+			Auth:         AuthSessionRequired,
+			ProtocolName: "candidate-exam-workspace-content",
+			ProtocolKind: RouteProtocolBinaryDownload,
+			Errors: []string{
 				"request.invalid",
 				"resource.not_found",
 				"exam.attempt.invalid",
@@ -557,13 +566,14 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			module.openWorkspaceFile,
-		),
-		idempotentSessionRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			candidateSubmissions,
-			[]string{
+			Protocol: module.openWorkspaceFile,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        candidateSubmissions,
+			Auth:        AuthSessionRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"audit.unavailable",
 				"request.invalid",
 				"resource.not_found",
@@ -586,13 +596,14 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			module.submit,
-		),
-		idempotentSessionRoute(
-			IdempotencyRequired,
-			http.MethodPut,
-			correctionAcknowledgement,
-			[]string{
+			Handle: module.submit,
+		},
+		endpoint{
+			Method:      http.MethodPut,
+			Path:        correctionAcknowledgement,
+			Auth:        AuthSessionRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"request.invalid",
 				"resource.not_found",
 				"exam.attempt.invalid",
@@ -610,12 +621,13 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			module.acknowledgeCorrection,
-		),
-		principalRoute(
-			http.MethodGet,
-			managerSubmission,
-			[]string{
+			Handle: module.acknowledgeCorrection,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   managerSubmission,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -626,12 +638,13 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			module.getSubmission,
-		),
-		principalRoute(
-			http.MethodGet,
-			managerSubmissionManifest,
-			[]string{
+			Handle: module.getSubmission,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   managerSubmissionManifest,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -642,15 +655,15 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			module.listSubmissionManifest,
-		),
-		protocolRoute(
-			"exam-submission-file-content",
-			RouteProtocolBinaryDownload,
-			AuthPrincipalRequired,
-			http.MethodGet,
-			managerSubmissionContent,
-			[]string{
+			Handle: module.listSubmissionManifest,
+		},
+		endpoint{
+			Method:       http.MethodGet,
+			Path:         managerSubmissionContent,
+			Auth:         AuthPrincipalRequired,
+			ProtocolName: "exam-submission-file-content",
+			ProtocolKind: RouteProtocolBinaryDownload,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -661,21 +674,9 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			module.openSubmissionFile,
-		),
+			Protocol: module.openSubmissionFile,
+		},
 	)
-}
-
-func idempotentSessionRoute(
-	requirement IdempotencyRequirement,
-	method string,
-	path routePath,
-	errorCodes []string,
-	operation operation,
-) routeDefinition {
-	definition := sessionRoute(method, path, errorCodes, operation)
-	definition.idempotency = requirement
-	return definition
 }
 
 func candidateAttemptContentResult(

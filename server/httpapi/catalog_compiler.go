@@ -62,66 +62,67 @@ func (a *API) compileRoutes(apiPrefix string, maxBodyBytes int64, resources ...a
 
 	for _, resource := range resources {
 		for _, definition := range resource.routes {
-			definition.idempotency = effectiveIdempotencyRequirement(definition.idempotency)
-			path, _, err := definition.path.compile(apiPrefix)
+			definition.Idempotency = effectiveIdempotencyRequirement(definition.Idempotency)
+			path, _, err := definition.routePath().compile(apiPrefix)
 			if err != nil {
 				return fmt.Errorf("compile resource %q: %w", resource.name, err)
 			}
 
-			errorPolicy := newRouteErrorPolicy(definition.errorCodes)
+			errorCodes := definition.errorCodes()
+			errorPolicy := newRouteErrorPolicy(errorCodes)
 			bodyLimit := a.maxBodyBytes
-			if definition.maxBodyBytes > 0 {
-				bodyLimit = definition.maxBodyBytes
+			if definition.MaxBodyBytes > 0 {
+				bodyLimit = definition.MaxBodyBytes
 			}
 
-			definition.maxBodyBytes = bodyLimit
+			definition.MaxBodyBytes = bodyLimit
 			operationHandler := a.operationHandler(definition, errorPolicy)
-			if definition.protocolOperation != nil {
+			if definition.Protocol != nil {
 				operationHandler = a.protocolOperationHandler(definition, errorPolicy)
-			} else if definition.upgradeOperation != nil {
+			} else if definition.Upgrade != nil {
 				operationHandler = a.upgradeOperationHandler(definition, errorPolicy)
 			}
 
-			operationHandler = a.withIdempotency(operationHandler, definition.idempotency)
-			handler := a.newHandlerWithErrorPolicy(operationHandler, definition.auth, errorPolicy)
+			operationHandler = a.withIdempotency(operationHandler, definition.Idempotency)
+			handler := a.newHandlerWithErrorPolicy(operationHandler, definition.Auth, errorPolicy)
 			handler = limitRequestBody(handler, bodyLimit)
 			// Upgrade handlers own long-lived transport lifetimes; WebSocket
 			// metrics record their handshake and connection lifecycle separately.
-			if a.metrics != nil && definition.protocolKind != RouteProtocolUpgrade {
-				handler = observeRequestMetrics(handler, a.metrics, path, definition.method)
+			if a.metrics != nil && definition.ProtocolKind != RouteProtocolUpgrade {
+				handler = observeRequestMetrics(handler, a.metrics, path, definition.Method)
 			}
 			if a.middleware.tracing != nil {
 				handler = nameRequestSpan(handler, path)
 			}
 
-			registered := router.Handle(path, handler).Methods(definition.method)
+			registered := router.Handle(path, handler).Methods(definition.Method)
 			if registerErr := registered.GetError(); registerErr != nil {
-				return fmt.Errorf("compile resource %q %s %s: %w", resource.name, definition.method, path, registerErr)
+				return fmt.Errorf("compile resource %q %s %s: %w", resource.name, definition.Method, path, registerErr)
 			}
 
 			pathRegexp, err := registered.GetPathRegexp()
 			if err != nil {
-				return fmt.Errorf("compile resource %q %s %s matcher: %w", resource.name, definition.method, path, err)
+				return fmt.Errorf("compile resource %q %s %s matcher: %w", resource.name, definition.Method, path, err)
 			}
 
 			compiledRegexp, err := regexp.Compile(pathRegexp)
 			if err != nil {
-				return fmt.Errorf("compile resource %q %s %s regexp: %w", resource.name, definition.method, path, err)
+				return fmt.Errorf("compile resource %q %s %s regexp: %w", resource.name, definition.Method, path, err)
 			}
 
-			key := definition.method + " " + pathRegexp
+			key := definition.Method + " " + pathRegexp
 			if _, exists := routeKeys[key]; exists {
-				return fmt.Errorf("compile resource %q %s %s: duplicate route shape", resource.name, definition.method, path)
+				return fmt.Errorf("compile resource %q %s %s: duplicate route shape", resource.name, definition.Method, path)
 			}
 
 			route := Route{
-				Method:       definition.method,
+				Method:       definition.Method,
 				Path:         path,
-				Auth:         definition.auth,
-				ErrorCodes:   append([]string(nil), definition.errorCodes...),
-				ProtocolName: definition.protocolName,
-				ProtocolKind: definition.protocolKind,
-				Idempotency:  definition.idempotency,
+				Auth:         definition.Auth,
+				ErrorCodes:   append([]string(nil), errorCodes...),
+				ProtocolName: definition.ProtocolName,
+				ProtocolKind: definition.ProtocolKind,
+				Idempotency:  definition.Idempotency,
 			}
 			sort.Strings(route.ErrorCodes)
 			routeKeys[key] = struct{}{}

@@ -57,21 +57,23 @@ type academicPeriodResourceModule struct {
 
 func academicPeriodResource(academicPeriods AcademicPeriodApplication) apiResource {
 	module := academicPeriodResourceModule{academicPeriods: academicPeriods}
-	collection := path("/academic-periods")
-	member := path("/academic-periods/{academic_period_id}")
+	collection := "/academic-periods"
+	member := "/academic-periods/{academic_period_id}"
 	return newResource(
 		"academic-periods",
-		principalRoute(
-			http.MethodGet,
-			collection,
-			academicReadErrorCodes("request.invalid", "resource.not_found"),
-			module.list,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyOptional,
-			http.MethodPost,
-			collection,
-			academicMutationErrorCodes(
+		endpoint{
+			Method: http.MethodGet,
+			Path:   collection,
+			Auth:   AuthPrincipalRequired,
+			Errors: academicReadErrorCodes("request.invalid", "resource.not_found"),
+			Handle: module.list,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        collection,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyOptional,
+			Errors: academicMutationErrorCodes(
 				"request.invalid",
 				"resource.not_found",
 				"academic_period.invalid",
@@ -80,33 +82,36 @@ func academicPeriodResource(academicPeriods AcademicPeriodApplication) apiResour
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			),
-			module.create,
-		),
-		principalRoute(
-			http.MethodGet,
-			member,
-			academicReadErrorCodes("request.invalid", "resource.not_found"),
-			module.get,
-		),
-		principalRoute(
-			http.MethodPatch,
-			member,
-			academicMutationErrorCodes(
+			Handle: module.create,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   member,
+			Auth:   AuthPrincipalRequired,
+			Errors: academicReadErrorCodes("request.invalid", "resource.not_found"),
+			Handle: module.get,
+		},
+		endpoint{
+			Method: http.MethodPatch,
+			Path:   member,
+			Auth:   AuthPrincipalRequired,
+			Errors: academicMutationErrorCodes(
 				"request.invalid",
 				"resource.not_found",
 				"academic_period.invalid",
 				"academic_period.conflict",
 			),
-			module.patch,
-		),
-		principalRoute(
-			http.MethodDelete,
-			member,
-			academicMutationErrorCodes(
+			Handle: module.patch,
+		},
+		endpoint{
+			Method: http.MethodDelete,
+			Path:   member,
+			Auth:   AuthPrincipalRequired,
+			Errors: academicMutationErrorCodes(
 				"request.invalid", "resource.not_found", "academic_period.conflict",
 			),
-			module.archive,
-		),
+			Handle: module.archive,
+		},
 	)
 }
 

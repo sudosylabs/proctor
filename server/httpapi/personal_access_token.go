@@ -142,15 +142,16 @@ type personalAccessTokenResourceModule struct {
 
 func personalAccessTokenResource(tokens PersonalAccessTokens) apiResource {
 	module := personalAccessTokenResourceModule{tokens: tokens}
-	collection := path("/users/me/tokens")
-	item := path("/users/me/tokens/{personal_access_token_id}")
-	grantableScopes := path("/users/me/tokens/grantable-scopes")
+	collection := "/users/me/tokens"
+	item := "/users/me/tokens/{personal_access_token_id}"
+	grantableScopes := "/users/me/tokens/grantable-scopes"
 	return newResource(
 		"personal-access-tokens",
-		recentSessionRoute(
-			http.MethodPost,
-			collection,
-			[]string{
+		endpoint{
+			Method: http.MethodPost,
+			Path:   collection,
+			Auth:   AuthRecentSessionRequired,
+			Errors: []string{
 				"request.invalid",
 				"resource.not_found",
 				"personal_access_token.invalid",
@@ -159,29 +160,32 @@ func personalAccessTokenResource(tokens PersonalAccessTokens) apiResource {
 				"audit.unavailable",
 				"authentication.session_required",
 			},
-			module.create,
-		),
-		sessionRoute(
-			http.MethodGet,
-			collection,
-			[]string{
+			Handle: module.create,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   collection,
+			Auth:   AuthSessionRequired,
+			Errors: []string{
 				"personal_access_token.unavailable",
 				"authentication.reauthentication_required",
 				"authentication.session_required",
 				"request.invalid",
 			},
-			module.list,
-		),
-		sessionRoute(
-			http.MethodGet,
-			grantableScopes,
-			[]string{"personal_access_token.unavailable", "authentication.reauthentication_required", "authentication.session_required"},
-			module.grantableScopes,
-		),
-		sessionRoute(
-			http.MethodPost,
-			path("/users/me/tokens/{personal_access_token_id}/disable"),
-			[]string{
+			Handle: module.list,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   grantableScopes,
+			Auth:   AuthSessionRequired,
+			Errors: []string{"personal_access_token.unavailable", "authentication.reauthentication_required", "authentication.session_required"},
+			Handle: module.grantableScopes,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/me/tokens/{personal_access_token_id}/disable",
+			Auth:   AuthSessionRequired,
+			Errors: []string{
 				"request.invalid",
 				"resource.not_found",
 				"personal_access_token.unavailable",
@@ -190,12 +194,13 @@ func personalAccessTokenResource(tokens PersonalAccessTokens) apiResource {
 				"authentication.session_required",
 				"personal_access_token.invalid",
 			},
-			module.disable,
-		),
-		recentSessionRoute(
-			http.MethodPost,
-			path("/users/me/tokens/{personal_access_token_id}/enable"),
-			[]string{
+			Handle: module.disable,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/me/tokens/{personal_access_token_id}/enable",
+			Auth:   AuthRecentSessionRequired,
+			Errors: []string{
 				"request.invalid",
 				"resource.not_found",
 				"personal_access_token.maximum_reached",
@@ -204,12 +209,13 @@ func personalAccessTokenResource(tokens PersonalAccessTokens) apiResource {
 				"authentication.session_required",
 				"personal_access_token.invalid",
 			},
-			module.enable,
-		),
-		sessionRoute(
-			http.MethodDelete,
-			item,
-			[]string{
+			Handle: module.enable,
+		},
+		endpoint{
+			Method: http.MethodDelete,
+			Path:   item,
+			Auth:   AuthSessionRequired,
+			Errors: []string{
 				"request.invalid",
 				"resource.not_found",
 				"personal_access_token.unavailable",
@@ -218,8 +224,8 @@ func personalAccessTokenResource(tokens PersonalAccessTokens) apiResource {
 				"authentication.session_required",
 				"personal_access_token.invalid",
 			},
-			module.revoke,
-		),
+			Handle: module.revoke,
+		},
 	)
 }
 

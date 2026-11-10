@@ -40,75 +40,76 @@ func validateResourceCatalog(apiPrefix string, resources []apiResource) error {
 		}
 
 		for _, route := range resource.routes {
-			if !isHTTPMethod(route.method) || strings.ToUpper(route.method) != route.method {
-				return fmt.Errorf("resource %q HTTP method %q is invalid", resource.name, route.method)
+			if !isHTTPMethod(route.Method) || strings.ToUpper(route.Method) != route.Method {
+				return fmt.Errorf("resource %q HTTP method %q is invalid", resource.name, route.Method)
 			}
-			if !validAuthRequirement(route.auth) {
+			if !validAuthRequirement(route.Auth) {
 				return fmt.Errorf("resource %q authentication requirement is invalid", resource.name)
 			}
-			if !validIdempotencyRequirement(route.idempotency) {
-				return fmt.Errorf("resource %q %s idempotency requirement is invalid", resource.name, route.method)
+			if !validIdempotencyRequirement(route.Idempotency) {
+				return fmt.Errorf("resource %q %s idempotency requirement is invalid", resource.name, route.Method)
 			}
-			if route.maxBodyBytes < 0 {
-				return fmt.Errorf("resource %q %s maximum body size must not be negative", resource.name, route.method)
-			}
-
-			if effectiveIdempotencyRequirement(route.idempotency) != IdempotencyNone &&
-				(!authRequiresPrincipal(route.auth) || route.upgradeOperation != nil || route.operation == nil && route.protocolOperation == nil) {
-				return fmt.Errorf("resource %q %s idempotency requires a principal route", resource.name, route.method)
+			if route.MaxBodyBytes < 0 {
+				return fmt.Errorf("resource %q %s maximum body size must not be negative", resource.name, route.Method)
 			}
 
-			ordinary := route.operation != nil
-			protocol := route.protocolOperation != nil
-			upgrade := route.upgradeOperation != nil
+			if effectiveIdempotencyRequirement(route.Idempotency) != IdempotencyNone &&
+				(!authRequiresPrincipal(route.Auth) || route.Upgrade != nil || route.Handle == nil && route.Protocol == nil) {
+				return fmt.Errorf("resource %q %s idempotency requires a principal route", resource.name, route.Method)
+			}
+
+			ordinary := route.Handle != nil
+			protocol := route.Protocol != nil
+			upgrade := route.Upgrade != nil
 			if countTrue(ordinary, protocol, upgrade) != 1 {
-				return fmt.Errorf("resource %q %s operation is required", resource.name, route.method)
+				return fmt.Errorf("resource %q %s operation is required", resource.name, route.Method)
 			}
-			if (protocol || upgrade) && !validProtocolName.MatchString(route.protocolName) {
-				return fmt.Errorf("resource %q %s protocol operation name %q is invalid", resource.name, route.method, route.protocolName)
+			if (protocol || upgrade) && !validProtocolName.MatchString(route.ProtocolName) {
+				return fmt.Errorf("resource %q %s protocol operation name %q is invalid", resource.name, route.Method, route.ProtocolName)
 			}
-			if (protocol || upgrade) && !validRouteProtocolKind(route.protocolKind) {
-				return fmt.Errorf("resource %q %s protocol operation kind %q is invalid", resource.name, route.method, route.protocolKind)
+			if (protocol || upgrade) && !validRouteProtocolKind(route.ProtocolKind) {
+				return fmt.Errorf("resource %q %s protocol operation kind %q is invalid", resource.name, route.Method, route.ProtocolKind)
 			}
-			if upgrade && route.protocolKind != RouteProtocolUpgrade {
-				return fmt.Errorf("resource %q %s upgrade operation kind %q is invalid", resource.name, route.method, route.protocolKind)
+			if upgrade && route.ProtocolKind != RouteProtocolUpgrade {
+				return fmt.Errorf("resource %q %s upgrade operation kind %q is invalid", resource.name, route.Method, route.ProtocolKind)
 			}
-			if protocol && route.protocolKind == RouteProtocolUpgrade {
-				return fmt.Errorf("resource %q %s upgrade requires the dedicated upgrade operation", resource.name, route.method)
+			if protocol && route.ProtocolKind == RouteProtocolUpgrade {
+				return fmt.Errorf("resource %q %s upgrade requires the dedicated upgrade operation", resource.name, route.Method)
 			}
-			if ordinary && (route.protocolName != "" || route.protocolKind != "") {
-				return fmt.Errorf("resource %q %s ordinary operation has protocol metadata", resource.name, route.method)
+			if ordinary && (route.ProtocolName != "" || route.ProtocolKind != "") {
+				return fmt.Errorf("resource %q %s ordinary operation has protocol metadata", resource.name, route.Method)
 			}
 
-			path, normalized, err := route.path.compile(apiPrefix)
+			path, normalized, err := route.routePath().compile(apiPrefix)
 			if err != nil {
-				return fmt.Errorf("resource %q %s path: %w", resource.name, route.method, err)
+				return fmt.Errorf("resource %q %s path: %w", resource.name, route.Method, err)
 			}
 
 			if upgrade &&
 				(resource.name != webSocketResourceName ||
-					route.protocolName != webSocketProtocolName ||
-					route.auth != AuthSessionRequired ||
-					route.method != http.MethodGet ||
+					route.ProtocolName != webSocketProtocolName ||
+					route.Auth != AuthSessionRequired ||
+					route.Method != http.MethodGet ||
 					path != apiPrefix+"/"+webSocketPathLiteral) {
-				return fmt.Errorf("resource %q %s %s is not the reserved WebSocket upgrade", resource.name, route.method, path)
+				return fmt.Errorf("resource %q %s %s is not the reserved WebSocket upgrade", resource.name, route.Method, path)
 			}
 
-			key := route.method + " " + normalized
+			key := route.Method + " " + normalized
 			if prior, exists := routeShapes[key]; exists {
-				return fmt.Errorf("resource %q %s %s has duplicate route shape with %s", resource.name, route.method, path, prior)
+				return fmt.Errorf("resource %q %s %s has duplicate route shape with %s", resource.name, route.Method, path, prior)
 			}
 
 			routeShapes[key] = resource.name
-			seenErrors := make(map[string]struct{}, len(route.errorCodes))
-			for _, code := range route.errorCodes {
+			errorCodes := route.errorCodes()
+			seenErrors := make(map[string]struct{}, len(errorCodes))
+			for _, code := range errorCodes {
 				_, applicationCode := applicationErrorMappings[code]
 				_, transportCode := transportProblemCodes[code]
 				if !applicationCode && !transportCode {
-					return fmt.Errorf("resource %q %s %s public error code %q is not mapped", resource.name, route.method, path, code)
+					return fmt.Errorf("resource %q %s %s public error code %q is not mapped", resource.name, route.Method, path, code)
 				}
 				if _, exists := seenErrors[code]; exists {
-					return fmt.Errorf("resource %q %s %s public error code %q is duplicated", resource.name, route.method, path, code)
+					return fmt.Errorf("resource %q %s %s public error code %q is duplicated", resource.name, route.Method, path, code)
 				}
 
 				seenErrors[code] = struct{}{}
@@ -126,11 +127,11 @@ func validateDeclaredKernelCodes(resources []apiResource) error {
 	var problems []string
 	for _, resource := range resources {
 		for _, route := range resource.routes {
-			kernel := kernelErrorCodes(route.auth, route.method)
-			for _, code := range route.declaredErrorCodes {
+			kernel := kernelErrorCodes(route.Auth, route.Method)
+			for _, code := range route.Errors {
 				// request.invalid is also every decoding operation's own code.
 				if code != "request.invalid" && slices.Contains(kernel, code) {
-					problems = append(problems, fmt.Sprintf("resource %q %s route declares kernel error code %q", resource.name, route.method, code))
+					problems = append(problems, fmt.Sprintf("resource %q %s route declares kernel error code %q", resource.name, route.Method, code))
 				}
 			}
 		}

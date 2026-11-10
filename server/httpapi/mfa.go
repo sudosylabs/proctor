@@ -70,19 +70,21 @@ type mfaResourceModule struct {
 
 func mfaResource(mfa MFA) apiResource {
 	module := mfaResourceModule{mfa: mfa}
-	base := path("/users/me/mfa")
+	base := "/users/me/mfa"
 	return newResource(
 		"multi-factor-authentication",
-		mfaRecoverySessionRoute(
-			http.MethodGet,
-			base,
-			[]string{"authentication.mfa.unavailable", "authentication.reauthentication_required", "authentication.session_required"},
-			module.status,
-		),
-		recentMFARecoverySessionRoute(
-			http.MethodPost,
-			path("/users/me/mfa/setup"),
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   base,
+			Auth:   AuthMFARecoverySessionRequired,
+			Errors: []string{"authentication.mfa.unavailable", "authentication.reauthentication_required", "authentication.session_required"},
+			Handle: module.status,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/me/mfa/setup",
+			Auth:   AuthRecentMFARecoverySessionRequired,
+			Errors: []string{
 				"authentication.mfa.disabled",
 				"authentication.mfa.not_found",
 				"authentication.mfa.conflict",
@@ -91,12 +93,13 @@ func mfaResource(mfa MFA) apiResource {
 				"audit.unavailable",
 				"authentication.session_required",
 			},
-			module.setup,
-		),
-		recentMFARecoverySessionRoute(
-			http.MethodPost,
-			path("/users/me/mfa/activate"),
-			[]string{
+			Handle: module.setup,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/me/mfa/activate",
+			Auth:   AuthRecentMFARecoverySessionRequired,
+			Errors: []string{
 				"request.invalid",
 				"authentication.mfa.code_invalid",
 				"authentication.rate_limited",
@@ -109,12 +112,13 @@ func mfaResource(mfa MFA) apiResource {
 				"audit.unavailable",
 				"authentication.session_required",
 			},
-			module.activate,
-		),
-		mfaEnrollmentSessionRoute(
-			http.MethodPost,
-			path("/users/me/mfa/challenge"),
-			[]string{
+			Handle: module.activate,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/me/mfa/challenge",
+			Auth:   AuthMFAEnrollmentSessionRequired,
+			Errors: []string{
 				"request.invalid",
 				"authentication.mfa.code_invalid",
 				"authentication.rate_limited",
@@ -128,12 +132,13 @@ func mfaResource(mfa MFA) apiResource {
 				"authentication.reauthentication_required",
 				"authentication.session_required",
 			},
-			module.challenge,
-		),
-		strongRecentSessionRoute(
-			http.MethodPost,
-			path("/users/me/mfa/recovery-codes/regenerate"),
-			[]string{
+			Handle: module.challenge,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/me/mfa/recovery-codes/regenerate",
+			Auth:   AuthStrongRecentSessionRequired,
+			Errors: []string{
 				"authentication.mfa.disabled",
 				"authentication.mfa.not_found",
 				"authentication.mfa.conflict",
@@ -142,12 +147,13 @@ func mfaResource(mfa MFA) apiResource {
 				"audit.unavailable",
 				"authentication.session_required",
 			},
-			module.regenerateRecoveryCodes,
-		),
-		strongRecentSessionRoute(
-			http.MethodPost,
-			path("/users/me/mfa/disable"),
-			[]string{
+			Handle: module.regenerateRecoveryCodes,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/me/mfa/disable",
+			Auth:   AuthStrongRecentSessionRequired,
+			Errors: []string{
 				"mfa.required_by_policy",
 				"authentication.mfa.disabled",
 				"authentication.mfa.not_found",
@@ -156,8 +162,8 @@ func mfaResource(mfa MFA) apiResource {
 				"audit.unavailable",
 				"authentication.session_required",
 			},
-			module.disable,
-		),
+			Handle: module.disable,
+		},
 	)
 }
 

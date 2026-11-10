@@ -34,33 +34,35 @@ type desktopRegistrationResourceModule struct {
 
 func desktopRegistrationResource(application *identity.Service) apiResource {
 	module := desktopRegistrationResourceModule{application: application}
-	collection := path("/users/me/desktop-registrations")
-	item := path("/users/me/desktop-registrations/{desktop_registration_id}")
+	collection := "/users/me/desktop-registrations"
+	item := "/users/me/desktop-registrations/{desktop_registration_id}"
 	return newResource(
 		"desktop-registrations",
-		sessionRoute(
-			http.MethodGet,
-			collection,
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   collection,
+			Auth:   AuthSessionRequired,
+			Errors: []string{
 				"desktop_registration.unavailable",
 				"authentication.reauthentication_required",
 				"authentication.session_required",
 				"request.invalid",
 			},
-			module.list,
-		),
-		strongRecentSessionRoute(
-			http.MethodDelete,
-			item,
-			[]string{
+			Handle: module.list,
+		},
+		endpoint{
+			Method: http.MethodDelete,
+			Path:   item,
+			Auth:   AuthStrongRecentSessionRequired,
+			Errors: []string{
 				"desktop_registration.unavailable",
 				"request.invalid",
 				"resource.not_found",
 				"audit.unavailable",
 				"authentication.session_required",
 			},
-			module.revoke,
-		),
+			Handle: module.revoke,
+		},
 	)
 }
 

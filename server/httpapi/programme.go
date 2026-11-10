@@ -48,30 +48,45 @@ type programmeResourceModule struct {
 
 func programmeResource(programmes ProgrammeApplication) apiResource {
 	module := programmeResourceModule{programmes: programmes}
-	collection := path("/academic-units/{academic_unit_id}/programmes")
-	member := path("/programmes/{programme_id}")
+	collection := "/academic-units/{academic_unit_id}/programmes"
+	member := "/programmes/{programme_id}"
 	return newResource(
 		"programmes",
-		principalRoute(http.MethodGet, collection, academicReadErrorCodes("request.invalid", "resource.not_found"), module.list),
-		principalRoute(
-			http.MethodPost,
-			collection,
-			academicMutationErrorCodes("request.invalid", "resource.not_found", "programme.invalid", "programme.conflict"),
-			module.create,
-		),
-		principalRoute(http.MethodGet, member, academicReadErrorCodes("request.invalid", "resource.not_found"), module.get),
-		principalRoute(
-			http.MethodPatch,
-			member,
-			academicMutationErrorCodes("request.invalid", "resource.not_found", "programme.invalid", "programme.conflict"),
-			module.patch,
-		),
-		principalRoute(
-			http.MethodDelete,
-			member,
-			academicMutationErrorCodes("request.invalid", "resource.not_found", "programme.conflict"),
-			module.archive,
-		),
+		endpoint{
+			Method: http.MethodGet,
+			Path:   collection,
+			Auth:   AuthPrincipalRequired,
+			Errors: academicReadErrorCodes("request.invalid", "resource.not_found"),
+			Handle: module.list,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   collection,
+			Auth:   AuthPrincipalRequired,
+			Errors: academicMutationErrorCodes("request.invalid", "resource.not_found", "programme.invalid", "programme.conflict"),
+			Handle: module.create,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   member,
+			Auth:   AuthPrincipalRequired,
+			Errors: academicReadErrorCodes("request.invalid", "resource.not_found"),
+			Handle: module.get,
+		},
+		endpoint{
+			Method: http.MethodPatch,
+			Path:   member,
+			Auth:   AuthPrincipalRequired,
+			Errors: academicMutationErrorCodes("request.invalid", "resource.not_found", "programme.invalid", "programme.conflict"),
+			Handle: module.patch,
+		},
+		endpoint{
+			Method: http.MethodDelete,
+			Path:   member,
+			Auth:   AuthPrincipalRequired,
+			Errors: academicMutationErrorCodes("request.invalid", "resource.not_found", "programme.conflict"),
+			Handle: module.archive,
+		},
 	)
 }
 

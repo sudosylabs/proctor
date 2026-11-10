@@ -986,11 +986,20 @@ The production route trace is intentionally linear and searchable:
 httpapi.New
     -> productionResources             (resource_catalog.go)
     -> <domain>Resource                (for example institutionResource)
-    -> principalRoute/sessionRoute/... (route_definition.go)
+    -> endpoint{...} literals          (route_definition.go)
     -> newAPI                          (api.go)
     -> compileRoutes + validation      (catalog_compiler.go)
     -> application capability method   (for example GetInstitution)
 ~~~
+
+A route is one `endpoint` struct literal. It names its `Method`, `Path`,
+`Auth`, `Errors`, and one of `Handle`, `Protocol`, or `Upgrade`. `Path` is a
+template string such as `/classes/{class_id}`; the compiler parses it. `Auth`
+has no default, so a public route writes `Auth: AuthPublic` and a route
+without `Auth` fails to compile. `Idempotency` and `MaxBodyBytes` are set only
+when the route needs them. A `Protocol` or `Upgrade` endpoint also sets
+`ProtocolName` and `ProtocolKind`. `Errors` lists only the operation's own
+codes; the compiler adds the kernel codes that `Auth` and `Method` imply.
 
 This is Proctor's declarative analogue to Mattermost's root `api.go` calling
 per-domain `Init*` functions. The explicit inventory retains the same useful
@@ -1001,7 +1010,7 @@ To add or change a cohesive resource family:
 
 1. define the focused application capability and transport DTO mapping beside
    the resource;
-2. declare typed paths, one explicit authentication requirement per operation,
+2. declare path templates, one explicit authentication requirement per operation,
    typed ordinary or reviewed protocol results, and the complete public-error
    allowlist;
 3. add the resource constructor once to `productionResources` in

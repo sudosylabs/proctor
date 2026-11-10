@@ -372,22 +372,23 @@ type examResourceModule struct{ exams ExamApplication }
 
 func examResource(exams ExamApplication) apiResource {
 	module := examResourceModule{exams: exams}
-	collection := path("/exams")
-	member := path("/exams/{exam_id}")
-	draft := path("/exams/{exam_id}/draft")
-	nativePolicy := path("/exams/{exam_id}/draft/policies/native")
-	focusLossPolicy := path("/exams/{exam_id}/draft/policies/focus-loss")
-	browserPolicy := path("/exams/{exam_id}/draft/browser-policy")
-	archive := path("/exams/{exam_id}/archive")
-	managers := path("/exams/{exam_id}/managers")
-	manager := path("/exams/{exam_id}/managers/{user_id}")
-	owner := path("/exams/{exam_id}/owner")
+	collection := "/exams"
+	member := "/exams/{exam_id}"
+	draft := "/exams/{exam_id}/draft"
+	nativePolicy := "/exams/{exam_id}/draft/policies/native"
+	focusLossPolicy := "/exams/{exam_id}/draft/policies/focus-loss"
+	browserPolicy := "/exams/{exam_id}/draft/browser-policy"
+	archive := "/exams/{exam_id}/archive"
+	managers := "/exams/{exam_id}/managers"
+	manager := "/exams/{exam_id}/managers/{user_id}"
+	owner := "/exams/{exam_id}/owner"
 	return newResource(
 		"exams",
-		principalRoute(
-			http.MethodGet,
-			collection,
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   collection,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -396,13 +397,14 @@ func examResource(exams ExamApplication) apiResource {
 				"exam.unavailable",
 				"resource.not_found",
 			},
-			module.list,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			collection,
-			[]string{
+			Handle: module.list,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        collection,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -417,12 +419,13 @@ func examResource(exams ExamApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			module.create,
-		),
-		principalRoute(
-			http.MethodGet,
-			member,
-			[]string{
+			Handle: module.create,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   member,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -430,35 +433,14 @@ func examResource(exams ExamApplication) apiResource {
 				"exam.unavailable",
 				"exam.invalid",
 			},
-			module.get,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPatch,
-			draft,
-			[]string{
-				"authorization.request.invalid",
-				"authorization.unavailable",
-				"audit.unavailable",
-				"request.invalid",
-				"resource.not_found",
-				"exam.invalid",
-				"exam.archived",
-				"exam.draft.revision_conflict",
-				"exam.draft.no_changes",
-				"exam.unavailable",
-				"idempotency.key_required",
-				"idempotency.key_invalid",
-				"idempotency.conflict",
-				"idempotency.in_progress",
-			},
-			module.editDraftText,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPut,
-			focusLossPolicy,
-			[]string{
+			Handle: module.get,
+		},
+		endpoint{
+			Method:      http.MethodPatch,
+			Path:        draft,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -474,13 +456,14 @@ func examResource(exams ExamApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			module.configureDraftFocusLoss,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPut,
-			nativePolicy,
-			[]string{
+			Handle: module.editDraftText,
+		},
+		endpoint{
+			Method:      http.MethodPut,
+			Path:        focusLossPolicy,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -496,13 +479,14 @@ func examResource(exams ExamApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			module.configureDraftNativePolicy,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPut,
-			browserPolicy,
-			[]string{
+			Handle: module.configureDraftFocusLoss,
+		},
+		endpoint{
+			Method:      http.MethodPut,
+			Path:        nativePolicy,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -518,13 +502,37 @@ func examResource(exams ExamApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			module.configureDraftBrowserPolicy,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			archive,
-			[]string{
+			Handle: module.configureDraftNativePolicy,
+		},
+		endpoint{
+			Method:      http.MethodPut,
+			Path:        browserPolicy,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.invalid",
+				"exam.archived",
+				"exam.draft.revision_conflict",
+				"exam.draft.no_changes",
+				"exam.unavailable",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+			},
+			Handle: module.configureDraftBrowserPolicy,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        archive,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -539,12 +547,13 @@ func examResource(exams ExamApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			module.archive,
-		),
-		principalRoute(
-			http.MethodGet,
-			managers,
-			[]string{
+			Handle: module.archive,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   managers,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -552,13 +561,14 @@ func examResource(exams ExamApplication) apiResource {
 				"exam.invalid",
 				"exam.unavailable",
 			},
-			module.listManagers,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			managers,
-			[]string{
+			Handle: module.listManagers,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        managers,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -576,13 +586,14 @@ func examResource(exams ExamApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			module.addManager,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodDelete,
-			manager,
-			[]string{
+			Handle: module.addManager,
+		},
+		endpoint{
+			Method:      http.MethodDelete,
+			Path:        manager,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -599,13 +610,14 @@ func examResource(exams ExamApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			module.removeManager,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPut,
-			owner,
-			[]string{
+			Handle: module.removeManager,
+		},
+		endpoint{
+			Method:      http.MethodPut,
+			Path:        owner,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -624,8 +636,8 @@ func examResource(exams ExamApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			module.transferOwner,
-		),
+			Handle: module.transferOwner,
+		},
 	)
 }
 

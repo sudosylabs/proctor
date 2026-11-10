@@ -93,10 +93,11 @@ func auditResource(audits AuditListingApplication) apiResource {
 	module := auditResourceModule{audits: audits}
 	return newResource(
 		"audits",
-		principalRoute(
-			http.MethodGet,
-			path("/audits"),
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/audits",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -105,14 +106,15 @@ func auditResource(audits AuditListingApplication) apiResource {
 				"request.invalid",
 				"resource.not_found",
 			},
-			module.list,
-		),
-		sessionRoute(
-			http.MethodGet,
-			path("/users/me/audits"),
-			[]string{"audit.query.invalid", "audit.unavailable", "request.invalid"},
-			module.listSelf,
-		),
+			Handle: module.list,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/users/me/audits",
+			Auth:   AuthSessionRequired,
+			Errors: []string{"audit.query.invalid", "audit.unavailable", "request.invalid"},
+			Handle: module.listSelf,
+		},
 	)
 }
 

@@ -52,15 +52,29 @@ func retentionResource(application RetentionApplication) apiResource {
 		"idempotency.conflict",
 		"idempotency.in_progress",
 	)
-	preview := sessionRoute(http.MethodPost, path("/retention/previews"), mutationErrors, m.preview)
-	control := strongRecentSessionRoute(http.MethodPut, path("/retention/control"), mutationErrors, m.changeControl)
-	preview.idempotency, control.idempotency = IdempotencyRequired, IdempotencyRequired
+	preview := endpoint{
+		Method:      http.MethodPost,
+		Path:        "/retention/previews",
+		Auth:        AuthSessionRequired,
+		Idempotency: IdempotencyRequired,
+		Errors:      mutationErrors,
+		Handle:      m.preview,
+	}
+	control := endpoint{
+		Method:      http.MethodPut,
+		Path:        "/retention/control",
+		Auth:        AuthStrongRecentSessionRequired,
+		Idempotency: IdempotencyRequired,
+		Errors:      mutationErrors,
+		Handle:      m.changeControl,
+	}
 	return newResource(
 		"retention",
-		sessionRoute(
-			http.MethodGet,
-			path("/retention/control"),
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/retention/control",
+			Auth:   AuthSessionRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -70,14 +84,15 @@ func retentionResource(application RetentionApplication) apiResource {
 				"resource.not_found",
 				"retention_policy.revision_conflict",
 			},
-			m.getControl,
-		),
+			Handle: m.getControl,
+		},
 		control,
 		preview,
-		sessionRoute(
-			http.MethodGet,
-			path("/retention/previews/{retention_preview_id}"),
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/retention/previews/{retention_preview_id}",
+			Auth:   AuthSessionRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -88,12 +103,13 @@ func retentionResource(application RetentionApplication) apiResource {
 				"resource.not_found",
 				"retention_policy.revision_conflict",
 			},
-			m.getPreview,
-		),
-		sessionRoute(
-			http.MethodGet,
-			path("/retention/records"),
-			[]string{
+			Handle: m.getPreview,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/retention/records",
+			Auth:   AuthSessionRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -104,12 +120,13 @@ func retentionResource(application RetentionApplication) apiResource {
 				"resource.not_found",
 				"retention_policy.revision_conflict",
 			},
-			m.records,
-		),
-		sessionRoute(
-			http.MethodGet,
-			path("/users/me/retention-notices"),
-			[]string{
+			Handle: m.records,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/users/me/retention-notices",
+			Auth:   AuthSessionRequired,
+			Errors: []string{
 				"authorization.denied",
 				"request.invalid",
 				"retention.invalid",
@@ -117,8 +134,8 @@ func retentionResource(application RetentionApplication) apiResource {
 				"retention_policy.revision_conflict",
 				"retention_policy.unavailable",
 			},
-			m.notices,
-		),
+			Handle: m.notices,
+		},
 	)
 }
 

@@ -45,10 +45,11 @@ type externalReauthenticationResponse struct {
 func sessionReauthenticationResource(authentication SessionReauthentication, cookies browserCookies) apiResource {
 	module := sessionReauthenticationResourceModule{authentication: authentication, cookies: cookies}
 	return newResource("session-reauthentication",
-		mfaRecoverySessionRoute(
-			http.MethodPost,
-			path("/auth/reauthenticate/external"),
-			[]string{
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/reauthenticate/external",
+			Auth:   AuthMFARecoverySessionRequired,
+			Errors: []string{
 				"request.invalid",
 				"authentication.reauthentication_method_required",
 				"authentication.external.request.invalid",
@@ -62,12 +63,13 @@ func sessionReauthenticationResource(authentication SessionReauthentication, coo
 				"authentication.desktop_authorization.invalid",
 				"authentication.external.account_not_linked",
 			},
-			module.external,
-		),
-		mfaRecoverySessionRoute(
-			http.MethodPost,
-			path("/auth/reauthenticate/password"),
-			personalAccessTokenSessionMutationCodes(
+			Handle: module.external,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/reauthenticate/password",
+			Auth:   AuthMFARecoverySessionRequired,
+			Errors: personalAccessTokenSessionMutationCodes(
 				"service.busy",
 				"request.invalid",
 				"authentication.credentials_invalid",
@@ -77,8 +79,8 @@ func sessionReauthenticationResource(authentication SessionReauthentication, coo
 				"authentication.internal",
 				"audit.unavailable",
 			),
-			module.password,
-		),
+			Handle: module.password,
+		},
 	)
 }
 

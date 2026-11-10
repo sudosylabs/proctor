@@ -78,16 +78,17 @@ type examResourceResponse struct {
 
 func examResourceHTTPResource(application ExamResourceApplication) apiResource {
 	m := examResourceHTTPModule{application: application}
-	collection := path("/exams/{exam_id}/draft/resources")
-	member := path("/exams/{exam_id}/draft/resources/{exam_resource_id}")
-	order := path("/exams/{exam_id}/draft/resources/order")
-	content := path("/exams/{exam_id}/draft/resources/{exam_resource_id}/content")
+	collection := "/exams/{exam_id}/draft/resources"
+	member := "/exams/{exam_id}/draft/resources/{exam_resource_id}"
+	order := "/exams/{exam_id}/draft/resources/order"
+	content := "/exams/{exam_id}/draft/resources/{exam_resource_id}/content"
 	return newResource(
 		"exam-resources",
-		principalRoute(
-			http.MethodGet,
-			collection,
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   collection,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -95,17 +96,17 @@ func examResourceHTTPResource(application ExamResourceApplication) apiResource {
 				"exam.resource.invalid",
 				"exam.resource.unavailable",
 			},
-			m.list,
-		),
-		idempotentProtocolRoute(
-			IdempotencyRequired,
-			examResourceUploadBodyLimit,
-			"exam-resource-upload",
-			RouteProtocolStreamingUpload,
-			AuthPrincipalRequired,
-			http.MethodPost,
-			collection,
-			[]string{
+			Handle: m.list,
+		},
+		endpoint{
+			Method:       http.MethodPost,
+			Path:         collection,
+			Auth:         AuthPrincipalRequired,
+			Idempotency:  IdempotencyRequired,
+			MaxBodyBytes: examResourceUploadBodyLimit,
+			ProtocolName: "exam-resource-upload",
+			ProtocolKind: RouteProtocolStreamingUpload,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -126,13 +127,14 @@ func examResourceHTTPResource(application ExamResourceApplication) apiResource {
 				"exam.resource.upload_invalid",
 				"exam.resource.revision_conflict",
 			},
-			m.create,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPatch,
-			member,
-			[]string{
+			Protocol: m.create,
+		},
+		endpoint{
+			Method:      http.MethodPatch,
+			Path:        member,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -150,13 +152,14 @@ func examResourceHTTPResource(application ExamResourceApplication) apiResource {
 				"exam.resource.no_changes",
 				"exam.resource.revision_conflict",
 			},
-			m.editMetadata,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPut,
-			order,
-			[]string{
+			Handle: m.editMetadata,
+		},
+		endpoint{
+			Method:      http.MethodPut,
+			Path:        order,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -174,17 +177,17 @@ func examResourceHTTPResource(application ExamResourceApplication) apiResource {
 				"exam.resource.no_changes",
 				"exam.resource.order_invalid",
 			},
-			m.reorder,
-		),
-		idempotentProtocolRoute(
-			IdempotencyRequired,
-			examResourceUploadBodyLimit,
-			"exam-resource-content-replacement",
-			RouteProtocolStreamingUpload,
-			AuthPrincipalRequired,
-			http.MethodPut,
-			content,
-			[]string{
+			Handle: m.reorder,
+		},
+		endpoint{
+			Method:       http.MethodPut,
+			Path:         content,
+			Auth:         AuthPrincipalRequired,
+			Idempotency:  IdempotencyRequired,
+			MaxBodyBytes: examResourceUploadBodyLimit,
+			ProtocolName: "exam-resource-content-replacement",
+			ProtocolKind: RouteProtocolStreamingUpload,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -204,13 +207,14 @@ func examResourceHTTPResource(application ExamResourceApplication) apiResource {
 				"exam.resource.upload_invalid",
 				"exam.resource.revision_conflict",
 			},
-			m.replaceContent,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodDelete,
-			member,
-			[]string{
+			Protocol: m.replaceContent,
+		},
+		endpoint{
+			Method:      http.MethodDelete,
+			Path:        member,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -227,15 +231,15 @@ func examResourceHTTPResource(application ExamResourceApplication) apiResource {
 				"idempotency.in_progress",
 				"exam.resource.revision_conflict",
 			},
-			m.remove,
-		),
-		protocolRoute(
-			"exam-resource-protected-content",
-			RouteProtocolBinaryDownload,
-			AuthPrincipalRequired,
-			http.MethodGet,
-			content,
-			[]string{
+			Handle: m.remove,
+		},
+		endpoint{
+			Method:       http.MethodGet,
+			Path:         content,
+			Auth:         AuthPrincipalRequired,
+			ProtocolName: "exam-resource-protected-content",
+			ProtocolKind: RouteProtocolBinaryDownload,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -243,8 +247,8 @@ func examResourceHTTPResource(application ExamResourceApplication) apiResource {
 				"exam.resource.invalid",
 				"exam.resource.unavailable",
 			},
-			m.open,
-		),
+			Protocol: m.open,
+		},
 	)
 }
 

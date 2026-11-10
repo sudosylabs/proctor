@@ -14,9 +14,10 @@ import (
 	"strings"
 )
 
-// The route-path vocabulary is deliberately private. Resource modules
-// describe canonical path shapes with these values; gorilla/mux syntax remains
-// an implementation detail of the catalog compiler.
+// The route-path vocabulary is deliberately private. Resource modules write
+// a path template in endpoint.Path; the kernel parses it into these values,
+// and gorilla/mux syntax remains an implementation detail of the catalog
+// compiler.
 
 type parameterKind uint8
 
@@ -88,8 +89,8 @@ func (p pathParameter) compile() (string, string, error) {
 	return "{" + p.name + ":" + pattern + "}", "{" + normalized + "}", nil
 }
 
-// routePath is a canonical route path. Resource modules build it with path or
-// rootPath from a readable template such as
+// routePath is a canonical route path. The kernel parses it from an
+// endpoint's Path, a readable template such as
 // "/programme-levels/{programme_level_id}/classes".
 type routePath struct {
 	parts       []pathPart

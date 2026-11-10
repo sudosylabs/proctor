@@ -128,12 +128,13 @@ type desktopAuthorizationResourceModule struct {
 
 func desktopAuthorizationResource(application DesktopAuthorization, cookies browserCookies) apiResource {
 	m := desktopAuthorizationResourceModule{application: application, cookies: cookies}
-	base := path("/auth/desktop/authorizations")
+	base := "/auth/desktop/authorizations"
 	return newResource("desktop_authorization",
-		publicRoute(
-			http.MethodPost,
-			base,
-			[]string{
+		endpoint{
+			Method: http.MethodPost,
+			Path:   base,
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"authentication.rate_limited",
 				"authentication.rate_limit_unavailable",
@@ -143,46 +144,50 @@ func desktopAuthorizationResource(application DesktopAuthorization, cookies brow
 				"authentication.desktop_authorization.incompatible",
 				"authentication.dpop.unavailable",
 			},
-			m.start,
-		),
-		publicRoute(
-			http.MethodPost,
-			path("/auth/desktop/authorizations/bind"),
-			[]string{
+			Handle: m.start,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/desktop/authorizations/bind",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"authentication.desktop_authorization.invalid",
 				"authentication.desktop_authorization.rejected",
 				"authentication.desktop_authorization.unavailable",
 			},
-			m.bind,
-		),
-		publicRoute(
-			http.MethodGet,
-			path("/auth/desktop/authorizations/context"),
-			[]string{
+			Handle: m.bind,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/auth/desktop/authorizations/context",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"authentication.desktop_authorization.invalid",
 				"authentication.desktop_authorization.rejected",
 				"authentication.desktop_authorization.unavailable",
 				"authentication.credential_ambiguous",
 			},
-			m.context,
-		),
-		sessionRoute(
-			http.MethodPost,
-			path("/auth/desktop/authorizations/authenticate/session"),
-			[]string{
+			Handle: m.context,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/desktop/authorizations/authenticate/session",
+			Auth:   AuthSessionRequired,
+			Errors: []string{
 				"authentication.desktop_authorization.invalid",
 				"authentication.mfa.enrollment_required",
 				"authentication.desktop_authorization.rejected",
 				"authentication.desktop_authorization.unavailable",
 				"authentication.desktop_authorization.account_session_locked",
 			},
-			m.authenticateSession,
-		),
-		publicRoute(
-			http.MethodPost,
-			path("/auth/desktop/authorizations/authenticate/password"),
-			[]string{
+			Handle: m.authenticateSession,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/desktop/authorizations/authenticate/password",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"authentication.mfa.enrollment_required",
 				"authentication.desktop_authorization.invalid",
@@ -198,15 +203,15 @@ func desktopAuthorizationResource(application DesktopAuthorization, cookies brow
 				"authentication.rate_limit_unavailable",
 				"authentication.credential_ambiguous",
 			},
-			m.authenticateLocal,
-		),
-		protocolRoute(
-			"desktop-authorization-external-login",
-			RouteProtocolRedirect,
-			AuthPublic,
-			http.MethodGet,
-			path("/auth/desktop/authorizations/authenticate/providers/{provider_id:provider}/login"),
-			[]string{
+			Handle: m.authenticateLocal,
+		},
+		endpoint{
+			Method:       http.MethodGet,
+			Path:         "/auth/desktop/authorizations/authenticate/providers/{provider_id:provider}/login",
+			Auth:         AuthPublic,
+			ProtocolName: "desktop-authorization-external-login",
+			ProtocolKind: RouteProtocolRedirect,
+			Errors: []string{
 				"request.invalid",
 				"authentication.desktop_authorization.invalid",
 				"authentication.desktop_authorization.rejected",
@@ -221,24 +226,26 @@ func desktopAuthorizationResource(application DesktopAuthorization, cookies brow
 				"authentication.external.rejected",
 				"authentication.token_invalid",
 			},
-			m.authenticateExternal,
-		),
-		publicRoute(
-			http.MethodPost,
-			path("/auth/desktop/authorizations/account/reset"),
-			[]string{
+			Protocol: m.authenticateExternal,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/desktop/authorizations/account/reset",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"authentication.desktop_authorization.invalid",
 				"authentication.desktop_authorization.rejected",
 				"authentication.desktop_authorization.unavailable",
 				"authentication.credential_ambiguous",
 			},
-			m.resetAccount,
-		),
-		publicRoute(
-			http.MethodPost,
-			path("/auth/desktop/authorizations/approve"),
-			[]string{
+			Handle: m.resetAccount,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/desktop/authorizations/approve",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"authentication.desktop_authorization.invalid",
 				"authentication.desktop_authorization.rejected",
@@ -246,24 +253,26 @@ func desktopAuthorizationResource(application DesktopAuthorization, cookies brow
 				"audit.unavailable",
 				"authentication.credential_ambiguous",
 			},
-			m.approve,
-		),
-		publicRoute(
-			http.MethodPost,
-			path("/auth/desktop/authorizations/cancel"),
-			[]string{
+			Handle: m.approve,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/desktop/authorizations/cancel",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"authentication.desktop_authorization.invalid",
 				"authentication.desktop_authorization.rejected",
 				"authentication.desktop_authorization.unavailable",
 				"authentication.credential_ambiguous",
 			},
-			m.cancel,
-		),
-		publicRoute(
-			http.MethodPost,
-			path("/auth/desktop/token"),
-			[]string{
+			Handle: m.cancel,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/desktop/token",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"authentication.mfa.enrollment_required",
 				"authentication.rate_limited",
@@ -280,8 +289,8 @@ func desktopAuthorizationResource(application DesktopAuthorization, cookies brow
 				"authentication.dpop.unavailable",
 				"audit.unavailable",
 			},
-			m.exchange,
-		),
+			Handle: m.exchange,
+		},
 	)
 }
 

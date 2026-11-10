@@ -80,10 +80,11 @@ func roleResource(roles RoleApplication) apiResource {
 	module := roleResourceModule{roles: roles}
 	return newResource(
 		"roles",
-		principalRoute(
-			http.MethodGet,
-			path("/roles"),
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/roles",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -91,12 +92,13 @@ func roleResource(roles RoleApplication) apiResource {
 				"request.invalid",
 				"resource.not_found",
 			},
-			module.list,
-		),
-		principalRoute(
-			http.MethodPost,
-			path("/roles"),
-			[]string{
+			Handle: module.list,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/roles",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -108,18 +110,20 @@ func roleResource(roles RoleApplication) apiResource {
 				"administration.unavailable",
 				"resource.not_found",
 			},
-			module.create,
-		),
-		principalRoute(
-			http.MethodGet,
-			path("/roles/{role_id}"),
-			operatorReadErrorCodes("request.invalid", "resource.not_found", "administration.unavailable"),
-			module.get,
-		),
-		principalRoute(
-			http.MethodPatch,
-			path("/roles/{role_id}"),
-			operatorMutationErrorCodes(
+			Handle: module.create,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/roles/{role_id}",
+			Auth:   AuthPrincipalRequired,
+			Errors: operatorReadErrorCodes("request.invalid", "resource.not_found", "administration.unavailable"),
+			Handle: module.get,
+		},
+		endpoint{
+			Method: http.MethodPatch,
+			Path:   "/roles/{role_id}",
+			Auth:   AuthPrincipalRequired,
+			Errors: operatorMutationErrorCodes(
 				"request.invalid",
 				"resource.not_found",
 				"role.invalid",
@@ -128,20 +132,21 @@ func roleResource(roles RoleApplication) apiResource {
 				"role.permission.invalid",
 				"administration.unavailable",
 			),
-			module.patch,
-		),
-		principalRoute(
-			http.MethodDelete,
-			path("/roles/{role_id}"),
-			operatorMutationErrorCodes(
+			Handle: module.patch,
+		},
+		endpoint{
+			Method: http.MethodDelete,
+			Path:   "/roles/{role_id}",
+			Auth:   AuthPrincipalRequired,
+			Errors: operatorMutationErrorCodes(
 				"request.invalid",
 				"resource.not_found",
 				"role.built_in.protected",
 				"role.conflict",
 				"administration.unavailable",
 			),
-			module.archive,
-		),
+			Handle: module.archive,
+		},
 	)
 }
 

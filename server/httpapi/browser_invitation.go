@@ -70,22 +70,24 @@ func browserInvitationResource(application BrowserInvitationApplication, cookies
 	module := browserInvitationResourceModule{application: application, cookies: cookies}
 	return newResource(
 		"browser-invitations",
-		publicRoute(
-			http.MethodPost,
-			path("/auth/browser/invitations"),
-			[]string{
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/browser/invitations",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"authentication.rate_limited",
 				"authentication.rate_limit_unavailable",
 				"invitation.invalid",
 				"invitation.unavailable",
 			},
-			module.start,
-		),
-		publicRoute(
-			http.MethodPost,
-			path("/auth/browser/invitations/accept"),
-			[]string{
+			Handle: module.start,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/browser/invitations/accept",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"authentication.rate_limited",
 				"authentication.rate_limit_unavailable",
@@ -99,12 +101,13 @@ func browserInvitationResource(application BrowserInvitationApplication, cookies
 				"authentication.password.identity_invalid",
 				"service.busy",
 			},
-			module.accept,
-		),
-		sessionRoute(
-			http.MethodPost,
-			path("/auth/browser/invitations/accept-session"),
-			[]string{
+			Handle: module.accept,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/browser/invitations/accept-session",
+			Auth:   AuthSessionRequired,
+			Errors: []string{
 				"authentication.rate_limited",
 				"authentication.rate_limit_unavailable",
 				"invitation.invalid",
@@ -112,8 +115,8 @@ func browserInvitationResource(application BrowserInvitationApplication, cookies
 				"audit.unavailable",
 				"request.invalid",
 			},
-			module.acceptWithSession,
-		),
+			Handle: module.acceptWithSession,
+		},
 	)
 }
 

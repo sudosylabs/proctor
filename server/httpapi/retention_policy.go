@@ -60,10 +60,12 @@ type retentionPolicyResourceModule struct {
 
 func retentionPolicyResource(application RetentionPolicyApplication) apiResource {
 	module := retentionPolicyResourceModule{application: application}
-	replace := strongRecentSessionRoute(
-		http.MethodPut,
-		path("/retention-policy"),
-		[]string{
+	replace := endpoint{
+		Method:      http.MethodPut,
+		Path:        "/retention-policy",
+		Auth:        AuthStrongRecentSessionRequired,
+		Idempotency: IdempotencyRequired,
+		Errors: []string{
 			"authorization.denied",
 			"authorization.request.invalid",
 			"authorization.unavailable",
@@ -78,15 +80,15 @@ func retentionPolicyResource(application RetentionPolicyApplication) apiResource
 			"retention_policy.unavailable",
 			"resource.not_found",
 		},
-		module.replace,
-	)
-	replace.idempotency = IdempotencyRequired
+		Handle: module.replace,
+	}
 	return newResource(
 		"retention-policy",
-		principalRoute(
-			http.MethodGet,
-			path("/retention-policy"),
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/retention-policy",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -94,8 +96,8 @@ func retentionPolicyResource(application RetentionPolicyApplication) apiResource
 				"resource.not_found",
 				"retention_policy.revision_conflict",
 			},
-			module.get,
-		),
+			Handle: module.get,
+		},
 		replace,
 	)
 }

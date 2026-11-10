@@ -41,24 +41,27 @@ func affiliationResource(affiliations AffiliationApplication) apiResource {
 	module := affiliationResourceModule{affiliations: affiliations}
 	return newResource(
 		"affiliations",
-		principalRoute(
-			http.MethodGet,
-			path("/users/{user_id}/affiliations"),
-			academicRelationshipReadErrorCodes(),
-			module.list,
-		),
-		principalRoute(
-			http.MethodPost,
-			path("/users/{user_id}/affiliations"),
-			academicRelationshipMutationErrorCodes("affiliation.invalid", "affiliation.conflict"),
-			module.create,
-		),
-		principalRoute(
-			http.MethodDelete,
-			path("/affiliations/{affiliation_id}"),
-			academicRelationshipMutationErrorCodes("affiliation.student_has_active_enrollment", "affiliation.conflict"),
-			module.end,
-		),
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/users/{user_id}/affiliations",
+			Auth:   AuthPrincipalRequired,
+			Errors: academicRelationshipReadErrorCodes(),
+			Handle: module.list,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/{user_id}/affiliations",
+			Auth:   AuthPrincipalRequired,
+			Errors: academicRelationshipMutationErrorCodes("affiliation.invalid", "affiliation.conflict"),
+			Handle: module.create,
+		},
+		endpoint{
+			Method: http.MethodDelete,
+			Path:   "/affiliations/{affiliation_id}",
+			Auth:   AuthPrincipalRequired,
+			Errors: academicRelationshipMutationErrorCodes("affiliation.student_has_active_enrollment", "affiliation.conflict"),
+			Handle: module.end,
+		},
 	)
 }
 

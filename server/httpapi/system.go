@@ -42,15 +42,35 @@ func systemResourceWithApplication(
 	}
 	return newResource(
 		"system",
-		publicRoute(http.MethodGet, rootPath("/health/live"), []string{healthNotLiveCode}, module.liveness),
-		publicRoute(http.MethodGet, rootPath("/health/ready"), []string{healthNotReadyCode}, module.readiness),
-		publicRoute(
-			http.MethodGet,
-			path("/system/ping"),
-			[]string{"request.invalid", "desktop_compatibility_policy.revision_conflict", "desktop_compatibility_policy.unavailable"},
-			module.ping,
-		),
-		publicRoute(http.MethodGet, path("/system/version"), nil, module.version),
+		endpoint{
+			Method:      http.MethodGet,
+			Path:        "/health/live",
+			RootMounted: true,
+			Auth:        AuthPublic,
+			Errors:      []string{healthNotLiveCode},
+			Handle:      module.liveness,
+		},
+		endpoint{
+			Method:      http.MethodGet,
+			Path:        "/health/ready",
+			RootMounted: true,
+			Auth:        AuthPublic,
+			Errors:      []string{healthNotReadyCode},
+			Handle:      module.readiness,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/system/ping",
+			Auth:   AuthPublic,
+			Errors: []string{"request.invalid", "desktop_compatibility_policy.revision_conflict", "desktop_compatibility_policy.unavailable"},
+			Handle: module.ping,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/system/version",
+			Auth:   AuthPublic,
+			Handle: module.version,
+		},
 	)
 }
 

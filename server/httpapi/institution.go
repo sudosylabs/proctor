@@ -81,23 +81,25 @@ func institutionResource(institutions InstitutionApplication) apiResource {
 	module := institutionResourceModule{institutions: institutions}
 	return newResource(
 		"institution",
-		principalRoute(
-			http.MethodGet,
-			path("/institution"),
-			academicReadErrorCodes("resource.not_found"),
-			module.get,
-		),
-		principalRoute(
-			http.MethodPatch,
-			path("/institution"),
-			academicMutationErrorCodes(
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/institution",
+			Auth:   AuthPrincipalRequired,
+			Errors: academicReadErrorCodes("resource.not_found"),
+			Handle: module.get,
+		},
+		endpoint{
+			Method: http.MethodPatch,
+			Path:   "/institution",
+			Auth:   AuthPrincipalRequired,
+			Errors: academicMutationErrorCodes(
 				"request.invalid",
 				"resource.not_found",
 				"institution.invalid",
 				"institution.conflict",
 			),
-			module.patch,
-		),
+			Handle: module.patch,
+		},
 	)
 }
 

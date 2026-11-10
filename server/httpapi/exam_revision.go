@@ -63,15 +63,16 @@ type examRevisionHTTPModule struct{ application ExamRevisionApplication }
 
 func examRevisionResource(application ExamRevisionApplication) apiResource {
 	module := examRevisionHTTPModule{application: application}
-	collection := path("/exams/{exam_id}/revisions")
-	member := path("/exams/{exam_id}/revisions/{exam_revision_id}")
+	collection := "/exams/{exam_id}/revisions"
+	member := "/exams/{exam_id}/revisions/{exam_revision_id}"
 	return newResource(
 		"exam-revisions",
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			collection,
-			[]string{
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        collection,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -89,12 +90,13 @@ func examRevisionResource(application ExamRevisionApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			module.publish,
-		),
-		principalRoute(
-			http.MethodGet,
-			collection,
-			[]string{
+			Handle: module.publish,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   collection,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -102,12 +104,13 @@ func examRevisionResource(application ExamRevisionApplication) apiResource {
 				"exam.invalid",
 				"exam.unavailable",
 			},
-			module.list,
-		),
-		principalRoute(
-			http.MethodGet,
-			member,
-			[]string{
+			Handle: module.list,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   member,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -115,8 +118,8 @@ func examRevisionResource(application ExamRevisionApplication) apiResource {
 				"exam.invalid",
 				"exam.unavailable",
 			},
-			module.get,
-		),
+			Handle: module.get,
+		},
 	)
 }
 

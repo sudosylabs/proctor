@@ -24,11 +24,11 @@ func TestRoutingKernelCentralizesAPIVersionRegexAndParams(t *testing.T) {
 
 	var gotRoleID string
 	httpAPI := newCompiledRoutingTestAPI(t, "/api/testing", newResource("role",
-		publicRoute(
-			http.MethodGet,
-			path("/roles/{role_id}"),
-			nil,
-			func(request operationRequest) (operationResult, error) {
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/roles/{role_id}",
+			Auth:   AuthPublic,
+			Handle: func(request operationRequest) (operationResult, error) {
 				roleID, err := request.params.RequireRoleID()
 				if err != nil {
 					return operationResult{}, err
@@ -36,7 +36,7 @@ func TestRoutingKernelCentralizesAPIVersionRegexAndParams(t *testing.T) {
 				gotRoleID = roleID.String()
 				return noContentResult(), nil
 			},
-		),
+		},
 	))
 
 	valid := httptest.NewRequest(http.MethodGet, "/api/testing/roles/"+modelIDForRouteTest, nil)
@@ -60,12 +60,13 @@ func TestRouteMetadataRetainsVersionRegexAndPolicyContract(t *testing.T) {
 	t.Parallel()
 
 	httpAPI := newCompiledRoutingTestAPI(t, "/api/testing", newResource("role",
-		sessionRoute(
-			http.MethodDelete,
-			path("/roles/{role_id}"),
-			[]string{"resource.not_found"},
-			func(operationRequest) (operationResult, error) { return noContentResult(), nil },
-		),
+		endpoint{
+			Method: http.MethodDelete,
+			Path:   "/roles/{role_id}",
+			Auth:   AuthSessionRequired,
+			Errors: []string{"resource.not_found"},
+			Handle: func(operationRequest) (operationResult, error) { return noContentResult(), nil },
+		},
 	))
 	routes := httpAPI.Routes()
 	want := "/api/testing/roles/{role_id:" + canonicalIDRoutePattern() + "}"

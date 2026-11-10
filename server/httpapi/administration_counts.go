@@ -42,19 +42,25 @@ func administrationCountsResource(application AdministrationCountsApplication) a
 	module := administrationCountsResourceModule{application: application}
 	return newResource(
 		"administration-counts",
-		sessionRoute(http.MethodGet, path("/administration/counts"), []string{
-			"administration.unavailable",
-			"authorization.denied",
-			"authorization.request.invalid",
-			"authorization.unavailable",
-			"invitation.unavailable",
-			"job.query.invalid",
-			"job.unavailable",
-			"mail.unavailable",
-			"onboarding_import.unavailable",
-			"request.invalid",
-			"resource.not_found",
-		}, module.get),
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/administration/counts",
+			Auth:   AuthSessionRequired,
+			Errors: []string{
+				"administration.unavailable",
+				"authorization.denied",
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"invitation.unavailable",
+				"job.query.invalid",
+				"job.unavailable",
+				"mail.unavailable",
+				"onboarding_import.unavailable",
+				"request.invalid",
+				"resource.not_found",
+			},
+			Handle: module.get,
+		},
 	)
 }
 

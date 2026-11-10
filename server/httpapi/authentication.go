@@ -312,10 +312,11 @@ func authenticationResource(
 	module := authenticationResourceModule{registration: registration, authentication: authentication, cookies: cookies}
 	return newResource(
 		"authentication",
-		publicRoute(
-			http.MethodPost,
-			path("/auth/register"),
-			[]string{
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/register",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"authentication.password.invalid",
 				"authentication.password.pattern_invalid",
@@ -328,12 +329,13 @@ func authenticationResource(
 				"authentication.rate_limited",
 				"authentication.rate_limit_unavailable",
 			},
-			module.register,
-		),
-		publicRoute(
-			http.MethodPost,
-			path("/auth/login"),
-			[]string{
+			Handle: module.register,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/login",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"authentication.mfa.enrollment_required",
 				"authentication.client_type.invalid",
@@ -352,12 +354,13 @@ func authenticationResource(
 				"authentication.external.invalid",
 				"authentication.session.invalid",
 			},
-			module.login,
-		),
-		refreshCredentialRoute(
-			http.MethodPost,
-			path("/auth/refresh"),
-			[]string{
+			Handle: module.login,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/refresh",
+			Auth:   AuthRefreshCredentialRequired,
+			Errors: []string{
 				"authentication.token_invalid",
 				"authentication.mfa.enrollment_required",
 				"authentication.internal",
@@ -366,47 +369,57 @@ func authenticationResource(
 				"authentication.dpop.use_nonce",
 				"authentication.dpop.unavailable",
 			},
-			module.refresh,
-		),
-		mfaRecoverySessionRoute(http.MethodPost, path("/auth/logout"), []string{"authentication.internal", "audit.unavailable"}, module.logout),
-		sessionRoute(
-			http.MethodPost,
-			path("/auth/email-verification/request"),
-			sessionAuthenticationMutationErrorCodes(
+			Handle: module.refresh,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/logout",
+			Auth:   AuthMFARecoverySessionRequired,
+			Errors: []string{"authentication.internal", "audit.unavailable"},
+			Handle: module.logout,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/email-verification/request",
+			Auth:   AuthSessionRequired,
+			Errors: sessionAuthenticationMutationErrorCodes(
 				"authentication.rate_limited",
 				"authentication.rate_limit_unavailable",
 				"authentication.account_recovery.unavailable",
 			),
-			module.requestEmailVerification,
-		),
-		publicRoute(
-			http.MethodPost,
-			path("/auth/email-verification/complete"),
-			[]string{
+			Handle: module.requestEmailVerification,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/email-verification/complete",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"authentication.rate_limited",
 				"authentication.rate_limit_unavailable",
 				"authentication.account_token.invalid",
 				"authentication.account_recovery.unavailable",
 			},
-			module.completeEmailVerification,
-		),
-		publicRoute(
-			http.MethodPost,
-			path("/auth/email-verification/inspect"),
-			[]string{
+			Handle: module.completeEmailVerification,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/email-verification/inspect",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"authentication.rate_limited",
 				"authentication.rate_limit_unavailable",
 				"authentication.account_token.invalid",
 				"authentication.account_recovery.unavailable",
 			},
-			module.inspectEmailVerification,
-		),
-		publicRoute(
-			http.MethodPost,
-			path("/auth/email-change/undo"),
-			[]string{
+			Handle: module.inspectEmailVerification,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/email-change/undo",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"authentication.rate_limited",
 				"authentication.rate_limit_unavailable",
@@ -414,35 +427,38 @@ func authenticationResource(
 				"authentication.account_recovery.unavailable",
 				"authentication.email_change_undo.conflict",
 			},
-			module.completeEmailChangeUndo,
-		),
-		publicRoute(
-			http.MethodPost,
-			path("/auth/email-change/undo/inspect"),
-			[]string{
+			Handle: module.completeEmailChangeUndo,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/email-change/undo/inspect",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"authentication.rate_limited",
 				"authentication.rate_limit_unavailable",
 				"authentication.account_token.invalid",
 				"authentication.account_recovery.unavailable",
 			},
-			module.inspectEmailChangeUndo,
-		),
-		publicRoute(
-			http.MethodPost,
-			path("/auth/password-reset/request"),
-			[]string{
+			Handle: module.inspectEmailChangeUndo,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/password-reset/request",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"authentication.rate_limited",
 				"authentication.rate_limit_unavailable",
 				"authentication.account_recovery.unavailable",
 			},
-			module.requestPasswordReset,
-		),
-		publicRoute(
-			http.MethodPost,
-			path("/auth/password-reset/complete"),
-			[]string{
+			Handle: module.requestPasswordReset,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/password-reset/complete",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"authentication.password.invalid",
 				"authentication.password.pattern_invalid",
@@ -455,8 +471,8 @@ func authenticationResource(
 				"authentication.account_token.invalid",
 				"authentication.account_recovery.unavailable",
 			},
-			module.completePasswordReset,
-		),
+			Handle: module.completePasswordReset,
+		},
 	)
 }
 

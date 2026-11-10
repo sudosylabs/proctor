@@ -32,31 +32,41 @@ func userAdministrationResource(
 	module := userAdministrationResourceModule{accounts: accounts, sessions: sessions}
 	return newResource(
 		"user-administration",
-		principalRoute(
-			http.MethodPost,
-			path("/users/{user_id}/disable"),
-			userAdministrationMutationCodes("user.invalid", "user.conflict", "user.last_system_admin"),
-			module.disable,
-		),
-		principalRoute(
-			http.MethodPost,
-			path("/users/{user_id}/enable"),
-			userAdministrationMutationCodes("user.invalid", "user.conflict", "user.last_system_admin"),
-			module.enable,
-		),
-		principalRoute(http.MethodGet, path("/users/{user_id}/sessions"), userAdministrationReadCodes("session.not_found"), module.listSessions),
-		principalRoute(
-			http.MethodPost,
-			path("/users/{user_id}/sessions/revoke-all"),
-			userAdministrationMutationCodes("session.not_found"),
-			module.revokeAllSessions,
-		),
-		principalRoute(
-			http.MethodDelete,
-			path("/users/{user_id}/sessions/{session_id}"),
-			userAdministrationMutationCodes("session.not_found"),
-			module.revokeSession,
-		),
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/{user_id}/disable",
+			Auth:   AuthPrincipalRequired,
+			Errors: userAdministrationMutationCodes("user.invalid", "user.conflict", "user.last_system_admin"),
+			Handle: module.disable,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/{user_id}/enable",
+			Auth:   AuthPrincipalRequired,
+			Errors: userAdministrationMutationCodes("user.invalid", "user.conflict", "user.last_system_admin"),
+			Handle: module.enable,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/users/{user_id}/sessions",
+			Auth:   AuthPrincipalRequired,
+			Errors: userAdministrationReadCodes("session.not_found"),
+			Handle: module.listSessions,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/{user_id}/sessions/revoke-all",
+			Auth:   AuthPrincipalRequired,
+			Errors: userAdministrationMutationCodes("session.not_found"),
+			Handle: module.revokeAllSessions,
+		},
+		endpoint{
+			Method: http.MethodDelete,
+			Path:   "/users/{user_id}/sessions/{session_id}",
+			Auth:   AuthPrincipalRequired,
+			Errors: userAdministrationMutationCodes("session.not_found"),
+			Handle: module.revokeSession,
+		},
 	)
 }
 

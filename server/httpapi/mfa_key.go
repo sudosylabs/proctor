@@ -81,22 +81,24 @@ type mfaKeyResourceModule struct{ application MFAKeyApplication }
 func mfaKeyResource(application MFAKeyApplication) apiResource {
 	module := mfaKeyResourceModule{application: application}
 	return newResource("mfa-keys",
-		strongRecentSessionRoute(
-			http.MethodGet,
-			path("/mfa/keys"),
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/mfa/keys",
+			Auth:   AuthStrongRecentSessionRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"authentication.mfa.unavailable",
 				"resource.not_found",
 			},
-			module.getKeyState,
-		),
-		strongRecentSessionRoute(
-			http.MethodPost,
-			path("/mfa/rekey"),
-			[]string{
+			Handle: module.getKeyState,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/mfa/rekey",
+			Auth:   AuthStrongRecentSessionRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -107,14 +109,15 @@ func mfaKeyResource(application MFAKeyApplication) apiResource {
 				"authentication.mfa.unavailable",
 				"resource.not_found",
 			},
-			module.startRekey,
-		),
-		strongRecentSessionRoute(
-			http.MethodGet,
-			path("/mfa/rekey/{job_id}"),
-			operatorReadErrorCodes("request.invalid", "resource.not_found", "authentication.mfa.unavailable"),
-			module.getRekeyStatus,
-		),
+			Handle: module.startRekey,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/mfa/rekey/{job_id}",
+			Auth:   AuthStrongRecentSessionRequired,
+			Errors: operatorReadErrorCodes("request.invalid", "resource.not_found", "authentication.mfa.unavailable"),
+			Handle: module.getRekeyStatus,
+		},
 	)
 }
 

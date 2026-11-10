@@ -25,10 +25,11 @@ func mfaAdministrationResource(application *identity.Service) apiResource {
 	module := mfaAdministrationResourceModule{application: application}
 	return newResource(
 		"mfa-administration",
-		strongRecentSessionRoute(
-			http.MethodPost,
-			path("/users/{user_id}/mfa/reset"),
-			[]string{
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/{user_id}/mfa/reset",
+			Auth:   AuthStrongRecentSessionRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -43,8 +44,8 @@ func mfaAdministrationResource(application *identity.Service) apiResource {
 				"authentication.internal",
 				"authentication.session_required",
 			},
-			module.reset,
-		),
+			Handle: module.reset,
+		},
 	)
 }
 func (m mfaAdministrationResourceModule) reset(request operationRequest) (operationResult, error) {

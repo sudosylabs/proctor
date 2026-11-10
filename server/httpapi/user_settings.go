@@ -45,11 +45,14 @@ type userSettingsResourceModule struct {
 
 func userSettingsResource(settings UserSettingsApplication) apiResource {
 	module := userSettingsResourceModule{settings: settings}
-	path := path("/users/me/settings")
-	replace := sessionRoute(
-		http.MethodPut,
-		path,
-		userSettingsSessionMutationCodes(
+	path := "/users/me/settings"
+	replace := endpoint{
+		Method:       http.MethodPut,
+		Path:         path,
+		Auth:         AuthSessionRequired,
+		Idempotency:  IdempotencyRequired,
+		MaxBodyBytes: userSettingsReplacementBodyMaxBytes,
+		Errors: userSettingsSessionMutationCodes(
 			"request.invalid",
 			"user_settings.invalid",
 			"user_settings.format_unsupported",
@@ -61,13 +64,17 @@ func userSettingsResource(settings UserSettingsApplication) apiResource {
 			"idempotency.conflict",
 			"idempotency.in_progress",
 		),
-		module.replace,
-	)
-	replace.idempotency = IdempotencyRequired
-	replace.maxBodyBytes = userSettingsReplacementBodyMaxBytes
+		Handle: module.replace,
+	}
 	return newResource(
 		"user-settings",
-		sessionRoute(http.MethodGet, path, userSettingsSessionCodes("user_settings.unavailable"), module.read),
+		endpoint{
+			Method: http.MethodGet,
+			Path:   path,
+			Auth:   AuthSessionRequired,
+			Errors: userSettingsSessionCodes("user_settings.unavailable"),
+			Handle: module.read,
+		},
 		replace,
 	)
 }

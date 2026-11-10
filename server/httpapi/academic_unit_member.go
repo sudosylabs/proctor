@@ -67,16 +67,18 @@ func academicUnitMemberResource(members AcademicUnitMemberApplication) apiResour
 	module := academicUnitMemberResourceModule{members: members}
 	return newResource(
 		"academic-unit-members",
-		principalRoute(
-			http.MethodGet,
-			path("/academic-units/{academic_unit_id}/members"),
-			academicRelationshipReadErrorCodes(),
-			module.list,
-		),
-		principalRoute(
-			http.MethodPost,
-			path("/academic-units/{academic_unit_id}/members"),
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/academic-units/{academic_unit_id}/members",
+			Auth:   AuthPrincipalRequired,
+			Errors: academicRelationshipReadErrorCodes(),
+			Handle: module.list,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/academic-units/{academic_unit_id}/members",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -88,12 +90,13 @@ func academicUnitMemberResource(members AcademicUnitMemberApplication) apiResour
 				"administration.unavailable",
 				"mail.unavailable",
 			},
-			module.create,
-		),
-		principalRoute(
-			http.MethodDelete,
-			path("/academic-unit-members/{academic_unit_member_id}"),
-			[]string{
+			Handle: module.create,
+		},
+		endpoint{
+			Method: http.MethodDelete,
+			Path:   "/academic-unit-members/{academic_unit_member_id}",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -104,8 +107,8 @@ func academicUnitMemberResource(members AcademicUnitMemberApplication) apiResour
 				"administration.unavailable",
 				"mail.unavailable",
 			},
-			module.end,
-		),
+			Handle: module.end,
+		},
 	)
 }
 

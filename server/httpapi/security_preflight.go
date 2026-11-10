@@ -219,10 +219,11 @@ func securityPreflightResource(application ExamAttemptApplication) apiResource {
 	module := examAttemptHTTPModule{application: application}
 	return newResource(
 		"security-preflights",
-		sessionRoute(
-			http.MethodGet,
-			path("/exam-attempts/{exam_attempt_id}/security-policy"),
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/exam-attempts/{exam_attempt_id}/security-policy",
+			Auth:   AuthSessionRequired,
+			Errors: []string{
 				"exam.delivery.control_rate_limited",
 				"request.invalid",
 				"resource.not_found",
@@ -247,13 +248,14 @@ func securityPreflightResource(application ExamAttemptApplication) apiResource {
 				"idempotency.in_progress",
 				"exam.delivery.metadata_capacity",
 			},
-			module.recoverSecurityPolicy,
-		),
-		idempotentSessionRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			path("/exam-sittings/{exam_sitting_id}/security-preflights"),
-			[]string{
+			Handle: module.recoverSecurityPolicy,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        "/exam-sittings/{exam_sitting_id}/security-preflights",
+			Auth:        AuthSessionRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"audit.unavailable",
 				"exam.delivery.control_rate_limited",
 				"request.invalid",
@@ -281,13 +283,14 @@ func securityPreflightResource(application ExamAttemptApplication) apiResource {
 				"idempotency.in_progress",
 				"exam.delivery.metadata_capacity",
 			},
-			module.prepareSecurityPreflight,
-		),
-		idempotentSessionRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			path("/security-preflights/{security_preflight_id}/report"),
-			[]string{
+			Handle: module.prepareSecurityPreflight,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        "/security-preflights/{security_preflight_id}/report",
+			Auth:        AuthSessionRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"audit.unavailable",
 				"exam.delivery.control_rate_limited",
 				"request.invalid",
@@ -315,8 +318,8 @@ func securityPreflightResource(application ExamAttemptApplication) apiResource {
 				"idempotency.in_progress",
 				"exam.delivery.metadata_capacity",
 			},
-			module.reportSecurityPreflight,
-		),
+			Handle: module.reportSecurityPreflight,
+		},
 	)
 }
 

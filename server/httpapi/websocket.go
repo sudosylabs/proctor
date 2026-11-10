@@ -27,18 +27,19 @@ const (
 func webSocketResource(transport WebSocketTransport) apiResource {
 	module := webSocketModule{transport: transport}
 	return newResource(webSocketResourceName,
-		upgradeRoute(
-			webSocketProtocolName,
-			AuthSessionRequired,
-			http.MethodGet,
-			path("/"+webSocketPathLiteral),
-			[]string{
+		endpoint{
+			Method:       http.MethodGet,
+			Path:         "/" + webSocketPathLiteral,
+			Auth:         AuthSessionRequired,
+			ProtocolName: webSocketProtocolName,
+			ProtocolKind: RouteProtocolUpgrade,
+			Errors: []string{
 				"request.invalid",
 				"websocket.origin.invalid",
 				"websocket.unavailable",
 			},
-			module.connect,
-		),
+			Upgrade: module.connect,
+		},
 	)
 }
 

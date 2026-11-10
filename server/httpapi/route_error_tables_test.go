@@ -44,13 +44,13 @@ func TestRouteErrorTablesMatchReachableCodes(t *testing.T) {
 	var routes []errorflow.Route
 	for _, resource := range productionResources(completeHTTPApplication(), nil, BuildInfo{}, browserCookies{}, nil) {
 		for _, definition := range resource.routes {
-			template, _, compileErr := definition.path.compile(model.APIURLSuffix)
+			template, _, compileErr := definition.routePath().compile(model.APIURLSuffix)
 			require.NoError(t, compileErr)
-			key := definition.method + " " + routeTemplateKey(template)
+			key := definition.Method + " " + routeTemplateKey(template)
 			operation := routeOperationName(definition)
 			function := analysis.FunctionForRuntimeName(operation)
 			require.NotNil(t, function, "%s: operation %s is not in the analyzed program", key, operation)
-			routes = append(routes, errorflow.Route{Key: key, Operation: function, Declared: definition.declaredErrorCodes,
+			routes = append(routes, errorflow.Route{Key: key, Operation: function, Declared: definition.Errors,
 				Implied: routeImpliedErrorCodes(definition), Infeasible: routeInfeasibleErrorCodes(definition)})
 		}
 	}
@@ -62,15 +62,15 @@ func TestRouteErrorTablesMatchReachableCodes(t *testing.T) {
 // "<route key> <code>", each with the reason.
 var routeErrorTableExceptions = map[string]string{}
 
-func routeOperationName(definition routeDefinition) string {
+func routeOperationName(definition endpoint) string {
 	var operation any
 	switch {
-	case definition.operation != nil:
-		operation = definition.operation
-	case definition.protocolOperation != nil:
-		operation = definition.protocolOperation
+	case definition.Handle != nil:
+		operation = definition.Handle
+	case definition.Protocol != nil:
+		operation = definition.Protocol
 	default:
-		operation = definition.upgradeOperation
+		operation = definition.Upgrade
 	}
 	return runtime.FuncForPC(reflect.ValueOf(operation).Pointer()).Name()
 }
@@ -78,14 +78,14 @@ func routeOperationName(definition routeDefinition) string {
 // routeImpliedErrorCodes are the codes the kernel adds, the idempotency codes
 // the route's requirement implies, and the transport's own problem codes
 // (health, say), which no application code mints; a table may name them.
-func routeImpliedErrorCodes(definition routeDefinition) []string {
-	implied := kernelErrorCodes(definition.auth, definition.method)
+func routeImpliedErrorCodes(definition endpoint) []string {
+	implied := kernelErrorCodes(definition.Auth, definition.Method)
 	for code := range transportProblemCodes {
 		implied = append(implied, code)
 	}
-	if definition.idempotency != IdempotencyNone {
+	if effectiveIdempotencyRequirement(definition.Idempotency) != IdempotencyNone {
 		implied = append(implied, "idempotency.key_invalid", "idempotency.conflict", "idempotency.in_progress")
-		if definition.idempotency == IdempotencyRequired {
+		if effectiveIdempotencyRequirement(definition.Idempotency) == IdempotencyRequired {
 			implied = append(implied, "idempotency.key_required")
 		}
 	}
@@ -96,8 +96,8 @@ func routeImpliedErrorCodes(definition routeDefinition) []string {
 // routeInfeasibleErrorCodes are codes a route cannot produce whatever its
 // operation contains: without an idempotency requirement the transport never
 // passes a key, so no idempotency failure can occur.
-func routeInfeasibleErrorCodes(definition routeDefinition) []string {
-	if definition.idempotency != IdempotencyNone {
+func routeInfeasibleErrorCodes(definition endpoint) []string {
+	if effectiveIdempotencyRequirement(definition.Idempotency) != IdempotencyNone {
 		return nil
 	}
 	return []string{"idempotency.conflict", "idempotency.in_progress", "idempotency.key_invalid", "idempotency.key_required"}

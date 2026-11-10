@@ -12,71 +12,72 @@ import (
 	"slices"
 )
 
-type routeDefinition struct {
-	method     string
-	path       routePath
-	auth       AuthRequirement
-	errorCodes []string
-	// declaredErrorCodes are the codes the resource declared before the kernel
-	// added the codes its authentication requirement implies.
-	declaredErrorCodes []string
-	operation          operation
-	protocolName       string
-	protocolKind       RouteProtocolKind
-	protocolOperation  protocolOperation
-	upgradeOperation   upgradeOperation
-	idempotency        IdempotencyRequirement
-	maxBodyBytes       int64
+// endpoint declares one route. A resource writes it as a struct literal with
+// named fields, so a route reads without knowing any helper.
+//
+// Every endpoint sets Method, Path and Auth, and exactly one of Handle,
+// Protocol and Upgrade. The catalog compiler validates the declaration, parses
+// Path, and adds the kernel error codes that Auth and Method imply.
+type endpoint struct {
+	// Method is the HTTP method, in upper case.
+	Method string
+	// Path is the URL template relative to the API root, such as
+	// "/programme-levels/{programme_level_id}/classes". route_path.go
+	// describes the template syntax.
+	Path string
+	// RootMounted mounts Path at the server root instead of under the API
+	// prefix. Only the health probes set it.
+	RootMounted bool
+	// Auth is the credential and assurance the route requires. It has no
+	// default: a public route says AuthPublic.
+	Auth AuthRequirement
+	// Idempotency says whether the route takes an Idempotency-Key. Empty
+	// means IdempotencyNone.
+	Idempotency IdempotencyRequirement
+	// MaxBodyBytes bounds the request body. Zero means the API default.
+	MaxBodyBytes int64
+	// Errors are the codes the operation itself can return. The kernel codes
+	// that Auth and Method imply are added at compile time and are not
+	// listed here.
+	Errors []string
+
+	// Handle is an ordinary operation with a typed JSON or empty result.
+	Handle operation
+	// Protocol is the reviewed escape hatch for a named HTTP protocol whose
+	// success response the ordinary result vocabulary cannot represent, such
+	// as an external-provider redirect or a bounded binary transfer.
+	// Authentication and safe error policy remain kernel-owned.
+	Protocol protocolOperation
+	// Upgrade is the sole raw response exception. A successful HTTP upgrade
+	// must transfer the response connection to the sibling transport, so this
+	// operation alone receives ResponseWriter. Only the reserved WebSocket
+	// route may set it.
+	Upgrade upgradeOperation
+	// ProtocolName is the kebab-case name of a Protocol or Upgrade endpoint.
+	ProtocolName string
+	// ProtocolKind is the kind of a Protocol endpoint, and
+	// RouteProtocolUpgrade for an Upgrade endpoint.
+	ProtocolKind RouteProtocolKind
 }
 
-// upgradeRoute is the sole raw response exception. A successful HTTP upgrade
-// must transfer the response connection to the sibling transport, so this
-// operation alone receives ResponseWriter. Authentication, request metadata,
-// parameters, declared failures, and immutable manifest metadata remain owned
-// by the routing kernel.
-func upgradeRoute(
-	name string,
-	auth AuthRequirement,
-	method string,
-	path routePath,
-	errorCodes []string,
-	operation upgradeOperation,
-) routeDefinition {
-	return routeDefinition{
-		method:             method,
-		path:               path,
-		auth:               auth,
-		errorCodes:         routeErrorCodes(auth, method, errorCodes),
-		declaredErrorCodes: errorCodes,
-		protocolName:       name,
-		protocolKind:       RouteProtocolUpgrade,
-		upgradeOperation:   operation,
-		idempotency:        IdempotencyNone,
+// routePath parses the endpoint's path template. A malformed template is
+// reported when the path is compiled.
+func (e endpoint) routePath() routePath {
+	if e.RootMounted {
+		return rootPath(e.Path)
 	}
+	return path(e.Path)
 }
 
-func route(
-	auth AuthRequirement,
-	method string,
-	path routePath,
-	errorCodes []string,
-	operation operation,
-) routeDefinition {
-	return routeDefinition{
-		method:             method,
-		path:               path,
-		auth:               auth,
-		errorCodes:         routeErrorCodes(auth, method, errorCodes),
-		declaredErrorCodes: errorCodes,
-		operation:          operation,
-		idempotency:        IdempotencyNone,
-	}
+// errorCodes returns the endpoint's complete public error list.
+func (e endpoint) errorCodes() []string {
+	return routeErrorCodes(e.Auth, e.Method, e.Errors)
 }
 
 // routeErrorCodes returns a route's complete public error list: the codes
-// its resource declares plus the kernel codes its authentication requirement
-// and method imply. Resource tables therefore declare only the codes their
-// operation adds.
+// its endpoint declares, in order, then the kernel codes its authentication
+// requirement and method imply that are not already present. Endpoints
+// therefore declare only the codes their operation adds.
 func routeErrorCodes(auth AuthRequirement, method string, errorCodes []string) []string {
 	result := append([]string(nil), errorCodes...)
 	for _, code := range kernelErrorCodes(auth, method) {
@@ -134,107 +135,14 @@ func kernelErrorCodes(auth AuthRequirement, method string) []string {
 	}
 }
 
-func idempotentPrincipalRoute(
-	requirement IdempotencyRequirement,
-	method string,
-	path routePath,
-	errorCodes []string,
-	operation operation,
-) routeDefinition {
-	definition := principalRoute(method, path, errorCodes, operation)
-	definition.idempotency = requirement
-	return definition
-}
-
-// idempotentProtocolRoute declares a bounded non-upgrade protocol operation
-// whose command key must reach the protocol handler. It is used for streaming
-// uploads that cannot be represented by the ordinary JSON operation shape.
-func idempotentProtocolRoute(
-	requirement IdempotencyRequirement,
-	maxBodyBytes int64,
-	name string,
-	kind RouteProtocolKind,
-	auth AuthRequirement,
-	method string,
-	path routePath,
-	errorCodes []string,
-	operation protocolOperation,
-) routeDefinition {
-	definition := protocolRoute(name, kind, auth, method, path, errorCodes, operation)
-	definition.idempotency = requirement
-	definition.maxBodyBytes = maxBodyBytes
-	return definition
-}
-
-func publicRoute(method string, path routePath, errorCodes []string, operation operation) routeDefinition {
-	return route(AuthPublic, method, path, errorCodes, operation)
-}
-
-func principalRoute(method string, path routePath, errorCodes []string, operation operation) routeDefinition {
-	return route(AuthPrincipalRequired, method, path, errorCodes, operation)
-}
-
-func sessionRoute(method string, path routePath, errorCodes []string, operation operation) routeDefinition {
-	return route(AuthSessionRequired, method, path, errorCodes, operation)
-}
-
-func recentSessionRoute(method string, path routePath, errorCodes []string, operation operation) routeDefinition {
-	return route(AuthRecentSessionRequired, method, path, errorCodes, operation)
-}
-
-func strongRecentSessionRoute(method string, path routePath, errorCodes []string, operation operation) routeDefinition {
-	return route(AuthStrongRecentSessionRequired, method, path, errorCodes, operation)
-}
-
-func refreshCredentialRoute(method string, path routePath, errorCodes []string, operation operation) routeDefinition {
-	return route(AuthRefreshCredentialRequired, method, path, errorCodes, operation)
-}
-
-// protocolRoute is the reviewed escape hatch for a named HTTP protocol whose
-// success response cannot be represented by the ordinary typed JSON/result
-// vocabulary (for example, an external-provider redirect or bounded binary
-// transfer). Authentication and safe error policy remain kernel-owned.
-func protocolRoute(
-	name string,
-	kind RouteProtocolKind,
-	auth AuthRequirement,
-	method string,
-	path routePath,
-	errorCodes []string,
-	operation protocolOperation,
-) routeDefinition {
-	return routeDefinition{
-		method:             method,
-		path:               path,
-		auth:               auth,
-		errorCodes:         routeErrorCodes(auth, method, errorCodes),
-		declaredErrorCodes: errorCodes,
-		protocolName:       name,
-		protocolKind:       kind,
-		protocolOperation:  operation,
-		idempotency:        IdempotencyNone,
-	}
-}
-
 type apiResource struct {
 	name   string
-	routes []routeDefinition
+	routes []endpoint
 }
 
-func newResource(name string, routes ...routeDefinition) apiResource {
-	return apiResource{name: name, routes: append([]routeDefinition(nil), routes...)}
+func newResource(name string, routes ...endpoint) apiResource {
+	return apiResource{name: name, routes: append([]endpoint(nil), routes...)}
 }
 
 type protocolOperation func(operationRequest) (protocolResult, error)
 type upgradeOperation func(http.ResponseWriter, operationRequest) error
-
-func mfaEnrollmentSessionRoute(method string, path routePath, codes []string, operation operation) routeDefinition {
-	return route(AuthMFAEnrollmentSessionRequired, method, path, codes, operation)
-}
-
-func mfaRecoverySessionRoute(method string, path routePath, codes []string, operation operation) routeDefinition {
-	return route(AuthMFARecoverySessionRequired, method, path, codes, operation)
-}
-func recentMFARecoverySessionRoute(method string, path routePath, codes []string, operation operation) routeDefinition {
-	return route(AuthRecentMFARecoverySessionRequired, method, path, codes, operation)
-}

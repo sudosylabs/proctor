@@ -345,14 +345,14 @@ type studentExamResultResponse struct {
 
 func examIntegrityReviewResource(application ExamIntegrityReviewApplication) apiResource {
 	module := examIntegrityReviewHTTPModule{application: application}
-	flags := path("/submissions/{submission_id}/integrity-flags")
-	discrepancies := path("/submissions/{submission_id}/integrity-discrepancies")
-	evidence := path("/submissions/{submission_id}/integrity-flags/{integrity_flag_id}/evidence")
-	review := path("/submissions/{submission_id}/review")
-	decision := path("/submissions/{submission_id}/review/decisions/{integrity_flag_id}")
-	finalize := path("/submissions/{submission_id}/review/finalize")
-	release := path("/submissions/{submission_id}/review/release")
-	candidateResult := path("/exam-attempts/{exam_attempt_id}/result")
+	flags := "/submissions/{submission_id}/integrity-flags"
+	discrepancies := "/submissions/{submission_id}/integrity-discrepancies"
+	evidence := "/submissions/{submission_id}/integrity-flags/{integrity_flag_id}/evidence"
+	review := "/submissions/{submission_id}/review"
+	decision := "/submissions/{submission_id}/review/decisions/{integrity_flag_id}"
+	finalize := "/submissions/{submission_id}/review/finalize"
+	release := "/submissions/{submission_id}/review/release"
+	candidateResult := "/exam-attempts/{exam_attempt_id}/result"
 	studentErrors := personalAccessTokenSessionCodes(
 		"request.invalid",
 		"resource.not_found",
@@ -360,10 +360,11 @@ func examIntegrityReviewResource(application ExamIntegrityReviewApplication) api
 		"exam.integrity_review.unavailable",
 	)
 	return newResource("exam-integrity-reviews",
-		principalRoute(
-			http.MethodGet,
-			flags,
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   flags,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -373,12 +374,13 @@ func examIntegrityReviewResource(application ExamIntegrityReviewApplication) api
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			module.listFlags,
-		),
-		principalRoute(
-			http.MethodGet,
-			evidence,
-			[]string{
+			Handle: module.listFlags,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   evidence,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -388,12 +390,13 @@ func examIntegrityReviewResource(application ExamIntegrityReviewApplication) api
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			module.listEvidence,
-		),
-		principalRoute(
-			http.MethodGet,
-			path("/submissions/{submission_id}/native-conditions"),
-			[]string{
+			Handle: module.listEvidence,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/submissions/{submission_id}/native-conditions",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -403,12 +406,13 @@ func examIntegrityReviewResource(application ExamIntegrityReviewApplication) api
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			module.listNativeConditions,
-		),
-		principalRoute(
-			http.MethodGet,
-			discrepancies,
-			[]string{
+			Handle: module.listNativeConditions,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   discrepancies,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -418,12 +422,13 @@ func examIntegrityReviewResource(application ExamIntegrityReviewApplication) api
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			module.listDiscrepancies,
-		),
-		principalRoute(
-			http.MethodGet,
-			review,
-			[]string{
+			Handle: module.listDiscrepancies,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   review,
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -433,38 +438,14 @@ func examIntegrityReviewResource(application ExamIntegrityReviewApplication) api
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			module.get,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPut,
-			review,
-			[]string{
-				"authorization.request.invalid",
-				"authorization.unavailable",
-				"audit.unavailable",
-				"request.invalid",
-				"resource.not_found",
-				"exam.integrity_review.invalid",
-				"exam.integrity_review.revision_conflict",
-				"exam.integrity_review.state_conflict",
-				"exam.integrity_review.incomplete",
-				"exam.integrity_review.too_large",
-				"exam.integrity_review.unavailable",
-				"idempotency.key_required",
-				"idempotency.key_invalid",
-				"idempotency.conflict",
-				"idempotency.in_progress",
-				"exam.sitting.invalid",
-				"exam.sitting.unavailable",
-			},
-			module.update,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPut,
-			decision,
-			[]string{
+			Handle: module.get,
+		},
+		endpoint{
+			Method:      http.MethodPut,
+			Path:        review,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -483,13 +464,14 @@ func examIntegrityReviewResource(application ExamIntegrityReviewApplication) api
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			module.saveDecision,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			finalize,
-			[]string{
+			Handle: module.update,
+		},
+		endpoint{
+			Method:      http.MethodPut,
+			Path:        decision,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -508,13 +490,14 @@ func examIntegrityReviewResource(application ExamIntegrityReviewApplication) api
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			module.finalize,
-		),
-		idempotentPrincipalRoute(
-			IdempotencyRequired,
-			http.MethodPost,
-			release,
-			[]string{
+			Handle: module.saveDecision,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        finalize,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"audit.unavailable",
@@ -533,9 +516,41 @@ func examIntegrityReviewResource(application ExamIntegrityReviewApplication) api
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			module.release,
-		),
-		sessionRoute(http.MethodGet, candidateResult, studentErrors, module.studentResult),
+			Handle: module.finalize,
+		},
+		endpoint{
+			Method:      http.MethodPost,
+			Path:        release,
+			Auth:        AuthPrincipalRequired,
+			Idempotency: IdempotencyRequired,
+			Errors: []string{
+				"authorization.request.invalid",
+				"authorization.unavailable",
+				"audit.unavailable",
+				"request.invalid",
+				"resource.not_found",
+				"exam.integrity_review.invalid",
+				"exam.integrity_review.revision_conflict",
+				"exam.integrity_review.state_conflict",
+				"exam.integrity_review.incomplete",
+				"exam.integrity_review.too_large",
+				"exam.integrity_review.unavailable",
+				"idempotency.key_required",
+				"idempotency.key_invalid",
+				"idempotency.conflict",
+				"idempotency.in_progress",
+				"exam.sitting.invalid",
+				"exam.sitting.unavailable",
+			},
+			Handle: module.release,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   candidateResult,
+			Auth:   AuthSessionRequired,
+			Errors: studentErrors,
+			Handle: module.studentResult,
+		},
 	)
 }
 

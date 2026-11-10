@@ -47,29 +47,32 @@ func classMemberResource(members ClassMemberApplication) apiResource {
 	module := classMemberResourceModule{members: members}
 	return newResource(
 		"class-members",
-		principalRoute(
-			http.MethodGet,
-			path("/classes/{class_id}/members"),
-			academicRelationshipReadErrorCodes(),
-			module.list,
-		),
-		principalRoute(
-			http.MethodPost,
-			path("/classes/{class_id}/members"),
-			academicRelationshipMutationErrorCodes(
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/classes/{class_id}/members",
+			Auth:   AuthPrincipalRequired,
+			Errors: academicRelationshipReadErrorCodes(),
+			Handle: module.list,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/classes/{class_id}/members",
+			Auth:   AuthPrincipalRequired,
+			Errors: academicRelationshipMutationErrorCodes(
 				"class_member.invalid",
 				"class_member.student_affiliation_required",
 				"class.enrollment_conflict",
 				"mail.unavailable",
 			),
-			module.enroll,
-		),
-		principalRoute(
-			http.MethodDelete,
-			path("/class-members/{class_member_id}"),
-			academicRelationshipMutationErrorCodes("class.enrollment_conflict", "mail.unavailable"),
-			module.end,
-		),
+			Handle: module.enroll,
+		},
+		endpoint{
+			Method: http.MethodDelete,
+			Path:   "/class-members/{class_member_id}",
+			Auth:   AuthPrincipalRequired,
+			Errors: academicRelationshipMutationErrorCodes("class.enrollment_conflict", "mail.unavailable"),
+			Handle: module.end,
+		},
 	)
 }
 

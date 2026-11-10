@@ -70,10 +70,12 @@ type desktopCompatibilityPolicyResourceModule struct {
 
 func desktopCompatibilityPolicyResource(application DesktopCompatibilityApplication) apiResource {
 	module := desktopCompatibilityPolicyResourceModule{application: application}
-	replace := strongRecentSessionRoute(
-		http.MethodPut,
-		path("/desktop-compatibility-policy"),
-		[]string{
+	replace := endpoint{
+		Method:      http.MethodPut,
+		Path:        "/desktop-compatibility-policy",
+		Auth:        AuthStrongRecentSessionRequired,
+		Idempotency: IdempotencyRequired,
+		Errors: []string{
 			"authorization.denied",
 			"authorization.request.invalid",
 			"authorization.unavailable",
@@ -88,15 +90,15 @@ func desktopCompatibilityPolicyResource(application DesktopCompatibilityApplicat
 			"desktop_compatibility_policy.unavailable",
 			"resource.not_found",
 		},
-		module.replace,
-	)
-	replace.idempotency = IdempotencyRequired
+		Handle: module.replace,
+	}
 	return newResource(
 		"desktop-compatibility-policy",
-		principalRoute(
-			http.MethodGet,
-			path("/desktop-compatibility-policy"),
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/desktop-compatibility-policy",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -104,8 +106,8 @@ func desktopCompatibilityPolicyResource(application DesktopCompatibilityApplicat
 				"desktop_compatibility_policy.revision_conflict",
 				"resource.not_found",
 			},
-			module.get,
-		),
+			Handle: module.get,
+		},
 		replace,
 	)
 }

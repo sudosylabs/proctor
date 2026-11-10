@@ -61,10 +61,11 @@ func roleBindingResource(bindings RoleBindingApplication) apiResource {
 	module := roleBindingResourceModule{bindings: bindings}
 	return newResource(
 		"role-bindings",
-		principalRoute(
-			http.MethodGet,
-			path("/role-bindings"),
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/role-bindings",
+			Auth:   AuthPrincipalRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -72,12 +73,13 @@ func roleBindingResource(bindings RoleBindingApplication) apiResource {
 				"administration.unavailable",
 				"resource.not_found",
 			},
-			module.list,
-		),
-		strongRecentSessionRoute(
-			http.MethodPost,
-			path("/role-bindings"),
-			[]string{
+			Handle: module.list,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/role-bindings",
+			Auth:   AuthStrongRecentSessionRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -90,12 +92,13 @@ func roleBindingResource(bindings RoleBindingApplication) apiResource {
 				"administration.unavailable",
 				"mail.unavailable",
 			},
-			module.create,
-		),
-		strongRecentSessionRoute(
-			http.MethodDelete,
-			path("/role-bindings/{role_binding_id}"),
-			[]string{
+			Handle: module.create,
+		},
+		endpoint{
+			Method: http.MethodDelete,
+			Path:   "/role-bindings/{role_binding_id}",
+			Auth:   AuthStrongRecentSessionRequired,
+			Errors: []string{
 				"authorization.denied",
 				"authorization.request.invalid",
 				"authorization.unavailable",
@@ -107,8 +110,8 @@ func roleBindingResource(bindings RoleBindingApplication) apiResource {
 				"administration.unavailable",
 				"mail.unavailable",
 			},
-			module.end,
-		),
+			Handle: module.end,
+		},
 	)
 }
 

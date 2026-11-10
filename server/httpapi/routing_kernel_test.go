@@ -37,9 +37,12 @@ func TestRoutingKernelRejectsInvalidCatalogs(t *testing.T) {
 		{
 			name: "negative route body limit",
 			resources: []apiResource{
-				newResource("invalid", routeDefinition{
-					method: http.MethodPost, path: path("/resources"), auth: AuthPublic,
-					maxBodyBytes: -1, operation: validOperation,
+				newResource("invalid", endpoint{
+					Method:       http.MethodPost,
+					Path:         "/resources",
+					Auth:         AuthPublic,
+					MaxBodyBytes: -1,
+					Handle:       validOperation,
 				}),
 			},
 			wantError: "maximum body size",
@@ -47,87 +50,159 @@ func TestRoutingKernelRejectsInvalidCatalogs(t *testing.T) {
 		{
 			name: "idempotent protocol requires principal",
 			resources: []apiResource{
-				newResource("invalid", idempotentProtocolRoute(
-					IdempotencyRequired, 1024, "streaming-upload", RouteProtocolStreamingUpload,
-					AuthPublic, http.MethodPost, path("/resources"), nil,
-					func(operationRequest) (protocolResult, error) {
+				newResource("invalid", endpoint{
+					Method:       http.MethodPost,
+					Path:         "/resources",
+					Auth:         AuthPublic,
+					Idempotency:  IdempotencyRequired,
+					MaxBodyBytes: 1024,
+					ProtocolName: "streaming-upload",
+					ProtocolKind: RouteProtocolStreamingUpload,
+					Protocol: func(operationRequest) (protocolResult, error) {
 						return streamingUploadProtocolResult(http.StatusCreated, struct{}{}), nil
 					},
-				)),
+				}),
 			},
 			wantError: "idempotency requires a principal route",
 		},
 		{
 			name: "idempotent upgrade is forbidden",
 			resources: []apiResource{
-				newResource("invalid", idempotentProtocolRoute(
-					IdempotencyRequired, 1024, "invalid-upgrade", RouteProtocolUpgrade,
-					AuthPrincipalRequired, http.MethodPost, path("/resources"), nil,
-					func(operationRequest) (protocolResult, error) { return protocolResult{}, nil },
-				)),
+				newResource("invalid", endpoint{
+					Method:       http.MethodPost,
+					Path:         "/resources",
+					Auth:         AuthPrincipalRequired,
+					Idempotency:  IdempotencyRequired,
+					MaxBodyBytes: 1024,
+					ProtocolName: "invalid-upgrade",
+					ProtocolKind: RouteProtocolUpgrade,
+					Protocol:     func(operationRequest) (protocolResult, error) { return protocolResult{}, nil },
+				}),
 			},
 			wantError: "upgrade requires the dedicated upgrade operation",
 		},
 		{
 			name: "duplicate normalized route",
 			resources: []apiResource{
-				newResource("first", principalRoute(http.MethodGet, path("/{first_id}"), nil, validOperation)),
-				newResource("second", principalRoute(http.MethodGet, path("/{second_id}"), nil, validOperation)),
+				newResource("first", endpoint{
+					Method: http.MethodGet,
+					Path:   "/{first_id}",
+					Auth:   AuthPrincipalRequired,
+					Handle: validOperation,
+				}),
+				newResource("second", endpoint{
+					Method: http.MethodGet,
+					Path:   "/{second_id}",
+					Auth:   AuthPrincipalRequired,
+					Handle: validOperation,
+				}),
 			},
 			wantError: "duplicate route shape",
 		},
 		{
-			name: "unsupported parameter kind",
+			name: "malformed path template",
 			resources: []apiResource{
-				newResource("invalid", principalRoute(http.MethodGet, routePath{parts: []pathPart{pathParameter{name: "id", kind: parameterKind(99)}}}, nil, validOperation)),
+				newResource("invalid", endpoint{
+					Method: http.MethodGet,
+					Path:   "/resources/{id:integer}",
+					Auth:   AuthPrincipalRequired,
+					Handle: validOperation,
+				}),
 			},
-			wantError: "unsupported parameter kind",
+			wantError: "unknown parameter kind",
 		},
 		{
 			name: "missing operation",
 			resources: []apiResource{
-				newResource("invalid", principalRoute(http.MethodGet, path("/resources"), nil, nil)),
+				newResource("invalid", endpoint{
+					Method: http.MethodGet,
+					Path:   "/resources",
+					Auth:   AuthPrincipalRequired,
+				}),
 			},
 			wantError: "operation is required",
 		},
 		{
 			name: "invalid authentication",
 			resources: []apiResource{
-				newResource("invalid", routeDefinition{method: http.MethodGet, path: path("/resources"), auth: AuthRequirement("unknown"), operation: validOperation}),
+				newResource("invalid", endpoint{
+					Method: http.MethodGet,
+					Path:   "/resources",
+					Auth:   AuthRequirement("unknown"),
+					Handle: validOperation,
+				}),
+			},
+			wantError: "authentication requirement is invalid",
+		},
+		{
+			name: "missing authentication",
+			resources: []apiResource{
+				newResource("invalid", endpoint{
+					Method: http.MethodGet,
+					Path:   "/resources",
+					Handle: validOperation,
+				}),
 			},
 			wantError: "authentication requirement is invalid",
 		},
 		{
 			name: "unmapped public error",
 			resources: []apiResource{
-				newResource("invalid", principalRoute(http.MethodGet, path("/resources"), []string{"not.registered"}, validOperation)),
+				newResource("invalid", endpoint{
+					Method: http.MethodGet,
+					Path:   "/resources",
+					Auth:   AuthPrincipalRequired,
+					Errors: []string{"not.registered"},
+					Handle: validOperation,
+				}),
 			},
 			wantError: "public error code",
 		},
 		{
 			name: "invalid protocol kind",
 			resources: []apiResource{
-				newResource("invalid", protocolRoute("invalid-protocol", RouteProtocolKind("raw"), AuthPublic, http.MethodGet, path("/resources"), nil, func(operationRequest) (protocolResult, error) {
-					return protocolResult{}, nil
-				})),
+				newResource("invalid", endpoint{
+					Method:       http.MethodGet,
+					Path:         "/resources",
+					Auth:         AuthPublic,
+					ProtocolName: "invalid-protocol",
+					ProtocolKind: RouteProtocolKind("raw"),
+					Protocol: func(operationRequest) (protocolResult, error) {
+						return protocolResult{}, nil
+					},
+				}),
 			},
 			wantError: "protocol operation kind",
 		},
 		{
 			name: "upgrade through bounded protocol operation",
 			resources: []apiResource{
-				newResource("invalid", protocolRoute("invalid-upgrade", RouteProtocolUpgrade, AuthPublic, http.MethodGet, path("/resources"), nil, func(operationRequest) (protocolResult, error) {
-					return protocolResult{}, nil
-				})),
+				newResource("invalid", endpoint{
+					Method:       http.MethodGet,
+					Path:         "/resources",
+					Auth:         AuthPublic,
+					ProtocolName: "invalid-upgrade",
+					ProtocolKind: RouteProtocolUpgrade,
+					Protocol: func(operationRequest) (protocolResult, error) {
+						return protocolResult{}, nil
+					},
+				}),
 			},
 			wantError: "upgrade requires the dedicated upgrade operation",
 		},
 		{
 			name: "raw upgrade outside reserved websocket operation",
 			resources: []apiResource{
-				newResource("invalid", upgradeRoute("another-upgrade", AuthSessionRequired, http.MethodGet, path("/resources"), nil, func(http.ResponseWriter, operationRequest) error {
-					return nil
-				})),
+				newResource("invalid", endpoint{
+					Method:       http.MethodGet,
+					Path:         "/resources",
+					Auth:         AuthSessionRequired,
+					ProtocolName: "another-upgrade",
+					ProtocolKind: RouteProtocolUpgrade,
+					Upgrade: func(http.ResponseWriter, operationRequest) error {
+						return nil
+					},
+				}),
 			},
 			wantError: "is not the reserved WebSocket upgrade",
 		},
@@ -145,14 +220,25 @@ func TestRoutingKernelRejectsInvalidCatalogs(t *testing.T) {
 
 func TestRoutingKernelAllowsIdempotentSessionJSONAndStreamingRoutes(t *testing.T) {
 	t.Parallel()
-	jsonRoute := sessionRoute(http.MethodPost, path("/json"), nil,
-		func(operationRequest) (operationResult, error) { return noContentResult(), nil })
-	jsonRoute.idempotency = IdempotencyRequired
-	streamRoute := idempotentProtocolRoute(IdempotencyRequired, 1024, "session-upload", RouteProtocolStreamingUpload,
-		AuthSessionRequired, http.MethodPost, path("/upload"), nil,
-		func(operationRequest) (protocolResult, error) {
+	jsonRoute := endpoint{
+		Method:      http.MethodPost,
+		Path:        "/json",
+		Auth:        AuthSessionRequired,
+		Idempotency: IdempotencyRequired,
+		Handle:      func(operationRequest) (operationResult, error) { return noContentResult(), nil },
+	}
+	streamRoute := endpoint{
+		Method:       http.MethodPost,
+		Path:         "/upload",
+		Auth:         AuthSessionRequired,
+		Idempotency:  IdempotencyRequired,
+		MaxBodyBytes: 1024,
+		ProtocolName: "session-upload",
+		ProtocolKind: RouteProtocolStreamingUpload,
+		Protocol: func(operationRequest) (protocolResult, error) {
 			return streamingUploadProtocolResult(http.StatusCreated, struct{}{}), nil
-		})
+		},
+	}
 	require.NoError(t, validateResourceCatalog("/api/v1", []apiResource{newResource("session-mutations", jsonRoute, streamRoute)}))
 }
 
@@ -181,14 +267,24 @@ func TestRoutingKernelAppliesPerRouteBodyLimitsAndProtocolIdempotency(t *testing
 	}
 	resources := []apiResource{newResource(
 		"uploads",
-		idempotentProtocolRoute(
-			IdempotencyRequired, 8, "large-streaming-upload", RouteProtocolStreamingUpload,
-			AuthPrincipalRequired, http.MethodPost, path("/large"), nil, readBody,
-		),
-		protocolRoute(
-			"default-streaming-upload", RouteProtocolStreamingUpload,
-			AuthPrincipalRequired, http.MethodPost, path("/default"), nil, readBody,
-		),
+		endpoint{
+			Method:       http.MethodPost,
+			Path:         "/large",
+			Auth:         AuthPrincipalRequired,
+			Idempotency:  IdempotencyRequired,
+			MaxBodyBytes: 8,
+			ProtocolName: "large-streaming-upload",
+			ProtocolKind: RouteProtocolStreamingUpload,
+			Protocol:     readBody,
+		},
+		endpoint{
+			Method:       http.MethodPost,
+			Path:         "/default",
+			Auth:         AuthPrincipalRequired,
+			ProtocolName: "default-streaming-upload",
+			ProtocolKind: RouteProtocolStreamingUpload,
+			Protocol:     readBody,
+		},
 	)}
 	cookies, err := newBrowserCookies("http://localhost:8065")
 	require.NoError(t, err)
@@ -224,7 +320,10 @@ func TestRoutingKernelAppliesPerRouteBodyLimitsAndProtocolIdempotency(t *testing
 	require.Contains(t, streamedResponse.Body.String(), `"read":false`, "streamed default upload")
 }
 
-func TestRoutingKernelExplicitAuthenticationConstructors(t *testing.T) {
+// TestRoutingKernelPublishesDeclaredAuthentication proves a route's manifest
+// entry carries the requirement its endpoint declares, for every requirement
+// a route may declare.
+func TestRoutingKernelPublishesDeclaredAuthentication(t *testing.T) {
 	t.Parallel()
 
 	operation := func(operationRequest) (operationResult, error) {
@@ -232,20 +331,33 @@ func TestRoutingKernelExplicitAuthenticationConstructors(t *testing.T) {
 	}
 	tests := []struct {
 		name string
-		got  routeDefinition
-		want AuthRequirement
+		path string
+		auth AuthRequirement
 	}{
-		{"public", publicRoute(http.MethodGet, path("/public"), nil, operation), AuthPublic},
-		{"principal", principalRoute(http.MethodGet, path("/principal"), nil, operation), AuthPrincipalRequired},
-		{"session", sessionRoute(http.MethodGet, path("/session"), nil, operation), AuthSessionRequired},
-		{"strong session", strongSessionRoute(http.MethodGet, path("/strong"), nil, operation), AuthStrongSessionRequired},
-		{"recent session", recentSessionRoute(http.MethodGet, path("/recent"), nil, operation), AuthRecentSessionRequired},
-		{"strong recent session", strongRecentSessionRoute(http.MethodGet, path("/strong-recent"), nil, operation), AuthStrongRecentSessionRequired},
-		{"refresh credential", refreshCredentialRoute(http.MethodGet, path("/refresh"), nil, operation), AuthRefreshCredentialRequired},
+		{"public", "/public", AuthPublic},
+		{"principal", "/principal", AuthPrincipalRequired},
+		{"session", "/session", AuthSessionRequired},
+		{"strong session", "/strong", AuthStrongSessionRequired},
+		{"recent session", "/recent", AuthRecentSessionRequired},
+		{"strong recent session", "/strong-recent", AuthStrongRecentSessionRequired},
+		{"refresh credential", "/refresh", AuthRefreshCredentialRequired},
+		{"MFA enrollment session", "/mfa-enrollment", AuthMFAEnrollmentSessionRequired},
+		{"MFA recovery session", "/mfa-recovery", AuthMFARecoverySessionRequired},
+		{"recent MFA recovery session", "/recent-mfa-recovery", AuthRecentMFARecoverySessionRequired},
 	}
+	require.Len(t, tests, len(authSpecs), "every declarable requirement has a case")
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			require.Equal(t, test.want, test.got.auth, "authentication")
+			t.Parallel()
+			httpAPI := newCompiledRoutingTestAPI(t, "/api/testing", newResource("authentication", endpoint{
+				Method: http.MethodGet,
+				Path:   test.path,
+				Auth:   test.auth,
+				Handle: operation,
+			}))
+			routes := httpAPI.Routes()
+			require.Len(t, routes, 1)
+			require.Equal(t, test.auth, routes[0].Auth, "authentication")
 		})
 	}
 }
@@ -260,42 +372,43 @@ func TestRoutingKernelAppliesTypedHeadersProblemsAndNamedProtocolOperations(t *t
 		classRouteAuthenticator{},
 		newResource(
 			"kernel-results",
-			publicRoute(
-				http.MethodGet,
-				path("/headers"),
-				nil,
-				func(operationRequest) (operationResult, error) {
+			endpoint{
+				Method: http.MethodGet,
+				Path:   "/headers",
+				Auth:   AuthPublic,
+				Handle: func(operationRequest) (operationResult, error) {
 					return jsonResult(http.StatusOK, healthResponse{Status: "ok"}).withHeaders(http.Header{
 						"X-Kernel-Test": []string{"preserved"},
 					}), nil
 				},
-			),
-			publicRoute(
-				http.MethodGet,
-				path("/unavailable"),
-				[]string{"health.not_ready"},
-				func(request operationRequest) (operationResult, error) {
+			},
+			endpoint{
+				Method: http.MethodGet,
+				Path:   "/unavailable",
+				Auth:   AuthPublic,
+				Errors: []string{"health.not_ready"},
+				Handle: func(request operationRequest) (operationResult, error) {
 					return problemResult(Problem{
 						Type: "https://proctor.sudosylabs.com/problems/health.not_ready", Title: "Service unavailable",
 						Status: http.StatusServiceUnavailable, Detail: "The service is not ready to accept requests.",
 						Instance: request.request.URL.Path, Code: "health.not_ready", RequestID: RequestID(request.context),
 					}), nil
 				},
-			),
-			protocolRoute(
-				"external-authentication-redirect",
-				RouteProtocolRedirect,
-				AuthPublic,
-				http.MethodGet,
-				path("/redirect"),
-				[]string{"request.invalid"},
-				func(request operationRequest) (protocolResult, error) {
+			},
+			endpoint{
+				Method:       http.MethodGet,
+				Path:         "/redirect",
+				Auth:         AuthPublic,
+				ProtocolName: "external-authentication-redirect",
+				ProtocolKind: RouteProtocolRedirect,
+				Errors:       []string{"request.invalid"},
+				Protocol: func(request operationRequest) (protocolResult, error) {
 					if request.request.URL.Query().Get("fail") != "" {
 						return protocolResult{}, invalidRequestError(errors.New("invalid"))
 					}
 					return redirectProtocolResult("/destination"), nil
 				},
-			),
+			},
 		),
 	)
 
@@ -331,18 +444,43 @@ func TestRoutingKernelValidatesResultsBeforeEmittingResponseEffects(t *testing.T
 		classRouteAuthenticator{},
 		newResource(
 			"invalid-results",
-			publicRoute(http.MethodGet, path("/invalid-ordinary"), nil, func(operationRequest) (operationResult, error) {
-				return operationResult{status: http.StatusInternalServerError, headers: cookieHeaders}, nil
-			}),
-			publicRoute(http.MethodGet, path("/undeclared-problem"), nil, func(request operationRequest) (operationResult, error) {
-				return problemResult(Problem{Status: http.StatusServiceUnavailable, Code: "health.not_ready", Instance: request.request.URL.Path}).withHeaders(cookieHeaders), nil
-			}),
-			protocolRoute("mismatched-protocol", RouteProtocolRedirect, AuthPublic, http.MethodGet, path("/invalid-protocol"), nil, func(operationRequest) (protocolResult, error) {
-				return streamingUploadProtocolResult(http.StatusOK, map[string]string{"status": "wrong"}).withHeaders(cookieHeaders), nil
-			}),
-			protocolRoute("undeclared-protocol-error", RouteProtocolRedirect, AuthPublic, http.MethodGet, path("/invalid-protocol-error"), []string{"request.invalid"}, func(operationRequest) (protocolResult, error) {
-				return protocolResult{}, errorWithHeaders(apperror.New("resource.not_found"), cookieHeaders)
-			}),
+			endpoint{
+				Method: http.MethodGet,
+				Path:   "/invalid-ordinary",
+				Auth:   AuthPublic,
+				Handle: func(operationRequest) (operationResult, error) {
+					return operationResult{status: http.StatusInternalServerError, headers: cookieHeaders}, nil
+				},
+			},
+			endpoint{
+				Method: http.MethodGet,
+				Path:   "/undeclared-problem",
+				Auth:   AuthPublic,
+				Handle: func(request operationRequest) (operationResult, error) {
+					return problemResult(Problem{Status: http.StatusServiceUnavailable, Code: "health.not_ready", Instance: request.request.URL.Path}).withHeaders(cookieHeaders), nil
+				},
+			},
+			endpoint{
+				Method:       http.MethodGet,
+				Path:         "/invalid-protocol",
+				Auth:         AuthPublic,
+				ProtocolName: "mismatched-protocol",
+				ProtocolKind: RouteProtocolRedirect,
+				Protocol: func(operationRequest) (protocolResult, error) {
+					return streamingUploadProtocolResult(http.StatusOK, map[string]string{"status": "wrong"}).withHeaders(cookieHeaders), nil
+				},
+			},
+			endpoint{
+				Method:       http.MethodGet,
+				Path:         "/invalid-protocol-error",
+				Auth:         AuthPublic,
+				ProtocolName: "undeclared-protocol-error",
+				ProtocolKind: RouteProtocolRedirect,
+				Errors:       []string{"request.invalid"},
+				Protocol: func(operationRequest) (protocolResult, error) {
+					return protocolResult{}, errorWithHeaders(apperror.New("resource.not_found"), cookieHeaders)
+				},
+			},
 		),
 	)
 
@@ -366,9 +504,16 @@ func TestRoutingKernelBoundsBinaryProtocolAndPublishesProtocolManifest(t *testin
 		classRouteAuthenticator{},
 		newResource(
 			"binary",
-			protocolRoute("bounded-binary-download", RouteProtocolBinaryDownload, AuthPublic, http.MethodGet, path("/binary"), nil, func(operationRequest) (protocolResult, error) {
-				return binaryDownloadProtocolResult(io.NopCloser(strings.NewReader("abcdef")), 3).withHeaders(http.Header{"Content-Type": {"application/octet-stream"}}), nil
-			}),
+			endpoint{
+				Method:       http.MethodGet,
+				Path:         "/binary",
+				Auth:         AuthPublic,
+				ProtocolName: "bounded-binary-download",
+				ProtocolKind: RouteProtocolBinaryDownload,
+				Protocol: func(operationRequest) (protocolResult, error) {
+					return binaryDownloadProtocolResult(io.NopCloser(strings.NewReader("abcdef")), 3).withHeaders(http.Header{"Content-Type": {"application/octet-stream"}}), nil
+				},
+			},
 		),
 	)
 
@@ -387,12 +532,13 @@ func TestRoutesReturnsDefensiveDeepCopy(t *testing.T) {
 	t.Parallel()
 
 	httpAPI := newCompiledRoutingTestAPI(t, "/api/testing", newResource("copy",
-		sessionRoute(
-			http.MethodGet,
-			path("/copy"),
-			[]string{"resource.not_found"},
-			func(operationRequest) (operationResult, error) { return noContentResult(), nil },
-		),
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/copy",
+			Auth:   AuthSessionRequired,
+			Errors: []string{"resource.not_found"},
+			Handle: func(operationRequest) (operationResult, error) { return noContentResult(), nil },
+		},
 	))
 	routes := httpAPI.Routes()
 	routes[0].Path = "/mutated"
@@ -411,11 +557,11 @@ func TestPublicRoutingKernelOperationDoesNotRequirePrincipal(t *testing.T) {
 		t,
 		logger,
 		classRouteAuthenticator{},
-		newResource("system", routeDefinition{
-			method: http.MethodGet,
-			path:   path("/system/ping"),
-			auth:   AuthPublic,
-			operation: func(request operationRequest) (operationResult, error) {
+		newResource("system", endpoint{
+			Method: http.MethodGet,
+			Path:   "/system/ping",
+			Auth:   AuthPublic,
+			Handle: func(request operationRequest) (operationResult, error) {
 				require.False(t, request.principal.UserID.IsValid(), "public operation received an invented principal")
 				return noContentResult(), nil
 			},
@@ -443,21 +589,24 @@ func TestRoutingKernelPathVocabularyPreservesV1IdentifierPatterns(t *testing.T) 
 		classRouteAuthenticator{},
 		newResource(
 			"identifiers",
-			publicRoute(
-				http.MethodGet,
-				rootPath("/health/live"),
-				nil,
-				operation,
-			),
-			routeDefinition{
-				method: http.MethodGet,
-				path:   path("/users/{user_id}"),
-				auth:   AuthPublic, operation: operation,
+			endpoint{
+				Method:      http.MethodGet,
+				Path:        "/health/live",
+				RootMounted: true,
+				Auth:        AuthPublic,
+				Handle:      operation,
 			},
-			routeDefinition{
-				method: http.MethodGet,
-				path:   path("/auth/providers/{provider_id:provider}"),
-				auth:   AuthPublic, operation: operation,
+			endpoint{
+				Method: http.MethodGet,
+				Path:   "/users/{user_id}",
+				Auth:   AuthPublic,
+				Handle: operation,
+			},
+			endpoint{
+				Method: http.MethodGet,
+				Path:   "/auth/providers/{provider_id:provider}",
+				Auth:   AuthPublic,
+				Handle: operation,
 			},
 		),
 	)

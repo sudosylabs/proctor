@@ -148,16 +148,18 @@ func bootstrapResource(bootstrap BootstrapApplication) apiResource {
 	module := bootstrapResourceModule{bootstrap: bootstrap}
 	return newResource(
 		"bootstrap",
-		publicRoute(
-			http.MethodGet,
-			path("/bootstrap"),
-			[]string{"installation.unavailable"},
-			module.status,
-		),
-		publicRoute(
-			http.MethodPost,
-			path("/bootstrap"),
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/bootstrap",
+			Auth:   AuthPublic,
+			Errors: []string{"installation.unavailable"},
+			Handle: module.status,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/bootstrap",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"installation.already_initialized",
 				"installation.unavailable",
@@ -170,8 +172,8 @@ func bootstrapResource(bootstrap BootstrapApplication) apiResource {
 				"authentication.rate_limited",
 				"administration.unavailable",
 			},
-			module.install,
-		),
+			Handle: module.install,
+		},
 	)
 }
 

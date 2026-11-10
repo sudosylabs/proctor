@@ -41,14 +41,16 @@ type examRecordsHTTPModule struct{ application ExamRecordsApplication }
 
 func examRecordsResource(application ExamRecordsApplication) apiResource {
 	m := examRecordsHTTPModule{application: application}
-	completion := path("/exams/{exam_id}/sittings/{exam_sitting_id}/records-completion")
-	waiver := path("/exams/{exam_id}/sittings/{exam_sitting_id}/submissions/{submission_id}/review-waiver")
-	holds := path("/exams/{exam_id}/retention-holds")
-	release := path("/exams/{exam_id}/retention-holds/{retention_hold_id}/release")
-	completeRoute := sessionRoute(
-		http.MethodPost,
-		completion,
-		[]string{
+	completion := "/exams/{exam_id}/sittings/{exam_sitting_id}/records-completion"
+	waiver := "/exams/{exam_id}/sittings/{exam_sitting_id}/submissions/{submission_id}/review-waiver"
+	holds := "/exams/{exam_id}/retention-holds"
+	release := "/exams/{exam_id}/retention-holds/{retention_hold_id}/release"
+	completeRoute := endpoint{
+		Method:      http.MethodPost,
+		Path:        completion,
+		Auth:        AuthSessionRequired,
+		Idempotency: IdempotencyRequired,
+		Errors: []string{
 			"authorization.request.invalid",
 			"authorization.unavailable",
 			"audit.unavailable",
@@ -62,12 +64,14 @@ func examRecordsResource(application ExamRecordsApplication) apiResource {
 			"idempotency.conflict",
 			"idempotency.in_progress",
 		},
-		m.complete,
-	)
-	waiveRoute := sessionRoute(
-		http.MethodPost,
-		waiver,
-		[]string{
+		Handle: m.complete,
+	}
+	waiveRoute := endpoint{
+		Method:      http.MethodPost,
+		Path:        waiver,
+		Auth:        AuthSessionRequired,
+		Idempotency: IdempotencyRequired,
+		Errors: []string{
 			"authorization.request.invalid",
 			"authorization.unavailable",
 			"audit.unavailable",
@@ -81,12 +85,14 @@ func examRecordsResource(application ExamRecordsApplication) apiResource {
 			"idempotency.conflict",
 			"idempotency.in_progress",
 		},
-		m.waive,
-	)
-	createRoute := sessionRoute(
-		http.MethodPost,
-		holds,
-		[]string{
+		Handle: m.waive,
+	}
+	createRoute := endpoint{
+		Method:      http.MethodPost,
+		Path:        holds,
+		Auth:        AuthSessionRequired,
+		Idempotency: IdempotencyRequired,
+		Errors: []string{
 			"authorization.request.invalid",
 			"authorization.unavailable",
 			"audit.unavailable",
@@ -100,12 +106,14 @@ func examRecordsResource(application ExamRecordsApplication) apiResource {
 			"idempotency.conflict",
 			"idempotency.in_progress",
 		},
-		m.createHold,
-	)
-	releaseRoute := strongRecentSessionRoute(
-		http.MethodPost,
-		release,
-		[]string{
+		Handle: m.createHold,
+	}
+	releaseRoute := endpoint{
+		Method:      http.MethodPost,
+		Path:        release,
+		Auth:        AuthStrongRecentSessionRequired,
+		Idempotency: IdempotencyRequired,
+		Errors: []string{
 			"authorization.request.invalid",
 			"authorization.unavailable",
 			"audit.unavailable",
@@ -119,16 +127,15 @@ func examRecordsResource(application ExamRecordsApplication) apiResource {
 			"idempotency.conflict",
 			"idempotency.in_progress",
 		},
-		m.releaseHold,
-	)
-	completeRoute.idempotency, waiveRoute.idempotency, createRoute.idempotency, releaseRoute.idempotency =
-		IdempotencyRequired, IdempotencyRequired, IdempotencyRequired, IdempotencyRequired
+		Handle: m.releaseHold,
+	}
 	return newResource(
 		"exam-records",
-		sessionRoute(
-			http.MethodGet,
-			completion,
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   completion,
+			Auth:   AuthSessionRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -136,13 +143,14 @@ func examRecordsResource(application ExamRecordsApplication) apiResource {
 				"exam.invalid",
 				"exam.unavailable",
 			},
-			m.getCompletion,
-		),
+			Handle: m.getCompletion,
+		},
 		completeRoute,
-		sessionRoute(
-			http.MethodGet,
-			waiver,
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   waiver,
+			Auth:   AuthSessionRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -150,13 +158,14 @@ func examRecordsResource(application ExamRecordsApplication) apiResource {
 				"exam.invalid",
 				"exam.unavailable",
 			},
-			m.getWaiver,
-		),
+			Handle: m.getWaiver,
+		},
 		waiveRoute,
-		sessionRoute(
-			http.MethodGet,
-			holds,
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   holds,
+			Auth:   AuthSessionRequired,
+			Errors: []string{
 				"authorization.request.invalid",
 				"authorization.unavailable",
 				"request.invalid",
@@ -164,8 +173,8 @@ func examRecordsResource(application ExamRecordsApplication) apiResource {
 				"exam.invalid",
 				"exam.unavailable",
 			},
-			m.listHolds,
-		),
+			Handle: m.listHolds,
+		},
 		createRoute,
 		releaseRoute,
 	)

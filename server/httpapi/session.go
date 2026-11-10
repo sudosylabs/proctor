@@ -53,28 +53,37 @@ type sessionResourceModule struct {
 
 func sessionResource(sessions Sessions, cookies browserCookies) apiResource {
 	module := sessionResourceModule{sessions: sessions, cookies: cookies}
-	base := path("/users/me/sessions")
+	base := "/users/me/sessions"
 	return newResource(
 		"sessions",
-		sessionRoute(http.MethodGet, base, []string{"authentication.internal", "request.invalid"}, module.list),
-		sessionRoute(
-			http.MethodPost,
-			path("/users/me/sessions/revoke"),
-			[]string{"request.invalid", "session.id.invalid", "session.not_found", "authentication.internal", "audit.unavailable"},
-			module.revoke,
-		),
-		sessionRoute(
-			http.MethodPost,
-			path("/users/me/sessions/revoke-all"),
-			[]string{"authentication.internal", "audit.unavailable"},
-			module.revokeAll,
-		),
-		sessionRoute(
-			http.MethodPost,
-			path("/users/me/sessions/revoke-others"),
-			[]string{"authentication.internal", "audit.unavailable"},
-			module.revokeOthers,
-		),
+		endpoint{
+			Method: http.MethodGet,
+			Path:   base,
+			Auth:   AuthSessionRequired,
+			Errors: []string{"authentication.internal", "request.invalid"},
+			Handle: module.list,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/me/sessions/revoke",
+			Auth:   AuthSessionRequired,
+			Errors: []string{"request.invalid", "session.id.invalid", "session.not_found", "authentication.internal", "audit.unavailable"},
+			Handle: module.revoke,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/me/sessions/revoke-all",
+			Auth:   AuthSessionRequired,
+			Errors: []string{"authentication.internal", "audit.unavailable"},
+			Handle: module.revokeAll,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/users/me/sessions/revoke-others",
+			Auth:   AuthSessionRequired,
+			Errors: []string{"authentication.internal", "audit.unavailable"},
+			Handle: module.revokeOthers,
+		},
 	)
 }
 

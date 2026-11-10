@@ -72,19 +72,20 @@ func externalAuthenticationResource(
 	module := externalAuthenticationResourceModule{authentication: authentication, cookies: cookies}
 	return newResource(
 		"external-authentication",
-		publicRoute(
-			http.MethodGet,
-			path("/auth/providers"),
-			[]string{"authentication.internal", "request.invalid"},
-			module.listProviders,
-		),
-		protocolRoute(
-			"external-authentication-login-redirect",
-			RouteProtocolRedirect,
-			AuthPublic,
-			http.MethodGet,
-			path("/auth/providers/{provider_id:provider}/login"),
-			[]string{
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/auth/providers",
+			Auth:   AuthPublic,
+			Errors: []string{"authentication.internal", "request.invalid"},
+			Handle: module.listProviders,
+		},
+		endpoint{
+			Method:       http.MethodGet,
+			Path:         "/auth/providers/{provider_id:provider}/login",
+			Auth:         AuthPublic,
+			ProtocolName: "external-authentication-login-redirect",
+			ProtocolKind: RouteProtocolRedirect,
+			Errors: []string{
 				"request.invalid",
 				"authentication.external.request.invalid",
 				"authentication.external.provider_not_found",
@@ -97,15 +98,15 @@ func externalAuthenticationResource(
 				"authentication.external.account_not_linked",
 				"authentication.token_invalid",
 			},
-			module.begin,
-		),
-		protocolRoute(
-			"external-authentication-login-post-redirect",
-			RouteProtocolRedirect,
-			AuthPublic,
-			http.MethodPost,
-			path("/auth/providers/{provider_id:provider}/login"),
-			[]string{
+			Protocol: module.begin,
+		},
+		endpoint{
+			Method:       http.MethodPost,
+			Path:         "/auth/providers/{provider_id:provider}/login",
+			Auth:         AuthPublic,
+			ProtocolName: "external-authentication-login-post-redirect",
+			ProtocolKind: RouteProtocolRedirect,
+			Errors: []string{
 				"request.invalid",
 				"authentication.external.request.invalid",
 				"authentication.external.provider_not_found",
@@ -118,15 +119,15 @@ func externalAuthenticationResource(
 				"authentication.desktop_authorization.invalid",
 				"authentication.token_invalid",
 			},
-			module.beginFromBody,
-		),
-		protocolRoute(
-			"external-authentication-callback-redirect",
-			RouteProtocolRedirect,
-			AuthPublic,
-			http.MethodGet,
-			path("/auth/providers/{provider_id:provider}/callback"),
-			[]string{
+			Protocol: module.beginFromBody,
+		},
+		endpoint{
+			Method:       http.MethodGet,
+			Path:         "/auth/providers/{provider_id:provider}/callback",
+			Auth:         AuthPublic,
+			ProtocolName: "external-authentication-callback-redirect",
+			ProtocolKind: RouteProtocolRedirect,
+			Errors: []string{
 				"request.invalid",
 				"authentication.external.invalid",
 				"authentication.external.provider_not_found",
@@ -147,8 +148,8 @@ func externalAuthenticationResource(
 				"authentication.credentials_invalid",
 				"authentication.mfa.enrollment_required",
 			},
-			module.complete,
-		),
+			Protocol: module.complete,
+		},
 	)
 }
 

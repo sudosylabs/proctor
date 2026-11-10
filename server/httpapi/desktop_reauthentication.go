@@ -89,36 +89,40 @@ type desktopReauthenticationResourceModule struct {
 
 func desktopReauthenticationResource(application DesktopReauthentication, cookies browserCookies) apiResource {
 	m := desktopReauthenticationResourceModule{application: application, cookies: cookies}
-	base := path("/auth/desktop/reauthentications")
+	base := "/auth/desktop/reauthentications"
 	return newResource("desktop_reauthentication",
-		sessionRoute(
-			http.MethodPost,
-			base,
-			[]string{
+		endpoint{
+			Method: http.MethodPost,
+			Path:   base,
+			Auth:   AuthSessionRequired,
+			Errors: []string{
 				"request.invalid",
 				"authentication.rate_limited",
 				"authentication.rate_limit_unavailable",
 				"authentication.desktop_reauthentication.invalid",
 				"authentication.internal",
 			},
-			m.start,
-		),
-		publicRoute(
-			http.MethodPost,
-			path("/auth/desktop/reauthentications/bind"),
-			[]string{"request.invalid", "authentication.desktop_reauthentication.invalid", "authentication.internal"},
-			m.bind,
-		),
-		publicRoute(
-			http.MethodGet,
-			path("/auth/desktop/reauthentications/context"),
-			[]string{"authentication.desktop_reauthentication.invalid", "authentication.internal", "authentication.credential_ambiguous"},
-			m.context,
-		),
-		publicRoute(
-			http.MethodPost,
-			path("/auth/desktop/reauthentications/authenticate/password"),
-			[]string{
+			Handle: m.start,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/desktop/reauthentications/bind",
+			Auth:   AuthPublic,
+			Errors: []string{"request.invalid", "authentication.desktop_reauthentication.invalid", "authentication.internal"},
+			Handle: m.bind,
+		},
+		endpoint{
+			Method: http.MethodGet,
+			Path:   "/auth/desktop/reauthentications/context",
+			Auth:   AuthPublic,
+			Errors: []string{"authentication.desktop_reauthentication.invalid", "authentication.internal", "authentication.credential_ambiguous"},
+			Handle: m.context,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/desktop/reauthentications/authenticate/password",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"authentication.desktop_reauthentication.invalid",
 				"authentication.reauthentication_method_required",
@@ -131,15 +135,15 @@ func desktopReauthenticationResource(application DesktopReauthentication, cookie
 				"audit.unavailable",
 				"service.busy",
 			},
-			m.authenticatePassword,
-		),
-		protocolRoute(
-			"desktop-reauthentication-external-login",
-			RouteProtocolRedirect,
-			AuthPublic,
-			http.MethodGet,
-			path("/auth/desktop/reauthentications/authenticate/providers/{provider_id:provider}/login"),
-			[]string{
+			Handle: m.authenticatePassword,
+		},
+		endpoint{
+			Method:       http.MethodGet,
+			Path:         "/auth/desktop/reauthentications/authenticate/providers/{provider_id:provider}/login",
+			Auth:         AuthPublic,
+			ProtocolName: "desktop-reauthentication-external-login",
+			ProtocolKind: RouteProtocolRedirect,
+			Errors: []string{
 				"request.invalid",
 				"authentication.desktop_reauthentication.invalid",
 				"authentication.reauthentication_method_required",
@@ -155,34 +159,37 @@ func desktopReauthenticationResource(application DesktopReauthentication, cookie
 				"authentication.rate_limit_unavailable",
 				"authentication.credential_ambiguous",
 			},
-			m.authenticateExternal,
-		),
-		publicRoute(
-			http.MethodPost,
-			path("/auth/desktop/reauthentications/approve"),
-			[]string{
+			Protocol: m.authenticateExternal,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/desktop/reauthentications/approve",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"authentication.desktop_reauthentication.invalid",
 				"authentication.internal",
 				"authentication.credential_ambiguous",
 			},
-			m.approve,
-		),
-		publicRoute(
-			http.MethodPost,
-			path("/auth/desktop/reauthentications/cancel"),
-			[]string{
+			Handle: m.approve,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/desktop/reauthentications/cancel",
+			Auth:   AuthPublic,
+			Errors: []string{
 				"request.invalid",
 				"authentication.desktop_reauthentication.invalid",
 				"authentication.internal",
 				"authentication.credential_ambiguous",
 			},
-			m.cancel,
-		),
-		sessionRoute(
-			http.MethodPost,
-			path("/auth/desktop/reauthentications/complete"),
-			[]string{
+			Handle: m.cancel,
+		},
+		endpoint{
+			Method: http.MethodPost,
+			Path:   "/auth/desktop/reauthentications/complete",
+			Auth:   AuthSessionRequired,
+			Errors: []string{
 				"request.invalid",
 				"authentication.rate_limited",
 				"authentication.rate_limit_unavailable",
@@ -191,8 +198,8 @@ func desktopReauthenticationResource(application DesktopReauthentication, cookie
 				"authentication.internal",
 				"audit.unavailable",
 			},
-			m.complete,
-		),
+			Handle: m.complete,
+		},
 	)
 }
 

@@ -96,14 +96,24 @@ func TestTransferRoutesOutliveServerTimeouts(t *testing.T) {
 	}
 	resources := []apiResource{newResource(
 		"transfers",
-		idempotentProtocolRoute(
-			IdempotencyNone, uploadLimit, "slow-upload", RouteProtocolStreamingUpload,
-			AuthPrincipalRequired, http.MethodPost, path("/upload"), nil, upload,
-		),
-		protocolRoute(
-			"slow-download", RouteProtocolBinaryDownload,
-			AuthPrincipalRequired, http.MethodGet, path("/download"), nil, download,
-		),
+		endpoint{
+			Method:       http.MethodPost,
+			Path:         "/upload",
+			Auth:         AuthPrincipalRequired,
+			Idempotency:  IdempotencyNone,
+			MaxBodyBytes: uploadLimit,
+			ProtocolName: "slow-upload",
+			ProtocolKind: RouteProtocolStreamingUpload,
+			Protocol:     upload,
+		},
+		endpoint{
+			Method:       http.MethodGet,
+			Path:         "/download",
+			Auth:         AuthPrincipalRequired,
+			ProtocolName: "slow-download",
+			ProtocolKind: RouteProtocolBinaryDownload,
+			Protocol:     download,
+		},
 	)}
 	cookies, err := newBrowserCookies("http://localhost:8065")
 	require.NoError(t, err)

@@ -61,14 +61,16 @@ The production route path is intentionally searchable:
 httpapi.New
   → productionResources
   → one cohesive <domain>Resource
-  → publicRoute / principalRoute / sessionRoute / …
+  → one endpoint{…} literal per route
   → catalog validation and immutable dispatch
   → one application capability
 ```
 
-The resource constructor declares typed paths, operations, credential
-requirements, allowed public errors, body limits, idempotency, and any named
-protocol-specific result. It retains only its narrow application capability.
+The resource constructor declares each route as one `endpoint` struct literal
+with named fields: `Method`, `Path`, `Auth`, `Errors`, and the operation in
+`Handle`. `Auth` is always written, including `AuthPublic`. A route sets
+`Idempotency`, `MaxBodyBytes`, or a named `Protocol` operation only when it
+needs one. It retains only its narrow application capability.
 It never retains the complete HTTP options, application facade, router, root
 Store, platform, or concrete adapter.
 

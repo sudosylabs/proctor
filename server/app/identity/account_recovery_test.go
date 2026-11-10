@@ -456,7 +456,7 @@ func TestAccountTokenCompletionRejectsMalformedCredentialGenerically(t *testing.
 }
 
 func TestPasswordResetWorkFailuresDoNotConsumeResetToken(t *testing.T) {
-	testPasswordHashFailures(t, "authentication.account_recovery.unavailable", func(t *testing.T, ctx context.Context, hasher passwordHash) error {
+	testPasswordHashFailures(t, "authentication.account_recovery.unavailable", func(t *testing.T, ctx context.Context, hasher passwordHashFunc) error {
 		consumed := false
 		user := &model.User{ID: model.NewUserID(), Email: "student@example.edu"}
 		tokens := &accountTokenStoreFake{byHash: &model.UserToken{UserID: user.ID, Purpose: model.UserTokenPasswordReset},

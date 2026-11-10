@@ -54,40 +54,10 @@ func accountDisableReason(command SetUserEnabledCommand) (string, error) {
 	return reason, nil
 }
 
-type accountStateStore interface {
-	Get(context.Context, model.UserID) (*model.User, error)
-	SetDisabled(context.Context, *store.UserDisabledStateChange) (*store.UserDisabledStateResult, error)
-}
-
-type accountStateAuthorizer interface {
-	AuthorizeAccountStateManage(context.Context, invocation.Invocation, model.UserID) error
-}
-
-type accountStateEffects interface {
-	SessionsRevoked(context.Context, model.UserID, []*model.Session, []string)
-}
-
-// accountStateServiceDependencies are the collaborators of accountStateService;
-// newAccountStateService validates them once and accountStateService keeps them in deps.
-type accountStateServiceDependencies struct {
-	Users         accountStateStore
-	Authorization accountStateAuthorizer
-	Capabilities  AccessPolicyCapabilitySource
-	Audit         access.MutationAuditor
-	Mail          accountStateMailPreparer
-	Effects       accountStateEffects
-	Now           func() time.Time
-}
-
-type accountStateService struct {
-	deps accountStateServiceDependencies
-}
-
-func newAccountStateService(deps accountStateServiceDependencies) *accountStateService {
-	return &accountStateService{deps: deps}
-}
-
-func (s *accountStateService) SetUserEnabled(ctx context.Context, invocation invocation.Invocation, command SetUserEnabledCommand) (*model.User, error) {
+// SetUserEnabled enables or disables a User after authorizing account state
+// management. Disabling revokes the User's Sessions and access tokens in the
+// same Store operation; their revocation is published after commit.
+func (s *Service) SetUserEnabled(ctx context.Context, invocation invocation.Invocation, command SetUserEnabledCommand) (*model.User, error) {
 	userID := command.ID
 	if !userID.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "user_id")
@@ -96,13 +66,13 @@ func (s *accountStateService) SetUserEnabled(ctx context.Context, invocation inv
 	if err != nil {
 		return nil, err
 	}
-	if err := s.deps.Authorization.AuthorizeAccountStateManage(ctx, invocation, userID); err != nil {
+	if err = s.authorizer.AuthorizeAccountStateManage(ctx, invocation, userID); err != nil {
 		return nil, err
 	}
 	if invocation.Principal().UserID == userID && !command.Enabled {
 		return nil, apperror.New("request.invalid").WithField("field", "user_id")
 	}
-	current, err := s.deps.Users.Get(ctx, userID)
+	current, err := s.users.Get(ctx, userID)
 	if err != nil {
 		return nil, accountStateStoreErrors.Translate(err)
 	}
@@ -123,7 +93,7 @@ func (s *accountStateService) SetUserEnabled(ctx context.Context, invocation inv
 	if alreadySatisfied && idempotency == nil {
 		return current, nil
 	}
-	now := model.TimeUTC(s.deps.Now())
+	now := model.TimeUTC(s.now())
 	recipient := *current
 	// Preparation freezes recipient fields only. SQL remains authoritative for
 	// whether the state change is a no-op, so make the snapshot mail-eligible
@@ -131,7 +101,7 @@ func (s *accountStateService) SetUserEnabled(ctx context.Context, invocation inv
 	recipient.DisabledAt = model.OptionalTime{}
 	prepared := &store.PreparedMail{}
 	if !batch.RetainedOutcome {
-		prepared, err = s.deps.Mail.PrepareAccountStateChanged(mail.NoticePreparation{Recipient: &recipient, At: now}, command.Enabled)
+		prepared, err = s.mail.PrepareAccountStateChanged(mail.NoticePreparation{Recipient: &recipient, At: now}, command.Enabled)
 		if err != nil {
 			return nil, accountStateStoreErrors.Translate(err)
 		}
@@ -146,7 +116,7 @@ func (s *accountStateService) SetUserEnabled(ctx context.Context, invocation inv
 	}
 	result, err := access.RunAudited(
 		ctx,
-		s.deps.Audit,
+		s.auditor,
 		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionUserManage,
@@ -159,12 +129,12 @@ func (s *accountStateService) SetUserEnabled(ctx context.Context, invocation inv
 		func(ctx context.Context, reference access.MutationReference) (*store.UserDisabledStateResult, error) {
 			input := &store.UserDisabledStateChange{
 				ID: userID, ExpectedRevision: current.Revision, Disabled: disabled,
-				Capabilities: AccessDeploymentCapabilities(s.deps.Capabilities.Snapshot()),
+				Capabilities: AccessDeploymentCapabilities(s.capabilities.Snapshot()),
 				Occurrence:   prepared.Occurrence, Delivery: prepared.Delivery, DeliveryJob: prepared.Job,
 				ChangedAt: reference.MutationAt, RevocationReason: model.SessionRevocationAccountDisabled,
 				AuditEventID: reference.ID, AuditAt: reference.MutationAt, Command: idempotency,
 			}
-			value, storeErr := s.deps.Users.SetDisabled(ctx, input)
+			value, storeErr := s.users.SetDisabled(ctx, input)
 			if batch.Replayed != nil {
 				*batch.Replayed = input.Replayed || input.NoOp
 			}
@@ -176,17 +146,9 @@ func (s *accountStateService) SetUserEnabled(ctx context.Context, invocation inv
 		return nil, err
 	}
 	if disabled && result != nil && len(result.RevokedSessions) > 0 {
-		s.deps.Effects.SessionsRevoked(ctx, userID, result.RevokedSessions, result.RevokedTokenHashes)
+		s.effects.SessionsRevoked(ctx, userID, sessionIDs(result.RevokedSessions), result.RevokedTokenHashes)
 	}
 	return result.User, nil
-}
-
-type accountStateRealtimeEffects struct {
-	effects SecurityEffects
-}
-
-func (e accountStateRealtimeEffects) SessionsRevoked(ctx context.Context, userID model.UserID, sessions []*model.Session, hashes []string) {
-	e.effects.SessionsRevoked(ctx, userID, sessionIDs(sessions), hashes)
 }
 
 var accountStateStoreErrors = apperror.AdministrationStoreTable("user", "user.conflict", "user.invalid", map[string]apperror.Code{

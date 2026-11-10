@@ -13,7 +13,7 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-func (s *externalAuthenticationService) begin(
+func (s *Service) beginExternalLogin(
 	ctx context.Context,
 	providerID string,
 	returnTo string,

@@ -7,16 +7,27 @@
 
 // Package identity owns who a caller is and how they prove it: local and
 // external sign-in, Sessions and their assurance, two-step verification,
-// personal access tokens, Desktop authorization, account recovery, account
-// state, email addresses, and installation bootstrap. Service holds every one
-// of these use cases, one file per concern.
+// personal access tokens, Desktop authorization, account recovery,
+// authentication methods, account state, email addresses, and installation
+// bootstrap.
+//
+// Service holds every one of these use cases as its own methods. Its fields
+// are the Store contracts the use cases call and one of each collaborator:
+// one authorizer, one security auditor beside the mutation auditor, one mail
+// composer, one set of security effects, one password hasher and one attempt
+// accounting. When one flow needs another, such as external sign-in issuing a
+// Session or handing a proof to Desktop authorization, it calls the other
+// method directly. New builds the Service once and refuses it when a
+// collaborator is missing. Each concern keeps its methods in the file named
+// for it.
 //
 // The mechanics the flows share stay inside the package behind them: the
 // password hasher, attempt accounting, the authentication cache invalidator,
-// and the TOTP mechanics. The parent app package builds the hasher, the
-// attempt accounting and the invalidator once with the exported
-// constructors, and shares them with the onboarding area's Invitations and
-// public registration and with its own test mail and realtime propagation.
+// DPoP, the access-policy view and the TOTP mechanics. The parent app package
+// builds the hasher, the attempt accounting and the invalidator once with the
+// exported constructors, and shares them with the onboarding area's
+// Invitations and public registration and with its own test mail and realtime
+// propagation.
 //
 // Start with identity.go for the Service and its collaborators, then open the
 // file named for the concern you are changing.
@@ -24,6 +35,7 @@ package identity
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"time"
@@ -32,6 +44,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
@@ -48,10 +61,13 @@ var (
 )
 
 // resourceAuthorizer is the one authorization port. A use case authorizes an
-// Action on a concrete Resource immediately before the work it guards, and
-// personal access token creation asks which actions the caller may delegate.
+// Action on a concrete Resource immediately before the work it guards,
+// enabling or disabling an account authorizes managing that User's account
+// state, and personal access token creation asks which actions the caller may
+// delegate.
 type resourceAuthorizer interface {
 	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
+	AuthorizeAccountStateManage(context.Context, invocation.Invocation, model.UserID) error
 	CanDelegateActionsAtScope(context.Context, model.Principal, []string, model.RoleScopeType, string) (bool, error)
 	PersonalAccessTokenDelegation(context.Context, model.Principal) (access.PersonalAccessTokenDelegation, error)
 }
@@ -156,14 +172,17 @@ type Dependencies struct {
 
 // securityAuditor is the part of *access.Auditor that records security
 // actions proved outside an authenticated mutation: a local password sign-in
-// (the admitted attempt, its completion and a terminal failure), the Desktop
-// authorization and reauthentication handoffs, which act for a proved account
-// at Institution scope, the two-step verification transitions, recorded for
-// the acting User as their subject, and the personal access token drafts that
-// the token aggregate completes. Mutations are audited through the Service's
-// access.MutationAuditor.
+// (the admitted attempt, its completion and a terminal failure), an external
+// sign-in (the attempt before its Session is issued, its completion and a
+// failed provider callback), the Desktop authorization and reauthentication
+// handoffs, which act for a proved account at Institution scope, the two-step
+// verification transitions, recorded for the acting User as their subject,
+// and the personal access token drafts that the token aggregate completes.
+// Mutations are audited through the Service's access.MutationAuditor.
 type securityAuditor interface {
 	BeginLocalLogin(context.Context, model.UserID, model.SessionClientType, model.RequestMetadata) (*model.AuditEvent, error)
+	BeginAuthentication(context.Context, model.UserID, string, string, model.SessionClientType, model.RequestMetadata,
+		model.InstitutionID) (*model.AuditEvent, error)
 	BeginAccountActionAtScope(context.Context, access.AccountAuditActor, model.Action, model.Resource, model.RoleScopeType,
 		string, model.RequestMetadata, any) (*model.AuditEvent, error)
 	BeginCriticalActionForSubject(context.Context, model.Principal, model.UserID, model.Action, model.Resource,
@@ -172,6 +191,7 @@ type securityAuditor interface {
 		any, any) (*model.AuditEvent, error)
 	CompleteCriticalAction(context.Context, model.AuditEventID, model.AuditStatus, string, any) (*model.AuditEvent, error)
 	RecordLocalLoginFailure(context.Context, model.UserID, model.SessionClientType, model.RequestMetadata, string) error
+	RecordExternalAuthenticationFailure(context.Context, string, string, model.RequestMetadata, model.InstitutionID, string) error
 }
 
 var _ securityAuditor = (*access.Auditor)(nil)
@@ -180,6 +200,7 @@ var _ securityAuditor = (*access.Auditor)(nil)
 // account-token mail and security notices with.
 type mailComposer interface {
 	Enabled() bool
+	PrepareAccountStateChanged(mail.NoticePreparation, bool) (*store.PreparedMail, error)
 	PrepareEmailVerification(mail.AccountTokenPreparation) (*store.PreparedMail, error)
 	PreparePasswordReset(mail.AccountTokenPreparation) (*store.PreparedMail, error)
 	PreparePasswordChanged(mail.NoticePreparation) (*store.PreparedMail, error)
@@ -207,13 +228,12 @@ type passwordHasher interface {
 
 var _ passwordHasher = (*PasswordHasher)(nil)
 
-// Service holds every identity use case. Sign-in, Sessions, Desktop
+// Service holds every identity use case: sign-in, Sessions, Desktop
 // authorization, reauthentication, registration and compatibility, two-step
-// verification and the MFA key ring, account tokens and email changes, and
-// personal access token administration live on the Service itself: its fields
-// are the Store contracts those use cases call and one of each collaborator.
-// The remaining concerns keep their own focused implementation, embedded here
-// so the Service's method set is their exported methods.
+// verification and the MFA key ring, account tokens and email changes,
+// personal access tokens, external authentication, authentication methods,
+// account state and installation bootstrap. Its fields are the Store
+// contracts those use cases call and one of each collaborator.
 type Service struct {
 	users                        store.UserStore
 	passwords                    store.PasswordCredentialStore
@@ -228,6 +248,9 @@ type Service struct {
 	userTokens                   store.UserTokenStore
 	academicUnits                store.AcademicUnitStore
 	jobs                         store.JobStore
+	externalLoginStates          store.ExternalLoginStateStore
+	externalIdentities           store.ExternalIdentityStore
+	installations                store.InstallationStore
 
 	// accessPolicy is the one *currentAuthenticationAccessPolicy every flow
 	// shares; dpop is the one DPoP nonce and replay guard, shared with
@@ -242,19 +265,28 @@ type Service struct {
 	hasher     passwordHasher
 	authorizer resourceAuthorizer
 	auditor    access.MutationAuditor
-	// securityAudit is nil when composition supplies no Auditor; local
-	// sign-in, the Desktop handoffs, two-step verification transitions and
-	// personal access token changes then fail closed with the audit
-	// unavailable.
+	// securityAudit is nil when composition supplies no Auditor; local and
+	// external sign-in, the Desktop handoffs, two-step verification
+	// transitions and personal access token changes then fail closed with the
+	// audit unavailable.
 	securityAudit securityAuditor
 	mail          mailComposer
 	effects       SecurityEffects
+	// invalidator is the shared *CacheInvalidator; external reauthentication
+	// drops the cached access credentials it replaces.
+	invalidator realtime.AuthenticationInvalidator
 	// mfa is the TOTP and recovery-code mechanics, which own secret sealing.
 	mfa         *mfaMechanics
 	operational OperationalRecorder
 	diagnostics *logging.Logger
 	// recoveryDiagnostics logs account recovery failures hidden from callers.
 	recoveryDiagnostics *logging.Logger
+
+	// externalProviders is the configured provider registry. invitations
+	// admits an External Identity through its Invitation; composition binds
+	// it to the onboarding area after the Service is built.
+	externalProviders ExternalProviderSource
+	invitations       InvitationAcceptor
 
 	// desktopBuilds is the immutable verified Desktop build catalog;
 	// skipDesktopBuildChecks admits any well-formed build in development.
@@ -267,26 +299,30 @@ type Service struct {
 	mfaRekeyEnabled bool
 	mfaRekeyWake    func()
 
-	nodeID                    string
-	publicURL                 string
-	sessionPolicy             SessionPolicy
-	loginRateLimit            LoginRateLimitPolicy
-	personalAccessTokenPolicy PersonalAccessTokenPolicy
-	accountRecoveryPolicy     AccountRecoveryPolicy
-	desktopPolicy             DesktopAuthorizationPolicy
-	recentAuthenticationTTL   time.Duration
-	newCredential             func() string
-	now                       func() time.Time
+	// bootstrapSecretDigest is the only form of the deployment bootstrap
+	// secret the Service keeps; bootstrapAvailable is false when no secret is
+	// configured. They and the bootstrap rate limit are fixed by New.
+	bootstrapSecretDigest          [sha256.Size]byte
+	bootstrapAvailable             bool
+	bootstrapRateLimitWindow       time.Duration
+	bootstrapMaximumSourceAttempts int
+
+	nodeID                       string
+	publicURL                    string
+	sessionPolicy                SessionPolicy
+	loginRateLimit               LoginRateLimitPolicy
+	personalAccessTokenPolicy    PersonalAccessTokenPolicy
+	accountRecoveryPolicy        AccountRecoveryPolicy
+	desktopPolicy                DesktopAuthorizationPolicy
+	externalAuthenticationPolicy ExternalAuthenticationPolicy
+	recentAuthenticationTTL      time.Duration
+	newCredential                func() string
+	now                          func() time.Time
 	// wait applies a progressive login delay; tests replace it.
 	wait func(context.Context, time.Duration) error
-
-	*externalAuthenticationService
-	*authenticationMethodService
-	*accountStateService
-	*bootstrapService
 }
 
-// New builds the Service and every focused implementation it embeds.
+// New builds the Service and checks every collaborator its use cases need.
 func New(deps Dependencies) (*Service, error) {
 	if deps.Store == nil {
 		return nil, errors.New("identity store catalog is required")
@@ -308,14 +344,13 @@ func New(deps Dependencies) (*Service, error) {
 	if err = service.requireDesktopCompatibility(deps.DesktopBuildCatalog); err != nil {
 		return nil, err
 	}
-	authenticationAccess, err := service.constructSessionAuthentication(deps, mfa)
-	if err != nil {
+	if err = service.constructSessionAuthentication(deps, mfa); err != nil {
 		return nil, err
 	}
 	if err := service.constructAccountServices(deps); err != nil {
 		return nil, err
 	}
-	if err := service.constructExternalAuthentication(deps, authenticationAccess); err != nil {
+	if err := service.constructExternalAuthentication(deps); err != nil {
 		return nil, err
 	}
 	if err := service.constructAdministration(deps); err != nil {
@@ -327,16 +362,16 @@ func New(deps Dependencies) (*Service, error) {
 // constructSessionAuthentication builds DPoP and the authentication access
 // policy, and sets and checks the Service's two-step verification, sign-in,
 // Session and Desktop authorization and reauthentication collaborators.
-func (s *Service) constructSessionAuthentication(deps Dependencies, mfa *mfaMechanics) (*currentAuthenticationAccessPolicy, error) {
+func (s *Service) constructSessionAuthentication(deps Dependencies, mfa *mfaMechanics) error {
 	dpop, err := newDPoPSecurity(dpopSecurityDependencies{Cache: deps.Cache, Policy: dpopPolicy{Origin: deps.PublicURL,
 		NonceLifetime: 5 * time.Minute, ProofLifetime: 5 * time.Minute, ClockSkew: time.Minute,
 		NewNonce: model.NewCredentialToken, Now: time.Now}})
 	if err != nil {
-		return nil, err
+		return err
 	}
 	authenticationAccess, err := newCurrentAuthenticationAccessPolicy(currentAuthenticationAccessPolicyDependencies{Policies: deps.Store.AccessPolicy(), MFAEnabled: deps.MFA.Enabled, Diagnostics: deps.AuthenticationDiagnostics, Now: time.Now})
 	if err != nil {
-		return nil, err
+		return err
 	}
 	s.users, s.passwords = deps.Store.User(), deps.Store.PasswordCredential()
 	s.sessions, s.sessionCredentials = deps.Store.Session(), deps.Store.SessionCredential()
@@ -354,20 +389,17 @@ func (s *Service) constructSessionAuthentication(deps Dependencies, mfa *mfaMech
 	s.sessionPolicy, s.loginRateLimit, s.personalAccessTokenPolicy = deps.Sessions, deps.LoginRateLimit, deps.PersonalAccessToken
 	s.newCredential, s.wait = model.NewCredentialToken, waitContext
 	if err = s.requireMFA(); err != nil {
-		return nil, err
+		return err
 	}
 	if err = s.requireSessionAuthentication(); err != nil {
-		return nil, err
+		return err
 	}
 	s.browserAuthentications = deps.Store.BrowserAuthentication()
 	s.desktopPolicy = DesktopAuthorizationPolicy{Issuer: deps.PublicURL, AllowLoopbackHTTPDevelopment: deps.LoopbackHTTPDevelopment}
 	if err = s.requireDesktopAuthorization(); err != nil {
-		return nil, err
+		return err
 	}
-	if err = s.requireDesktopReauthentication(); err != nil {
-		return nil, err
-	}
-	return authenticationAccess, nil
+	return s.requireDesktopReauthentication()
 }
 
 // constructAccountServices sets and checks the account token and personal
@@ -386,8 +418,10 @@ func (s *Service) constructAccountServices(deps Dependencies) error {
 	return s.requireDesktopRegistration()
 }
 
-// constructExternalAuthentication builds external authentication and authentication method management.
-func (s *Service) constructExternalAuthentication(deps Dependencies, authenticationAccess *currentAuthenticationAccessPolicy) error {
+// constructExternalAuthentication sets and checks the external
+// authentication and authentication method collaborators. The external
+// policy's public URL, node and rate limit default to the Service's own.
+func (s *Service) constructExternalAuthentication(deps Dependencies) error {
 	externalPolicy := deps.ExternalAuth
 	if externalPolicy.PublicURL == "" {
 		externalPolicy.PublicURL = deps.PublicURL
@@ -398,23 +432,21 @@ func (s *Service) constructExternalAuthentication(deps Dependencies, authenticat
 	if externalPolicy.LoginRateLimit == (LoginRateLimitPolicy{}) {
 		externalPolicy.LoginRateLimit = deps.LoginRateLimit
 	}
-	externalAuthentication, err := newExternalAuthenticationService(externalAuthenticationServiceDependencies{Registry: deps.Registry, LoginStates: deps.Store.ExternalLoginState(), Institutions: deps.Store.Institution(), Identities: deps.Store.ExternalIdentity(), Sessions: deps.Store.Session(), AccessPolicy: authenticationAccess, Attempts: deps.Attempts, Authentication: s, Invalidator: deps.Invalidator, Audit: deps.Auditor, MutationAudit: deps.Auditor.MutationAudit(), Capabilities: deps.Capabilities, InvitationAcceptor: deps.Invitations, DesktopAuthorization: s, DesktopReauthentication: s, Policy: externalPolicy, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Diagnostics: deps.AuthenticationDiagnostics, NewCredential: model.NewCredentialToken, Now: time.Now})
-	if err != nil {
+	s.externalProviders, s.invitations, s.externalAuthenticationPolicy = deps.Registry, deps.Invitations, externalPolicy
+	s.externalLoginStates, s.externalIdentities = deps.Store.ExternalLoginState(), deps.Store.ExternalIdentity()
+	s.invalidator = deps.Invalidator
+	if err := s.requireExternalAuthentication(); err != nil {
 		return err
 	}
-	authenticationMethods, err := newAuthenticationMethodService(authenticationMethodServiceDependencies{Users: deps.Store.User(), Mail: deps.Mail, Passwords: deps.Store.PasswordCredential(), Identities: deps.Store.ExternalIdentity(), Providers: deps.Registry, Capabilities: deps.Capabilities, Hasher: deps.Hasher, Audit: deps.Auditor.MutationAudit(), Effects: deps.Effects, RecentTTL: deps.RecentAuthenticationTTL, Now: time.Now})
-	if err != nil {
-		return err
-	}
-	s.externalAuthenticationService, s.authenticationMethodService = externalAuthentication, authenticationMethods
-	return nil
+	return s.requireAuthenticationMethods()
 }
 
-// constructAdministration builds account state and bootstrap and, when the
-// catalog has Jobs and MFA credentials, enables the MFA key ring.
+// constructAdministration fixes the bootstrap secret digest and rate limit
+// and, when the catalog has Jobs and MFA credentials, enables the MFA key
+// ring.
 func (s *Service) constructAdministration(deps Dependencies) error {
-	s.accountStateService = newAccountStateService(accountStateServiceDependencies{Users: deps.Store.User(), Authorization: deps.Authorizer, Capabilities: deps.Capabilities, Audit: deps.Auditor.MutationAudit(), Mail: deps.Mail, Effects: accountStateRealtimeEffects{effects: deps.Effects}, Now: time.Now})
-	s.bootstrapService = newBootstrapService(bootstrapServiceDependencies{Installations: deps.Store.Installation(), Hasher: deps.Hasher, Attempts: deps.Attempts, RateLimit: deps.LoginRateLimit, Protection: deps.BootstrapProtection, NodeID: deps.NodeID, Now: time.Now, RecoveryPolicy: administratorRecoveryPolicy{capabilities: deps.Capabilities, mfaEnabled: deps.MFA.Enabled}})
+	s.installations = deps.Store.Installation()
+	s.fixBootstrapProtection(deps.LoginRateLimit, deps.BootstrapProtection)
 	if deps.Store.Job() == nil || deps.Store.MFA() == nil {
 		return nil
 	}

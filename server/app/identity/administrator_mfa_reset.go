@@ -30,15 +30,10 @@ type AdministratorMFAResetResult struct {
 	ReenrollmentRequired bool
 }
 
-type administratorRecoveryPolicy struct {
-	capabilities AccessPolicyCapabilitySource
-	mfaEnabled   bool
-}
-
 // ResetAdministratorMFA is absent from every network application capability.
 // The module root borrows it only while its Server is inert, and the Store
 // serializes it against all serving nodes and unreconciled host recovery.
-func (s *bootstrapService) ResetAdministratorMFA(ctx context.Context, system invocation.System, command AdministratorMFAResetCommand) (*AdministratorMFAResetResult, error) {
+func (s *Service) ResetAdministratorMFA(ctx context.Context, system invocation.System, command AdministratorMFAResetCommand) (*AdministratorMFAResetResult, error) {
 	if !system.Valid() {
 		return nil, apperror.New("administrator_recovery.invalid")
 	}
@@ -47,15 +42,15 @@ func (s *bootstrapService) ResetAdministratorMFA(ctx context.Context, system inv
 	if institutionErr != nil || userErr != nil {
 		return nil, apperror.New("administrator_recovery.invalid")
 	}
-	if !s.deps.RecoveryPolicy.mfaEnabled {
-		return nil, apperror.New("authentication.mfa.disabled")
+	if err := s.requireMFAEnabled(); err != nil {
+		return nil, err
 	}
-	if s.deps.RecoveryPolicy.capabilities == nil {
+	if s.capabilities == nil {
 		return nil, apperror.New("administrator_recovery.unavailable").Wrap(errors.New("administrator recovery capabilities are unavailable"))
 	}
-	result, err := s.deps.Installations.ResetAdministratorMFA(ctx, &store.AdministratorMFAReset{
-		InstitutionID: institutionID, UserID: userID, MFAEnabled: s.deps.RecoveryPolicy.mfaEnabled,
-		Capabilities: AccessDeploymentCapabilities(s.deps.RecoveryPolicy.capabilities.Snapshot()),
+	result, err := s.installations.ResetAdministratorMFA(ctx, &store.AdministratorMFAReset{
+		InstitutionID: institutionID, UserID: userID, MFAEnabled: s.mfa.deps.Settings.Enabled,
+		Capabilities: AccessDeploymentCapabilities(s.capabilities.Snapshot()),
 	})
 	if err != nil {
 		return nil, apperror.New("administrator_recovery.unavailable").Wrap(err)

@@ -9,7 +9,6 @@ package identity
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -29,15 +28,14 @@ func TestDesktopExternalAuthenticationStartUsesBoundTransactionOwner(t *testing.
 		ID: transactionID, State: model.BrowserAuthenticationStateBound,
 	}}
 	service := newDesktopExternalAuthenticationFixture(t, transactions)
-	// This App embeds only the external-authentication module. It cannot reach
-	// through a sibling's Store to initiate this purpose-specific handoff.
-	application := &Service{externalAuthenticationService: service}
-	result, err := application.BeginDesktopExternalAuthentication(t.Context(), invocation.Invocation{}, BeginDesktopExternalAuthenticationCommand{
+	// The handoff starts from the Desktop transaction the browser binding names;
+	// external authentication reaches it only through Desktop authorization.
+	result, err := service.BeginDesktopExternalAuthentication(t.Context(), invocation.Invocation{}, BeginDesktopExternalAuthenticationCommand{
 		ProviderID: "campus", Binding: binding, State: state, Source: "192.0.2.10",
 	})
 	require.NoError(t, err, "begin Desktop external authentication")
 	require.NotNil(t, result, "begin Desktop external authentication")
-	saved := service.deps.LoginStates.(*externalLoginStateStoreFake).saved
+	saved := service.externalLoginStates.(*externalLoginStateStoreFake).saved
 	require.NotNil(t, saved)
 	require.Equal(t, model.ExternalAuthenticationPurposeDesktopAuthorization, saved.Purpose)
 	require.Equal(t, transactionID, saved.BrowserAuthenticationTransactionID)
@@ -77,16 +75,15 @@ func TestDesktopExternalAuthenticationRejectsUnboundProofBeforeProvider(t *testi
 		t.Run(test.name, func(t *testing.T) {
 			service := newDesktopExternalAuthenticationFixture(t, &test.transactions)
 			provider := &recordingExternalProvider{}
-			service.deps.Registry = externalProviderSourceFake{provider: provider}
-			application := &Service{externalAuthenticationService: service}
-			result, err := application.BeginDesktopExternalAuthentication(t.Context(), invocation.Invocation{}, BeginDesktopExternalAuthenticationCommand{
+			service.externalProviders = externalProviderSourceFake{provider: provider}
+			result, err := service.BeginDesktopExternalAuthentication(t.Context(), invocation.Invocation{}, BeginDesktopExternalAuthenticationCommand{
 				ProviderID: "campus", Binding: test.binding, State: test.state, Source: "192.0.2.10",
 			})
 			require.Nil(t, result, "begin = %#v, %v; want %s", result, err, test.code)
 			require.True(t, apperror.Is(err, test.code), "begin = %#v, %v; want %s", result, err, test.code)
 			require.Equal(t, test.lookups, test.transactions.contextCalls, "invalid Desktop proof reached provider or login-state persistence")
 			require.Equal(t, 0, provider.beginCalls, "invalid Desktop proof reached provider or login-state persistence")
-			require.Nil(t, service.deps.LoginStates.(*externalLoginStateStoreFake).saved, "invalid Desktop proof reached provider or login-state persistence")
+			require.Nil(t, service.externalLoginStates.(*externalLoginStateStoreFake).saved, "invalid Desktop proof reached provider or login-state persistence")
 		})
 	}
 }
@@ -104,7 +101,7 @@ func TestExternalAuthenticationCompletionIsolatesDesktopPurpose(t *testing.T) {
 			user := &model.User{ID: model.NewUserID(), Username: "student", Email: "student@example.edu"}
 			identity := &model.ExternalIdentity{ID: model.NewExternalIdentityID(), UserID: user.ID, Provider: "campus", Subject: "opaque-subject"}
 			identities := &externalHandoffIdentityStore{user: user, identity: identity}
-			issuer := &externalHandoffSessionIssuer{session: &model.Session{ID: model.NewSessionID(), UserID: user.ID}, tokens: &model.AuthenticationTokens{}}
+			sessions, recovery := &externalSessionStoreFake{}, &externalRecoveryStateStoreFake{}
 			acceptor := &externalInvitationAcceptorFake{result: &store.ExternalIdentityInvitationAcceptanceResult{User: user, Identity: identity}}
 			stateToken, binding := model.NewCredentialToken(), model.NewCredentialToken()
 			state := &model.ExternalLoginState{Provider: "campus", Purpose: purpose,
@@ -120,14 +117,15 @@ func TestExternalAuthenticationCompletionIsolatesDesktopPurpose(t *testing.T) {
 			}
 			assertion := &model.ExternalAuthenticationAssertion{ProviderID: "campus", Subject: identity.Subject, Email: user.Email,
 				EmailVerified: true, AuthenticationStrength: model.AuthenticationMultiFactor, AuthenticatedAt: at.UnixMilli()}
-			service.deps.Registry = externalProviderSourceFake{provider: providerConnectionProvider{state: stateToken, assertion: assertion}}
-			service.deps.LoginStates = &externalLoginStateStoreFake{get: state, consumeResult: state, storeNow: at}
-			service.deps.Identities, service.deps.Authentication, service.deps.InvitationAcceptor = identities, issuer, acceptor
-			service.deps.AccessPolicy = authenticationAccessPolicyFake{providers: map[string]bool{"campus": true},
+			service.externalProviders = externalProviderSourceFake{provider: providerConnectionProvider{state: stateToken, assertion: assertion}}
+			service.externalLoginStates = &externalLoginStateStoreFake{get: state, consumeResult: state, storeNow: at}
+			service.externalIdentities, service.invitations = identities, acceptor
+			service.sessions, service.mfaCredentials = sessions, recovery
+			service.accessPolicy = authenticationAccessPolicyFake{providers: map[string]bool{"campus": true}, desktop: true,
 				providerModes: map[string]model.ProviderAdmissionMode{"campus": model.ProviderAdmissionInvitationRequired}}
-			service.deps.Audit, service.deps.Now = externalHandoffAudit{}, func() time.Time { return at }
-			application := &Service{externalAuthenticationService: service}
-			result, err := application.CompleteExternalAuthentication(t.Context(), invocation.Invocation{}, CompleteExternalAuthenticationCommand{
+			audit := &securityAuditorFake{}
+			service.securityAudit, service.now = audit, func() time.Time { return at }
+			result, err := service.CompleteExternalAuthentication(t.Context(), invocation.Invocation{}, CompleteExternalAuthenticationCommand{
 				ProviderID: "campus", Binding: binding,
 			})
 			require.NoError(t, err, "complete %s", purpose)
@@ -147,11 +145,18 @@ func TestExternalAuthenticationCompletionIsolatesDesktopPurpose(t *testing.T) {
 				require.Nil(t, transactions.authenticated, "%s authenticated a Desktop transaction", purpose)
 			}
 			if purpose == model.ExternalAuthenticationPurposeLogin {
-				require.Equal(t, 1, issuer.calls)
-				require.Same(t, issuer.session, result.Session)
-				require.Same(t, issuer.tokens, result.Tokens)
+				require.Len(t, sessions.saves, 1)
+				require.Same(t, sessions.saved, result.Session)
+				require.NotNil(t, result.Tokens)
+				saved := sessions.saves[0]
+				require.Equal(t, state.ID, saved.ExternalLoginStateID, "the Session consumes the login state")
+				require.Equal(t, identity.ID, saved.Session.ExternalIdentityID)
+				require.Equal(t, model.HashToken(result.Tokens.AccessToken), saved.Credentials[0].TokenHash, "the returned token is the saved access credential")
+				begun := audit.events[len(audit.events)-1]
+				require.Equal(t, model.ActionAuthenticationExternalLogin, begun.action, "the Session completes the external sign-in attempt")
+				require.Equal(t, begun.id, saved.AuditEventID, "the Session completes the external sign-in attempt")
 			} else {
-				require.Zero(t, issuer.calls, "%s created an ordinary Session", purpose)
+				require.Empty(t, sessions.saves, "%s created an ordinary Session", purpose)
 				require.Nil(t, result.Session, "%s created an ordinary Session", purpose)
 				require.Nil(t, result.Tokens, "%s created an ordinary Session", purpose)
 			}
@@ -161,34 +166,24 @@ func TestExternalAuthenticationCompletionIsolatesDesktopPurpose(t *testing.T) {
 	}
 }
 
-func newDesktopExternalAuthenticationFixture(t *testing.T, transactions *desktopAuthorizationStoreFake) *externalAuthenticationService {
+// newDesktopExternalAuthenticationFixture builds a Service with Desktop
+// authorization over transactions and the external authentication
+// collaborators, checked as New checks them.
+func newDesktopExternalAuthenticationFixture(t *testing.T, transactions *desktopAuthorizationStoreFake) *Service {
 	t.Helper()
-	desktop := newTestDesktopAuthorizationService(t, transactions, time.Now)
-	desktop.desktopPolicy.Issuer = "https://proctor.example.test"
-	service, err := (externalAuthenticationConstructorArgs{
-		registry: externalProviderSourceFake{provider: externalProviderFake{}}, loginStates: &externalLoginStateStoreFake{},
-		institutions: providerConnectionInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}},
-		identities:   externalIdentityStoreFake{}, sessions: externalSessionStoreFake{},
-		attempts: newExternalAuthenticationAttempts(t, newAuthenticationCacheFake()), issuer: externalSessionIssuerFake{},
-		invalidator: externalInvalidatorFake{}, audit: externalAuditFake{}, diagnostics: newDiscardLogger(t),
-		acceptor: &externalInvitationAcceptorFake{}, desktop: desktop, newCredential: model.NewCredentialToken, now: time.Now,
-	}).build()
-	require.NoError(t, err)
-	service.deps.Policy = ExternalAuthenticationPolicy{PublicURL: "https://proctor.example.test", LoginStateTTL: 5 * time.Minute,
+	service := newTestDesktopAuthorizationService(t, transactions, time.Now)
+	service.desktopPolicy.Issuer = "https://proctor.example.test"
+	service.accessPolicy = authenticationAccessPolicyFake{local: true, desktop: true, providers: map[string]bool{"campus": true}}
+	events := []string{}
+	service.externalProviders = externalProviderSourceFake{provider: externalProviderFake{}}
+	service.externalLoginStates, service.externalIdentities = &externalLoginStateStoreFake{}, externalIdentityStoreFake{}
+	service.invalidator, service.invitations = externalInvalidatorFake{}, &externalInvitationAcceptorFake{}
+	service.auditor = &mutationAttemptAuditorFake{events: &events, beginID: model.NewAuditEventID().String()}
+	service.diagnostics = newDiscardLogger(t)
+	service.externalAuthenticationPolicy = ExternalAuthenticationPolicy{PublicURL: "https://proctor.example.test", LoginStateTTL: 5 * time.Minute,
 		LoginRateLimit: LoginRateLimitPolicy{Window: time.Minute, MaximumSourceAttempts: 10}}
+	require.NoError(t, service.requireExternalAuthentication())
 	return service
-}
-
-type externalDesktopAuthorizationFake struct{}
-
-func (*externalDesktopAuthorizationFake) resolveExternalAuthentication(context.Context, string, string) (desktopExternalAuthenticationTarget, error) {
-	return desktopExternalAuthenticationTarget{}, errors.New("unexpected Desktop authentication start")
-}
-
-func (*externalDesktopAuthorizationFake) authenticateExternal(context.Context, model.BrowserAuthenticationTransactionID,
-	*model.User, *model.ExternalIdentity, string, *model.ExternalAuthenticationAssertion,
-) error {
-	return errors.New("unexpected Desktop authentication completion")
 }
 
 type externalHandoffIdentityStore struct {
@@ -205,25 +200,4 @@ func (s *externalHandoffIdentityStore) ResolveOrProvision(context.Context, *stor
 func (s *externalHandoffIdentityStore) Link(context.Context, *store.ExternalIdentityLink) (*store.AuthenticationMethodMutationResult, error) {
 	s.linkCalls++
 	return &store.AuthenticationMethodMutationResult{Identity: s.identity}, nil
-}
-
-type externalHandoffSessionIssuer struct {
-	calls   int
-	session *model.Session
-	tokens  *model.AuthenticationTokens
-}
-
-func (s *externalHandoffSessionIssuer) createSession(context.Context, sessionIssuance) (*model.Session, *model.AuthenticationTokens, error) {
-	s.calls++
-	return s.session, s.tokens, nil
-}
-
-type externalHandoffAudit struct{ externalAuditFake }
-
-func (externalHandoffAudit) BeginAuthentication(context.Context, model.UserID, string, string, model.SessionClientType, model.RequestMetadata, model.InstitutionID) (*model.AuditEvent, error) {
-	return &model.AuditEvent{ID: model.NewAuditEventID()}, nil
-}
-
-func (externalHandoffSessionIssuer) mfaRecoveryState(_ context.Context, userID model.UserID) (*model.UserMFARecovery, error) {
-	return &model.UserMFARecovery{UserID: userID}, nil
 }

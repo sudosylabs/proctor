@@ -36,9 +36,8 @@ func TestAdministratorMFAResetRequiresEnabledServiceAndExactTargetBeforeMutation
 		t.Run(test.name, func(t *testing.T) {
 			events := []string{}
 			persistence := &installationStoreFake{events: &events}
-			service := &bootstrapService{deps: bootstrapServiceDependencies{Installations: persistence, RecoveryPolicy: administratorRecoveryPolicy{
-				capabilities: &accessPolicyCapabilitiesFake{}, mfaEnabled: test.enabled,
-			}}}
+			service := &Service{installations: persistence, capabilities: &accessPolicyCapabilitiesFake{},
+				mfa: &mfaMechanics{deps: mfaMechanicsDependencies{Settings: MFAPolicy{Enabled: test.enabled}}}}
 			result, err := service.ResetAdministratorMFA(context.Background(), invocation.Task("host-operator-test"), AdministratorMFAResetCommand{InstitutionID: model.InstitutionID(test.institution), UserID: model.UserID(test.user)})
 			require.Nil(t, result, "result=%#v error=%v events", result, err)
 			require.True(t, apperror.Is(err, test.code), "result=%#v error=%v events", result, err)
@@ -71,7 +70,9 @@ func TestAdministratorMFAResetPassesCurrentDeploymentAndRequiresDurableEvidence(
 		t.Run(test.name, func(t *testing.T) {
 			events := []string{}
 			persistence := &installationStoreFake{events: &events, mfaResetResult: test.result, mfaResetErr: test.err}
-			service := newBootstrapService(bootstrapServiceDependencies{Installations: persistence, Hasher: &passwordHasherFake{events: &events}, Attempts: nil, RateLimit: LoginRateLimitPolicy{}, Protection: BootstrapProtectionPolicy{}, NodeID: "offline", Now: time.Now, RecoveryPolicy: administratorRecoveryPolicy{capabilities: capabilities, mfaEnabled: true}})
+			service := bootstrapTestService(&Service{installations: persistence, hasher: &passwordHasherFake{events: &events}, nodeID: "offline", now: time.Now,
+				capabilities: capabilities, mfa: &mfaMechanics{deps: mfaMechanicsDependencies{Settings: MFAPolicy{Enabled: true}}}},
+				LoginRateLimitPolicy{}, BootstrapProtectionPolicy{})
 			result, err := service.ResetAdministratorMFA(context.Background(), invocation.Task("host-operator-test"), AdministratorMFAResetCommand{InstitutionID: model.InstitutionID(" " + institutionID.String() + " "), UserID: userID})
 			require.Equal(t, test.wantOK, err == nil, "result=%#v error=%v events", result, err)
 			require.Equal(t, []string{"reset-administrator-mfa"}, events, "result=%#v error=%v events", result, err)

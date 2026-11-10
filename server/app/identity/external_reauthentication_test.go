@@ -73,7 +73,7 @@ func TestExternalReauthenticationBindsOriginalSessionAndClosedTask(t *testing.T)
 			states := &externalLoginStateStoreFake{storeNow: now}
 			events := []string{}
 			audit := &mutationAttemptAuditorFake{events: &events, beginID: model.NewAuditEventID().String()}
-			service.deps.LoginStates, service.deps.MutationAudit = states, audit
+			service.externalLoginStates, service.auditor = states, audit
 			result, err := service.BeginExternalReauthentication(context.Background(), invocation.New(principal, model.RequestMetadata{}), BeginExternalReauthenticationCommand{Task: test.task, Source: "192.0.2.30"})
 			if test.want == "" {
 				require.Error(t, err, "unbounded continuation reached provider or Store")
@@ -119,7 +119,7 @@ func TestExternalReauthenticationCallbackUsesBoundProofAndSafeFailureContinuatio
 			state.PrepareCreate(model.NewExternalLoginStateID(), now.Add(-time.Second))
 			provider := &freshExternalProviderFake{providerConnectionProvider: providerConnectionProvider{state: stateToken, completeErr: test.providerErr, assertion: &model.ExternalAuthenticationAssertion{ProviderID: "campus", Subject: "private-subject", AuthenticatedAt: now.Add(test.offset).UnixMilli()}}}
 			service := externalAuthenticationBeginService(t, externalProviderSourceFake{provider: provider}, newAuthenticationCacheFake(), 10)
-			service.deps.Now = func() time.Time { return now }
+			service.now = func() time.Time { return now }
 			states := &externalLoginStateStoreFake{get: state, consumeResult: state, storeNow: now}
 			institution, err := model.NewInstitution(model.NewInstitutionID(), "fresh-proof", "Fresh Proof", "", now)
 			require.NoError(t, err)
@@ -127,9 +127,9 @@ func TestExternalReauthenticationCallbackUsesBoundProofAndSafeFailureContinuatio
 			auditor := &mutationAttemptAuditorFake{events: &events}
 			committed := &model.Session{ID: state.SessionID, UserID: state.TargetUserID}
 			sessions := &freshExternalSessionStoreFake{result: &store.SessionReauthenticationResult{Session: committed}, err: test.commitErr}
-			service.deps.LoginStates, service.deps.Sessions = states, sessions
-			service.deps.Institutions, service.deps.Audit, service.deps.MutationAudit, service.deps.Invalidator = providerConnectionInstitutionStoreFake{institution: institution}, externalAuditFake{}, auditor, externalInvalidatorFake{}
-			result, err := service.complete(context.Background(), "campus", binding, model.ExternalAuthenticationCallback{}, model.RequestMetadata{})
+			service.externalLoginStates, service.sessions = states, sessions
+			service.institutions, service.securityAudit, service.auditor, service.invalidator = providerConnectionInstitutionStoreFake{institution: institution}, &securityAuditorFake{}, auditor, externalInvalidatorFake{}
+			result, err := service.completeExternalCallback(context.Background(), "campus", binding, model.ExternalAuthenticationCallback{}, model.RequestMetadata{})
 			require.NoError(t, err, "completion")
 			require.NotNil(t, result, "completion")
 			require.Nil(t, result.Tokens, "completion")
@@ -149,19 +149,6 @@ func TestExternalReauthenticationCallbackUsesBoundProofAndSafeFailureContinuatio
 			}
 		})
 	}
-}
-
-type recoveryExternalIssuerFake struct {
-	state *model.UserMFARecovery
-	calls int
-}
-
-func (f *recoveryExternalIssuerFake) mfaRecoveryState(context.Context, model.UserID) (*model.UserMFARecovery, error) {
-	return f.state, nil
-}
-func (f *recoveryExternalIssuerFake) createSession(context.Context, sessionIssuance) (*model.Session, *model.AuthenticationTokens, error) {
-	f.calls++
-	return nil, nil, errors.New("unexpected Session issuance")
 }
 
 type recoveryExternalIdentityFake struct {
@@ -188,7 +175,8 @@ func TestExternalRecoveryRequiresFreshExistingIdentityBeforeSessionIssuance(t *t
 		t.Run(test.name, func(t *testing.T) {
 			now := model.NowUTC()
 			user := &model.User{ID: model.NewUserID(), Username: "fresh-recovery", Email: "fresh@example.edu"}
-			issuer := &recoveryExternalIssuerFake{state: &model.UserMFARecovery{UserID: user.ID, Generation: 1, ReenrollmentRequired: true, ResetAt: model.OptionalTimeFrom(now.Add(-time.Minute)), UpdatedAt: now.Add(-time.Minute)}}
+			recovery := &externalRecoveryStateStoreFake{state: &model.UserMFARecovery{UserID: user.ID, Generation: 1, ReenrollmentRequired: true, ResetAt: model.OptionalTimeFrom(now.Add(-time.Minute)), UpdatedAt: now.Add(-time.Minute)}}
+			sessions := &externalSessionStoreFake{saveErr: errors.New("unexpected Session issuance")}
 			stateToken, binding := model.NewCredentialToken(), model.NewCredentialToken()
 			state := &model.ExternalLoginState{Provider: "campus", Purpose: test.purpose, StateHash: model.HashToken(stateToken), BindingHash: model.HashToken(binding), ReturnTo: "/account/security", ClientType: model.SessionClientWeb, ExpiresAt: now.Add(time.Minute)}
 			if test.wrongUser {
@@ -201,16 +189,18 @@ func TestExternalRecoveryRequiresFreshExistingIdentityBeforeSessionIssuance(t *t
 			state.PrepareCreate(model.NewExternalLoginStateID(), createdAt)
 			provider := &freshExternalProviderFake{providerConnectionProvider: providerConnectionProvider{state: stateToken, assertion: &model.ExternalAuthenticationAssertion{ProviderID: "campus", Subject: "existing-identity", AuthenticatedAt: now.UnixMilli()}}}
 			service := externalAuthenticationBeginService(t, externalProviderSourceFake{provider: provider}, newAuthenticationCacheFake(), 10)
-			service.deps.Now = func() time.Time { return now }
+			service.now = func() time.Time { return now }
 			states := &externalLoginStateStoreFake{get: state, consumeResult: state, storeNow: now}
 			institution, err := model.NewInstitution(model.NewInstitutionID(), "fresh-proof", "Fresh Proof", "", now)
 			require.NoError(t, err)
-			service.deps.LoginStates, service.deps.Authentication, service.deps.Audit = states, issuer, externalAuditFake{}
-			service.deps.Institutions = providerConnectionInstitutionStoreFake{institution: institution}
-			service.deps.Identities = recoveryExternalIdentityFake{user: user, identity: &model.ExternalIdentity{ID: model.NewExternalIdentityID(), UserID: user.ID, Provider: "campus", Subject: "existing-identity"}}
-			service.deps.Capabilities = &accessPolicyCapabilitiesFake{snapshot: AccessPolicyCapabilitySnapshot{Providers: []AccessPolicyProviderCapability{{Descriptor: provider.Descriptor()}}}}
-			result, err := service.complete(context.Background(), "campus", binding, model.ExternalAuthenticationCallback{}, model.RequestMetadata{})
-			require.Equal(t, 0, issuer.calls, "unverified recovery flow issued a Session")
+			service.externalLoginStates, service.securityAudit = states, &securityAuditorFake{}
+			service.mfaCredentials, service.mfa, service.sessions = recovery, mustTestMFAMechanics(t), sessions
+			service.institutions = providerConnectionInstitutionStoreFake{institution: institution}
+			service.externalIdentities = recoveryExternalIdentityFake{user: user, identity: &model.ExternalIdentity{ID: model.NewExternalIdentityID(), UserID: user.ID, Provider: "campus", Subject: "existing-identity"}}
+			service.capabilities = &accessPolicyCapabilitiesFake{snapshot: AccessPolicyCapabilitySnapshot{Providers: []AccessPolicyProviderCapability{{Descriptor: provider.Descriptor()}}}}
+			result, err := service.completeExternalCallback(context.Background(), "campus", binding, model.ExternalAuthenticationCallback{}, model.RequestMetadata{})
+			require.Equal(t, 1, recovery.reads, "recovery state is read once for the resolved User")
+			require.Empty(t, sessions.saves, "unverified recovery flow issued a Session")
 			if test.restart {
 				require.NoError(t, err, "recovery restart")
 				require.NotNil(t, result, "recovery restart")

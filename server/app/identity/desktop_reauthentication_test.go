@@ -9,7 +9,6 @@ package identity
 
 import (
 	"context"
-	"errors"
 	"net/url"
 	"strings"
 	"testing"
@@ -24,20 +23,6 @@ import (
 )
 
 const desktopReauthenticationTestPassword = "CorrectHorseBatteryStaple1!"
-
-// externalDesktopReauthenticationFake fails any Desktop reauthentication use
-// by external-authentication tests that do not exercise it.
-type externalDesktopReauthenticationFake struct{}
-
-func (externalDesktopReauthenticationFake) resolveExternalReauthentication(context.Context, string, string, string) (desktopExternalAuthenticationTarget, error) {
-	return desktopExternalAuthenticationTarget{}, errors.New("unexpected Desktop reauthentication start")
-}
-
-func (externalDesktopReauthenticationFake) authenticateExternalReauthentication(context.Context, invocation.Invocation,
-	model.BrowserAuthenticationTransactionID, *model.ExternalIdentity, string, *model.ExternalAuthenticationAssertion,
-) error {
-	return errors.New("unexpected Desktop reauthentication completion")
-}
 
 type desktopReauthenticationStoreFake struct {
 	store.BrowserAuthenticationStore

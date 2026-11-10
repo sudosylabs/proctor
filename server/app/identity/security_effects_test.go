@@ -120,7 +120,15 @@ func TestExternalAuthenticationServiceRequiresInvalidator(t *testing.T) {
 	authentication := newTestAuthenticationService(t, persistence)
 	audit, auditErr := access.NewAuditor(access.AuditorDependencies{Audits: securityAuditStore{}, Institutions: securityInstitutionStore{}, NodeID: model.NewID()})
 	require.NoError(t, auditErr)
-	_, err := newExternalAuthenticationService(externalAuthenticationServiceDependencies{Registry: securityEffectsProviderSourceFake{}, LoginStates: securityExternalLoginStateStore{}, Institutions: securityInstitutionStore{}, Identities: securityExternalIdentityStore{}, Sessions: persistence.Session(), AccessPolicy: allowAllAuthenticationAccessPolicy(), Attempts: mustAuthenticationAttemptAccounting(t, newAuthenticationCacheFake()), Authentication: authentication, Invalidator: nil, Audit: audit, MutationAudit: audit.MutationAudit(), Capabilities: &accessPolicyCapabilitiesFake{}, InvitationAcceptor: &externalInvitationAcceptorFake{}, DesktopAuthorization: &externalDesktopAuthorizationFake{}, DesktopReauthentication: externalDesktopReauthenticationFake{}, Policy: ExternalAuthenticationPolicy{}, RecentAuthenticationTTL: 15 * time.Minute, Diagnostics: newDiscardLogger(t), NewCredential: model.NewCredentialToken, Now: nil})
+	service := authentication
+	service.externalProviders, service.externalLoginStates = securityEffectsProviderSourceFake{}, securityExternalLoginStateStore{}
+	service.institutions, service.externalIdentities, service.sessions = securityInstitutionStore{}, securityExternalIdentityStore{}, persistence.Session()
+	service.accessPolicy, service.attempts = allowAllAuthenticationAccessPolicy(), mustAuthenticationAttemptAccounting(t, newAuthenticationCacheFake())
+	service.invalidator, service.securityAudit, service.auditor = nil, audit, audit.MutationAudit()
+	service.capabilities, service.invitations = &accessPolicyCapabilitiesFake{}, &externalInvitationAcceptorFake{}
+	service.externalAuthenticationPolicy, service.recentAuthenticationTTL = ExternalAuthenticationPolicy{}, 15*time.Minute
+	service.diagnostics, service.newCredential, service.now = newDiscardLogger(t), model.NewCredentialToken, nil
+	err := service.requireExternalAuthentication()
 	require.Error(t, err, "nil authentication invalidator was accepted")
 }
 

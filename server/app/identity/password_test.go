@@ -220,7 +220,7 @@ func (passwordHashFunc) ReuseCheck(string) store.PasswordReuseCheck {
 	return store.PasswordReuseCheck{}
 }
 
-func testPasswordHashFailures(t *testing.T, unavailableCode string, invoke func(*testing.T, context.Context, passwordHash) error) {
+func testPasswordHashFailures(t *testing.T, unavailableCode string, invoke func(*testing.T, context.Context, passwordHashFunc) error) {
 	t.Helper()
 	for _, test := range []struct {
 		name string

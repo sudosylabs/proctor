@@ -203,8 +203,8 @@ func TestAuthenticationAttemptAccountingIsolatesAllFourCallerFlowsAndProtectsInp
 	}
 	login := &Service{attempts: accounting, loginRateLimit: policy}
 	recovery := &Service{attempts: accounting, accountRecoveryPolicy: AccountRecoveryPolicy{RateLimit: policy}}
-	external := &externalAuthenticationService{deps: externalAuthenticationServiceDependencies{Attempts: accounting, Policy: ExternalAuthenticationPolicy{LoginRateLimit: policy}}}
-	bootstrap := &bootstrapService{deps: bootstrapServiceDependencies{Attempts: accounting}, rateLimitWindow: policy.Window, maximumSourceAttempts: policy.MaximumSourceAttempts}
+	external := &Service{attempts: accounting, externalAuthenticationPolicy: ExternalAuthenticationPolicy{LoginRateLimit: policy}}
+	bootstrap := bootstrapTestService(&Service{attempts: accounting}, policy, BootstrapProtectionPolicy{})
 
 	sensitiveValues := []string{
 		"student@example.edu",
@@ -231,7 +231,7 @@ func TestAuthenticationAttemptAccountingIsolatesAllFourCallerFlowsAndProtectsInp
 			)
 		},
 		func() error {
-			return bootstrap.checkRateLimit(context.Background(), "127.0.0.1:443")
+			return bootstrap.checkBootstrapRateLimit(context.Background(), "127.0.0.1:443")
 		},
 	}
 	for index, flow := range flows {

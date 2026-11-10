@@ -305,9 +305,13 @@ keeps only the services that span areas or own no area (`SearchService`,
 `AdministrationCounts`, `RealtimeService`, `RealtimeAdmission`,
 `JobOperations`, `MailService`), each named on `App` like an area service.
 
-`academic.Service`, `administration.Service` and `onboarding.Service` are
-flat: one struct whose fields are the Store contracts it calls and one of each
-collaborator, built by one `New`. What remains is inside one area package:
-`identity.Service` still embeds one private implementation per concern rather
-than holding its collaborators itself. Do not add a new embedded
+Every area service is flat: `academic.Service`, `user.Service`,
+`administration.Service`, `onboarding.Service` and `identity.Service` are each
+one struct whose fields are the Store contracts it calls and one of each
+collaborator, built by one `New`. Identity is the one area with two audit
+collaborators: `auditor`, the `access.MutationAuditor` for ordinary audited
+mutations, and `securityAudit`, the subset of `*access.Auditor` for the
+sign-in, Desktop and MFA audit protocols that the mutation runner does not
+cover. No area service embeds another implementation. A new concern adds its
+methods and fields to its area's `Service`; it does not add an embedded
 implementation.

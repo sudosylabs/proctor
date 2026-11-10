@@ -29,16 +29,16 @@ func TestAuthenticationAttemptAccountingHasOneProductionOwner(t *testing.T) {
 	local, ok := reflect.TypeOf(Service{}).FieldByName("attempts")
 	require.True(t, ok, "local login does not retain the shared private attempt accounting")
 	require.Equal(t, accountingType, local.Type, "local login does not retain the shared private attempt accounting")
-	for name, service := range map[string]reflect.Type{
-		"external authentication": reflect.TypeOf(externalAuthenticationService{}),
-		"installation bootstrap":  reflect.TypeOf(bootstrapService{}),
-	} {
-		deps, ok := service.FieldByName("deps")
-		require.True(t, ok, "%s keeps no deps field", name)
-		field, ok := deps.Type.FieldByName("Attempts")
-		require.True(t, ok, "%s does not retain the shared private attempt accounting", name)
-		require.Equal(t, accountingType, field.Type, "%s does not retain the shared private attempt accounting", name)
+	// External authentication and installation bootstrap account their
+	// attempts through that same field: the Service holds no other.
+	held := 0
+	serviceType := reflect.TypeOf(Service{})
+	for index := 0; index < serviceType.NumField(); index++ {
+		if serviceType.Field(index).Type == accountingType {
+			held++
+		}
 	}
+	require.Equal(t, 1, held, "external authentication and installation bootstrap do not retain the shared private attempt accounting")
 
 	// The parent app package builds the one shared instance and hands it to
 	// this package, to the onboarding area's Invitation and registration

@@ -136,6 +136,39 @@ func (f *securityAuditorFake) RecordLocalLoginFailure(_ context.Context, target 
 	return nil
 }
 
+func (f *securityAuditorFake) BeginAuthentication(_ context.Context, userID model.UserID, method, providerID string,
+	clientType model.SessionClientType, metadata model.RequestMetadata, institutionID model.InstitutionID,
+) (*model.AuditEvent, error) {
+	return f.begin(&securityAuditRecord{actor: userID, target: userID, clientType: clientType,
+		action: model.ActionAuthenticationExternalLogin, resource: model.Resource{Type: model.ResourceUser, ID: userID.String()},
+		scopeType: model.RoleScopeInstitution, scopeID: institutionID.String(), metadata: metadata,
+		parameters: map[string]any{"provider": providerID, "method": method}}), nil
+}
+
+func (f *securityAuditorFake) RecordExternalAuthenticationFailure(_ context.Context, providerID, method string,
+	metadata model.RequestMetadata, institutionID model.InstitutionID, errorCode string,
+) error {
+	record := securityAuditRecord{id: model.NewAuditEventID(), status: model.AuditStatusFail,
+		action: model.ActionAuthenticationExternalLogin, resource: model.Resource{Type: model.ResourceInstitution, ID: institutionID.String()},
+		scopeType: model.RoleScopeInstitution, scopeID: institutionID.String(), metadata: metadata,
+		parameters: map[string]any{"provider": providerID, "method": method}, errorCode: errorCode}
+	f.events = append(f.events, &record)
+	f.terminal = append(f.terminal, record)
+	return nil
+}
+
+// externalFailureCodes returns the error codes of the failed external
+// sign-ins recorded, in order.
+func (f *securityAuditorFake) externalFailureCodes() []string {
+	codes := []string{}
+	for _, record := range f.terminal {
+		if record.action == model.ActionAuthenticationExternalLogin && record.status == model.AuditStatusFail {
+			codes = append(codes, record.errorCode)
+		}
+	}
+	return codes
+}
+
 // withOperation returns the events begun with operation, in order.
 func (f *securityAuditorFake) withOperation(operation string) []*securityAuditRecord {
 	var matched []*securityAuditRecord

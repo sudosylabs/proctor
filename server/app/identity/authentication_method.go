@@ -11,7 +11,6 @@ import (
 	"context"
 	"errors"
 	"sort"
-	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -21,11 +20,15 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// AuthenticationMethodView lists how the current User can sign in: whether
+// they hold a local password, and each linked External Identity.
 type AuthenticationMethodView struct {
 	Password  bool
 	Providers []AuthenticationProviderMethodView
 }
 
+// AuthenticationProviderMethodView is one linked External Identity and the
+// provider it signs in with.
 type AuthenticationProviderMethodView struct {
 	IdentityID  model.ExternalIdentityID
 	ProviderID  string
@@ -33,66 +36,47 @@ type AuthenticationProviderMethodView struct {
 	Type        string
 }
 
-// authenticationMethodServiceDependencies are the collaborators of authenticationMethodService;
-// newAuthenticationMethodService validates them once and authenticationMethodService keeps them in deps.
-type authenticationMethodServiceDependencies struct {
-	Users        store.UserStore
-	Mail         passwordChangedMailPreparer
-	Passwords    store.PasswordCredentialStore
-	Identities   store.ExternalIdentityStore
-	Providers    ExternalProviderSource
-	Capabilities AccessPolicyCapabilitySource
-	Hasher       *PasswordHasher
-	Audit        access.MutationAuditor
-	Effects      SecurityEffects
-	RecentTTL    time.Duration
-	Now          func() time.Time
-}
-
-type authenticationMethodService struct {
-	deps authenticationMethodServiceDependencies
-}
-
-// passwordChangedMailPreparer freezes the security notice a self-service
-// password change sends to the account address.
-type passwordChangedMailPreparer interface {
-	PreparePasswordChanged(mail.NoticePreparation) (*store.PreparedMail, error)
-}
-
 // ChangePasswordCommand replaces the current User's existing local password.
 type ChangePasswordCommand struct {
 	Password string
 }
 
-func newAuthenticationMethodService(deps authenticationMethodServiceDependencies) (*authenticationMethodService, error) {
-	if deps.Users == nil || deps.Mail == nil || deps.Passwords == nil || deps.Identities == nil || deps.Providers == nil || deps.Capabilities == nil ||
-		deps.Hasher == nil || deps.Audit == nil || deps.Effects == nil || deps.RecentTTL <= 0 || deps.Now == nil {
-		return nil, errors.New("authentication method service dependencies are required")
+// requireAuthenticationMethods refuses a Service whose authentication method
+// management collaborators are incomplete. New calls it once, after external
+// authentication is set up.
+func (s *Service) requireAuthenticationMethods() error {
+	if s.users == nil || s.mail == nil || s.passwords == nil || s.externalIdentities == nil || s.externalProviders == nil || s.capabilities == nil ||
+		s.hasher == nil || s.auditor == nil || s.effects == nil || s.recentAuthenticationTTL <= 0 || s.now == nil {
+		return errors.New("authentication method service dependencies are required")
 	}
-	return &authenticationMethodService{deps: deps}, nil
+	return nil
 }
 
-func (s *authenticationMethodService) require(invocation invocation.Invocation) error {
-	return RequireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentTTL)
+// requireAuthenticationMethodSession admits a change to the caller's own
+// authentication methods only from a strong, recently authenticated Session.
+func (s *Service) requireAuthenticationMethodSession(invocation invocation.Invocation) error {
+	return RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL)
 }
 
-func (s *authenticationMethodService) AuthenticationMethods(ctx context.Context, invocation invocation.Invocation) (AuthenticationMethodView, error) {
+// AuthenticationMethods lists the current User's local password and linked
+// External Identities, ordered by identity.
+func (s *Service) AuthenticationMethods(ctx context.Context, invocation invocation.Invocation) (AuthenticationMethodView, error) {
 	if invocation.Principal().Validate() != nil {
 		return AuthenticationMethodView{}, access.InvalidTokenAppError()
 	}
 	userID := invocation.Principal().UserID
 	view := AuthenticationMethodView{Providers: []AuthenticationProviderMethodView{}}
-	if _, err := s.deps.Passwords.GetByUser(ctx, userID); err == nil {
+	if _, err := s.passwords.GetByUser(ctx, userID); err == nil {
 		view.Password = true
 	} else if !store.IsNotFound(err) {
 		return view, authenticationUnavailable(err)
 	}
-	identities, err := s.deps.Identities.ListByUser(ctx, userID)
+	identities, err := s.externalIdentities.ListByUser(ctx, userID)
 	if err != nil {
 		return view, authenticationUnavailable(err)
 	}
 	descriptors := map[string]model.ExternalAuthenticationProvider{}
-	for _, descriptor := range s.deps.Providers.Descriptors() {
+	for _, descriptor := range s.externalProviders.Descriptors() {
 		descriptors[descriptor.ID] = descriptor
 	}
 	for _, identity := range identities {
@@ -109,29 +93,31 @@ func (s *authenticationMethodService) AuthenticationMethods(ctx context.Context,
 	return view, nil
 }
 
-func (s *authenticationMethodService) EnrollPassword(ctx context.Context, invocation invocation.Invocation, password string) error {
-	if err := s.require(invocation); err != nil {
+// EnrollPassword adds a local password to the current User after strong
+// recent authentication.
+func (s *Service) EnrollPassword(ctx context.Context, invocation invocation.Invocation, password string) error {
+	if err := s.requireAuthenticationMethodSession(invocation); err != nil {
 		return err
 	}
 	userID := invocation.Principal().UserID
-	user, err := s.deps.Users.Get(ctx, userID)
+	user, err := s.users.Get(ctx, userID)
 	if err != nil {
 		return authenticationMethodStoreErrors.Translate(err)
 	}
 	if err = CheckNewPassword(password, passwordIdentityOf(user)); err != nil {
 		return err
 	}
-	hash, err := s.deps.Hasher.Hash(ctx, password)
+	hash, err := s.hasher.Hash(ctx, password)
 	if err != nil {
 		return PasswordHashError(err, "authentication.internal")
 	}
-	_, appErr := access.RunAudited(ctx, s.deps.Audit, access.Mutation{Invocation: invocation,
+	_, appErr := access.RunAudited(ctx, s.auditor, access.Mutation{Invocation: invocation,
 		Action: model.ActionExternalIdentityManage, Resource: model.Resource{Type: model.ResourceUser, ID: userID.String()},
-		Operation: "enroll_password", Value: map[string]any{"method": "password"}}, s.deps.Now,
+		Operation: "enroll_password", Value: map[string]any{"method": "password"}}, s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.AuthenticationMethodMutationResult, error) {
-			return s.deps.Passwords.Enroll(ctx, &store.PasswordCredentialEnrollment{
-				Credential: &model.PasswordCredential{UserID: userID, PasswordHash: hash}, Reuse: s.deps.Hasher.ReuseCheck(password),
-				Capabilities: AccessDeploymentCapabilities(s.deps.Capabilities.Snapshot()), AuditEventID: reference.ID, AuditAt: reference.MutationAt})
+			return s.passwords.Enroll(ctx, &store.PasswordCredentialEnrollment{
+				Credential: &model.PasswordCredential{UserID: userID, PasswordHash: hash}, Reuse: s.hasher.ReuseCheck(password),
+				Capabilities: AccessDeploymentCapabilities(s.capabilities.Snapshot()), AuditEventID: reference.ID, AuditAt: reference.MutationAt})
 		}, authenticationMethodStoreErrors.Translate)
 	return appErr
 }
@@ -140,85 +126,91 @@ func (s *authenticationMethodService) EnrollPassword(ctx context.Context, invoca
 // strong recent authentication. The calling Session stays live; every other
 // Session of the User is revoked, outstanding password-reset links stop
 // working, and the account address receives the password-changed notice.
-func (s *authenticationMethodService) ChangePassword(ctx context.Context, invocation invocation.Invocation, command ChangePasswordCommand) error {
-	if err := s.require(invocation); err != nil {
+func (s *Service) ChangePassword(ctx context.Context, invocation invocation.Invocation, command ChangePasswordCommand) error {
+	if err := s.requireAuthenticationMethodSession(invocation); err != nil {
 		return err
 	}
 	principal := invocation.Principal()
-	user, err := s.deps.Users.Get(ctx, principal.UserID)
+	user, err := s.users.Get(ctx, principal.UserID)
 	if err != nil {
 		return authenticationMethodStoreErrors.Translate(err)
 	}
 	if err = CheckNewPassword(command.Password, passwordIdentityOf(user)); err != nil {
 		return err
 	}
-	hash, err := s.deps.Hasher.Hash(ctx, command.Password)
+	hash, err := s.hasher.Hash(ctx, command.Password)
 	if err != nil {
 		return PasswordHashError(err, "authentication.internal")
 	}
-	prepared, err := s.deps.Mail.PreparePasswordChanged(mail.NoticePreparation{Recipient: user, At: model.TimeUTC(s.deps.Now())})
+	prepared, err := s.mail.PreparePasswordChanged(mail.NoticePreparation{Recipient: user, At: model.TimeUTC(s.now())})
 	if err != nil {
 		return apperror.New("authentication.method.unavailable").Wrap(err)
 	}
-	result, appErr := access.RunAudited(ctx, s.deps.Audit, access.Mutation{Invocation: invocation,
+	result, appErr := access.RunAudited(ctx, s.auditor, access.Mutation{Invocation: invocation,
 		Action: model.ActionExternalIdentityManage, Resource: model.Resource{Type: model.ResourceUser, ID: user.ID.String()},
-		Operation: "change_password", Value: map[string]any{"method": "password"}}, s.deps.Now,
+		Operation: "change_password", Value: map[string]any{"method": "password"}}, s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.AuthenticationMethodMutationResult, error) {
-			return s.deps.Passwords.Change(ctx, &store.PasswordCredentialChange{UserID: user.ID, KeepSessionID: principal.SessionID,
-				PasswordHash: hash, Reuse: s.deps.Hasher.ReuseCheck(command.Password), RevocationReason: model.SessionRevocationPasswordChanged,
+			return s.passwords.Change(ctx, &store.PasswordCredentialChange{UserID: user.ID, KeepSessionID: principal.SessionID,
+				PasswordHash: hash, Reuse: s.hasher.ReuseCheck(command.Password), RevocationReason: model.SessionRevocationPasswordChanged,
 				Occurrence: prepared.Occurrence, Delivery: prepared.Delivery, Job: prepared.Job,
 				AuditEventID: reference.ID, AuditAt: reference.MutationAt})
 		}, authenticationMethodStoreErrors.Translate)
 	if appErr == nil {
-		s.publishRevocations(ctx, user.ID, result)
+		s.publishAuthenticationMethodRevocations(ctx, user.ID, result)
 	}
 	return appErr
 }
 
-func (s *authenticationMethodService) RemovePassword(ctx context.Context, invocation invocation.Invocation) error {
-	if err := s.require(invocation); err != nil {
+// RemovePassword removes the current User's local password after strong
+// recent authentication and publishes the Session revocations the Store
+// reports.
+func (s *Service) RemovePassword(ctx context.Context, invocation invocation.Invocation) error {
+	if err := s.requireAuthenticationMethodSession(invocation); err != nil {
 		return err
 	}
 	userID := invocation.Principal().UserID
-	result, appErr := access.RunAudited(ctx, s.deps.Audit, access.Mutation{Invocation: invocation,
+	result, appErr := access.RunAudited(ctx, s.auditor, access.Mutation{Invocation: invocation,
 		Action: model.ActionExternalIdentityManage, Resource: model.Resource{Type: model.ResourceUser, ID: userID.String()},
-		Operation: "remove_password", Value: map[string]any{"method": "password"}}, s.deps.Now,
+		Operation: "remove_password", Value: map[string]any{"method": "password"}}, s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.AuthenticationMethodMutationResult, error) {
-			return s.deps.Passwords.Remove(ctx, &store.PasswordCredentialRemoval{UserID: userID,
-				Capabilities: AccessDeploymentCapabilities(s.deps.Capabilities.Snapshot()), ChangedAt: reference.MutationAt,
+			return s.passwords.Remove(ctx, &store.PasswordCredentialRemoval{UserID: userID,
+				Capabilities: AccessDeploymentCapabilities(s.capabilities.Snapshot()), ChangedAt: reference.MutationAt,
 				RevocationReason: model.SessionRevocationPasswordRemoved, AuditEventID: reference.ID, AuditAt: reference.MutationAt})
 		}, authenticationMethodStoreErrors.Translate)
 	if appErr == nil {
-		s.publishRevocations(ctx, userID, result)
+		s.publishAuthenticationMethodRevocations(ctx, userID, result)
 	}
 	return appErr
 }
 
-func (s *authenticationMethodService) UnlinkExternalIdentity(ctx context.Context, invocation invocation.Invocation, id model.ExternalIdentityID) error {
-	if err := s.require(invocation); err != nil {
+// UnlinkExternalIdentity removes one of the current User's linked External
+// Identities after strong recent authentication and publishes the Session
+// revocations the Store reports.
+func (s *Service) UnlinkExternalIdentity(ctx context.Context, invocation invocation.Invocation, id model.ExternalIdentityID) error {
+	if err := s.requireAuthenticationMethodSession(invocation); err != nil {
 		return err
 	}
 	if !id.IsValid() {
 		return apperror.New("request.invalid")
 	}
 	userID := invocation.Principal().UserID
-	result, appErr := access.RunAudited(ctx, s.deps.Audit, access.Mutation{Invocation: invocation,
+	result, appErr := access.RunAudited(ctx, s.auditor, access.Mutation{Invocation: invocation,
 		Action: model.ActionExternalIdentityManage, Resource: model.Resource{Type: model.ResourceUser, ID: userID.String()},
-		Operation: "unlink_provider", Value: map[string]any{"identity_id": id.String()}}, s.deps.Now,
+		Operation: "unlink_provider", Value: map[string]any{"identity_id": id.String()}}, s.now,
 		func(ctx context.Context, reference access.MutationReference) (*store.AuthenticationMethodMutationResult, error) {
-			return s.deps.Identities.Unlink(ctx, &store.ExternalIdentityUnlink{ID: id, UserID: userID,
-				Capabilities: AccessDeploymentCapabilities(s.deps.Capabilities.Snapshot()), ChangedAt: reference.MutationAt,
+			return s.externalIdentities.Unlink(ctx, &store.ExternalIdentityUnlink{ID: id, UserID: userID,
+				Capabilities: AccessDeploymentCapabilities(s.capabilities.Snapshot()), ChangedAt: reference.MutationAt,
 				RevocationReason: model.SessionRevocationExternalIdentityUnlinked, AuditEventID: reference.ID, AuditAt: reference.MutationAt})
 		}, authenticationMethodStoreErrors.Translate)
 	if appErr == nil {
-		s.publishRevocations(ctx, userID, result)
+		s.publishAuthenticationMethodRevocations(ctx, userID, result)
 	}
 	return appErr
 }
 
-func (s *authenticationMethodService) publishRevocations(ctx context.Context, userID model.UserID, result *store.AuthenticationMethodMutationResult) {
+func (s *Service) publishAuthenticationMethodRevocations(ctx context.Context, userID model.UserID, result *store.AuthenticationMethodMutationResult) {
 	if result == nil {
 		return
 	}
-	s.deps.Effects.SessionsRevoked(ctx, userID, sessionIDs(result.RevokedSessions), result.RevokedTokenHashes)
+	s.effects.SessionsRevoked(ctx, userID, sessionIDs(result.RevokedSessions), result.RevokedTokenHashes)
 }

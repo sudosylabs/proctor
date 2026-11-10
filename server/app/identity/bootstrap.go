@@ -20,7 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -72,7 +71,7 @@ type BootstrapProtectionPolicy struct {
 // RecoverAdministratorAccess is intentionally absent from every network
 // application interface. The module root borrows this method only for the
 // explicit offline host command.
-func (s *bootstrapService) RecoverAdministratorAccess(ctx context.Context, system invocation.System, command AdministratorRecoveryCommand) (*AdministratorRecoveryResult, error) {
+func (s *Service) RecoverAdministratorAccess(ctx context.Context, system invocation.System, command AdministratorRecoveryCommand) (*AdministratorRecoveryResult, error) {
 	if !system.Valid() {
 		return nil, apperror.New("administrator_recovery.invalid")
 	}
@@ -84,12 +83,12 @@ func (s *bootstrapService) RecoverAdministratorAccess(ctx context.Context, syste
 	passwordHash := ""
 	if command.Password != "" {
 		var err error
-		passwordHash, err = s.deps.Hasher.Hash(ctx, command.Password)
+		passwordHash, err = s.hasher.Hash(ctx, command.Password)
 		if err != nil {
 			return nil, PasswordHashError(err, "administrator_recovery.unavailable")
 		}
 	}
-	result, err := s.deps.Installations.RecoverAdministratorAccess(ctx, &store.AdministratorRecovery{
+	result, err := s.installations.RecoverAdministratorAccess(ctx, &store.AdministratorRecovery{
 		InstitutionID: institutionID, UserID: userID,
 		EnableLocalLogin: command.EnableLocalLogin, RotatePasswordHash: passwordHash,
 	})
@@ -107,59 +106,29 @@ func (s *bootstrapService) RecoverAdministratorAccess(ctx context.Context, syste
 
 // ReconcileAdministratorRecovery records every completed offline recovery in
 // ordinary audit before this node starts workers or network transports.
-func (s *bootstrapService) ReconcileAdministratorRecovery(ctx context.Context, system invocation.System) error {
+func (s *Service) ReconcileAdministratorRecovery(ctx context.Context, system invocation.System) error {
 	if !system.Valid() {
 		return errors.New("reconcile offline administrator recovery: invalid system identity")
 	}
-	_, err := s.deps.Installations.ReconcileAdministratorRecovery(ctx, &store.AdministratorRecoveryReconciliation{NodeID: s.deps.NodeID})
+	_, err := s.installations.ReconcileAdministratorRecovery(ctx, &store.AdministratorRecoveryReconciliation{NodeID: s.nodeID})
 	if err != nil {
 		return fmt.Errorf("reconcile offline administrator recovery: %w", err)
 	}
 	return nil
 }
 
-type passwordHash interface {
-	Hash(context.Context, string) (string, error)
-}
-
-// bootstrapServiceDependencies are the collaborators of bootstrapService;
-// newBootstrapService validates them once and bootstrapService keeps them in deps.
-type bootstrapServiceDependencies struct {
-	Installations  store.InstallationStore
-	Hasher         passwordHash
-	Attempts       *AttemptAccounting
-	RateLimit      LoginRateLimitPolicy
-	Protection     BootstrapProtectionPolicy
-	NodeID         string
-	Now            func() time.Time
-	RecoveryPolicy administratorRecoveryPolicy
-}
-
-type bootstrapService struct {
-	deps bootstrapServiceDependencies
-
-	rateLimitWindow       time.Duration
-	maximumSourceAttempts int
-	bootstrapSecretDigest [sha256.Size]byte
-	bootstrapAvailable    bool
-}
-
-func newBootstrapService(deps bootstrapServiceDependencies) *bootstrapService {
-	return &bootstrapService{deps: deps, rateLimitWindow: deps.RateLimit.Window, maximumSourceAttempts: deps.RateLimit.MaximumSourceAttempts, bootstrapSecretDigest: digestBootstrapSecret(deps.Protection.Secret), bootstrapAvailable: deps.Protection.Secret != ""}
-}
-
 // ReconcileSystemAdministratorRole adds newly registered grantable actions to
 // the protected built-in Role before this node serves application traffic.
-func (s *bootstrapService) ReconcileSystemAdministratorRole(ctx context.Context, system invocation.System) error {
+func (s *Service) ReconcileSystemAdministratorRole(ctx context.Context, system invocation.System) error {
 	if !system.Valid() {
 		return errors.New("reconcile protected system-administrator Role: invalid system identity")
 	}
-	_, err := s.deps.Installations.ReconcileSystemAdministratorRole(ctx, &store.SystemAdministratorRoleReconciliation{
+	_, err := s.installations.ReconcileSystemAdministratorRole(ctx, &store.SystemAdministratorRoleReconciliation{
 		RequiredPermissions: model.AllActions(),
-		ReconciledAt:        s.deps.Now(),
+		ReconciledAt:        s.now(),
 		AuditEvent: &model.AuditEvent{
 			Action: string(model.ActionRoleSystemAdminReconcile), Status: model.AuditStatusSuccess,
-			NodeID: s.deps.NodeID, ClientType: "system",
+			NodeID: s.nodeID, ClientType: "system",
 		},
 	})
 	if err != nil {
@@ -168,8 +137,10 @@ func (s *bootstrapService) ReconcileSystemAdministratorRole(ctx context.Context,
 	return nil
 }
 
-func (s *bootstrapService) GetInstallationStatus(ctx context.Context, _ invocation.Invocation, _ GetInstallationStatusQuery) (*model.InstallationStatus, error) {
-	state, err := s.deps.Installations.Get(ctx)
+// GetInstallationStatus reports whether the installation has been
+// bootstrapped.
+func (s *Service) GetInstallationStatus(ctx context.Context, _ invocation.Invocation, _ GetInstallationStatusQuery) (*model.InstallationStatus, error) {
+	state, err := s.installations.Get(ctx)
 	if err != nil {
 		if store.IsNotFound(err) {
 			return &model.InstallationStatus{Initialized: false}, nil
@@ -182,12 +153,15 @@ func (s *bootstrapService) GetInstallationStatus(ctx context.Context, _ invocati
 	return &model.InstallationStatus{Initialized: true}, nil
 }
 
-func (s *bootstrapService) BootstrapInstallation(ctx context.Context, invocation invocation.Invocation, command BootstrapInstallationCommand) (*model.InstallationBootstrapResult, error) {
+// BootstrapInstallation creates the Institution, its protected System
+// Administrator and the initial Access Policy once, for a caller that proves
+// the deployment bootstrap secret. Attempts are rate limited per source.
+func (s *Service) BootstrapInstallation(ctx context.Context, invocation invocation.Invocation, command BootstrapInstallationCommand) (*model.InstallationBootstrapResult, error) {
 	if strings.TrimSpace(command.InstitutionName) == "" || strings.TrimSpace(command.AdministratorUsername) == "" ||
 		strings.TrimSpace(command.AdministratorEmail) == "" || command.Password == "" {
 		return nil, apperror.New("request.invalid").WithField("field", "bootstrap")
 	}
-	if err := s.checkRateLimit(ctx, command.Source); err != nil {
+	if err := s.checkBootstrapRateLimit(ctx, command.Source); err != nil {
 		return nil, err
 	}
 	providedDigest := digestBootstrapSecret(command.BootstrapSecret)
@@ -203,7 +177,7 @@ func (s *bootstrapService) BootstrapInstallation(ctx context.Context, invocation
 		FirstName: command.AdministratorFirstName, LastName: command.AdministratorLastName}); err != nil {
 		return nil, err
 	}
-	hash, err := s.deps.Hasher.Hash(ctx, command.Password)
+	hash, err := s.hasher.Hash(ctx, command.Password)
 	if err != nil {
 		return nil, PasswordHashError(err, "installation.unavailable")
 	}
@@ -213,7 +187,7 @@ func (s *bootstrapService) BootstrapInstallation(ctx context.Context, invocation
 		DisplayName: command.AdministratorDisplayName, FirstName: command.AdministratorFirstName,
 		LastName: command.AdministratorLastName, Locale: command.AdministratorLocale,
 		Timezone: command.AdministratorTimezone,
-	}, s.deps.Now())
+	}, s.now())
 	if err != nil {
 		return nil, apperror.New("request.invalid").WithField("field", "administrator").Wrap(err)
 	}
@@ -243,7 +217,7 @@ func (s *bootstrapService) BootstrapInstallation(ctx context.Context, invocation
 		AuditEvent: &model.AuditEvent{
 			Action:     string(model.ActionInstallationBootstrap),
 			RequestID:  metadata.RequestID,
-			NodeID:     s.deps.NodeID,
+			NodeID:     s.nodeID,
 			ClientType: "bootstrap",
 			AuthMethod: "bootstrap",
 			IPAddress:  metadata.IPAddress,
@@ -251,7 +225,7 @@ func (s *bootstrapService) BootstrapInstallation(ctx context.Context, invocation
 		},
 		DefaultProfilePictureJob: defaultPictureJob,
 	}
-	result, err := s.deps.Installations.Bootstrap(ctx, input)
+	result, err := s.installations.Bootstrap(ctx, input)
 	if err != nil {
 		if store.IsConflict(err) {
 			return nil, apperror.New("installation.already_initialized").Wrap(err)
@@ -259,7 +233,7 @@ func (s *bootstrapService) BootstrapInstallation(ctx context.Context, invocation
 		// The commit boundary may be ambiguous. Repeating the proof- and
 		// fingerprint-fenced named aggregate either returns the retained exact
 		// outcome or proves that this attempt did not win.
-		retried, retryErr := s.deps.Installations.Bootstrap(ctx, input)
+		retried, retryErr := s.installations.Bootstrap(ctx, input)
 		if retryErr == nil {
 			return retried, nil
 		}
@@ -269,6 +243,14 @@ func (s *bootstrapService) BootstrapInstallation(ctx context.Context, invocation
 		return nil, apperror.New("installation.unavailable").Wrap(errors.Join(err, retryErr))
 	}
 	return result, nil
+}
+
+// fixBootstrapProtection keeps only the digest of the deployment bootstrap
+// secret, whether one is configured, and the bootstrap rate limit. New calls
+// it once.
+func (s *Service) fixBootstrapProtection(rateLimit LoginRateLimitPolicy, protection BootstrapProtectionPolicy) {
+	s.bootstrapRateLimitWindow, s.bootstrapMaximumSourceAttempts = rateLimit.Window, rateLimit.MaximumSourceAttempts
+	s.bootstrapSecretDigest, s.bootstrapAvailable = digestBootstrapSecret(protection.Secret), protection.Secret != ""
 }
 
 func digestBootstrapSecret(secret string) [sha256.Size]byte {
@@ -302,13 +284,13 @@ func fingerprintBootstrapCommand(command BootstrapInstallationCommand) ([sha256.
 	return fingerprint, nil
 }
 
-func (s *bootstrapService) checkRateLimit(ctx context.Context, source string) error {
-	_, limited, err := s.deps.Attempts.account(ctx, authenticationAttemptIntent{
+func (s *Service) checkBootstrapRateLimit(ctx context.Context, source string) error {
+	_, limited, err := s.attempts.account(ctx, authenticationAttemptIntent{
 		purpose: authenticationAttemptPurposeInstallationBootstrap,
-		window:  s.rateLimitWindow,
+		window:  s.bootstrapRateLimitWindow,
 		limits: []AttemptLimit{{
 			dimension: authenticationAttemptDimensionSource,
-			maximum:   s.maximumSourceAttempts,
+			maximum:   s.bootstrapMaximumSourceAttempts,
 			source:    source,
 		}},
 	})

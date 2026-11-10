@@ -38,14 +38,6 @@ type sessionIssuance struct {
 	AuditEventID model.AuditEventID
 }
 
-type authenticationSessionIssuer interface {
-	mfaRecoveryState(context.Context, model.UserID) (*model.UserMFARecovery, error)
-	createSession(
-		context.Context,
-		sessionIssuance,
-	) (*model.Session, *model.AuthenticationTokens, error)
-}
-
 // resolvePersonalAccessTokenBearer resolves a raw personal access token to
 // its CLI principal, debouncing the token's last-used write.
 func (s *Service) resolvePersonalAccessTokenBearer(

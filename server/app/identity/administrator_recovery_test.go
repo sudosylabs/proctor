@@ -26,7 +26,7 @@ func TestAdministratorRecoveryHashesPrivatePasswordBeforeNamedAggregate(t *testi
 	events := []string{}
 	persistence := &installationStoreFake{events: &events, recoveryResult: &store.AdministratorRecoveryResult{RecordID: model.NewAdministratorRecoveryRecordID(), PasswordRotated: true}}
 	hasher := &passwordHasherFake{events: &events, hash: "encoded-private-password"}
-	service := newBootstrapService(bootstrapServiceDependencies{Installations: persistence, Hasher: hasher, Attempts: bootstrapAttemptAccounting(t, &bootstrapAttemptCacheFake{}), RateLimit: bootstrapRateLimitPolicy(10), Protection: bootstrapProtection(), NodeID: "node-recovery", Now: time.Now, RecoveryPolicy: administratorRecoveryPolicy{}})
+	service := bootstrapTestService(&Service{installations: persistence, hasher: hasher, attempts: bootstrapAttemptAccounting(t, &bootstrapAttemptCacheFake{}), nodeID: "node-recovery", now: time.Now}, bootstrapRateLimitPolicy(10), bootstrapProtection())
 	institutionID, userID := model.NewInstitutionID(), model.NewUserID()
 
 	result, err := service.RecoverAdministratorAccess(context.Background(), invocation.Task("host-operator-test"), AdministratorRecoveryCommand{
@@ -46,10 +46,10 @@ func TestAdministratorRecoveryHashesPrivatePasswordBeforeNamedAggregate(t *testi
 }
 
 func TestAdministratorRecoveryPasswordWorkFailuresStopBeforeAggregate(t *testing.T) {
-	testPasswordHashFailures(t, "administrator_recovery.unavailable", func(t *testing.T, ctx context.Context, hasher passwordHash) error {
+	testPasswordHashFailures(t, "administrator_recovery.unavailable", func(t *testing.T, ctx context.Context, hasher passwordHashFunc) error {
 		events := []string{}
 		persistence := &installationStoreFake{events: &events}
-		service := newBootstrapService(bootstrapServiceDependencies{Installations: persistence, Hasher: hasher, Attempts: bootstrapAttemptAccounting(t, &bootstrapAttemptCacheFake{}), RateLimit: bootstrapRateLimitPolicy(10), Protection: bootstrapProtection(), NodeID: "node-recovery", Now: time.Now, RecoveryPolicy: administratorRecoveryPolicy{}})
+		service := bootstrapTestService(&Service{installations: persistence, hasher: accountTokenHasherFake{hashFunc: hasher}, attempts: bootstrapAttemptAccounting(t, &bootstrapAttemptCacheFake{}), nodeID: "node-recovery", now: time.Now}, bootstrapRateLimitPolicy(10), bootstrapProtection())
 		result, err := service.RecoverAdministratorAccess(ctx, invocation.Task("host-operator-test"), AdministratorRecoveryCommand{
 			InstitutionID: model.NewInstitutionID(), UserID: model.NewUserID(),
 			Password: "correct horse battery staple",
@@ -64,7 +64,7 @@ func TestAdministratorRecoveryPasswordWorkFailuresStopBeforeAggregate(t *testing
 func TestAdministratorRecoveryRejectsInvalidCommandBeforeHashing(t *testing.T) {
 	t.Parallel()
 	events := []string{}
-	service := newBootstrapService(bootstrapServiceDependencies{Installations: &installationStoreFake{events: &events}, Hasher: &passwordHasherFake{events: &events}, Attempts: bootstrapAttemptAccounting(t, &bootstrapAttemptCacheFake{}), RateLimit: bootstrapRateLimitPolicy(10), Protection: bootstrapProtection(), NodeID: "node-recovery", Now: time.Now, RecoveryPolicy: administratorRecoveryPolicy{}})
+	service := bootstrapTestService(&Service{installations: &installationStoreFake{events: &events}, hasher: &passwordHasherFake{events: &events}, attempts: bootstrapAttemptAccounting(t, &bootstrapAttemptCacheFake{}), nodeID: "node-recovery", now: time.Now}, bootstrapRateLimitPolicy(10), bootstrapProtection())
 
 	for name, command := range map[string]AdministratorRecoveryCommand{
 		"missing action":      {InstitutionID: model.NewInstitutionID(), UserID: model.NewUserID()},
@@ -84,7 +84,7 @@ func TestAdministratorRecoveryStartupReconciliationFailsClosed(t *testing.T) {
 	events := []string{}
 	persistenceErr := errors.New("database unavailable")
 	persistence := &installationStoreFake{events: &events, recoveryReconcileErr: persistenceErr}
-	service := newBootstrapService(bootstrapServiceDependencies{Installations: persistence, Hasher: &passwordHasherFake{events: &events}, Attempts: bootstrapAttemptAccounting(t, &bootstrapAttemptCacheFake{}), RateLimit: bootstrapRateLimitPolicy(10), Protection: bootstrapProtection(), NodeID: "node-recovery", Now: time.Now, RecoveryPolicy: administratorRecoveryPolicy{}})
+	service := bootstrapTestService(&Service{installations: persistence, hasher: &passwordHasherFake{events: &events}, attempts: bootstrapAttemptAccounting(t, &bootstrapAttemptCacheFake{}), nodeID: "node-recovery", now: time.Now}, bootstrapRateLimitPolicy(10), bootstrapProtection())
 
 	err := service.ReconcileAdministratorRecovery(context.Background(), invocation.Task("startup-reconciliation-test"))
 	require.ErrorIs(t, err, persistenceErr, "ReconcileAdministratorRecovery()")
@@ -96,7 +96,7 @@ func TestHostOperatorUseCasesRequireTheirSystemIdentity(t *testing.T) {
 	t.Parallel()
 	events := []string{}
 	persistence := &installationStoreFake{events: &events}
-	service := newBootstrapService(bootstrapServiceDependencies{Installations: persistence, Hasher: &passwordHasherFake{events: &events}, Attempts: bootstrapAttemptAccounting(t, &bootstrapAttemptCacheFake{}), RateLimit: bootstrapRateLimitPolicy(10), Protection: bootstrapProtection(), NodeID: "node-recovery", Now: time.Now, RecoveryPolicy: administratorRecoveryPolicy{}})
+	service := bootstrapTestService(&Service{installations: persistence, hasher: &passwordHasherFake{events: &events}, attempts: bootstrapAttemptAccounting(t, &bootstrapAttemptCacheFake{}), nodeID: "node-recovery", now: time.Now}, bootstrapRateLimitPolicy(10), bootstrapProtection())
 	command := AdministratorRecoveryCommand{InstitutionID: model.NewInstitutionID(), UserID: model.NewUserID(), Password: "private-password"}
 
 	_, err := service.RecoverAdministratorAccess(context.Background(), invocation.System{}, command)

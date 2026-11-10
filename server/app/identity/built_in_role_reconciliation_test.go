@@ -42,7 +42,7 @@ func TestBootstrapServiceReconcilesSystemAdministratorRoleFromRegistry(t *testin
 	persistence := &builtInRoleReconciliationStoreFake{
 		result: &store.SystemAdministratorRoleReconciliationResult{},
 	}
-	service := newBootstrapService(bootstrapServiceDependencies{Installations: persistence, Hasher: &passwordHasherFake{events: &events}, Attempts: bootstrapAttemptAccounting(t, &bootstrapAttemptCacheFake{}), RateLimit: LoginRateLimitPolicy{Window: time.Minute, MaximumSourceAttempts: 3}, Protection: bootstrapProtection(), NodeID: "node-reconcile", Now: func() time.Time { return at }, RecoveryPolicy: administratorRecoveryPolicy{}})
+	service := bootstrapTestService(&Service{installations: persistence, hasher: &passwordHasherFake{events: &events}, attempts: bootstrapAttemptAccounting(t, &bootstrapAttemptCacheFake{}), nodeID: "node-reconcile", now: func() time.Time { return at }}, LoginRateLimitPolicy{Window: time.Minute, MaximumSourceAttempts: 3}, bootstrapProtection())
 
 	require.NoError(t, service.ReconcileSystemAdministratorRole(context.Background(), invocation.Task("startup-reconciliation-test")))
 	require.NotNil(t, persistence.input, "reconciliation input was not persisted")
@@ -62,7 +62,7 @@ func TestBootstrapServiceFailsStartupWhenSystemAdministratorRoleCannotReconcile(
 	persistenceErr := errors.New("database unavailable")
 	events := []string{}
 	persistence := &builtInRoleReconciliationStoreFake{err: persistenceErr}
-	service := newBootstrapService(bootstrapServiceDependencies{Installations: persistence, Hasher: &passwordHasherFake{events: &events}, Attempts: bootstrapAttemptAccounting(t, &bootstrapAttemptCacheFake{}), RateLimit: LoginRateLimitPolicy{Window: time.Minute, MaximumSourceAttempts: 3}, Protection: bootstrapProtection(), NodeID: "node-reconcile", Now: model.NowUTC, RecoveryPolicy: administratorRecoveryPolicy{}})
+	service := bootstrapTestService(&Service{installations: persistence, hasher: &passwordHasherFake{events: &events}, attempts: bootstrapAttemptAccounting(t, &bootstrapAttemptCacheFake{}), nodeID: "node-reconcile", now: model.NowUTC}, LoginRateLimitPolicy{Window: time.Minute, MaximumSourceAttempts: 3}, bootstrapProtection())
 
 	err := service.ReconcileSystemAdministratorRole(context.Background(), invocation.Task("startup-reconciliation-test"))
 	require.ErrorIs(t, err, persistenceErr)

@@ -21,7 +21,7 @@ import (
 
 type ExamRevisionApplication interface {
 	PublishExamRevision(context.Context, invocation.Invocation, exam.PublishRevisionCommand) (store.ExamRevisionSummary, error)
-	GetExamRevision(context.Context, invocation.Invocation, exam.GetRevisionQuery) (store.ExamRevisionSummary, error)
+	GetExamRevision(context.Context, invocation.Invocation, model.ExamID, model.ExamRevisionID) (store.ExamRevisionSummary, error)
 	ListExamRevisions(context.Context, invocation.Invocation, exam.ListRevisionsQuery) (exam.RevisionPage, error)
 }
 
@@ -155,11 +155,7 @@ func (h examRevisionHandlers) get(request operationRequest) (operationResult, er
 		return operationResult{}, err
 	}
 
-	summary, err := h.app.GetExamRevision(
-		request.context,
-		request.invocation(),
-		exam.GetRevisionQuery{ExamID: examID, RevisionID: revisionID},
-	)
+	summary, err := h.app.GetExamRevision(request.context, request.invocation(), examID, revisionID)
 	if err != nil {
 		return operationResult{}, err
 	}

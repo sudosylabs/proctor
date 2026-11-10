@@ -179,7 +179,7 @@ func (s *Service) DeclareNativeDeliveryGaps(
 	}
 	defer release()
 
-	access, err := nativeDeliverySelector(invocation, command.Query)
+	deliveryAccess, err := nativeDeliverySelector(invocation, command.Query)
 	if err != nil {
 		return nil, err
 	}
@@ -187,37 +187,37 @@ func (s *Service) DeclareNativeDeliveryGaps(
 		return nil, apperror.Invalid("exam.attempt.invalid", "delivery_gaps")
 	}
 
-	idempotency, err := idempotency.Require(invocation, store.NativeDeliveryGapsOperation, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(invocation, store.NativeDeliveryGapsOperation, command.IdempotencyKey, struct {
 		AttemptID   model.ExamAttemptID
 		StreamID    string
 		Declaration model.DeclareDeliveryGaps
-	}{access.Access.AttemptID, access.StreamID, command.Declaration})
+	}{deliveryAccess.Access.AttemptID, deliveryAccess.StreamID, command.Declaration})
 	if err != nil {
 		return nil, err
 	}
 
-	audit, err := s.beginNativeDeliveryAudit(ctx, invocation, access, store.NativeDeliveryGapsOperation)
+	audit, err := s.beginNativeDeliveryAudit(ctx, invocation, deliveryAccess, store.NativeDeliveryGapsOperation)
 	if err != nil {
 		return nil, err
 	}
 
 	value, err := s.deps.Persistence.DeclareNativeDeliveryGaps(
 		ctx,
-		&store.NativeDeliveryGapDeclaration{Access: access, Declaration: command.Declaration, AuditEventID: audit, AuditAt: s.deps.Now()},
-		idempotency,
+		&store.NativeDeliveryGapDeclaration{Access: deliveryAccess, Declaration: command.Declaration, AuditEventID: audit, AuditAt: s.deps.Now()},
+		commandIdempotency,
 	)
 	if err != nil {
 		var capacity *model.DeliveryMetadataCapacity
 		if errors.As(err, &capacity) {
-			return nil, s.nativeDeliveryFailure(ctx, access, err)
+			return nil, s.nativeDeliveryFailure(ctx, deliveryAccess, err)
 		}
 
 		var refusal *store.NativeDeliveryRefusal
 		if errors.As(err, &refusal) {
-			return nil, s.nativeDeliveryFailure(ctx, access, err)
+			return nil, s.nativeDeliveryFailure(ctx, deliveryAccess, err)
 		}
 
-		return nil, s.failAudit(ctx, audit, s.nativeDeliveryFailure(ctx, access, err))
+		return nil, s.failAudit(ctx, audit, s.nativeDeliveryFailure(ctx, deliveryAccess, err))
 	}
 
 	if value == nil ||
@@ -245,7 +245,7 @@ func (s *Service) SealNativeDelivery(
 	}
 	defer release()
 
-	access, err := nativeDeliverySelector(invocation, command.Query)
+	deliveryAccess, err := nativeDeliverySelector(invocation, command.Query)
 	if err != nil {
 		return nil, err
 	}
@@ -253,40 +253,40 @@ func (s *Service) SealNativeDelivery(
 		return nil, apperror.Invalid("exam.attempt.invalid", "delivery_final")
 	}
 
-	idempotency, err := idempotency.Require(invocation, store.NativeDeliveryFinalOperation, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(invocation, store.NativeDeliveryFinalOperation, command.IdempotencyKey, struct {
 		AttemptID   model.ExamAttemptID
 		StreamID    string
 		Declaration model.FinalDeliveryDeclaration
-	}{access.Access.AttemptID, access.StreamID, command.Declaration})
+	}{deliveryAccess.Access.AttemptID, deliveryAccess.StreamID, command.Declaration})
 	if err != nil {
 		return nil, err
 	}
 
-	audit, err := s.beginNativeDeliveryAudit(ctx, invocation, access, store.NativeDeliveryFinalOperation)
+	audit, err := s.beginNativeDeliveryAudit(ctx, invocation, deliveryAccess, store.NativeDeliveryFinalOperation)
 	if err != nil {
 		return nil, err
 	}
 
 	value, err := s.deps.Persistence.SealNativeDelivery(
 		ctx,
-		&store.NativeDeliveryFinalDeclaration{Access: access, Declaration: command.Declaration, AuditEventID: audit, AuditAt: s.deps.Now()},
-		idempotency,
+		&store.NativeDeliveryFinalDeclaration{Access: deliveryAccess, Declaration: command.Declaration, AuditEventID: audit, AuditAt: s.deps.Now()},
+		commandIdempotency,
 	)
 	if err != nil {
 		var capacity *model.DeliveryMetadataCapacity
 		if errors.As(err, &capacity) {
-			return nil, s.nativeDeliveryFailure(ctx, access, err)
+			return nil, s.nativeDeliveryFailure(ctx, deliveryAccess, err)
 		}
 
 		var refusal *store.NativeDeliveryRefusal
 		if errors.As(err, &refusal) {
-			return nil, s.nativeDeliveryFailure(ctx, access, err)
+			return nil, s.nativeDeliveryFailure(ctx, deliveryAccess, err)
 		}
 
-		return nil, s.failAudit(ctx, audit, s.nativeDeliveryFailure(ctx, access, err))
+		return nil, s.failAudit(ctx, audit, s.nativeDeliveryFailure(ctx, deliveryAccess, err))
 	}
 
-	if value == nil || value.Validate() != nil || value.StreamID != access.StreamID {
+	if value == nil || value.Validate() != nil || value.StreamID != deliveryAccess.StreamID {
 		return nil, apperror.New("exam.attempt.unavailable").Wrap(model.ErrNativeDeliveryInvalid)
 	}
 
@@ -307,7 +307,7 @@ func (s *Service) UpdateNativeDeliverySummary(
 	}
 	defer release()
 
-	access, err := nativeDeliverySelector(invocation, command.Query)
+	deliveryAccess, err := nativeDeliverySelector(invocation, command.Query)
 	if err != nil {
 		return nil, err
 	}
@@ -315,29 +315,29 @@ func (s *Service) UpdateNativeDeliverySummary(
 		return nil, apperror.Invalid("exam.attempt.invalid", "delivery_summary")
 	}
 
-	idempotency, err := idempotency.Require(invocation, store.NativeDeliverySummaryOperation, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(invocation, store.NativeDeliverySummaryOperation, command.IdempotencyKey, struct {
 		AttemptID model.ExamAttemptID
 		StreamID  string
 		Summary   model.UnretainedDeliverySummary
-	}{access.Access.AttemptID, access.StreamID, command.Summary})
+	}{deliveryAccess.Access.AttemptID, deliveryAccess.StreamID, command.Summary})
 	if err != nil {
 		return nil, err
 	}
 
-	audit, err := s.beginNativeDeliveryAudit(ctx, invocation, access, store.NativeDeliverySummaryOperation)
+	audit, err := s.beginNativeDeliveryAudit(ctx, invocation, deliveryAccess, store.NativeDeliverySummaryOperation)
 	if err != nil {
 		return nil, err
 	}
 
 	value, err := s.deps.Persistence.UpdateNativeDeliverySummary(
 		ctx,
-		&store.NativeDeliverySummaryUpdate{Access: access, Summary: command.Summary, AuditEventID: audit, AuditAt: s.deps.Now()},
-		idempotency,
+		&store.NativeDeliverySummaryUpdate{Access: deliveryAccess, Summary: command.Summary, AuditEventID: audit, AuditAt: s.deps.Now()},
+		commandIdempotency,
 	)
 	if err != nil {
-		return nil, s.failAudit(ctx, audit, s.nativeDeliveryFailure(ctx, access, err))
+		return nil, s.failAudit(ctx, audit, s.nativeDeliveryFailure(ctx, deliveryAccess, err))
 	}
-	if value == nil || value.Validate() != nil || value.StreamID != access.StreamID {
+	if value == nil || value.Validate() != nil || value.StreamID != deliveryAccess.StreamID {
 		return nil, apperror.New("exam.attempt.unavailable").Wrap(model.ErrNativeDeliveryInvalid)
 	}
 
@@ -377,18 +377,18 @@ func (s *Service) AppendNativeDelivery(
 	command NativeDeliveryAppendCommand,
 ) (_ *model.NativeSecurityAcknowledgement, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	access, err := nativeDeliverySelector(invocation, command.Query)
+	deliveryAccess, err := nativeDeliverySelector(invocation, command.Query)
 	if err != nil {
 		return nil, err
 	}
-	if command.Batch.Validate() != nil || command.Batch.StreamID != access.StreamID {
+	if command.Batch.Validate() != nil || command.Batch.StreamID != deliveryAccess.StreamID {
 		return nil, apperror.Invalid("exam.attempt.invalid", "native_batch")
 	}
 
-	access.ParticipationID, access.Generation = command.Batch.ParticipationID, command.Batch.Generation
-	target, err := s.deps.Persistence.ResolveNativeDeliveryTarget(ctx, access)
+	deliveryAccess.ParticipationID, deliveryAccess.Generation = command.Batch.ParticipationID, command.Batch.Generation
+	target, err := s.deps.Persistence.ResolveNativeDeliveryTarget(ctx, deliveryAccess)
 	if err != nil {
-		return nil, s.nativeDeliveryFailure(ctx, access, err)
+		return nil, s.nativeDeliveryFailure(ctx, deliveryAccess, err)
 	}
 	if target == nil || target.Security.Validate() != nil {
 		return nil, apperror.New("exam.attempt.unavailable").Wrap(model.ErrNativeDeliveryInvalid)
@@ -405,41 +405,41 @@ func (s *Service) AppendNativeDelivery(
 		return nil, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
 
-	idempotency, err := idempotency.Require(invocation, store.NativeDeliveryAppendOperation, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(invocation, store.NativeDeliveryAppendOperation, command.IdempotencyKey, struct {
 		AttemptID model.ExamAttemptID
 		Batch     model.NativeSecurityBatch
-	}{access.Access.AttemptID, command.Batch})
+	}{deliveryAccess.Access.AttemptID, command.Batch})
 	if err != nil {
 		return nil, err
 	}
 
-	audit, err := s.beginNativeDeliveryAudit(ctx, invocation, access, store.NativeDeliveryAppendOperation)
+	audit, err := s.beginNativeDeliveryAudit(ctx, invocation, deliveryAccess, store.NativeDeliveryAppendOperation)
 	if err != nil {
 		return nil, err
 	}
 
 	value, err := s.deps.Persistence.AppendNativeDelivery(
 		ctx,
-		&store.NativeDeliveryAppend{Access: access, Batch: command.Batch, DesktopBuild: build, AuditEventID: audit, AuditAt: s.deps.Now()},
-		idempotency,
+		&store.NativeDeliveryAppend{Access: deliveryAccess, Batch: command.Batch, DesktopBuild: build, AuditEventID: audit, AuditAt: s.deps.Now()},
+		commandIdempotency,
 	)
 	if err != nil {
 		var capacity *model.DeliveryMetadataCapacity
 		if errors.As(err, &capacity) {
-			return nil, s.nativeDeliveryFailure(ctx, access, err)
+			return nil, s.nativeDeliveryFailure(ctx, deliveryAccess, err)
 		}
 
 		var refusal *store.NativeDeliveryRefusal
 		if errors.As(err, &refusal) {
-			return nil, s.nativeDeliveryFailure(ctx, access, err)
+			return nil, s.nativeDeliveryFailure(ctx, deliveryAccess, err)
 		}
 
-		return nil, s.failAudit(ctx, audit, s.nativeDeliveryFailure(ctx, access, err))
+		return nil, s.failAudit(ctx, audit, s.nativeDeliveryFailure(ctx, deliveryAccess, err))
 	}
 
 	if value == nil ||
 		value.Receipt.Validate() != nil ||
-		value.Receipt.StreamID != access.StreamID ||
+		value.Receipt.StreamID != deliveryAccess.StreamID ||
 		value.Receipt.BatchSequence != command.Batch.BatchSequence {
 		return nil, apperror.New("exam.attempt.unavailable").Wrap(model.ErrNativeDeliveryInvalid)
 	}

@@ -106,7 +106,7 @@ func TestAcademicUnitGetDenialDoesNotReadPersistence(t *testing.T) {
 	_, err := service.GetAcademicUnit(
 		context.Background(),
 		invocation.New(model.Principal{}, model.RequestMetadata{}),
-		GetAcademicUnitQuery{ID: model.NewAcademicUnitID()},
+		model.NewAcademicUnitID(),
 	)
 	require.True(t, apperror.Is(err, "authorization.denied"), "Get() error = %v, want authorization.denied", err)
 	require.Equal(t, 0, units.getCalls, "persistence reads after denial")
@@ -126,7 +126,7 @@ func TestAcademicUnitGetUsesUnitViewScope(t *testing.T) {
 		return nil
 	})}})
 	got, err := service.GetAcademicUnit(
-		context.Background(), invocation.Invocation{}, GetAcademicUnitQuery{ID: unit.ID},
+		context.Background(), invocation.Invocation{}, unit.ID,
 	)
 	require.NoError(t, err)
 	require.Same(t, unit, got, "Get()")

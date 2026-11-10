@@ -36,7 +36,6 @@ type grantableScopesHTTPApplication struct {
 func (a *grantableScopesHTTPApplication) ListGrantablePersonalAccessTokenScopes(
 	context.Context,
 	invocation.Invocation,
-	identity.ListGrantablePersonalAccessTokenScopesQuery,
 ) (*identity.PersonalAccessTokenGrantableScopes, error) {
 	a.calls++
 	return a.catalogue, nil

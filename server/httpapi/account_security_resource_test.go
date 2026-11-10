@@ -36,7 +36,6 @@ type accountSecurityHTTPApplication struct {
 func (as *accountSecurityHTTPApplication) ListSessions(
 	context.Context,
 	invocation.Invocation,
-	identity.ListSessionsQuery,
 ) ([]*model.Session, error) {
 	return append([]*model.Session{}, as.sessions...), nil
 }
@@ -44,7 +43,6 @@ func (as *accountSecurityHTTPApplication) ListSessions(
 func (as *accountSecurityHTTPApplication) RevokeOtherSessions(
 	context.Context,
 	invocation.Invocation,
-	identity.RevokeOtherSessionsCommand,
 ) (*identity.RevokeOtherSessionsResult, error) {
 	as.revokeOthers++
 	return &identity.RevokeOtherSessionsResult{RevokedSessionCount: 2}, nil
@@ -53,7 +51,6 @@ func (as *accountSecurityHTTPApplication) RevokeOtherSessions(
 func (as *accountSecurityHTTPApplication) GetMFAStatus(
 	context.Context,
 	invocation.Invocation,
-	identity.GetMFAStatusQuery,
 ) (*identity.MFAStatus, error) {
 	return &identity.MFAStatus{Enabled: true, RecoveryCodesRemaining: 7}, nil
 }

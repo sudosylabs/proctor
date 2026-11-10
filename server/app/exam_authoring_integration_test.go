@@ -113,7 +113,7 @@ func TestExamAuthoringIntegration(t *testing.T) {
 		Title: &staleTitle, IdempotencyKey: "exam-edit-stale",
 	})
 	require.True(t, apperror.Is(appErr, "exam.draft.revision_conflict"), "stale edit error = %v", appErr)
-	got, appErr := helper.App.ExamAuthoring.GetExam(ctx, call, exam.GetQuery{ExamID: created.Exam.ID})
+	got, appErr := helper.App.ExamAuthoring.GetExam(ctx, call, created.Exam.ID)
 	require.NoError(t, appErr)
 	require.Equal(t, created.Exam.ID, got.Exam.ID)
 	require.Equal(t, editedTitle, got.Draft.Title)
@@ -133,7 +133,7 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	require.NoError(t, appErr)
 	managerMembership, err := persistence.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{AcademicUnitID: unit.ID, UserID: managerUser.ID, StartsAt: model.TimeFromMillis(model.GetMillis() - 1_000)})
 	require.NoError(t, err)
-	managerAdded, appErr := helper.App.ExamAuthoring.AddExamManager(ctx, call, exam.AddManagerCommand{
+	managerAdded, appErr := helper.App.ExamAuthoring.AddExamManager(ctx, call, exam.ManagerChangeCommand{
 		ExamID: created.Exam.ID, UserID: managerUser.ID, ExpectedExamRevision: 1, IdempotencyKey: "exam-manager-add",
 	})
 	require.NoError(t, appErr, "manager addition = %#v", managerAdded)
@@ -182,7 +182,7 @@ func TestExamAuthoringIntegration(t *testing.T) {
 		ChangedAt: reenabledAt, AuditEventID: reenableAudit.ID, AuditAt: reenabledAt,
 	}))
 	require.NoError(t, err)
-	transferred, appErr := helper.App.ExamAuthoring.TransferExamOwnership(ctx, call, exam.TransferOwnerCommand{
+	transferred, appErr := helper.App.ExamAuthoring.TransferExamOwnership(ctx, call, exam.ManagerChangeCommand{
 		ExamID: created.Exam.ID, UserID: managerUser.ID, ExpectedExamRevision: 2, IdempotencyKey: "exam-owner-transfer",
 	})
 	require.NoError(t, appErr, "ownership transfer = %#v", transferred)
@@ -199,7 +199,7 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	require.True(t, remainsManager)
 	require.False(t, owner)
 	require.True(t, relationships[managerUser.ID])
-	removedCreator, appErr := helper.App.ExamAuthoring.RemoveExamManager(ctx, managerInvocation, exam.RemoveManagerCommand{
+	removedCreator, appErr := helper.App.ExamAuthoring.RemoveExamManager(ctx, managerInvocation, exam.ManagerChangeCommand{
 		ExamID: created.Exam.ID, UserID: teacher.ID, ExpectedExamRevision: 3, IdempotencyKey: "exam-manager-remove-creator",
 	})
 	require.NoError(t, appErr, "creator relationship removal = %#v", removedCreator)
@@ -232,7 +232,7 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	outsiderPrincipal, appErr := helper.App.Identity.AuthenticateAccess(ctx, outsiderLogin.Tokens.AccessToken)
 	require.NoError(t, appErr)
 	outsiderInvocation := invocation.New(*outsiderPrincipal, model.RequestMetadata{RequestID: "exam-get-denied-integration"})
-	_, appErr = helper.App.ExamAuthoring.GetExam(ctx, outsiderInvocation, exam.GetQuery{ExamID: created.Exam.ID})
+	_, appErr = helper.App.ExamAuthoring.GetExam(ctx, outsiderInvocation, created.Exam.ID)
 	require.True(t, apperror.Is(appErr, "resource.not_found"), "outsider get error = %v, want concealed resource.not_found", appErr)
 	_, appErr = helper.App.ExamAuthoring.ArchiveExam(ctx, outsiderInvocation, exam.ArchiveCommand{
 		ExamID: created.Exam.ID, ExpectedExamRevision: created.Exam.Revision, IdempotencyKey: "exam-archive-denied",
@@ -247,7 +247,7 @@ func TestExamAuthoringIntegration(t *testing.T) {
 		ScopeID: institution.ID.String(), StartsAt: model.TimeFromMillis(model.GetMillis() - 1_000),
 	})
 	require.NoError(t, err)
-	overrideAdded, appErr := helper.App.ExamAuthoring.AddExamManager(ctx, outsiderInvocation, exam.AddManagerCommand{
+	overrideAdded, appErr := helper.App.ExamAuthoring.AddExamManager(ctx, outsiderInvocation, exam.ManagerChangeCommand{
 		ExamID: created.Exam.ID, UserID: teacher.ID, ExpectedExamRevision: currentExamRevision, IdempotencyKey: "exam-manager-override-add",
 	})
 	require.NoError(t, appErr, "override Manager addition = %#v", overrideAdded)
@@ -304,7 +304,7 @@ func TestExamAuthoringIntegration(t *testing.T) {
 	require.Equal(t, archived.ID, archivedPage.Items[0].ID, "archived catalog = %#v", archivedPage)
 	require.True(t, archivedPage.Items[0].ArchivedAt.Valid, "archived catalog = %#v", archivedPage)
 	require.Equal(t, archived.Revision, archivedPage.Items[0].Revision, "archived catalog = %#v", archivedPage)
-	archivedView, appErr := helper.App.ExamAuthoring.GetExam(ctx, call, exam.GetQuery{ExamID: created.Exam.ID})
+	archivedView, appErr := helper.App.ExamAuthoring.GetExam(ctx, call, created.Exam.ID)
 	require.NoError(t, appErr, "archived exact Get = %#v", archivedView)
 	require.True(t, archivedView.Exam.IsArchived(), "archived exact Get = %#v", archivedView)
 	require.Equal(t, editedTitle, archivedView.Draft.Title, "archived exact Get = %#v", archivedView)

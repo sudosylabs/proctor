@@ -283,21 +283,21 @@ func focusLossSelector(invocation invocation.Invocation, command FocusLossComman
 	}, nil
 }
 
-func validFocusLossTarget(target *store.ExamAttemptFocusLossTarget, access store.ExamAttemptFocusLossAccess) bool {
+func validFocusLossTarget(target *store.ExamAttemptFocusLossTarget, focusLossAccess store.ExamAttemptFocusLossAccess) bool {
 	return target != nil &&
 		target.ExamID.IsValid() &&
 		target.SittingID.IsValid() &&
 		target.ClassID.IsValid() &&
-		target.CandidateUserID == access.CandidateUserID &&
-		target.AttemptID == access.AttemptID &&
-		target.ParticipationID == access.ParticipationID &&
-		target.Generation == access.Generation
+		target.CandidateUserID == focusLossAccess.CandidateUserID &&
+		target.AttemptID == focusLossAccess.AttemptID &&
+		target.ParticipationID == focusLossAccess.ParticipationID &&
+		target.Generation == focusLossAccess.Generation
 }
 
 func projectFocusLoss(
 	stored *store.ExamAttemptFocusLossResult,
 	target *store.ExamAttemptFocusLossTarget,
-	access store.ExamAttemptFocusLossAccess,
+	focusLossAccess store.ExamAttemptFocusLossAccess,
 	command FocusLossCommand,
 ) (FocusLossEvaluation, error) {
 	if stored == nil ||
@@ -306,13 +306,13 @@ func projectFocusLoss(
 		stored.ExamID != target.ExamID ||
 		stored.SittingID != target.SittingID ||
 		stored.ClassID != target.ClassID ||
-		stored.CandidateUserID != access.CandidateUserID ||
-		stored.AttemptID != access.AttemptID ||
-		stored.ParticipationID != access.ParticipationID ||
-		stored.Generation != access.Generation ||
-		stored.Signal.AttemptID != access.AttemptID ||
-		stored.Signal.ParticipationID != access.ParticipationID ||
-		stored.Signal.Generation != access.Generation ||
+		stored.CandidateUserID != focusLossAccess.CandidateUserID ||
+		stored.AttemptID != focusLossAccess.AttemptID ||
+		stored.ParticipationID != focusLossAccess.ParticipationID ||
+		stored.Generation != focusLossAccess.Generation ||
+		stored.Signal.AttemptID != focusLossAccess.AttemptID ||
+		stored.Signal.ParticipationID != focusLossAccess.ParticipationID ||
+		stored.Signal.Generation != focusLossAccess.Generation ||
 		stored.Signal.Sequence != command.Sequence ||
 		stored.Signal.DurationMilliseconds != command.DurationMilliseconds ||
 		stored.Signal.Source != command.Source ||
@@ -327,7 +327,7 @@ func projectFocusLoss(
 		return FocusLossEvaluation{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Focus Loss outcome"))
 	}
 
-	if !validFocusLossEnforcement(stored, access) {
+	if !validFocusLossEnforcement(stored, focusLossAccess) {
 		return FocusLossEvaluation{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Focus Loss enforcement outcome"))
 	}
 
@@ -376,12 +376,12 @@ func projectFocusLoss(
 	return result, nil
 }
 
-func validFocusLossEnforcement(result *store.ExamAttemptFocusLossResult, access store.ExamAttemptFocusLossAccess) bool {
+func validFocusLossEnforcement(result *store.ExamAttemptFocusLossResult, focusLossAccess store.ExamAttemptFocusLossAccess) bool {
 	if result.Overflow != nil &&
 		(result.Overflow.Validate() != nil ||
-			result.Overflow.AttemptID != access.AttemptID ||
-			result.Overflow.ParticipationID != access.ParticipationID ||
-			result.Overflow.Generation != access.Generation) {
+			result.Overflow.AttemptID != focusLossAccess.AttemptID ||
+			result.Overflow.ParticipationID != focusLossAccess.ParticipationID ||
+			result.Overflow.Generation != focusLossAccess.Generation) {
 		return false
 	}
 
@@ -446,8 +446,8 @@ func validFocusLossEnforcement(result *store.ExamAttemptFocusLossResult, access 
 
 	if result.Flag != nil &&
 		(result.Flag.Validate() != nil ||
-			result.Flag.AttemptID != access.AttemptID ||
-			result.Flag.Generation != access.Generation ||
+			result.Flag.AttemptID != focusLossAccess.AttemptID ||
+			result.Flag.Generation != focusLossAccess.Generation ||
 			result.Flag.Kind != model.IntegrityPolicyFocusLoss) {
 		return false
 	}
@@ -458,7 +458,7 @@ func validFocusLossEnforcement(result *store.ExamAttemptFocusLossResult, access 
 
 	if result.Attempt != nil &&
 		(result.Attempt.Validate() != nil ||
-			result.Attempt.ID != access.AttemptID ||
+			result.Attempt.ID != focusLossAccess.AttemptID ||
 			result.Attempt.ExamID != result.ExamID ||
 			result.Attempt.SittingID != result.SittingID ||
 			result.Attempt.CandidateUserID != result.CandidateUserID) {
@@ -467,12 +467,12 @@ func validFocusLossEnforcement(result *store.ExamAttemptFocusLossResult, access 
 
 	if result.Participation != nil &&
 		(!validParticipationView(result.Participation) ||
-			result.Participation.ID != access.ParticipationID ||
-			result.Participation.Generation != access.Generation) {
+			result.Participation.ID != focusLossAccess.ParticipationID ||
+			result.Participation.Generation != focusLossAccess.Generation) {
 		return false
 	}
 
-	if result.Connection != nil && (result.Connection.ID != access.ConnectionID || !validFocusLossConnection(result.Connection)) {
+	if result.Connection != nil && (result.Connection.ID != focusLossAccess.ConnectionID || !validFocusLossConnection(result.Connection)) {
 		return false
 	}
 
@@ -484,10 +484,10 @@ func validFocusLossEnforcement(result *store.ExamAttemptFocusLossResult, access 
 	}
 
 	if result.Suspension != nil &&
-		(!validActiveSuspension(result.Suspension, access.AttemptID) ||
+		(!validActiveSuspension(result.Suspension, focusLossAccess.AttemptID) ||
 			result.Flag == nil ||
-			result.Suspension.ParticipationID != access.ParticipationID ||
-			result.Suspension.Generation != access.Generation ||
+			result.Suspension.ParticipationID != focusLossAccess.ParticipationID ||
+			result.Suspension.Generation != focusLossAccess.Generation ||
 			result.Suspension.FlagID != result.Flag.ID ||
 			result.Suspension.CandidateReason != model.AttemptSuspensionCandidateReasonFocusLossPolicy) {
 		return false

@@ -24,7 +24,7 @@ import (
 
 type recoveryMFAHTTPFake struct{ MFA }
 
-func (recoveryMFAHTTPFake) GetMFAStatus(_ context.Context, invocation invocation.Invocation, _ identity.GetMFAStatusQuery) (*identity.MFAStatus, error) {
+func (recoveryMFAHTTPFake) GetMFAStatus(_ context.Context, invocation invocation.Invocation) (*identity.MFAStatus, error) {
 	return &identity.MFAStatus{MFARecoveryRequired: invocation.Principal().MFARecoveryRequired, AuthenticationMethod: "oidc", AuthenticationProviderID: "campus", AuthenticationStrength: model.AuthenticationSingleFactor, RecentlyAuthenticated: true}, nil
 }
 func (recoveryMFAHTTPFake) SetupMFA(context.Context, invocation.Invocation, identity.SetupMFACommand) (*identity.MFASetup, error) {
@@ -57,7 +57,7 @@ func TestMFARestrictedSessionOnlyReachesExplicitRecoveryRoutes(t *testing.T) {
 
 type enrollmentMFAHTTPFake struct{ MFA }
 
-func (enrollmentMFAHTTPFake) GetMFAStatus(_ context.Context, invocation invocation.Invocation, _ identity.GetMFAStatusQuery) (*identity.MFAStatus, error) {
+func (enrollmentMFAHTTPFake) GetMFAStatus(_ context.Context, invocation invocation.Invocation) (*identity.MFAStatus, error) {
 	return &identity.MFAStatus{MFAEnrollmentRequired: invocation.Principal().MFAEnrollmentRequired, AuthenticationMethod: "oidc", AuthenticationProviderID: "campus", AuthenticationStrength: model.AuthenticationSingleFactor, RecentlyAuthenticated: true}, nil
 }
 func (enrollmentMFAHTTPFake) SetupMFA(context.Context, invocation.Invocation, identity.SetupMFACommand) (*identity.MFASetup, error) {
@@ -137,7 +137,7 @@ type statusMFAHTTPFake struct {
 	status *identity.MFAStatus
 }
 
-func (f statusMFAHTTPFake) GetMFAStatus(context.Context, invocation.Invocation, identity.GetMFAStatusQuery) (*identity.MFAStatus, error) {
+func (f statusMFAHTTPFake) GetMFAStatus(context.Context, invocation.Invocation) (*identity.MFAStatus, error) {
 	return f.status, nil
 }
 

@@ -19,49 +19,43 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// GetManagedAttemptQuery names one Attempt by its exact Exam and Sitting for
-// a managed view.
-type GetManagedAttemptQuery struct {
-	ExamID    model.ExamID
-	SittingID model.ExamSittingID
-	AttemptID model.ExamAttemptID
-}
-
 // GetExamAttempt returns a managed view of one Attempt. It authorizes Sitting
 // view on the exact Sitting before reading the Attempt so a caller cannot
 // distinguish existing, mismatched, or missing Attempts.
 func (s *Service) GetExamAttempt(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	query GetManagedAttemptQuery,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
 ) (_ store.ExamAttemptManagerSnapshot, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	if !query.ExamID.IsValid() || !query.SittingID.IsValid() || !query.AttemptID.IsValid() {
+	if !examID.IsValid() || !sittingID.IsValid() || !attemptID.IsValid() {
 		return store.ExamAttemptManagerSnapshot{}, apperror.Invalid("exam.attempt.invalid", "attempt")
 	}
 	// Authorization precedes every Attempt read so a caller without Sitting
 	// view authority cannot distinguish existing, mismatched, or missing
 	// Attempts; the authorizer records that decision.
-	if err := s.deps.Managers.AuthorizeSittingView(ctx, invocation, query.SittingID); err != nil {
+	if err := s.deps.Managers.AuthorizeSittingView(ctx, invocation, sittingID); err != nil {
 		return store.ExamAttemptManagerSnapshot{}, err
 	}
 
-	sitting, err := s.deps.Sittings.Resolve(ctx, query.SittingID)
+	sitting, err := s.deps.Sittings.Resolve(ctx, sittingID)
 	if err != nil {
 		return store.ExamAttemptManagerSnapshot{}, storeError(storeErrors, err)
 	}
 
-	if sitting == nil || sitting.Sitting == nil || sitting.Sitting.ID != query.SittingID || !sitting.AcademicUnitID.IsValid() {
+	if sitting == nil || sitting.Sitting == nil || sitting.Sitting.ID != sittingID || !sitting.AcademicUnitID.IsValid() {
 		return store.ExamAttemptManagerSnapshot{}, apperror.New("exam.attempt.unavailable").Wrap(
 			errors.New("inconsistent managed Attempt Sitting projection"),
 		)
 	}
 
-	if sitting.Sitting.ExamID != query.ExamID {
+	if sitting.Sitting.ExamID != examID {
 		return store.ExamAttemptManagerSnapshot{}, apperror.New("exam.attempt.not_found")
 	}
 
-	snapshot, err := s.deps.Persistence.Get(ctx, query.ExamID, query.AttemptID)
+	snapshot, err := s.deps.Persistence.Get(ctx, examID, attemptID)
 	if err != nil {
 		return store.ExamAttemptManagerSnapshot{}, storeError(storeErrors, err)
 	}
@@ -69,14 +63,14 @@ func (s *Service) GetExamAttempt(
 	if snapshot == nil ||
 		snapshot.Attempt == nil ||
 		snapshot.Attempt.Validate() != nil ||
-		snapshot.Attempt.ExamID != query.ExamID ||
+		snapshot.Attempt.ExamID != examID ||
 		!validActiveSuspension(snapshot.ActiveSuspension, snapshot.Attempt.ID) {
 		return store.ExamAttemptManagerSnapshot{}, apperror.New("exam.attempt.unavailable").Wrap(
 			errors.New("inconsistent managed Attempt projection"),
 		)
 	}
 
-	if snapshot.Attempt.SittingID != query.SittingID {
+	if snapshot.Attempt.SittingID != sittingID {
 		return store.ExamAttemptManagerSnapshot{}, apperror.New("exam.attempt.not_found")
 	}
 

@@ -159,33 +159,24 @@ func New(deps Dependencies) (*Service, error) {
 	return &Service{deps: deps}, nil
 }
 
-// ListQuery names the Exam whose Draft Starter Workspace is listed.
-type ListQuery struct{ ExamID model.ExamID }
-
 // ListExamStarterWorkspace returns the entries of the Exam Draft's Starter
 // Workspace to a caller authorized to view the Exam.
 func (s *Service) ListExamStarterWorkspace(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	query ListQuery,
+	examID model.ExamID,
 ) (_ []store.ExamStarterWorkspaceItem, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	if _, err := s.authorize(ctx, invocation, query.ExamID, false); err != nil {
+	if _, err := s.authorize(ctx, invocation, examID, false); err != nil {
 		return nil, err
 	}
 
-	items, err := s.deps.Persistence.List(ctx, query.ExamID)
+	items, err := s.deps.Persistence.List(ctx, examID)
 	if err != nil {
 		return nil, storeErrors.Translate(err)
 	}
 
 	return items, nil
-}
-
-// OpenFileQuery names one Draft Starter Workspace file of an Exam.
-type OpenFileQuery struct {
-	ExamID  model.ExamID
-	EntryID model.StarterWorkspaceEntryID
 }
 
 // OpenExamStarterWorkspaceFile opens one file of the Exam Draft's Starter
@@ -194,17 +185,18 @@ type OpenFileQuery struct {
 func (s *Service) OpenExamStarterWorkspaceFile(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	query OpenFileQuery,
+	examID model.ExamID,
+	entryID model.StarterWorkspaceEntryID,
 ) (_ OpenedFile, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	if !query.EntryID.IsValid() {
+	if !entryID.IsValid() {
 		return OpenedFile{}, apperror.Invalid("exam.starter_workspace.invalid", "entry_id")
 	}
-	if _, err := s.authorize(ctx, invocation, query.ExamID, false); err != nil {
+	if _, err := s.authorize(ctx, invocation, examID, false); err != nil {
 		return OpenedFile{}, err
 	}
 
-	item, err := s.deps.Persistence.GetFile(ctx, query.ExamID, query.EntryID)
+	item, err := s.deps.Persistence.GetFile(ctx, examID, entryID)
 	if err != nil {
 		return OpenedFile{}, storeErrors.Translate(err)
 	}
@@ -242,7 +234,7 @@ func (s *Service) CreateExamStarterWorkspaceDirectory(
 		return Result{}, err
 	}
 
-	idempotency, err := prepareWorkspaceIdempotency(
+	commandIdempotency, err := prepareWorkspaceIdempotency(
 		invocation,
 		idempotencyOperationCreateDirectory,
 		command.IdempotencyKey,
@@ -286,7 +278,7 @@ func (s *Service) CreateExamStarterWorkspaceDirectory(
 		"directory_create",
 		ChangeDirectoryCreated,
 		mutation,
-		idempotency,
+		commandIdempotency,
 		s.deps.Persistence.CreateDirectory,
 	)
 }
@@ -312,7 +304,7 @@ func (s *Service) CreateExamStarterWorkspaceFile(
 		return Result{}, apperror.Invalid("exam.starter_workspace.invalid", "content")
 	}
 
-	idempotency, err := prepareWorkspaceIdempotency(
+	commandIdempotency, err := prepareWorkspaceIdempotency(
 		invocation,
 		idempotencyOperationCreateFile,
 		command.IdempotencyKey,
@@ -347,7 +339,7 @@ func (s *Service) CreateExamStarterWorkspaceFile(
 		command.ExpectedSHA256,
 		command.Body,
 		command.Size,
-		idempotency,
+		commandIdempotency,
 		"file_create",
 		ChangeFileCreated,
 		s.deps.Persistence.CreateFile,
@@ -367,7 +359,7 @@ func (s *Service) MoveExamStarterWorkspaceEntry(
 		return Result{}, err
 	}
 
-	idempotency, err := prepareWorkspaceIdempotency(
+	commandIdempotency, err := prepareWorkspaceIdempotency(
 		invocation,
 		idempotencyOperationMoveEntry,
 		command.IdempotencyKey,
@@ -399,7 +391,7 @@ func (s *Service) MoveExamStarterWorkspaceEntry(
 		EntryID:               command.EntryID,
 		Path:                  path,
 	}
-	return s.runMutation(ctx, invocation, authorization, "entry_move", ChangeEntryMoved, mutation, idempotency, s.deps.Persistence.MoveEntry)
+	return s.runMutation(ctx, invocation, authorization, "entry_move", ChangeEntryMoved, mutation, commandIdempotency, s.deps.Persistence.MoveEntry)
 }
 
 // ReplaceExamStarterWorkspaceFile idempotently replaces a Starter Workspace
@@ -423,7 +415,7 @@ func (s *Service) ReplaceExamStarterWorkspaceFile(
 		return Result{}, apperror.Invalid("exam.starter_workspace.invalid", "content")
 	}
 
-	idempotency, err := prepareWorkspaceIdempotency(
+	commandIdempotency, err := prepareWorkspaceIdempotency(
 		invocation,
 		idempotencyOperationReplaceFile,
 		command.IdempotencyKey,
@@ -458,7 +450,7 @@ func (s *Service) ReplaceExamStarterWorkspaceFile(
 		command.ExpectedSHA256,
 		command.Body,
 		command.Size,
-		idempotency,
+		commandIdempotency,
 		"file_replace",
 		ChangeFileReplaced,
 		s.deps.Persistence.ReplaceFile,
@@ -478,7 +470,7 @@ func (s *Service) RemoveExamStarterWorkspaceEntry(
 		return Result{}, err
 	}
 
-	idempotency, err := idempotency.Require(invocation, idempotencyOperationRemoveEntry, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(invocation, idempotencyOperationRemoveEntry, command.IdempotencyKey, struct {
 		ExamID                string `json:"exam_id"`
 		ExpectedDraftRevision int64  `json:"expected_draft_revision"`
 		EntryID               string `json:"entry_id,omitempty"`
@@ -510,7 +502,7 @@ func (s *Service) RemoveExamStarterWorkspaceEntry(
 		"entry_remove",
 		ChangeEntryRemoved,
 		mutation,
-		idempotency,
+		commandIdempotency,
 		s.deps.Persistence.RemoveEntry,
 	)
 }
@@ -532,11 +524,11 @@ func (s *Service) authorize(
 		return authorization{}, apperror.Invalid("exam.starter_workspace.invalid", "exam_id")
 	}
 
-	access, err := s.deps.Access.Access(ctx, examID, principal.UserID)
+	examAccess, err := s.deps.Access.Access(ctx, examID, principal.UserID)
 	if err != nil {
 		return authorization{}, storeErrors.Translate(err)
 	}
-	if access == nil || access.Exam == nil {
+	if examAccess == nil || examAccess.Exam == nil {
 		return authorization{}, apperror.New("exam.starter_workspace.unavailable").Wrap(errors.New("Exam access projection is incomplete"))
 	}
 
@@ -546,11 +538,11 @@ func (s *Service) authorize(
 	}
 
 	var at time.Time
-	if access.ActorIsManager {
+	if examAccess.ActorIsManager {
 		at = model.TimeUTC(s.deps.Now())
 	}
 
-	action, err := manageraccess.SelectAction(ctx, s.deps.Memberships, principal.UserID, access, at, ordinaryAction, overrideAction)
+	action, err := manageraccess.SelectAction(ctx, s.deps.Memberships, principal.UserID, examAccess, at, ordinaryAction, overrideAction)
 	if err != nil {
 		return authorization{}, apperror.New("exam.starter_workspace.unavailable").Wrap(err)
 	}
@@ -560,7 +552,7 @@ func (s *Service) authorize(
 		return authorization{}, err
 	}
 
-	return authorization{action: action, unitID: access.Exam.AcademicUnitID, override: action == overrideAction}, nil
+	return authorization{action: action, unitID: examAccess.Exam.AcademicUnitID, override: action == overrideAction}, nil
 }
 
 type mutationRunner func(
@@ -576,7 +568,7 @@ func (s *Service) runMutation(
 	auditOperation string,
 	effectOperation ChangeOperation,
 	mutation *store.ExamStarterWorkspaceMutation,
-	idempotency *store.CommandIdempotency,
+	commandIdempotency *store.CommandIdempotency,
 	run mutationRunner,
 ) (Result, error) {
 	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
@@ -598,7 +590,7 @@ func (s *Service) runMutation(
 
 	mutation.AuditEventID = auditID
 	mutation.AuditAt = mutation.ChangedAt
-	result, err := run(ctx, mutation, idempotency)
+	result, err := run(ctx, mutation, commandIdempotency)
 	if err != nil {
 		mapped := storeErrors.Translate(err)
 		if failErr := s.deps.Auditor.Fail(ctx, auditID, apperror.CodeOf(mapped, "exam.starter_workspace.unavailable")); failErr != nil {
@@ -642,7 +634,7 @@ func (s *Service) stageAndFinalize(
 	mediaType, expectedSHA256 string,
 	body io.Reader,
 	size int64,
-	idempotency *store.CommandIdempotency,
+	commandIdempotency *store.CommandIdempotency,
 	auditOperation string,
 	effectOperation ChangeOperation,
 	run mutationRunner,
@@ -703,7 +695,7 @@ func (s *Service) stageAndFinalize(
 		SizeBytes:              staged.SizeBytes,
 		SHA256:                 staged.SHA256,
 	}
-	result, err := s.runMutation(ctx, invocation, authorization, auditOperation, effectOperation, mutation, idempotency, run)
+	result, err := s.runMutation(ctx, invocation, authorization, auditOperation, effectOperation, mutation, commandIdempotency, run)
 	if err != nil {
 		if !apperror.Is(err, "exam.starter_workspace.unavailable") {
 			_ = s.deps.Persistence.MarkObjectReclaimable(ctx, &store.StarterWorkspaceObjectReclaim{ObjectID: objectID, At: at})

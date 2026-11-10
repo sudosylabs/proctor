@@ -128,7 +128,6 @@ func (h institutionHandlers) get(request operationRequest) (operationResult, err
 	institution, err := h.app.GetInstitution(
 		request.context,
 		request.invocation(),
-		academic.GetInstitutionQuery{},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -183,6 +182,6 @@ func institutionResponseFromModel(institution *model.Institution) institutionRes
 
 // InstitutionApplication is the application port its handlers call; it reads and updates the Institution.
 type InstitutionApplication interface {
-	GetInstitution(context.Context, invocation.Invocation, academic.GetInstitutionQuery) (*model.Institution, error)
+	GetInstitution(context.Context, invocation.Invocation) (*model.Institution, error)
 	UpdateInstitution(context.Context, invocation.Invocation, academic.UpdateInstitutionCommand) (*model.Institution, error)
 }

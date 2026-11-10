@@ -175,7 +175,7 @@ func (a *Authoring) CreateExam(ctx context.Context, invocation invocation.Invoca
 		return View{}, apperror.Invalid("exam.invalid", "academic_unit_id")
 	}
 
-	idempotency, err := idempotency.Require(invocation, idempotencyOperationCreate, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(invocation, idempotencyOperationCreate, command.IdempotencyKey, struct {
 		AcademicUnitID       string `json:"academic_unit_id"`
 		Title                string `json:"title"`
 		InstructionsMarkdown string `json:"instructions_markdown"`
@@ -238,7 +238,7 @@ func (a *Authoring) CreateExam(ctx context.Context, invocation invocation.Invoca
 	}
 
 	creation := &store.ExamAuthoringCreation{Exam: exam, Draft: draft, Manager: manager, AuditEventID: auditID, AuditAt: at}
-	result, err := a.deps.Persistence.Create(ctx, creation, idempotency)
+	result, err := a.deps.Persistence.Create(ctx, creation, commandIdempotency)
 	if err != nil {
 		mapped := examStoreErrors.Translate(err)
 		if auditErr := a.deps.Auditor.Fail(ctx, auditID, apperror.CodeOf(mapped, "exam.unavailable")); auditErr != nil {
@@ -261,30 +261,27 @@ func (a *Authoring) CreateExam(ctx context.Context, invocation invocation.Invoca
 	return project(result.Value), nil
 }
 
-// GetQuery names one Exam.
-type GetQuery struct{ ExamID model.ExamID }
-
 // GetExam returns an Exam and its Exam Draft to a caller authorized to view
 // it, directly or through an override.
-func (a *Authoring) GetExam(ctx context.Context, invocation invocation.Invocation, query GetQuery) (_ View, resultErr error) {
+func (a *Authoring) GetExam(ctx context.Context, invocation invocation.Invocation, id model.ExamID) (_ View, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	principal := invocation.Principal()
-	if principal.Validate() != nil || !query.ExamID.IsValid() {
+	if principal.Validate() != nil || !id.IsValid() {
 		return View{}, apperror.Invalid("exam.invalid", "exam_id")
 	}
 
-	access, err := a.deps.Persistence.Access(ctx, query.ExamID, principal.UserID)
+	examAccess, err := a.deps.Persistence.Access(ctx, id, principal.UserID)
 	if err != nil {
 		return View{}, examStoreErrors.Translate(err)
 	}
-	if access == nil || access.Exam == nil {
+	if examAccess == nil || examAccess.Exam == nil {
 		return View{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no access projection"))
 	}
 
 	action, err := a.actionForAccess(
 		ctx,
 		principal.UserID,
-		access,
+		examAccess,
 		model.TimeUTC(a.deps.Now()),
 		model.ActionExamView,
 		model.ActionExamViewOverride,
@@ -297,12 +294,12 @@ func (a *Authoring) GetExam(ctx context.Context, invocation invocation.Invocatio
 		ctx,
 		invocation,
 		action,
-		model.Resource{Type: model.ResourceExam, ID: query.ExamID.String()},
+		model.Resource{Type: model.ResourceExam, ID: id.String()},
 	); err != nil {
 		return View{}, err
 	}
 
-	snapshot, err := a.deps.Persistence.Get(ctx, query.ExamID, principal.UserID)
+	snapshot, err := a.deps.Persistence.Get(ctx, id, principal.UserID)
 	if err != nil {
 		return View{}, examStoreErrors.Translate(err)
 	}
@@ -322,18 +319,18 @@ func (a *Authoring) AuthorizeExamView(ctx context.Context, invocation invocation
 		return apperror.Invalid("exam.invalid", "exam_id")
 	}
 
-	access, err := a.deps.Persistence.Access(ctx, examID, principal.UserID)
+	examAccess, err := a.deps.Persistence.Access(ctx, examID, principal.UserID)
 	if err != nil {
 		return examStoreErrors.Translate(err)
 	}
-	if access == nil || access.Exam == nil {
+	if examAccess == nil || examAccess.Exam == nil {
 		return apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no access projection"))
 	}
 
 	action, err := a.actionForAccess(
 		ctx,
 		principal.UserID,
-		access,
+		examAccess,
 		model.TimeUTC(a.deps.Now()),
 		model.ActionExamView,
 		model.ActionExamViewOverride,
@@ -368,7 +365,7 @@ func (a *Authoring) EditExamDraftText(
 	}
 
 	instructions := cloneStringPointer(command.InstructionsMarkdown)
-	idempotency, err := idempotency.Require(invocation, idempotencyOperationEditDraftText, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(invocation, idempotencyOperationEditDraftText, command.IdempotencyKey, struct {
 		ExamID                string  `json:"exam_id"`
 		ExpectedDraftRevision int64   `json:"expected_draft_revision"`
 		Title                 *string `json:"title"`
@@ -448,7 +445,7 @@ func (a *Authoring) EditExamDraftText(
 		UpdatedAt:            candidate.UpdatedAt,
 		AuditEventID:         auditID,
 		AuditAt:              at,
-	}, idempotency)
+	}, commandIdempotency)
 	if err != nil {
 		mapped := examStoreErrors.Translate(err)
 		if auditErr := a.deps.Auditor.Fail(ctx, auditID, apperror.CodeOf(mapped, "exam.unavailable")); auditErr != nil {
@@ -500,7 +497,7 @@ func (a *Authoring) ConfigureExamDraftFocusLoss(
 		return View{}, apperror.Invalid("exam.invalid", "focus_loss").Wrap(err)
 	}
 
-	idempotency, err := idempotency.Require(invocation, idempotencyOperationConfigureDraftFocusLoss, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(invocation, idempotencyOperationConfigureDraftFocusLoss, command.IdempotencyKey, struct {
 		ExamID                      string                          `json:"exam_id"`
 		ExpectedDraftRevision       int64                           `json:"expected_draft_revision"`
 		Enabled                     bool                            `json:"enabled"`
@@ -583,7 +580,7 @@ func (a *Authoring) ConfigureExamDraftFocusLoss(
 		UpdatedAt:        candidate.UpdatedAt,
 		AuditEventID:     auditID,
 		AuditAt:          at,
-	}, idempotency)
+	}, commandIdempotency)
 	if err != nil {
 		mapped := examStoreErrors.Translate(err)
 		if auditErr := a.deps.Auditor.Fail(ctx, auditID, apperror.CodeOf(mapped, "exam.unavailable")); auditErr != nil {
@@ -633,7 +630,7 @@ func (a *Authoring) ConfigureExamDraftBrowserPolicy(
 		return View{}, apperror.Invalid("exam.invalid", "browser_policy").Wrap(err)
 	}
 
-	idempotency, err := idempotency.Require(invocation, idempotencyOperationConfigureBrowserPolicy, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(invocation, idempotencyOperationConfigureBrowserPolicy, command.IdempotencyKey, struct {
 		ExamID                string          `json:"exam_id"`
 		ExpectedDraftRevision int64           `json:"expected_draft_revision"`
 		Policy                json.RawMessage `json:"browser_policy"`
@@ -709,7 +706,7 @@ func (a *Authoring) ConfigureExamDraftBrowserPolicy(
 			AuditEventID:      auditID,
 			AuditAt:           at,
 		},
-		idempotency,
+		commandIdempotency,
 	)
 	if err != nil {
 		mapped := examStoreErrors.Translate(err)
@@ -744,11 +741,11 @@ func cloneStringPointer(value *string) *string {
 func (a *Authoring) actionForAccess(
 	ctx context.Context,
 	userID model.UserID,
-	access *store.ExamAccessSnapshot,
+	examAccess *store.ExamAccessSnapshot,
 	at time.Time,
 	ordinaryAction, overrideAction model.Action,
 ) (model.Action, error) {
-	action, err := manageraccess.SelectAction(ctx, a.deps.Memberships, userID, access, at, ordinaryAction, overrideAction)
+	action, err := manageraccess.SelectAction(ctx, a.deps.Memberships, userID, examAccess, at, ordinaryAction, overrideAction)
 	if err != nil {
 		return "", apperror.New("exam.unavailable").Wrap(err)
 	}
@@ -824,7 +821,7 @@ func (a *Authoring) ConfigureExamDraftNativePolicy(
 		return View{}, apperror.Invalid("exam.invalid", "native_policy").Wrap(err)
 	}
 
-	idempotency, err := idempotency.Require(invocation, idempotencyOperationConfigureDraftNativePolicy, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(invocation, idempotencyOperationConfigureDraftNativePolicy, command.IdempotencyKey, struct {
 		ExamID                string                     `json:"exam_id"`
 		ExpectedDraftRevision int64                      `json:"expected_draft_revision"`
 		Native                model.NativeSecurityPolicy `json:"native"`
@@ -895,7 +892,7 @@ func (a *Authoring) ConfigureExamDraftNativePolicy(
 		UpdatedAt:        candidate.UpdatedAt,
 		AuditEventID:     auditID,
 		AuditAt:          at,
-	}, idempotency)
+	}, commandIdempotency)
 	if err != nil {
 		mapped := examStoreErrors.Translate(err)
 		if auditErr := a.deps.Auditor.Fail(ctx, auditID, apperror.CodeOf(mapped, "exam.unavailable")); auditErr != nil {

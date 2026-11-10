@@ -147,7 +147,7 @@ func (h programmeHandlers) get(request operationRequest) (operationResult, error
 	programme, err := h.app.GetProgramme(
 		request.context,
 		request.invocation(),
-		academic.GetProgrammeQuery{ID: id},
+		id,
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -230,7 +230,7 @@ func programmeResponseFromModel(programme *model.Programme) programmeResponse {
 
 // ProgrammeApplication is the application port its handlers call; it reads and changes Programmes.
 type ProgrammeApplication interface {
-	GetProgramme(context.Context, invocation.Invocation, academic.GetProgrammeQuery) (*model.Programme, error)
+	GetProgramme(context.Context, invocation.Invocation, model.ProgrammeID) (*model.Programme, error)
 	ListProgrammes(context.Context, invocation.Invocation, academic.ListProgrammesQuery) (paging.Page[*model.Programme], error)
 	CreateProgramme(context.Context, invocation.Invocation, academic.CreateProgrammeCommand) (*model.Programme, error)
 	UpdateProgramme(context.Context, invocation.Invocation, academic.UpdateProgrammeCommand) (*model.Programme, error)

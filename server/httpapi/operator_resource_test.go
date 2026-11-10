@@ -57,10 +57,10 @@ type focusedRoleApplication struct {
 	create administration.CreateRoleCommand
 }
 
-func (f *focusedRoleApplication) ListRoles(context.Context, invocation.Invocation, administration.ListRolesQuery) ([]*model.Role, error) {
+func (f *focusedRoleApplication) ListRoles(context.Context, invocation.Invocation) ([]*model.Role, error) {
 	return f.roles, nil
 }
-func (f *focusedRoleApplication) GetRole(context.Context, invocation.Invocation, administration.GetRoleQuery) (*model.Role, error) {
+func (f *focusedRoleApplication) GetRole(context.Context, invocation.Invocation, model.RoleID) (*model.Role, error) {
 	return f.roles[0], nil
 }
 func (f *focusedRoleApplication) CreateRole(_ context.Context, _ invocation.Invocation, command administration.CreateRoleCommand) (*model.Role, error) {
@@ -207,7 +207,7 @@ func (f *focusedJobApplication) ListJobs(_ context.Context, _ invocation.Invocat
 	f.listQuery = query
 	return job.Page{Items: []job.View{f.view}, Counted: query.BeforeID.IsZero(), Total: 1}, nil
 }
-func (f *focusedJobApplication) GetJob(context.Context, invocation.Invocation, app.GetJobQuery) (job.View, error) {
+func (f *focusedJobApplication) GetJob(context.Context, invocation.Invocation, model.JobID) (job.View, error) {
 	return f.view, nil
 }
 func (f *focusedJobApplication) ListJobAttempts(_ context.Context, _ invocation.Invocation, query app.ListJobAttemptsQuery) (job.AttemptPage, error) {

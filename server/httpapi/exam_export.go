@@ -184,8 +184,8 @@ func (h examExportsHandlers) scope(request operationRequest) (model.RetentionHol
 	if h.submission {
 		return recordsSubmissionScope(request)
 	}
-	exam, sitting, err := examSittingIDs(request)
-	return model.RetentionHoldScope{ExamID: exam, SittingID: sitting}, err
+	examID, sittingID, err := examSittingIDs(request)
+	return model.RetentionHoldScope{ExamID: examID, SittingID: sittingID}, err
 }
 
 func (h examExportsHandlers) query(request operationRequest) (exam.ExportQuery, error) {

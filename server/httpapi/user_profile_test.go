@@ -114,11 +114,11 @@ type roleHTTPApplication struct {
 	archiveCommand administration.ArchiveRoleCommand
 }
 
-func (a *roleHTTPApplication) ListRoles(context.Context, invocation.Invocation, administration.ListRolesQuery) ([]*model.Role, error) {
+func (a *roleHTTPApplication) ListRoles(context.Context, invocation.Invocation) ([]*model.Role, error) {
 	return a.list, nil
 }
 
-func (a *roleHTTPApplication) GetRole(context.Context, invocation.Invocation, administration.GetRoleQuery) (*model.Role, error) {
+func (a *roleHTTPApplication) GetRole(context.Context, invocation.Invocation, model.RoleID) (*model.Role, error) {
 	return a.result, nil
 }
 
@@ -143,7 +143,7 @@ type bootstrapHTTPApplication struct {
 	result *model.InstallationBootstrapResult
 }
 
-func (a *bootstrapHTTPApplication) GetInstallationStatus(context.Context, invocation.Invocation, identity.GetInstallationStatusQuery) (*model.InstallationStatus, error) {
+func (a *bootstrapHTTPApplication) GetInstallationStatus(context.Context, invocation.Invocation) (*model.InstallationStatus, error) {
 	if a.status != nil {
 		return a.status, nil
 	}
@@ -186,7 +186,7 @@ func (a *userProfileHTTPApplication) SearchUsers(_ context.Context, _ invocation
 	}
 	return page, nil
 }
-func (a *userProfileHTTPApplication) GetUserProfile(context.Context, invocation.Invocation, user.GetUserProfileQuery) (*model.User, error) {
+func (a *userProfileHTTPApplication) GetUserProfile(context.Context, invocation.Invocation, model.UserID) (*model.User, error) {
 	return a.result, nil
 }
 func (a *userProfileHTTPApplication) UpdateUserProfile(_ context.Context, _ invocation.Invocation, command user.UpdateUserProfileCommand) (*model.User, error) {

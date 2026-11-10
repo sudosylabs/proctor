@@ -67,7 +67,7 @@ func TestClassGetAuthorizesExactScopeBeforeReading(t *testing.T) {
 	t.Parallel()
 	events := []string{}
 	service := mustNew(Dependencies{Store: &catalogFake{class: &classStoreFake{events: &events}}, Authorizer: &programmeAuthorizerFake{events: &events, err: apperror.New("authorization.denied")}, Auditor: &institutionAuditorFake{events: &events}, Now: time.Now, NewID: model.NewID})
-	_, err := service.GetClass(context.Background(), invocation.Invocation{}, GetClassQuery{ID: model.NewClassID()})
+	_, err := service.GetClass(context.Background(), invocation.Invocation{}, model.NewClassID())
 	require.True(t, apperror.Is(err, "authorization.denied"), "Get() error = %v", err)
 	require.Equal(t, []string{"authorize"}, events)
 }

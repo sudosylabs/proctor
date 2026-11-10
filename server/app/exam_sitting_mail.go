@@ -52,7 +52,7 @@ func (a sittingScheduleMailPreparationAdapter) Prepare(ctx context.Context,
 		priorClassName = priorClass.DisplayName
 	}
 
-	sitting := &model.ExamSitting{
+	record := &model.ExamSitting{
 		ID:               request.SittingID,
 		ExamID:           request.ExamID,
 		ExamRevisionID:   request.ExamRevisionID,
@@ -63,11 +63,11 @@ func (a sittingScheduleMailPreparationAdapter) Prepare(ctx context.Context,
 		Revision:         request.SittingRevision,
 	}
 	if request.ChangeKind == store.ExamSittingMailCanceled {
-		sitting.State = model.ExamSittingCanceled
-		sitting.ReasonCode = model.ExamSittingReasonManagerCanceled
+		record.State = model.ExamSittingCanceled
+		record.ReasonCode = model.ExamSittingReasonManagerCanceled
 	}
 
-	return a.preparer.Prepare(request.ActorUserID, sitting, request.ChangeKind, mail.SittingScheduleDetails{
+	return a.preparer.Prepare(request.ActorUserID, record, request.ChangeKind, mail.SittingScheduleDetails{
 		ExamTitle:             revision.Title,
 		ClassDisplayName:      class.DisplayName,
 		PriorClassDisplayName: priorClassName,

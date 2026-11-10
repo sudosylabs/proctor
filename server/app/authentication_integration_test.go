@@ -80,7 +80,6 @@ func TestAuthenticationFanoutFailureIntegration(t *testing.T) {
 	require.NoError(t, helper.App.Identity.Logout(
 		ctx,
 		invocation.New(*principal, model.RequestMetadata{}),
-		identity.LogoutCommand{},
 	), "Logout() error")
 	_, err = helper.App.Identity.AuthenticateAccess(ctx, login.Tokens.AccessToken)
 	require.True(t, apperror.Is(err, "authentication.token_invalid"), "AuthenticateAccess() after logout error = %v, want invalid token", err)

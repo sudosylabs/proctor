@@ -131,7 +131,7 @@ func TestAcademicPeriodLookupOperationsAuthorizeBeforeReading(t *testing.T) {
 	t.Parallel()
 	operations := map[string]func(*Service) error{
 		"get": func(service *Service) error {
-			_, err := service.GetAcademicPeriod(context.Background(), invocation.Invocation{}, GetAcademicPeriodQuery{ID: model.NewAcademicPeriodID()})
+			_, err := service.GetAcademicPeriod(context.Background(), invocation.Invocation{}, model.NewAcademicPeriodID())
 			return err
 		},
 		"update": func(service *Service) error {

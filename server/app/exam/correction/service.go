@@ -623,16 +623,16 @@ func (s *Service) authorize(
 		return authorizationDecision{}, apperror.Invalid("exam.sitting.correction.invalid", "principal")
 	}
 
-	access, err := s.deps.Access.Access(ctx, examID, p.UserID)
+	examAccess, err := s.deps.Access.Access(ctx, examID, p.UserID)
 	if err != nil {
 		return authorizationDecision{}, storeErrors.Translate(err)
 	}
-	if access == nil || access.Exam == nil || access.Exam.ID != examID {
+	if examAccess == nil || examAccess.Exam == nil || examAccess.Exam.ID != examID {
 		return authorizationDecision{}, apperror.New("exam.sitting.correction.unavailable").Wrap(errors.New("missing access"))
 	}
 
 	var at time.Time
-	if access.ActorIsManager {
+	if examAccess.ActorIsManager {
 		at = s.deps.Now()
 	}
 
@@ -640,7 +640,7 @@ func (s *Service) authorize(
 		ctx,
 		s.deps.Memberships,
 		p.UserID,
-		access,
+		examAccess,
 		at,
 		model.ActionExamSittingManage,
 		model.ActionExamSittingManageOverride,
@@ -658,7 +658,7 @@ func (s *Service) authorize(
 		return authorizationDecision{}, err
 	}
 
-	return authorizationDecision{action == model.ActionExamSittingManageOverride, access.Exam.AcademicUnitID, action}, nil
+	return authorizationDecision{action == model.ActionExamSittingManageOverride, examAccess.Exam.AcademicUnitID, action}, nil
 }
 func (s *Service) failAudit(ctx context.Context, id model.AuditEventID, err error) error {
 	mapped := storeErrors.Translate(err)

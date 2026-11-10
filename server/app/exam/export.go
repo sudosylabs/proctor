@@ -126,11 +126,11 @@ func (s *Exports) authorize(
 		return "", "", apperror.Invalid("exam.invalid", "export_scope")
 	}
 
-	access, err := s.deps.Access.Access(ctx, scope.ExamID, invocation.Principal().UserID)
+	examAccess, err := s.deps.Access.Access(ctx, scope.ExamID, invocation.Principal().UserID)
 	if err != nil {
 		return "", "", examExportStoreErrors.Translate(err)
 	}
-	if access == nil || access.Exam == nil || access.Exam.ID != scope.ExamID || !access.Exam.AcademicUnitID.IsValid() {
+	if examAccess == nil || examAccess.Exam == nil || examAccess.Exam.ID != scope.ExamID || !examAccess.Exam.AcademicUnitID.IsValid() {
 		return "", "", apperror.New("exam.export.unavailable").Wrap(err)
 	}
 
@@ -138,7 +138,7 @@ func (s *Exports) authorize(
 		ctx,
 		s.deps.Memberships,
 		invocation.Principal().UserID,
-		access,
+		examAccess,
 		model.TimeUTC(s.deps.Now()),
 		model.ActionExamRecordsExport,
 		model.ActionExamRecordsExportOverride,
@@ -150,7 +150,7 @@ func (s *Exports) authorize(
 		return "", "", err
 	}
 
-	return action, access.Exam.AcademicUnitID, nil
+	return action, examAccess.Exam.AcademicUnitID, nil
 }
 
 func (s *Exports) authorizeSources(
@@ -178,15 +178,15 @@ func (s *Exports) authorizeSources(
 	}
 
 	if slices.Contains(categories, model.RetentionCategoryBrowserActivity) {
-		access, err := s.deps.Access.Access(ctx, scope.ExamID, invocation.Principal().UserID)
+		examAccess, err := s.deps.Access.Access(ctx, scope.ExamID, invocation.Principal().UserID)
 		if err != nil {
 			return examExportStoreErrors.Translate(err)
 		}
-		if access == nil || access.Exam == nil || access.Exam.ID != scope.ExamID || access.Exam.AcademicUnitID != unit {
+		if examAccess == nil || examAccess.Exam == nil || examAccess.Exam.ID != scope.ExamID || examAccess.Exam.AcademicUnitID != unit {
 			return apperror.New("exam.export.unavailable").Wrap(errors.New("invalid browser history access projection"))
 		}
 
-		if !access.ActorIsManager {
+		if !examAccess.ActorIsManager {
 			if err := s.deps.Authorizer.RecordDenial(
 				ctx,
 				invocation,
@@ -263,7 +263,7 @@ func (s *Exports) CreateExamExport(
 
 	key := command.IdempotencyKey
 	command.IdempotencyKey = ""
-	idempotency, err := idempotency.Require(invocation, store.ExamExportCreateOperation, key, command)
+	commandIdempotency, err := idempotency.Require(invocation, store.ExamExportCreateOperation, key, command)
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +273,7 @@ func (s *Exports) CreateExamExport(
 		return nil, err
 	}
 
-	selected, err := s.deps.Persistence.ListCreationScope(ctx, command.Scope, idempotency)
+	selected, err := s.deps.Persistence.ListCreationScope(ctx, command.Scope, commandIdempotency)
 	if err != nil {
 		return nil, examExportStoreErrors.Translate(err)
 	}
@@ -317,7 +317,7 @@ func (s *Exports) CreateExamExport(
 		input.SubmissionIDs = append(input.SubmissionIDs, a.SubmissionID)
 	}
 
-	result, err := s.deps.Persistence.Create(ctx, input, idempotency)
+	result, err := s.deps.Persistence.Create(ctx, input, commandIdempotency)
 	if err != nil {
 		mapped := examExportStoreErrors.Translate(err)
 		code := apperror.CodeOf(mapped, "exam.export.unavailable")

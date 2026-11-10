@@ -53,9 +53,9 @@ func (a *academicUnitHTTPApplication) AuthenticateBearer(
 func (a *academicUnitHTTPApplication) GetAcademicUnit(
 	_ context.Context,
 	invocation invocation.Invocation,
-	query academic.GetAcademicUnitQuery,
+	id model.AcademicUnitID,
 ) (*model.AcademicUnit, error) {
-	if invocation.Principal().UserID != a.principal.UserID || query.ID != a.unit.ID {
+	if invocation.Principal().UserID != a.principal.UserID || id != a.unit.ID {
 		return nil, apperror.New("request.invalid")
 	}
 	if a.getErr != nil {

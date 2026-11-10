@@ -54,7 +54,7 @@ func TestExamHTTPCreateAndGetUseApplicationFacade(t *testing.T) {
 	got := httptest.NewRecorder()
 	httpAPI.ServeHTTP(got, get)
 	require.Equal(t, http.StatusOK, got.Code, "get = %d query=%#v body=%s", got.Code, fake.get, got.Body.String())
-	require.Equal(t, view.Exam.ID, fake.get.ExamID, "get = %d query=%#v body=%s", got.Code, fake.get, got.Body.String())
+	require.Equal(t, view.Exam.ID, fake.get, "get = %d query=%#v body=%s", got.Code, fake.get, got.Body.String())
 	assertExamHTTPResponse(t, got.Body.Bytes(), view)
 }
 
@@ -344,17 +344,17 @@ func TestExamHTTPResponseIsBoundedAndContainsTypedPolicy(t *testing.T) {
 	require.NoError(t, json.Unmarshal(encoded, &document))
 	_, exists := document["managers"]
 	require.False(t, exists, "bounded view exposed manager collection")
-	exam := document["exam"].(map[string]any)
+	examDocument := document["exam"].(map[string]any)
 	for _, field := range []string{"created_at", "updated_at"} {
-		value, ok := exam[field].(string)
-		require.True(t, ok, "%s = %#v, want RFC3339 string", field, exam[field])
+		value, ok := examDocument[field].(string)
+		require.True(t, ok, "%s = %#v, want RFC3339 string", field, examDocument[field])
 		_, err = time.Parse(time.RFC3339Nano, value)
 		require.NoError(t, err, "parse %s", field)
 	}
-	_, present := exam["archived_at"]
-	require.False(t, present, "archived_at = %#v, want omitted for active exam", exam["archived_at"])
+	_, present := examDocument["archived_at"]
+	require.False(t, present, "archived_at = %#v, want omitted for active exam", examDocument["archived_at"])
 	for _, legacy := range []string{"create_at", "update_at", "delete_at"} {
-		_, exists := exam[legacy]
+		_, exists := examDocument[legacy]
 		require.False(t, exists, "response exposed legacy timestamp field %q", legacy)
 	}
 	draft := document["draft"].(map[string]any)
@@ -382,9 +382,9 @@ type examHTTPApplication struct {
 	catalog                exam.CatalogPage
 	archive                exam.ArchiveCommand
 	archived               model.Exam
-	get                    exam.GetQuery
+	get                    model.ExamID
 	managerList            exam.ListManagersQuery
-	managerCommand         exam.AddManagerCommand
+	managerCommand         exam.ManagerChangeCommand
 	managerPage            exam.ManagerPage
 	managerChange          store.ExamManagerCommandResult
 }
@@ -393,15 +393,15 @@ func (a *examHTTPApplication) ListExamManagers(_ context.Context, _ invocation.I
 	a.managerList = query
 	return a.managerPage, nil
 }
-func (a *examHTTPApplication) AddExamManager(_ context.Context, _ invocation.Invocation, command exam.AddManagerCommand) (store.ExamManagerCommandResult, error) {
+func (a *examHTTPApplication) AddExamManager(_ context.Context, _ invocation.Invocation, command exam.ManagerChangeCommand) (store.ExamManagerCommandResult, error) {
 	a.managerCommand = command
 	return a.managerChange, nil
 }
-func (a *examHTTPApplication) RemoveExamManager(_ context.Context, _ invocation.Invocation, command exam.RemoveManagerCommand) (store.ExamManagerCommandResult, error) {
+func (a *examHTTPApplication) RemoveExamManager(_ context.Context, _ invocation.Invocation, command exam.ManagerChangeCommand) (store.ExamManagerCommandResult, error) {
 	a.managerCommand = command
 	return a.managerChange, nil
 }
-func (a *examHTTPApplication) TransferExamOwnership(_ context.Context, _ invocation.Invocation, command exam.TransferOwnerCommand) (store.ExamManagerCommandResult, error) {
+func (a *examHTTPApplication) TransferExamOwnership(_ context.Context, _ invocation.Invocation, command exam.ManagerChangeCommand) (store.ExamManagerCommandResult, error) {
 	a.managerCommand = command
 	return a.managerChange, nil
 }
@@ -427,8 +427,8 @@ func (a *examHTTPApplication) CreateExam(_ context.Context, _ invocation.Invocat
 	a.create = command
 	return a.view, nil
 }
-func (a *examHTTPApplication) GetExam(_ context.Context, _ invocation.Invocation, query exam.GetQuery) (exam.View, error) {
-	a.get = query
+func (a *examHTTPApplication) GetExam(_ context.Context, _ invocation.Invocation, id model.ExamID) (exam.View, error) {
+	a.get = id
 	return a.view, nil
 }
 func (a *examHTTPApplication) EditExamDraftText(_ context.Context, _ invocation.Invocation, command exam.EditDraftTextCommand) (exam.View, error) {

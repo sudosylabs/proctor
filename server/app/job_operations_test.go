@@ -137,7 +137,7 @@ func TestJobOperationsAuthorizeBeforeEngineInspection(t *testing.T) {
 
 	events = events[:0]
 	authorizer.err = errors.New("denied")
-	_, appErr = service.GetJob(context.Background(), invocation.Invocation{}, GetJobQuery{ID: view.ID})
+	_, appErr = service.GetJob(context.Background(), invocation.Invocation{}, view.ID)
 	require.Error(t, appErr, "Get() ignored authorization failure")
 	require.Equal(t, []string{"authorize"}, events)
 }
@@ -279,7 +279,7 @@ func TestJobOperationsPresentInitiatorsAndSubjectsOncePerPage(t *testing.T) {
 	require.Empty(t, page.Items[3].Subject)
 
 	engine.view = job.View{ID: system, Type: model.JobTypeCleanup}
-	single, err := service.GetJob(context.Background(), invocation.Invocation{}, GetJobQuery{ID: system})
+	single, err := service.GetJob(context.Background(), invocation.Invocation{}, system)
 	require.NoError(t, err)
 	require.Empty(t, single.CreatedByDisplayName)
 	require.Len(t, users.calls, 1, "a Job with no initiator reads no names")

@@ -24,7 +24,7 @@ import (
 type mfaKeyAPIFake struct {
 	state   identity.MFAKeyStateView
 	started identity.StartMFARekeyCommand
-	status  identity.GetMFARekeyStatusQuery
+	status  model.JobID
 	err     error
 }
 
@@ -37,9 +37,9 @@ func (f *mfaKeyAPIFake) StartMFARekey(_ context.Context, _ invocation.Invocation
 	return identity.MFARekeyView{JobID: model.NewJobID(), PrimaryKeyID: "0123456789abcdef0123456789abcdef", RetiringKeyID: command.RetiringKeyID}, f.err
 }
 
-func (f *mfaKeyAPIFake) GetMFARekeyStatus(_ context.Context, _ invocation.Invocation, query identity.GetMFARekeyStatusQuery) (identity.MFARekeyStatusView, error) {
-	f.status = query
-	return identity.MFARekeyStatusView{JobID: query.JobID}, f.err
+func (f *mfaKeyAPIFake) GetMFARekeyStatus(_ context.Context, _ invocation.Invocation, jobID model.JobID) (identity.MFARekeyStatusView, error) {
+	f.status = jobID
+	return identity.MFARekeyStatusView{JobID: jobID}, f.err
 }
 
 func TestMFARekeyAcceptsOnlyAKeyIdentity(t *testing.T) {

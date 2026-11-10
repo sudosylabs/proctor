@@ -225,9 +225,9 @@ func TestMFASecurityTransitionsPrepareOneOrdinaryNoticeWithoutSecrets(t *testing
 	_, err = application.ActivateMFA(context.Background(), invocation, ActivateMFACommand{Code: code})
 	require.NoError(t, err)
 
-	_, err = application.RegenerateMFARecoveryCodes(context.Background(), invocation, RegenerateMFARecoveryCodesCommand{})
+	_, err = application.RegenerateMFARecoveryCodes(context.Background(), invocation)
 	require.NoError(t, err)
-	require.NoError(t, application.DisableMFA(context.Background(), invocation, DisableMFACommand{}))
+	require.NoError(t, application.DisableMFA(context.Background(), invocation))
 	require.Len(t, mailer.requests, 3, "mail preparations")
 	for index, want := range []model.MailTemplateKey{
 		model.MailTemplateIdentityMFAEnabled,
@@ -563,7 +563,7 @@ func TestMFAStatusReportsPasswordChangeRecoveryTotalAndRecentWindow(t *testing.T
 	service := newTestMFAApplicationService(t, &mfaApplicationStoreFake{}, &securityAuditorFake{}, &mfaApplicationEffectsFake{}, now)
 	service.passwords = mfaPasswordCredentialsFake{credential: &model.PasswordCredential{UserID: principal.UserID, PasswordChangedAt: changedAt}}
 
-	status, err := service.GetMFAStatus(context.Background(), invocation.New(principal, model.RequestMetadata{}), GetMFAStatusQuery{})
+	status, err := service.GetMFAStatus(context.Background(), invocation.New(principal, model.RequestMetadata{}))
 	require.NoError(t, err)
 	require.True(t, status.PasswordChangedAt.Valid)
 	require.True(t, status.PasswordChangedAt.Time.Equal(changedAt))
@@ -579,7 +579,7 @@ func TestMFAStatusReportsPasswordChangeRecoveryTotalAndRecentWindow(t *testing.T
 	stale := principal
 	stale.AuthenticatedAt = now.Add(-time.Hour)
 	service.passwords = mfaPasswordCredentialsFake{}
-	status, err = service.GetMFAStatus(context.Background(), invocation.New(stale, model.RequestMetadata{}), GetMFAStatusQuery{})
+	status, err = service.GetMFAStatus(context.Background(), invocation.New(stale, model.RequestMetadata{}))
 	require.NoError(t, err)
 	require.False(t, status.RecentlyAuthenticated)
 	require.False(t, status.RecentlyAuthenticatedUntil.Valid)
@@ -587,7 +587,7 @@ func TestMFAStatusReportsPasswordChangeRecoveryTotalAndRecentWindow(t *testing.T
 	require.Equal(t, 15*time.Minute, status.RecentAuthenticationTTL)
 
 	service.passwords = mfaPasswordCredentialsFake{err: errors.New("connection reset")}
-	_, err = service.GetMFAStatus(context.Background(), invocation.New(principal, model.RequestMetadata{}), GetMFAStatusQuery{})
+	_, err = service.GetMFAStatus(context.Background(), invocation.New(principal, model.RequestMetadata{}))
 	require.Error(t, err, "a failed password read was reported as no password")
 }
 
@@ -606,7 +606,7 @@ func TestMFAStatusReportsMethodActivationAndIssuedRecoverySet(t *testing.T) {
 	}
 	service := newTestMFAApplicationService(t, persistence, &securityAuditorFake{}, &mfaApplicationEffectsFake{}, now)
 
-	status, err := service.GetMFAStatus(context.Background(), invocation.New(principal, model.RequestMetadata{}), GetMFAStatusQuery{})
+	status, err := service.GetMFAStatus(context.Background(), invocation.New(principal, model.RequestMetadata{}))
 	require.NoError(t, err)
 	require.True(t, status.Enabled)
 	require.Equal(t, MFAMethodAuthenticatorApp, status.Method)
@@ -621,7 +621,7 @@ func TestMFAStatusReportsMethodActivationAndIssuedRecoverySet(t *testing.T) {
 	persistence.credential = &model.MFACredential{
 		UserID: principal.UserID, State: model.MFAStatePending, PendingExpiresAt: model.OptionalTimeFrom(now.Add(time.Minute)),
 	}
-	status, err = service.GetMFAStatus(context.Background(), invocation.New(principal, model.RequestMetadata{}), GetMFAStatusQuery{})
+	status, err = service.GetMFAStatus(context.Background(), invocation.New(principal, model.RequestMetadata{}))
 	require.NoError(t, err)
 	require.True(t, status.Pending)
 	require.Equal(t, MFAMethodAuthenticatorApp, status.Method)

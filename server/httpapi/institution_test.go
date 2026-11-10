@@ -48,7 +48,6 @@ func (a *institutionHTTPApplication) AuthenticateBearer(
 func (a *institutionHTTPApplication) GetInstitution(
 	_ context.Context,
 	invocation invocation.Invocation,
-	_ academic.GetInstitutionQuery,
 ) (*model.Institution, error) {
 	if invocation.Principal().UserID != a.principal.UserID {
 		return nil, apperror.New("request.invalid")

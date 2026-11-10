@@ -30,7 +30,6 @@ type ListJobsQuery struct {
 	Limit           int
 }
 
-type GetJobQuery struct{ ID model.JobID }
 type ListJobAttemptsQuery struct {
 	JobID               model.JobID
 	BeforeNumber, Limit int
@@ -166,14 +165,14 @@ func (s *JobOperations) countRecentJobFailures(
 }
 
 // GetJob returns one operator-visible Job.
-func (s *JobOperations) GetJob(ctx context.Context, invocation invocation.Invocation, query GetJobQuery) (job.View, error) {
+func (s *JobOperations) GetJob(ctx context.Context, invocation invocation.Invocation, id model.JobID) (job.View, error) {
 	if s == nil {
 		return job.View{}, apperror.New("job.unavailable")
 	}
 	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionJobView); err != nil {
 		return job.View{}, err
 	}
-	view, err := s.deps.Jobs.Get(ctx, query.ID)
+	view, err := s.deps.Jobs.Get(ctx, id)
 	if err != nil {
 		return job.View{}, jobOperationsStoreErrors.Translate(err)
 	}

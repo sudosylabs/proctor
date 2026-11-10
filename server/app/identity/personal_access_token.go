@@ -42,13 +42,6 @@ type CreatePersonalAccessTokenCommand struct {
 	ExpiresAt      int64
 }
 
-// ListPersonalAccessTokensQuery lists the caller's PATs.
-type ListPersonalAccessTokensQuery struct{}
-
-// ListGrantablePersonalAccessTokenScopesQuery lists the scopes the caller may
-// currently place in a new PAT.
-type ListGrantablePersonalAccessTokenScopesQuery struct{}
-
 // PersonalAccessTokenGrantableScopes is the caller's current PAT scope
 // catalogue. AcademicUnits holds at most 50 delegable roots ordered by display
 // name; AcademicUnitsHasMore reports that more exist. Each scope lists only the
@@ -242,7 +235,6 @@ func (s *Service) CreatePersonalAccessToken(
 func (s *Service) ListPersonalAccessTokens(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	_ ListPersonalAccessTokensQuery,
 ) ([]*model.PersonalAccessToken, error) {
 	principal := invocation.Principal()
 	if err := requireInteractiveSession(principal, false, s.now(), s.recentAuthenticationTTL); err != nil {
@@ -262,7 +254,6 @@ func (s *Service) ListPersonalAccessTokens(
 func (s *Service) ListGrantablePersonalAccessTokenScopes(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	_ ListGrantablePersonalAccessTokenScopesQuery,
 ) (*PersonalAccessTokenGrantableScopes, error) {
 	principal := invocation.Principal()
 	if err := requireInteractiveSession(principal, false, s.now(), s.recentAuthenticationTTL); err != nil {

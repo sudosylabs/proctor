@@ -17,9 +17,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// GetInstitutionQuery is the input of GetInstitution.
-type GetInstitutionQuery struct{}
-
 // UpdateInstitutionCommand is the input of UpdateInstitution.
 type UpdateInstitutionCommand struct {
 	Name         *string
@@ -32,7 +29,6 @@ type UpdateInstitutionCommand struct {
 func (s *Service) GetInstitution(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	_ GetInstitutionQuery,
 ) (*model.Institution, error) {
 	institution, err := s.institutions.GetSingleton(ctx)
 	if err != nil {

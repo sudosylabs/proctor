@@ -31,7 +31,6 @@ type authenticationEntryHTTPApplication struct {
 	loginResult         *identity.LoginResult
 	loginError          error
 	loginCalls          int
-	logoutCommand       identity.LogoutCommand
 	logoutCalls         int
 	registrationCommand onboarding.RegisterLocalUserCommand
 	registrationCalls   int
@@ -61,9 +60,7 @@ func (af *authenticationEntryHTTPApplication) Login(
 func (af *authenticationEntryHTTPApplication) Logout(
 	_ context.Context,
 	_ invocation.Invocation,
-	command identity.LogoutCommand,
 ) error {
-	af.logoutCommand = command
 	af.logoutCalls++
 	return nil
 }

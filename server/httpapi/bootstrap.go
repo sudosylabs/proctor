@@ -178,7 +178,7 @@ func bootstrapResource(app BootstrapApplication) apiResource {
 }
 
 func (h bootstrapHandlers) status(request operationRequest) (operationResult, error) {
-	status, err := h.app.GetInstallationStatus(request.context, request.invocation(), identity.GetInstallationStatusQuery{})
+	status, err := h.app.GetInstallationStatus(request.context, request.invocation())
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -222,7 +222,7 @@ func (h bootstrapHandlers) install(request operationRequest) (operationResult, e
 
 // BootstrapApplication is the application port its handlers call; it reports and performs installation bootstrap.
 type BootstrapApplication interface {
-	GetInstallationStatus(context.Context, invocation.Invocation, identity.GetInstallationStatusQuery) (*model.InstallationStatus, error)
+	GetInstallationStatus(context.Context, invocation.Invocation) (*model.InstallationStatus, error)
 	BootstrapInstallation(
 		context.Context,
 		invocation.Invocation,

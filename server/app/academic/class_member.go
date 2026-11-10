@@ -88,7 +88,7 @@ func (s *Service) EnrollClassMember(
 	}
 
 	candidate, previous := plan.candidate, plan.previous
-	idempotency, err := prepareClassEnrollmentIdempotency(invocation, command, candidate)
+	commandIdempotency, err := prepareClassEnrollmentIdempotency(invocation, command, candidate)
 	if err != nil {
 		return nil, err
 	}
@@ -96,9 +96,9 @@ func (s *Service) EnrollClassMember(
 		command.Batch.Fields().Authorization.ClassMemberID = previous.ID
 	}
 
-	batchitem.BindOnboardingImport(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
-	batchitem.BindAuthorization(idempotency, command.Batch.Fields().Authorization)
-	batchitem.BindBatch(idempotency, command.Batch.Fields().Metadata)
+	batchitem.BindOnboardingImport(commandIdempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
+	batchitem.BindAuthorization(commandIdempotency, command.Batch.Fields().Authorization)
+	batchitem.BindBatch(commandIdempotency, command.Batch.Fields().Metadata)
 	recipient := &model.User{ID: userID, Revision: 1}
 	if !command.Batch.Fields().RetainedOutcome {
 		recipient, err = s.users.Get(ctx, userID)
@@ -112,7 +112,7 @@ func (s *Service) EnrollClassMember(
 		return nil, err
 	}
 
-	return s.runClassEnrollment(ctx, invocation, command, resource, plan, recipient, prepared, idempotency, at)
+	return s.runClassEnrollment(ctx, invocation, command, resource, plan, recipient, prepared, commandIdempotency, at)
 }
 
 // classEnrollmentPlan is the validated candidate membership and any membership it transfers from.
@@ -207,14 +207,14 @@ func (s *Service) enrollRetainedClassMember(
 		EndsAt:   model.OptionalTimeFromMillis(command.EndAt),
 	}
 	candidate.PrepareCreate(memberID, at)
-	idempotency, commandErr := prepareClassEnrollmentIdempotency(invocation, command, candidate)
+	commandIdempotency, commandErr := prepareClassEnrollmentIdempotency(invocation, command, candidate)
 	if commandErr != nil {
 		return nil, commandErr
 	}
 
-	batchitem.BindOnboardingImport(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
-	batchitem.BindAuthorization(idempotency, command.Batch.Fields().Authorization)
-	batchitem.BindBatch(idempotency, command.Batch.Fields().Metadata)
+	batchitem.BindOnboardingImport(commandIdempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
+	batchitem.BindAuthorization(commandIdempotency, command.Batch.Fields().Authorization)
+	batchitem.BindBatch(commandIdempotency, command.Batch.Fields().Metadata)
 	freshMutation := false
 	result, replayErr := access.RunAudited(
 		ctx,
@@ -239,7 +239,7 @@ func (s *Service) enrollRetainedClassMember(
 					AuditEventID:                       reference.ID,
 					PreviousAuditEventID:               sourceAuditID,
 					AuditAt:                            reference.MutationAt,
-					Command:                            idempotency,
+					Command:                            commandIdempotency,
 				}
 				if retainedPrevious != nil {
 					input.ExpectedPreviousID = retainedPrevious.ID
@@ -424,7 +424,7 @@ func (s *Service) runClassEnrollment(
 	plan classEnrollmentPlan,
 	recipient *model.User,
 	prepared *store.PreparedMail,
-	idempotency *store.CommandIdempotency,
+	commandIdempotency *store.CommandIdempotency,
 	at time.Time,
 ) (*model.ClassEnrollment, error) {
 	candidate, previous := plan.candidate, plan.previous
@@ -463,7 +463,7 @@ func (s *Service) runClassEnrollment(
 					Notice:                             notice,
 					AuditEventID:                       destinationReference.ID,
 					AuditAt:                            destinationReference.MutationAt,
-					Command:                            idempotency,
+					Command:                            commandIdempotency,
 				}
 				value, fresh, storeErr := s.enrollClassMember(ctx, command, input)
 				freshMutation = fresh
@@ -501,7 +501,7 @@ func (s *Service) runClassEnrollment(
 						AuditEventID:                       destinationReference.ID,
 						PreviousAuditEventID:               sourceReference.ID,
 						AuditAt:                            destinationReference.MutationAt,
-						Command:                            idempotency,
+						Command:                            commandIdempotency,
 					}
 					value, fresh, storeErr := s.enrollClassMember(ctx, command, input)
 					freshMutation = fresh
@@ -564,7 +564,7 @@ func (s *Service) EndClassMember(
 		return nil, ClassMemberStoreErrors.Translate(err)
 	}
 
-	idempotency, err := prepareClassMemberEndIdempotency(invocation, command)
+	commandIdempotency, err := prepareClassMemberEndIdempotency(invocation, command)
 	if err != nil {
 		return nil, err
 	}
@@ -611,7 +611,7 @@ func (s *Service) EndClassMember(
 				Notice:                    &store.PreparedMail{Occurrence: prepared.Occurrence, Delivery: prepared.Delivery, Job: prepared.Job},
 				AuditEventID:              reference.ID,
 				AuditAt:                   reference.MutationAt,
-				Command:                   idempotency,
+				Command:                   commandIdempotency,
 			}
 			value, fresh, storeErr := s.endClassMember(ctx, command, input)
 			freshMutation = fresh
@@ -631,17 +631,17 @@ func (s *Service) EndClassMember(
 
 // prepareClassMemberEndIdempotency prepares the end command idempotency and binds its batch provenance.
 func prepareClassMemberEndIdempotency(invocation invocation.Invocation, command EndClassMemberCommand) (*store.CommandIdempotency, error) {
-	idempotency, err := idempotency.Prepare(invocation, "class_member.end", command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Prepare(invocation, "class_member.end", command.IdempotencyKey, struct {
 		ID      string `json:"id"`
 		ScopeID string `json:"scope_id,omitempty"`
 	}{command.ID.String(), strings.TrimSpace(command.BatchScopeID)})
 	if err != nil {
 		return nil, err
 	}
-	batchitem.BindOnboardingImport(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
-	batchitem.BindAuthorization(idempotency, command.Batch.Fields().Authorization)
-	batchitem.BindBatch(idempotency, command.Batch.Fields().Metadata)
-	return idempotency, nil
+	batchitem.BindOnboardingImport(commandIdempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
+	batchitem.BindAuthorization(commandIdempotency, command.Batch.Fields().Authorization)
+	batchitem.BindBatch(commandIdempotency, command.Batch.Fields().Metadata)
+	return commandIdempotency, nil
 }
 
 // endClassMember runs one Store end, mirrors replay to the batch, and reports whether it freshly mutated.
@@ -664,7 +664,7 @@ func (s *Service) endRetainedClassMember(
 	invocation invocation.Invocation,
 	command EndClassMemberCommand,
 ) (*model.ClassMember, error) {
-	idempotency, err := prepareClassMemberEndIdempotency(invocation, command)
+	commandIdempotency, err := prepareClassMemberEndIdempotency(invocation, command)
 	if err != nil {
 		return nil, err
 	}
@@ -689,7 +689,7 @@ func (s *Service) endRetainedClassMember(
 				EndAt:                     reference.MutationAt,
 				AuditEventID:              reference.ID,
 				AuditAt:                   reference.MutationAt,
-				Command:                   idempotency,
+				Command:                   commandIdempotency,
 			}
 			value, fresh, storeErr := s.endClassMember(ctx, command, input)
 			freshMutation = fresh
@@ -770,8 +770,7 @@ func (s *Service) ListClassMembersPage(
 	invocation invocation.Invocation,
 	query ListClassMembersPageQuery,
 ) (*ClassMemberPage, error) {
-	resource, err := s.authorizeClass(ctx, invocation, query.ClassID, model.ActionClassMembersView)
-	if err != nil {
+	if _, err := s.authorizeClass(ctx, invocation, query.ClassID, model.ActionClassMembersView); err != nil {
 		return nil, err
 	}
 
@@ -780,18 +779,13 @@ func (s *Service) ListClassMembersPage(
 		return nil, err
 	}
 
-	scopeID, err := model.ParseClassID(resource.ID)
-	if err != nil {
-		return nil, apperror.New("request.invalid").WithField("field", "class_id")
-	}
-
 	if query.AfterID.IsZero() != query.AfterUserID.IsZero() ||
 		(!query.AfterID.IsZero() && (!query.AfterID.IsValid() || !query.AfterUserID.IsValid())) {
 		return nil, apperror.New("request.invalid").WithField("field", "cursor")
 	}
 
 	options := store.ClassMemberPageOptions{
-		ClassID:     scopeID,
+		ClassID:     query.ClassID,
 		ActiveAt:    model.TimeFromMillis(activeAt),
 		Limit:       limit,
 		AfterID:     query.AfterID,

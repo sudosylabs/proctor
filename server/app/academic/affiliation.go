@@ -21,11 +21,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ListAffiliationsQuery is the input of ListAffiliations.
-type ListAffiliationsQuery struct {
-	UserID model.UserID
-}
-
 // CreateAffiliationCommand is the input of CreateAffiliation.
 type CreateAffiliationCommand struct {
 	UserID         model.UserID
@@ -49,9 +44,8 @@ type EndAffiliationCommand struct {
 func (s *Service) ListAffiliations(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	query ListAffiliationsQuery,
+	userID model.UserID,
 ) ([]*model.Affiliation, error) {
-	userID := query.UserID
 	if !userID.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "user_id")
 	}
@@ -81,18 +75,13 @@ func (s *Service) CreateAffiliation(
 		return nil, err
 	}
 
-	userID, err := model.ParseUserID(resource.ID)
-	if err != nil {
-		return nil, apperror.New("request.invalid").WithField("field", "user_id").Wrap(err)
-	}
-
 	affiliationID, err := model.ParseAffiliationID(s.newID())
 	if err != nil {
 		return nil, apperror.New("request.invalid").WithField("field", "affiliation_id").Wrap(err)
 	}
 
 	candidate := &model.Affiliation{
-		UserID:   userID,
+		UserID:   command.UserID,
 		Kind:     command.Kind,
 		StartsAt: model.TimeFromMillis(command.StartAt),
 		EndsAt:   model.OptionalTimeFromMillis(command.EndAt),
@@ -103,7 +92,7 @@ func (s *Service) CreateAffiliation(
 		return nil, apperror.DomainInvalid("affiliation.invalid", validationErr)
 	}
 
-	idempotency, err := idempotency.Prepare(invocation, "affiliation.add", command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Prepare(invocation, "affiliation.add", command.IdempotencyKey, struct {
 		UserID  string                `json:"user_id"`
 		Kind    model.AffiliationKind `json:"kind"`
 		StartAt int64                 `json:"start_at"`
@@ -113,9 +102,9 @@ func (s *Service) CreateAffiliation(
 		return nil, err
 	}
 
-	batchitem.BindOnboardingImport(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
-	batchitem.BindAuthorization(idempotency, command.Batch.Fields().Authorization)
-	batchitem.BindBatch(idempotency, command.Batch.Fields().Metadata)
+	batchitem.BindOnboardingImport(commandIdempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
+	batchitem.BindAuthorization(commandIdempotency, command.Batch.Fields().Authorization)
+	batchitem.BindBatch(commandIdempotency, command.Batch.Fields().Metadata)
 	changed := false
 	result, err := access.RunAudited(
 		ctx,
@@ -133,7 +122,7 @@ func (s *Service) CreateAffiliation(
 				Affiliation:  candidate,
 				AuditEventID: reference.ID,
 				AuditAt:      reference.MutationAt,
-				Command:      idempotency,
+				Command:      commandIdempotency,
 			}
 			value, storeErr := s.affiliations.Create(ctx, input)
 			if command.Batch.Fields().Replayed != nil {
@@ -193,7 +182,7 @@ func (s *Service) EndAffiliation(
 		}
 	}
 
-	idempotency, err := idempotency.Prepare(invocation, "affiliation.end", command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Prepare(invocation, "affiliation.end", command.IdempotencyKey, struct {
 		ID        string              `json:"id"`
 		ScopeType model.RoleScopeType `json:"scope_type,omitempty"`
 		ScopeID   string              `json:"scope_id,omitempty"`
@@ -202,9 +191,9 @@ func (s *Service) EndAffiliation(
 		return nil, err
 	}
 
-	batchitem.BindOnboardingImport(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
-	batchitem.BindAuthorization(idempotency, command.Batch.Fields().Authorization)
-	batchitem.BindBatch(idempotency, command.Batch.Fields().Metadata)
+	batchitem.BindOnboardingImport(commandIdempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
+	batchitem.BindAuthorization(commandIdempotency, command.Batch.Fields().Authorization)
+	batchitem.BindBatch(commandIdempotency, command.Batch.Fields().Metadata)
 	changed := false
 	result, err := access.RunAudited(
 		ctx,
@@ -224,7 +213,7 @@ func (s *Service) EndAffiliation(
 				EndAt:            reference.MutationAt,
 				AuditEventID:     reference.ID,
 				AuditAt:          reference.MutationAt,
-				Command:          idempotency,
+				Command:          commandIdempotency,
 			}
 			value, storeErr := s.affiliations.End(ctx, input)
 			if command.Batch.Fields().Replayed != nil {

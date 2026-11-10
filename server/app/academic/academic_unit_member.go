@@ -50,11 +50,6 @@ func (s *Service) CreateAcademicUnitMember(
 		return nil, err
 	}
 
-	unitID, err := model.ParseAcademicUnitID(resource.ID)
-	if err != nil {
-		return nil, apperror.New("request.invalid").WithField("field", "academic_unit_id").Wrap(err)
-	}
-
 	userID, err := model.ParseUserID(strings.TrimSpace(command.UserID.String()))
 	if err != nil {
 		return nil, apperror.New("request.invalid").WithField("field", "user_id").Wrap(err)
@@ -66,7 +61,7 @@ func (s *Service) CreateAcademicUnitMember(
 	}
 
 	candidate := &model.AcademicUnitMember{
-		AcademicUnitID: unitID,
+		AcademicUnitID: command.AcademicUnitID,
 		UserID:         userID,
 		StartsAt:       model.TimeFromMillis(command.StartAt),
 	}
@@ -95,7 +90,7 @@ func (s *Service) CreateAcademicUnitMember(
 		}
 	}
 
-	idempotency, err := idempotency.Prepare(invocation, "academic_unit_member.add", command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Prepare(invocation, "academic_unit_member.add", command.IdempotencyKey, struct {
 		AcademicUnitID string `json:"academic_unit_id"`
 		UserID         string `json:"user_id"`
 		StartAt        int64  `json:"start_at"`
@@ -104,9 +99,9 @@ func (s *Service) CreateAcademicUnitMember(
 		return nil, err
 	}
 
-	batchitem.BindOnboardingImport(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
-	batchitem.BindAuthorization(idempotency, command.Batch.Fields().Authorization)
-	batchitem.BindBatch(idempotency, command.Batch.Fields().Metadata)
+	batchitem.BindOnboardingImport(commandIdempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
+	batchitem.BindAuthorization(commandIdempotency, command.Batch.Fields().Authorization)
+	batchitem.BindBatch(commandIdempotency, command.Batch.Fields().Metadata)
 	changed := false
 	result, err := access.RunAudited(
 		ctx,
@@ -127,7 +122,7 @@ func (s *Service) CreateAcademicUnitMember(
 				Notice:                    notice,
 				AuditEventID:              reference.ID,
 				AuditAt:                   reference.MutationAt,
-				Command:                   idempotency,
+				Command:                   commandIdempotency,
 			}
 			value, storeErr := s.academicUnitMembers.Create(ctx, input)
 			changed = storeErr == nil && !input.Replayed && !input.NoOp
@@ -179,7 +174,7 @@ func (s *Service) EndAcademicUnitMember(
 		return nil, apperror.New("resource.not_found").WithField("resource", "academic_unit_member")
 	}
 
-	idempotency, err := idempotency.Prepare(invocation, "academic_unit_member.end", command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Prepare(invocation, "academic_unit_member.end", command.IdempotencyKey, struct {
 		ID      string `json:"id"`
 		ScopeID string `json:"scope_id,omitempty"`
 	}{id.String(), strings.TrimSpace(command.BatchScopeID)})
@@ -187,9 +182,9 @@ func (s *Service) EndAcademicUnitMember(
 		return nil, err
 	}
 
-	batchitem.BindOnboardingImport(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
-	batchitem.BindAuthorization(idempotency, command.Batch.Fields().Authorization)
-	batchitem.BindBatch(idempotency, command.Batch.Fields().Metadata)
+	batchitem.BindOnboardingImport(commandIdempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
+	batchitem.BindAuthorization(commandIdempotency, command.Batch.Fields().Authorization)
+	batchitem.BindBatch(commandIdempotency, command.Batch.Fields().Metadata)
 	recipient := &model.User{ID: current.UserID, Revision: 1}
 	var notice *store.PreparedMail
 	at := model.TimeUTC(s.now())
@@ -232,7 +227,7 @@ func (s *Service) EndAcademicUnitMember(
 				Notice:                    notice,
 				AuditEventID:              reference.ID,
 				AuditAt:                   reference.MutationAt,
-				Command:                   idempotency,
+				Command:                   commandIdempotency,
 			}
 			value, storeErr := s.academicUnitMembers.End(ctx, input)
 			changed = storeErr == nil && !input.Replayed && !input.NoOp
@@ -329,18 +324,13 @@ func (s *Service) ListAcademicUnitMembersPage(
 		return nil, err
 	}
 
-	scopeID, err := model.ParseAcademicUnitID(resource.ID)
-	if err != nil {
-		return nil, apperror.New("request.invalid").WithField("field", "academic_unit_id")
-	}
-
 	if query.AfterID.IsZero() != query.AfterUserID.IsZero() ||
 		(!query.AfterID.IsZero() && (!query.AfterID.IsValid() || !query.AfterUserID.IsValid())) {
 		return nil, apperror.New("request.invalid").WithField("field", "cursor")
 	}
 
 	options := store.AcademicUnitMemberPageOptions{
-		AcademicUnitID: scopeID,
+		AcademicUnitID: query.AcademicUnitID,
 		ActiveAt:       model.TimeFromMillis(activeAt),
 		Limit:          limit,
 		AfterID:        query.AfterID,

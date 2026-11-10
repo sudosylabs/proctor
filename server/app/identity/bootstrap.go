@@ -29,8 +29,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type GetInstallationStatusQuery struct{}
-
 type BootstrapInstallationCommand struct {
 	InstitutionName          string
 	InstitutionDisplayName   string
@@ -156,7 +154,6 @@ func (s *Service) ReconcileSystemAdministratorRole(ctx context.Context, system i
 func (s *Service) GetInstallationStatus(
 	ctx context.Context,
 	_ invocation.Invocation,
-	_ GetInstallationStatusQuery,
 ) (*model.InstallationStatus, error) {
 	state, err := s.installations.Get(ctx)
 	if err != nil {

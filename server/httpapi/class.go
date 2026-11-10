@@ -203,7 +203,7 @@ func (h classHandlers) get(request operationRequest) (operationResult, error) {
 	class, err := h.app.GetClass(
 		request.context,
 		request.invocation(),
-		academic.GetClassQuery{ID: id},
+		id,
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -280,7 +280,7 @@ func classResponseFromModel(class *model.Class) classResponse {
 
 // ClassApplication is the application port its handlers call; it reads and changes Classes.
 type ClassApplication interface {
-	GetClass(context.Context, invocation.Invocation, academic.GetClassQuery) (*model.Class, error)
+	GetClass(context.Context, invocation.Invocation, model.ClassID) (*model.Class, error)
 	ListClasses(context.Context, invocation.Invocation, academic.ListClassesQuery) (paging.Page[*model.Class], error)
 	SearchClasses(context.Context, invocation.Invocation, academic.SearchClassesQuery) (paging.Page[*model.Class], error)
 	CreateClass(context.Context, invocation.Invocation, academic.CreateClassCommand) (*model.Class, error)

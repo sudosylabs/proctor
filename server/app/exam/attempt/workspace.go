@@ -107,7 +107,7 @@ func (s *Service) ListCandidateExamWorkspaceJournal(
 	query WorkspaceJournalQuery,
 ) (_ WorkspaceJournalPage, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	access, err := candidateSelector(invocation, query.Access)
+	candidateAccess, err := candidateSelector(invocation, query.Access)
 	if err != nil {
 		return WorkspaceJournalPage{}, err
 	}
@@ -116,7 +116,7 @@ func (s *Service) ListCandidateExamWorkspaceJournal(
 	}
 
 	stored, err := s.deps.Workspace.ListJournal(ctx, store.CandidateWorkspaceJournalOptions{
-		Access:      access,
+		Access:      candidateAccess,
 		AfterCursor: query.AfterCursor,
 		Limit:       query.Limit,
 	})
@@ -162,7 +162,7 @@ func (s *Service) CreateCandidateExamWorkspaceDirectory(
 	command CreateWorkspaceDirectoryCommand,
 ) (_ WorkspaceMutationResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	access, err := workspaceMutationSelector(invocation, command.Access)
+	workspaceAccess, err := workspaceMutationSelector(invocation, command.Access)
 	if err != nil {
 		return WorkspaceMutationResult{}, err
 	}
@@ -175,7 +175,7 @@ func (s *Service) CreateCandidateExamWorkspaceDirectory(
 	idempotency, err := prepareWorkspaceMutationIdempotency(
 		invocation,
 		command.IdempotencyKey,
-		access.AttemptID,
+		workspaceAccess.AttemptID,
 		model.AttemptWorkspaceMutationCreateDirectory,
 		struct {
 			Path string `json:"path"`
@@ -190,13 +190,13 @@ func (s *Service) CreateCandidateExamWorkspaceDirectory(
 		return WorkspaceMutationResult{}, apperror.Invalid("exam.attempt.invalid", "workspace_entry_id")
 	}
 
-	target, err := s.resolveWorkspaceMutationTarget(ctx, access)
+	target, err := s.resolveWorkspaceMutationTarget(ctx, workspaceAccess)
 	if err != nil {
 		return WorkspaceMutationResult{}, err
 	}
 
 	return s.applyWorkspaceMutation(ctx, invocation, target, &store.ExamAttemptWorkspaceMutation{
-		Access:          access,
+		Access:          workspaceAccess,
 		Operation:       model.AttemptWorkspaceMutationCreateDirectory,
 		EntryID:         entryID,
 		DestinationPath: path,
@@ -264,7 +264,7 @@ func (s *Service) MoveCandidateExamWorkspaceEntry(
 	command MoveWorkspaceEntryCommand,
 ) (_ WorkspaceMutationResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	access, err := workspaceMutationSelector(invocation, command.Access)
+	workspaceAccess, err := workspaceMutationSelector(invocation, command.Access)
 	if err != nil {
 		return WorkspaceMutationResult{}, err
 	}
@@ -277,7 +277,7 @@ func (s *Service) MoveCandidateExamWorkspaceEntry(
 	idempotency, err := prepareWorkspaceMutationIdempotency(
 		invocation,
 		command.IdempotencyKey,
-		access.AttemptID,
+		workspaceAccess.AttemptID,
 		model.AttemptWorkspaceMutationMoveEntry,
 		struct{ EntryID, ExpectedPath, DestinationPath string }{
 			command.EntryID.String(),
@@ -289,13 +289,13 @@ func (s *Service) MoveCandidateExamWorkspaceEntry(
 		return WorkspaceMutationResult{}, err
 	}
 
-	target, err := s.resolveWorkspaceMutationTarget(ctx, access)
+	target, err := s.resolveWorkspaceMutationTarget(ctx, workspaceAccess)
 	if err != nil {
 		return WorkspaceMutationResult{}, err
 	}
 
 	return s.applyWorkspaceMutation(ctx, invocation, target, &store.ExamAttemptWorkspaceMutation{
-		Access:          access,
+		Access:          workspaceAccess,
 		Operation:       model.AttemptWorkspaceMutationMoveEntry,
 		EntryID:         command.EntryID,
 		ExpectedPath:    expected,
@@ -312,7 +312,7 @@ func (s *Service) DeleteCandidateExamWorkspaceEntry(
 	command DeleteWorkspaceEntryCommand,
 ) (_ WorkspaceMutationResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	access, err := workspaceMutationSelector(invocation, command.Access)
+	workspaceAccess, err := workspaceMutationSelector(invocation, command.Access)
 	if err != nil {
 		return WorkspaceMutationResult{}, err
 	}
@@ -333,7 +333,7 @@ func (s *Service) DeleteCandidateExamWorkspaceEntry(
 	idempotency, err := prepareWorkspaceMutationIdempotency(
 		invocation,
 		command.IdempotencyKey,
-		access.AttemptID,
+		workspaceAccess.AttemptID,
 		model.AttemptWorkspaceMutationDeleteEntry,
 		struct {
 			EntryID, ExpectedPath, ExpectedContentVersion string
@@ -345,13 +345,13 @@ func (s *Service) DeleteCandidateExamWorkspaceEntry(
 		return WorkspaceMutationResult{}, err
 	}
 
-	target, err := s.resolveWorkspaceMutationTarget(ctx, access)
+	target, err := s.resolveWorkspaceMutationTarget(ctx, workspaceAccess)
 	if err != nil {
 		return WorkspaceMutationResult{}, err
 	}
 
 	return s.applyWorkspaceMutation(ctx, invocation, target, &store.ExamAttemptWorkspaceMutation{
-		Access:                  access,
+		Access:                  workspaceAccess,
 		Operation:               model.AttemptWorkspaceMutationDeleteEntry,
 		EntryID:                 command.EntryID,
 		ExpectedPath:            expected,
@@ -374,7 +374,7 @@ func (s *Service) stageWorkspaceFile(
 	idempotencyKey string,
 	operation model.AttemptWorkspaceMutationKind,
 ) (WorkspaceMutationResult, error) {
-	access, err := workspaceMutationSelector(invocation, mutationAccess)
+	workspaceAccess, err := workspaceMutationSelector(invocation, mutationAccess)
 	if err != nil {
 		return WorkspaceMutationResult{}, err
 	}
@@ -416,12 +416,12 @@ func (s *Service) stageWorkspaceFile(
 		}{entryID.String(), expectedPath, expectedVersion.String(), mediaType, expectedSHA, size}
 	}
 
-	idempotency, err := prepareWorkspaceMutationIdempotency(invocation, idempotencyKey, access.AttemptID, operation, semantic)
+	idempotency, err := prepareWorkspaceMutationIdempotency(invocation, idempotencyKey, workspaceAccess.AttemptID, operation, semantic)
 	if err != nil {
 		return WorkspaceMutationResult{}, err
 	}
 
-	target, err := s.resolveWorkspaceMutationTarget(ctx, access)
+	target, err := s.resolveWorkspaceMutationTarget(ctx, workspaceAccess)
 	if err != nil {
 		return WorkspaceMutationResult{}, err
 	}
@@ -433,7 +433,7 @@ func (s *Service) stageWorkspaceFile(
 
 	if _, err = s.deps.Workspace.ReserveObject(
 		ctx,
-		&store.ExamAttemptWorkspaceObjectReservation{Access: access, ObjectID: objectID},
+		&store.ExamAttemptWorkspaceObjectReservation{Access: workspaceAccess, ObjectID: objectID},
 	); err != nil {
 		return WorkspaceMutationResult{}, storeError(storeErrors, err)
 	}
@@ -454,7 +454,7 @@ func (s *Service) stageWorkspaceFile(
 	}
 
 	if _, err = s.deps.Workspace.MarkObjectReady(ctx, &store.ExamAttemptWorkspaceObjectReady{
-		Access:         access,
+		Access:         workspaceAccess,
 		ObjectID:       objectID,
 		ContentVersion: version,
 		Content:        *staged,
@@ -468,7 +468,7 @@ func (s *Service) stageWorkspaceFile(
 	}
 
 	result, err := s.applyWorkspaceMutation(ctx, invocation, target, &store.ExamAttemptWorkspaceMutation{
-		Access:                 access,
+		Access:                 workspaceAccess,
 		Operation:              operation,
 		EntryID:                entryID,
 		ExpectedPath:           expectedPath,
@@ -492,20 +492,20 @@ func (s *Service) stageWorkspaceFile(
 
 func workspaceMutationSelector(
 	invocation invocation.Invocation,
-	access WorkspaceMutationAccess,
+	mutationAccess WorkspaceMutationAccess,
 ) (store.ExamAttemptWorkspaceMutationAccess, error) {
-	read, err := candidateSelector(invocation, access.CandidateAccess)
+	read, err := candidateSelector(invocation, mutationAccess.CandidateAccess)
 	if err != nil {
 		return store.ExamAttemptWorkspaceMutationAccess{}, err
 	}
-	if !access.ParticipationID.IsValid() || access.Generation < 1 {
+	if !mutationAccess.ParticipationID.IsValid() || mutationAccess.Generation < 1 {
 		return store.ExamAttemptWorkspaceMutationAccess{}, apperror.Invalid("exam.attempt.invalid", "workspace_access")
 	}
 
 	return store.ExamAttemptWorkspaceMutationAccess{
 		AttemptID:                read.AttemptID,
-		ParticipationID:          access.ParticipationID,
-		Generation:               access.Generation,
+		ParticipationID:          mutationAccess.ParticipationID,
+		Generation:               mutationAccess.Generation,
 		CandidateUserID:          read.CandidateUserID,
 		SessionID:                read.SessionID,
 		DesktopRegistrationID:    read.DesktopRegistrationID,
@@ -515,12 +515,12 @@ func workspaceMutationSelector(
 	}, nil
 }
 
-func validWorkspaceTarget(target *store.ExamAttemptWorkspaceMutationTarget, access store.ExamAttemptWorkspaceMutationAccess) bool {
+func validWorkspaceTarget(target *store.ExamAttemptWorkspaceMutationTarget, workspaceAccess store.ExamAttemptWorkspaceMutationAccess) bool {
 	return target != nil &&
 		target.ExamID.IsValid() &&
 		target.SittingID.IsValid() &&
 		target.ClassID.IsValid() &&
-		target.CandidateUserID == access.CandidateUserID &&
+		target.CandidateUserID == workspaceAccess.CandidateUserID &&
 		target.WorkspaceID.IsValid()
 }
 
@@ -587,13 +587,13 @@ func projectWorkspaceMutation(
 
 func (s *Service) resolveWorkspaceMutationTarget(
 	ctx context.Context,
-	access store.ExamAttemptWorkspaceMutationAccess,
+	workspaceAccess store.ExamAttemptWorkspaceMutationAccess,
 ) (*store.ExamAttemptWorkspaceMutationTarget, error) {
-	target, err := s.deps.Workspace.ResolveMutationTarget(ctx, access)
+	target, err := s.deps.Workspace.ResolveMutationTarget(ctx, workspaceAccess)
 	if err != nil {
 		return nil, storeError(storeErrors, err)
 	}
-	if !validWorkspaceTarget(target, access) {
+	if !validWorkspaceTarget(target, workspaceAccess) {
 		return nil, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Attempt Workspace mutation target"))
 	}
 

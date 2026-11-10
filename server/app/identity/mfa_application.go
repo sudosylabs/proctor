@@ -64,7 +64,6 @@ func (s *Service) requireMFA() error {
 func (s *Service) GetMFAStatus(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	_ GetMFAStatusQuery,
 ) (*MFAStatus, error) {
 	principal := invocation.Principal()
 	if err := s.requireMFARecoverySession(principal, false); err != nil {
@@ -371,7 +370,6 @@ func (s *Service) ChallengeMFA(
 func (s *Service) RegenerateMFARecoveryCodes(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	_ RegenerateMFARecoveryCodesCommand,
 ) ([]string, error) {
 	principal := invocation.Principal()
 	if err := s.requireMFAStrongRecentSession(principal); err != nil {
@@ -431,7 +429,6 @@ func (s *Service) RegenerateMFARecoveryCodes(
 func (s *Service) DisableMFA(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	_ DisableMFACommand,
 ) error {
 	principal := invocation.Principal()
 	if err := s.requireMFAStrongRecentSession(principal); err != nil {

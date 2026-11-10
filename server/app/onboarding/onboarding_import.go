@@ -112,7 +112,7 @@ func (s *Service) UploadOnboardingImport(
 	if command.Body == nil ||
 		command.Mode == model.OnboardingImportStudentProgression ||
 		model.ValidateOnboardingImportScope(command.Mode, command.ScopeType, command.ScopeID) != nil ||
-		(command.Mode == model.OnboardingImportTeacherAcademicUnit && !model.RoleID(command.RoleID).IsValid()) ||
+		(command.Mode == model.OnboardingImportTeacherAcademicUnit && !command.RoleID.IsValid()) ||
 		(command.Mode != model.OnboardingImportTeacherAcademicUnit && command.RoleID != "") {
 		return OnboardingImportView{}, apperror.New("request.invalid")
 	}
@@ -185,7 +185,7 @@ func (s *Service) UploadOnboardingImport(
 				FileName:    fileName,
 			}
 			if command.RoleID != "" {
-				value.RoleID = model.RoleID(command.RoleID)
+				value.RoleID = command.RoleID
 			}
 
 			created, createErr := s.imports.CreateOnboardingImport(ctx, &store.OnboardingImportCreation{
@@ -904,7 +904,7 @@ func (s *Service) parse(ctx context.Context, id model.OnboardingImportID) error 
 		return store.NewErrConflict("onboarding_import", "state", nil)
 	}
 
-	invocation := invocation.New(current.Principal, model.RequestMetadata{})
+	actorInvocation := invocation.New(current.Principal, model.RequestMetadata{})
 	if err = s.validatePrincipal(ctx, current.Principal); err != nil {
 		if onboardingImportRetryableError(err) {
 			return err
@@ -921,7 +921,7 @@ func (s *Service) parse(ctx context.Context, id model.OnboardingImportID) error 
 
 	if err = s.authorize(
 		ctx,
-		invocation,
+		actorInvocation,
 		model.ActionOnboardingBatchManage,
 		onboardingImportResource(current.ScopeType, current.ScopeID),
 	); err != nil {
@@ -939,7 +939,7 @@ func (s *Service) parse(ctx context.Context, id model.OnboardingImportID) error 
 	}
 
 	if current.Mode != model.OnboardingImportInstitution {
-		if err = s.validateExternalTarget(ctx, invocation, current.Mode, current.ScopeID, current.RoleID.String(), true); err != nil {
+		if err = s.validateExternalTarget(ctx, actorInvocation, current.Mode, current.ScopeID, current.RoleID.String(), true); err != nil {
 			if onboardingImportRetryableError(err) {
 				return err
 			}
@@ -960,7 +960,7 @@ func (s *Service) parse(ctx context.Context, id model.OnboardingImportID) error 
 	}
 
 	defer func() { _ = reader.Close() }()
-	rows, ignored, digest, err := s.parseCSV(ctx, invocation, current, reader)
+	rows, ignored, digest, err := s.parseCSV(ctx, actorInvocation, current, reader)
 	if err != nil {
 		if !errors.Is(err, errOnboardingImportInvalidFile) {
 			return err
@@ -1321,7 +1321,7 @@ func (s *Service) execute(ctx context.Context, id model.OnboardingImportID, star
 		return store.NewErrConflict("onboarding_import", "state", nil)
 	}
 
-	invocation := invocation.New(current.Principal, model.RequestMetadata{})
+	actorInvocation := invocation.New(current.Principal, model.RequestMetadata{})
 	after, processed := startAfter, 0
 	for {
 		select {
@@ -1366,7 +1366,7 @@ func (s *Service) execute(ctx context.Context, id model.OnboardingImportID, star
 				return store.NewErrConflict("onboarding_import", "state", nil)
 			}
 
-			status, invitationID, resourceID, code, executeErr := s.executeRow(ctx, invocation, latest, row)
+			status, invitationID, resourceID, code, executeErr := s.executeRow(ctx, actorInvocation, latest, row)
 			if executeErr != nil {
 				return executeErr
 			}

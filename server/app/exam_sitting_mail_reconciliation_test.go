@@ -21,19 +21,19 @@ import (
 
 func TestSittingMailReconciliationPeriodicRunnerPreparesOneBoundedFanout(t *testing.T) {
 	at := time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
-	sitting, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(),
+	record, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(),
 		at.Add(time.Hour), at.Add(2*time.Hour), at)
 	require.NoError(t, err)
 	persistence := &sittingMailStoreFake{candidates: []store.ExamSittingMailReconciliationCandidate{{
-		Sitting: sitting, ActorUserID: model.NewUserID(),
+		Sitting: record, ActorUserID: model.NewUserID(),
 	}}}
 	mail := &sittingMailReconciliationPreparerFake{prepared: &store.ExamSittingMailFanout{}}
 	err = (sittingMailReconciliationPeriodicRunner{sittings: persistence, mail: mail}).Run(context.Background())
 	require.NoError(t, err)
 	require.NotNil(t, persistence.reconciled, "reconciliation=%#v request=%#v", persistence.reconciled, mail.request)
-	require.Equal(t, sitting.ID, persistence.reconciled.SittingID, "reconciliation=%#v request=%#v", persistence.reconciled, mail.request)
+	require.Equal(t, record.ID, persistence.reconciled.SittingID, "reconciliation=%#v request=%#v", persistence.reconciled, mail.request)
 	require.Equal(t, store.ExamSittingMailReconciled, mail.request.ChangeKind, "reconciliation=%#v request=%#v", persistence.reconciled, mail.request)
-	require.Equal(t, sitting.Revision, mail.request.SittingRevision, "reconciliation=%#v request=%#v", persistence.reconciled, mail.request)
+	require.Equal(t, record.Revision, mail.request.SittingRevision, "reconciliation=%#v request=%#v", persistence.reconciled, mail.request)
 }
 
 type sittingMailStoreFake struct {

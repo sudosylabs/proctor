@@ -271,7 +271,7 @@ func (s *Service) validatePrincipal(ctx context.Context, principal model.Princip
 		}
 	}
 
-	user, err := s.users.Get(ctx, principal.UserID)
+	account, err := s.users.Get(ctx, principal.UserID)
 	if err != nil {
 		if store.IsNotFound(err) {
 			return access.InvalidTokenAppError()
@@ -279,7 +279,7 @@ func (s *Service) validatePrincipal(ctx context.Context, principal model.Princip
 		return authenticationUnavailable(err)
 	}
 
-	if !user.IsActive() {
+	if !account.IsActive() {
 		return access.InvalidTokenAppError()
 	}
 
@@ -496,9 +496,9 @@ func (s *Service) proveLocalSubject(
 		return nil, err
 	}
 
-	user, err := s.findLoginUser(ctx, command.LoginID)
-	if err == nil && user != nil {
-		subject.userID = user.ID
+	account, err := s.findLoginUser(ctx, command.LoginID)
+	if err == nil && account != nil {
+		subject.userID = account.ID
 	}
 
 	if err != nil && !store.IsNotFound(err) {
@@ -509,22 +509,22 @@ func (s *Service) proveLocalSubject(
 	}
 
 	if err != nil {
-		user = nil
+		account = nil
 	}
 
-	failures, err := s.delayAfterLoginFailures(ctx, command.LoginID, user)
+	failures, err := s.delayAfterLoginFailures(ctx, command.LoginID, account)
 	if err != nil {
 		return nil, err
 	}
 
-	if user == nil {
+	if account == nil {
 		if dummyErr := s.hasher.VerifyDummy(ctx, command.Password); dummyErr != nil {
 			return nil, passwordWorkError(dummyErr, "authentication.internal")
 		}
 		return nil, s.recordLoginFailure(ctx, failures)
 	}
 
-	credential, err := s.passwords.GetByUser(ctx, user.ID)
+	credential, err := s.passwords.GetByUser(ctx, account.ID)
 	if err != nil {
 		if dummyErr := s.hasher.VerifyDummy(ctx, command.Password); dummyErr != nil {
 			return nil, passwordWorkError(dummyErr, "authentication.internal")
@@ -538,14 +538,14 @@ func (s *Service) proveLocalSubject(
 
 	// Recovery state exists only for active Users. Do equivalent password work
 	// before rejecting disabled accounts, without consulting their MFA state.
-	if !user.IsActive() {
+	if !account.IsActive() {
 		if dummyErr := s.hasher.VerifyDummy(ctx, command.Password); dummyErr != nil {
 			return nil, passwordWorkError(dummyErr, "authentication.internal")
 		}
 		return nil, s.recordLoginFailure(ctx, failures)
 	}
 
-	recovery, err := s.mfaRecoveryState(ctx, user.ID)
+	recovery, err := s.mfaRecoveryState(ctx, account.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -557,7 +557,7 @@ func (s *Service) proveLocalSubject(
 		return nil, s.recordLoginFailure(ctx, failures)
 	}
 
-	if !user.IsActive() {
+	if !account.IsActive() {
 		return nil, invalidCredentialsAppError()
 	}
 
@@ -574,7 +574,7 @@ func (s *Service) proveLocalSubject(
 
 	now := s.now()
 	authenticationStrength, mfaCompletedAt, err := s.verifyLoginMFA(
-		ctx, user.ID.String(), command.MFACode, now,
+		ctx, account.ID.String(), command.MFACode, now,
 	)
 	if err != nil {
 		return nil, err
@@ -584,7 +584,7 @@ func (s *Service) proveLocalSubject(
 	}
 
 	return &localAuthenticationProof{
-		User:                     user,
+		User:                     account,
 		AuthenticationStrength:   authenticationStrength,
 		AuthenticationGeneration: recovery.Generation,
 		MFARecoveryRequired:      recovery.ReenrollmentRequired,
@@ -648,11 +648,11 @@ func (s *Service) applyLocalRehash(ctx context.Context, credential *model.Passwo
 func (s *Service) delayAfterLoginFailures(
 	ctx context.Context,
 	loginID string,
-	user *model.User,
+	account *model.User,
 ) (authenticationFailureSubject, error) {
 	identity := "identifier:" + normalizeLoginIdentity(loginID)
-	if user != nil {
-		identity = "account:" + user.ID.String()
+	if account != nil {
+		identity = "account:" + account.ID.String()
 	}
 
 	subject, err := s.attempts.failureSubject(authenticationAttemptPurposeLocalLogin, identity)
@@ -705,13 +705,13 @@ func (s *Service) createSession(
 	ctx context.Context,
 	command sessionIssuance,
 ) (*model.Session, *model.AuthenticationTokens, error) {
-	user := command.User
+	account := command.User
 	clientType := command.ClientType
 	strength := command.AuthenticationStrength
 	authenticatedAt := command.AuthenticatedAt
 	mfaCompletedAt := command.MFACompletedAt
-	if user == nil ||
-		!user.IsActive() ||
+	if account == nil ||
+		!account.IsActive() ||
 		!clientType.IsValid() ||
 		!strength.IsValid() ||
 		authenticatedAt <= 0 {
@@ -732,7 +732,7 @@ func (s *Service) createSession(
 		mfaCompletedAt = 0
 	}
 
-	enrollmentRequired, err := s.mfaEnrollmentRequired(ctx, user.ID, clientType, strength)
+	enrollmentRequired, err := s.mfaEnrollmentRequired(ctx, account.ID, clientType, strength)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -747,7 +747,7 @@ func (s *Service) createSession(
 	accessExpiresAt := sessionDeadline(now, settings.AccessTTL, absoluteExpiresAt)
 	refreshExpiresAt := sessionDeadline(now, settings.RefreshTTL, absoluteExpiresAt)
 	session := &model.Session{
-		UserID:                   user.ID,
+		UserID:                   account.ID,
 		AuthenticationGeneration: command.AuthenticationGeneration,
 		MFARecoveryRequired:      command.MFARecoveryRequired,
 		MFAEnrollmentRequired:    enrollmentRequired,
@@ -980,7 +980,7 @@ func (s *Service) authenticateAccess(
 		return nil, authenticationUnavailable(err)
 	}
 
-	user, err := s.users.Get(ctx, session.UserID)
+	account, err := s.users.Get(ctx, session.UserID)
 	if err != nil {
 		if store.IsNotFound(err) {
 			return nil, access.InvalidTokenAppError()
@@ -988,7 +988,7 @@ func (s *Service) authenticateAccess(
 		return nil, authenticationUnavailable(err)
 	}
 
-	resolved := &resolvedAuthentication{Credential: credential, Session: session, User: user}
+	resolved := &resolvedAuthentication{Credential: credential, Session: session, User: account}
 	if !resolved.User.IsActive() || resolved.Credential.IsExpiredAt(now) {
 		return nil, access.InvalidTokenAppError()
 	}
@@ -1185,8 +1185,8 @@ func (s *Service) RefreshSession(
 		return nil, nil, access.InvalidTokenAppError()
 	}
 
-	user, err := s.users.Get(ctx, rotation.Session.UserID)
-	if err != nil || !user.IsActive() {
+	account, err := s.users.Get(ctx, rotation.Session.UserID)
+	if err != nil || !account.IsActive() {
 		if err == nil {
 			var revokedAccessHashes []string
 			revokedAccessHashes, err = s.sessions.Withdraw(
@@ -1228,7 +1228,7 @@ func tokenTypeForSession(session *model.Session) string {
 }
 
 // Logout revokes the caller's current Session.
-func (s *Service) Logout(ctx context.Context, invocation invocation.Invocation, _ LogoutCommand) (resultErr error) {
+func (s *Service) Logout(ctx context.Context, invocation invocation.Invocation) (resultErr error) {
 	defer func() { recordOperational(s.operational, "authentication", "logout", resultErr) }()
 	principal := invocation.Principal()
 	if principal.ValidateMFARecovery() != nil {

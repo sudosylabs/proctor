@@ -350,7 +350,7 @@ type examAttemptSystemAuditAdapter struct{ audit *access.Auditor }
 func (a examAttemptSystemAuditAdapter) Begin(
 	ctx context.Context,
 	action model.Action,
-	resource model.Resource,
+	target model.Resource,
 	scopeType model.RoleScopeType,
 	scopeID,
 	operation string,
@@ -364,7 +364,7 @@ func (a examAttemptSystemAuditAdapter) Begin(
 	event, err := a.audit.BeginSystemCriticalActionAtScope(
 		ctx,
 		action,
-		resource,
+		target,
 		scopeType,
 		scopeID,
 		map[string]any{"operation": operation, "value": auditValue},

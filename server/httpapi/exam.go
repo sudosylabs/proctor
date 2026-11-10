@@ -704,7 +704,7 @@ func (h examHandlers) get(request operationRequest) (operationResult, error) {
 	if err != nil {
 		return operationResult{}, err
 	}
-	view, err := h.app.GetExam(request.context, request.invocation(), exam.GetQuery{ExamID: examID})
+	view, err := h.app.GetExam(request.context, request.invocation(), examID)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -868,7 +868,7 @@ func (h examHandlers) archive(request operationRequest) (operationResult, error)
 		return operationResult{}, invalidRequestError(errors.New("must be positive"))
 	}
 
-	exam, err := h.app.ArchiveExam(request.context, request.invocation(), exam.ArchiveCommand{
+	archived, err := h.app.ArchiveExam(request.context, request.invocation(), exam.ArchiveCommand{
 		ExamID:               examID,
 		ExpectedExamRevision: body.ExpectedExamRevision,
 		IdempotencyKey:       request.idempotencyKey,
@@ -877,7 +877,7 @@ func (h examHandlers) archive(request operationRequest) (operationResult, error)
 		return operationResult{}, err
 	}
 
-	return jsonResult(http.StatusOK, examIdentityResponseFromModel(exam)), nil
+	return jsonResult(http.StatusOK, examIdentityResponseFromModel(archived)), nil
 }
 
 func (h examHandlers) listManagers(request operationRequest) (operationResult, error) {
@@ -949,7 +949,7 @@ func (h examHandlers) addManager(request operationRequest) (operationResult, err
 		return operationResult{}, err
 	}
 
-	change, err := h.app.AddExamManager(request.context, request.invocation(), exam.AddManagerCommand{
+	change, err := h.app.AddExamManager(request.context, request.invocation(), exam.ManagerChangeCommand{
 		ExamID:               examID,
 		UserID:               userID,
 		ExpectedExamRevision: body.ExpectedExamRevision,
@@ -981,7 +981,7 @@ func (h examHandlers) removeManager(request operationRequest) (operationResult, 
 		return operationResult{}, invalidRequestError(errors.New("must be positive"))
 	}
 
-	change, err := h.app.RemoveExamManager(request.context, request.invocation(), exam.RemoveManagerCommand{
+	change, err := h.app.RemoveExamManager(request.context, request.invocation(), exam.ManagerChangeCommand{
 		ExamID:               examID,
 		UserID:               userID,
 		ExpectedExamRevision: body.ExpectedExamRevision,
@@ -1010,7 +1010,7 @@ func (h examHandlers) transferOwner(request operationRequest) (operationResult, 
 		return operationResult{}, err
 	}
 
-	change, err := h.app.TransferExamOwnership(request.context, request.invocation(), exam.TransferOwnerCommand{
+	change, err := h.app.TransferExamOwnership(request.context, request.invocation(), exam.ManagerChangeCommand{
 		ExamID:               examID,
 		UserID:               userID,
 		ExpectedExamRevision: body.ExpectedExamRevision,
@@ -1232,23 +1232,23 @@ func examSummaryResponseFromApplication(summary store.ExamSummary) examSummaryRe
 	return response
 }
 
-func examIdentityResponseFromModel(exam model.Exam) examIdentityResponse {
+func examIdentityResponseFromModel(record model.Exam) examIdentityResponse {
 	var archivedAt *string
-	if exam.ArchivedAt.Valid {
-		formatted := model.FormatRFC3339(exam.ArchivedAt.Time)
+	if record.ArchivedAt.Valid {
+		formatted := model.FormatRFC3339(record.ArchivedAt.Time)
 		archivedAt = &formatted
 	}
 
 	return examIdentityResponse{
-		ID:                exam.ID.String(),
-		AcademicUnitID:    exam.AcademicUnitID.String(),
-		CreatorUserID:     exam.CreatorUserID.String(),
-		OwnerUserID:       exam.OwnerUserID.String(),
-		DefaultRevisionID: exam.DefaultRevisionID.String(),
-		CreatedAt:         model.FormatRFC3339(exam.CreatedAt),
-		UpdatedAt:         model.FormatRFC3339(exam.UpdatedAt),
+		ID:                record.ID.String(),
+		AcademicUnitID:    record.AcademicUnitID.String(),
+		CreatorUserID:     record.CreatorUserID.String(),
+		OwnerUserID:       record.OwnerUserID.String(),
+		DefaultRevisionID: record.DefaultRevisionID.String(),
+		CreatedAt:         model.FormatRFC3339(record.CreatedAt),
+		UpdatedAt:         model.FormatRFC3339(record.UpdatedAt),
 		ArchivedAt:        archivedAt,
-		Revision:          exam.Revision,
+		Revision:          record.Revision,
 	}
 }
 
@@ -1317,7 +1317,7 @@ func (r *configureExamDraftNativePolicyRequest) UnmarshalJSON(data []byte) error
 // ExamApplication is the application port its handlers call; it authors Exams and manages their owners and managers.
 type ExamApplication interface {
 	CreateExam(context.Context, invocation.Invocation, exam.CreateCommand) (exam.View, error)
-	GetExam(context.Context, invocation.Invocation, exam.GetQuery) (exam.View, error)
+	GetExam(context.Context, invocation.Invocation, model.ExamID) (exam.View, error)
 	EditExamDraftText(context.Context, invocation.Invocation, exam.EditDraftTextCommand) (exam.View, error)
 	ConfigureExamDraftNativePolicy(context.Context, invocation.Invocation, exam.ConfigureDraftNativePolicyCommand) (exam.View, error)
 	ConfigureExamDraftFocusLoss(context.Context, invocation.Invocation, exam.ConfigureDraftFocusLossCommand) (exam.View, error)
@@ -1325,7 +1325,7 @@ type ExamApplication interface {
 	ListExams(context.Context, invocation.Invocation, exam.ListQuery) (exam.CatalogPage, error)
 	ArchiveExam(context.Context, invocation.Invocation, exam.ArchiveCommand) (model.Exam, error)
 	ListExamManagers(context.Context, invocation.Invocation, exam.ListManagersQuery) (exam.ManagerPage, error)
-	AddExamManager(context.Context, invocation.Invocation, exam.AddManagerCommand) (store.ExamManagerCommandResult, error)
-	RemoveExamManager(context.Context, invocation.Invocation, exam.RemoveManagerCommand) (store.ExamManagerCommandResult, error)
-	TransferExamOwnership(context.Context, invocation.Invocation, exam.TransferOwnerCommand) (store.ExamManagerCommandResult, error)
+	AddExamManager(context.Context, invocation.Invocation, exam.ManagerChangeCommand) (store.ExamManagerCommandResult, error)
+	RemoveExamManager(context.Context, invocation.Invocation, exam.ManagerChangeCommand) (store.ExamManagerCommandResult, error)
+	TransferExamOwnership(context.Context, invocation.Invocation, exam.ManagerChangeCommand) (store.ExamManagerCommandResult, error)
 }

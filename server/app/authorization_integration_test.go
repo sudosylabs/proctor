@@ -24,7 +24,6 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 	"github.com/sudosylabs/proctor/server/store/storetest"
@@ -307,7 +306,7 @@ func TestPrincipalPermissionAndUserVisibilityPolicies(t *testing.T) {
 	)
 	require.True(t, apperror.Is(authErr, "authorization.denied"), "cross-user profile-picture authorization = %v", authErr)
 	_, err = helper.App.Users.GetUserProfile(
-		ctx, invocation.New(*principal, metadata), user.GetUserProfileQuery{ID: target.ID},
+		ctx, invocation.New(*principal, metadata), target.ID,
 	)
 	require.True(t, apperror.Is(err, "authorization.denied"), "unbound cross-user read error = %v", err)
 
@@ -323,7 +322,7 @@ func TestPrincipalPermissionAndUserVisibilityPolicies(t *testing.T) {
 	require.NoError(t, err)
 
 	visible, err := helper.App.Users.GetUserProfile(
-		ctx, invocation.New(*principal, metadata), user.GetUserProfileQuery{ID: target.ID},
+		ctx, invocation.New(*principal, metadata), target.ID,
 	)
 	require.NoError(t, err, "authorized cross-user read = %#v", visible)
 	require.Equal(t, target.ID, visible.ID, "authorized cross-user read = %#v", visible)
@@ -337,7 +336,7 @@ func TestPrincipalPermissionAndUserVisibilityPolicies(t *testing.T) {
 	_, err = storetest.EndRoleBinding(ctx, persistence, binding.ID, model.NowUTC())
 	require.NoError(t, err)
 	_, err = helper.App.Users.GetUserProfile(
-		ctx, invocation.New(*principal, metadata), user.GetUserProfileQuery{ID: target.ID},
+		ctx, invocation.New(*principal, metadata), target.ID,
 	)
 	require.True(t, apperror.Is(err, "authorization.denied"), "ended binding cross-user read error = %v", err)
 

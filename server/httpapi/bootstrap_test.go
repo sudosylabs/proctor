@@ -202,7 +202,7 @@ type recordingBootstrap struct {
 	bootstrapErr error
 }
 
-func (r *recordingBootstrap) GetInstallationStatus(context.Context, invocation.Invocation, identity.GetInstallationStatusQuery) (*model.InstallationStatus, error) {
+func (r *recordingBootstrap) GetInstallationStatus(context.Context, invocation.Invocation) (*model.InstallationStatus, error) {
 	return &model.InstallationStatus{Initialized: false}, nil
 }
 

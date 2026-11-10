@@ -171,7 +171,6 @@ func (h mfaHandlers) status(request operationRequest) (operationResult, error) {
 	status, err := h.app.GetMFAStatus(
 		request.context,
 		request.invocation(),
-		identity.GetMFAStatusQuery{},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -253,7 +252,6 @@ func (h mfaHandlers) regenerateRecoveryCodes(request operationRequest) (operatio
 	codes, err := h.app.RegenerateMFARecoveryCodes(
 		request.context,
 		request.invocation(),
-		identity.RegenerateMFARecoveryCodesCommand{},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -267,7 +265,6 @@ func (h mfaHandlers) disable(request operationRequest) (operationResult, error) 
 	if err := h.app.DisableMFA(
 		request.context,
 		request.invocation(),
-		identity.DisableMFACommand{},
 	); err != nil {
 		return operationResult{}, err
 	}
@@ -284,10 +281,10 @@ func mfaCode(request operationRequest) (string, error) {
 
 // MFA is the application port its handlers call; it manages the caller's multi-factor authentication.
 type MFA interface {
-	GetMFAStatus(context.Context, invocation.Invocation, identity.GetMFAStatusQuery) (*identity.MFAStatus, error)
+	GetMFAStatus(context.Context, invocation.Invocation) (*identity.MFAStatus, error)
 	SetupMFA(context.Context, invocation.Invocation, identity.SetupMFACommand) (*identity.MFASetup, error)
 	ActivateMFA(context.Context, invocation.Invocation, identity.ActivateMFACommand) (*identity.MFAActivation, error)
 	ChallengeMFA(context.Context, invocation.Invocation, identity.ChallengeMFACommand) (*model.Session, error)
-	RegenerateMFARecoveryCodes(context.Context, invocation.Invocation, identity.RegenerateMFARecoveryCodesCommand) ([]string, error)
-	DisableMFA(context.Context, invocation.Invocation, identity.DisableMFACommand) error
+	RegenerateMFARecoveryCodes(context.Context, invocation.Invocation) ([]string, error)
+	DisableMFA(context.Context, invocation.Invocation) error
 }

@@ -109,7 +109,7 @@ func TestMFARestrictedContextSurvivesDisabledService(t *testing.T) {
 	base := &mfaApplicationStoreFake{}
 	service := newTestMFAApplicationService(t, base, &securityAuditorFake{}, &mfaApplicationEffectsFake{}, now)
 	service.mfa.deps.Settings.Enabled = false
-	status, err := service.GetMFAStatus(context.Background(), invocation.New(principal, model.RequestMetadata{}), GetMFAStatusQuery{})
+	status, err := service.GetMFAStatus(context.Background(), invocation.New(principal, model.RequestMetadata{}))
 	require.NoError(t, err)
 	require.False(t, status.ServiceEnabled, "disabled service concealed mandatory reenrollment")
 	require.True(t, status.MFARecoveryRequired, "disabled service concealed mandatory reenrollment")

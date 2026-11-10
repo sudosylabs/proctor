@@ -207,13 +207,13 @@ func newExamIntegrityReviewHTTPFake(t *testing.T) *examIntegrityReviewHTTPFake {
 		Provenance:      model.ExamSubmissionCandidateSubmitted, SubmittedAt: at})
 	require.NoError(t, err)
 	managerID := model.NewUserID()
-	review, err := model.NewSubmissionReview(model.NewSubmissionReviewID(), submissionID, managerID, at)
+	record, err := model.NewSubmissionReview(model.NewSubmissionReviewID(), submissionID, managerID, at)
 	require.NoError(t, err)
-	err = review.UpdateDraft(1, "Manager-only note.", "Approved **remarks**", at.Add(time.Second))
+	err = record.UpdateDraft(1, "Manager-only note.", "Approved **remarks**", at.Add(time.Second))
 	require.NoError(t, err)
 	flag, err := model.NewIntegrityFlag(model.NewIntegrityFlagID(), attemptID, 1, model.IntegrityPolicyConnectionLoss, at)
 	require.NoError(t, err)
-	decision, err := model.NewIntegrityReviewDecision(model.NewIntegrityReviewDecisionID(), review.ID, flag.ID,
+	decision, err := model.NewIntegrityReviewDecision(model.NewIntegrityReviewDecisionID(), record.ID, flag.ID,
 		model.IntegrityReviewInconclusive, managerID, "Manager-only rationale.", at.Add(time.Second))
 	require.NoError(t, err)
 	evidence, err := model.NewConnectionLossEvidence(model.NewIntegrityEvidenceID(), attemptID,
@@ -230,7 +230,7 @@ func newExamIntegrityReviewHTTPFake(t *testing.T) *examIntegrityReviewHTTPFake {
 	authorization := store.ExamIntegrityReviewAuthorization{SubmissionID: submissionID, ExamID: model.NewExamID(),
 		SittingID: model.NewExamSittingID(), AttemptID: attemptID, CandidateUserID: principal.UserID,
 		AcademicUnitID: model.NewAcademicUnitID()}
-	return &examIntegrityReviewHTTPFake{principal: principal, submission: submission, review: review,
+	return &examIntegrityReviewHTTPFake{principal: principal, submission: submission, review: record,
 		decisionValue: decision, flag: flag, evidence: evidence, discrepancy: discrepancy, attemptID: attemptID, authorization: authorization,
 		evidencePage: store.ExamIntegrityEvidencePage{Items: []model.IntegrityEvidence{*evidence}}}
 }
@@ -296,13 +296,13 @@ func (f *examIntegrityReviewHTTPFake) UpdateExamIntegrityReview(context.Context,
 }
 
 func (f *examIntegrityReviewHTTPFake) FinalizeExamIntegrityReview(context.Context, invocation.Invocation,
-	review.FinalizeCommand,
+	review.TerminalCommand,
 ) (review.Result, error) {
 	return review.Result{Authorization: f.authorization, Review: f.review}, nil
 }
 
 func (f *examIntegrityReviewHTTPFake) ReleaseStudentExamResult(context.Context, invocation.Invocation,
-	review.ReleaseCommand,
+	review.TerminalCommand,
 ) (review.Result, error) {
 	return review.Result{Authorization: f.authorization, Review: f.review}, nil
 }

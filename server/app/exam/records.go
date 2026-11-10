@@ -129,11 +129,11 @@ func (r *Records) authorize(
 
 	action := ordinary
 	if override != "" {
-		access, accessErr := r.deps.Access.Access(ctx, scope.ExamID, principal.UserID)
+		examAccess, accessErr := r.deps.Access.Access(ctx, scope.ExamID, principal.UserID)
 		if accessErr != nil {
 			return nil, "", examRecordsStoreErrors.Translate(accessErr)
 		}
-		if access == nil || access.Exam == nil || access.Exam.ID != scope.ExamID || access.Exam.AcademicUnitID != resolved.AcademicUnitID {
+		if examAccess == nil || examAccess.Exam == nil || examAccess.Exam.ID != scope.ExamID || examAccess.Exam.AcademicUnitID != resolved.AcademicUnitID {
 			return nil, "", apperror.New("exam.unavailable").Wrap(errors.New("Exam records access projection is incomplete"))
 		}
 
@@ -141,7 +141,7 @@ func (r *Records) authorize(
 			ctx,
 			r.deps.Memberships,
 			principal.UserID,
-			access,
+			examAccess,
 			model.TimeUTC(r.deps.Now()),
 			ordinary,
 			override,
@@ -303,7 +303,7 @@ func (r *Records) CompleteExamSittingRecords(
 
 	key := command.IdempotencyKey
 	command.IdempotencyKey = ""
-	idempotency, err := idempotency.Require(invocation, store.ExamRecordsCompleteOperation, key, command)
+	commandIdempotency, err := idempotency.Require(invocation, store.ExamRecordsCompleteOperation, key, command)
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +330,7 @@ func (r *Records) CompleteExamSittingRecords(
 		ExamRecordsMutation:          mutation,
 		ExpectedRevision:             command.ExpectedRevision,
 		AcknowledgedEvidenceRevision: command.AcknowledgedEvidenceRevision,
-	}, idempotency)
+	}, commandIdempotency)
 	if err != nil {
 		return nil, r.fail(ctx, mutation, err)
 	}
@@ -361,7 +361,7 @@ func (r *Records) WaiveSubmissionReview(
 
 	key := command.IdempotencyKey
 	command.IdempotencyKey = ""
-	idempotency, err := idempotency.Require(invocation, store.ExamRecordsWaiveReviewOperation, key, command)
+	commandIdempotency, err := idempotency.Require(invocation, store.ExamRecordsWaiveReviewOperation, key, command)
 	if err != nil {
 		return nil, err
 	}
@@ -401,7 +401,7 @@ func (r *Records) WaiveSubmissionReview(
 			ReasonCode:                        command.ReasonCode,
 			PrivateReason:                     command.PrivateReason,
 		},
-		idempotency,
+		commandIdempotency,
 	)
 	if err != nil {
 		return nil, r.fail(ctx, mutation, err)
@@ -467,7 +467,7 @@ func (r *Records) CreateRetentionHold(
 
 	key := command.IdempotencyKey
 	command.IdempotencyKey = ""
-	idempotency, err := idempotency.Require(invocation, store.ExamRecordsCreateHoldOperation, key, command)
+	commandIdempotency, err := idempotency.Require(invocation, store.ExamRecordsCreateHoldOperation, key, command)
 	if err != nil {
 		return nil, err
 	}
@@ -499,7 +499,7 @@ func (r *Records) CreateRetentionHold(
 		HoldID:              holdID,
 		ReasonCode:          command.ReasonCode,
 		PrivateReason:       command.PrivateReason,
-	}, idempotency)
+	}, commandIdempotency)
 	if err != nil {
 		return nil, r.fail(ctx, mutation, err)
 	}
@@ -527,7 +527,7 @@ func (r *Records) ReleaseRetentionHold(
 
 	key := command.IdempotencyKey
 	command.IdempotencyKey = ""
-	idempotency, err := idempotency.Require(invocation, store.ExamRecordsReleaseHoldOperation, key, command)
+	commandIdempotency, err := idempotency.Require(invocation, store.ExamRecordsReleaseHoldOperation, key, command)
 	if err != nil {
 		return nil, err
 	}
@@ -559,7 +559,7 @@ func (r *Records) ReleaseRetentionHold(
 		ReasonCode:              command.ReasonCode,
 		PrivateReason:           command.PrivateReason,
 		RecentAuthenticationTTL: r.deps.RecentTTL,
-	}, idempotency)
+	}, commandIdempotency)
 	if err != nil {
 		return nil, r.fail(ctx, mutation, err)
 	}

@@ -20,11 +20,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// GetClassQuery is the input of GetClass.
-type GetClassQuery struct {
-	ID model.ClassID
-}
-
 // ListClassesQuery is the input of ListClasses.
 type ListClassesQuery struct {
 	ProgrammeLevelID model.ProgrammeLevelID
@@ -65,8 +60,7 @@ type ArchiveClassCommand struct {
 }
 
 // GetClass reads one Class after authorizing the caller.
-func (s *Service) GetClass(ctx context.Context, invocation invocation.Invocation, query GetClassQuery) (*model.Class, error) {
-	id := query.ID
+func (s *Service) GetClass(ctx context.Context, invocation invocation.Invocation, id model.ClassID) (*model.Class, error) {
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "class_id")
 	}
@@ -174,14 +168,13 @@ func (s *Service) CreateClass(ctx context.Context, invocation invocation.Invocat
 		return nil, apperror.New("request.invalid").WithField("field", "class_id").Wrap(err)
 	}
 
-	programmeLevelID := levelID
 	academicPeriodID, err := model.ParseAcademicPeriodID(strings.TrimSpace(command.AcademicPeriodID.String()))
 	if err != nil {
 		return nil, apperror.New("request.invalid").WithField("field", "academic_period_id").Wrap(err)
 	}
 
 	candidate := &model.Class{
-		ProgrammeLevelID: programmeLevelID,
+		ProgrammeLevelID: levelID,
 		AcademicPeriodID: academicPeriodID,
 		Name:             command.Name,
 		DisplayName:      command.DisplayName,

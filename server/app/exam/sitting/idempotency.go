@@ -64,7 +64,7 @@ func prepareScheduleUpdateIdempotency(invocation invocation.Invocation, command 
 func prepareTransitionIdempotency(
 	invocation invocation.Invocation,
 	operation string,
-	command PauseCommand,
+	command ManagerTransitionCommand,
 ) (*store.CommandIdempotency, error) {
 	return idempotency.Require(invocation, operation, command.IdempotencyKey, struct {
 		ExamID           model.ExamID        `json:"exam_id"`

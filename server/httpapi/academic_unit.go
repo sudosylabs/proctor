@@ -198,7 +198,7 @@ func (h academicUnitHandlers) get(request operationRequest) (operationResult, er
 	unit, err := h.app.GetAcademicUnit(
 		request.context,
 		request.invocation(),
-		academic.GetAcademicUnitQuery{ID: id},
+		id,
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -329,7 +329,7 @@ func academicUnitResponseFromModel(unit *model.AcademicUnit) academicUnitRespons
 
 // AcademicUnitApplication is the application port its handlers call; it reads and changes Academic Units.
 type AcademicUnitApplication interface {
-	GetAcademicUnit(context.Context, invocation.Invocation, academic.GetAcademicUnitQuery) (*model.AcademicUnit, error)
+	GetAcademicUnit(context.Context, invocation.Invocation, model.AcademicUnitID) (*model.AcademicUnit, error)
 	ListAcademicUnits(context.Context, invocation.Invocation, academic.ListAcademicUnitsQuery) (paging.Page[*model.AcademicUnit], error)
 	SearchAcademicUnits(context.Context, invocation.Invocation, academic.SearchAcademicUnitsQuery) (paging.Page[*model.AcademicUnit], error)
 	CreateAcademicUnit(context.Context, invocation.Invocation, academic.CreateAcademicUnitCommand) (*model.AcademicUnit, error)

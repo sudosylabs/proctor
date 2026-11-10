@@ -51,7 +51,7 @@ func (s *Service) AcknowledgeExamAttemptCorrection(
 		return CorrectionAcknowledgementResult{}, apperror.Invalid("exam.attempt.invalid", "correction_acknowledgement")
 	}
 
-	idempotency, err := idempotency.Require(invocation, store.ExamAttemptCorrectionAcknowledgementOperation, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(invocation, store.ExamAttemptCorrectionAcknowledgementOperation, command.IdempotencyKey, struct {
 		AttemptID                 string `json:"exam_attempt_id"`
 		ParticipationID           string `json:"participation_id"`
 		Generation                int64  `json:"generation"`
@@ -124,7 +124,7 @@ func (s *Service) AcknowledgeExamAttemptCorrection(
 	}
 
 	input.AuditEvent = auditEvent
-	stored, err := s.deps.Persistence.AcknowledgeCorrection(ctx, &input, idempotency)
+	stored, err := s.deps.Persistence.AcknowledgeCorrection(ctx, &input, commandIdempotency)
 	if err != nil {
 		return CorrectionAcknowledgementResult{}, storeError(storeErrors, err)
 	}

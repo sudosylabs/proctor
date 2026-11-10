@@ -586,11 +586,7 @@ func (h examAttemptHandlers) getManaged(request operationRequest) (operationResu
 		return operationResult{}, err
 	}
 
-	view, err := h.app.GetExamAttempt(request.context, request.invocation(), attempt.GetManagedAttemptQuery{
-		ExamID:    examID,
-		SittingID: sittingID,
-		AttemptID: attemptID,
-	})
+	view, err := h.app.GetExamAttempt(request.context, request.invocation(), examID, sittingID, attemptID)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -778,18 +774,18 @@ func examAttemptManagerResponseFromView(view store.ExamAttemptManagerSnapshot) (
 		return examAttemptManagerResponse{}, errors.New("Exam Attempt application returned an incomplete manager projection")
 	}
 
-	attempt, workspace := view.Attempt, view.Workspace
+	record, workspace := view.Attempt, view.Workspace
 	response := examAttemptManagerResponse{
-		ID:                  attempt.ID.String(),
-		ExamID:              attempt.ExamID.String(),
-		SittingID:           attempt.SittingID.String(),
-		CandidateUserID:     attempt.CandidateUserID.String(),
-		AdmissionRevisionID: attempt.AdmissionRevisionID.String(),
-		State:               string(attempt.State),
-		CreatedAt:           model.FormatRFC3339(attempt.CreatedAt),
-		UpdatedAt:           model.FormatRFC3339(attempt.UpdatedAt),
-		SubmittedAt:         attempt.SubmittedAt.FormatRFC3339(),
-		Revision:            attempt.Revision,
+		ID:                  record.ID.String(),
+		ExamID:              record.ExamID.String(),
+		SittingID:           record.SittingID.String(),
+		CandidateUserID:     record.CandidateUserID.String(),
+		AdmissionRevisionID: record.AdmissionRevisionID.String(),
+		State:               string(record.State),
+		CreatedAt:           model.FormatRFC3339(record.CreatedAt),
+		UpdatedAt:           model.FormatRFC3339(record.UpdatedAt),
+		SubmittedAt:         record.SubmittedAt.FormatRFC3339(),
+		Revision:            record.Revision,
 		Workspace: examAttemptWorkspaceResponse{
 			ID:        workspace.ID.String(),
 			Cursor:    workspace.Cursor,

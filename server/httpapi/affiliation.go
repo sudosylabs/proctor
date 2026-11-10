@@ -95,7 +95,7 @@ func (h affiliationHandlers) list(request operationRequest) (operationResult, er
 		return operationResult{}, err
 	}
 
-	values, err := h.app.ListAffiliations(request.context, request.invocation(), academic.ListAffiliationsQuery{UserID: userID})
+	values, err := h.app.ListAffiliations(request.context, request.invocation(), userID)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -180,7 +180,7 @@ func affiliationResponseFromModel(value *model.Affiliation) affiliationResponse 
 
 // AffiliationApplication is the application port its handlers call; it lists, adds and ends a User's Affiliations.
 type AffiliationApplication interface {
-	ListAffiliations(context.Context, invocation.Invocation, academic.ListAffiliationsQuery) ([]*model.Affiliation, error)
+	ListAffiliations(context.Context, invocation.Invocation, model.UserID) ([]*model.Affiliation, error)
 	CreateAffiliation(context.Context, invocation.Invocation, academic.CreateAffiliationCommand) (*model.Affiliation, error)
 	EndAffiliation(context.Context, invocation.Invocation, academic.EndAffiliationCommand) (*model.Affiliation, error)
 }

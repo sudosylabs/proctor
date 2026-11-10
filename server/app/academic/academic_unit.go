@@ -18,11 +18,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// GetAcademicUnitQuery identifies one academic unit to retrieve.
-type GetAcademicUnitQuery struct {
-	ID model.AcademicUnitID
-}
-
 // ListAcademicUnitsQuery lists direct children of a parent unit. An empty
 // ParentID lists root units of the installation institution.
 type ListAcademicUnitsQuery struct {
@@ -42,9 +37,8 @@ type SearchAcademicUnitsQuery struct {
 func (s *Service) GetAcademicUnit(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	query GetAcademicUnitQuery,
+	id model.AcademicUnitID,
 ) (*model.AcademicUnit, error) {
-	id := query.ID
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "academic_unit_id")
 	}

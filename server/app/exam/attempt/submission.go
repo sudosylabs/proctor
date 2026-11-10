@@ -412,31 +412,31 @@ func (s *Service) SubmitExamAttempt(
 	return result.Receipt, nil
 }
 
-func validSubmissionTarget(target *store.ExamSubmissionSealTarget, access store.ExamSubmissionSealAccess) bool {
+func validSubmissionTarget(target *store.ExamSubmissionSealTarget, sealAccess store.ExamSubmissionSealAccess) bool {
 	return target != nil &&
 		target.ExamID.IsValid() &&
 		target.SittingID.IsValid() &&
 		target.ClassID.IsValid() &&
-		target.CandidateUserID == access.CandidateUserID &&
+		target.CandidateUserID == sealAccess.CandidateUserID &&
 		target.WorkspaceID.IsValid() &&
-		target.CurrentRevisionID == access.ExpectedCurrentRevisionID &&
+		target.CurrentRevisionID == sealAccess.ExpectedCurrentRevisionID &&
 		!target.SealAt.IsZero()
 }
 
 func projectSubmissionResult(
 	stored *store.ExamSubmissionSealResult,
 	target *store.ExamSubmissionSealTarget,
-	access store.ExamSubmissionSealAccess,
+	sealAccess store.ExamSubmissionSealAccess,
 	proposedID model.SubmissionID,
 	proposedCode model.SubmissionReceiptCode,
 ) (SubmissionResult, error) {
 	if stored == nil ||
 		!stored.Receipt.SubmissionID.IsValid() ||
 		!stored.Receipt.ReceiptCode.IsValid() ||
-		stored.Receipt.AttemptID != access.AttemptID ||
+		stored.Receipt.AttemptID != sealAccess.AttemptID ||
 		stored.Receipt.State != model.ExamAttemptSubmitted ||
-		stored.Receipt.WorkspaceCursor != access.ExpectedWorkspaceCursor ||
-		stored.Receipt.ExamRevisionID != access.ExpectedCurrentRevisionID ||
+		stored.Receipt.WorkspaceCursor != sealAccess.ExpectedWorkspaceCursor ||
+		stored.Receipt.ExamRevisionID != sealAccess.ExpectedCurrentRevisionID ||
 		!validWorkspaceSHA256(stored.Receipt.ManifestDigest) ||
 		stored.Receipt.SubmittedAt.IsZero() ||
 		stored.Receipt.BrowserActivity.Validate() != nil ||
@@ -444,9 +444,9 @@ func projectSubmissionResult(
 		stored.SittingID != target.SittingID ||
 		stored.ClassID != target.ClassID ||
 		stored.CandidateUserID != target.CandidateUserID ||
-		stored.ParticipationID != access.ParticipationID ||
-		stored.Generation != access.Generation ||
-		stored.ConnectionID != access.ConnectionID ||
+		stored.ParticipationID != sealAccess.ParticipationID ||
+		stored.Generation != sealAccess.Generation ||
+		stored.ConnectionID != sealAccess.ConnectionID ||
 		(!stored.Replayed && (stored.Receipt.SubmissionID != proposedID || stored.Receipt.ReceiptCode != proposedCode)) {
 		return SubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Submission seal result"))
 	}

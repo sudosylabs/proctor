@@ -10,7 +10,6 @@ package identity
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -18,8 +17,6 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
-
-type ListDesktopRegistrationsQuery struct{}
 
 type RevokeDesktopRegistrationCommand struct {
 	RegistrationID model.DesktopRegistrationID
@@ -38,7 +35,6 @@ func (s *Service) requireDesktopRegistration() error {
 func (s *Service) ListDesktopRegistrations(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	_ ListDesktopRegistrationsQuery,
 ) ([]*model.DesktopRegistration, error) {
 	principal := invocation.Principal()
 	if err := requireInteractiveSession(principal, false, s.now(), s.recentAuthenticationTTL); err != nil {
@@ -64,8 +60,7 @@ func (s *Service) RevokeDesktopRegistration(
 		return err
 	}
 
-	registrationID, err := model.ParseDesktopRegistrationID(strings.TrimSpace(command.RegistrationID.String()))
-	if err != nil {
+	if !command.RegistrationID.IsValid() {
 		return apperror.New("request.invalid").WithField("field", "desktop_registration_id")
 	}
 
@@ -74,14 +69,14 @@ func (s *Service) RevokeDesktopRegistration(
 		Action:     model.ActionDesktopRegistrationRevoke,
 		Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 		Operation:  "revoke",
-		Value:      map[string]any{"registration_id": registrationID.String()},
+		Value:      map[string]any{"registration_id": command.RegistrationID.String()},
 	})
 	if err != nil {
 		return err
 	}
 
 	result, err := s.desktopRegistrations.Revoke(ctx, &store.DesktopRegistrationRevocation{
-		RegistrationID: registrationID,
+		RegistrationID: command.RegistrationID,
 		UserID:         principal.UserID,
 		RevokedAt:      at,
 		AuditEventID:   auditID,

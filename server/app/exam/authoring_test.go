@@ -396,7 +396,7 @@ func TestGetSelectsManagerOrOverrideAuthorization(t *testing.T) {
 			if test.manager {
 				fixture.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: fixture.unitID, UserID: fixture.userID}}
 			}
-			view, err := fixture.service.GetExam(context.Background(), fixture.invocation, GetQuery{ExamID: fixture.examID})
+			view, err := fixture.service.GetExam(context.Background(), fixture.invocation, fixture.examID)
 			require.NoError(t, err)
 			require.Equal(t, fixture.examID, view.Exam.ID, "view/auth = %#v / %s %#v", view, fixture.authorizer.action, fixture.authorizer.resource)
 			require.Equal(t, test.action, fixture.authorizer.action, "view/auth = %#v / %s %#v", view, fixture.authorizer.action, fixture.authorizer.resource)
@@ -414,7 +414,7 @@ func TestGetRequiresOverrideWhenManagerMembershipWasRevoked(t *testing.T) {
 	fixture.persistence.actorIsManager = true
 	denied := errors.New("override denied")
 	fixture.authorizer.err = denied
-	_, err := fixture.service.GetExam(context.Background(), fixture.invocation, GetQuery{ExamID: fixture.examID})
+	_, err := fixture.service.GetExam(context.Background(), fixture.invocation, fixture.examID)
 	require.ErrorIs(t, err, denied)
 	require.Equal(t, model.ActionExamViewOverride, fixture.authorizer.action, "action")
 	require.Equal(t, []string{"store.access", "membership", "authorize"}, *fixture.order)
@@ -426,7 +426,7 @@ func TestGetStopsWhenCurrentManagerMembershipCannotBeRead(t *testing.T) {
 	fixture.persistence.actorIsManager = true
 	failure := errors.New("membership unavailable")
 	fixture.memberships.err = failure
-	_, err := fixture.service.GetExam(context.Background(), fixture.invocation, GetQuery{ExamID: fixture.examID})
+	_, err := fixture.service.GetExam(context.Background(), fixture.invocation, fixture.examID)
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault)
 	require.Equal(t, "exam.unavailable", fault.Code())

@@ -116,17 +116,17 @@ func academicPeriodResource(app AcademicPeriodApplication) apiResource {
 }
 
 func (h academicPeriodHandlers) list(request operationRequest) (operationResult, error) {
-	paging, err := request.pageRequest()
+	requested, err := request.pageRequest()
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	cursor, present, err := decodePageCursor(paging, academicPeriodCursorSpec())
+	cursor, present, err := decodePageCursor(requested, academicPeriodCursorSpec())
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	query := academic.ListAcademicPeriodsQuery{Query: request.http.URL.Query().Get("q"), Limit: paging.Limit}
+	query := academic.ListAcademicPeriodsQuery{Query: request.http.URL.Query().Get("q"), Limit: requested.Limit}
 	if present {
 		query.AfterStartAt, query.AfterName, query.AfterID = academicPeriodCursorStart(cursor), cursor.Name, model.AcademicPeriodID(cursor.ID)
 	}
@@ -197,7 +197,7 @@ func (h academicPeriodHandlers) get(request operationRequest) (operationResult, 
 		return operationResult{}, err
 	}
 	period, err := h.app.GetAcademicPeriod(
-		request.context, request.invocation(), academic.GetAcademicPeriodQuery{ID: id},
+		request.context, request.invocation(), id,
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -288,7 +288,7 @@ func academicPeriodResponseFromModel(period *model.AcademicPeriod) academicPerio
 
 // AcademicPeriodApplication is the application port its handlers call; it reads and changes Academic Periods.
 type AcademicPeriodApplication interface {
-	GetAcademicPeriod(context.Context, invocation.Invocation, academic.GetAcademicPeriodQuery) (*model.AcademicPeriod, error)
+	GetAcademicPeriod(context.Context, invocation.Invocation, model.AcademicPeriodID) (*model.AcademicPeriod, error)
 	ListAcademicPeriods(context.Context, invocation.Invocation, academic.ListAcademicPeriodsQuery) (paging.Page[*model.AcademicPeriod], error)
 	CreateAcademicPeriod(context.Context, invocation.Invocation, academic.CreateAcademicPeriodCommand) (*model.AcademicPeriod, error)
 	UpdateAcademicPeriod(context.Context, invocation.Invocation, academic.UpdateAcademicPeriodCommand) (*model.AcademicPeriod, error)

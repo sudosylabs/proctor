@@ -101,7 +101,7 @@ func (p *Publication) PublishExamRevision(
 		return store.ExamRevisionSummary{}, apperror.Invalid("exam.invalid", "publication")
 	}
 
-	idempotency, err := idempotency.Require(invocation, idempotencyOperationPublishRevision, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(invocation, idempotencyOperationPublishRevision, command.IdempotencyKey, struct {
 		ExamID                string `json:"exam_id"`
 		ExpectedDraftRevision int64  `json:"expected_draft_revision"`
 	}{command.ExamID.String(), command.ExpectedDraftRevision})
@@ -171,7 +171,7 @@ func (p *Publication) PublishExamRevision(
 			AuditEventID:          auditID,
 			AuditAt:               at,
 		},
-		idempotency,
+		commandIdempotency,
 	)
 	if err != nil {
 		mapped := examStoreErrors.Translate(err)
@@ -195,25 +195,20 @@ func (p *Publication) PublishExamRevision(
 	return *result.Revision, nil
 }
 
-// GetRevisionQuery names one Exam Revision.
-type GetRevisionQuery struct {
-	ExamID     model.ExamID
-	RevisionID model.ExamRevisionID
-}
-
 // GetExamRevision returns the summary of one Exam Revision to a caller
 // authorized to view the Exam.
 func (p *Publication) GetExamRevision(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	query GetRevisionQuery,
+	examID model.ExamID,
+	revisionID model.ExamRevisionID,
 ) (_ store.ExamRevisionSummary, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	if err := p.authorizeView(ctx, invocation, query.ExamID); err != nil {
+	if err := p.authorizeView(ctx, invocation, examID); err != nil {
 		return store.ExamRevisionSummary{}, err
 	}
 
-	revision, err := p.deps.Persistence.GetSummary(ctx, query.ExamID, query.RevisionID)
+	revision, err := p.deps.Persistence.GetSummary(ctx, examID, revisionID)
 	if err != nil {
 		return store.ExamRevisionSummary{}, examStoreErrors.Translate(err)
 	}
@@ -263,11 +258,11 @@ func (p *Publication) authorizeView(ctx context.Context, invocation invocation.I
 		return apperror.Invalid("exam.invalid", "exam_id")
 	}
 
-	access, err := p.deps.Access.Access(ctx, examID, principal.UserID)
+	examAccess, err := p.deps.Access.Access(ctx, examID, principal.UserID)
 	if err != nil {
 		return examStoreErrors.Translate(err)
 	}
-	if access == nil || access.Exam == nil {
+	if examAccess == nil || examAccess.Exam == nil {
 		return apperror.New("exam.unavailable").Wrap(errors.New("Exam access projection is incomplete"))
 	}
 
@@ -275,7 +270,7 @@ func (p *Publication) authorizeView(ctx context.Context, invocation invocation.I
 		ctx,
 		p.deps.Memberships,
 		principal.UserID,
-		access,
+		examAccess,
 		model.TimeUTC(p.deps.Now()),
 		model.ActionExamView,
 		model.ActionExamViewOverride,

@@ -132,7 +132,7 @@ func (a *Authoring) ArchiveExam(
 		return model.Exam{}, apperror.Invalid("exam.invalid", "exam_revision")
 	}
 
-	idempotency, err := idempotency.Require(invocation, idempotencyOperationArchive, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(invocation, idempotencyOperationArchive, command.IdempotencyKey, struct {
 		ExamID               string `json:"exam_id"`
 		ExpectedExamRevision int64  `json:"expected_exam_revision"`
 	}{ExamID: command.ExamID.String(), ExpectedExamRevision: command.ExpectedExamRevision})
@@ -184,7 +184,7 @@ func (a *Authoring) ArchiveExam(
 		ArchivedAt:       at,
 		AuditEventID:     auditID,
 		AuditAt:          at,
-	}, idempotency)
+	}, commandIdempotency)
 	if err != nil {
 		mapped := examStoreErrors.Translate(err)
 		if auditErr := a.deps.Auditor.Fail(ctx, auditID, apperror.CodeOf(mapped, "exam.unavailable")); auditErr != nil {

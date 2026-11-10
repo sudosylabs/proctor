@@ -20,7 +20,7 @@ import (
 type MFAKeyApplication interface {
 	GetMFAKeyState(context.Context, invocation.Invocation) (identity.MFAKeyStateView, error)
 	StartMFARekey(context.Context, invocation.Invocation, identity.StartMFARekeyCommand) (identity.MFARekeyView, error)
-	GetMFARekeyStatus(context.Context, invocation.Invocation, identity.GetMFARekeyStatusQuery) (identity.MFARekeyStatusView, error)
+	GetMFARekeyStatus(context.Context, invocation.Invocation, model.JobID) (identity.MFARekeyStatusView, error)
 }
 
 type mfaRekeyRequest struct {
@@ -173,7 +173,7 @@ func (h mfaKeyHandlers) getRekeyStatus(request operationRequest) (operationResul
 		return operationResult{}, err
 	}
 
-	view, err := h.app.GetMFARekeyStatus(request.context, request.invocation(), identity.GetMFARekeyStatusQuery{JobID: jobID})
+	view, err := h.app.GetMFARekeyStatus(request.context, request.invocation(), jobID)
 	if err != nil {
 		return operationResult{}, err
 	}

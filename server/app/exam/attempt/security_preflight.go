@@ -110,12 +110,12 @@ func (s *Service) PrepareExamSecurityPreflight(
 		return nil, apperror.Invalid("exam.attempt.invalid", "security_preflight")
 	}
 
-	access, err := s.securityPreflightAccess(ctx, invocation, command.SittingID)
+	preflightAccess, err := s.securityPreflightAccess(ctx, invocation, command.SittingID)
 	if err != nil {
 		return nil, err
 	}
 
-	idempotency, err := idempotency.Require(
+	commandIdempotency, err := idempotency.Require(
 		invocation,
 		store.SecurityPreflightPrepareOperation,
 		command.IdempotencyKey,
@@ -145,7 +145,7 @@ func (s *Service) PrepareExamSecurityPreflight(
 	result, err := s.deps.Persistence.PrepareSecurityPreflight(
 		ctx,
 		&store.SecurityPreflightPrepare{
-			Access:                           access,
+			Access:                           preflightAccess,
 			AttemptID:                        command.AttemptID,
 			PreflightID:                      model.NewID(),
 			Challenge:                        model.NewCredentialToken(),
@@ -155,7 +155,7 @@ func (s *Service) PrepareExamSecurityPreflight(
 			AuditEventID:                     audit,
 			AuditAt:                          s.deps.Now(),
 		},
-		idempotency,
+		commandIdempotency,
 	)
 	if err != nil {
 		return nil, s.failAudit(ctx, audit, storeError(securityPreflightStoreErrors, err))
@@ -192,7 +192,7 @@ func (s *Service) ReportExamSecurityPreflight(
 
 	principal := invocation.Principal()
 	// Authenticate before looking up a resource selector or beginning an audit.
-	access, err := s.securityPreflightAccess(ctx, invocation, "")
+	preflightAccess, err := s.securityPreflightAccess(ctx, invocation, "")
 	if err != nil {
 		return nil, err
 	}
@@ -202,8 +202,8 @@ func (s *Service) ReportExamSecurityPreflight(
 		return nil, storeError(securityPreflightStoreErrors, err)
 	}
 
-	access.SittingID = sittingID
-	idempotency, err := idempotency.Require(invocation, store.SecurityPreflightReportOperation, command.IdempotencyKey, struct {
+	preflightAccess.SittingID = sittingID
+	commandIdempotency, err := idempotency.Require(invocation, store.SecurityPreflightReportOperation, command.IdempotencyKey, struct {
 		PreflightID string                        `json:"preflight_id"`
 		Report      model.SecurityPreflightReport `json:"report"`
 	}{command.PreflightID, command.Report})
@@ -219,13 +219,13 @@ func (s *Service) ReportExamSecurityPreflight(
 	result, err := s.deps.Persistence.ReportSecurityPreflight(
 		ctx,
 		&store.SecurityPreflightReport{
-			Access:       access,
+			Access:       preflightAccess,
 			PreflightID:  command.PreflightID,
 			Report:       command.Report,
 			AuditEventID: audit,
 			AuditAt:      s.deps.Now(),
 		},
-		idempotency,
+		commandIdempotency,
 	)
 	if err != nil {
 		return nil, s.failAudit(ctx, audit, storeError(securityPreflightStoreErrors, err))
@@ -271,12 +271,12 @@ func (s *Service) RecoverExamSecurityPolicy(
 		return nil, apperror.Invalid("exam.attempt.invalid", "attempt_id")
 	}
 
-	access, err := s.securityPreflightAccess(ctx, invocation, "")
+	preflightAccess, err := s.securityPreflightAccess(ctx, invocation, "")
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := s.deps.Persistence.RecoverSecurityPolicy(ctx, access, attemptID)
+	result, err := s.deps.Persistence.RecoverSecurityPolicy(ctx, preflightAccess, attemptID)
 	if err != nil {
 		return nil, storeError(securityPreflightStoreErrors, err)
 	}

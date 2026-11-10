@@ -21,8 +21,13 @@ import (
 const examStarterWorkspaceUploadBodyLimit = model.StarterWorkspaceMaximumFileBytes + 64*1024
 
 type ExamStarterWorkspaceApplication interface {
-	ListExamStarterWorkspace(context.Context, invocation.Invocation, workspace.ListQuery) ([]store.ExamStarterWorkspaceItem, error)
-	OpenExamStarterWorkspaceFile(context.Context, invocation.Invocation, workspace.OpenFileQuery) (workspace.OpenedFile, error)
+	ListExamStarterWorkspace(context.Context, invocation.Invocation, model.ExamID) ([]store.ExamStarterWorkspaceItem, error)
+	OpenExamStarterWorkspaceFile(
+		context.Context,
+		invocation.Invocation,
+		model.ExamID,
+		model.StarterWorkspaceEntryID,
+	) (workspace.OpenedFile, error)
 	CreateExamStarterWorkspaceDirectory(context.Context, invocation.Invocation, workspace.CreateDirectoryCommand) (workspace.Result, error)
 	CreateExamStarterWorkspaceFile(context.Context, invocation.Invocation, workspace.CreateFileCommand) (workspace.Result, error)
 	MoveExamStarterWorkspaceEntry(context.Context, invocation.Invocation, workspace.MoveEntryCommand) (workspace.Result, error)
@@ -271,7 +276,7 @@ func (h examStarterWorkspaceHandlers) list(request operationRequest) (operationR
 		return operationResult{}, err
 	}
 
-	items, err := h.app.ListExamStarterWorkspace(request.context, request.invocation(), workspace.ListQuery{ExamID: examID})
+	items, err := h.app.ListExamStarterWorkspace(request.context, request.invocation(), examID)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -444,11 +449,7 @@ func (h examStarterWorkspaceHandlers) openFile(request operationRequest) (protoc
 		return protocolResult{}, err
 	}
 
-	opened, err := h.app.OpenExamStarterWorkspaceFile(
-		request.context,
-		request.invocation(),
-		workspace.OpenFileQuery{ExamID: examID, EntryID: entryID},
-	)
+	opened, err := h.app.OpenExamStarterWorkspaceFile(request.context, request.invocation(), examID, entryID)
 	if err != nil {
 		return protocolResult{}, err
 	}

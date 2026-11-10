@@ -43,15 +43,14 @@ type ManagerPage struct {
 	HasMore bool
 }
 
-type AddManagerCommand struct {
+// ManagerChangeCommand names the user whose relationship to one Exam changes:
+// added as an Exam Manager, removed as one, or made its owner.
+type ManagerChangeCommand struct {
 	ExamID               model.ExamID
 	UserID               model.UserID
 	ExpectedExamRevision int64
 	IdempotencyKey       string
 }
-
-type RemoveManagerCommand = AddManagerCommand
-type TransferOwnerCommand = AddManagerCommand
 
 // ListExamManagers returns one page of an Exam's Exam Managers to a caller
 // authorized to manage the Exam.
@@ -101,7 +100,7 @@ func (a *Authoring) ListExamManagers(
 func (a *Authoring) AddExamManager(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	command AddManagerCommand,
+	command ManagerChangeCommand,
 ) (_ store.ExamManagerCommandResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	return a.changeManager(ctx, invocation, command, managerAddition, a.deps.Persistence.AddManager)
@@ -112,7 +111,7 @@ func (a *Authoring) AddExamManager(
 func (a *Authoring) RemoveExamManager(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	command RemoveManagerCommand,
+	command ManagerChangeCommand,
 ) (_ store.ExamManagerCommandResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	return a.changeManager(ctx, invocation, command, managerRemoval, a.deps.Persistence.RemoveManager)
@@ -123,7 +122,7 @@ func (a *Authoring) RemoveExamManager(
 func (a *Authoring) TransferExamOwnership(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	command TransferOwnerCommand,
+	command ManagerChangeCommand,
 ) (_ store.ExamManagerCommandResult, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	return a.changeManager(ctx, invocation, command, ownershipTransfer, a.deps.Persistence.TransferOwner)
@@ -177,7 +176,7 @@ var (
 func (a *Authoring) changeManager(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	command AddManagerCommand,
+	command ManagerChangeCommand,
 	transition managerTransition,
 	mutate managerMutation,
 ) (store.ExamManagerCommandResult, error) {
@@ -186,7 +185,7 @@ func (a *Authoring) changeManager(
 		return store.ExamManagerCommandResult{}, apperror.Invalid("exam.invalid", "manager_command")
 	}
 
-	idempotency, err := idempotency.Require(invocation, transition.idempotencyOperation, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(invocation, transition.idempotencyOperation, command.IdempotencyKey, struct {
 		ExamID               string `json:"exam_id"`
 		UserID               string `json:"user_id"`
 		ExpectedExamRevision int64  `json:"expected_exam_revision"`
@@ -264,7 +263,7 @@ func (a *Authoring) changeManager(
 		AuditEventID:     auditID,
 		AuditAt:          at,
 		Notices:          notices,
-	}, idempotency)
+	}, commandIdempotency)
 	if err != nil {
 		mapped := examStoreErrors.Translate(err)
 		if auditErr := a.deps.Auditor.Fail(ctx, auditID, apperror.CodeOf(mapped, "exam.unavailable")); auditErr != nil {
@@ -340,15 +339,15 @@ func (a *Authoring) authorizeManagement(
 	at time.Time,
 ) (*store.ExamAccessSnapshot, model.Action, error) {
 	principal := invocation.Principal()
-	access, err := a.deps.Persistence.Access(ctx, examID, principal.UserID)
+	examAccess, err := a.deps.Persistence.Access(ctx, examID, principal.UserID)
 	if err != nil {
 		return nil, "", examStoreErrors.Translate(err)
 	}
-	if access == nil || access.Exam == nil {
+	if examAccess == nil || examAccess.Exam == nil {
 		return nil, "", apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no access projection"))
 	}
 
-	action, err := a.actionForAccess(ctx, principal.UserID, access, at, model.ActionExamManage, model.ActionExamManageOverride)
+	action, err := a.actionForAccess(ctx, principal.UserID, examAccess, at, model.ActionExamManage, model.ActionExamManageOverride)
 	if err != nil {
 		return nil, "", err
 	}
@@ -356,7 +355,7 @@ func (a *Authoring) authorizeManagement(
 		return nil, "", err
 	}
 
-	return access, action, nil
+	return examAccess, action, nil
 }
 
 func (a *Authoring) isEligibleManager(ctx context.Context, userID model.UserID, unitID model.AcademicUnitID, at time.Time) (bool, error) {

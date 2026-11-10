@@ -151,9 +151,12 @@ type examRevisionHTTPFake struct {
 	principal model.Principal
 	summary   store.ExamRevisionSummary
 	publish   exam.PublishRevisionCommand
-	get       exam.GetRevisionQuery
-	list      exam.ListRevisionsQuery
-	page      exam.RevisionPage
+	get       struct {
+		ExamID     model.ExamID
+		RevisionID model.ExamRevisionID
+	}
+	list exam.ListRevisionsQuery
+	page exam.RevisionPage
 }
 
 func newExamRevisionHTTPFake() *examRevisionHTTPFake {
@@ -184,8 +187,13 @@ func (f *examRevisionHTTPFake) PublishExamRevision(_ context.Context, _ invocati
 	return f.summary, nil
 }
 
-func (f *examRevisionHTTPFake) GetExamRevision(_ context.Context, _ invocation.Invocation, query exam.GetRevisionQuery) (store.ExamRevisionSummary, error) {
-	f.get = query
+func (f *examRevisionHTTPFake) GetExamRevision(
+	_ context.Context,
+	_ invocation.Invocation,
+	examID model.ExamID,
+	revisionID model.ExamRevisionID,
+) (store.ExamRevisionSummary, error) {
+	f.get.ExamID, f.get.RevisionID = examID, revisionID
 	return f.summary, nil
 }
 

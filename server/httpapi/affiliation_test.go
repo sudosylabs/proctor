@@ -32,7 +32,7 @@ type affiliationHTTPApplication struct {
 	listErr       error
 }
 
-func (a *affiliationHTTPApplication) ListAffiliations(context.Context, invocation.Invocation, academic.ListAffiliationsQuery) ([]*model.Affiliation, error) {
+func (a *affiliationHTTPApplication) ListAffiliations(context.Context, invocation.Invocation, model.UserID) ([]*model.Affiliation, error) {
 	return a.values, a.listErr
 }
 func (a *affiliationHTTPApplication) CreateAffiliation(_ context.Context, _ invocation.Invocation, command academic.CreateAffiliationCommand) (*model.Affiliation, error) {

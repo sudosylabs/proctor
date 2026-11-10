@@ -36,8 +36,8 @@ type ExamIntegrityReviewApplication interface {
 	) (*store.ExamIntegrityDiscrepancyPage, error)
 	SaveExamIntegrityDecision(context.Context, invocation.Invocation, review.SaveDecisionCommand) (review.Result, error)
 	UpdateExamIntegrityReview(context.Context, invocation.Invocation, review.UpdateDraftCommand) (review.Result, error)
-	FinalizeExamIntegrityReview(context.Context, invocation.Invocation, review.FinalizeCommand) (review.Result, error)
-	ReleaseStudentExamResult(context.Context, invocation.Invocation, review.ReleaseCommand) (review.Result, error)
+	FinalizeExamIntegrityReview(context.Context, invocation.Invocation, review.TerminalCommand) (review.Result, error)
+	ReleaseStudentExamResult(context.Context, invocation.Invocation, review.TerminalCommand) (review.Result, error)
 	GetStudentExamResult(context.Context, invocation.Invocation, model.ExamAttemptID) (*model.StudentResult, error)
 }
 
@@ -348,7 +348,7 @@ func examIntegrityReviewResource(app ExamIntegrityReviewApplication) apiResource
 	flags := "/submissions/{submission_id}/integrity-flags"
 	discrepancies := "/submissions/{submission_id}/integrity-discrepancies"
 	evidence := "/submissions/{submission_id}/integrity-flags/{integrity_flag_id}/evidence"
-	review := "/submissions/{submission_id}/review"
+	reviewPath := "/submissions/{submission_id}/review"
 	decision := "/submissions/{submission_id}/review/decisions/{integrity_flag_id}"
 	finalize := "/submissions/{submission_id}/review/finalize"
 	release := "/submissions/{submission_id}/review/release"
@@ -426,7 +426,7 @@ func examIntegrityReviewResource(app ExamIntegrityReviewApplication) apiResource
 		},
 		endpoint{
 			Method: http.MethodGet,
-			Path:   review,
+			Path:   reviewPath,
 			Auth:   AuthPrincipalRequired,
 			Errors: []string{
 				"authorization.request.invalid",
@@ -442,7 +442,7 @@ func examIntegrityReviewResource(app ExamIntegrityReviewApplication) apiResource
 		},
 		endpoint{
 			Method:      http.MethodPut,
-			Path:        review,
+			Path:        reviewPath,
 			Auth:        AuthPrincipalRequired,
 			Idempotency: IdempotencyRequired,
 			Errors: []string{
@@ -851,7 +851,7 @@ func (h examIntegrityReviewHandlers) terminal(request operationRequest,
 		return operationResult{}, invalidRequestError(err)
 	}
 
-	command := review.FinalizeCommand{
+	command := review.TerminalCommand{
 		SubmissionID:           submissionID,
 		ReviewID:               reviewID,
 		ExpectedReviewRevision: body.ExpectedReviewRevision,
@@ -931,8 +931,8 @@ func examIntegrityReviewSnapshotResponse(snapshot *store.ExamSubmissionReviewSna
 		Decisions:                 make([]examIntegrityReviewDecisionResponse, 0, len(snapshot.Decisions)),
 	}
 	if snapshot.Review != nil {
-		review := examSubmissionReviewDTO(*snapshot.Review)
-		response.Review = &review
+		dto := examSubmissionReviewDTO(*snapshot.Review)
+		response.Review = &dto
 	}
 
 	for _, item := range snapshot.Decisions {
@@ -942,31 +942,31 @@ func examIntegrityReviewSnapshotResponse(snapshot *store.ExamSubmissionReviewSna
 	return response, nil
 }
 
-func examSubmissionReviewDTO(review model.SubmissionReview) examSubmissionReviewResponse {
+func examSubmissionReviewDTO(record model.SubmissionReview) examSubmissionReviewResponse {
 	response := examSubmissionReviewResponse{
-		ID:                      review.ID.String(),
-		SubmissionID:            review.SubmissionID.String(),
-		State:                   string(review.State),
-		ReleaseState:            string(review.ReleaseState),
-		Revision:                review.Revision,
-		CreatedByUserID:         review.CreatedByUserID.String(),
-		ManagerNotes:            review.ManagerNotes,
-		StudentRemarksMarkdown:  review.StudentRemarksMarkdown,
-		FlagCount:               review.FlagCount,
-		EvidenceCount:           review.EvidenceCount,
-		DiscrepancyCount:        review.DiscrepancyCount,
-		EvidenceInventoryDigest: review.EvidenceInventoryDigest,
-		CreatedAt:               model.FormatRFC3339(review.CreatedAt),
-		UpdatedAt:               model.FormatRFC3339(review.UpdatedAt),
+		ID:                      record.ID.String(),
+		SubmissionID:            record.SubmissionID.String(),
+		State:                   string(record.State),
+		ReleaseState:            string(record.ReleaseState),
+		Revision:                record.Revision,
+		CreatedByUserID:         record.CreatedByUserID.String(),
+		ManagerNotes:            record.ManagerNotes,
+		StudentRemarksMarkdown:  record.StudentRemarksMarkdown,
+		FlagCount:               record.FlagCount,
+		EvidenceCount:           record.EvidenceCount,
+		DiscrepancyCount:        record.DiscrepancyCount,
+		EvidenceInventoryDigest: record.EvidenceInventoryDigest,
+		CreatedAt:               model.FormatRFC3339(record.CreatedAt),
+		UpdatedAt:               model.FormatRFC3339(record.UpdatedAt),
 	}
-	if review.FinalizedAt.Valid {
-		response.FinalizedAt = model.FormatRFC3339(review.FinalizedAt.Time)
-		response.FinalizedByUserID = review.FinalizedByUserID.String()
+	if record.FinalizedAt.Valid {
+		response.FinalizedAt = model.FormatRFC3339(record.FinalizedAt.Time)
+		response.FinalizedByUserID = record.FinalizedByUserID.String()
 	}
 
-	if review.ReleasedAt.Valid {
-		response.ReleasedAt = model.FormatRFC3339(review.ReleasedAt.Time)
-		response.ReleasedByUserID = review.ReleasedByUserID.String()
+	if record.ReleasedAt.Valid {
+		response.ReleasedAt = model.FormatRFC3339(record.ReleasedAt.Time)
+		response.ReleasedByUserID = record.ReleasedByUserID.String()
 	}
 
 	return response

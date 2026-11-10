@@ -58,7 +58,7 @@ func TestIdempotencyDocumentsAndStoreBoundaryCompatibility(t *testing.T) {
 	assertPreparedIdempotency(t, updated, userID, idempotencyOperationUpdateSchedule, "update-key",
 		fmt.Sprintf(`{"exam_id":%q,"exam_sitting_id":%q,"expected_revision":2,"scheduled_end_at":"2026-08-24T13:00:00Z"}`, examID, sittingID))
 
-	transition := PauseCommand{ExamID: examID, SittingID: sittingID, ExpectedRevision: 3, PrivateReason: "room unavailable", IdempotencyKey: "transition-key"}
+	transition := ManagerTransitionCommand{ExamID: examID, SittingID: sittingID, ExpectedRevision: 3, PrivateReason: "room unavailable", IdempotencyKey: "transition-key"}
 	for _, operation := range []string{idempotencyOperationCancel, idempotencyOperationPause, idempotencyOperationResume, idempotencyOperationClose} {
 		prepared, prepareErr := prepareTransitionIdempotency(invocation, operation, transition)
 		require.NoError(t, prepareErr)

@@ -22,9 +22,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// GetAcademicPeriodQuery names one Academic Period.
-type GetAcademicPeriodQuery struct{ ID model.AcademicPeriodID }
-
 // ListAcademicPeriodsQuery is the input of ListAcademicPeriods.
 type ListAcademicPeriodsQuery struct {
 	Query string
@@ -63,9 +60,8 @@ type ArchiveAcademicPeriodCommand struct {
 func (s *Service) GetAcademicPeriod(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	query GetAcademicPeriodQuery,
+	id model.AcademicPeriodID,
 ) (*model.AcademicPeriod, error) {
-	id := query.ID
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "academic_period_id")
 	}
@@ -149,7 +145,7 @@ func (s *Service) CreateAcademicPeriod(
 		return nil, err
 	}
 
-	idempotency, err := idempotency.Prepare(invocation, "academic_period.create", command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Prepare(invocation, "academic_period.create", command.IdempotencyKey, struct {
 		OwnerType, OwnerID             string
 		Name, DisplayName, Description string
 		StartAt, EndAt                 int64
@@ -185,7 +181,7 @@ func (s *Service) CreateAcademicPeriod(
 				AuditEventID: reference.ID,
 				AuditAt:      reference.MutationAt,
 			}
-			if idempotency == nil {
+			if commandIdempotency == nil {
 				period, createErr := s.academicPeriods.Create(ctx, input)
 				return &store.AcademicPeriodCommandResult{Value: period}, createErr
 			}
@@ -201,7 +197,7 @@ func (s *Service) CreateAcademicPeriod(
 				return nil, errors.New("academic period store does not support idempotent creation")
 			}
 
-			return idempotentStore.CreateIdempotently(ctx, input, idempotency)
+			return idempotentStore.CreateIdempotently(ctx, input, commandIdempotency)
 		},
 		academicPeriodStoreErrors.Translate,
 	)

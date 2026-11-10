@@ -25,7 +25,7 @@ const defaultJobPageSize = 50
 
 type JobOperationsApplication interface {
 	ListJobs(context.Context, invocation.Invocation, app.ListJobsQuery) (job.Page, error)
-	GetJob(context.Context, invocation.Invocation, app.GetJobQuery) (job.View, error)
+	GetJob(context.Context, invocation.Invocation, model.JobID) (job.View, error)
 	ListJobAttempts(context.Context, invocation.Invocation, app.ListJobAttemptsQuery) (job.AttemptPage, error)
 	CancelJob(context.Context, invocation.Invocation, app.CancelJobCommand) (job.View, error)
 	RetryJob(context.Context, invocation.Invocation, app.RetryJobCommand) (job.View, error)
@@ -210,7 +210,7 @@ func (h jobHandlers) get(request operationRequest) (operationResult, error) {
 	if err != nil {
 		return operationResult{}, err
 	}
-	view, err := h.app.GetJob(request.context, request.invocation(), app.GetJobQuery{ID: jobID})
+	view, err := h.app.GetJob(request.context, request.invocation(), jobID)
 	if err != nil {
 		return operationResult{}, err
 	}

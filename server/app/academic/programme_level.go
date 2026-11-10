@@ -19,9 +19,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// GetProgrammeLevelQuery names one Programme Level.
-type GetProgrammeLevelQuery struct{ ID model.ProgrammeLevelID }
-
 // ListProgrammeLevelsQuery is the input of ListProgrammeLevels.
 type ListProgrammeLevelsQuery struct {
 	ProgrammeID model.ProgrammeID
@@ -56,9 +53,8 @@ type ArchiveProgrammeLevelCommand struct {
 func (s *Service) GetProgrammeLevel(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	query GetProgrammeLevelQuery,
+	id model.ProgrammeLevelID,
 ) (*model.ProgrammeLevel, error) {
-	id := query.ID
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "programme_level_id")
 	}

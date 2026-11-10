@@ -28,10 +28,8 @@ func (s *Service) IssueStudentClassInvitation(
 	invocation invocation.Invocation,
 	command IssueStudentClassInvitationCommand,
 ) (InvitationView, error) {
-	classID := strings.TrimSpace(command.ClassID.String())
-	parsedClassID, err := model.ParseClassID(classID)
-	if err != nil {
-		return InvitationView{}, apperror.New("request.invalid").WithField("field", "class_id").Wrap(err)
+	if !command.ClassID.IsValid() {
+		return InvitationView{}, apperror.Invalid("request.invalid", "class_id")
 	}
 
 	lifetime, err := invitationLifetime(command.ExpiresInDays, model.InvitationLifetime)
@@ -39,7 +37,7 @@ func (s *Service) IssueStudentClassInvitation(
 		return InvitationView{}, err
 	}
 
-	resource := model.Resource{Type: model.ResourceClass, ID: classID}
+	resource := model.Resource{Type: model.ResourceClass, ID: command.ClassID.String()}
 	if err = s.authorize(ctx, invocation, model.ActionInvitationCreate, resource); err != nil {
 		return InvitationView{}, err
 	}
@@ -47,7 +45,7 @@ func (s *Service) IssueStudentClassInvitation(
 		return InvitationView{}, err
 	}
 
-	class, err := s.classes.Get(ctx, parsedClassID)
+	class, err := s.classes.Get(ctx, command.ClassID)
 	if err != nil {
 		return InvitationView{}, invitationStoreErrors.Translate(err)
 	}
@@ -56,18 +54,18 @@ func (s *Service) IssueStudentClassInvitation(
 	if err != nil {
 		return InvitationView{}, invitationStoreErrors.Translate(err)
 	}
-	if class.ID != parsedClassID || period.ID != class.AcademicPeriodID {
+	if class.ID != command.ClassID || period.ID != class.AcademicPeriodID {
 		return InvitationView{}, apperror.New("invitation.class_period_conflict")
 	}
 
 	semantic := command
 	semantic.IdempotencyKey = ""
-	idempotency, err := idempotency.Prepare(invocation, "invitation.student_class.issue", command.IdempotencyKey, semantic)
+	commandIdempotency, err := idempotency.Prepare(invocation, "invitation.student_class.issue", command.IdempotencyKey, semantic)
 	if err != nil {
 		return InvitationView{}, err
 	}
 
-	batchitem.BindOnboardingImport(idempotency, command.onboardingImportID, command.onboardingImportRowNumber)
+	batchitem.BindOnboardingImport(commandIdempotency, command.onboardingImportID, command.onboardingImportRowNumber)
 	attempt := access.Mutation{
 		Invocation: invocation,
 		Action:     model.ActionInvitationCreate,
@@ -81,7 +79,7 @@ func (s *Service) IssueStudentClassInvitation(
 			"academic_period_id": period.ID.String(),
 		},
 	}
-	if recovered, ok, recoverErr := s.recoverInvitationIssueOutcome(ctx, idempotency, attempt); ok {
+	if recovered, ok, recoverErr := s.recoverInvitationIssueOutcome(ctx, commandIdempotency, attempt); ok {
 		return recovered, recoverErr
 	}
 
@@ -106,7 +104,7 @@ func (s *Service) IssueStudentClassInvitation(
 		if candidateErr != nil {
 			return InvitationView{}, candidateErr
 		}
-		if view, handled, noOpErr := s.resolveOnboardingInvitationNoOp(ctx, invocation, attempt, candidate, idempotency); handled {
+		if view, handled, noOpErr := s.resolveOnboardingInvitationNoOp(ctx, invocation, attempt, candidate, commandIdempotency); handled {
 			return view, noOpErr
 		}
 	}
@@ -133,7 +131,7 @@ func (s *Service) IssueStudentClassInvitation(
 		attempt.Value = candidate.Auditable()
 		return s.recordDuplicateInvitationView(
 			ctx,
-			idempotency,
+			commandIdempotency,
 			attempt,
 			store.InvitationBatchDuplicate{Candidate: candidate},
 			command.batchCanonicalKey,
@@ -176,7 +174,7 @@ func (s *Service) IssueStudentClassInvitation(
 		attempt,
 		func() time.Time { return issuedAt },
 		func(ctx context.Context, reference access.MutationReference) (*store.InvitationCommandResult, error) {
-			return s.storeStudentClassInvitation(ctx, idempotency, invitation, prepared, reference)
+			return s.storeStudentClassInvitation(ctx, commandIdempotency, invitation, prepared, reference)
 		},
 		invitationStoreErrors.Translate,
 	)
@@ -229,7 +227,7 @@ func newStudentClassInvitationValue(
 // storeStudentClassInvitation records the audited Student Class Invitation issue, idempotently when a key is present.
 func (s *Service) storeStudentClassInvitation(
 	ctx context.Context,
-	idempotency *store.CommandIdempotency,
+	commandIdempotency *store.CommandIdempotency,
 	invitation *model.Invitation,
 	prepared *store.PreparedMail,
 	reference access.MutationReference,
@@ -242,8 +240,8 @@ func (s *Service) storeStudentClassInvitation(
 		AuditEventID: reference.ID,
 		AuditAt:      reference.MutationAt,
 	}
-	if idempotency != nil {
-		value, storeErr := s.invitations.IssueStudentClassIdempotently(ctx, input, idempotency)
+	if commandIdempotency != nil {
+		value, storeErr := s.invitations.IssueStudentClassIdempotently(ctx, input, commandIdempotency)
 		if storeErr == nil && value.Duplicate {
 			return nil, apperror.New("onboarding_batch.duplicate")
 		}
@@ -262,9 +260,8 @@ func (s *Service) IssueTeacherAcademicUnitInvitation(
 	invocation invocation.Invocation,
 	command IssueTeacherAcademicUnitInvitationCommand,
 ) (InvitationView, error) {
-	unitID, err := model.ParseAcademicUnitID(strings.TrimSpace(command.AcademicUnitID.String()))
-	if err != nil {
-		return InvitationView{}, apperror.New("request.invalid").WithField("field", "academic_unit_id").Wrap(err)
+	if !command.AcademicUnitID.IsValid() {
+		return InvitationView{}, apperror.Invalid("request.invalid", "academic_unit_id")
 	}
 
 	roleID, err := model.ParseRoleID(strings.TrimSpace(command.RoleID.String()))
@@ -277,7 +274,7 @@ func (s *Service) IssueTeacherAcademicUnitInvitation(
 		return InvitationView{}, err
 	}
 
-	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()}
+	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: command.AcademicUnitID.String()}
 	if err = s.authorize(ctx, invocation, model.ActionInvitationCreate, resource); err != nil {
 		return InvitationView{}, err
 	}
@@ -285,8 +282,8 @@ func (s *Service) IssueTeacherAcademicUnitInvitation(
 		return InvitationView{}, err
 	}
 
-	unit, err := s.academicUnits.Get(ctx, unitID)
-	if err != nil || unit.ID != unitID || unit.IsArchived() {
+	unit, err := s.academicUnits.Get(ctx, command.AcademicUnitID)
+	if err != nil || unit.ID != command.AcademicUnitID || unit.IsArchived() {
 		return InvitationView{}, invitationStoreErrors.Translate(err)
 	}
 
@@ -297,18 +294,18 @@ func (s *Service) IssueTeacherAcademicUnitInvitation(
 	if err = validateInvitationDelegableRole(role, model.RoleScopeAcademicUnit); err != nil {
 		return InvitationView{}, err
 	}
-	if err = s.authorizeActionDelegation(ctx, invocation, role.Permissions, model.RoleScopeAcademicUnit, unitID.String()); err != nil {
+	if err = s.authorizeActionDelegation(ctx, invocation, role.Permissions, model.RoleScopeAcademicUnit, command.AcademicUnitID.String()); err != nil {
 		return InvitationView{}, err
 	}
 
 	semantic := command
 	semantic.IdempotencyKey = ""
-	idempotency, err := idempotency.Prepare(invocation, "invitation.teacher_academic_unit.issue", command.IdempotencyKey, semantic)
+	commandIdempotency, err := idempotency.Prepare(invocation, "invitation.teacher_academic_unit.issue", command.IdempotencyKey, semantic)
 	if err != nil {
 		return InvitationView{}, err
 	}
 
-	batchitem.BindOnboardingImport(idempotency, command.onboardingImportID, command.onboardingImportRowNumber)
+	batchitem.BindOnboardingImport(commandIdempotency, command.onboardingImportID, command.onboardingImportRowNumber)
 	attempt := access.Mutation{
 		Invocation: invocation,
 		Action:     model.ActionInvitationCreate,
@@ -322,7 +319,7 @@ func (s *Service) IssueTeacherAcademicUnitInvitation(
 			"role_id":          role.ID.String(),
 		},
 	}
-	if recovered, ok, recoverErr := s.recoverInvitationIssueOutcome(ctx, idempotency, attempt); ok {
+	if recovered, ok, recoverErr := s.recoverInvitationIssueOutcome(ctx, commandIdempotency, attempt); ok {
 		return recovered, recoverErr
 	}
 
@@ -347,7 +344,7 @@ func (s *Service) IssueTeacherAcademicUnitInvitation(
 		if candidateErr != nil {
 			return InvitationView{}, candidateErr
 		}
-		if view, handled, noOpErr := s.resolveOnboardingInvitationNoOp(ctx, invocation, attempt, candidate, idempotency); handled {
+		if view, handled, noOpErr := s.resolveOnboardingInvitationNoOp(ctx, invocation, attempt, candidate, commandIdempotency); handled {
 			return view, noOpErr
 		}
 	}
@@ -374,7 +371,7 @@ func (s *Service) IssueTeacherAcademicUnitInvitation(
 		attempt.Value = candidate.Auditable()
 		return s.recordDuplicateInvitationView(
 			ctx,
-			idempotency,
+			commandIdempotency,
 			attempt,
 			store.InvitationBatchDuplicate{Candidate: candidate},
 			command.batchCanonicalKey,
@@ -417,7 +414,7 @@ func (s *Service) IssueTeacherAcademicUnitInvitation(
 		attempt,
 		func() time.Time { return issuedAt },
 		func(ctx context.Context, reference access.MutationReference) (*store.InvitationCommandResult, error) {
-			return s.storeTeacherAcademicUnitInvitation(ctx, idempotency, invitation, prepared, reference)
+			return s.storeTeacherAcademicUnitInvitation(ctx, commandIdempotency, invitation, prepared, reference)
 		},
 		invitationStoreErrors.Translate,
 	)
@@ -472,7 +469,7 @@ func newTeacherAcademicUnitInvitationValue(
 // key is present.
 func (s *Service) storeTeacherAcademicUnitInvitation(
 	ctx context.Context,
-	idempotency *store.CommandIdempotency,
+	commandIdempotency *store.CommandIdempotency,
 	invitation *model.Invitation,
 	prepared *store.PreparedMail,
 	reference access.MutationReference,
@@ -486,8 +483,8 @@ func (s *Service) storeTeacherAcademicUnitInvitation(
 		AuditEventID: reference.ID,
 		AuditAt:      reference.MutationAt,
 	}
-	if idempotency != nil {
-		value, storeErr := s.invitations.IssueTeacherAcademicUnitIdempotently(ctx, input, idempotency)
+	if commandIdempotency != nil {
+		value, storeErr := s.invitations.IssueTeacherAcademicUnitIdempotently(ctx, input, commandIdempotency)
 		if storeErr == nil && value.Duplicate {
 			return nil, apperror.New("onboarding_batch.duplicate")
 		}
@@ -506,7 +503,7 @@ func (s *Service) resolveOnboardingInvitationNoOp(
 	invocation invocation.Invocation,
 	attempt access.Mutation,
 	candidate *model.Invitation,
-	idempotency *store.CommandIdempotency,
+	commandIdempotency *store.CommandIdempotency,
 ) (view InvitationView, handled bool, err error) {
 	_, noOp, noOpErr := s.invitations.ResolveOnboardingInvitationNoOp(ctx, candidate)
 	if noOpErr != nil {
@@ -514,7 +511,7 @@ func (s *Service) resolveOnboardingInvitationNoOp(
 	}
 
 	if noOp {
-		view, err = s.completeOnboardingInvitationNoOp(ctx, invocation, attempt, candidate, idempotency)
+		view, err = s.completeOnboardingInvitationNoOp(ctx, invocation, attempt, candidate, commandIdempotency)
 		return view, true, err
 	}
 
@@ -536,9 +533,8 @@ func (s *Service) IssueAcademicUnitRoleInvitation(
 	invocation invocation.Invocation,
 	command IssueAcademicUnitRoleInvitationCommand,
 ) (InvitationView, error) {
-	unitID, err := model.ParseAcademicUnitID(strings.TrimSpace(command.AcademicUnitID.String()))
-	if err != nil {
-		return InvitationView{}, apperror.New("request.invalid").WithField("field", "academic_unit_id").Wrap(err)
+	if !command.AcademicUnitID.IsValid() {
+		return InvitationView{}, apperror.Invalid("request.invalid", "academic_unit_id")
 	}
 
 	roleID, err := model.ParseRoleID(strings.TrimSpace(command.RoleID.String()))
@@ -551,15 +547,15 @@ func (s *Service) IssueAcademicUnitRoleInvitation(
 		return InvitationView{}, err
 	}
 
-	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()}
+	resource := model.Resource{Type: model.ResourceAcademicUnit, ID: command.AcademicUnitID.String()}
 	for _, action := range []model.Action{model.ActionInvitationCreate, model.ActionRoleBindingManage} {
 		if err = s.authorize(ctx, invocation, action, resource); err != nil {
 			return InvitationView{}, err
 		}
 	}
 
-	unit, err := s.academicUnits.Get(ctx, unitID)
-	if err != nil || unit.ID != unitID || unit.IsArchived() {
+	unit, err := s.academicUnits.Get(ctx, command.AcademicUnitID)
+	if err != nil || unit.ID != command.AcademicUnitID || unit.IsArchived() {
 		return InvitationView{}, invitationStoreErrors.Translate(err)
 	}
 
@@ -570,18 +566,18 @@ func (s *Service) IssueAcademicUnitRoleInvitation(
 	if err = validateInvitationDelegableRole(role, model.RoleScopeAcademicUnit); err != nil {
 		return InvitationView{}, err
 	}
-	if err = s.authorizeActionDelegation(ctx, invocation, role.Permissions, model.RoleScopeAcademicUnit, unitID.String()); err != nil {
+	if err = s.authorizeActionDelegation(ctx, invocation, role.Permissions, model.RoleScopeAcademicUnit, command.AcademicUnitID.String()); err != nil {
 		return InvitationView{}, err
 	}
 
 	semantic := command
 	semantic.IdempotencyKey = ""
-	idempotency, err := idempotency.Prepare(invocation, "invitation.academic_unit_role.issue", command.IdempotencyKey, semantic)
+	commandIdempotency, err := idempotency.Prepare(invocation, "invitation.academic_unit_role.issue", command.IdempotencyKey, semantic)
 	if err != nil {
 		return InvitationView{}, err
 	}
 
-	batchitem.BindOnboardingImport(idempotency, command.onboardingImportID, command.onboardingImportRowNumber)
+	batchitem.BindOnboardingImport(commandIdempotency, command.onboardingImportID, command.onboardingImportRowNumber)
 	return s.issueAuthorizedScopedRole(ctx, invocation, authorizedScopedRoleInvitationIssue{
 		targetEmail:               command.TargetEmail,
 		purpose:                   model.InvitationPurposeAcademicUnitRole,
@@ -594,7 +590,7 @@ func (s *Service) IssueAcademicUnitRoleInvitation(
 		intendedStartsAt:          command.IntendedStartsAt,
 		intendedEndsAt:            command.IntendedEndsAt,
 		lifetime:                  lifetime,
-		idempotency:               idempotency,
+		idempotency:               commandIdempotency,
 		batchDuplicate:            command.batchDuplicate,
 		batchCanonicalKey:         command.batchCanonicalKey,
 		onboardingImportID:        command.onboardingImportID,
@@ -613,9 +609,8 @@ func (s *Service) IssueInstitutionRoleInvitation(
 		return InvitationView{}, err
 	}
 
-	institutionID, err := model.ParseInstitutionID(strings.TrimSpace(command.InstitutionID.String()))
-	if err != nil {
-		return InvitationView{}, apperror.New("request.invalid").WithField("field", "institution_id").Wrap(err)
+	if !command.InstitutionID.IsValid() {
+		return InvitationView{}, apperror.Invalid("request.invalid", "institution_id")
 	}
 
 	roleID, err := model.ParseRoleID(strings.TrimSpace(command.RoleID.String()))
@@ -628,7 +623,7 @@ func (s *Service) IssueInstitutionRoleInvitation(
 		return InvitationView{}, err
 	}
 
-	resource := model.Resource{Type: model.ResourceInstitution, ID: institutionID.String()}
+	resource := model.Resource{Type: model.ResourceInstitution, ID: command.InstitutionID.String()}
 	for _, action := range []model.Action{model.ActionInvitationCreate, model.ActionRoleBindingManage} {
 		if err = s.authorize(ctx, invocation, action, resource); err != nil {
 			return InvitationView{}, err
@@ -642,30 +637,30 @@ func (s *Service) IssueInstitutionRoleInvitation(
 	if err = validateInvitationDelegableRole(role, model.RoleScopeInstitution); err != nil {
 		return InvitationView{}, err
 	}
-	if err = s.authorizeActionDelegation(ctx, invocation, role.Permissions, model.RoleScopeInstitution, institutionID.String()); err != nil {
+	if err = s.authorizeActionDelegation(ctx, invocation, role.Permissions, model.RoleScopeInstitution, command.InstitutionID.String()); err != nil {
 		return InvitationView{}, err
 	}
 
 	semantic := command
 	semantic.IdempotencyKey = ""
-	idempotency, err := idempotency.Prepare(invocation, "invitation.institution_role.issue", command.IdempotencyKey, semantic)
+	commandIdempotency, err := idempotency.Prepare(invocation, "invitation.institution_role.issue", command.IdempotencyKey, semantic)
 	if err != nil {
 		return InvitationView{}, err
 	}
 
-	batchitem.BindOnboardingImport(idempotency, command.onboardingImportID, command.onboardingImportRowNumber)
+	batchitem.BindOnboardingImport(commandIdempotency, command.onboardingImportID, command.onboardingImportRowNumber)
 	return s.issueAuthorizedScopedRole(ctx, invocation, authorizedScopedRoleInvitationIssue{
 		targetEmail:               command.TargetEmail,
 		purpose:                   model.InvitationPurposeInstitutionRole,
 		resource:                  resource,
 		scopeType:                 model.RoleScopeInstitution,
-		scopeID:                   institutionID.String(),
+		scopeID:                   command.InstitutionID.String(),
 		operation:                 "issue_institution_role",
 		role:                      role,
 		intendedStartsAt:          command.IntendedStartsAt,
 		intendedEndsAt:            command.IntendedEndsAt,
 		lifetime:                  lifetime,
-		idempotency:               idempotency,
+		idempotency:               commandIdempotency,
 		batchDuplicate:            command.batchDuplicate,
 		batchCanonicalKey:         command.batchCanonicalKey,
 		onboardingImportID:        command.onboardingImportID,
@@ -846,9 +841,9 @@ func (s *Service) completeOnboardingInvitationNoOp(
 	invocation invocation.Invocation,
 	attempt access.Mutation,
 	candidate *model.Invitation,
-	idempotency *store.CommandIdempotency,
+	commandIdempotency *store.CommandIdempotency,
 ) (InvitationView, error) {
-	if candidate == nil || idempotency == nil || !idempotency.OnboardingImportID.IsValid() {
+	if candidate == nil || commandIdempotency == nil || !commandIdempotency.OnboardingImportID.IsValid() {
 		return InvitationView{}, apperror.New("invitation.unavailable")
 	}
 
@@ -865,21 +860,21 @@ func (s *Service) completeOnboardingInvitationNoOp(
 					Invitation:   candidate,
 					AuditEventID: reference.ID,
 					AuditAt:      reference.MutationAt,
-				}, idempotency)
+				}, commandIdempotency)
 			case model.InvitationPurposeTeacherAcademicUnit:
 				return s.invitations.IssueTeacherAcademicUnitIdempotently(ctx, &store.TeacherAcademicUnitInvitationIssue{
 					Invitation:   candidate,
 					Lifetime:     model.InvitationLifetime,
 					AuditEventID: reference.ID,
 					AuditAt:      reference.MutationAt,
-				}, idempotency)
+				}, commandIdempotency)
 			case model.InvitationPurposeAcademicUnitRole, model.InvitationPurposeInstitutionRole:
 				return s.invitations.IssueScopedRoleIdempotently(ctx, &store.ScopedRoleInvitationIssue{
 					Invitation:   candidate,
 					Lifetime:     model.InvitationLifetime,
 					AuditEventID: reference.ID,
 					AuditAt:      reference.MutationAt,
-				}, idempotency)
+				}, commandIdempotency)
 			default:
 				return nil, store.NewErrInvalidInput("invitation", "purpose", candidate.Purpose)
 			}

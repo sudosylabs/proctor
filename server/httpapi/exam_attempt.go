@@ -94,7 +94,13 @@ type ExamAttemptApplication interface {
 		invocation.Invocation,
 		attempt.ReportSecurityPreflightCommand,
 	) (*model.SecurityPreflightResult, error)
-	GetExamAttempt(context.Context, invocation.Invocation, attempt.GetManagedAttemptQuery) (store.ExamAttemptManagerSnapshot, error)
+	GetExamAttempt(
+		context.Context,
+		invocation.Invocation,
+		model.ExamID,
+		model.ExamSittingID,
+		model.ExamAttemptID,
+	) (store.ExamAttemptManagerSnapshot, error)
 	ListExamAttempts(context.Context, invocation.Invocation, attempt.ListManagedAttemptsQuery) (attempt.ManagedAttemptPage, error)
 	ListSittingCandidateStatuses(
 		context.Context,

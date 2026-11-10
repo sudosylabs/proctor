@@ -81,7 +81,7 @@ func TestFinalizeAndReleaseUseDistinctAuthorizationAndEffects(t *testing.T) {
 	t.Parallel()
 	f := newReviewFixture(t)
 	f.persistence.mode = "finalize"
-	finalized, err := f.service.FinalizeExamIntegrityReview(context.Background(), f.invocation, FinalizeCommand{SubmissionID: f.submissionID,
+	finalized, err := f.service.FinalizeExamIntegrityReview(context.Background(), f.invocation, TerminalCommand{SubmissionID: f.submissionID,
 		ReviewID: f.reviewID, ExpectedReviewRevision: 2, IdempotencyKey: "test-key"})
 	require.NoError(t, err, "finalized=%#v error=%v auth=%#v effects=%#v", finalized, err, f.authorizer, f.effects)
 	require.Equal(t, model.SubmissionReviewFinalized, finalized.Review.State, "finalized=%#v error=%v auth=%#v effects=%#v", finalized, err, f.authorizer, f.effects)
@@ -92,7 +92,7 @@ func TestFinalizeAndReleaseUseDistinctAuthorizationAndEffects(t *testing.T) {
 	require.NoError(t, prepareErr)
 	require.Equal(t, wantFinalize, f.persistence.idempotency)
 	f.persistence.mode = "release"
-	released, err := f.service.ReleaseStudentExamResult(context.Background(), f.invocation, ReleaseCommand{SubmissionID: f.submissionID,
+	released, err := f.service.ReleaseStudentExamResult(context.Background(), f.invocation, TerminalCommand{SubmissionID: f.submissionID,
 		ReviewID: f.reviewID, ExpectedReviewRevision: 3, IdempotencyKey: "test-key"})
 	require.NoError(t, err, "released=%#v error=%v auth=%#v effects=%#v", released, err, f.authorizer, f.effects)
 	require.Equal(t, model.SubmissionReviewReleased, released.Review.ReleaseState, "released=%#v error=%v auth=%#v effects=%#v", released, err, f.authorizer, f.effects)
@@ -116,7 +116,7 @@ func TestReleasePreparationFailureIsAuditedAsAttempt(t *testing.T) {
 	f := newReviewFixture(t)
 	f.persistence.mode = "release"
 	f.persistence.prepareErr = store.NewErrConflict("submission_review", "integrity_review_state", nil)
-	_, err := f.service.ReleaseStudentExamResult(context.Background(), f.invocation, ReleaseCommand{SubmissionID: f.submissionID,
+	_, err := f.service.ReleaseStudentExamResult(context.Background(), f.invocation, TerminalCommand{SubmissionID: f.submissionID,
 		ReviewID: f.reviewID, ExpectedReviewRevision: 3, IdempotencyKey: "test-key"})
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault)
@@ -133,7 +133,7 @@ func TestReleaseReplayReturnsRetainedResultWithoutPreparingMail(t *testing.T) {
 	t.Parallel()
 	f := newReviewFixture(t)
 	f.persistence.mode, f.persistence.replayed = "release", true
-	released, err := f.service.ReleaseStudentExamResult(context.Background(), f.invocation, ReleaseCommand{SubmissionID: f.submissionID,
+	released, err := f.service.ReleaseStudentExamResult(context.Background(), f.invocation, TerminalCommand{SubmissionID: f.submissionID,
 		ReviewID: f.reviewID, ExpectedReviewRevision: 3, IdempotencyKey: "test-key"})
 	require.NoError(t, err, "released=%#v error=%v effects=%#v mail=%#v release", released, err, f.effects, f.mail)
 	require.True(t, released.Replayed, "released=%#v error=%v effects=%#v mail=%#v release", released, err, f.effects, f.mail)

@@ -67,9 +67,7 @@ func desktopRegistrationResource(app *identity.Service) apiResource {
 }
 
 func (h desktopRegistrationHandlers) list(request operationRequest) (operationResult, error) {
-	registrations, err := h.app.ListDesktopRegistrations(
-		request.context, request.invocation(), identity.ListDesktopRegistrationsQuery{},
-	)
+	registrations, err := h.app.ListDesktopRegistrations(request.context, request.invocation())
 	if err != nil {
 		return operationResult{}, err
 	}

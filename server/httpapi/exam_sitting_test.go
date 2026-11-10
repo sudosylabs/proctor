@@ -360,20 +360,23 @@ func TestExamSittingHTTPListsNoShowsWithOpaqueUserCursor(t *testing.T) {
 }
 
 type examSittingHTTPFake struct {
-	principal    model.Principal
-	sitting      *model.ExamSitting
-	schedule     sitting.ScheduleCommand
-	get          sitting.GetQuery
+	principal model.Principal
+	sitting   *model.ExamSitting
+	schedule  sitting.ScheduleCommand
+	get       struct {
+		ExamID    model.ExamID
+		SittingID model.ExamSittingID
+	}
 	list         sitting.ListQuery
 	page         sitting.Page
 	update       sitting.UpdateScheduleCommand
 	updateCalls  int
 	cancel       sitting.CancelCommand
 	cancelResult store.ExamSittingSnapshot
-	pause        sitting.PauseCommand
-	resume       sitting.ResumeCommand
+	pause        sitting.ManagerTransitionCommand
+	resume       sitting.ManagerTransitionCommand
 	extend       sitting.ExtendCommand
-	close        sitting.EarlyCloseCommand
+	close        sitting.ManagerTransitionCommand
 	noShows      sitting.ListNoShowsQuery
 	noShowPage   sitting.NoShowPage
 }
@@ -381,9 +384,9 @@ type examSittingHTTPFake struct {
 func newExamSittingHTTPFake(t *testing.T) *examSittingHTTPFake {
 	t.Helper()
 	at := time.Date(2026, time.August, 15, 9, 30, 0, 123456789, time.UTC)
-	sitting, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(), at.Add(time.Hour), at.Add(3*time.Hour), at)
+	record, err := model.NewExamSitting(model.NewExamSittingID(), model.NewExamID(), model.NewExamRevisionID(), model.NewClassID(), at.Add(time.Hour), at.Add(3*time.Hour), at)
 	require.NoError(t, err)
-	return &examSittingHTTPFake{principal: testExamHTTPPrincipal(), sitting: sitting, cancelResult: store.ExamSittingSnapshot{Sitting: sitting}}
+	return &examSittingHTTPFake{principal: testExamHTTPPrincipal(), sitting: record, cancelResult: store.ExamSittingSnapshot{Sitting: record}}
 }
 
 func (f *examSittingHTTPFake) AuthenticateAccess(context.Context, string) (*model.Principal, error) {
@@ -401,8 +404,13 @@ func (f *examSittingHTTPFake) ScheduleExamSitting(_ context.Context, _ invocatio
 	return store.ExamSittingSnapshot{Sitting: f.sitting}, nil
 }
 
-func (f *examSittingHTTPFake) GetExamSitting(_ context.Context, _ invocation.Invocation, query sitting.GetQuery) (store.ExamSittingSnapshot, error) {
-	f.get = query
+func (f *examSittingHTTPFake) GetExamSitting(
+	_ context.Context,
+	_ invocation.Invocation,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+) (store.ExamSittingSnapshot, error) {
+	f.get.ExamID, f.get.SittingID = examID, sittingID
 	return store.ExamSittingSnapshot{Sitting: f.sitting}, nil
 }
 
@@ -421,12 +429,12 @@ func (f *examSittingHTTPFake) CancelExamSitting(_ context.Context, _ invocation.
 	return f.cancelResult, nil
 }
 
-func (f *examSittingHTTPFake) PauseExamSitting(_ context.Context, _ invocation.Invocation, command sitting.PauseCommand) (store.ExamSittingSnapshot, error) {
+func (f *examSittingHTTPFake) PauseExamSitting(_ context.Context, _ invocation.Invocation, command sitting.ManagerTransitionCommand) (store.ExamSittingSnapshot, error) {
 	f.pause = command
 	return store.ExamSittingSnapshot{Sitting: f.sitting}, nil
 }
 
-func (f *examSittingHTTPFake) ResumeExamSitting(_ context.Context, _ invocation.Invocation, command sitting.ResumeCommand) (store.ExamSittingSnapshot, error) {
+func (f *examSittingHTTPFake) ResumeExamSitting(_ context.Context, _ invocation.Invocation, command sitting.ManagerTransitionCommand) (store.ExamSittingSnapshot, error) {
 	f.resume = command
 	return store.ExamSittingSnapshot{Sitting: f.sitting}, nil
 }
@@ -436,7 +444,7 @@ func (f *examSittingHTTPFake) ExtendExamSitting(_ context.Context, _ invocation.
 	return store.ExamSittingSnapshot{Sitting: f.sitting}, nil
 }
 
-func (f *examSittingHTTPFake) CloseExamSitting(_ context.Context, _ invocation.Invocation, command sitting.EarlyCloseCommand) (store.ExamSittingSnapshot, error) {
+func (f *examSittingHTTPFake) CloseExamSitting(_ context.Context, _ invocation.Invocation, command sitting.ManagerTransitionCommand) (store.ExamSittingSnapshot, error) {
 	f.close = command
 	return store.ExamSittingSnapshot{Sitting: f.sitting}, nil
 }

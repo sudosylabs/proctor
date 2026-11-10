@@ -75,7 +75,7 @@ func TestGetAuthorizesExactSittingResource(t *testing.T) {
 	fixture := newFixture(t)
 	fixture.persistence.snapshot = &store.ExamSittingSnapshot{Sitting: fixture.sitting(t)}
 
-	got, err := fixture.service.GetExamSitting(context.Background(), fixture.invocation, GetQuery{ExamID: fixture.examID, SittingID: fixture.sittingID})
+	got, err := fixture.service.GetExamSitting(context.Background(), fixture.invocation, fixture.examID, fixture.sittingID)
 	require.NoError(t, err)
 	require.NotNil(t, got.Sitting)
 	require.Equal(t, fixture.sittingID, got.Sitting.ID)
@@ -470,7 +470,7 @@ func TestGetRejectsMismatchedExamOwnership(t *testing.T) {
 	foreign.ExamID = model.NewExamID()
 	fixture.persistence.snapshot = &store.ExamSittingSnapshot{Sitting: foreign}
 
-	_, err := fixture.service.GetExamSitting(context.Background(), fixture.invocation, GetQuery{ExamID: fixture.examID, SittingID: fixture.sittingID})
+	_, err := fixture.service.GetExamSitting(context.Background(), fixture.invocation, fixture.examID, fixture.sittingID)
 	assertFaultCode(t, err, "exam.sitting.unavailable")
 }
 
@@ -589,7 +589,7 @@ func TestCancelRetainsPrivateReasonOnlyInStoreCommand(t *testing.T) {
 	require.Equal(t, int64(1), fixture.persistence.cancel.ExpectedRevision)
 	require.Same(t, fixture.mail.result, fixture.persistence.cancel.Mail, "cancellation mail = %#v, store", fixture.mail.request)
 	require.Equal(t, store.ExamSittingMailCanceled, fixture.mail.request.ChangeKind, "cancellation mail = %#v, store", fixture.mail.request)
-	wantIdempotency, err := prepareTransitionIdempotency(fixture.invocation, idempotencyOperationCancel, PauseCommand(command))
+	wantIdempotency, err := prepareTransitionIdempotency(fixture.invocation, idempotencyOperationCancel, ManagerTransitionCommand(command))
 	require.NoError(t, err)
 	require.Equal(t, wantIdempotency, fixture.persistence.command)
 	wantAudit := map[string]any{"exam_id": fixture.examID.String(), "exam_sitting_id": fixture.sittingID.String(),
@@ -660,14 +660,14 @@ func newFixture(t *testing.T) fixture {
 	exam, err := model.NewExam(examID, unitID, userID, testNow.Add(-time.Hour))
 	require.NoError(t, err)
 	persistence := &sittingStoreFake{}
-	access := &accessFake{snapshot: &store.ExamAccessSnapshot{Exam: exam, ActorIsManager: true}}
+	accessStore := &accessFake{snapshot: &store.ExamAccessSnapshot{Exam: exam, ActorIsManager: true}}
 	memberships := &membershipsFake{items: []*model.AcademicUnitMember{{AcademicUnitID: unitID}}}
 	authorizer, auditor, systemAudit, effects := &authorizerFake{}, &auditorFake{id: model.NewID()}, &systemAuditorFake{id: model.NewID()}, &effectsFake{}
 	jobs := &lifecycleJobFactoryFake{open: &model.Job{}, deadline: &model.Job{}, finalize: &model.Job{}}
 	mail := &scheduleMailPreparerFake{result: &store.ExamSittingMailFanout{}}
 	service, err := New(Dependencies{
 		Persistence:   persistence,
-		Access:        access,
+		Access:        accessStore,
 		Memberships:   memberships,
 		Authorizer:    authorizer,
 		Auditor:       auditor,
@@ -681,7 +681,7 @@ func newFixture(t *testing.T) fixture {
 	require.NoError(t, err)
 	return fixture{service: service, invocation: invocation.New(testPrincipal(userID), model.RequestMetadata{}), userID: userID,
 		unitID: unitID, examID: examID, revisionID: revisionID, classID: classID, sittingID: sittingID,
-		persistence: persistence, access: access, memberships: memberships, authorizer: authorizer, auditor: auditor,
+		persistence: persistence, access: accessStore, memberships: memberships, authorizer: authorizer, auditor: auditor,
 		systemAudit: systemAudit, effects: effects, jobs: jobs, mail: mail}
 }
 

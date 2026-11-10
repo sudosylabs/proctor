@@ -283,7 +283,7 @@ type OpenedContent struct {
 	ContentVersion model.WorkspaceContentVersion
 }
 
-func candidateSelector(invocation invocation.Invocation, access CandidateAccess) (store.CandidateAttemptAccess, error) {
+func candidateSelector(invocation invocation.Invocation, candidateAccess CandidateAccess) (store.CandidateAttemptAccess, error) {
 	principal := invocation.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return store.CandidateAttemptAccess{}, apperror.New("authentication.token_invalid")
@@ -291,18 +291,18 @@ func candidateSelector(invocation invocation.Invocation, access CandidateAccess)
 	if !principal.HasRegisteredDesktopKey() {
 		return store.CandidateAttemptAccess{}, apperror.New("exam.attempt.registered_desktop_required")
 	}
-	if !access.AttemptID.IsValid() || !access.ConnectionID.IsValid() || !model.IsValidCredentialToken(access.ContinuityCredential) {
+	if !candidateAccess.AttemptID.IsValid() || !candidateAccess.ConnectionID.IsValid() || !model.IsValidCredentialToken(candidateAccess.ContinuityCredential) {
 		return store.CandidateAttemptAccess{}, apperror.Invalid("exam.attempt.invalid", "candidate_access")
 	}
 
 	return store.CandidateAttemptAccess{
-		AttemptID:                access.AttemptID,
+		AttemptID:                candidateAccess.AttemptID,
 		CandidateUserID:          principal.UserID,
 		SessionID:                principal.SessionID,
 		DesktopRegistrationID:    principal.DesktopRegistrationID,
 		DPoPKeyThumbprint:        principal.DPoPKeyThumbprint,
-		ConnectionID:             access.ConnectionID,
-		ContinuityCredentialHash: model.HashToken(access.ContinuityCredential),
+		ConnectionID:             candidateAccess.ConnectionID,
+		ContinuityCredentialHash: model.HashToken(candidateAccess.ContinuityCredential),
 	}, nil
 }
 

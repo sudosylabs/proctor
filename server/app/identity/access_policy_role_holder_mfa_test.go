@@ -191,7 +191,7 @@ func TestMFADisableIsRefusedWhileThePolicyRequiresIt(t *testing.T) {
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: at, MFACompletedAt: model.OptionalTimeFrom(at)}
 	service.accessPolicy = authenticationAccessPolicyFake{roleHolderMFA: map[model.UserID]bool{principal.UserID: true}}
-	err := service.DisableMFA(context.Background(), invocation.New(principal, model.RequestMetadata{}), DisableMFACommand{})
+	err := service.DisableMFA(context.Background(), invocation.New(principal, model.RequestMetadata{}))
 	require.True(t, apperror.Is(err, "mfa.required_by_policy"), "err=%v", err)
 	// The refusal is an audited failure of the attempted disablement.
 	require.Equal(t, []string{"audit_begin", "audit_fail"}, events)

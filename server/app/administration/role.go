@@ -17,14 +17,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ListRolesQuery lists every Role.
-type ListRolesQuery struct{}
-
-// GetRoleQuery reads one Role.
-type GetRoleQuery struct {
-	ID model.RoleID
-}
-
 // CreateRoleCommand creates a custom Role with the given permissions.
 type CreateRoleCommand struct {
 	Name        string
@@ -47,7 +39,7 @@ type ArchiveRoleCommand struct {
 }
 
 // ListRoles returns every Role to a caller with Institution-wide role.view.
-func (s *Service) ListRoles(ctx context.Context, invocation invocation.Invocation, _ ListRolesQuery) ([]*model.Role, error) {
+func (s *Service) ListRoles(ctx context.Context, invocation invocation.Invocation) ([]*model.Role, error) {
 	if _, err := s.authorizeRoles(ctx, invocation, model.ActionRoleView); err != nil {
 		return nil, err
 	}
@@ -62,8 +54,7 @@ func (s *Service) ListRoles(ctx context.Context, invocation invocation.Invocatio
 }
 
 // GetRole returns one Role to a caller with Institution-wide role.view.
-func (s *Service) GetRole(ctx context.Context, invocation invocation.Invocation, query GetRoleQuery) (*model.Role, error) {
-	id := query.ID
+func (s *Service) GetRole(ctx context.Context, invocation invocation.Invocation, id model.RoleID) (*model.Role, error) {
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "role_id")
 	}

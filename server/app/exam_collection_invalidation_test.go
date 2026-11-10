@@ -21,10 +21,10 @@ import (
 
 func TestExamArchiveInvalidatesEveryAffectedCollection(t *testing.T) {
 	t.Parallel()
-	realtime := newTestRealtimeService(t, noopAuthenticationCache{})
+	realtimeService := newTestRealtimeService(t, noopAuthenticationCache{})
 	sink := &recordingRealtimeSink{}
-	require.NoError(t, realtime.AttachRealtimeSink(sink))
-	require.NoError(t, realtime.AttachRealtimeClusterFanout(&recordingRealtimeCluster{}))
+	require.NoError(t, realtimeService.AttachRealtimeSink(sink))
+	require.NoError(t, realtimeService.AttachRealtimeClusterFanout(&recordingRealtimeCluster{}))
 	examID, sittingID, candidateID := model.NewExamID(), model.NewExamSittingID(), model.NewUserID()
 	collections := examCollectionInvalidationEffects{
 		sittings: &examSittingInvalidationStoreFake{
@@ -33,9 +33,9 @@ func TestExamArchiveInvalidatesEveryAffectedCollection(t *testing.T) {
 				ExamID: examID, SittingID: sittingID,
 			}},
 		},
-		realtime: realtime,
+		realtime: realtimeService,
 	}
-	effects := examRealtimeEffects{realtime: realtime, collections: collections}
+	effects := examRealtimeEffects{realtime: realtimeService, collections: collections}
 	require.NoError(t, effects.Archived(context.Background(), examID, 4, time.Unix(100, 0)))
 	sink.mu.Lock()
 	events := append([]string(nil), sinkEventNames(sink.events)...)

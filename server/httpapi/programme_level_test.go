@@ -34,7 +34,7 @@ type programmeLevelHTTPApplication struct {
 	updateCommand  academic.UpdateProgrammeLevelCommand
 }
 
-func (a *programmeLevelHTTPApplication) GetProgrammeLevel(context.Context, invocation.Invocation, academic.GetProgrammeLevelQuery) (*model.ProgrammeLevel, error) {
+func (a *programmeLevelHTTPApplication) GetProgrammeLevel(context.Context, invocation.Invocation, model.ProgrammeLevelID) (*model.ProgrammeLevel, error) {
 	return a.result, a.err
 }
 func (a *programmeLevelHTTPApplication) ListProgrammeLevels(context.Context, invocation.Invocation, academic.ListProgrammeLevelsQuery) (paging.Page[*model.ProgrammeLevel], error) {

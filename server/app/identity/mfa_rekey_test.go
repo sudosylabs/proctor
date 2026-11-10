@@ -185,7 +185,7 @@ func TestMFARekeyStatusHidesOtherJobTypesAndProjectsTheProof(t *testing.T) {
 	other, err := model.NewJob(model.NewJobID(), model.JobTypeMailRekey, command, "mail-rekey:other", at, at, 10)
 	require.NoError(t, err)
 	fixture.store.job = other
-	_, err = fixture.service.GetMFARekeyStatus(context.Background(), fixture.invocation(), GetMFARekeyStatusQuery{JobID: other.ID})
+	_, err = fixture.service.GetMFARekeyStatus(context.Background(), fixture.invocation(), other.ID)
 	require.True(t, apperror.Is(err, "resource.not_found"), "a mail rekey is not an MFA rekey: error = %v", err)
 
 	succeeded, err := model.NewJob(model.NewJobID(), model.JobTypeMFARekey, command, "mfa-rekey:test", at, at, 10)
@@ -194,7 +194,7 @@ func TestMFARekeyStatusHidesOtherJobTypesAndProjectsTheProof(t *testing.T) {
 	succeeded.Result = json.RawMessage(`{"primary_key_id":"` + fixture.sealer.PrimaryKeyID() + `","retiring_key_id":"` + fixture.retiringID +
 		`","processed":3,"resealed":3,"non_primary_references":0,"retiring_references":0,"retirement_safe":true}`)
 	fixture.store.job = succeeded
-	view, err := fixture.service.GetMFARekeyStatus(context.Background(), fixture.invocation(), GetMFARekeyStatusQuery{JobID: succeeded.ID})
+	view, err := fixture.service.GetMFARekeyStatus(context.Background(), fixture.invocation(), succeeded.ID)
 	require.NoError(t, err)
 	require.Equal(t, &MFARekeyProofView{RetirementSafe: true}, view.Proof)
 	require.Equal(t, int64(3), view.Resealed)
@@ -209,7 +209,7 @@ func TestMFAKeyRingIsUnavailableWithoutJobAndMFAStores(t *testing.T) {
 	require.True(t, apperror.Is(err, "authentication.mfa.unavailable"), "key state error = %v", err)
 	_, err = fixture.service.StartMFARekey(context.Background(), fixture.invocation(), StartMFARekeyCommand{RetiringKeyID: fixture.retiringID})
 	require.True(t, apperror.Is(err, "authentication.mfa.unavailable"), "start error = %v", err)
-	_, err = fixture.service.GetMFARekeyStatus(context.Background(), fixture.invocation(), GetMFARekeyStatusQuery{JobID: model.NewJobID()})
+	_, err = fixture.service.GetMFARekeyStatus(context.Background(), fixture.invocation(), model.NewJobID())
 	require.True(t, apperror.Is(err, "authentication.mfa.unavailable"), "status error = %v", err)
 	require.Empty(t, fixture.authorizer.actions, "an unavailable key ring authorizes nothing")
 	require.Empty(t, fixture.events, "an unavailable key ring audits or writes nothing")

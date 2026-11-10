@@ -27,14 +27,14 @@ import (
 
 type ExamSittingApplication interface {
 	ScheduleExamSitting(context.Context, invocation.Invocation, sitting.ScheduleCommand) (store.ExamSittingSnapshot, error)
-	GetExamSitting(context.Context, invocation.Invocation, sitting.GetQuery) (store.ExamSittingSnapshot, error)
+	GetExamSitting(context.Context, invocation.Invocation, model.ExamID, model.ExamSittingID) (store.ExamSittingSnapshot, error)
 	ListExamSittings(context.Context, invocation.Invocation, sitting.ListQuery) (sitting.Page, error)
 	UpdateExamSittingSchedule(context.Context, invocation.Invocation, sitting.UpdateScheduleCommand) (store.ExamSittingSnapshot, error)
 	CancelExamSitting(context.Context, invocation.Invocation, sitting.CancelCommand) (store.ExamSittingSnapshot, error)
-	PauseExamSitting(context.Context, invocation.Invocation, sitting.PauseCommand) (store.ExamSittingSnapshot, error)
-	ResumeExamSitting(context.Context, invocation.Invocation, sitting.ResumeCommand) (store.ExamSittingSnapshot, error)
+	PauseExamSitting(context.Context, invocation.Invocation, sitting.ManagerTransitionCommand) (store.ExamSittingSnapshot, error)
+	ResumeExamSitting(context.Context, invocation.Invocation, sitting.ManagerTransitionCommand) (store.ExamSittingSnapshot, error)
 	ExtendExamSitting(context.Context, invocation.Invocation, sitting.ExtendCommand) (store.ExamSittingSnapshot, error)
-	CloseExamSitting(context.Context, invocation.Invocation, sitting.EarlyCloseCommand) (store.ExamSittingSnapshot, error)
+	CloseExamSitting(context.Context, invocation.Invocation, sitting.ManagerTransitionCommand) (store.ExamSittingSnapshot, error)
 	ListExamSittingNoShows(context.Context, invocation.Invocation, sitting.ListNoShowsQuery) (sitting.NoShowPage, error)
 }
 
@@ -581,7 +581,7 @@ func (h examSittingHandlers) get(request operationRequest) (operationResult, err
 	if err != nil {
 		return operationResult{}, err
 	}
-	view, err := h.app.GetExamSitting(request.context, request.invocation(), sitting.GetQuery{ExamID: examID, SittingID: sittingID})
+	view, err := h.app.GetExamSitting(request.context, request.invocation(), examID, sittingID)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -774,7 +774,7 @@ func (h examSittingHandlers) cancel(request operationRequest) (operationResult, 
 	return jsonResult(http.StatusOK, examSittingResponseFromView(view)), nil
 }
 
-type examSittingManagerCommandCall func(context.Context, invocation.Invocation, sitting.PauseCommand) (store.ExamSittingSnapshot, error)
+type examSittingManagerCommandCall func(context.Context, invocation.Invocation, sitting.ManagerTransitionCommand) (store.ExamSittingSnapshot, error)
 
 func (h examSittingHandlers) pause(request operationRequest) (operationResult, error) {
 	return h.managerTransition(request, "pauseExamSitting", h.app.PauseExamSitting)
@@ -812,7 +812,7 @@ func (h examSittingHandlers) managerTransition(
 		)
 	}
 
-	view, err := run(request.context, request.invocation(), sitting.PauseCommand{
+	view, err := run(request.context, request.invocation(), sitting.ManagerTransitionCommand{
 		ExamID:           examID,
 		SittingID:        sittingID,
 		ExpectedRevision: body.ExpectedRevision,
@@ -945,24 +945,24 @@ func examSittingResponseFromView(view store.ExamSittingSnapshot) examSittingResp
 		return examSittingResponse{}
 	}
 
-	sitting := view.Sitting
+	record := view.Sitting
 	return examSittingResponse{
-		ID:               sitting.ID.String(),
-		ExamID:           sitting.ExamID.String(),
-		ExamRevisionID:   sitting.ExamRevisionID.String(),
-		ClassID:          sitting.ClassID.String(),
-		ScheduledStartAt: model.FormatRFC3339(sitting.ScheduledStartAt),
-		ScheduledEndAt:   model.FormatRFC3339(sitting.ScheduledEndAt),
-		State:            string(sitting.State),
-		CreatedAt:        model.FormatRFC3339(sitting.CreatedAt),
-		UpdatedAt:        model.FormatRFC3339(sitting.UpdatedAt),
-		OpenedAt:         sitting.OpenedAt.FormatRFC3339(),
-		PausedAt:         sitting.PausedAt.FormatRFC3339(),
-		ClosingAt:        sitting.ClosingAt.FormatRFC3339(),
-		ClosedAt:         sitting.ClosedAt.FormatRFC3339(),
-		CanceledAt:       sitting.CanceledAt.FormatRFC3339(),
-		ReasonCode:       string(sitting.ReasonCode),
-		Revision:         sitting.Revision,
+		ID:               record.ID.String(),
+		ExamID:           record.ExamID.String(),
+		ExamRevisionID:   record.ExamRevisionID.String(),
+		ClassID:          record.ClassID.String(),
+		ScheduledStartAt: model.FormatRFC3339(record.ScheduledStartAt),
+		ScheduledEndAt:   model.FormatRFC3339(record.ScheduledEndAt),
+		State:            string(record.State),
+		CreatedAt:        model.FormatRFC3339(record.CreatedAt),
+		UpdatedAt:        model.FormatRFC3339(record.UpdatedAt),
+		OpenedAt:         record.OpenedAt.FormatRFC3339(),
+		PausedAt:         record.PausedAt.FormatRFC3339(),
+		ClosingAt:        record.ClosingAt.FormatRFC3339(),
+		ClosedAt:         record.ClosedAt.FormatRFC3339(),
+		CanceledAt:       record.CanceledAt.FormatRFC3339(),
+		ReasonCode:       string(record.ReasonCode),
+		Revision:         record.Revision,
 	}
 }
 

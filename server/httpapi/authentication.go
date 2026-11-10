@@ -280,7 +280,7 @@ type RegistrationApplication interface {
 type authenticationEntryApplication interface {
 	Login(context.Context, invocation.Invocation, identity.LoginCommand) (*identity.LoginResult, error)
 	RefreshSession(context.Context, invocation.Invocation, identity.RefreshSessionCommand) (*model.Session, *model.AuthenticationTokens, error)
-	Logout(context.Context, invocation.Invocation, identity.LogoutCommand) error
+	Logout(context.Context, invocation.Invocation) error
 	RequestEmailVerification(context.Context, invocation.Invocation, identity.RequestEmailVerificationCommand) error
 	CompleteEmailVerification(context.Context, invocation.Invocation, identity.CompleteEmailVerificationCommand) (*model.User, error)
 	CompleteEmailChangeUndo(context.Context, invocation.Invocation, identity.CompleteEmailChangeUndoCommand) error
@@ -600,7 +600,7 @@ func dpopErrorHeaders(err error) http.Header {
 }
 
 func (h authenticationHandlers) logout(request operationRequest) (operationResult, error) {
-	if err := h.authentication.Logout(request.context, request.invocation(), identity.LogoutCommand{}); err != nil {
+	if err := h.authentication.Logout(request.context, request.invocation()); err != nil {
 		return operationResult{}, err
 	}
 	result := noContentResult().withHeaders(http.Header{"Cache-Control": {"no-store"}})

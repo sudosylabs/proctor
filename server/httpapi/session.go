@@ -91,7 +91,6 @@ func (h sessionHandlers) list(request operationRequest) (operationResult, error)
 	sessions, err := h.app.ListSessions(
 		request.context,
 		request.invocation(),
-		identity.ListSessionsQuery{},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -149,7 +148,6 @@ func (h sessionHandlers) revokeAll(request operationRequest) (operationResult, e
 	if err := h.app.RevokeAllSessions(
 		request.context,
 		request.invocation(),
-		identity.RevokeAllSessionsCommand{},
 	); err != nil {
 		return operationResult{}, err
 	}
@@ -165,7 +163,6 @@ func (h sessionHandlers) revokeOthers(request operationRequest) (operationResult
 	result, err := h.app.RevokeOtherSessions(
 		request.context,
 		request.invocation(),
-		identity.RevokeOtherSessionsCommand{},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -175,12 +172,11 @@ func (h sessionHandlers) revokeOthers(request operationRequest) (operationResult
 
 // Sessions is the application port its handlers call; it lists and revokes the caller's own Sessions.
 type Sessions interface {
-	ListSessions(context.Context, invocation.Invocation, identity.ListSessionsQuery) ([]*model.Session, error)
+	ListSessions(context.Context, invocation.Invocation) ([]*model.Session, error)
 	RevokeSession(context.Context, invocation.Invocation, identity.RevokeSessionCommand) error
-	RevokeAllSessions(context.Context, invocation.Invocation, identity.RevokeAllSessionsCommand) error
+	RevokeAllSessions(context.Context, invocation.Invocation) error
 	RevokeOtherSessions(
 		context.Context,
 		invocation.Invocation,
-		identity.RevokeOtherSessionsCommand,
 	) (*identity.RevokeOtherSessionsResult, error)
 }

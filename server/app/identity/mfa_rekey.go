@@ -53,11 +53,6 @@ type MFARekeyView struct {
 	CreatedAt     time.Time
 }
 
-// GetMFARekeyStatusQuery names one MFA rekey Job.
-type GetMFARekeyStatusQuery struct {
-	JobID model.JobID
-}
-
 // MFARekeyProgressView is the safe progress of a running rekey.
 type MFARekeyProgressView struct {
 	Current int64
@@ -240,16 +235,16 @@ func (s *Service) StartMFARekey(ctx context.Context, invocation invocation.Invoc
 func (s *Service) GetMFARekeyStatus(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	query GetMFARekeyStatusQuery,
+	jobID model.JobID,
 ) (MFARekeyStatusView, error) {
 	if _, err := s.authorizeMFARekey(ctx, invocation); err != nil {
 		return MFARekeyStatusView{}, err
 	}
-	if !query.JobID.IsValid() {
+	if !jobID.IsValid() {
 		return MFARekeyStatusView{}, apperror.Invalid("request.invalid", "job_id")
 	}
 
-	job, err := s.jobs.Get(ctx, query.JobID)
+	job, err := s.jobs.Get(ctx, jobID)
 	if err != nil {
 		if store.IsNotFound(err) {
 			return MFARekeyStatusView{}, apperror.New("resource.not_found")

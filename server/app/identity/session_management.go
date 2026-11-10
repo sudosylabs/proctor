@@ -25,20 +25,10 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ListSessionsQuery lists the caller's active sessions.
-type ListSessionsQuery struct{}
-
 // RevokeSessionCommand revokes one of the caller's sessions by ID.
 type RevokeSessionCommand struct {
 	SessionID model.SessionID
 }
-
-// RevokeAllSessionsCommand revokes every active session for the caller.
-type RevokeAllSessionsCommand struct{}
-
-// RevokeOtherSessionsCommand revokes every active session for the caller
-// except the Session making the request.
-type RevokeOtherSessionsCommand struct{}
 
 // RevokeOtherSessionsResult reports how many of the caller's other Sessions
 // this request revoked.
@@ -61,14 +51,10 @@ type RefreshSessionCommand struct {
 	DPoP         *DPoPRequestProof
 }
 
-// LogoutCommand ends the caller's current session.
-type LogoutCommand struct{}
-
 // ListSessions lists the caller's active Sessions.
 func (s *Service) ListSessions(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	_ ListSessionsQuery,
 ) ([]*model.Session, error) {
 	principal := invocation.Principal()
 	if principal.Validate() != nil {
@@ -136,7 +122,6 @@ func (s *Service) RevokeSession(
 func (s *Service) RevokeAllSessions(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	_ RevokeAllSessionsCommand,
 ) error {
 	principal := invocation.Principal()
 	if principal.Validate() != nil {
@@ -167,7 +152,6 @@ func (s *Service) RevokeAllSessions(
 func (s *Service) RevokeOtherSessions(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	_ RevokeOtherSessionsCommand,
 ) (*RevokeOtherSessionsResult, error) {
 	principal := invocation.Principal()
 	if principal.Validate() != nil || !principal.SessionID.IsValid() {

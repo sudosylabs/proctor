@@ -205,7 +205,7 @@ func newFocusedResourceAPI(
 	return httpAPI
 }
 
-func (a *classHTTPApplication) GetClass(context.Context, invocation.Invocation, academic.GetClassQuery) (*model.Class, error) {
+func (a *classHTTPApplication) GetClass(context.Context, invocation.Invocation, model.ClassID) (*model.Class, error) {
 	return a.result, nil
 }
 func (a *classHTTPApplication) ListClasses(context.Context, invocation.Invocation, academic.ListClassesQuery) (paging.Page[*model.Class], error) {

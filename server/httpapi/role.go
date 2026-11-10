@@ -168,7 +168,6 @@ func (h roleHandlers) list(request operationRequest) (operationResult, error) {
 	roles, err := h.app.ListRoles(
 		request.context,
 		request.invocation(),
-		administration.ListRolesQuery{},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -196,7 +195,7 @@ func (h roleHandlers) get(request operationRequest) (operationResult, error) {
 	role, err := h.app.GetRole(
 		request.context,
 		request.invocation(),
-		administration.GetRoleQuery{ID: roleID},
+		roleID,
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -272,8 +271,8 @@ func (h roleHandlers) archive(request operationRequest) (operationResult, error)
 
 // RoleApplication is the application port its handlers call; it reads and changes Roles.
 type RoleApplication interface {
-	ListRoles(context.Context, invocation.Invocation, administration.ListRolesQuery) ([]*model.Role, error)
-	GetRole(context.Context, invocation.Invocation, administration.GetRoleQuery) (*model.Role, error)
+	ListRoles(context.Context, invocation.Invocation) ([]*model.Role, error)
+	GetRole(context.Context, invocation.Invocation, model.RoleID) (*model.Role, error)
 	CreateRole(context.Context, invocation.Invocation, administration.CreateRoleCommand) (*model.Role, error)
 	UpdateRole(context.Context, invocation.Invocation, administration.UpdateRoleCommand) (*model.Role, error)
 	ArchiveRole(context.Context, invocation.Invocation, administration.ArchiveRoleCommand) error

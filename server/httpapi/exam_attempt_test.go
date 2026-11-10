@@ -864,26 +864,30 @@ type examAttemptHTTPFake struct {
 	presentationCalls         int
 	workspaceQuery            attempt.WorkspaceQuery
 	managerList               attempt.ListManagedAttemptsQuery
-	managerGet                attempt.GetManagedAttemptQuery
-	workspaceOpen             attempt.OpenWorkspaceFileQuery
-	reallow                   attempt.ReallowCommand
-	suspend                   attempt.ManualSuspensionCommand
-	journalQuery              attempt.WorkspaceJournalQuery
-	journalPage               attempt.WorkspaceJournalPage
-	workspaceDirectory        attempt.CreateWorkspaceDirectoryCommand
-	workspaceFile             attempt.CreateWorkspaceFileCommand
-	workspaceReplace          attempt.ReplaceWorkspaceFileCommand
-	workspaceMove             attempt.MoveWorkspaceEntryCommand
-	workspaceDelete           attempt.DeleteWorkspaceEntryCommand
-	workspaceMutation         attempt.WorkspaceMutationResult
-	submit                    attempt.SubmitCommand
-	submissionReceipt         store.ExamSubmissionReceipt
-	submissionView            attempt.ManagedSubmission
-	submissionManifest        attempt.SubmissionManifestPage
-	submissionGet             attempt.GetSubmissionQuery
-	submissionManifestQuery   attempt.ListSubmissionManifestQuery
-	submissionOpen            attempt.OpenSubmissionFileQuery
-	uploaded                  []byte
+	managerGet                struct {
+		ExamID    model.ExamID
+		SittingID model.ExamSittingID
+		AttemptID model.ExamAttemptID
+	}
+	workspaceOpen           attempt.OpenWorkspaceFileQuery
+	reallow                 attempt.ReallowCommand
+	suspend                 attempt.ManualSuspensionCommand
+	journalQuery            attempt.WorkspaceJournalQuery
+	journalPage             attempt.WorkspaceJournalPage
+	workspaceDirectory      attempt.CreateWorkspaceDirectoryCommand
+	workspaceFile           attempt.CreateWorkspaceFileCommand
+	workspaceReplace        attempt.ReplaceWorkspaceFileCommand
+	workspaceMove           attempt.MoveWorkspaceEntryCommand
+	workspaceDelete         attempt.DeleteWorkspaceEntryCommand
+	workspaceMutation       attempt.WorkspaceMutationResult
+	submit                  attempt.SubmitCommand
+	submissionReceipt       store.ExamSubmissionReceipt
+	submissionView          attempt.ManagedSubmission
+	submissionManifest      attempt.SubmissionManifestPage
+	submissionGet           attempt.GetSubmissionQuery
+	submissionManifestQuery attempt.ListSubmissionManifestQuery
+	submissionOpen          attempt.OpenSubmissionFileQuery
+	uploaded                []byte
 }
 
 func newExamAttemptHTTPFake(t *testing.T) *examAttemptHTTPFake {
@@ -953,7 +957,7 @@ func newExamAttemptHTTPFake(t *testing.T) *examAttemptHTTPFake {
 	return fake
 }
 
-func candidateTestRuntimeCapabilities(t *testing.T, at time.Time, attempt *model.ExamAttempt) store.CandidateRuntimeCapabilities {
+func candidateTestRuntimeCapabilities(t *testing.T, at time.Time, record *model.ExamAttempt) store.CandidateRuntimeCapabilities {
 	t.Helper()
 	manifest := model.CurrentAttemptConfigurationManifestFingerprint()
 	configuration, err := (model.AttemptConfigurationCandidate{ManifestFingerprint: manifest, RegistryFingerprint: "fnv1a64:" + strings.Repeat("b", 16), UserSettingsRevision: model.NewUserSettingsRevision(), DesktopBuild: "test-build", DesktopTarget: "darwin-arm64", Presentation: model.AttemptConfigurationPresentation{ColorTheme: "dark", ZoomPercent: 100, EditorFontSizePX: 14, EditorLineHeightPX: 22, ScreenReaderMode: "auto", AnnouncementMode: "auto", CursorStyle: "line", CursorBlinking: "blink"}, ApprovedCommands: []string{}, ApprovedKeybindings: []string{}}).Freeze(model.NewID())
@@ -964,7 +968,7 @@ func candidateTestRuntimeCapabilities(t *testing.T, at time.Time, attempt *model
 			ApprovedCommands: append([]string{}, configuration.ApprovedCommands...), ApprovedKeybindings: append([]string{}, configuration.ApprovedKeybindings...), Digest: configuration.Digest},
 		FocusLossCollectionEnabled: true, WorkspaceMutationAllowed: true, SubmissionAllowed: true,
 		Browser: store.CandidateBrowserCapability{State: store.CandidateBrowserDisabled},
-		ExamRevision: store.CandidateExamRevisionCapability{AdmissionRevisionID: attempt.AdmissionRevisionID,
+		ExamRevision: store.CandidateExamRevisionCapability{AdmissionRevisionID: record.AdmissionRevisionID,
 			CurrentRevisionID: model.NewExamRevisionID()},
 		Departure: store.CandidateDepartureCapability{Allowed: false, Reason: "attempt_in_progress"}}
 }
@@ -993,8 +997,14 @@ func (f *examAttemptHTTPFake) AuthenticateBearer(context.Context, string) (*mode
 	return &principal, nil
 }
 
-func (f *examAttemptHTTPFake) GetExamAttempt(_ context.Context, _ invocation.Invocation, query attempt.GetManagedAttemptQuery) (store.ExamAttemptManagerSnapshot, error) {
-	f.managerGet = query
+func (f *examAttemptHTTPFake) GetExamAttempt(
+	_ context.Context,
+	_ invocation.Invocation,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	attemptID model.ExamAttemptID,
+) (store.ExamAttemptManagerSnapshot, error) {
+	f.managerGet.ExamID, f.managerGet.SittingID, f.managerGet.AttemptID = examID, sittingID, attemptID
 	return f.managerPage.Items[0], nil
 }
 

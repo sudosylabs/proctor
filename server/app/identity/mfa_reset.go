@@ -41,10 +41,9 @@ func (s *Service) ResetUserMFA(ctx context.Context, invocation invocation.Invoca
 		return err
 	}
 
-	userID, err := model.ParseUserID(command.UserID.String())
 	reason, reference := strings.TrimSpace(command.Reason), strings.TrimSpace(command.VerificationReference)
-	if err != nil ||
-		userID == principal.UserID ||
+	if !command.UserID.IsValid() ||
+		command.UserID == principal.UserID ||
 		!command.IdentityVerified ||
 		reason == "" ||
 		utf8.RuneCountInString(reason) > 512 ||
@@ -53,13 +52,13 @@ func (s *Service) ResetUserMFA(ctx context.Context, invocation invocation.Invoca
 		return apperror.New("authentication.mfa.reset_invalid")
 	}
 
-	resource := model.Resource{Type: model.ResourceUser, ID: userID.String()}
-	if err = s.authorizer.Authorize(ctx, invocation, model.ActionUserMFAReset, resource); err != nil {
+	resource := model.Resource{Type: model.ResourceUser, ID: command.UserID.String()}
+	if err := s.authorizer.Authorize(ctx, invocation, model.ActionUserMFAReset, resource); err != nil {
 		return err
 	}
 
 	at := model.TimeUTC(s.now())
-	prepared, err := s.prepareMFANotice(ctx, userID, mail.MFANoticeReset, at)
+	prepared, err := s.prepareMFANotice(ctx, command.UserID, mail.MFANoticeReset, at)
 	if err != nil {
 		return err
 	}
@@ -75,7 +74,7 @@ func (s *Service) ResetUserMFA(ctx context.Context, invocation invocation.Invoca
 
 	result, err := s.mfaCredentials.Reset(ctx, &store.MFAAssistedReset{
 		Principal:               principal,
-		UserID:                  userID,
+		UserID:                  command.UserID,
 		IdentityVerified:        true,
 		Reason:                  reason,
 		VerificationReference:   reference,
@@ -92,7 +91,7 @@ func (s *Service) ResetUserMFA(ctx context.Context, invocation invocation.Invoca
 		return authenticationUnavailable(errors.New("MFA reset returned no recovery state"))
 	}
 
-	s.effects.SessionsRevoked(ctx, userID, mfaResetSessionIDs(result.Sessions), result.AccessTokenHashes)
+	s.effects.SessionsRevoked(ctx, command.UserID, mfaResetSessionIDs(result.Sessions), result.AccessTokenHashes)
 	return nil
 }
 

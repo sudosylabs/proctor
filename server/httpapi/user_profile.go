@@ -687,12 +687,12 @@ func etagMatches(header, current string) bool {
 }
 
 func (h userProfileHandlers) search(request operationRequest) (operationResult, error) {
-	paging, err := request.pageRequest()
+	requested, err := request.pageRequest()
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	cursor, present, err := decodePageCursor(paging, userDirectoryCursorSpec())
+	cursor, present, err := decodePageCursor(requested, userDirectoryCursorSpec())
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -702,7 +702,7 @@ func (h userProfileHandlers) search(request operationRequest) (operationResult, 
 		return operationResult{}, invalidRequestError(err)
 	}
 
-	query := user.SearchUsersQuery{Query: request.http.URL.Query().Get("q"), Limit: paging.Limit, IncludeDisabled: includeDisabled}
+	query := user.SearchUsersQuery{Query: request.http.URL.Query().Get("q"), Limit: requested.Limit, IncludeDisabled: includeDisabled}
 	if query.Affiliations, query.AcademicUnitID, err = userDirectoryFilters(request.http.URL.Query()); err != nil {
 		return operationResult{}, err
 	}
@@ -822,7 +822,7 @@ func userDirectoryCursorSpec() opaqueCursorSpec[userDirectoryCursor] {
 }
 
 func (h userProfileHandlers) current(request operationRequest) (operationResult, error) {
-	account, err := h.profiles.GetUserProfile(request.context, request.invocation(), user.GetUserProfileQuery{ID: request.principal.UserID})
+	account, err := h.profiles.GetUserProfile(request.context, request.invocation(), request.principal.UserID)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -834,7 +834,7 @@ func (h userProfileHandlers) get(request operationRequest) (operationResult, err
 	if err != nil {
 		return operationResult{}, err
 	}
-	account, err := h.profiles.GetUserProfile(request.context, request.invocation(), user.GetUserProfileQuery{ID: userID})
+	account, err := h.profiles.GetUserProfile(request.context, request.invocation(), userID)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -909,7 +909,7 @@ func userProfileResponseFromModel(account *model.User) userProfileResponse {
 type UserProfileApplication interface {
 	GetCurrentUserContext(context.Context, invocation.Invocation) (*user.CurrentUserContextView, error)
 	SearchUsers(context.Context, invocation.Invocation, user.SearchUsersQuery) (paging.Counted[user.UserDirectoryEntry], error)
-	GetUserProfile(context.Context, invocation.Invocation, user.GetUserProfileQuery) (*model.User, error)
+	GetUserProfile(context.Context, invocation.Invocation, model.UserID) (*model.User, error)
 	UpdateUserProfile(context.Context, invocation.Invocation, user.UpdateUserProfileCommand) (*model.User, error)
 	UploadProfilePicture(context.Context, invocation.Invocation, user.UploadProfilePictureCommand) (*model.User, error)
 	RemoveProfilePicture(context.Context, invocation.Invocation, user.RemoveProfilePictureCommand) (*model.User, error)

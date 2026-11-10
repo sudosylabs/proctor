@@ -127,7 +127,7 @@ func TestGrantablePersonalAccessTokenScopesFollowDelegationAuthority(t *testing.
 	service := fixture.service(t, fixture.access)
 	caller := invocation.New(personalAccessTokenSessionPrincipal(fixture.userID, fixture.now), model.RequestMetadata{})
 
-	catalogue, err := service.ListGrantablePersonalAccessTokenScopes(context.Background(), caller, ListGrantablePersonalAccessTokenScopesQuery{})
+	catalogue, err := service.ListGrantablePersonalAccessTokenScopes(context.Background(), caller)
 	require.NoError(t, err)
 	require.False(t, catalogue.AcademicUnitsHasMore)
 	require.Len(t, catalogue.AcademicUnits, 2)
@@ -160,7 +160,7 @@ func TestGrantablePersonalAccessTokenScopesNeverOfferWhatCreationRefuses(t *test
 	fixture := newGrantableScopeFixture(t)
 	service := fixture.service(t, fixture.access)
 	caller := invocation.New(personalAccessTokenSessionPrincipal(fixture.userID, fixture.now), model.RequestMetadata{})
-	catalogue, err := service.ListGrantablePersonalAccessTokenScopes(context.Background(), caller, ListGrantablePersonalAccessTokenScopesQuery{})
+	catalogue, err := service.ListGrantablePersonalAccessTokenScopes(context.Background(), caller)
 	require.NoError(t, err)
 	require.NotEmpty(t, catalogue.Scopes)
 
@@ -208,14 +208,14 @@ func TestGrantablePersonalAccessTokenScopesRequireInteractiveSession(t *testing.
 		ClientType: model.SessionClientCLI, CredentialScopes: []string{string(model.ActionExamView)},
 	}
 	_, err := service.ListGrantablePersonalAccessTokenScopes(
-		context.Background(), invocation.New(principal, model.RequestMetadata{}), ListGrantablePersonalAccessTokenScopesQuery{},
+		context.Background(), invocation.New(principal, model.RequestMetadata{}),
 	)
 	require.True(t, apperror.Is(err, "authentication.session_required"), "error = %v", err)
 
 	// A non-recent session may read the catalogue; creation alone requires recency.
 	stale := personalAccessTokenSessionPrincipal(fixture.userID, fixture.now.Add(-24*time.Hour))
 	_, err = service.ListGrantablePersonalAccessTokenScopes(
-		context.Background(), invocation.New(stale, model.RequestMetadata{}), ListGrantablePersonalAccessTokenScopesQuery{},
+		context.Background(), invocation.New(stale, model.RequestMetadata{}),
 	)
 	require.NoError(t, err)
 }
@@ -243,7 +243,6 @@ func TestGrantablePersonalAccessTokenScopesBoundListedAcademicUnits(t *testing.T
 	catalogue, err := service.ListGrantablePersonalAccessTokenScopes(
 		context.Background(),
 		invocation.New(personalAccessTokenSessionPrincipal(fixture.userID, fixture.now), model.RequestMetadata{}),
-		ListGrantablePersonalAccessTokenScopesQuery{},
 	)
 	require.NoError(t, err)
 	require.True(t, catalogue.AcademicUnitsHasMore)

@@ -32,8 +32,8 @@ type ExamResourceApplication interface {
 	EditExamResourceMetadata(context.Context, invocation.Invocation, resource.EditMetadataCommand) (store.ExamResourceRecord, error)
 	ReorderExamResources(context.Context, invocation.Invocation, resource.ReorderCommand) ([]store.ExamResourceRecord, error)
 	RemoveExamResource(context.Context, invocation.Invocation, resource.RemoveCommand) (store.ExamResourceRecord, error)
-	ListExamResources(context.Context, invocation.Invocation, resource.ListQuery) ([]store.ExamResourceRecord, error)
-	OpenExamResource(context.Context, invocation.Invocation, resource.OpenQuery) (resource.Opened, error)
+	ListExamResources(context.Context, invocation.Invocation, model.ExamID) ([]store.ExamResourceRecord, error)
+	OpenExamResource(context.Context, invocation.Invocation, model.ExamID, model.ExamResourceID) (resource.Opened, error)
 }
 
 // examResourceHandlers serves the Exam Resource routes: the files attached to
@@ -262,7 +262,7 @@ func (h examResourceHandlers) list(request operationRequest) (operationResult, e
 		return operationResult{}, err
 	}
 
-	items, err := h.app.ListExamResources(request.context, request.invocation(), resource.ListQuery{ExamID: examID})
+	items, err := h.app.ListExamResources(request.context, request.invocation(), examID)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -444,11 +444,7 @@ func (h examResourceHandlers) open(request operationRequest) (protocolResult, er
 		return protocolResult{}, err
 	}
 
-	opened, err := h.app.OpenExamResource(
-		request.context,
-		request.invocation(),
-		resource.OpenQuery{ExamID: examID, ResourceID: resourceID},
-	)
+	opened, err := h.app.OpenExamResource(request.context, request.invocation(), examID, resourceID)
 	if err != nil {
 		return protocolResult{}, err
 	}

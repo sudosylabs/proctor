@@ -374,13 +374,13 @@ func browserSourceSelector(invocation invocation.Invocation, query BrowserSource
 		return store.BrowserDeliveryAccess{}, apperror.Invalid("exam.attempt.invalid", "participation_id")
 	}
 
-	access, err := nativeDeliverySelector(invocation, NativeDeliveryQuery{Access: query.Access, StreamID: selector})
+	deliveryAccess, err := nativeDeliverySelector(invocation, NativeDeliveryQuery{Access: query.Access, StreamID: selector})
 	if err != nil {
 		return store.BrowserDeliveryAccess{}, err
 	}
 
 	return store.BrowserDeliveryAccess{
-		Access:          access.Access,
+		Access:          deliveryAccess.Access,
 		SourceSessionID: query.SourceSessionID,
 		ParticipationID: query.ParticipationID,
 	}, nil
@@ -401,12 +401,12 @@ func (s *Service) BrowserSourceStatus(
 	}
 	defer release()
 
-	access, err := browserSourceSelector(invocation, query)
+	deliveryAccess, err := browserSourceSelector(invocation, query)
 	if err != nil {
 		return nil, err
 	}
 
-	value, err := s.deps.Persistence.BrowserSourceStatus(ctx, access)
+	value, err := s.deps.Persistence.BrowserSourceStatus(ctx, deliveryAccess)
 	if err != nil {
 		return nil, storeError(storeErrors, err)
 	}
@@ -436,12 +436,12 @@ func (s *Service) BrowserSourceList(
 		return nil, apperror.Invalid("exam.attempt.invalid", "participation_id")
 	}
 
-	access, err := browserSourceSelector(invocation, query)
+	deliveryAccess, err := browserSourceSelector(invocation, query)
 	if err != nil {
 		return nil, err
 	}
 
-	values, err := s.deps.Persistence.BrowserSourceList(ctx, access)
+	values, err := s.deps.Persistence.BrowserSourceList(ctx, deliveryAccess)
 	if err != nil {
 		return nil, storeError(storeErrors, err)
 	}

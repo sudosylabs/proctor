@@ -50,17 +50,16 @@ type CancelCommand struct {
 	IdempotencyKey   string
 }
 
-type PauseCommand struct {
+// ManagerTransitionCommand carries one manager decision that moves a Sitting
+// through its lifecycle (pause, resume or early close) with the private
+// reason recorded for it.
+type ManagerTransitionCommand struct {
 	ExamID           model.ExamID
 	SittingID        model.ExamSittingID
 	ExpectedRevision int64
 	PrivateReason    string
 	IdempotencyKey   string
 }
-
-type ResumeCommand = PauseCommand
-
-type EarlyCloseCommand = PauseCommand
 
 type ExtendCommand struct {
 	ExamID           model.ExamID
@@ -350,21 +349,16 @@ func (s *Service) ScheduleExamSitting(
 	return value, nil
 }
 
-// GetQuery names one Sitting of an Exam.
-type GetQuery struct {
-	ExamID    model.ExamID
-	SittingID model.ExamSittingID
-}
-
 // GetExamSitting returns one Sitting to a caller authorized to view it,
 // directly or through an override.
 func (s *Service) GetExamSitting(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	query GetQuery,
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
 ) (_ store.ExamSittingSnapshot, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	if !query.ExamID.IsValid() || !query.SittingID.IsValid() {
+	if !examID.IsValid() || !sittingID.IsValid() {
 		return store.ExamSittingSnapshot{}, apperror.Invalid("exam.sitting.invalid", "identity")
 	}
 
@@ -372,8 +366,8 @@ func (s *Service) GetExamSitting(
 	if _, err := s.authorize(
 		ctx,
 		invocation,
-		query.ExamID,
-		model.Resource{Type: model.ResourceExamSitting, ID: query.SittingID.String()},
+		examID,
+		model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
 		at,
 		model.ActionExamSittingView,
 		model.ActionExamSittingViewOverride,
@@ -381,7 +375,7 @@ func (s *Service) GetExamSitting(
 		return store.ExamSittingSnapshot{}, err
 	}
 
-	snapshot, err := s.deps.Persistence.Get(ctx, query.ExamID, query.SittingID)
+	snapshot, err := s.deps.Persistence.Get(ctx, examID, sittingID)
 	if err != nil {
 		return store.ExamSittingSnapshot{}, storeErrors.Translate(err)
 	}
@@ -391,7 +385,7 @@ func (s *Service) GetExamSitting(
 		return store.ExamSittingSnapshot{}, err
 	}
 
-	if value.Sitting.ExamID != query.ExamID || value.Sitting.ID != query.SittingID {
+	if value.Sitting.ExamID != examID || value.Sitting.ID != sittingID {
 		return store.ExamSittingSnapshot{}, apperror.New("exam.sitting.unavailable").Wrap(
 			errors.New("Exam Sitting Store returned a mismatched snapshot"),
 		)
@@ -483,22 +477,22 @@ func (s *Service) authorizeBrowserActivityView(
 		return "", apperror.New("exam.sitting.unavailable").Wrap(errors.New("Exam Sitting Store returned a mismatched snapshot"))
 	}
 
-	access, err := s.deps.Access.Access(ctx, value.Sitting.ExamID, invocation.Principal().UserID)
+	examAccess, err := s.deps.Access.Access(ctx, value.Sitting.ExamID, invocation.Principal().UserID)
 	if err != nil {
 		return "", storeErrors.Translate(err)
 	}
-	if access == nil || access.Exam == nil || access.Exam.Validate() != nil || access.Exam.ID != value.Sitting.ExamID {
+	if examAccess == nil || examAccess.Exam == nil || examAccess.Exam.Validate() != nil || examAccess.Exam.ID != value.Sitting.ExamID {
 		return "", apperror.New("exam.sitting.unavailable").Wrap(errors.New("Exam access projection is incomplete"))
 	}
 
 	resource := model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()}
-	if !access.ActorIsManager {
+	if !examAccess.ActorIsManager {
 		if err := s.deps.Authorizer.RecordDenial(
 			ctx,
 			invocation,
 			model.ActionExamAttemptBrowserActivityView,
 			resource,
-			access.Exam.AcademicUnitID,
+			examAccess.Exam.AcademicUnitID,
 		); err != nil {
 			return "", err
 		}
@@ -510,7 +504,7 @@ func (s *Service) authorizeBrowserActivityView(
 		return "", err
 	}
 
-	return access.Exam.AcademicUnitID, nil
+	return examAccess.Exam.AcademicUnitID, nil
 }
 
 // AuthorizeSubmissionView applies the current Exam Manager relationship and
@@ -876,7 +870,7 @@ func (s *Service) CancelExamSitting(
 		return store.ExamSittingSnapshot{}, apperror.Invalid("exam.sitting.invalid", "cancellation")
 	}
 
-	idempotency, err := prepareTransitionIdempotency(invocation, idempotencyOperationCancel, PauseCommand(command))
+	idempotency, err := prepareTransitionIdempotency(invocation, idempotencyOperationCancel, ManagerTransitionCommand(command))
 	if err != nil {
 		return store.ExamSittingSnapshot{}, err
 	}
@@ -985,7 +979,7 @@ func (s *Service) CancelExamSitting(
 func (s *Service) PauseExamSitting(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	command PauseCommand,
+	command ManagerTransitionCommand,
 ) (_ store.ExamSittingSnapshot, resultErr error) {
 	defer func() { s.recordOperational("pause", resultErr) }()
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -1013,7 +1007,7 @@ func (s *Service) PauseExamSitting(
 func (s *Service) ResumeExamSitting(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	command ResumeCommand,
+	command ManagerTransitionCommand,
 ) (_ store.ExamSittingSnapshot, resultErr error) {
 	defer func() { s.recordOperational("resume", resultErr) }()
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -1041,7 +1035,7 @@ func (s *Service) ResumeExamSitting(
 func (s *Service) CloseExamSitting(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	command EarlyCloseCommand,
+	command ManagerTransitionCommand,
 ) (_ store.ExamSittingSnapshot, resultErr error) {
 	defer func() { s.recordOperational("close", resultErr) }()
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
@@ -1073,7 +1067,7 @@ type managerTransitionStoreCall func(
 func (s *Service) runManagerTransition(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	command PauseCommand,
+	command ManagerTransitionCommand,
 	operation, idempotencyOperation string,
 	transition store.ExamSittingLifecycleTransitionCode,
 	allowArchived, finalize bool,
@@ -1343,7 +1337,7 @@ func (s *Service) ListExamSittingNoShows(
 		return NoShowPage{}, apperror.Invalid("exam.sitting.invalid", "no_show_list")
 	}
 
-	snapshot, err := s.GetExamSitting(ctx, invocation, GetQuery{ExamID: query.ExamID, SittingID: query.SittingID})
+	snapshot, err := s.GetExamSitting(ctx, invocation, query.ExamID, query.SittingID)
 	if err != nil {
 		return NoShowPage{}, err
 	}
@@ -1692,15 +1686,15 @@ func (s *Service) authorize(
 		return authorizationDecision{}, apperror.Invalid("exam.sitting.invalid", "exam_id")
 	}
 
-	access, err := s.deps.Access.Access(ctx, examID, principal.UserID)
+	examAccess, err := s.deps.Access.Access(ctx, examID, principal.UserID)
 	if err != nil {
 		return authorizationDecision{}, storeErrors.Translate(err)
 	}
-	if access == nil || access.Exam == nil || access.Exam.Validate() != nil || access.Exam.ID != examID {
+	if examAccess == nil || examAccess.Exam == nil || examAccess.Exam.Validate() != nil || examAccess.Exam.ID != examID {
 		return authorizationDecision{}, apperror.New("exam.sitting.unavailable").Wrap(errors.New("Exam access projection is incomplete"))
 	}
 
-	action, err := manageraccess.SelectAction(ctx, s.deps.Memberships, principal.UserID, access, at, ordinaryAction, overrideAction)
+	action, err := manageraccess.SelectAction(ctx, s.deps.Memberships, principal.UserID, examAccess, at, ordinaryAction, overrideAction)
 	if err != nil {
 		return authorizationDecision{}, apperror.New("exam.sitting.unavailable").Wrap(err)
 	}
@@ -1710,9 +1704,9 @@ func (s *Service) authorize(
 
 	return authorizationDecision{
 		action:       action,
-		unitID:       access.Exam.AcademicUnitID,
+		unitID:       examAccess.Exam.AcademicUnitID,
 		override:     action == overrideAction,
-		examArchived: access.Exam.IsArchived(),
+		examArchived: examAccess.Exam.IsArchived(),
 	}, nil
 }
 

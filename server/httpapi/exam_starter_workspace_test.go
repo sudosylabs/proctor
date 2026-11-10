@@ -239,10 +239,15 @@ func (f *examStarterWorkspaceHTTPFake) AuthenticateBearer(context.Context, strin
 func (f *examStarterWorkspaceHTTPFake) result() workspace.Result {
 	return workspace.Result{Entry: f.entry, Object: &f.object, DraftRevision: 2}
 }
-func (f *examStarterWorkspaceHTTPFake) ListExamStarterWorkspace(context.Context, invocation.Invocation, workspace.ListQuery) ([]store.ExamStarterWorkspaceItem, error) {
+func (f *examStarterWorkspaceHTTPFake) ListExamStarterWorkspace(context.Context, invocation.Invocation, model.ExamID) ([]store.ExamStarterWorkspaceItem, error) {
 	return []store.ExamStarterWorkspaceItem{{Entry: f.entry, Object: &f.object}}, nil
 }
-func (f *examStarterWorkspaceHTTPFake) OpenExamStarterWorkspaceFile(context.Context, invocation.Invocation, workspace.OpenFileQuery) (workspace.OpenedFile, error) {
+func (f *examStarterWorkspaceHTTPFake) OpenExamStarterWorkspaceFile(
+	context.Context,
+	invocation.Invocation,
+	model.ExamID,
+	model.StarterWorkspaceEntryID,
+) (workspace.OpenedFile, error) {
 	return workspace.OpenedFile{Body: io.NopCloser(strings.NewReader("protected code")), MediaType: f.object.MediaType,
 		SizeBytes: 14, SHA256: f.object.SHA256, ContentVersion: f.object.ContentVersion}, nil
 }

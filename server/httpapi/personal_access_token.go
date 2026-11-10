@@ -296,7 +296,6 @@ func (h personalAccessTokenHandlers) list(request operationRequest) (operationRe
 	tokens, err := h.app.ListPersonalAccessTokens(
 		request.context,
 		request.invocation(),
-		identity.ListPersonalAccessTokensQuery{},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -322,7 +321,6 @@ func (h personalAccessTokenHandlers) grantableScopes(request operationRequest) (
 	catalogue, err := h.app.ListGrantablePersonalAccessTokenScopes(
 		request.context,
 		request.invocation(),
-		identity.ListGrantablePersonalAccessTokenScopesQuery{},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -360,12 +358,10 @@ type PersonalAccessTokens interface {
 	ListPersonalAccessTokens(
 		context.Context,
 		invocation.Invocation,
-		identity.ListPersonalAccessTokensQuery,
 	) ([]*model.PersonalAccessToken, error)
 	ListGrantablePersonalAccessTokenScopes(
 		context.Context,
 		invocation.Invocation,
-		identity.ListGrantablePersonalAccessTokenScopesQuery,
 	) (*identity.PersonalAccessTokenGrantableScopes, error)
 	RevokePersonalAccessToken(
 		context.Context,

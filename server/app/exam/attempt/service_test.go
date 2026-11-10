@@ -213,21 +213,21 @@ func TestCreateWorkspaceDirectoryRevalidatesMutationAccessAuditsAndPublishesSafe
 	})
 	require.NoError(t, err)
 	principal := f.invocation.Principal()
-	access := f.workspace.resolvedAccess
-	require.Equal(t, f.attemptID, access.AttemptID, "access=%#v mutation=%#v result=%#v effects=%#v", access, f.workspace.mutation, result, f.effects)
-	require.Equal(t, participationID, access.ParticipationID, "access=%#v mutation=%#v result=%#v effects=%#v", access, f.workspace.mutation, result, f.effects)
-	require.Equal(t, int64(4), access.Generation, "access=%#v mutation=%#v result=%#v effects=%#v", access, f.workspace.mutation, result, f.effects)
-	require.Equal(t, principal.UserID, access.CandidateUserID, "access=%#v mutation=%#v result=%#v effects=%#v", access, f.workspace.mutation, result, f.effects)
-	require.Equal(t, principal.SessionID, access.SessionID, "access=%#v mutation=%#v result=%#v effects=%#v", access, f.workspace.mutation, result, f.effects)
-	require.Equal(t, f.connectionID, access.ConnectionID, "access=%#v mutation=%#v result=%#v effects=%#v", access, f.workspace.mutation, result, f.effects)
-	require.Equal(t, model.HashToken(credential), access.ContinuityCredentialHash, "access=%#v mutation=%#v result=%#v effects=%#v", access, f.workspace.mutation, result, f.effects)
-	require.NotNil(t, f.workspace.mutation, "access=%#v mutation=%#v result=%#v effects=%#v", access, f.workspace.mutation, result, f.effects)
-	require.Equal(t, entryID, f.workspace.mutation.EntryID, "access=%#v mutation=%#v result=%#v effects=%#v", access, f.workspace.mutation, result, f.effects)
-	require.Equal(t, "src", f.workspace.mutation.DestinationPath, "access=%#v mutation=%#v result=%#v effects=%#v", access, f.workspace.mutation, result, f.effects)
-	require.Equal(t, model.AttemptWorkspaceMutationCreateDirectory, f.workspace.mutation.Operation, "access=%#v mutation=%#v result=%#v effects=%#v", access, f.workspace.mutation, result, f.effects)
-	require.True(t, f.workspace.mutation.AuditEventID.IsValid(), "access=%#v mutation=%#v result=%#v effects=%#v", access, f.workspace.mutation, result, f.effects)
-	require.Equal(t, int64(9), result.Change.Cursor, "access=%#v mutation=%#v result=%#v effects=%#v", access, f.workspace.mutation, result, f.effects)
-	require.Equal(t, 1, f.effects.workspaceChanged, "access=%#v mutation=%#v result=%#v effects=%#v", access, f.workspace.mutation, result, f.effects)
+	workspaceAccess := f.workspace.resolvedAccess
+	require.Equal(t, f.attemptID, workspaceAccess.AttemptID, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
+	require.Equal(t, participationID, workspaceAccess.ParticipationID, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
+	require.Equal(t, int64(4), workspaceAccess.Generation, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
+	require.Equal(t, principal.UserID, workspaceAccess.CandidateUserID, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
+	require.Equal(t, principal.SessionID, workspaceAccess.SessionID, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
+	require.Equal(t, f.connectionID, workspaceAccess.ConnectionID, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
+	require.Equal(t, model.HashToken(credential), workspaceAccess.ContinuityCredentialHash, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
+	require.NotNil(t, f.workspace.mutation, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
+	require.Equal(t, entryID, f.workspace.mutation.EntryID, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
+	require.Equal(t, "src", f.workspace.mutation.DestinationPath, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
+	require.Equal(t, model.AttemptWorkspaceMutationCreateDirectory, f.workspace.mutation.Operation, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
+	require.True(t, f.workspace.mutation.AuditEventID.IsValid(), "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
+	require.Equal(t, int64(9), result.Change.Cursor, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
+	require.Equal(t, 1, f.effects.workspaceChanged, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
 	auditCapture := fmt.Sprintf("%#v", f.audit.values)
 	require.Len(t, f.audit.values, 2)
 	require.Equal(t, f.attemptID.String(), f.audit.values["exam_attempt_id"])
@@ -772,8 +772,7 @@ func TestManagerAttemptOperationsAuthorizeBeforeReadingAttempts(t *testing.T) {
 		run           func(*fixture, model.ExamAttemptID) error
 	}{
 		"get": {authorization: "manager.authorize", run: func(f *fixture, attemptID model.ExamAttemptID) error {
-			_, err := f.service.GetExamAttempt(context.Background(), f.invocation, GetManagedAttemptQuery{
-				ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: attemptID})
+			_, err := f.service.GetExamAttempt(context.Background(), f.invocation, f.sitting.ExamID, f.sitting.ID, attemptID)
 			return err
 		}},
 		"reallow": {authorization: "manager.manage", run: func(f *fixture, attemptID model.ExamAttemptID) error {
@@ -1125,14 +1124,14 @@ func TestContentSelectorsPreserveCandidateAccessErrors(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	invalidCall := invocation.New(model.Principal{}, model.RequestMetadata{})
-	access := CandidateAccess{AttemptID: f.attemptID, ConnectionID: f.connectionID, ContinuityCredential: model.NewCredentialToken()}
+	candidateAccess := CandidateAccess{AttemptID: f.attemptID, ConnectionID: f.connectionID, ContinuityCredential: model.NewCredentialToken()}
 	for _, open := range []func() error{
 		func() error {
-			_, err := f.service.OpenCandidateExamResource(context.Background(), invalidCall, OpenResourceQuery{Access: access, ResourceID: model.NewExamResourceID()})
+			_, err := f.service.OpenCandidateExamResource(context.Background(), invalidCall, OpenResourceQuery{Access: candidateAccess, ResourceID: model.NewExamResourceID()})
 			return err
 		},
 		func() error {
-			_, err := f.service.OpenCandidateExamWorkspaceFile(context.Background(), invalidCall, OpenWorkspaceFileQuery{Access: access, EntryID: model.NewAttemptWorkspaceEntryID()})
+			_, err := f.service.OpenCandidateExamWorkspaceFile(context.Background(), invalidCall, OpenWorkspaceFileQuery{Access: candidateAccess, EntryID: model.NewAttemptWorkspaceEntryID()})
 			return err
 		},
 	} {
@@ -1164,12 +1163,12 @@ func TestWorkspaceListUsesPathFreeSnapshotCursor(t *testing.T) {
 
 func TestWorkspaceListRejectsUnboundedOrInvalidCursorsBeforeStore(t *testing.T) {
 	t.Parallel()
-	access := CandidateAccess{ContinuityCredential: model.NewCredentialToken()}
+	candidateAccess := CandidateAccess{ContinuityCredential: model.NewCredentialToken()}
 	for _, query := range []WorkspaceQuery{
-		{Access: access, ExpectedCursor: -1, Limit: 0},
-		{Access: access, ExpectedCursor: -1, Limit: 201},
-		{Access: access, ExpectedCursor: -2, Limit: 20},
-		{Access: access, ExpectedCursor: -1, AfterEntryID: model.NewAttemptWorkspaceEntryID(), Limit: 20},
+		{Access: candidateAccess, ExpectedCursor: -1, Limit: 0},
+		{Access: candidateAccess, ExpectedCursor: -1, Limit: 201},
+		{Access: candidateAccess, ExpectedCursor: -2, Limit: 20},
+		{Access: candidateAccess, ExpectedCursor: -1, AfterEntryID: model.NewAttemptWorkspaceEntryID(), Limit: 20},
 	} {
 		f := newFixture(t)
 		query.Access.AttemptID, query.Access.ConnectionID = f.attemptID, f.connectionID
@@ -1805,9 +1804,9 @@ func (f *attemptWorkspaceStoreFake) ListJournal(_ context.Context, options store
 	f.journalOptions = options
 	return f.journalPage, nil
 }
-func (f *attemptWorkspaceStoreFake) ResolveMutationTarget(_ context.Context, access store.ExamAttemptWorkspaceMutationAccess) (*store.ExamAttemptWorkspaceMutationTarget, error) {
+func (f *attemptWorkspaceStoreFake) ResolveMutationTarget(_ context.Context, workspaceAccess store.ExamAttemptWorkspaceMutationAccess) (*store.ExamAttemptWorkspaceMutationTarget, error) {
 	f.f.order = append(f.f.order, "workspace.resolve")
-	f.resolvedAccess = access
+	f.resolvedAccess = workspaceAccess
 	return f.target, nil
 }
 func (f *attemptWorkspaceStoreFake) ReserveObject(_ context.Context, input *store.ExamAttemptWorkspaceObjectReservation) (*model.AttemptWorkspaceObject, error) {
@@ -1904,9 +1903,9 @@ func (f *attemptStoreFake) RenewParticipation(_ context.Context, input *store.Ex
 	f.renew = input
 	return f.renewResult, f.renewErr
 }
-func (f *attemptStoreFake) ResolveFocusLossTarget(_ context.Context, access store.ExamAttemptFocusLossAccess) (*store.ExamAttemptFocusLossTarget, error) {
+func (f *attemptStoreFake) ResolveFocusLossTarget(_ context.Context, focusLossAccess store.ExamAttemptFocusLossAccess) (*store.ExamAttemptFocusLossTarget, error) {
 	f.f.order = append(f.f.order, "focus.resolve")
-	f.focusAccess = access
+	f.focusAccess = focusLossAccess
 	return f.focusTarget, f.focusErr
 }
 func (f *attemptStoreFake) RecordFocusLoss(_ context.Context, input *store.ExamAttemptFocusLossSignal) (*store.ExamAttemptFocusLossResult, error) {
@@ -1914,9 +1913,9 @@ func (f *attemptStoreFake) RecordFocusLoss(_ context.Context, input *store.ExamA
 	f.focusSignal = input
 	return f.focusResult, f.focusErr
 }
-func (f *attemptStoreFake) ResolveEndedFocusLossTarget(_ context.Context, access store.ExamAttemptFocusLossAccess) (*store.ExamAttemptFocusLossDiscrepancyTarget, error) {
+func (f *attemptStoreFake) ResolveEndedFocusLossTarget(_ context.Context, focusLossAccess store.ExamAttemptFocusLossAccess) (*store.ExamAttemptFocusLossDiscrepancyTarget, error) {
 	f.f.order = append(f.f.order, "focus.late.resolve")
-	f.focusAccess = access
+	f.focusAccess = focusLossAccess
 	return f.lateFocusTarget, f.lateFocusErr
 }
 func (f *attemptStoreFake) RecordEndedFocusLoss(_ context.Context, input *store.ExamAttemptFocusLossDiscrepancy) (*store.ExamAttemptFocusLossDiscrepancyResult, error) {
@@ -1990,10 +1989,10 @@ func (*attemptStoreFake) ListSessionRevocationInvalidationTargets(
 ) ([]store.ExamAttemptInvalidationTarget, error) {
 	return nil, nil
 }
-func (f *attemptStoreFake) GetCandidatePresentation(_ context.Context, access store.CandidateAttemptAccess) (*store.CandidateExamPresentation, error) {
-	f.candidateAccess = access
-	if f.authorizedSession.IsValid() && access.SessionID != f.authorizedSession {
-		return nil, store.NewErrNotFound("exam_attempt_access", access.AttemptID.String())
+func (f *attemptStoreFake) GetCandidatePresentation(_ context.Context, candidateAccess store.CandidateAttemptAccess) (*store.CandidateExamPresentation, error) {
+	f.candidateAccess = candidateAccess
+	if f.authorizedSession.IsValid() && candidateAccess.SessionID != f.authorizedSession {
+		return nil, store.NewErrNotFound("exam_attempt_access", candidateAccess.AttemptID.String())
 	}
 	return f.presentation, nil
 }

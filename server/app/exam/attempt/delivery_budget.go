@@ -45,14 +45,14 @@ func (s *Service) DeliveryBudget(
 		return nil, apperror.Invalid("exam.attempt.invalid", "participation_id")
 	}
 
-	access, err := nativeDeliverySelector(invocation, NativeDeliveryQuery{Access: query.Access, StreamID: query.ParticipationID.String()})
+	deliveryAccess, err := nativeDeliverySelector(invocation, NativeDeliveryQuery{Access: query.Access, StreamID: query.ParticipationID.String()})
 	if err != nil {
 		return nil, err
 	}
 
 	value, err := s.deps.Persistence.DeliveryBudget(
 		ctx,
-		store.DeliveryBudgetAccess{Access: access.Access, ParticipationID: query.ParticipationID},
+		store.DeliveryBudgetAccess{Access: deliveryAccess.Access, ParticipationID: query.ParticipationID},
 	)
 	if err != nil {
 		return nil, deliveryStoreError(err)
@@ -88,7 +88,7 @@ func (s *Service) StopDeliveryDetails(
 		return nil, apperror.Invalid("exam.attempt.invalid", "stop_delivery_details")
 	}
 
-	idempotency, err := idempotency.Require(invocation, store.DeliveryStopDetailsOperation, command.IdempotencyKey, struct {
+	commandIdempotency, err := idempotency.Require(invocation, store.DeliveryStopDetailsOperation, command.IdempotencyKey, struct {
 		Attempt model.ExamAttemptID
 		Request model.StopDeliveryDetails
 	}{candidateAccess.AttemptID, command.Request})
@@ -120,7 +120,7 @@ func (s *Service) StopDeliveryDetails(
 	value, err := s.deps.Persistence.StopDeliveryDetails(
 		ctx,
 		&store.DeliveryDetailsStop{Access: candidateAccess, Request: command.Request, AuditEventID: audit, AuditAt: s.deps.Now()},
-		idempotency,
+		commandIdempotency,
 	)
 	if err != nil {
 		return nil, s.failAudit(ctx, audit, deliveryStoreError(err))

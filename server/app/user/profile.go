@@ -35,11 +35,6 @@ type SearchUsersQuery struct {
 	AcademicUnitID  model.AcademicUnitID
 }
 
-// GetUserProfileQuery reads one User profile.
-type GetUserProfileQuery struct {
-	ID model.UserID
-}
-
 // UpdateUserProfileCommand changes the profile members whose pointer is set.
 type UpdateUserProfileCommand struct {
 	ID          model.UserID
@@ -308,8 +303,7 @@ func (s *Service) listUsers(
 
 // GetUserProfile reads one User profile; a scoped grant reads the limited
 // projection without the mailbox and account metadata.
-func (s *Service) GetUserProfile(ctx context.Context, invocation invocation.Invocation, query GetUserProfileQuery) (*model.User, error) {
-	id := query.ID
+func (s *Service) GetUserProfile(ctx context.Context, invocation invocation.Invocation, id model.UserID) (*model.User, error) {
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "user_id")
 	}

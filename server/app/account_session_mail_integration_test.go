@@ -70,14 +70,14 @@ func TestAccountAndAdministrativeSessionNoticesUseRealServerGraph(t *testing.T) 
 	logout := loginIntegrationUser(t, helper.Handler(), target.Username, password, model.SessionClientCLI, "mail11-logout")
 	logoutPrincipal, appErr := helper.App.Identity.AuthenticateAccess(ctx, logout.Tokens.AccessToken)
 	require.NoError(t, appErr)
-	require.NoError(t, helper.App.Identity.Logout(ctx, invocation.New(*logoutPrincipal, model.RequestMetadata{}), identity.LogoutCommand{}))
-	require.NoError(t, helper.App.Identity.Logout(ctx, invocation.New(*logoutPrincipal, model.RequestMetadata{}), identity.LogoutCommand{}))
+	require.NoError(t, helper.App.Identity.Logout(ctx, invocation.New(*logoutPrincipal, model.RequestMetadata{})))
+	require.NoError(t, helper.App.Identity.Logout(ctx, invocation.New(*logoutPrincipal, model.RequestMetadata{})))
 	all := loginIntegrationUser(t, helper.Handler(), target.Username, password, model.SessionClientCLI, "mail11-self-all")
 	allPrincipal, appErr := helper.App.Identity.AuthenticateAccess(ctx, all.Tokens.AccessToken)
 	require.NoError(t, appErr)
 	allInvocation := invocation.New(*allPrincipal, model.RequestMetadata{})
 	for range 2 {
-		require.NoError(t, helper.App.Identity.RevokeAllSessions(ctx, allInvocation, identity.RevokeAllSessionsCommand{}))
+		require.NoError(t, helper.App.Identity.RevokeAllSessions(ctx, allInvocation))
 	}
 	audits, err := persistence.Audit().List(ctx, store.AuditListOptions{
 		ActorID: target.ID, Action: string(model.ActionSessionManage),

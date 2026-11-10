@@ -111,7 +111,7 @@ func TestInstitutionGetAuthorizesSingletonResource(t *testing.T) {
 	institution := &model.Institution{ID: model.InstitutionID(model.NewID())}
 	authorizer := &institutionAuthorizerFake{events: &events}
 	service := mustNew(Dependencies{Store: &catalogFake{institution: &institutionStoreFake{events: &events, current: institution}}, Authorizer: authorizer, Auditor: &institutionAuditorFake{events: &events}, Now: time.Now})
-	got, err := service.GetInstitution(context.Background(), invocation.Invocation{}, GetInstitutionQuery{})
+	got, err := service.GetInstitution(context.Background(), invocation.Invocation{})
 	require.NoError(t, err, "Get()")
 	require.Same(t, institution, got, "Get()")
 	require.Equal(t, model.ActionInstitutionManage, authorizer.action, "authorization")

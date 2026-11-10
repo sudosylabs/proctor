@@ -149,25 +149,22 @@ func New(deps Dependencies) (*Service, error) {
 	return &Service{deps: deps}, nil
 }
 
-// ListQuery names the Exam whose Draft Resources are listed.
-type ListQuery struct{ ExamID model.ExamID }
-
 // ListExamResources returns the Exam Draft's Exam Resources to a caller
 // authorized to view the Exam.
 func (s *Service) ListExamResources(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	query ListQuery,
+	examID model.ExamID,
 ) (_ []store.ExamResourceRecord, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	if !query.ExamID.IsValid() {
+	if !examID.IsValid() {
 		return nil, apperror.Invalid("exam.resource.invalid", "exam_id")
 	}
-	if _, err := s.authorize(ctx, invocation, query.ExamID, false); err != nil {
+	if _, err := s.authorize(ctx, invocation, examID, false); err != nil {
 		return nil, err
 	}
 
-	items, err := s.deps.Persistence.List(ctx, query.ExamID)
+	items, err := s.deps.Persistence.List(ctx, examID)
 	if err != nil {
 		return nil, storeErrors.Translate(err)
 	}
@@ -175,23 +172,22 @@ func (s *Service) ListExamResources(
 	return items, nil
 }
 
-// OpenQuery names one Draft Resource of an Exam.
-type OpenQuery struct {
-	ExamID     model.ExamID
-	ResourceID model.ExamResourceID
-}
-
 // OpenExamResource opens the selected content of one Exam Draft Exam Resource
 // for a caller authorized to view the Exam. The caller must close the body.
-func (s *Service) OpenExamResource(ctx context.Context, invocation invocation.Invocation, query OpenQuery) (_ Opened, resultErr error) {
+func (s *Service) OpenExamResource(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	examID model.ExamID,
+	resourceID model.ExamResourceID,
+) (_ Opened, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	if !query.ExamID.IsValid() || !query.ResourceID.IsValid() {
+	if !examID.IsValid() || !resourceID.IsValid() {
 		return Opened{}, apperror.Invalid("exam.resource.invalid", "identity")
 	}
-	if _, err := s.authorize(ctx, invocation, query.ExamID, false); err != nil {
+	if _, err := s.authorize(ctx, invocation, examID, false); err != nil {
 		return Opened{}, err
 	}
-	record, err := s.deps.Persistence.Get(ctx, query.ExamID, query.ResourceID)
+	record, err := s.deps.Persistence.Get(ctx, examID, resourceID)
 	if err != nil {
 		return Opened{}, storeErrors.Translate(err)
 	}
@@ -835,16 +831,16 @@ func (s *Service) authorize(
 		return authorizationDecision{}, apperror.Invalid("exam.resource.invalid", "principal")
 	}
 
-	access, err := s.deps.Access.Access(ctx, examID, principal.UserID)
+	examAccess, err := s.deps.Access.Access(ctx, examID, principal.UserID)
 	if err != nil {
 		return authorizationDecision{}, storeErrors.Translate(err)
 	}
-	if access == nil || access.Exam == nil {
+	if examAccess == nil || examAccess.Exam == nil {
 		return authorizationDecision{}, apperror.New("exam.resource.unavailable").Wrap(errors.New("missing access"))
 	}
 
 	var at time.Time
-	if access.ActorIsManager {
+	if examAccess.ActorIsManager {
 		at = s.deps.Now()
 	}
 
@@ -853,7 +849,7 @@ func (s *Service) authorize(
 		ordinaryAction, overrideAction = model.ActionExamManage, model.ActionExamManageOverride
 	}
 
-	action, err := manageraccess.SelectAction(ctx, s.deps.Memberships, principal.UserID, access, at, ordinaryAction, overrideAction)
+	action, err := manageraccess.SelectAction(ctx, s.deps.Memberships, principal.UserID, examAccess, at, ordinaryAction, overrideAction)
 	if err != nil {
 		return authorizationDecision{}, apperror.New("exam.resource.unavailable").Wrap(err)
 	}
@@ -861,7 +857,7 @@ func (s *Service) authorize(
 		return authorizationDecision{}, err
 	}
 
-	return authorizationDecision{override: action == overrideAction, academicUnitID: access.Exam.AcademicUnitID}, nil
+	return authorizationDecision{override: action == overrideAction, academicUnitID: examAccess.Exam.AcademicUnitID}, nil
 }
 
 // currentActiveDraft permits an unaudited no-op only after a bounded

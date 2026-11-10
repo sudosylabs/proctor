@@ -155,9 +155,7 @@ func TestExamSittingIntegration(t *testing.T) {
 	waitForExamSittingMailDelivery(t, ctx, persistence, helper, secondary, candidate.ID,
 		model.MailTemplateExamSittingScheduled)
 
-	got, appErr := helper.App.Sittings.GetExamSitting(ctx, managerInvocation, sitting.GetQuery{
-		ExamID: created.Exam.ID, SittingID: scheduled.Sitting.ID,
-	})
+	got, appErr := helper.App.Sittings.GetExamSitting(ctx, managerInvocation, created.Exam.ID, scheduled.Sitting.ID)
 	require.NoError(t, appErr, "get Sitting = %#v", got)
 	require.NotNil(t, got.Sitting, "get Sitting = %#v", got)
 	require.Equal(t, scheduled.Sitting.ID, got.Sitting.ID, "get Sitting = %#v", got)
@@ -222,7 +220,7 @@ func TestExamSittingIntegration(t *testing.T) {
 	affected, affectedErr := result.RowsAffected()
 	require.NoError(t, affectedErr, "open live Sitting affected")
 	require.Equal(t, int64(1), affected, "open live Sitting affected")
-	paused, appErr := helper.App.Sittings.PauseExamSitting(ctx, managerInvocation, sitting.PauseCommand{
+	paused, appErr := helper.App.Sittings.PauseExamSitting(ctx, managerInvocation, sitting.ManagerTransitionCommand{
 		ExamID: created.Exam.ID, SittingID: live.Sitting.ID, ExpectedRevision: 2,
 		PrivateReason: "Investigating a delivery interruption", IdempotencyKey: "sitting-live-pause",
 	})
@@ -230,7 +228,7 @@ func TestExamSittingIntegration(t *testing.T) {
 	require.NotNil(t, paused.Sitting, "pause live Sitting = %#v", paused)
 	require.Equal(t, model.ExamSittingPaused, paused.Sitting.State, "pause live Sitting = %#v", paused)
 	require.Equal(t, int64(3), paused.Sitting.Revision, "pause live Sitting = %#v", paused)
-	resumed, appErr := helper.App.Sittings.ResumeExamSitting(ctx, managerInvocation, sitting.ResumeCommand{
+	resumed, appErr := helper.App.Sittings.ResumeExamSitting(ctx, managerInvocation, sitting.ManagerTransitionCommand{
 		ExamID: created.Exam.ID, SittingID: live.Sitting.ID, ExpectedRevision: 3,
 		PrivateReason: "Delivery interruption resolved", IdempotencyKey: "sitting-live-resume",
 	})
@@ -247,7 +245,7 @@ func TestExamSittingIntegration(t *testing.T) {
 	require.NotNil(t, extended.Sitting, "extend live Sitting = %#v", extended)
 	require.Equal(t, int64(5), extended.Sitting.Revision, "extend live Sitting = %#v", extended)
 	require.True(t, extended.Sitting.ScheduledEndAt.Equal(liveEnd), "extend live Sitting = %#v", extended)
-	closedEarly, appErr := helper.App.Sittings.CloseExamSitting(ctx, managerInvocation, sitting.EarlyCloseCommand{
+	closedEarly, appErr := helper.App.Sittings.CloseExamSitting(ctx, managerInvocation, sitting.ManagerTransitionCommand{
 		ExamID: created.Exam.ID, SittingID: live.Sitting.ID, ExpectedRevision: 5,
 		PrivateReason: "Authorized early close", IdempotencyKey: "sitting-live-close",
 	})
@@ -256,7 +254,7 @@ func TestExamSittingIntegration(t *testing.T) {
 	require.Equal(t, model.ExamSittingClosing, closedEarly.Sitting.State, "close live Sitting = %#v", closedEarly)
 	require.Equal(t, int64(6), closedEarly.Sitting.Revision, "close live Sitting = %#v", closedEarly)
 	require.Equal(t, model.ExamSittingReasonManagerClosed, closedEarly.Sitting.ReasonCode, "close live Sitting = %#v", closedEarly)
-	closedReplay, appErr := helper.App.Sittings.CloseExamSitting(ctx, managerInvocation, sitting.EarlyCloseCommand{
+	closedReplay, appErr := helper.App.Sittings.CloseExamSitting(ctx, managerInvocation, sitting.ManagerTransitionCommand{
 		ExamID: created.Exam.ID, SittingID: live.Sitting.ID, ExpectedRevision: 5,
 		PrivateReason: "Authorized early close", IdempotencyKey: "sitting-live-close",
 	})
@@ -267,9 +265,7 @@ func TestExamSittingIntegration(t *testing.T) {
 
 	_, err = storetest.EndAcademicUnitMember(ctx, persistence, managerMembership.ID, managerMembership.Revision, model.NowUTC().Add(-100*time.Millisecond))
 	require.NoError(t, err)
-	_, appErr = helper.App.Sittings.GetExamSitting(ctx, managerInvocation, sitting.GetQuery{
-		ExamID: created.Exam.ID, SittingID: scheduled.Sitting.ID,
-	})
+	_, appErr = helper.App.Sittings.GetExamSitting(ctx, managerInvocation, created.Exam.ID, scheduled.Sitting.ID)
 	require.True(t, apperror.Is(appErr, "resource.not_found"), "get after membership revocation error = %v", appErr)
 	appErr = helper.App.RealtimeAdmission.AuthorizeWebSocketSubscription(ctx, invocation.New(*managerPrincipal, model.RequestMetadata{}),
 		model.ActionExamSittingView, model.Resource{Type: model.ResourceExamSitting, ID: scheduled.Sitting.ID.String()})
@@ -280,9 +276,7 @@ func TestExamSittingIntegration(t *testing.T) {
 	require.NoError(t, err)
 	_, err = storetest.EndRoleBinding(ctx, persistence, managerBinding.ID, model.NowUTC().Add(-25*time.Millisecond))
 	require.NoError(t, err)
-	_, appErr = helper.App.Sittings.GetExamSitting(ctx, managerInvocation, sitting.GetQuery{
-		ExamID: created.Exam.ID, SittingID: scheduled.Sitting.ID,
-	})
+	_, appErr = helper.App.Sittings.GetExamSitting(ctx, managerInvocation, created.Exam.ID, scheduled.Sitting.ID)
 	require.True(t, apperror.Is(appErr, "resource.not_found"), "get after permission revocation error = %v", appErr)
 	appErr = helper.App.RealtimeAdmission.AuthorizeWebSocketSubscription(ctx, invocation.New(*managerPrincipal, model.RequestMetadata{}),
 		model.ActionExamSittingView, model.Resource{Type: model.ResourceExamSitting, ID: scheduled.Sitting.ID.String()})
@@ -319,9 +313,7 @@ func TestExamSittingIntegration(t *testing.T) {
 	overrideScheduled, appErr := helper.App.Sittings.ScheduleExamSitting(ctx, overrideInvocation, overrideSchedule)
 	require.NoError(t, appErr, "override schedule = %#v", overrideScheduled)
 	require.NotNil(t, overrideScheduled.Sitting, "override schedule = %#v", overrideScheduled)
-	_, appErr = helper.App.Sittings.GetExamSitting(ctx, overrideInvocation, sitting.GetQuery{
-		ExamID: created.Exam.ID, SittingID: overrideScheduled.Sitting.ID,
-	})
+	_, appErr = helper.App.Sittings.GetExamSitting(ctx, overrideInvocation, created.Exam.ID, overrideScheduled.Sitting.ID)
 	require.NoError(t, appErr)
 	overridePage, appErr := helper.App.Sittings.ListExamSittings(ctx, overrideInvocation, sitting.ListQuery{
 		ExamID: created.Exam.ID, Limit: 50,

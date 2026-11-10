@@ -32,7 +32,7 @@ type programmeHTTPApplication struct {
 	updateCommand  academic.UpdateProgrammeCommand
 }
 
-func (a *programmeHTTPApplication) GetProgramme(context.Context, invocation.Invocation, academic.GetProgrammeQuery) (*model.Programme, error) {
+func (a *programmeHTTPApplication) GetProgramme(context.Context, invocation.Invocation, model.ProgrammeID) (*model.Programme, error) {
 	return a.result, nil
 }
 func (a *programmeHTTPApplication) ListProgrammes(context.Context, invocation.Invocation, academic.ListProgrammesQuery) (paging.Page[*model.Programme], error) {

@@ -63,9 +63,6 @@ func newMFAMechanics(deps mfaMechanicsDependencies) (*mfaMechanics, error) {
 	return mechanics, nil
 }
 
-// GetMFAStatusQuery returns the caller's MFA enrollment status.
-type GetMFAStatusQuery struct{}
-
 // SetupMFACommand starts pending TOTP enrollment.
 type SetupMFACommand struct {
 	AccountName string
@@ -78,14 +75,6 @@ type ActivateMFACommand struct {
 
 // ChallengeMFACommand upgrades the current session to multi-factor assurance.
 type ChallengeMFACommand struct {
-	Code string
-}
-
-// RegenerateMFARecoveryCodesCommand replaces recovery codes.
-type RegenerateMFARecoveryCodesCommand struct{}
-
-// DisableMFACommand disables MFA for the caller.
-type DisableMFACommand struct {
 	Code string
 }
 

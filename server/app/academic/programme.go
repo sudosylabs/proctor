@@ -19,9 +19,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// GetProgrammeQuery names one Programme.
-type GetProgrammeQuery struct{ ID model.ProgrammeID }
-
 // ListProgrammesQuery is the input of ListProgrammes.
 type ListProgrammesQuery struct {
 	AcademicUnitID model.AcademicUnitID
@@ -53,8 +50,7 @@ type ArchiveProgrammeCommand struct {
 }
 
 // GetProgramme reads one Programme after authorizing the caller.
-func (s *Service) GetProgramme(ctx context.Context, invocation invocation.Invocation, query GetProgrammeQuery) (*model.Programme, error) {
-	id := query.ID
+func (s *Service) GetProgramme(ctx context.Context, invocation invocation.Invocation, id model.ProgrammeID) (*model.Programme, error) {
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "programme_id")
 	}

@@ -309,7 +309,9 @@ func (s *Service) UpdateExamIntegrityReview(
 	return result, nil
 }
 
-type FinalizeCommand struct {
+// TerminalCommand names one Submission Review at an expected revision for a
+// terminal step: finalization, or release of the student result.
+type TerminalCommand struct {
 	SubmissionID           model.SubmissionID
 	ReviewID               model.SubmissionReviewID
 	ExpectedReviewRevision int64
@@ -329,7 +331,7 @@ const (
 func (s *Service) FinalizeExamIntegrityReview(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	command FinalizeCommand,
+	command TerminalCommand,
 ) (_ Result, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	return s.terminalMutation(
@@ -343,16 +345,13 @@ func (s *Service) FinalizeExamIntegrityReview(
 	)
 }
 
-// ReleaseCommand names the same target and expected revision as finalization.
-type ReleaseCommand = FinalizeCommand
-
 // ReleaseStudentExamResult idempotently and irreversibly releases a finalized
 // Submission Review's student result to the candidate, fenced by
 // ExpectedReviewRevision, for a caller authorized to release results.
 func (s *Service) ReleaseStudentExamResult(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	command ReleaseCommand,
+	command TerminalCommand,
 ) (_ Result, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
 	return s.terminalMutation(

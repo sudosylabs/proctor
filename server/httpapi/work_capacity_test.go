@@ -25,7 +25,7 @@ func TestLoginCapacityRefusalIsRetryableAndDoesNotIssueCredentials(t *testing.T)
 	logger, _ := newTestLogger(t)
 	failure := apperror.New("service.busy").Wrap(errors.New("private capacity detail"))
 	fake := &authenticationEntryHTTPApplication{loginError: failure}
-	api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{}, authenticationResource(fake, browserCookies{}))
+	api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{}, authenticationResource(fake, fake, browserCookies{}))
 	request := newJSONRequest(http.MethodPost, "/api/v1/auth/login",
 		strings.NewReader(`{"login_id":"student","password":"example-password","client_type":"web"}`))
 	response := httptest.NewRecorder()

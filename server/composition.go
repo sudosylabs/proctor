@@ -20,6 +20,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/user"
@@ -55,6 +56,7 @@ type composedWebSocket interface {
 
 var (
 	_ httpapi.Application                            = (*app.App)(nil)
+	_ httpapi.IdentityApplication                    = (*identity.Service)(nil)
 	_ httpapi.AcademicUnitApplication                = (*academic.Service)(nil)
 	_ httpapi.InstitutionApplication                 = (*academic.Service)(nil)
 	_ httpapi.ProgrammeApplication                   = (*academic.Service)(nil)
@@ -72,12 +74,12 @@ var (
 	_ httpapi.UserProfileApplication                 = (*user.Service)(nil)
 	_ httpapi.UserAccountApplication                 = (*app.App)(nil)
 	_ httpapi.UserSettingsApplication                = (*user.Service)(nil)
-	_ httpapi.AccountStateApplication                = (*app.App)(nil)
-	_ httpapi.SessionAdministrationApplication       = (*app.App)(nil)
+	_ httpapi.AccountStateApplication                = (*identity.Service)(nil)
+	_ httpapi.SessionAdministrationApplication       = (*identity.Service)(nil)
 	_ httpapi.RoleApplication                        = (*app.App)(nil)
 	_ httpapi.RoleBindingApplication                 = (*app.App)(nil)
 	_ httpapi.AuditListingApplication                = (*app.App)(nil)
-	_ httpapi.BootstrapApplication                   = (*app.App)(nil)
+	_ httpapi.BootstrapApplication                   = (*identity.Service)(nil)
 	_ httpapi.AccessPolicyApplication                = (*app.App)(nil)
 	_ httpapi.MailApplication                        = (*app.App)(nil)
 )
@@ -303,7 +305,7 @@ func composeConsumers(
 	// 4. Assemble one inert lifecycle owner. No listener, goroutine, readiness,
 	// or transport lifecycle operation runs during composition.
 	node := &Server{components: runtimeComponents{
-		platform: applicationPlatform, reconciler: application, administratorRecovery: application,
+		platform: applicationPlatform, reconciler: applicationIdentity(application), administratorRecovery: applicationIdentity(application),
 		settings: runtimeSettingsFromConfig(snapshot.Server),
 		logger:   capabilities.logger, jobs: jobRuntime, servingLease: servingLease, transport: rootTransport,
 		websocket: webSocketHub, metrics: capabilities.metrics, tracing: capabilities.tracing, readiness: readiness, listen: net.Listen, newHTTP: newHTTPServer,
@@ -406,6 +408,15 @@ func resolveBuildInfo(buildInfo httpapi.BuildInfo) httpapi.BuildInfo {
 	return buildInfo
 }
 
+// applicationIdentity returns the identity area of application, or a typed
+// nil for a reduced composition test graph that has no application.
+func applicationIdentity(application *app.App) *identity.Service {
+	if application == nil {
+		return nil
+	}
+	return application.Identity
+}
+
 // httpAPIOptions projects the application, readiness, WebSocket hub and server settings into HTTP API options.
 func httpAPIOptions(
 	application *app.App,
@@ -435,21 +446,22 @@ func httpAPIOptions(
 		academics = application.Academic
 		users = application.Users
 	}
+	identities := applicationIdentity(application)
 	return httpapi.Options{
 		Logger: apiLogger{log: capabilities.logger}, Health: readiness,
 		Metrics:     httpMetrics,
 		Tracing:     httpTracer,
-		Application: application, AcademicUnits: academics, Institutions: academics,
+		Application: application, Identity: identities, AcademicUnits: academics, Institutions: academics,
 		Programmes: academics, ProgrammeLevels: academics, AcademicPeriods: academics,
 		Classes: academics, Affiliations: academics, AcademicUnitMembers: academics,
-		ClassMembers: academics, UserProfiles: users, UserAccounts: application, UserSettings: users, AccountStates: application,
+		ClassMembers: academics, UserProfiles: users, UserAccounts: application, UserSettings: users, AccountStates: identities,
 		Invitations:                   application,
 		BrowserInvitations:            application,
 		OnboardingImports:             application,
 		StudentProgressions:           application,
 		AcademicAdministrationBatches: application,
-		SessionAdministrations:        application, Roles: application, RoleBindings: application,
-		AuditListings: application, Bootstrap: application, AccessPolicy: application, BuildInfo: buildInfo,
+		SessionAdministrations:        identities, Roles: application, RoleBindings: application,
+		AuditListings: application, Bootstrap: identities, AccessPolicy: application, BuildInfo: buildInfo,
 		Mail:      application,
 		PublicURL: snapshot.Server.PublicURL, MaxBodyBytes: snapshot.Server.MaxBodyBytes,
 		ReadTimeout: snapshot.Server.ReadTimeout.Duration, WriteTimeout: snapshot.Server.WriteTimeout.Duration,

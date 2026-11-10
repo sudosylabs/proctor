@@ -13,6 +13,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/user"
@@ -44,13 +45,13 @@ func (s *invitationService) acceptStudentClassByClaimHash(ctx context.Context, i
 	if timezone == "" {
 		timezone = invitation.Suggestions.Timezone
 	}
-	if err = checkNewPassword(command.Password, passwordIdentity{Username: command.Username, Email: invitation.TargetEmail,
+	if err = identity.CheckNewPassword(command.Password, identity.PasswordIdentity{Username: command.Username, Email: invitation.TargetEmail,
 		DisplayName: command.DisplayName, FirstName: command.FirstName, LastName: command.LastName}); err != nil {
 		return nil, err
 	}
 	hash, err := s.deps.Hasher.Hash(ctx, command.Password)
 	if err != nil {
-		return nil, passwordHashError(err, "invitation.unavailable")
+		return nil, identity.PasswordHashError(err, "invitation.unavailable")
 	}
 	account, defaultJob, err := prepareUserDefaultProfilePictureJob(&model.User{Username: command.Username, Email: invitation.TargetEmail,
 		EmailVerified: true, DisplayName: command.DisplayName, FirstName: command.FirstName, LastName: command.LastName,
@@ -122,13 +123,13 @@ func (s *invitationService) acceptTeacherAcademicUnitByClaimHash(ctx context.Con
 	if timezone == "" {
 		timezone = invitation.Suggestions.Timezone
 	}
-	if err = checkNewPassword(command.Password, passwordIdentity{Username: command.Username, Email: invitation.TargetEmail,
+	if err = identity.CheckNewPassword(command.Password, identity.PasswordIdentity{Username: command.Username, Email: invitation.TargetEmail,
 		DisplayName: command.DisplayName, FirstName: command.FirstName, LastName: command.LastName}); err != nil {
 		return nil, err
 	}
 	hash, err := s.deps.Hasher.Hash(ctx, command.Password)
 	if err != nil {
-		return nil, passwordHashError(err, "invitation.unavailable")
+		return nil, identity.PasswordHashError(err, "invitation.unavailable")
 	}
 	account, defaultJob, err := prepareUserDefaultProfilePictureJob(&model.User{Username: command.Username, Email: invitation.TargetEmail,
 		EmailVerified: true, DisplayName: command.DisplayName, FirstName: command.FirstName, LastName: command.LastName,
@@ -202,7 +203,7 @@ func (s *invitationService) acceptExternalIdentity(ctx context.Context, state *m
 		return nil, err
 	}
 	at := model.TimeUTC(s.deps.Now())
-	userCandidate := externalUserCandidate(assertion)
+	userCandidate := identity.ExternalUserCandidate(assertion)
 	userCandidate.Email, userCandidate.EmailVerified = invitation.TargetEmail, true
 	account, defaultJob, preparationErr := prepareUserDefaultProfilePictureJob(userCandidate, at)
 	var settings *model.UserSettingsDocument
@@ -289,7 +290,7 @@ func (s *invitationService) acceptScopedRole(ctx context.Context, invocation inv
 	}
 	principal := invocation.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
-		return nil, invalidTokenAppError()
+		return nil, access.InvalidTokenAppError()
 	}
 	if !model.IsValidCredentialToken(claim) {
 		return nil, apperror.New("invitation.invalid")
@@ -307,7 +308,7 @@ func (s *invitationService) acceptScopedRoleByClaimHash(
 ) (*InvitationAcceptanceView, error) {
 	principal := invocation.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess || !model.IsValidTokenHash(claimHash) {
-		return nil, invalidTokenAppError()
+		return nil, access.InvalidTokenAppError()
 	}
 	invitation, err := s.deps.Store.GetByClaimHash(ctx, claimHash)
 	if err != nil || invitation.Purpose != purpose {

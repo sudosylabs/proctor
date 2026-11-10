@@ -154,6 +154,7 @@ type Options struct {
 	Localizer                     Localizer
 	Health                        Health
 	Application                   Application
+	Identity                      IdentityApplication
 	AcademicUnits                 AcademicUnitApplication
 	Institutions                  InstitutionApplication
 	Programmes                    ProgrammeApplication

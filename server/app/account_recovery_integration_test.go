@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/packages/mail"
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
@@ -42,7 +42,7 @@ func TestAccountRecoveryIntegration(t *testing.T) {
 		}),
 		testlib.WithStore(persistence),
 	)
-	bootstrap, appErr := helper.App.BootstrapInstallation(context.Background(), invocation.Invocation{}, app.BootstrapInstallationCommand{
+	bootstrap, appErr := helper.App.Identity.BootstrapInstallation(context.Background(), invocation.Invocation{}, identity.BootstrapInstallationCommand{
 		InstitutionName: "recovery-university", InstitutionDisplayName: "Recovery University",
 		AdministratorUsername: "recovery-admin", AdministratorEmail: "recovery-admin@example.edu",
 		AdministratorDisplayName: "Recovery Admin", AdministratorLocale: "en", AdministratorTimezone: "UTC",
@@ -52,7 +52,7 @@ func TestAccountRecoveryIntegration(t *testing.T) {
 	institution := bootstrap.Institution
 	const oldPassword = "correct horse battery staple"
 	const newPassword = "new correct horse battery staple"
-	user, appErr := helper.App.CreateLocalUser(context.Background(), app.CreateLocalUserCommand{User: &model.User{
+	user, appErr := helper.App.Identity.CreateLocalUser(context.Background(), identity.CreateLocalUserCommand{User: &model.User{
 		Username: "recovery-user", Email: "recovery-user@example.edu",
 		DisplayName: "Recovery User",
 	}, Password: oldPassword})
@@ -223,7 +223,7 @@ func TestCurrentAccessPolicyGatesLocalLoginAndPasswordRecoveryRealGraph(t *testi
 		cfg.Authentication.AccountRecovery.RateLimit.MaximumAttempts = 20
 		cfg.Authentication.AccountRecovery.RateLimit.MaximumSourceAttempts = 100
 	}), testlib.WithStore(persistence))
-	bootstrap, appErr := helper.App.BootstrapInstallation(context.Background(), invocation.Invocation{}, app.BootstrapInstallationCommand{
+	bootstrap, appErr := helper.App.Identity.BootstrapInstallation(context.Background(), invocation.Invocation{}, identity.BootstrapInstallationCommand{
 		InstitutionName: "policy-recovery", InstitutionDisplayName: "Policy Recovery",
 		AdministratorUsername: "policy-recovery-admin", AdministratorEmail: "policy-recovery-admin@example.edu",
 		AdministratorLocale: "en", AdministratorTimezone: "UTC",
@@ -232,7 +232,7 @@ func TestCurrentAccessPolicyGatesLocalLoginAndPasswordRecoveryRealGraph(t *testi
 	require.NoError(t, appErr, "bootstrap")
 	require.NotNil(t, bootstrap, "bootstrap")
 	const password = "correct horse battery staple"
-	user, appErr := helper.App.CreateLocalUser(context.Background(), app.CreateLocalUserCommand{User: &model.User{
+	user, appErr := helper.App.Identity.CreateLocalUser(context.Background(), identity.CreateLocalUserCommand{User: &model.User{
 		Username: "policy-recovery-user", Email: "policy-recovery-user@example.edu",
 	}, Password: password})
 	require.NoError(t, appErr)

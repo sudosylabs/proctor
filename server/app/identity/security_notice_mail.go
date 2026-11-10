@@ -1,0 +1,25 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+
+package identity
+
+import (
+	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/store"
+)
+
+type accountStateMailPreparer interface {
+	PrepareAccountStateChanged(mail.NoticePreparation, bool) (*store.PreparedMail, error)
+}
+
+type sessionAdministrationMailPreparer interface {
+	PrepareSessionsRevokedByAdministrator(mail.NoticePreparation) (*store.PreparedMail, error)
+}
+
+type mfaNoticeMailPreparer interface {
+	PrepareMFANotice(mail.NoticePreparation, mail.MFANoticeKind) (*store.PreparedMail, error)
+}

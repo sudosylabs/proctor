@@ -22,6 +22,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
@@ -48,11 +49,11 @@ func TestRoleHolderMFAPolicyRestrictsSignInUntilEnrollment(t *testing.T) {
 		"password":         adminPassword,
 	}, "")
 	require.Equal(t, http.StatusCreated, bootstrap.Code, "bootstrap=%d %s", bootstrap.Code, bootstrap.Body.String())
-	admin, err := helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{LoginID: "role-holder-mfa-admin", Password: adminPassword,
+	admin, err := helper.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{LoginID: "role-holder-mfa-admin", Password: adminPassword,
 		ClientType: model.SessionClientWeb, Source: "127.0.0.1:1"})
 	require.NoError(t, err)
 	strengthenRoleAdministratorSession(t, helper.Handler(), admin.Tokens.AccessToken)
-	adminPrincipal, err := helper.App.AuthenticateAccess(ctx, admin.Tokens.AccessToken)
+	adminPrincipal, err := helper.App.Identity.AuthenticateAccess(ctx, admin.Tokens.AccessToken)
 	require.NoError(t, err)
 	adminInvocation := invocation.New(*adminPrincipal, model.RequestMetadata{RequestID: "role-holder-mfa-policy"})
 	current, err := helper.App.GetAccessPolicy(ctx, adminInvocation)
@@ -77,7 +78,7 @@ func TestRoleHolderMFAPolicyRestrictsSignInUntilEnrollment(t *testing.T) {
 		ScopeType: model.RoleScopeInstitution, ScopeID: institution.ID.String(), StartsAt: model.TimeFromMillis(model.GetMillis() - 100)})
 	require.NoError(t, err)
 
-	restricted, err := helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{LoginID: "role-holder-mfa-teacher", Password: roleHolderPassword,
+	restricted, err := helper.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{LoginID: "role-holder-mfa-teacher", Password: roleHolderPassword,
 		ClientType: model.SessionClientWeb, Source: "127.0.0.1:2"})
 	require.NoError(t, err)
 	require.True(t, restricted.Session.MFAEnrollmentRequired, "a role holder without two-step gets a restricted Session")
@@ -93,10 +94,10 @@ func TestRoleHolderMFAPolicyRestrictsSignInUntilEnrollment(t *testing.T) {
 	require.True(t, state.EnrollmentRequired)
 	require.False(t, state.RecoveryRequired)
 
-	_, err = helper.App.AuthenticateDesktopAuthorizationLocally(ctx, invocation.Invocation{}, app.AuthenticateDesktopAuthorizationLocallyCommand{
+	_, err = helper.App.Identity.AuthenticateDesktopAuthorizationLocally(ctx, invocation.Invocation{}, identity.AuthenticateDesktopAuthorizationLocallyCommand{
 		Binding: model.NewCredentialToken(), LoginID: "role-holder-mfa-teacher", Password: roleHolderPassword, Source: "127.0.0.1:3"})
 	require.True(t, apperror.Is(err, "authentication.mfa.enrollment_required"), "Desktop sign-in error = %v", err)
-	_, err = helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{LoginID: "role-holder-mfa-teacher", Password: roleHolderPassword,
+	_, err = helper.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{LoginID: "role-holder-mfa-teacher", Password: roleHolderPassword,
 		ClientType: model.SessionClientCLI, Source: "127.0.0.1:4"})
 	require.True(t, apperror.Is(err, "authentication.mfa.enrollment_required"), "CLI sign-in error = %v", err)
 
@@ -130,16 +131,16 @@ func TestAccessPolicySessionLengthAppliesToRunningAndNewSessions(t *testing.T) {
 		"password":         adminPassword,
 	}, "")
 	require.Equal(t, http.StatusCreated, bootstrap.Code, "bootstrap=%d %s", bootstrap.Code, bootstrap.Body.String())
-	admin, err := helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{LoginID: "session-length-admin", Password: adminPassword,
+	admin, err := helper.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{LoginID: "session-length-admin", Password: adminPassword,
 		ClientType: model.SessionClientWeb, Source: "127.0.0.1:1"})
 	require.NoError(t, err)
 	strengthenRoleAdministratorSession(t, helper.Handler(), admin.Tokens.AccessToken)
-	adminPrincipal, err := helper.App.AuthenticateAccess(ctx, admin.Tokens.AccessToken)
+	adminPrincipal, err := helper.App.Identity.AuthenticateAccess(ctx, admin.Tokens.AccessToken)
 	require.NoError(t, err)
 	adminInvocation := invocation.New(*adminPrincipal, model.RequestMetadata{RequestID: "session-length-policy"})
 	const learnerPassword = "violet compass meadow sturdy kettle"
 	createIntegrationUser(t, helper, "session-length-learner", learnerPassword)
-	running, err := helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{LoginID: "session-length-learner", Password: learnerPassword,
+	running, err := helper.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{LoginID: "session-length-learner", Password: learnerPassword,
 		ClientType: model.SessionClientWeb, Source: "127.0.0.1:2"})
 	require.NoError(t, err)
 
@@ -160,7 +161,7 @@ func TestAccessPolicySessionLengthAppliesToRunningAndNewSessions(t *testing.T) {
 	still := performJSONRequest(helper.Handler(), http.MethodGet, "/api/v1/users/me", nil, running.Tokens.AccessToken)
 	require.Equal(t, http.StatusOK, still.Code, "a shortened Session stays live: %s", still.Body.String())
 
-	fresh, err := helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{LoginID: "session-length-learner", Password: learnerPassword,
+	fresh, err := helper.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{LoginID: "session-length-learner", Password: learnerPassword,
 		ClientType: model.SessionClientWeb, Source: "127.0.0.1:3"})
 	require.NoError(t, err)
 	lifetime := fresh.Session.ExpiresAt.Sub(fresh.Session.CreatedAt)
@@ -200,7 +201,7 @@ func TestRoleHolderMFAPolicyPausesWhileMFAIsDisabled(t *testing.T) {
 	_, err := persistence.GetMaster().Exec(ctx, `UPDATE access_policies SET role_holder_mfa_required=true WHERE singleton=1`)
 	require.NoError(t, err)
 
-	admin, err := helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{LoginID: "paused-rule-admin", Password: adminPassword,
+	admin, err := helper.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{LoginID: "paused-rule-admin", Password: adminPassword,
 		ClientType: model.SessionClientWeb, Source: "127.0.0.1:1"})
 	require.NoError(t, err)
 	require.False(t, admin.Session.MFAEnrollmentRequired, "a paused rule restricts nobody")
@@ -217,11 +218,11 @@ func TestRoleHolderMFAPolicyPausesWhileMFAIsDisabled(t *testing.T) {
 	require.True(t, policy.Required)
 	require.False(t, policy.Enforced)
 
-	_, err = helper.App.AuthenticateDesktopAuthorizationLocally(ctx, invocation.Invocation{}, app.AuthenticateDesktopAuthorizationLocallyCommand{
+	_, err = helper.App.Identity.AuthenticateDesktopAuthorizationLocally(ctx, invocation.Invocation{}, identity.AuthenticateDesktopAuthorizationLocallyCommand{
 		Binding: model.NewCredentialToken(), LoginID: "paused-rule-admin", Password: adminPassword, Source: "127.0.0.1:2"})
 	require.Error(t, err, "an unbound Desktop transaction still fails")
 	require.False(t, apperror.Is(err, "authentication.mfa.enrollment_required"), "Desktop sign-in is not refused by a paused rule: %v", err)
-	cli, err := helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{LoginID: "paused-rule-admin", Password: adminPassword,
+	cli, err := helper.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{LoginID: "paused-rule-admin", Password: adminPassword,
 		ClientType: model.SessionClientCLI, Source: "127.0.0.1:3"})
 	require.NoError(t, err, "CLI sign-in is not refused by a paused rule")
 	require.False(t, cli.Session.MFAEnrollmentRequired)

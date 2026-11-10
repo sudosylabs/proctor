@@ -11,14 +11,14 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type DesktopRegistrations interface {
-	ListDesktopRegistrations(context.Context, invocation.Invocation, app.ListDesktopRegistrationsQuery) ([]*model.DesktopRegistration, error)
-	RevokeDesktopRegistration(context.Context, invocation.Invocation, app.RevokeDesktopRegistrationCommand) error
+	ListDesktopRegistrations(context.Context, invocation.Invocation, identity.ListDesktopRegistrationsQuery) ([]*model.DesktopRegistration, error)
+	RevokeDesktopRegistration(context.Context, invocation.Invocation, identity.RevokeDesktopRegistrationCommand) error
 }
 
 type desktopRegistrationResponse struct {
@@ -52,7 +52,7 @@ func desktopRegistrationResource(application DesktopRegistrations) apiResource {
 
 func (m desktopRegistrationResourceModule) list(request operationRequest) (operationResult, error) {
 	registrations, err := m.application.ListDesktopRegistrations(
-		request.context, request.invocation(), app.ListDesktopRegistrationsQuery{},
+		request.context, request.invocation(), identity.ListDesktopRegistrationsQuery{},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -78,7 +78,7 @@ func (m desktopRegistrationResourceModule) revoke(request operationRequest) (ope
 	}
 	if err = m.application.RevokeDesktopRegistration(
 		request.context, request.invocation(),
-		app.RevokeDesktopRegistrationCommand{RegistrationID: registrationID},
+		identity.RevokeDesktopRegistrationCommand{RegistrationID: registrationID},
 	); err != nil {
 		return operationResult{}, err
 	}

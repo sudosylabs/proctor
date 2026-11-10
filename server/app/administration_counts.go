@@ -11,6 +11,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
@@ -90,7 +91,7 @@ func newAdministrationCountsService(deps administrationCountsServiceDependencies
 func (s *administrationCountsService) AdministrationCounts(ctx context.Context, invocation invocation.Invocation) (AdministrationCounts, error) {
 	principal := invocation.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
-		return AdministrationCounts{}, invalidTokenAppError()
+		return AdministrationCounts{}, access.InvalidTokenAppError()
 	}
 	var counts AdministrationCounts
 	var err error

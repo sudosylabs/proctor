@@ -12,6 +12,7 @@ import (
 	"errors"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -179,17 +180,7 @@ func (s *realtimeService) InvalidateCurrentUserContext(ctx context.Context, user
 	return s.PublishRealtimeEvent(ctx, event)
 }
 
-var _ authenticationSecurityEffects = (*realtimeService)(nil)
-
-func sessionIDs(sessions []*model.Session) []model.SessionID {
-	ids := make([]model.SessionID, 0, len(sessions))
-	for _, session := range sessions {
-		if session != nil {
-			ids = append(ids, session.ID)
-		}
-	}
-	return ids
-}
+var _ identity.SecurityEffects = (*realtimeService)(nil)
 
 func invalidRealtimeRequest(field string) error {
 	return apperror.New("websocket.request.invalid").WithField("field", field)

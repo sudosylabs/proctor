@@ -13,6 +13,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -344,7 +345,7 @@ func (a roleAuthorization) AuthorizeInstitution(ctx context.Context, invocation 
 }
 
 type roleRealtimeEffects struct {
-	effects authorizationInvalidationEffects
+	effects identity.AuthorizationInvalidationEffects
 }
 
 func (e roleRealtimeEffects) AuthorizationChanged(ctx context.Context) {

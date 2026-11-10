@@ -18,6 +18,7 @@ import (
 
 	mailpkg "github.com/sudosylabs/proctor/packages/mail"
 	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	appmail "github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/httpapi"
@@ -85,21 +86,21 @@ func applicationDependencies(
 		LoopbackHTTPDevelopment: explicitLoopbackHTTPDevelopment(cfg.Server.PublicURL),
 		Password:                passwordPolicyFromConfig(auth),
 		Sessions:                sessionPolicyFromConfig(auth),
-		LoginRateLimit: app.LoginRateLimitPolicy{
+		LoginRateLimit: identity.LoginRateLimitPolicy{
 			Window:                     auth.LoginRateLimit.Window.Duration,
 			MaximumAttempts:            auth.LoginRateLimit.MaximumAttempts,
 			MaximumSourceAttempts:      auth.LoginRateLimit.MaximumSourceAttempts,
 			AccountFailuresBeforeDelay: auth.LoginRateLimit.AccountFailuresBeforeDelay,
 			MaximumAccountFailureDelay: auth.LoginRateLimit.MaximumAccountFailureDelay.Duration,
 		},
-		PersonalAccessToken: app.PersonalAccessTokenPolicy{
+		PersonalAccessToken: identity.PersonalAccessTokenPolicy{
 			MinimumLifetime:        auth.PersonalAccessTokens.MinimumLifetime.Duration,
 			MaximumLifetime:        auth.PersonalAccessTokens.MaximumLifetime.Duration,
 			LastUsedUpdateInterval: auth.PersonalAccessTokens.LastUsedUpdateInterval.Duration,
 			MaximumPerUser:         auth.PersonalAccessTokens.MaximumPerUser,
 		},
 		AccountRecovery: accountRecoveryPolicyFromConfig(auth),
-		MFA: app.MFAPolicy{
+		MFA: identity.MFAPolicy{
 			Enabled:           auth.MFA.Enabled,
 			Issuer:            auth.MFA.Issuer,
 			SetupTTL:          auth.MFA.SetupTTL.Duration,
@@ -114,8 +115,8 @@ func applicationDependencies(
 }
 
 // passwordPolicyFromConfig translates the configured password settings into the application password policy.
-func passwordPolicyFromConfig(auth config.Authentication) app.PasswordPolicy {
-	return app.PasswordPolicy{
+func passwordPolicyFromConfig(auth config.Authentication) identity.PasswordPolicy {
+	return identity.PasswordPolicy{
 		MaximumConcurrentOperations: auth.Password.MaximumConcurrentOperations,
 		MinimumLength:               auth.Password.MinimumLength,
 		MaximumLength:               auth.Password.MaximumLength,
@@ -129,8 +130,8 @@ func passwordPolicyFromConfig(auth config.Authentication) app.PasswordPolicy {
 }
 
 // sessionPolicyFromConfig translates the configured Session settings into the application Session policy.
-func sessionPolicyFromConfig(auth config.Authentication) app.SessionPolicy {
-	return app.SessionPolicy{
+func sessionPolicyFromConfig(auth config.Authentication) identity.SessionPolicy {
+	return identity.SessionPolicy{
 		AccessTTL:              auth.Sessions.AccessTTL.Duration,
 		RefreshTTL:             auth.Sessions.RefreshTTL.Duration,
 		IdleTTL:                auth.Sessions.IdleTTL.Duration,
@@ -142,12 +143,12 @@ func sessionPolicyFromConfig(auth config.Authentication) app.SessionPolicy {
 }
 
 // accountRecoveryPolicyFromConfig translates the configured account recovery settings into the application policy.
-func accountRecoveryPolicyFromConfig(auth config.Authentication) app.AccountRecoveryPolicy {
-	return app.AccountRecoveryPolicy{
+func accountRecoveryPolicyFromConfig(auth config.Authentication) identity.AccountRecoveryPolicy {
+	return identity.AccountRecoveryPolicy{
 		EmailVerificationTTL: auth.AccountRecovery.EmailVerificationTTL.Duration,
 		PasswordResetTTL:     auth.AccountRecovery.PasswordResetTTL.Duration,
 		EmailChangeUndoTTL:   auth.AccountRecovery.EmailChangeUndoTTL.Duration,
-		RateLimit: app.LoginRateLimitPolicy{
+		RateLimit: identity.LoginRateLimitPolicy{
 			Window:                auth.AccountRecovery.RateLimit.Window.Duration,
 			MaximumAttempts:       auth.AccountRecovery.RateLimit.MaximumAttempts,
 			MaximumSourceAttempts: auth.AccountRecovery.RateLimit.MaximumSourceAttempts,
@@ -156,11 +157,11 @@ func accountRecoveryPolicyFromConfig(auth config.Authentication) app.AccountReco
 }
 
 // externalAuthenticationPolicyFromConfig translates the configured external authentication settings into the application policy.
-func externalAuthenticationPolicyFromConfig(auth config.Authentication, publicURL, nodeID string) app.ExternalAuthenticationPolicy {
-	return app.ExternalAuthenticationPolicy{
+func externalAuthenticationPolicyFromConfig(auth config.Authentication, publicURL, nodeID string) identity.ExternalAuthenticationPolicy {
+	return identity.ExternalAuthenticationPolicy{
 		PublicURL:     publicURL,
 		LoginStateTTL: auth.External.LoginStateTTL.Duration,
-		LoginRateLimit: app.LoginRateLimitPolicy{
+		LoginRateLimit: identity.LoginRateLimitPolicy{
 			Window:                auth.LoginRateLimit.Window.Duration,
 			MaximumAttempts:       auth.LoginRateLimit.MaximumAttempts,
 			MaximumSourceAttempts: auth.LoginRateLimit.MaximumSourceAttempts,
@@ -186,7 +187,7 @@ type platformAuthenticationCache struct {
 func (c platformAuthenticationCache) Get(ctx context.Context, key string) ([]byte, error) {
 	data, err := c.cache.Get(ctx, key)
 	if errors.Is(err, platform.ErrCacheMiss) {
-		return nil, app.ErrAuthenticationCacheMiss
+		return nil, identity.ErrAuthenticationCacheMiss
 	}
 	return data, err
 }
@@ -208,7 +209,7 @@ func (c platformAuthenticationCache) SetIfAbsent(
 ) error {
 	err := c.cache.Set(ctx, key, value, ttl, platform.CacheSetIfAbsent)
 	if errors.Is(err, platform.ErrCacheNotStored) {
-		return app.ErrAuthenticationCacheNotStored
+		return identity.ErrAuthenticationCacheNotStored
 	}
 	return err
 }
@@ -313,7 +314,7 @@ func (a externalProviderRegistryAdapter) Descriptors() []model.ExternalAuthentic
 
 func (a externalProviderRegistryAdapter) Provider(
 	id string,
-) (app.ExternalIdentityProvider, bool) {
+) (identity.ExternalIdentityProvider, bool) {
 	provider, ok := a.registry.Provider(id)
 	if !ok {
 		return nil, false
@@ -335,8 +336,8 @@ func (a externalIdentityProviderAdapter) AutoProvision() bool {
 
 func (a externalIdentityProviderAdapter) Begin(
 	ctx context.Context,
-	request app.ExternalProviderBeginRequest,
-) (*app.ExternalProviderBeginResponse, error) {
+	request identity.ExternalProviderBeginRequest,
+) (*identity.ExternalProviderBeginResponse, error) {
 	response, err := a.provider.Begin(ctx, externalauth.BeginRequest{
 		CallbackURL:         request.CallbackURL,
 		State:               request.State,
@@ -349,7 +350,7 @@ func (a externalIdentityProviderAdapter) Begin(
 	if response == nil {
 		return nil, nil
 	}
-	return &app.ExternalProviderBeginResponse{RedirectURL: response.RedirectURL}, nil
+	return &identity.ExternalProviderBeginResponse{RedirectURL: response.RedirectURL}, nil
 }
 
 func (a externalIdentityProviderAdapter) State(
@@ -364,7 +365,7 @@ func (a externalIdentityProviderAdapter) State(
 
 func (a externalIdentityProviderAdapter) Complete(
 	ctx context.Context,
-	request app.ExternalProviderCompleteRequest,
+	request identity.ExternalProviderCompleteRequest,
 ) (*model.ExternalAuthenticationAssertion, error) {
 	assertion, err := a.provider.Complete(ctx, externalauth.CompleteRequest{
 		CallbackURL:             request.CallbackURL,
@@ -382,11 +383,11 @@ func (a externalIdentityProviderAdapter) Complete(
 func mapExternalProviderError(err error) error {
 	switch {
 	case errors.Is(err, externalauth.ErrAuthenticationRejected):
-		return app.ErrExternalAuthenticationRejected
+		return identity.ErrExternalAuthenticationRejected
 	case errors.Is(err, externalauth.ErrInvalidResponse):
-		return app.ErrExternalAuthenticationInvalid
+		return identity.ErrExternalAuthenticationInvalid
 	case errors.Is(err, externalauth.ErrProviderUnavailable):
-		return app.ErrExternalAuthenticationUnavailable
+		return identity.ErrExternalAuthenticationUnavailable
 	default:
 		return err
 	}

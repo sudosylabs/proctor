@@ -15,6 +15,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
@@ -70,7 +71,7 @@ func (s *onboardingImportService) resolveAcademicAdministrationImportRow(ctx con
 	row.TargetRevision = revision
 
 	if operation.requiresStrongRecentSession() {
-		if err = requireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.AdministrationBatches.deps.RecentTTL); err != nil {
+		if err = identity.RequireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.AdministrationBatches.deps.RecentTTL); err != nil {
 			return err
 		}
 	}
@@ -352,7 +353,7 @@ func (s *onboardingImportService) resolveExactAcademicUnit(ctx context.Context, 
 
 func (s *onboardingImportService) previewRoleAuthorization(ctx context.Context, invocation invocation.Invocation, role *model.Role, resourceType model.ResourceType, scopeType model.RoleScopeType, scopeID string) error {
 	if s.deps.Invitations != nil {
-		if err := requireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.Invitations.deps.RecentAuthenticationTTL); err != nil {
+		if err := identity.RequireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.Invitations.deps.RecentAuthenticationTTL); err != nil {
 			return err
 		}
 	}

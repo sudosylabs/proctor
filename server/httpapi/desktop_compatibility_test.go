@@ -19,26 +19,26 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type desktopCompatibilityHTTPApplication struct {
-	query          app.DesktopCompatibilityQuery
+	query          identity.DesktopCompatibilityQuery
 	evaluations    int
-	evaluation     app.DesktopCompatibilityResult
+	evaluation     identity.DesktopCompatibilityResult
 	evaluationErr  error
 	policy         *model.DesktopCompatibilityPolicy
-	replaceCommand app.ReplaceDesktopCompatibilityPolicyCommand
+	replaceCommand identity.ReplaceDesktopCompatibilityPolicyCommand
 }
 
 func (a *desktopCompatibilityHTTPApplication) EvaluateDesktopCompatibility(
 	_ context.Context,
 	_ invocation.Invocation,
-	query app.DesktopCompatibilityQuery,
-) (app.DesktopCompatibilityResult, error) {
+	query identity.DesktopCompatibilityQuery,
+) (identity.DesktopCompatibilityResult, error) {
 	a.query = query
 	a.evaluations++
 	return a.evaluation, a.evaluationErr
@@ -54,7 +54,7 @@ func (a *desktopCompatibilityHTTPApplication) GetDesktopCompatibilityPolicy(
 func (a *desktopCompatibilityHTTPApplication) ReplaceDesktopCompatibilityPolicy(
 	_ context.Context,
 	_ invocation.Invocation,
-	command app.ReplaceDesktopCompatibilityPolicyCommand,
+	command identity.ReplaceDesktopCompatibilityPolicyCommand,
 ) (*model.DesktopCompatibilityPolicy, error) {
 	a.replaceCommand = command
 	return a.policy.Clone(), nil
@@ -65,9 +65,9 @@ func TestSystemPingReturnsRequestSpecificNoStoreCompatibility(t *testing.T) {
 	logger, _ := newTestLogger(t)
 	now := time.Date(2026, time.August, 28, 10, 11, 12, 345_000_000, time.UTC)
 	applicationFake := &desktopCompatibilityHTTPApplication{
-		evaluation: app.DesktopCompatibilityResult{
+		evaluation: identity.DesktopCompatibilityResult{
 			Availability:            model.DesktopAvailabilityReady,
-			Compatibility:           app.DesktopCompatibilityCompatible,
+			Compatibility:           identity.DesktopCompatibilityCompatible,
 			Reason:                  "compatible",
 			MinimumDesktopRelease:   "1.2.0",
 			MaximumDesktopRelease:   "1.4.0",
@@ -120,10 +120,10 @@ func TestSystemPingPublishesMaintenanceAvailabilityAndRetryTime(t *testing.T) {
 	retryAt := time.Date(2026, time.August, 28, 11, 0, 0, 0, time.UTC)
 	serverTime := retryAt.Add(-time.Minute)
 	applicationFake := &desktopCompatibilityHTTPApplication{
-		evaluation: app.DesktopCompatibilityResult{
+		evaluation: identity.DesktopCompatibilityResult{
 			Availability:         model.DesktopAvailabilityMaintenance,
 			RetryAt:              model.OptionalTimeFrom(retryAt),
-			Compatibility:        app.DesktopCompatibilityCompatible,
+			Compatibility:        identity.DesktopCompatibilityCompatible,
 			Reason:               "compatible",
 			AdministratorMessage: "Scheduled maintenance is in progress.",
 		},
@@ -155,10 +155,10 @@ func TestSystemPingOmitsRetryTimeNotLaterThanItsServerTime(t *testing.T) {
 	logger, _ := newTestLogger(t)
 	serverTime := time.Date(2026, time.August, 28, 11, 0, 0, 0, time.UTC)
 	applicationFake := &desktopCompatibilityHTTPApplication{
-		evaluation: app.DesktopCompatibilityResult{
+		evaluation: identity.DesktopCompatibilityResult{
 			Availability:  model.DesktopAvailabilityMaintenance,
 			RetryAt:       model.OptionalTimeFrom(serverTime),
-			Compatibility: app.DesktopCompatibilityCompatible,
+			Compatibility: identity.DesktopCompatibilityCompatible,
 			Reason:        "compatible",
 		},
 	}

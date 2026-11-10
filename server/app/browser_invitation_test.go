@@ -98,7 +98,7 @@ func (a *browserInvitationAttemptLimiterFake) Check(context.Context, string, str
 func TestBrowserInvitationPreservesPasswordWorkFailures(t *testing.T) {
 	for _, purpose := range []model.InvitationPurpose{model.InvitationPurposeStudentClass, model.InvitationPurposeTeacherAcademicUnit} {
 		t.Run(string(purpose), func(t *testing.T) {
-			testPasswordHashFailures(t, "invitation.unavailable", func(t *testing.T, ctx context.Context, hasher passwordHash) error {
+			testPasswordHashFailures(t, "invitation.unavailable", func(t *testing.T, ctx context.Context, hasher testPasswordHasher) error {
 				invitation := &model.Invitation{ID: model.NewInvitationID(), Purpose: purpose,
 					ClaimHash: model.HashInvitationClaim(model.NewCredentialToken()), TargetEmail: "invited@example.edu"}
 				persistence := &invitationStoreFake{invitation: invitation}

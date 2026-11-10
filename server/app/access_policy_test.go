@@ -17,6 +17,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -62,10 +63,12 @@ func (a *accessPolicyAuthorizationFake) Authorize(_ context.Context, _ invocatio
 }
 
 type accessPolicyCapabilitiesFake struct {
-	snapshot AccessPolicyCapabilitySnapshot
+	snapshot identity.AccessPolicyCapabilitySnapshot
 }
 
-func (c *accessPolicyCapabilitiesFake) Snapshot() AccessPolicyCapabilitySnapshot { return c.snapshot }
+func (c *accessPolicyCapabilitiesFake) Snapshot() identity.AccessPolicyCapabilitySnapshot {
+	return c.snapshot
+}
 
 type accessPolicyAuditFake struct {
 	beginID  string
@@ -107,8 +110,8 @@ func accessPolicyFixture(t *testing.T) (*accessPolicyService, *accessPolicyStore
 	require.NoError(t, err)
 	policy := model.NewInitialAccessPolicy(model.NewAccessPolicyID(), at)
 	persistence := &accessPolicyStoreFake{snapshot: &store.AccessPolicySnapshot{Policy: policy}}
-	capabilities := &accessPolicyCapabilitiesFake{snapshot: AccessPolicyCapabilitySnapshot{
-		Providers:   []AccessPolicyProviderCapability{{Descriptor: model.ExternalAuthenticationProvider{ID: "campus-oidc", DisplayName: "Campus", Type: "oidc"}, AutoProvision: true}},
+	capabilities := &accessPolicyCapabilitiesFake{snapshot: identity.AccessPolicyCapabilitySnapshot{
+		Providers:   []identity.AccessPolicyProviderCapability{{Descriptor: model.ExternalAuthenticationProvider{ID: "campus-oidc", DisplayName: "Campus", Type: "oidc"}, AutoProvision: true}},
 		DurableMail: true,
 	}}
 	effects := &accessPolicyEffectsFake{}
@@ -133,13 +136,13 @@ func (accessPolicyEffectFailuresFake) Report(context.Context, string, error) {}
 
 type accessPolicyProviderSourceFake struct {
 	descriptors []model.ExternalAuthenticationProvider
-	providers   map[string]ExternalIdentityProvider
+	providers   map[string]identity.ExternalIdentityProvider
 }
 
 func (s accessPolicyProviderSourceFake) Descriptors() []model.ExternalAuthenticationProvider {
 	return append([]model.ExternalAuthenticationProvider(nil), s.descriptors...)
 }
-func (s accessPolicyProviderSourceFake) Provider(id string) (ExternalIdentityProvider, bool) {
+func (s accessPolicyProviderSourceFake) Provider(id string) (identity.ExternalIdentityProvider, bool) {
 	provider, ok := s.providers[id]
 	return provider, ok
 }
@@ -165,7 +168,7 @@ func TestDeploymentAccessPolicyCapabilitiesUseOnlyLiveProvidersAndMailAvailabili
 				{ID: "removed", DisplayName: "Removed", Type: "oidc"},
 				{ID: "campus", DisplayName: "Campus", Type: "oidc"},
 			},
-			providers: map[string]ExternalIdentityProvider{"campus": provider},
+			providers: map[string]identity.ExternalIdentityProvider{"campus": provider},
 		},
 		mail: accessPolicyMailSenderFake{enabled: true}, health: accessPolicyMailHealthFake{code: MailHealthHealthy},
 	}).Snapshot()
@@ -211,13 +214,13 @@ func (p *accessPolicyExternalProviderFake) Descriptor() model.ExternalAuthentica
 	return model.ExternalAuthenticationProvider{ID: "campus", DisplayName: "Campus", Type: "oidc"}
 }
 func (p *accessPolicyExternalProviderFake) AutoProvision() bool { return p.autoProvision }
-func (*accessPolicyExternalProviderFake) Begin(context.Context, ExternalProviderBeginRequest) (*ExternalProviderBeginResponse, error) {
+func (*accessPolicyExternalProviderFake) Begin(context.Context, identity.ExternalProviderBeginRequest) (*identity.ExternalProviderBeginResponse, error) {
 	return nil, nil
 }
 func (*accessPolicyExternalProviderFake) State(model.ExternalAuthenticationCallback) (string, error) {
 	return "", nil
 }
-func (*accessPolicyExternalProviderFake) Complete(context.Context, ExternalProviderCompleteRequest) (*model.ExternalAuthenticationAssertion, error) {
+func (*accessPolicyExternalProviderFake) Complete(context.Context, identity.ExternalProviderCompleteRequest) (*model.ExternalAuthenticationAssertion, error) {
 	return nil, nil
 }
 
@@ -429,7 +432,7 @@ func TestPublicAccessDiscoveryFiltersUnavailableProvidersAndRestoresByStableID(t
 	require.Equal(t, "https://proctor.example.edu", discovery.CanonicalOrigin)
 	require.Empty(t, discovery.Providers)
 	require.True(t, discovery.Initialized)
-	capabilities.snapshot.Providers = []AccessPolicyProviderCapability{{Descriptor: model.ExternalAuthenticationProvider{ID: "campus-oidc", DisplayName: "Campus", Type: "oidc"}}}
+	capabilities.snapshot.Providers = []identity.AccessPolicyProviderCapability{{Descriptor: model.ExternalAuthenticationProvider{ID: "campus-oidc", DisplayName: "Campus", Type: "oidc"}}}
 	discovery, err = service.DiscoverAccess(context.Background(), invocation.Invocation{})
 	require.NoError(t, err, "restored-provider discovery = %#v", discovery)
 	require.Len(t, discovery.Providers, 1, "restored-provider discovery = %#v", discovery)

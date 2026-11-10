@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -30,37 +30,37 @@ func resolveBootstrapProtection(
 	cfg config.Config,
 	installations bootstrapStatusStore,
 	output io.Writer,
-) (app.BootstrapProtectionPolicy, error) {
+) (identity.BootstrapProtectionPolicy, error) {
 	if cfg.Authentication.Bootstrap.Secret != "" || installations == nil {
 		// Without installation state there is nothing to protect beyond the
 		// operator's configured secret.
-		return app.BootstrapProtectionPolicy{Secret: cfg.Authentication.Bootstrap.Secret}, nil
+		return identity.BootstrapProtectionPolicy{Secret: cfg.Authentication.Bootstrap.Secret}, nil
 	}
 
 	state, err := installations.Get(ctx)
 	if err == nil {
 		if validateErr := state.Validate(); validateErr != nil {
-			return app.BootstrapProtectionPolicy{}, fmt.Errorf("validate installation bootstrap state: %w", validateErr)
+			return identity.BootstrapProtectionPolicy{}, fmt.Errorf("validate installation bootstrap state: %w", validateErr)
 		}
-		return app.BootstrapProtectionPolicy{}, nil
+		return identity.BootstrapProtectionPolicy{}, nil
 	}
 	if !store.IsNotFound(err) {
-		return app.BootstrapProtectionPolicy{}, fmt.Errorf("determine installation bootstrap state: %w", err)
+		return identity.BootstrapProtectionPolicy{}, fmt.Errorf("determine installation bootstrap state: %w", err)
 	}
 
 	if cfg.Authentication.Bootstrap.DevelopmentMode {
 		secretBytes := make([]byte, 32)
 		if _, err := rand.Read(secretBytes); err != nil {
-			return app.BootstrapProtectionPolicy{}, fmt.Errorf("generate development bootstrap secret: %w", err)
+			return identity.BootstrapProtectionPolicy{}, fmt.Errorf("generate development bootstrap secret: %w", err)
 		}
 		secret := base64.RawURLEncoding.EncodeToString(secretBytes)
 		if output == nil {
-			return app.BootstrapProtectionPolicy{}, errors.New("development bootstrap secret output is unavailable")
+			return identity.BootstrapProtectionPolicy{}, errors.New("development bootstrap secret output is unavailable")
 		}
 		if _, err := fmt.Fprintf(output, "Proctor development bootstrap secret: %s\n", secret); err != nil {
-			return app.BootstrapProtectionPolicy{}, fmt.Errorf("display development bootstrap secret: %w", err)
+			return identity.BootstrapProtectionPolicy{}, fmt.Errorf("display development bootstrap secret: %w", err)
 		}
-		return app.BootstrapProtectionPolicy{Secret: secret}, nil
+		return identity.BootstrapProtectionPolicy{Secret: secret}, nil
 	}
-	return app.BootstrapProtectionPolicy{}, errors.New("bootstrap secret is required for an uninitialized network-accessible installation")
+	return identity.BootstrapProtectionPolicy{}, errors.New("bootstrap secret is required for an uninitialized network-accessible installation")
 }

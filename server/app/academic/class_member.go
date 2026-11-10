@@ -86,9 +86,9 @@ func (s *Service) EnrollClassMember(ctx context.Context, invocation invocation.I
 	if previous != nil && command.Batch.Fields().Authorization != nil {
 		command.Batch.Fields().Authorization.ClassMemberID = previous.ID
 	}
-	bindOnboardingImportCommand(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
-	bindAcademicAdministrationAuthorization(idempotency, command.Batch.Fields().Authorization)
-	bindAcademicAdministrationBatch(idempotency, command.Batch.Fields().Metadata)
+	batchitem.BindOnboardingImport(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
+	batchitem.BindAuthorization(idempotency, command.Batch.Fields().Authorization)
+	batchitem.BindBatch(idempotency, command.Batch.Fields().Metadata)
 	recipient := &model.User{ID: userID, Revision: 1}
 	if !command.Batch.Fields().RetainedOutcome {
 		recipient, err = s.users.Get(ctx, userID)
@@ -170,9 +170,9 @@ func (s *Service) enrollRetainedClassMember(
 	if commandErr != nil {
 		return nil, commandErr
 	}
-	bindOnboardingImportCommand(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
-	bindAcademicAdministrationAuthorization(idempotency, command.Batch.Fields().Authorization)
-	bindAcademicAdministrationBatch(idempotency, command.Batch.Fields().Metadata)
+	batchitem.BindOnboardingImport(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
+	batchitem.BindAuthorization(idempotency, command.Batch.Fields().Authorization)
+	batchitem.BindBatch(idempotency, command.Batch.Fields().Metadata)
 	freshMutation := false
 	result, replayErr := access.RunAudited(ctx, s.auditor, access.Mutation{Invocation: invocation, Action: model.ActionClassMembersManage,
 		Resource: resource, Operation: "enroll", Value: candidate.Auditable(), Subject: candidate.UserID}, func() time.Time { return at },
@@ -468,9 +468,9 @@ func prepareClassMemberEndIdempotency(invocation invocation.Invocation, command 
 	if err != nil {
 		return nil, err
 	}
-	bindOnboardingImportCommand(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
-	bindAcademicAdministrationAuthorization(idempotency, command.Batch.Fields().Authorization)
-	bindAcademicAdministrationBatch(idempotency, command.Batch.Fields().Metadata)
+	batchitem.BindOnboardingImport(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
+	batchitem.BindAuthorization(idempotency, command.Batch.Fields().Authorization)
+	batchitem.BindBatch(idempotency, command.Batch.Fields().Metadata)
 	return idempotency, nil
 }
 

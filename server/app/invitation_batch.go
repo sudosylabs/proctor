@@ -18,6 +18,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -37,7 +38,7 @@ func (s *invitationService) RunInvitationBatch(ctx context.Context, invocation i
 		return InvitationBatchResult{}, err
 	}
 	if command.Operation == InvitationBatchAcademicUnitRoleCreate || command.Operation == InvitationBatchInstitutionRoleCreate {
-		if err = requireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
+		if err = identity.RequireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
 			return InvitationBatchResult{}, err
 		}
 	}
@@ -147,14 +148,6 @@ func (s *invitationService) invitationBatchAuthorizationResource(ctx context.Con
 
 func invitationBatchItemIdempotencyKey(batchKey, itemKey string) string {
 	return fmt.Sprintf("%d:%s:%s", len(batchKey), batchKey, itemKey)
-}
-
-func bindOnboardingImportCommand(idempotency *store.CommandIdempotency, id model.OnboardingImportID, rowNumber int) {
-	if idempotency == nil || !id.IsValid() || rowNumber < 1 {
-		return
-	}
-	idempotency.OnboardingImportID = id
-	idempotency.OnboardingImportRowNumber = rowNumber
 }
 
 func invitationBatchLifecycleOperation(operation InvitationBatchOperation) string {

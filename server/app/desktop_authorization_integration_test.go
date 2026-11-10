@@ -26,8 +26,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server"
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
@@ -79,39 +79,39 @@ func testDesktopAuthorizationRotatingSession(t *testing.T, development bool) {
 	})
 	require.NoError(t, err, "save institution")
 	require.NotNil(t, institution, "save institution")
-	compatibility, err := primary.App.EvaluateDesktopCompatibility(t.Context(), invocation.Invocation{}, app.DesktopCompatibilityQuery{
+	compatibility, err := primary.App.Identity.EvaluateDesktopCompatibility(t.Context(), invocation.Invocation{}, identity.DesktopCompatibilityQuery{
 		DesktopRelease: build.DesktopRelease, DesktopBuildID: build.DesktopBuildID, Platform: string(build.Platform), Architecture: string(build.Architecture), RealtimeProtocol: build.RealtimeProtocol,
 	})
 	require.NoError(t, err, "configured build unavailable: %#v", compatibility)
-	require.Equal(t, app.DesktopCompatibilityCompatible, compatibility.Compatibility, "configured build unavailable: %#v", compatibility)
+	require.Equal(t, identity.DesktopCompatibilityCompatible, compatibility.Compatibility, "configured build unavailable: %#v", compatibility)
 
 	if development {
 		// The test graph must ignore the host environment and default to strict
 		// compatibility even when the test binary itself was built without production.
 		strict := testlib.Setup(t, testlib.WithConfig(publicOrigin), testlib.WithStore(openAdditionalUserSettingsStore(t, dataSource)))
-		result, err := strict.App.EvaluateDesktopCompatibility(t.Context(), invocation.Invocation{}, app.DesktopCompatibilityQuery{
+		result, err := strict.App.Identity.EvaluateDesktopCompatibility(t.Context(), invocation.Invocation{}, identity.DesktopCompatibilityQuery{
 			DesktopRelease: build.DesktopRelease, DesktopBuildID: build.DesktopBuildID, Platform: string(build.Platform), Architecture: string(build.Architecture), RealtimeProtocol: build.RealtimeProtocol,
 		})
 		require.NoError(t, err, "default test graph bypassed compatibility: %#v", result)
-		require.Equal(t, app.DesktopCompatibilityUnsupportedTarget, result.Compatibility, "default test graph bypassed compatibility: %#v", result)
+		require.Equal(t, identity.DesktopCompatibilityUnsupportedTarget, result.Compatibility, "default test graph bypassed compatibility: %#v", result)
 	}
 
-	user, err := primary.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+	user, err := primary.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 		Username: "desktop-user", Email: "desktop-user@example.edu",
 	}, Password: "correct horse battery staple"})
 	require.NoError(t, err)
-	web, err := primary.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{
+	web, err := primary.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{
 		LoginID: user.Username, Password: "correct horse battery staple",
 		ClientType: model.SessionClientWeb, DeviceID: "browser", Source: "127.0.0.1:1",
 	})
 	require.NoError(t, err)
-	principal, err := secondary.App.AuthenticateAccess(ctx, web.Tokens.AccessToken)
+	principal, err := secondary.App.Identity.AuthenticateAccess(ctx, web.Tokens.AccessToken)
 	require.NoError(t, err)
 
 	state := model.NewCredentialToken()
 	verifier := model.NewCredentialToken()
 	privateKey, publicJWK := integrationDesktopDPoPKey(t)
-	started, err := primary.App.StartDesktopAuthorization(ctx, invocation.Invocation{}, app.StartDesktopAuthorizationCommand{
+	started, err := primary.App.Identity.StartDesktopAuthorization(ctx, invocation.Invocation{}, identity.StartDesktopAuthorizationCommand{
 		CallbackURL: "http://127.0.0.1:49152/" + model.NewCredentialToken(),
 		State:       state, CodeChallenge: model.PKCES256Challenge(verifier),
 		DeviceID: "desktop-device", DeviceName: "Exam laptop",
@@ -122,18 +122,18 @@ func testDesktopAuthorizationRotatingSession(t *testing.T, development bool) {
 	require.NoError(t, err)
 	authorizationURL, err := url.Parse(started.AuthorizationURL)
 	require.NoError(t, err)
-	binding, err := secondary.App.BindDesktopAuthorization(ctx, invocation.Invocation{}, app.BindDesktopAuthorizationCommand{
+	binding, err := secondary.App.Identity.BindDesktopAuthorization(ctx, invocation.Invocation{}, identity.BindDesktopAuthorizationCommand{
 		Handle: authorizationURL.Query().Get("request"), BrowserProof: authorizationURL.Fragment[len("proof="):], State: state,
 	})
 	require.NoError(t, err)
-	authenticated, err := secondary.App.AuthenticateDesktopAuthorizationSession(ctx,
+	authenticated, err := secondary.App.Identity.AuthenticateDesktopAuthorizationSession(ctx,
 		invocation.New(*principal, model.RequestMetadata{RequestID: "desktop-node-b"}),
-		app.AuthenticateDesktopAuthorizationCommand{Binding: binding.Binding})
+		identity.AuthenticateDesktopAuthorizationCommand{Binding: binding.Binding})
 	require.NoError(t, err, "authenticate Desktop authorization: %#v", authenticated)
 	require.NotNil(t, authenticated.Account, "authenticate Desktop authorization: %#v", authenticated)
 	require.Equal(t, user.ID, authenticated.Account.ID, "authenticate Desktop authorization: %#v", authenticated)
-	approved, err := secondary.App.ApproveDesktopAuthorization(ctx, invocation.Invocation{},
-		app.ApproveDesktopAuthorizationCommand{Binding: binding.Binding, State: state})
+	approved, err := secondary.App.Identity.ApproveDesktopAuthorization(ctx, invocation.Invocation{},
+		identity.ApproveDesktopAuthorizationCommand{Binding: binding.Binding, State: state})
 	require.NoError(t, err)
 	callback, err := url.Parse(approved.RedirectURL)
 	require.NoError(t, err)
@@ -144,7 +144,7 @@ func testDesktopAuthorizationRotatingSession(t *testing.T, development bool) {
 		"htu": origin + "/api/v1/auth/desktop/token",
 		"iat": time.Now().Unix(), "nonce": started.DPoPNonce,
 	})
-	exchanged, err := primary.App.ExchangeDesktopAuthorization(ctx, invocation.Invocation{}, app.ExchangeDesktopAuthorizationCommand{
+	exchanged, err := primary.App.Identity.ExchangeDesktopAuthorization(ctx, invocation.Invocation{}, identity.ExchangeDesktopAuthorizationCommand{
 		Code: callback.Query().Get("code"), State: state, CodeVerifier: verifier,
 		DPoPProof: proof, PublicJWK: publicJWK,
 		DesktopRelease: build.DesktopRelease, DesktopBuildID: build.DesktopBuildID,
@@ -167,7 +167,7 @@ func testDesktopAuthorizationRotatingSession(t *testing.T, development bool) {
 		require.Len(t, events, 1, "%s audits for approving account", action)
 		require.Equal(t, model.AuditStatusSuccess, events[0].Status, "%s audits for approving account", action)
 	}
-	_, _, bearerErr := secondary.App.RefreshSession(ctx, invocation.Invocation{}, app.RefreshSessionCommand{
+	_, _, bearerErr := secondary.App.Identity.RefreshSession(ctx, invocation.Invocation{}, identity.RefreshSessionCommand{
 		RefreshToken: exchanged.Tokens.RefreshToken,
 	})
 	require.True(t, apperror.Is(bearerErr, "authentication.token_invalid"), "Desktop refresh accepted as Bearer: %v", bearerErr)
@@ -176,29 +176,29 @@ func testDesktopAuthorizationRotatingSession(t *testing.T, development bool) {
 		"htu": origin + "/api/v1/auth/refresh",
 		"iat": time.Now().Unix(), "nonce": exchanged.DPoPNonce,
 	})
-	_, _, err = secondary.App.RefreshSession(ctx, invocation.Invocation{}, app.RefreshSessionCommand{
+	_, _, err = secondary.App.Identity.RefreshSession(ctx, invocation.Invocation{}, identity.RefreshSessionCommand{
 		RefreshToken: exchanged.Tokens.RefreshToken,
-		DPoP:         &app.DPoPRequestProof{Proof: refreshProof, Method: "POST", Path: "/api/v1/auth/refresh"},
+		DPoP:         &identity.DPoPRequestProof{Proof: refreshProof, Method: "POST", Path: "/api/v1/auth/refresh"},
 	})
 	// The two test nodes have independent disposable caches, so the secondary
 	// challenges the primary's nonce before the client retries with fresh proof.
 	require.True(t, apperror.Is(err, "authentication.dpop.use_nonce"), "cross-node refresh error = %v, want nonce challenge", err)
-	refreshNonce, ok := app.DPoPChallengeNonce(err)
+	refreshNonce, ok := identity.DPoPChallengeNonce(err)
 	require.True(t, ok, "cross-node refresh challenge did not provide a replacement nonce")
 	refreshProof = integrationDesktopDPoPProof(t, privateKey, publicJWK, map[string]any{
 		"jti": model.NewCredentialToken(), "htm": "POST",
 		"htu": origin + "/api/v1/auth/refresh",
 		"iat": time.Now().Unix(), "nonce": refreshNonce,
 	})
-	rotatedSession, rotated, err := secondary.App.RefreshSession(ctx, invocation.Invocation{}, app.RefreshSessionCommand{
+	rotatedSession, rotated, err := secondary.App.Identity.RefreshSession(ctx, invocation.Invocation{}, identity.RefreshSessionCommand{
 		RefreshToken: exchanged.Tokens.RefreshToken,
-		DPoP:         &app.DPoPRequestProof{Proof: refreshProof, Method: "POST", Path: "/api/v1/auth/refresh"},
+		DPoP:         &identity.DPoPRequestProof{Proof: refreshProof, Method: "POST", Path: "/api/v1/auth/refresh"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, exchanged.Session.ID, rotatedSession.ID, "desktop refresh did not use ordinary rotation: session=%#v tokens=%#v", rotatedSession, rotated)
 	require.NotEqual(t, exchanged.Tokens.AccessToken, rotated.AccessToken, "desktop refresh did not use ordinary rotation: session=%#v tokens=%#v", rotatedSession, rotated)
 	require.NotEqual(t, exchanged.Tokens.RefreshToken, rotated.RefreshToken, "desktop refresh did not use ordinary rotation: session=%#v tokens=%#v", rotatedSession, rotated)
-	_, err = primary.App.AuthenticateAccess(ctx, exchanged.Tokens.AccessToken)
+	_, err = primary.App.Identity.AuthenticateAccess(ctx, exchanged.Tokens.AccessToken)
 	require.True(t, apperror.Is(err, "authentication.token_invalid"), "old desktop access after rotation error = %v", err)
 }
 

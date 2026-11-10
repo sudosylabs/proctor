@@ -11,7 +11,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -58,7 +58,7 @@ func (s *Server) ResetAdministratorMFA(ctx context.Context, command Administrato
 	if s.components.administratorRecovery == nil {
 		return nil, errors.New("administrator MFA reset is unavailable")
 	}
-	result, err := s.components.administratorRecovery.ResetAdministratorMFA(ctx, invocation.Task("administrator-mfa-reset"), app.AdministratorMFAResetCommand{
+	result, err := s.components.administratorRecovery.ResetAdministratorMFA(ctx, invocation.Task("administrator-mfa-reset"), identity.AdministratorMFAResetCommand{
 		InstitutionID: model.InstitutionID(command.InstitutionID), UserID: model.UserID(command.UserID),
 	})
 	if err != nil {

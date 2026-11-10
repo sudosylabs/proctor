@@ -23,6 +23,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -240,7 +241,7 @@ func authenticationTokensResponseFromModel(tokens *model.AuthenticationTokens) *
 	}
 }
 
-func authenticationResponseFromLogin(request *http.Request, result *app.LoginResult) authenticationResponse {
+func authenticationResponseFromLogin(request *http.Request, result *identity.LoginResult) authenticationResponse {
 	if result == nil {
 		return authenticationResponse{}
 	}
@@ -267,27 +268,33 @@ func authenticationResponseFromRefresh(
 	}
 }
 
-type authenticationEntryApplication interface {
+// registrationApplication is public self-registration, which stays on the
+// application root beside Invitations.
+type registrationApplication interface {
 	RegisterLocalUser(context.Context, invocation.Invocation, app.RegisterLocalUserCommand) error
-	Login(context.Context, invocation.Invocation, app.LoginCommand) (*app.LoginResult, error)
-	RefreshSession(context.Context, invocation.Invocation, app.RefreshSessionCommand) (*model.Session, *model.AuthenticationTokens, error)
-	Logout(context.Context, invocation.Invocation, app.LogoutCommand) error
-	RequestEmailVerification(context.Context, invocation.Invocation, app.RequestEmailVerificationCommand) error
-	CompleteEmailVerification(context.Context, invocation.Invocation, app.CompleteEmailVerificationCommand) (*model.User, error)
-	CompleteEmailChangeUndo(context.Context, invocation.Invocation, app.CompleteEmailChangeUndoCommand) error
-	InspectEmailVerification(context.Context, invocation.Invocation, app.InspectAccountTokenCommand) (*app.EmailVerificationInspection, error)
-	InspectEmailChangeUndo(context.Context, invocation.Invocation, app.InspectAccountTokenCommand) (*app.EmailChangeUndoInspection, error)
-	RequestPasswordReset(context.Context, invocation.Invocation, app.RequestPasswordResetCommand) error
-	CompletePasswordReset(context.Context, invocation.Invocation, app.CompletePasswordResetCommand) (*model.User, error)
+}
+
+type authenticationEntryApplication interface {
+	Login(context.Context, invocation.Invocation, identity.LoginCommand) (*identity.LoginResult, error)
+	RefreshSession(context.Context, invocation.Invocation, identity.RefreshSessionCommand) (*model.Session, *model.AuthenticationTokens, error)
+	Logout(context.Context, invocation.Invocation, identity.LogoutCommand) error
+	RequestEmailVerification(context.Context, invocation.Invocation, identity.RequestEmailVerificationCommand) error
+	CompleteEmailVerification(context.Context, invocation.Invocation, identity.CompleteEmailVerificationCommand) (*model.User, error)
+	CompleteEmailChangeUndo(context.Context, invocation.Invocation, identity.CompleteEmailChangeUndoCommand) error
+	InspectEmailVerification(context.Context, invocation.Invocation, identity.InspectAccountTokenCommand) (*identity.EmailVerificationInspection, error)
+	InspectEmailChangeUndo(context.Context, invocation.Invocation, identity.InspectAccountTokenCommand) (*identity.EmailChangeUndoInspection, error)
+	RequestPasswordReset(context.Context, invocation.Invocation, identity.RequestPasswordResetCommand) error
+	CompletePasswordReset(context.Context, invocation.Invocation, identity.CompletePasswordResetCommand) (*model.User, error)
 }
 
 type authenticationResourceModule struct {
+	registration   registrationApplication
 	authentication authenticationEntryApplication
 	cookies        browserCookies
 }
 
-func authenticationResource(authentication authenticationEntryApplication, cookies browserCookies) apiResource {
-	module := authenticationResourceModule{authentication: authentication, cookies: cookies}
+func authenticationResource(registration registrationApplication, authentication authenticationEntryApplication, cookies browserCookies) apiResource {
+	module := authenticationResourceModule{registration: registration, authentication: authentication, cookies: cookies}
 	return newResource(
 		"authentication",
 		publicRoute(
@@ -375,7 +382,7 @@ func (m authenticationResourceModule) register(request operationRequest) (operat
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
-	if err := m.authentication.RegisterLocalUser(
+	if err := m.registration.RegisterLocalUser(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
 		app.RegisterLocalUserCommand{
@@ -401,7 +408,7 @@ func (m authenticationResourceModule) login(request operationRequest) (operation
 	result, err := m.authentication.Login(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
-		app.LoginCommand{
+		identity.LoginCommand{
 			LoginID: input.LoginID, Password: input.Password, ClientType: input.ClientType,
 			DeviceID: input.DeviceID, DeviceName: input.DeviceName, MFACode: input.MFACode,
 			Source: request.metadata.IPAddress,
@@ -428,13 +435,13 @@ func (m authenticationResourceModule) refresh(request operationRequest) (operati
 	if !ok {
 		return operationResult{}, authenticationRequiredError()
 	}
-	command := app.RefreshSessionCommand{RefreshToken: credential.token}
+	command := identity.RefreshSessionCommand{RefreshToken: credential.token}
 	if credential.source == credentialSourceDPoP {
 		proof, proofErr := requestDPoPProof(request.request)
 		if proofErr != nil {
 			return operationResult{}, errorWithHeaders(proofErr, dpopErrorHeaders(proofErr))
 		}
-		command.DPoP = &app.DPoPRequestProof{
+		command.DPoP = &identity.DPoPRequestProof{
 			Proof: proof, Method: request.request.Method, Path: request.request.URL.EscapedPath(),
 		}
 	}
@@ -466,7 +473,7 @@ func (m authenticationResourceModule) refresh(request operationRequest) (operati
 
 func dpopErrorHeaders(err error) http.Header {
 	headers := http.Header{"WWW-Authenticate": {`DPoP error="invalid_dpop_proof"`}}
-	if nonce, ok := app.DPoPChallengeNonce(err); ok {
+	if nonce, ok := identity.DPoPChallengeNonce(err); ok {
 		headers.Set("DPoP-Nonce", nonce)
 		headers.Set("WWW-Authenticate", `DPoP error="use_dpop_nonce"`)
 	}
@@ -474,7 +481,7 @@ func dpopErrorHeaders(err error) http.Header {
 }
 
 func (m authenticationResourceModule) logout(request operationRequest) (operationResult, error) {
-	if err := m.authentication.Logout(request.context, request.invocation(), app.LogoutCommand{}); err != nil {
+	if err := m.authentication.Logout(request.context, request.invocation(), identity.LogoutCommand{}); err != nil {
 		return operationResult{}, err
 	}
 	result := noContentResult().withHeaders(http.Header{"Cache-Control": {"no-store"}})
@@ -487,7 +494,7 @@ func (m authenticationResourceModule) logout(request operationRequest) (operatio
 func (m authenticationResourceModule) requestEmailVerification(request operationRequest) (operationResult, error) {
 	err := m.authentication.RequestEmailVerification(
 		request.context, request.invocation(),
-		app.RequestEmailVerificationCommand{Source: request.metadata.IPAddress},
+		identity.RequestEmailVerificationCommand{Source: request.metadata.IPAddress},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -503,7 +510,7 @@ func (m authenticationResourceModule) completeEmailVerification(request operatio
 	_, err := m.authentication.CompleteEmailVerification(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
-		app.CompleteEmailVerificationCommand{Token: input.Token, Source: request.metadata.IPAddress},
+		identity.CompleteEmailVerificationCommand{Token: input.Token, Source: request.metadata.IPAddress},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -517,7 +524,7 @@ func (m authenticationResourceModule) completeEmailChangeUndo(request operationR
 		return operationResult{}, err
 	}
 	if err := m.authentication.CompleteEmailChangeUndo(request.context, invocation.New(model.Principal{}, request.metadata),
-		app.CompleteEmailChangeUndoCommand{Token: input.Token, Source: request.metadata.IPAddress}); err != nil {
+		identity.CompleteEmailChangeUndoCommand{Token: input.Token, Source: request.metadata.IPAddress}); err != nil {
 		return operationResult{}, err
 	}
 	return noContentResult(), nil
@@ -529,7 +536,7 @@ func (m authenticationResourceModule) inspectEmailVerification(request operation
 		return operationResult{}, err
 	}
 	inspected, err := m.authentication.InspectEmailVerification(request.context, invocation.New(model.Principal{}, request.metadata),
-		app.InspectAccountTokenCommand{Token: input.Token, Source: request.metadata.IPAddress})
+		identity.InspectAccountTokenCommand{Token: input.Token, Source: request.metadata.IPAddress})
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -542,7 +549,7 @@ func (m authenticationResourceModule) inspectEmailChangeUndo(request operationRe
 		return operationResult{}, err
 	}
 	inspected, err := m.authentication.InspectEmailChangeUndo(request.context, invocation.New(model.Principal{}, request.metadata),
-		app.InspectAccountTokenCommand{Token: input.Token, Source: request.metadata.IPAddress})
+		identity.InspectAccountTokenCommand{Token: input.Token, Source: request.metadata.IPAddress})
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -558,7 +565,7 @@ func (m authenticationResourceModule) requestPasswordReset(request operationRequ
 	if err := m.authentication.RequestPasswordReset(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
-		app.RequestPasswordResetCommand{Email: input.Email, Source: request.metadata.IPAddress},
+		identity.RequestPasswordResetCommand{Email: input.Email, Source: request.metadata.IPAddress},
 	); err != nil {
 		return operationResult{}, err
 	}
@@ -573,7 +580,7 @@ func (m authenticationResourceModule) completePasswordReset(request operationReq
 	_, err := m.authentication.CompletePasswordReset(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
-		app.CompletePasswordResetCommand{
+		identity.CompletePasswordResetCommand{
 			Token: input.Token, Password: input.Password, Source: request.metadata.IPAddress,
 		},
 	)

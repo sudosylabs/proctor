@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
@@ -59,9 +60,9 @@ type publicRegistrationDependencies struct {
 	policies      publicRegistrationPolicy
 	institutions  publicRegistrationInstitution
 	mail          publicRegistrationVerificationPreparer
-	attempts      *authenticationAttemptAccounting
+	attempts      *identity.AttemptAccounting
 	hasher        publicRegistrationPasswordHasher
-	rateLimit     LoginRateLimitPolicy
+	rateLimit     identity.LoginRateLimitPolicy
 	tokenTTL      time.Duration
 	publicURL     string
 	nodeID        string
@@ -114,13 +115,13 @@ func (s *publicRegistrationService) RegisterLocalUser(ctx context.Context, invoc
 	if err != nil {
 		return apperror.New("authentication.registration.invalid").Wrap(err)
 	}
-	if err = checkNewPassword(command.Password, passwordIdentity{Username: account.Username, Email: account.Email,
+	if err = identity.CheckNewPassword(command.Password, identity.PasswordIdentity{Username: account.Username, Email: account.Email,
 		FirstName: account.FirstName, LastName: account.LastName}); err != nil {
 		return err
 	}
 	passwordHash, err := s.hasher.Hash(ctx, command.Password)
 	if err != nil {
-		return passwordHashError(err, "authentication.registration.unavailable")
+		return identity.PasswordHashError(err, "authentication.registration.unavailable")
 	}
 	credential := &model.PasswordCredential{UserID: account.ID, PasswordHash: passwordHash}
 	credential.PrepareCreate(model.NewPasswordCredentialID(), at)
@@ -135,7 +136,7 @@ func (s *publicRegistrationService) RegisterLocalUser(ctx context.Context, invoc
 		TokenHash: model.HashToken(rawToken), Target: account.Email, ExpiresAt: at.Add(s.tokenTTL),
 	}
 	token.PrepareCreate(model.NewUserTokenID(), at)
-	actionURL, err := accountCredentialLink(s.publicURL, "/account/verify-email", rawToken)
+	actionURL, err := identity.AccountCredentialLink(s.publicURL, "/account/verify-email", rawToken)
 	if err != nil {
 		return registrationUnavailable(err)
 	}
@@ -149,9 +150,9 @@ func (s *publicRegistrationService) RegisterLocalUser(ctx context.Context, invoc
 	if err != nil {
 		return registrationUnavailable(err)
 	}
-	audit := recoveryAuditEvent(
+	audit := identity.RecoveryAuditEvent(
 		model.ActionAuthenticationPublicRegistration,
-		model.Resource{Type: model.ResourceUser, ID: account.ID.String()}, institutionID.String(),
+		model.Resource{Type: model.ResourceUser, ID: account.ID.String()}, institutionID,
 		invocation.RequestMetadata(), s.nodeID, nil, "anonymous",
 	)
 	_, err = s.registrations.RegisterLocal(ctx, &store.PublicLocalUserRegistration{
@@ -173,16 +174,11 @@ func (s *publicRegistrationService) RegisterLocalUser(ctx context.Context, invoc
 	return registrationUnavailable(err)
 }
 
-func (s *publicRegistrationService) checkRateLimit(ctx context.Context, identity, source string) error {
-	_, limited, err := s.attempts.account(ctx, authenticationAttemptIntent{
-		purpose:   authenticationAttemptPurposePublicRegistration,
-		qualifier: "register",
-		window:    s.rateLimit.Window,
-		limits: []authenticationAttemptLimit{
-			{dimension: authenticationAttemptDimensionIdentity, maximum: s.rateLimit.MaximumAttempts, identity: identity},
-			{dimension: authenticationAttemptDimensionSource, maximum: s.rateLimit.MaximumSourceAttempts, source: source},
-		},
-	})
+func (s *publicRegistrationService) checkRateLimit(ctx context.Context, registrantIdentity, source string) error {
+	limited, err := s.attempts.Account(ctx, identity.AttemptPurposePublicRegistration, "register", s.rateLimit.Window,
+		identity.IdentityAttemptLimit(registrantIdentity, s.rateLimit.MaximumAttempts),
+		identity.SourceAttemptLimit(source, s.rateLimit.MaximumSourceAttempts),
+	)
 	if err != nil {
 		return apperror.New("authentication.rate_limit_unavailable").Wrap(err)
 	}
@@ -221,5 +217,5 @@ func (a publicRegistrationInstitutionAdapter) InstitutionID(ctx context.Context)
 
 var (
 	_ publicRegistrationStore          = (store.UserStore)(nil)
-	_ publicRegistrationPasswordHasher = (*passwordHasher)(nil)
+	_ publicRegistrationPasswordHasher = (*identity.PasswordHasher)(nil)
 )

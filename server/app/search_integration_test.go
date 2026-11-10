@@ -20,6 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store/storetest"
@@ -37,7 +38,7 @@ func TestSearchIntegrationScopesEveryTypeToTheCaller(t *testing.T) {
 	helper := testlib.Setup(t, testlib.WithStore(persistence))
 	ctx := context.Background()
 	password := "correct horse battery staple"
-	bootstrap, appErr := helper.App.BootstrapInstallation(ctx, invocation.Invocation{}, app.BootstrapInstallationCommand{
+	bootstrap, appErr := helper.App.Identity.BootstrapInstallation(ctx, invocation.Invocation{}, identity.BootstrapInstallationCommand{
 		InstitutionName: "northbridge", InstitutionDisplayName: "Northbridge University",
 		AdministratorUsername: "search-admin", AdministratorEmail: "search-admin@example.edu",
 		AdministratorDisplayName: "Search Administrator", AdministratorLocale: "en", AdministratorTimezone: "UTC",
@@ -77,12 +78,12 @@ func TestSearchIntegrationScopesEveryTypeToTheCaller(t *testing.T) {
 	physics, chemistry := newDepartment("physics"), newDepartment("chemistry")
 
 	newCaller := func(username string) (*model.User, invocation.Invocation) {
-		user, appErr := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+		user, appErr := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 			Username: username, Email: username + "@example.edu", DisplayName: username,
 		}, Password: password})
 		require.NoError(t, appErr)
 		login := loginIntegrationUser(t, helper.Handler(), username, password, model.SessionClientCLI, username+"-cli")
-		principal, appErr := helper.App.AuthenticateAccess(ctx, login.Tokens.AccessToken)
+		principal, appErr := helper.App.Identity.AuthenticateAccess(ctx, login.Tokens.AccessToken)
 		require.NoError(t, appErr)
 		return user, invocation.New(*principal, model.RequestMetadata{RequestID: username + "-search"})
 	}

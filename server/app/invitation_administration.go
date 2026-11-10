@@ -14,6 +14,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
@@ -107,7 +108,7 @@ func (s *invitationService) ResendInvitation(ctx context.Context, invocation inv
 			return InvitationAdministrationView{}, apperror.New("resource.not_found")
 		}
 		if invitationPurposeRequiresInteractiveBatch(current.Invitation.Purpose) {
-			if err = requireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
+			if err = identity.RequireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
 				return InvitationAdministrationView{}, err
 			}
 		}
@@ -154,7 +155,7 @@ func (s *invitationService) ResendInvitation(ctx context.Context, invocation inv
 			if !model.IsValidCredentialToken(rawClaim) {
 				return nil, apperror.New("invitation.unavailable")
 			}
-			actionURL, linkErr := accountCredentialLink(s.deps.PublicURL, "/join", rawClaim)
+			actionURL, linkErr := identity.AccountCredentialLink(s.deps.PublicURL, "/join", rawClaim)
 			if linkErr != nil {
 				return nil, apperror.New("invitation.unavailable").Wrap(linkErr)
 			}
@@ -202,7 +203,7 @@ func (s *invitationService) RevokeInvitation(ctx context.Context, invocation inv
 			return InvitationAdministrationView{}, apperror.New("resource.not_found")
 		}
 		if invitationPurposeRequiresInteractiveBatch(current.Invitation.Purpose) {
-			if err = requireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
+			if err = identity.RequireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
 				return InvitationAdministrationView{}, err
 			}
 		}

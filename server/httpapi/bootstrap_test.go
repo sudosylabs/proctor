@@ -17,8 +17,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -197,16 +197,16 @@ func TestBootstrapUsesApplicationCommand(t *testing.T) {
 }
 
 type recordingBootstrap struct {
-	command      app.BootstrapInstallationCommand
+	command      identity.BootstrapInstallationCommand
 	result       *model.InstallationBootstrapResult
 	bootstrapErr error
 }
 
-func (r *recordingBootstrap) GetInstallationStatus(context.Context, invocation.Invocation, app.GetInstallationStatusQuery) (*model.InstallationStatus, error) {
+func (r *recordingBootstrap) GetInstallationStatus(context.Context, invocation.Invocation, identity.GetInstallationStatusQuery) (*model.InstallationStatus, error) {
 	return &model.InstallationStatus{Initialized: false}, nil
 }
 
-func (r *recordingBootstrap) BootstrapInstallation(_ context.Context, _ invocation.Invocation, command app.BootstrapInstallationCommand) (*model.InstallationBootstrapResult, error) {
+func (r *recordingBootstrap) BootstrapInstallation(_ context.Context, _ invocation.Invocation, command identity.BootstrapInstallationCommand) (*model.InstallationBootstrapResult, error) {
 	r.command = command
 	return r.result, r.bootstrapErr
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -169,7 +170,7 @@ func TestPublicRegistrationMailAndPersistenceFailuresCreateNoPartialApplicationS
 }
 
 func TestPublicRegistrationPasswordWorkFailuresStopBeforeMailAndPersistence(t *testing.T) {
-	testPasswordHashFailures(t, "authentication.registration.unavailable", func(t *testing.T, ctx context.Context, hasher passwordHash) error {
+	testPasswordHashFailures(t, "authentication.registration.unavailable", func(t *testing.T, ctx context.Context, hasher testPasswordHasher) error {
 		persistence := &publicRegistrationStoreFake{}
 		mail := &publicRegistrationMailFake{enabled: true}
 		service := newTestPublicRegistrationService(t, persistence, mail, time.Now())
@@ -234,7 +235,7 @@ func TestPublicRegistrationUsesPrivateSharedAttemptAccounting(t *testing.T) {
 	cache := newExpiringAuthenticationAttemptCache(time.Now)
 	service := newTestPublicRegistrationService(t, &publicRegistrationStoreFake{}, &publicRegistrationMailFake{enabled: true}, time.Now())
 	service.attempts = mustAuthenticationAttemptAccounting(t, cache)
-	service.rateLimit = LoginRateLimitPolicy{Window: time.Minute, MaximumAttempts: 1, MaximumSourceAttempts: 10}
+	service.rateLimit = identity.LoginRateLimitPolicy{Window: time.Minute, MaximumAttempts: 1, MaximumSourceAttempts: 10}
 	command := RegisterLocalUserCommand{Username: "student", Email: " Student@Example.EDU ", FirstName: "New", LastName: "Student", Password: "correct horse battery staple", Source: "192.0.2.40:443"}
 	require.NoError(t, service.RegisterLocalUser(context.Background(), invocation.Invocation{}, command))
 	command.Email = "student@example.edu"
@@ -307,7 +308,7 @@ func newTestPublicRegistrationService(t *testing.T, persistence publicRegistrati
 		mail:          mail,
 		attempts:      mustAuthenticationAttemptAccounting(t, newExpiringAuthenticationAttemptCache(time.Now)),
 		hasher:        &registrationPasswordHasherFake{},
-		rateLimit:     LoginRateLimitPolicy{Window: time.Minute, MaximumAttempts: 10, MaximumSourceAttempts: 100},
+		rateLimit:     identity.LoginRateLimitPolicy{Window: time.Minute, MaximumAttempts: 10, MaximumSourceAttempts: 100},
 		tokenTTL:      time.Hour,
 		publicURL:     "https://proctor.example.test",
 		nodeID:        "registration-test-node",

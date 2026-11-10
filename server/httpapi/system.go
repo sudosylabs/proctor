@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -120,7 +120,7 @@ func (m systemResourceModule) ping(request operationRequest) (operationResult, e
 		ServerTime:          model.FormatRFC3339(responseTime),
 		Availability:        "temporarily_unavailable",
 		Reason:              "temporarily_unavailable",
-		Compatibility:       string(app.DesktopCompatibilityServerIncompatible),
+		Compatibility:       string(identity.DesktopCompatibilityServerIncompatible),
 		CompatibilityReason: "compatibility_unavailable",
 	}
 	if evaluationErr == nil {
@@ -144,7 +144,7 @@ func (m systemResourceModule) ping(request operationRequest) (operationResult, e
 	}), nil
 }
 
-func desktopCompatibilityQuery(request *http.Request) (app.DesktopCompatibilityQuery, error) {
+func desktopCompatibilityQuery(request *http.Request) (identity.DesktopCompatibilityQuery, error) {
 	values := request.URL.Query()
 	allowed := map[string]int{
 		"desktop_release":   64,
@@ -156,7 +156,7 @@ func desktopCompatibilityQuery(request *http.Request) (app.DesktopCompatibilityQ
 	for key, candidates := range values {
 		maximum, known := allowed[key]
 		if !known || len(candidates) != 1 || candidates[0] == "" || len(candidates[0]) > maximum {
-			return app.DesktopCompatibilityQuery{}, apperror.New("request.invalid").WithField("field", key)
+			return identity.DesktopCompatibilityQuery{}, apperror.New("request.invalid").WithField("field", key)
 		}
 	}
 	selector := func(key string) (string, error) {
@@ -168,32 +168,32 @@ func desktopCompatibilityQuery(request *http.Request) (app.DesktopCompatibilityQ
 	}
 	desktopRelease, err := selector("desktop_release")
 	if err != nil {
-		return app.DesktopCompatibilityQuery{}, err
+		return identity.DesktopCompatibilityQuery{}, err
 	}
 	desktopBuildID, err := selector("desktop_build_id")
 	if err != nil {
-		return app.DesktopCompatibilityQuery{}, err
+		return identity.DesktopCompatibilityQuery{}, err
 	}
 	platform, err := selector("platform")
 	if err != nil {
-		return app.DesktopCompatibilityQuery{}, err
+		return identity.DesktopCompatibilityQuery{}, err
 	}
 	architecture, err := selector("architecture")
 	if err != nil {
-		return app.DesktopCompatibilityQuery{}, err
+		return identity.DesktopCompatibilityQuery{}, err
 	}
 	realtimeText, err := selector("realtime_protocol")
 	if err != nil {
-		return app.DesktopCompatibilityQuery{}, err
+		return identity.DesktopCompatibilityQuery{}, err
 	}
 	realtimeProtocol, parseErr := strconv.Atoi(realtimeText)
 	if parseErr != nil || realtimeProtocol < 1 {
-		return app.DesktopCompatibilityQuery{}, apperror.New("request.invalid").WithField(
+		return identity.DesktopCompatibilityQuery{}, apperror.New("request.invalid").WithField(
 			"field",
 			"realtime_protocol",
 		)
 	}
-	return app.DesktopCompatibilityQuery{
+	return identity.DesktopCompatibilityQuery{
 		DesktopRelease:   desktopRelease,
 		DesktopBuildID:   desktopBuildID,
 		Platform:         platform,

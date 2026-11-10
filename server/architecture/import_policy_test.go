@@ -481,12 +481,36 @@ var dependencyRules = []dependencyRule{
 		),
 	},
 	{
+		name:           "identity application",
+		sources:        []pathPattern{exact(serverModule + "/app/identity")},
+		deniedStandard: standardInfrastructure,
+		project: only(
+			exact(serverModule+"/app/access"),
+			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/app/exam/attempt"),
+			exact(serverModule+"/app/idempotency"),
+			exact(serverModule+"/app/internal/batchitem"),
+			exact(serverModule+"/app/invocation"),
+			exact(serverModule+"/app/job"),
+			exact(serverModule+"/app/jobhandler"),
+			exact(serverModule+"/app/mail"),
+			exact(serverModule+"/app/paging"),
+			exact(serverModule+"/app/realtime"),
+			exact(serverModule+"/app/user"),
+			exact(serverModule+"/model"),
+			exact(serverModule+"/secretseal"),
+			exact(serverModule+"/store"),
+		),
+		thirdParty: only(exact("golang.org/x/crypto/argon2")),
+	},
+	{
 		name:           "application",
 		sources:        []pathPattern{subtree(serverModule + "/app")},
 		deniedStandard: standardInfrastructure,
 		project: only(
 			exact(serverModule+"/app/academic"),
 			exact(serverModule+"/app/access"),
+			exact(serverModule+"/app/identity"),
 			exact(serverModule+"/app/paging"),
 			exact(serverModule+"/app/user"),
 			exact(serverModule+"/app/internal/batchitem"),
@@ -519,6 +543,7 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app"),
 			exact(serverModule+"/app/academic"),
 			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/app/identity"),
 			exact(serverModule+"/app/invocation"),
 			exact(serverModule+"/app/job"),
 			exact(serverModule+"/app/paging"),
@@ -701,6 +726,7 @@ func TestDependencyRulePrecedence(t *testing.T) {
 		{packagePath: serverModule + "/app/paging", wantRule: "paging application"},
 		{packagePath: serverModule + "/app/academic", wantRule: "academic application"},
 		{packagePath: serverModule + "/app/user", wantRule: "user application"},
+		{packagePath: serverModule + "/app/identity", wantRule: "identity application"},
 		{packagePath: serverModule + "/app/exam/manageraccess", wantRule: "exam manager access"},
 		{packagePath: serverModule + "/app/exam", wantRule: "exam manager access consumers"},
 		{packagePath: serverModule + "/app/exam/review", wantRule: "exam idempotency consumers"},
@@ -801,6 +827,16 @@ func TestAreaPackageBoundaries(t *testing.T) {
 		for _, dependency := range []string{"/app", "/app/exam", "/app/job", "/httpapi", "/store/sqlstore", "/platform"} {
 			assert.True(t, forbiddenImport(area, serverModule+dependency), "%s can import forbidden dependency %s", area, dependency)
 		}
+	}
+	identity := serverModule + "/app/identity"
+	for _, consumer := range []string{"/app", "/httpapi", "/websocket"} {
+		assert.False(t, forbiddenImport(serverModule+consumer, identity), "%s cannot import identity", consumer)
+	}
+	for _, dependency := range []string{"/app/access", "/app/user", "/app/internal/batchitem", "/app/mail", "/app/realtime"} {
+		assert.False(t, forbiddenImport(identity, serverModule+dependency), "identity cannot import %s", dependency)
+	}
+	for _, dependency := range []string{"/app", "/app/academic", "/app/exam", "/httpapi", "/websocket", "/store/sqlstore", "/platform"} {
+		assert.True(t, forbiddenImport(identity, serverModule+dependency), "identity can import forbidden dependency %s", dependency)
 	}
 	assert.True(t, forbiddenImport(access, academic), "access can import the academic area")
 	assert.True(t, forbiddenImport(access, paging), "access can import paging")

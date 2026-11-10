@@ -23,6 +23,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/cluster"
@@ -85,15 +86,15 @@ func TestUserSettingsTwoNodePostgreSQLConvergencePublishesOnePrivateRefetchHint(
 	})
 	require.NoError(t, err)
 	const password = "correct horse battery staple"
-	account, err := primary.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+	account, err := primary.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 		Username: "settings-two-node-user", Email: "settings-two-node-user@example.edu",
 	}, Password: password})
 	require.NoError(t, err)
-	login, err := primary.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{
+	login, err := primary.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{
 		LoginID: account.Username, Password: password, ClientType: model.SessionClientWeb, Source: "127.0.0.1:1",
 	})
 	require.NoError(t, err)
-	principal, err := primary.App.AuthenticateAccess(ctx, login.Tokens.AccessToken)
+	principal, err := primary.App.Identity.AuthenticateAccess(ctx, login.Tokens.AccessToken)
 	require.NoError(t, err)
 	invocation := invocation.New(*principal, model.RequestMetadata{RequestID: "settings-two-node"})
 	before, err := primary.App.Users.ReadOwnUserSettings(ctx, invocation)
@@ -203,15 +204,15 @@ func TestUserSettingsUnknownOutcomeReconcilesByReadWithoutContentLeak(t *testing
 	})
 	require.NoError(t, err)
 	const password = "correct horse battery staple"
-	account, err := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+	account, err := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 		Username: "settings-unknown-user", Email: "settings-unknown-user@example.edu",
 	}, Password: password})
 	require.NoError(t, err)
-	login, err := helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{
+	login, err := helper.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{
 		LoginID: account.Username, Password: password, ClientType: model.SessionClientWeb, Source: "127.0.0.1:1",
 	})
 	require.NoError(t, err)
-	principal, err := helper.App.AuthenticateAccess(ctx, login.Tokens.AccessToken)
+	principal, err := helper.App.Identity.AuthenticateAccess(ctx, login.Tokens.AccessToken)
 	require.NoError(t, err)
 	invocation := invocation.New(*principal, model.RequestMetadata{RequestID: "settings-unknown-outcome"})
 	before, err := helper.App.Users.ReadOwnUserSettings(ctx, invocation)

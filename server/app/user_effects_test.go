@@ -16,37 +16,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 )
-
-// accountAuthorizerFake authorizes every account-state and email action and
-// records the decision for the call-order assertions of those tests.
-type accountAuthorizerFake struct{ events *[]string }
-
-func (a *accountAuthorizerFake) Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error {
-	*a.events = append(*a.events, "authorize-manage")
-	return nil
-}
-
-func (a *accountAuthorizerFake) AuthorizeAccountStateManage(context.Context, invocation.Invocation, model.UserID) error {
-	*a.events = append(*a.events, "authorize-manage")
-	return nil
-}
-
-// userSettingsSessionPrincipal is the interactive Session principal that the
-// authentication tests sign a User in as.
-func userSettingsSessionPrincipal(at time.Time) model.Principal {
-	return model.Principal{
-		UserID: model.NewUserID(), SessionID: model.NewSessionID(),
-		CredentialID:         model.PrincipalCredentialID(model.NewSessionCredentialID()),
-		CredentialType:       model.CredentialSessionAccess,
-		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
-		ClientType: model.SessionClientWeb, AuthenticatedAt: at,
-	}
-}
 
 func TestProfilePictureRealtimeEffectContainsOnlySafeChangeMetadata(t *testing.T) {
 	sink := &recordingRealtimeSink{}

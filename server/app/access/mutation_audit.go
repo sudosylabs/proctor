@@ -60,7 +60,7 @@ func (a MutationAuditAdapter) BeginAtScope(ctx context.Context, invocation invoc
 func (a MutationAuditAdapter) BeginForSubject(ctx context.Context, attempt Mutation) (model.AuditEventID, error) {
 	principal := attempt.Invocation.Principal()
 	if principal.ValidateMFARecovery() != nil {
-		return "", invalidTokenAppError()
+		return "", InvalidTokenAppError()
 	}
 	if a.audit == nil || a.audit.deps.Audits == nil {
 		return "", AuditUnavailable(store.NewErrNotFound("audit_store", ""))

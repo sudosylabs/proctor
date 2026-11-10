@@ -39,10 +39,6 @@ func constructAccessAndAcademics(
 	if err != nil {
 		return accessAcademicConstruction{}, err
 	}
-	desktopCompatibility, err := newDesktopCompatibilityService(desktopCompatibilityServiceDependencies{Policies: deps.Store.DesktopCompatibilityPolicy(), Institutions: deps.Store.Institution(), Authorization: authorization, Audit: foundation.audit.MutationAudit(), Builds: deps.DesktopBuildCatalog, SkipBuildChecks: deps.SkipDesktopCompatibility, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Now: time.Now})
-	if err != nil {
-		return accessAcademicConstruction{}, err
-	}
 	academics, err := academic.New(academic.Dependencies{
 		Store: deps.Store, Authorizer: authorization, Auditor: foundation.audit.MutationAudit(), Mail: foundation.mail,
 		Effects: academicRealtimeEffects{sittings: deps.Store.ExamSitting(), realtime: foundation.realtime},
@@ -53,8 +49,7 @@ func constructAccessAndAcademics(
 	}
 	return accessAcademicConstruction{
 		authorization: authorization, capabilities: capabilities, accessPolicies: accessPolicies,
-		desktopCompatibility: desktopCompatibility,
-		retentionPolicy:      retentionPolicy,
-		academic:             academics,
+		retentionPolicy: retentionPolicy,
+		academic:        academics,
 	}, nil
 }

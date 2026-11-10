@@ -20,12 +20,13 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/review"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/exam/workspace"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-func constructExaminations(deps Dependencies, foundation applicationFoundation, access accessAcademicConstruction) (examinationConstruction, error) {
+func constructExaminations(deps Dependencies, foundation applicationFoundation, access accessAcademicConstruction, accounts accountConstruction) (examinationConstruction, error) {
 	collectionEffects := examCollectionInvalidationEffects{
 		sittings: deps.Store.ExamSitting(),
 		realtime: foundation.realtime,
@@ -38,7 +39,7 @@ func constructExaminations(deps Dependencies, foundation applicationFoundation, 
 	if err := constructExamSittings(deps, foundation, access, collectionEffects, &built); err != nil {
 		return examinationConstruction{}, err
 	}
-	if err := constructExamAttempts(deps, foundation, access, &built); err != nil {
+	if err := constructExamAttempts(deps, foundation, access, accounts.identity, &built); err != nil {
 		return examinationConstruction{}, err
 	}
 	if err := constructExamContent(deps, foundation, access, collectionEffects, &built); err != nil {
@@ -133,7 +134,7 @@ func constructExamSittings(
 
 // constructExamAttempts builds the Attempt service and the integrity review service that depend on Sittings.
 func constructExamAttempts(
-	deps Dependencies, foundation applicationFoundation, access accessAcademicConstruction, built *examinationConstruction,
+	deps Dependencies, foundation applicationFoundation, access accessAcademicConstruction, desktopBuilds *identity.Service, built *examinationConstruction,
 ) error {
 	sittings := built.sittings
 	attemptEffects := examAttemptRealtimeEffects{realtime: foundation.realtime}
@@ -146,7 +147,7 @@ func constructExamAttempts(
 		Auditor:       foundation.audit.MutationAudit(),
 		SystemAuditor: examAttemptSystemAuditAdapter{audit: foundation.audit},
 		Effects:       attemptEffects, EffectFailures: attemptEffects, Content: deps.FileContent, Mail: submissionMail,
-		DesktopBuilds: access.desktopCompatibility,
+		DesktopBuilds: desktopBuilds,
 		Now:           time.Now, NewAttemptID: model.NewExamAttemptID, NewWorkspaceID: model.NewExamAttemptWorkspaceID,
 		NewParticipation: model.NewAttemptParticipationID, NewConnection: model.NewAttemptConnectionID,
 		NewEvidence: model.NewIntegrityEvidenceID, NewFlag: model.NewIntegrityFlagID,

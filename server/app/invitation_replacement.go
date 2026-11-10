@@ -14,6 +14,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -46,7 +47,7 @@ func (s *invitationService) ReplaceInvitation(ctx context.Context, invocation in
 	if err != nil {
 		return InvitationAdministrationView{}, err
 	}
-	actionURL, err := accountCredentialLink(s.deps.PublicURL, "/join", rawClaim)
+	actionURL, err := identity.AccountCredentialLink(s.deps.PublicURL, "/join", rawClaim)
 	if err != nil {
 		return InvitationAdministrationView{}, apperror.New("invitation.unavailable").Wrap(err)
 	}
@@ -225,7 +226,7 @@ func (s *invitationService) prepareAcademicUnitReplacement(ctx context.Context, 
 // prepareInstitutionRoleReplacement requires recent strong authentication, authorizes the Institution target and
 // delegated Role, and builds the replacement Institution Role Invitation.
 func (s *invitationService) prepareInstitutionRoleReplacement(ctx context.Context, invocation invocation.Invocation, command ReplaceInvitationCommand, draft invitationReplacementDraft) (*model.Invitation, error) {
-	if err := requireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
+	if err := identity.RequireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
 		return nil, err
 	}
 	institutionID, err := model.ParseInstitutionID(strings.TrimSpace(command.InstitutionID.String()))

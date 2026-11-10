@@ -20,17 +20,18 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type authenticationEntryHTTPApplication struct {
 	authenticationEntryApplication
-	loginCommand        app.LoginCommand
-	loginResult         *app.LoginResult
+	loginCommand        identity.LoginCommand
+	loginResult         *identity.LoginResult
 	loginError          error
 	loginCalls          int
-	logoutCommand       app.LogoutCommand
+	logoutCommand       identity.LogoutCommand
 	logoutCalls         int
 	registrationCommand app.RegisterLocalUserCommand
 	registrationCalls   int
@@ -50,8 +51,8 @@ func (af *authenticationEntryHTTPApplication) RegisterLocalUser(
 func (af *authenticationEntryHTTPApplication) Login(
 	_ context.Context,
 	_ invocation.Invocation,
-	command app.LoginCommand,
-) (*app.LoginResult, error) {
+	command identity.LoginCommand,
+) (*identity.LoginResult, error) {
 	af.loginCommand = command
 	af.loginCalls++
 	return af.loginResult, af.loginError
@@ -60,7 +61,7 @@ func (af *authenticationEntryHTTPApplication) Login(
 func (af *authenticationEntryHTTPApplication) Logout(
 	_ context.Context,
 	_ invocation.Invocation,
-	command app.LogoutCommand,
+	command identity.LogoutCommand,
 ) error {
 	af.logoutCommand = command
 	af.logoutCalls++
@@ -71,16 +72,16 @@ type externalAuthenticationEntryHTTPApplication struct {
 	externalAuthenticationEntryApplication
 	providers       []model.ExternalAuthenticationProvider
 	providersError  error
-	beginCommand    app.BeginExternalAuthenticationCommand
+	beginCommand    identity.BeginExternalAuthenticationCommand
 	start           *model.ExternalAuthenticationStart
-	completeCommand app.CompleteExternalAuthenticationCommand
+	completeCommand identity.CompleteExternalAuthenticationCommand
 	completion      *model.ExternalAuthenticationCompletion
 }
 
 func (af *externalAuthenticationEntryHTTPApplication) CompleteExternalAuthentication(
 	_ context.Context,
 	_ invocation.Invocation,
-	command app.CompleteExternalAuthenticationCommand,
+	command identity.CompleteExternalAuthenticationCommand,
 ) (*model.ExternalAuthenticationCompletion, error) {
 	af.completeCommand = command
 	return af.completion, nil
@@ -123,7 +124,7 @@ func TestExternalAuthenticationCallbackReturnsValidatedRedirectAndCookies(t *tes
 func (af *externalAuthenticationEntryHTTPApplication) BeginExternalAuthentication(
 	_ context.Context,
 	_ invocation.Invocation,
-	command app.BeginExternalAuthenticationCommand,
+	command identity.BeginExternalAuthenticationCommand,
 ) (*model.ExternalAuthenticationStart, error) {
 	af.beginCommand = command
 	return af.start, nil
@@ -190,7 +191,7 @@ func TestAuthenticationResourceRunsPublicAndSessionEntriesThroughKernel(t *testi
 		ClientType: model.SessionClientCLI, AuthenticatedAt: now,
 	}
 	authentication := &authenticationEntryHTTPApplication{
-		loginResult: &app.LoginResult{
+		loginResult: &identity.LoginResult{
 			User: &model.User{ID: principal.UserID, Username: "student", Email: "student@example.edu"},
 			Session: &model.Session{
 				ID: principal.SessionID, UserID: principal.UserID, ClientType: model.SessionClientWeb,
@@ -207,7 +208,7 @@ func TestAuthenticationResourceRunsPublicAndSessionEntriesThroughKernel(t *testi
 	require.NoError(t, err)
 	httpAPI := newFocusedResourceAPI(
 		t, logger, classRouteAuthenticator{principal: principal},
-		authenticationResource(authentication, cookies),
+		authenticationResource(authentication, authentication, cookies),
 	)
 
 	loginRequest := newJSONRequest(
@@ -262,7 +263,7 @@ func TestAuthenticationResourceKernelRejectsMissingCredentialAndInvalidJSON(t *t
 	authentication := &authenticationEntryHTTPApplication{}
 	httpAPI := newFocusedResourceAPI(
 		t, logger, classRouteAuthenticator{},
-		authenticationResource(authentication, cookies),
+		authenticationResource(authentication, authentication, cookies),
 	)
 
 	refresh := httptest.NewRecorder()
@@ -311,7 +312,7 @@ func TestPublicRegistrationUsesStrictBodyAndReturnsNoAccountProjection(t *testin
 
 	logger, _ := newTestLogger(t)
 	applicationFake := &authenticationEntryHTTPApplication{}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{}, authenticationResource(applicationFake, browserCookies{}))
+	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{}, authenticationResource(applicationFake, applicationFake, browserCookies{}))
 
 	request := newJSONRequest(http.MethodPost, "/api/v1/auth/register",
 		strings.NewReader(`{"username":"student","email":"student@example.edu","first_name":"New","last_name":"Student","password":"long-private-password"}`))

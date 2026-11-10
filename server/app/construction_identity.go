@@ -8,111 +8,51 @@
 package app
 
 import (
+	"context"
 	"time"
 
-	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
-func constructIdentity(
+// constructAccounts builds the identity area and the account flows that stay
+// in this package: Invitations, browser Invitation handoff and public
+// registration. Invitations come first because external sign-in admits an
+// External Identity through them.
+func constructAccounts(
 	deps Dependencies,
 	foundation applicationFoundation,
-	authorization *access.Authorizer,
-	capabilities accessPolicyCapabilitySource,
-	desktopCompatibility *desktopCompatibilityService,
-) (identityConstruction, error) {
-	var built identityConstruction
-	authenticationAccess, err := constructSessionAuthentication(deps, foundation, authorization, capabilities, desktopCompatibility, &built)
-	if err != nil {
-		return identityConstruction{}, err
-	}
-	if err := constructAccountServices(deps, foundation, authorization, authenticationAccess, &built); err != nil {
-		return identityConstruction{}, err
-	}
-	if err := constructExternalAuthentication(deps, foundation, capabilities, authenticationAccess, &built); err != nil {
-		return identityConstruction{}, err
-	}
-	return built, nil
-}
-
-// constructSessionAuthentication builds DPoP, the authentication access policy, MFA, local authentication and desktop authorization.
-func constructSessionAuthentication(
-	deps Dependencies,
-	foundation applicationFoundation,
-	authorization *access.Authorizer,
-	capabilities accessPolicyCapabilitySource,
-	desktopCompatibility *desktopCompatibilityService,
-	built *identityConstruction,
-) (*currentAuthenticationAccessPolicy, error) {
-	dpop, err := newDPoPSecurity(dpopSecurityDependencies{Cache: deps.Cache, Policy: dpopPolicy{Origin: deps.PublicURL,
-		NonceLifetime: 5 * time.Minute, ProofLifetime: 5 * time.Minute, ClockSkew: time.Minute,
-		NewNonce: model.NewCredentialToken, Now: time.Now}})
-	if err != nil {
-		return nil, err
-	}
-	authenticationAccess, err := newCurrentAuthenticationAccessPolicy(currentAuthenticationAccessPolicyDependencies{Policies: deps.Store.AccessPolicy(), MFAEnabled: deps.MFA.Enabled, Diagnostics: deps.AuthenticationDiagnostics, Now: time.Now})
-	if err != nil {
-		return nil, err
-	}
+	access accessAcademicConstruction,
+) (accountConstruction, error) {
 	accountMail := foundation.mail
-	mfaApplication, err := newMFAApplicationService(mfaApplicationServiceDependencies{Users: deps.Store.User(), Credentials: deps.Store.MFA(), Passwords: deps.Store.PasswordCredential(), Sessions: deps.Store.Session(), Institutions: deps.Store.Institution(), Audit: mfaAuditAdapter{audit: foundation.audit}, Effects: foundation.realtime, Mail: accountMail, Mechanics: foundation.mfa, Security: mfaSecurityDependencies{authorization: authorization, capabilities: capabilities, attempts: foundation.attempts, rateLimit: deps.LoginRateLimit}, RoleHolderMFA: authenticationAccess, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Now: time.Now})
+	invitations, err := newInvitationService(invitationServiceDependencies{Store: deps.Store.Invitation(), Classes: deps.Store.Class(), Periods: deps.Store.AcademicPeriod(), AcademicUnits: deps.Store.AcademicUnit(), Roles: deps.Store.Role(), Authorization: invitationAuthorizationAdapter{authorization: access.authorization}, Mail: accountMail, Hasher: foundation.hasher, Audit: foundation.audit.MutationAudit(), Attempts: invitationAttemptAccounting{attempts: foundation.attempts, policy: deps.AccountRecovery.RateLimit}, MembershipEffects: academicRealtimeEffects{sittings: deps.Store.ExamSitting(), realtime: foundation.realtime}, NodeID: deps.NodeID, PublicURL: deps.PublicURL, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, NewClaim: model.NewCredentialToken, Now: time.Now})
 	if err != nil {
-		return nil, err
+		return accountConstruction{}, err
 	}
-	// Expand PAT policy used both at bearer resolution and administration.
-	patPolicy := deps.PersonalAccessToken
-	patResolver, err := newPersonalAccessTokenBearerResolver(personalAccessTokenBearerResolverDependencies{Tokens: deps.Store.PersonalAccessToken(), Policy: patPolicy, Diagnostics: deps.AuthenticationDiagnostics})
+	wake := &jobWake{}
+	service, err := identity.New(identity.Dependencies{
+		Store: deps.Store, Cache: deps.Cache, Registry: deps.Registry,
+		Authorizer: access.authorization, Auditor: foundation.audit, Capabilities: access.capabilities,
+		Effects: foundation.realtime, Mail: accountMail,
+		Hasher: foundation.hasher, Attempts: foundation.attempts, Invalidator: foundation.invalidator,
+		Invitations:     externalInvitationAcceptor{invitations: invitations},
+		Operational:     operationalRecorderAdapter{recorder: deps.OperationalRecorder},
+		MFASecretSealer: deps.MFASecretSealer, MFARekeyWake: wake.Wake,
+		DesktopBuildCatalog: deps.DesktopBuildCatalog, SkipDesktopCompatibility: deps.SkipDesktopCompatibility,
+		NodeID: deps.NodeID, PublicURL: deps.PublicURL, LoopbackHTTPDevelopment: deps.LoopbackHTTPDevelopment,
+		MFA: deps.MFA, Sessions: deps.Sessions, LoginRateLimit: deps.LoginRateLimit,
+		BootstrapProtection: deps.BootstrapProtection, PersonalAccessToken: deps.PersonalAccessToken,
+		AccountRecovery: deps.AccountRecovery, ExternalAuth: deps.ExternalAuth,
+		RecentAuthenticationTTL:   deps.RecentAuthenticationTTL,
+		AuthenticationDiagnostics: deps.AuthenticationDiagnostics, RecoveryDiagnostics: deps.RecoveryDiagnostics,
+	})
 	if err != nil {
-		return nil, err
-	}
-	authentication, err := newAuthenticationService(authenticationServiceDependencies{Users: deps.Store.User(), Passwords: deps.Store.PasswordCredential(), Sessions: deps.Store.Session(), SessionCredentials: deps.Store.SessionCredential(), AccessPolicy: authenticationAccess, Cache: deps.Cache, Attempts: foundation.attempts, SecurityEffects: foundation.realtime, Audit: foundation.audit.MutationAudit(), LoginAudit: localLoginAuditAdapter{audit: foundation.audit}, Hasher: foundation.hasher, MFA: mfaApplication, PersonalTokens: patResolver, SessionPolicy: deps.Sessions, LoginRateLimit: deps.LoginRateLimit, Diagnostics: deps.AuthenticationDiagnostics, NewCredential: model.NewCredentialToken, Now: time.Now, Desktop: authenticationDesktopDependencies{registrations: deps.Store.DesktopRegistration(), dpop: dpop}})
-	if err != nil {
-		return nil, err
-	}
-	authentication.operational = deps.OperationalRecorder
-	desktopAuthorization, err := newDesktopAuthorizationService(desktopAuthorizationServiceDependencies{Transactions: deps.Store.BrowserAuthentication(), Institutions: deps.Store.Institution(), AccessPolicy: authenticationAccess, Capabilities: capabilities, Audit: desktopAuthorizationAuditAdapter{audit: foundation.audit}, Attempts: desktopAuthorizationAttemptAccounting{attempts: foundation.attempts, policy: deps.LoginRateLimit}, SessionPolicy: deps.Sessions, Policy: DesktopAuthorizationPolicy{Issuer: deps.PublicURL, AllowLoopbackHTTPDevelopment: deps.LoopbackHTTPDevelopment}, NewCredential: model.NewCredentialToken, Now: time.Now, Identity: desktopAuthorizationIdentityDependencies{users: deps.Store.User(), authentication: authentication,
-		compatibility: desktopCompatibility, dpop: dpop}})
-	if err != nil {
-		return nil, err
-	}
-	built.mail, built.mfaApplication = accountMail, mfaApplication
-	desktopReauthentication, err := newDesktopReauthenticationService(desktopReauthenticationServiceDependencies{Transactions: deps.Store.BrowserAuthentication(), Institutions: deps.Store.Institution(), Users: deps.Store.User(), Capabilities: capabilities, Audit: desktopReauthenticationAuditAdapter{audit: foundation.audit}, Attempts: desktopAuthorizationAttemptAccounting{attempts: foundation.attempts, policy: deps.LoginRateLimit}, Authentication: authentication, Policy: DesktopAuthorizationPolicy{Issuer: deps.PublicURL, AllowLoopbackHTTPDevelopment: deps.LoopbackHTTPDevelopment}, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, NewCredential: model.NewCredentialToken, Now: time.Now})
-	if err != nil {
-		return nil, err
-	}
-	built.authentication, built.desktopAuthorization, built.desktopReauthentication = authentication, desktopAuthorization, desktopReauthentication
-	return authenticationAccess, nil
-}
-
-// constructAccountServices builds self-service Sessions, Invitations, account tokens, registration and token administration.
-func constructAccountServices(
-	deps Dependencies,
-	foundation applicationFoundation,
-	authorization *access.Authorizer,
-	authenticationAccess *currentAuthenticationAccessPolicy,
-	built *identityConstruction,
-) error {
-	accountMail := built.mail
-	patPolicy := deps.PersonalAccessToken
-	selfSessions, err := newSelfSessionService(selfSessionServiceDependencies{Sessions: deps.Store.Session(), Audit: foundation.audit.MutationAudit(), Effects: foundation.realtime, Now: time.Now})
-	if err != nil {
-		return err
-	}
-	invitations, err := newInvitationService(invitationServiceDependencies{Store: deps.Store.Invitation(), Classes: deps.Store.Class(), Periods: deps.Store.AcademicPeriod(), AcademicUnits: deps.Store.AcademicUnit(), Roles: deps.Store.Role(), Authorization: invitationAuthorizationAdapter{authorization: authorization}, Mail: accountMail, Hasher: foundation.hasher, Audit: foundation.audit.MutationAudit(), Attempts: invitationAttemptAccounting{attempts: foundation.attempts, policy: deps.AccountRecovery.RateLimit}, MembershipEffects: academicRealtimeEffects{sittings: deps.Store.ExamSitting(), realtime: foundation.realtime}, NodeID: deps.NodeID, PublicURL: deps.PublicURL, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, NewClaim: model.NewCredentialToken, Now: time.Now})
-	if err != nil {
-		return err
+		return accountConstruction{}, err
 	}
 	browserInvitations, err := newBrowserInvitationService(browserInvitationServiceDependencies{Transactions: deps.Store.BrowserAuthentication(), Institutions: deps.Store.Institution(), Invitations: invitations, Issuer: deps.PublicURL, NewProof: model.NewCredentialToken})
 	if err != nil {
-		return err
-	}
-	accountTokens, err := newAccountTokenService(accountTokenServiceDependencies{Users: deps.Store.User(), Passwords: deps.Store.PasswordCredential(), Tokens: deps.Store.UserToken(), AccessPolicy: authenticationAccess, Institutions: deps.Store.Institution(), Mail: accountMail, Attempts: foundation.attempts, Hasher: foundation.hasher, Audit: accountTokenAuditRecorder{nodeID: deps.NodeID}, Effects: foundation.realtime, Diagnostics: deps.RecoveryDiagnostics, Policy: deps.AccountRecovery, PublicURL: deps.PublicURL, NewToken: model.NewCredentialToken, Now: time.Now})
-	if err != nil {
-		return err
-	}
-	accountTokens.administration = userEmailAdministration{
-		authorization: authorization, audit: foundation.audit.MutationAudit(),
-		recentAuthenticationTTL: deps.RecentAuthenticationTTL,
+		return accountConstruction{}, err
 	}
 	publicRegistration, err := newPublicRegistrationService(publicRegistrationDependencies{
 		registrations: deps.Store.User(),
@@ -129,49 +69,32 @@ func constructAccountServices(
 		now:           time.Now,
 	})
 	if err != nil {
-		return err
+		return accountConstruction{}, err
 	}
-	personalAccessTokenAdministration, err := newPersonalAccessTokenAdministrationService(personalAccessTokenAdministrationServiceDependencies{Tokens: deps.Store.PersonalAccessToken(), Users: deps.Store.User(), AcademicUnits: deps.Store.AcademicUnit(), Institutions: deps.Store.Institution(), Audit: personalAccessTokenAuditAdapter{audit: foundation.audit}, Authorization: authorization, Mail: accountMail, Policy: patPolicy, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, NewCredential: model.NewCredentialToken, Now: time.Now})
-	if err != nil {
-		return err
-	}
-	desktopRegistrations, err := newDesktopRegistrationService(desktopRegistrationServiceDependencies{Registrations: deps.Store.DesktopRegistration(), Audit: foundation.audit.MutationAudit(), Effects: foundation.realtime, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Now: time.Now})
-	if err != nil {
-		return err
-	}
-	built.selfSessions, built.invitations, built.browserInvitations = selfSessions, invitations, browserInvitations
-	built.accountTokens, built.publicRegistration = accountTokens, publicRegistration
-	built.personalAccessTokenAdministration, built.desktopRegistrations = personalAccessTokenAdministration, desktopRegistrations
-	return nil
+	return accountConstruction{
+		identity: service, browserInvitations: browserInvitations, publicRegistration: publicRegistration,
+		invitations: invitations, wake: wake,
+	}, nil
 }
 
-// constructExternalAuthentication builds external authentication and authentication method management.
-func constructExternalAuthentication(
-	deps Dependencies,
-	foundation applicationFoundation,
-	capabilities accessPolicyCapabilitySource,
-	authenticationAccess *currentAuthenticationAccessPolicy,
-	built *identityConstruction,
-) error {
-	authentication, invitations, desktopAuthorization := built.authentication, built.invitations, built.desktopAuthorization
-	externalPolicy := deps.ExternalAuth
-	if externalPolicy.PublicURL == "" {
-		externalPolicy.PublicURL = deps.PublicURL
+// externalInvitationAcceptor lets external sign-in in the identity area admit
+// an External Identity through the Invitation its login state carries.
+type externalInvitationAcceptor struct{ invitations *invitationService }
+
+func (a externalInvitationAcceptor) AcceptExternalIdentity(ctx context.Context, state *model.ExternalLoginState,
+	assertion *model.ExternalAuthenticationAssertion, capabilities store.AccessDeploymentCapabilities,
+	metadata model.RequestMetadata, sessionClientType string,
+) (*store.ExternalIdentityInvitationAcceptanceResult, error) {
+	return a.invitations.acceptExternalIdentity(ctx, state, assertion, capabilities, metadata, sessionClientType)
+}
+
+// jobWake wakes the Job runtime once it exists. The identity area needs the
+// wake when it is built, before the runtime that its MFA rekey proposes Jobs
+// to.
+type jobWake struct{ wake func() }
+
+func (w *jobWake) Wake() {
+	if w.wake != nil {
+		w.wake()
 	}
-	if externalPolicy.NodeID == "" {
-		externalPolicy.NodeID = deps.NodeID
-	}
-	if externalPolicy.LoginRateLimit == (LoginRateLimitPolicy{}) {
-		externalPolicy.LoginRateLimit = deps.LoginRateLimit
-	}
-	externalAuthentication, err := newExternalAuthenticationService(externalAuthenticationServiceDependencies{Registry: deps.Registry, LoginStates: deps.Store.ExternalLoginState(), Institutions: deps.Store.Institution(), Identities: deps.Store.ExternalIdentity(), Sessions: deps.Store.Session(), AccessPolicy: authenticationAccess, Attempts: foundation.attempts, Authentication: authentication, Invalidator: foundation.invalidator, Audit: foundation.audit, MutationAudit: foundation.audit.MutationAudit(), Capabilities: capabilities, InvitationAcceptor: invitations, DesktopAuthorization: desktopAuthorization, DesktopReauthentication: built.desktopReauthentication, Policy: externalPolicy, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Diagnostics: deps.AuthenticationDiagnostics, NewCredential: model.NewCredentialToken, Now: time.Now})
-	if err != nil {
-		return err
-	}
-	authenticationMethods, err := newAuthenticationMethodService(authenticationMethodServiceDependencies{Users: deps.Store.User(), Mail: built.mail, Passwords: deps.Store.PasswordCredential(), Identities: deps.Store.ExternalIdentity(), Providers: deps.Registry, Capabilities: capabilities, Hasher: foundation.hasher, Audit: foundation.audit.MutationAudit(), Effects: foundation.realtime, RecentTTL: deps.RecentAuthenticationTTL, Now: time.Now})
-	if err != nil {
-		return err
-	}
-	built.externalAuthentication, built.authenticationMethods = externalAuthentication, authenticationMethods
-	return nil
 }

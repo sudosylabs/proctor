@@ -24,8 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
-
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -587,7 +586,7 @@ func createIntegrationUser(
 	password string,
 ) *model.User {
 	t.Helper()
-	user, appErr := helper.App.CreateLocalUser(context.Background(), app.CreateLocalUserCommand{User: &model.User{
+	user, appErr := helper.App.Identity.CreateLocalUser(context.Background(), identity.CreateLocalUserCommand{User: &model.User{
 		Username:    username,
 		Email:       username + "@example.edu",
 		DisplayName: username,

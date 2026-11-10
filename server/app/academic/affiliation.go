@@ -98,9 +98,9 @@ func (s *Service) CreateAffiliation(ctx context.Context, invocation invocation.I
 	if err != nil {
 		return nil, err
 	}
-	bindOnboardingImportCommand(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
-	bindAcademicAdministrationAuthorization(idempotency, command.Batch.Fields().Authorization)
-	bindAcademicAdministrationBatch(idempotency, command.Batch.Fields().Metadata)
+	batchitem.BindOnboardingImport(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
+	batchitem.BindAuthorization(idempotency, command.Batch.Fields().Authorization)
+	batchitem.BindBatch(idempotency, command.Batch.Fields().Metadata)
 	changed := false
 	result, err := access.RunAudited(
 		ctx,
@@ -170,9 +170,9 @@ func (s *Service) EndAffiliation(ctx context.Context, invocation invocation.Invo
 	if err != nil {
 		return nil, err
 	}
-	bindOnboardingImportCommand(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
-	bindAcademicAdministrationAuthorization(idempotency, command.Batch.Fields().Authorization)
-	bindAcademicAdministrationBatch(idempotency, command.Batch.Fields().Metadata)
+	batchitem.BindOnboardingImport(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
+	batchitem.BindAuthorization(idempotency, command.Batch.Fields().Authorization)
+	batchitem.BindBatch(idempotency, command.Batch.Fields().Metadata)
 	changed := false
 	result, err := access.RunAudited(
 		ctx,

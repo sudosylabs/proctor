@@ -37,6 +37,7 @@ func TestRoleHTTPCreateUsesApplicationCommandWithoutPreflight(t *testing.T) {
 	options := validHTTPOptions(t)
 	options.Logger = logger
 	options.Application = transport
+	options.Identity = transport
 	options.AcademicUnits = transport
 	options.Institutions = transport
 	options.Roles = roles

@@ -531,7 +531,7 @@ func authorizedScopeDefinition(
 	resourceType model.ResourceType,
 ) (model.ActionDefinition, bool, error) {
 	if principal.Validate() != nil {
-		return model.ActionDefinition{}, false, invalidTokenAppError()
+		return model.ActionDefinition{}, false, InvalidTokenAppError()
 	}
 	definition, known := model.DefinitionForAction(action)
 	if !known || !definition.AcceptsResource(resourceType) {

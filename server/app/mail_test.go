@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
@@ -273,6 +274,16 @@ func bytesRepeat(value byte, count int) []byte {
 	}
 	return result
 }
+
+// mailTestAttempts is the shared attempt accounting over cache, built the way
+// composition builds it.
+func mailTestAttempts(t *testing.T, cache identity.AttemptCache) *identity.AttemptAccounting {
+	t.Helper()
+	attempts, err := identity.NewAttemptAccounting(identity.AttemptAccountingDependencies{Cache: cache})
+	require.NoError(t, err)
+	return attempts
+}
+
 func mailTestPrincipal(at time.Time) model.Principal {
 	return model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewSessionCredentialID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientWeb, AuthenticatedAt: at}
 }
@@ -414,7 +425,7 @@ func TestMailServicePreparesOnlyControlledSelfRecipientAndAtomicIntent(t *testin
 	sender := &mailSenderFake{enabled: true, from: MailAddress{Name: "Proctor", Address: "no-reply@institution.test"}}
 	authorizer, auditor := &mailAuthorizerFake{}, &mailAuditFake{}
 	content := FrozenMailContent{Subject: "Fixed test", Text: "fixed text", HTML: "<p>fixed html</p>"}
-	service, err := newMailService(mailServiceDependencies{Mail: persistence, Users: mailUserStoreFake{mailTestUser(principal, at)}, Authorization: authorizer, Audit: auditor, Attempts: &authenticationAttemptAccounting{deps: authenticationAttemptAccountingDependencies{Cache: &mailAttemptCacheFake{}}}, Renderer: mailRendererFake{content}, Sender: sender, Metrics: NopMailDeliveryRecorder{}, Sealer: mailTestSealer(t), RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
+	service, err := newMailService(mailServiceDependencies{Mail: persistence, Users: mailUserStoreFake{mailTestUser(principal, at)}, Authorization: authorizer, Audit: auditor, Attempts: mailTestAttempts(t, &mailAttemptCacheFake{}), Renderer: mailRendererFake{content}, Sender: sender, Metrics: NopMailDeliveryRecorder{}, Sealer: mailTestSealer(t), RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
 	require.NoError(t, err)
 	woke := 0
 	service.wake = func() { woke++ }
@@ -440,7 +451,7 @@ func TestMailMetricsRequiresMailViewAuthorization(t *testing.T) {
 	principal := mailTestPrincipal(at)
 	authorizer := &mailAuthorizerFake{}
 	metrics := &recordingMailMetrics{health: []MailHealthMetric{{Code: MailHealthHealthy}}}
-	service, err := newMailService(mailServiceDependencies{Mail: &mailStoreFake{}, Users: mailUserStoreFake{mailTestUser(principal, at)}, Authorization: authorizer, Audit: &mailAuditFake{}, Attempts: &authenticationAttemptAccounting{deps: authenticationAttemptAccountingDependencies{Cache: &mailAttemptCacheFake{}}}, Renderer: mailRendererFake{}, Sender: &mailSenderFake{}, Metrics: metrics, Sealer: nil, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
+	service, err := newMailService(mailServiceDependencies{Mail: &mailStoreFake{}, Users: mailUserStoreFake{mailTestUser(principal, at)}, Authorization: authorizer, Audit: &mailAuditFake{}, Attempts: mailTestAttempts(t, &mailAttemptCacheFake{}), Renderer: mailRendererFake{}, Sender: &mailSenderFake{}, Metrics: metrics, Sealer: nil, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
 	require.NoError(t, err)
 	_, err = service.GetMailMetrics(context.Background(), invocation.New(principal, model.RequestMetadata{}))
 	require.NoError(t, err)
@@ -456,7 +467,7 @@ func TestMailServiceRejectsPATUnverifiedAndRateLimitedBeforePersistence(t *testi
 	sender := &mailSenderFake{enabled: true, from: MailAddress{Address: "no-reply@example.test"}}
 	content := FrozenMailContent{Subject: "test", Text: "test"}
 	cache := &mailAttemptCacheFake{}
-	service, err := newMailService(mailServiceDependencies{Mail: persistence, Users: mailUserStoreFake{user}, Authorization: &mailAuthorizerFake{}, Audit: &mailAuditFake{}, Attempts: &authenticationAttemptAccounting{deps: authenticationAttemptAccountingDependencies{Cache: cache}}, Renderer: mailRendererFake{content}, Sender: sender, Metrics: NopMailDeliveryRecorder{}, Sealer: mailTestSealer(t), RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
+	service, err := newMailService(mailServiceDependencies{Mail: persistence, Users: mailUserStoreFake{user}, Authorization: &mailAuthorizerFake{}, Audit: &mailAuditFake{}, Attempts: mailTestAttempts(t, cache), Renderer: mailRendererFake{content}, Sender: sender, Metrics: NopMailDeliveryRecorder{}, Sealer: mailTestSealer(t), RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
 	require.NoError(t, err)
 	pat := principal
 	pat.SessionID = ""
@@ -490,7 +501,7 @@ func TestMailOperatorReadsAuthorizeBeforeInspectionAndReturnOnlySafeViews(t *tes
 	delivery := queuedMailDeliveryFixtureForApp(at)
 	persistence := &mailStoreFake{delivery: delivery}
 	authorizer := &mailAuthorizerFake{}
-	service, err := newMailService(mailServiceDependencies{Mail: persistence, Users: mailUserStoreFake{mailTestUser(principal, at)}, Authorization: authorizer, Audit: &mailAuditFake{}, Attempts: &authenticationAttemptAccounting{deps: authenticationAttemptAccountingDependencies{Cache: &mailAttemptCacheFake{}}}, Renderer: mailRendererFake{}, Sender: &mailSenderFake{}, Metrics: NopMailDeliveryRecorder{}, Sealer: nil, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
+	service, err := newMailService(mailServiceDependencies{Mail: persistence, Users: mailUserStoreFake{mailTestUser(principal, at)}, Authorization: authorizer, Audit: &mailAuditFake{}, Attempts: mailTestAttempts(t, &mailAttemptCacheFake{}), Renderer: mailRendererFake{}, Sender: &mailSenderFake{}, Metrics: NopMailDeliveryRecorder{}, Sealer: nil, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
 	require.NoError(t, err)
 	page, appErr := service.ListMailDeliveries(context.Background(), invocation.New(principal, model.RequestMetadata{}), ListMailDeliveriesQuery{States: []model.MailDeliveryState{model.MailDeliveryQueued}, Limit: 20})
 	require.NoError(t, appErr, "List() page=%#v err=%v lists=%d actions=%v", page, appErr, persistence.lists, authorizer.actions)
@@ -525,7 +536,7 @@ func TestMailOperatorMutationsRequireRecentSessionAndAuditSameDelivery(t *testin
 	delivery := queuedMailDeliveryFixtureForApp(at.Add(-time.Minute))
 	persistence := &mailStoreFake{delivery: delivery}
 	auditor := &mailAuditFake{}
-	service, err := newMailService(mailServiceDependencies{Mail: persistence, Users: mailUserStoreFake{mailTestUser(principal, at)}, Authorization: &mailAuthorizerFake{}, Audit: auditor, Attempts: &authenticationAttemptAccounting{deps: authenticationAttemptAccountingDependencies{Cache: &mailAttemptCacheFake{}}}, Renderer: mailRendererFake{}, Sender: &mailSenderFake{}, Metrics: NopMailDeliveryRecorder{}, Sealer: nil, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
+	service, err := newMailService(mailServiceDependencies{Mail: persistence, Users: mailUserStoreFake{mailTestUser(principal, at)}, Authorization: &mailAuthorizerFake{}, Audit: auditor, Attempts: mailTestAttempts(t, &mailAttemptCacheFake{}), Renderer: mailRendererFake{}, Sender: &mailSenderFake{}, Metrics: NopMailDeliveryRecorder{}, Sealer: nil, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
 	require.NoError(t, err)
 	pat := principal
 	pat.SessionID = ""
@@ -555,7 +566,7 @@ func TestMailServiceRejectsEnabledDeliveryWithoutSecretSealer(t *testing.T) {
 	at := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
 	principal := mailTestPrincipal(at)
 	content := FrozenMailContent{Subject: "test", Text: "test"}
-	_, err := newMailService(mailServiceDependencies{Mail: &mailStoreFake{}, Users: mailUserStoreFake{mailTestUser(principal, at)}, Authorization: &mailAuthorizerFake{}, Audit: &mailAuditFake{}, Attempts: &authenticationAttemptAccounting{deps: authenticationAttemptAccountingDependencies{Cache: &mailAttemptCacheFake{}}}, Renderer: mailRendererFake{content}, Sender: &mailSenderFake{enabled: true, from: MailAddress{Address: "no-reply@example.test"}}, Metrics: NopMailDeliveryRecorder{}, Sealer: nil, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
+	_, err := newMailService(mailServiceDependencies{Mail: &mailStoreFake{}, Users: mailUserStoreFake{mailTestUser(principal, at)}, Authorization: &mailAuthorizerFake{}, Audit: &mailAuditFake{}, Attempts: mailTestAttempts(t, &mailAttemptCacheFake{}), Renderer: mailRendererFake{content}, Sender: &mailSenderFake{enabled: true, from: MailAddress{Address: "no-reply@example.test"}}, Metrics: NopMailDeliveryRecorder{}, Sealer: nil, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return at }})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "enabled mail requires secret sealing")
 }

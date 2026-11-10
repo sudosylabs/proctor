@@ -13,7 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -21,7 +21,7 @@ func TestAdministratorMFAResetOnlyAvailableOnInertServer(t *testing.T) {
 	t.Parallel()
 	command := AdministratorMFAResetCommand{InstitutionID: "institution", UserID: "user"}
 	for _, state := range []nodeState{nodeInert, nodeStarting, nodeRunning, nodeStopping, nodeClosed} {
-		fake := &administratorRecoveryRuntimeFake{mfaResult: &app.AdministratorMFAResetResult{RecoveryGeneration: 3, ReenrollmentRequired: true}}
+		fake := &administratorRecoveryRuntimeFake{mfaResult: &identity.AdministratorMFAResetResult{RecoveryGeneration: 3, ReenrollmentRequired: true}}
 		node := &Server{state: state, components: runtimeComponents{administratorRecovery: fake}}
 		result, err := node.ResetAdministratorMFA(context.Background(), command)
 		if state == nodeInert {

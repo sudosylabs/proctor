@@ -16,7 +16,7 @@ package httpapi
 import (
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -65,7 +65,7 @@ func (m sessionResourceModule) list(request operationRequest) (operationResult, 
 	sessions, err := m.sessions.ListSessions(
 		request.context,
 		request.invocation(),
-		app.ListSessionsQuery{},
+		identity.ListSessionsQuery{},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -100,7 +100,7 @@ func (m sessionResourceModule) revoke(request operationRequest) (operationResult
 	if err := m.sessions.RevokeSession(
 		request.context,
 		request.invocation(),
-		app.RevokeSessionCommand{SessionID: model.SessionID(input.SessionID)},
+		identity.RevokeSessionCommand{SessionID: model.SessionID(input.SessionID)},
 	); err != nil {
 		return operationResult{}, err
 	}
@@ -116,7 +116,7 @@ func (m sessionResourceModule) revokeAll(request operationRequest) (operationRes
 	if err := m.sessions.RevokeAllSessions(
 		request.context,
 		request.invocation(),
-		app.RevokeAllSessionsCommand{},
+		identity.RevokeAllSessionsCommand{},
 	); err != nil {
 		return operationResult{}, err
 	}
@@ -132,7 +132,7 @@ func (m sessionResourceModule) revokeOthers(request operationRequest) (operation
 	result, err := m.sessions.RevokeOtherSessions(
 		request.context,
 		request.invocation(),
-		app.RevokeOtherSessionsCommand{},
+		identity.RevokeOtherSessionsCommand{},
 	)
 	if err != nil {
 		return operationResult{}, err

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
 	"github.com/sudosylabs/proctor/server/model"
@@ -23,7 +24,7 @@ func constructJobs(
 	deps Dependencies,
 	foundation applicationFoundation,
 	access accessAcademicConstruction,
-	identity identityConstruction,
+	accounts accountConstruction,
 	examinations examinationConstruction,
 	profiles profileFileConstruction,
 ) (jobConstruction, error) {
@@ -47,7 +48,7 @@ func constructJobs(
 	if mailHealth == nil {
 		mailHealth = newMailHealth(deps.MailDeliverySender != nil && deps.MailDeliverySender.Enabled())
 	}
-	definitions := buildApplicationJobDefinitions(deps, foundation, identity, examinations, profiles, defaultJobs, mailHealth)
+	definitions := buildApplicationJobDefinitions(deps, foundation, accounts, examinations, profiles, defaultJobs, mailHealth)
 	runtime, err := job.New(job.Dependencies{
 		Store: deps.Store.Job(), Descriptors: definitions.descriptors, NodeID: deps.NodeID,
 		Diagnostics:   deps.RecoveryDiagnostics,
@@ -63,8 +64,11 @@ func constructJobs(
 	if defaultJobs != nil {
 		defaultJobs.SetWake(runtime.Wake)
 	}
-	if identity.onboardingImports != nil {
-		identity.onboardingImports.wake = runtime.Wake
+	if accounts.onboardingImports != nil {
+		accounts.onboardingImports.wake = runtime.Wake
+	}
+	if accounts.wake != nil {
+		accounts.wake.wake = runtime.Wake
 	}
 	var mailService *mailService
 	if deps.Store.Mail() != nil {
@@ -78,23 +82,12 @@ func constructJobs(
 		mailService.wake = runtime.Wake
 	}
 
-	var mfaKeys *mfaKeyService
-	if deps.Store.MFA() != nil {
-		mfaKeys, err = newMFAKeyService(mfaKeyServiceDependencies{Keys: deps.Store.MFA(), Jobs: deps.Store.Job(),
-			Authorization: mfaKeyAuthorization{authorization: access.authorization, institutions: deps.Store.Institution()},
-			Audit:         foundation.audit.MutationAudit(), Sealer: deps.MFASecretSealer,
-			RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Now: time.Now, Wake: runtime.Wake})
-		if err != nil {
-			return jobConstruction{}, err
-		}
-	}
-
 	operations, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: runtime, Authorization: jobOperationsAuthorization{authorization: access.authorization, institutions: deps.Store.Institution()}, Audit: foundation.audit.MutationAudit(),
 		Users: deps.Store.User(), ExamExports: deps.Store.ExamExport(), Now: time.Now})
 	if err != nil {
 		return jobConstruction{}, err
 	}
-	return jobConstruction{runtime: runtime, operations: operations, mail: mailService, mfaKeys: mfaKeys}, nil
+	return jobConstruction{runtime: runtime, operations: operations, mail: mailService}, nil
 }
 
 type activeMailPayloadKeyStore interface {
@@ -152,7 +145,7 @@ type applicationJobDefinitions struct {
 func buildApplicationJobDefinitions(
 	deps Dependencies,
 	foundation applicationFoundation,
-	identity identityConstruction,
+	accounts accountConstruction,
 	examinations examinationConstruction,
 	profiles profileFileConstruction,
 	defaultJobs *jobhandler.DefaultProfilePictureJobs,
@@ -165,8 +158,8 @@ func buildApplicationJobDefinitions(
 	sealingUseCases := examSittingSealingJobUseCases{sittings: examinations.sittings, attempts: examinations.attempts,
 		jobs: deps.Store.Job(), now: time.Now, newID: model.NewJobID}
 	var onboarding jobhandler.OnboardingImportService
-	if identity.onboardingImports != nil {
-		onboarding = onboardingImportJobs{service: identity.onboardingImports}
+	if accounts.onboardingImports != nil {
+		onboarding = onboardingImportJobs{service: accounts.onboardingImports}
 	}
 	catalog := jobhandler.NewCatalog(jobhandler.CatalogDependencies{
 		JobStore:                       deps.Store.Job(),
@@ -189,15 +182,12 @@ func buildApplicationJobDefinitions(
 	})
 	periodicTasks := []job.PeriodicTask{
 		{Name: examAttemptExpiryPeriodicTaskName, Interval: examAttemptExpiryScanInterval, Runner: examAttemptExpiryPeriodicRunner{attempts: examinations.attempts}},
-		{Name: "browser-authentication-maintenance", Interval: browserAuthenticationMaintenanceInterval,
-			Runner: browserAuthenticationMaintenancePeriodicRunner{transactions: deps.Store.BrowserAuthentication()}},
-		{Name: "external-authentication-maintenance", Interval: externalAuthenticationMaintenanceInterval,
-			Runner: externalAuthenticationMaintenancePeriodicRunner{states: deps.Store.ExternalLoginState()}},
-		{Name: "personal-access-token-maintenance", Interval: personalAccessTokenMaintenanceInterval,
-			Runner: personalAccessTokenMaintenancePeriodicRunner{tokens: deps.Store.PersonalAccessToken()}},
+	}
+	periodicTasks = append(periodicTasks, identity.MaintenanceTasks(deps.Store)...)
+	periodicTasks = append(periodicTasks, []job.PeriodicTask{
 		{Name: "exam-sitting-mail-reconciliation", Interval: sittingMailReconciliationInterval,
 			Runner: sittingMailReconciliationPeriodicRunner{sittings: deps.Store.ExamSitting(), mail: examinations.sittingMailPreparation}},
-	}
+	}...)
 	if deps.Store.Mail() != nil && deps.MailDeliverySender != nil {
 		periodicTasks = append(periodicTasks, job.PeriodicTask{Name: "mail-maintenance-monitor", Interval: time.Minute, Runner: mailMaintenanceMonitor{mail: deps.Store.Mail(), sender: deps.MailDeliverySender, health: mailHealth, recorder: deps.MailDeliveryRecorder, now: time.Now}})
 	}

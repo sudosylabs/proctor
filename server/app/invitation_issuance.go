@@ -15,6 +15,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
+	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/internal/batchitem"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -54,7 +56,7 @@ func (s *invitationService) IssueStudentClassInvitation(ctx context.Context, inv
 	if err != nil {
 		return InvitationView{}, err
 	}
-	bindOnboardingImportCommand(idempotency, command.onboardingImportID, command.onboardingImportRowNumber)
+	batchitem.BindOnboardingImport(idempotency, command.onboardingImportID, command.onboardingImportRowNumber)
 	attempt := access.Mutation{Invocation: invocation, Action: model.ActionInvitationCreate, Resource: resource,
 		ScopeType: model.RoleScopeClass, ScopeID: class.ID.String(), Operation: "issue_student_class",
 		Value: map[string]any{"purpose": model.InvitationPurposeStudentClass, "class_id": class.ID.String(), "academic_period_id": period.ID.String()}}
@@ -96,7 +98,7 @@ func (s *invitationService) IssueStudentClassInvitation(ctx context.Context, inv
 	if err != nil {
 		return InvitationView{}, err
 	}
-	actionURL, err := accountCredentialLink(s.deps.PublicURL, "/join", rawClaim)
+	actionURL, err := identity.AccountCredentialLink(s.deps.PublicURL, "/join", rawClaim)
 	if err != nil {
 		return InvitationView{}, apperror.New("invitation.unavailable").Wrap(err)
 	}
@@ -188,7 +190,7 @@ func (s *invitationService) IssueTeacherAcademicUnitInvitation(ctx context.Conte
 	if err != nil {
 		return InvitationView{}, err
 	}
-	bindOnboardingImportCommand(idempotency, command.onboardingImportID, command.onboardingImportRowNumber)
+	batchitem.BindOnboardingImport(idempotency, command.onboardingImportID, command.onboardingImportRowNumber)
 	attempt := access.Mutation{Invocation: invocation, Action: model.ActionInvitationCreate, Resource: resource,
 		ScopeType: model.RoleScopeAcademicUnit, ScopeID: unit.ID.String(), Operation: "issue_teacher_academic_unit",
 		Value: map[string]any{"purpose": model.InvitationPurposeTeacherAcademicUnit, "academic_unit_id": unit.ID.String(), "role_id": role.ID.String()}}
@@ -230,7 +232,7 @@ func (s *invitationService) IssueTeacherAcademicUnitInvitation(ctx context.Conte
 	if err != nil {
 		return InvitationView{}, err
 	}
-	actionURL, err := accountCredentialLink(s.deps.PublicURL, "/join", rawClaim)
+	actionURL, err := identity.AccountCredentialLink(s.deps.PublicURL, "/join", rawClaim)
 	if err != nil {
 		return InvitationView{}, apperror.New("invitation.unavailable").Wrap(err)
 	}
@@ -347,7 +349,7 @@ func (s *invitationService) IssueAcademicUnitRoleInvitation(ctx context.Context,
 	if err != nil {
 		return InvitationView{}, err
 	}
-	bindOnboardingImportCommand(idempotency, command.onboardingImportID, command.onboardingImportRowNumber)
+	batchitem.BindOnboardingImport(idempotency, command.onboardingImportID, command.onboardingImportRowNumber)
 	return s.issueAuthorizedScopedRole(ctx, invocation, authorizedScopedRoleInvitationIssue{
 		targetEmail: command.TargetEmail, purpose: model.InvitationPurposeAcademicUnitRole,
 		resource: resource, scopeType: model.RoleScopeAcademicUnit, scopeID: unit.ID.String(), operation: "issue_academic_unit_role",
@@ -358,7 +360,7 @@ func (s *invitationService) IssueAcademicUnitRoleInvitation(ctx context.Context,
 }
 
 func (s *invitationService) IssueInstitutionRoleInvitation(ctx context.Context, invocation invocation.Invocation, command IssueInstitutionRoleInvitationCommand) (InvitationView, error) {
-	if err := requireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
+	if err := identity.RequireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
 		return InvitationView{}, err
 	}
 	institutionID, err := model.ParseInstitutionID(strings.TrimSpace(command.InstitutionID.String()))
@@ -395,7 +397,7 @@ func (s *invitationService) IssueInstitutionRoleInvitation(ctx context.Context, 
 	if err != nil {
 		return InvitationView{}, err
 	}
-	bindOnboardingImportCommand(idempotency, command.onboardingImportID, command.onboardingImportRowNumber)
+	batchitem.BindOnboardingImport(idempotency, command.onboardingImportID, command.onboardingImportRowNumber)
 	return s.issueAuthorizedScopedRole(ctx, invocation, authorizedScopedRoleInvitationIssue{
 		targetEmail: command.TargetEmail, purpose: model.InvitationPurposeInstitutionRole,
 		resource: resource, scopeType: model.RoleScopeInstitution, scopeID: institutionID.String(), operation: "issue_institution_role",
@@ -468,7 +470,7 @@ func (s *invitationService) issueAuthorizedScopedRole(ctx context.Context, invoc
 	if err != nil {
 		return InvitationView{}, apperror.DomainInvalid("invitation.invalid", err)
 	}
-	actionURL, err := accountCredentialLink(s.deps.PublicURL, "/join", rawClaim)
+	actionURL, err := identity.AccountCredentialLink(s.deps.PublicURL, "/join", rawClaim)
 	if err != nil {
 		return InvitationView{}, apperror.New("invitation.unavailable").Wrap(err)
 	}

@@ -25,6 +25,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/cluster"
 	"github.com/sudosylabs/proctor/server/config"
@@ -65,13 +66,13 @@ func TestAccessPolicyTwoNodePostgreSQLFenceAndSafeRevisionFanout(t *testing.T) {
 		"password":         "correct horse battery staple",
 	}, "")
 	require.Equal(t, http.StatusCreated, bootstrap.Code, "bootstrap = %d: %s", bootstrap.Code, bootstrap.Body.String())
-	login, err := primary.App.Login(context.Background(), invocation.Invocation{}, app.LoginCommand{
+	login, err := primary.App.Identity.Login(context.Background(), invocation.Invocation{}, identity.LoginCommand{
 		LoginID: "policy-admin", Password: "correct horse battery staple", ClientType: model.SessionClientCLI,
 		DeviceID: "policy-cli", Source: "127.0.0.1:1",
 	})
 	require.NoError(t, err, "login: %v; logs=%s", err, primary.Logs.String())
 	strengthenRoleAdministratorSession(t, primary.Handler(), login.Tokens.AccessToken)
-	principal, err := primary.App.AuthenticateAccess(context.Background(), login.Tokens.AccessToken)
+	principal, err := primary.App.Identity.AuthenticateAccess(context.Background(), login.Tokens.AccessToken)
 	require.NoError(t, err)
 	invocation := invocation.New(*principal, model.RequestMetadata{RequestID: "access-policy-two-node"})
 	current, err := primary.App.GetAccessPolicy(context.Background(), invocation)
@@ -259,7 +260,7 @@ func TestAccessPolicyTwoNodePostgreSQLFenceAndSafeRevisionFanout(t *testing.T) {
 		ID: removedProviderBinding.ID,
 	})
 	require.NoError(t, err)
-	_, err = primary.App.SetUserEnabled(context.Background(), invocation, app.SetUserEnabledCommand{
+	_, err = primary.App.Identity.SetUserEnabled(context.Background(), invocation, identity.SetUserEnabledCommand{
 		ID: externalAdmin.ID, Enabled: false,
 	})
 	require.True(t, apperror.Is(err, "user.last_system_admin"), "disable only policy-usable administrator error = %v", err)

@@ -14,6 +14,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/app/user"
@@ -31,13 +32,13 @@ type Authenticator interface {
 }
 
 type AccountStateApplication interface {
-	SetUserEnabled(context.Context, invocation.Invocation, app.SetUserEnabledCommand) (*model.User, error)
+	SetUserEnabled(context.Context, invocation.Invocation, identity.SetUserEnabledCommand) (*model.User, error)
 }
 
 type SessionAdministrationApplication interface {
-	ListUserSessions(context.Context, invocation.Invocation, app.ListUserSessionsQuery) (paging.Page[*model.Session], error)
-	RevokeUserSession(context.Context, invocation.Invocation, app.RevokeUserSessionCommand) error
-	RevokeUserSessions(context.Context, invocation.Invocation, app.RevokeUserSessionsCommand) error
+	ListUserSessions(context.Context, invocation.Invocation, identity.ListUserSessionsQuery) (paging.Page[*model.Session], error)
+	RevokeUserSession(context.Context, invocation.Invocation, identity.RevokeUserSessionCommand) error
+	RevokeUserSessions(context.Context, invocation.Invocation, identity.RevokeUserSessionsCommand) error
 }
 
 // UserProfileApplication is the User directory, profile and profile-picture
@@ -52,12 +53,16 @@ type UserProfileApplication interface {
 	GetProfilePicture(context.Context, invocation.Invocation, user.GetProfilePictureQuery) (*user.ProfilePictureContent, error)
 }
 
-// UserAccountApplication is the User use cases that stay on the application
-// root: a candidate's own exam activity and email address changes.
+// UserAccountApplication is the User use case that stays on the application
+// root: a candidate's own exam activity.
 type UserAccountApplication interface {
 	ListCandidateExamActivity(context.Context, invocation.Invocation, attempt.CandidateActivityQuery) (attempt.CandidateActivityPage, error)
-	ChangeUserEmail(context.Context, invocation.Invocation, app.ChangeUserEmailCommand) (*app.UserEmailState, error)
-	VerifyUserEmailPrivileged(context.Context, invocation.Invocation, app.VerifyUserEmailPrivilegedCommand) (*app.UserEmailState, error)
+}
+
+// UserEmailApplication is the email address changes of the identity area.
+type UserEmailApplication interface {
+	ChangeUserEmail(context.Context, invocation.Invocation, identity.ChangeUserEmailCommand) (*identity.UserEmailState, error)
+	VerifyUserEmailPrivileged(context.Context, invocation.Invocation, identity.VerifyUserEmailPrivilegedCommand) (*identity.UserEmailState, error)
 }
 
 type UserSettingsApplication interface {
@@ -146,27 +151,27 @@ type ClassMemberApplication interface {
 }
 
 type Sessions interface {
-	ListSessions(context.Context, invocation.Invocation, app.ListSessionsQuery) ([]*model.Session, error)
-	RevokeSession(context.Context, invocation.Invocation, app.RevokeSessionCommand) error
-	RevokeAllSessions(context.Context, invocation.Invocation, app.RevokeAllSessionsCommand) error
-	RevokeOtherSessions(context.Context, invocation.Invocation, app.RevokeOtherSessionsCommand) (*app.RevokeOtherSessionsResult, error)
+	ListSessions(context.Context, invocation.Invocation, identity.ListSessionsQuery) ([]*model.Session, error)
+	RevokeSession(context.Context, invocation.Invocation, identity.RevokeSessionCommand) error
+	RevokeAllSessions(context.Context, invocation.Invocation, identity.RevokeAllSessionsCommand) error
+	RevokeOtherSessions(context.Context, invocation.Invocation, identity.RevokeOtherSessionsCommand) (*identity.RevokeOtherSessionsResult, error)
 }
 
 type PersonalAccessTokens interface {
-	CreatePersonalAccessToken(context.Context, invocation.Invocation, app.CreatePersonalAccessTokenCommand) (*model.PersonalAccessTokenCreation, error)
-	ListPersonalAccessTokens(context.Context, invocation.Invocation, app.ListPersonalAccessTokensQuery) ([]*model.PersonalAccessToken, error)
-	ListGrantablePersonalAccessTokenScopes(context.Context, invocation.Invocation, app.ListGrantablePersonalAccessTokenScopesQuery) (*app.PersonalAccessTokenGrantableScopes, error)
-	RevokePersonalAccessToken(context.Context, invocation.Invocation, app.RevokePersonalAccessTokenCommand) (*model.PersonalAccessToken, error)
-	SetPersonalAccessTokenDisabled(context.Context, invocation.Invocation, app.SetPersonalAccessTokenDisabledCommand) (*model.PersonalAccessToken, error)
+	CreatePersonalAccessToken(context.Context, invocation.Invocation, identity.CreatePersonalAccessTokenCommand) (*model.PersonalAccessTokenCreation, error)
+	ListPersonalAccessTokens(context.Context, invocation.Invocation, identity.ListPersonalAccessTokensQuery) ([]*model.PersonalAccessToken, error)
+	ListGrantablePersonalAccessTokenScopes(context.Context, invocation.Invocation, identity.ListGrantablePersonalAccessTokenScopesQuery) (*identity.PersonalAccessTokenGrantableScopes, error)
+	RevokePersonalAccessToken(context.Context, invocation.Invocation, identity.RevokePersonalAccessTokenCommand) (*model.PersonalAccessToken, error)
+	SetPersonalAccessTokenDisabled(context.Context, invocation.Invocation, identity.SetPersonalAccessTokenDisabledCommand) (*model.PersonalAccessToken, error)
 }
 
 type MFA interface {
-	GetMFAStatus(context.Context, invocation.Invocation, app.GetMFAStatusQuery) (*app.MFAStatus, error)
-	SetupMFA(context.Context, invocation.Invocation, app.SetupMFACommand) (*app.MFASetup, error)
-	ActivateMFA(context.Context, invocation.Invocation, app.ActivateMFACommand) (*app.MFAActivation, error)
-	ChallengeMFA(context.Context, invocation.Invocation, app.ChallengeMFACommand) (*model.Session, error)
-	RegenerateMFARecoveryCodes(context.Context, invocation.Invocation, app.RegenerateMFARecoveryCodesCommand) ([]string, error)
-	DisableMFA(context.Context, invocation.Invocation, app.DisableMFACommand) error
+	GetMFAStatus(context.Context, invocation.Invocation, identity.GetMFAStatusQuery) (*identity.MFAStatus, error)
+	SetupMFA(context.Context, invocation.Invocation, identity.SetupMFACommand) (*identity.MFASetup, error)
+	ActivateMFA(context.Context, invocation.Invocation, identity.ActivateMFACommand) (*identity.MFAActivation, error)
+	ChallengeMFA(context.Context, invocation.Invocation, identity.ChallengeMFACommand) (*model.Session, error)
+	RegenerateMFARecoveryCodes(context.Context, invocation.Invocation, identity.RegenerateMFARecoveryCodesCommand) ([]string, error)
+	DisableMFA(context.Context, invocation.Invocation, identity.DisableMFACommand) error
 }
 
 type AuditListingApplication interface {
@@ -175,16 +180,16 @@ type AuditListingApplication interface {
 }
 
 type BootstrapApplication interface {
-	GetInstallationStatus(context.Context, invocation.Invocation, app.GetInstallationStatusQuery) (*model.InstallationStatus, error)
-	BootstrapInstallation(context.Context, invocation.Invocation, app.BootstrapInstallationCommand) (*model.InstallationBootstrapResult, error)
+	GetInstallationStatus(context.Context, invocation.Invocation, identity.GetInstallationStatusQuery) (*model.InstallationStatus, error)
+	BootstrapInstallation(context.Context, invocation.Invocation, identity.BootstrapInstallationCommand) (*model.InstallationBootstrapResult, error)
 }
 
 type DesktopCompatibilityApplication interface {
 	EvaluateDesktopCompatibility(
 		context.Context,
 		invocation.Invocation,
-		app.DesktopCompatibilityQuery,
-	) (app.DesktopCompatibilityResult, error)
+		identity.DesktopCompatibilityQuery,
+	) (identity.DesktopCompatibilityResult, error)
 	GetDesktopCompatibilityPolicy(
 		context.Context,
 		invocation.Invocation,
@@ -192,7 +197,7 @@ type DesktopCompatibilityApplication interface {
 	ReplaceDesktopCompatibilityPolicy(
 		context.Context,
 		invocation.Invocation,
-		app.ReplaceDesktopCompatibilityPolicyCommand,
+		identity.ReplaceDesktopCompatibilityPolicyCommand,
 	) (*model.DesktopCompatibilityPolicy, error)
 }
 
@@ -214,22 +219,9 @@ type RoleBindingApplication interface {
 // interfaces keep domain ownership visible without turning authentication into
 // an unrelated service locator.
 type Application interface {
-	Authenticator
 	SearchApplication
 	AdministrationCountsApplication
-	authenticationEntryApplication
-	DesktopAuthorization
-	DesktopReauthentication
-	DesktopRegistrations
-	externalAuthenticationEntryApplication
-	authenticationMethodApplication
-	Sessions
-	SessionReauthentication
-	PersonalAccessTokens
-	MFA
-	MFAAdministration
-	MFAKeyApplication
-	DesktopCompatibilityApplication
+	registrationApplication
 	RetentionPolicyApplication
 	RetentionApplication
 	ExamRecordsApplication
@@ -244,6 +236,27 @@ type Application interface {
 	ExamStarterWorkspaceApplication
 	ExamAttemptApplication
 	ExamIntegrityReviewApplication
+}
+
+// IdentityApplication is the identity area's use cases: credential
+// resolution, sign-in and recovery, Sessions, two-step verification, personal
+// access tokens, Desktop authorization and compatibility, and email changes.
+type IdentityApplication interface {
+	Authenticator
+	authenticationEntryApplication
+	DesktopAuthorization
+	DesktopReauthentication
+	DesktopRegistrations
+	externalAuthenticationEntryApplication
+	authenticationMethodApplication
+	Sessions
+	SessionReauthentication
+	PersonalAccessTokens
+	MFA
+	MFAAdministration
+	MFAKeyApplication
+	DesktopCompatibilityApplication
+	UserEmailApplication
 }
 
 // SearchApplication finds Exams, Classes and Users within the caller's own

@@ -19,6 +19,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
@@ -38,7 +39,7 @@ func TestControlledMailUsesRealApplicationGraphAndDurableWorker(t *testing.T) {
 	)
 	ctx := context.Background()
 	const password = "correct horse battery staple"
-	bootstrap, appErr := helper.App.BootstrapInstallation(ctx, invocation.Invocation{}, app.BootstrapInstallationCommand{
+	bootstrap, appErr := helper.App.Identity.BootstrapInstallation(ctx, invocation.Invocation{}, identity.BootstrapInstallationCommand{
 		InstitutionName: "mail-university", InstitutionDisplayName: "Mail University",
 		AdministratorUsername: "mail-operator", AdministratorEmail: "mail-operator@example.edu",
 		AdministratorDisplayName: "Mail Operator", AdministratorLocale: "en", AdministratorTimezone: "UTC",
@@ -52,12 +53,12 @@ func TestControlledMailUsesRealApplicationGraphAndDurableWorker(t *testing.T) {
 	require.NoError(t, err)
 	operator, err = persistence.User().Get(ctx, operator.ID)
 	require.NoError(t, err)
-	login, appErr := helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{
+	login, appErr := helper.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{
 		LoginID: operator.Username, Password: password, ClientType: model.SessionClientWeb,
 		Source: "127.0.0.1:1", DeviceName: "mail-integration",
 	})
 	require.NoError(t, appErr)
-	principal, appErr := helper.App.AuthenticateAccess(ctx, login.Tokens.AccessToken)
+	principal, appErr := helper.App.Identity.AuthenticateAccess(ctx, login.Tokens.AccessToken)
 	require.NoError(t, appErr)
 	invocation := invocation.New(*principal, model.RequestMetadata{RequestID: "mail-integration"})
 	queued, appErr := helper.App.SendTestMail(ctx, invocation)

@@ -30,9 +30,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
@@ -68,51 +68,51 @@ func TestTransactionalMailPhaseCertification(t *testing.T) {
 	)
 	ctx := context.Background()
 	const password = "correct horse battery staple"
-	bootstrap, appErr := helper.App.BootstrapInstallation(ctx, invocation.Invocation{}, app.BootstrapInstallationCommand{
+	bootstrap, appErr := helper.App.Identity.BootstrapInstallation(ctx, invocation.Invocation{}, identity.BootstrapInstallationCommand{
 		InstitutionName: "mail-certification", InstitutionDisplayName: "Mail Certification University",
 		AdministratorUsername: "mail-cert-admin", AdministratorEmail: "mail-cert-admin@example.edu",
 		AdministratorDisplayName: "Mail Certification Administrator", AdministratorLocale: "en", AdministratorTimezone: "UTC",
 		Password: password, BootstrapSecret: testlib.BootstrapSecret, Source: "127.0.0.1:1",
 	})
 	require.NoError(t, appErr)
-	adminLogin, appErr := helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{
+	adminLogin, appErr := helper.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{
 		LoginID: bootstrap.Administrator.Username, Password: password, ClientType: model.SessionClientWeb,
 		Source: "127.0.0.1:1", DeviceName: "mail-cert-admin",
 	})
 	require.NoError(t, appErr)
-	adminPrincipal, appErr := helper.App.AuthenticateAccess(ctx, adminLogin.Tokens.AccessToken)
+	adminPrincipal, appErr := helper.App.Identity.AuthenticateAccess(ctx, adminLogin.Tokens.AccessToken)
 	require.NoError(t, appErr)
 	adminInvocation := invocation.New(*adminPrincipal,
 		model.RequestMetadata{RequestID: "mail-cert-admin", IPAddress: "127.0.0.1"})
 
-	credentialUser, appErr := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+	credentialUser, appErr := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 		Username: "mail-cert-credential", Email: "mail-cert-credential@example.edu",
 		DisplayName: "Mail Credential Candidate", Locale: "en", Timezone: "UTC",
 	}, Password: password})
 	require.NoError(t, appErr)
-	credentialLogin, appErr := helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{
+	credentialLogin, appErr := helper.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{
 		LoginID: credentialUser.Username, Password: password, ClientType: model.SessionClientWeb,
 		Source: "127.0.0.1:1", DeviceName: "mail-cert-credential",
 	})
 	require.NoError(t, appErr)
-	credentialPrincipal, appErr := helper.App.AuthenticateAccess(ctx, credentialLogin.Tokens.AccessToken)
+	credentialPrincipal, appErr := helper.App.Identity.AuthenticateAccess(ctx, credentialLogin.Tokens.AccessToken)
 	require.NoError(t, appErr)
-	appErr = helper.App.RequestEmailVerification(ctx,
+	appErr = helper.App.Identity.RequestEmailVerification(ctx,
 		invocation.New(*credentialPrincipal, model.RequestMetadata{RequestID: "mail-cert-verification"}),
-		app.RequestEmailVerificationCommand{Source: "127.0.0.1:1"})
+		identity.RequestEmailVerificationCommand{Source: "127.0.0.1:1"})
 	require.NoError(t, appErr)
 
-	securityUser, appErr := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+	securityUser, appErr := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 		Username: "mail-cert-security", Email: "mail-cert-security@example.edu",
 		DisplayName: "Mail Security Candidate", EmailVerified: true, Locale: "en", Timezone: "UTC",
 	}, Password: password})
 	require.NoError(t, appErr)
-	_, appErr = helper.App.SetUserEnabled(ctx, adminInvocation, app.SetUserEnabledCommand{
+	_, appErr = helper.App.Identity.SetUserEnabled(ctx, adminInvocation, identity.SetUserEnabledCommand{
 		ID: securityUser.ID, Enabled: false, IdempotencyKey: "mail-cert-disable",
 	})
 	require.NoError(t, appErr)
 
-	candidate, appErr := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+	candidate, appErr := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 		Username: "mail-cert-candidate", Email: "mail-cert-candidate@example.edu",
 		DisplayName: "Mail Fanout Candidate", EmailVerified: true, Locale: "en", Timezone: "UTC",
 	}, Password: password})

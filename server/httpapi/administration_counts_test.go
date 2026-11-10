@@ -78,7 +78,7 @@ func TestUserDirectoryReportsItsTotalOnTheFirstPageOnly(t *testing.T) {
 	logger, _ := newTestLogger(t)
 	first := &model.User{ID: model.NewUserID(), Username: "alpha", CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100)}
 	profiles := &userProfileHTTPApplication{values: []*model.User{first}, searchHasMore: true, searchTotal: store.MaximumListCount}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: operatorTestPrincipal()}, userProfileResource(profiles, profiles))
+	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: operatorTestPrincipal()}, userProfileResource(profiles, profiles, profiles))
 
 	response := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/users?limit=1", "", true)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())

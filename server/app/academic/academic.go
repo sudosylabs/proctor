@@ -134,23 +134,3 @@ func New(deps Dependencies) (*Service, error) {
 		newID:               deps.NewID,
 	}, nil
 }
-
-func bindOnboardingImportCommand(idempotency *store.CommandIdempotency, id model.OnboardingImportID, rowNumber int) {
-	if idempotency == nil || !id.IsValid() || rowNumber < 1 {
-		return
-	}
-	idempotency.OnboardingImportID = id
-	idempotency.OnboardingImportRowNumber = rowNumber
-}
-
-func bindAcademicAdministrationAuthorization(command *store.CommandIdempotency, authority *store.CommandAuthorization) {
-	if command != nil {
-		command.Authorization = authority
-	}
-}
-
-func bindAcademicAdministrationBatch(command *store.CommandIdempotency, batch *store.CommandBatch) {
-	if command != nil {
-		command.Batch = batch
-	}
-}

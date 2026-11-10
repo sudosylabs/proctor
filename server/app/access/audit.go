@@ -72,7 +72,7 @@ func (a MailAuditAdapter) PrepareTest(ctx context.Context, invocation invocation
 	}
 	principal := invocation.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
-		return nil, invalidTokenAppError()
+		return nil, InvalidTokenAppError()
 	}
 	parameters, err := model.EncodeAuditData(map[string]string{"delivery_id": deliveryID.String(), "template_key": string(model.MailTemplateSystemTest)})
 	if err != nil {
@@ -317,7 +317,7 @@ func (s *Auditor) BeginCriticalAction(
 	priorState any,
 ) (*model.AuditEvent, error) {
 	if principal.ValidateMFARecovery() != nil {
-		return nil, invalidTokenAppError()
+		return nil, InvalidTokenAppError()
 	}
 	return s.BeginCriticalActionForSubject(ctx, principal, "", action, resource, metadata, parameters, priorState)
 }
@@ -337,7 +337,7 @@ func (s *Auditor) BeginCriticalActionForSubject(
 	priorState any,
 ) (*model.AuditEvent, error) {
 	if principal.ValidateMFARecovery() != nil {
-		return nil, invalidTokenAppError()
+		return nil, InvalidTokenAppError()
 	}
 	if s.deps.Audits == nil {
 		return nil, AuditUnavailable(store.NewErrNotFound("audit_store", ""))
@@ -377,7 +377,7 @@ func (s *Auditor) PrepareCriticalAction(
 	priorState any,
 ) (*model.AuditEvent, error) {
 	if principal.ValidateMFARecovery() != nil {
-		return nil, invalidTokenAppError()
+		return nil, InvalidTokenAppError()
 	}
 	scopeType, scopeID, err := s.resourceScope(ctx, resource)
 	if err != nil {
@@ -402,7 +402,7 @@ func (s *Auditor) BeginCriticalActionAtScope(
 	priorState any,
 ) (*model.AuditEvent, error) {
 	if principal.ValidateMFARecovery() != nil {
-		return nil, invalidTokenAppError()
+		return nil, InvalidTokenAppError()
 	}
 	if s.deps.Audits == nil {
 		return nil, AuditUnavailable(store.NewErrNotFound("audit_store", ""))

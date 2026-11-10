@@ -23,6 +23,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
+	"github.com/sudosylabs/proctor/server/app/identity"
 
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
@@ -31,14 +32,18 @@ import (
 )
 
 type constructionCatalogStub struct{ store.Catalog }
-type constructionCacheStub struct{ authenticationCache }
+type constructionCacheStub struct{ identity.AuthenticationCache }
 type constructionMailDeliverySenderStub struct{ MailDeliverySender }
 type constructionMailTemplateRendererStub struct{ DirectMailTemplateRenderer }
-type constructionRegistryStub struct{ externalProviderSource }
+type constructionRegistryStub struct {
+	identity.ExternalProviderSource
+}
 type constructionFileContentStub struct{ FileContent }
-type constructionAuthenticationDiagnosticsStub struct{ authenticationDiagnostics }
+type constructionAuthenticationDiagnosticsStub struct {
+	identity.AuthenticationDiagnostics
+}
 type constructionRealtimeDiagnosticsStub struct{ realtimeDiagnostics }
-type constructionRecoveryDiagnosticsStub struct{ recoveryDiagnostics }
+type constructionRecoveryDiagnosticsStub struct{ identity.RecoveryDiagnostics }
 
 type activeMailPayloadKeyStoreFake struct {
 	state *store.MailKeyState
@@ -147,7 +152,7 @@ func TestJobRecipePreservesLifecycleOnlyGraphs(t *testing.T) {
 		Dependencies{Store: constructionCatalogWithoutJobs{}},
 		applicationFoundation{},
 		accessAcademicConstruction{},
-		identityConstruction{},
+		accountConstruction{},
 		examinationConstruction{},
 		profileFileConstruction{},
 	)
@@ -265,7 +270,7 @@ func TestJobRecipeConnectsRuntimeOperationsAndProfileWake(t *testing.T) {
 		},
 		applicationFoundation{},
 		accessAcademicConstruction{},
-		identityConstruction{},
+		accountConstruction{},
 		examinationConstruction{sittings: &sitting.Service{}, attempts: &attempt.Service{}},
 		profiles,
 	)
@@ -276,7 +281,7 @@ func TestJobRecipeConnectsRuntimeOperationsAndProfileWake(t *testing.T) {
 	// runtime, which is only possible once constructJobs has attached it.
 	require.NoError(t, defaultJobs.ProposeDefaultProfilePicture(context.Background(), model.NewUserID(), time.Now()))
 	application := assembleApplication(
-		Dependencies{}, applicationFoundation{}, identityConstruction{}, accessAcademicConstruction{},
+		Dependencies{}, applicationFoundation{}, accountConstruction{}, accessAcademicConstruction{},
 		examinationConstruction{}, profiles, jobs, administrationConstruction{},
 	)
 	require.Same(t, jobs.runtime, application.jobs, "assembled application did not retain the constructed Job runtime and operations")
@@ -286,18 +291,19 @@ func TestJobRecipeConnectsRuntimeOperationsAndProfileWake(t *testing.T) {
 func TestApplicationJobDefinitionsIncludeSittingLifecycleAndDailyRecovery(t *testing.T) {
 	t.Parallel()
 	profiles := profileFileConstruction{}
+	catalog := constructionCatalogWithJobs{
+		jobs: constructionJobStoreStub{}, users: constructionUserStoreStub{},
+		files: constructionFileStoreStub{}, institutions: constructionInstitutionStoreStub{},
+		desktop: constructionBrowserAuthenticationStoreStub{}, externalLoginStates: constructionExternalLoginStateStoreStub{}, invitations: constructionInvitationStoreStub{},
+		onboardingImports: constructionOnboardingImportStoreStub{}, personalAccessTokens: constructionPersonalAccessTokenStoreStub{},
+	}
 	definitions := buildApplicationJobDefinitions(
 		Dependencies{
-			Store: constructionCatalogWithJobs{
-				jobs: constructionJobStoreStub{}, users: constructionUserStoreStub{},
-				files: constructionFileStoreStub{}, institutions: constructionInstitutionStoreStub{},
-				desktop: constructionBrowserAuthenticationStoreStub{}, externalLoginStates: constructionExternalLoginStateStoreStub{}, invitations: constructionInvitationStoreStub{},
-				onboardingImports: constructionOnboardingImportStoreStub{}, personalAccessTokens: constructionPersonalAccessTokenStoreStub{},
-			},
+			Store:       catalog,
 			FileContent: constructionFileContentStub{},
 		},
 		applicationFoundation{},
-		identityConstruction{onboardingImports: &onboardingImportService{}},
+		accountConstruction{onboardingImports: &onboardingImportService{}},
 		examinationConstruction{sittings: &sitting.Service{}, attempts: &attempt.Service{}}, profiles,
 		jobhandler.NewDefaultProfilePictureJobs(jobhandler.DefaultProfilePictureJobsDependencies{Jobs: constructionJobStoreStub{}}),
 		newMailHealth(false),
@@ -357,24 +363,13 @@ func TestApplicationJobDefinitionsIncludeSittingLifecycleAndDailyRecovery(t *tes
 	runner, ok := periodic.Runner.(examAttemptExpiryPeriodicRunner)
 	require.True(t, ok)
 	require.NotNil(t, runner.attempts)
-	browserPeriodic, exists := periodicByName["browser-authentication-maintenance"]
-	require.True(t, exists)
-	require.Equal(t, browserAuthenticationMaintenanceInterval, browserPeriodic.Interval)
-	browserRunner, ok := browserPeriodic.Runner.(browserAuthenticationMaintenancePeriodicRunner)
-	require.True(t, ok, "Browser authentication maintenance runner = %#v", browserPeriodic.Runner)
-	require.NotNil(t, browserRunner.transactions)
-	externalPeriodic, exists := periodicByName["external-authentication-maintenance"]
-	require.True(t, exists)
-	require.Equal(t, externalAuthenticationMaintenanceInterval, externalPeriodic.Interval)
-	externalRunner, ok := externalPeriodic.Runner.(externalAuthenticationMaintenancePeriodicRunner)
-	require.True(t, ok, "External authentication maintenance runner = %#v", externalPeriodic.Runner)
-	require.NotNil(t, externalRunner.states)
-	personalAccessTokenPeriodic, exists := periodicByName["personal-access-token-maintenance"]
-	require.True(t, exists)
-	require.Equal(t, personalAccessTokenMaintenanceInterval, personalAccessTokenPeriodic.Interval)
-	personalAccessTokenRunner, ok := personalAccessTokenPeriodic.Runner.(personalAccessTokenMaintenancePeriodicRunner)
-	require.True(t, ok, "Personal access token maintenance runner = %#v", personalAccessTokenPeriodic.Runner)
-	require.NotNil(t, personalAccessTokenRunner.tokens)
+	// The identity area defines its maintenance passes; the application graph
+	// runs each one unchanged.
+	for _, maintenance := range identity.MaintenanceTasks(catalog) {
+		task, exists := periodicByName[maintenance.Name]
+		require.True(t, exists, "%s periodic task is absent", maintenance.Name)
+		require.Equal(t, maintenance, task)
+	}
 	_, exists = descriptors[model.JobType("authentication.desktop_authorization_maintenance")]
 	require.False(t, exists, "Browser authentication maintenance must not create a durable Job descriptor")
 	_, exists = descriptors[model.JobType("personal_access_token.mutation_maintenance")]

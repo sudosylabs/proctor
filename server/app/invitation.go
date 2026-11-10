@@ -16,6 +16,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/paging"
@@ -346,7 +347,7 @@ type invitationMailPreparer interface {
 
 type invitationMembershipEffects interface {
 	classMemberEffects
-	authorizationInvalidationEffects
+	identity.AuthorizationInvalidationEffects
 }
 
 // invitationServiceDependencies are the collaborators of invitationService;
@@ -496,25 +497,22 @@ var invitationStoreErrors = apperror.StoreTable{
 func invalidInvitationError(err error) error { return apperror.New("invitation.invalid").Wrap(err) }
 
 type invitationAttemptAccounting struct {
-	attempts *authenticationAttemptAccounting
-	policy   LoginRateLimitPolicy
+	attempts *identity.AttemptAccounting
+	policy   identity.LoginRateLimitPolicy
 }
 
 const invitationAcceptanceAttemptQualifier = "claim-accept"
 
-func (a invitationAttemptAccounting) Check(ctx context.Context, identity, source string) error {
+func (a invitationAttemptAccounting) Check(ctx context.Context, claimIdentity, source string) error {
 	if a.attempts == nil || a.policy.Window <= 0 || a.policy.MaximumAttempts <= 0 || a.policy.MaximumSourceAttempts <= 0 {
-		return rateLimitUnavailableAppError(errors.New("invitation attempt accounting is unavailable"))
+		return identity.RateLimitUnavailableAppError(errors.New("invitation attempt accounting is unavailable"))
 	}
-	_, limited, err := a.attempts.account(ctx, authenticationAttemptIntent{
-		purpose: authenticationAttemptPurposeInvitation, qualifier: invitationAcceptanceAttemptQualifier, window: a.policy.Window,
-		limits: []authenticationAttemptLimit{
-			{dimension: authenticationAttemptDimensionIdentity, maximum: a.policy.MaximumAttempts, identity: identity},
-			{dimension: authenticationAttemptDimensionSource, maximum: a.policy.MaximumSourceAttempts, source: source},
-		},
-	})
+	limited, err := a.attempts.Account(ctx, identity.AttemptPurposeInvitation, invitationAcceptanceAttemptQualifier, a.policy.Window,
+		identity.IdentityAttemptLimit(claimIdentity, a.policy.MaximumAttempts),
+		identity.SourceAttemptLimit(source, a.policy.MaximumSourceAttempts),
+	)
 	if err != nil {
-		return rateLimitUnavailableAppError(err)
+		return identity.RateLimitUnavailableAppError(err)
 	}
 	if limited {
 		return apperror.New("authentication.rate_limited")

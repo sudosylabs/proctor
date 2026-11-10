@@ -15,6 +15,7 @@ import "errors"
 type resourceApplications struct {
 	authenticator Authenticator
 
+	registration            registrationApplication
 	authentication          authenticationEntryApplication
 	authenticationMethods   authenticationMethodApplication
 	desktopAuthorization    DesktopAuthorization
@@ -25,6 +26,7 @@ type resourceApplications struct {
 
 	userProfiles            UserProfileApplication
 	userAccounts            UserAccountApplication
+	userEmails              UserEmailApplication
 	userSettings            UserSettingsApplication
 	accountStates           AccountStateApplication
 	sessionAdministration   SessionAdministrationApplication
@@ -80,22 +82,27 @@ func resolveResourceApplications(options Options) (resourceApplications, error) 
 	if options.Application == nil {
 		return resourceApplications{}, errors.New("application is required")
 	}
-	application := options.Application
+	if options.Identity == nil {
+		return resourceApplications{}, errors.New("identity application is required")
+	}
+	application, identity := options.Application, options.Identity
 	// These assignments are deliberately compile-time projections. Adding a
 	// broad-Application resource requires changing its declared contract, not a
 	// runtime assertion hidden in catalog construction.
-	var authenticator Authenticator = application
-	var authentication authenticationEntryApplication = application
-	var authenticationMethods authenticationMethodApplication = application
-	var desktopAuthorization DesktopAuthorization = application
-	var desktopReauthentication DesktopReauthentication = application
-	var desktopRegistrations DesktopRegistrations = application
-	var externalAuthentication externalAuthenticationEntryApplication = application
-	var sessions Sessions = application
-	var mfa MFA = application
-	var mfaAdministration MFAAdministration = application
-	var mfaKeys MFAKeyApplication = application
-	var personalAccessTokens PersonalAccessTokens = application
+	var authenticator Authenticator = identity
+	var registration registrationApplication = application
+	var authentication authenticationEntryApplication = identity
+	var authenticationMethods authenticationMethodApplication = identity
+	var desktopAuthorization DesktopAuthorization = identity
+	var desktopReauthentication DesktopReauthentication = identity
+	var desktopRegistrations DesktopRegistrations = identity
+	var externalAuthentication externalAuthenticationEntryApplication = identity
+	var sessions Sessions = identity
+	var mfa MFA = identity
+	var mfaAdministration MFAAdministration = identity
+	var mfaKeys MFAKeyApplication = identity
+	var personalAccessTokens PersonalAccessTokens = identity
+	var userEmails UserEmailApplication = identity
 	var exams ExamApplication = application
 	var examRevisions ExamRevisionApplication = application
 	var examSittings ExamSittingApplication = application
@@ -105,12 +112,12 @@ func resolveResourceApplications(options Options) (resourceApplications, error) 
 	var examAttempts ExamAttemptApplication = application
 	var examIntegrityReviews ExamIntegrityReviewApplication = application
 	var jobs JobOperationsApplication = application
-	var desktopCompatibility DesktopCompatibilityApplication = application
+	var desktopCompatibility DesktopCompatibilityApplication = identity
 	var retentionPolicy RetentionPolicyApplication = application
 	var retention RetentionApplication = application
 	var examRecords ExamRecordsApplication = application
 	var examExports ExamExportsApplication = application
-	var sessionReauthentication SessionReauthentication = application
+	var sessionReauthentication SessionReauthentication = identity
 	var search SearchApplication = application
 	var administrationCounts AdministrationCountsApplication = application
 
@@ -119,13 +126,13 @@ func resolveResourceApplications(options Options) (resourceApplications, error) 
 	}
 
 	return resourceApplications{
-		authenticator:  authenticator,
-		authentication: authentication, authenticationMethods: authenticationMethods,
+		authenticator: authenticator,
+		registration:  registration, authentication: authentication, authenticationMethods: authenticationMethods,
 		desktopAuthorization: desktopAuthorization, externalAuthentication: externalAuthentication,
 		desktopReauthentication: desktopReauthentication,
 		desktopRegistrations:    desktopRegistrations,
 		browserInvitations:      options.BrowserInvitations,
-		userProfiles:            options.UserProfiles, userAccounts: options.UserAccounts, userSettings: options.UserSettings,
+		userProfiles:            options.UserProfiles, userAccounts: options.UserAccounts, userEmails: userEmails, userSettings: options.UserSettings,
 		accountStates: options.AccountStates, sessionAdministration: options.SessionAdministrations,
 		sessions: sessions, mfa: mfa, personalAccessTokens: personalAccessTokens,
 		mfaAdministration:       mfaAdministration,

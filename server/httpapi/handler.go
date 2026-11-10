@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -199,7 +199,7 @@ func requestDPoPProof(request *http.Request) (string, error) {
 }
 
 func writeDPoPApplicationError(writer http.ResponseWriter, request *http.Request, logger Logger, policy routeErrorPolicy, err error) {
-	if nonce, ok := app.DPoPChallengeNonce(err); ok {
+	if nonce, ok := identity.DPoPChallengeNonce(err); ok {
 		writer.Header().Set("DPoP-Nonce", nonce)
 		writer.Header().Set("WWW-Authenticate", `DPoP error="use_dpop_nonce"`)
 	} else {

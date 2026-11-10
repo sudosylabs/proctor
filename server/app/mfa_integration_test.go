@@ -32,8 +32,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
-
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
@@ -87,9 +86,9 @@ func TestMFAIntegration(t *testing.T) {
 	require.Equal(t, http.StatusCreated, bootstrap.Code, "bootstrap = %d: %s", bootstrap.Code, bootstrap.Body.String())
 	startIntegrationServer(t, helper)
 	password := "correct horse battery staple"
-	user, appErr := helper.App.CreateLocalUser(
+	user, appErr := helper.App.Identity.CreateLocalUser(
 		context.Background(),
-		app.CreateLocalUserCommand{User: &model.User{
+		identity.CreateLocalUserCommand{User: &model.User{
 			Username: "mfa-user", Email: "mfa-user@example.edu",
 			DisplayName: "MFA User",
 		}, Password: password},

@@ -1019,7 +1019,7 @@ passes an immutable Desktop compatibility policy into application services.
 
 Common-password blocklist
 -------------------------
-app/password_blocklist.txt is data copied from the Go module
+app/identity/password_blocklist.txt is data copied from the Go module
 github.com/ccojocar/zxcvbn-go v1.0.4 (go.sum
 h1:FWnCIRMXPj43ukfX000kvBZvV6raSxakYr1nzyNrUcc=), file data/data/Passwords.json
 (SHA-256 53e63393c342bb9f843d8ff85d675e899e8c2525abef9a68f8722ab36f32bba7),

@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -920,7 +921,7 @@ func TestInvitationAcceptanceCommitsWithTerminalNoticeWhenMailIsDisabled(t *test
 func TestInvitationPasswordWorkFailuresStopBeforeAcceptance(t *testing.T) {
 	for _, purpose := range []model.InvitationPurpose{model.InvitationPurposeStudentClass, model.InvitationPurposeTeacherAcademicUnit} {
 		t.Run(string(purpose), func(t *testing.T) {
-			testPasswordHashFailures(t, "invitation.unavailable", func(t *testing.T, ctx context.Context, hasher passwordHash) error {
+			testPasswordHashFailures(t, "invitation.unavailable", func(t *testing.T, ctx context.Context, hasher testPasswordHasher) error {
 				raw := model.NewCredentialToken()
 				invitation := &model.Invitation{Purpose: purpose, ClaimHash: model.HashInvitationClaim(raw), TargetEmail: "invited@example.edu"}
 				persistence := &invitationStoreFake{invitation: invitation}
@@ -999,27 +1000,37 @@ func TestInvitationServiceIssuesAndAcceptsWithoutPersistingRawClaim(t *testing.T
 
 func TestInvitationAttemptAccountingLimitsClaimAndSourceBeforeValidation(t *testing.T) {
 	now := time.Now()
-	accounting, err := newAuthenticationAttemptAccounting(authenticationAttemptAccountingDependencies{Cache: newExpiringAuthenticationAttemptCache(func() time.Time { return now })})
-	require.NoError(t, err)
-	limiter := invitationAttemptAccounting{attempts: accounting, policy: LoginRateLimitPolicy{
+	cache := newExpiringAuthenticationAttemptCache(func() time.Time { return now })
+	accounting := mustAuthenticationAttemptAccounting(t, cache)
+	limiter := invitationAttemptAccounting{attempts: accounting, policy: identity.LoginRateLimitPolicy{
 		Window: time.Minute, MaximumAttempts: 1, MaximumSourceAttempts: 2,
 	}}
-	identity := model.HashInvitationClaim("malformed")
-	err = limiter.Check(context.Background(), identity, "127.0.0.1")
+	claim := model.HashInvitationClaim("malformed")
+	err := limiter.Check(context.Background(), claim, "127.0.0.1")
 	require.NoError(t, err)
-	purpose, _ := authenticationAttemptPurposeInvitation.keySegment()
-	identityLimit := authenticationAttemptLimit{dimension: authenticationAttemptDimensionIdentity, identity: identity}
-	intent := authenticationAttemptIntent{purpose: authenticationAttemptPurposeInvitation, qualifier: invitationAcceptanceAttemptQualifier}
-	expectedKey := "authentication/attempts/" + purpose + "/identity/" + digestAuthenticationAttempt(intent, identityLimit)
-	legacyIntent := intent
-	legacyIntent.qualifier = "student-class-accept"
-	legacyKey := "authentication/attempts/" + purpose + "/identity/" + digestAuthenticationAttempt(legacyIntent, identityLimit)
-	entries := accounting.deps.Cache.(*expiringAuthenticationAttemptCache).snapshot()
+	// The identity area owns the key layout; derive each expected identity
+	// counter key by counting the same claim under one qualifier alone.
+	identityKey := func(qualifier string) string {
+		probe := newExpiringAuthenticationAttemptCache(func() time.Time { return now })
+		_, probeErr := mustAuthenticationAttemptAccounting(t, probe).Account(context.Background(), identity.AttemptPurposeInvitation,
+			qualifier, time.Minute, identity.IdentityAttemptLimit(claim, 1))
+		require.NoError(t, probeErr)
+		keys := probe.snapshot()
+		require.Len(t, keys, 1)
+		for key := range keys {
+			require.True(t, strings.HasPrefix(key, "authentication/attempts/invitation/identity/"), "identity counter key %q", key)
+			return key
+		}
+		return ""
+	}
+	expectedKey := identityKey(invitationAcceptanceAttemptQualifier)
+	legacyKey := identityKey("student-class-accept")
+	entries := cache.snapshot()
 	_, ok := entries[expectedKey]
 	require.True(t, ok, "purpose-neutral Invitation acceptance counter was not recorded: %#v", entries)
 	_, ok = entries[legacyKey]
 	require.False(t, ok, "teacher-capable Invitation accounting used legacy student qualifier: %#v", entries)
-	err = limiter.Check(context.Background(), identity, "127.0.0.1")
+	err = limiter.Check(context.Background(), claim, "127.0.0.1")
 	failure, ok := apperror.As(err)
 	require.True(t, ok)
 	require.Equal(t, "authentication.rate_limited", failure.Code())

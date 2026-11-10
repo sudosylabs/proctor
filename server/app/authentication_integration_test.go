@@ -22,8 +22,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/cluster"
 	"github.com/sudosylabs/proctor/server/config"
@@ -63,26 +63,26 @@ func TestAuthenticationFanoutFailureIntegration(t *testing.T) {
 	)
 	ctx := context.Background()
 	const password = "correct horse battery staple"
-	user, err := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+	user, err := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 		Username: "fanout-failure-user",
 		Email:    "fanout-failure-user@example.edu",
 	}, Password: password})
 	require.NoError(t, err)
-	login, err := helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{
+	login, err := helper.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{
 		LoginID:    user.Username,
 		Password:   password,
 		ClientType: model.SessionClientCLI,
 		Source:     "127.0.0.1:1",
 	})
 	require.NoError(t, err)
-	principal, err := helper.App.AuthenticateAccess(ctx, login.Tokens.AccessToken)
+	principal, err := helper.App.Identity.AuthenticateAccess(ctx, login.Tokens.AccessToken)
 	require.NoError(t, err)
-	require.NoError(t, helper.App.Logout(
+	require.NoError(t, helper.App.Identity.Logout(
 		ctx,
 		invocation.New(*principal, model.RequestMetadata{}),
-		app.LogoutCommand{},
+		identity.LogoutCommand{},
 	), "Logout() error")
-	_, err = helper.App.AuthenticateAccess(ctx, login.Tokens.AccessToken)
+	_, err = helper.App.Identity.AuthenticateAccess(ctx, login.Tokens.AccessToken)
 	require.True(t, apperror.Is(err, "authentication.token_invalid"), "AuthenticateAccess() after logout error = %v, want invalid token", err)
 	require.Contains(t, helper.Logs.String(), "session revocation broadcast failed", "failed best-effort security fan-out was not diagnosed")
 	require.Contains(t, helper.Logs.String(), "realtime cluster fan-out failed", "failed best-effort security fan-out was not diagnosed")
@@ -99,13 +99,13 @@ func TestSessionExpiryEnforcementAcrossHTTPRefreshAndEstablishedWebSocket(t *tes
 	helper := testlib.Setup(t, testlib.WithStore(persistence))
 	ctx := context.Background()
 
-	login := func(identity string) (*model.Session, *model.AuthenticationTokens) {
+	login := func(loginIdentity string) (*model.Session, *model.AuthenticationTokens) {
 		t.Helper()
-		user, err := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
-			Username: identity, Email: identity + "@example.edu",
+		user, err := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
+			Username: loginIdentity, Email: loginIdentity + "@example.edu",
 		}, Password: "correct horse battery staple"})
 		require.NoError(t, err)
-		result, err := helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{
+		result, err := helper.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{
 			LoginID: user.Username, Password: "correct horse battery staple",
 			ClientType: model.SessionClientCLI, Source: "127.0.0.1:1",
 		})
@@ -150,7 +150,7 @@ func TestSessionExpiryEnforcementAcrossHTTPRefreshAndEstablishedWebSocket(t *tes
 	assertExpired(refreshSession.ID)
 
 	websocketSession, websocketTokens := login("expiry-websocket")
-	principal, err := helper.App.AuthenticateAccess(ctx, websocketTokens.AccessToken)
+	principal, err := helper.App.Identity.AuthenticateAccess(ctx, websocketTokens.AccessToken)
 	require.NoError(t, err)
 	expire(websocketSession.ID, websocketTokens.AccessToken)
 	err = helper.App.ValidateWebSocketPrincipal(ctx, *principal)
@@ -190,9 +190,9 @@ func TestPersonalAccessTokenIntegration(t *testing.T) {
 	})
 	require.NoError(t, err)
 	password := "correct horse battery staple"
-	user, appErr := helper.App.CreateLocalUser(
+	user, appErr := helper.App.Identity.CreateLocalUser(
 		context.Background(),
-		app.CreateLocalUserCommand{User: &model.User{
+		identity.CreateLocalUserCommand{User: &model.User{
 			Username: "pat-user", Email: "pat-user@example.edu",
 			DisplayName: "PAT User",
 		}, Password: password},
@@ -370,7 +370,7 @@ func TestAuthenticationIntegration(t *testing.T) {
 	)
 
 	password := "correct horse battery staple"
-	user, appErr := helper.App.CreateLocalUser(context.Background(), app.CreateLocalUserCommand{User: &model.User{
+	user, appErr := helper.App.Identity.CreateLocalUser(context.Background(), identity.CreateLocalUserCommand{User: &model.User{
 		Username:    "integration-user",
 		Email:       "integration-user@example.edu",
 		DisplayName: "Integration User",
@@ -602,7 +602,7 @@ func TestBrowserCookieAuthenticationIntegration(t *testing.T) {
 		testlib.WithStore(persistence),
 	)
 	password := "correct horse battery staple"
-	user, appErr := helper.App.CreateLocalUser(context.Background(), app.CreateLocalUserCommand{User: &model.User{
+	user, appErr := helper.App.Identity.CreateLocalUser(context.Background(), identity.CreateLocalUserCommand{User: &model.User{
 		Username: "browser-user", Email: "browser-user@example.edu",
 		DisplayName: "Browser User",
 	}, Password: password})
@@ -703,7 +703,7 @@ func TestSessionManagementIntegration(t *testing.T) {
 	seedAuthenticationAuditInstitution(t, persistence)
 	helper := testlib.Setup(t, testlib.WithStore(persistence))
 	password := "correct horse battery staple"
-	user, appErr := helper.App.CreateLocalUser(context.Background(), app.CreateLocalUserCommand{User: &model.User{
+	user, appErr := helper.App.Identity.CreateLocalUser(context.Background(), identity.CreateLocalUserCommand{User: &model.User{
 		Username:    "session-user",
 		Email:       "session-user@example.edu",
 		DisplayName: "Session User",
@@ -790,7 +790,7 @@ func TestSessionManagementIntegration(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, invalidID.Code, "invalid session id status")
 	assertProblemCode(t, invalidID, "session.id.invalid")
 
-	otherUser, appErr := helper.App.CreateLocalUser(context.Background(), app.CreateLocalUserCommand{User: &model.User{
+	otherUser, appErr := helper.App.Identity.CreateLocalUser(context.Background(), identity.CreateLocalUserCommand{User: &model.User{
 		Username:    "other-session-user",
 		Email:       "other-session-user@example.edu",
 		DisplayName: "Other Session User",

@@ -26,6 +26,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
@@ -107,7 +108,7 @@ type onboardingImportServiceDependencies struct {
 	Content               OnboardingImportFiles
 	Invitations           *invitationService
 	AdministrationBatches *academicAdministrationBatchService
-	Authentication        *authenticationService
+	Authentication        *identity.Service
 	Authorization         invitationAuthorizer
 	Audit                 access.MutationAuditor
 	Tokens                store.PersonalAccessTokenStore
@@ -546,30 +547,30 @@ func onboardingImportResource(scope model.RoleScopeType, id string) model.Resour
 
 func (s *onboardingImportService) validatePrincipal(ctx context.Context, principal model.Principal) error {
 	if principal.Validate() != nil {
-		return invalidTokenAppError()
+		return access.InvalidTokenAppError()
 	}
 	if principal.CredentialType == model.CredentialSessionAccess {
-		return s.deps.Authentication.validatePrincipal(ctx, principal)
+		return s.deps.Authentication.ValidatePrincipal(ctx, principal)
 	}
 	token, err := s.deps.Tokens.Get(ctx, model.PersonalAccessTokenID(principal.CredentialID))
 	if err != nil {
 		if store.IsNotFound(err) {
-			return invalidTokenAppError()
+			return access.InvalidTokenAppError()
 		}
 		return apperror.New("administration.unavailable").Wrap(err)
 	}
 	if token.UserID != principal.UserID || !token.IsActiveAt(s.deps.Now()) || !slices.Equal(token.Scopes, principal.CredentialScopes) || token.AcademicUnitID != principal.AcademicUnitID {
-		return invalidTokenAppError()
+		return access.InvalidTokenAppError()
 	}
 	user, err := s.deps.Users.Get(ctx, principal.UserID)
 	if err != nil {
 		if store.IsNotFound(err) {
-			return invalidTokenAppError()
+			return access.InvalidTokenAppError()
 		}
 		return apperror.New("administration.unavailable").Wrap(err)
 	}
 	if !user.IsActive() {
-		return invalidTokenAppError()
+		return access.InvalidTokenAppError()
 	}
 	return nil
 }

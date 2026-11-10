@@ -19,6 +19,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/review"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/exam/workspace"
+	"github.com/sudosylabs/proctor/server/app/identity"
 
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/user"
@@ -45,21 +46,13 @@ type (
 // Dependencies bundle; infrastructure getters and platform location are not
 // part of the public surface.
 type App struct {
-	*authenticationService
-	*desktopAuthorizationService
-	*desktopReauthenticationService
-	*desktopRegistrationService
+	// Identity holds sign-in, Session, MFA, token, Desktop authorization,
+	// account recovery, account state and bootstrap use cases.
+	Identity *identity.Service
 	*browserInvitationService
-	*selfSessionService
-	*externalAuthenticationService
-	*authenticationMethodService
-	*mfaApplicationService
-	*accountTokenService
 	*publicRegistrationService
-	*personalAccessTokenAdministrationService
 	*accessPolicyService
 	*retentionPolicyService
-	*desktopCompatibilityService
 	// Academic holds the Institution, Academic Unit, Programme, Academic
 	// Period, Class, membership and Affiliation use cases.
 	Academic *academic.Service
@@ -78,12 +71,9 @@ type App struct {
 	// Users holds the User directory, profile, settings and profile-picture
 	// use cases.
 	Users *user.Service
-	*accountStateService
-	*sessionAdministrationService
 	*roleService
 	*roleBindingService
 	*auditListingService
-	*bootstrapService
 	*academicAdministrationBatchService
 	*searchService
 	*administrationCountsService
@@ -92,7 +82,6 @@ type App struct {
 	jobs *job.Engine
 	*jobOperationsService
 	*mailService
-	*mfaKeyService
 }
 
 // Jobs returns the root-owned durable Job runtime, or nil for lifecycle-only
@@ -123,24 +112,24 @@ func New(deps Dependencies) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	identity, err := constructIdentity(deps, foundation, access.authorization, access.capabilities, access.desktopCompatibility)
-	if err != nil {
-		return nil, err
-	}
-	examinations, err := constructExaminations(deps, foundation, access)
-	if err != nil {
-		return nil, err
-	}
 	profiles, err := constructProfilesAndFiles(deps, foundation, access)
 	if err != nil {
 		return nil, err
 	}
-	administration := constructAdministration(deps, foundation, access, identity)
-	identity.onboardingImports, err = constructOnboardingImports(deps, identity, administration, access, foundation)
+	accounts, err := constructAccounts(deps, foundation, access)
 	if err != nil {
 		return nil, err
 	}
-	jobs, err := constructJobs(deps, foundation, access, identity, examinations, profiles)
+	examinations, err := constructExaminations(deps, foundation, access, accounts)
+	if err != nil {
+		return nil, err
+	}
+	administration := constructAdministration(deps, foundation, access, accounts)
+	accounts.onboardingImports, err = constructOnboardingImports(deps, accounts, administration, access, foundation)
+	if err != nil {
+		return nil, err
+	}
+	jobs, err := constructJobs(deps, foundation, access, accounts, examinations, profiles)
 	if err != nil {
 		return nil, err
 	}
@@ -148,20 +137,20 @@ func New(deps Dependencies) (*App, error) {
 		Exams: examinations.authoring, Users: profiles.users,
 		ClassAuthorization: access.authorization, Classes: deps.Store.Class(),
 	})
-	administration.counts = newAdministrationCountsService(administrationCountsDependencies(identity, jobs))
-	return assembleApplication(deps, foundation, identity, access, examinations, profiles, jobs, administration), nil
+	administration.counts = newAdministrationCountsService(administrationCountsDependencies(accounts, jobs))
+	return assembleApplication(deps, foundation, accounts, access, examinations, profiles, jobs, administration), nil
 }
 
 // administrationCountsDependencies projects the summary's counters from the
 // services that exist; a reduced lifecycle test graph may lack some, and
 // their counts are then left out.
-func administrationCountsDependencies(identity identityConstruction, jobs jobConstruction) administrationCountsServiceDependencies {
+func administrationCountsDependencies(accounts accountConstruction, jobs jobConstruction) administrationCountsServiceDependencies {
 	var deps administrationCountsServiceDependencies
-	if identity.invitations != nil {
-		deps.Invitations = identity.invitations
+	if accounts.invitations != nil {
+		deps.Invitations = accounts.invitations
 	}
-	if identity.onboardingImports != nil {
-		deps.Imports = identity.onboardingImports
+	if accounts.onboardingImports != nil {
+		deps.Imports = accounts.onboardingImports
 	}
 	if jobs.operations != nil {
 		deps.Jobs = jobs.operations
@@ -172,20 +161,11 @@ func administrationCountsDependencies(identity identityConstruction, jobs jobCon
 	return deps
 }
 
-// ErrAuthenticationCacheMiss and ErrAuthenticationCacheNotStored are the
-// transport-neutral sentinels authentication uses for disposable cache
-// outcomes. Composition adapters translate infrastructure cache errors into
-// these values so authentication never imports platform.
-var (
-	ErrAuthenticationCacheMiss      = errors.New("authentication cache: key not found")
-	ErrAuthenticationCacheNotStored = errors.New("authentication cache: conditional write not applied")
-)
-
 // constructOnboardingImports projects the onboarding import stores. A
 // deliberately reduced lifecycle test catalog omits whole capability
 // families and so constructs no onboarding imports; production catalogs
 // project every target store together.
-func constructOnboardingImports(deps Dependencies, identity identityConstruction, administration administrationConstruction,
+func constructOnboardingImports(deps Dependencies, accounts accountConstruction, administration administrationConstruction,
 	access accessAcademicConstruction, foundation applicationFoundation,
 ) (*onboardingImportService, error) {
 	if deps.Store == nil {
@@ -205,5 +185,5 @@ func constructOnboardingImports(deps Dependencies, identity identityConstruction
 		catalog.AcademicPeriod() == nil || catalog.Class() == nil || catalog.Role() == nil {
 		return nil, nil
 	}
-	return newOnboardingImportService(onboardingImportServiceDependencies{Imports: catalog.OnboardingImport(), Content: deps.FileContent, Invitations: identity.invitations, AdministrationBatches: administration.academicAdministrationBatches, Authentication: identity.authentication, Authorization: invitationAuthorizationAdapter{authorization: access.authorization}, Audit: foundation.audit.MutationAudit(), Tokens: catalog.PersonalAccessToken(), Users: catalog.User(), Institutions: catalog.Institution(), Units: catalog.AcademicUnit(), Programmes: catalog.Programme(), Levels: catalog.ProgrammeLevel(), Periods: catalog.AcademicPeriod(), Classes: catalog.Class(), Roles: catalog.Role(), Affiliations: catalog.Affiliation(), UnitMembers: catalog.AcademicUnitMember(), ClassMembers: catalog.ClassMember(), RoleBindings: catalog.RoleBinding(), Now: time.Now})
+	return newOnboardingImportService(onboardingImportServiceDependencies{Imports: catalog.OnboardingImport(), Content: deps.FileContent, Invitations: accounts.invitations, AdministrationBatches: administration.academicAdministrationBatches, Authentication: accounts.identity, Authorization: invitationAuthorizationAdapter{authorization: access.authorization}, Audit: foundation.audit.MutationAudit(), Tokens: catalog.PersonalAccessToken(), Users: catalog.User(), Institutions: catalog.Institution(), Units: catalog.AcademicUnit(), Programmes: catalog.Programme(), Levels: catalog.ProgrammeLevel(), Periods: catalog.AcademicPeriod(), Classes: catalog.Class(), Roles: catalog.Role(), Affiliations: catalog.Affiliation(), UnitMembers: catalog.AcademicUnitMember(), ClassMembers: catalog.ClassMember(), RoleBindings: catalog.RoleBinding(), Now: time.Now})
 }

@@ -12,8 +12,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -88,7 +88,7 @@ func (m userAdministrationResourceModule) setEnabled(request operationRequest, e
 	user, err := m.accounts.SetUserEnabled(
 		request.context,
 		request.invocation(),
-		app.SetUserEnabledCommand{ID: userID, Enabled: enabled, Reason: reason},
+		identity.SetUserEnabledCommand{ID: userID, Enabled: enabled, Reason: reason},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -104,7 +104,7 @@ func (m userAdministrationResourceModule) revokeAllSessions(request operationReq
 	err = m.sessions.RevokeUserSessions(
 		request.context,
 		request.invocation(),
-		app.RevokeUserSessionsCommand{UserID: userID},
+		identity.RevokeUserSessionsCommand{UserID: userID},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -123,7 +123,7 @@ func (m userAdministrationResourceModule) listSessions(request operationRequest)
 	if err != nil {
 		return operationResult{}, apperror.New("request.invalid").WithField("field", "include_revoked")
 	}
-	query := app.ListUserSessionsQuery{UserID: userID, IncludeRevoked: includeRevoked, Limit: defaultSessionPageSize}
+	query := identity.ListUserSessionsQuery{UserID: userID, IncludeRevoked: includeRevoked, Limit: defaultSessionPageSize}
 	values := request.request.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		limit, parseErr := strconv.Atoi(raw)
@@ -208,7 +208,7 @@ func (m userAdministrationResourceModule) revokeSession(request operationRequest
 	err = m.sessions.RevokeUserSession(
 		request.context,
 		request.invocation(),
-		app.RevokeUserSessionCommand{UserID: userID, SessionID: sessionID},
+		identity.RevokeUserSessionCommand{UserID: userID, SessionID: sessionID},
 	)
 	if err != nil {
 		return operationResult{}, err

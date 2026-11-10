@@ -17,7 +17,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -25,22 +25,22 @@ import (
 type desktopReauthenticationHTTPApplication struct {
 	DesktopReauthentication
 	passwordBinding string
-	complete        app.CompleteDesktopReauthenticationCommand
+	complete        identity.CompleteDesktopReauthenticationCommand
 }
 
-func (a *desktopReauthenticationHTTPApplication) BindDesktopReauthentication(context.Context, invocation.Invocation, app.BindDesktopAuthorizationCommand) (*app.DesktopAuthorizationBinding, error) {
-	return &app.DesktopAuthorizationBinding{Binding: "reauthentication-binding", ExpiresAt: time.Now().Add(time.Minute).UnixMilli()}, nil
+func (a *desktopReauthenticationHTTPApplication) BindDesktopReauthentication(context.Context, invocation.Invocation, identity.BindDesktopAuthorizationCommand) (*identity.DesktopAuthorizationBinding, error) {
+	return &identity.DesktopAuthorizationBinding{Binding: "reauthentication-binding", ExpiresAt: time.Now().Add(time.Minute).UnixMilli()}, nil
 }
 
-func (a *desktopReauthenticationHTTPApplication) AuthenticateDesktopReauthenticationPassword(_ context.Context, _ invocation.Invocation, command app.AuthenticateDesktopReauthenticationPasswordCommand) (*app.DesktopReauthenticationBrowserContext, error) {
+func (a *desktopReauthenticationHTTPApplication) AuthenticateDesktopReauthenticationPassword(_ context.Context, _ invocation.Invocation, command identity.AuthenticateDesktopReauthenticationPasswordCommand) (*identity.DesktopReauthenticationBrowserContext, error) {
 	a.passwordBinding = command.Binding
-	return &app.DesktopReauthenticationBrowserContext{State: model.BrowserAuthenticationStateAuthenticated, DisplayName: "Ada Candidate",
+	return &identity.DesktopReauthenticationBrowserContext{State: model.BrowserAuthenticationStateAuthenticated, DisplayName: "Ada Candidate",
 		AuthenticationMethod: "password", ExpiresAt: time.Now().Add(time.Minute)}, nil
 }
 
-func (a *desktopReauthenticationHTTPApplication) CompleteDesktopReauthentication(_ context.Context, _ invocation.Invocation, command app.CompleteDesktopReauthenticationCommand) (*app.DesktopReauthenticationResult, error) {
+func (a *desktopReauthenticationHTTPApplication) CompleteDesktopReauthentication(_ context.Context, _ invocation.Invocation, command identity.CompleteDesktopReauthenticationCommand) (*identity.DesktopReauthenticationResult, error) {
 	a.complete = command
-	return &app.DesktopReauthenticationResult{RecentlyAuthenticatedUntil: time.Date(2026, 8, 1, 9, 17, 0, 0, time.UTC)}, nil
+	return &identity.DesktopReauthenticationResult{RecentlyAuthenticatedUntil: time.Date(2026, 8, 1, 9, 17, 0, 0, time.UTC)}, nil
 }
 
 func TestDesktopReauthenticationHTTPScopesItsBindingAndReturnsRecency(t *testing.T) {
@@ -94,5 +94,5 @@ func TestDesktopReauthenticationHTTPScopesItsBindingAndReturnsRecency(t *testing
 	httpAPI.ServeHTTP(response, complete)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	require.JSONEq(t, `{"recently_authenticated_until":"2026-08-01T09:17:00Z"}`, response.Body.String())
-	require.Equal(t, app.CompleteDesktopReauthenticationCommand{Code: "code", CodeVerifier: "verifier", State: "state", Source: applicationFake.complete.Source}, applicationFake.complete)
+	require.Equal(t, identity.CompleteDesktopReauthenticationCommand{Code: "code", CodeVerifier: "verifier", State: "state", Source: applicationFake.complete.Source}, applicationFake.complete)
 }

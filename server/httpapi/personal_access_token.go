@@ -15,7 +15,7 @@ package httpapi
 import (
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -92,7 +92,7 @@ type personalAccessTokenAcademicUnitResponse struct {
 
 func personalAccessTokenGrantableScopesResponseFromApp(
 	request *http.Request,
-	catalogue *app.PersonalAccessTokenGrantableScopes,
+	catalogue *identity.PersonalAccessTokenGrantableScopes,
 ) personalAccessTokenGrantableScopesResponse {
 	response := personalAccessTokenGrantableScopesResponse{
 		Scopes:        []personalAccessTokenGrantableScopeResponse{},
@@ -177,7 +177,7 @@ func (m personalAccessTokenResourceModule) setDisabled(request operationRequest,
 	updated, err := m.tokens.SetPersonalAccessTokenDisabled(
 		request.context,
 		request.invocation(),
-		app.SetPersonalAccessTokenDisabledCommand{TokenID: tokenID, Disabled: disabled},
+		identity.SetPersonalAccessTokenDisabledCommand{TokenID: tokenID, Disabled: disabled},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -197,7 +197,7 @@ func (m personalAccessTokenResourceModule) create(request operationRequest) (ope
 	created, err := m.tokens.CreatePersonalAccessToken(
 		request.context,
 		request.invocation(),
-		app.CreatePersonalAccessTokenCommand{
+		identity.CreatePersonalAccessTokenCommand{
 			Description: input.Description, Scopes: input.Scopes,
 			AcademicUnitID: model.AcademicUnitID(input.AcademicUnitID), ExpiresAt: expiresAt,
 		},
@@ -214,7 +214,7 @@ func (m personalAccessTokenResourceModule) list(request operationRequest) (opera
 	tokens, err := m.tokens.ListPersonalAccessTokens(
 		request.context,
 		request.invocation(),
-		app.ListPersonalAccessTokensQuery{},
+		identity.ListPersonalAccessTokensQuery{},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -233,7 +233,7 @@ func (m personalAccessTokenResourceModule) grantableScopes(request operationRequ
 	catalogue, err := m.tokens.ListGrantablePersonalAccessTokenScopes(
 		request.context,
 		request.invocation(),
-		app.ListGrantablePersonalAccessTokenScopesQuery{},
+		identity.ListGrantablePersonalAccessTokenScopesQuery{},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -250,7 +250,7 @@ func (m personalAccessTokenResourceModule) revoke(request operationRequest) (ope
 	if _, err := m.tokens.RevokePersonalAccessToken(
 		request.context,
 		request.invocation(),
-		app.RevokePersonalAccessTokenCommand{TokenID: tokenID},
+		identity.RevokePersonalAccessTokenCommand{TokenID: tokenID},
 	); err != nil {
 		return operationResult{}, err
 	}

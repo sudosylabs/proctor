@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -95,7 +96,7 @@ func (f *sessionRevocationAttemptProjectionFake) ListSessionRevocationInvalidati
 type noopAuthenticationCache struct{}
 
 func (noopAuthenticationCache) Get(context.Context, string) ([]byte, error) {
-	return nil, ErrAuthenticationCacheMiss
+	return nil, identity.ErrAuthenticationCacheMiss
 }
 func (noopAuthenticationCache) SetAlways(context.Context, string, []byte, time.Duration) error {
 	return nil
@@ -108,9 +109,9 @@ func (noopAuthenticationCache) Add(context.Context, string, int64, time.Duration
 	return 0, nil
 }
 
-func newTestRealtimeService(t *testing.T, cache authenticationCache) *realtimeService {
+func newTestRealtimeService(t *testing.T, cache identity.AuthenticationCache) *realtimeService {
 	t.Helper()
-	invalidator, err := newAuthenticationCacheInvalidator(authenticationCacheInvalidatorDependencies{Cache: cache, Diagnostics: &securityEffectsDiagnosticsFake{}})
+	invalidator, err := identity.NewCacheInvalidator(identity.CacheInvalidatorDependencies{Cache: cache, Diagnostics: &securityEffectsDiagnosticsFake{}})
 	require.NoError(t, err)
 	service, err := newRealtimeService(
 		invalidator, &securityEffectsRealtimeDiagnosticsFake{},

@@ -12,6 +12,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -21,7 +22,7 @@ import (
 // authorizes each subscription against current resource state, concealing
 // Exams and Sittings the caller may not see.
 type realtimeAdmissionService struct {
-	principals    *authenticationService
+	principals    *identity.Service
 	exams         realtimeExamViewAuthorizer
 	sittings      realtimeSittingViewAuthorizer
 	authorization *access.Authorizer
@@ -87,7 +88,7 @@ func (s *realtimeAdmissionService) AuthorizeWebSocketSubscription(
 // ValidateWebSocketPrincipal revalidates the authoritative Session and User
 // state behind a long-lived connection's principal.
 func (s *realtimeAdmissionService) ValidateWebSocketPrincipal(ctx context.Context, principal model.Principal) error {
-	err := s.principals.validatePrincipal(ctx, principal)
+	err := s.principals.ValidatePrincipal(ctx, principal)
 	recordOperational(s.operational, "realtime", "principal_validate", err)
 	return err
 }

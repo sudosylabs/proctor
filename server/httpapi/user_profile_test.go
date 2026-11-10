@@ -23,6 +23,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/app/user"
@@ -40,8 +41,8 @@ type userProfileHTTPApplication struct {
 	searchTotal        int
 	searchQuery        user.SearchUsersQuery
 	updateCommand      user.UpdateUserProfileCommand
-	changeEmailCommand app.ChangeUserEmailCommand
-	verifyEmailCommand app.VerifyUserEmailPrivilegedCommand
+	changeEmailCommand identity.ChangeUserEmailCommand
+	verifyEmailCommand identity.VerifyUserEmailPrivilegedCommand
 	uploadCommand      user.UploadProfilePictureCommand
 	removeCommand      user.RemoveProfilePictureCommand
 	pictureQuery       user.GetProfilePictureQuery
@@ -59,23 +60,23 @@ func (a *userProfileHTTPApplication) ListCandidateExamActivity(context.Context, 
 	return attempt.CandidateActivityPage{}, nil
 }
 
-func (a *userProfileHTTPApplication) ChangeUserEmail(_ context.Context, _ invocation.Invocation, command app.ChangeUserEmailCommand) (*app.UserEmailState, error) {
+func (a *userProfileHTTPApplication) ChangeUserEmail(_ context.Context, _ invocation.Invocation, command identity.ChangeUserEmailCommand) (*identity.UserEmailState, error) {
 	a.changeEmailCommand = command
-	return &app.UserEmailState{UserID: a.result.ID, EmailVerified: a.result.EmailVerified}, nil
+	return &identity.UserEmailState{UserID: a.result.ID, EmailVerified: a.result.EmailVerified}, nil
 }
 
-func (a *userProfileHTTPApplication) VerifyUserEmailPrivileged(_ context.Context, _ invocation.Invocation, command app.VerifyUserEmailPrivilegedCommand) (*app.UserEmailState, error) {
+func (a *userProfileHTTPApplication) VerifyUserEmailPrivileged(_ context.Context, _ invocation.Invocation, command identity.VerifyUserEmailPrivilegedCommand) (*identity.UserEmailState, error) {
 	a.verifyEmailCommand = command
-	return &app.UserEmailState{UserID: a.result.ID, EmailVerified: a.result.EmailVerified}, nil
+	return &identity.UserEmailState{UserID: a.result.ID, EmailVerified: a.result.EmailVerified}, nil
 }
 
 type accountStateHTTPApplication struct {
 	AccountStateApplication
 	result  *model.User
-	command app.SetUserEnabledCommand
+	command identity.SetUserEnabledCommand
 }
 
-func (a *accountStateHTTPApplication) SetUserEnabled(_ context.Context, _ invocation.Invocation, command app.SetUserEnabledCommand) (*model.User, error) {
+func (a *accountStateHTTPApplication) SetUserEnabled(_ context.Context, _ invocation.Invocation, command identity.SetUserEnabledCommand) (*model.User, error) {
 	a.command = command
 	return a.result, nil
 }
@@ -84,22 +85,22 @@ type sessionAdministrationHTTPApplication struct {
 	SessionAdministrationApplication
 	list             []*model.Session
 	hasMore          bool
-	listQuery        app.ListUserSessionsQuery
-	revokeCommand    app.RevokeUserSessionCommand
-	revokeAllCommand app.RevokeUserSessionsCommand
+	listQuery        identity.ListUserSessionsQuery
+	revokeCommand    identity.RevokeUserSessionCommand
+	revokeAllCommand identity.RevokeUserSessionsCommand
 }
 
-func (a *sessionAdministrationHTTPApplication) ListUserSessions(_ context.Context, _ invocation.Invocation, query app.ListUserSessionsQuery) (paging.Page[*model.Session], error) {
+func (a *sessionAdministrationHTTPApplication) ListUserSessions(_ context.Context, _ invocation.Invocation, query identity.ListUserSessionsQuery) (paging.Page[*model.Session], error) {
 	a.listQuery = query
 	return paging.Page[*model.Session]{Items: a.list, HasMore: a.hasMore}, nil
 }
 
-func (a *sessionAdministrationHTTPApplication) RevokeUserSession(_ context.Context, _ invocation.Invocation, command app.RevokeUserSessionCommand) error {
+func (a *sessionAdministrationHTTPApplication) RevokeUserSession(_ context.Context, _ invocation.Invocation, command identity.RevokeUserSessionCommand) error {
 	a.revokeCommand = command
 	return nil
 }
 
-func (a *sessionAdministrationHTTPApplication) RevokeUserSessions(_ context.Context, _ invocation.Invocation, command app.RevokeUserSessionsCommand) error {
+func (a *sessionAdministrationHTTPApplication) RevokeUserSessions(_ context.Context, _ invocation.Invocation, command identity.RevokeUserSessionsCommand) error {
 	a.revokeAllCommand = command
 	return nil
 }
@@ -170,14 +171,14 @@ type bootstrapHTTPApplication struct {
 	result *model.InstallationBootstrapResult
 }
 
-func (a *bootstrapHTTPApplication) GetInstallationStatus(context.Context, invocation.Invocation, app.GetInstallationStatusQuery) (*model.InstallationStatus, error) {
+func (a *bootstrapHTTPApplication) GetInstallationStatus(context.Context, invocation.Invocation, identity.GetInstallationStatusQuery) (*model.InstallationStatus, error) {
 	if a.status != nil {
 		return a.status, nil
 	}
 	return &model.InstallationStatus{Initialized: false}, nil
 }
 
-func (a *bootstrapHTTPApplication) BootstrapInstallation(context.Context, invocation.Invocation, app.BootstrapInstallationCommand) (*model.InstallationBootstrapResult, error) {
+func (a *bootstrapHTTPApplication) BootstrapInstallation(context.Context, invocation.Invocation, identity.BootstrapInstallationCommand) (*model.InstallationBootstrapResult, error) {
 	return a.result, nil
 }
 
@@ -189,9 +190,9 @@ type loginRevisionHTTPApplication struct {
 func (a *loginRevisionHTTPApplication) Login(
 	context.Context,
 	invocation.Invocation,
-	app.LoginCommand,
-) (*app.LoginResult, error) {
-	return &app.LoginResult{
+	identity.LoginCommand,
+) (*identity.LoginResult, error) {
+	return &identity.LoginResult{
 		User:    a.user,
 		Session: &model.Session{ID: model.NewSessionID()},
 		Tokens:  &model.AuthenticationTokens{AccessToken: "access"},
@@ -251,7 +252,7 @@ func TestCurrentUserContextHTTPReturnsClosedNoStoreDTO(t *testing.T) {
 	session := model.Principal{UserID: userID, SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now()}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: session}, userProfileResource(profiles, profiles))
+	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: session}, userProfileResource(profiles, profiles, profiles))
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/users/me/context", nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
@@ -276,7 +277,7 @@ func TestUserProfileHTTPUsesAllowlistedDTOAndRouteID(t *testing.T) {
 	userID := model.NewID()
 	account := &model.User{ID: model.UserID(userID), CreatedAt: model.TimeFromMillis(100), UpdatedAt: model.TimeFromMillis(100), Revision: 7, Username: "student", Email: "student@example.edu", DisplayName: "Student", Locale: "en", Timezone: "UTC", ProfilePictureChangedAt: model.OptionalTimeFromMillis(500)}
 	profiles := &userProfileHTTPApplication{result: account}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userProfileResource(profiles, profiles))
+	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userProfileResource(profiles, profiles, profiles))
 	request := httptest.NewRequest(http.MethodPatch, "/api/v1/users/"+userID, strings.NewReader(`{"display_name":"Updated"}`))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
@@ -335,7 +336,7 @@ func TestGenericUserProfilePatchRejectsEmailSecurityFields(t *testing.T) {
 	logger, _ := newTestLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now()}
 	profiles := &userProfileHTTPApplication{result: &model.User{ID: model.NewUserID()}}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userProfileResource(profiles, profiles))
+	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userProfileResource(profiles, profiles, profiles))
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPatch, "/api/v1/users/"+model.NewID(), strings.NewReader(`{"email":"redirect@example.edu","email_verified":true}`))
 	request.Header.Set("Authorization", "Bearer credential")
 	request.Header.Set("Content-Type", "application/json")
@@ -358,7 +359,7 @@ func TestEmailMutationResponsesUseNarrowAccountStateProjection(t *testing.T) {
 		Revision: 9, Username: "private-user", Email: "private@example.edu", EmailVerified: false,
 		DisplayName: "Private User", Locale: "fr", Timezone: "Europe/Paris",
 		LastLoginAt: model.OptionalTimeFrom(now.Add(-time.Minute)), LastActivityAt: model.OptionalTimeFrom(now)}}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userProfileResource(profiles, profiles))
+	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userProfileResource(profiles, profiles, profiles))
 
 	for _, test := range []struct {
 		name, method, path, body string
@@ -399,7 +400,7 @@ func TestUserSearchTransportPreservesIncludeDisabledRequestForApplicationAuthori
 		ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now(),
 	}
 	profiles := &userProfileHTTPApplication{}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userProfileResource(profiles, profiles))
+	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userProfileResource(profiles, profiles, profiles))
 	for _, test := range []struct {
 		name            string
 		query           string
@@ -429,7 +430,7 @@ func TestUserSearchTransportReadsAffiliationAndUnitFilters(t *testing.T) {
 		ClientType: model.SessionClientCLI, AuthenticatedAt: time.Now(),
 	}
 	profiles := &userProfileHTTPApplication{}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userProfileResource(profiles, profiles))
+	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userProfileResource(profiles, profiles, profiles))
 	serve := func(query string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users"+query, nil)
 		request.Header.Set("Authorization", "Bearer credential")
@@ -478,7 +479,7 @@ func TestUserSearchTransportPresentsEachUsersSummary(t *testing.T) {
 		}}}},
 		{User: plain, Memberships: store.UserDirectorySummary{UserID: plain.ID}},
 	}}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userProfileResource(profiles, profiles))
+	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, userProfileResource(profiles, profiles, profiles))
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users", nil)
 	request.Header.Set("Authorization", "Bearer credential")
 	response := httptest.NewRecorder()
@@ -576,7 +577,7 @@ func TestLoginResponseDoesNotExposeUserRevision(t *testing.T) {
 		t,
 		logger,
 		classRouteAuthenticator{},
-		authenticationResource(application, browserCookies{}),
+		authenticationResource(nil, application, browserCookies{}),
 	)
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "status = %d: %s", response.Code, response.Body.String())

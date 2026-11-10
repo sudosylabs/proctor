@@ -18,6 +18,7 @@ import (
 
 type testHTTPApplication struct {
 	Application
+	IdentityApplication
 	principal *model.Principal
 }
 
@@ -45,7 +46,7 @@ func validHTTPOptions(t *testing.T) Options {
 	logger, _ := newTestLogger(t)
 	application := &testHTTPApplication{}
 	return Options{
-		Logger: logger, Localizer: newTestLocalizer(t), Health: testHTTPHealth{}, Application: application,
+		Logger: logger, Localizer: newTestLocalizer(t), Health: testHTTPHealth{}, Application: application, Identity: application,
 		AcademicUnits: &academicUnitHTTPApplication{}, Institutions: &institutionHTTPApplication{},
 		Programmes: &programmeHTTPApplication{}, ProgrammeLevels: &programmeLevelHTTPApplication{},
 		AcademicPeriods: &academicPeriodHTTPApplication{}, Classes: &classHTTPApplication{},

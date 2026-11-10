@@ -18,7 +18,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -28,7 +28,7 @@ type accountSecurityHTTPApplication struct {
 	MFA
 	PersonalAccessTokens
 
-	createToken  app.CreatePersonalAccessTokenCommand
+	createToken  identity.CreatePersonalAccessTokenCommand
 	sessions     []*model.Session
 	revokeOthers int
 }
@@ -36,7 +36,7 @@ type accountSecurityHTTPApplication struct {
 func (as *accountSecurityHTTPApplication) ListSessions(
 	context.Context,
 	invocation.Invocation,
-	app.ListSessionsQuery,
+	identity.ListSessionsQuery,
 ) ([]*model.Session, error) {
 	return append([]*model.Session{}, as.sessions...), nil
 }
@@ -44,24 +44,24 @@ func (as *accountSecurityHTTPApplication) ListSessions(
 func (as *accountSecurityHTTPApplication) RevokeOtherSessions(
 	context.Context,
 	invocation.Invocation,
-	app.RevokeOtherSessionsCommand,
-) (*app.RevokeOtherSessionsResult, error) {
+	identity.RevokeOtherSessionsCommand,
+) (*identity.RevokeOtherSessionsResult, error) {
 	as.revokeOthers++
-	return &app.RevokeOtherSessionsResult{RevokedSessionCount: 2}, nil
+	return &identity.RevokeOtherSessionsResult{RevokedSessionCount: 2}, nil
 }
 
 func (as *accountSecurityHTTPApplication) GetMFAStatus(
 	context.Context,
 	invocation.Invocation,
-	app.GetMFAStatusQuery,
-) (*app.MFAStatus, error) {
-	return &app.MFAStatus{Enabled: true, RecoveryCodesRemaining: 7}, nil
+	identity.GetMFAStatusQuery,
+) (*identity.MFAStatus, error) {
+	return &identity.MFAStatus{Enabled: true, RecoveryCodesRemaining: 7}, nil
 }
 
 func (as *accountSecurityHTTPApplication) CreatePersonalAccessToken(
 	_ context.Context,
 	_ invocation.Invocation,
-	command app.CreatePersonalAccessTokenCommand,
+	command identity.CreatePersonalAccessTokenCommand,
 ) (*model.PersonalAccessTokenCreation, error) {
 	as.createToken = command
 	return &model.PersonalAccessTokenCreation{

@@ -11,17 +11,17 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type authenticationMethodApplication interface {
-	AuthenticationMethods(context.Context, invocation.Invocation) (app.AuthenticationMethodView, error)
+	AuthenticationMethods(context.Context, invocation.Invocation) (identity.AuthenticationMethodView, error)
 	EnrollPassword(context.Context, invocation.Invocation, string) error
-	ChangePassword(context.Context, invocation.Invocation, app.ChangePasswordCommand) error
+	ChangePassword(context.Context, invocation.Invocation, identity.ChangePasswordCommand) error
 	RemovePassword(context.Context, invocation.Invocation) error
-	BeginProviderConnection(context.Context, invocation.Invocation, app.BeginProviderConnectionCommand) (*model.ExternalAuthenticationStart, error)
+	BeginProviderConnection(context.Context, invocation.Invocation, identity.BeginProviderConnectionCommand) (*model.ExternalAuthenticationStart, error)
 	UnlinkExternalIdentity(context.Context, invocation.Invocation, model.ExternalIdentityID) error
 }
 
@@ -111,7 +111,7 @@ func (m authenticationMethodResourceModule) changePassword(request operationRequ
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
-	if err := m.application.ChangePassword(request.context, request.invocation(), app.ChangePasswordCommand{Password: body.Password}); err != nil {
+	if err := m.application.ChangePassword(request.context, request.invocation(), identity.ChangePasswordCommand{Password: body.Password}); err != nil {
 		return operationResult{}, err
 	}
 	return noContentResult(), nil
@@ -133,7 +133,7 @@ func (m authenticationMethodResourceModule) connect(request operationRequest) (o
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
-	start, err := m.application.BeginProviderConnection(request.context, request.invocation(), app.BeginProviderConnectionCommand{ProviderID: providerID, ReturnTo: body.ReturnTo, Source: request.metadata.IPAddress})
+	start, err := m.application.BeginProviderConnection(request.context, request.invocation(), identity.BeginProviderConnectionCommand{ProviderID: providerID, ReturnTo: body.ReturnTo, Source: request.metadata.IPAddress})
 	if err != nil {
 		return operationResult{}, err
 	}

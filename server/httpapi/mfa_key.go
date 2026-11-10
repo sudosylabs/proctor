@@ -11,16 +11,16 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 // MFAKeyApplication is the operator surface of the MFA key ring.
 type MFAKeyApplication interface {
-	GetMFAKeyState(context.Context, invocation.Invocation) (app.MFAKeyStateView, error)
-	StartMFARekey(context.Context, invocation.Invocation, app.StartMFARekeyCommand) (app.MFARekeyView, error)
-	GetMFARekeyStatus(context.Context, invocation.Invocation, app.GetMFARekeyStatusQuery) (app.MFARekeyStatusView, error)
+	GetMFAKeyState(context.Context, invocation.Invocation) (identity.MFAKeyStateView, error)
+	StartMFARekey(context.Context, invocation.Invocation, identity.StartMFARekeyCommand) (identity.MFARekeyView, error)
+	GetMFARekeyStatus(context.Context, invocation.Invocation, identity.GetMFARekeyStatusQuery) (identity.MFARekeyStatusView, error)
 }
 
 type mfaRekeyRequest struct {
@@ -105,7 +105,7 @@ func (m mfaKeyResourceModule) startRekey(request operationRequest) (operationRes
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
-	view, err := m.application.StartMFARekey(request.context, request.invocation(), app.StartMFARekeyCommand{RetiringKeyID: body.RetiringKeyID})
+	view, err := m.application.StartMFARekey(request.context, request.invocation(), identity.StartMFARekeyCommand{RetiringKeyID: body.RetiringKeyID})
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -118,7 +118,7 @@ func (m mfaKeyResourceModule) getRekeyStatus(request operationRequest) (operatio
 	if err != nil {
 		return operationResult{}, err
 	}
-	view, err := m.application.GetMFARekeyStatus(request.context, request.invocation(), app.GetMFARekeyStatusQuery{JobID: jobID})
+	view, err := m.application.GetMFARekeyStatus(request.context, request.invocation(), identity.GetMFARekeyStatusQuery{JobID: jobID})
 	if err != nil {
 		return operationResult{}, err
 	}

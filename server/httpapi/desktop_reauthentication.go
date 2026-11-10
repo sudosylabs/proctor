@@ -11,8 +11,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -20,14 +20,14 @@ import (
 // DesktopReauthentication lets a Desktop Session confirm its own User again
 // in the system browser and redeem that proof as recent authentication.
 type DesktopReauthentication interface {
-	StartDesktopReauthentication(context.Context, invocation.Invocation, app.StartDesktopReauthenticationCommand) (*app.DesktopReauthenticationStart, error)
-	BindDesktopReauthentication(context.Context, invocation.Invocation, app.BindDesktopAuthorizationCommand) (*app.DesktopAuthorizationBinding, error)
-	DesktopReauthenticationContext(context.Context, invocation.Invocation, string) (*app.DesktopReauthenticationBrowserContext, error)
-	AuthenticateDesktopReauthenticationPassword(context.Context, invocation.Invocation, app.AuthenticateDesktopReauthenticationPasswordCommand) (*app.DesktopReauthenticationBrowserContext, error)
-	BeginDesktopReauthenticationExternalAuthentication(context.Context, invocation.Invocation, app.BeginDesktopReauthenticationExternalAuthenticationCommand) (*model.ExternalAuthenticationStart, error)
-	ApproveDesktopReauthentication(context.Context, invocation.Invocation, app.ApproveDesktopAuthorizationCommand) (*app.DesktopAuthorizationApproval, error)
-	CancelDesktopReauthentication(context.Context, invocation.Invocation, app.ApproveDesktopAuthorizationCommand) error
-	CompleteDesktopReauthentication(context.Context, invocation.Invocation, app.CompleteDesktopReauthenticationCommand) (*app.DesktopReauthenticationResult, error)
+	StartDesktopReauthentication(context.Context, invocation.Invocation, identity.StartDesktopReauthenticationCommand) (*identity.DesktopReauthenticationStart, error)
+	BindDesktopReauthentication(context.Context, invocation.Invocation, identity.BindDesktopAuthorizationCommand) (*identity.DesktopAuthorizationBinding, error)
+	DesktopReauthenticationContext(context.Context, invocation.Invocation, string) (*identity.DesktopReauthenticationBrowserContext, error)
+	AuthenticateDesktopReauthenticationPassword(context.Context, invocation.Invocation, identity.AuthenticateDesktopReauthenticationPasswordCommand) (*identity.DesktopReauthenticationBrowserContext, error)
+	BeginDesktopReauthenticationExternalAuthentication(context.Context, invocation.Invocation, identity.BeginDesktopReauthenticationExternalAuthenticationCommand) (*model.ExternalAuthenticationStart, error)
+	ApproveDesktopReauthentication(context.Context, invocation.Invocation, identity.ApproveDesktopAuthorizationCommand) (*identity.DesktopAuthorizationApproval, error)
+	CancelDesktopReauthentication(context.Context, invocation.Invocation, identity.ApproveDesktopAuthorizationCommand) error
+	CompleteDesktopReauthentication(context.Context, invocation.Invocation, identity.CompleteDesktopReauthenticationCommand) (*identity.DesktopReauthenticationResult, error)
 }
 
 type desktopReauthenticationStartRequest struct {
@@ -85,7 +85,7 @@ func (m desktopReauthenticationResourceModule) start(request operationRequest) (
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
-	result, err := m.application.StartDesktopReauthentication(request.context, request.invocation(), app.StartDesktopReauthenticationCommand{
+	result, err := m.application.StartDesktopReauthentication(request.context, request.invocation(), identity.StartDesktopReauthenticationCommand{
 		CallbackURL: input.CallbackURL, State: input.State, CodeChallenge: input.CodeChallenge, Source: request.metadata.IPAddress,
 	})
 	if err != nil {
@@ -100,7 +100,7 @@ func (m desktopReauthenticationResourceModule) bind(request operationRequest) (o
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
-	result, err := m.application.BindDesktopReauthentication(request.context, request.invocation(), app.BindDesktopAuthorizationCommand{
+	result, err := m.application.BindDesktopReauthentication(request.context, request.invocation(), identity.BindDesktopAuthorizationCommand{
 		Handle: input.Handle, BrowserProof: input.BrowserProof, State: input.State,
 	})
 	if err != nil {
@@ -134,7 +134,7 @@ func (m desktopReauthenticationResourceModule) authenticatePassword(request oper
 	if err = request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
-	result, err := m.application.AuthenticateDesktopReauthenticationPassword(request.context, request.invocation(), app.AuthenticateDesktopReauthenticationPasswordCommand{
+	result, err := m.application.AuthenticateDesktopReauthenticationPassword(request.context, request.invocation(), identity.AuthenticateDesktopReauthenticationPasswordCommand{
 		Binding: binding, Password: input.Password, Source: request.metadata.IPAddress,
 	})
 	if err != nil {
@@ -152,7 +152,7 @@ func (m desktopReauthenticationResourceModule) authenticateExternal(request oper
 	if err != nil {
 		return protocolResult{}, err
 	}
-	start, err := m.application.BeginDesktopReauthenticationExternalAuthentication(request.context, request.invocation(), app.BeginDesktopReauthenticationExternalAuthenticationCommand{
+	start, err := m.application.BeginDesktopReauthenticationExternalAuthentication(request.context, request.invocation(), identity.BeginDesktopReauthenticationExternalAuthenticationCommand{
 		ProviderID: provider, Binding: binding, State: request.request.URL.Query().Get("state"), Source: request.metadata.IPAddress,
 	})
 	if err != nil {
@@ -174,7 +174,7 @@ func (m desktopReauthenticationResourceModule) approve(request operationRequest)
 	if err = request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
-	result, err := m.application.ApproveDesktopReauthentication(request.context, request.invocation(), app.ApproveDesktopAuthorizationCommand{Binding: binding, State: input.State})
+	result, err := m.application.ApproveDesktopReauthentication(request.context, request.invocation(), identity.ApproveDesktopAuthorizationCommand{Binding: binding, State: input.State})
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -192,7 +192,7 @@ func (m desktopReauthenticationResourceModule) cancel(request operationRequest) 
 	if err = request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
-	if err = m.application.CancelDesktopReauthentication(request.context, request.invocation(), app.ApproveDesktopAuthorizationCommand{Binding: binding, State: input.State}); err != nil {
+	if err = m.application.CancelDesktopReauthentication(request.context, request.invocation(), identity.ApproveDesktopAuthorizationCommand{Binding: binding, State: input.State}); err != nil {
 		return operationResult{}, err
 	}
 	headers := captureResponseHeaders(m.cookies.clearDesktopReauthenticationBinding)
@@ -205,7 +205,7 @@ func (m desktopReauthenticationResourceModule) complete(request operationRequest
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
-	result, err := m.application.CompleteDesktopReauthentication(request.context, request.invocation(), app.CompleteDesktopReauthenticationCommand{
+	result, err := m.application.CompleteDesktopReauthentication(request.context, request.invocation(), identity.CompleteDesktopReauthenticationCommand{
 		Code: input.Code, CodeVerifier: input.CodeVerifier, State: input.State, Source: request.metadata.IPAddress,
 	})
 	if err != nil {
@@ -224,7 +224,7 @@ func (m desktopReauthenticationResourceModule) binding(request *http.Request) (s
 	return binding, nil
 }
 
-func desktopReauthenticationContextResponseFromApplication(value *app.DesktopReauthenticationBrowserContext) desktopReauthenticationContextResponse {
+func desktopReauthenticationContextResponseFromApplication(value *identity.DesktopReauthenticationBrowserContext) desktopReauthenticationContextResponse {
 	if value == nil {
 		return desktopReauthenticationContextResponse{}
 	}

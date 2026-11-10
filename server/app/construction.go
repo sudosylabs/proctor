@@ -8,7 +8,6 @@
 package app
 
 import (
-	"context"
 	"errors"
 	"time"
 
@@ -21,6 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/review"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/exam/workspace"
+	"github.com/sudosylabs/proctor/server/app/identity"
 
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
@@ -48,41 +48,31 @@ type examinationConstruction struct {
 // focused application service. It is a private construction result, not a
 // runtime service locator.
 type applicationFoundation struct {
-	mfa         *mfaMechanics
-	hasher      *passwordHasher
-	attempts    *authenticationAttemptAccounting
-	invalidator *authenticationCacheInvalidator
+	hasher      *identity.PasswordHasher
+	attempts    *identity.AttemptAccounting
+	invalidator *identity.CacheInvalidator
 	realtime    *realtimeService
 	audit       *access.Auditor
 	mail        *mail.Composer
 	mailHealth  *MailHealth
 }
 
-type identityConstruction struct {
-	mail                              *mail.Composer
-	authentication                    *authenticationService
-	desktopAuthorization              *desktopAuthorizationService
-	desktopReauthentication           *desktopReauthenticationService
-	desktopRegistrations              *desktopRegistrationService
-	browserInvitations                *browserInvitationService
-	selfSessions                      *selfSessionService
-	externalAuthentication            *externalAuthenticationService
-	authenticationMethods             *authenticationMethodService
-	mfaApplication                    *mfaApplicationService
-	accountTokens                     *accountTokenService
-	publicRegistration                *publicRegistrationService
-	invitations                       *invitationService
-	onboardingImports                 *onboardingImportService
-	personalAccessTokenAdministration *personalAccessTokenAdministrationService
+type accountConstruction struct {
+	identity           *identity.Service
+	browserInvitations *browserInvitationService
+	publicRegistration *publicRegistrationService
+	invitations        *invitationService
+	onboardingImports  *onboardingImportService
+	// wake reaches the Job runtime once constructJobs builds it.
+	wake *jobWake
 }
 
 type accessAcademicConstruction struct {
-	authorization        *access.Authorizer
-	capabilities         accessPolicyCapabilitySource
-	accessPolicies       *accessPolicyService
-	retentionPolicy      *retentionPolicyService
-	desktopCompatibility *desktopCompatibilityService
-	academic             *academic.Service
+	authorization   *access.Authorizer
+	capabilities    identity.AccessPolicyCapabilitySource
+	accessPolicies  *accessPolicyService
+	retentionPolicy *retentionPolicyService
+	academic        *academic.Service
 }
 
 type profileFileConstruction struct {
@@ -96,16 +86,12 @@ type jobConstruction struct {
 	runtime    *job.Engine
 	operations *jobOperationsService
 	mail       *mailService
-	mfaKeys    *mfaKeyService
 }
 
 type administrationConstruction struct {
-	accountStates                 *accountStateService
-	sessionAdministrations        *sessionAdministrationService
 	roles                         *roleService
 	roleBindings                  *roleBindingService
 	auditListings                 *auditListingService
-	bootstrap                     *bootstrapService
 	academicAdministrationBatches *academicAdministrationBatchService
 	// search spans Exams, Users and Classes, so it is built once every one of
 	// those services exists.
@@ -150,24 +136,15 @@ func validateApplicationDependencies(deps Dependencies) error {
 }
 
 func constructApplicationFoundation(deps Dependencies) (applicationFoundation, error) {
-	mfa, err := newMFAMechanics(mfaMechanicsDependencies{Settings: deps.MFA, Sealer: deps.MFASecretSealer})
+	hasher, err := identity.NewPasswordHasher(identity.PasswordHasherDependencies{Settings: deps.Password, Recorder: deps.PasswordWorkRecorder})
 	if err != nil {
 		return applicationFoundation{}, err
 	}
-	if deps.MFASecretSealer != nil {
-		if err = validateMFASecretKeys(context.Background(), deps.Store.MFA(), deps.MFASecretSealer); err != nil {
-			return applicationFoundation{}, err
-		}
-	}
-	hasher, err := newPasswordHasher(passwordHasherDependencies{Settings: deps.Password, Recorder: deps.PasswordWorkRecorder})
+	attempts, err := identity.NewAttemptAccounting(identity.AttemptAccountingDependencies{Cache: deps.Cache})
 	if err != nil {
 		return applicationFoundation{}, err
 	}
-	attempts, err := newAuthenticationAttemptAccounting(authenticationAttemptAccountingDependencies{Cache: deps.Cache})
-	if err != nil {
-		return applicationFoundation{}, err
-	}
-	invalidator, err := newAuthenticationCacheInvalidator(authenticationCacheInvalidatorDependencies{Cache: deps.Cache, Diagnostics: deps.AuthenticationDiagnostics})
+	invalidator, err := identity.NewCacheInvalidator(identity.CacheInvalidatorDependencies{Cache: deps.Cache, Diagnostics: deps.AuthenticationDiagnostics})
 	if err != nil {
 		return applicationFoundation{}, err
 	}
@@ -190,7 +167,6 @@ func constructApplicationFoundation(deps Dependencies) (applicationFoundation, e
 		return applicationFoundation{}, err
 	}
 	return applicationFoundation{
-		mfa:         mfa,
 		hasher:      hasher,
 		attempts:    attempts,
 		invalidator: invalidator,
@@ -204,7 +180,7 @@ func constructApplicationFoundation(deps Dependencies) (applicationFoundation, e
 func assembleApplication(
 	deps Dependencies,
 	foundation applicationFoundation,
-	identity identityConstruction,
+	accounts accountConstruction,
 	access accessAcademicConstruction,
 	examinations examinationConstruction,
 	profiles profileFileConstruction,
@@ -212,52 +188,38 @@ func assembleApplication(
 	administration administrationConstruction,
 ) *App {
 	return &App{
-		authenticationService:                    identity.authentication,
-		desktopAuthorizationService:              identity.desktopAuthorization,
-		desktopReauthenticationService:           identity.desktopReauthentication,
-		desktopRegistrationService:               identity.desktopRegistrations,
-		browserInvitationService:                 identity.browserInvitations,
-		selfSessionService:                       identity.selfSessions,
-		externalAuthenticationService:            identity.externalAuthentication,
-		authenticationMethodService:              identity.authenticationMethods,
-		mfaApplicationService:                    identity.mfaApplication,
-		accountTokenService:                      identity.accountTokens,
-		publicRegistrationService:                identity.publicRegistration,
-		invitationService:                        identity.invitations,
-		onboardingImportService:                  identity.onboardingImports,
-		personalAccessTokenAdministrationService: identity.personalAccessTokenAdministration,
-		accessPolicyService:                      access.accessPolicies,
-		retentionPolicyService:                   access.retentionPolicy,
-		desktopCompatibilityService:              access.desktopCompatibility,
-		Academic:                                 access.academic,
-		examAuthoringService:                     examinations.authoring,
-		examPublicationService:                   examinations.revisions,
-		examSittingService:                       examinations.sittings,
-		examAttemptService:                       examinations.attempts,
-		examReviewService:                        examinations.reviews,
-		examRecordsService:                       examinations.records,
-		examExportsService:                       examinations.exports,
-		examResourceService:                      examinations.resources,
-		examCorrectionService:                    examinations.corrections,
-		examStarterWorkspaceService:              examinations.starterWorkspace,
-		Users:                                    profiles.users,
-		accountStateService:                      administration.accountStates,
-		sessionAdministrationService:             administration.sessionAdministrations,
-		roleService:                              administration.roles,
-		roleBindingService:                       administration.roleBindings,
-		auditListingService:                      administration.auditListings,
-		bootstrapService:                         administration.bootstrap,
-		academicAdministrationBatchService:       administration.academicAdministrationBatches,
-		realtimeService:                          foundation.realtime,
-		searchService:                            administration.search,
-		administrationCountsService:              administration.counts,
+		Identity:                           accounts.identity,
+		browserInvitationService:           accounts.browserInvitations,
+		publicRegistrationService:          accounts.publicRegistration,
+		invitationService:                  accounts.invitations,
+		onboardingImportService:            accounts.onboardingImports,
+		accessPolicyService:                access.accessPolicies,
+		retentionPolicyService:             access.retentionPolicy,
+		Academic:                           access.academic,
+		examAuthoringService:               examinations.authoring,
+		examPublicationService:             examinations.revisions,
+		examSittingService:                 examinations.sittings,
+		examAttemptService:                 examinations.attempts,
+		examReviewService:                  examinations.reviews,
+		examRecordsService:                 examinations.records,
+		examExportsService:                 examinations.exports,
+		examResourceService:                examinations.resources,
+		examCorrectionService:              examinations.corrections,
+		examStarterWorkspaceService:        examinations.starterWorkspace,
+		Users:                              profiles.users,
+		roleService:                        administration.roles,
+		roleBindingService:                 administration.roleBindings,
+		auditListingService:                administration.auditListings,
+		academicAdministrationBatchService: administration.academicAdministrationBatches,
+		realtimeService:                    foundation.realtime,
+		searchService:                      administration.search,
+		administrationCountsService:        administration.counts,
 		realtimeAdmissionService: &realtimeAdmissionService{
-			principals: identity.authentication, exams: examinations.authoring, sittings: examinations.sittings,
+			principals: accounts.identity, exams: examinations.authoring, sittings: examinations.sittings,
 			authorization: access.authorization, operational: deps.OperationalRecorder,
 		},
 		jobs:                 jobs.runtime,
 		jobOperationsService: jobs.operations,
 		mailService:          jobs.mail,
-		mfaKeyService:        jobs.mfaKeys,
 	}
 }

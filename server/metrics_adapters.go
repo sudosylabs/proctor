@@ -17,6 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/packages/mail"
 	"github.com/sudosylabs/proctor/packages/vfs"
 	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/cluster"
 	"github.com/sudosylabs/proctor/server/filecontent"
@@ -36,7 +37,7 @@ type workMetricsRecorder struct {
 	pool    string
 }
 
-var _ app.PasswordWorkRecorder = workMetricsRecorder{}
+var _ identity.PasswordWorkRecorder = workMetricsRecorder{}
 var _ filecontent.WorkRecorder = workMetricsRecorder{}
 
 func (r workMetricsRecorder) Started() { r.metrics.WorkStarted(r.pool) }

@@ -77,7 +77,7 @@ var typedIDAllowlist = map[string]string{
 	"app/jobhandler.RetentionExpiryCheckpoint AfterID":          "retention record cursor: RetentionExpiryKind chooses the entity",
 	"app.retentionJobAudit.BeginRetentionExpiry id":             "retention record: RetentionExpiryKind chooses the entity",
 	"store.ExamAttemptStore.ResolveSecurityPreflightSitting id": "Desktop agreement identifier (model.IsValidAgreementID)",
-	"app.externalProviderSource.Provider id":                    "operator-configured identity provider",
+	"app/identity.ExternalProviderSource.Provider id":           "operator-configured identity provider",
 	"app/realtime.RealtimeEvent ID":                             "runtime event identity for peer deduplication",
 }
 

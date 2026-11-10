@@ -9,8 +9,8 @@
 // administrator reads and changes about a User's profile: the User directory
 // and profile, the portable settings document, and the profile picture.
 // Service holds every one of these use cases, one file per concern.
-// Account state, email addresses and account recovery stay in the parent app
-// package for now.
+// Account state, email addresses and account recovery belong to the identity
+// area in app/identity.
 // Start with user.go for the Service and its collaborators, then open the
 // file named for the concern you are changing.
 package user
@@ -142,5 +142,6 @@ func New(deps Dependencies) (*Service, error) {
 }
 
 // StoreErrors presents Store failures of a User as application errors. The
-// parent app package uses it for the User reads of account recovery and email.
+// identity area uses it for the User reads of email changes, and the parent
+// app package for those of onboarding import.
 var StoreErrors = apperror.AdministrationStoreTable("user", "user.conflict", "user.invalid", nil)

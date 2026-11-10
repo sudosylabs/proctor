@@ -17,18 +17,18 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type recoveryMFAHTTPFake struct{ MFA }
 
-func (recoveryMFAHTTPFake) GetMFAStatus(_ context.Context, invocation invocation.Invocation, _ app.GetMFAStatusQuery) (*app.MFAStatus, error) {
-	return &app.MFAStatus{MFARecoveryRequired: invocation.Principal().MFARecoveryRequired, AuthenticationMethod: "oidc", AuthenticationProviderID: "campus", AuthenticationStrength: model.AuthenticationSingleFactor, RecentlyAuthenticated: true}, nil
+func (recoveryMFAHTTPFake) GetMFAStatus(_ context.Context, invocation invocation.Invocation, _ identity.GetMFAStatusQuery) (*identity.MFAStatus, error) {
+	return &identity.MFAStatus{MFARecoveryRequired: invocation.Principal().MFARecoveryRequired, AuthenticationMethod: "oidc", AuthenticationProviderID: "campus", AuthenticationStrength: model.AuthenticationSingleFactor, RecentlyAuthenticated: true}, nil
 }
-func (recoveryMFAHTTPFake) SetupMFA(context.Context, invocation.Invocation, app.SetupMFACommand) (*app.MFASetup, error) {
-	return &app.MFASetup{Secret: "once-only", ProvisioningURI: "otpauth://totp/Proctor", ExpiresAt: time.Now().Add(time.Minute)}, nil
+func (recoveryMFAHTTPFake) SetupMFA(context.Context, invocation.Invocation, identity.SetupMFACommand) (*identity.MFASetup, error) {
+	return &identity.MFASetup{Secret: "once-only", ProvisioningURI: "otpauth://totp/Proctor", ExpiresAt: time.Now().Add(time.Minute)}, nil
 }
 func TestMFARestrictedSessionOnlyReachesExplicitRecoveryRoutes(t *testing.T) {
 	logger, _ := newTestLogger(t)
@@ -57,13 +57,13 @@ func TestMFARestrictedSessionOnlyReachesExplicitRecoveryRoutes(t *testing.T) {
 
 type enrollmentMFAHTTPFake struct{ MFA }
 
-func (enrollmentMFAHTTPFake) GetMFAStatus(_ context.Context, invocation invocation.Invocation, _ app.GetMFAStatusQuery) (*app.MFAStatus, error) {
-	return &app.MFAStatus{MFAEnrollmentRequired: invocation.Principal().MFAEnrollmentRequired, AuthenticationMethod: "oidc", AuthenticationProviderID: "campus", AuthenticationStrength: model.AuthenticationSingleFactor, RecentlyAuthenticated: true}, nil
+func (enrollmentMFAHTTPFake) GetMFAStatus(_ context.Context, invocation invocation.Invocation, _ identity.GetMFAStatusQuery) (*identity.MFAStatus, error) {
+	return &identity.MFAStatus{MFAEnrollmentRequired: invocation.Principal().MFAEnrollmentRequired, AuthenticationMethod: "oidc", AuthenticationProviderID: "campus", AuthenticationStrength: model.AuthenticationSingleFactor, RecentlyAuthenticated: true}, nil
 }
-func (enrollmentMFAHTTPFake) SetupMFA(context.Context, invocation.Invocation, app.SetupMFACommand) (*app.MFASetup, error) {
-	return &app.MFASetup{Secret: "once-only", ProvisioningURI: "otpauth://totp/Proctor", ExpiresAt: time.Now().Add(time.Minute)}, nil
+func (enrollmentMFAHTTPFake) SetupMFA(context.Context, invocation.Invocation, identity.SetupMFACommand) (*identity.MFASetup, error) {
+	return &identity.MFASetup{Secret: "once-only", ProvisioningURI: "otpauth://totp/Proctor", ExpiresAt: time.Now().Add(time.Minute)}, nil
 }
-func (enrollmentMFAHTTPFake) ChallengeMFA(context.Context, invocation.Invocation, app.ChallengeMFACommand) (*model.Session, error) {
+func (enrollmentMFAHTTPFake) ChallengeMFA(context.Context, invocation.Invocation, identity.ChallengeMFACommand) (*model.Session, error) {
 	now := time.Now().UTC()
 	return &model.Session{ID: model.NewSessionID(), CreatedAt: now, UpdatedAt: now, UserID: model.NewUserID(), ClientType: model.SessionClientWeb,
 		AuthenticationMethod: "oidc", AuthenticationStrength: model.AuthenticationMultiFactor, AuthenticatedAt: now,
@@ -134,17 +134,17 @@ func TestRestrictedPrincipalAssuranceByRoute(t *testing.T) {
 
 type statusMFAHTTPFake struct {
 	MFA
-	status *app.MFAStatus
+	status *identity.MFAStatus
 }
 
-func (f statusMFAHTTPFake) GetMFAStatus(context.Context, invocation.Invocation, app.GetMFAStatusQuery) (*app.MFAStatus, error) {
+func (f statusMFAHTTPFake) GetMFAStatus(context.Context, invocation.Invocation, identity.GetMFAStatusQuery) (*identity.MFAStatus, error) {
 	return f.status, nil
 }
 
 func TestMFAStatusResponseMapsPasswordRecoveryAndRecentWindow(t *testing.T) {
 	logger, _ := newTestLogger(t)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor, ClientType: model.SessionClientWeb, AuthenticatedAt: time.Now()}
-	read := func(status *app.MFAStatus) string {
+	read := func(status *identity.MFAStatus) string {
 		api := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, mfaResource(statusMFAHTTPFake{status: status}))
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me/mfa", nil)
 		request.Header.Set("Authorization", "Bearer status")
@@ -153,9 +153,9 @@ func TestMFAStatusResponseMapsPasswordRecoveryAndRecentWindow(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 		return response.Body.String()
 	}
-	body := read(&app.MFAStatus{AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor, Enabled: true, RecentlyAuthenticated: true,
+	body := read(&identity.MFAStatus{AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor, Enabled: true, RecentlyAuthenticated: true,
 		RecoveryCodesRemaining: 7, RecoveryCodesTotal: 10, RecentAuthenticationTTL: 15*time.Minute + 59*time.Second,
-		Method: app.MFAMethodAuthenticatorApp, EnabledAt: model.OptionalTimeFrom(time.Date(2026, 6, 2, 8, 0, 0, 0, time.UTC)),
+		Method: identity.MFAMethodAuthenticatorApp, EnabledAt: model.OptionalTimeFrom(time.Date(2026, 6, 2, 8, 0, 0, 0, time.UTC)),
 		RecoveryCodesGeneratedAt:   model.OptionalTimeFrom(time.Date(2026, 7, 9, 10, 15, 0, 0, time.UTC)),
 		PasswordChangedAt:          model.OptionalTimeFrom(time.Date(2026, 7, 1, 9, 30, 0, 0, time.UTC)),
 		RecentlyAuthenticatedUntil: model.OptionalTimeFrom(time.Date(2026, 8, 18, 12, 14, 0, 0, time.UTC))})
@@ -167,7 +167,7 @@ func TestMFAStatusResponseMapsPasswordRecoveryAndRecentWindow(t *testing.T) {
 	require.Contains(t, body, `"recent_authentication_minutes":15`)
 	require.Contains(t, body, `"recently_authenticated_until":"2026-08-18T12:14:00Z"`)
 
-	body = read(&app.MFAStatus{AuthenticationMethod: "oidc", AuthenticationStrength: model.AuthenticationSingleFactor, RecoveryCodesTotal: 10, RecentAuthenticationTTL: 30 * time.Second})
+	body = read(&identity.MFAStatus{AuthenticationMethod: "oidc", AuthenticationStrength: model.AuthenticationSingleFactor, RecoveryCodesTotal: 10, RecentAuthenticationTTL: 30 * time.Second})
 	require.NotContains(t, body, "password_changed_at")
 	require.NotContains(t, body, "recently_authenticated_until")
 	require.NotContains(t, body, `"method"`)

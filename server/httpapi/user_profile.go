@@ -17,9 +17,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -195,10 +195,11 @@ type candidateExamActivityResultResponse struct {
 type userProfileResourceModule struct {
 	profiles UserProfileApplication
 	accounts UserAccountApplication
+	emails   UserEmailApplication
 }
 
-func userProfileResource(profiles UserProfileApplication, accounts UserAccountApplication) apiResource {
-	module := userProfileResourceModule{profiles: profiles, accounts: accounts}
+func userProfileResource(profiles UserProfileApplication, accounts UserAccountApplication, emails UserEmailApplication) apiResource {
+	module := userProfileResourceModule{profiles: profiles, accounts: accounts, emails: emails}
 	userPath := apiPath(literal("users"), canonicalID("user_id"))
 	picture := appendRoutePath(userPath, literal("profile-picture"))
 	email := appendRoutePath(userPath, literal("email"))
@@ -343,7 +344,7 @@ func (m userProfileResourceModule) changeEmail(request operationRequest) (operat
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
-	state, appErr := m.accounts.ChangeUserEmail(request.context, request.invocation(), app.ChangeUserEmailCommand{UserID: userID, Email: body.Email})
+	state, appErr := m.emails.ChangeUserEmail(request.context, request.invocation(), identity.ChangeUserEmailCommand{UserID: userID, Email: body.Email})
 	if appErr != nil {
 		return operationResult{}, appErr
 	}
@@ -355,14 +356,14 @@ func (m userProfileResourceModule) verifyEmail(request operationRequest) (operat
 	if err != nil {
 		return operationResult{}, err
 	}
-	state, appErr := m.accounts.VerifyUserEmailPrivileged(request.context, request.invocation(), app.VerifyUserEmailPrivilegedCommand{UserID: userID})
+	state, appErr := m.emails.VerifyUserEmailPrivileged(request.context, request.invocation(), identity.VerifyUserEmailPrivilegedCommand{UserID: userID})
 	if appErr != nil {
 		return operationResult{}, appErr
 	}
 	return jsonResult(http.StatusOK, userEmailStateResponseFromApplication(state)), nil
 }
 
-func userEmailStateResponseFromApplication(state *app.UserEmailState) userEmailStateResponse {
+func userEmailStateResponseFromApplication(state *identity.UserEmailState) userEmailStateResponse {
 	if state == nil {
 		return userEmailStateResponse{}
 	}

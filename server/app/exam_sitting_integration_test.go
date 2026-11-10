@@ -18,10 +18,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
@@ -46,7 +46,7 @@ func TestExamSittingIntegration(t *testing.T) {
 	ctx := context.Background()
 	const password = "correct horse battery staple"
 
-	bootstrap, appErr := helper.App.BootstrapInstallation(ctx, invocation.Invocation{}, app.BootstrapInstallationCommand{
+	bootstrap, appErr := helper.App.Identity.BootstrapInstallation(ctx, invocation.Invocation{}, identity.BootstrapInstallationCommand{
 		InstitutionName: "sitting-university", InstitutionDisplayName: "Sitting University",
 		AdministratorUsername: "sitting-administrator", AdministratorEmail: "sitting-administrator@example.edu",
 		AdministratorDisplayName: "Sitting Administrator", AdministratorLocale: "en", AdministratorTimezone: "UTC",
@@ -78,7 +78,7 @@ func TestExamSittingIntegration(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	candidate, appErr := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+	candidate, appErr := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 		Username: "sitting-candidate", Email: "sitting-candidate@example.edu", DisplayName: "Sitting Candidate",
 		EmailVerified: true, Locale: "en", Timezone: "UTC",
 	}, Password: password})
@@ -91,16 +91,16 @@ func TestExamSittingIntegration(t *testing.T) {
 		ClassID: class.ID, UserID: candidate.ID, StartsAt: period.StartsAt,
 	})
 	require.NoError(t, err)
-	manager, appErr := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+	manager, appErr := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 		Username: "sitting-manager", Email: "sitting-manager@example.edu", DisplayName: "Sitting Manager",
 	}, Password: password})
 	require.NoError(t, appErr)
-	managerLogin, appErr := helper.App.Login(ctx, invocation.Invocation{}, app.LoginCommand{
+	managerLogin, appErr := helper.App.Identity.Login(ctx, invocation.Invocation{}, identity.LoginCommand{
 		LoginID: manager.Username, Password: password, ClientType: model.SessionClientCLI,
 		DeviceID: "sitting-manager-cli", Source: "127.0.0.1:1",
 	})
 	require.NoError(t, appErr, "manager login: %v; logs=%s", appErr, helper.Logs.String())
-	managerPrincipal, appErr := helper.App.AuthenticateAccess(ctx, managerLogin.Tokens.AccessToken)
+	managerPrincipal, appErr := helper.App.Identity.AuthenticateAccess(ctx, managerLogin.Tokens.AccessToken)
 	require.NoError(t, appErr)
 	managerInvocation := invocation.New(*managerPrincipal, model.RequestMetadata{RequestID: "exam-sitting-manager-integration"})
 	managerMembership, err := persistence.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
@@ -288,12 +288,12 @@ func TestExamSittingIntegration(t *testing.T) {
 		model.ActionExamSittingView, model.Resource{Type: model.ResourceExamSitting, ID: scheduled.Sitting.ID.String()})
 	require.True(t, apperror.Is(appErr, "resource.not_found"), "subscription after permission revocation error = %v", appErr)
 
-	overrideUser, appErr := helper.App.CreateLocalUser(ctx, app.CreateLocalUserCommand{User: &model.User{
+	overrideUser, appErr := helper.App.Identity.CreateLocalUser(ctx, identity.CreateLocalUserCommand{User: &model.User{
 		Username: "sitting-override", Email: "sitting-override@example.edu", DisplayName: "Sitting Override",
 	}, Password: password})
 	require.NoError(t, appErr)
 	overrideLogin := loginIntegrationUser(t, helper.Handler(), overrideUser.Username, password, model.SessionClientCLI, "sitting-override-cli")
-	overridePrincipal, appErr := helper.App.AuthenticateAccess(ctx, overrideLogin.Tokens.AccessToken)
+	overridePrincipal, appErr := helper.App.Identity.AuthenticateAccess(ctx, overrideLogin.Tokens.AccessToken)
 	require.NoError(t, appErr)
 	overrideInvocation := invocation.New(*overridePrincipal, model.RequestMetadata{RequestID: "exam-sitting-override-integration"})
 	overrideRole, err := storetest.SaveRole(ctx, persistence, &model.Role{

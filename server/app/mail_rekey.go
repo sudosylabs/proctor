@@ -15,6 +15,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
 	"github.com/sudosylabs/proctor/server/model"
@@ -51,7 +52,7 @@ func (s *mailService) GetMailKeyState(ctx context.Context, invocation invocation
 	if s == nil {
 		return MailKeyStateView{}, apperror.New("mail.unavailable")
 	}
-	if err := requireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
+	if err := identity.RequireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
 		return MailKeyStateView{}, err
 	}
 	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionMailRekey); err != nil {
@@ -79,7 +80,7 @@ func (s *mailService) StartMailRekey(ctx context.Context, invocation invocation.
 	if s == nil {
 		return MailRekeyView{}, apperror.New("mail.unavailable")
 	}
-	if err := requireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
+	if err := identity.RequireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL); err != nil {
 		return MailRekeyView{}, err
 	}
 	resource, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionMailRekey)

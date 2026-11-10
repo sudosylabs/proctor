@@ -16,6 +16,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/paging"
@@ -115,7 +116,7 @@ type mailServiceDependencies struct {
 	Users                   mailUserStore
 	Authorization           institutionAuthorizer
 	Audit                   mailAuditPreparer
-	Attempts                *authenticationAttemptAccounting
+	Attempts                *identity.AttemptAccounting
 	Renderer                mail.Renderer
 	Sender                  mail.Sender
 	Metrics                 MailMetricsReader
@@ -222,7 +223,7 @@ func (s *mailService) SendTestMail(ctx context.Context, invocation invocation.In
 	}
 	principal := invocation.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
-		return MailDeliveryView{}, invalidTokenAppError()
+		return MailDeliveryView{}, access.InvalidTokenAppError()
 	}
 	if !principal.IsRecentlyAuthenticated(s.deps.Now(), s.deps.RecentAuthenticationTTL) {
 		return MailDeliveryView{}, apperror.New("authentication.reauthentication_required")
@@ -275,7 +276,7 @@ func (s *mailService) GetMailDelivery(ctx context.Context, invocation invocation
 	}
 	principal := invocation.Principal()
 	if principal.Validate() != nil {
-		return MailDeliveryView{}, invalidTokenAppError()
+		return MailDeliveryView{}, access.InvalidTokenAppError()
 	}
 	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionMailView); err != nil {
 		return MailDeliveryView{}, err
@@ -295,7 +296,7 @@ func (s *mailService) ListMailDeliveries(ctx context.Context, invocation invocat
 		return MailDeliveryPage{}, apperror.New("mail.unavailable")
 	}
 	if invocation.Principal().Validate() != nil {
-		return MailDeliveryPage{}, invalidTokenAppError()
+		return MailDeliveryPage{}, access.InvalidTokenAppError()
 	}
 	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionMailView); err != nil {
 		return MailDeliveryPage{}, err
@@ -340,7 +341,7 @@ func (s *mailService) countFailedMailDeliveries(ctx context.Context, invocation 
 		return 0, apperror.New("mail.unavailable")
 	}
 	if invocation.Principal().Validate() != nil {
-		return 0, invalidTokenAppError()
+		return 0, access.InvalidTokenAppError()
 	}
 	if _, err := s.deps.Authorization.AuthorizeInstitution(ctx, invocation, model.ActionMailView); err != nil {
 		return 0, err
@@ -379,7 +380,7 @@ func (s *mailService) RetryMailDelivery(ctx context.Context, invocation invocati
 func (s *mailService) mutate(ctx context.Context, invocation invocation.Invocation, operation string, id model.MailDeliveryID, retry bool, apply func(context.Context, *store.MailDeliveryMutation) (*model.MailDelivery, error)) (MailDeliveryView, error) {
 	principal := invocation.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
-		return MailDeliveryView{}, invalidTokenAppError()
+		return MailDeliveryView{}, access.InvalidTokenAppError()
 	}
 	if !principal.IsRecentlyAuthenticated(s.deps.Now(), s.deps.RecentAuthenticationTTL) {
 		return MailDeliveryView{}, apperror.New("authentication.reauthentication_required")
@@ -421,7 +422,7 @@ func (s *mailService) mutate(ctx context.Context, invocation invocation.Invocati
 }
 
 func (s *mailService) checkTestRateLimit(ctx context.Context, userID model.UserID) error {
-	_, limited, err := s.deps.Attempts.account(ctx, authenticationAttemptIntent{purpose: authenticationAttemptPurposeMailTest, window: mailTestRateLimitWindow, limits: []authenticationAttemptLimit{{dimension: authenticationAttemptDimensionIdentity, maximum: mailTestRateLimitMaximum, identity: userID.String()}}})
+	limited, err := s.deps.Attempts.Account(ctx, identity.AttemptPurposeMailTest, "", mailTestRateLimitWindow, identity.IdentityAttemptLimit(userID.String(), mailTestRateLimitMaximum))
 	if err != nil {
 		return apperror.New("mail.unavailable").Wrap(err)
 	}

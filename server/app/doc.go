@@ -27,4 +27,6 @@
 //   - child packages: apperror (the one application error type), invocation
 //     (the call context every use case takes), idempotency, job (the durable
 //     Job engine), jobhandler, mail, realtime and exam
+//   - area packages: academic, user and identity (sign-in, Sessions, MFA,
+//     tokens, Desktop authorization, account recovery and account state)
 package app

@@ -30,6 +30,7 @@ var nonUseCaseSurface = map[string]string{
 	"AuthenticateBearer":             principalResolution,
 	"AuthenticateDPoP":               principalResolution,
 	"ValidateWebSocketPrincipal":     "WebSocket admission revalidates the Principal a connection was opened with before it builds any Invocation",
+	"ValidatePrincipal":              "WebSocket admission and onboarding import revalidate a Principal established earlier before they build an Invocation from it",
 	"AuthenticationCacheInvalidated": realtimePropagation,
 	"SessionsRevoked":                realtimePropagation,
 	"InvalidateAuthorization":        realtimePropagation,

@@ -10,8 +10,8 @@ package httpapi
 import (
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -153,7 +153,7 @@ func bootstrapResource(bootstrap BootstrapApplication) apiResource {
 }
 
 func (m bootstrapResourceModule) status(request operationRequest) (operationResult, error) {
-	status, err := m.bootstrap.GetInstallationStatus(request.context, request.invocation(), app.GetInstallationStatusQuery{})
+	status, err := m.bootstrap.GetInstallationStatus(request.context, request.invocation(), identity.GetInstallationStatusQuery{})
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -171,7 +171,7 @@ func (m bootstrapResourceModule) install(request operationRequest) (operationRes
 	result, err := m.bootstrap.BootstrapInstallation(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
-		app.BootstrapInstallationCommand{
+		identity.BootstrapInstallationCommand{
 			InstitutionName:          input.Institution.Name,
 			InstitutionDisplayName:   input.Institution.DisplayName,
 			InstitutionDescription:   input.Institution.Description,

@@ -11,12 +11,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
-	"github.com/sudosylabs/proctor/server/app/internal/batchitem"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/internal/batchitem"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/apperror"
@@ -125,8 +127,8 @@ type academicAdministrationBatchCommands interface {
 	EndClassMember(context.Context, invocation.Invocation, academic.EndClassMemberCommand) (*model.ClassMember, error)
 	CreateRoleBinding(context.Context, invocation.Invocation, CreateRoleBindingCommand) (*model.RoleBinding, error)
 	EndRoleBinding(context.Context, invocation.Invocation, EndRoleBindingCommand) (*model.RoleBinding, error)
-	SetUserEnabled(context.Context, invocation.Invocation, SetUserEnabledCommand) (*model.User, error)
-	RevokeUserSessions(context.Context, invocation.Invocation, RevokeUserSessionsCommand) error
+	SetUserEnabled(context.Context, invocation.Invocation, identity.SetUserEnabledCommand) (*model.User, error)
+	RevokeUserSessions(context.Context, invocation.Invocation, identity.RevokeUserSessionsCommand) error
 }
 
 // academicAdministrationBatchServiceDependencies are the collaborators of academicAdministrationBatchService;
@@ -144,10 +146,9 @@ type academicAdministrationBatchService struct {
 }
 
 type academicAdministrationCommandServices struct {
-	academic      *academic.Service
-	roleBindings  *roleBindingService
-	accountStates *accountStateService
-	sessions      *sessionAdministrationService
+	academic     *academic.Service
+	roleBindings *roleBindingService
+	identity     *identity.Service
 }
 
 func (s academicAdministrationCommandServices) CreateAffiliation(ctx context.Context, invocation invocation.Invocation, command academic.CreateAffiliationCommand) (*model.Affiliation, error) {
@@ -174,11 +175,11 @@ func (s academicAdministrationCommandServices) CreateRoleBinding(ctx context.Con
 func (s academicAdministrationCommandServices) EndRoleBinding(ctx context.Context, invocation invocation.Invocation, command EndRoleBindingCommand) (*model.RoleBinding, error) {
 	return s.roleBindings.EndRoleBinding(ctx, invocation, command)
 }
-func (s academicAdministrationCommandServices) SetUserEnabled(ctx context.Context, invocation invocation.Invocation, command SetUserEnabledCommand) (*model.User, error) {
-	return s.accountStates.SetUserEnabled(ctx, invocation, command)
+func (s academicAdministrationCommandServices) SetUserEnabled(ctx context.Context, invocation invocation.Invocation, command identity.SetUserEnabledCommand) (*model.User, error) {
+	return s.identity.SetUserEnabled(ctx, invocation, command)
 }
-func (s academicAdministrationCommandServices) RevokeUserSessions(ctx context.Context, invocation invocation.Invocation, command RevokeUserSessionsCommand) error {
-	return s.sessions.RevokeUserSessions(ctx, invocation, command)
+func (s academicAdministrationCommandServices) RevokeUserSessions(ctx context.Context, invocation invocation.Invocation, command identity.RevokeUserSessionsCommand) error {
+	return s.identity.RevokeUserSessions(ctx, invocation, command)
 }
 
 func newAcademicAdministrationBatchService(deps academicAdministrationBatchServiceDependencies) *academicAdministrationBatchService {
@@ -204,7 +205,7 @@ func (s *academicAdministrationBatchService) RunAcademicAdministrationBatch(ctx 
 		return AcademicAdministrationBatchResult{}, err
 	}
 	if command.Operation.requiresStrongRecentSession() {
-		if err = requireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentTTL); err != nil {
+		if err = identity.RequireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentTTL); err != nil {
 			return AcademicAdministrationBatchResult{}, err
 		}
 	}
@@ -469,11 +470,11 @@ func (s *academicAdministrationBatchService) runItem(ctx context.Context, invoca
 		return academicAdministrationModelOutcome(value, replayed, metadata, err)
 	case AcademicAdministrationUserEnable, AcademicAdministrationUserDisable:
 		var replayed bool
-		value, err := s.deps.Commands.SetUserEnabled(ctx, invocation, SetUserEnabledCommand{ID: item.UserID, Enabled: batch.Operation == AcademicAdministrationUserEnable, IdempotencyKey: itemKey, batchReplayed: &replayed, batchAuthorization: authority, batchMetadata: metadata, batchRetainedOutcome: retained, onboardingImportID: batch.onboardingImportID, onboardingImportRowNumber: batch.onboardingImportRowNumber})
+		value, err := s.deps.Commands.SetUserEnabled(ctx, invocation, identity.SetUserEnabledCommand{ID: item.UserID, Enabled: batch.Operation == AcademicAdministrationUserEnable, IdempotencyKey: itemKey, Batch: batchitem.New(batchitem.Fields{Replayed: &replayed, Authorization: authority, Metadata: metadata, RetainedOutcome: retained, OnboardingImportID: batch.onboardingImportID, OnboardingImportRowNumber: batch.onboardingImportRowNumber})})
 		return academicAdministrationModelOutcome(value, replayed, metadata, err)
 	case AcademicAdministrationUserSessionsRevoke:
 		var replayed bool
-		err := s.deps.Commands.RevokeUserSessions(ctx, invocation, RevokeUserSessionsCommand{UserID: item.UserID, IdempotencyKey: itemKey, batchReplayed: &replayed, batchAuthorization: authority, batchMetadata: metadata, batchRetainedOutcome: retained, onboardingImportID: batch.onboardingImportID, onboardingImportRowNumber: batch.onboardingImportRowNumber})
+		err := s.deps.Commands.RevokeUserSessions(ctx, invocation, identity.RevokeUserSessionsCommand{UserID: item.UserID, IdempotencyKey: itemKey, Batch: batchitem.New(batchitem.Fields{Replayed: &replayed, Authorization: authority, Metadata: metadata, RetainedOutcome: retained, OnboardingImportID: batch.onboardingImportID, OnboardingImportRowNumber: batch.onboardingImportRowNumber})})
 		if err != nil {
 			return "", "", err
 		}
@@ -511,18 +512,6 @@ func academicAdministrationBatchAuthority(invocation invocation.Invocation, batc
 	return &store.CommandAuthorization{
 		Principal: invocation.Principal(), ScopeType: batch.ScopeType, ScopeID: batch.ScopeID,
 		Actions: actions,
-	}
-}
-
-func bindAcademicAdministrationAuthorization(command *store.CommandIdempotency, authority *store.CommandAuthorization) {
-	if command != nil {
-		command.Authorization = authority
-	}
-}
-
-func bindAcademicAdministrationBatch(command *store.CommandIdempotency, batch *store.CommandBatch) {
-	if command != nil {
-		command.Batch = batch
 	}
 }
 

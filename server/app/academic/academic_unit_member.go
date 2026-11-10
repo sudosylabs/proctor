@@ -90,9 +90,9 @@ func (s *Service) CreateAcademicUnitMember(ctx context.Context, invocation invoc
 	if err != nil {
 		return nil, err
 	}
-	bindOnboardingImportCommand(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
-	bindAcademicAdministrationAuthorization(idempotency, command.Batch.Fields().Authorization)
-	bindAcademicAdministrationBatch(idempotency, command.Batch.Fields().Metadata)
+	batchitem.BindOnboardingImport(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
+	batchitem.BindAuthorization(idempotency, command.Batch.Fields().Authorization)
+	batchitem.BindBatch(idempotency, command.Batch.Fields().Metadata)
 	changed := false
 	result, err := access.RunAudited(
 		ctx,
@@ -153,9 +153,9 @@ func (s *Service) EndAcademicUnitMember(ctx context.Context, invocation invocati
 	if err != nil {
 		return nil, err
 	}
-	bindOnboardingImportCommand(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
-	bindAcademicAdministrationAuthorization(idempotency, command.Batch.Fields().Authorization)
-	bindAcademicAdministrationBatch(idempotency, command.Batch.Fields().Metadata)
+	batchitem.BindOnboardingImport(idempotency, command.Batch.Fields().OnboardingImportID, command.Batch.Fields().OnboardingImportRowNumber)
+	batchitem.BindAuthorization(idempotency, command.Batch.Fields().Authorization)
+	batchitem.BindBatch(idempotency, command.Batch.Fields().Metadata)
 	recipient := &model.User{ID: current.UserID, Revision: 1}
 	var notice *store.PreparedMail
 	at := model.TimeUTC(s.now())

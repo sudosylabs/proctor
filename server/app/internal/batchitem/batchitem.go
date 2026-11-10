@@ -42,3 +42,28 @@ func New(fields Fields) Item { return Item{fields: fields} }
 
 // Fields returns a copy of the batch context.
 func (i Item) Fields() Fields { return i.fields }
+
+// BindOnboardingImport records the onboarding import row a command belongs to
+// on its idempotency input. An invalid import or row records nothing.
+func BindOnboardingImport(idempotency *store.CommandIdempotency, id model.OnboardingImportID, rowNumber int) {
+	if idempotency == nil || !id.IsValid() || rowNumber < 1 {
+		return
+	}
+	idempotency.OnboardingImportID = id
+	idempotency.OnboardingImportRowNumber = rowNumber
+}
+
+// BindAuthorization records the batch's authority on a command's idempotency
+// input.
+func BindAuthorization(command *store.CommandIdempotency, authority *store.CommandAuthorization) {
+	if command != nil {
+		command.Authorization = authority
+	}
+}
+
+// BindBatch records the batch a command belongs to on its idempotency input.
+func BindBatch(command *store.CommandIdempotency, batch *store.CommandBatch) {
+	if command != nil {
+		command.Batch = batch
+	}
+}

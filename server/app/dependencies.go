@@ -17,6 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
 	"github.com/sudosylabs/proctor/server/app/exam/resource"
 	"github.com/sudosylabs/proctor/server/app/exam/workspace"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
 	"github.com/sudosylabs/proctor/server/app/mail"
@@ -59,7 +60,7 @@ type OnboardingImportFiles interface {
 // adapters; App never holds platform.Service.
 type Dependencies struct {
 	Store                store.Catalog
-	Cache                authenticationCache
+	Cache                identity.AuthenticationCache
 	MailDeliverySender   mail.Sender
 	MailTemplateRenderer mail.Renderer
 	MailDeliveryRecorder MailDeliveryRecorder
@@ -74,7 +75,7 @@ type Dependencies struct {
 	// MailSecretSealer is the concrete in-process cryptographic module for
 	// recoverable mail payloads. It is nil until an independent ring is configured.
 	MailSecretSealer *secretseal.Sealer
-	Registry         externalProviderSource
+	Registry         identity.ExternalProviderSource
 	FileContent      FileContent
 	// DesktopBuildCatalog is the immutable verified build catalog embedded by
 	// the server release. An empty catalog admits no released builds.
@@ -92,64 +93,18 @@ type Dependencies struct {
 	// explicit local development. It never relaxes non-loopback issuer rules.
 	LoopbackHTTPDevelopment bool
 
-	Password                PasswordPolicy
-	PasswordWorkRecorder    PasswordWorkRecorder
-	Sessions                SessionPolicy
-	LoginRateLimit          LoginRateLimitPolicy
-	BootstrapProtection     BootstrapProtectionPolicy
-	PersonalAccessToken     PersonalAccessTokenPolicy
-	AccountRecovery         AccountRecoveryPolicy
-	MFA                     MFAPolicy
-	ExternalAuth            ExternalAuthenticationPolicy
+	Password                identity.PasswordPolicy
+	PasswordWorkRecorder    identity.PasswordWorkRecorder
+	Sessions                identity.SessionPolicy
+	LoginRateLimit          identity.LoginRateLimitPolicy
+	BootstrapProtection     identity.BootstrapProtectionPolicy
+	PersonalAccessToken     identity.PersonalAccessTokenPolicy
+	AccountRecovery         identity.AccountRecoveryPolicy
+	MFA                     identity.MFAPolicy
+	ExternalAuth            identity.ExternalAuthenticationPolicy
 	RecentAuthenticationTTL time.Duration
 
-	AuthenticationDiagnostics authenticationDiagnostics
+	AuthenticationDiagnostics identity.AuthenticationDiagnostics
 	RealtimeDiagnostics       realtimeDiagnostics
-	RecoveryDiagnostics       recoveryDiagnostics
-}
-
-// PasswordPolicy is the immutable password-hashing projection composition
-// supplies so password code does not import deployment config.
-type PasswordPolicy struct {
-	MinimumLength               int
-	MaximumLength               int
-	ArgonMemoryKiB              int
-	ArgonIterations             int
-	ArgonParallelism            int
-	ArgonSaltBytes              int
-	ArgonKeyBytes               int
-	MaximumConcurrentOperations int
-	HistoryCount                int
-}
-
-// PasswordWorkRecorder observes bounded runtime password work. Implementations
-// must be concurrency-safe and return promptly; nil disables recording.
-type PasswordWorkRecorder interface {
-	Started()
-	Finished(time.Duration)
-	Rejected()
-}
-
-// AccountRecoveryPolicy is the operator projection for email verification and
-// password reset TTLs and rate limits.
-type AccountRecoveryPolicy struct {
-	EmailVerificationTTL time.Duration
-	PasswordResetTTL     time.Duration
-	EmailChangeUndoTTL   time.Duration
-	RateLimit            LoginRateLimitPolicy
-}
-
-// MFAPolicy is the enrollment and verification policy for TOTP MFA. Key-ring
-// construction remains at the server composition root.
-type MFAPolicy struct {
-	Enabled           bool
-	Issuer            string
-	SetupTTL          time.Duration
-	RecoveryCodeCount int
-}
-
-// recoveryDiagnostics reports non-fatal recovery failures without depending on
-// a concrete logger package.
-type recoveryDiagnostics interface {
-	ErrorContext(ctx context.Context, message string, err error)
+	RecoveryDiagnostics       identity.RecoveryDiagnostics
 }

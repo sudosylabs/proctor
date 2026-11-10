@@ -15,6 +15,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
+	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/internal/batchitem"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/model"
@@ -91,7 +93,7 @@ type roleBindingServiceDependencies struct {
 	Roles         roleBindingRoleStore
 	Users         roleBindingUserStore
 	Authorization roleBindingAuthorizer
-	Capabilities  accessPolicyCapabilitySource
+	Capabilities  identity.AccessPolicyCapabilitySource
 	Audit         access.MutationAuditor
 	Mail          relationshipTransitionMailPreparer
 	Effects       roleBindingEffects
@@ -195,15 +197,15 @@ func (s *roleBindingService) CreateRoleBinding(ctx context.Context, invocation i
 	if err != nil {
 		return nil, err
 	}
-	bindOnboardingImportCommand(idempotency, command.onboardingImportID, command.onboardingImportRowNumber)
+	batchitem.BindOnboardingImport(idempotency, command.onboardingImportID, command.onboardingImportRowNumber)
 	if command.batchAuthorization != nil {
 		command.batchAuthorization.DelegatedActions = make([]model.Action, 0, len(delegatedPermissions))
 		for _, permission := range delegatedPermissions {
 			command.batchAuthorization.DelegatedActions = append(command.batchAuthorization.DelegatedActions, model.Action(permission))
 		}
 	}
-	bindAcademicAdministrationAuthorization(idempotency, command.batchAuthorization)
-	bindAcademicAdministrationBatch(idempotency, command.batchMetadata)
+	batchitem.BindAuthorization(idempotency, command.batchAuthorization)
+	batchitem.BindBatch(idempotency, command.batchMetadata)
 	saved, err := access.RunAudited(
 		ctx,
 		s.deps.Audit,
@@ -326,9 +328,9 @@ func (s *roleBindingService) EndRoleBinding(ctx context.Context, invocation invo
 	if err != nil {
 		return nil, err
 	}
-	bindOnboardingImportCommand(idempotency, command.onboardingImportID, command.onboardingImportRowNumber)
-	bindAcademicAdministrationAuthorization(idempotency, command.batchAuthorization)
-	bindAcademicAdministrationBatch(idempotency, command.batchMetadata)
+	batchitem.BindOnboardingImport(idempotency, command.onboardingImportID, command.onboardingImportRowNumber)
+	batchitem.BindAuthorization(idempotency, command.batchAuthorization)
+	batchitem.BindBatch(idempotency, command.batchMetadata)
 	mailAt := model.TimeUTC(s.deps.Now())
 	recipient := &model.User{ID: current.UserID, Revision: 1}
 	var notice *store.PreparedMail
@@ -365,7 +367,7 @@ func (s *roleBindingService) EndRoleBinding(ctx context.Context, invocation invo
 			input := &store.RoleBindingEnd{
 				ID: id, EndAt: reference.MutationAt,
 				ExpectedRecipientRevision: recipient.Revision, Notice: notice,
-				Capabilities: accessDeploymentCapabilities(s.deps.Capabilities.Snapshot()),
+				Capabilities: identity.AccessDeploymentCapabilities(s.deps.Capabilities.Snapshot()),
 				AuditEventID: reference.ID, AuditAt: reference.MutationAt, Command: idempotency,
 			}
 			value, storeErr := s.deps.Bindings.End(ctx, input)
@@ -384,7 +386,7 @@ func (s *roleBindingService) EndRoleBinding(ctx context.Context, invocation invo
 }
 
 type roleBindingRealtimeEffects struct {
-	effects authorizationInvalidationEffects
+	effects identity.AuthorizationInvalidationEffects
 }
 
 func (e roleBindingRealtimeEffects) AuthorizationChangedForUser(ctx context.Context, userID model.UserID) {

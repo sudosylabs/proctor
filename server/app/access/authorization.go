@@ -92,7 +92,7 @@ func (s *Authorizer) evaluate(
 ) (bool, resolvedAuthorizationResource, error) {
 	var unresolved resolvedAuthorizationResource
 	if principal.Validate() != nil {
-		return false, unresolved, invalidTokenAppError()
+		return false, unresolved, InvalidTokenAppError()
 	}
 	definition, known := model.DefinitionForAction(action)
 	if !known || resource.Validate() != nil || !definition.AcceptsResource(resource.Type) {
@@ -353,7 +353,7 @@ func (s *Authorizer) AuthorizeAccountStateManage(
 	resource := model.Resource{Type: model.ResourceUser, ID: userID.String()}
 	definition, known := model.DefinitionForAction(model.ActionUserManage)
 	if principal.Validate() != nil {
-		return invalidTokenAppError()
+		return InvalidTokenAppError()
 	}
 	if !known || resource.Validate() != nil || !definition.AcceptsResource(resource.Type) {
 		return apperror.New("authorization.request.invalid")
@@ -551,7 +551,7 @@ type ProfileReadAuthorization struct {
 func (s *Authorizer) AuthorizeProfileRead(ctx context.Context, invocation invocation.Invocation, userID model.UserID) (ProfileReadAuthorization, error) {
 	principal := invocation.Principal()
 	if principal.Validate() != nil {
-		return ProfileReadAuthorization{}, invalidTokenAppError()
+		return ProfileReadAuthorization{}, InvalidTokenAppError()
 	}
 	if principal.UserID == userID {
 		return ProfileReadAuthorization{FullProfile: true}, nil

@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/config"
@@ -195,15 +196,15 @@ func TestWebSocketIntegration(t *testing.T) {
 	responseMessage = readWebSocketResponse(t, connection)
 	require.Equal(t, "ok", responseMessage.Status)
 
-	principal, appErr := helper.App.AuthenticateAccess(
+	principal, appErr := helper.App.Identity.AuthenticateAccess(
 		context.Background(),
 		login.Tokens.AccessToken,
 	)
 	require.NoError(t, appErr)
-	require.NoError(t, helper.App.RevokeSession(
+	require.NoError(t, helper.App.Identity.RevokeSession(
 		context.Background(),
 		invocation.New(*principal, model.RequestMetadata{}),
-		app.RevokeSessionCommand{SessionID: login.Session.ID},
+		identity.RevokeSessionCommand{SessionID: login.Session.ID},
 	))
 	_ = connection.SetReadDeadline(time.Now().Add(3 * time.Second))
 	_, _, err = connection.ReadMessage()
@@ -341,7 +342,7 @@ func TestWebSocketTwoNodeConformance(t *testing.T) {
 	require.Equal(t, "institution.cluster_updated", event.Event)
 	require.Equal(t, `{"source":"node-a"}`, string(event.Data))
 
-	principal, appErr := nodeA.App.AuthenticateAccess(
+	principal, appErr := nodeA.App.Identity.AuthenticateAccess(
 		context.Background(),
 		login.Tokens.AccessToken,
 	)
@@ -375,10 +376,10 @@ func TestWebSocketTwoNodeConformance(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = connection.Close() })
 	_ = readWebSocketEvent(t, connection)
-	require.NoError(t, nodeA.App.RevokeSession(
+	require.NoError(t, nodeA.App.Identity.RevokeSession(
 		context.Background(),
 		invocation.New(*principal, model.RequestMetadata{}),
-		app.RevokeSessionCommand{SessionID: login.Session.ID},
+		identity.RevokeSessionCommand{SessionID: login.Session.ID},
 	))
 	_ = connection.SetReadDeadline(time.Now().Add(5 * time.Second))
 	_, _, err = connection.ReadMessage()

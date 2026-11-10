@@ -16,6 +16,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -36,7 +37,7 @@ func (f *academicAdministrationBatchAuthorizerFake) Authorize(_ context.Context,
 
 type academicAdministrationBatchCommandsFake struct {
 	enrollments []academic.EnrollClassMemberCommand
-	disabled    []SetUserEnabledCommand
+	disabled    []identity.SetUserEnabledCommand
 	operations  []AcademicAdministrationBatchOperation
 }
 
@@ -156,7 +157,7 @@ func (f *academicAdministrationBatchCommandsFake) EndRoleBinding(_ context.Conte
 	f.operations = append(f.operations, AcademicAdministrationRoleBindingEnd)
 	return &model.RoleBinding{ID: model.RoleBindingID(command.ID)}, nil
 }
-func (f *academicAdministrationBatchCommandsFake) SetUserEnabled(_ context.Context, _ invocation.Invocation, command SetUserEnabledCommand) (*model.User, error) {
+func (f *academicAdministrationBatchCommandsFake) SetUserEnabled(_ context.Context, _ invocation.Invocation, command identity.SetUserEnabledCommand) (*model.User, error) {
 	f.disabled = append(f.disabled, command)
 	if command.Enabled {
 		f.operations = append(f.operations, AcademicAdministrationUserEnable)
@@ -165,7 +166,7 @@ func (f *academicAdministrationBatchCommandsFake) SetUserEnabled(_ context.Conte
 	}
 	return &model.User{ID: model.UserID(command.ID)}, nil
 }
-func (f *academicAdministrationBatchCommandsFake) RevokeUserSessions(context.Context, invocation.Invocation, RevokeUserSessionsCommand) error {
+func (f *academicAdministrationBatchCommandsFake) RevokeUserSessions(context.Context, invocation.Invocation, identity.RevokeUserSessionsCommand) error {
 	f.operations = append(f.operations, AcademicAdministrationUserSessionsRevoke)
 	return nil
 }

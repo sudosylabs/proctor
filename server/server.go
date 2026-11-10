@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/logging"
@@ -157,8 +158,8 @@ type runtimeReconciler interface {
 // runtimeAdministratorRecovery is borrowed only by the inert Server facade;
 // it is never projected into HTTP or another transport.
 type runtimeAdministratorRecovery interface {
-	RecoverAdministratorAccess(context.Context, invocation.System, app.AdministratorRecoveryCommand) (*app.AdministratorRecoveryResult, error)
-	ResetAdministratorMFA(context.Context, invocation.System, app.AdministratorMFAResetCommand) (*app.AdministratorMFAResetResult, error)
+	RecoverAdministratorAccess(context.Context, invocation.System, identity.AdministratorRecoveryCommand) (*identity.AdministratorRecoveryResult, error)
+	ResetAdministratorMFA(context.Context, invocation.System, identity.AdministratorMFAResetCommand) (*identity.AdministratorMFAResetResult, error)
 }
 
 // runtimeTracing is the span exporter's lifecycle: Close flushes buffered
@@ -387,7 +388,7 @@ func (s *Server) RecoverAdministratorAccess(ctx context.Context, command Adminis
 	if recovery == nil {
 		return nil, errors.New("administrator recovery is unavailable")
 	}
-	result, err := recovery.RecoverAdministratorAccess(ctx, invocation.Task("administrator-recovery"), app.AdministratorRecoveryCommand{
+	result, err := recovery.RecoverAdministratorAccess(ctx, invocation.Task("administrator-recovery"), identity.AdministratorRecoveryCommand{
 		InstitutionID: model.InstitutionID(command.InstitutionID), UserID: model.UserID(command.UserID),
 		EnableLocalLogin: command.EnableLocalLogin, Password: command.Password,
 	})

@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -157,7 +158,7 @@ func TestRoleBindingEndFailurePublishesNoInvalidation(t *testing.T) {
 		events: &events, binding: binding,
 		endErr: store.NewErrConflict("role_binding", "role_bindings_last_system_admin", errors.New("last")),
 	}
-	service := newRoleBindingService(roleBindingServiceDependencies{Bindings: persistence, Roles: &roleBindingRoleStoreFake{events: &events}, Users: relationshipUserStoreTestFake{}, Authorization: &roleAuthorizerFake{events: &events, resource: model.Resource{Type: model.ResourceInstitution, ID: model.NewID()}}, Capabilities: &accessPolicyCapabilitiesFake{snapshot: AccessPolicyCapabilitySnapshot{Providers: []AccessPolicyProviderCapability{{
+	service := newRoleBindingService(roleBindingServiceDependencies{Bindings: persistence, Roles: &roleBindingRoleStoreFake{events: &events}, Users: relationshipUserStoreTestFake{}, Authorization: &roleAuthorizerFake{events: &events, resource: model.Resource{Type: model.ResourceInstitution, ID: model.NewID()}}, Capabilities: &accessPolicyCapabilitiesFake{snapshot: identity.AccessPolicyCapabilitySnapshot{Providers: []identity.AccessPolicyProviderCapability{{
 		Descriptor: model.ExternalAuthenticationProvider{ID: "campus", Type: "oidc"},
 	}}}}, Audit: endAuditor, Mail: mail, Effects: &roleBindingEffectsFake{events: &events}, Now: time.Now})
 	_, err := service.EndRoleBinding(context.Background(), invocation.Invocation{}, EndRoleBindingCommand{ID: binding.ID})

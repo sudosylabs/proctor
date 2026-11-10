@@ -1,0 +1,499 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// Modifications Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+//
+// Adapted from Mattermost server/channels/app/email/email.go and
+// authentication.go. Proctor uses purpose-specific hashed credentials,
+// target-bound single-use consumption, generic public recovery responses,
+// fail-closed rate limiting, and durable transactional security audits.
+
+package identity
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/url"
+	"strings"
+
+	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
+)
+
+type accountRecoveryAttemptOperation uint8
+
+const (
+	accountRecoveryAttemptEmailVerificationRequest accountRecoveryAttemptOperation = iota + 1
+	accountRecoveryAttemptPasswordResetRequest
+	accountRecoveryAttemptEmailVerificationComplete
+	accountRecoveryAttemptPasswordResetComplete
+	accountRecoveryAttemptEmailChangeNotice
+	accountRecoveryAttemptEmailChangeUndoComplete
+	accountRecoveryAttemptEmailVerificationInspect
+	accountRecoveryAttemptEmailChangeUndoInspect
+)
+
+func (o accountRecoveryAttemptOperation) qualifier() (string, bool) {
+	switch o {
+	case accountRecoveryAttemptEmailVerificationRequest:
+		return "email-verification-request", true
+	case accountRecoveryAttemptPasswordResetRequest:
+		return "password-reset-request", true
+	case accountRecoveryAttemptEmailVerificationComplete:
+		return "email-verification-complete", true
+	case accountRecoveryAttemptPasswordResetComplete:
+		return "password-reset-complete", true
+	case accountRecoveryAttemptEmailChangeNotice:
+		return "email-change-notice", true
+	case accountRecoveryAttemptEmailChangeUndoComplete:
+		return "email-change-undo-complete", true
+	case accountRecoveryAttemptEmailVerificationInspect:
+		return "email-verification-inspect", true
+	case accountRecoveryAttemptEmailChangeUndoInspect:
+		return "email-change-undo-inspect", true
+	default:
+		return "", false
+	}
+}
+
+// RequestEmailVerificationCommand issues a verification token for the caller.
+type RequestEmailVerificationCommand struct {
+	Source string
+}
+
+// CompleteEmailVerificationCommand consumes a verification credential.
+type CompleteEmailVerificationCommand struct {
+	Token  string
+	Source string
+}
+
+// RequestPasswordResetCommand issues a password-reset token when eligible.
+type RequestPasswordResetCommand struct {
+	Email  string
+	Source string
+}
+
+// CompletePasswordResetCommand consumes a reset token and sets a new password.
+type CompletePasswordResetCommand struct {
+	Token    string
+	Password string
+	Source   string
+}
+
+func (s *accountTokenService) RequestEmailVerification(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command RequestEmailVerificationCommand,
+) error {
+	if !s.deps.Mail.Enabled() {
+		return accountRecoveryUnavailable(fmt.Errorf("mail delivery is disabled"))
+	}
+	principal := invocation.Principal()
+	if err := s.checkAccountRecoveryRateLimit(
+		ctx,
+		accountRecoveryAttemptEmailVerificationRequest,
+		principal.UserID.String(),
+		command.Source,
+	); err != nil {
+		return err
+	}
+	user, err := s.deps.Users.Get(ctx, principal.UserID)
+	if err != nil {
+		return accountRecoveryStoreFailure(err)
+	}
+	if !user.IsActive() {
+		return access.InvalidTokenAppError()
+	}
+	if user.EmailVerified {
+		return nil
+	}
+	institution, err := s.accountRecoveryInstitution(ctx)
+	if err != nil {
+		return err
+	}
+	rawToken := s.deps.NewToken()
+	now := s.deps.Now()
+	token := &model.UserToken{
+		UserID:    user.ID,
+		Purpose:   model.UserTokenEmailVerification,
+		TokenHash: model.HashToken(rawToken),
+		Target:    user.Email,
+		ExpiresAt: now.Add(s.deps.Policy.EmailVerificationTTL),
+	}
+	token.PrepareCreate(model.NewUserTokenID(), now)
+	event := s.deps.Audit.Success(
+		model.ActionAuthenticationEmailVerificationRequest,
+		model.Resource{Type: model.ResourceUser, ID: user.ID.String()},
+		institution.ID,
+		invocation,
+		&principal,
+		"session",
+	)
+	link, err := AccountCredentialLink(
+		s.deps.PublicURL,
+		"/account/verify-email",
+		rawToken,
+	)
+	if err != nil {
+		return accountRecoveryUnavailable(err)
+	}
+	prepared, err := s.deps.Mail.PrepareEmailVerification(mail.AccountTokenPreparation{
+		Recipient: user, OccurrenceID: model.MailOccurrenceID(token.ID.String()), ActionURL: link, At: now, Deadline: token.ExpiresAt,
+	})
+	if err != nil {
+		return accountRecoveryUnavailable(err)
+	}
+	if _, err = s.deps.Tokens.Issue(ctx, &store.UserTokenMailIssue{Token: token, Occurrence: prepared.Occurrence,
+		Delivery: prepared.Delivery, Job: prepared.Job, AuditEvent: event}); err != nil {
+		return accountRecoveryStoreFailure(err)
+	}
+	return nil
+}
+
+// RequestPasswordReset deliberately returns success for unknown, disabled, or
+// external-only accounts and for per-account persistence/delivery failures.
+// Operational failures are logged without the requested email or raw token.
+func (s *accountTokenService) RequestPasswordReset(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command RequestPasswordResetCommand,
+) error {
+	localLoginAllowed, err := s.deps.AccessPolicy.AllowsLocalLogin(ctx)
+	if err != nil {
+		s.logHiddenRecoveryFailure(ctx, "password reset access policy lookup failed", err)
+		return nil
+	}
+	if !localLoginAllowed {
+		return nil
+	}
+	if !s.deps.Mail.Enabled() {
+		return accountRecoveryUnavailable(fmt.Errorf("mail delivery is disabled"))
+	}
+	normalizedEmail := strings.ToLower(strings.TrimSpace(model.SanitizeUnicode(command.Email)))
+	if err := s.checkAccountRecoveryRateLimit(
+		ctx,
+		accountRecoveryAttemptPasswordResetRequest,
+		normalizedEmail,
+		command.Source,
+	); err != nil {
+		return err
+	}
+	if !model.IsValidEmail(normalizedEmail) {
+		return nil
+	}
+	user, err := s.deps.Users.GetByEmail(ctx, normalizedEmail)
+	if err != nil {
+		if !store.IsNotFound(err) {
+			s.logHiddenRecoveryFailure(ctx, "password reset user lookup failed", err)
+		}
+		return nil
+	}
+	if !user.IsActive() {
+		return nil
+	}
+	if _, err = s.deps.Passwords.GetByUser(ctx, user.ID); err != nil {
+		if !store.IsNotFound(err) {
+			s.logHiddenRecoveryFailure(ctx, "password credential lookup failed", err)
+		}
+		return nil
+	}
+	institution, err := s.accountRecoveryInstitution(ctx)
+	if err != nil {
+		s.logHiddenRecoveryFailure(ctx, "password reset institution lookup failed", err)
+		return nil
+	}
+	rawToken := s.deps.NewToken()
+	now := s.deps.Now()
+	token := &model.UserToken{
+		UserID:    user.ID,
+		Purpose:   model.UserTokenPasswordReset,
+		TokenHash: model.HashToken(rawToken),
+		Target:    user.Email,
+		ExpiresAt: now.Add(s.deps.Policy.PasswordResetTTL),
+	}
+	token.PrepareCreate(model.NewUserTokenID(), now)
+	event := s.deps.Audit.Success(
+		model.ActionAuthenticationPasswordResetRequest,
+		model.Resource{Type: model.ResourceUser, ID: user.ID.String()},
+		institution.ID,
+		invocation,
+		nil,
+		"anonymous",
+	)
+	link, err := AccountCredentialLink(
+		s.deps.PublicURL,
+		"/account/reset-password",
+		rawToken,
+	)
+	if err != nil {
+		s.logHiddenRecoveryFailure(ctx, "password reset link generation failed", err)
+		return nil
+	}
+	prepared, err := s.deps.Mail.PreparePasswordReset(mail.AccountTokenPreparation{
+		Recipient: user, OccurrenceID: model.MailOccurrenceID(token.ID.String()), ActionURL: link, At: now, Deadline: token.ExpiresAt,
+	})
+	if err != nil {
+		s.logHiddenRecoveryFailure(ctx, "password reset delivery preparation failed", err)
+		return nil
+	}
+	if _, err = s.deps.Tokens.Issue(ctx, &store.UserTokenMailIssue{Token: token, Occurrence: prepared.Occurrence,
+		Delivery: prepared.Delivery, Job: prepared.Job, AuditEvent: event}); err != nil {
+		s.logHiddenRecoveryFailure(ctx, "password reset token and delivery issue failed", err)
+	}
+	return nil
+}
+
+func (s *accountTokenService) CompleteEmailVerification(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command CompleteEmailVerificationCommand,
+) (*model.User, error) {
+	if err := s.checkAccountRecoveryRateLimit(
+		ctx,
+		accountRecoveryAttemptEmailVerificationComplete,
+		recoveryCredentialRateIdentity(command.Token),
+		command.Source,
+	); err != nil {
+		return nil, err
+	}
+	if !validRawCredential(command.Token) {
+		return nil, invalidAccountCredential()
+	}
+	institution, err := s.accountRecoveryInstitution(ctx)
+	if err != nil {
+		return nil, err
+	}
+	event := s.deps.Audit.Success(
+		model.ActionAuthenticationEmailVerificationComplete,
+		model.Resource{Type: model.ResourceUser},
+		institution.ID,
+		invocation,
+		nil,
+		"email_verification_token",
+	)
+	result, err := s.deps.Tokens.ConsumeEmailVerification(
+		ctx,
+		&store.EmailVerificationConsumption{TokenHash: model.HashToken(command.Token), Now: s.deps.Now(), AuditEvent: event},
+	)
+	if err != nil {
+		if store.IsNotFound(err) {
+			return nil, invalidAccountCredential()
+		}
+		return nil, accountRecoveryStoreFailure(err)
+	}
+	return result.User, nil
+}
+
+func (s *accountTokenService) CompletePasswordReset(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command CompletePasswordResetCommand,
+) (*model.User, error) {
+	if err := s.checkAccountRecoveryRateLimit(
+		ctx,
+		accountRecoveryAttemptPasswordResetComplete,
+		recoveryCredentialRateIdentity(command.Token),
+		command.Source,
+	); err != nil {
+		return nil, err
+	}
+	localLoginAllowed, err := s.deps.AccessPolicy.AllowsLocalLogin(ctx)
+	if err != nil {
+		return nil, accountRecoveryStoreFailure(err)
+	}
+	if !localLoginAllowed {
+		return nil, invalidAccountCredential()
+	}
+	if !validRawCredential(command.Token) {
+		return nil, invalidAccountCredential()
+	}
+	institution, err := s.accountRecoveryInstitution(ctx)
+	if err != nil {
+		return nil, err
+	}
+	event := s.deps.Audit.Success(
+		model.ActionAuthenticationPasswordResetComplete,
+		model.Resource{Type: model.ResourceUser},
+		institution.ID,
+		invocation,
+		nil,
+		"password_reset_token",
+	)
+	now := model.TimeUTC(s.deps.Now())
+	token, err := s.deps.Tokens.GetByHash(ctx, model.HashToken(command.Token), model.UserTokenPasswordReset)
+	if err != nil {
+		if store.IsNotFound(err) {
+			return nil, invalidAccountCredential()
+		}
+		return nil, accountRecoveryStoreFailure(err)
+	}
+	user, err := s.deps.Users.Get(ctx, token.UserID)
+	if err != nil {
+		if store.IsNotFound(err) {
+			return nil, invalidAccountCredential()
+		}
+		return nil, accountRecoveryStoreFailure(err)
+	}
+	// Hash only for a live token's account. The hashing permit is shared with
+	// login, so guessed tokens must not be able to consume it.
+	if err = CheckNewPassword(command.Password, passwordIdentityOf(user)); err != nil {
+		return nil, err
+	}
+	passwordHash, err := s.deps.Hasher.Hash(ctx, command.Password)
+	if err != nil {
+		return nil, PasswordHashError(err, "authentication.account_recovery.unavailable")
+	}
+	prepared, err := s.deps.Mail.PreparePasswordChanged(mail.NoticePreparation{Recipient: user, At: now})
+	if err != nil {
+		return nil, accountRecoveryUnavailable(err)
+	}
+	result, err := s.deps.Tokens.ConsumePasswordReset(ctx, &store.PasswordResetCompletion{
+		TokenHash: model.HashToken(command.Token), PasswordHash: passwordHash, Reuse: s.deps.Hasher.ReuseCheck(command.Password), At: now,
+		RevocationReason: model.SessionRevocationPasswordReset, AuditEvent: event, Occurrence: prepared.Occurrence,
+		Delivery: prepared.Delivery, Job: prepared.Job,
+	})
+	if err != nil {
+		if errors.Is(err, store.ErrAuthenticationMethodDisabled) {
+			return nil, invalidAccountCredential()
+		}
+		if errors.Is(err, store.ErrPasswordReused) {
+			return nil, passwordReused()
+		}
+		if apperror.Is(err, "service.busy") {
+			return nil, err
+		}
+		if store.IsNotFound(err) {
+			return nil, invalidAccountCredential()
+		}
+		return nil, accountRecoveryStoreFailure(err)
+	}
+	s.deps.Effects.SessionsRevoked(
+		ctx,
+		result.User.ID,
+		sessionIDs(result.RevokedSessions),
+		result.RevokedAccessHashes,
+	)
+	return result.User, nil
+}
+
+func (s *accountTokenService) accountRecoveryInstitution(ctx context.Context) (*model.Institution, error) {
+	institution, err := s.deps.Institutions.GetSingleton(ctx)
+	if err != nil {
+		return nil, accountRecoveryStoreFailure(err)
+	}
+	return institution, nil
+}
+
+func (s *accountTokenService) checkAccountRecoveryRateLimit(
+	ctx context.Context,
+	operation accountRecoveryAttemptOperation,
+	identity string,
+	source string,
+) error {
+	qualifier, valid := operation.qualifier()
+	if !valid {
+		return RateLimitUnavailableAppError(fmt.Errorf("account recovery attempt operation is invalid"))
+	}
+	settings := s.deps.Policy.RateLimit
+	_, limited, err := s.deps.Attempts.account(ctx, authenticationAttemptIntent{
+		purpose:   authenticationAttemptPurposeAccountRecovery,
+		qualifier: qualifier,
+		window:    settings.Window,
+		limits: []AttemptLimit{
+			{
+				dimension: authenticationAttemptDimensionIdentity,
+				maximum:   settings.MaximumAttempts,
+				identity:  identity,
+			},
+			{
+				dimension: authenticationAttemptDimensionSource,
+				maximum:   settings.MaximumSourceAttempts,
+				source:    source,
+			},
+		},
+	})
+	if err != nil {
+		return RateLimitUnavailableAppError(err)
+	}
+	if limited {
+		return apperror.New("authentication.rate_limited")
+	}
+	return nil
+}
+
+func recoveryCredentialRateIdentity(rawToken string) string {
+	return model.HashToken(rawToken)
+}
+
+// RecoveryAuditEvent builds the success audit event of an unauthenticated
+// account-credential flow; public registration records it too.
+func RecoveryAuditEvent(
+	action model.Action,
+	resource model.Resource,
+	institutionID model.InstitutionID,
+	metadata model.RequestMetadata,
+	nodeID string,
+	principal *model.Principal,
+	authenticationMethod string,
+) *model.AuditEvent {
+	event := &model.AuditEvent{
+		Action: string(action), Resource: resource,
+		ScopeType: model.RoleScopeInstitution, ScopeID: institutionID.String(),
+		Status: model.AuditStatusSuccess, RequestID: metadata.RequestID,
+		NodeID: nodeID, AuthMethod: authenticationMethod,
+		IPAddress: metadata.IPAddress, UserAgent: metadata.UserAgent,
+	}
+	if principal != nil {
+		event.ActorID = principal.UserID
+		event.SessionID = principal.SessionID
+		event.ClientType = string(principal.ClientType)
+		event.AuthMethod = principal.AuthenticationMethod
+	}
+	return event
+}
+
+// AccountCredentialLink builds the hosted link that carries a raw account
+// credential, such as an Invitation claim or an email verification token.
+func AccountCredentialLink(
+	publicURL string,
+	path string,
+	rawToken string,
+) (string, error) {
+	base, err := url.Parse(publicURL)
+	if err != nil || !base.IsAbs() || base.Host == "" {
+		return "", fmt.Errorf("invalid public URL")
+	}
+	base.Path = strings.TrimRight(base.Path, "/") + path
+	base.RawPath = ""
+	base.RawQuery = ""
+	base.Fragment = "token=" + url.QueryEscape(rawToken)
+	return base.String(), nil
+}
+
+func (s *accountTokenService) logHiddenRecoveryFailure(
+	ctx context.Context,
+	message string,
+	err error,
+) {
+	s.deps.Diagnostics.ErrorContext(ctx, message, err)
+}
+
+func invalidAccountCredential() error {
+	return apperror.New("authentication.account_token.invalid")
+}
+
+func accountRecoveryStoreFailure(err error) error {
+	return apperror.New("authentication.account_recovery.unavailable").Wrap(err)
+}
+
+func accountRecoveryUnavailable(err error) error {
+	return apperror.New("authentication.account_recovery.unavailable").Wrap(err)
+}

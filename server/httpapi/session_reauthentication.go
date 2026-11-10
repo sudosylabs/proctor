@@ -11,14 +11,14 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
 type SessionReauthentication interface {
-	ReauthenticatePassword(context.Context, invocation.Invocation, app.ReauthenticatePasswordCommand) (*model.Session, error)
-	BeginExternalReauthentication(context.Context, invocation.Invocation, app.BeginExternalReauthenticationCommand) (*model.ExternalAuthenticationStart, error)
+	ReauthenticatePassword(context.Context, invocation.Invocation, identity.ReauthenticatePasswordCommand) (*model.Session, error)
+	BeginExternalReauthentication(context.Context, invocation.Invocation, identity.BeginExternalReauthenticationCommand) (*model.ExternalAuthenticationStart, error)
 }
 
 type sessionReauthenticationResourceModule struct {
@@ -52,7 +52,7 @@ func (m sessionReauthenticationResourceModule) password(request operationRequest
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
-	session, err := m.authentication.ReauthenticatePassword(request.context, request.invocation(), app.ReauthenticatePasswordCommand{
+	session, err := m.authentication.ReauthenticatePassword(request.context, request.invocation(), identity.ReauthenticatePasswordCommand{
 		Password: input.Password, Source: request.metadata.IPAddress,
 	})
 	if err != nil {
@@ -66,7 +66,7 @@ func (m sessionReauthenticationResourceModule) external(request operationRequest
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
-	start, err := m.authentication.BeginExternalReauthentication(request.context, request.invocation(), app.BeginExternalReauthenticationCommand{Task: input.Task, Source: request.metadata.IPAddress})
+	start, err := m.authentication.BeginExternalReauthentication(request.context, request.invocation(), identity.BeginExternalReauthenticationCommand{Task: input.Task, Source: request.metadata.IPAddress})
 	if err != nil {
 		return operationResult{}, err
 	}

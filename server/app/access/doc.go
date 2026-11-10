@@ -35,8 +35,10 @@ type UserSettingsAuditInput struct {
 	SourceBytes       int
 }
 
-// invalidTokenAppError reports a Principal that is not a valid caller.
-func invalidTokenAppError() error {
+// InvalidTokenAppError reports a Principal, credential or token that is not a
+// valid caller. It is the one definition of that failure: the identity area
+// and the parent app package return it too.
+func InvalidTokenAppError() error {
 	return apperror.New("authentication.token_invalid")
 }
 

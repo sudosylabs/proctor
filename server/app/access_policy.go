@@ -19,6 +19,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/realtime"
@@ -32,35 +33,18 @@ const (
 	desktopAuthorizationProtocolMax = 1
 )
 
-type AccessPolicyProviderCapability struct {
-	Descriptor    model.ExternalAuthenticationProvider
-	AutoProvision bool
-}
-
-type AccessPolicyCapabilitySnapshot struct {
-	Providers   []AccessPolicyProviderCapability
-	DurableMail bool
-	// MFA reports whether the server configuration enables two-step
-	// verification, so role holders could enroll a second factor.
-	MFA bool
-}
-
-type accessPolicyCapabilitySource interface {
-	Snapshot() AccessPolicyCapabilitySnapshot
-}
-
 // deploymentAccessPolicyCapabilities projects only safe process capabilities
 // from the live registry and mail transport. Secrets never enter policy code.
 type deploymentAccessPolicyCapabilities struct {
-	providers  externalProviderSource
+	providers  identity.ExternalProviderSource
 	mail       mail.Sender
 	health     interface{ Code() string }
 	mfaEnabled bool
 }
 
-func (c deploymentAccessPolicyCapabilities) Snapshot() AccessPolicyCapabilitySnapshot {
+func (c deploymentAccessPolicyCapabilities) Snapshot() identity.AccessPolicyCapabilitySnapshot {
 	durableMail := c.mail != nil && c.mail.Enabled() && c.health != nil && c.health.Code() == MailHealthHealthy
-	result := AccessPolicyCapabilitySnapshot{DurableMail: durableMail, MFA: c.mfaEnabled}
+	result := identity.AccessPolicyCapabilitySnapshot{DurableMail: durableMail, MFA: c.mfaEnabled}
 	if c.providers == nil {
 		return result
 	}
@@ -69,7 +53,7 @@ func (c deploymentAccessPolicyCapabilities) Snapshot() AccessPolicyCapabilitySna
 		if !available || provider == nil {
 			continue
 		}
-		result.Providers = append(result.Providers, AccessPolicyProviderCapability{
+		result.Providers = append(result.Providers, identity.AccessPolicyProviderCapability{
 			Descriptor: descriptor, AutoProvision: provider.AutoProvision(),
 		})
 	}
@@ -104,7 +88,7 @@ type accessPolicyServiceDependencies struct {
 	Policies        store.AccessPolicyStore
 	Institutions    accessPolicyInstitutionStore
 	Authorization   resourceAuthorizer
-	Capabilities    accessPolicyCapabilitySource
+	Capabilities    identity.AccessPolicyCapabilitySource
 	Audit           access.MutationAuditor
 	Effects         accessPolicyEffects
 	EffectFailures  accessPolicyEffectFailures
@@ -116,7 +100,7 @@ type accessPolicyServiceDependencies struct {
 	RecentAuthenticationTTL time.Duration
 	// Sessions are the deployment Session lifetimes: the defaults and the
 	// ceilings of the policy's Session lengths.
-	Sessions SessionPolicy
+	Sessions identity.SessionPolicy
 	Now      func() time.Time
 }
 
@@ -145,7 +129,7 @@ func newAccessPolicyService(deps accessPolicyServiceDependencies) (*accessPolicy
 // activity debounce; the absolute length outlasts both that floor and the
 // recent-authentication window; each default and ceiling is the configured
 // lifetime, which the policy can only shorten.
-func sessionLengthLimits(sessions SessionPolicy, recentAuthentication time.Duration) model.SessionLengthLimits {
+func sessionLengthLimits(sessions identity.SessionPolicy, recentAuthentication time.Duration) model.SessionLengthLimits {
 	wholeMinutesUp := func(duration time.Duration) int { return int((duration + time.Minute - 1) / time.Minute) }
 	idleMinimum := wholeMinutesUp(max(sessions.AccessTTL, sessions.ActivityUpdateInterval+time.Minute))
 	idleDefault, absoluteDefault := int(sessions.IdleTTL/time.Minute), int(sessions.AbsoluteTTL/time.Minute)
@@ -329,7 +313,7 @@ func (s *accessPolicyService) authorize(ctx context.Context, invocation invocati
 }
 
 func (s *accessPolicyService) requireStrongRecent(invocation invocation.Invocation) error {
-	return requireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL)
+	return identity.RequireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.deps.RecentAuthenticationTTL)
 }
 
 func (s *accessPolicyService) preflightInput(expected int64, settings model.AccessPolicySettings, revokeExistingSessions bool) (*store.AccessPolicyPreflight, error) {
@@ -342,7 +326,7 @@ func (s *accessPolicyService) preflightInput(expected int64, settings model.Acce
 	if err := settings.ValidateSessionLengths(s.sessionLimits); err != nil {
 		return nil, invalidAccessPolicySettings(err)
 	}
-	capabilities := accessDeploymentCapabilities(s.deps.Capabilities.Snapshot())
+	capabilities := identity.AccessDeploymentCapabilities(s.deps.Capabilities.Snapshot())
 	return &store.AccessPolicyPreflight{ExpectedRevision: expected, Settings: settings,
 		RevokeExistingSessions: revokeExistingSessions,
 		Capabilities:           capabilities, SessionLimits: s.sessionLimits,
@@ -357,16 +341,6 @@ func invalidAccessPolicySettings(err error) error {
 		return apperror.Invalid("access_policy.invalid", invalid.Field).Wrap(err)
 	}
 	return apperror.New("access_policy.invalid").Wrap(err)
-}
-
-func accessDeploymentCapabilities(snapshot AccessPolicyCapabilitySnapshot) store.AccessDeploymentCapabilities {
-	providers := make(map[string]store.AccessProviderCapability, len(snapshot.Providers))
-	for _, provider := range snapshot.Providers {
-		if provider.Descriptor.ID != "" {
-			providers[provider.Descriptor.ID] = store.AccessProviderCapability{AutoProvision: provider.AutoProvision}
-		}
-	}
-	return store.AccessDeploymentCapabilities{Providers: providers, DurableMail: snapshot.DurableMail, MFA: snapshot.MFA}
 }
 
 func (s *accessPolicyService) view(snapshot *store.AccessPolicySnapshot) AccessPolicyView {

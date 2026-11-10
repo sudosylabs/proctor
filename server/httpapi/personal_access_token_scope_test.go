@@ -20,7 +20,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/localization"
 	"github.com/sudosylabs/proctor/server/model"
@@ -29,15 +29,15 @@ import (
 type grantableScopesHTTPApplication struct {
 	PersonalAccessTokens
 
-	catalogue *app.PersonalAccessTokenGrantableScopes
+	catalogue *identity.PersonalAccessTokenGrantableScopes
 	calls     int
 }
 
 func (a *grantableScopesHTTPApplication) ListGrantablePersonalAccessTokenScopes(
 	context.Context,
 	invocation.Invocation,
-	app.ListGrantablePersonalAccessTokenScopesQuery,
-) (*app.PersonalAccessTokenGrantableScopes, error) {
+	identity.ListGrantablePersonalAccessTokenScopesQuery,
+) (*identity.PersonalAccessTokenGrantableScopes, error) {
 	a.calls++
 	return a.catalogue, nil
 }
@@ -100,8 +100,8 @@ func TestGrantablePersonalAccessTokenScopesRouteLocalizesCopy(t *testing.T) {
 	logger, _ := newTestLogger(t)
 	now := time.Now()
 	unitID := model.NewAcademicUnitID()
-	application := &grantableScopesHTTPApplication{catalogue: &app.PersonalAccessTokenGrantableScopes{
-		Scopes: []app.PersonalAccessTokenGrantableScope{{
+	application := &grantableScopesHTTPApplication{catalogue: &identity.PersonalAccessTokenGrantableScopes{
+		Scopes: []identity.PersonalAccessTokenGrantableScope{{
 			Action: model.ActionExamView, ResourceTypes: []model.ResourceType{model.ResourceExam},
 			AcademicUnitIDs: []model.AcademicUnitID{unitID},
 		}},
@@ -145,7 +145,7 @@ func TestGrantablePersonalAccessTokenScopesResponseUsesEmptyCollections(t *testi
 
 	encoded, err := json.Marshal(personalAccessTokenGrantableScopesResponseFromApp(
 		httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil),
-		&app.PersonalAccessTokenGrantableScopes{Scopes: []app.PersonalAccessTokenGrantableScope{{Action: model.ActionAuditView, InstitutionWide: true}}},
+		&identity.PersonalAccessTokenGrantableScopes{Scopes: []identity.PersonalAccessTokenGrantableScope{{Action: model.ActionAuditView, InstitutionWide: true}}},
 	))
 	require.NoError(t, err)
 	require.JSONEq(t, `{"scopes":[{"name":"audit.view","title":"audit.view","description":"","resource_types":[],"institution_wide":true,"academic_unit_ids":[]}],"academic_units":[],"academic_units_has_more":false}`, string(encoded))

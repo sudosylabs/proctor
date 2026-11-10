@@ -14,6 +14,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"os"
 	"sort"
 	"testing"
@@ -149,16 +150,18 @@ func (constructionCatalogWithoutJobs) Job() store.JobStore { return nil }
 func TestJobRecipePreservesLifecycleOnlyGraphs(t *testing.T) {
 	t.Parallel()
 
-	constructed, err := constructJobs(
+	constructed, err := newJobRuntime(
 		Dependencies{Store: constructionCatalogWithoutJobs{}},
-		applicationFoundation{},
-		accessAcademicConstruction{},
-		accountConstruction{},
-		examinationConstruction{},
-		profileFileConstruction{},
+		sharedMechanics{},
+		nil,
+		examServices{},
+		nil,
+		nil,
+		onboarding.Ports{},
+		nil,
 	)
 	require.NoError(t, err)
-	require.Nil(t, constructed.runtime, "constructed Jobs = %#v, want empty lifecycle-only result", constructed)
+	require.Nil(t, constructed.engine, "constructed Jobs = %#v, want empty lifecycle-only result", constructed)
 	require.Nil(t, constructed.operations, "constructed Jobs = %#v, want empty lifecycle-only result", constructed)
 }
 
@@ -256,8 +259,8 @@ func TestJobRecipeConnectsRuntimeOperationsAndProfileWake(t *testing.T) {
 	t.Parallel()
 
 	defaultJobs := jobhandler.NewDefaultProfilePictureJobs(jobhandler.DefaultProfilePictureJobsDependencies{Jobs: constructionEnqueueJobStoreStub{}})
-	profiles := profileFileConstruction{defaultJobs: defaultJobs}
-	jobs, err := constructJobs(
+	wake := &jobWake{}
+	jobs, err := newJobRuntime(
 		Dependencies{
 			Store: constructionCatalogWithJobs{
 				jobs: constructionJobStoreStub{}, users: constructionUserStoreStub{},
@@ -269,24 +272,57 @@ func TestJobRecipeConnectsRuntimeOperationsAndProfileWake(t *testing.T) {
 			},
 			NodeID: "node-a", RecoveryDiagnostics: constructionRecoveryDiagnosticsStub{},
 		},
-		applicationFoundation{},
-		accessAcademicConstruction{},
-		accountConstruction{},
-		examinationConstruction{sittings: &sitting.Service{}, attempts: &attempt.Service{}},
-		profiles,
+		sharedMechanics{},
+		nil,
+		examServices{sittings: &sitting.Service{}, attempts: &attempt.Service{}},
+		nil,
+		defaultJobs,
+		onboarding.Ports{},
+		wake,
 	)
 	require.NoError(t, err)
-	require.NotNil(t, jobs.runtime, "constructed Jobs = %#v, want runtime and operations", jobs)
+	require.NotNil(t, jobs.engine, "constructed Jobs = %#v, want runtime and operations", jobs)
 	require.NotNil(t, jobs.operations, "constructed Jobs = %#v, want runtime and operations", jobs)
 	// Contract: the proposal the profile service makes wakes the constructed
-	// runtime, which is only possible once constructJobs has attached it.
+	// runtime, which is only possible once newJobRuntime has attached it.
 	require.NoError(t, defaultJobs.ProposeDefaultProfilePicture(context.Background(), model.NewUserID(), time.Now()))
-	application := assembleApplication(
-		Dependencies{}, applicationFoundation{}, accountConstruction{}, accessAcademicConstruction{},
-		examinationConstruction{}, profiles, jobs, administrationConstruction{},
-	)
-	require.Same(t, jobs.runtime, application.jobs, "assembled application did not retain the constructed Job runtime and operations")
-	require.Same(t, jobs.operations, application.jobOperationsService, "assembled application did not retain the constructed Job runtime and operations")
+	// Contract: the wake that identity and onboarding were built with now
+	// reaches the constructed runtime.
+	require.NotNil(t, wake.wake, "the identity and onboarding Job wake was not connected to the runtime")
+	// Contract: New assembles App from this runtime.
+	values := appLiteralFieldValues(t)
+	require.Equal(t, "jobs.engine", values["jobEngine"], "assembled application did not retain the constructed Job runtime and operations")
+	require.Equal(t, "jobs.operations", values["Jobs"], "assembled application did not retain the constructed Job runtime and operations")
+	require.Equal(t, "jobs.mail", values["Mail"], "assembled application did not retain the constructed mail operations")
+}
+
+// appLiteralFieldValues returns the source of each keyed value in the App
+// composite literal that New returns.
+func appLiteralFieldValues(t *testing.T) map[string]string {
+	t.Helper()
+	source, err := os.ReadFile("new.go")
+	require.NoError(t, err)
+	parsed, err := parser.ParseFile(token.NewFileSet(), "new.go", source, 0)
+	require.NoError(t, err)
+	values := map[string]string{}
+	ast.Inspect(parsed, func(node ast.Node) bool {
+		literal, ok := node.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+		if identifier, ok := literal.Type.(*ast.Ident); !ok || identifier.Name != "App" {
+			return true
+		}
+		for _, element := range literal.Elts {
+			keyed, ok := element.(*ast.KeyValueExpr)
+			require.True(t, ok, "App assembly uses an unkeyed field")
+			key, ok := keyed.Key.(*ast.Ident)
+			require.True(t, ok, "App assembly has a non-identifier field")
+			values[key.Name] = types.ExprString(keyed.Value)
+		}
+		return false
+	})
+	return values
 }
 
 // constructionOnboardingImportJobsStub stands in for the onboarding import
@@ -297,7 +333,6 @@ type constructionOnboardingImportJobsStub struct {
 
 func TestApplicationJobDefinitionsIncludeSittingLifecycleAndDailyRecovery(t *testing.T) {
 	t.Parallel()
-	profiles := profileFileConstruction{}
 	catalog := constructionCatalogWithJobs{
 		jobs: constructionJobStoreStub{}, users: constructionUserStoreStub{},
 		files: constructionFileStoreStub{}, institutions: constructionInstitutionStoreStub{},
@@ -309,10 +344,11 @@ func TestApplicationJobDefinitionsIncludeSittingLifecycleAndDailyRecovery(t *tes
 			Store:       catalog,
 			FileContent: constructionFileContentStub{},
 		},
-		applicationFoundation{},
-		accountConstruction{onboardingPorts: onboarding.Ports{ImportJobs: constructionOnboardingImportJobsStub{}}},
-		examinationConstruction{sittings: &sitting.Service{}, attempts: &attempt.Service{}}, profiles,
+		sharedMechanics{},
+		examServices{sittings: &sitting.Service{}, attempts: &attempt.Service{}},
+		nil,
 		jobhandler.NewDefaultProfilePictureJobs(jobhandler.DefaultProfilePictureJobsDependencies{Jobs: constructionJobStoreStub{}}),
+		onboarding.Ports{ImportJobs: constructionOnboardingImportJobsStub{}},
 		newMailHealth(false),
 	)
 	_, err := job.NewRegistry(definitions.descriptors)
@@ -396,9 +432,9 @@ func TestApplicationAssemblyNamesEveryAppField(t *testing.T) {
 	require.NoError(t, err)
 	want := structFieldNames(t, parsedApp, "App")
 
-	source, err = os.ReadFile("construction.go")
+	source, err = os.ReadFile("new.go")
 	require.NoError(t, err)
-	parsedConstruction, err := parser.ParseFile(token.NewFileSet(), "construction.go", source, 0)
+	parsedConstruction, err := parser.ParseFile(token.NewFileSet(), "new.go", source, 0)
 	require.NoError(t, err)
 	got := compositeLiteralFieldNames(t, parsedConstruction, "App")
 	require.Len(t, got, len(want), "assembled App fields")

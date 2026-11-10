@@ -32,9 +32,9 @@ type AdministrationCount struct {
 	IsLowerBound bool
 }
 
-// AdministrationCounts summarises the administration work waiting on the
+// AdministrationCountsResult summarises the administration work waiting on the
 // caller. A count is nil when the caller may not list that resource.
-type AdministrationCounts struct {
+type AdministrationCountsResult struct {
 	// PendingInvitations are pending Invitations that have not expired,
 	// within the caller's invitation.view scopes.
 	PendingInvitations *AdministrationCount
@@ -80,7 +80,7 @@ type administrationImportCounter interface {
 }
 
 // administrationCountsServiceDependencies are the collaborators of
-// administrationCountsService: the services that own each listed resource,
+// AdministrationCounts: the services that own each listed resource,
 // so every count is authorized, audited, and scoped exactly as its list is.
 type administrationCountsServiceDependencies struct {
 	Invitations administrationInvitationCounter
@@ -89,12 +89,14 @@ type administrationCountsServiceDependencies struct {
 	Imports     administrationImportCounter
 }
 
-type administrationCountsService struct {
+// AdministrationCounts answers the bounded counts behind the administration
+// navigation, each through the service that owns the counted resource.
+type AdministrationCounts struct {
 	deps administrationCountsServiceDependencies
 }
 
-func newAdministrationCountsService(deps administrationCountsServiceDependencies) *administrationCountsService {
-	return &administrationCountsService{deps: deps}
+func newAdministrationCountsService(deps administrationCountsServiceDependencies) *AdministrationCounts {
+	return &AdministrationCounts{deps: deps}
 }
 
 // AdministrationCounts returns the bounded counts behind the administration
@@ -102,32 +104,32 @@ func newAdministrationCountsService(deps administrationCountsServiceDependencies
 // administration reads. Each count runs its resource's own list
 // authorization, which records the decision as that list does; a count the
 // caller may not list is left out rather than failing the summary.
-func (s *administrationCountsService) AdministrationCounts(ctx context.Context, invocation invocation.Invocation) (AdministrationCounts, error) {
+func (s *AdministrationCounts) AdministrationCounts(ctx context.Context, invocation invocation.Invocation) (AdministrationCountsResult, error) {
 	principal := invocation.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
-		return AdministrationCounts{}, access.InvalidTokenAppError()
+		return AdministrationCountsResult{}, access.InvalidTokenAppError()
 	}
-	var counts AdministrationCounts
+	var counts AdministrationCountsResult
 	var err error
 	if counts.PendingInvitations, err = administrationCount(s.deps.Invitations != nil, func() (int, error) {
 		return s.deps.Invitations.countPendingInvitations(ctx, invocation, MaximumAdministrationCount)
 	}); err != nil {
-		return AdministrationCounts{}, err
+		return AdministrationCountsResult{}, err
 	}
 	if counts.FailedJobs, err = administrationCount(s.deps.Jobs != nil, func() (int, error) {
 		return s.deps.Jobs.countRecentJobFailures(ctx, invocation, administrationFailedJobWindow, MaximumAdministrationCount)
 	}); err != nil {
-		return AdministrationCounts{}, err
+		return AdministrationCountsResult{}, err
 	}
 	if counts.FailedMailDeliveries, err = administrationCount(s.deps.Mail != nil, func() (int, error) {
 		return s.deps.Mail.countFailedMailDeliveries(ctx, invocation, MaximumAdministrationCount)
 	}); err != nil {
-		return AdministrationCounts{}, err
+		return AdministrationCountsResult{}, err
 	}
 	if counts.OpenOnboardingImports, err = administrationCount(s.deps.Imports != nil, func() (int, error) {
 		return s.deps.Imports.countOpenOnboardingImports(ctx, invocation, MaximumAdministrationCount)
 	}); err != nil {
-		return AdministrationCounts{}, err
+		return AdministrationCountsResult{}, err
 	}
 	return counts, nil
 }

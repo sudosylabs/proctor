@@ -153,8 +153,10 @@ type Options struct {
 	Tracing                       Tracing
 	Localizer                     Localizer
 	Health                        Health
-	Application                   Application
 	Identity                      IdentityApplication
+	Search                        SearchApplication
+	AdministrationCounts          AdministrationCountsApplication
+	Jobs                          JobOperationsApplication
 	AcademicUnits                 AcademicUnitApplication
 	Institutions                  InstitutionApplication
 	Programmes                    ProgrammeApplication

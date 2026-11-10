@@ -12,7 +12,7 @@ import "github.com/sudosylabs/proctor/server/app/realtime"
 func newRealtimeService(
 	invalidator realtime.AuthenticationInvalidator,
 	diagnostics realtimeDiagnostics,
-) (*realtimeService, error) {
+) (*RealtimeService, error) {
 	delivery, err := realtime.New(realtime.Dependencies{AuthenticationInvalidator: invalidator, Diagnostics: diagnostics})
 	if err != nil {
 		return nil, err

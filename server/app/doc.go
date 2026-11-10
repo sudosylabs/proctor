@@ -12,20 +12,21 @@
 // formats live in httpapi and websocket, SQL in store/sqlstore, and stored
 // file bytes in filecontent.
 //
-// App, built once by New, is the application's public surface. It holds one
-// service per area, so each use case is declared once, as a method on its
-// service. Each area is moving into its own child package, which App
-// exposes as a named field; until an area moves, its services live in this
-// package and App embeds them. Exam use cases already live in app/exam and
-// its children.
+// App, built once by New, is the application's public surface. It names
+// each service in its own field and embeds none, so each use case is
+// declared once, as a method on its service. Each area lives in its own
+// child package; this package keeps only the services that span areas
+// (search, administration counts, realtime publication and admission, Job
+// and mail operations).
 //
 // Where to look:
-//   - app.go: App and New
+//   - app.go: App
+//   - new.go: New, which builds the graph top to bottom; new_exam.go and
+//     new_jobs.go build the Exam services and the Job runtime
 //   - dependencies.go: what the server package must supply
-//   - construction_*.go: how each group of services is built
-//   - mutation_attempt.go: the shared begin, mutate and audit sequence most
-//     audited changes use
-//   - child packages: apperror (the one application error type), invocation
+//   - leaf packages: access (authorization and access.RunAudited, the shared
+//     begin, mutate and audit sequence most audited changes use), paging,
+//     apperror (the one application error type), invocation
 //     (the call context every use case takes), idempotency, job (the durable
 //     Job engine), jobhandler, mail, realtime and exam
 //   - area packages: academic, user, identity (sign-in, Sessions, MFA,

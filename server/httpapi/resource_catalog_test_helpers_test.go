@@ -17,7 +17,10 @@ import (
 )
 
 type testHTTPApplication struct {
-	Application
+	SearchApplication
+	AdministrationCountsApplication
+	JobOperationsApplication
+	MailApplication
 	IdentityApplication
 	RetentionPolicyApplication
 	RetentionApplication
@@ -65,7 +68,8 @@ func validHTTPOptions(t *testing.T) Options {
 	application := &testHTTPApplication{}
 	examApplications := &testExamApplications{}
 	return Options{
-		Logger: logger, Localizer: newTestLocalizer(t), Health: testHTTPHealth{}, Application: application, Identity: application,
+		Logger: logger, Localizer: newTestLocalizer(t), Health: testHTTPHealth{}, Identity: application,
+		Search: application, AdministrationCounts: application, Jobs: application,
 		AcademicUnits: &academicUnitHTTPApplication{}, Institutions: &institutionHTTPApplication{},
 		Programmes: &programmeHTTPApplication{}, ProgrammeLevels: &programmeLevelHTTPApplication{},
 		AcademicPeriods: &academicPeriodHTTPApplication{}, Classes: &classHTTPApplication{},

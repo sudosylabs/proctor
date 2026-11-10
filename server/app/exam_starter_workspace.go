@@ -17,7 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-type examStarterWorkspaceRealtimeEffects struct{ realtime *realtimeService }
+type examStarterWorkspaceRealtimeEffects struct{ realtime *RealtimeService }
 
 func (e examStarterWorkspaceRealtimeEffects) Changed(ctx context.Context, examID model.ExamID, entryID model.StarterWorkspaceEntryID, draftRevision int64, operation workspace.ChangeOperation, changedAt time.Time) error {
 	event, err := realtime.NewExamStarterWorkspaceChangedEvent(examID, entryID, draftRevision, string(operation), changedAt)

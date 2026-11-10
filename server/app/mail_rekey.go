@@ -48,7 +48,9 @@ type mailKeyInspector interface {
 	InspectKeyState(context.Context) (*store.MailKeyState, error)
 }
 
-func (s *mailService) GetMailKeyState(ctx context.Context, invocation invocation.Invocation) (MailKeyStateView, error) {
+// GetMailKeyState reports the configured and required primary mail payload
+// keys and the keys still referenced by active payloads.
+func (s *MailService) GetMailKeyState(ctx context.Context, invocation invocation.Invocation) (MailKeyStateView, error) {
 	if s == nil {
 		return MailKeyStateView{}, apperror.New("mail.unavailable")
 	}
@@ -76,7 +78,9 @@ func (s *mailService) GetMailKeyState(ctx context.Context, invocation invocation
 	return view, nil
 }
 
-func (s *mailService) StartMailRekey(ctx context.Context, invocation invocation.Invocation, retiringKeyID string) (MailRekeyView, error) {
+// StartMailRekey starts the Job that re-encrypts active mail payloads away
+// from a retiring key to the configured primary key.
+func (s *MailService) StartMailRekey(ctx context.Context, invocation invocation.Invocation, retiringKeyID string) (MailRekeyView, error) {
 	if s == nil {
 		return MailRekeyView{}, apperror.New("mail.unavailable")
 	}

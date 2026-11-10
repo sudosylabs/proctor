@@ -271,7 +271,7 @@ func TestExamSittingIntegration(t *testing.T) {
 		ExamID: created.Exam.ID, SittingID: scheduled.Sitting.ID,
 	})
 	require.True(t, apperror.Is(appErr, "resource.not_found"), "get after membership revocation error = %v", appErr)
-	appErr = helper.App.AuthorizeWebSocketSubscription(ctx, invocation.New(*managerPrincipal, model.RequestMetadata{}),
+	appErr = helper.App.RealtimeAdmission.AuthorizeWebSocketSubscription(ctx, invocation.New(*managerPrincipal, model.RequestMetadata{}),
 		model.ActionExamSittingView, model.Resource{Type: model.ResourceExamSitting, ID: scheduled.Sitting.ID.String()})
 	require.True(t, apperror.Is(appErr, "resource.not_found"), "subscription after membership revocation error = %v", appErr)
 	_, err = persistence.AcademicUnitMember().Save(ctx, &model.AcademicUnitMember{
@@ -284,7 +284,7 @@ func TestExamSittingIntegration(t *testing.T) {
 		ExamID: created.Exam.ID, SittingID: scheduled.Sitting.ID,
 	})
 	require.True(t, apperror.Is(appErr, "resource.not_found"), "get after permission revocation error = %v", appErr)
-	appErr = helper.App.AuthorizeWebSocketSubscription(ctx, invocation.New(*managerPrincipal, model.RequestMetadata{}),
+	appErr = helper.App.RealtimeAdmission.AuthorizeWebSocketSubscription(ctx, invocation.New(*managerPrincipal, model.RequestMetadata{}),
 		model.ActionExamSittingView, model.Resource{Type: model.ResourceExamSitting, ID: scheduled.Sitting.ID.String()})
 	require.True(t, apperror.Is(appErr, "resource.not_found"), "subscription after permission revocation error = %v", appErr)
 

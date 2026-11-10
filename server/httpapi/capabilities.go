@@ -216,16 +216,6 @@ type RoleBindingApplication interface {
 	EndRoleBinding(context.Context, invocation.Invocation, administration.EndRoleBindingCommand) (*model.RoleBinding, error)
 }
 
-// Application is the cohesive application-facing API contract. Its component
-// interfaces keep domain ownership visible without turning authentication into
-// an unrelated service locator.
-type Application interface {
-	SearchApplication
-	AdministrationCountsApplication
-	JobOperationsApplication
-	MailApplication
-}
-
 // IdentityApplication is the identity area's use cases: credential
 // resolution, sign-in and recovery, Sessions, two-step verification, personal
 // access tokens, Desktop authorization and compatibility, and email changes.

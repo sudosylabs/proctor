@@ -67,7 +67,7 @@ func (a examSittingSystemAuditAdapter) Fail(ctx context.Context, id model.AuditE
 }
 
 type examSittingRealtimeEffects struct {
-	realtime    *realtimeService
+	realtime    *RealtimeService
 	collections examCollectionInvalidationEffects
 }
 

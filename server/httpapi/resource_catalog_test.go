@@ -72,7 +72,6 @@ func TestResolveResourceApplicationsRequiresCompleteGraph(t *testing.T) {
 		message string
 		remove  func(*Options)
 	}{
-		{"application", "application is required", func(options *Options) { options.Application = nil }},
 		{"academic units", "academic unit reads are required", func(options *Options) { options.AcademicUnits = nil }},
 		{"institutions", "institution application is required", func(options *Options) { options.Institutions = nil }},
 		{"programmes", "programme application is required", func(options *Options) { options.Programmes = nil }},
@@ -97,6 +96,9 @@ func TestResolveResourceApplicationsRequiresCompleteGraph(t *testing.T) {
 		{"audit", "audit listing application is required", func(options *Options) { options.AuditListings = nil }},
 		{"bootstrap", "bootstrap application is required", func(options *Options) { options.Bootstrap = nil }},
 		{"access policy", "access policy application is required", func(options *Options) { options.AccessPolicy = nil }},
+		{"search", "search application is required", func(options *Options) { options.Search = nil }},
+		{"administration counts", "administration counts application is required", func(options *Options) { options.AdministrationCounts = nil }},
+		{"job operations", "job operations application is required", func(options *Options) { options.Jobs = nil }},
 		{"mail", "mail application is required", func(options *Options) { options.Mail = nil }},
 	}
 	for _, test := range tests {
@@ -142,7 +144,7 @@ func TestResolveResourceApplicationsUsesExplicitCapabilities(t *testing.T) {
 	require.Equal(t, resolved.onboardingImports, onboardingImports, "resolver did not preserve explicit resource capabilities")
 	require.Equal(t, resolved.studentProgressions, studentProgressions, "resolver did not preserve explicit resource capabilities")
 	require.Equal(t, resolved.academicAdministrationBatches, batches, "resolver did not preserve explicit resource capabilities")
-	require.Equal(t, resolved.authenticator, options.Application, "resolver did not project the configured Application authenticator")
+	require.Equal(t, resolved.authenticator, options.Identity, "resolver did not project the configured Identity authenticator")
 }
 
 func TestNewInvokesEveryExplicitFormerFallbackCapability(t *testing.T) {
@@ -162,7 +164,7 @@ func TestNewInvokesEveryExplicitFormerFallbackCapability(t *testing.T) {
 			configure: func(options *Options) func(*testing.T) {
 				fake := &replayingAccessPolicyHTTPApplication{}
 				options.AccessPolicy = fake
-				options.Application.(*testHTTPApplication).principal = &principal
+				options.Identity.(*testHTTPApplication).principal = &principal
 				return func(t *testing.T) {
 					require.Equal(t, 1, fake.discoveries, "DiscoverAccess calls")
 				}
@@ -174,7 +176,7 @@ func TestNewInvokesEveryExplicitFormerFallbackCapability(t *testing.T) {
 			configure: func(options *Options) func(*testing.T) {
 				fake := &invitationHTTPApplication{}
 				options.Invitations = fake
-				options.Application.(*testHTTPApplication).principal = &principal
+				options.Identity.(*testHTTPApplication).principal = &principal
 				return func(t *testing.T) {
 					require.NotEqual(t, 0, fake.list.Limit, "ListInvitations was not invoked")
 				}
@@ -186,7 +188,7 @@ func TestNewInvokesEveryExplicitFormerFallbackCapability(t *testing.T) {
 			configure: func(options *Options) func(*testing.T) {
 				fake := &browserInvitationHTTPApplication{}
 				options.BrowserInvitations = fake
-				options.Application.(*testHTTPApplication).principal = &principal
+				options.Identity.(*testHTTPApplication).principal = &principal
 				return func(t *testing.T) {
 					require.NotEmpty(t, fake.start.Claim, "StartBrowserInvitation was not invoked")
 				}
@@ -202,7 +204,7 @@ func TestNewInvokesEveryExplicitFormerFallbackCapability(t *testing.T) {
 			configure: func(options *Options) func(*testing.T) {
 				fake := &recordingOnboardingImportApplication{}
 				options.OnboardingImports = fake
-				options.Application.(*testHTTPApplication).principal = &principal
+				options.Identity.(*testHTTPApplication).principal = &principal
 				return func(t *testing.T) {
 					require.NotEmpty(t, fake.getID, "GetOnboardingImport was not invoked")
 				}
@@ -216,7 +218,7 @@ func TestNewInvokesEveryExplicitFormerFallbackCapability(t *testing.T) {
 			configure: func(options *Options) func(*testing.T) {
 				fake := &studentProgressionApplicationFake{}
 				options.StudentProgressions = fake
-				options.Application.(*testHTTPApplication).principal = &principal
+				options.Identity.(*testHTTPApplication).principal = &principal
 				return func(t *testing.T) {
 					require.NotEmpty(t, fake.getID, "GetStudentProgression was not invoked")
 				}
@@ -230,7 +232,7 @@ func TestNewInvokesEveryExplicitFormerFallbackCapability(t *testing.T) {
 			configure: func(options *Options) func(*testing.T) {
 				fake := &academicAdministrationBatchHTTPApplication{}
 				options.AcademicAdministrationBatches = fake
-				options.Application.(*testHTTPApplication).principal = &principal
+				options.Identity.(*testHTTPApplication).principal = &principal
 				return func(t *testing.T) {
 					require.Equal(t, "catalog-explicit-batch", fake.command.IdempotencyKey)
 				}

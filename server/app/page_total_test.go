@@ -25,7 +25,7 @@ func TestMailDeliveryListCountsTheFirstPageThroughTheListedOptions(t *testing.T)
 	delivery := &model.MailDelivery{ID: model.NewMailDeliveryID(), CreatedAt: model.TimeFromMillis(100)}
 	persistence := &mailStoreFake{delivery: delivery, countTotal: 3}
 	authorizer := &mailAuthorizerFake{}
-	service := &mailService{deps: mailServiceDependencies{Mail: persistence, Authorization: authorizer}}
+	service := &MailService{deps: mailServiceDependencies{Mail: persistence, Authorization: authorizer}}
 	caller := invocation.New(mailTestPrincipal(time.Now()), model.RequestMetadata{})
 	query := ListMailDeliveriesQuery{States: []model.MailDeliveryState{model.MailDeliveryFailed}, Limit: 10}
 	first, err := service.ListMailDeliveries(context.Background(), caller, query)

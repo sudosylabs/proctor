@@ -206,7 +206,7 @@ func studentProgressionListAPI(t *testing.T, fake *studentProgressionApplication
 	}
 	options := validHTTPOptions(t)
 	options.StudentProgressions = fake
-	options.Application.(*testHTTPApplication).principal = &principal
+	options.Identity.(*testHTTPApplication).principal = &principal
 	httpAPI, err := New(options)
 	require.NoError(t, err)
 	return httpAPI

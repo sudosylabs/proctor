@@ -41,10 +41,10 @@ func TestRealtimeServiceRequiresSecurityDependencies(t *testing.T) {
 func TestAuthenticationAndRealtimeRetainOnlyNarrowSiblingPorts(t *testing.T) {
 	t.Parallel()
 
-	realtimeType := reflect.TypeOf(realtimeService{})
+	realtimeType := reflect.TypeOf(RealtimeService{})
 	identityPointerType := reflect.TypeOf((*identity.Service)(nil))
 	for index := 0; index < realtimeType.NumField(); index++ {
 		field := realtimeType.Field(index)
-		require.NotEqual(t, identityPointerType, field.Type, "realtimeService retains the identity Service in field %q", field.Name)
+		require.NotEqual(t, identityPointerType, field.Type, "RealtimeService retains the identity Service in field %q", field.Name)
 	}
 }

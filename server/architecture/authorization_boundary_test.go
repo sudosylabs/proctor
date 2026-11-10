@@ -11,6 +11,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"io/fs"
 	"path/filepath"
 	"strings"
@@ -128,15 +129,15 @@ func TestApplicationFacadeDoesNotRetainPersistenceLocator(t *testing.T) {
 }
 
 // Every use case is declared once, on the focused service that owns it. App
-// embeds the services of areas still in the flat package and names each
-// moved area's services in exported fields (Academic *academic.Service,
-// Attempts *attempt.Service), so it declares no method of its own beyond the
-// runtime handle composition borrows, and holds no other named field.
-func TestApplicationSurfaceIsTheEmbeddedServices(t *testing.T) {
+// names each service in an exported field (Academic *academic.Service,
+// Search *SearchService) and embeds nothing, so it declares no method of its
+// own beyond the runtime handle composition borrows, and holds no other
+// field.
+func TestApplicationSurfaceIsNamedServices(t *testing.T) {
 	t.Parallel()
 
-	allowedMethods := map[string]struct{}{"Jobs": {}}
-	allowedFields := map[string]struct{}{"jobs": {}}
+	allowedMethods := map[string]struct{}{"JobEngine": {}}
+	allowedFields := map[string]struct{}{"jobEngine": {}}
 	inspectProductionGoFiles(t, []string{"app"}, func(path string, file *ast.File) {
 		for _, declaration := range file.Decls {
 			switch candidate := declaration.(type) {
@@ -157,10 +158,11 @@ func TestApplicationSurfaceIsTheEmbeddedServices(t *testing.T) {
 						continue
 					}
 					for _, field := range structure.Fields.List {
+						assert.NotEmpty(t, field.Names, "App embeds %s in %s; name the service in an exported field", types.ExprString(field.Type), path)
 						for _, name := range field.Names {
 							_, allowed := allowedFields[name.Name]
-							allowed = allowed || (name.IsExported() && isAreaService(field.Type))
-							assert.True(t, allowed, "App holds named field %s in %s; embed the service that owns its use cases", name.Name, path)
+							allowed = allowed || (name.IsExported() && isServicePointer(field.Type))
+							assert.True(t, allowed, "App holds field %s in %s; hold only exported service pointers", name.Name, path)
 						}
 					}
 				}
@@ -173,8 +175,7 @@ func TestApplicationDoesNotExportFocusedServiceImplementations(t *testing.T) {
 	t.Parallel()
 
 	retiredImplementationTypes := map[string]struct{}{
-		"AuditService":    {},
-		"RealtimeService": {},
+		"AuditService": {},
 	}
 	inspectProductionGoFiles(t, []string{"app"}, func(path string, file *ast.File) {
 		for _, declaration := range file.Decls {
@@ -194,19 +195,23 @@ func TestApplicationDoesNotExportFocusedServiceImplementations(t *testing.T) {
 	})
 }
 
-// isAreaService reports a field type of the form *<area>.<Service>, the one
-// shape a moved area's App field takes.
-func isAreaService(expression ast.Expr) bool {
+// isServicePointer reports a field type of the form *<area>.<Service> or
+// *<Service>: a pointer to an exported service type of an area package or of
+// the parent.
+func isServicePointer(expression ast.Expr) bool {
 	pointer, ok := expression.(*ast.StarExpr)
 	if !ok {
 		return false
 	}
-	selector, ok := pointer.X.(*ast.SelectorExpr)
-	if !ok {
+	switch target := pointer.X.(type) {
+	case *ast.Ident:
+		return target.IsExported()
+	case *ast.SelectorExpr:
+		_, packageQualified := target.X.(*ast.Ident)
+		return packageQualified && target.Sel.IsExported()
+	default:
 		return false
 	}
-	_, packageQualified := selector.X.(*ast.Ident)
-	return packageQualified && selector.Sel.IsExported()
 }
 
 func appReceiverNames(function *ast.FuncDecl) (map[string]bool, bool) {

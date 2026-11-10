@@ -228,7 +228,6 @@ func TestClassSearchMapsMissingAcademicUnit(t *testing.T) {
 	transport := &academicUnitHTTPApplication{principal: principal}
 	options := validHTTPOptions(t)
 	options.Logger = logger
-	options.Application = transport
 	options.Identity = transport
 	options.AcademicUnits = transport
 	options.Institutions = transport
@@ -264,7 +263,6 @@ func TestClassHTTPMapsBothParentsFromRouteAndBody(t *testing.T) {
 	transport := &academicUnitHTTPApplication{principal: principal}
 	options := validHTTPOptions(t)
 	options.Logger = logger
-	options.Application = transport
 	options.Identity = transport
 	options.AcademicUnits = transport
 	options.Institutions = transport

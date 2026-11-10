@@ -26,7 +26,6 @@ import (
 )
 
 type academicUnitHTTPApplication struct {
-	Application
 	IdentityApplication
 	InstitutionApplication
 	principal      model.Principal
@@ -259,7 +258,6 @@ func TestAcademicUnitHTTPCreateMapsCommandWithoutPermissionPreflight(t *testing.
 			}
 			options := validHTTPOptions(t)
 			options.Logger = logger
-			options.Application = fakeApplication
 			options.Identity = fakeApplication
 			options.AcademicUnits = fakeApplication
 			options.Institutions = fakeApplication
@@ -314,7 +312,6 @@ func TestAcademicUnitHTTPMutationsMapCommandsWithoutPermissionPreflight(t *testi
 	logger, _ := newTestLogger(t)
 	options := validHTTPOptions(t)
 	options.Logger = logger
-	options.Application = fakeApplication
 	options.Identity = fakeApplication
 	options.AcademicUnits = fakeApplication
 	options.Institutions = fakeApplication

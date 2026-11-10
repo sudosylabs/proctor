@@ -18,7 +18,7 @@ import (
 // AdministrationCountsApplication summarises the administration work waiting
 // on the caller for navigation badges.
 type AdministrationCountsApplication interface {
-	AdministrationCounts(context.Context, invocation.Invocation) (app.AdministrationCounts, error)
+	AdministrationCounts(context.Context, invocation.Invocation) (app.AdministrationCountsResult, error)
 }
 
 // administrationCountsResponse carries each count the caller may see with its

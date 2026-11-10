@@ -24,9 +24,9 @@ import (
 	"github.com/sudosylabs/proctor/server/app/user"
 )
 
-// App is the long-lived application surface. It holds each focused service
-// that owns public use cases, and embeds the rest, so it declares no use
-// case of its own. Construction receives only the explicit
+// App is the long-lived application surface. It names each focused service
+// that owns public use cases in its own field and embeds nothing, so it
+// declares no use case of its own. Construction receives only the explicit
 // Dependencies bundle; infrastructure getters and platform location are not
 // part of the public surface.
 type App struct {
@@ -73,88 +73,37 @@ type App struct {
 	// Users holds the User directory, profile, settings and profile-picture
 	// use cases.
 	Users *user.Service
-	*searchService
-	*administrationCountsService
-	*realtimeService
-	*realtimeAdmissionService
-	jobs *job.Engine
-	*jobOperationsService
-	*mailService
+	// Search finds Exams, Classes and Users within the caller's own list
+	// visibility for each type.
+	Search *SearchService
+	// Counts summarises the administration work waiting on the caller:
+	// pending Invitations, failed Jobs and mail deliveries, and open
+	// onboarding imports.
+	Counts *AdministrationCounts
+	// Realtime delivers committed events locally and to peers, unbinds
+	// Attempt Connections, propagates Session revocation and authentication
+	// or authorization invalidation, and receives the WebSocket sink and
+	// cluster fan-out that composition attaches.
+	Realtime *RealtimeService
+	// RealtimeAdmission revalidates a WebSocket connection's principal and
+	// authorizes each of its subscriptions.
+	RealtimeAdmission *RealtimeAdmission
+	// Jobs lists, inspects, cancels and retries Jobs and lists their attempts
+	// for operators; it is nil when the graph has no Job store.
+	Jobs *JobOperations
+	// Mail holds the operator mail controls: deliveries, metrics, test mail
+	// and payload-key rotation; it is nil when the graph has no Job or mail
+	// store.
+	Mail *MailService
+
+	jobEngine *job.Engine
 }
 
-// Jobs returns the root-owned durable Job runtime, or nil for lifecycle-only
+// JobEngine returns the root-owned durable Job runtime, or nil for lifecycle-only
 // test graphs that intentionally provide no Job store.
-func (a *App) Jobs() *job.Engine {
+func (a *App) JobEngine() *job.Engine {
 	if a == nil {
 		return nil
 	}
-	return a.jobs
-}
-
-// New constructs the application graph from explicit dependencies. Only the
-// module-root composition package should call this. The ordered recipe remains
-// visible here while private construction modules retain each cohesive slice's
-// projection and wiring knowledge.
-func New(deps Dependencies) (*App, error) {
-	if deps.OperationalRecorder == nil {
-		deps.OperationalRecorder = nopOperationalRecorder{}
-	}
-	if err := validateApplicationDependencies(deps); err != nil {
-		return nil, err
-	}
-	foundation, err := constructApplicationFoundation(deps)
-	if err != nil {
-		return nil, err
-	}
-	access, err := constructAccessAndAcademics(deps, foundation)
-	if err != nil {
-		return nil, err
-	}
-	profiles, err := constructProfilesAndFiles(deps, foundation, access)
-	if err != nil {
-		return nil, err
-	}
-	accounts, err := constructAccounts(deps, foundation, access)
-	if err != nil {
-		return nil, err
-	}
-	examinations, err := constructExaminations(deps, foundation, access, accounts)
-	if err != nil {
-		return nil, err
-	}
-	accounts.onboarding, accounts.onboardingPorts, err = constructOnboarding(deps, foundation, access, accounts)
-	if err != nil {
-		return nil, err
-	}
-	var administration administrationConstruction
-	jobs, err := constructJobs(deps, foundation, access, accounts, examinations, profiles)
-	if err != nil {
-		return nil, err
-	}
-	administration.search = newSearchService(searchServiceDependencies{
-		Exams: examinations.authoring, Users: profiles.users,
-		ClassAuthorization: access.authorization, Classes: deps.Store.Class(),
-	})
-	administration.counts = newAdministrationCountsService(administrationCountsDependencies(accounts, jobs))
-	return assembleApplication(deps, foundation, accounts, access, examinations, profiles, jobs, administration), nil
-}
-
-// administrationCountsDependencies projects the summary's counters from the
-// services that exist; a reduced lifecycle test graph may lack some, and
-// their counts are then left out.
-func administrationCountsDependencies(accounts accountConstruction, jobs jobConstruction) administrationCountsServiceDependencies {
-	var deps administrationCountsServiceDependencies
-	if accounts.onboardingPorts.CountPendingInvitations != nil {
-		deps.Invitations = pendingInvitationCounter(accounts.onboardingPorts.CountPendingInvitations)
-	}
-	if accounts.onboardingPorts.CountOpenImports != nil {
-		deps.Imports = openImportCounter(accounts.onboardingPorts.CountOpenImports)
-	}
-	if jobs.operations != nil {
-		deps.Jobs = jobs.operations
-	}
-	if jobs.mail != nil {
-		deps.Mail = jobs.mail
-	}
-	return deps
+	return a.jobEngine
 }

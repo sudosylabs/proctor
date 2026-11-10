@@ -17,11 +17,11 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-// realtimeAdmissionService admits long-lived WebSocket clients. It
+// RealtimeAdmission admits long-lived WebSocket clients. It
 // revalidates a Session principal before the transport keeps trusting it and
 // authorizes each subscription against current resource state, concealing
 // Exams and Sittings the caller may not see.
-type realtimeAdmissionService struct {
+type RealtimeAdmission struct {
 	principals    *identity.Service
 	exams         realtimeExamViewAuthorizer
 	sittings      realtimeSittingViewAuthorizer
@@ -55,7 +55,7 @@ var (
 // AuthorizeWebSocketSubscription authorizes one subscription Action on its
 // Resource. Exams and Sittings use their relationship gates; every other
 // Resource takes the audited Access Control decision.
-func (s *realtimeAdmissionService) AuthorizeWebSocketSubscription(
+func (s *RealtimeAdmission) AuthorizeWebSocketSubscription(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	action model.Action,
@@ -87,7 +87,7 @@ func (s *realtimeAdmissionService) AuthorizeWebSocketSubscription(
 
 // ValidateWebSocketPrincipal revalidates the authoritative Session and User
 // state behind a long-lived connection's principal.
-func (s *realtimeAdmissionService) ValidateWebSocketPrincipal(ctx context.Context, principal model.Principal) error {
+func (s *RealtimeAdmission) ValidateWebSocketPrincipal(ctx context.Context, principal model.Principal) error {
 	err := s.principals.ValidatePrincipal(ctx, principal)
 	recordOperational(s.operational, "realtime", "principal_validate", err)
 	return err

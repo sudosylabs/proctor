@@ -110,7 +110,7 @@ func (a examIntegrityReviewAuthorizationAdapter) denySelf(ctx context.Context, i
 	return apperror.New("exam.integrity_review.not_found")
 }
 
-type examIntegrityReviewRealtimeEffects struct{ realtime *realtimeService }
+type examIntegrityReviewRealtimeEffects struct{ realtime *RealtimeService }
 
 func (e examIntegrityReviewRealtimeEffects) publishManagerBoardInvalidation(ctx context.Context,
 	result review.Result,

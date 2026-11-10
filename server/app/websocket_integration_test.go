@@ -146,7 +146,7 @@ func TestWebSocketIntegration(t *testing.T) {
 	require.Equal(t, int64(2), responseMessage.Sequence)
 
 	eventData := json.RawMessage(`{"version":1}`)
-	require.NoError(t, helper.App.PublishRealtimeEvent(
+	require.NoError(t, helper.App.Realtime.PublishRealtimeEvent(
 		context.Background(),
 		realtime.RealtimeEvent{
 			Name:   "institution.updated",
@@ -326,7 +326,7 @@ func TestWebSocketTwoNodeConformance(t *testing.T) {
 	writeWebSocketRequest(t, connection, 1, "subscribe", subscription)
 	require.Equal(t, "ok", readWebSocketResponse(t, connection).Status)
 
-	require.NoError(t, nodeA.App.PublishRealtimeEvent(
+	require.NoError(t, nodeA.App.Realtime.PublishRealtimeEvent(
 		context.Background(),
 		realtime.RealtimeEvent{
 			Name:   "institution.cluster_updated",

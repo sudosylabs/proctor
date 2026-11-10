@@ -61,7 +61,7 @@ func (a examAuthorizationAdapter) AuthorizeList(ctx context.Context, invocation 
 }
 
 type examRealtimeEffects struct {
-	realtime    *realtimeService
+	realtime    *RealtimeService
 	collections examCollectionInvalidationEffects
 }
 

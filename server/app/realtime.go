@@ -25,16 +25,16 @@ type realtimeDiagnostics interface {
 	ErrorContextWithEvent(ctx context.Context, message, event string, err error)
 }
 
-// realtimeServiceDependencies are the collaborators of realtimeService;
-// newRealtimeServiceWithDelivery validates them once and realtimeService keeps them in deps.
+// realtimeServiceDependencies are the collaborators of RealtimeService;
+// newRealtimeServiceWithDelivery validates them once and RealtimeService keeps them in deps.
 type realtimeServiceDependencies struct {
 	Delivery    *realtime.Service
 	Diagnostics realtimeDiagnostics
 }
 
-// realtimeService translates the child module's publication failures into
+// RealtimeService translates the child module's publication failures into
 // parent application errors and retains parent-owned effect adapters.
-type realtimeService struct {
+type RealtimeService struct {
 	deps realtimeServiceDependencies
 
 	attempts interface {
@@ -42,31 +42,33 @@ type realtimeService struct {
 	}
 }
 
-func newRealtimeServiceWithDelivery(deps realtimeServiceDependencies) (*realtimeService, error) {
+func newRealtimeServiceWithDelivery(deps realtimeServiceDependencies) (*RealtimeService, error) {
 	if deps.Delivery == nil {
 		return nil, errors.New("realtime delivery is required")
 	}
 	if deps.Diagnostics == nil {
 		return nil, errors.New("realtime diagnostics are required")
 	}
-	return &realtimeService{deps: deps}, nil
+	return &RealtimeService{deps: deps}, nil
 }
 
 // AttachRealtimeClusterFanout wires the composition-owned cluster adapter and
 // registers peer handlers. It must be called once before the node becomes
 // ready. Peer handlers apply only local effects so Broadcast never loops.
-func (s *realtimeService) AttachRealtimeClusterFanout(fanout realtime.ClusterFanout) error {
+func (s *RealtimeService) AttachRealtimeClusterFanout(fanout realtime.ClusterFanout) error {
 	return s.deps.Delivery.SetClusterFanout(fanout)
 }
 
-func (s *realtimeService) AttachRealtimeSink(sink realtime.Sink) error {
+// AttachRealtimeSink wires the composition-owned local WebSocket sink. It must
+// be called once before the node becomes ready.
+func (s *RealtimeService) AttachRealtimeSink(sink realtime.Sink) error {
 	return s.deps.Delivery.SetSink(sink)
 }
 
 // PublishRealtimeEvent delivers a transport-neutral event locally first, then
 // fans it out to peers best-effort. Callers must invoke this only after
 // durable commit.
-func (s *realtimeService) PublishRealtimeEvent(ctx context.Context, event realtime.RealtimeEvent) error {
+func (s *RealtimeService) PublishRealtimeEvent(ctx context.Context, event realtime.RealtimeEvent) error {
 	err := s.deps.Delivery.Publish(ctx, event)
 	if err == nil {
 		return nil
@@ -78,7 +80,9 @@ func (s *realtimeService) PublishRealtimeEvent(ctx context.Context, event realti
 	return internalRealtimeError(err)
 }
 
-func (s *realtimeService) UnbindExamAttemptConnection(ctx context.Context, connectionID model.AttemptConnectionID) error {
+// UnbindExamAttemptConnection unbinds one Attempt Connection locally and then
+// on peers, leaving its WebSocket open.
+func (s *RealtimeService) UnbindExamAttemptConnection(ctx context.Context, connectionID model.AttemptConnectionID) error {
 	err := s.deps.Delivery.UnbindExamAttemptConnection(ctx, connectionID)
 	if err == nil {
 		return nil
@@ -90,7 +94,7 @@ func (s *realtimeService) UnbindExamAttemptConnection(ctx context.Context, conne
 	return internalRealtimeError(err)
 }
 
-func (s *realtimeService) reportTransientFailure(
+func (s *RealtimeService) reportTransientFailure(
 	ctx context.Context,
 	event string,
 	err error,
@@ -101,7 +105,10 @@ func (s *realtimeService) reportTransientFailure(
 	s.deps.Diagnostics.ErrorContextWithEvent(ctx, "transient realtime publication failed", event, err)
 }
 
-func (s *realtimeService) SessionsRevoked(
+// SessionsRevoked propagates revoked Sessions and access tokens, then tells
+// the affected Attempts' candidate and Sitting board that their activity
+// changed. Publication failures are reported, not returned.
+func (s *RealtimeService) SessionsRevoked(
 	ctx context.Context,
 	userID model.UserID,
 	sessionIDs []model.SessionID,
@@ -146,7 +153,9 @@ func (s *realtimeService) SessionsRevoked(
 	}
 }
 
-func (s *realtimeService) AuthenticationCacheInvalidated(
+// AuthenticationCacheInvalidated clears a User's cached authentications
+// locally and then on peers, without closing sockets.
+func (s *RealtimeService) AuthenticationCacheInvalidated(
 	ctx context.Context,
 	userID model.UserID,
 	accessTokenHashes []string,
@@ -154,7 +163,10 @@ func (s *realtimeService) AuthenticationCacheInvalidated(
 	s.deps.Delivery.AuthenticationCacheInvalidated(ctx, userID, accessTokenHashes)
 }
 
-func (s *realtimeService) InvalidateAuthorization(ctx context.Context, userID model.UserID) {
+// InvalidateAuthorization propagates a change to a User's authorization and
+// tells their clients to refresh their activity and current-user context.
+// Publication failures are reported, not returned.
+func (s *RealtimeService) InvalidateAuthorization(ctx context.Context, userID model.UserID) {
 	s.deps.Delivery.InvalidateAuthorization(ctx, userID)
 	if userID == "" {
 		return
@@ -172,7 +184,9 @@ func (s *realtimeService) InvalidateAuthorization(ctx context.Context, userID mo
 	}
 }
 
-func (s *realtimeService) InvalidateCurrentUserContext(ctx context.Context, userID model.UserID) error {
+// InvalidateCurrentUserContext tells a User's clients that their current-user
+// context changed.
+func (s *RealtimeService) InvalidateCurrentUserContext(ctx context.Context, userID model.UserID) error {
 	event, err := realtime.NewCurrentUserContextChangedEvent(userID)
 	if err != nil {
 		return err
@@ -180,7 +194,7 @@ func (s *realtimeService) InvalidateCurrentUserContext(ctx context.Context, user
 	return s.PublishRealtimeEvent(ctx, event)
 }
 
-var _ identity.SecurityEffects = (*realtimeService)(nil)
+var _ identity.SecurityEffects = (*RealtimeService)(nil)
 
 func invalidRealtimeRequest(field string) error {
 	return apperror.New("websocket.request.invalid").WithField("field", field)

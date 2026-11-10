@@ -145,15 +145,18 @@ constructed server has no listener, worker, or maintenance goroutine running.
 
 ## Follow `app.New`
 
-`app.New` builds the application services in dependency order and returns the
-`app.App` value. `App` is a collection of use cases, not a persistence
-accessor.
+[`app.New`](https://github.com/sudosylabs/Proctor/blob/main/server/app/new.go)
+reads top to bottom: it validates its dependencies, builds the shared
+mechanics and Access Control, builds each area in dependency order, then the
+optional Job runtime and the services that span areas, and returns the
+`app.App` value. Larger areas are built by helpers beside it, such as
+`newExamServices` in `new_exam.go` and `newJobRuntime` in `new_jobs.go`. `App`
+is a collection of use cases, not a persistence accessor.
 
-The application is moving to one package per domain area (`app/academic`,
-`app/user`, `app/identity`, `app/exam`, ...). `App` exposes each area as a named field,
-so a call reads `app.Academic.CreateClass(...)`. Areas that have not moved yet
-still live as private services in the flat `app/` package and are embedded in
-`App`.
+Each domain area is one package (`app/academic`, `app/user`, `app/identity`,
+`app/exam`, ...). `App` names every service in its own field and embeds
+nothing, so a call reads `app.Academic.CreateClass(...)` or
+`app.Search.Search(...)`.
 
 When adding a dependency:
 

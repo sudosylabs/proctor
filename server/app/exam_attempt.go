@@ -92,7 +92,7 @@ func (a examAttemptManagerAuthorizationAdapter) AuthorizeSubmissionView(ctx cont
 }
 
 type examAttemptRealtimeEffects struct {
-	realtime *realtimeService
+	realtime *RealtimeService
 }
 
 func (e examAttemptRealtimeEffects) publishCandidateActivityInvalidation(ctx context.Context,

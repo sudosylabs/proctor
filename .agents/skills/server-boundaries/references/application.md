@@ -109,8 +109,9 @@ infrastructure.
 A service is a struct whose fields are its collaborators: the `store`
 contracts it calls, the area's `Authorizer` and `Auditor` (satisfied in
 production by `*access.Authorizer` and `*access.Auditor`), and whatever else it
-needs. Its constructor takes a `Dependencies` struct when
-there are more than a handful of collaborators, and plain arguments otherwise.
+needs. Its constructor takes one `Dependencies` (or `<X>Dependencies`) struct
+declared beside it rather than positional collaborators
+(`TestServicesTakeOneDependencies`).
 A service generates identifiers with one `NewID func() string` (or calls
 `model.NewID` directly) and reads time from one `Now func() time.Time`.
 
@@ -259,8 +260,9 @@ owns its policy, under its public use-case name (`CreateClass`, not `Create`).
 `app.App` exposes the area services as named fields and declares no use case of
 its own. Transports call `app.Academic.CreateClass` and so on; an `httpapi`
 resource receives the area service it serves, so an `httpapi` consumer interface
-lists the methods of one service. The WebSocket hub receives the Attempt
-service (`app.Attempts`) as its own typed dependency.
+lists the methods of one service. The WebSocket hub receives WebSocket
+admission (`app.RealtimeAdmission`) and the Attempt service (`app.Attempts`)
+as its typed dependencies.
 
 Work a wrapper would add belongs in the owning service method: operational
 outcome recording, error concealment, input normalization, defensive copies,
@@ -274,9 +276,18 @@ collaborators; it never reads another service's fields.
 they use. App itself has no Store field or accessor; architecture tests reject
 production `App.Store()` traversal.
 
-`app.New` remains the sole application constructor. It reads top to bottom:
-validate shared dependencies, build `access`, then each area in dependency
-order, then optional Jobs, and return the `App`.
+`app.New` in `app/new.go` remains the sole application constructor. It reads
+top to bottom: validate the dependencies, build the shared mechanics (password
+hashing, attempt accounting, cache invalidation, realtime publication, audit
+and mail composition) and `access`, then each area in dependency order, then
+the optional Job runtime and the services that span areas (search and the
+administration counts), and return one `App` literal that names every field.
+Its local variables carry each built service to the next step; an area too
+large to build inline has a helper in `new_<area>.go` named for what it
+builds (`newExamServices`, `newJobRuntime`). Identity is built before
+onboarding and the Job runtime, so it receives an Invitation acceptor and a
+Job wake (which onboarding also receives) that `New` connects once those
+exist.
 
 Another project's package taxonomy is not a template. An area or child package
 is introduced only after the responsibility is stable, can obey inward
@@ -287,19 +298,14 @@ real composition graph provide shared persistence and wiring evidence.
 
 ## Migration status
 
-The repository is moving from per-service ports and an embedding `App` to the
-area packages described above (plan of 2026-11-10). Until an area has moved,
-its code still uses the old shape: private services in the flat `app/`
-package, a per-service `Dependencies` struct and store port, and embedding in
-`App`. Follow the new shape in any area that has moved, and do not add new
-per-service ports anywhere. `app/access`, `app/paging`, `app/academic`, `app/user`,
-`app/identity` and `app/exam` with its children have moved; the academic administration batches, Student Progression and
-onboarding imports still live in `app` and call `academic.Service`. Invitations,
-browser Invitation handoff and public registration still live in `app` and call
-`identity.Service` and the identity mechanics (the shared password hasher and
-attempt accounting) it exports for them. `identity.Service` embeds one private
-implementation per concern rather than holding every collaborator itself. `App`
-still embeds the services of the areas that remain in `app` (Invitations, roles,
-search, Jobs, mail, and so on). `TestServicesTakeOneDependencies` and
-`TestApplicationSurfaceIsTheEmbeddedServices` enforce the old shape and retire
-when the last area moves.
+The move to area packages (plan of 2026-11-10) is complete. Every area lives
+in its package, and `App` names every service in its own field and embeds
+nothing; `TestApplicationSurfaceIsNamedServices` keeps it that way. The parent
+keeps only the services that span areas or own no area (`SearchService`,
+`AdministrationCounts`, `RealtimeService`, `RealtimeAdmission`,
+`JobOperations`, `MailService`), each named on `App` like an area service.
+
+What remains is inside three area packages: `identity.Service`,
+`administration.Service` and `onboarding.Service` still embed one private
+implementation per concern rather than holding their collaborators
+themselves. Do not add a new embedded implementation.

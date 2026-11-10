@@ -22,7 +22,7 @@ import (
 func TestAuthorizeWebSocketExamSubscriptionUsesExamRelationshipGate(t *testing.T) {
 	t.Parallel()
 	exams := &realtimeExamViewFake{}
-	admission := &realtimeAdmissionService{exams: exams}
+	admission := &RealtimeAdmission{exams: exams}
 	principal := testExamPrincipal(model.NewUserID())
 	examID := model.NewExamID()
 	err := admission.AuthorizeWebSocketSubscription(context.Background(), invocation.New(principal, model.RequestMetadata{RequestID: "subscribe"}),
@@ -37,7 +37,7 @@ func TestAuthorizeWebSocketExamSubscriptionConcealsMissingAndDeniedExams(t *test
 	principal := testExamPrincipal(model.NewUserID())
 	resource := model.Resource{Type: model.ResourceExam, ID: model.NewExamID().String()}
 	for _, failure := range []error{apperror.New("exam.not_found"), apperror.New("authorization.denied")} {
-		admission := &realtimeAdmissionService{exams: &realtimeExamViewFake{err: failure}}
+		admission := &RealtimeAdmission{exams: &realtimeExamViewFake{err: failure}}
 		err := admission.AuthorizeWebSocketSubscription(context.Background(), invocation.New(principal, model.RequestMetadata{}), model.ActionExamView, resource)
 		require.True(t, apperror.Is(err, "resource.not_found"), "error = %v, want concealed resource.not_found", err)
 	}
@@ -46,7 +46,7 @@ func TestAuthorizeWebSocketExamSubscriptionConcealsMissingAndDeniedExams(t *test
 func TestAuthorizeWebSocketSittingSubscriptionUsesRelationshipGate(t *testing.T) {
 	t.Parallel()
 	sittings := &realtimeSittingViewFake{}
-	admission := &realtimeAdmissionService{sittings: sittings}
+	admission := &RealtimeAdmission{sittings: sittings}
 	principal := testExamPrincipal(model.NewUserID())
 	sittingID := model.NewExamSittingID()
 	err := admission.AuthorizeWebSocketSubscription(context.Background(),
@@ -62,7 +62,7 @@ func TestAuthorizeWebSocketSittingSubscriptionConcealsMissingAndDeniedTargets(t 
 	principal := testExamPrincipal(model.NewUserID())
 	resource := model.Resource{Type: model.ResourceExamSitting, ID: model.NewExamSittingID().String()}
 	for _, failure := range []error{apperror.New("exam.sitting.not_found"), apperror.New("authorization.denied")} {
-		admission := &realtimeAdmissionService{sittings: &realtimeSittingViewFake{err: failure}}
+		admission := &RealtimeAdmission{sittings: &realtimeSittingViewFake{err: failure}}
 		err := admission.AuthorizeWebSocketSubscription(context.Background(), invocation.New(principal, model.RequestMetadata{}),
 			model.ActionExamSittingView, resource)
 		require.True(t, apperror.Is(err, "resource.not_found"), "error = %v, want concealed resource.not_found", err)

@@ -18,7 +18,7 @@ import (
 
 // userRealtimeEffects publishes the realtime effects of User changes through
 // the application's realtime service.
-type userRealtimeEffects struct{ realtime *realtimeService }
+type userRealtimeEffects struct{ realtime *RealtimeService }
 
 func (e userRealtimeEffects) SettingsChanged(ctx context.Context, change user.SettingsChange) error {
 	event, err := realtime.NewUserSettingsChangedEvent(

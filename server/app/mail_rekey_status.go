@@ -57,7 +57,8 @@ type mailRekeyJobReader interface {
 	Get(context.Context, model.JobID) (*model.Job, error)
 }
 
-func (s *mailService) GetMailRekeyStatus(ctx context.Context, invocation invocation.Invocation, jobID model.JobID) (MailRekeyStatusView, error) {
+// GetMailRekeyStatus reports the progress of one mail rekey Job.
+func (s *MailService) GetMailRekeyStatus(ctx context.Context, invocation invocation.Invocation, jobID model.JobID) (MailRekeyStatusView, error) {
 	if s == nil {
 		return MailRekeyStatusView{}, apperror.New("mail.unavailable")
 	}

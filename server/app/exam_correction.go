@@ -17,7 +17,7 @@ import (
 )
 
 type examCorrectionRealtimeEffects struct {
-	realtime    *realtimeService
+	realtime    *RealtimeService
 	collections examCollectionInvalidationEffects
 }
 

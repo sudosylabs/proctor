@@ -23,7 +23,7 @@ import (
 // with the reason each takes no Invocation. Every other exported method is a
 // use case.
 var nonUseCaseSurface = map[string]string{
-	"Jobs":                           "runtime handle that composition borrows",
+	"JobEngine":                      "runtime handle that composition borrows",
 	"AttachRealtimeSink":             "composition attaches the WebSocket sink once before readiness",
 	"AttachRealtimeClusterFanout":    "composition attaches the cluster fan-out once before readiness",
 	"AuthenticateAccess":             principalResolution,
@@ -50,10 +50,10 @@ const (
 
 // TestUseCasesTakeAnInvocationFirst keeps one call shape for every use case:
 // each exported method of the application surface (the method set of
-// *app.App, promoted from its embedded services, and of each named area
-// field such as App.Academic) takes (context.Context,
-// invocation.Invocation, ...) or, for actorless Job, periodic, startup and
-// host-operator work, (context.Context, invocation.System, ...).
+// *app.App and of each named service field such as App.Academic) takes
+// (context.Context, invocation.Invocation, ...) or, for actorless Job,
+// periodic, startup and host-operator work, (context.Context,
+// invocation.System, ...).
 func TestUseCasesTakeAnInvocationFirst(t *testing.T) {
 	t.Parallel()
 	for _, violation := range useCaseInvocationViolations(typedServerPackages(t), serverModule, nonUseCaseSurface) {

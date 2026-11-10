@@ -13,44 +13,53 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-func constructJobs(
-	deps Dependencies,
-	foundation applicationFoundation,
-	access accessAcademicConstruction,
-	accounts accountConstruction,
-	examinations examinationConstruction,
-	profiles profileFileConstruction,
-) (jobConstruction, error) {
-	if deps.Store.Job() == nil {
-		return jobConstruction{}, nil
-	}
-	if examinations.sittings == nil || examinations.attempts == nil {
-		return jobConstruction{}, errors.New("Examination lifecycle use cases are required when Jobs are enabled")
-	}
+// jobRuntime is the durable Job engine and the operator services built on
+// it. Every member is nil in a lifecycle-only graph that has no Job store,
+// and mail is nil when the graph has no mail store.
+type jobRuntime struct {
+	engine     *job.Engine
+	operations *JobOperations
+	mail       *MailService
+}
 
-	defaultJobs := profiles.defaultJobs
+// newJobRuntime builds the Job engine over every application Job definition,
+// connects the wakes that services built earlier hold, and builds the
+// operator Job and mail services on it.
+func newJobRuntime(
+	deps Dependencies, shared sharedMechanics, authorizer *access.Authorizer, exams examServices,
+	users *user.Service, defaultPictureJobs *jobhandler.DefaultProfilePictureJobs, onboardingPorts onboarding.Ports, wake *jobWake,
+) (jobRuntime, error) {
+	if deps.Store.Job() == nil {
+		return jobRuntime{}, nil
+	}
+	if exams.sittings == nil || exams.attempts == nil {
+		return jobRuntime{}, errors.New("Examination lifecycle use cases are required when Jobs are enabled")
+	}
 	// Enabled workers must be able to open every active payload before runtime
 	// construction. Disabled workers suppress payloads before decryption, so a
 	// deliberately absent or retired ring must not prevent that convergence.
 	if deps.Store.Mail() != nil && deps.MailDeliverySender != nil && deps.MailDeliverySender.Enabled() {
 		if err := validateActiveMailPayloadKeys(context.Background(), deps.Store.Mail(), deps.MailSecretSealer); err != nil {
-			return jobConstruction{}, err
+			return jobRuntime{}, err
 		}
 	}
-	mailHealth := foundation.mailHealth
+	mailHealth := shared.mailHealth
 	if mailHealth == nil {
 		mailHealth = newMailHealth(deps.MailDeliverySender != nil && deps.MailDeliverySender.Enabled())
 	}
-	definitions := buildApplicationJobDefinitions(deps, foundation, accounts, examinations, profiles, defaultJobs, mailHealth)
-	runtime, err := job.New(job.Dependencies{
+	definitions := buildApplicationJobDefinitions(deps, shared, exams, users, defaultPictureJobs, onboardingPorts, mailHealth)
+	engine, err := job.New(job.Dependencies{
 		Store: deps.Store.Job(), Descriptors: definitions.descriptors, NodeID: deps.NodeID,
 		Diagnostics:   deps.RecoveryDiagnostics,
 		Recorder:      deps.JobRecorder,
@@ -60,32 +69,31 @@ func constructJobs(
 		PeriodicTasks: definitions.periodicTasks,
 	})
 	if err != nil {
-		return jobConstruction{}, err
+		return jobRuntime{}, err
 	}
-	if defaultJobs != nil {
-		defaultJobs.SetWake(runtime.Wake)
+	if defaultPictureJobs != nil {
+		defaultPictureJobs.SetWake(engine.Wake)
 	}
-	if accounts.wake != nil {
-		accounts.wake.wake = runtime.Wake
+	if wake != nil {
+		wake.wake = engine.Wake
 	}
-	var mailService *mailService
+	var mailOperations *MailService
 	if deps.Store.Mail() != nil {
-		mailService, err = newMailService(mailServiceDependencies{Mail: deps.Store.Mail(), Users: deps.Store.User(), Authorization: mailAuthorizationAdapter{authorization: access.authorization, institutions: deps.Store.Institution()}, Audit: foundation.audit.MailAudit(), Attempts: foundation.attempts, Renderer: deps.MailTemplateRenderer, Sender: deps.MailDeliverySender, Metrics: deps.MailMetricsReader, Sealer: deps.MailSecretSealer, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Now: time.Now,
+		mailOperations, err = newMailService(mailServiceDependencies{Mail: deps.Store.Mail(), Users: deps.Store.User(), Authorization: mailAuthorizationAdapter{authorization: authorizer, institutions: deps.Store.Institution()}, Audit: shared.audit.MailAudit(), Attempts: shared.attempts, Renderer: deps.MailTemplateRenderer, Sender: deps.MailDeliverySender, Metrics: deps.MailMetricsReader, Sealer: deps.MailSecretSealer, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Now: time.Now,
 			InstitutionName: (&institutionNameCache{institutions: deps.Store.Institution(), now: time.Now}).Name})
 		if err != nil {
-			return jobConstruction{}, err
+			return jobRuntime{}, err
 		}
-		mailService.rekeyJobs = deps.Store.Job()
-		mailService.rekeyAudit = foundation.audit.MutationAudit()
-		mailService.wake = runtime.Wake
+		mailOperations.rekeyJobs = deps.Store.Job()
+		mailOperations.rekeyAudit = shared.audit.MutationAudit()
+		mailOperations.wake = engine.Wake
 	}
-
-	operations, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: runtime, Authorization: jobOperationsAuthorization{authorization: access.authorization, institutions: deps.Store.Institution()}, Audit: foundation.audit.MutationAudit(),
+	operations, err := newJobOperationsService(jobOperationsServiceDependencies{Jobs: engine, Authorization: jobOperationsAuthorization{authorization: authorizer, institutions: deps.Store.Institution()}, Audit: shared.audit.MutationAudit(),
 		Users: deps.Store.User(), ExamExports: deps.Store.ExamExport(), Now: time.Now})
 	if err != nil {
-		return jobConstruction{}, err
+		return jobRuntime{}, err
 	}
-	return jobConstruction{runtime: runtime, operations: operations, mail: mailService}, nil
+	return jobRuntime{engine: engine, operations: operations, mail: mailOperations}, nil
 }
 
 type activeMailPayloadKeyStore interface {
@@ -142,49 +150,69 @@ type applicationJobDefinitions struct {
 // use the same definition graph that production passes to the Job engine.
 func buildApplicationJobDefinitions(
 	deps Dependencies,
-	foundation applicationFoundation,
-	accounts accountConstruction,
-	examinations examinationConstruction,
-	profiles profileFileConstruction,
-	defaultJobs *jobhandler.DefaultProfilePictureJobs,
+	shared sharedMechanics,
+	exams examServices,
+	users *user.Service,
+	defaultPictureJobs *jobhandler.DefaultProfilePictureJobs,
+	onboardingPorts onboarding.Ports,
 	mailHealth *MailHealth,
 ) applicationJobDefinitions {
 	if mailHealth == nil {
 		mailHealth = newMailHealth(deps.MailDeliverySender != nil && deps.MailDeliverySender.Enabled())
 	}
-	lifecycleUseCases := examSittingLifecycleJobUseCases{sittings: examinations.sittings}
-	sealingUseCases := examSittingSealingJobUseCases{sittings: examinations.sittings, attempts: examinations.attempts,
+	lifecycleUseCases := examSittingLifecycleJobUseCases{sittings: exams.sittings}
+	sealingUseCases := examSittingSealingJobUseCases{sittings: exams.sittings, attempts: exams.attempts,
 		jobs: deps.Store.Job(), now: time.Now, newID: model.NewJobID}
-	retentionJobs := administration.NewRetentionJobs(foundation.audit, deps.Store.Retention(), deps.Store.User(), foundation.mail, time.Now)
+	retentionJobs := administration.NewRetentionJobs(shared.audit, deps.Store.Retention(), deps.Store.User(), shared.mail, time.Now)
 	catalog := jobhandler.NewCatalog(jobhandler.CatalogDependencies{
 		JobStore:                       deps.Store.Job(),
-		DefaultProfilePictureGenerator: jobDefaultProfilePictureGenerator{service: profiles.users}, Users: deps.Store.User(), DefaultProfilePictureJobs: defaultJobs,
+		DefaultProfilePictureGenerator: jobDefaultProfilePictureGenerator{service: users}, Users: deps.Store.User(), DefaultProfilePictureJobs: defaultPictureJobs,
 		Files: deps.Store.File(), FileContent: deps.FileContent,
 		StarterWorkspaces: deps.Store.ExamStarterWorkspace(), StarterWorkspaceContent: deps.FileContent,
 		AttemptWorkspaces: deps.Store.ExamAttemptWorkspace(), AttemptWorkspaceContent: deps.FileContent,
 		CommandOutcomes: deps.Store.CommandOutcome(), AuditAttempts: deps.Store.Audit(),
 		Sessions: deps.Store.Session(), SessionCredentials: deps.Store.SessionCredential(), SessionRetiredRetention: deps.Sessions.RetiredRetention,
-		ExamExports: examinations.exports, ExamExportStore: deps.Store.ExamExport(), ExamExportContent: deps.FileContent,
+		ExamExports: exams.exports, ExamExportStore: deps.Store.ExamExport(), ExamExportContent: deps.FileContent,
 		Retention: deps.Store.Retention(), RetentionContent: deps.FileContent, RetentionAudit: retentionJobs.Audit,
 		RetentionExpiry: deps.Store.Retention(), RetentionExpiryAudit: retentionJobs.ExpiryAudit,
 		RetentionNotices: deps.Store.Retention(), RetentionNoticeDispatcher: retentionJobs.Notices,
 		MailDeliveries: deps.Store.Mail(), MailSender: deps.MailDeliverySender, MailSealer: deps.MailSecretSealer,
 		MailRecorder: jobMailDeliveryRecorder{recorder: deps.MailDeliveryRecorder}, MailHealth: jobMailHealth{health: mailHealth},
-		MailRelevance: jobMailDeliveryIsRelevant, SittingMailStore: deps.Store.ExamSitting(), SittingMail: examinations.sittingMail,
+		MailRelevance: jobMailDeliveryIsRelevant, SittingMailStore: deps.Store.ExamSitting(), SittingMail: exams.sittingMail,
 		MailCleanup: deps.Store.Mail(), SittingMailMaintenance: deps.Store.ExamSitting(), MailRekey: deps.Store.Mail(), MFARekey: deps.Store.MFA(), MFASealer: deps.MFASecretSealer,
 		Invitations: deps.Store.Invitation(), OnboardingImports: deps.Store.OnboardingImport(), OnboardingFiles: deps.FileContent,
-		ExamSittingLifecycle: lifecycleUseCases, ExamSittingSealing: sealingUseCases, Onboarding: accounts.onboardingPorts.ImportJobs, Now: time.Now,
+		ExamSittingLifecycle: lifecycleUseCases, ExamSittingSealing: sealingUseCases, Onboarding: onboardingPorts.ImportJobs, Now: time.Now,
 	})
 	periodicTasks := []job.PeriodicTask{
-		{Name: examAttemptExpiryPeriodicTaskName, Interval: examAttemptExpiryScanInterval, Runner: examAttemptExpiryPeriodicRunner{attempts: examinations.attempts}},
+		{Name: examAttemptExpiryPeriodicTaskName, Interval: examAttemptExpiryScanInterval, Runner: examAttemptExpiryPeriodicRunner{attempts: exams.attempts}},
 	}
 	periodicTasks = append(periodicTasks, identity.MaintenanceTasks(deps.Store)...)
 	periodicTasks = append(periodicTasks, []job.PeriodicTask{
 		{Name: "exam-sitting-mail-reconciliation", Interval: sittingMailReconciliationInterval,
-			Runner: sittingMailReconciliationPeriodicRunner{sittings: deps.Store.ExamSitting(), mail: examinations.sittingMailPreparation}},
+			Runner: sittingMailReconciliationPeriodicRunner{sittings: deps.Store.ExamSitting(), mail: exams.sittingMailPreparation}},
 	}...)
 	if deps.Store.Mail() != nil && deps.MailDeliverySender != nil {
 		periodicTasks = append(periodicTasks, job.PeriodicTask{Name: "mail-maintenance-monitor", Interval: time.Minute, Runner: mailMaintenanceMonitor{mail: deps.Store.Mail(), sender: deps.MailDeliverySender, health: mailHealth, recorder: deps.MailDeliveryRecorder, now: time.Now}})
 	}
 	return applicationJobDefinitions{descriptors: catalog.Descriptors, recurrences: catalog.Recurrences, periodicTasks: periodicTasks}
+}
+
+// administrationCountsDependencies projects the summary's counters from the
+// services that exist; a reduced lifecycle test graph may lack some, and
+// their counts are then left out.
+func administrationCountsDependencies(onboardingPorts onboarding.Ports, jobs jobRuntime) administrationCountsServiceDependencies {
+	var deps administrationCountsServiceDependencies
+	if onboardingPorts.CountPendingInvitations != nil {
+		deps.Invitations = pendingInvitationCounter(onboardingPorts.CountPendingInvitations)
+	}
+	if onboardingPorts.CountOpenImports != nil {
+		deps.Imports = openImportCounter(onboardingPorts.CountOpenImports)
+	}
+	if jobs.operations != nil {
+		deps.Jobs = jobs.operations
+	}
+	if jobs.mail != nil {
+		deps.Mail = jobs.mail
+	}
+	return deps
 }

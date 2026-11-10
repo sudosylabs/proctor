@@ -53,7 +53,7 @@ func TestAuthenticationAttemptAccountingHasOneProductionOwner(t *testing.T) {
 				selector, ok := call.Fun.(*ast.SelectorExpr)
 				if ok && selector.Sel.Name == "NewAttemptAccounting" {
 					constructorCalls++
-					assert.Equal(t, "../construction.go", filepath.Join(directory, name))
+					assert.Equal(t, "../new.go", filepath.Join(directory, name))
 				}
 				identifier, ok := call.Fun.(*ast.Ident)
 				if ok && identifier.Name == "NewAttemptAccounting" {

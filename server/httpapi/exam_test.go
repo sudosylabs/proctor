@@ -371,7 +371,6 @@ func TestExamHTTPResponseIsBoundedAndContainsTypedPolicy(t *testing.T) {
 }
 
 type examHTTPApplication struct {
-	Application
 	principal              model.Principal
 	view                   exam.View
 	create                 exam.CreateCommand

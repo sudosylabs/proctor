@@ -25,7 +25,7 @@ type examCollectionInvalidationStore interface {
 
 type examCollectionInvalidationEffects struct {
 	sittings examCollectionInvalidationStore
-	realtime *realtimeService
+	realtime *RealtimeService
 }
 
 func (e examCollectionInvalidationEffects) CandidateActivityChangedForSitting(

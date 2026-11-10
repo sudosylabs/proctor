@@ -19,22 +19,15 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// serviceConstructionAllowlist names the only application constructors of a
-// collaborator-holding type that do not keep their Dependencies in a deps
-// field, with the reason.
-var serviceConstructionAllowlist = map[string]string{
-	"app.New": "App embeds the focused services; New distributes its Dependencies to them and keeps none itself",
-}
-
-// TestServicesTakeOneDependencies keeps one construction shape for every
-// application service, in app and its child modules: a New or new function
-// that builds a type holding collaborators (interfaces, functions, or
-// pointers to types with methods) takes exactly one parameter, a struct named
-// Dependencies or <X>Dependencies declared beside it, and the type keeps that
-// value in a field named deps.
+// TestServicesTakeOneDependencies keeps service constructors from growing
+// positional parameter lists, in app and its child modules: a New or new
+// function that builds, by pointer, a type of its own package holding
+// collaborators (interfaces, functions, or pointers to types with methods)
+// takes exactly one parameter, a struct named Dependencies or <X>Dependencies
+// declared beside it.
 func TestServicesTakeOneDependencies(t *testing.T) {
 	t.Parallel()
-	for _, violation := range serviceConstructionViolations(typedServerPackages(t), serverModule, serviceConstructionAllowlist) {
+	for _, violation := range serviceConstructionViolations(typedServerPackages(t), serverModule) {
 		assert.Fail(t, violation)
 	}
 }
@@ -57,31 +50,25 @@ func newPositional(reader reader, now func() time.Time) *positional {
 	return &positional{reader: reader, now: now}
 }
 
-type unkeptDependencies struct{ Reader reader }
-
-type unkept struct{ reader reader }
-
-func newUnkept(deps unkeptDependencies) (*unkept, error) { return &unkept{reader: deps.Reader}, nil }
-
-type configured struct{ deps Config }
+type configured struct{ reader reader }
 
 type Config struct{ Reader reader }
 
-func newConfigured(config Config) *configured { return &configured{deps: config} }
+func newConfigured(config Config) *configured { return &configured{reader: config.Reader} }
 
 type keptDependencies struct{ Reader reader }
 
-type kept struct{ deps keptDependencies }
+type kept struct{ reader reader }
 
-func newKept(deps keptDependencies) *kept { return &kept{deps: deps} }
+func newKept(deps keptDependencies) *kept { return &kept{reader: deps.Reader} }
 
 type page struct{ items []string }
 
 func newPage(items []string, limit int) *page { return &page{items: items[:limit]} }
 
-type App struct{ *kept }
+type App struct{ Kept *kept }
 
-func New(deps keptDependencies) *App { return &App{kept: newKept(deps)} }
+func New(deps keptDependencies) *App { return &App{Kept: newKept(deps)} }
 `,
 		"app/area/area.go": `package area
 
@@ -95,18 +82,17 @@ func New(deps Dependencies) (*Service, error) { return &Service{reader: deps.Rea
 
 type helper struct{ reader reader }
 
-func newHelper(deps Dependencies) *helper { return &helper{reader: deps.Reader} }
+func newHelper(reader reader, limit int) *helper { return &helper{reader: reader} }
 `,
 	})
 	require.Equal(t, []string{
-		"area.go:13: fixture/app/area.newHelper keeps no deps field of type Dependencies in helper",
-		"services.go:12: fixture/app.newPositional takes 2 parameters; take one Dependencies struct and keep it in positional.deps",
-		"services.go:20: fixture/app.newUnkept keeps no deps field of type unkeptDependencies in unkept",
-		"services.go:26: fixture/app.newConfigured takes Config; take one struct named Dependencies or <X>Dependencies",
-	}, serviceConstructionViolations(loaded, "fixture", map[string]string{"app.New": "embedding facade"}))
+		"area.go:13: fixture/app/area.newHelper takes 2 parameters; take one Dependencies struct",
+		"services.go:12: fixture/app.newPositional takes 2 parameters; take one Dependencies struct",
+		"services.go:20: fixture/app.newConfigured takes Config; take one struct named Dependencies or <X>Dependencies",
+	}, serviceConstructionViolations(loaded, "fixture"))
 }
 
-func serviceConstructionViolations(loaded []*packages.Package, module string, allowed map[string]string) []string {
+func serviceConstructionViolations(loaded []*packages.Package, module string) []string {
 	var violations []string
 	for _, pkg := range loaded {
 		if pkg.PkgPath != module+"/app" && !strings.HasPrefix(pkg.PkgPath, module+"/app/") {
@@ -118,33 +104,21 @@ func serviceConstructionViolations(loaded []*packages.Package, module string, al
 			if !ok || !(strings.HasPrefix(name, "New") || strings.HasPrefix(name, "new")) {
 				continue
 			}
-			if _, exempt := allowed[pkg.Types.Name()+"."+name]; exempt {
-				continue
-			}
 			signature := constructor.Type().(*types.Signature)
-			built := constructedService(pkg.Types, signature)
-			if built == nil {
+			if constructedService(pkg.Types, signature) == nil {
 				continue
 			}
 			position := sourcePosition(pkg, constructor.Pos())
 			qualified := pkg.PkgPath + "." + name
 			if signature.Params().Len() != 1 {
-				violations = append(violations, fmt.Sprintf("%s: %s takes %d parameters; take one Dependencies struct and keep it in %s.deps",
-					position, qualified, signature.Params().Len(), built.Obj().Name()))
+				violations = append(violations, fmt.Sprintf("%s: %s takes %d parameters; take one Dependencies struct",
+					position, qualified, signature.Params().Len()))
 				continue
 			}
 			dependencies, ok := signature.Params().At(0).Type().(*types.Named)
 			if !ok || dependencies.Obj().Pkg() != pkg.Types || !strings.HasSuffix(dependencies.Obj().Name(), "Dependencies") {
 				violations = append(violations, fmt.Sprintf("%s: %s takes %s; take one struct named Dependencies or <X>Dependencies",
 					position, qualified, types.TypeString(signature.Params().At(0).Type(), types.RelativeTo(pkg.Types))))
-				continue
-			}
-			if areaServiceConstructor(pkg.PkgPath, module, name, built, dependencies) {
-				continue
-			}
-			if !keepsDependencies(built, dependencies) {
-				violations = append(violations, fmt.Sprintf("%s: %s keeps no deps field of type %s in %s",
-					position, qualified, dependencies.Obj().Name(), built.Obj().Name()))
 			}
 		}
 	}
@@ -192,25 +166,6 @@ func holdsCollaborator(structure *types.Struct, depth int) bool {
 			if depth == 0 && structure.Field(index).Name() == "deps" && holdsCollaborator(underlying, depth+1) {
 				return true
 			}
-		}
-	}
-	return false
-}
-
-// areaServiceConstructor reports the area-package shape: a child package of
-// app whose New(Dependencies) builds its Service and keeps the collaborators
-// as the Service's own fields rather than a deps copy.
-func areaServiceConstructor(pkgPath, module, name string, built, dependencies *types.Named) bool {
-	return strings.HasPrefix(pkgPath, module+"/app/") && name == "New" &&
-		built.Obj().Name() == "Service" && dependencies.Obj().Name() == "Dependencies"
-}
-
-func keepsDependencies(built, dependencies *types.Named) bool {
-	structure := built.Underlying().(*types.Struct)
-	for index := range structure.NumFields() {
-		field := structure.Field(index)
-		if field.Name() == "deps" && types.Identical(field.Type(), dependencies) {
-			return true
 		}
 	}
 	return false

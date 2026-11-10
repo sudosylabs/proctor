@@ -137,7 +137,7 @@ func onboardingImportListAPI(t *testing.T, fake *recordingOnboardingImportApplic
 	}
 	options := validHTTPOptions(t)
 	options.OnboardingImports = fake
-	options.Application.(*testHTTPApplication).principal = &principal
+	options.Identity.(*testHTTPApplication).principal = &principal
 	httpAPI, err := New(options)
 	require.NoError(t, err)
 	return httpAPI

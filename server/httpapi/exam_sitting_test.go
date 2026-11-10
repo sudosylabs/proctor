@@ -360,7 +360,6 @@ func TestExamSittingHTTPListsNoShowsWithOpaqueUserCursor(t *testing.T) {
 }
 
 type examSittingHTTPFake struct {
-	Application
 	principal    model.Principal
 	sitting      *model.ExamSitting
 	schedule     sitting.ScheduleCommand

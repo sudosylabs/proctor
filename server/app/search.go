@@ -75,7 +75,7 @@ type searchClassStore interface {
 	SearchVisible(context.Context, store.ClassSearchOptions) ([]*model.Class, error)
 }
 
-// searchServiceDependencies are the collaborators of searchService. Exams and
+// searchServiceDependencies are the collaborators of SearchService. Exams and
 // Users are the Exam catalog and User directory use cases themselves, so each
 // type is authorized, audited and scoped exactly as its own list is.
 type searchServiceDependencies struct {
@@ -85,12 +85,14 @@ type searchServiceDependencies struct {
 	Classes            searchClassStore
 }
 
-type searchService struct {
+// SearchService finds Exams, Classes and Users within the caller's own list
+// visibility for each type.
+type SearchService struct {
 	deps searchServiceDependencies
 }
 
-func newSearchService(deps searchServiceDependencies) *searchService {
-	return &searchService{deps: deps}
+func newSearchService(deps searchServiceDependencies) *SearchService {
+	return &SearchService{deps: deps}
 }
 
 // Search finds Exams by Draft title, Classes by name or display name, and
@@ -98,7 +100,7 @@ func newSearchService(deps searchServiceDependencies) *searchService {
 // authorization; a type the caller may not list contributes no matches, and
 // the search is denied only when the caller may list none of the requested
 // types. The query text never enters logs or audit records.
-func (s *searchService) Search(ctx context.Context, invocation invocation.Invocation, query SearchQuery) (SearchResult, error) {
+func (s *SearchService) Search(ctx context.Context, invocation invocation.Invocation, query SearchQuery) (SearchResult, error) {
 	term, types, limit, err := validateSearchQuery(query)
 	if err != nil {
 		return SearchResult{}, err
@@ -137,7 +139,7 @@ func (s *searchService) Search(ctx context.Context, invocation invocation.Invoca
 	return result, nil
 }
 
-func (s *searchService) searchClasses(ctx context.Context, invocation invocation.Invocation, term string, limit int) ([]*model.Class, error) {
+func (s *SearchService) searchClasses(ctx context.Context, invocation invocation.Invocation, term string, limit int) ([]*model.Class, error) {
 	visibility, err := s.deps.ClassAuthorization.AuthorizeClassSearch(ctx, invocation)
 	if err != nil {
 		return nil, err

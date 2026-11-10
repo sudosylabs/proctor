@@ -64,7 +64,10 @@ type composedWebSocket interface {
 }
 
 var (
-	_ httpapi.Application                            = (*app.App)(nil)
+	_ httpapi.SearchApplication                      = (*app.SearchService)(nil)
+	_ httpapi.AdministrationCountsApplication        = (*app.AdministrationCounts)(nil)
+	_ httpapi.JobOperationsApplication               = (*app.JobOperations)(nil)
+	_ websocket.Application                          = (*app.RealtimeAdmission)(nil)
 	_ httpapi.IdentityApplication                    = (*identity.Service)(nil)
 	_ httpapi.AcademicUnitApplication                = (*academic.Service)(nil)
 	_ httpapi.InstitutionApplication                 = (*academic.Service)(nil)
@@ -93,7 +96,7 @@ var (
 	_ httpapi.AccessPolicyApplication                = (*administration.Service)(nil)
 	_ httpapi.RetentionPolicyApplication             = (*administration.Service)(nil)
 	_ httpapi.RetentionApplication                   = (*administration.Service)(nil)
-	_ httpapi.MailApplication                        = (*app.App)(nil)
+	_ httpapi.MailApplication                        = (*app.MailService)(nil)
 	_ httpapi.ExamApplication                        = (*exam.Authoring)(nil)
 	_ httpapi.ExamRevisionApplication                = (*exam.Publication)(nil)
 	_ httpapi.ExamSittingApplication                 = (*sitting.Service)(nil)
@@ -174,13 +177,13 @@ func defaultConsumerConstructors(
 			return newRealtimeClusterAdapter(cluster)
 		},
 		attachRealtime: func(application *app.App, fanout realtime.ClusterFanout) error {
-			return application.AttachRealtimeClusterFanout(fanout)
+			return application.Realtime.AttachRealtimeClusterFanout(fanout)
 		},
 		websocket: func(application *app.App, logger runtimeLogger, publicURL, nodeID string) (composedWebSocket, error) {
-			return websocket.NewHub(application, application.Attempts, websocketLogger{log: logger}, publicURL, nodeID, localizer)
+			return websocket.NewHub(application.RealtimeAdmission, application.Attempts, websocketLogger{log: logger}, publicURL, nodeID, localizer)
 		},
 		attachSink: func(application *app.App, sink realtime.Sink) error {
-			return application.AttachRealtimeSink(sink)
+			return application.Realtime.AttachRealtimeSink(sink)
 		},
 		http: func(options httpapi.Options) (runtimeTransport, http.Handler, error) {
 			options.Localizer = localizer
@@ -191,7 +194,7 @@ func defaultConsumerConstructors(
 			return webui.New(webappFiles, options)
 		},
 		jobs: func(application *app.App) runtimeComponent {
-			if runner := application.Jobs(); runner != nil {
+			if runner := application.JobEngine(); runner != nil {
 				return runner
 			}
 			return nil
@@ -467,6 +470,10 @@ func httpAPIOptions(
 	var onboardings *onboarding.Service
 	var users *user.Service
 	var (
+		search            *app.SearchService
+		counts            *app.AdministrationCounts
+		jobs              *app.JobOperations
+		mail              *app.MailService
 		examAuthoring     *exam.Authoring
 		examPublication   *exam.Publication
 		examRecords       *exam.Records
@@ -483,6 +490,8 @@ func httpAPIOptions(
 		administrations = application.Administration
 		onboardings = application.Onboarding
 		users = application.Users
+		search, counts = application.Search, application.Counts
+		jobs, mail = application.Jobs, application.Mail
 		examAuthoring, examPublication = application.ExamAuthoring, application.ExamPublication
 		examRecords, examExports = application.ExamRecords, application.ExamExports
 		sittings, attempts, reviews = application.Sittings, application.Attempts, application.Reviews
@@ -492,9 +501,10 @@ func httpAPIOptions(
 	identities := applicationIdentity(application)
 	return httpapi.Options{
 		Logger: apiLogger{log: capabilities.logger}, Health: readiness,
-		Metrics:     httpMetrics,
-		Tracing:     httpTracer,
-		Application: application, Identity: identities, AcademicUnits: academics, Institutions: academics,
+		Metrics:  httpMetrics,
+		Tracing:  httpTracer,
+		Identity: identities, Search: search, AdministrationCounts: counts, Jobs: jobs,
+		AcademicUnits: academics, Institutions: academics,
 		Programmes: academics, ProgrammeLevels: academics, AcademicPeriods: academics,
 		Classes: academics, Affiliations: academics, AcademicUnitMembers: academics,
 		ClassMembers: academics, UserProfiles: users, UserAccounts: attempts, UserSettings: users, AccountStates: identities,
@@ -507,7 +517,7 @@ func httpAPIOptions(
 		SessionAdministrations:        identities, Roles: administrations, RoleBindings: administrations,
 		AuditListings: administrations, Bootstrap: identities, AccessPolicy: administrations,
 		RetentionPolicy: administrations, Retention: administrations, BuildInfo: buildInfo,
-		Mail:  application,
+		Mail:  mail,
 		Exams: examAuthoring, ExamRevisions: examPublication, ExamSittings: sittings,
 		ExamCorrections: corrections, ExamResources: resources, ExamStarterWorkspaces: starterWorkspaces,
 		ExamAttempts: attempts, ExamIntegrityReviews: reviews, ExamRecords: examRecords, ExamExports: examExports,

@@ -79,16 +79,13 @@ type resourceApplications struct {
 }
 
 func resolveResourceApplications(options Options) (resourceApplications, error) {
-	if options.Application == nil {
-		return resourceApplications{}, errors.New("application is required")
-	}
 	if options.Identity == nil {
 		return resourceApplications{}, errors.New("identity application is required")
 	}
-	application, identity := options.Application, options.Identity
-	// These assignments are deliberately compile-time projections. Adding a
-	// broad-Application resource requires changing its declared contract, not a
-	// runtime assertion hidden in catalog construction.
+	identity := options.Identity
+	// These assignments are deliberately compile-time projections. Adding an
+	// identity resource requires changing its declared contract, not a runtime
+	// assertion hidden in catalog construction.
 	var authenticator Authenticator = identity
 	var authentication authenticationEntryApplication = identity
 	var authenticationMethods authenticationMethodApplication = identity
@@ -102,11 +99,8 @@ func resolveResourceApplications(options Options) (resourceApplications, error) 
 	var mfaKeys MFAKeyApplication = identity
 	var personalAccessTokens PersonalAccessTokens = identity
 	var userEmails UserEmailApplication = identity
-	var jobs JobOperationsApplication = application
 	var desktopCompatibility DesktopCompatibilityApplication = identity
 	var sessionReauthentication SessionReauthentication = identity
-	var search SearchApplication = application
-	var administrationCounts AdministrationCountsApplication = application
 
 	if err := requireResourceApplicationOptions(options); err != nil {
 		return resourceApplications{}, err
@@ -143,9 +137,9 @@ func resolveResourceApplications(options Options) (resourceApplications, error) 
 		retention:            options.Retention,
 		examRecords:          options.ExamRecords,
 		examExports:          options.ExamExports,
-		search:               search,
-		administrationCounts: administrationCounts,
-		audit:                options.AuditListings, jobs: jobs, mail: options.Mail, bootstrap: options.Bootstrap,
+		search:               options.Search,
+		administrationCounts: options.AdministrationCounts,
+		audit:                options.AuditListings, jobs: options.Jobs, mail: options.Mail, bootstrap: options.Bootstrap,
 	}, nil
 }
 
@@ -183,6 +177,9 @@ func requireResourceApplicationOptions(options Options) error {
 		{options.AccessPolicy == nil, "access policy application is required"},
 		{options.RetentionPolicy == nil, "retention policy application is required"},
 		{options.Retention == nil, "retention application is required"},
+		{options.Search == nil, "search application is required"},
+		{options.AdministrationCounts == nil, "administration counts application is required"},
+		{options.Jobs == nil, "job operations application is required"},
 		{options.Mail == nil, "mail application is required"},
 		{options.Exams == nil, "exam application is required"},
 		{options.ExamRevisions == nil, "exam revision application is required"},

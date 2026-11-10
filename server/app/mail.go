@@ -109,8 +109,8 @@ type mailAuditPreparer interface {
 	Fail(context.Context, model.AuditEventID, string) error
 }
 
-// mailServiceDependencies are the collaborators of mailService;
-// newMailService validates them once and mailService keeps them in deps.
+// mailServiceDependencies are the collaborators of MailService;
+// newMailService validates them once and MailService keeps them in deps.
 type mailServiceDependencies struct {
 	Mail                    mailStore
 	Users                   mailUserStore
@@ -127,7 +127,10 @@ type mailServiceDependencies struct {
 	InstitutionName func() string
 }
 
-type mailService struct {
+// MailService holds the operator mail use cases: delivery listing, inspection,
+// cancellation and retry, metrics, test mail, and payload-key rotation. A nil
+// MailService answers that mail operations are unavailable.
+type MailService struct {
 	deps mailServiceDependencies
 
 	rekey      mailRekeyStarter
@@ -191,7 +194,7 @@ func (c *institutionNameCache) Name() string {
 	return c.name
 }
 
-func newMailService(deps mailServiceDependencies) (*mailService, error) {
+func newMailService(deps mailServiceDependencies) (*MailService, error) {
 	if deps.Mail == nil || deps.Users == nil || deps.Authorization == nil || deps.Audit == nil || deps.Attempts == nil || deps.Renderer == nil || deps.Sender == nil || deps.Metrics == nil || deps.Now == nil || deps.RecentAuthenticationTTL <= 0 {
 		return nil, errors.New("mail service dependencies are invalid")
 	}
@@ -204,10 +207,11 @@ func newMailService(deps mailServiceDependencies) (*mailService, error) {
 	}
 	rekey, _ := deps.Mail.(mailRekeyStarter)
 	keyState, _ := deps.Mail.(mailKeyInspector)
-	return &mailService{deps: deps, rekey: rekey, keyState: keyState, composer: composer}, nil
+	return &MailService{deps: deps, rekey: rekey, keyState: keyState, composer: composer}, nil
 }
 
-func (s *mailService) GetMailMetrics(ctx context.Context, invocation invocation.Invocation) (MailMetricsSnapshot, error) {
+// GetMailMetrics returns the current mail delivery metrics snapshot.
+func (s *MailService) GetMailMetrics(ctx context.Context, invocation invocation.Invocation) (MailMetricsSnapshot, error) {
 	if s == nil {
 		return MailMetricsSnapshot{}, apperror.New("mail.unavailable")
 	}
@@ -217,7 +221,9 @@ func (s *mailService) GetMailMetrics(ctx context.Context, invocation invocation.
 	return s.deps.Metrics.Snapshot(), nil
 }
 
-func (s *mailService) SendTestMail(ctx context.Context, invocation invocation.Invocation) (MailDeliveryView, error) {
+// SendTestMail queues a rate-limited test message to the recently
+// authenticated caller's own verified address, with audit.
+func (s *MailService) SendTestMail(ctx context.Context, invocation invocation.Invocation) (MailDeliveryView, error) {
 	if s == nil {
 		return MailDeliveryView{}, apperror.New("mail.unavailable")
 	}
@@ -270,7 +276,8 @@ func (s *mailService) SendTestMail(ctx context.Context, invocation invocation.In
 	return mailDeliveryView(created), nil
 }
 
-func (s *mailService) GetMailDelivery(ctx context.Context, invocation invocation.Invocation, id model.MailDeliveryID) (MailDeliveryView, error) {
+// GetMailDelivery returns one mail delivery.
+func (s *MailService) GetMailDelivery(ctx context.Context, invocation invocation.Invocation, id model.MailDeliveryID) (MailDeliveryView, error) {
 	if s == nil {
 		return MailDeliveryView{}, apperror.New("mail.unavailable")
 	}
@@ -291,7 +298,8 @@ func (s *mailService) GetMailDelivery(ctx context.Context, invocation invocation
 	return mailDeliveryView(delivery), nil
 }
 
-func (s *mailService) ListMailDeliveries(ctx context.Context, invocation invocation.Invocation, query ListMailDeliveriesQuery) (MailDeliveryPage, error) {
+// ListMailDeliveries lists one page of mail deliveries.
+func (s *MailService) ListMailDeliveries(ctx context.Context, invocation invocation.Invocation, query ListMailDeliveriesQuery) (MailDeliveryPage, error) {
 	if s == nil {
 		return MailDeliveryPage{}, apperror.New("mail.unavailable")
 	}
@@ -336,7 +344,7 @@ func (s *mailService) ListMailDeliveries(ctx context.Context, invocation invocat
 // state, authorized and audited exactly as ListMailDeliveries is, stopping
 // at maximum. Suppressed and canceled deliveries are policy and operator
 // outcomes rather than failures, so they are not counted.
-func (s *mailService) countFailedMailDeliveries(ctx context.Context, invocation invocation.Invocation, maximum int) (int, error) {
+func (s *MailService) countFailedMailDeliveries(ctx context.Context, invocation invocation.Invocation, maximum int) (int, error) {
 	if s == nil {
 		return 0, apperror.New("mail.unavailable")
 	}
@@ -363,21 +371,23 @@ func mailListError(err error) error {
 	return mailStoreErrors.Translate(err)
 }
 
-func (s *mailService) CancelMailDelivery(ctx context.Context, invocation invocation.Invocation, id model.MailDeliveryID) (MailDeliveryView, error) {
+// CancelMailDelivery cancels one mail delivery, with audit.
+func (s *MailService) CancelMailDelivery(ctx context.Context, invocation invocation.Invocation, id model.MailDeliveryID) (MailDeliveryView, error) {
 	if s == nil {
 		return MailDeliveryView{}, apperror.New("mail.unavailable")
 	}
 	return s.mutate(ctx, invocation, "cancel", id, false, s.deps.Mail.CancelDelivery)
 }
 
-func (s *mailService) RetryMailDelivery(ctx context.Context, invocation invocation.Invocation, id model.MailDeliveryID) (MailDeliveryView, error) {
+// RetryMailDelivery retries one mail delivery, with audit.
+func (s *MailService) RetryMailDelivery(ctx context.Context, invocation invocation.Invocation, id model.MailDeliveryID) (MailDeliveryView, error) {
 	if s == nil {
 		return MailDeliveryView{}, apperror.New("mail.unavailable")
 	}
 	return s.mutate(ctx, invocation, "retry", id, true, s.deps.Mail.RetryDelivery)
 }
 
-func (s *mailService) mutate(ctx context.Context, invocation invocation.Invocation, operation string, id model.MailDeliveryID, retry bool, apply func(context.Context, *store.MailDeliveryMutation) (*model.MailDelivery, error)) (MailDeliveryView, error) {
+func (s *MailService) mutate(ctx context.Context, invocation invocation.Invocation, operation string, id model.MailDeliveryID, retry bool, apply func(context.Context, *store.MailDeliveryMutation) (*model.MailDelivery, error)) (MailDeliveryView, error) {
 	principal := invocation.Principal()
 	if principal.Validate() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return MailDeliveryView{}, access.InvalidTokenAppError()
@@ -421,7 +431,7 @@ func (s *mailService) mutate(ctx context.Context, invocation invocation.Invocati
 	return mailDeliveryView(updated), nil
 }
 
-func (s *mailService) checkTestRateLimit(ctx context.Context, userID model.UserID) error {
+func (s *MailService) checkTestRateLimit(ctx context.Context, userID model.UserID) error {
 	limited, err := s.deps.Attempts.Account(ctx, identity.AttemptPurposeMailTest, "", mailTestRateLimitWindow, identity.IdentityAttemptLimit(userID.String(), mailTestRateLimitMaximum))
 	if err != nil {
 		return apperror.New("mail.unavailable").Wrap(err)

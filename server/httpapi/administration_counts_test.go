@@ -24,12 +24,12 @@ import (
 )
 
 type administrationCountsHTTPApplication struct {
-	counts app.AdministrationCounts
+	counts app.AdministrationCountsResult
 	err    error
 	calls  int
 }
 
-func (a *administrationCountsHTTPApplication) AdministrationCounts(context.Context, invocation.Invocation) (app.AdministrationCounts, error) {
+func (a *administrationCountsHTTPApplication) AdministrationCounts(context.Context, invocation.Invocation) (app.AdministrationCountsResult, error) {
 	a.calls++
 	return a.counts, a.err
 }
@@ -37,7 +37,7 @@ func (a *administrationCountsHTTPApplication) AdministrationCounts(context.Conte
 func TestAdministrationCountsOmitsCountsTheCallerMayNotList(t *testing.T) {
 	t.Parallel()
 	logger, _ := newTestLogger(t)
-	application := &administrationCountsHTTPApplication{counts: app.AdministrationCounts{
+	application := &administrationCountsHTTPApplication{counts: app.AdministrationCountsResult{
 		PendingInvitations:   &app.AdministrationCount{Count: 12},
 		FailedMailDeliveries: &app.AdministrationCount{Count: app.MaximumAdministrationCount, IsLowerBound: true},
 	}}
@@ -53,7 +53,7 @@ func TestAdministrationCountsOmitsCountsTheCallerMayNotList(t *testing.T) {
 		"failed_mail_deliveries": float64(app.MaximumAdministrationCount), "failed_mail_deliveries_is_lower_bound": true,
 	}, body, "a count the caller may not list is omitted with its flag")
 
-	application.counts = app.AdministrationCounts{}
+	application.counts = app.AdministrationCountsResult{}
 	empty := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/administration/counts", "", true)
 	require.Equal(t, http.StatusOK, empty.Code, empty.Body.String())
 	require.JSONEq(t, `{}`, empty.Body.String())

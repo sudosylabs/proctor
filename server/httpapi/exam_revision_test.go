@@ -148,7 +148,6 @@ func TestExamRevisionHTTPCursorAndPublishBodyAreStrict(t *testing.T) {
 }
 
 type examRevisionHTTPFake struct {
-	Application
 	principal model.Principal
 	summary   store.ExamRevisionSummary
 	publish   exam.PublishRevisionCommand

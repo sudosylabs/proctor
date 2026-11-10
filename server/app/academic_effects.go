@@ -24,7 +24,7 @@ import (
 // onboarding area uses its Class Membership effects as well.
 type academicRealtimeEffects struct {
 	sittings store.ExamSittingStore
-	realtime *realtimeService
+	realtime *RealtimeService
 }
 
 func (e academicRealtimeEffects) Created(ctx context.Context, unitID model.AcademicUnitID) error {

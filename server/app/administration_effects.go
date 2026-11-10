@@ -17,7 +17,7 @@ import (
 
 // administrationRealtimeEffects publishes the realtime effects of
 // administration changes through the application's realtime service.
-type administrationRealtimeEffects struct{ realtime *realtimeService }
+type administrationRealtimeEffects struct{ realtime *RealtimeService }
 
 func (e administrationRealtimeEffects) InvalidateAuthorization(ctx context.Context, userID model.UserID) {
 	e.realtime.InvalidateAuthorization(ctx, userID)

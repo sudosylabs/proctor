@@ -98,7 +98,7 @@ func TestStartMailRekeyRequiresStrongRecentSessionAndEnqueuesAuditedJob(t *testi
 	}}}}
 	authorizer := &mailAuthorizerFake{}
 	auditor := &mailRekeyAuditFake{beginID: model.NewID(), events: &events}
-	service := &mailService{deps: mailServiceDependencies{Authorization: authorizer, Sealer: sealer, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return now }}, rekey: persistence, keyState: persistence, rekeyAudit: auditor}
+	service := &MailService{deps: mailServiceDependencies{Authorization: authorizer, Sealer: sealer, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return now }}, rekey: persistence, keyState: persistence, rekeyAudit: auditor}
 	woke := 0
 	service.wake = func() { woke++ }
 	// Authentication restores durable Session timestamps; the service clock
@@ -187,7 +187,7 @@ func TestStartMailRekeyCompletesConflictAndPersistenceFailureAudits(t *testing.T
 			t.Parallel()
 			persistence := &mailRekeyStarterFake{err: test.storeErr}
 			auditor := &mailRekeyAuditFake{beginID: model.NewID(), failErr: test.failErr}
-			service := &mailService{deps: mailServiceDependencies{Authorization: &mailAuthorizerFake{}, Sealer: sealer, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return now }}, rekey: persistence, rekeyAudit: auditor, wake: func() { require.FailNow(t, "failed rekey woke workers") }}
+			service := &MailService{deps: mailServiceDependencies{Authorization: &mailAuthorizerFake{}, Sealer: sealer, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return now }}, rekey: persistence, rekeyAudit: auditor, wake: func() { require.FailNow(t, "failed rekey woke workers") }}
 			principal := mailTestPrincipal(model.TimeUTC(now))
 			principal.AuthenticationStrength = model.AuthenticationMultiFactor
 			principal.MFACompletedAt = model.OptionalTimeFrom(now)
@@ -221,7 +221,7 @@ func TestGetMailRekeyStatusProjectsOnlyTypedProgressAndRetirementProof(t *testin
 	require.NoError(t, err)
 	persistence := &mailRekeyStarterFake{job: succeeded}
 	authorizer := &mailAuthorizerFake{}
-	service := &mailService{deps: mailServiceDependencies{Authorization: authorizer, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return now.Add(4 * time.Second) }}, rekeyJobs: persistence}
+	service := &MailService{deps: mailServiceDependencies{Authorization: authorizer, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return now.Add(4 * time.Second) }}, rekeyJobs: persistence}
 	principal := mailTestPrincipal(model.TimeUTC(now))
 	principal.AuthenticationStrength = model.AuthenticationMultiFactor
 	principal.MFACompletedAt = model.OptionalTimeFrom(now)
@@ -252,7 +252,7 @@ func TestGetMailRekeyStatusConcealsJobsOwnedByOtherDomains(t *testing.T) {
 		json.RawMessage(`{"user_id":"`+model.NewUserID().String()+`"}`), model.NewUserID().String(), now, now, 8)
 	require.NoError(t, err)
 	persistence := &mailRekeyStarterFake{job: other}
-	service := &mailService{deps: mailServiceDependencies{Authorization: &mailAuthorizerFake{}, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return now }}, rekeyJobs: persistence}
+	service := &MailService{deps: mailServiceDependencies{Authorization: &mailAuthorizerFake{}, RecentAuthenticationTTL: 15 * time.Minute, Now: func() time.Time { return now }}, rekeyJobs: persistence}
 	principal := mailTestPrincipal(model.TimeUTC(now))
 	principal.AuthenticationStrength = model.AuthenticationMultiFactor
 	principal.MFACompletedAt = model.OptionalTimeFrom(now)

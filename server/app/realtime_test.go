@@ -109,7 +109,7 @@ func (noopAuthenticationCache) Add(context.Context, string, int64, time.Duration
 	return 0, nil
 }
 
-func newTestRealtimeService(t *testing.T, cache identity.AuthenticationCache) *realtimeService {
+func newTestRealtimeService(t *testing.T, cache identity.AuthenticationCache) *RealtimeService {
 	t.Helper()
 	invalidator, err := identity.NewCacheInvalidator(identity.CacheInvalidatorDependencies{Cache: cache, Diagnostics: &securityEffectsDiagnosticsFake{}})
 	require.NoError(t, err)

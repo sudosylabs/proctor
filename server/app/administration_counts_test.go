@@ -65,7 +65,7 @@ func TestAdministrationCountsOmitsWhatTheCallerMayNotList(t *testing.T) {
 
 	counts, err := service.AdministrationCounts(context.Background(), administrationCountsSession())
 	require.NoError(t, err)
-	require.Equal(t, AdministrationCounts{
+	require.Equal(t, AdministrationCountsResult{
 		PendingInvitations:    &AdministrationCount{Count: 12},
 		FailedMailDeliveries:  &AdministrationCount{Count: MaximumAdministrationCount, IsLowerBound: true},
 		OpenOnboardingImports: &AdministrationCount{},
@@ -102,5 +102,5 @@ func TestAdministrationCountsRequiresAnInteractiveSession(t *testing.T) {
 
 	counts, err := newAdministrationCountsService(administrationCountsServiceDependencies{}).AdministrationCounts(context.Background(), administrationCountsSession())
 	require.NoError(t, err)
-	require.Equal(t, AdministrationCounts{}, counts, "a graph without the services counts nothing")
+	require.Equal(t, AdministrationCountsResult{}, counts, "a graph without the services counts nothing")
 }

@@ -153,7 +153,7 @@ func TestSessionExpiryEnforcementAcrossHTTPRefreshAndEstablishedWebSocket(t *tes
 	principal, err := helper.App.Identity.AuthenticateAccess(ctx, websocketTokens.AccessToken)
 	require.NoError(t, err)
 	expire(websocketSession.ID, websocketTokens.AccessToken)
-	err = helper.App.ValidateWebSocketPrincipal(ctx, *principal)
+	err = helper.App.RealtimeAdmission.ValidateWebSocketPrincipal(ctx, *principal)
 	require.True(t, apperror.Is(err, "authentication.token_invalid"), "expired WebSocket principal error = %v", err)
 	assertExpired(websocketSession.ID)
 }

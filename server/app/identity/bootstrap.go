@@ -71,15 +71,21 @@ type BootstrapProtectionPolicy struct {
 // RecoverAdministratorAccess is intentionally absent from every network
 // application interface. The module root borrows this method only for the
 // explicit offline host command.
-func (s *Service) RecoverAdministratorAccess(ctx context.Context, system invocation.System, command AdministratorRecoveryCommand) (*AdministratorRecoveryResult, error) {
+func (s *Service) RecoverAdministratorAccess(
+	ctx context.Context,
+	system invocation.System,
+	command AdministratorRecoveryCommand,
+) (*AdministratorRecoveryResult, error) {
 	if !system.Valid() {
 		return nil, apperror.New("administrator_recovery.invalid")
 	}
+
 	institutionID, institutionErr := model.ParseInstitutionID(strings.TrimSpace(command.InstitutionID.String()))
 	userID, userErr := model.ParseUserID(strings.TrimSpace(command.UserID.String()))
 	if institutionErr != nil || userErr != nil || (!command.EnableLocalLogin && command.Password == "") {
 		return nil, apperror.New("administrator_recovery.invalid")
 	}
+
 	passwordHash := ""
 	if command.Password != "" {
 		var err error
@@ -88,9 +94,12 @@ func (s *Service) RecoverAdministratorAccess(ctx context.Context, system invocat
 			return nil, PasswordHashError(err, "administrator_recovery.unavailable")
 		}
 	}
+
 	result, err := s.installations.RecoverAdministratorAccess(ctx, &store.AdministratorRecovery{
-		InstitutionID: institutionID, UserID: userID,
-		EnableLocalLogin: command.EnableLocalLogin, RotatePasswordHash: passwordHash,
+		InstitutionID:      institutionID,
+		UserID:             userID,
+		EnableLocalLogin:   command.EnableLocalLogin,
+		RotatePasswordHash: passwordHash,
 	})
 	if err != nil {
 		return nil, apperror.New("administrator_recovery.unavailable").Wrap(err)
@@ -98,6 +107,7 @@ func (s *Service) RecoverAdministratorAccess(ctx context.Context, system invocat
 	if result == nil {
 		return nil, apperror.New("administrator_recovery.unavailable").Wrap(errors.New("persistence returned no recovery result"))
 	}
+
 	return &AdministratorRecoveryResult{
 		LocalLoginEnabled: result.LocalLoginEnabled,
 		PasswordRotated:   result.PasswordRotated,
@@ -123,83 +133,116 @@ func (s *Service) ReconcileSystemAdministratorRole(ctx context.Context, system i
 	if !system.Valid() {
 		return errors.New("reconcile protected system-administrator Role: invalid system identity")
 	}
+
 	_, err := s.installations.ReconcileSystemAdministratorRole(ctx, &store.SystemAdministratorRoleReconciliation{
 		RequiredPermissions: model.AllActions(),
 		ReconciledAt:        s.now(),
 		AuditEvent: &model.AuditEvent{
-			Action: string(model.ActionRoleSystemAdminReconcile), Status: model.AuditStatusSuccess,
-			NodeID: s.nodeID, ClientType: "system",
+			Action:     string(model.ActionRoleSystemAdminReconcile),
+			Status:     model.AuditStatusSuccess,
+			NodeID:     s.nodeID,
+			ClientType: "system",
 		},
 	})
 	if err != nil {
 		return fmt.Errorf("reconcile protected system-administrator Role: %w", err)
 	}
+
 	return nil
 }
 
 // GetInstallationStatus reports whether the installation has been
 // bootstrapped.
-func (s *Service) GetInstallationStatus(ctx context.Context, _ invocation.Invocation, _ GetInstallationStatusQuery) (*model.InstallationStatus, error) {
+func (s *Service) GetInstallationStatus(
+	ctx context.Context,
+	_ invocation.Invocation,
+	_ GetInstallationStatusQuery,
+) (*model.InstallationStatus, error) {
 	state, err := s.installations.Get(ctx)
 	if err != nil {
 		if store.IsNotFound(err) {
 			return &model.InstallationStatus{Initialized: false}, nil
 		}
+
 		return nil, apperror.New("installation.unavailable").Wrap(err)
 	}
+
 	if err := state.Validate(); err != nil {
 		return nil, apperror.New("installation.unavailable").Wrap(err)
 	}
+
 	return &model.InstallationStatus{Initialized: true}, nil
 }
 
 // BootstrapInstallation creates the Institution, its protected System
 // Administrator and the initial Access Policy once, for a caller that proves
 // the deployment bootstrap secret. Attempts are rate limited per source.
-func (s *Service) BootstrapInstallation(ctx context.Context, invocation invocation.Invocation, command BootstrapInstallationCommand) (*model.InstallationBootstrapResult, error) {
-	if strings.TrimSpace(command.InstitutionName) == "" || strings.TrimSpace(command.AdministratorUsername) == "" ||
-		strings.TrimSpace(command.AdministratorEmail) == "" || command.Password == "" {
+func (s *Service) BootstrapInstallation(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command BootstrapInstallationCommand,
+) (*model.InstallationBootstrapResult, error) {
+	if strings.TrimSpace(command.InstitutionName) == "" ||
+		strings.TrimSpace(command.AdministratorUsername) == "" ||
+		strings.TrimSpace(command.AdministratorEmail) == "" ||
+		command.Password == "" {
 		return nil, apperror.New("request.invalid").WithField("field", "bootstrap")
 	}
+
 	if err := s.checkBootstrapRateLimit(ctx, command.Source); err != nil {
 		return nil, err
 	}
+
 	providedDigest := digestBootstrapSecret(command.BootstrapSecret)
 	if !s.bootstrapAvailable || subtle.ConstantTimeCompare(providedDigest[:], s.bootstrapSecretDigest[:]) != 1 {
 		return nil, apperror.New("installation.bootstrap_denied")
 	}
+
 	fingerprint, err := fingerprintBootstrapCommand(command)
 	if err != nil {
 		return nil, apperror.New("request.invalid").WithField("field", "bootstrap").Wrap(err)
 	}
-	if err = CheckNewPassword(command.Password, PasswordIdentity{Username: command.AdministratorUsername,
-		Email: command.AdministratorEmail, DisplayName: command.AdministratorDisplayName,
-		FirstName: command.AdministratorFirstName, LastName: command.AdministratorLastName}); err != nil {
+
+	if err = CheckNewPassword(command.Password, PasswordIdentity{
+		Username:    command.AdministratorUsername,
+		Email:       command.AdministratorEmail,
+		DisplayName: command.AdministratorDisplayName,
+		FirstName:   command.AdministratorFirstName,
+		LastName:    command.AdministratorLastName,
+	}); err != nil {
 		return nil, err
 	}
+
 	hash, err := s.hasher.Hash(ctx, command.Password)
 	if err != nil {
 		return nil, PasswordHashError(err, "installation.unavailable")
 	}
+
 	metadata := invocation.RequestMetadata()
 	administrator, defaultPictureJob, err := jobhandler.PrepareUserDefaultProfilePictureJob(&model.User{
-		Username: command.AdministratorUsername, Email: command.AdministratorEmail,
-		DisplayName: command.AdministratorDisplayName, FirstName: command.AdministratorFirstName,
-		LastName: command.AdministratorLastName, Locale: command.AdministratorLocale,
-		Timezone: command.AdministratorTimezone,
+		Username:    command.AdministratorUsername,
+		Email:       command.AdministratorEmail,
+		DisplayName: command.AdministratorDisplayName,
+		FirstName:   command.AdministratorFirstName,
+		LastName:    command.AdministratorLastName,
+		Locale:      command.AdministratorLocale,
+		Timezone:    command.AdministratorTimezone,
 	}, s.now())
 	if err != nil {
 		return nil, apperror.New("request.invalid").WithField("field", "administrator").Wrap(err)
 	}
+
 	administratorSettings, err := user.PrepareInitialSettingsDocument(administrator)
 	if err != nil {
 		return nil, apperror.New("request.invalid").WithField("field", "administrator").Wrap(err)
 	}
+
 	input := &store.InstallationBootstrap{
 		BootstrapSecretDigest: providedDigest,
 		CommandFingerprint:    fingerprint,
 		Institution: &model.Institution{
-			Name: command.InstitutionName, DisplayName: command.InstitutionDisplayName,
+			Name:        command.InstitutionName,
+			DisplayName: command.InstitutionDisplayName,
 			Description: command.InstitutionDescription,
 		},
 		Administrator:         administrator,
@@ -230,6 +273,7 @@ func (s *Service) BootstrapInstallation(ctx context.Context, invocation invocati
 		if store.IsConflict(err) {
 			return nil, apperror.New("installation.already_initialized").Wrap(err)
 		}
+
 		// The commit boundary may be ambiguous. Repeating the proof- and
 		// fingerprint-fenced named aggregate either returns the retained exact
 		// outcome or proves that this attempt did not win.
@@ -240,8 +284,10 @@ func (s *Service) BootstrapInstallation(ctx context.Context, invocation invocati
 		if store.IsConflict(retryErr) {
 			return nil, apperror.New("installation.already_initialized").Wrap(retryErr)
 		}
+
 		return nil, apperror.New("installation.unavailable").Wrap(errors.Join(err, retryErr))
 	}
+
 	return result, nil
 }
 
@@ -265,15 +311,22 @@ func fingerprintBootstrapCommand(command BootstrapInstallationCommand) ([sha256.
 		AdministratorLastName, AdministratorLocale, AdministratorTimezone string
 		Password                                                          string
 	}{
-		command.InstitutionName, command.InstitutionDisplayName, command.InstitutionDescription,
-		command.AdministratorUsername, command.AdministratorEmail,
-		command.AdministratorDisplayName, command.AdministratorFirstName,
-		command.AdministratorLastName, command.AdministratorLocale, command.AdministratorTimezone,
+		command.InstitutionName,
+		command.InstitutionDisplayName,
+		command.InstitutionDescription,
+		command.AdministratorUsername,
+		command.AdministratorEmail,
+		command.AdministratorDisplayName,
+		command.AdministratorFirstName,
+		command.AdministratorLastName,
+		command.AdministratorLocale,
+		command.AdministratorTimezone,
 		command.Password,
 	})
 	if err != nil {
 		return [sha256.Size]byte{}, err
 	}
+
 	// The raw deployment secret keys the fingerprint so the durable value does
 	// not become a fast offline password verifier if the database is exposed.
 	mac := hmac.New(sha256.New, []byte(command.BootstrapSecret))

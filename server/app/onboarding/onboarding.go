@@ -55,7 +55,16 @@ type resourceAuthorizer interface {
 	CanDelegateActionsAtScope(context.Context, model.Principal, []string, model.RoleScopeType, string) (bool, error)
 	GrantedScopes(context.Context, model.Principal, model.Action, model.ResourceType) (access.AuthorizedScopeConstraint, error)
 	Institution(context.Context) (*model.Institution, error)
-	RecordAuthorizationDecision(context.Context, model.Principal, model.Action, model.Resource, model.RoleScopeType, string, model.RequestMetadata, bool) error
+	RecordAuthorizationDecision(
+		context.Context,
+		model.Principal,
+		model.Action,
+		model.Resource,
+		model.RoleScopeType,
+		string,
+		model.RequestMetadata,
+		bool,
+	) error
 }
 
 var _ resourceAuthorizer = (*access.Authorizer)(nil)
@@ -88,7 +97,11 @@ var _ passwordHasher = (*identity.PasswordHasher)(nil)
 type academicCommands interface {
 	CreateAffiliation(context.Context, invocation.Invocation, academic.CreateAffiliationCommand) (*model.Affiliation, error)
 	EndAffiliation(context.Context, invocation.Invocation, academic.EndAffiliationCommand) (*model.Affiliation, error)
-	CreateAcademicUnitMember(context.Context, invocation.Invocation, academic.CreateAcademicUnitMemberCommand) (*model.AcademicUnitMember, error)
+	CreateAcademicUnitMember(
+		context.Context,
+		invocation.Invocation,
+		academic.CreateAcademicUnitMemberCommand,
+	) (*model.AcademicUnitMember, error)
 	EndAcademicUnitMember(context.Context, invocation.Invocation, academic.EndAcademicUnitMemberCommand) (*model.AcademicUnitMember, error)
 	EnrollClassMember(context.Context, invocation.Invocation, academic.EnrollClassMemberCommand) (*model.ClassEnrollment, error)
 	EndClassMember(context.Context, invocation.Invocation, academic.EndClassMemberCommand) (*model.ClassMember, error)
@@ -209,8 +222,14 @@ type Ports struct {
 	// AcceptExternalIdentity admits an External Identity through the
 	// Invitation its login state carries. External sign-in calls it once it
 	// has verified the provider's assertion.
-	AcceptExternalIdentity func(context.Context, *model.ExternalLoginState, *model.ExternalAuthenticationAssertion,
-		store.AccessDeploymentCapabilities, model.RequestMetadata, string) (*store.ExternalIdentityInvitationAcceptanceResult, error)
+	AcceptExternalIdentity func(
+		context.Context,
+		*model.ExternalLoginState,
+		*model.ExternalAuthenticationAssertion,
+		store.AccessDeploymentCapabilities,
+		model.RequestMetadata,
+		string,
+	) (*store.ExternalIdentityInvitationAcceptanceResult, error)
 	// CountPendingInvitations and CountOpenImports are the administration
 	// summary counts; each authorizes like its list. CountOpenImports is nil
 	// when the Service has no onboarding imports.
@@ -228,19 +247,37 @@ func New(deps Dependencies) (*Service, Ports, error) {
 	if deps.Store == nil {
 		return nil, Ports{}, errors.New("onboarding store catalog is required")
 	}
+
 	catalog := deps.Store
-	if catalog.Invitation() == nil || catalog.Class() == nil || catalog.AcademicPeriod() == nil || catalog.AcademicUnit() == nil || catalog.Role() == nil ||
-		deps.Auditor == nil || deps.MembershipEffects == nil || deps.NodeID == "" || deps.PublicURL == "" || deps.RecentAuthenticationTTL <= 0 {
+	if catalog.Invitation() == nil ||
+		catalog.Class() == nil ||
+		catalog.AcademicPeriod() == nil ||
+		catalog.AcademicUnit() == nil ||
+		catalog.Role() == nil ||
+		deps.Auditor == nil ||
+		deps.MembershipEffects == nil ||
+		deps.NodeID == "" ||
+		deps.PublicURL == "" ||
+		deps.RecentAuthenticationTTL <= 0 {
 		return nil, Ports{}, errors.New("invitation service dependencies are invalid")
 	}
-	if catalog.BrowserAuthentication() == nil || catalog.Institution() == nil || model.ValidateBrowserAuthenticationIssuer(deps.PublicURL, true) != nil {
+
+	if catalog.BrowserAuthentication() == nil ||
+		catalog.Institution() == nil ||
+		model.ValidateBrowserAuthenticationIssuer(deps.PublicURL, true) != nil {
 		return nil, Ports{}, errors.New("browser invitation dependencies are invalid")
 	}
+
 	rateLimit := deps.AccountRecovery.RateLimit
-	if catalog.User() == nil || deps.Attempts == nil || rateLimit.Window <= 0 || rateLimit.MaximumAttempts <= 0 || rateLimit.MaximumSourceAttempts <= 0 ||
+	if catalog.User() == nil ||
+		deps.Attempts == nil ||
+		rateLimit.Window <= 0 ||
+		rateLimit.MaximumAttempts <= 0 ||
+		rateLimit.MaximumSourceAttempts <= 0 ||
 		deps.AccountRecovery.EmailVerificationTTL <= 0 {
 		return nil, Ports{}, errors.New("public registration dependencies are invalid")
 	}
+
 	s := &Service{
 		invitations:             catalog.Invitation(),
 		browserAuthentication:   catalog.BrowserAuthentication(),
@@ -278,15 +315,18 @@ func New(deps Dependencies) (*Service, Ports, error) {
 	if deps.Authorizer != nil {
 		s.authorizer = deps.Authorizer
 	}
+
 	enabled, err := onboardingImportsEnabled(deps)
 	if err != nil {
 		return nil, Ports{}, err
 	}
+
 	ports := Ports{AcceptExternalIdentity: s.acceptExternalIdentity, CountPendingInvitations: s.countPendingInvitations}
 	if enabled {
 		s.imports, s.content, s.wake = catalog.OnboardingImport(), deps.Content, deps.Wake
 		ports.CountOpenImports, ports.ImportJobs = s.countOpenOnboardingImports, onboardingImportJobs{service: s}
 	}
+
 	return s, ports, nil
 }
 
@@ -305,16 +345,24 @@ func onboardingImportsEnabled(deps Dependencies) (bool, error) {
 	if catalog.PersonalAccessToken() == nil || catalog.User() == nil {
 		return false, errors.New("onboarding import credential stores are required")
 	}
-	if catalog.Institution() == nil || catalog.AcademicUnit() == nil || catalog.Programme() == nil || catalog.ProgrammeLevel() == nil ||
-		catalog.AcademicPeriod() == nil || catalog.Class() == nil || catalog.Role() == nil {
+
+	if catalog.Institution() == nil ||
+		catalog.AcademicUnit() == nil ||
+		catalog.Programme() == nil ||
+		catalog.ProgrammeLevel() == nil ||
+		catalog.AcademicPeriod() == nil ||
+		catalog.Class() == nil ||
+		catalog.Role() == nil {
 		return false, nil
 	}
+
 	if deps.Identity == nil {
 		return false, errors.New("onboarding import application collaborators are required")
 	}
 	if catalog.Affiliation() == nil || catalog.AcademicUnitMember() == nil || catalog.ClassMember() == nil || catalog.RoleBinding() == nil {
 		return false, errors.New("onboarding import academic administration stores are required")
 	}
+
 	return true, nil
 }
 
@@ -337,10 +385,17 @@ func (s *Service) authorize(ctx context.Context, invocation invocation.Invocatio
 
 // authorizeActionDelegation refuses unless the caller may grant every Action
 // at the scope.
-func (s *Service) authorizeActionDelegation(ctx context.Context, invocation invocation.Invocation, actions []string, scopeType model.RoleScopeType, scopeID string) error {
+func (s *Service) authorizeActionDelegation(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	actions []string,
+	scopeType model.RoleScopeType,
+	scopeID string,
+) error {
 	if s.authorizer == nil {
 		return apperror.New("invitation.unavailable")
 	}
+
 	allowed, err := s.authorizer.CanDelegateActionsAtScope(ctx, invocation.Principal(), actions, scopeType, scopeID)
 	if err != nil {
 		return err
@@ -348,6 +403,7 @@ func (s *Service) authorizeActionDelegation(ctx context.Context, invocation invo
 	if !allowed {
 		return access.DeniedError()
 	}
+
 	return nil
 }
 
@@ -356,7 +412,11 @@ func (s *Service) authorizeActionDelegation(ctx context.Context, invocation invo
 // academic_progression.manage, which share one scope shape: the Institution,
 // Academic Unit subtrees, and Classes. Progression authority is a Class
 // action, so its scopes are resolved for Class resources.
-func (s *Service) visibility(ctx context.Context, invocation invocation.Invocation, action model.Action) (store.InvitationVisibilityScope, error) {
+func (s *Service) visibility(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	action model.Action,
+) (store.InvitationVisibilityScope, error) {
 	resourceType := model.ResourceInstitution
 	switch action {
 	case model.ActionInvitationView, model.ActionInvitationManage, model.ActionOnboardingBatchView:
@@ -365,17 +425,21 @@ func (s *Service) visibility(ctx context.Context, invocation invocation.Invocati
 	default:
 		return store.InvitationVisibilityScope{}, apperror.New("invitation.unavailable")
 	}
+
 	if s.authorizer == nil {
 		return store.InvitationVisibilityScope{}, apperror.New("invitation.unavailable")
 	}
+
 	constraint, err := s.authorizer.GrantedScopes(ctx, invocation.Principal(), action, resourceType)
 	if err != nil {
 		return store.InvitationVisibilityScope{}, err
 	}
+
 	institution, err := s.authorizer.Institution(ctx)
 	if err != nil {
 		return store.InvitationVisibilityScope{}, invitationStoreErrors.Translate(err)
 	}
+
 	allowed := constraint.InstitutionWide || len(constraint.AcademicUnitRootIDs) > 0 || len(constraint.ClassIDs) > 0
 	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
 	scopeType, scopeID := model.RoleScopeInstitution, institution.ID.String()
@@ -386,12 +450,27 @@ func (s *Service) visibility(ctx context.Context, invocation invocation.Invocati
 		resource = model.Resource{Type: model.ResourceClass, ID: constraint.ClassIDs[0].String()}
 		scopeType, scopeID = model.RoleScopeClass, resource.ID
 	}
-	if err = s.authorizer.RecordAuthorizationDecision(ctx, invocation.Principal(), action, resource, scopeType, scopeID, invocation.RequestMetadata(), allowed); err != nil {
+
+	if err = s.authorizer.RecordAuthorizationDecision(
+		ctx,
+		invocation.Principal(),
+		action,
+		resource,
+		scopeType,
+		scopeID,
+		invocation.RequestMetadata(),
+		allowed,
+	); err != nil {
 		return store.InvitationVisibilityScope{}, err
 	}
+
 	if !allowed {
 		return store.InvitationVisibilityScope{}, access.DeniedError()
 	}
-	return store.InvitationVisibilityScope{InstitutionWide: constraint.InstitutionWide,
-		AcademicUnitRootIDs: append([]model.AcademicUnitID(nil), constraint.AcademicUnitRootIDs...), ClassIDs: append([]model.ClassID(nil), constraint.ClassIDs...)}, nil
+
+	return store.InvitationVisibilityScope{
+		InstitutionWide:     constraint.InstitutionWide,
+		AcademicUnitRootIDs: append([]model.AcademicUnitID(nil), constraint.AcademicUnitRootIDs...),
+		ClassIDs:            append([]model.ClassID(nil), constraint.ClassIDs...),
+	}, nil
 }

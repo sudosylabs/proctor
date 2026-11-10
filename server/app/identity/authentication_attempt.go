@@ -289,10 +289,13 @@ func validateAuthenticationAttemptIntent(
 	intent authenticationAttemptIntent,
 ) (string, []AttemptLimit, error) {
 	purpose, valid := intent.purpose.keySegment()
-	if !valid || intent.window <= 0 || len(intent.limits) == 0 ||
+	if !valid ||
+		intent.window <= 0 ||
+		len(intent.limits) == 0 ||
 		len(intent.qualifier) > maxAuthenticationAttemptQualifierBytes {
 		return "", nil, errors.New("authentication attempt intent is invalid")
 	}
+
 	seen := make(map[authenticationAttemptDimension]struct{}, len(intent.limits))
 	for _, limit := range intent.limits {
 		if _, valid = limit.dimension.keySegment(); !valid || limit.maximum <= 0 {
@@ -301,12 +304,15 @@ func validateAuthenticationAttemptIntent(
 		if _, duplicate := seen[limit.dimension]; duplicate {
 			return "", nil, errors.New("authentication attempt intent is invalid")
 		}
+
 		if len(limit.identity) > maxAuthenticationAttemptIdentityBytes ||
 			len(limit.source) > maxAuthenticationAttemptSourceBytes {
 			return "", nil, errors.New("authentication attempt intent is invalid")
 		}
+
 		seen[limit.dimension] = struct{}{}
 	}
+
 	return purpose, intent.limits, nil
 }
 

@@ -95,33 +95,41 @@ func (s *Service) RevokeSession(
 	if principal.Validate() != nil {
 		return access.InvalidTokenAppError()
 	}
+
 	sessionID := strings.TrimSpace(command.SessionID.String())
 	if !model.SessionID(sessionID).IsValid() {
 		return apperror.New("session.id.invalid").WithField("field", "session_id")
 	}
+
 	session, err := s.sessions.Get(ctx, model.SessionID(sessionID))
 	if err != nil {
 		if store.IsNotFound(err) {
 			return apperror.New("session.not_found")
 		}
+
 		return authenticationUnavailable(err)
 	}
+
 	if session.UserID != principal.UserID {
 		return apperror.New("session.not_found")
 	}
 
-	return s.revokeSession(ctx,
+	return s.revokeSession(
+		ctx,
 		access.Mutation{
-			Invocation: invocation, Action: model.ActionSessionManage,
-			Resource:  model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
-			Operation: "revoke_own_session",
-			Value:     map[string]any{"session_id": session.ID.String()},
+			Invocation: invocation,
+			Action:     model.ActionSessionManage,
+			Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
+			Operation:  "revoke_own_session",
+			Value:      map[string]any{"session_id": session.ID.String()},
 		},
 		&store.SessionRevocation{
-			SessionID: session.ID, UserID: principal.UserID,
-			Reason: model.SessionRevocationUserSession,
+			SessionID: session.ID,
+			UserID:    principal.UserID,
+			Reason:    model.SessionRevocationUserSession,
 		},
-		selfSessionRevocationStoreErrors.Translate, s.now,
+		selfSessionRevocationStoreErrors.Translate,
+		s.now,
 	)
 }
 
@@ -135,16 +143,22 @@ func (s *Service) RevokeAllSessions(
 	if principal.Validate() != nil {
 		return access.InvalidTokenAppError()
 	}
-	return s.revokeAllSessions(ctx,
+
+	return s.revokeAllSessions(
+		ctx,
 		access.Mutation{
-			Invocation: invocation, Action: model.ActionSessionManage,
-			Resource:  model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
-			Operation: "revoke_own_sessions",
+			Invocation: invocation,
+			Action:     model.ActionSessionManage,
+			Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
+			Operation:  "revoke_own_sessions",
 		},
 		&store.UserSessionsRevocation{
-			UserID: principal.UserID, Reason: model.SessionRevocationUserAllSessions,
+			UserID: principal.UserID,
+			Reason: model.SessionRevocationUserAllSessions,
 		},
-		authenticationUnavailable, nil, s.now,
+		authenticationUnavailable,
+		nil,
+		s.now,
 	)
 }
 
@@ -160,22 +174,29 @@ func (s *Service) RevokeOtherSessions(
 	if principal.Validate() != nil || !principal.SessionID.IsValid() {
 		return nil, access.InvalidTokenAppError()
 	}
-	count, err := s.revokeAllSessionsCounted(ctx,
+
+	count, err := s.revokeAllSessionsCounted(
+		ctx,
 		access.Mutation{
-			Invocation: invocation, Action: model.ActionSessionManage,
-			Resource:  model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
-			Operation: "revoke_other_sessions",
-			Value:     map[string]any{"kept_session_id": principal.SessionID.String()},
+			Invocation: invocation,
+			Action:     model.ActionSessionManage,
+			Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
+			Operation:  "revoke_other_sessions",
+			Value:      map[string]any{"kept_session_id": principal.SessionID.String()},
 		},
 		&store.UserSessionsRevocation{
-			UserID: principal.UserID, KeepSessionID: principal.SessionID,
-			Reason: model.SessionRevocationUserOtherSessions,
+			UserID:        principal.UserID,
+			KeepSessionID: principal.SessionID,
+			Reason:        model.SessionRevocationUserOtherSessions,
 		},
-		selfOtherSessionsRevocationStoreErrors.Translate, nil, s.now,
+		selfOtherSessionsRevocationStoreErrors.Translate,
+		nil,
+		s.now,
 	)
 	if err != nil {
 		return nil, err
 	}
+
 	return &RevokeOtherSessionsResult{RevokedSessionCount: count}, nil
 }
 

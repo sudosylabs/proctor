@@ -40,31 +40,58 @@ func (s *Service) ResetUserMFA(ctx context.Context, invocation invocation.Invoca
 	if err := s.requireMFAEnabled(); err != nil {
 		return err
 	}
+
 	userID, err := model.ParseUserID(command.UserID.String())
 	reason, reference := strings.TrimSpace(command.Reason), strings.TrimSpace(command.VerificationReference)
-	if err != nil || userID == principal.UserID || !command.IdentityVerified || reason == "" || utf8.RuneCountInString(reason) > 512 || reference == "" || utf8.RuneCountInString(reference) > 128 {
+	if err != nil ||
+		userID == principal.UserID ||
+		!command.IdentityVerified ||
+		reason == "" ||
+		utf8.RuneCountInString(reason) > 512 ||
+		reference == "" ||
+		utf8.RuneCountInString(reference) > 128 {
 		return apperror.New("authentication.mfa.reset_invalid")
 	}
+
 	resource := model.Resource{Type: model.ResourceUser, ID: userID.String()}
 	if err = s.authorizer.Authorize(ctx, invocation, model.ActionUserMFAReset, resource); err != nil {
 		return err
 	}
+
 	at := model.TimeUTC(s.now())
 	prepared, err := s.prepareMFANotice(ctx, userID, mail.MFANoticeReset, at)
 	if err != nil {
 		return err
 	}
-	auditID, err := s.beginMFAAudit(ctx, invocation, model.ActionUserMFAReset, resource, map[string]any{"identity_verified": true, "reason": reason, "verification_reference": reference})
+
+	auditID, err := s.beginMFAAudit(ctx, invocation, model.ActionUserMFAReset, resource, map[string]any{
+		"identity_verified":      true,
+		"reason":                 reason,
+		"verification_reference": reference,
+	})
 	if err != nil {
 		return err
 	}
-	result, err := s.mfaCredentials.Reset(ctx, &store.MFAAssistedReset{Principal: principal, UserID: userID, IdentityVerified: true, Reason: reason, VerificationReference: reference, RecentAuthenticationTTL: s.recentAuthenticationTTL, AuditEventID: auditID, Capabilities: AccessDeploymentCapabilities(s.capabilities.Snapshot()), Notice: mfaSecurityNotice(prepared), NoticeAt: at})
+
+	result, err := s.mfaCredentials.Reset(ctx, &store.MFAAssistedReset{
+		Principal:               principal,
+		UserID:                  userID,
+		IdentityVerified:        true,
+		Reason:                  reason,
+		VerificationReference:   reference,
+		RecentAuthenticationTTL: s.recentAuthenticationTTL,
+		AuditEventID:            auditID,
+		Capabilities:            AccessDeploymentCapabilities(s.capabilities.Snapshot()),
+		Notice:                  mfaSecurityNotice(prepared),
+		NoticeAt:                at,
+	})
 	if err != nil {
 		return s.failMFAMutation(ctx, auditID, err)
 	}
 	if result == nil || result.Recovery == nil {
 		return authenticationUnavailable(errors.New("MFA reset returned no recovery state"))
 	}
+
 	s.effects.SessionsRevoked(ctx, userID, mfaResetSessionIDs(result.Sessions), result.AccessTokenHashes)
 	return nil
 }

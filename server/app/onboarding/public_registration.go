@@ -43,6 +43,7 @@ func (s *Service) RegisterLocalUser(ctx context.Context, invocation invocation.I
 	if !registrationEnabled || !localLoginEnabled {
 		return apperror.New("authentication.registration.invitation_required")
 	}
+
 	normalizedEmail := strings.ToLower(strings.TrimSpace(model.SanitizeUnicode(command.Email)))
 	if err = s.checkPublicRegistrationAttempt(ctx, normalizedEmail, command.Source); err != nil {
 		return err
@@ -50,6 +51,7 @@ func (s *Service) RegisterLocalUser(ctx context.Context, invocation invocation.I
 	if !s.mail.Enabled() {
 		return registrationUnavailable(errors.New("mail delivery is disabled"))
 	}
+
 	firstName := strings.TrimSpace(model.SanitizeUnicode(command.FirstName))
 	lastName := strings.TrimSpace(model.SanitizeUnicode(command.LastName))
 	if firstName == "" || lastName == "" {
@@ -66,14 +68,21 @@ func (s *Service) RegisterLocalUser(ctx context.Context, invocation invocation.I
 	if err != nil {
 		return apperror.New("authentication.registration.invalid").Wrap(err)
 	}
-	if err = identity.CheckNewPassword(command.Password, identity.PasswordIdentity{Username: account.Username, Email: account.Email,
-		FirstName: account.FirstName, LastName: account.LastName}); err != nil {
+
+	if err = identity.CheckNewPassword(command.Password, identity.PasswordIdentity{
+		Username:  account.Username,
+		Email:     account.Email,
+		FirstName: account.FirstName,
+		LastName:  account.LastName,
+	}); err != nil {
 		return err
 	}
+
 	passwordHash, err := s.hasher.Hash(ctx, command.Password)
 	if err != nil {
 		return identity.PasswordHashError(err, "authentication.registration.unavailable")
 	}
+
 	credential := &model.PasswordCredential{UserID: account.ID, PasswordHash: passwordHash}
 	credential.PrepareCreate(model.NewPasswordCredentialID(), at)
 	settings, err := user.PrepareInitialSettingsDocument(account)
@@ -83,50 +92,74 @@ func (s *Service) RegisterLocalUser(ctx context.Context, invocation invocation.I
 
 	rawToken := s.newToken()
 	token := &model.UserToken{
-		UserID: account.ID, Purpose: model.UserTokenEmailVerification,
-		TokenHash: model.HashToken(rawToken), Target: account.Email, ExpiresAt: at.Add(s.emailVerificationTTL),
+		UserID:    account.ID,
+		Purpose:   model.UserTokenEmailVerification,
+		TokenHash: model.HashToken(rawToken),
+		Target:    account.Email,
+		ExpiresAt: at.Add(s.emailVerificationTTL),
 	}
 	token.PrepareCreate(model.NewUserTokenID(), at)
 	actionURL, err := identity.AccountCredentialLink(s.publicURL, "/account/verify-email", rawToken)
 	if err != nil {
 		return registrationUnavailable(err)
 	}
+
 	prepared, err := s.mail.PreparePublicRegistrationVerification(
 		account, model.MailOccurrenceID(token.ID.String()), actionURL, at, token.ExpiresAt,
 	)
 	if err != nil {
 		return registrationUnavailable(err)
 	}
+
 	institutionID, err := s.institutionID(ctx)
 	if err != nil {
 		return registrationUnavailable(err)
 	}
+
 	audit := identity.RecoveryAuditEvent(
 		model.ActionAuthenticationPublicRegistration,
-		model.Resource{Type: model.ResourceUser, ID: account.ID.String()}, institutionID,
-		invocation.RequestMetadata(), s.nodeID, nil, "anonymous",
+		model.Resource{Type: model.ResourceUser, ID: account.ID.String()},
+		institutionID,
+		invocation.RequestMetadata(),
+		s.nodeID,
+		nil,
+		"anonymous",
 	)
 	_, err = s.users.RegisterLocal(ctx, &store.PublicLocalUserRegistration{
-		User: account, Settings: settings, PasswordCredential: credential, DefaultProfilePictureJob: defaultJob,
-		VerificationToken: token, TokenLifetime: s.emailVerificationTTL, MailLifetime: s.emailVerificationTTL,
-		VerificationOccurrence: prepared.Occurrence,
-		VerificationDelivery:   prepared.Delivery, VerificationJob: prepared.Job, AuditEvent: audit,
+		User:                     account,
+		Settings:                 settings,
+		PasswordCredential:       credential,
+		DefaultProfilePictureJob: defaultJob,
+		VerificationToken:        token,
+		TokenLifetime:            s.emailVerificationTTL,
+		MailLifetime:             s.emailVerificationTTL,
+		VerificationOccurrence:   prepared.Occurrence,
+		VerificationDelivery:     prepared.Delivery,
+		VerificationJob:          prepared.Job,
+		AuditEvent:               audit,
 	})
 	if err == nil {
 		return nil
 	}
+
 	if store.IsUserIdentityConflict(err) {
 		// A syntactically valid duplicate is indistinguishable from accepted work.
 		return nil
 	}
+
 	if errors.Is(err, store.ErrAuthenticationMethodDisabled) || store.IsNotFound(err) {
 		return apperror.New("authentication.registration.invitation_required")
 	}
+
 	return registrationUnavailable(err)
 }
 
 func (s *Service) checkPublicRegistrationAttempt(ctx context.Context, registrantIdentity, source string) error {
-	limited, err := s.attempts.Account(ctx, identity.AttemptPurposePublicRegistration, "register", s.rateLimit.Window,
+	limited, err := s.attempts.Account(
+		ctx,
+		identity.AttemptPurposePublicRegistration,
+		"register",
+		s.rateLimit.Window,
 		identity.IdentityAttemptLimit(registrantIdentity, s.rateLimit.MaximumAttempts),
 		identity.SourceAttemptLimit(source, s.rateLimit.MaximumSourceAttempts),
 	)
@@ -136,6 +169,7 @@ func (s *Service) checkPublicRegistrationAttempt(ctx context.Context, registrant
 	if limited {
 		return apperror.New("authentication.rate_limited")
 	}
+
 	return nil
 }
 

@@ -148,12 +148,20 @@ func (s *mfaMechanics) consumeSecondFactor(
 	if err != nil {
 		return err
 	}
-	if err := mfaPersistence.ConsumeSecondFactor(ctx, &store.MFASecondFactorConsumption{UserID: model.UserID(userID), TimeStep: proof.step, RecoveryCodeHash: proof.recoveryHash, Now: now}); err != nil {
+
+	if err := mfaPersistence.ConsumeSecondFactor(ctx, &store.MFASecondFactorConsumption{
+		UserID:           model.UserID(userID),
+		TimeStep:         proof.step,
+		RecoveryCodeHash: proof.recoveryHash,
+		Now:              now,
+	}); err != nil {
 		if store.IsNotFound(err) {
 			return mfaInvalidCodeError()
 		}
+
 		return mfaStoreErrors.Translate(err)
 	}
+
 	return nil
 }
 
@@ -165,33 +173,44 @@ type mfaFactorProof struct {
 
 // Verification does not consume a factor. The owning aggregate commits replay
 // protection together with the Session transition and its required audit.
-func (s *mfaMechanics) verifySecondFactor(ctx context.Context, persistence store.MFAStore, userID, code string, now time.Time) (mfaFactorProof, error) {
+func (s *mfaMechanics) verifySecondFactor(
+	ctx context.Context,
+	persistence store.MFAStore,
+	userID, code string,
+	now time.Time,
+) (mfaFactorProof, error) {
 	credential, err := persistence.GetByUser(ctx, model.UserID(userID))
 	if err != nil {
 		if store.IsNotFound(err) {
 			return mfaFactorProof{}, mfaInvalidCodeError()
 		}
+
 		return mfaFactorProof{}, mfaStoreErrors.Translate(err)
 	}
+
 	if credential == nil || !credential.IsActive() {
 		return mfaFactorProof{}, mfaInvalidCodeError()
 	}
+
 	proof := mfaFactorProof{credentialID: credential.ID}
 	if len(strings.TrimSpace(code)) == 6 {
 		secret, err := s.decrypt(userID, credential)
 		if err != nil {
 			return mfaFactorProof{}, authenticationUnavailable(err)
 		}
+
 		step, valid := verifyTOTP(secret, strings.TrimSpace(code), credential.LastUsedTimeStep, now)
 		if !valid {
 			return mfaFactorProof{}, mfaInvalidCodeError()
 		}
+
 		proof.step = step
 	} else if normalized := normalizeMFARecoveryCode(code); normalized != "" {
 		proof.recoveryHash = model.HashToken(normalized)
 	} else {
 		return mfaFactorProof{}, mfaInvalidCodeError()
 	}
+
 	return proof, nil
 }
 
@@ -402,6 +421,7 @@ func validateMFASecretKeys(ctx context.Context, persistence store.MFAStore, seal
 	if persistence == nil {
 		return errors.New("MFA secret-key persistence is unavailable")
 	}
+
 	state, err := persistence.InspectKeyState(ctx)
 	if err != nil {
 		return fmt.Errorf("inspect MFA secret keys: %w", err)
@@ -409,15 +429,25 @@ func validateMFASecretKeys(ctx context.Context, persistence store.MFAStore, seal
 	if state == nil {
 		return errors.New("MFA secret-key state is unavailable")
 	}
+
 	// Every new secret must be sealed with the fenced primary, so a ring
 	// without it could write nothing.
 	if state.RequiredPrimaryKeyID != "" && (sealer == nil || !sealer.HasKey(state.RequiredPrimaryKeyID)) {
-		return fmt.Errorf("MFA primary key %s required by the last rekey is not configured; restore it to Authentication.MFA", state.RequiredPrimaryKeyID)
+		return fmt.Errorf(
+			"MFA primary key %s required by the last rekey is not configured; restore it to Authentication.MFA",
+			state.RequiredPrimaryKeyID,
+		)
 	}
+
 	for _, item := range state.Active {
 		if sealer == nil || !sealer.HasKey(item.KeyID) {
-			return fmt.Errorf("MFA secret key %s is not configured but seals %d stored credentials; restore it to Authentication.MFA.DecryptionKeys", item.KeyID, item.Credentials)
+			return fmt.Errorf(
+				"MFA secret key %s is not configured but seals %d stored credentials; restore it to Authentication.MFA.DecryptionKeys",
+				item.KeyID,
+				item.Credentials,
+			)
 		}
 	}
+
 	return nil
 }

@@ -57,7 +57,10 @@ func (a onboardingImportJobs) Get(ctx context.Context, id model.OnboardingImport
 	return a.service.imports.GetOnboardingImport(ctx, id)
 }
 
-func (a onboardingImportJobs) Execute(ctx context.Context, id model.OnboardingImportID, after int,
+func (a onboardingImportJobs) Execute(
+	ctx context.Context,
+	id model.OnboardingImportID,
+	after int,
 	checkpoint func(int, int) error,
 ) error {
 	return a.service.execute(ctx, id, after, checkpoint)

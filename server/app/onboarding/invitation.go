@@ -253,9 +253,12 @@ const (
 // IsValid reports whether o is a supported Invitation batch operation.
 func (o InvitationBatchOperation) IsValid() bool {
 	switch o {
-	case InvitationBatchStudentClassCreate, InvitationBatchTeacherAcademicUnitCreate,
-		InvitationBatchAcademicUnitRoleCreate, InvitationBatchInstitutionRoleCreate,
-		InvitationBatchResend, InvitationBatchRevoke:
+	case InvitationBatchStudentClassCreate,
+		InvitationBatchTeacherAcademicUnitCreate,
+		InvitationBatchAcademicUnitRoleCreate,
+		InvitationBatchInstitutionRoleCreate,
+		InvitationBatchResend,
+		InvitationBatchRevoke:
 		return true
 	default:
 		return false
@@ -315,8 +318,12 @@ func invitationResource(invitation *model.Invitation) model.Resource {
 	if invitation == nil {
 		return model.Resource{}
 	}
-	typeByScope := map[model.RoleScopeType]model.ResourceType{model.RoleScopeInstitution: model.ResourceInstitution,
-		model.RoleScopeAcademicUnit: model.ResourceAcademicUnit, model.RoleScopeClass: model.ResourceClass}
+
+	typeByScope := map[model.RoleScopeType]model.ResourceType{
+		model.RoleScopeInstitution:  model.ResourceInstitution,
+		model.RoleScopeAcademicUnit: model.ResourceAcademicUnit,
+		model.RoleScopeClass:        model.ResourceClass,
+	}
 	return model.Resource{Type: typeByScope[invitation.ScopeType], ID: invitation.ScopeID}
 }
 
@@ -324,16 +331,31 @@ func invitationAdministrationView(record *store.InvitationAdministrationRecord) 
 	if record == nil || record.Invitation == nil {
 		return InvitationAdministrationView{}
 	}
+
 	invitation := record.Invitation
-	result := InvitationAdministrationView{InvitationView: invitationView(invitation), TargetEmail: invitation.TargetEmail,
-		InviterUserID: invitation.InviterUserID, AcceptedUserID: invitation.AcceptedUserID,
-		CreatedAt: invitation.CreatedAt, UpdatedAt: invitation.UpdatedAt, Revision: invitation.Revision}
+	result := InvitationAdministrationView{
+		InvitationView: invitationView(invitation),
+		TargetEmail:    invitation.TargetEmail,
+		InviterUserID:  invitation.InviterUserID,
+		AcceptedUserID: invitation.AcceptedUserID,
+		CreatedAt:      invitation.CreatedAt,
+		UpdatedAt:      invitation.UpdatedAt,
+		Revision:       invitation.Revision,
+	}
 	if record.Delivery != nil {
 		delivery := record.Delivery
-		result.Delivery = &InvitationDeliveryView{TemplateKey: delivery.TemplateKey, State: delivery.State,
-			MaskedRecipient: delivery.MaskedRecipient, CreatedAt: delivery.CreatedAt, UpdatedAt: delivery.UpdatedAt,
-			Deadline: delivery.Deadline, AcceptedAt: delivery.AcceptedAt, PublicFailureCode: delivery.PublicFailureCode}
+		result.Delivery = &InvitationDeliveryView{
+			TemplateKey:       delivery.TemplateKey,
+			State:             delivery.State,
+			MaskedRecipient:   delivery.MaskedRecipient,
+			CreatedAt:         delivery.CreatedAt,
+			UpdatedAt:         delivery.UpdatedAt,
+			Deadline:          delivery.Deadline,
+			AcceptedAt:        delivery.AcceptedAt,
+			PublicFailureCode: delivery.PublicFailureCode,
+		}
 	}
+
 	return result
 }
 
@@ -341,10 +363,20 @@ func invitationView(invitation *model.Invitation) InvitationView {
 	if invitation == nil {
 		return InvitationView{}
 	}
-	return InvitationView{ID: invitation.ID, Purpose: invitation.Purpose, State: invitation.State, ClassID: invitation.ClassID,
-		AcademicPeriodID: invitation.AcademicPeriodID, AcademicUnitID: invitation.AcademicUnitID, RoleID: invitation.RoleID,
-		RoleActions: append([]string(nil), invitation.RoleActions...), IntendedStartsAt: invitation.IntendedStartsAt,
-		IntendedEndsAt: invitation.IntendedEndsAt, ExpiresAt: invitation.ExpiresAt}
+
+	return InvitationView{
+		ID:               invitation.ID,
+		Purpose:          invitation.Purpose,
+		State:            invitation.State,
+		ClassID:          invitation.ClassID,
+		AcademicPeriodID: invitation.AcademicPeriodID,
+		AcademicUnitID:   invitation.AcademicUnitID,
+		RoleID:           invitation.RoleID,
+		RoleActions:      append([]string(nil), invitation.RoleActions...),
+		IntendedStartsAt: invitation.IntendedStartsAt,
+		IntendedEndsAt:   invitation.IntendedEndsAt,
+		ExpiresAt:        invitation.ExpiresAt,
+	}
 }
 
 var invitationStoreErrors = apperror.StoreTable{
@@ -366,7 +398,12 @@ func (s *Service) checkInvitationAttempt(ctx context.Context, claimIdentity, sou
 	if s.attempts == nil || policy.Window <= 0 || policy.MaximumAttempts <= 0 || policy.MaximumSourceAttempts <= 0 {
 		return identity.RateLimitUnavailableAppError(errors.New("invitation attempt accounting is unavailable"))
 	}
-	limited, err := s.attempts.Account(ctx, identity.AttemptPurposeInvitation, invitationAcceptanceAttemptQualifier, policy.Window,
+
+	limited, err := s.attempts.Account(
+		ctx,
+		identity.AttemptPurposeInvitation,
+		invitationAcceptanceAttemptQualifier,
+		policy.Window,
 		identity.IdentityAttemptLimit(claimIdentity, policy.MaximumAttempts),
 		identity.SourceAttemptLimit(source, policy.MaximumSourceAttempts),
 	)
@@ -376,5 +413,6 @@ func (s *Service) checkInvitationAttempt(ctx context.Context, claimIdentity, sou
 	if limited {
 		return apperror.New("authentication.rate_limited")
 	}
+
 	return nil
 }

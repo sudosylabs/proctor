@@ -62,34 +62,47 @@ func (s *Service) RevokeDesktopRegistration(
 	if err := requireInteractiveSession(principal, true, at, s.recentAuthenticationTTL); err != nil {
 		return err
 	}
+
 	registrationID, err := model.ParseDesktopRegistrationID(strings.TrimSpace(command.RegistrationID.String()))
 	if err != nil {
 		return apperror.New("request.invalid").WithField("field", "desktop_registration_id")
 	}
+
 	auditID, err := s.auditor.Begin(
-		ctx, invocation, model.ActionDesktopRegistrationRevoke,
+		ctx,
+		invocation,
+		model.ActionDesktopRegistrationRevoke,
 		model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
-		"revoke", map[string]any{"registration_id": registrationID.String()}, nil,
+		"revoke",
+		map[string]any{"registration_id": registrationID.String()},
+		nil,
 	)
 	if err != nil {
 		return err
 	}
+
 	result, err := s.desktopRegistrations.Revoke(ctx, &store.DesktopRegistrationRevocation{
-		RegistrationID: registrationID, UserID: principal.UserID,
-		RevokedAt: at, AuditEventID: auditID, AuditAt: at,
+		RegistrationID: registrationID,
+		UserID:         principal.UserID,
+		RevokedAt:      at,
+		AuditEventID:   auditID,
+		AuditAt:        at,
 	})
 	if err != nil {
 		failure := desktopRegistrationStoreErrors.Translate(err)
 		if auditErr := s.auditor.Fail(ctx, auditID, apperror.CodeOf(failure, "desktop_registration.unavailable")); auditErr != nil {
 			return apperror.New("audit.unavailable").Wrap(auditErr)
 		}
+
 		return failure
 	}
+
 	if !result.AlreadyRevoked && len(result.Sessions) > 0 {
 		s.effects.SessionsRevoked(
 			ctx, principal.UserID, sessionIDs(result.Sessions), result.TokenHashes,
 		)
 	}
+
 	return nil
 }
 

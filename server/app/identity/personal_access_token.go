@@ -122,14 +122,17 @@ func (s *Service) CreatePersonalAccessToken(
 	); err != nil {
 		return nil, err
 	}
+
 	settings := s.personalAccessTokenPolicy
 	if command.ExpiresAt <= 0 {
 		return nil, invalidPersonalAccessTokenRequest("expires_at")
 	}
+
 	normalizedScopes, err := normalizePersonalAccessTokenScopes(command.Scopes)
 	if err != nil {
 		return nil, err
 	}
+
 	if command.AcademicUnitID != "" {
 		if !model.AcademicUnitID(command.AcademicUnitID).IsValid() {
 			return nil, invalidPersonalAccessTokenRequest("academic_unit_id")
@@ -138,6 +141,7 @@ func (s *Service) CreatePersonalAccessToken(
 			return nil, personalAccessTokenFailure("academic_unit", err)
 		}
 	}
+
 	targetScopeType := model.RoleScopeInstitution
 	targetScopeID := ""
 	if command.AcademicUnitID != "" {
@@ -148,8 +152,10 @@ func (s *Service) CreatePersonalAccessToken(
 		if lookupErr != nil {
 			return nil, personalAccessTokenFailure("institution", lookupErr)
 		}
+
 		targetScopeID = institution.ID.String()
 	}
+
 	allowed, err := s.authorizer.CanDelegateActionsAtScope(
 		ctx, principal, normalizedScopes, targetScopeType, targetScopeID,
 	)
@@ -170,41 +176,65 @@ func (s *Service) CreatePersonalAccessToken(
 		ExpiresAt:      model.TimeFromMillis(command.ExpiresAt),
 	}
 	parameters := map[string]any{
-		"description": command.Description, "scopes": normalizedScopes,
-		"academic_unit_id": command.AcademicUnitID, "expires_at": command.ExpiresAt,
+		"description":      command.Description,
+		"scopes":           normalizedScopes,
+		"academic_unit_id": command.AcademicUnitID,
+		"expires_at":       command.ExpiresAt,
 	}
 	resource, err := s.personalAccessTokenAuditResource(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	auditDraft, appErr := s.preparePersonalAccessTokenAudit(
-		ctx, principal, model.ActionPersonalAccessTokenCreate, resource, invocation.RequestMetadata(),
-		parameters, nil,
+		ctx,
+		principal,
+		model.ActionPersonalAccessTokenCreate,
+		resource,
+		invocation.RequestMetadata(),
+		parameters,
+		nil,
 	)
 	if appErr != nil {
 		return nil, appErr
 	}
+
 	prepared, err := s.personalAccessTokens.PrepareMutation(ctx, &store.PersonalAccessTokenMutationPreparation{
-		UserID: principal.UserID, Kind: store.PersonalAccessTokenMutationCreate,
-		AuditEvent: auditDraft, Lifetime: personalAccessTokenMutationPreparationLifetime,
+		UserID:     principal.UserID,
+		Kind:       store.PersonalAccessTokenMutationCreate,
+		AuditEvent: auditDraft,
+		Lifetime:   personalAccessTokenMutationPreparationLifetime,
 	})
 	if err != nil {
 		return nil, personalAccessTokenFailure("personal_access_token", err)
 	}
-	notice, err := s.preparePersonalAccessTokenNotice(ctx, principal.UserID, candidate, model.MailTemplateIdentityPersonalAccessTokenCreated, prepared.ActionAt)
+
+	notice, err := s.preparePersonalAccessTokenNotice(
+		ctx,
+		principal.UserID,
+		candidate,
+		model.MailTemplateIdentityPersonalAccessTokenCreated,
+		prepared.ActionAt,
+	)
 	if err != nil {
 		return nil, s.failPersonalAccessTokenMutation(ctx, prepared.ID.String(), err)
 	}
+
 	result, err := s.personalAccessTokens.Create(ctx, &store.PersonalAccessTokenCreationMutation{
-		Token: candidate, MaximumActive: settings.MaximumPerUser,
-		MinimumLifetime: settings.MinimumLifetime, MaximumLifetime: settings.MaximumLifetime,
-		PreparationID: prepared.ID, Notice: notice,
+		Token:           candidate,
+		MaximumActive:   settings.MaximumPerUser,
+		MinimumLifetime: settings.MinimumLifetime,
+		MaximumLifetime: settings.MaximumLifetime,
+		PreparationID:   prepared.ID,
+		Notice:          notice,
 	})
 	if err != nil {
 		return nil, s.failPersonalAccessTokenMutation(ctx, prepared.ID.String(), err)
 	}
+
 	return &model.PersonalAccessTokenCreation{
-		Token: result.Token, Credential: rawCredential,
+		Token:      result.Token,
+		Credential: rawCredential,
 	}, nil
 }
 
@@ -238,10 +268,12 @@ func (s *Service) ListGrantablePersonalAccessTokenScopes(
 	if err := requireInteractiveSession(principal, false, s.now(), s.recentAuthenticationTTL); err != nil {
 		return nil, err
 	}
+
 	delegation, err := s.authorizer.PersonalAccessTokenDelegation(ctx, principal)
 	if err != nil {
 		return nil, personalAccessTokenFailure("authorization", err)
 	}
+
 	units := make([]*model.AcademicUnit, 0, len(delegation.AcademicUnitRootIDs))
 	for _, id := range delegation.AcademicUnitRootIDs {
 		unit, lookupErr := s.academicUnits.Get(ctx, id)
@@ -251,12 +283,15 @@ func (s *Service) ListGrantablePersonalAccessTokenScopes(
 			return nil, apperror.New("personal_access_token.unavailable").
 				WithField("resource", "academic_unit").Wrap(lookupErr)
 		}
+
 		units = append(units, unit)
 	}
+
 	sort.SliceStable(units, func(i, j int) bool {
 		if units[i].DisplayName != units[j].DisplayName {
 			return units[i].DisplayName < units[j].DisplayName
 		}
+
 		return units[i].ID < units[j].ID
 	})
 	result := &PersonalAccessTokenGrantableScopes{
@@ -266,27 +301,34 @@ func (s *Service) ListGrantablePersonalAccessTokenScopes(
 		units = units[:personalAccessTokenGrantableAcademicUnitLimit]
 		result.AcademicUnitsHasMore = true
 	}
+
 	result.AcademicUnits = units
 	listed := make(map[model.AcademicUnitID]struct{}, len(units))
 	for _, unit := range units {
 		listed[unit.ID] = struct{}{}
 	}
+
 	for _, action := range delegation.Actions {
 		definition, ok := model.DefinitionForAction(action.Action)
 		if !ok {
 			continue
 		}
+
 		scope := PersonalAccessTokenGrantableScope{
-			Action: action.Action, ResourceTypes: definition.ResourceTypes(),
-			InstitutionWide: action.InstitutionWide, AcademicUnitIDs: []model.AcademicUnitID{},
+			Action:          action.Action,
+			ResourceTypes:   definition.ResourceTypes(),
+			InstitutionWide: action.InstitutionWide,
+			AcademicUnitIDs: []model.AcademicUnitID{},
 		}
 		for _, id := range action.AcademicUnitIDs {
 			if _, ok := listed[id]; ok {
 				scope.AcademicUnitIDs = append(scope.AcademicUnitIDs, id)
 			}
 		}
+
 		result.Scopes = append(result.Scopes, scope)
 	}
+
 	return result, nil
 }
 
@@ -303,45 +345,70 @@ func (s *Service) RevokePersonalAccessToken(
 	if !command.TokenID.IsValid() {
 		return nil, invalidPersonalAccessTokenRequest("personal_access_token_id")
 	}
+
 	current, err := s.personalAccessTokens.Get(ctx, command.TokenID)
 	if err != nil || current.UserID != principal.UserID {
 		if err == nil {
 			err = store.NewErrNotFound("personal_access_token", command.TokenID.String())
 		}
+
 		return nil, personalAccessTokenFailure("personal_access_token", err)
 	}
+
 	if current.RevokedAt.Valid {
 		return current, nil
 	}
+
 	resource, err := s.personalAccessTokenAuditResource(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	auditDraft, appErr := s.preparePersonalAccessTokenAudit(
-		ctx, principal, model.ActionPersonalAccessTokenRevoke, resource, invocation.RequestMetadata(),
+		ctx,
+		principal,
+		model.ActionPersonalAccessTokenRevoke,
+		resource,
+		invocation.RequestMetadata(),
 		map[string]any{"personal_access_token_id": command.TokenID},
 		current.Auditable(),
 	)
 	if appErr != nil {
 		return nil, appErr
 	}
+
 	prepared, err := s.personalAccessTokens.PrepareMutation(ctx, &store.PersonalAccessTokenMutationPreparation{
-		UserID: principal.UserID, TokenID: command.TokenID, Kind: store.PersonalAccessTokenMutationRevoke,
-		AuditEvent: auditDraft, Lifetime: personalAccessTokenMutationPreparationLifetime,
+		UserID:     principal.UserID,
+		TokenID:    command.TokenID,
+		Kind:       store.PersonalAccessTokenMutationRevoke,
+		AuditEvent: auditDraft,
+		Lifetime:   personalAccessTokenMutationPreparationLifetime,
 	})
 	if err != nil {
 		return nil, personalAccessTokenFailure("personal_access_token", err)
 	}
-	notice, err := s.preparePersonalAccessTokenNotice(ctx, principal.UserID, current, model.MailTemplateIdentityPersonalAccessTokenRevoked, prepared.ActionAt)
+
+	notice, err := s.preparePersonalAccessTokenNotice(
+		ctx,
+		principal.UserID,
+		current,
+		model.MailTemplateIdentityPersonalAccessTokenRevoked,
+		prepared.ActionAt,
+	)
 	if err != nil {
 		return nil, s.failPersonalAccessTokenMutation(ctx, prepared.ID.String(), err)
 	}
+
 	result, err := s.personalAccessTokens.Revoke(ctx, &store.PersonalAccessTokenRevocation{
-		ID: command.TokenID, UserID: principal.UserID, PreparationID: prepared.ID, Notice: notice,
+		ID:            command.TokenID,
+		UserID:        principal.UserID,
+		PreparationID: prepared.ID,
+		Notice:        notice,
 	})
 	if err != nil {
 		return nil, s.failPersonalAccessTokenMutation(ctx, prepared.ID.String(), err)
 	}
+
 	return result.Token, nil
 }
 
@@ -358,30 +425,41 @@ func (s *Service) SetPersonalAccessTokenDisabled(
 	if !command.Disabled {
 		action = model.ActionPersonalAccessTokenEnable
 	}
+
 	if err := requireInteractiveSession(
 		principal, !command.Disabled, at, s.recentAuthenticationTTL,
 	); err != nil {
 		return nil, err
 	}
+
 	if !command.TokenID.IsValid() {
 		return nil, invalidPersonalAccessTokenRequest("personal_access_token_id")
 	}
+
 	current, err := s.personalAccessTokens.Get(ctx, command.TokenID)
 	if err != nil || current.UserID != principal.UserID {
 		if err == nil {
 			err = store.NewErrNotFound("personal_access_token", command.TokenID.String())
 		}
+
 		return nil, personalAccessTokenFailure("personal_access_token", err)
 	}
+
 	if command.Disabled == current.DisabledAt.Valid {
 		return current, nil
 	}
+
 	resource, err := s.personalAccessTokenAuditResource(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	auditDraft, appErr := s.preparePersonalAccessTokenAudit(
-		ctx, principal, action, resource, invocation.RequestMetadata(),
+		ctx,
+		principal,
+		action,
+		resource,
+		invocation.RequestMetadata(),
 		map[string]any{
 			"personal_access_token_id": command.TokenID,
 			"disabled":                 command.Disabled,
@@ -391,32 +469,45 @@ func (s *Service) SetPersonalAccessTokenDisabled(
 	if appErr != nil {
 		return nil, appErr
 	}
+
 	key := model.MailTemplateIdentityPersonalAccessTokenEnabled
 	if command.Disabled {
 		key = model.MailTemplateIdentityPersonalAccessTokenDisabled
 	}
+
 	kind := store.PersonalAccessTokenMutationEnable
 	if command.Disabled {
 		kind = store.PersonalAccessTokenMutationDisable
 	}
+
 	prepared, err := s.personalAccessTokens.PrepareMutation(ctx, &store.PersonalAccessTokenMutationPreparation{
-		UserID: principal.UserID, TokenID: command.TokenID, Kind: kind,
-		AuditEvent: auditDraft, Lifetime: personalAccessTokenMutationPreparationLifetime,
+		UserID:     principal.UserID,
+		TokenID:    command.TokenID,
+		Kind:       kind,
+		AuditEvent: auditDraft,
+		Lifetime:   personalAccessTokenMutationPreparationLifetime,
 	})
 	if err != nil {
 		return nil, personalAccessTokenFailure("personal_access_token", err)
 	}
+
 	notice, err := s.preparePersonalAccessTokenNotice(ctx, principal.UserID, current, key, prepared.ActionAt)
 	if err != nil {
 		return nil, s.failPersonalAccessTokenMutation(ctx, prepared.ID.String(), err)
 	}
+
 	result, err := s.personalAccessTokens.ChangeState(ctx, &store.PersonalAccessTokenStateMutation{
-		ID: command.TokenID, UserID: principal.UserID, Disabled: command.Disabled,
-		MaximumActive: s.personalAccessTokenPolicy.MaximumPerUser, PreparationID: prepared.ID, Notice: notice,
+		ID:            command.TokenID,
+		UserID:        principal.UserID,
+		Disabled:      command.Disabled,
+		MaximumActive: s.personalAccessTokenPolicy.MaximumPerUser,
+		PreparationID: prepared.ID,
+		Notice:        notice,
 	})
 	if err != nil {
 		return nil, s.failPersonalAccessTokenMutation(ctx, prepared.ID.String(), err)
 	}
+
 	return result.Token, nil
 }
 
@@ -431,17 +522,25 @@ func (s *Service) preparePersonalAccessTokenNotice(
 	if err != nil || user == nil || user.ID != userID {
 		return store.PersonalAccessTokenSecurityNotice{}, personalAccessTokenFailure("user", err)
 	}
+
 	prepared, err := s.mail.PreparePersonalAccessTokenSecurityNotice(mail.PersonalAccessTokenPreparation{
-		Recipient: user, TemplateKey: key, Description: token.Description,
-		ExpiresAt: token.ExpiresAt, ActionAt: at, ActionCount: len(token.Scopes),
+		Recipient:          user,
+		TemplateKey:        key,
+		Description:        token.Description,
+		ExpiresAt:          token.ExpiresAt,
+		ActionAt:           at,
+		ActionCount:        len(token.Scopes),
 		AcademicUnitScoped: !token.AcademicUnitID.IsZero(),
 	})
 	if err != nil {
 		return store.PersonalAccessTokenSecurityNotice{}, apperror.New("mail.unavailable").Wrap(err)
 	}
+
 	return store.PersonalAccessTokenSecurityNotice{
-		Occurrence: prepared.Occurrence, Delivery: prepared.Delivery, Job: prepared.Job,
-		ExpiresAt: token.ExpiresAt,
+		Occurrence: prepared.Occurrence,
+		Delivery:   prepared.Delivery,
+		Job:        prepared.Job,
+		ExpiresAt:  token.ExpiresAt,
 	}, nil
 }
 
@@ -455,12 +554,15 @@ func requireInteractiveSession(
 		principal.CredentialType != model.CredentialSessionAccess {
 		return apperror.New("authentication.session_required")
 	}
-	if recent && !principal.IsRecentlyAuthenticated(
-		now,
-		recentAuthenticationTTL,
-	) {
+
+	if recent &&
+		!principal.IsRecentlyAuthenticated(
+			now,
+			recentAuthenticationTTL,
+		) {
 		return apperror.New("authentication.reauthentication_required")
 	}
+
 	return nil
 }
 
@@ -502,9 +604,14 @@ func (s *Service) failPersonalAccessTokenMutation(
 	if failure, ok := apperror.As(mapped); ok {
 		code = failure.Code()
 	}
-	if terminalErr := s.personalAccessTokens.FailMutation(ctx, &store.PersonalAccessTokenMutationFailure{PreparationID: model.PersonalAccessTokenPreparationID(preparationID), ErrorCode: code}); terminalErr != nil {
+
+	if terminalErr := s.personalAccessTokens.FailMutation(
+		ctx,
+		&store.PersonalAccessTokenMutationFailure{PreparationID: model.PersonalAccessTokenPreparationID(preparationID), ErrorCode: code},
+	); terminalErr != nil {
 		return apperror.New("audit.unavailable").Wrap(terminalErr)
 	}
+
 	return mapped
 }
 
@@ -543,9 +650,14 @@ func personalAccessTokenFailure(resource string, err error) error {
 	if _, ok := apperror.As(err); ok {
 		return apperror.New("personal_access_token.unavailable").WithField("resource", resource).Wrap(err)
 	}
+
 	return apperror.StoreTable{
-		Rules: []apperror.StoreRule{{Kind: apperror.StoreConflict, Entity: "personal_access_token",
-			Constraint: "personal_access_tokens_maximum_per_user", Code: "personal_access_token.maximum_reached"}},
+		Rules: []apperror.StoreRule{{
+			Kind:       apperror.StoreConflict,
+			Entity:     "personal_access_token",
+			Constraint: "personal_access_tokens_maximum_per_user",
+			Code:       "personal_access_token.maximum_reached",
+		}},
 		NotFound:    "resource.not_found",
 		Unavailable: "personal_access_token.unavailable",
 		Fields:      map[string]string{"resource": resource},

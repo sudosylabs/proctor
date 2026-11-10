@@ -115,15 +115,20 @@ func (p *currentAuthenticationAccessPolicy) AllowsLocalLogin(ctx context.Context
 	return policy.LocalLoginEnabled, nil
 }
 
-func (p *currentAuthenticationAccessPolicy) ExternalProviderAdmission(ctx context.Context, providerID string) (externalProviderAdmissionPolicy, error) {
+func (p *currentAuthenticationAccessPolicy) ExternalProviderAdmission(
+	ctx context.Context,
+	providerID string,
+) (externalProviderAdmissionPolicy, error) {
 	providerID = strings.ToLower(strings.TrimSpace(providerID))
 	if providerID == "" {
 		return externalProviderAdmissionPolicy{}, nil
 	}
+
 	policy, err := p.current(ctx)
 	if err != nil {
 		return externalProviderAdmissionPolicy{}, err
 	}
+
 	return externalProviderAdmissionPolicy{
 		Mode:                       policy.ProviderAdmissions[providerID],
 		InvitationAdmissionEnabled: policy.InvitationAdmissionEnabled,
@@ -174,14 +179,22 @@ func (p *currentAuthenticationAccessPolicy) RequiresMFA(ctx context.Context, use
 		if err != nil {
 			return false, err
 		}
+
 		if policy.RoleHolderMFARequired {
 			p.pausedWarning.Do(func() {
-				p.deps.Diagnostics.WarnContext(ctx, "role holder two-step verification is paused",
-					logging.Err(errors.New("the access policy requires two-step verification of role holders, but the deployment configuration disables MFA")))
+				p.deps.Diagnostics.WarnContext(
+					ctx,
+					"role holder two-step verification is paused",
+					logging.Err(
+						errors.New("the access policy requires two-step verification of role holders, but the deployment configuration disables MFA"),
+					),
+				)
 			})
 		}
+
 		return false, nil
 	}
+
 	return p.deps.Policies.HasRoleHolderMFARequirement(ctx, userID, model.TimeUTC(p.deps.Now()))
 }
 

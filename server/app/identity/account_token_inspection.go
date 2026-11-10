@@ -45,7 +45,11 @@ type EmailChangeUndoInspection struct {
 // superseded, consumed, and mismatched tokens behind the completion's generic
 // invalid-credential outcome. The result is presentation only; completion
 // rechecks everything against authoritative PostgreSQL time.
-func (s *Service) InspectEmailVerification(ctx context.Context, _ invocation.Invocation, command InspectAccountTokenCommand) (*EmailVerificationInspection, error) {
+func (s *Service) InspectEmailVerification(
+	ctx context.Context,
+	_ invocation.Invocation,
+	command InspectAccountTokenCommand,
+) (*EmailVerificationInspection, error) {
 	token, user, err := s.inspectAccountToken(ctx, accountRecoveryAttemptEmailVerificationInspect, model.UserTokenEmailVerification, command)
 	if err != nil {
 		return nil, err
@@ -53,45 +57,67 @@ func (s *Service) InspectEmailVerification(ctx context.Context, _ invocation.Inv
 	if user.Email != token.Target {
 		return nil, invalidAccountCredential()
 	}
+
 	return &EmailVerificationInspection{Email: token.Target}, nil
 }
 
 // InspectEmailChangeUndo reads, under the same rules as
 // InspectEmailVerification, the change an active undo token would reverse.
-func (s *Service) InspectEmailChangeUndo(ctx context.Context, _ invocation.Invocation, command InspectAccountTokenCommand) (*EmailChangeUndoInspection, error) {
+func (s *Service) InspectEmailChangeUndo(
+	ctx context.Context,
+	_ invocation.Invocation,
+	command InspectAccountTokenCommand,
+) (*EmailChangeUndoInspection, error) {
 	token, user, err := s.inspectAccountToken(ctx, accountRecoveryAttemptEmailChangeUndoInspect, model.UserTokenEmailChangeUndo, command)
 	if err != nil {
 		return nil, err
 	}
-	return &EmailChangeUndoInspection{RestoredEmail: token.Target, MaskedCurrentEmail: mail.MaskAddress(user.Email), ChangedAt: model.TimeUTC(token.CreatedAt)}, nil
+
+	return &EmailChangeUndoInspection{
+		RestoredEmail:      token.Target,
+		MaskedCurrentEmail: mail.MaskAddress(user.Email),
+		ChangedAt:          model.TimeUTC(token.CreatedAt),
+	}, nil
 }
 
-func (s *Service) inspectAccountToken(ctx context.Context, operation accountRecoveryAttemptOperation, purpose model.UserTokenPurpose, command InspectAccountTokenCommand) (*model.UserToken, *model.User, error) {
+func (s *Service) inspectAccountToken(
+	ctx context.Context,
+	operation accountRecoveryAttemptOperation,
+	purpose model.UserTokenPurpose,
+	command InspectAccountTokenCommand,
+) (*model.UserToken, *model.User, error) {
 	if err := s.checkAccountRecoveryRateLimit(ctx, operation, recoveryCredentialRateIdentity(command.Token), command.Source); err != nil {
 		return nil, nil, err
 	}
 	if !validRawCredential(command.Token) {
 		return nil, nil, invalidAccountCredential()
 	}
+
 	token, err := s.userTokens.GetByHash(ctx, model.HashToken(command.Token), purpose)
 	if err != nil {
 		if store.IsNotFound(err) {
 			return nil, nil, invalidAccountCredential()
 		}
+
 		return nil, nil, accountRecoveryStoreFailure(err)
 	}
+
 	if token == nil || token.Purpose != purpose || !token.IsActiveAt(s.now()) {
 		return nil, nil, invalidAccountCredential()
 	}
+
 	user, err := s.users.Get(ctx, token.UserID)
 	if err != nil {
 		if store.IsNotFound(err) {
 			return nil, nil, invalidAccountCredential()
 		}
+
 		return nil, nil, accountRecoveryStoreFailure(err)
 	}
+
 	if user == nil || !user.IsActive() {
 		return nil, nil, invalidAccountCredential()
 	}
+
 	return token, user, nil
 }

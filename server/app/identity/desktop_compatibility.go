@@ -109,14 +109,20 @@ func newDesktopBuildCatalog(entries []model.DesktopBuildTuple) (*desktopBuildCat
 // collaborators are incomplete and builds the immutable Desktop build catalog.
 // New calls it first, before any sign-in collaborator is set up.
 func (s *Service) requireDesktopCompatibility(builds []model.DesktopBuildTuple) error {
-	if s.desktopCompatibilityPolicies == nil || s.institutions == nil || s.authorizer == nil || s.auditor == nil ||
-		s.recentAuthenticationTTL <= 0 || s.now == nil {
+	if s.desktopCompatibilityPolicies == nil ||
+		s.institutions == nil ||
+		s.authorizer == nil ||
+		s.auditor == nil ||
+		s.recentAuthenticationTTL <= 0 ||
+		s.now == nil {
 		return errors.New("desktop compatibility service dependencies are invalid")
 	}
+
 	catalog, err := newDesktopBuildCatalog(builds)
 	if err != nil {
 		return err
 	}
+
 	s.desktopBuilds = catalog
 	return nil
 }
@@ -139,29 +145,37 @@ func (s *Service) evaluateDesktopBuild(
 	if err := validateDesktopCompatibilityQuery(query); err != nil {
 		return DesktopCompatibilityResult{}, err
 	}
+
 	policy, err := s.desktopCompatibilityPolicies.Get(ctx)
 	if err != nil || policy == nil {
 		return DesktopCompatibilityResult{}, desktopCompatibilityPolicyError(err)
 	}
+
 	var result DesktopCompatibilityResult
 	if skipBuildChecks {
 		if policy.Validate() != nil {
 			return DesktopCompatibilityResult{}, apperror.New("desktop_compatibility_policy.unavailable")
 		}
+
 		result = DesktopCompatibilityResult{
-			Availability: policy.Availability, RetryAt: policy.RetryAt,
-			Compatibility: DesktopCompatibilityCompatible, Reason: "compatible",
+			Availability:         policy.Availability,
+			RetryAt:              policy.RetryAt,
+			Compatibility:        DesktopCompatibilityCompatible,
+			Reason:               "compatible",
 			AdministratorMessage: policy.AdministratorMessage,
 		}
 	} else {
 		result, err = s.desktopBuilds.evaluate(policy, query)
 	}
+
 	if err != nil {
 		return DesktopCompatibilityResult{}, err
 	}
+
 	if result.RetryAt.Valid && !result.RetryAt.Time.After(model.TimeUTC(s.now())) {
 		result.RetryAt = model.OptionalTime{}
 	}
+
 	result.PolicyRevision = policy.Revision
 	return result, nil
 }
@@ -177,23 +191,31 @@ func (s *Service) ResolveAttemptDesktopBuild(
 	if principal.Validate() != nil || !principal.HasRegisteredDesktopKey() {
 		return attempt.DesktopBuildResolution{}, errors.New("Desktop principal is invalid")
 	}
+
 	query := DesktopCompatibilityQuery{
-		DesktopRelease: principal.DesktopRelease, DesktopBuildID: principal.DesktopBuildID,
-		Platform: string(principal.DesktopPlatform), Architecture: string(principal.DesktopArchitecture),
+		DesktopRelease:   principal.DesktopRelease,
+		DesktopBuildID:   principal.DesktopBuildID,
+		Platform:         string(principal.DesktopPlatform),
+		Architecture:     string(principal.DesktopArchitecture),
 		RealtimeProtocol: principal.DesktopRealtimeProtocol,
 	}
 	result, err := s.evaluateDesktopBuild(ctx, query, false)
-	if err != nil || result.Availability != model.DesktopAvailabilityReady ||
+	if err != nil ||
+		result.Availability != model.DesktopAvailabilityReady ||
 		result.Compatibility != DesktopCompatibilityCompatible {
 		return attempt.DesktopBuildResolution{}, errors.New("Desktop build is not compatible")
 	}
+
 	for _, entry := range s.desktopBuilds.entries {
-		if entry.DesktopRelease == query.DesktopRelease && entry.DesktopBuildID == query.DesktopBuildID &&
-			entry.Platform == principal.DesktopPlatform && entry.Architecture == principal.DesktopArchitecture &&
+		if entry.DesktopRelease == query.DesktopRelease &&
+			entry.DesktopBuildID == query.DesktopBuildID &&
+			entry.Platform == principal.DesktopPlatform &&
+			entry.Architecture == principal.DesktopArchitecture &&
 			entry.RealtimeProtocol == query.RealtimeProtocol {
 			return attempt.DesktopBuildResolution{Build: entry, CompatibilityPolicyRevision: result.PolicyRevision}, nil
 		}
 	}
+
 	return attempt.DesktopBuildResolution{}, errors.New("Desktop build is missing from the verified catalog")
 }
 
@@ -225,6 +247,7 @@ func (s *Service) ReplaceDesktopCompatibilityPolicy(
 	); err != nil {
 		return nil, err
 	}
+
 	institution, resource, err := s.authorizeInstitutionAction(
 		ctx,
 		invocation,
@@ -239,6 +262,7 @@ func (s *Service) ReplaceDesktopCompatibilityPolicy(
 	if command.IdempotencyKey == "" {
 		return nil, apperror.New("idempotency.key_required")
 	}
+
 	idempotency, err := idempotency.Prepare(
 		invocation,
 		"desktop_compatibility_policy.replace",
@@ -254,6 +278,7 @@ func (s *Service) ReplaceDesktopCompatibilityPolicy(
 	if err != nil {
 		return nil, err
 	}
+
 	stored, err := access.RunAudited(
 		ctx,
 		s.auditor,
@@ -298,6 +323,7 @@ func (s *Service) ReplaceDesktopCompatibilityPolicy(
 	if stored == nil || stored.Policy == nil || stored.Policy.Validate() != nil {
 		return nil, apperror.New("desktop_compatibility_policy.unavailable")
 	}
+
 	return stored.Policy.Clone(), nil
 }
 
@@ -350,6 +376,7 @@ func (c *desktopBuildCatalog) evaluate(
 			matchingTarget = append(matchingTarget, entry)
 		}
 	}
+
 	if len(matchingTarget) == 0 {
 		return DesktopCompatibilityResult{
 			Availability:         policy.Availability,
@@ -368,36 +395,43 @@ func (c *desktopBuildCatalog) evaluate(
 		result.Reason = "release_too_old"
 		return result, nil
 	}
+
 	maximumComparison, _ := model.CompareDesktopReleases(query.DesktopRelease, result.MaximumDesktopRelease)
 	if maximumComparison > 0 {
 		result.Compatibility = DesktopCompatibilityServerIncompatible
 		result.Reason = "release_too_new"
 		return result, nil
 	}
+
 	if query.RealtimeProtocol < result.MinimumRealtimeProtocol {
 		result.Compatibility = DesktopCompatibilityUpdateRequired
 		result.Reason = "realtime_protocol_too_old"
 		return result, nil
 	}
+
 	if query.RealtimeProtocol > result.MaximumRealtimeProtocol {
 		result.Compatibility = DesktopCompatibilityServerIncompatible
 		result.Reason = "realtime_protocol_too_new"
 		return result, nil
 	}
+
 	if _, revoked := slices.BinarySearch(policy.RevokedDesktopBuildIDs, query.DesktopBuildID); revoked {
 		result.Compatibility = DesktopCompatibilityUpdateRequired
 		result.Reason = "build_revoked"
 		return result, nil
 	}
+
 	for _, entry := range matchingTarget {
 		isExactBuild := entry.DesktopBuildID == query.DesktopBuildID &&
-			entry.DesktopRelease == query.DesktopRelease && entry.RealtimeProtocol == query.RealtimeProtocol
+			entry.DesktopRelease == query.DesktopRelease &&
+			entry.RealtimeProtocol == query.RealtimeProtocol
 		if isExactBuild {
 			result.Compatibility = DesktopCompatibilityCompatible
 			result.Reason = "compatible"
 			return result, nil
 		}
 	}
+
 	result.Compatibility = DesktopCompatibilityServerIncompatible
 	result.Reason = "build_unrecognized"
 	return result, nil
@@ -452,16 +486,24 @@ func desktopCompatibilityBounds(
 // a retained stream even after its owning key authenticates a newer Desktop.
 // It grants no live admission; source ownership is checked by the use case and
 // atomically again by the delivery Store.
-func (s *Service) ResolveNativeDeliveryBuild(_ context.Context, identity attempt.NativeDeliveryBuildIdentity) (model.DesktopBuildTuple, error) {
+func (s *Service) ResolveNativeDeliveryBuild(
+	_ context.Context,
+	identity attempt.NativeDeliveryBuildIdentity,
+) (model.DesktopBuildTuple, error) {
 	for _, entry := range s.desktopBuilds.entries {
 		agreement := entry.NativeAgreement
 		if agreement == nil {
 			continue
 		}
+
 		matrix := agreement.Matrix()
-		if matrix.ReleaseID == identity.ReleaseID && matrix.MatrixID == identity.MatrixID && matrix.TargetTuple == identity.TargetTuple && agreement.MatrixDigest() == identity.MatrixDigest {
+		if matrix.ReleaseID == identity.ReleaseID &&
+			matrix.MatrixID == identity.MatrixID &&
+			matrix.TargetTuple == identity.TargetTuple &&
+			agreement.MatrixDigest() == identity.MatrixDigest {
 			return entry, nil
 		}
 	}
+
 	return model.DesktopBuildTuple{}, errors.New("original native delivery build is missing from the verified catalog")
 }

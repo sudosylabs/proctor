@@ -48,6 +48,7 @@ func (s *Service) resolvePersonalAccessTokenBearer(
 	if !validRawCredential(rawToken) {
 		return nil, access.InvalidTokenAppError()
 	}
+
 	resolved, err := s.personalAccessTokens.Resolve(
 		ctx,
 		model.HashToken(rawToken),
@@ -58,8 +59,10 @@ func (s *Service) resolvePersonalAccessTokenBearer(
 		if store.IsNotFound(err) {
 			return nil, access.InvalidTokenAppError()
 		}
+
 		return nil, authenticationUnavailable(err)
 	}
+
 	principal := &model.Principal{
 		UserID:               resolved.User.ID,
 		CredentialID:         model.PrincipalCredentialID(resolved.Token.ID),
@@ -77,5 +80,6 @@ func (s *Service) resolvePersonalAccessTokenBearer(
 		)
 		return nil, access.InvalidTokenAppError()
 	}
+
 	return principal, nil
 }

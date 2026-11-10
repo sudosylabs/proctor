@@ -181,14 +181,44 @@ type Dependencies struct {
 // Mutations are audited through the Service's access.MutationAuditor.
 type securityAuditor interface {
 	BeginLocalLogin(context.Context, model.UserID, model.SessionClientType, model.RequestMetadata) (*model.AuditEvent, error)
-	BeginAuthentication(context.Context, model.UserID, string, string, model.SessionClientType, model.RequestMetadata,
-		model.InstitutionID) (*model.AuditEvent, error)
-	BeginAccountActionAtScope(context.Context, access.AccountAuditActor, model.Action, model.Resource, model.RoleScopeType,
-		string, model.RequestMetadata, any) (*model.AuditEvent, error)
-	BeginCriticalActionForSubject(context.Context, model.Principal, model.UserID, model.Action, model.Resource,
-		model.RequestMetadata, any, any) (*model.AuditEvent, error)
-	PrepareCriticalAction(context.Context, model.Principal, model.Action, model.Resource, model.RequestMetadata,
-		any, any) (*model.AuditEvent, error)
+	BeginAuthentication(
+		context.Context,
+		model.UserID,
+		string,
+		string,
+		model.SessionClientType,
+		model.RequestMetadata,
+		model.InstitutionID,
+	) (*model.AuditEvent, error)
+	BeginAccountActionAtScope(
+		context.Context,
+		access.AccountAuditActor,
+		model.Action,
+		model.Resource,
+		model.RoleScopeType,
+		string,
+		model.RequestMetadata,
+		any,
+	) (*model.AuditEvent, error)
+	BeginCriticalActionForSubject(
+		context.Context,
+		model.Principal,
+		model.UserID,
+		model.Action,
+		model.Resource,
+		model.RequestMetadata,
+		any,
+		any,
+	) (*model.AuditEvent, error)
+	PrepareCriticalAction(
+		context.Context,
+		model.Principal,
+		model.Action,
+		model.Resource,
+		model.RequestMetadata,
+		any,
+		any,
+	) (*model.AuditEvent, error)
 	CompleteCriticalAction(context.Context, model.AuditEventID, model.AuditStatus, string, any) (*model.AuditEvent, error)
 	RecordLocalLoginFailure(context.Context, model.UserID, model.SessionClientType, model.RequestMetadata, string) error
 	RecordExternalAuthenticationFailure(context.Context, string, string, model.RequestMetadata, model.InstitutionID, string) error
@@ -327,19 +357,26 @@ func New(deps Dependencies) (*Service, error) {
 	if deps.Store == nil {
 		return nil, errors.New("identity store catalog is required")
 	}
+
 	mfa, err := newMFAMechanics(mfaMechanicsDependencies{Settings: deps.MFA, Sealer: deps.MFASecretSealer})
 	if err != nil {
 		return nil, err
 	}
+
 	if deps.MFASecretSealer != nil {
 		if err = validateMFASecretKeys(context.Background(), deps.Store.MFA(), deps.MFASecretSealer); err != nil {
 			return nil, err
 		}
 	}
+
 	service := &Service{
-		desktopCompatibilityPolicies: deps.Store.DesktopCompatibilityPolicy(), institutions: deps.Store.Institution(),
-		authorizer: deps.Authorizer, auditor: deps.Auditor.MutationAudit(), skipDesktopBuildChecks: deps.SkipDesktopCompatibility,
-		recentAuthenticationTTL: deps.RecentAuthenticationTTL, now: time.Now,
+		desktopCompatibilityPolicies: deps.Store.DesktopCompatibilityPolicy(),
+		institutions:                 deps.Store.Institution(),
+		authorizer:                   deps.Authorizer,
+		auditor:                      deps.Auditor.MutationAudit(),
+		skipDesktopBuildChecks:       deps.SkipDesktopCompatibility,
+		recentAuthenticationTTL:      deps.RecentAuthenticationTTL,
+		now:                          time.Now,
 	}
 	if err = service.requireDesktopCompatibility(deps.DesktopBuildCatalog); err != nil {
 		return nil, err
@@ -356,6 +393,7 @@ func New(deps Dependencies) (*Service, error) {
 	if err := service.constructAdministration(deps); err != nil {
 		return nil, err
 	}
+
 	return service, nil
 }
 
@@ -363,16 +401,28 @@ func New(deps Dependencies) (*Service, error) {
 // policy, and sets and checks the Service's two-step verification, sign-in,
 // Session and Desktop authorization and reauthentication collaborators.
 func (s *Service) constructSessionAuthentication(deps Dependencies, mfa *mfaMechanics) error {
-	dpop, err := newDPoPSecurity(dpopSecurityDependencies{Cache: deps.Cache, Policy: dpopPolicy{Origin: deps.PublicURL,
-		NonceLifetime: 5 * time.Minute, ProofLifetime: 5 * time.Minute, ClockSkew: time.Minute,
-		NewNonce: model.NewCredentialToken, Now: time.Now}})
+	dpop, err := newDPoPSecurity(dpopSecurityDependencies{Cache: deps.Cache, Policy: dpopPolicy{
+		Origin:        deps.PublicURL,
+		NonceLifetime: 5 * time.Minute,
+		ProofLifetime: 5 * time.Minute,
+		ClockSkew:     time.Minute,
+		NewNonce:      model.NewCredentialToken,
+		Now:           time.Now,
+	}})
 	if err != nil {
 		return err
 	}
-	authenticationAccess, err := newCurrentAuthenticationAccessPolicy(currentAuthenticationAccessPolicyDependencies{Policies: deps.Store.AccessPolicy(), MFAEnabled: deps.MFA.Enabled, Diagnostics: deps.AuthenticationDiagnostics, Now: time.Now})
+
+	authenticationAccess, err := newCurrentAuthenticationAccessPolicy(currentAuthenticationAccessPolicyDependencies{
+		Policies:    deps.Store.AccessPolicy(),
+		MFAEnabled:  deps.MFA.Enabled,
+		Diagnostics: deps.AuthenticationDiagnostics,
+		Now:         time.Now,
+	})
 	if err != nil {
 		return err
 	}
+
 	s.users, s.passwords = deps.Store.User(), deps.Store.PasswordCredential()
 	s.sessions, s.sessionCredentials = deps.Store.Session(), deps.Store.SessionCredential()
 	s.desktopRegistrations, s.personalAccessTokens = deps.Store.DesktopRegistration(), deps.Store.PersonalAccessToken()
@@ -381,10 +431,12 @@ func (s *Service) constructSessionAuthentication(deps Dependencies, mfa *mfaMech
 	if deps.Hasher != nil {
 		s.hasher = deps.Hasher
 	}
+
 	s.mail, s.effects, s.capabilities = deps.Mail, deps.Effects, deps.Capabilities
 	if deps.Auditor != nil {
 		s.securityAudit = deps.Auditor
 	}
+
 	s.operational, s.diagnostics = deps.Operational, deps.AuthenticationDiagnostics
 	s.sessionPolicy, s.loginRateLimit, s.personalAccessTokenPolicy = deps.Sessions, deps.LoginRateLimit, deps.PersonalAccessToken
 	s.newCredential, s.wait = model.NewCredentialToken, waitContext
@@ -394,11 +446,13 @@ func (s *Service) constructSessionAuthentication(deps Dependencies, mfa *mfaMech
 	if err = s.requireSessionAuthentication(); err != nil {
 		return err
 	}
+
 	s.browserAuthentications = deps.Store.BrowserAuthentication()
 	s.desktopPolicy = DesktopAuthorizationPolicy{Issuer: deps.PublicURL, AllowLoopbackHTTPDevelopment: deps.LoopbackHTTPDevelopment}
 	if err = s.requireDesktopAuthorization(); err != nil {
 		return err
 	}
+
 	return s.requireDesktopReauthentication()
 }
 
@@ -463,12 +517,21 @@ func (s *Service) constructAdministration(deps Dependencies) error {
 // access token preparations. Every node may run them.
 func MaintenanceTasks(catalog store.Catalog) []job.PeriodicTask {
 	return []job.PeriodicTask{
-		{Name: "browser-authentication-maintenance", Interval: browserAuthenticationMaintenanceInterval,
-			Runner: browserAuthenticationMaintenancePeriodicRunner{transactions: catalog.BrowserAuthentication()}},
-		{Name: "external-authentication-maintenance", Interval: externalAuthenticationMaintenanceInterval,
-			Runner: externalAuthenticationMaintenancePeriodicRunner{states: catalog.ExternalLoginState()}},
-		{Name: "personal-access-token-maintenance", Interval: personalAccessTokenMaintenanceInterval,
-			Runner: personalAccessTokenMaintenancePeriodicRunner{tokens: catalog.PersonalAccessToken()}},
+		{
+			Name:     "browser-authentication-maintenance",
+			Interval: browserAuthenticationMaintenanceInterval,
+			Runner:   browserAuthenticationMaintenancePeriodicRunner{transactions: catalog.BrowserAuthentication()},
+		},
+		{
+			Name:     "external-authentication-maintenance",
+			Interval: externalAuthenticationMaintenanceInterval,
+			Runner:   externalAuthenticationMaintenancePeriodicRunner{states: catalog.ExternalLoginState()},
+		},
+		{
+			Name:     "personal-access-token-maintenance",
+			Interval: personalAccessTokenMaintenanceInterval,
+			Runner:   personalAccessTokenMaintenancePeriodicRunner{tokens: catalog.PersonalAccessToken()},
+		},
 	}
 }
 

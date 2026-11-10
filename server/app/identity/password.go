@@ -75,6 +75,7 @@ func NewPasswordHasher(deps PasswordHasherDependencies) (*PasswordHasher, error)
 	if settings.HistoryCount < 0 || settings.HistoryCount > store.MaximumPasswordHistory {
 		return nil, errors.New("password history count is out of range")
 	}
+
 	hasher := &PasswordHasher{
 		deps:          deps,
 		minimumLength: settings.MinimumLength,
@@ -100,8 +101,10 @@ func NewPasswordHasher(deps PasswordHasherDependencies) (*PasswordHasher, error)
 			dummyHashes.Unlock()
 			return nil, fmt.Errorf("create password timing hash: %w", err)
 		}
+
 		dummyHashes.values[hasher.parameters] = dummy
 	}
+
 	dummyHashes.Unlock()
 	hasher.dummyHash = dummy
 	return hasher, nil

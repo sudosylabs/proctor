@@ -58,24 +58,36 @@ func (s *Service) ListUserSessions(
 	if query.Limit < 1 || query.Limit > paging.MaximumLimit {
 		return paging.Page[*model.Session]{}, apperror.Invalid("request.invalid", "limit")
 	}
+
 	if query.BeforeCreatedAt.IsZero() != query.BeforeID.IsZero() ||
 		(!query.BeforeID.IsZero() && !query.BeforeID.IsValid()) {
 		return paging.Page[*model.Session]{}, apperror.Invalid("request.invalid", "cursor")
 	}
-	if err := s.authorizer.Authorize(ctx, invocation, model.ActionSessionView, model.Resource{Type: model.ResourceUser, ID: userID.String()}); err != nil {
+
+	if err := s.authorizer.Authorize(
+		ctx,
+		invocation,
+		model.ActionSessionView,
+		model.Resource{Type: model.ResourceUser, ID: userID.String()},
+	); err != nil {
 		return paging.Page[*model.Session]{}, err
 	}
+
 	page := &store.SessionPageQuery{
-		UserID: userID, Limit: query.Limit + 1,
-		BeforeCreatedAt: query.BeforeCreatedAt, BeforeID: query.BeforeID,
+		UserID:          userID,
+		Limit:           query.Limit + 1,
+		BeforeCreatedAt: query.BeforeCreatedAt,
+		BeforeID:        query.BeforeID,
 	}
 	if !query.IncludeRevoked {
 		page.ActiveAt = model.TimeUTC(s.now())
 	}
+
 	sessions, err := s.sessions.ListByUser(ctx, page)
 	if err != nil {
 		return paging.Page[*model.Session]{}, sessionAdministrationStoreErrors.Translate(err)
 	}
+
 	return paging.New(sessions, query.Limit), nil
 }
 
@@ -94,26 +106,38 @@ func (s *Service) RevokeUserSession(
 	if !sessionID.IsValid() {
 		return apperror.New("request.invalid").WithField("field", "session_id")
 	}
-	if err := s.authorizer.Authorize(ctx, invocation, model.ActionSessionManage, model.Resource{Type: model.ResourceUser, ID: userID.String()}); err != nil {
+
+	if err := s.authorizer.Authorize(
+		ctx,
+		invocation,
+		model.ActionSessionManage,
+		model.Resource{Type: model.ResourceUser, ID: userID.String()},
+	); err != nil {
 		return err
 	}
+
 	session, err := s.sessions.Get(ctx, sessionID)
 	if err != nil || session.UserID != userID {
 		if err == nil {
 			err = store.NewErrNotFound("session", sessionID.String())
 		}
+
 		return sessionAdministrationStoreErrors.Translate(err)
 	}
+
 	user, err := s.users.Get(ctx, userID)
 	if err != nil {
 		return sessionAdministrationStoreErrors.Translate(err)
 	}
+
 	now := model.TimeUTC(s.now())
 	prepared, err := s.prepareRevocationNotice(user, now)
 	if err != nil {
 		return sessionAdministrationStoreErrors.Translate(err)
 	}
-	return s.revokeSession(ctx,
+
+	return s.revokeSession(
+		ctx,
 		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionSessionManage,
@@ -123,11 +147,15 @@ func (s *Service) RevokeUserSession(
 			Prior:      session.Auditable(),
 		},
 		&store.SessionRevocation{
-			SessionID: sessionID, UserID: userID,
-			Occurrence: prepared.Occurrence, Delivery: prepared.Delivery, DeliveryJob: prepared.Job,
-			Reason: model.SessionRevocationAdministratorSession,
+			SessionID:   sessionID,
+			UserID:      userID,
+			Occurrence:  prepared.Occurrence,
+			Delivery:    prepared.Delivery,
+			DeliveryJob: prepared.Job,
+			Reason:      model.SessionRevocationAdministratorSession,
 		},
-		sessionAdministrationStoreErrors.Translate, func() time.Time { return now },
+		sessionAdministrationStoreErrors.Translate,
+		func() time.Time { return now },
 	)
 }
 
@@ -142,13 +170,21 @@ func (s *Service) RevokeUserSessions(
 	if !userID.IsValid() {
 		return apperror.New("request.invalid").WithField("field", "user_id")
 	}
-	if err := s.authorizer.Authorize(ctx, invocation, model.ActionSessionManage, model.Resource{Type: model.ResourceUser, ID: userID.String()}); err != nil {
+
+	if err := s.authorizer.Authorize(
+		ctx,
+		invocation,
+		model.ActionSessionManage,
+		model.Resource{Type: model.ResourceUser, ID: userID.String()},
+	); err != nil {
 		return err
 	}
+
 	user, err := s.users.Get(ctx, userID)
 	if err != nil {
 		return sessionAdministrationStoreErrors.Translate(err)
 	}
+
 	now := model.TimeUTC(s.now())
 	idempotency, err := idempotency.Prepare(invocation, "user_sessions.revoke", command.IdempotencyKey, struct {
 		UserID string `json:"user_id"`
@@ -156,6 +192,7 @@ func (s *Service) RevokeUserSessions(
 	if err != nil {
 		return err
 	}
+
 	batch := command.Batch.Fields()
 	batchitem.BindOnboardingImport(idempotency, batch.OnboardingImportID, batch.OnboardingImportRowNumber)
 	batchitem.BindAuthorization(idempotency, batch.Authorization)
@@ -169,7 +206,9 @@ func (s *Service) RevokeUserSessions(
 			return sessionAdministrationStoreErrors.Translate(err)
 		}
 	}
-	return s.revokeAllSessions(ctx,
+
+	return s.revokeAllSessions(
+		ctx,
 		access.Mutation{
 			Invocation: invocation,
 			Action:     model.ActionSessionManage,
@@ -178,11 +217,16 @@ func (s *Service) RevokeUserSessions(
 			Value:      map[string]any{"user_id": userID},
 		},
 		&store.UserSessionsRevocation{
-			UserID:     userID,
-			Occurrence: prepared.Occurrence, Delivery: prepared.Delivery, DeliveryJob: prepared.Job,
-			Reason: model.SessionRevocationAdministratorAllSessions, Command: idempotency,
+			UserID:      userID,
+			Occurrence:  prepared.Occurrence,
+			Delivery:    prepared.Delivery,
+			DeliveryJob: prepared.Job,
+			Reason:      model.SessionRevocationAdministratorAllSessions,
+			Command:     idempotency,
 		},
-		sessionAdministrationStoreErrors.Translate, batch.Replayed, func() time.Time { return now },
+		sessionAdministrationStoreErrors.Translate,
+		batch.Replayed,
+		func() time.Time { return now },
 	)
 }
 

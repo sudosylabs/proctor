@@ -26,8 +26,11 @@ import (
 // upload revalidation failure as an Invitation batch would record it, and the
 // progression preview failures.
 func OnboardingImportFailureCodes() []string {
-	return sortedCodes([]string{"authentication.token_invalid", "onboarding_import.file_invalid"},
-		invitationRowErrorCodes(), model.StudentProgressionFailureCodes())
+	return sortedCodes(
+		[]string{"authentication.token_invalid", "onboarding_import.file_invalid"},
+		invitationRowErrorCodes(),
+		model.StudentProgressionFailureCodes(),
+	)
 }
 
 // OnboardingImportPreviewCodes is every preview_code a preview row records:
@@ -35,8 +38,11 @@ func OnboardingImportFailureCodes() []string {
 // Invitation batch would record them, and the student progression row
 // outcomes.
 func OnboardingImportPreviewCodes() []string {
-	return sortedCodes([]string{"request.invalid", "onboarding_batch.duplicate"},
-		invitationRowErrorCodes(), model.StudentProgressionPreviewCodes())
+	return sortedCodes(
+		[]string{"request.invalid", "onboarding_batch.duplicate"},
+		invitationRowErrorCodes(),
+		model.StudentProgressionPreviewCodes(),
+	)
 }
 
 // OnboardingImportRowCodes is every public_code an executed row records when
@@ -44,8 +50,11 @@ func OnboardingImportPreviewCodes() []string {
 // academic administration batches that execute the row, which include
 // student_progression.conflict for a changed source membership.
 func OnboardingImportRowCodes() []string {
-	return sortedCodes([]string{"authentication.token_invalid"},
-		invitationRowErrorCodes(), AcademicAdministrationBatchErrorCodes())
+	return sortedCodes(
+		[]string{"authentication.token_invalid"},
+		invitationRowErrorCodes(),
+		AcademicAdministrationBatchErrorCodes(),
+	)
 }
 
 func sortedCodes(sets ...[]string) []string {

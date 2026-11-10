@@ -131,8 +131,13 @@ func (s *Service) recoveryAuditEvent(
 	authenticationMethod string,
 ) *model.AuditEvent {
 	return RecoveryAuditEvent(
-		action, resource, institutionID, invocation.RequestMetadata(), s.nodeID,
-		principal, authenticationMethod,
+		action,
+		resource,
+		institutionID,
+		invocation.RequestMetadata(),
+		s.nodeID,
+		principal,
+		authenticationMethod,
 	)
 }
 
@@ -146,6 +151,7 @@ func (s *Service) RequestEmailVerification(
 	if !s.mail.Enabled() {
 		return accountRecoveryUnavailable(fmt.Errorf("mail delivery is disabled"))
 	}
+
 	principal := invocation.Principal()
 	if err := s.checkAccountRecoveryRateLimit(
 		ctx,
@@ -155,6 +161,7 @@ func (s *Service) RequestEmailVerification(
 	); err != nil {
 		return err
 	}
+
 	user, err := s.users.Get(ctx, principal.UserID)
 	if err != nil {
 		return accountRecoveryStoreFailure(err)
@@ -165,10 +172,12 @@ func (s *Service) RequestEmailVerification(
 	if user.EmailVerified {
 		return nil
 	}
+
 	institution, err := s.accountRecoveryInstitution(ctx)
 	if err != nil {
 		return err
 	}
+
 	rawToken := s.newCredential()
 	now := s.now()
 	token := &model.UserToken{
@@ -195,16 +204,28 @@ func (s *Service) RequestEmailVerification(
 	if err != nil {
 		return accountRecoveryUnavailable(err)
 	}
+
 	prepared, err := s.mail.PrepareEmailVerification(mail.AccountTokenPreparation{
-		Recipient: user, OccurrenceID: model.MailOccurrenceID(token.ID.String()), ActionURL: link, At: now, Deadline: token.ExpiresAt,
+		Recipient:    user,
+		OccurrenceID: model.MailOccurrenceID(token.ID.String()),
+		ActionURL:    link,
+		At:           now,
+		Deadline:     token.ExpiresAt,
 	})
 	if err != nil {
 		return accountRecoveryUnavailable(err)
 	}
-	if _, err = s.userTokens.Issue(ctx, &store.UserTokenMailIssue{Token: token, Occurrence: prepared.Occurrence,
-		Delivery: prepared.Delivery, Job: prepared.Job, AuditEvent: event}); err != nil {
+
+	if _, err = s.userTokens.Issue(ctx, &store.UserTokenMailIssue{
+		Token:      token,
+		Occurrence: prepared.Occurrence,
+		Delivery:   prepared.Delivery,
+		Job:        prepared.Job,
+		AuditEvent: event,
+	}); err != nil {
 		return accountRecoveryStoreFailure(err)
 	}
+
 	return nil
 }
 
@@ -221,12 +242,14 @@ func (s *Service) RequestPasswordReset(
 		s.logHiddenRecoveryFailure(ctx, "password reset access policy lookup failed", err)
 		return nil
 	}
+
 	if !localLoginAllowed {
 		return nil
 	}
 	if !s.mail.Enabled() {
 		return accountRecoveryUnavailable(fmt.Errorf("mail delivery is disabled"))
 	}
+
 	normalizedEmail := strings.ToLower(strings.TrimSpace(model.SanitizeUnicode(command.Email)))
 	if err := s.checkAccountRecoveryRateLimit(
 		ctx,
@@ -236,30 +259,38 @@ func (s *Service) RequestPasswordReset(
 	); err != nil {
 		return err
 	}
+
 	if !model.IsValidEmail(normalizedEmail) {
 		return nil
 	}
+
 	user, err := s.users.GetByEmail(ctx, normalizedEmail)
 	if err != nil {
 		if !store.IsNotFound(err) {
 			s.logHiddenRecoveryFailure(ctx, "password reset user lookup failed", err)
 		}
+
 		return nil
 	}
+
 	if !user.IsActive() {
 		return nil
 	}
+
 	if _, err = s.passwords.GetByUser(ctx, user.ID); err != nil {
 		if !store.IsNotFound(err) {
 			s.logHiddenRecoveryFailure(ctx, "password credential lookup failed", err)
 		}
+
 		return nil
 	}
+
 	institution, err := s.accountRecoveryInstitution(ctx)
 	if err != nil {
 		s.logHiddenRecoveryFailure(ctx, "password reset institution lookup failed", err)
 		return nil
 	}
+
 	rawToken := s.newCredential()
 	now := s.now()
 	token := &model.UserToken{
@@ -287,17 +318,29 @@ func (s *Service) RequestPasswordReset(
 		s.logHiddenRecoveryFailure(ctx, "password reset link generation failed", err)
 		return nil
 	}
+
 	prepared, err := s.mail.PreparePasswordReset(mail.AccountTokenPreparation{
-		Recipient: user, OccurrenceID: model.MailOccurrenceID(token.ID.String()), ActionURL: link, At: now, Deadline: token.ExpiresAt,
+		Recipient:    user,
+		OccurrenceID: model.MailOccurrenceID(token.ID.String()),
+		ActionURL:    link,
+		At:           now,
+		Deadline:     token.ExpiresAt,
 	})
 	if err != nil {
 		s.logHiddenRecoveryFailure(ctx, "password reset delivery preparation failed", err)
 		return nil
 	}
-	if _, err = s.userTokens.Issue(ctx, &store.UserTokenMailIssue{Token: token, Occurrence: prepared.Occurrence,
-		Delivery: prepared.Delivery, Job: prepared.Job, AuditEvent: event}); err != nil {
+
+	if _, err = s.userTokens.Issue(ctx, &store.UserTokenMailIssue{
+		Token:      token,
+		Occurrence: prepared.Occurrence,
+		Delivery:   prepared.Delivery,
+		Job:        prepared.Job,
+		AuditEvent: event,
+	}); err != nil {
 		s.logHiddenRecoveryFailure(ctx, "password reset token and delivery issue failed", err)
 	}
+
 	return nil
 }
 
@@ -316,13 +359,16 @@ func (s *Service) CompleteEmailVerification(
 	); err != nil {
 		return nil, err
 	}
+
 	if !validRawCredential(command.Token) {
 		return nil, invalidAccountCredential()
 	}
+
 	institution, err := s.accountRecoveryInstitution(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	event := s.recoveryAuditEvent(
 		model.ActionAuthenticationEmailVerificationComplete,
 		model.Resource{Type: model.ResourceUser},
@@ -339,8 +385,10 @@ func (s *Service) CompleteEmailVerification(
 		if store.IsNotFound(err) {
 			return nil, invalidAccountCredential()
 		}
+
 		return nil, accountRecoveryStoreFailure(err)
 	}
+
 	return result.User, nil
 }
 
@@ -359,6 +407,7 @@ func (s *Service) CompletePasswordReset(
 	); err != nil {
 		return nil, err
 	}
+
 	localLoginAllowed, err := s.accessPolicy.AllowsLocalLogin(ctx)
 	if err != nil {
 		return nil, accountRecoveryStoreFailure(err)
@@ -369,10 +418,12 @@ func (s *Service) CompletePasswordReset(
 	if !validRawCredential(command.Token) {
 		return nil, invalidAccountCredential()
 	}
+
 	institution, err := s.accountRecoveryInstitution(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	event := s.recoveryAuditEvent(
 		model.ActionAuthenticationPasswordResetComplete,
 		model.Resource{Type: model.ResourceUser},
@@ -387,32 +438,45 @@ func (s *Service) CompletePasswordReset(
 		if store.IsNotFound(err) {
 			return nil, invalidAccountCredential()
 		}
+
 		return nil, accountRecoveryStoreFailure(err)
 	}
+
 	user, err := s.users.Get(ctx, token.UserID)
 	if err != nil {
 		if store.IsNotFound(err) {
 			return nil, invalidAccountCredential()
 		}
+
 		return nil, accountRecoveryStoreFailure(err)
 	}
+
 	// Hash only for a live token's account. The hashing permit is shared with
 	// login, so guessed tokens must not be able to consume it.
 	if err = CheckNewPassword(command.Password, passwordIdentityOf(user)); err != nil {
 		return nil, err
 	}
+
 	passwordHash, err := s.hasher.Hash(ctx, command.Password)
 	if err != nil {
 		return nil, PasswordHashError(err, "authentication.account_recovery.unavailable")
 	}
+
 	prepared, err := s.mail.PreparePasswordChanged(mail.NoticePreparation{Recipient: user, At: now})
 	if err != nil {
 		return nil, accountRecoveryUnavailable(err)
 	}
+
 	result, err := s.userTokens.ConsumePasswordReset(ctx, &store.PasswordResetCompletion{
-		TokenHash: model.HashToken(command.Token), PasswordHash: passwordHash, Reuse: s.hasher.ReuseCheck(command.Password), At: now,
-		RevocationReason: model.SessionRevocationPasswordReset, AuditEvent: event, Occurrence: prepared.Occurrence,
-		Delivery: prepared.Delivery, Job: prepared.Job,
+		TokenHash:        model.HashToken(command.Token),
+		PasswordHash:     passwordHash,
+		Reuse:            s.hasher.ReuseCheck(command.Password),
+		At:               now,
+		RevocationReason: model.SessionRevocationPasswordReset,
+		AuditEvent:       event,
+		Occurrence:       prepared.Occurrence,
+		Delivery:         prepared.Delivery,
+		Job:              prepared.Job,
 	})
 	if err != nil {
 		if errors.Is(err, store.ErrAuthenticationMethodDisabled) {
@@ -427,8 +491,10 @@ func (s *Service) CompletePasswordReset(
 		if store.IsNotFound(err) {
 			return nil, invalidAccountCredential()
 		}
+
 		return nil, accountRecoveryStoreFailure(err)
 	}
+
 	s.effects.SessionsRevoked(
 		ctx,
 		result.User.ID,
@@ -499,11 +565,16 @@ func RecoveryAuditEvent(
 	authenticationMethod string,
 ) *model.AuditEvent {
 	event := &model.AuditEvent{
-		Action: string(action), Resource: resource,
-		ScopeType: model.RoleScopeInstitution, ScopeID: institutionID.String(),
-		Status: model.AuditStatusSuccess, RequestID: metadata.RequestID,
-		NodeID: nodeID, AuthMethod: authenticationMethod,
-		IPAddress: metadata.IPAddress, UserAgent: metadata.UserAgent,
+		Action:     string(action),
+		Resource:   resource,
+		ScopeType:  model.RoleScopeInstitution,
+		ScopeID:    institutionID.String(),
+		Status:     model.AuditStatusSuccess,
+		RequestID:  metadata.RequestID,
+		NodeID:     nodeID,
+		AuthMethod: authenticationMethod,
+		IPAddress:  metadata.IPAddress,
+		UserAgent:  metadata.UserAgent,
 	}
 	if principal != nil {
 		event.ActorID = principal.UserID
@@ -511,6 +582,7 @@ func RecoveryAuditEvent(
 		event.ClientType = string(principal.ClientType)
 		event.AuthMethod = principal.AuthenticationMethod
 	}
+
 	return event
 }
 

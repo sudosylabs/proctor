@@ -98,14 +98,20 @@ func newDPoPSecurity(deps dpopSecurityDependencies) (*dpopSecurity, error) {
 	if deps.Cache == nil {
 		return nil, errors.New("DPoP security cache is required")
 	}
+
 	canonicalOrigin, err := canonicalDPoPOrigin(deps.Policy.Origin)
 	if err != nil {
 		return nil, fmt.Errorf("DPoP origin: %w", err)
 	}
-	if deps.Policy.NonceLifetime <= 0 || deps.Policy.ProofLifetime < deps.Policy.NonceLifetime ||
-		deps.Policy.ClockSkew < 0 || deps.Policy.NewNonce == nil || deps.Policy.Now == nil {
+
+	if deps.Policy.NonceLifetime <= 0 ||
+		deps.Policy.ProofLifetime < deps.Policy.NonceLifetime ||
+		deps.Policy.ClockSkew < 0 ||
+		deps.Policy.NewNonce == nil ||
+		deps.Policy.Now == nil {
 		return nil, errors.New("DPoP policy is invalid")
 	}
+
 	deps.Policy.Origin = canonicalOrigin
 	return &dpopSecurity{deps: deps}, nil
 }
@@ -141,23 +147,28 @@ func (s *dpopSecurity) Verify(
 	if proof == "" {
 		return nil, s.challenge(ctx, binding, errors.New("DPoP proof is missing"))
 	}
+
 	parsed, err := parseAndVerifyDPoPProof(proof)
 	if err != nil {
 		return nil, apperror.New("authentication.dpop.invalid").Wrap(err)
 	}
+
 	if expectedJWK != nil {
 		expectedThumbprint, thumbErr := expectedJWK.Thumbprint()
 		if thumbErr != nil || expectedThumbprint != parsed.KeyThumbprint {
 			return nil, apperror.New("authentication.dpop.invalid")
 		}
 	}
+
 	if binding.KeyThumbprint != parsed.KeyThumbprint || s.validateBinding(binding) != nil {
 		return nil, apperror.New("authentication.dpop.invalid")
 	}
+
 	canonicalTarget, err := canonicalDPoPTarget(targetURI)
 	if err != nil || parsed.HTM != method || parsed.HTU != canonicalTarget {
 		return nil, apperror.New("authentication.dpop.invalid")
 	}
+
 	if accessToken != "" {
 		if parsed.ATH != dpopAccessTokenHash(accessToken) {
 			return nil, apperror.New("authentication.dpop.invalid")
@@ -165,29 +176,40 @@ func (s *dpopSecurity) Verify(
 	} else if parsed.ATH != "" {
 		return nil, apperror.New("authentication.dpop.invalid")
 	}
+
 	if parsed.Nonce == "" {
 		return nil, s.challenge(ctx, binding, errors.New("DPoP nonce is missing"))
 	}
+
 	record, err := s.nonceRecord(ctx, parsed.Nonce)
 	if err != nil || record.Binding != binding {
 		return nil, s.challenge(ctx, binding, errors.New("DPoP nonce is unknown or expired"))
 	}
+
 	now := s.deps.Policy.Now().UTC()
 	issuedAt := time.Unix(record.IssuedAt, 0).UTC()
 	proofAt := time.Unix(parsed.IAT, 0).UTC()
-	if proofAt.Before(issuedAt.Add(-s.deps.Policy.ClockSkew)) || proofAt.After(now.Add(s.deps.Policy.ClockSkew)) ||
+	if proofAt.Before(issuedAt.Add(-s.deps.Policy.ClockSkew)) ||
+		proofAt.After(now.Add(s.deps.Policy.ClockSkew)) ||
 		now.Sub(issuedAt) > s.deps.Policy.NonceLifetime+s.deps.Policy.ClockSkew {
 		return nil, apperror.New("authentication.dpop.invalid")
 	}
+
 	replayKey := dpopReplayCachePrefix + model.HashToken(parsed.KeyThumbprint+"\x00"+parsed.JTI)
 	if err = s.deps.Cache.SetIfAbsent(ctx, replayKey, []byte{1}, s.deps.Policy.ProofLifetime); err != nil {
 		if errors.Is(err, ErrAuthenticationCacheNotStored) {
 			return nil, apperror.New("authentication.dpop.replayed")
 		}
+
 		return nil, apperror.New("authentication.dpop.unavailable").Wrap(err)
 	}
-	return &verifiedDPoPProof{PublicJWK: parsed.PublicJWK, KeyThumbprint: parsed.KeyThumbprint,
-		JTI: parsed.JTI, IssuedAt: proofAt}, nil
+
+	return &verifiedDPoPProof{
+		PublicJWK:     parsed.PublicJWK,
+		KeyThumbprint: parsed.KeyThumbprint,
+		JTI:           parsed.JTI,
+		IssuedAt:      proofAt,
+	}, nil
 }
 
 func (s *dpopSecurity) challenge(ctx context.Context, binding dpopBinding, cause error) error {
@@ -250,22 +272,27 @@ func parseAndVerifyDPoPProof(compact string) (*parsedDPoPProof, error) {
 	if compact == "" || len(compact) > dpopProofMaxBytes || !utf8.ValidString(compact) {
 		return nil, errors.New("DPoP proof is invalid")
 	}
+
 	segments := strings.Split(compact, ".")
 	if len(segments) != 3 || segments[0] == "" || segments[1] == "" || segments[2] == "" {
 		return nil, errors.New("DPoP proof must be a compact JWS")
 	}
+
 	headerBytes, err := base64.RawURLEncoding.DecodeString(segments[0])
 	if err != nil || base64.RawURLEncoding.EncodeToString(headerBytes) != segments[0] {
 		return nil, errors.New("DPoP header encoding is invalid")
 	}
+
 	payloadBytes, err := base64.RawURLEncoding.DecodeString(segments[1])
 	if err != nil || base64.RawURLEncoding.EncodeToString(payloadBytes) != segments[1] {
 		return nil, errors.New("DPoP payload encoding is invalid")
 	}
+
 	signature, err := base64.RawURLEncoding.DecodeString(segments[2])
 	if err != nil || len(signature) != 64 || base64.RawURLEncoding.EncodeToString(signature) != segments[2] {
 		return nil, errors.New("DPoP signature encoding is invalid")
 	}
+
 	var header struct {
 		Typ string
 		Alg string
@@ -274,22 +301,27 @@ func parseAndVerifyDPoPProof(compact string) (*parsedDPoPProof, error) {
 	if err = json.Unmarshal(headerBytes, &header); err != nil || header.Typ != "dpop+jwt" || header.Alg != "ES256" {
 		return nil, errors.New("DPoP JOSE header is invalid")
 	}
+
 	var jwkMembers map[string]json.RawMessage
 	if err = json.Unmarshal(header.JWK, &jwkMembers); err != nil {
 		return nil, errors.New("DPoP JWK is invalid")
 	}
+
 	for _, member := range []string{"kty", "crv", "x", "y"} {
 		if _, exists := jwkMembers[member]; !exists {
 			return nil, errors.New("DPoP JWK is incomplete")
 		}
 	}
+
 	if _, containsPrivateKey := jwkMembers["d"]; containsPrivateKey {
 		return nil, errors.New("DPoP JWK must contain only public key material")
 	}
+
 	var jwk model.DesktopPublicJWK
 	if err = json.Unmarshal(header.JWK, &jwk); err != nil || jwk.Validate() != nil {
 		return nil, errors.New("DPoP JWK is invalid")
 	}
+
 	publicKey, _ := jwk.PublicKey()
 	digest := sha256.Sum256([]byte(segments[0] + "." + segments[1]))
 	r := new(big.Int).SetBytes(signature[:32])
@@ -297,6 +329,7 @@ func parseAndVerifyDPoPProof(compact string) (*parsedDPoPProof, error) {
 	if !ecdsa.Verify(publicKey, digest[:], r, signatureS) {
 		return nil, errors.New("DPoP signature is invalid")
 	}
+
 	var claims struct {
 		JTI   string
 		HTM   string
@@ -307,24 +340,40 @@ func parseAndVerifyDPoPProof(compact string) (*parsedDPoPProof, error) {
 	}
 	decoder := json.NewDecoder(strings.NewReader(string(payloadBytes)))
 	decoder.UseNumber()
-	if err = decoder.Decode(&claims); err != nil || claims.JTI == "" || len(claims.JTI) > dpopJTIMaxBytes ||
-		!utf8.ValidString(claims.JTI) || strings.TrimSpace(claims.JTI) != claims.JTI || claims.HTM == "" {
+	if err = decoder.Decode(&claims); err != nil ||
+		claims.JTI == "" ||
+		len(claims.JTI) > dpopJTIMaxBytes ||
+		!utf8.ValidString(claims.JTI) ||
+		strings.TrimSpace(claims.JTI) != claims.JTI ||
+		claims.HTM == "" {
 		return nil, errors.New("DPoP claims are invalid")
 	}
+
 	if err = decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return nil, errors.New("DPoP claims contain trailing JSON values")
 	}
+
 	iat, err := strconv.ParseInt(string(claims.IAT), 10, 64)
 	if err != nil || iat <= 0 {
 		return nil, errors.New("DPoP iat is invalid")
 	}
+
 	htu, err := canonicalDPoPTarget(claims.HTU)
 	if err != nil || htu != claims.HTU {
 		return nil, errors.New("DPoP htu is invalid")
 	}
+
 	thumbprint, _ := jwk.Thumbprint()
-	return &parsedDPoPProof{PublicJWK: jwk, KeyThumbprint: thumbprint, JTI: claims.JTI,
-		HTM: claims.HTM, HTU: htu, IAT: iat, ATH: claims.ATH, Nonce: claims.Nonce}, nil
+	return &parsedDPoPProof{
+		PublicJWK:     jwk,
+		KeyThumbprint: thumbprint,
+		JTI:           claims.JTI,
+		HTM:           claims.HTM,
+		HTU:           htu,
+		IAT:           iat,
+		ATH:           claims.ATH,
+		Nonce:         claims.Nonce,
+	}, nil
 }
 
 func dpopAccessTokenHash(token string) string {

@@ -29,20 +29,28 @@ func (s *Service) revokeSession(
 	mapError func(error) error,
 	now func() time.Time,
 ) error {
-	result, err := access.RunAudited(ctx, s.auditor, attempt, now,
+	result, err := access.RunAudited(
+		ctx,
+		s.auditor,
+		attempt,
+		now,
 		func(ctx context.Context, reference access.MutationReference) (*store.SessionRevocationResult, error) {
 			input.RevokedAt = reference.MutationAt
 			input.AuditEventID, input.AuditAt = reference.ID, reference.MutationAt
 			return s.sessions.Revoke(ctx, input)
-		}, mapError)
+		},
+		mapError,
+	)
 	if err != nil {
 		return err
 	}
+
 	// The Store represents an already-absent logout with no affected Session;
 	// other single revocations retain their owning use case's not-found error.
 	if result != nil && result.Session != nil {
 		s.publishSessionsRevoked(ctx, input.UserID.String(), []*model.Session{result.Session}, result.TokenHashes)
 	}
+
 	return nil
 }
 
@@ -69,7 +77,11 @@ func (s *Service) revokeAllSessionsCounted(
 	unchanged *bool,
 	now func() time.Time,
 ) (int, error) {
-	result, err := access.RunAudited(ctx, s.auditor, attempt, now,
+	result, err := access.RunAudited(
+		ctx,
+		s.auditor,
+		attempt,
+		now,
 		func(ctx context.Context, reference access.MutationReference) (*store.UserSessionsRevocationResult, error) {
 			input.RevokedAt = reference.MutationAt
 			input.AuditEventID, input.AuditAt = reference.ID, reference.MutationAt
@@ -79,14 +91,18 @@ func (s *Service) revokeAllSessionsCounted(
 			if unchanged != nil {
 				*unchanged = input.Replayed || input.NoOp
 			}
+
 			return value, err
-		}, mapError)
+		},
+		mapError,
+	)
 	if err != nil {
 		return 0, err
 	}
 	if result == nil || input.Replayed || input.NoOp {
 		return 0, nil
 	}
+
 	s.publishSessionsRevoked(ctx, input.UserID.String(), result.Sessions, result.TokenHashes)
 	return len(result.Sessions), nil
 }

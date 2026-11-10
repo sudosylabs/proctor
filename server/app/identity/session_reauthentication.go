@@ -27,7 +27,11 @@ type ReauthenticatePasswordCommand struct {
 
 // ReauthenticatePassword proves the current Session User's password again and
 // records the recent authentication on that Session.
-func (s *Service) ReauthenticatePassword(ctx context.Context, invocation invocation.Invocation, command ReauthenticatePasswordCommand) (*model.Session, error) {
+func (s *Service) ReauthenticatePassword(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command ReauthenticatePasswordCommand,
+) (*model.Session, error) {
 	principal := invocation.Principal()
 	if principal.ValidateMFARecovery() != nil || principal.CredentialType != model.CredentialSessionAccess {
 		return nil, access.InvalidTokenAppError()
@@ -37,10 +41,17 @@ func (s *Service) ReauthenticatePassword(ctx context.Context, invocation invocat
 	if principal.AuthenticationMethod != "password" || principal.AuthenticationProviderID != "" {
 		return nil, apperror.New("authentication.reauthentication_method_required")
 	}
+
 	receipt, limited, err := s.attempts.account(ctx, authenticationAttemptIntent{
-		purpose: authenticationAttemptPurposeReauthentication, window: s.loginRateLimit.Window,
+		purpose: authenticationAttemptPurposeReauthentication,
+		window:  s.loginRateLimit.Window,
 		limits: []AttemptLimit{
-			{dimension: authenticationAttemptDimensionIdentitySource, maximum: s.loginRateLimit.MaximumAttempts, identity: principal.UserID.String(), source: command.Source},
+			{
+				dimension: authenticationAttemptDimensionIdentitySource,
+				maximum:   s.loginRateLimit.MaximumAttempts,
+				identity:  principal.UserID.String(),
+				source:    command.Source,
+			},
 			{dimension: authenticationAttemptDimensionSource, maximum: s.loginRateLimit.MaximumSourceAttempts, source: command.Source},
 		},
 	})
@@ -50,6 +61,7 @@ func (s *Service) ReauthenticatePassword(ctx context.Context, invocation invocat
 	if limited {
 		return nil, apperror.New("authentication.rate_limited")
 	}
+
 	allowed, err := s.accessPolicy.AllowsLocalLogin(ctx)
 	if err != nil {
 		return nil, authenticationUnavailable(err)
@@ -57,6 +69,7 @@ func (s *Service) ReauthenticatePassword(ctx context.Context, invocation invocat
 	if !allowed || command.Password == "" || len(command.Password) > s.hasher.maximumPasswordLength() {
 		return nil, invalidCredentialsAppError()
 	}
+
 	user, err := s.users.Get(ctx, principal.UserID)
 	if err != nil {
 		return nil, reauthenticationStoreErrors.Translate(err)
@@ -64,28 +77,37 @@ func (s *Service) ReauthenticatePassword(ctx context.Context, invocation invocat
 	if !user.IsActive() {
 		return nil, invalidCredentialsAppError()
 	}
+
 	credential, err := s.passwords.GetByUser(ctx, principal.UserID)
 	if err != nil {
 		return nil, reauthenticationStoreErrors.Translate(err)
 	}
+
 	if err = s.hasher.Verify(ctx, credential.PasswordHash, command.Password); err != nil {
 		if errors.Is(err, ErrPasswordMismatch) {
 			return nil, invalidCredentialsAppError()
 		}
+
 		return nil, passwordWorkError(err, "authentication.internal")
 	}
+
 	result, err := access.RunAudited(ctx, s.auditor, access.Mutation{
-		Invocation: invocation, Action: model.ActionAuthenticationReauthenticate,
-		Resource:  model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
-		Operation: "password", Value: map[string]any{"session_id": principal.SessionID.String()},
+		Invocation: invocation,
+		Action:     model.ActionAuthenticationReauthenticate,
+		Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
+		Operation:  "password",
+		Value:      map[string]any{"session_id": principal.SessionID.String()},
 	}, s.now, func(ctx context.Context, reference access.MutationReference) (*store.SessionReauthenticationResult, error) {
 		auditID := reference.ID
 		credentialID, err := model.ParseSessionCredentialID(principal.CredentialID.String())
 		if err != nil {
 			return nil, err
 		}
+
 		return s.sessions.ReauthenticatePassword(ctx, &store.SessionPasswordReauthentication{
-			SessionID: principal.SessionID, UserID: principal.UserID, CredentialID: credentialID,
+			SessionID:     principal.SessionID,
+			UserID:        principal.UserID,
+			CredentialID:  credentialID,
 			PasswordProof: store.PasswordCredentialProof{ID: credential.ID, Revision: credential.Revision},
 			AuditEventID:  auditID,
 		})
@@ -96,10 +118,12 @@ func (s *Service) ReauthenticatePassword(ctx context.Context, invocation invocat
 	if result == nil || result.Session == nil {
 		return nil, authenticationUnavailable(errors.New("reauthentication returned no Session"))
 	}
+
 	s.effects.AuthenticationCacheInvalidated(ctx, principal.UserID, result.AccessTokenHashes)
 	if err := s.attempts.reset(ctx, receipt, authenticationAttemptDimensionIdentitySource); err != nil {
 		s.warn(ctx, "reauthentication rate-limit reset failed", err)
 	}
+
 	return result.Session, nil
 }
 

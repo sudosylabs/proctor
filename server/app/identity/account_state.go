@@ -46,22 +46,32 @@ func accountDisableReason(command SetUserEnabledCommand) (string, error) {
 	if command.Reason == nil {
 		return "", nil
 	}
+
 	reason := strings.TrimSpace(*command.Reason)
-	if command.Enabled || reason == "" || utf8.RuneCountInString(reason) > MaximumAccountDisableReasonRunes ||
-		!utf8.ValidString(reason) || strings.ContainsFunc(reason, unicode.IsControl) {
+	if command.Enabled ||
+		reason == "" ||
+		utf8.RuneCountInString(reason) > MaximumAccountDisableReasonRunes ||
+		!utf8.ValidString(reason) ||
+		strings.ContainsFunc(reason, unicode.IsControl) {
 		return "", apperror.Invalid("request.invalid", "reason")
 	}
+
 	return reason, nil
 }
 
 // SetUserEnabled enables or disables a User after authorizing account state
 // management. Disabling revokes the User's Sessions and access tokens in the
 // same Store operation; their revocation is published after commit.
-func (s *Service) SetUserEnabled(ctx context.Context, invocation invocation.Invocation, command SetUserEnabledCommand) (*model.User, error) {
+func (s *Service) SetUserEnabled(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	command SetUserEnabledCommand,
+) (*model.User, error) {
 	userID := command.ID
 	if !userID.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "user_id")
 	}
+
 	reason, err := accountDisableReason(command)
 	if err != nil {
 		return nil, err
@@ -72,10 +82,12 @@ func (s *Service) SetUserEnabled(ctx context.Context, invocation invocation.Invo
 	if invocation.Principal().UserID == userID && !command.Enabled {
 		return nil, apperror.New("request.invalid").WithField("field", "user_id")
 	}
+
 	current, err := s.users.Get(ctx, userID)
 	if err != nil {
 		return nil, accountStateStoreErrors.Translate(err)
 	}
+
 	disabled := !command.Enabled
 	idempotency, err := idempotency.Prepare(invocation, "user.enabled_state", command.IdempotencyKey, struct {
 		UserID  string `json:"user_id"`
@@ -85,6 +97,7 @@ func (s *Service) SetUserEnabled(ctx context.Context, invocation invocation.Invo
 	if err != nil {
 		return nil, err
 	}
+
 	batch := command.Batch.Fields()
 	batchitem.BindOnboardingImport(idempotency, batch.OnboardingImportID, batch.OnboardingImportRowNumber)
 	batchitem.BindAuthorization(idempotency, batch.Authorization)
@@ -93,6 +106,7 @@ func (s *Service) SetUserEnabled(ctx context.Context, invocation invocation.Invo
 	if alreadySatisfied && idempotency == nil {
 		return current, nil
 	}
+
 	now := model.TimeUTC(s.now())
 	recipient := *current
 	// Preparation freezes recipient fields only. SQL remains authoritative for
@@ -106,14 +120,17 @@ func (s *Service) SetUserEnabled(ctx context.Context, invocation invocation.Invo
 			return nil, accountStateStoreErrors.Translate(err)
 		}
 	}
+
 	operation := model.AuditOperationEnableAccount
 	if disabled {
 		operation = model.AuditOperationDisableAccount
 	}
+
 	parameters := map[string]any{"user_id": userID, "disabled": disabled}
 	if reason != "" {
 		parameters["reason"] = reason
 	}
+
 	result, err := access.RunAudited(
 		ctx,
 		s.auditor,
@@ -128,16 +145,24 @@ func (s *Service) SetUserEnabled(ctx context.Context, invocation invocation.Invo
 		func() time.Time { return now },
 		func(ctx context.Context, reference access.MutationReference) (*store.UserDisabledStateResult, error) {
 			input := &store.UserDisabledStateChange{
-				ID: userID, ExpectedRevision: current.Revision, Disabled: disabled,
-				Capabilities: AccessDeploymentCapabilities(s.capabilities.Snapshot()),
-				Occurrence:   prepared.Occurrence, Delivery: prepared.Delivery, DeliveryJob: prepared.Job,
-				ChangedAt: reference.MutationAt, RevocationReason: model.SessionRevocationAccountDisabled,
-				AuditEventID: reference.ID, AuditAt: reference.MutationAt, Command: idempotency,
+				ID:               userID,
+				ExpectedRevision: current.Revision,
+				Disabled:         disabled,
+				Capabilities:     AccessDeploymentCapabilities(s.capabilities.Snapshot()),
+				Occurrence:       prepared.Occurrence,
+				Delivery:         prepared.Delivery,
+				DeliveryJob:      prepared.Job,
+				ChangedAt:        reference.MutationAt,
+				RevocationReason: model.SessionRevocationAccountDisabled,
+				AuditEventID:     reference.ID,
+				AuditAt:          reference.MutationAt,
+				Command:          idempotency,
 			}
 			value, storeErr := s.users.SetDisabled(ctx, input)
 			if batch.Replayed != nil {
 				*batch.Replayed = input.Replayed || input.NoOp
 			}
+
 			return value, storeErr
 		},
 		accountStateStoreErrors.Translate,
@@ -145,9 +170,11 @@ func (s *Service) SetUserEnabled(ctx context.Context, invocation invocation.Invo
 	if err != nil {
 		return nil, err
 	}
+
 	if disabled && result != nil && len(result.RevokedSessions) > 0 {
 		s.effects.SessionsRevoked(ctx, userID, sessionIDs(result.RevokedSessions), result.RevokedTokenHashes)
 	}
+
 	return result.User, nil
 }
 

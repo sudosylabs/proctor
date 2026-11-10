@@ -63,8 +63,14 @@ func passwordIdentityOf(user *model.User) PasswordIdentity {
 	if user == nil {
 		return PasswordIdentity{}
 	}
-	return PasswordIdentity{Username: user.Username, Email: user.Email, DisplayName: user.DisplayName,
-		FirstName: user.FirstName, LastName: user.LastName}
+
+	return PasswordIdentity{
+		Username:    user.Username,
+		Email:       user.Email,
+		DisplayName: user.DisplayName,
+		FirstName:   user.FirstName,
+		LastName:    user.LastName,
+	}
 }
 
 // CheckNewPassword applies the content policy to a password a User is about

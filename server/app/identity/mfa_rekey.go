@@ -130,19 +130,30 @@ func (s *Service) GetMFAKeyState(ctx context.Context, invocation invocation.Invo
 	if s.mfa.deps.Sealer == nil {
 		return MFAKeyStateView{}, apperror.New("authentication.mfa.unavailable")
 	}
+
 	state, err := s.mfaCredentials.InspectKeyState(ctx)
 	if err != nil || state == nil {
 		return MFAKeyStateView{}, apperror.New("authentication.mfa.unavailable").Wrap(err)
 	}
-	view := MFAKeyStateView{PrimaryKeyID: s.mfa.deps.Sealer.PrimaryKeyID(), RequiredPrimaryKeyID: state.RequiredPrimaryKeyID,
-		ActiveRekeyJobID: state.ActiveRekeyJobID, Active: make([]MFASecretKeyUsageView, 0, len(state.Active))}
+
+	view := MFAKeyStateView{
+		PrimaryKeyID:         s.mfa.deps.Sealer.PrimaryKeyID(),
+		RequiredPrimaryKeyID: state.RequiredPrimaryKeyID,
+		ActiveRekeyJobID:     state.ActiveRekeyJobID,
+		Active:               make([]MFASecretKeyUsageView, 0, len(state.Active)),
+	}
 	for _, usage := range state.Active {
 		if usage.KeyID == "" || usage.Credentials <= 0 {
 			return MFAKeyStateView{}, apperror.New("authentication.mfa.unavailable").Wrap(errors.New("MFA key state is invalid"))
 		}
-		view.Active = append(view.Active, MFASecretKeyUsageView{KeyID: usage.KeyID, Credentials: usage.Credentials,
-			Configured: s.mfa.deps.Sealer.HasKey(usage.KeyID)})
+
+		view.Active = append(view.Active, MFASecretKeyUsageView{
+			KeyID:       usage.KeyID,
+			Credentials: usage.Credentials,
+			Configured:  s.mfa.deps.Sealer.HasKey(usage.KeyID),
+		})
 	}
+
 	return view, nil
 }
 
@@ -157,68 +168,108 @@ func (s *Service) StartMFARekey(ctx context.Context, invocation invocation.Invoc
 	if s.mfa.deps.Sealer == nil {
 		return MFARekeyView{}, apperror.New("authentication.mfa.unavailable")
 	}
+
 	primaryKeyID := s.mfa.deps.Sealer.PrimaryKeyID()
 	if command.RetiringKeyID == "" || command.RetiringKeyID == primaryKeyID || !s.mfa.deps.Sealer.HasKey(command.RetiringKeyID) {
 		return MFARekeyView{}, apperror.Invalid("authentication.mfa.rekey.invalid", "retiring_key_id")
 	}
+
 	encoded, err := json.Marshal(jobhandler.MFARekeyCommand{PrimaryKeyID: primaryKeyID, RetiringKeyID: command.RetiringKeyID})
 	if err != nil {
 		return MFARekeyView{}, apperror.New("authentication.mfa.unavailable").Wrap(err)
 	}
+
 	now := model.TimeUTC(s.now())
-	job, err := model.NewJob(model.NewJobID(), model.JobTypeMFARekey, encoded,
-		"mfa-rekey:"+primaryKeyID+":"+command.RetiringKeyID, now, now, 10)
+	job, err := model.NewJob(
+		model.NewJobID(),
+		model.JobTypeMFARekey,
+		encoded,
+		"mfa-rekey:"+primaryKeyID+":"+command.RetiringKeyID,
+		now,
+		now,
+		10,
+	)
 	if err != nil {
 		return MFARekeyView{}, apperror.New("authentication.mfa.unavailable").Wrap(err)
 	}
+
 	job.CreatedByUserID = invocation.Principal().UserID
 	operation, err := access.RunAudited(ctx, s.auditor, access.Mutation{
-		Invocation: invocation, Action: model.ActionMFARekey, Resource: resource,
-		ScopeType: model.RoleScopeInstitution, ScopeID: resource.ID, Operation: "start_rekey",
-		Value: map[string]any{"job_id": job.ID.String(), "primary_key_id": primaryKeyID, "retiring_key_id": command.RetiringKeyID},
+		Invocation: invocation,
+		Action:     model.ActionMFARekey,
+		Resource:   resource,
+		ScopeType:  model.RoleScopeInstitution,
+		ScopeID:    resource.ID,
+		Operation:  "start_rekey",
+		Value:      map[string]any{"job_id": job.ID.String(), "primary_key_id": primaryKeyID, "retiring_key_id": command.RetiringKeyID},
 	}, s.now, func(ctx context.Context, reference access.MutationReference) (*store.MFARekeyOperation, error) {
-		return s.mfaCredentials.StartRekey(ctx, &store.MFARekeyStart{PrimaryKeyID: primaryKeyID, RetiringKeyID: command.RetiringKeyID,
-			Job: job, AuditEventID: reference.ID, AuditAt: reference.MutationAt})
+		return s.mfaCredentials.StartRekey(ctx, &store.MFARekeyStart{
+			PrimaryKeyID:  primaryKeyID,
+			RetiringKeyID: command.RetiringKeyID,
+			Job:           job,
+			AuditEventID:  reference.ID,
+			AuditAt:       reference.MutationAt,
+		})
 	}, mfaRekeyStoreErrors.Translate)
 	if err != nil {
 		return MFARekeyView{}, err
 	}
-	if operation == nil || operation.JobID != job.ID || operation.PrimaryKeyID != primaryKeyID ||
-		operation.RetiringKeyID != command.RetiringKeyID || operation.CreatedAt.IsZero() {
-		return MFARekeyView{}, apperror.New("authentication.mfa.unavailable").Wrap(errors.New("MFA rekey persistence returned an invalid operation"))
+
+	if operation == nil ||
+		operation.JobID != job.ID ||
+		operation.PrimaryKeyID != primaryKeyID ||
+		operation.RetiringKeyID != command.RetiringKeyID ||
+		operation.CreatedAt.IsZero() {
+		return MFARekeyView{}, apperror.New("authentication.mfa.unavailable").Wrap(
+			errors.New("MFA rekey persistence returned an invalid operation"),
+		)
 	}
+
 	s.mfaRekeyWake()
-	return MFARekeyView{JobID: operation.JobID, PrimaryKeyID: operation.PrimaryKeyID,
-		RetiringKeyID: operation.RetiringKeyID, CreatedAt: operation.CreatedAt}, nil
+	return MFARekeyView{
+		JobID:         operation.JobID,
+		PrimaryKeyID:  operation.PrimaryKeyID,
+		RetiringKeyID: operation.RetiringKeyID,
+		CreatedAt:     operation.CreatedAt,
+	}, nil
 }
 
 // GetMFARekeyStatus reports the safe progress and retirement proof of one MFA
 // rekey Job. Another Job type is not found, so the caller learns nothing about
 // unrelated Jobs.
-func (s *Service) GetMFARekeyStatus(ctx context.Context, invocation invocation.Invocation, query GetMFARekeyStatusQuery) (MFARekeyStatusView, error) {
+func (s *Service) GetMFARekeyStatus(
+	ctx context.Context,
+	invocation invocation.Invocation,
+	query GetMFARekeyStatusQuery,
+) (MFARekeyStatusView, error) {
 	if _, err := s.authorizeMFARekey(ctx, invocation); err != nil {
 		return MFARekeyStatusView{}, err
 	}
 	if !query.JobID.IsValid() {
 		return MFARekeyStatusView{}, apperror.Invalid("request.invalid", "job_id")
 	}
+
 	job, err := s.jobs.Get(ctx, query.JobID)
 	if err != nil {
 		if store.IsNotFound(err) {
 			return MFARekeyStatusView{}, apperror.New("resource.not_found")
 		}
+
 		return MFARekeyStatusView{}, apperror.New("authentication.mfa.unavailable").Wrap(err)
 	}
+
 	if job == nil {
 		return MFARekeyStatusView{}, apperror.New("authentication.mfa.unavailable").Wrap(errors.New("MFA rekey persistence returned no Job"))
 	}
 	if job.Type != model.JobTypeMFARekey {
 		return MFARekeyStatusView{}, apperror.New("resource.not_found")
 	}
+
 	view, err := projectMFARekeyStatus(job)
 	if err != nil {
 		return MFARekeyStatusView{}, apperror.New("authentication.mfa.unavailable").Wrap(err)
 	}
+
 	return view, nil
 }
 
@@ -226,42 +277,71 @@ func projectMFARekeyStatus(job *model.Job) (MFARekeyStatusView, error) {
 	if job.Validate() != nil {
 		return MFARekeyStatusView{}, errors.New("MFA rekey Job is invalid")
 	}
+
 	command, err := jobhandler.DecodeMFARekeyCommand(job.Command)
-	if err != nil || !ValidRekeyKeyID(command.PrimaryKeyID) || !ValidRekeyKeyID(command.RetiringKeyID) ||
+	if err != nil ||
+		!ValidRekeyKeyID(command.PrimaryKeyID) ||
+		!ValidRekeyKeyID(command.RetiringKeyID) ||
 		command.PrimaryKeyID == command.RetiringKeyID {
 		return MFARekeyStatusView{}, errors.New("MFA rekey command is invalid")
 	}
-	view := MFARekeyStatusView{JobID: job.ID, Status: job.Status, PrimaryKeyID: command.PrimaryKeyID,
-		RetiringKeyID: command.RetiringKeyID, CreatedAt: job.CreatedAt, UpdatedAt: job.UpdatedAt,
-		CompletedAt: job.CompletedAt, PublicErrorCode: job.PublicErrorCode,
-		AttemptCount: job.AttemptCount, MaximumAttempts: job.MaximumAttempts}
+
+	view := MFARekeyStatusView{
+		JobID:           job.ID,
+		Status:          job.Status,
+		PrimaryKeyID:    command.PrimaryKeyID,
+		RetiringKeyID:   command.RetiringKeyID,
+		CreatedAt:       job.CreatedAt,
+		UpdatedAt:       job.UpdatedAt,
+		CompletedAt:     job.CompletedAt,
+		PublicErrorCode: job.PublicErrorCode,
+		AttemptCount:    job.AttemptCount,
+		MaximumAttempts: job.MaximumAttempts,
+	}
 	if len(job.Checkpoint) > 0 {
 		checkpoint, checkpointErr := jobhandler.DecodeMFARekeyCheckpoint(job.Checkpoint)
-		if checkpointErr != nil || job.Progress == nil || job.Progress.Current != checkpoint.Processed ||
-			job.Progress.Total < checkpoint.Processed || job.Progress.Stage != "resealing" {
+		if checkpointErr != nil ||
+			job.Progress == nil ||
+			job.Progress.Current != checkpoint.Processed ||
+			job.Progress.Total < checkpoint.Processed ||
+			job.Progress.Stage != "resealing" {
 			return MFARekeyStatusView{}, errors.New("MFA rekey checkpoint projection is invalid")
 		}
+
 		view.Processed, view.Resealed = checkpoint.Processed, checkpoint.Resealed
 		view.Progress = &MFARekeyProgressView{Current: job.Progress.Current, Total: job.Progress.Total, Stage: job.Progress.Stage}
 	} else if job.Progress != nil {
 		return MFARekeyStatusView{}, errors.New("MFA rekey progress has no checkpoint")
 	}
+
 	if len(job.Result) == 0 {
 		if job.Status == model.JobStatusSucceeded {
 			return MFARekeyStatusView{}, errors.New("successful MFA rekey has no proof")
 		}
+
 		return view, nil
 	}
+
 	result, err := jobhandler.DecodeMFARekeyResult(job.Result)
-	if err != nil || job.Status != model.JobStatusSucceeded ||
-		result.PrimaryKeyID != command.PrimaryKeyID || result.RetiringKeyID != command.RetiringKeyID ||
-		result.Processed < view.Processed || result.Resealed < view.Resealed || result.Resealed > result.Processed ||
-		result.NonPrimaryReferences != 0 || result.RetiringReferences != 0 || !result.RetirementSafe {
+	if err != nil ||
+		job.Status != model.JobStatusSucceeded ||
+		result.PrimaryKeyID != command.PrimaryKeyID ||
+		result.RetiringKeyID != command.RetiringKeyID ||
+		result.Processed < view.Processed ||
+		result.Resealed < view.Resealed ||
+		result.Resealed > result.Processed ||
+		result.NonPrimaryReferences != 0 ||
+		result.RetiringReferences != 0 ||
+		!result.RetirementSafe {
 		return MFARekeyStatusView{}, errors.New("MFA rekey retirement proof is invalid")
 	}
+
 	view.Processed, view.Resealed = result.Processed, result.Resealed
-	view.Proof = &MFARekeyProofView{NonPrimaryReferences: result.NonPrimaryReferences,
-		RetiringReferences: result.RetiringReferences, RetirementSafe: result.RetirementSafe}
+	view.Proof = &MFARekeyProofView{
+		NonPrimaryReferences: result.NonPrimaryReferences,
+		RetiringReferences:   result.RetiringReferences,
+		RetirementSafe:       result.RetirementSafe,
+	}
 	return view, nil
 }
 

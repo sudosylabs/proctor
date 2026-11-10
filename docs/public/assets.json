@@ -110,8 +110,8 @@
         ".agents/skills/server-boundaries/references/application.md",
         ".agents/skills/http-api/references/transport.md",
         "server/httpapi/handler.go",
-        "server/app/session_assurance.go",
-        "server/app/authorization.go"
+        "server/app/identity/session_assurance.go",
+        "server/app/access/authorization.go"
       ]
     },
     {
@@ -173,7 +173,7 @@
       },
       "review_triggers": [
         ".agents/skills/identity-and-access/references/identity.md",
-        "server/app/dpop.go",
+        "server/app/identity/dpop.go",
         "server/httpapi/authentication.go",
         "server/openapi/fragments/authentication/auth-desktop.yaml"
       ]
@@ -206,7 +206,7 @@
       "review_triggers": [
         ".agents/skills/identity-and-access/references/access-and-onboarding.md",
         "server/model/invitation.go",
-        "server/app/invitation.go",
+        "server/app/onboarding/invitation.go",
         "server/openapi/fragments/invitations-and-onboarding/shared.yaml"
       ]
     },
@@ -237,8 +237,8 @@
       },
       "review_triggers": [
         ".agents/skills/identity-and-access/references/access-and-onboarding.md",
-        "server/app/onboarding_import.go",
-        "server/app/student_progression.go",
+        "server/app/onboarding/onboarding_import.go",
+        "server/app/onboarding/student_progression.go",
         "server/openapi/fragments/invitations-and-onboarding/onboarding-imports.yaml"
       ]
     },
@@ -641,7 +641,7 @@
       },
       "review_triggers": [
         "server/model/user_settings.go",
-        "server/app/user_settings.go",
+        "server/app/user/settings.go",
         "server/store/user_settings.go",
         "server/store/sqlstore/user_settings_store.go",
         "server/httpapi/user_settings.go",
@@ -1011,7 +1011,7 @@
       "visual_system": "proctor-assurance-v1",
       "last_reviewed": "2026-08-30",
       "visual_review": {"status": "approved", "source_sha256": "5888b3fe87870ceed0b16f114e801e75d04cbec38b1bf2f8d2b1503e6ea9bc06", "reviewed": "2026-08-30", "method": "Exact SVG bytes inspected full-size in a browser and in-page at 1440x1024 and 390x844; responsive review confirmed containment, connector continuity, no horizontal overflow, and usable caption/full-size controls, while print-emulated element capture confirmed contrast and non-color meaning.", "checks": ["text_containment", "connector_continuity", "rendered_legibility", "narrow_viewport", "print_contrast"], "viewports": [{"name": "desktop", "width": 1440, "height": 1024}, {"name": "mobile", "width": 390, "height": 844}]},
-      "review_triggers": [".agents/skills/exam-lifecycle/references/examinations.md", "server/model/exam_submission.go", "server/app/exam_submission.go", "server/store/sqlstore/exam_submission_store.go"]
+      "review_triggers": [".agents/skills/exam-lifecycle/references/examinations.md", "server/model/exam_submission.go", "server/app/exam/attempt/submission.go", "server/store/sqlstore/exam_submission_store.go"]
     },
     {
       "id": "integrity-review-release-boundary",

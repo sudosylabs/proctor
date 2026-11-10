@@ -19,7 +19,7 @@ its owner so revoking one layer cannot be bypassed by another.
 
 | Concern | Primary owner |
 | --- | --- |
-| Desktop Authorization lifecycle and compatibility evaluation | `server/app/desktop_authorization.go`, `desktop_compatibility.go` |
+| Desktop Authorization lifecycle and compatibility evaluation | `server/app/identity/desktop_authorization.go`, `desktop_compatibility.go` |
 | DPoP proof validation, nonce, replay, and registered-key principal | `server/app/dpop*.go` |
 | HTTP DTOs, loopback rules, and route declarations | `server/httpapi/desktop_*.go` |
 | Durable one-use transactions, Registration, Session, and policy state | `server/store` and `server/store/sqlstore` |

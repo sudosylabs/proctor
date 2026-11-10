@@ -93,43 +93,85 @@ func (r protocolResult) withHeaders(headers http.Header) protocolResult {
 	return r
 }
 
+// prepareOperation gathers what the middleware attached to the request into
+// the value an operation receives. It answers the request itself and reports
+// false when the route requires a Principal the request does not carry, or
+// the path parameters are missing.
+func (a *API) prepareOperation(
+	writer http.ResponseWriter,
+	request *http.Request,
+	definition routeDefinition,
+	errorPolicy routeErrorPolicy,
+) (operationRequest, bool) {
+	principal, hasPrincipal := Principal(request.Context())
+	if authRequiresPrincipal(definition.auth) && !hasPrincipal {
+		writeRouteApplicationError(writer, request, a.logger, errorPolicy, authenticationRequiredError())
+		return operationRequest{}, false
+	}
+
+	params, ok := RequestParams(request.Context())
+	if !ok {
+		writeRouteApplicationError(writer, request, a.logger, errorPolicy, invalidRequestError(nil))
+		return operationRequest{}, false
+	}
+
+	return operationRequest{
+		context:        request.Context(),
+		principal:      principal,
+		metadata:       RequestMetadata(request.Context()),
+		params:         params,
+		request:        request,
+		idempotencyKey: idempotencyKeyFromContext(request.Context()),
+	}, true
+}
+
+// writeOperationError answers with the failure an operation returned. A code
+// the route did not declare, or an invalid response header, becomes an
+// internal error instead, so a route cannot leak an undeclared failure.
+// retryInProgress adds Retry-After to idempotency.in_progress.
+func (a *API) writeOperationError(
+	writer http.ResponseWriter,
+	request *http.Request,
+	errorPolicy routeErrorPolicy,
+	err error,
+	retryInProgress bool,
+) {
+	cause, headers := responseErrorParts(err)
+	var failure applicationFailure
+	if retryInProgress && errors.As(cause, &failure) && failure.Code() == "idempotency.in_progress" {
+		if headers == nil {
+			headers = make(http.Header)
+		}
+
+		headers.Set("Retry-After", "1")
+	}
+
+	if validateResponseHeaders(headers) != nil || !routeErrorAllowed(errorPolicy, cause) {
+		a.logInvalidRouteError(request, cause)
+		WriteProblem(writer, internalProblem(request))
+		return
+	}
+
+	applyResponseHeaders(writer, headers)
+	writeApplicationError(writer, request, a.logger, cause)
+}
+
 func (a *API) upgradeOperationHandler(
 	definition routeDefinition,
 	errorPolicy routeErrorPolicy,
 ) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		principal, hasPrincipal := Principal(request.Context())
-		if authRequiresPrincipal(definition.auth) && !hasPrincipal {
-			writeRouteApplicationError(writer, request, a.logger, errorPolicy, authenticationRequiredError())
-			return
-		}
-
-		params, ok := RequestParams(request.Context())
+		prepared, ok := a.prepareOperation(writer, request, definition, errorPolicy)
 		if !ok {
-			writeRouteApplicationError(writer, request, a.logger, errorPolicy, invalidRequestError(nil))
 			return
 		}
 
-		err := definition.upgradeOperation(writer, operationRequest{
-			context:   request.Context(),
-			principal: principal,
-			metadata:  RequestMetadata(request.Context()),
-			params:    params,
-			request:   request,
-		})
+		err := definition.upgradeOperation(writer, prepared)
 		if err == nil {
 			return
 		}
 
-		cause, headers := responseErrorParts(err)
-		if validateResponseHeaders(headers) != nil || !routeErrorAllowed(errorPolicy, cause) {
-			a.logInvalidRouteError(request, cause)
-			WriteProblem(writer, internalProblem(request))
-			return
-		}
-
-		applyResponseHeaders(writer, headers)
-		writeApplicationError(writer, request, a.logger, cause)
+		a.writeOperationError(writer, request, errorPolicy, err, false)
 	})
 }
 
@@ -217,56 +259,14 @@ func (a *API) operationHandler(
 	errorPolicy routeErrorPolicy,
 ) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		principal, hasPrincipal := Principal(request.Context())
-		if authRequiresPrincipal(definition.auth) && !hasPrincipal {
-			writeRouteApplicationError(
-				writer,
-				request,
-				a.logger,
-				errorPolicy,
-				authenticationRequiredError(),
-			)
-			return
-		}
-
-		params, ok := RequestParams(request.Context())
+		prepared, ok := a.prepareOperation(writer, request, definition, errorPolicy)
 		if !ok {
-			writeRouteApplicationError(
-				writer,
-				request,
-				a.logger,
-				errorPolicy,
-				invalidRequestError(nil),
-			)
 			return
 		}
 
-		result, err := definition.operation(operationRequest{
-			context:        request.Context(),
-			principal:      principal,
-			metadata:       RequestMetadata(request.Context()),
-			params:         params,
-			request:        request,
-			idempotencyKey: idempotencyKeyFromContext(request.Context()),
-		})
+		result, err := definition.operation(prepared)
 		if err != nil {
-			cause, headers := responseErrorParts(err)
-			if failure, ok := cause.(applicationFailure); ok && failure.Code() == "idempotency.in_progress" {
-				if headers == nil {
-					headers = make(http.Header)
-				}
-
-				headers.Set("Retry-After", "1")
-			}
-
-			if validateResponseHeaders(headers) != nil || !routeErrorAllowed(errorPolicy, cause) {
-				a.logInvalidRouteError(request, cause)
-				WriteProblem(writer, internalProblem(request))
-				return
-			}
-
-			applyResponseHeaders(writer, headers)
-			writeApplicationError(writer, request, a.logger, cause)
+			a.writeOperationError(writer, request, errorPolicy, err, true)
 			return
 		}
 
@@ -332,15 +332,8 @@ func (a *API) protocolOperationHandler(
 	errorPolicy routeErrorPolicy,
 ) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		principal, hasPrincipal := Principal(request.Context())
-		if authRequiresPrincipal(definition.auth) && !hasPrincipal {
-			writeRouteApplicationError(writer, request, a.logger, errorPolicy, authenticationRequiredError())
-			return
-		}
-
-		params, ok := RequestParams(request.Context())
+		prepared, ok := a.prepareOperation(writer, request, definition, errorPolicy)
 		if !ok {
-			writeRouteApplicationError(writer, request, a.logger, errorPolicy, invalidRequestError(nil))
 			return
 		}
 
@@ -350,14 +343,7 @@ func (a *API) protocolOperationHandler(
 			}
 		}
 
-		result, err := definition.protocolOperation(operationRequest{
-			context:        request.Context(),
-			principal:      principal,
-			metadata:       RequestMetadata(request.Context()),
-			params:         params,
-			request:        request,
-			idempotencyKey: idempotencyKeyFromContext(request.Context()),
-		})
+		result, err := definition.protocolOperation(prepared)
 		if result.body != nil {
 			defer func() {
 				if err := result.body.Close(); err != nil {
@@ -367,23 +353,7 @@ func (a *API) protocolOperationHandler(
 		}
 
 		if err != nil {
-			cause, headers := responseErrorParts(err)
-			if failure, ok := cause.(applicationFailure); ok && failure.Code() == "idempotency.in_progress" {
-				if headers == nil {
-					headers = make(http.Header)
-				}
-
-				headers.Set("Retry-After", "1")
-			}
-
-			if validateResponseHeaders(headers) != nil || !routeErrorAllowed(errorPolicy, cause) {
-				a.logInvalidRouteError(request, cause)
-				WriteProblem(writer, internalProblem(request))
-				return
-			}
-
-			applyResponseHeaders(writer, headers)
-			writeApplicationError(writer, request, a.logger, cause)
+			a.writeOperationError(writer, request, errorPolicy, err, true)
 			return
 		}
 

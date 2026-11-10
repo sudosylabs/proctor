@@ -5,15 +5,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package correction owns the bounded staging and atomic application policy
-// for instructions and resource corrections to one Open or Paused Exam
-// Sitting. It preserves immutable Revision history, frozen policy and Starter
-// Workspace content, current authorization, private manager provenance,
-// idempotency, and commit-before-effect ordering.
+// Package correction changes an Open or Paused Sitting while it runs: its
+// Exam Instructions, browser policy, or Exam Resources. New Resource content
+// is staged and verified first; applying the correction then publishes a new
+// immutable Exam Revision for the Sitting instead of editing the old one.
 //
-// The package does not own Draft authoring, future-default Revision selection,
-// Attempt admission, candidate delivery, HTTP, SQL, VFS selection, or realtime
-// infrastructure. It depends inward only on domain models, bounded Store
-// contracts, and consumer-owned authorization, audit, content, and effect
-// ports; the parent application embeds the service as part of its surface.
+// The package does not edit Drafts, admit Attempts, or deliver the corrected
+// Exam to candidates; attempt shows candidates the correction and records
+// their acknowledgement. It imports only model, store, app/apperror,
+// app/invocation, app/idempotency and app/exam/manageraccess. Start with
+// Service in service.go.
 package correction

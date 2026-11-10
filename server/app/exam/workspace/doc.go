@@ -5,10 +5,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package workspace owns the bounded logical hierarchy and opaque-content
-// mechanics of an Exam Draft's Starter Workspace. It does not own Attempt
-// workspaces, Exam Resources, publication, HTTP, SQL, VFS selection, or
-// infrastructure lifecycle. Logical paths are PostgreSQL metadata and never
-// object-store keys. The parent application embeds the service as part of its
-// surface.
+// Package workspace manages the Starter Workspace of an Exam Draft: the tree
+// of directories and files copied into each new Attempt Workspace. It
+// creates, moves, replaces and removes entries and opens files for managers.
+// Paths are stored as PostgreSQL metadata and are never used as object-store
+// keys.
+//
+// Candidates' Attempt Workspaces belong to attempt, Exam Resources to
+// resource, and publication to the parent exam package. HTTP, SQL and the
+// choice of file store live elsewhere. The package imports only model, store,
+// app/apperror, app/invocation, app/idempotency and app/exam/manageraccess.
+// Start with Service in service.go.
 package workspace

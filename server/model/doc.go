@@ -5,11 +5,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package model defines Proctor's durable domain contracts, validation, and
-// safe audit representations.
+// Package model defines Proctor's domain types and the checks each value can
+// make on its own, such as required fields and allowed values. Checks that
+// need stored state, such as uniqueness or cycles in the Academic Unit tree,
+// belong to app and the store. Both persistence and the transports import
+// model, so a type they must agree on lives here.
 //
-// The academic hierarchy separates organizational ownership, curriculum, and
-// time-bound student cohorts:
+// The academic hierarchy separates who owns a course of study from the
+// students who take it in a given period:
 //
 //	Institution
 //	└── AcademicUnit (a tree of faculties, schools, and departments)
@@ -17,49 +20,28 @@
 //	        └── ProgrammeLevel
 //	            └── Class ── AcademicPeriod
 //
-// An Institution is the school or university represented by one installation.
-// AcademicUnit forms an arbitrary-depth organizational tree: for example, a
-// university can contain a College of Engineering, which contains a School of
-// Computing. A Programme is a course of study owned by one of those units,
-// such as Bachelor of Computer Science. ProgrammeLevel is a curriculum stage,
-// such as Year 1. Class is the concrete roster into which students enroll at
-// that stage during an AcademicPeriod, such as "Computer Science Year 1 -
-// Class A" in the 2026-2027 academic year.
+// For example, a School of Computing owns the Bachelor of Computer Science
+// Programme, whose Year 1 ProgrammeLevel has "Class A" in the 2026-2027
+// AcademicPeriod. A student's placement comes from their active ClassMember.
+// Staff belong to an AcademicUnit through AcademicUnitMember, but membership
+// grants nothing; access comes from scoped RoleBinding values.
 //
-// This separation permits one programme level to have several classes in the
-// same period, and permits new classes to be created in a later period without
-// rewriting the programme. A student's organizational and programme placement
-// is derived from the student's active ClassMember. Teachers and staff are
-// associated with AcademicUnit through AcademicUnitMember and receive access
-// through scoped RoleBinding values; membership itself is not authorization.
-//
-// Models in this package own shape-level invariants. Invariants that need
-// authoritative state, such as hierarchy cycle detection or uniqueness, belong
-// to the application and persistence layers.
-//
-// Domain primitives:
-//
-//   - entity-specific IDs (UserID, ClassID, …) share the opaque 26-character
-//     z-base-32 representation but are not freely assignable across entities;
-//   - durable aggregate times are UTC time.Time values, with OptionalTime for
-//     nullable instants. Transport and legacy command boundaries perform any
-//     required integer-millisecond conversion explicitly.
-//
-// Serialization: a model type carries json tags only when the model owns its
-// one canonical serialization. That covers digest- or signature-bound
-// documents, the closed documents of the desktop and browser delivery
-// agreements, persisted replay outcomes that a transport returns verbatim, and
-// versioned durable Job payloads. Such a document has the same spelling in
-// PostgreSQL and on the wire, so it lives here, in the one package that both
-// persistence and transports import. A shape serialized by only one boundary
-// belongs to that boundary: request and response DTOs in httpapi or
-// websocket, persisted spellings in sqlstore. A json:"-" tag on a secret field
-// is a leak guard and is always allowed.
-//
-// Errors: a model failure is either a package-level sentinel that callers
-// match with errors.Is, or a *ValidationError built by invalidModelError,
-// which names the model, the field (empty for the whole value), and the
-// reason, and may wrap an underlying cause. The model never formats an ad hoc
-// error. Closed vocabularies and identifiers answer IsValid() bool; structured
-// values answer Validate() error.
+// Conventions:
+//   - IDs: each entity has its own ID type (UserID, ClassID, ...). All share
+//     one opaque 26-character z-base-32 form but are not interchangeable.
+//   - Times: durable instants are UTC time.Time values, with OptionalTime
+//     when absence matters. Edges that use integer milliseconds convert
+//     explicitly.
+//   - JSON: a type carries json tags only when model owns its one canonical
+//     form: digest- or signature-bound documents, the desktop and browser
+//     delivery agreements, stored replay results a transport returns as-is,
+//     and durable Job payloads. Request and response types live in httpapi or
+//     websocket, and stored-only spellings in sqlstore. A json:"-" tag on a
+//     secret field is always allowed.
+//   - Errors: a failure is either a package sentinel matched with errors.Is,
+//     or a *ValidationError from invalidModelError naming the model, the
+//     field (empty for the whole value) and the reason, optionally wrapping a
+//     cause. No ad hoc error strings.
+//   - Validity: closed vocabularies and identifiers answer IsValid() bool;
+//     structured values answer Validate() error.
 package model

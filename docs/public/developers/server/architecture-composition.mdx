@@ -59,6 +59,65 @@ Selective child packages exist only where a responsibility has substantial
 structure and can still point inward without importing its parent. Do not
 repeat the existing child layout for visual symmetry.
 
+## Follow One Request
+
+The quickest way to learn the server is to follow a single request from the
+route to SQL. Files are named after their entity in every layer, so the same
+word leads you through each step.
+
+### Create a Class
+
+`POST /api/v1/programme-levels/{programme_level_id}/classes`
+
+1. **Route.** `httpapi/class.go` declares the route in `classResource` with
+   `principalRoute`. That helper says the route needs a signed-in principal
+   and lists the errors it may return. `classResourceModule.create` decodes
+   the body into `createClassRequest` and builds an `app.CreateClassCommand`.
+2. **Use case.** `app/class.go`, `CreateClass`, takes the request through
+   these steps:
+   1. validates the Programme Level ID;
+   2. authorizes `model.ActionClassManage` against that Programme Level;
+   3. builds a `model.Class` and calls `Validate`;
+   4. records the mutation through `runAuditedMutation` (`app/mutation_attempt.go`).
+3. **Store contract.** `store.ClassStore.Create`, declared in
+   `store/academic.go`, takes a `store.ClassCreation` that carries the Class
+   and its audit event, so both commit together.
+4. **SQL.** `store/sqlstore/class_store.go`, `SQLClassStore.Create`, inserts
+   the row and completes the audit event in one transaction. On the way it
+   passes through the generated timing and retry layers
+   (`store/timerlayer`, `store/retrylayer`), which add no behavior.
+5. **Errors.** A typed Store error becomes an application error through the
+   service's `apperror.StoreTable`. `httpapi` turns it into a Problem Details
+   response with the status that `httpapi/error_catalog.yaml` assigns to its
+   code.
+
+### Submit an Attempt
+
+`POST /api/v1/exam-attempts/{exam_attempt_id}/submissions`
+
+1. **Route.** `httpapi/exam_attempt.go` declares the route with
+   `idempotentSessionRoute`, which requires a Session and an idempotency key.
+   The handler is `examAttemptHTTPModule.submit` in
+   `httpapi/exam_attempt_submission.go`.
+2. **Use case.** `app/exam/attempt/submission.go`, `SubmitExamAttempt`,
+   takes the request through these steps:
+   1. resolves the candidate's current Workspace;
+   2. prepares idempotency;
+   3. checks the seal target;
+   4. begins the audit record;
+   5. prepares the submission receipt mail.
+3. **Store contract.** `store.ExamSubmissionStore.Seal` freezes the
+   Submission. It writes the prepared mail and the Job that delivers it in
+   the same transaction (`store/sqlstore/exam_submission_store.go`).
+4. **After commit.** The service calls its `Effects` port. In the parent
+   application that is `examAttemptRealtimeEffects` (`app/exam_attempt.go`),
+   which publishes realtime events through `app/realtime` and unbinds the
+   Attempt connection. Effects run only after the Submission is durable, and
+   their failures never undo it.
+5. **Background.** When a Sitting closes, the `exam_sitting.sealing` Job in
+   `app/jobhandler/exam_sitting_sealing.go` seals the remaining Attempts
+   through `attempt.Service.SealForSittingClose`.
+
 ## Follow `server.New`
 
 Read [`server/server.go`](https://github.com/sudosylabs/Proctor/blob/main/server/server.go)
@@ -85,19 +144,24 @@ constructed server has no listener, worker, or maintenance goroutine running.
 
 ## Follow `app.New`
 
-`app.New` constructs focused services in an explicit dependency order and
-assembles the `app.App` facade. The facade is a collection of use cases, not a
-persistence accessor. Focused services receive the exact Store and behavioral
-ports they consume; they do not ask `App` or a dependencies object for another
-service at runtime.
+`app.New` builds the application services in dependency order and returns the
+`app.App` value. `App` is a collection of use cases, not a persistence
+accessor.
+
+The application is moving to one package per domain area (`app/academic`,
+`app/identity`, `app/exam`, ...). `App` exposes each area as a named field,
+so a call reads `app.Academic.CreateClass(...)`. Areas that have not moved yet
+still live as private services in the flat `app/` package and are embedded in
+`App`.
 
 When adding a dependency:
 
-- put the interface beside its consumer unless it is part of the deliberate
-  grouped Store family;
+- hold the concrete type, or the `store` contract you call; add an interface
+  only when something real substitutes behind it;
+- in tests, fake a Store contract by embedding it and overriding the methods
+  the test uses;
 - validate required dependencies in the constructor;
-- keep constructors inert;
-- project only the methods the consumer needs; and
+- keep constructors inert; and
 - update the architecture policy when a new production import is intentional.
 
 The need to reach through `App`, `platform.Service`, `config.Config`, or a root

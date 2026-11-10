@@ -5,26 +5,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package sqlstore implements Proctor's authoritative PostgreSQL persistence
-// adapter.
+// Package sqlstore implements the store contracts on PostgreSQL. It runs the
+// SQL, owns transactions and locking, turns constraint violations into store
+// errors, and rebuilds rows into validated model values. Callers never see a
+// transaction: each named Store operation runs its own and documents what it
+// guarantees.
 //
-// The package owns SQL schema projections, query execution, transaction
-// lifecycle, locking, constraint translation, and fail-closed reconstruction
-// of durable rows into validated domain models. Ordinary transaction mechanics
-// remain private here; callers use named Store operations whose contracts state
-// their complete atomic and concurrency guarantees.
+// A row that fails validation is an internal error. Reading stops without a
+// partial result, the error names only the entity and field, and the row is
+// never repaired or normalized. Authorization, application rules, caching and
+// post-commit effects live elsewhere; the cache and retry wrappers are in
+// store/localcachelayer and store/retrylayer.
 //
-// Persisted entity identifiers are decoded through their domain-specific types
-// and backed by validated PostgreSQL CHECK constraints. A malformed row is an
-// internal persistence invariant failure: reconstruction stops without partial
-// results, diagnostics identify only the entity and field, and the adapter does
-// not normalize or repair authoritative data. Deliberate non-entity values such
-// as hashes, claim tokens, object keys, protocol versions, addresses, and
-// cluster node identifiers retain their own bounded contracts.
-//
-// Package sqlstore excludes application policy, authorization decisions,
-// transport contracts, transient cache state, and post-commit effects. It may
-// depend inward on store contracts and domain models plus PostgreSQL and SQL
-// implementation libraries. Domain packages never depend on database/sql, and
-// generic transaction callbacks never cross the Store interface.
+// Where to look:
+//   - store.go: SQLStore, New and Settings
+//   - <model>_store.go: one SQL<Model>Store per store contract
+//   - migrate.go and schema.go: schema migrations from server/migrations
+//   - errors.go: which PostgreSQL failures are safe to retry
+//   - command_outcome.go: saved results that make commands safe to replay
 package sqlstore

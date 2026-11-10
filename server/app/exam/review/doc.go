@@ -5,11 +5,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package review owns post-Submission integrity inspection, revision-fenced
-// manager decisions and draft remarks, immutable Review finalization, explicit
-// student-result release, manager inspection of bounded late discrepancies,
-// and the minimal released candidate projection. It depends only on model,
-// the bounded Integrity Review Store contract, the shared safemarkdown leaf,
-// and narrow authorization, audit, and realtime ports. It does not own
-// integrity collection, Submission sealing/content, HTTP, SQL, or grading.
+// Package review holds what happens after a Submission: managers inspect its
+// Integrity flags, evidence and late discrepancies, record decisions and
+// draft remarks, finalize the Review, and release the result to the student.
+// Decisions are fenced by the Review's revision, and a finalized Review does
+// not change. The student sees only the released result.
+//
+// Collecting Integrity evidence and sealing Submissions belong to attempt.
+// The package does not grade, speak HTTP, or run SQL. It imports only model,
+// store, app/apperror, app/invocation, app/idempotency and
+// app/exam/safemarkdown. Start with Service in service.go.
 package review

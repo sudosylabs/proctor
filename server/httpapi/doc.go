@@ -5,36 +5,28 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package httpapi implements Proctor's versioned HTTP transport.
+// Package httpapi serves Proctor's REST API under /api/v1, plus the
+// /health/live and /health/ready probes. Each resource file (class.go,
+// exam_attempt.go, ...) declares its routes, request and response types, and
+// the errors each route may return. The package decodes requests, checks
+// credentials and writes responses; deciding whether the caller may act on a
+// resource stays in the application use cases.
 //
-// The package owns transport concerns: the immutable route catalog, request
-// parameters and DTOs, strict decoding and body limits, credential and
-// assurance classification, response serialization, Problem Details, and the
-// safe route manifest used for OpenAPI agreement. Application use cases remain
-// authoritative for action and resource authorization.
+// Every route declares the credential and assurance it requires, as an
+// AuthRequirement such as AuthSessionRequired or
+// AuthStrongRecentSessionRequired, and the exact error codes it can return.
+// New compiles every route into one fixed catalog and fails on an ambiguous
+// or invalid route, so nothing is registered after construction.
 //
-// New is the only production construction entry point. It validates every
-// required dependency, projects the composition-only application capabilities
-// into each resource's narrow consumer-owned interface, compiles the complete
-// catalog, rejects ambiguous or invalid routes, and seals the handler before
-// returning. Resources never receive the API, a mutable router, Store,
-// platform services, or a late-registration hook.
+// Where to look:
+//   - api.go: API and New
+//   - resource_catalog.go: every resource in the production API, in order
+//   - route_definition.go and route_path.go: how a route is declared
+//   - problem.go and error_catalog.yaml: Problem Details and error codes
+//   - CONTRACT.md: the rules every route follows
 //
-// A resource owns a cohesive path family, its wire DTOs, domain mapping,
-// explicit credential and assurance requirements, and its allowlist of public
-// errors. Ordinary operations return typed results; the kernel validates the
-// full result before applying headers, cookies, bodies, or errors. Named,
-// bounded protocol results cover redirects, downloads, and uploads. The
-// session-authenticated WebSocket handshake is the sole reserved raw upgrade
-// exception because the sibling transport must take ownership of the upgraded
-// connection.
-//
-// To extend the API, add or update one cohesive resource constructor, depend
-// on the narrowest application capability that serves it, add the resource to
-// the explicit production catalog, update the checked-in OpenAPI contract, and
-// exercise the resource through the real routing kernel. Do not expose router
-// implementation types or add package initialization registration.
-//
-// Routes returns a defensive, read-only projection of the sealed catalog for
-// agreement tests and diagnostics. It is not a registration interface.
+// To add a route, add it to its resource file, list any new resource in
+// resource_catalog.go, and update the OpenAPI sources under server/openapi.
+// The WebSocket upgrade is the only route handed the raw ResponseWriter,
+// because the websocket package takes over the connection.
 package httpapi

@@ -5,11 +5,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package resource owns the bounded mechanics of authored Exam Resources.
-// It coordinates protected access, immutable content staging, Draft selection,
-// ordering, audit, idempotency and post-commit effects. It depends only on
-// domain models and consumer-owned persistence/content/security ports; it does
-// not import its parent application package, HTTP, SQL, VFS or platform code.
-// Published revision snapshots and candidate Sitting projection remain owned
-// by the parent examination application.
+// Package resource manages the Exam Resources of an Exam Draft: adding them,
+// replacing their content, editing their details, reordering and removing
+// them, and opening them for managers. Each change is authorized, audited and
+// safe to retry.
+//
+// Freezing Resources into a Revision belongs to the parent exam package, and
+// showing them to candidates during a Sitting belongs to attempt. HTTP, SQL
+// and file storage live elsewhere. The package imports only model, store,
+// app/apperror, app/invocation, app/idempotency and app/exam/manageraccess.
+// Start with Service in service.go.
 package resource

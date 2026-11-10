@@ -3,7 +3,7 @@
 This directory contains the new Proctor application server. It is an
 independent Go module and is licensed under AGPL-3.0-only.
 
-The server exposes a narrow module-root construction and lifecycle facade:
+`server.New` builds a node and `Run` serves it until shutdown:
 
 ```go
 node, err := server.New(ctx, server.WithConfigPath(path))
@@ -14,32 +14,17 @@ defer node.Close()
 return node.Run(ctx)
 ```
 
-The module-root facade selects concrete infrastructure and owns platform
-startup, HTTP serving, readiness, bounded HTTP drain, transport cleanup, and
-platform shutdown:
+`server.New` is the only place that picks concrete infrastructure
+(PostgreSQL, cache, mail, file storage, cluster). It hands that infrastructure
+to `platform.Service`, which owns its health and shutdown. It then builds the
+application (`app.App`) and the HTTP, WebSocket and Job runtimes on top.
+Construction starts nothing; `Run` starts serving. The `proctor` CLI under
+`cmd/proctor/commands` is a thin caller of this package, and `testlib` builds
+the same graph for tests.
 
-```text
-server.New → acquire concrete adapters → platform.Accept (ownership)
-                                         ↓ borrowed construction projection
-                              File Content → app.App → HTTP/WebSocket/Jobs
-                                         ↓ projection discarded
-                                      inert Server
-```
-
-`platform.Accept` takes ownership of already-constructed store, cache, mail,
-VFS, cluster, logging, configuration, and external-authentication capabilities
-at call entry, including failure outcomes. A short-lived lifecycle-free
-projection lets the root wire consumers without turning Platform into a
-locator. The projection is discarded before construction returns.
-
-The facade intentionally exposes construction, blocking run, close, readiness,
-and the narrow operator-command capabilities used by the CLI. The CLI remains
-a thin caller of this API. Its Cobra tree is assembled explicitly under
-`cmd/proctor/commands`, creates fresh command state for each execution, and
-keeps concrete infrastructure construction in this module-root facade.
-`testlib` uses the same private composition recipe
-through concrete typed overrides and receives only Server, the application
-facade and an HTTP handler; it retains its supplied adapters for assertions.
+To find your way around the code, start with the
+[server architecture guide](../docs/public/developers/server/architecture-composition.mdx).
+It maps the directories and follows two requests from route to SQL.
 
 Repository skills route durable architecture and workflow. Exact component
 behavior remains beside the component:

@@ -5,11 +5,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package safemarkdown owns the shared candidate-facing Markdown sanitizer
-// used by protected Exam presentation and released student remarks. It owns
-// neither rendering nor product-specific presentation policy and depends only
-// on the standard library; application children decide where sanitization is
-// required and clients must still render the result in a sandboxed mode.
+// Package safemarkdown cleans the Markdown candidates see: protected Exam
+// text in attempt and released student remarks in review. Sanitize keeps
+// ordinary formatting and removes raw HTML, unsafe link schemes and anything
+// that would load remote content. It does not render Markdown, so clients must
+// still render the result with HTML disabled. It uses only the standard
+// library.
 package safemarkdown
 
 import (

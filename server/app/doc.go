@@ -5,28 +5,26 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package app owns Proctor's application use cases and orchestration.
+// Package app holds Proctor's use cases: what each user may do, and what
+// happens when they do it. A use case checks authorization against current
+// state, records audit, calls a named Store operation, and publishes
+// follow-up effects only after the change commits. HTTP and WebSocket wire
+// formats live in httpapi and websocket, SQL in store/sqlstore, and stored
+// file bytes in filecontent.
 //
-// App is the public application surface. It embeds the focused services that
-// own the use cases, so each use case is declared once, on its owning
-// service, and App declares none of its own. Its constructor projects the
-// bounded root Store into exact per-model and named aggregate contracts,
-// validates security and infrastructure capabilities before they become
-// observable, and retains only focused services and behavioral ports. Identity,
-// Access Control, academic relationships, durable audit, and Realtime remain
-// cooperating sibling capabilities; none is a service locator for the others.
+// App, built once by New, is the application's public surface. It embeds one
+// service per area, so each use case is declared once, as a method on its
+// service. Each area is moving into its own child package, which App will
+// expose as a named field; until an area moves, its services live in this
+// package. Exam use cases already live in app/exam and its children.
 //
-// The package owns application policy, authoritative authorization, audit
-// ordering, transaction intent, and post-commit effects. It excludes HTTP and
-// WebSocket wire behavior, SQL and concrete infrastructure, and reusable file
-// content mechanics. Focused service implementations remain unexported; their
-// exported methods are the use cases App promotes. The app/job child package is the bounded
-// exception for the generic durable Job execution engine.
-//
-// Uniform audited mutations share a private mutation-attempt runner for the
-// begin, named Store mutation, error mapping, and failed-attempt sequence.
-// Successful completion stays atomic with the Store mutation, while callers
-// retain post-commit effects. Credential-bearing MFA, personal-access-token,
-// and external-authentication protocols remain explicit, as do Job operations,
-// because their completion and compensation rules differ from that sequence.
+// Where to look:
+//   - app.go: App and New
+//   - dependencies.go: what the server package must supply
+//   - construction_*.go: how each group of services is built
+//   - mutation_attempt.go: the shared begin, mutate and audit sequence most
+//     audited changes use
+//   - child packages: apperror (the one application error type), invocation
+//     (the call context every use case takes), idempotency, job (the durable
+//     Job engine), jobhandler, mail, realtime and exam
 package app

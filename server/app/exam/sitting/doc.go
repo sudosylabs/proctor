@@ -5,20 +5,21 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package sitting owns Exam Sitting scheduling, discovery, manager lifecycle
-// commands, and trusted lifecycle reconciliation application policy.
+// Package sitting schedules Exam Sittings and moves them through their
+// lifecycle: reschedule, cancel, pause, resume, extend and close. Managers
+// drive it through commands, and lifecycle Jobs drive it when a scheduled
+// time arrives. It also offers the Sitting authorization checks (such as
+// AuthorizeSittingView) that other use cases reuse.
 //
-// Ordinary operations require current Exam management, exact Academic Unit
-// membership, and the applicable role permission; explicit administrator
-// overrides remain separate audited actions. Durable Store commands remain
-// authoritative for revision, lifecycle, lineage, and academic-period checks;
-// transient effects are published only after a non-replayed commit.
+// Ordinary actions need a current Exam Manager who belongs to the Exam's
+// Academic Unit and holds the role permission; administrators use separate,
+// audited override actions. The Store has the final say on revision,
+// lifecycle and Academic Period checks, and follow-up effects are published
+// only after a change commits.
 //
-// The package constructs lifecycle Job intents through a consumer-owned
-// factory, while persistence atomically commits each intent with its Sitting
-// mutation. It does not execute Jobs and does not own transports, SQL,
-// Attempts, submission sealing, or file content. It depends inward only on
-// model, bounded Store contracts, and consumer-owned authorization, audit,
-// Job-construction, and effect ports; it never imports the parent application
-// or concrete adapters.
+// The package builds lifecycle Job requests and the Store saves each one with
+// its Sitting change, but it does not run Jobs. Attempts and Submission
+// sealing belong to attempt. It imports only model, store, app/apperror,
+// app/invocation, app/idempotency and app/exam/manageraccess. Start with
+// Service in service.go.
 package sitting

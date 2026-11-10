@@ -29,7 +29,7 @@ func TestRoutingKernelCentralizesAPIVersionRegexAndParams(t *testing.T) {
 			Path:   "/roles/{role_id}",
 			Auth:   AuthPublic,
 			Handle: func(request operationRequest) (operationResult, error) {
-				roleID, err := request.params.RequireRoleID()
+				roleID, err := pathID[model.RoleID](request, "role_id")
 				if err != nil {
 					return operationResult{}, err
 				}

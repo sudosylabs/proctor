@@ -468,7 +468,7 @@ func (m examStarterWorkspaceHTTPModule) openFile(request operationRequest) (prot
 }
 
 func examStarterWorkspaceExamID(request operationRequest) (model.ExamID, error) {
-	examID, err := request.params.RequireExamID()
+	examID, err := pathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return "", err
 	}
@@ -480,7 +480,7 @@ func examStarterWorkspaceIDs(request operationRequest) (model.ExamID, model.Star
 	if err != nil {
 		return "", "", err
 	}
-	entryID, err := request.params.RequireStarterWorkspaceEntryID()
+	entryID, err := pathID[model.StarterWorkspaceEntryID](request, "starter_workspace_entry_id")
 	if err != nil {
 		return "", "", err
 	}

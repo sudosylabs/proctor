@@ -218,7 +218,7 @@ func (m examRevisionHTTPModule) list(request operationRequest) (operationResult,
 }
 
 func examRevisionExamID(request operationRequest) (model.ExamID, error) {
-	id, err := request.params.RequireExamID()
+	id, err := pathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return "", err
 	}
@@ -230,7 +230,7 @@ func examRevisionIDs(request operationRequest) (model.ExamID, model.ExamRevision
 	if err != nil {
 		return "", "", err
 	}
-	revisionID, err := request.params.RequireExamRevisionID()
+	revisionID, err := pathID[model.ExamRevisionID](request, "exam_revision_id")
 	if err != nil {
 		return "", "", err
 	}

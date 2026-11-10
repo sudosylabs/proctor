@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/model"
 )
 
 type mfaAdministrationResourceModule struct{ application *identity.Service }
@@ -49,7 +50,7 @@ func mfaAdministrationResource(application *identity.Service) apiResource {
 	)
 }
 func (m mfaAdministrationResourceModule) reset(request operationRequest) (operationResult, error) {
-	userID, err := request.params.RequireUserID()
+	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
 	}

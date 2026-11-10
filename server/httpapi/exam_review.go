@@ -872,7 +872,7 @@ func (m examIntegrityReviewHTTPModule) terminal(request operationRequest,
 }
 
 func (m examIntegrityReviewHTTPModule) studentResult(request operationRequest) (operationResult, error) {
-	attemptID, err := request.params.RequireExamAttemptID()
+	attemptID, err := pathID[model.ExamAttemptID](request, "exam_attempt_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -986,7 +986,7 @@ func examIntegrityReviewDecisionDTO(decision model.IntegrityReviewDecision) exam
 }
 
 func reviewSubmissionID(request operationRequest) (model.SubmissionID, error) {
-	id, err := request.params.RequireSubmissionID()
+	id, err := pathID[model.SubmissionID](request, "submission_id")
 	if err != nil {
 		return "", err
 	}
@@ -994,7 +994,7 @@ func reviewSubmissionID(request operationRequest) (model.SubmissionID, error) {
 }
 
 func reviewFlagID(request operationRequest) (model.IntegrityFlagID, error) {
-	id, err := request.params.RequireIntegrityFlagID()
+	id, err := pathID[model.IntegrityFlagID](request, "integrity_flag_id")
 	if err != nil {
 		return "", err
 	}

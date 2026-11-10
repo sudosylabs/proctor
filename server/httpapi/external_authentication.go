@@ -154,7 +154,7 @@ func externalAuthenticationResource(
 }
 
 func (m externalAuthenticationResourceModule) beginFromBody(request operationRequest) (protocolResult, error) {
-	providerID, appErr := request.params.RequireProviderID()
+	providerID, appErr := pathProviderID(request, "provider_id")
 	if appErr != nil {
 		return protocolResult{}, appErr
 	}
@@ -218,14 +218,14 @@ func (m externalAuthenticationResourceModule) listProviders(request operationReq
 func (m externalAuthenticationResourceModule) begin(
 	request operationRequest,
 ) (protocolResult, error) {
-	providerID, appErr := request.params.RequireProviderID()
+	providerID, appErr := pathProviderID(request, "provider_id")
 	if appErr != nil {
 		return protocolResult{}, appErr
 	}
 
 	clientType := model.SessionClientWeb
-	if request.params.ClientType != "" {
-		clientType = model.SessionClientType(request.params.ClientType)
+	if requested := request.queryValue("client_type"); requested != "" {
+		clientType = model.SessionClientType(requested)
 	}
 
 	start, err := m.authentication.BeginExternalAuthentication(
@@ -233,10 +233,10 @@ func (m externalAuthenticationResourceModule) begin(
 		invocation.New(model.Principal{}, request.metadata),
 		identity.BeginExternalAuthenticationCommand{
 			ProviderID: providerID,
-			ReturnTo:   request.params.ReturnTo,
+			ReturnTo:   request.queryValue("return_to"),
 			ClientType: clientType,
-			DeviceID:   request.params.DeviceID,
-			DeviceName: request.params.DeviceName,
+			DeviceID:   request.queryValue("device_id"),
+			DeviceName: request.queryValue("device_name"),
 			Source:     request.metadata.IPAddress,
 		},
 	)
@@ -255,7 +255,7 @@ func (m externalAuthenticationResourceModule) complete(
 	request operationRequest,
 ) (protocolResult, error) {
 	clearBinding := captureResponseHeaders(m.cookies.clearExternalLoginBinding)
-	providerID, appErr := request.params.RequireProviderID()
+	providerID, appErr := pathProviderID(request, "provider_id")
 	if appErr != nil {
 		return protocolResult{}, errorWithHeaders(appErr, clearBinding)
 	}

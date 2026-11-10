@@ -276,7 +276,7 @@ func (m examAttemptHTTPModule) openSubmissionFile(request operationRequest) (pro
 		return protocolResult{}, err
 	}
 
-	entryID, err := request.params.RequireAttemptWorkspaceEntryID()
+	entryID, err := pathID[model.AttemptWorkspaceEntryID](request, "attempt_workspace_entry_id")
 	if err != nil {
 		return protocolResult{}, err
 	}
@@ -299,7 +299,7 @@ func managedSubmissionQuery(request operationRequest) (attempt.GetSubmissionQuer
 		return attempt.GetSubmissionQuery{}, err
 	}
 
-	submissionID, err := request.params.RequireSubmissionID()
+	submissionID, err := pathID[model.SubmissionID](request, "submission_id")
 	if err != nil {
 		return attempt.GetSubmissionQuery{}, err
 	}

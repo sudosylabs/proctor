@@ -195,15 +195,17 @@ func nativeDeliveryResource(application ExamAttemptApplication) apiResource {
 	)
 }
 
-func nativeDeliveryQuery(request operationRequest) (attempt.NativeDeliveryQuery, error) {
-	attemptID, err := request.params.RequireExamAttemptID()
+// nativeDeliveryQuery builds the query for one delivery stream. streamID names
+// a delivery stream, Participation, or source session chosen by the Store, so
+// it stays an untyped opaque identifier.
+func nativeDeliveryQuery(request operationRequest, streamID string) (attempt.NativeDeliveryQuery, error) {
+	attemptID, err := pathID[model.ExamAttemptID](request, "exam_attempt_id")
 	if err != nil {
 		return attempt.NativeDeliveryQuery{}, err
 	}
 
-	streamID, err := request.params.RequireNativeStreamID()
-	if err != nil {
-		return attempt.NativeDeliveryQuery{}, err
+	if !model.IsValidOpaqueID(streamID) {
+		return attempt.NativeDeliveryQuery{}, invalidRequestError(nil)
 	}
 
 	query := attempt.NativeDeliveryQuery{Access: attempt.CandidateAccess{AttemptID: attemptID}, StreamID: streamID}
@@ -223,7 +225,7 @@ func nativeDeliveryQuery(request operationRequest) (attempt.NativeDeliveryQuery,
 	return query, nil
 }
 func (m examAttemptHTTPModule) nativeDeliveryStatus(request operationRequest) (operationResult, error) {
-	query, err := nativeDeliveryQuery(request)
+	query, err := nativeDeliveryQuery(request, request.params["stream_id"])
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -234,11 +236,11 @@ func (m examAttemptHTTPModule) nativeDeliveryStatus(request operationRequest) (o
 	return nativeDeliveryStatusResult(value)
 }
 func (m examAttemptHTTPModule) nativeDeliveryReceipt(request operationRequest) (operationResult, error) {
-	query, err := nativeDeliveryQuery(request)
+	query, err := nativeDeliveryQuery(request, request.params["stream_id"])
 	if err != nil {
 		return operationResult{}, err
 	}
-	sequence, err := strconv.ParseInt(request.params.NativeBatchSequence, 10, 64)
+	sequence, err := strconv.ParseInt(request.params["batch_sequence"], 10, 64)
 	if err != nil || sequence < 1 || sequence > model.NativeParticipationPositionLimit {
 		return operationResult{}, invalidRequestError(err)
 	}
@@ -252,7 +254,7 @@ func (m examAttemptHTTPModule) nativeDeliveryReceipt(request operationRequest) (
 	return jsonResult(http.StatusOK, value).withHeaders(noStoreHeaders()), nil
 }
 func (m examAttemptHTTPModule) declareNativeDeliveryGaps(request operationRequest) (operationResult, error) {
-	query, err := nativeDeliveryQuery(request)
+	query, err := nativeDeliveryQuery(request, request.params["stream_id"])
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -274,7 +276,7 @@ func (m examAttemptHTTPModule) declareNativeDeliveryGaps(request operationReques
 	return jsonResult(http.StatusOK, value).withHeaders(noStoreHeaders()), nil
 }
 func (m examAttemptHTTPModule) sealNativeDelivery(request operationRequest) (operationResult, error) {
-	query, err := nativeDeliveryQuery(request)
+	query, err := nativeDeliveryQuery(request, request.params["stream_id"])
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -296,7 +298,7 @@ func (m examAttemptHTTPModule) sealNativeDelivery(request operationRequest) (ope
 	return nativeDeliveryStatusResult(value)
 }
 func (m examAttemptHTTPModule) updateNativeDeliverySummary(request operationRequest) (operationResult, error) {
-	query, err := nativeDeliveryQuery(request)
+	query, err := nativeDeliveryQuery(request, request.params["stream_id"])
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -331,8 +333,7 @@ func (m examAttemptHTTPModule) appendNativeDelivery(request operationRequest) (o
 	}
 
 	// The stream selector is in the closed batch envelope on this operation.
-	request.params.NativeStreamID = body.StreamID
-	query, err := nativeDeliveryQuery(request)
+	query, err := nativeDeliveryQuery(request, body.StreamID)
 	if err != nil {
 		return operationResult{}, err
 	}

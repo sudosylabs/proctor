@@ -192,7 +192,7 @@ func (m academicPeriodResourceModule) create(request operationRequest) (operatio
 }
 
 func (m academicPeriodResourceModule) get(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireAcademicPeriodID()
+	id, err := pathID[model.AcademicPeriodID](request, "academic_period_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -206,7 +206,7 @@ func (m academicPeriodResourceModule) get(request operationRequest) (operationRe
 }
 
 func (m academicPeriodResourceModule) patch(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireAcademicPeriodID()
+	id, err := pathID[model.AcademicPeriodID](request, "academic_period_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -250,7 +250,7 @@ func (m academicPeriodResourceModule) patch(request operationRequest) (operation
 }
 
 func (m academicPeriodResourceModule) archive(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireAcademicPeriodID()
+	id, err := pathID[model.AcademicPeriodID](request, "academic_period_id")
 	if err != nil {
 		return operationResult{}, err
 	}

@@ -95,7 +95,7 @@ func (m examAttemptHTTPModule) deliveryBudget(request operationRequest) (operati
 	return jsonResult(http.StatusOK, value).withHeaders(noStoreHeaders()), nil
 }
 func (m examAttemptHTTPModule) stopDeliveryDetails(request operationRequest) (operationResult, error) {
-	attemptID, err := request.params.RequireExamAttemptID()
+	attemptID, err := pathID[model.ExamAttemptID](request, "exam_attempt_id")
 	if err != nil {
 		return operationResult{}, err
 	}

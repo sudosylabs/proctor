@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/model"
 )
 
 type authenticationMethodResourceModule struct {
@@ -212,7 +213,7 @@ func (m authenticationMethodResourceModule) removePassword(request operationRequ
 }
 
 func (m authenticationMethodResourceModule) connect(request operationRequest) (operationResult, error) {
-	providerID, err := request.params.RequireProviderID()
+	providerID, err := pathProviderID(request, "provider_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -242,7 +243,7 @@ func (m authenticationMethodResourceModule) connect(request operationRequest) (o
 }
 
 func (m authenticationMethodResourceModule) unlink(request operationRequest) (operationResult, error) {
-	parsed, err := request.params.RequireExternalIdentityID()
+	parsed, err := pathID[model.ExternalIdentityID](request, "external_identity_id")
 	if err != nil {
 		return operationResult{}, err
 	}

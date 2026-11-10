@@ -281,7 +281,7 @@ func (m mailResourceModule) getRekeyStatus(request operationRequest) (operationR
 		return operationResult{}, errUnpresentableResult
 	}
 
-	raw, err := request.params.RequireJobID()
+	raw, err := pathID[model.JobID](request, "job_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -385,7 +385,7 @@ func (m mailResourceModule) getDelivery(request operationRequest) (operationResu
 	if m.mail == nil {
 		return operationResult{}, errUnpresentableResult
 	}
-	raw, err := request.params.RequireMailDeliveryID()
+	raw, err := pathID[model.MailDeliveryID](request, "mail_delivery_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -463,7 +463,7 @@ func (m mailResourceModule) mutateDelivery(
 		return operationResult{}, err
 	}
 
-	raw, err := request.params.RequireMailDeliveryID()
+	raw, err := pathID[model.MailDeliveryID](request, "mail_delivery_id")
 	if err != nil {
 		return operationResult{}, err
 	}

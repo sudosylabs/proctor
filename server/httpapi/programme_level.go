@@ -103,7 +103,7 @@ func programmeLevelResource(programmeLevels ProgrammeLevelApplication) apiResour
 }
 
 func (m programmeLevelResourceModule) list(request operationRequest) (operationResult, error) {
-	programmeID, err := request.params.RequireProgrammeID()
+	programmeID, err := pathID[model.ProgrammeID](request, "programme_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -129,7 +129,7 @@ func (m programmeLevelResourceModule) list(request operationRequest) (operationR
 }
 
 func (m programmeLevelResourceModule) create(request operationRequest) (operationResult, error) {
-	programmeID, err := request.params.RequireProgrammeID()
+	programmeID, err := pathID[model.ProgrammeID](request, "programme_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -154,7 +154,7 @@ func (m programmeLevelResourceModule) create(request operationRequest) (operatio
 }
 
 func (m programmeLevelResourceModule) get(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireProgrammeLevelID()
+	id, err := pathID[model.ProgrammeLevelID](request, "programme_level_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -168,7 +168,7 @@ func (m programmeLevelResourceModule) get(request operationRequest) (operationRe
 }
 
 func (m programmeLevelResourceModule) patch(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireProgrammeLevelID()
+	id, err := pathID[model.ProgrammeLevelID](request, "programme_level_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -196,7 +196,7 @@ func (m programmeLevelResourceModule) patch(request operationRequest) (operation
 }
 
 func (m programmeLevelResourceModule) archive(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireProgrammeLevelID()
+	id, err := pathID[model.ProgrammeLevelID](request, "programme_level_id")
 	if err != nil {
 		return operationResult{}, err
 	}

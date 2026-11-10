@@ -705,7 +705,7 @@ func candidateAttemptContentResult(
 }
 
 func candidateAccess(request operationRequest) (attempt.CandidateAccess, error) {
-	attemptID, err := request.params.RequireExamAttemptID()
+	attemptID, err := pathID[model.ExamAttemptID](request, "exam_attempt_id")
 	if err != nil {
 		return attempt.CandidateAccess{}, err
 	}

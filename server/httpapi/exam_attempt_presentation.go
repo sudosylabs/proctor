@@ -128,7 +128,7 @@ func (m examAttemptHTTPModule) acknowledgeCorrection(request operationRequest) (
 		return operationResult{}, err
 	}
 
-	correctionRevisionID, err := request.params.RequireExamRevisionID()
+	correctionRevisionID, err := pathID[model.ExamRevisionID](request, "exam_revision_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -301,7 +301,7 @@ func (m examAttemptHTTPModule) openResource(request operationRequest) (protocolR
 		return protocolResult{}, err
 	}
 
-	resourceID, err := request.params.RequireExamResourceID()
+	resourceID, err := pathID[model.ExamResourceID](request, "exam_resource_id")
 	if err != nil {
 		return protocolResult{}, err
 	}

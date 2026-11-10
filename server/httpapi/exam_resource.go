@@ -463,7 +463,7 @@ func (m examResourceHTTPModule) open(request operationRequest) (protocolResult, 
 }
 
 func examResourceExamID(request operationRequest) (model.ExamID, error) {
-	id, err := request.params.RequireExamID()
+	id, err := pathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return "", err
 	}
@@ -474,7 +474,7 @@ func examResourceIDs(request operationRequest) (model.ExamID, model.ExamResource
 	if err != nil {
 		return "", "", err
 	}
-	resourceID, err := request.params.RequireExamResourceID()
+	resourceID, err := pathID[model.ExamResourceID](request, "exam_resource_id")
 	if err != nil {
 		return "", "", err
 	}

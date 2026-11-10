@@ -189,7 +189,7 @@ func (m roleResourceModule) list(request operationRequest) (operationResult, err
 }
 
 func (m roleResourceModule) get(request operationRequest) (operationResult, error) {
-	roleID, err := request.params.RequireRoleID()
+	roleID, err := pathID[model.RoleID](request, "role_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -228,7 +228,7 @@ func (m roleResourceModule) create(request operationRequest) (operationResult, e
 }
 
 func (m roleResourceModule) patch(request operationRequest) (operationResult, error) {
-	roleID, err := request.params.RequireRoleID()
+	roleID, err := pathID[model.RoleID](request, "role_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -256,7 +256,7 @@ func (m roleResourceModule) patch(request operationRequest) (operationResult, er
 }
 
 func (m roleResourceModule) archive(request operationRequest) (operationResult, error) {
-	roleID, err := request.params.RequireRoleID()
+	roleID, err := pathID[model.RoleID](request, "role_id")
 	if err != nil {
 		return operationResult{}, err
 	}

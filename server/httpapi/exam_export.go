@@ -191,7 +191,7 @@ func (m examExportsHTTPModule) query(request operationRequest) (exam.ExportQuery
 	if err != nil {
 		return exam.ExportQuery{}, err
 	}
-	id, err := request.params.RequireExamExportID()
+	id, err := pathID[model.ExamExportID](request, "exam_export_id")
 	if err != nil {
 		return exam.ExportQuery{}, err
 	}

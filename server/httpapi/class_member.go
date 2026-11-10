@@ -77,7 +77,7 @@ func classMemberResource(members ClassMemberApplication) apiResource {
 }
 
 func (m classMemberResourceModule) list(request operationRequest) (operationResult, error) {
-	classID, err := request.params.RequireClassID()
+	classID, err := pathID[model.ClassID](request, "class_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -109,7 +109,7 @@ func (m classMemberResourceModule) list(request operationRequest) (operationResu
 }
 
 func (m classMemberResourceModule) enroll(request operationRequest) (operationResult, error) {
-	classID, err := request.params.RequireClassID()
+	classID, err := pathID[model.ClassID](request, "class_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -143,7 +143,7 @@ func (m classMemberResourceModule) enroll(request operationRequest) (operationRe
 }
 
 func (m classMemberResourceModule) end(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireClassMemberID()
+	id, err := pathID[model.ClassMemberID](request, "class_member_id")
 	if err != nil {
 		return operationResult{}, err
 	}

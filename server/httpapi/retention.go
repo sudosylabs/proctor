@@ -270,7 +270,7 @@ func (m retentionHTTPModule) preview(request operationRequest) (operationResult,
 	return jsonResult(http.StatusCreated, retentionPreviewDTO(p)).withHeaders(privateNoStoreHeaders()), nil
 }
 func (m retentionHTTPModule) getPreview(request operationRequest) (operationResult, error) {
-	id, err := model.ParseRetentionPreviewID(request.params.RetentionPreviewID)
+	id, err := model.ParseRetentionPreviewID(request.params["retention_preview_id"])
 	if err != nil {
 		return operationResult{}, invalidRequestError(err)
 	}

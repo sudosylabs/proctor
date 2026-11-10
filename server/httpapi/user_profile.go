@@ -503,7 +503,7 @@ func (m userProfileResourceModule) context(request operationRequest) (operationR
 }
 
 func (m userProfileResourceModule) changeEmail(request operationRequest) (operationResult, error) {
-	userID, err := request.params.RequireUserID()
+	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -526,7 +526,7 @@ func (m userProfileResourceModule) changeEmail(request operationRequest) (operat
 }
 
 func (m userProfileResourceModule) verifyEmail(request operationRequest) (operationResult, error) {
-	userID, err := request.params.RequireUserID()
+	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -578,7 +578,7 @@ func userProfilePrincipalMutationCodes(extra ...string) []string {
 }
 
 func (m userProfileResourceModule) uploadPicture(request operationRequest) (protocolResult, error) {
-	userID, err := request.params.RequireUserID()
+	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return protocolResult{}, err
 	}
@@ -602,7 +602,7 @@ func (m userProfileResourceModule) uploadPicture(request operationRequest) (prot
 }
 
 func (m userProfileResourceModule) removePicture(request operationRequest) (operationResult, error) {
-	userID, err := request.params.RequireUserID()
+	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -643,7 +643,7 @@ func profilePictureIfMatch(header string, required bool) (string, error) {
 }
 
 func (m userProfileResourceModule) downloadPicture(request operationRequest) (protocolResult, error) {
-	userID, err := request.params.RequireUserID()
+	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return protocolResult{}, err
 	}
@@ -830,7 +830,7 @@ func (m userProfileResourceModule) current(request operationRequest) (operationR
 }
 
 func (m userProfileResourceModule) get(request operationRequest) (operationResult, error) {
-	userID, err := request.params.RequireUserID()
+	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -842,7 +842,7 @@ func (m userProfileResourceModule) get(request operationRequest) (operationResul
 }
 
 func (m userProfileResourceModule) update(request operationRequest) (operationResult, error) {
-	userID, err := request.params.RequireUserID()
+	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
 	}

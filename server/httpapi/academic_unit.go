@@ -191,7 +191,7 @@ func (m academicUnitResourceModule) createRoot(request operationRequest) (operat
 }
 
 func (m academicUnitResourceModule) get(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireAcademicUnitID()
+	id, err := pathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -207,7 +207,7 @@ func (m academicUnitResourceModule) get(request operationRequest) (operationResu
 }
 
 func (m academicUnitResourceModule) patch(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireAcademicUnitID()
+	id, err := pathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -240,7 +240,7 @@ func (m academicUnitResourceModule) patch(request operationRequest) (operationRe
 }
 
 func (m academicUnitResourceModule) archive(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireAcademicUnitID()
+	id, err := pathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -260,7 +260,7 @@ func (m academicUnitResourceModule) archive(request operationRequest) (operation
 }
 
 func (m academicUnitResourceModule) listChildren(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireAcademicUnitID()
+	id, err := pathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -282,7 +282,7 @@ func (m academicUnitResourceModule) listChildren(request operationRequest) (oper
 }
 
 func (m academicUnitResourceModule) createChild(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireAcademicUnitID()
+	id, err := pathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
 		return operationResult{}, err
 	}

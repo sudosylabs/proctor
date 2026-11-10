@@ -700,7 +700,7 @@ func (m examResourceModule) create(request operationRequest) (operationResult, e
 }
 
 func (m examResourceModule) get(request operationRequest) (operationResult, error) {
-	examID, err := request.params.RequireExamID()
+	examID, err := pathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -712,7 +712,7 @@ func (m examResourceModule) get(request operationRequest) (operationResult, erro
 }
 
 func (m examResourceModule) editDraftText(request operationRequest) (operationResult, error) {
-	examID, err := request.params.RequireExamID()
+	examID, err := pathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -746,7 +746,7 @@ func (m examResourceModule) editDraftText(request operationRequest) (operationRe
 }
 
 func (m examResourceModule) configureDraftFocusLoss(request operationRequest) (operationResult, error) {
-	examID, err := request.params.RequireExamID()
+	examID, err := pathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -793,7 +793,7 @@ func (m examResourceModule) configureDraftFocusLoss(request operationRequest) (o
 }
 
 func (m examResourceModule) configureDraftBrowserPolicy(request operationRequest) (operationResult, error) {
-	examID, err := request.params.RequireExamID()
+	examID, err := pathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -825,7 +825,7 @@ func (m examResourceModule) configureDraftBrowserPolicy(request operationRequest
 }
 
 func (m examResourceModule) configureDraftNativePolicy(request operationRequest) (operationResult, error) {
-	examID, err := request.params.RequireExamID()
+	examID, err := pathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -855,7 +855,7 @@ func (m examResourceModule) configureDraftNativePolicy(request operationRequest)
 }
 
 func (m examResourceModule) archive(request operationRequest) (operationResult, error) {
-	examID, err := request.params.RequireExamID()
+	examID, err := pathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -968,7 +968,7 @@ func (m examResourceModule) removeManager(request operationRequest) (operationRe
 		return operationResult{}, err
 	}
 
-	userID, err := request.params.RequireUserID()
+	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -1024,7 +1024,7 @@ func (m examResourceModule) transferOwner(request operationRequest) (operationRe
 }
 
 func examIDFromRequest(request operationRequest) (model.ExamID, error) {
-	examID, err := request.params.RequireExamID()
+	examID, err := pathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return "", err
 	}

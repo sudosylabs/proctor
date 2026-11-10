@@ -147,7 +147,7 @@ type securityPolicyResponse struct {
 }
 
 func (m examAttemptHTTPModule) prepareSecurityPreflight(request operationRequest) (operationResult, error) {
-	sittingID, err := request.params.RequireExamSittingID()
+	sittingID, err := pathID[model.ExamSittingID](request, "exam_sitting_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -190,7 +190,7 @@ func (m examAttemptHTTPModule) prepareSecurityPreflight(request operationRequest
 	return jsonResult(http.StatusOK, result), nil
 }
 func (m examAttemptHTTPModule) reportSecurityPreflight(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireSecurityPreflightID()
+	id, err := opaquePathID(request, "security_preflight_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -324,7 +324,7 @@ func securityPreflightResource(application ExamAttemptApplication) apiResource {
 }
 
 func (m examAttemptHTTPModule) recoverSecurityPolicy(request operationRequest) (operationResult, error) {
-	attemptID, err := request.params.RequireExamAttemptID()
+	attemptID, err := pathID[model.ExamAttemptID](request, "exam_attempt_id")
 	if err != nil {
 		return operationResult{}, err
 	}

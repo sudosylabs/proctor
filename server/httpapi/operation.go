@@ -492,6 +492,12 @@ func (r operationRequest) decodeJSON(target any) error {
 	return nil
 }
 
+// queryValue returns the named query parameter's first value without
+// surrounding whitespace, or "" when the request does not carry it.
+func (r operationRequest) queryValue(name string) string {
+	return strings.TrimSpace(r.request.URL.Query().Get(name))
+}
+
 // queryLimit returns the collection page size with the shared default and
 // bound.
 func (r operationRequest) queryLimit() (int, error) {

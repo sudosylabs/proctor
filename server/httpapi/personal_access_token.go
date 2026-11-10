@@ -246,7 +246,7 @@ func (m personalAccessTokenResourceModule) enable(request operationRequest) (ope
 }
 
 func (m personalAccessTokenResourceModule) setDisabled(request operationRequest, disabled bool) (operationResult, error) {
-	tokenID, err := request.params.RequirePersonalAccessTokenID()
+	tokenID, err := pathID[model.PersonalAccessTokenID](request, "personal_access_token_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -332,7 +332,7 @@ func (m personalAccessTokenResourceModule) grantableScopes(request operationRequ
 }
 
 func (m personalAccessTokenResourceModule) revoke(request operationRequest) (operationResult, error) {
-	tokenID, err := request.params.RequirePersonalAccessTokenID()
+	tokenID, err := pathID[model.PersonalAccessTokenID](request, "personal_access_token_id")
 	if err != nil {
 		return operationResult{}, err
 	}

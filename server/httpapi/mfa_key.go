@@ -168,7 +168,7 @@ func (m mfaKeyResourceModule) startRekey(request operationRequest) (operationRes
 }
 
 func (m mfaKeyResourceModule) getRekeyStatus(request operationRequest) (operationResult, error) {
-	jobID, err := request.params.RequireJobID()
+	jobID, err := pathID[model.JobID](request, "job_id")
 	if err != nil {
 		return operationResult{}, err
 	}

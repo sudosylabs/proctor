@@ -121,7 +121,7 @@ func (m userAdministrationResourceModule) enable(request operationRequest) (oper
 }
 
 func (m userAdministrationResourceModule) setEnabled(request operationRequest, enabled bool, reason *string) (operationResult, error) {
-	userID, err := request.params.RequireUserID()
+	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -137,7 +137,7 @@ func (m userAdministrationResourceModule) setEnabled(request operationRequest, e
 }
 
 func (m userAdministrationResourceModule) revokeAllSessions(request operationRequest) (operationResult, error) {
-	userID, err := request.params.RequireUserID()
+	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -153,7 +153,7 @@ func (m userAdministrationResourceModule) revokeAllSessions(request operationReq
 }
 
 func (m userAdministrationResourceModule) listSessions(request operationRequest) (operationResult, error) {
-	userID, err := request.params.RequireUserID()
+	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -249,11 +249,11 @@ func sessionCursorSpec() opaqueCursorSpec[sessionCursor] {
 }
 
 func (m userAdministrationResourceModule) revokeSession(request operationRequest) (operationResult, error) {
-	userID, err := request.params.RequireUserID()
+	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
 	}
-	sessionID, err := request.params.RequireSessionID()
+	sessionID, err := pathID[model.SessionID](request, "session_id")
 	if err != nil {
 		return operationResult{}, err
 	}

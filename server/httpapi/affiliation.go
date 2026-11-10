@@ -90,7 +90,7 @@ func academicRelationshipMutationErrorCodes(specific ...string) []string {
 }
 
 func (m affiliationResourceModule) list(request operationRequest) (operationResult, error) {
-	userID, err := request.params.RequireUserID()
+	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -117,7 +117,7 @@ func (m affiliationResourceModule) list(request operationRequest) (operationResu
 }
 
 func (m affiliationResourceModule) create(request operationRequest) (operationResult, error) {
-	userID, err := request.params.RequireUserID()
+	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -151,7 +151,7 @@ func (m affiliationResourceModule) create(request operationRequest) (operationRe
 }
 
 func (m affiliationResourceModule) end(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireAffiliationID()
+	id, err := pathID[model.AffiliationID](request, "affiliation_id")
 	if err != nil {
 		return operationResult{}, err
 	}

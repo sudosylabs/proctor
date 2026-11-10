@@ -334,7 +334,7 @@ func (m onboardingImportModule) list(request operationRequest) (operationResult,
 }
 
 func (m onboardingImportModule) get(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireOnboardingImportID()
+	id, err := pathID[model.OnboardingImportID](request, "onboarding_import_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -346,7 +346,7 @@ func (m onboardingImportModule) get(request operationRequest) (operationResult, 
 }
 
 func (m onboardingImportModule) commit(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireOnboardingImportID()
+	id, err := pathID[model.OnboardingImportID](request, "onboarding_import_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -371,7 +371,7 @@ func (m onboardingImportModule) commit(request operationRequest) (operationResul
 }
 
 func (m onboardingImportModule) cancel(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireOnboardingImportID()
+	id, err := pathID[model.OnboardingImportID](request, "onboarding_import_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -383,7 +383,7 @@ func (m onboardingImportModule) cancel(request operationRequest) (operationResul
 }
 
 func (m onboardingImportModule) report(request operationRequest) (protocolResult, error) {
-	id, err := request.params.RequireOnboardingImportID()
+	id, err := pathID[model.OnboardingImportID](request, "onboarding_import_id")
 	if err != nil {
 		return protocolResult{}, err
 	}

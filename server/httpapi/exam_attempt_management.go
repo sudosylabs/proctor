@@ -750,11 +750,11 @@ func (m examAttemptHTTPModule) listBrowserActivity(request operationRequest) (op
 }
 
 func managedExamAttemptScope(request operationRequest) (model.ExamID, model.ExamSittingID, error) {
-	examID, err := request.params.RequireExamID()
+	examID, err := pathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return "", "", err
 	}
-	sittingID, err := request.params.RequireExamSittingID()
+	sittingID, err := pathID[model.ExamSittingID](request, "exam_sitting_id")
 	if err != nil {
 		return "", "", err
 	}
@@ -766,7 +766,7 @@ func managedExamAttemptIDs(request operationRequest) (model.ExamID, model.ExamSi
 	if err != nil {
 		return "", "", "", err
 	}
-	attemptID, err := request.params.RequireExamAttemptID()
+	attemptID, err := pathID[model.ExamAttemptID](request, "exam_attempt_id")
 	if err != nil {
 		return "", "", "", err
 	}

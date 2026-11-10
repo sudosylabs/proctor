@@ -468,7 +468,7 @@ func (m examRecordsHTTPModule) releaseHold(request operationRequest) (operationR
 		return operationResult{}, err
 	}
 
-	holdID, err := request.params.RequireRetentionHoldID()
+	holdID, err := pathID[model.RetentionHoldID](request, "retention_hold_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -605,7 +605,7 @@ func recordsSubmissionScope(request operationRequest) (model.RetentionHoldScope,
 	if err != nil {
 		return model.RetentionHoldScope{}, err
 	}
-	id, err := request.params.RequireSubmissionID()
+	id, err := pathID[model.SubmissionID](request, "submission_id")
 	if err != nil {
 		return model.RetentionHoldScope{}, err
 	}

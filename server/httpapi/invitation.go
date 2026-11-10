@@ -627,7 +627,7 @@ func (m invitationResourceModule) list(request operationRequest) (operationResul
 }
 
 func (m invitationResourceModule) get(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireInvitationID()
+	id, err := pathID[model.InvitationID](request, "invitation_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -662,7 +662,7 @@ func (m invitationResourceModule) mutate(
 	request operationRequest,
 	mutation func(model.InvitationID, int64) (onboarding.InvitationAdministrationView, error),
 ) (operationResult, error) {
-	id, err := request.params.RequireInvitationID()
+	id, err := pathID[model.InvitationID](request, "invitation_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -684,7 +684,7 @@ func (m invitationResourceModule) mutate(
 }
 
 func (m invitationResourceModule) replace(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireInvitationID()
+	id, err := pathID[model.InvitationID](request, "invitation_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -819,7 +819,7 @@ func invitationCursorSpec() opaqueCursorSpec[invitationCursor] {
 }
 
 func (m invitationResourceModule) issueAcademicUnitRole(request operationRequest) (operationResult, error) {
-	unitID, err := request.params.RequireAcademicUnitID()
+	unitID, err := pathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -854,7 +854,7 @@ func (m invitationResourceModule) issueAcademicUnitRole(request operationRequest
 }
 
 func (m invitationResourceModule) issueInstitutionRole(request operationRequest) (operationResult, error) {
-	institutionID, err := request.params.RequireInstitutionID()
+	institutionID, err := pathID[model.InstitutionID](request, "institution_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -931,7 +931,7 @@ func (m invitationResourceModule) acceptInstitutionRole(request operationRequest
 }
 
 func (m invitationResourceModule) issueTeacherAcademicUnit(request operationRequest) (operationResult, error) {
-	unitID, err := request.params.RequireAcademicUnitID()
+	unitID, err := pathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -1000,7 +1000,7 @@ func (m invitationResourceModule) acceptTeacherAcademicUnit(request operationReq
 }
 
 func (m invitationResourceModule) issueStudentClass(request operationRequest) (operationResult, error) {
-	classID, err := request.params.RequireClassID()
+	classID, err := pathID[model.ClassID](request, "class_id")
 	if err != nil {
 		return operationResult{}, err
 	}

@@ -875,7 +875,7 @@ func validExamSittingManagerReason(reason string) bool {
 }
 
 func examSittingExamID(request operationRequest) (model.ExamID, error) {
-	id, err := request.params.RequireExamID()
+	id, err := pathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return "", err
 	}
@@ -887,7 +887,7 @@ func examSittingIDs(request operationRequest) (model.ExamID, model.ExamSittingID
 	if err != nil {
 		return "", "", err
 	}
-	sittingID, err := request.params.RequireExamSittingID()
+	sittingID, err := pathID[model.ExamSittingID](request, "exam_sitting_id")
 	if err != nil {
 		return "", "", err
 	}

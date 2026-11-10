@@ -141,7 +141,7 @@ func TestMailDeliveryListCursorFiltersAndMutationBodiesAreBounded(t *testing.T) 
 	require.True(t, apperror.Is(err, "request.invalid"), "invalid filter err=%v lists", err)
 	require.Equal(t, 1, fake.lists, "invalid filter err=%v lists", err)
 	request, _ = http.NewRequest(http.MethodPost, "/api/v1/mail/deliveries/"+id.String()+"/retry", bytes.NewBufferString(`{"body":"forbidden"}`))
-	_, err = module.retryDelivery(operationRequest{request: request, params: Params{MailDeliveryID: id.String()}})
+	_, err = module.retryDelivery(operationRequest{request: request, params: Params{"mail_delivery_id": id.String()}})
 	require.True(t, apperror.Is(err, "request.invalid"), "retry body err=%v ids", err)
 	require.Empty(t, fake.ids, "retry body err=%v ids", err)
 }
@@ -219,7 +219,7 @@ func TestMailRekeyStatusProjectsSafeProgressAndFinalProof(t *testing.T) {
 	jobID := model.NewJobID()
 	fake := &recordingMailAPI{}
 	result, err := (mailResourceModule{mail: fake}).getRekeyStatus(operationRequest{
-		request: &http.Request{}, params: Params{JobID: jobID.String()},
+		request: &http.Request{}, params: Params{"job_id": jobID.String()},
 	})
 	require.NoError(t, err, "getRekeyStatus() = %#v, %v ids", result, err)
 	require.Equal(t, http.StatusOK, result.status, "getRekeyStatus() = %#v, %v ids", result, err)

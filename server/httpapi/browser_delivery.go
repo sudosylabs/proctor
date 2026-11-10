@@ -221,14 +221,14 @@ func browserDeliveryResource(application ExamAttemptApplication) apiResource {
 }
 
 func browserSourceQuery(request operationRequest, list bool) (attempt.BrowserSourceQuery, error) {
-	attemptID, err := request.params.RequireExamAttemptID()
+	attemptID, err := pathID[model.ExamAttemptID](request, "exam_attempt_id")
 	if err != nil {
 		return attempt.BrowserSourceQuery{}, err
 	}
 
 	query := attempt.BrowserSourceQuery{
 		Access:          attempt.CandidateAccess{AttemptID: attemptID},
-		SourceSessionID: model.BrowserSourceSessionID(request.params.BrowserSourceSessionID),
+		SourceSessionID: model.BrowserSourceSessionID(request.params["source_session_id"]),
 	}
 	if list {
 		values := request.request.URL.Query()["participation_id"]

@@ -113,7 +113,7 @@ func academicUnitMemberResource(members AcademicUnitMemberApplication) apiResour
 }
 
 func (m academicUnitMemberResourceModule) list(request operationRequest) (operationResult, error) {
-	unitID, err := request.params.RequireAcademicUnitID()
+	unitID, err := pathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -150,7 +150,7 @@ func (m academicUnitMemberResourceModule) list(request operationRequest) (operat
 }
 
 func (m academicUnitMemberResourceModule) create(request operationRequest) (operationResult, error) {
-	unitID, err := request.params.RequireAcademicUnitID()
+	unitID, err := pathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -178,7 +178,7 @@ func (m academicUnitMemberResourceModule) create(request operationRequest) (oper
 }
 
 func (m academicUnitMemberResourceModule) end(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireAcademicUnitMemberID()
+	id, err := pathID[model.AcademicUnitMemberID](request, "academic_unit_member_id")
 	if err != nil {
 		return operationResult{}, err
 	}

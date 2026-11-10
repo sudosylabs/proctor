@@ -44,7 +44,7 @@ func webSocketResource(transport WebSocketTransport) apiResource {
 }
 
 func (m webSocketModule) connect(writer http.ResponseWriter, request operationRequest) error {
-	connectionID, sequence, err := parseWebSocketResume(request.params)
+	connectionID, sequence, err := parseWebSocketResume(request.queryValue("connection_id"), request.queryValue("sequence_number"))
 	if err != nil {
 		return err
 	}
@@ -60,16 +60,16 @@ func (m webSocketModule) connect(writer http.ResponseWriter, request operationRe
 	)
 }
 
-func parseWebSocketResume(params Params) (string, int64, error) {
-	if params.ConnectionID == "" && params.SequenceNumber == "" {
+func parseWebSocketResume(connectionID, sequenceNumber string) (string, int64, error) {
+	if connectionID == "" && sequenceNumber == "" {
 		return "", 0, nil
 	}
-	if !model.IsValidOpaqueID(params.ConnectionID) || params.SequenceNumber == "" {
+	if !model.IsValidOpaqueID(connectionID) || sequenceNumber == "" {
 		return "", 0, invalidRequestError(nil)
 	}
-	sequence, err := strconv.ParseInt(params.SequenceNumber, 10, 64)
+	sequence, err := strconv.ParseInt(sequenceNumber, 10, 64)
 	if err != nil || sequence < 0 {
 		return "", 0, invalidRequestError(err)
 	}
-	return params.ConnectionID, sequence, nil
+	return connectionID, sequence, nil
 }

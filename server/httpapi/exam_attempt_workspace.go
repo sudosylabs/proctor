@@ -573,7 +573,7 @@ func candidateWorkspaceEntryAccess(request operationRequest) (attempt.CandidateA
 	if err != nil {
 		return attempt.CandidateAccess{}, "", err
 	}
-	entryID, err := request.params.RequireAttemptWorkspaceEntryID()
+	entryID, err := pathID[model.AttemptWorkspaceEntryID](request, "attempt_workspace_entry_id")
 	if err != nil {
 		return attempt.CandidateAccess{}, "", err
 	}
@@ -612,7 +612,7 @@ func (m examAttemptHTTPModule) openWorkspaceFile(request operationRequest) (prot
 		return protocolResult{}, err
 	}
 
-	entryID, err := request.params.RequireAttemptWorkspaceEntryID()
+	entryID, err := pathID[model.AttemptWorkspaceEntryID](request, "attempt_workspace_entry_id")
 	if err != nil {
 		return protocolResult{}, err
 	}

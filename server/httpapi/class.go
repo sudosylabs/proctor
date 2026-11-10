@@ -122,7 +122,7 @@ func classMutationErrorCodes(specific ...string) []string {
 }
 
 func (m classResourceModule) search(request operationRequest) (operationResult, error) {
-	academicUnitID, err := request.params.RequireAcademicUnitID()
+	academicUnitID, err := pathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -148,7 +148,7 @@ func (m classResourceModule) search(request operationRequest) (operationResult, 
 }
 
 func (m classResourceModule) list(request operationRequest) (operationResult, error) {
-	programmeLevelID, err := request.params.RequireProgrammeLevelID()
+	programmeLevelID, err := pathID[model.ProgrammeLevelID](request, "programme_level_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -170,7 +170,7 @@ func (m classResourceModule) list(request operationRequest) (operationResult, er
 }
 
 func (m classResourceModule) create(request operationRequest) (operationResult, error) {
-	programmeLevelID, err := request.params.RequireProgrammeLevelID()
+	programmeLevelID, err := pathID[model.ProgrammeLevelID](request, "programme_level_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -196,7 +196,7 @@ func (m classResourceModule) create(request operationRequest) (operationResult, 
 }
 
 func (m classResourceModule) get(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireClassID()
+	id, err := pathID[model.ClassID](request, "class_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -212,7 +212,7 @@ func (m classResourceModule) get(request operationRequest) (operationResult, err
 }
 
 func (m classResourceModule) patch(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireClassID()
+	id, err := pathID[model.ClassID](request, "class_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -242,7 +242,7 @@ func (m classResourceModule) patch(request operationRequest) (operationResult, e
 }
 
 func (m classResourceModule) archive(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireClassID()
+	id, err := pathID[model.ClassID](request, "class_id")
 	if err != nil {
 		return operationResult{}, err
 	}

@@ -315,7 +315,7 @@ func (m studentProgressionModule) list(request operationRequest) (operationResul
 }
 
 func (m studentProgressionModule) get(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireStudentProgressionID()
+	id, err := pathID[model.OnboardingImportID](request, "student_progression_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -327,7 +327,7 @@ func (m studentProgressionModule) get(request operationRequest) (operationResult
 }
 
 func (m studentProgressionModule) commit(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireStudentProgressionID()
+	id, err := pathID[model.OnboardingImportID](request, "student_progression_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -351,7 +351,7 @@ func (m studentProgressionModule) commit(request operationRequest) (operationRes
 }
 
 func (m studentProgressionModule) cancel(request operationRequest) (operationResult, error) {
-	id, err := request.params.RequireStudentProgressionID()
+	id, err := pathID[model.OnboardingImportID](request, "student_progression_id")
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -363,7 +363,7 @@ func (m studentProgressionModule) cancel(request operationRequest) (operationRes
 }
 
 func (m studentProgressionModule) report(request operationRequest) (protocolResult, error) {
-	id, err := request.params.RequireStudentProgressionID()
+	id, err := pathID[model.OnboardingImportID](request, "student_progression_id")
 	if err != nil {
 		return protocolResult{}, err
 	}

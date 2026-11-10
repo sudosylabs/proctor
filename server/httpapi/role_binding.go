@@ -177,7 +177,7 @@ func (m roleBindingResourceModule) create(request operationRequest) (operationRe
 }
 
 func (m roleBindingResourceModule) end(request operationRequest) (operationResult, error) {
-	bindingID, err := request.params.RequireRoleBindingID()
+	bindingID, err := pathID[model.RoleBindingID](request, "role_binding_id")
 	if err != nil {
 		return operationResult{}, err
 	}

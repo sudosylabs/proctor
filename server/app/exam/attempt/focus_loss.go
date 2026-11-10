@@ -120,7 +120,7 @@ func (s *Service) EvaluateExamAttemptFocusLoss(ctx context.Context, invocation i
 	if !result.Duplicate && (result.GapDetected || result.FlagCreated || result.ManagerNotificationRequired ||
 		result.CandidateWarningCreated || result.SuspensionCreated) {
 		if effectErr := s.deps.Effects.FocusLossEvaluated(ctx, result); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "exam_attempt_focus_loss_evaluated", effectErr)
+			s.deps.Effects.Report(ctx, "exam_attempt_focus_loss_evaluated", effectErr)
 		}
 	}
 	return result, nil
@@ -177,7 +177,7 @@ func (s *Service) evaluateEndedFocusLoss(ctx context.Context, invocation invocat
 		Duplicate: stored.Duplicate, GapDetected: stored.Discrepancy.MissingBefore > 0, DiscrepancyRecorded: true}
 	if !result.Duplicate {
 		if effectErr := s.deps.Effects.FocusLossEvaluated(ctx, result); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "exam_attempt_focus_loss_discrepancy_recorded", effectErr)
+			s.deps.Effects.Report(ctx, "exam_attempt_focus_loss_discrepancy_recorded", effectErr)
 		}
 	}
 	return result, nil

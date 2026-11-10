@@ -41,10 +41,8 @@ type Effects interface {
 	ReviewChanged(context.Context, Result) error
 	ReviewFinalized(context.Context, Result) error
 	ResultReleased(context.Context, Result) error
-}
-
-type EffectFailures interface {
-	Report(context.Context, string, error)
+	// Report records an Effect failure; the committed change stands.
+	Report(ctx context.Context, operation string, err error)
 }
 
 type ResultReleaseMailPreparation struct {
@@ -68,22 +66,21 @@ type ResultReleaseMailPreparer interface {
 // Dependencies are the collaborators of Service; New validates them once and the
 // service retains them unchanged.
 type Dependencies struct {
-	Persistence    store.ExamIntegrityReviewStore
-	Authorizer     Authorizer
-	Auditor        Auditor
-	Effects        Effects
-	EffectFailures EffectFailures
-	Mail           ResultReleaseMailPreparer
-	Now            func() time.Time
-	NewReviewID    func() model.SubmissionReviewID
-	NewDecisionID  func() model.IntegrityReviewDecisionID
+	Persistence   store.ExamIntegrityReviewStore
+	Authorizer    Authorizer
+	Auditor       Auditor
+	Effects       Effects
+	Mail          ResultReleaseMailPreparer
+	Now           func() time.Time
+	NewReviewID   func() model.SubmissionReviewID
+	NewDecisionID func() model.IntegrityReviewDecisionID
 }
 
 type Service struct{ deps Dependencies }
 
 func New(deps Dependencies) (*Service, error) {
 	if deps.Persistence == nil || deps.Authorizer == nil || deps.Auditor == nil || deps.Effects == nil ||
-		deps.EffectFailures == nil || deps.Mail == nil || deps.Now == nil || deps.NewReviewID == nil || deps.NewDecisionID == nil {
+		deps.Mail == nil || deps.Now == nil || deps.NewReviewID == nil || deps.NewDecisionID == nil {
 		return nil, errors.New("Exam Integrity Review dependencies are required")
 	}
 	return &Service{deps: deps}, nil
@@ -619,7 +616,7 @@ func (s *Service) effect(ctx context.Context, operation string, result Result, r
 		return
 	}
 	if err := deliver(ctx, result); err != nil {
-		s.deps.EffectFailures.Report(ctx, operation, err)
+		s.deps.Effects.Report(ctx, operation, err)
 	}
 }
 

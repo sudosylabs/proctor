@@ -34,7 +34,6 @@ func TestPublicationPublishesAfterCurrentManagerAuthorizationAndSuppressesReplay
 		Authorizer:        f.authorizer,
 		Auditor:           f.auditor,
 		Effects:           effects,
-		EffectFailures:    f.effects,
 		Now:               fixedPublicationTime,
 		NewID:             model.NewExamRevisionID,
 		InstitutionOrigin: "https://institution.example",
@@ -67,7 +66,6 @@ func TestPublicationUsesOverrideForNonManager(t *testing.T) {
 		Authorizer:        f.authorizer,
 		Auditor:           f.auditor,
 		Effects:           &publicationEffectsFake{},
-		EffectFailures:    f.effects,
 		Now:               fixedPublicationTime,
 		NewID:             model.NewExamRevisionID,
 		InstitutionOrigin: "https://institution.example",
@@ -92,7 +90,6 @@ func TestPublicationMapsCapacityConflict(t *testing.T) {
 		Authorizer:        f.authorizer,
 		Auditor:           f.auditor,
 		Effects:           &publicationEffectsFake{},
-		EffectFailures:    f.effects,
 		Now:               fixedPublicationTime,
 		NewID:             model.NewExamRevisionID,
 		InstitutionOrigin: "https://institution.example",
@@ -135,3 +132,5 @@ func (f *revisionStoreFake) Publish(_ context.Context, input *store.ExamRevision
 	}
 	return &store.ExamRevisionPublicationResult{Revision: &f.summary, ExamRevision: 2, DraftRevision: input.ExpectedDraftRevision + 1, Replayed: f.replayed}, nil
 }
+
+func (f *publicationEffectsFake) Report(context.Context, string, error) {}

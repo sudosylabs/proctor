@@ -23,10 +23,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type AccessStore interface {
-	Access(context.Context, model.ExamID, model.UserID) (*store.ExamAccessSnapshot, error)
-	Get(context.Context, model.ExamID, model.UserID) (*store.ExamAuthoringSnapshot, error)
-}
 type Authorizer interface {
 	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
 }
@@ -36,9 +32,8 @@ type Auditor interface {
 }
 type Effects interface {
 	Changed(context.Context, model.ExamID, model.ExamResourceID, int64, string) error
-}
-type EffectFailures interface {
-	Report(context.Context, string, error)
+	// Report records an Effect failure; the committed change stands.
+	Report(ctx context.Context, operation string, err error)
 }
 type FileContent interface {
 	StoreExamResource(context.Context, model.FileRevisionID, model.ExamResourceMediaType, io.Reader, int64, time.Time) (model.FileRendition, error)
@@ -111,25 +106,24 @@ type Service struct{ deps Dependencies }
 // Dependencies are the collaborators of Service; New validates them once and the
 // service retains them unchanged.
 type Dependencies struct {
-	Persistence    store.ExamResourceStore
-	Access         AccessStore
-	Memberships    manageraccess.Memberships
-	Authorizer     Authorizer
-	Auditor        Auditor
-	Effects        Effects
-	EffectFailures EffectFailures
-	Content        FileContent
-	Now            func() time.Time
-	NewResourceID  func() model.ExamResourceID
-	NewEntryID     func() model.FileEntryID
-	NewRevisionID  func() model.FileRevisionID
-	NewLeaseID     func() model.UploadLeaseID
+	Persistence   store.ExamResourceStore
+	Access        store.ExamAuthoringStore
+	Memberships   store.AcademicUnitMemberStore
+	Authorizer    Authorizer
+	Auditor       Auditor
+	Effects       Effects
+	Content       FileContent
+	Now           func() time.Time
+	NewResourceID func() model.ExamResourceID
+	NewEntryID    func() model.FileEntryID
+	NewRevisionID func() model.FileRevisionID
+	NewLeaseID    func() model.UploadLeaseID
 }
 
 // New returns an Exam Resource Service, or an error when a required
 // dependency is missing.
 func New(deps Dependencies) (*Service, error) {
-	if deps.Persistence == nil || deps.Access == nil || deps.Memberships == nil || deps.Authorizer == nil || deps.Auditor == nil || deps.Effects == nil || deps.EffectFailures == nil || deps.Content == nil || deps.Now == nil || deps.NewResourceID == nil || deps.NewEntryID == nil || deps.NewRevisionID == nil || deps.NewLeaseID == nil {
+	if deps.Persistence == nil || deps.Access == nil || deps.Memberships == nil || deps.Authorizer == nil || deps.Auditor == nil || deps.Effects == nil || deps.Content == nil || deps.Now == nil || deps.NewResourceID == nil || deps.NewEntryID == nil || deps.NewRevisionID == nil || deps.NewLeaseID == nil {
 		return nil, errors.New("exam resource dependencies are required")
 	}
 	return &Service{deps: deps}, nil
@@ -466,9 +460,9 @@ func (s *Service) ReorderExamResources(ctx context.Context, invocation invocatio
 	}
 	if !result.Replayed {
 		if result.DraftRevision < 1 {
-			s.deps.EffectFailures.Report(ctx, "exam_resource_changed", errors.New("missing committed Draft revision"))
+			s.deps.Effects.Report(ctx, "exam_resource_changed", errors.New("missing committed Draft revision"))
 		} else if effectErr := s.deps.Effects.Changed(ctx, c.ExamID, "", result.DraftRevision, "reorder"); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "exam_resource_changed", effectErr)
+			s.deps.Effects.Report(ctx, "exam_resource_changed", effectErr)
 		}
 	}
 	return result.Items, nil
@@ -562,7 +556,7 @@ func (s *Service) effect(ctx context.Context, result *store.ExamResourceCommandR
 		return
 	}
 	if err := s.deps.Effects.Changed(ctx, result.Value.Resource.ExamID, result.Value.Resource.ID, result.Value.DraftRevision, operation); err != nil {
-		s.deps.EffectFailures.Report(ctx, "exam_resource_changed", err)
+		s.deps.Effects.Report(ctx, "exam_resource_changed", err)
 	}
 }
 func mapContent(err error) error {

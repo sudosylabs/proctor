@@ -129,7 +129,7 @@ func (s *Service) AppendExamAttemptBrowserActivity(ctx context.Context, invocati
 	if acknowledgement.GapAttentionChanged {
 		if effectErr := s.deps.Effects.BrowserActivityGapChanged(ctx, acknowledgement.ExamID,
 			acknowledgement.SittingID); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "browser_activity_gap_changed", effectErr)
+			s.deps.Effects.Report(ctx, "browser_activity_gap_changed", effectErr)
 		}
 	}
 	return *acknowledgement, nil

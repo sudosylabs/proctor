@@ -154,7 +154,7 @@ func (s *Service) ConnectExamAttempt(ctx context.Context, invocation invocation.
 	}
 	if result.ConnectionOpened && !result.Replayed {
 		if effectErr := s.deps.Effects.ConnectionOpened(ctx, result); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "exam_attempt_connection_opened", effectErr)
+			s.deps.Effects.Report(ctx, "exam_attempt_connection_opened", effectErr)
 		}
 	}
 	return result, nil
@@ -235,7 +235,7 @@ func (s *Service) CloseExamAttemptConnection(ctx context.Context, invocation inv
 		CandidateUserID: stored.CandidateUserID, Connection: *stored.Connection, Changed: stored.Changed}
 	if result.Changed {
 		if effectErr := s.deps.Effects.ConnectionClosed(ctx, result); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "exam_attempt_connection_closed", effectErr)
+			s.deps.Effects.Report(ctx, "exam_attempt_connection_closed", effectErr)
 		}
 	}
 	return result, nil

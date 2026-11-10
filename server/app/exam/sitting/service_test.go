@@ -665,18 +665,17 @@ func newFixture(t *testing.T) fixture {
 	jobs := &lifecycleJobFactoryFake{open: &model.Job{}, deadline: &model.Job{}, finalize: &model.Job{}}
 	mail := &scheduleMailPreparerFake{result: &store.ExamSittingMailFanout{}}
 	service, err := New(Dependencies{
-		Persistence:    persistence,
-		Access:         access,
-		Memberships:    memberships,
-		Authorizer:     authorizer,
-		Auditor:        auditor,
-		SystemAuditor:  systemAudit,
-		Effects:        effects,
-		EffectFailures: effects,
-		Jobs:           jobs,
-		Mail:           mail,
-		Now:            func() time.Time { return testNow },
-		NewID:          func() model.ExamSittingID { return sittingID },
+		Persistence:   persistence,
+		Access:        access,
+		Memberships:   memberships,
+		Authorizer:    authorizer,
+		Auditor:       auditor,
+		SystemAuditor: systemAudit,
+		Effects:       effects,
+		Jobs:          jobs,
+		Mail:          mail,
+		Now:           func() time.Time { return testNow },
+		NewID:         func() model.ExamSittingID { return sittingID },
 	})
 	require.NoError(t, err)
 	return fixture{service: service, invocation: invocation.New(testPrincipal(userID), model.RequestMetadata{}), userID: userID,
@@ -817,6 +816,7 @@ func (f *sittingStoreFake) ListNoShows(_ context.Context, options store.ExamSitt
 }
 
 type accessFake struct {
+	store.ExamAuthoringStore
 	snapshot *store.ExamAccessSnapshot
 	err      error
 }
@@ -826,6 +826,7 @@ func (f *accessFake) Access(context.Context, model.ExamID, model.UserID) (*store
 }
 
 type membershipsFake struct {
+	store.AcademicUnitMemberStore
 	items []*model.AcademicUnitMember
 	err   error
 	at    time.Time

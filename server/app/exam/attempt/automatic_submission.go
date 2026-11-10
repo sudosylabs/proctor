@@ -122,7 +122,7 @@ func (s *Service) SealForSittingClose(ctx context.Context, system invocation.Sys
 	}
 	if !result.Replayed {
 		if effectErr := s.deps.Effects.AttemptSealedForSittingClose(ctx, result); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "exam_attempt_sealed_for_sitting_close", effectErr)
+			s.deps.Effects.Report(ctx, "exam_attempt_sealed_for_sitting_close", effectErr)
 		}
 	}
 	return result, nil

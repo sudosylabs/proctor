@@ -102,7 +102,6 @@ func newExamAuthoring(deps Dependencies, shared sharedMechanics, authorizer *acc
 		Auditor:           shared.audit.MutationAudit(),
 		Outcomes:          deps.Store.CommandOutcome(),
 		Effects:           effects,
-		EffectFailures:    effects,
 		Now:               time.Now,
 		NewID:             model.NewExamID,
 		InstitutionOrigin: deps.PublicURL,
@@ -129,7 +128,6 @@ func newExamPublication(deps Dependencies, shared sharedMechanics, authorizer *a
 		Authorizer:        examAuthorizationAdapter{authorization: authorizer},
 		Auditor:           shared.audit.MutationAudit(),
 		Effects:           effects,
-		EffectFailures:    effects,
 		Now:               time.Now,
 		NewID:             model.NewExamRevisionID,
 		InstitutionOrigin: deps.PublicURL,
@@ -143,19 +141,18 @@ func newSittings(
 ) (*sitting.Service, error) {
 	effects := examSittingRealtimeEffects{realtime: shared.realtime, collections: collections}
 	return sitting.New(sitting.Dependencies{
-		Persistence:    deps.Store.ExamSitting(),
-		Access:         deps.Store.ExamAuthoring(),
-		Memberships:    deps.Store.AcademicUnitMember(),
-		Authorizer:     authorizer,
-		Auditor:        shared.audit.MutationAudit(),
-		SystemAuditor:  examSittingSystemAuditAdapter{audit: shared.audit},
-		Effects:        effects,
-		EffectFailures: effects,
-		Jobs:           jobhandler.NewExamSittingLifecycleJobFactory(time.Now, model.NewJobID),
-		Mail:           scheduleMail,
-		Now:            time.Now,
-		NewID:          model.NewExamSittingID,
-		Operational:    operationalRecorderAdapter{recorder: deps.OperationalRecorder},
+		Persistence:   deps.Store.ExamSitting(),
+		Access:        deps.Store.ExamAuthoring(),
+		Memberships:   deps.Store.AcademicUnitMember(),
+		Authorizer:    authorizer,
+		Auditor:       shared.audit.MutationAudit(),
+		SystemAuditor: examSittingSystemAuditAdapter{audit: shared.audit},
+		Effects:       effects,
+		Jobs:          jobhandler.NewExamSittingLifecycleJobFactory(time.Now, model.NewJobID),
+		Mail:          scheduleMail,
+		Now:           time.Now,
+		NewID:         model.NewExamSittingID,
+		Operational:   operationalRecorderAdapter{recorder: deps.OperationalRecorder},
 	})
 }
 
@@ -169,7 +166,7 @@ func newAttempts(deps Dependencies, shared sharedMechanics, sittings *sitting.Se
 		Managers:      examAttemptManagerAuthorizationAdapter{sittings: sittings, submissions: deps.Store.ExamSubmission(), audit: shared.audit},
 		Auditor:       shared.audit.MutationAudit(),
 		SystemAuditor: examAttemptSystemAuditAdapter{audit: shared.audit},
-		Effects:       effects, EffectFailures: effects, Content: deps.FileContent, Mail: submissionMail,
+		Effects:       effects, Content: deps.FileContent, Mail: submissionMail,
 		DesktopBuilds: desktopBuilds,
 		Now:           time.Now, NewAttemptID: model.NewExamAttemptID, NewWorkspaceID: model.NewExamAttemptWorkspaceID,
 		NewParticipation: model.NewAttemptParticipationID, NewConnection: model.NewAttemptConnectionID,
@@ -192,26 +189,25 @@ func newReviews(deps Dependencies, shared sharedMechanics, sittings *sitting.Ser
 		Authorizer: examIntegrityReviewAuthorizationAdapter{reviews: deps.Store.ExamIntegrityReview(), sittings: sittings,
 			audit: shared.audit},
 		Auditor: shared.audit.MutationAudit(),
-		Effects: effects, EffectFailures: effects, Mail: resultReleaseMail, Now: time.Now,
+		Effects: effects, Mail: resultReleaseMail, Now: time.Now,
 		NewReviewID: model.NewSubmissionReviewID, NewDecisionID: model.NewIntegrityReviewDecisionID})
 }
 
 func newExamResources(deps Dependencies, shared sharedMechanics, authorizer *access.Authorizer) (*resource.Service, error) {
 	effects := examResourceRealtimeEffects{realtime: shared.realtime}
 	return resource.New(resource.Dependencies{
-		Persistence:    deps.Store.ExamResource(),
-		Access:         deps.Store.ExamAuthoring(),
-		Memberships:    deps.Store.AcademicUnitMember(),
-		Authorizer:     authorizer,
-		Auditor:        shared.audit.MutationAudit(),
-		Effects:        effects,
-		EffectFailures: effects,
-		Content:        deps.FileContent,
-		Now:            time.Now,
-		NewResourceID:  model.NewExamResourceID,
-		NewEntryID:     model.NewFileEntryID,
-		NewRevisionID:  model.NewFileRevisionID,
-		NewLeaseID:     model.NewUploadLeaseID,
+		Persistence:   deps.Store.ExamResource(),
+		Access:        deps.Store.ExamAuthoring(),
+		Memberships:   deps.Store.AcademicUnitMember(),
+		Authorizer:    authorizer,
+		Auditor:       shared.audit.MutationAudit(),
+		Effects:       effects,
+		Content:       deps.FileContent,
+		Now:           time.Now,
+		NewResourceID: model.NewExamResourceID,
+		NewEntryID:    model.NewFileEntryID,
+		NewRevisionID: model.NewFileRevisionID,
+		NewLeaseID:    model.NewUploadLeaseID,
 	})
 }
 
@@ -227,7 +223,6 @@ func newCorrections(
 		Authorizer:        authorizer,
 		Auditor:           shared.audit.MutationAudit(),
 		Effects:           effects,
-		EffectFailures:    effects,
 		Content:           deps.FileContent,
 		Now:               time.Now,
 		NewStageID:        model.NewExamCorrectionResourceStageID,
@@ -244,18 +239,17 @@ func newCorrections(
 func newStarterWorkspaces(deps Dependencies, shared sharedMechanics, authorizer *access.Authorizer) (*workspace.Service, error) {
 	effects := examStarterWorkspaceRealtimeEffects{realtime: shared.realtime}
 	return workspace.New(workspace.Dependencies{
-		Persistence:    deps.Store.ExamStarterWorkspace(),
-		Access:         deps.Store.ExamAuthoring(),
-		Memberships:    deps.Store.AcademicUnitMember(),
-		Authorizer:     authorizer,
-		Auditor:        shared.audit.MutationAudit(),
-		Content:        deps.FileContent,
-		Effects:        effects,
-		EffectFailures: effects,
-		Now:            time.Now,
-		NewEntryID:     model.NewStarterWorkspaceEntryID,
-		NewObjectID:    model.NewStarterWorkspaceObjectID,
-		NewVersion:     model.NewWorkspaceContentVersion,
+		Persistence: deps.Store.ExamStarterWorkspace(),
+		Access:      deps.Store.ExamAuthoring(),
+		Memberships: deps.Store.AcademicUnitMember(),
+		Authorizer:  authorizer,
+		Auditor:     shared.audit.MutationAudit(),
+		Content:     deps.FileContent,
+		Effects:     effects,
+		Now:         time.Now,
+		NewEntryID:  model.NewStarterWorkspaceEntryID,
+		NewObjectID: model.NewStarterWorkspaceObjectID,
+		NewVersion:  model.NewWorkspaceContentVersion,
 	})
 }
 

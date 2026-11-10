@@ -190,7 +190,7 @@ func newReviewFixture(t *testing.T) *reviewFixture {
 	f.effects = &reviewEffectsFake{}
 	f.mail = &reviewMailFake{f: f}
 	service, err := New(Dependencies{Persistence: f.persistence, Authorizer: f.authorizer, Auditor: f.auditor,
-		Effects: f.effects, EffectFailures: f.effects, Mail: f.mail, Now: func() time.Time { return f.at },
+		Effects: f.effects, Mail: f.mail, Now: func() time.Time { return f.at },
 		NewReviewID: model.NewSubmissionReviewID, NewDecisionID: model.NewIntegrityReviewDecisionID})
 	require.NoError(t, err)
 	f.service = service

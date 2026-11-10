@@ -280,18 +280,17 @@ func newServiceFixture(t *testing.T) *serviceFixture {
 	effects := &fakeWorkspaceEffects{}
 	content := &fakeWorkspaceContent{persistence: persistence}
 	service, err := New(Dependencies{
-		Persistence:    persistence,
-		Access:         persistence,
-		Memberships:    fakeMemberships{unitID: exam.AcademicUnitID},
-		Authorizer:     authorizer,
-		Auditor:        auditor,
-		Content:        content,
-		Effects:        effects,
-		EffectFailures: fakeFailures{},
-		Now:            func() time.Time { return at },
-		NewEntryID:     model.NewStarterWorkspaceEntryID,
-		NewObjectID:    model.NewStarterWorkspaceObjectID,
-		NewVersion:     model.NewWorkspaceContentVersion,
+		Persistence: persistence,
+		Access:      fakeWorkspaceAccess{persistence: persistence},
+		Memberships: fakeMemberships{unitID: exam.AcademicUnitID},
+		Authorizer:  authorizer,
+		Auditor:     auditor,
+		Content:     content,
+		Effects:     effects,
+		Now:         func() time.Time { return at },
+		NewEntryID:  model.NewStarterWorkspaceEntryID,
+		NewObjectID: model.NewStarterWorkspaceObjectID,
+		NewVersion:  model.NewWorkspaceContentVersion,
 	})
 	require.NoError(t, err)
 	principal := model.Principal{UserID: userID, SessionID: model.SessionID("ssssssssssssssssssssssssss"),
@@ -313,6 +312,16 @@ type fakeWorkspaceStore struct {
 	committed     *store.ExamStarterWorkspaceMutationResult
 	finalizeCalls int
 	idempotency   *store.CommandIdempotency
+}
+
+// fakeWorkspaceAccess serves the Exam access snapshot of a fakeWorkspaceStore.
+type fakeWorkspaceAccess struct {
+	store.ExamAuthoringStore
+	persistence *fakeWorkspaceStore
+}
+
+func (f fakeWorkspaceAccess) Access(ctx context.Context, examID model.ExamID, userID model.UserID) (*store.ExamAccessSnapshot, error) {
+	return f.persistence.Access(ctx, examID, userID)
 }
 
 func (f *fakeWorkspaceStore) Access(context.Context, model.ExamID, model.UserID) (*store.ExamAccessSnapshot, error) {
@@ -391,6 +400,7 @@ func (f *fakeWorkspaceStore) ReleaseObjectCleanup(ctx context.Context, input *st
 }
 
 type fakeMemberships struct {
+	store.AcademicUnitMemberStore
 	unitID model.AcademicUnitID
 	err    error
 }
@@ -430,9 +440,7 @@ func (f *fakeWorkspaceEffects) Changed(_ context.Context, examID model.ExamID, e
 	return nil
 }
 
-type fakeFailures struct{}
-
-func (fakeFailures) Report(context.Context, string, error) {}
+func (*fakeWorkspaceEffects) Report(context.Context, string, error) {}
 
 type fakeWorkspaceContent struct {
 	persistence          *fakeWorkspaceStore

@@ -479,15 +479,14 @@ func newAuthoringFixture(t *testing.T) authoringFixture {
 	persistence := &authoringStoreFake{order: &order, examID: examID, unitID: unitID, actorID: userID}
 	effects := &effectsFake{order: &order}
 	service, err := NewAuthoring(AuthoringDependencies{
-		Persistence:    persistence,
-		Memberships:    memberships,
-		Users:          users,
-		Mail:           mail,
-		Authorizer:     authorizer,
-		Auditor:        auditor,
-		Outcomes:       outcomes,
-		Effects:        effects,
-		EffectFailures: effects,
+		Persistence: persistence,
+		Memberships: memberships,
+		Users:       users,
+		Mail:        mail,
+		Authorizer:  authorizer,
+		Auditor:     auditor,
+		Outcomes:    outcomes,
+		Effects:     effects,
 		Now: func() time.Time {
 			return time.Date(2026, 8, 14, 8, 0, 0, 0, time.UTC)
 		},
@@ -534,6 +533,7 @@ func (f *authorizerFake) Authorize(_ context.Context, _ invocation.Invocation, a
 }
 
 type membershipsFake struct {
+	store.AcademicUnitMemberStore
 	order       *[]string
 	items       []*model.AcademicUnitMember
 	itemsByUser map[string][]*model.AcademicUnitMember
@@ -553,6 +553,7 @@ func (f *membershipsFake) ListActiveByUser(_ context.Context, userID model.UserI
 }
 
 type usersFake struct {
+	store.UserStore
 	order *[]string
 	user  *model.User
 	users map[string]*model.User

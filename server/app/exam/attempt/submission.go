@@ -303,7 +303,7 @@ func (s *Service) SubmitExamAttempt(ctx context.Context, invocation invocation.I
 	}
 	if !result.Replayed {
 		if effectErr := s.deps.Effects.AttemptSubmitted(ctx, result); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "exam_attempt_submitted", effectErr)
+			s.deps.Effects.Report(ctx, "exam_attempt_submitted", effectErr)
 		}
 	}
 	return result.Receipt, nil

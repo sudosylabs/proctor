@@ -107,7 +107,7 @@ func (s *Service) RenewExamAttemptParticipation(ctx context.Context, invocation 
 	}
 	if !result.Duplicate {
 		if effectErr := s.deps.Effects.ParticipationRenewed(ctx, result); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "exam_attempt_participation_renewed", effectErr)
+			s.deps.Effects.Report(ctx, "exam_attempt_participation_renewed", effectErr)
 		}
 	}
 	return result, nil

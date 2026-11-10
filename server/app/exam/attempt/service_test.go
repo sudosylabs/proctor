@@ -1379,7 +1379,7 @@ func newFixture(t *testing.T) *fixture {
 	require.NoError(t, configurationErr)
 	service, err := New(Dependencies{
 		Persistence: f.persistence, Workspace: f.workspace, Submissions: f.submissions, Sittings: &sittingFake{f: f}, Managers: &managerFake{f: f},
-		Auditor: f.audit, SystemAuditor: f.systemAudit, Effects: f.effects, EffectFailures: f.effects, Content: f.content, Mail: f.mail,
+		Auditor: f.audit, SystemAuditor: f.systemAudit, Effects: f.effects, Content: f.content, Mail: f.mail,
 		DesktopBuilds: &desktopBuildResolverFake{f: f},
 		Now:           func() time.Time { return f.at }, NewAttemptID: model.NewExamAttemptID, NewWorkspaceID: model.NewExamAttemptWorkspaceID,
 		NewParticipation: model.NewAttemptParticipationID, NewConnection: model.NewAttemptConnectionID,

@@ -108,4 +108,3 @@ func (e examRealtimeEffects) Report(ctx context.Context, operation string, err e
 var _ exam.Authorizer = examAuthorizationAdapter{}
 var _ exam.Auditor = access.MutationAuditAdapter{}
 var _ exam.Effects = examRealtimeEffects{}
-var _ exam.EffectFailures = examRealtimeEffects{}

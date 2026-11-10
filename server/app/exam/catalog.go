@@ -152,7 +152,7 @@ func (a *Authoring) ArchiveExam(ctx context.Context, invocation invocation.Invoc
 	}
 	if !result.Replayed {
 		if effectErr := a.deps.Effects.Archived(ctx, result.Value.ID, result.Value.Revision, result.Value.ArchivedAt.Time); effectErr != nil {
-			a.deps.EffectFailures.Report(ctx, "exam_archived", effectErr)
+			a.deps.Effects.Report(ctx, "exam_archived", effectErr)
 		}
 	}
 	return *result.Value, nil

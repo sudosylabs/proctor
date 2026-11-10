@@ -357,7 +357,6 @@ func (e examAttemptRealtimeEffects) Report(ctx context.Context, operation string
 var _ attempt.ManagerAuthorizer = examAttemptManagerAuthorizationAdapter{}
 var _ attempt.Auditor = access.MutationAuditAdapter{}
 var _ attempt.Effects = examAttemptRealtimeEffects{}
-var _ attempt.EffectFailures = examAttemptRealtimeEffects{}
 
 // SupportsDeliveryRecovery reports whether a failure can carry delivery repair context.
 func SupportsDeliveryRecovery(code string) bool { return attempt.SupportsDeliveryRecovery(code) }

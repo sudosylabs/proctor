@@ -124,7 +124,7 @@ func (s *Service) ReallowExamAttempt(ctx context.Context, invocation invocation.
 		CandidateUserID: stored.CandidateUserID, Attempt: *stored.Attempt, Suspension: *stored.Suspension, Replayed: stored.Replayed}
 	if !result.Replayed {
 		if effectErr := s.deps.Effects.AttemptReallowed(ctx, result); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "exam_attempt_reallowed", effectErr)
+			s.deps.Effects.Report(ctx, "exam_attempt_reallowed", effectErr)
 		}
 	}
 	return result, nil

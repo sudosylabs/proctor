@@ -240,7 +240,6 @@ func newCorrectionFixture(t *testing.T) *correctionFixture {
 		Authorizer:        f.authorizer,
 		Auditor:           f.auditor,
 		Effects:           f.effects,
-		EffectFailures:    f.effects,
 		Content:           f.content,
 		Now:               func() time.Time { return f.at },
 		NewStageID:        model.NewExamCorrectionResourceStageID,
@@ -300,7 +299,10 @@ func correctionRendition(id model.FileRenditionID, revisionID model.FileRevision
 	return r
 }
 
-type correctionRevisionsFake struct{ snapshot *model.ExamRevision }
+type correctionRevisionsFake struct {
+	store.ExamRevisionStore
+	snapshot *model.ExamRevision
+}
 
 func (r *correctionRevisionsFake) GetSnapshot(context.Context, model.ExamID, model.ExamRevisionID) (*model.ExamRevision, error) {
 	if r.snapshot == nil {
@@ -309,7 +311,10 @@ func (r *correctionRevisionsFake) GetSnapshot(context.Context, model.ExamID, mod
 	return r.snapshot, nil
 }
 
-type correctionAccessFake struct{ f *correctionFixture }
+type correctionAccessFake struct {
+	store.ExamAuthoringStore
+	f *correctionFixture
+}
 
 func (a *correctionAccessFake) Access(context.Context, model.ExamID, model.UserID) (*store.ExamAccessSnapshot, error) {
 	a.f.order = append(a.f.order, "access")
@@ -318,6 +323,7 @@ func (a *correctionAccessFake) Access(context.Context, model.ExamID, model.UserI
 }
 
 type correctionMembershipFake struct {
+	store.AcademicUnitMemberStore
 	f     *correctionFixture
 	empty bool
 	err   error

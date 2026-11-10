@@ -86,10 +86,6 @@ type Page struct {
 	HasMore bool
 }
 
-type accessStore interface {
-	Access(context.Context, model.ExamID, model.UserID) (*store.ExamAccessSnapshot, error)
-}
-
 type Authorizer interface {
 	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
 	RecordDenial(context.Context, invocation.Invocation, model.Action, model.Resource, model.AcademicUnitID) error
@@ -141,10 +137,8 @@ type Effects interface {
 	Canceled(context.Context, model.ExamID, model.ExamSittingID, model.ExamSittingState, int64, time.Time) error
 	LifecycleChanged(context.Context, model.ExamID, model.ExamSittingID, model.ExamSittingState, int64,
 		store.ExamSittingLifecycleTransitionCode, time.Time, time.Time) error
-}
-
-type EffectFailures interface {
-	Report(context.Context, string, error)
+	// Report records an Effect failure; the committed change stands.
+	Report(ctx context.Context, operation string, err error)
 }
 
 // Service schedules Exam Sittings and drives their lifecycle, both on manager
@@ -160,26 +154,25 @@ type OperationalRecorder interface {
 // Dependencies are the collaborators of Service; New validates them once and the
 // service retains them unchanged.
 type Dependencies struct {
-	Persistence    store.ExamSittingStore
-	Access         accessStore
-	Memberships    manageraccess.Memberships
-	Authorizer     Authorizer
-	Auditor        Auditor
-	SystemAuditor  SystemAuditor
-	Effects        Effects
-	EffectFailures EffectFailures
-	Jobs           LifecycleJobFactory
-	Mail           ScheduleMailPreparer
-	Now            func() time.Time
-	NewID          func() model.ExamSittingID
-	Operational    OperationalRecorder
+	Persistence   store.ExamSittingStore
+	Access        store.ExamAuthoringStore
+	Memberships   store.AcademicUnitMemberStore
+	Authorizer    Authorizer
+	Auditor       Auditor
+	SystemAuditor SystemAuditor
+	Effects       Effects
+	Jobs          LifecycleJobFactory
+	Mail          ScheduleMailPreparer
+	Now           func() time.Time
+	NewID         func() model.ExamSittingID
+	Operational   OperationalRecorder
 }
 
 // New returns an Exam Sitting Service, or an error when a required dependency
 // is missing.
 func New(deps Dependencies) (*Service, error) {
 	if deps.Persistence == nil || deps.Access == nil || deps.Memberships == nil || deps.Authorizer == nil || deps.Auditor == nil || deps.SystemAuditor == nil || deps.Effects == nil ||
-		deps.EffectFailures == nil || deps.Jobs == nil || deps.Mail == nil || deps.Now == nil || deps.NewID == nil {
+		deps.Jobs == nil || deps.Mail == nil || deps.Now == nil || deps.NewID == nil {
 		return nil, errors.New("Exam Sitting dependencies are required")
 	}
 	return &Service{deps: deps}, nil
@@ -250,7 +243,7 @@ func (s *Service) ScheduleExamSitting(ctx context.Context, invocation invocation
 	}
 	if !result.Replayed {
 		if effectErr := s.deps.Effects.Scheduled(ctx, value.Sitting.ExamID, value.Sitting.ID, value.Sitting.State, value.Sitting.Revision, at); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "exam_sitting_scheduled", effectErr)
+			s.deps.Effects.Report(ctx, "exam_sitting_scheduled", effectErr)
 		}
 	}
 	return value, nil
@@ -582,7 +575,7 @@ func (s *Service) UpdateExamSittingSchedule(ctx context.Context, invocation invo
 	}
 	if !result.Replayed {
 		if effectErr := s.deps.Effects.ScheduleUpdated(ctx, value.Sitting.ExamID, value.Sitting.ID, value.Sitting.State, value.Sitting.Revision, at); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "exam_sitting_schedule_updated", effectErr)
+			s.deps.Effects.Report(ctx, "exam_sitting_schedule_updated", effectErr)
 		}
 	}
 	return value, nil
@@ -642,7 +635,7 @@ func (s *Service) CancelExamSitting(ctx context.Context, invocation invocation.I
 	}
 	if !result.Replayed {
 		if effectErr := s.deps.Effects.Canceled(ctx, value.Sitting.ExamID, value.Sitting.ID, value.Sitting.State, value.Sitting.Revision, at); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "exam_sitting_canceled", effectErr)
+			s.deps.Effects.Report(ctx, "exam_sitting_canceled", effectErr)
 		}
 	}
 	return value, nil
@@ -994,7 +987,7 @@ func (s *Service) publishLifecycle(ctx context.Context, result *store.ExamSittin
 	sitting := result.Value.Sitting
 	if err := s.deps.Effects.LifecycleChanged(ctx, sitting.ExamID, sitting.ID, sitting.State, sitting.Revision,
 		result.Transition, sitting.ScheduledEndAt, sitting.UpdatedAt); err != nil {
-		s.deps.EffectFailures.Report(ctx, "exam_sitting_"+operation, err)
+		s.deps.Effects.Report(ctx, "exam_sitting_"+operation, err)
 	}
 }
 

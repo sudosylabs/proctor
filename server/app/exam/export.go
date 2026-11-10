@@ -86,7 +86,7 @@ type Exports struct{ deps ExportsDependencies }
 type ExportsDependencies struct {
 	Persistence store.ExamExportStore
 	Access      store.ExamAuthoringStore
-	Memberships manageraccess.Memberships
+	Memberships store.AcademicUnitMemberStore
 	Authorizer  RecordsAuthorizer
 	Auditor     Auditor
 	Content     ExportContent

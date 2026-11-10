@@ -133,7 +133,7 @@ func (s *Service) SuspendExamAttempt(ctx context.Context, invocation invocation.
 	}
 	if !result.Replayed {
 		if effectErr := s.deps.Effects.AttemptSuspendedByManager(ctx, result); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "exam_attempt_suspended_by_manager", effectErr)
+			s.deps.Effects.Report(ctx, "exam_attempt_suspended_by_manager", effectErr)
 		}
 	}
 	return result, nil

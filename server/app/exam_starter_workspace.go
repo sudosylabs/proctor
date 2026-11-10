@@ -33,4 +33,3 @@ func (e examStarterWorkspaceRealtimeEffects) Report(ctx context.Context, operati
 var _ workspace.Authorizer = (*access.Authorizer)(nil)
 var _ workspace.Auditor = access.MutationAuditAdapter{}
 var _ workspace.Effects = examStarterWorkspaceRealtimeEffects{}
-var _ workspace.EffectFailures = examStarterWorkspaceRealtimeEffects{}

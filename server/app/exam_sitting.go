@@ -123,4 +123,3 @@ var _ sitting.Authorizer = (*access.Authorizer)(nil)
 var _ sitting.Auditor = access.MutationAuditAdapter{}
 var _ sitting.SystemAuditor = examSittingSystemAuditAdapter{}
 var _ sitting.Effects = examSittingRealtimeEffects{}
-var _ sitting.EffectFailures = examSittingRealtimeEffects{}

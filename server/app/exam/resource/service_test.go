@@ -382,19 +382,18 @@ func newFixture(t *testing.T) *fixture {
 	f.authorizer = &authFake{f: f}
 	at := time.Date(2026, 8, 14, 12, 0, 0, 0, time.UTC)
 	service, err := New(Dependencies{
-		Persistence:    f.persistence,
-		Access:         f.access,
-		Memberships:    f.memberships,
-		Authorizer:     f.authorizer,
-		Auditor:        f.auditor,
-		Effects:        f.effects,
-		EffectFailures: f.effects,
-		Content:        f.content,
-		Now:            func() time.Time { return at },
-		NewResourceID:  model.NewExamResourceID,
-		NewEntryID:     model.NewFileEntryID,
-		NewRevisionID:  model.NewFileRevisionID,
-		NewLeaseID:     model.NewUploadLeaseID,
+		Persistence:   f.persistence,
+		Access:        f.access,
+		Memberships:   f.memberships,
+		Authorizer:    f.authorizer,
+		Auditor:       f.auditor,
+		Effects:       f.effects,
+		Content:       f.content,
+		Now:           func() time.Time { return at },
+		NewResourceID: model.NewExamResourceID,
+		NewEntryID:    model.NewFileEntryID,
+		NewRevisionID: model.NewFileRevisionID,
+		NewLeaseID:    model.NewUploadLeaseID,
 	})
 	require.NoError(t, err)
 	f.service = service
@@ -465,6 +464,7 @@ func (s *storeFake) Reorder(_ context.Context, _ *store.ExamResourceReorder, com
 }
 
 type accessFake struct {
+	store.ExamAuthoringStore
 	f             *fixture
 	draftRevision int64
 	archived      bool
@@ -496,6 +496,7 @@ func (s *storeFake) Remove(_ context.Context, input *store.ExamResourceRemoval, 
 }
 
 type membershipFake struct {
+	store.AcademicUnitMemberStore
 	f     *fixture
 	items []*model.AcademicUnitMember
 	err   error

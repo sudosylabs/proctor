@@ -81,16 +81,11 @@ type Effects interface {
 	Archived(context.Context, model.ExamID, int64, time.Time) error
 	ManagerChanged(context.Context, model.ExamID, model.UserID, bool, int64, time.Time) error
 	OwnerTransferred(context.Context, model.ExamID, model.UserID, int64, time.Time) error
-}
-type EffectFailures interface {
-	Report(context.Context, string, error)
+	// Report records an Effect failure; the committed change stands.
+	Report(ctx context.Context, operation string, err error)
 }
 
 type CommandOutcomes interface {
-}
-
-type users interface {
-	Get(context.Context, model.UserID) (*model.User, error)
 }
 
 type ManagerMailRelationship string
@@ -128,14 +123,13 @@ type OperationalRecorder interface {
 // service retains them unchanged.
 type AuthoringDependencies struct {
 	Persistence       store.ExamAuthoringStore
-	Memberships       manageraccess.Memberships
-	Users             users
+	Memberships       store.AcademicUnitMemberStore
+	Users             store.UserStore
 	Mail              ManagerMailPreparer
 	Authorizer        Authorizer
 	Auditor           Auditor
 	Outcomes          CommandOutcomes
 	Effects           Effects
-	EffectFailures    EffectFailures
 	Now               func() time.Time
 	NewID             func() model.ExamID
 	InstitutionOrigin string
@@ -145,7 +139,7 @@ type AuthoringDependencies struct {
 // NewAuthoring returns an Authoring service, or an error when a required
 // dependency is missing.
 func NewAuthoring(deps AuthoringDependencies) (*Authoring, error) {
-	if deps.Persistence == nil || deps.Memberships == nil || deps.Users == nil || deps.Mail == nil || deps.Authorizer == nil || deps.Auditor == nil || deps.Outcomes == nil || deps.Effects == nil || deps.EffectFailures == nil || deps.Now == nil || deps.NewID == nil {
+	if deps.Persistence == nil || deps.Memberships == nil || deps.Users == nil || deps.Mail == nil || deps.Authorizer == nil || deps.Auditor == nil || deps.Outcomes == nil || deps.Effects == nil || deps.Now == nil || deps.NewID == nil {
 		return nil, errors.New("exam authoring dependencies are required")
 	}
 	return &Authoring{deps: deps}, nil
@@ -227,7 +221,7 @@ func (a *Authoring) CreateExam(ctx context.Context, invocation invocation.Invoca
 	}
 	if !result.Replayed {
 		if effectErr := a.deps.Effects.Created(ctx, result.Value.Exam.ID); effectErr != nil {
-			a.deps.EffectFailures.Report(ctx, "exam_created", effectErr)
+			a.deps.Effects.Report(ctx, "exam_created", effectErr)
 		}
 	}
 	return project(result.Value), nil
@@ -379,7 +373,7 @@ func (a *Authoring) EditExamDraftText(ctx context.Context, invocation invocation
 	}
 	if !result.Replayed {
 		if effectErr := a.deps.Effects.DraftUpdated(ctx, result.Value.Exam.ID, result.Value.Draft.Revision); effectErr != nil {
-			a.deps.EffectFailures.Report(ctx, "exam_draft_updated", effectErr)
+			a.deps.Effects.Report(ctx, "exam_draft_updated", effectErr)
 		}
 	}
 	return project(result.Value), nil
@@ -474,7 +468,7 @@ func (a *Authoring) ConfigureExamDraftFocusLoss(ctx context.Context, invocation 
 	}
 	if !result.Replayed {
 		if effectErr := a.deps.Effects.DraftUpdated(ctx, result.Value.Exam.ID, result.Value.Draft.Revision); effectErr != nil {
-			a.deps.EffectFailures.Report(ctx, "exam_draft_updated", effectErr)
+			a.deps.Effects.Report(ctx, "exam_draft_updated", effectErr)
 		}
 	}
 	return project(result.Value), nil
@@ -563,7 +557,7 @@ func (a *Authoring) ConfigureExamDraftBrowserPolicy(ctx context.Context, invocat
 	}
 	if !result.Replayed {
 		if effectErr := a.deps.Effects.DraftUpdated(ctx, result.Value.Exam.ID, result.Value.Draft.Revision); effectErr != nil {
-			a.deps.EffectFailures.Report(ctx, "exam_draft_updated", effectErr)
+			a.deps.Effects.Report(ctx, "exam_draft_updated", effectErr)
 		}
 	}
 	return project(result.Value), nil
@@ -704,7 +698,7 @@ func (a *Authoring) ConfigureExamDraftNativePolicy(ctx context.Context, invocati
 	}
 	if !result.Replayed {
 		if effectErr := a.deps.Effects.DraftUpdated(ctx, result.Value.Exam.ID, result.Value.Draft.Revision); effectErr != nil {
-			a.deps.EffectFailures.Report(ctx, "exam_draft_updated", effectErr)
+			a.deps.Effects.Report(ctx, "exam_draft_updated", effectErr)
 		}
 	}
 	return project(result.Value), nil

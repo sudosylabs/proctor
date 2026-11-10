@@ -44,4 +44,3 @@ func (e examCorrectionRealtimeEffects) Report(ctx context.Context, operation str
 var _ correction.Authorizer = (*access.Authorizer)(nil)
 var _ correction.Auditor = access.MutationAuditAdapter{}
 var _ correction.Effects = examCorrectionRealtimeEffects{}
-var _ correction.EffectFailures = examCorrectionRealtimeEffects{}

@@ -32,4 +32,3 @@ func (e examResourceRealtimeEffects) Report(ctx context.Context, operation strin
 var _ resource.Authorizer = (*access.Authorizer)(nil)
 var _ resource.Auditor = access.MutationAuditAdapter{}
 var _ resource.Effects = examResourceRealtimeEffects{}
-var _ resource.EffectFailures = examResourceRealtimeEffects{}

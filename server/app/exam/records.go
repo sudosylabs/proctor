@@ -69,7 +69,7 @@ type Records struct{ deps RecordsDependencies }
 type RecordsDependencies struct {
 	Persistence store.ExamRecordsStore
 	Access      store.ExamAuthoringStore
-	Memberships manageraccess.Memberships
+	Memberships store.AcademicUnitMemberStore
 	Authorizer  RecordsAuthorizer
 	Auditor     Auditor
 	RecentTTL   time.Duration

@@ -75,10 +75,8 @@ type Effects interface {
 	BrowserActivityGapChanged(context.Context, model.ExamID, model.ExamSittingID) error
 	AttemptSubmitted(context.Context, SubmissionResult) error
 	AttemptSealedForSittingClose(context.Context, AutomaticSubmissionResult) error
-}
-
-type EffectFailures interface {
-	Report(context.Context, string, error)
+	// Report records an Effect failure; the committed change stands.
+	Report(ctx context.Context, operation string, err error)
 }
 
 type Content interface {
@@ -138,7 +136,6 @@ type Dependencies struct {
 	Auditor             Auditor
 	SystemAuditor       SystemAuditor
 	Effects             Effects
-	EffectFailures      EffectFailures
 	Content             Content
 	Mail                SubmissionMailPreparer
 	DesktopBuilds       DesktopBuildResolver
@@ -180,7 +177,7 @@ func (s *Service) recordOperational(event string, err error) {
 
 func New(deps Dependencies) (*Service, error) {
 	if deps.Persistence == nil || deps.Workspace == nil || deps.Submissions == nil || deps.Sittings == nil || deps.Managers == nil || deps.Auditor == nil || deps.SystemAuditor == nil || deps.Effects == nil ||
-		deps.EffectFailures == nil || deps.Content == nil || deps.Mail == nil || deps.DesktopBuilds == nil || deps.Now == nil || deps.NewAttemptID == nil ||
+		deps.Content == nil || deps.Mail == nil || deps.DesktopBuilds == nil || deps.Now == nil || deps.NewAttemptID == nil ||
 		deps.NewWorkspaceID == nil || deps.NewParticipation == nil || deps.NewConnection == nil || deps.NewEvidence == nil ||
 		deps.NewFlag == nil || deps.NewSuspension == nil || deps.NewFocusLossSignal == nil || deps.NewDiscrepancy == nil || deps.NewWorkspaceEntry == nil || deps.NewWorkspaceObject == nil || deps.NewWorkspaceVersion == nil || deps.NewSubmission == nil || deps.NewReceiptCode == nil {
 		return nil, errors.New("Exam Attempt dependencies are required")

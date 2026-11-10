@@ -205,7 +205,7 @@ func (a *Authoring) changeManager(ctx context.Context, invocation invocation.Inv
 	if !result.Replayed {
 		effectErr := transition.publish(ctx, a.deps.Effects, result.Exam.ID, command.UserID, result.Exam.Revision, at)
 		if effectErr != nil {
-			a.deps.EffectFailures.Report(ctx, transition.operation, effectErr)
+			a.deps.Effects.Report(ctx, transition.operation, effectErr)
 		}
 	}
 	return *result, nil

@@ -83,10 +83,6 @@ type OpenedFile struct {
 	ContentVersion model.WorkspaceContentVersion
 }
 
-type accessStore interface {
-	Access(context.Context, model.ExamID, model.UserID) (*store.ExamAccessSnapshot, error)
-}
-
 type Authorizer interface {
 	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
 }
@@ -113,10 +109,8 @@ const (
 
 type Effects interface {
 	Changed(context.Context, model.ExamID, model.StarterWorkspaceEntryID, int64, ChangeOperation, time.Time) error
-}
-
-type EffectFailures interface {
-	Report(context.Context, string, error)
+	// Report records an Effect failure; the committed change stands.
+	Report(ctx context.Context, operation string, err error)
 }
 
 // Service manages the Starter Workspace of an Exam Draft.
@@ -125,25 +119,24 @@ type Service struct{ deps Dependencies }
 // Dependencies are the collaborators of Service; New validates them once and the
 // service retains them unchanged.
 type Dependencies struct {
-	Persistence    store.ExamStarterWorkspaceStore
-	Access         accessStore
-	Memberships    manageraccess.Memberships
-	Authorizer     Authorizer
-	Auditor        Auditor
-	Content        Content
-	Effects        Effects
-	EffectFailures EffectFailures
-	Now            func() time.Time
-	NewEntryID     func() model.StarterWorkspaceEntryID
-	NewObjectID    func() model.StarterWorkspaceObjectID
-	NewVersion     func() model.WorkspaceContentVersion
+	Persistence store.ExamStarterWorkspaceStore
+	Access      store.ExamAuthoringStore
+	Memberships store.AcademicUnitMemberStore
+	Authorizer  Authorizer
+	Auditor     Auditor
+	Content     Content
+	Effects     Effects
+	Now         func() time.Time
+	NewEntryID  func() model.StarterWorkspaceEntryID
+	NewObjectID func() model.StarterWorkspaceObjectID
+	NewVersion  func() model.WorkspaceContentVersion
 }
 
 // New returns a Starter Workspace Service, or an error when a required
 // dependency is missing.
 func New(deps Dependencies) (*Service, error) {
 	if deps.Persistence == nil || deps.Access == nil || deps.Memberships == nil || deps.Authorizer == nil || deps.Auditor == nil || deps.Content == nil || deps.Effects == nil ||
-		deps.EffectFailures == nil || deps.Now == nil || deps.NewEntryID == nil || deps.NewObjectID == nil || deps.NewVersion == nil {
+		deps.Now == nil || deps.NewEntryID == nil || deps.NewObjectID == nil || deps.NewVersion == nil {
 		return nil, errors.New("Starter Workspace dependencies are required")
 	}
 	return &Service{deps: deps}, nil
@@ -389,7 +382,7 @@ func (s *Service) runMutation(ctx context.Context, invocation invocation.Invocat
 	}
 	if !result.Replayed {
 		if effectErr := s.deps.Effects.Changed(ctx, mutation.ExamID, result.Entry.ID, result.DraftRevision, effectOperation, mutation.ChangedAt); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "exam_starter_workspace_"+string(effectOperation), effectErr)
+			s.deps.Effects.Report(ctx, "exam_starter_workspace_"+string(effectOperation), effectErr)
 		}
 	}
 	return Result{Entry: *result.Entry, Object: result.Object, DraftRevision: result.DraftRevision, Replayed: result.Replayed}, nil

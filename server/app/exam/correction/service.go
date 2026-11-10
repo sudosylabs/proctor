@@ -25,12 +25,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type AccessStore interface {
-	Access(context.Context, model.ExamID, model.UserID) (*store.ExamAccessSnapshot, error)
-}
-type Revisions interface {
-	GetSnapshot(context.Context, model.ExamID, model.ExamRevisionID) (*model.ExamRevision, error)
-}
 type Authorizer interface {
 	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
 }
@@ -40,9 +34,8 @@ type Auditor interface {
 }
 type Effects interface {
 	Corrected(context.Context, Result) error
-}
-type EffectFailures interface {
-	Report(context.Context, string, error)
+	// Report records an Effect failure; the committed change stands.
+	Report(ctx context.Context, operation string, err error)
 }
 type Content interface {
 	StoreExamResourceRendition(context.Context, model.FileRevisionID, model.FileRenditionID, model.ExamResourceMediaType, io.Reader, int64, time.Time) (model.FileRendition, error)
@@ -141,13 +134,12 @@ type Service struct{ deps Dependencies }
 // service retains them unchanged.
 type Dependencies struct {
 	Persistence       store.ExamCorrectionStore
-	Revisions         Revisions
-	Access            AccessStore
-	Memberships       manageraccess.Memberships
+	Revisions         store.ExamRevisionStore
+	Access            store.ExamAuthoringStore
+	Memberships       store.AcademicUnitMemberStore
 	Authorizer        Authorizer
 	Auditor           Auditor
 	Effects           Effects
-	EffectFailures    EffectFailures
 	Content           Content
 	Now               func() time.Time
 	NewStageID        func() model.ExamCorrectionResourceStageID
@@ -163,7 +155,7 @@ type Dependencies struct {
 // New returns a correction Service, or an error when a required dependency is
 // missing.
 func New(deps Dependencies) (*Service, error) {
-	if deps.Persistence == nil || deps.Revisions == nil || deps.Access == nil || deps.Memberships == nil || deps.Authorizer == nil || deps.Auditor == nil || deps.Effects == nil || deps.EffectFailures == nil || deps.Content == nil || deps.Now == nil || deps.NewStageID == nil || deps.NewResourceID == nil || deps.NewEntryID == nil || deps.NewFileRevisionID == nil || deps.NewLeaseID == nil || deps.NewRenditionID == nil || deps.NewExamRevisionID == nil {
+	if deps.Persistence == nil || deps.Revisions == nil || deps.Access == nil || deps.Memberships == nil || deps.Authorizer == nil || deps.Auditor == nil || deps.Effects == nil || deps.Content == nil || deps.Now == nil || deps.NewStageID == nil || deps.NewResourceID == nil || deps.NewEntryID == nil || deps.NewFileRevisionID == nil || deps.NewLeaseID == nil || deps.NewRenditionID == nil || deps.NewExamRevisionID == nil {
 		return nil, errors.New("exam correction dependencies are required")
 	}
 	return &Service{deps: deps}, nil
@@ -343,7 +335,7 @@ func (s *Service) ApplyExamSittingCorrection(ctx context.Context, invocation inv
 	}
 	if !result.Replayed {
 		if effectErr := s.deps.Effects.Corrected(ctx, result); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "exam_sitting_content_corrected", effectErr)
+			s.deps.Effects.Report(ctx, "exam_sitting_content_corrected", effectErr)
 		}
 	}
 	return result.applied(), nil

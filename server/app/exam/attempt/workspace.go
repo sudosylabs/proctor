@@ -420,7 +420,7 @@ func (s *Service) applyWorkspaceMutation(ctx context.Context, invocation invocat
 	}
 	if !result.Replayed {
 		if effectErr := s.deps.Effects.WorkspaceChanged(ctx, result); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "exam_attempt_workspace_changed", effectErr)
+			s.deps.Effects.Report(ctx, "exam_attempt_workspace_changed", effectErr)
 		}
 	}
 	return result, nil

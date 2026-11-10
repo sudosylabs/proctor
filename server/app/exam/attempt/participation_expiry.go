@@ -96,7 +96,7 @@ func (s *Service) expireParticipation(ctx context.Context, due store.ExamAttempt
 	}
 	if !result.Replayed {
 		if effectErr := s.deps.Effects.ParticipationExpired(ctx, result); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "exam_attempt_participation_expired", effectErr)
+			s.deps.Effects.Report(ctx, "exam_attempt_participation_expired", effectErr)
 		}
 	}
 	return result, nil

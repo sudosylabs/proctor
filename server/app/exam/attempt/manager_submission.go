@@ -123,7 +123,7 @@ func (s *Service) EndExamAttemptByManager(ctx context.Context, invocation invoca
 	}
 	if !result.Replayed {
 		if effectErr := s.deps.Effects.AttemptSubmitted(ctx, result); effectErr != nil {
-			s.deps.EffectFailures.Report(ctx, "exam_attempt_manager_ended", effectErr)
+			s.deps.Effects.Report(ctx, "exam_attempt_manager_ended", effectErr)
 		}
 	}
 	return result.Receipt, nil

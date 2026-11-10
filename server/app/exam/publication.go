@@ -40,6 +40,8 @@ type RevisionPage struct {
 
 type PublicationEffects interface {
 	RevisionPublished(context.Context, store.ExamRevisionSummary) error
+	// Report records an Effect failure; the committed change stands.
+	Report(ctx context.Context, operation string, err error)
 }
 
 // Publication owns the authorization, audit, persistence and after-commit
@@ -51,11 +53,10 @@ type Publication struct{ deps PublicationDependencies }
 type PublicationDependencies struct {
 	Persistence       store.ExamRevisionStore
 	Access            store.ExamAuthoringStore
-	Memberships       manageraccess.Memberships
+	Memberships       store.AcademicUnitMemberStore
 	Authorizer        Authorizer
 	Auditor           Auditor
 	Effects           PublicationEffects
-	EffectFailures    EffectFailures
 	Now               func() time.Time
 	NewID             func() model.ExamRevisionID
 	InstitutionOrigin string
@@ -65,7 +66,7 @@ type PublicationDependencies struct {
 // NewPublication returns a Publication service, or an error when a required
 // dependency is missing.
 func NewPublication(deps PublicationDependencies) (*Publication, error) {
-	if deps.Persistence == nil || deps.Access == nil || deps.Memberships == nil || deps.Authorizer == nil || deps.Auditor == nil || deps.Effects == nil || deps.EffectFailures == nil || deps.Now == nil || deps.NewID == nil {
+	if deps.Persistence == nil || deps.Access == nil || deps.Memberships == nil || deps.Authorizer == nil || deps.Auditor == nil || deps.Effects == nil || deps.Now == nil || deps.NewID == nil {
 		return nil, errors.New("Exam Revision publication dependencies are required")
 	}
 	return &Publication{deps: deps}, nil
@@ -135,7 +136,7 @@ func (p *Publication) PublishExamRevision(ctx context.Context, invocation invoca
 	}
 	if !result.Replayed {
 		if effectErr := p.deps.Effects.RevisionPublished(ctx, *result.Revision); effectErr != nil {
-			p.deps.EffectFailures.Report(ctx, "exam_revision_published", effectErr)
+			p.deps.Effects.Report(ctx, "exam_revision_published", effectErr)
 		}
 	}
 	return *result.Revision, nil

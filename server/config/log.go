@@ -40,7 +40,6 @@ func validateLog(log Log, add func(string, string)) {
 	if log.MaxFieldBytes < 256 || log.MaxFieldBytes > 1<<20 {
 		add("log.max_field_bytes", "must be between 256 and 1048576")
 	}
-
 	if log.QueueSize < 1 || log.QueueSize > 1<<20 {
 		add("log.queue_size", "must be between 1 and 1048576")
 	}
@@ -92,11 +91,9 @@ func validateLog(log Log, add func(string, string)) {
 			if target.MaxSizeMB < 1 || target.MaxSizeMB > 10240 {
 				add(prefix+".max_size_mb", "must be between 1 and 10240")
 			}
-
 			if target.MaxAgeDays < 0 || target.MaxAgeDays > 3650 {
 				add(prefix+".max_age_days", "must be between 0 and 3650")
 			}
-
 			if target.MaxBackups < 0 || target.MaxBackups > 10000 {
 				add(prefix+".max_backups", "must be between 0 and 10000")
 			}

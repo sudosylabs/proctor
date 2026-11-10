@@ -142,7 +142,6 @@ func (s *Service) SealForSittingClose(
 			if prepareErr == nil {
 				prepareErr = errors.New("invalid automatic Submission receipt mail preparation")
 			}
-
 			return AutomaticSubmissionResult{}, s.failSystemAudit(ctx, auditID, apperror.New("exam.attempt.unavailable").Wrap(prepareErr))
 		}
 

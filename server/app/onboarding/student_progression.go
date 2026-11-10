@@ -105,7 +105,6 @@ func (s *Service) ListStudentProgressions(
 		if !state.IsValid() {
 			return paging.Counted[OnboardingImportView]{}, apperror.Invalid("request.invalid", "state")
 		}
-
 		if !slices.Contains(states, state) {
 			states = append(states, state)
 		}
@@ -362,7 +361,6 @@ func (s *Service) DryRunStudentProgression(
 	if err != nil {
 		return OnboardingImportView{}, err
 	}
-
 	if s.wake != nil {
 		s.wake()
 	}

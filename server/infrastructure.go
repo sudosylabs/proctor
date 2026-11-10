@@ -354,7 +354,6 @@ func (i *ownedInfrastructure) acquireCacheMailerAndVFS(ctx context.Context, cfg 
 	if metricsModule.Enabled() {
 		i.cache = &measuredCache{next: i.cache, backend: cfg.Cache.Backend, metrics: metricsModule}
 	}
-
 	if err := checkAcquisitionContext(ctx, "acquire cache"); err != nil {
 		return err
 	}
@@ -371,7 +370,6 @@ func (i *ownedInfrastructure) acquireCacheMailerAndVFS(ctx context.Context, cfg 
 	if metricsModule.Enabled() {
 		i.mailer = &measuredMailer{next: i.mailer, metrics: metricsModule}
 	}
-
 	if err := checkAcquisitionContext(ctx, "acquire mail transport"); err != nil {
 		return err
 	}
@@ -766,7 +764,6 @@ func newCluster(
 		if err != nil {
 			return nil, err
 		}
-
 		if serverVersion == "" {
 			serverVersion = app.Version
 		}

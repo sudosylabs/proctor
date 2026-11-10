@@ -59,7 +59,6 @@ func (s UnretainedDeliverySummary) Compare(next UnretainedDeliverySummary) (bool
 		if bytes.Equal(priorRaw, nextRaw) {
 			return true, nil
 		}
-
 		return false, ErrDeliveryConflict
 	}
 

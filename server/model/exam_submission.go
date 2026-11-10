@@ -385,7 +385,6 @@ func (s *ExamSubmission) Validate() error {
 	if s.IntegrityRetiredAt.Valid || !s.IntegrityRetiredAt.Time.IsZero() {
 		return invalidModelError("ExamSubmission.Validate", "exam_submission", "", "retained Exam Submission integrity has a retirement time", "")
 	}
-
 	if (s.IntegrityState == SubmissionIntegritySettled) != (s.UnresolvedIntegrityCount == 0) {
 		return invalidModelError("ExamSubmission.Validate", "exam_submission", "", "inconsistent Exam Submission integrity state", "")
 	}

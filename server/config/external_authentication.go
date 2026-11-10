@@ -294,7 +294,6 @@ func validateExternalClaims(
 	if claims.Subject == "" {
 		add(prefix+".subject", "is required")
 	}
-
 	if providerType == ExternalAuthenticationTypeOIDC && claims.Subject != "sub" {
 		add(prefix+".subject", "must be sub for an oidc provider")
 	}
@@ -303,7 +302,6 @@ func validateExternalClaims(
 		if claims.Username == "" {
 			add(prefix+".username", "is required when auto_provision is enabled")
 		}
-
 		if claims.Email == "" {
 			add(prefix+".email", "is required when auto_provision is enabled")
 		}

@@ -219,15 +219,12 @@ func (r *runner) send(
 	if payload != nil {
 		req.Header.Set("Content-Type", contentType)
 	}
-
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-
 	if key != "" {
 		req.Header.Set("Idempotency-Key", key)
 	}
-
 	if ifMatch != "" {
 		req.Header.Set("If-Match", ifMatch)
 	}
@@ -237,7 +234,6 @@ func (r *runner) send(
 		if r.ctx.Err() != nil {
 			return nil, nil, r.ctx.Err()
 		}
-
 		return nil, nil, errors.New("local request failed; rerun to reconcile the saved operation")
 	}
 

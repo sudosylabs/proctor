@@ -112,7 +112,6 @@ func (a *API) collectResources(apiPrefix string, resources ...apiResource) error
 			if a.metrics != nil && definition.protocolKind != RouteProtocolUpgrade {
 				handler = observeRequestMetrics(handler, a.metrics, path, definition.method)
 			}
-
 			if a.middleware.tracing != nil {
 				handler = nameRequestSpan(handler, path)
 			}

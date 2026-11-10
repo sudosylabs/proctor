@@ -90,7 +90,6 @@ func (s *Service) EvaluateExamAttemptFocusLoss(
 		if endedFocusLossCandidate(err) {
 			return s.evaluateEndedFocusLoss(ctx, invocation, command, selector)
 		}
-
 		return FocusLossEvaluation{}, storeError(storeErrors, err)
 	}
 
@@ -134,7 +133,6 @@ func (s *Service) EvaluateExamAttemptFocusLoss(
 			if auditErr := s.deps.Auditor.Fail(ctx, auditID, "exam.attempt.state_conflict"); auditErr != nil {
 				return FocusLossEvaluation{}, auditErr
 			}
-
 			return s.evaluateEndedFocusLoss(ctx, invocation, command, selector)
 		}
 
@@ -360,19 +358,15 @@ func projectFocusLoss(
 	if stored.Flag != nil {
 		result.Flag = *stored.Flag
 	}
-
 	if stored.Overflow != nil {
 		result.EvidenceOverflowCount = stored.Overflow.Count
 	}
-
 	if stored.Attempt != nil {
 		result.Attempt = *stored.Attempt
 	}
-
 	if stored.Participation != nil {
 		result.Participation = *stored.Participation
 	}
-
 	if stored.Connection != nil {
 		result.Connection = *stored.Connection
 	}

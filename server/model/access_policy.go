@@ -408,35 +408,27 @@ func changedAccessPolicyFields(current, next AccessPolicySettings) []string {
 	if current.LocalLoginEnabled != next.LocalLoginEnabled {
 		changed = append(changed, "local_login_enabled")
 	}
-
 	if current.PublicRegistrationEnabled != next.PublicRegistrationEnabled {
 		changed = append(changed, "public_registration_enabled")
 	}
-
 	if current.InvitationAdmissionEnabled != next.InvitationAdmissionEnabled {
 		changed = append(changed, "invitation_admission_enabled")
 	}
-
 	if current.InvitationLocalCredentialEnabled != next.InvitationLocalCredentialEnabled {
 		changed = append(changed, "invitation_local_credential_enabled")
 	}
-
 	if current.DesktopAuthorizationEnabled != next.DesktopAuthorizationEnabled {
 		changed = append(changed, "desktop_authorization_enabled")
 	}
-
 	if !providerAdmissionsEqual(current.ProviderAdmissions, next.ProviderAdmissions) {
 		changed = append(changed, "provider_admissions")
 	}
-
 	if current.RoleHolderMFARequired != next.RoleHolderMFARequired {
 		changed = append(changed, "role_holder_mfa_required")
 	}
-
 	if current.SessionIdleMinutes != next.SessionIdleMinutes {
 		changed = append(changed, "session_idle_minutes")
 	}
-
 	if current.SessionAbsoluteMinutes != next.SessionAbsoluteMinutes {
 		changed = append(changed, "session_absolute_minutes")
 	}
@@ -478,7 +470,6 @@ func (p *AccessPolicy) Auditable() map[string]any {
 	if p == nil {
 		return map[string]any{}
 	}
-
 	return map[string]any{
 		"id":                                    p.ID.String(),
 		"revision":                              p.Revision,

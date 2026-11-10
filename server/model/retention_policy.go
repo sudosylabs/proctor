@@ -129,7 +129,6 @@ func (p *RetentionPolicy) Auditable() map[string]any {
 	if p == nil {
 		return map[string]any{}
 	}
-
 	return map[string]any{
 		"institution_id":                      p.InstitutionID.String(),
 		"revision":                            p.Revision,

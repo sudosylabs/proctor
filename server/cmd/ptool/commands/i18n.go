@@ -223,7 +223,6 @@ func formatCatalog(name string, check bool) (bool, error) {
 		if err == nil {
 			err = errors.New("multiple JSON values")
 		}
-
 		return false, fmt.Errorf("decode catalog %q: %w", name, err)
 	}
 

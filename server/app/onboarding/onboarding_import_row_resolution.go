@@ -135,7 +135,6 @@ func (s *Service) resolveAcademicAdministrationImportOperation(
 		if err := s.loadAcademicAdministrationImportUser(ctx, item.UserID.String(), row); err != nil {
 			return err
 		}
-
 		if !row.StartsAt.Valid {
 			row.StartsAt = model.OptionalTimeFrom(current.CreatedAt)
 		}
@@ -145,7 +144,6 @@ func (s *Service) resolveAcademicAdministrationImportOperation(
 		if err := s.loadAcademicAdministrationImportUser(ctx, item.UserID.String(), row); err != nil {
 			return err
 		}
-
 		if !row.StartsAt.Valid {
 			row.StartsAt = model.OptionalTimeFrom(current.CreatedAt)
 		}
@@ -155,7 +153,6 @@ func (s *Service) resolveAcademicAdministrationImportOperation(
 		if err := s.loadAcademicAdministrationImportUser(ctx, item.UserID.String(), row); err != nil {
 			return err
 		}
-
 		if !row.StartsAt.Valid {
 			row.StartsAt = model.OptionalTimeFrom(current.CreatedAt)
 		}
@@ -174,13 +171,11 @@ func (s *Service) resolveAcademicAdministrationImportOperation(
 		if err := s.loadAcademicAdministrationImportUser(ctx, item.UserID.String(), row); err != nil {
 			return err
 		}
-
 		return s.authorize(ctx, invocation, model.ActionUserManage, model.Resource{Type: model.ResourceUser, ID: row.UserID.String()})
 	case AcademicAdministrationUserSessionsRevoke:
 		if err := s.loadAcademicAdministrationImportUser(ctx, item.UserID.String(), row); err != nil {
 			return err
 		}
-
 		return s.authorize(ctx, invocation, model.ActionSessionManage, model.Resource{Type: model.ResourceUser, ID: row.UserID.String()})
 	default:
 		return apperror.New("request.invalid")
@@ -220,7 +215,6 @@ func (s *Service) resolveAcademicAdministrationImportClassTransfer(
 	if previous.UserID != row.UserID {
 		return apperror.New("resource.not_found")
 	}
-
 	if !row.StartsAt.Valid {
 		row.StartsAt = model.OptionalTimeFrom(current.CreatedAt)
 	}
@@ -259,7 +253,6 @@ func (s *Service) resolveAcademicAdministrationImportRoleBindingCreate(
 	if !row.StartsAt.Valid {
 		row.StartsAt = model.OptionalTimeFrom(current.CreatedAt)
 	}
-
 	if err := s.authorize(ctx, invocation, model.ActionRoleBindingManage, resource); err != nil {
 		return err
 	}

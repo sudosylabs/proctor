@@ -42,7 +42,6 @@ func resolveBootstrapProtection(
 		if validateErr := state.Validate(); validateErr != nil {
 			return identity.BootstrapProtectionPolicy{}, fmt.Errorf("validate installation bootstrap state: %w", validateErr)
 		}
-
 		return identity.BootstrapProtectionPolicy{}, nil
 	}
 

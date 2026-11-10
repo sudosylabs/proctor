@@ -280,7 +280,6 @@ func (e BrowserActivityEvent) MarshalJSON() ([]byte, error) {
 	if e.ValidateClientRecord() != nil {
 		return nil, ErrDeliveryInvalid
 	}
-
 	return json.Marshal(browserActivityEventWire{
 		Sequence:             e.Sequence,
 		Kind:                 e.Kind,

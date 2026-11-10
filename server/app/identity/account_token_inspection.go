@@ -98,7 +98,6 @@ func (s *Service) inspectAccountToken(
 		if store.IsNotFound(err) {
 			return nil, nil, invalidAccountCredential()
 		}
-
 		return nil, nil, accountRecoveryStoreFailure(err)
 	}
 
@@ -111,7 +110,6 @@ func (s *Service) inspectAccountToken(
 		if store.IsNotFound(err) {
 			return nil, nil, invalidAccountCredential()
 		}
-
 		return nil, nil, accountRecoveryStoreFailure(err)
 	}
 

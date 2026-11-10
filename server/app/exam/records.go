@@ -123,7 +123,6 @@ func (r *Records) authorize(
 		if err = r.deps.Authorizer.RecordDenial(ctx, invocation, ordinary, scope.Resource(), resolved.AcademicUnitID); err != nil {
 			return nil, "", err
 		}
-
 		return nil, "", apperror.New("exam.not_found")
 	}
 
@@ -251,7 +250,6 @@ func (r *Records) begin(
 	if scope.Scope.SittingID.IsValid() {
 		data["exam_sitting_id"] = scope.Scope.SittingID.String()
 	}
-
 	if scope.Scope.SubmissionID.IsValid() {
 		data["submission_id"] = scope.Scope.SubmissionID.String()
 	}

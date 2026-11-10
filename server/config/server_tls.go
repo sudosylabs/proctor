@@ -98,7 +98,6 @@ func validateServerTLS(server Server, cluster Cluster, add func(string, string))
 		if strings.TrimSpace(settings.CertificateFile) == "" {
 			add("server.tls.certificate_file", "is required when TLS mode is static")
 		}
-
 		if strings.TrimSpace(settings.PrivateKeyFile) == "" {
 			add("server.tls.private_key_file", "is required when TLS mode is static")
 		}
@@ -106,19 +105,15 @@ func validateServerTLS(server Server, cluster Cluster, add func(string, string))
 		if strings.TrimSpace(settings.LetsEncrypt.CacheDirectory) == "" {
 			add("server.tls.lets_encrypt.cache_directory", "is required when TLS mode is lets_encrypt")
 		}
-
 		if server.LetsEncryptHostname() == "" {
 			add("server.public_url", "must use a fully qualified DNS hostname for Let's Encrypt")
 		}
-
 		if cluster.Backend == "memberlist" {
 			add("server.tls.mode", "lets_encrypt is single-node only; terminate public TLS at the load balancer in a cluster")
 		}
-
 		if !settings.ForwardHTTPToHTTPS {
 			add("server.tls.forward_http_to_https", "must be enabled for Let's Encrypt HTTP-01 challenges")
 		}
-
 		if !settings.LetsEncrypt.AcceptTermsOfService {
 			add("server.tls.lets_encrypt.accept_terms_of_service", "must be true to accept the Let's Encrypt Subscriber Agreement")
 		}

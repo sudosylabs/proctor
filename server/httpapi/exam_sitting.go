@@ -512,7 +512,6 @@ func examSittingNoShowCursorSpec() opaqueCursorSpec[examSittingNoShowCursorWire]
 			if !model.UserID(cursor.CandidateUserID).IsValid() {
 				return errors.New("invalid no-show keyset")
 			}
-
 			return nil
 		},
 	}

@@ -58,7 +58,6 @@ func validateMetrics(metrics Metrics, server Server, add func(string, string)) {
 		if metrics.Enabled && hasCertificate != hasKey {
 			add("metrics.tls", "certificate_file and private_key_file must be configured together")
 		}
-
 		if metrics.Enabled && !loopback && (!hasCertificate || !hasKey || len(metrics.BearerToken) < 32) {
 			add("metrics.listen_address", "non-loopback metrics require TLS and a bearer token of at least 32 bytes")
 		}
@@ -86,11 +85,9 @@ func validateMetrics(metrics Metrics, server Server, add func(string, string)) {
 	if metrics.ProfilingEnabled && !metrics.Enabled {
 		add("metrics.profiling_enabled", "requires metrics.enabled")
 	}
-
 	if metrics.ProfilingEnabled && metrics.BearerToken == "" {
 		add("metrics.profiling_enabled", "requires metrics.bearer_token")
 	}
-
 	if metrics.MaximumConcurrentScrapes < 1 || metrics.MaximumConcurrentScrapes > 32 {
 		add("metrics.maximum_concurrent_scrapes", "must be between 1 and 32")
 	}

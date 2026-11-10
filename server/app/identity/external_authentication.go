@@ -148,7 +148,6 @@ func (s *Service) beginExternalAuthenticationAudit(
 	if s.securityAudit == nil {
 		return nil, access.AuditUnavailable(errors.New("external authentication audit service is unavailable"))
 	}
-
 	return s.securityAudit.BeginAuthentication(
 		ctx,
 		userID,
@@ -172,7 +171,6 @@ func (s *Service) recordExternalCompletionFailure(ctx context.Context, attempt e
 	if s.securityAudit == nil {
 		return access.AuditUnavailable(errors.New("external authentication audit service is unavailable"))
 	}
-
 	return s.securityAudit.RecordExternalAuthenticationFailure(
 		ctx,
 		attempt.providerID,
@@ -433,7 +431,6 @@ func (s *Service) beginForPurpose(
 	if admission.Mode == "" {
 		return nil, externalProviderNotFoundError()
 	}
-
 	if returnTo == "" {
 		returnTo = "/"
 	}
@@ -575,7 +572,6 @@ func (s *Service) saveExternalLoginState(
 		if invitationClaimHash != "" && store.IsNotFound(err) {
 			return nil, apperror.New("authentication.external.account_not_linked")
 		}
-
 		return nil, authenticationUnavailable(err)
 	}
 
@@ -786,7 +782,6 @@ func (s *Service) consumeCallbackLoginState(
 		if err != nil && !store.IsNotFound(err) {
 			return nil, "", "", authenticationUnavailable(err)
 		}
-
 		return nil, "", "", invalidExternalAuthenticationError()
 	}
 
@@ -806,7 +801,6 @@ func (s *Service) consumeCallbackLoginState(
 		if store.IsNotFound(err) {
 			return nil, "", "", invalidExternalAuthenticationError()
 		}
-
 		return nil, "", "", authenticationUnavailable(err)
 	}
 
@@ -833,7 +827,6 @@ func (s *Service) completeProviderAssertion(
 		if !errors.Is(providerErr, ErrExternalAuthenticationRejected) {
 			errorCode = "authentication.external.unavailable"
 		}
-
 		if appErr := s.recordExternalCompletionFailure(ctx, attempt, string(errorCode)); appErr != nil {
 			return nil, s.failConsumedProviderConnection(ctx, state, appErr)
 		}
@@ -845,7 +838,6 @@ func (s *Service) completeProviderAssertion(
 		if auditErr := s.recordExternalCompletionFailure(ctx, attempt, "authentication.external.invalid_assertion"); auditErr != nil {
 			return nil, s.failConsumedProviderConnection(ctx, state, auditErr)
 		}
-
 		return nil, s.failConsumedProviderConnection(
 			ctx,
 			state,
@@ -868,7 +860,6 @@ func (s *Service) completeInvitationAdmission(
 		if auditErr := s.recordExternalCompletionFailure(ctx, attempt, "authentication.external.invalid"); auditErr != nil {
 			return nil, auditErr
 		}
-
 		return nil, invalidExternalAuthenticationError()
 	}
 
@@ -881,7 +872,6 @@ func (s *Service) completeInvitationAdmission(
 		if auditErr := s.recordExternalCompletionFailure(ctx, attempt, "authentication.external.account_not_linked"); auditErr != nil {
 			return nil, auditErr
 		}
-
 		return nil, apperror.New("authentication.external.account_not_linked")
 	}
 
@@ -898,7 +888,6 @@ func (s *Service) completeInvitationAdmission(
 			if auditErr := s.recordExternalCompletionFailure(ctx, attempt, "authentication.external.invalid"); auditErr != nil {
 				return nil, auditErr
 			}
-
 			return nil, invalidExternalAuthenticationError()
 		}
 
@@ -1017,7 +1006,6 @@ func (s *Service) resolveExternalIdentity(
 		if auditErr := s.recordExternalCompletionFailure(ctx, attempt, "authentication.external.internal"); auditErr != nil {
 			return nil, auditErr
 		}
-
 		return nil, authenticationUnavailable(errors.New("external identity resolution returned invalid provenance"))
 	}
 
@@ -1025,7 +1013,6 @@ func (s *Service) resolveExternalIdentity(
 		if appErr := s.recordExternalCompletionFailure(ctx, attempt, "authentication.external.inactive_account"); appErr != nil {
 			return nil, appErr
 		}
-
 		return nil, invalidExternalAuthenticationError()
 	}
 
@@ -1105,7 +1092,6 @@ func (s *Service) issueExternalSession(
 				if f, ok := apperror.As(legacy); ok {
 					return f.Code()
 				}
-
 				return "authentication.internal"
 			}(),
 		); completionErr != nil {

@@ -238,7 +238,6 @@ func (h *Hub) Accept(
 		if h.recorder != nil {
 			h.recorder.ConnectionOpened("unavailable")
 		}
-
 		return apperror.New("websocket.unavailable")
 	}
 
@@ -246,7 +245,6 @@ func (h *Hub) Accept(
 		if h.recorder != nil {
 			h.recorder.ConnectionOpened("origin_invalid")
 		}
-
 		return apperror.New("websocket.origin.invalid")
 	}
 
@@ -529,7 +527,6 @@ func (h *Hub) publishWire(event *Event) {
 		if h.recorder != nil {
 			h.recorder.ObserveWebSocketBroadcast("invalid", "rejected", 0)
 		}
-
 		return
 	}
 

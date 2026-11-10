@@ -91,7 +91,6 @@ func decodeOpaqueCursor[T any](raw string, spec opaqueCursorSpec[T]) (T, error) 
 		if err == nil {
 			err = errors.New("cursor contains trailing data")
 		}
-
 		return zero, invalidOpaqueCursorError(spec.label, err)
 	}
 
@@ -214,7 +213,6 @@ func scanOpaqueCursorJSONObject(data []byte, members []string) error {
 		if err == nil {
 			return errors.New("cursor contains trailing data")
 		}
-
 		return err
 	}
 

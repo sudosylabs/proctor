@@ -283,7 +283,6 @@ func (g defaultProfilePictureGlyph) drawCell(
 				if corner.X > 0 {
 					px = width - 1 - x
 				}
-
 				if corner.Y > 0 {
 					py = width - 1 - y
 				}

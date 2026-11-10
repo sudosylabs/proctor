@@ -163,7 +163,6 @@ func (s *Service) GetInstallationStatus(
 		if store.IsNotFound(err) {
 			return &model.InstallationStatus{Initialized: false}, nil
 		}
-
 		return nil, apperror.New("installation.unavailable").Wrap(err)
 	}
 

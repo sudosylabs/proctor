@@ -125,7 +125,6 @@ func (c *Content) StoreExamResourceRendition(
 		if cancellation := ctx.Err(); cancellation != nil {
 			return model.FileRendition{}, cancellation
 		}
-
 		return model.FileRendition{}, sanitize("rewind exam resource spool", err)
 	}
 

@@ -71,27 +71,21 @@ func validateMail(mailConfig Mail, add func(string, string)) {
 	if !mailConfig.Enabled {
 		return
 	}
-
 	if mailConfig.SecretSealing.EncryptionKey == "" {
 		add("mail.secret_sealing.encryption_key", "is required when mail is enabled")
 	}
-
 	if !validMailbox(mailConfig.FromAddress) {
 		add("mail.from_address", "must be a plain email address")
 	}
-
 	if strings.ContainsAny(mailConfig.FromName, "\x00\r\n") {
 		add("mail.from_name", "contains invalid characters")
 	}
-
 	if !validHostPort(mailConfig.SMTP.Address) {
 		add("mail.smtp.address", "must be a host:port TCP address")
 	}
-
 	if strings.ContainsAny(mailConfig.SMTP.ServerName, "\x00\r\n") {
 		add("mail.smtp.server_name", "contains invalid characters")
 	}
-
 	if strings.ContainsAny(mailConfig.SMTP.LocalName, "\x00\r\n") {
 		add("mail.smtp.local_name", "contains invalid characters")
 	}
@@ -111,7 +105,6 @@ func validateMail(mailConfig Mail, add func(string, string)) {
 		if mailConfig.SMTP.Username == "" {
 			add("mail.smtp.username", "is required when authentication is enabled")
 		}
-
 		if mailConfig.SMTP.Security == "none" {
 			add("mail.smtp.security", "must use TLS when authentication is enabled")
 		}
@@ -131,7 +124,6 @@ func validateMail(mailConfig Mail, add func(string, string)) {
 	if mailConfig.SMTP.MaxMessageBytes < 1024 || mailConfig.SMTP.MaxMessageBytes > 100<<20 {
 		add("mail.smtp.max_message_bytes", "must be between 1024 and 104857600")
 	}
-
 	if mailConfig.SMTP.MaxRecipients < 1 || mailConfig.SMTP.MaxRecipients > 1000 {
 		add("mail.smtp.max_recipients", "must be between 1 and 1000")
 	}

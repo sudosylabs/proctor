@@ -63,11 +63,9 @@ func validateCache(cache Cache, add func(string, string)) {
 		if cache.Memory.MaxEntries < 1 || cache.Memory.MaxEntries > 1_000_000 {
 			add("cache.memory.max_entries", "must be between 1 and 1000000")
 		}
-
 		if cache.Memory.MaxBytes < 1<<20 || cache.Memory.MaxBytes > 1<<30 {
 			add("cache.memory.max_bytes", "must be between 1048576 and 1073741824")
 		}
-
 		if cache.Memory.MaxCounters < 1 || cache.Memory.MaxCounters > 1_000_000 {
 			add("cache.memory.max_counters", "must be between 1 and 1000000")
 		}
@@ -85,7 +83,6 @@ func validateCache(cache Cache, add func(string, string)) {
 		if cache.Redis.Database < 0 {
 			add("cache.redis.database", "must not be negative")
 		}
-
 		if cache.Redis.ConnectTimeout.Duration <= 0 {
 			add("cache.redis.connect_timeout", "must be greater than zero")
 		}

@@ -70,7 +70,6 @@ func (c *connectionRuntime) readPump(ctx context.Context) {
 			if c.recorder != nil {
 				c.recorder.ObserveWebSocketMessage("inbound", "request", streamResult(err), 0)
 			}
-
 			return
 		}
 
@@ -703,7 +702,6 @@ func (c *connectionRuntime) finalizeExamAttempt(ctx context.Context) {
 		if removedSubscription && c.recorder != nil {
 			c.recorder.AddWebSocketSubscriptions(-1)
 		}
-
 		if binding == nil {
 			return
 		}

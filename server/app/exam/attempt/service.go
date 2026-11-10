@@ -237,7 +237,6 @@ func validActiveSuspension(view *store.ExamAttemptSuspensionView, attemptID mode
 	if view == nil {
 		return true
 	}
-
 	return view.ID.IsValid() &&
 		view.AttemptID == attemptID &&
 		view.ParticipationID.IsValid() &&

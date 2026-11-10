@@ -98,7 +98,6 @@ func kernelErrorCodes(auth AuthRequirement, method string) []string {
 		if unsafe {
 			return []string{"request.invalid"}
 		}
-
 		return nil
 	case AuthRefreshCredentialRequired:
 		codes := []string{"authentication.required", "authentication.credential_ambiguous"}
@@ -127,11 +126,9 @@ func kernelErrorCodes(auth AuthRequirement, method string) []string {
 		if unsafe {
 			codes = append(codes, "authentication.csrf.invalid")
 		}
-
 		if auth == AuthStrongSessionRequired || auth == AuthStrongRecentSessionRequired {
 			codes = append(codes, "authentication.strong_required")
 		}
-
 		if auth == AuthRecentMFARecoverySessionRequired || auth == AuthRecentSessionRequired || auth == AuthStrongRecentSessionRequired {
 			codes = append(codes, "authentication.reauthentication_required")
 		}

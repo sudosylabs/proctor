@@ -213,11 +213,9 @@ func (s *Session) PrepareCreate(id SessionID, at time.Time) {
 	if s.MFACompletedAt.Valid {
 		s.MFACompletedAt = s.MFACompletedAt.UTC()
 	}
-
 	if s.ReauthenticatedAt.Valid {
 		s.ReauthenticatedAt = s.ReauthenticatedAt.UTC()
 	}
-
 	if s.RevokedAt.Valid {
 		s.RevokedAt = s.RevokedAt.UTC()
 	}

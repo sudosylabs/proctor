@@ -318,7 +318,6 @@ func (s *Service) CreateExamStarterWorkspaceFile(
 		if err != nil {
 			return Result{}, err
 		}
-
 		return Result{}, apperror.Invalid("exam.starter_workspace.invalid", "content")
 	}
 
@@ -720,7 +719,6 @@ func (s *Service) stageAndFinalize(
 		if !apperror.Is(err, "exam.starter_workspace.unavailable") {
 			_ = s.deps.Persistence.MarkObjectReclaimable(ctx, &store.StarterWorkspaceObjectReclaim{ObjectID: objectID, At: at})
 		}
-
 		return Result{}, err
 	}
 

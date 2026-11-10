@@ -298,7 +298,6 @@ func (m mailResourceModule) getRekeyStatus(request operationRequest) (operationR
 	if view.CompletedAt.Valid {
 		response.CompletedAt = view.CompletedAt.FormatRFC3339()
 	}
-
 	if view.Progress != nil {
 		response.Progress = &mailRekeyProgressResponse{Current: view.Progress.Current, Total: view.Progress.Total, Stage: view.Progress.Stage}
 	}
@@ -605,7 +604,6 @@ func mailResponse(view app.MailDeliveryView) mailDeliveryResponse {
 	if view.AcceptedAt.Valid {
 		result.AcceptedAt = view.AcceptedAt.FormatRFC3339()
 	}
-
 	if view.FailedAt.Valid {
 		result.FailedAt = view.FailedAt.FormatRFC3339()
 	}

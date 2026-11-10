@@ -196,7 +196,6 @@ func canonicalBrowserHostPortWithDefault(parsed *url.URL, defaultPort string) (s
 		if err != nil || number < 1 || number > 65535 || strconv.Itoa(number) != port {
 			return "", "", invalidModelError("canonicalBrowserHostPortWithDefault", "browser_url", "", "port is invalid", "")
 		}
-
 		if port == defaultPort {
 			port = ""
 		}
@@ -324,7 +323,6 @@ func canonicalBrowserIPv4(host string) (string, error) {
 	if len(parts) > 1 && parts[len(parts)-1] == "" {
 		parts = parts[:len(parts)-1]
 	}
-
 	if len(parts) < 1 || len(parts) > 4 {
 		return "", invalidModelError("canonicalBrowserIPv4", "browser_url", "", "numeric host is invalid", "")
 	}

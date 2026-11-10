@@ -147,7 +147,6 @@ func sessionResponseFromModel(request *http.Request, session *model.Session) *se
 	if session == nil {
 		return nil
 	}
-
 	return &sessionResponse{
 		ID:                      session.ID.String(),
 		CreatedAt:               model.FormatRFC3339(session.CreatedAt),
@@ -556,7 +555,6 @@ func (m authenticationResourceModule) refresh(request operationRequest) (operati
 		if command.DPoP != nil {
 			headers = dpopErrorHeaders(err)
 		}
-
 		if credential.source == credentialSourceCookie {
 			headers = combineResponseHeaders(headers, captureResponseHeaders(m.cookies.clear))
 		}

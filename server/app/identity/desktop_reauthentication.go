@@ -51,11 +51,9 @@ func (s *Service) requireDesktopReauthentication() error {
 	if s.recentAuthenticationTTL <= 0 {
 		return errors.New("desktop reauthentication recency policy is invalid")
 	}
-
 	if s.desktopPolicy.TransactionLifetime == 0 {
 		s.desktopPolicy.TransactionLifetime = model.BrowserAuthenticationTransactionLifetime
 	}
-
 	if s.desktopPolicy.CodeLifetime == 0 {
 		s.desktopPolicy.CodeLifetime = model.DesktopAuthorizationCodeLifetime
 	}
@@ -369,7 +367,6 @@ func (s *Service) AuthenticateDesktopReauthenticationPassword(
 		if errors.Is(err, ErrPasswordMismatch) {
 			return nil, invalidCredentialsAppError()
 		}
-
 		return nil, passwordWorkError(err, "authentication.internal")
 	}
 

@@ -185,7 +185,6 @@ func NewDesktopNativeAgreement(
 			if entry.Claim != NativeClaimEnforce || entry.Verification != "passed" {
 				return nil, errNativeAgreement
 			}
-
 			if definition.SourceID != "" {
 				baselineSources[definition.SourceID] = true
 			}

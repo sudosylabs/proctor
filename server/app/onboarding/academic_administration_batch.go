@@ -150,7 +150,6 @@ func (s *Service) RunAcademicAdministrationBatch(
 	if command.progression {
 		batchAction = model.ActionAcademicProgressionManage
 	}
-
 	if err = s.authorize(ctx, invocation, batchAction, resource); err != nil {
 		return AcademicAdministrationBatchResult{}, err
 	}
@@ -428,7 +427,6 @@ func (s *Service) runAcademicAdministrationBatchItem(
 	if model.UserID(strings.TrimSpace(item.UserID.String())).IsValid() {
 		authority.RecipientUserID = model.UserID(strings.TrimSpace(item.UserID.String()))
 	}
-
 	if batch.Operation == AcademicAdministrationClassTransfer || batch.Operation == AcademicAdministrationClassEnd {
 		authority.ClassMemberID = model.ClassMemberID(strings.TrimSpace(item.RelationshipID))
 	}

@@ -191,7 +191,6 @@ func (m mfaKeyResourceModule) getRekeyStatus(request operationRequest) (operatio
 	if view.CompletedAt.Valid {
 		response.CompletedAt = view.CompletedAt.FormatRFC3339()
 	}
-
 	if view.Progress != nil {
 		response.Progress = &mfaRekeyProgressResponse{Current: view.Progress.Current, Total: view.Progress.Total, Stage: view.Progress.Stage}
 	}

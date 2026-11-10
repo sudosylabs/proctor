@@ -47,7 +47,6 @@ func submissionManifestCursorSpec() opaqueCursorSpec[submissionManifestCursorWir
 			if !model.AttemptWorkspaceEntryID(cursor.EntryID).IsValid() {
 				return errors.New("invalid Submission manifest keyset")
 			}
-
 			return nil
 		},
 	}

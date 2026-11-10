@@ -98,11 +98,9 @@ func validateTracingHeaders(headers map[string]string, plaintextRemoteEndpoint b
 	if len(headers) == 0 {
 		return
 	}
-
 	if len(headers) > maximumTracingHeaders {
 		add("tracing.headers", "must contain at most 16 headers")
 	}
-
 	if plaintextRemoteEndpoint {
 		add("tracing.headers", "require an https endpoint_url unless the collector is on loopback")
 	}
@@ -124,7 +122,6 @@ func validateTracingHeaders(headers map[string]string, plaintextRemoteEndpoint b
 		if _, reserved := reservedTracingHeaders[key]; reserved {
 			add("tracing.headers", "must not set transport-controlled headers such as Content-Type or Host")
 		}
-
 		if _, duplicate := canonical[key]; duplicate {
 			add("tracing.headers", "names must be unique ignoring case")
 		}

@@ -652,7 +652,6 @@ func (m *Module) registerCollectors(registry *prometheus.Registry, build BuildIn
 			if m.ready.Load() {
 				return 1
 			}
-
 			return 0
 		}),
 		prometheus.NewGaugeFunc(prometheus.GaugeOpts{

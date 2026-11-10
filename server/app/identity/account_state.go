@@ -170,7 +170,6 @@ func (s *Service) SetUserEnabled(
 	if err != nil {
 		return nil, err
 	}
-
 	if disabled && result != nil && len(result.RevokedSessions) > 0 {
 		s.effects.SessionsRevoked(ctx, userID, sessionIDs(result.RevokedSessions), result.RevokedTokenHashes)
 	}

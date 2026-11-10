@@ -88,7 +88,6 @@ func (s *Service) resolveDesktopCredential(
 		if store.IsNotFound(err) {
 			return nil, access.InvalidTokenAppError()
 		}
-
 		return nil, authenticationUnavailable(err)
 	}
 
@@ -110,7 +109,6 @@ func (s *Service) resolveDesktopCredential(
 		if store.IsNotFound(err) || err == nil {
 			return nil, access.InvalidTokenAppError()
 		}
-
 		return nil, authenticationUnavailable(err)
 	}
 
@@ -135,7 +133,6 @@ func (s *Service) verifyDesktopProof(
 		if store.IsNotFound(err) {
 			return nil, access.InvalidTokenAppError()
 		}
-
 		return nil, authenticationUnavailable(err)
 	}
 
@@ -149,7 +146,6 @@ func (s *Service) verifyDesktopProof(
 	if err != nil {
 		return nil, apperror.New("authentication.dpop.invalid")
 	}
-
 	if !accessBound {
 		accessToken = ""
 	}

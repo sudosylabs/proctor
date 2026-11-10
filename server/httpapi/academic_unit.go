@@ -306,7 +306,6 @@ func academicUnitResponseFromModel(unit *model.AcademicUnit) academicUnitRespons
 	if unit == nil {
 		return academicUnitResponse{}
 	}
-
 	return academicUnitResponse{
 		Revision:      unit.Revision,
 		ID:            unit.ID.String(),

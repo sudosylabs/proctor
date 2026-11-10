@@ -363,7 +363,6 @@ func invitationView(invitation *model.Invitation) InvitationView {
 	if invitation == nil {
 		return InvitationView{}
 	}
-
 	return InvitationView{
 		ID:               invitation.ID,
 		Purpose:          invitation.Purpose,

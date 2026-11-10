@@ -71,7 +71,6 @@ func examIntegrityReviewCursorSpec(kind string) opaqueCursorSpec[examIntegrityRe
 			if cursor.Kind != kind || !model.IsValidOpaqueID(cursor.ID) {
 				return errors.New("invalid Integrity Review keyset")
 			}
-
 			return nil
 		},
 	}
@@ -242,7 +241,6 @@ func browserIntegrityGroupFrom(value *model.BrowserIntegrityGroup) *browserInteg
 	if value == nil {
 		return nil
 	}
-
 	return &browserIntegrityGroupResponse{
 		ParticipationID:         value.ParticipationID,
 		PolicyRevisionID:        value.PolicyRevisionID,
@@ -265,7 +263,6 @@ func browserIntegrityOverflowFrom(value *model.BrowserIntegrityOverflow) *browse
 	if value == nil {
 		return nil
 	}
-
 	return &browserIntegrityOverflowResponse{
 		ValidatedEventCount: value.ValidatedEventCount,
 		FirstReceivedAt:     value.FirstReceivedAt,

@@ -45,7 +45,6 @@ func validateCluster(cluster Cluster, add func(string, string)) {
 		if !validHostPort(cluster.Memberlist.BindAddress) {
 			add("cluster.memberlist.bind_address", "must be a host:port TCP address")
 		}
-
 		if !validHostPort(cluster.Memberlist.AdvertiseAddress) {
 			add("cluster.memberlist.advertise_address", "must be a host:port TCP address")
 		}

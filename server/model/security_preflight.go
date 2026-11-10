@@ -251,7 +251,6 @@ func EvaluateSecurityPreflight(
 	if now.Before(challenge.IssuedAt) {
 		return SecurityPreflightResult{}, ErrSecurityPreflightInvalid
 	}
-
 	if !now.Before(challenge.ExpiresAt) {
 		block(SecurityReasonPreflightExpired)
 	}
@@ -383,7 +382,6 @@ func EvaluateNativeCoverage(
 		if requiredSource && (!source.Complete || source.GapCount != 0 || source.Health != "healthy") {
 			block(SecurityReasonSourceUnavailable)
 		}
-
 		if requiresPermission && source.Permission != "granted" {
 			block(SecurityReasonPermissionRequired)
 		}

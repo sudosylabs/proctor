@@ -430,7 +430,6 @@ func ValidateNativeRecordBinding(
 				if life.FinalSequence != nil && last > *life.FinalSequence {
 					return ErrNativeDeliveryInvalid
 				}
-
 				return nil
 			}
 		}
@@ -522,7 +521,6 @@ func AdvanceNativeOccurrence(
 		if next.Status != "opened" && !precedingTerminalGap {
 			return zero, ErrDeliveryConflict
 		}
-
 		return NativeOccurrenceProgress{Latest: cloneNativeOccurrence(next), UnresolvedOpener: next.Status != "opened"}, nil
 	}
 

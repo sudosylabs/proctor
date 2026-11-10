@@ -200,7 +200,6 @@ func (s *dpopSecurity) Verify(
 		if errors.Is(err, ErrAuthenticationCacheNotStored) {
 			return nil, apperror.New("authentication.dpop.replayed")
 		}
-
 		return nil, apperror.New("authentication.dpop.unavailable").Wrap(err)
 	}
 

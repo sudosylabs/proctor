@@ -231,23 +231,18 @@ func validateAuthenticationSessions(authentication Authentication, add func(stri
 	if sessions.AccessTTL.Duration > sessions.IdleTTL.Duration {
 		add("authentication.sessions.access_ttl", "must not exceed idle_ttl")
 	}
-
 	if sessions.IdleTTL.Duration > sessions.AbsoluteTTL.Duration {
 		add("authentication.sessions.idle_ttl", "must not exceed absolute_ttl")
 	}
-
 	if sessions.RefreshTTL.Duration > sessions.AbsoluteTTL.Duration {
 		add("authentication.sessions.refresh_ttl", "must not exceed absolute_ttl")
 	}
-
 	if sessions.ActivityUpdateInterval.Duration >= sessions.IdleTTL.Duration {
 		add("authentication.sessions.activity_update_interval", "must be less than idle_ttl")
 	}
-
 	if sessions.MaximumPerUser < 1 || sessions.MaximumPerUser > 1000 {
 		add("authentication.sessions.maximum_per_user", "must be between 1 and 1000")
 	}
-
 	if sessions.RetiredRetention.Duration < time.Hour || sessions.RetiredRetention.Duration > 8760*time.Hour {
 		add("authentication.sessions.retired_retention", "must be between 1h and 8760h")
 	}
@@ -360,7 +355,6 @@ func validateAuthenticationMFA(mfa MFA, add func(string, string)) {
 	if mfa.SetupTTL.Duration < time.Minute || mfa.SetupTTL.Duration > time.Hour {
 		add("authentication.mfa.setup_ttl", "must be between 1m and 1h")
 	}
-
 	if mfa.RecoveryCodeCount < 5 || mfa.RecoveryCodeCount > 20 {
 		add("authentication.mfa.recovery_code_count", "must be between 5 and 20")
 	}

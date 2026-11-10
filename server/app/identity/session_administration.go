@@ -121,7 +121,6 @@ func (s *Service) RevokeUserSession(
 		if err == nil {
 			err = store.NewErrNotFound("session", sessionID.String())
 		}
-
 		return sessionAdministrationStoreErrors.Translate(err)
 	}
 

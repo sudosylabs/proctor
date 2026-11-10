@@ -117,7 +117,6 @@ func (e *Exam) Auditable() map[string]any {
 	if e == nil {
 		return map[string]any{}
 	}
-
 	return map[string]any{
 		"id":                  e.ID.String(),
 		"academic_unit_id":    e.AcademicUnitID.String(),
@@ -240,7 +239,6 @@ func (d *ExamDraft) ApplyBrowserPolicy(policy BrowserPolicy, at time.Time) (bool
 	if candidate.UpdatedAt.Before(d.UpdatedAt) {
 		candidate.UpdatedAt = d.UpdatedAt
 	}
-
 	if err = candidate.Validate(); err != nil {
 		return false, err
 	}

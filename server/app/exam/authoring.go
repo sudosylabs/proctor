@@ -425,11 +425,9 @@ func (a *Authoring) EditExamDraftText(
 	if !changed && snapshot.Draft.Revision == command.ExpectedDraftRevision && !snapshot.Exam.IsArchived() {
 		return View{}, apperror.New("exam.draft.no_changes")
 	}
-
 	if title != nil {
 		title = &candidate.Title
 	}
-
 	if instructions != nil {
 		instructions = &candidate.InstructionsMarkdown
 	}

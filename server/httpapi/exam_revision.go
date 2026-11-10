@@ -273,7 +273,6 @@ func examRevisionCursorSpec() opaqueCursorSpec[examRevisionCursor] {
 			if cursor.Number < 1 || !model.ExamRevisionID(cursor.RevisionID).IsValid() {
 				return errors.New("invalid Exam Revision keyset")
 			}
-
 			return nil
 		},
 	}

@@ -47,7 +47,6 @@ func retentionNoticeCursorSpec() opaqueCursorSpec[retentionNoticeCursor] {
 			if !model.RetentionRetirementID(c.After).IsValid() {
 				return errors.New("invalid retention notice cursor")
 			}
-
 			return nil
 		},
 	}

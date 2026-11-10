@@ -169,7 +169,6 @@ func (r *ExamResource) ReplaceContent(revisionID FileRevisionID, at time.Time) (
 	if candidate.UpdatedAt.Before(r.UpdatedAt) {
 		candidate.UpdatedAt = r.UpdatedAt
 	}
-
 	if err := candidate.Validate(); err != nil {
 		return false, err
 	}

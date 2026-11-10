@@ -106,7 +106,6 @@ func (s *Service) RevokeSession(
 		if store.IsNotFound(err) {
 			return apperror.New("session.not_found")
 		}
-
 		return authenticationUnavailable(err)
 	}
 

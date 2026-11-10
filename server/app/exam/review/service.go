@@ -488,7 +488,6 @@ func (s *Service) terminalMutation(
 				if prepareErr == nil {
 					prepareErr = errors.New("invalid result release mail preparation")
 				}
-
 				return Result{}, s.failAudit(ctx, auditID, apperror.New("exam.integrity_review.unavailable").Wrap(prepareErr))
 			}
 
@@ -860,7 +859,6 @@ func (s *Service) effect(
 	if replayed {
 		return
 	}
-
 	if err := deliver(ctx, result); err != nil {
 		s.deps.Effects.Report(ctx, operation, err)
 	}

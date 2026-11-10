@@ -49,18 +49,15 @@ func (r *exactSizeReader) Read(buffer []byte) (int, error) {
 		if err := r.probe(); err != nil {
 			return 0, err
 		}
-
 		return 0, io.EOF
 	}
 
 	if len(buffer) == 0 {
 		return 0, nil
 	}
-
 	if int64(len(buffer)) > r.remaining {
 		buffer = buffer[:r.remaining]
 	}
-
 	if len(buffer) > streamReadLimit {
 		buffer = buffer[:streamReadLimit]
 	}

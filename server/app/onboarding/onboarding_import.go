@@ -160,7 +160,6 @@ func (s *Service) UploadOnboardingImport(
 				if s.content.IsOnboardingImportTooLarge(stageErr) {
 					return nil, apperror.New("onboarding_import.file_invalid").Wrap(stageErr)
 				}
-
 				return nil, apperror.New("onboarding_import.unavailable").Wrap(stageErr)
 			}
 
@@ -206,7 +205,6 @@ func (s *Service) UploadOnboardingImport(
 	if err != nil {
 		return OnboardingImportView{}, err
 	}
-
 	if s.wake != nil {
 		s.wake()
 	}
@@ -326,7 +324,6 @@ func (s *Service) ListOnboardingImports(
 		if !state.IsValid() {
 			return paging.Page[OnboardingImportView]{}, apperror.Invalid("request.invalid", "state")
 		}
-
 		if !slices.Contains(states, state) {
 			states = append(states, state)
 		}
@@ -492,7 +489,6 @@ func (s *Service) commit(
 	if err != nil {
 		return OnboardingImportView{}, err
 	}
-
 	if s.wake != nil {
 		s.wake()
 	}
@@ -592,7 +588,6 @@ func (s *Service) cancel(
 	if err != nil {
 		return OnboardingImportView{}, err
 	}
-
 	if current.State == model.OnboardingImportParsing || current.State == model.OnboardingImportUploading {
 		_ = s.content.RemoveOnboardingImport(context.WithoutCancel(ctx), id)
 	}
@@ -721,7 +716,6 @@ func onboardingImportView(value *store.OnboardingImport) OnboardingImportView {
 	if value == nil {
 		return OnboardingImportView{}
 	}
-
 	return OnboardingImportView{
 		ID:                  value.ID,
 		Mode:                value.Mode,
@@ -792,7 +786,6 @@ func (s *Service) validatePrincipal(ctx context.Context, principal model.Princip
 		if store.IsNotFound(err) {
 			return access.InvalidTokenAppError()
 		}
-
 		return apperror.New("administration.unavailable").Wrap(err)
 	}
 
@@ -808,7 +801,6 @@ func (s *Service) validatePrincipal(ctx context.Context, principal model.Princip
 		if store.IsNotFound(err) {
 			return access.InvalidTokenAppError()
 		}
-
 		return apperror.New("administration.unavailable").Wrap(err)
 	}
 
@@ -1179,15 +1171,12 @@ func (s *Service) parseOnboardingImportRow(
 	if values["role_id"] != "" {
 		row.RoleID = model.RoleID(values["role_id"])
 	}
-
 	if row.Reference == "" {
 		row.Reference = strconv.Itoa(number)
 	}
-
 	if len(row.Reference) > 128 {
 		row.Reference = strconv.Itoa(number)
 	}
-
 	if len(row.Email) > model.UserEmailMaxLength {
 		row.Email = ""
 	}
@@ -1425,7 +1414,6 @@ func (s *Service) executeRow(
 		if onboardingImportRetryableError(err) {
 			return "", "", "", "", err
 		}
-
 		return model.OnboardingImportRowFailed, "", "", "authentication.token_invalid", nil
 	}
 
@@ -1434,7 +1422,6 @@ func (s *Service) executeRow(
 			if onboardingImportRetryableError(err) {
 				return "", "", "", "", err
 			}
-
 			return model.OnboardingImportRowFailed, "", "", invitationBatchPublicErrorCode(err), nil
 		}
 	}
@@ -1501,7 +1488,6 @@ func (s *Service) executeRow(
 			if runErr != nil && onboardingImportRetryableError(runErr) {
 				return "", "", "", "", runErr
 			}
-
 			return model.OnboardingImportRowFailed, "", "", academicAdministrationBatchPublicErrorCode(runErr), nil
 		}
 
@@ -1544,7 +1530,6 @@ func (s *Service) executeRow(
 		if err != nil && onboardingImportRetryableError(err) {
 			return "", "", "", "", err
 		}
-
 		return model.OnboardingImportRowFailed, "", "", invitationBatchPublicErrorCode(err), nil
 	}
 

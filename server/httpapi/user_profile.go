@@ -692,7 +692,6 @@ func (m userProfileResourceModule) search(request operationRequest) (operationRe
 	if query.Affiliations, query.AcademicUnitID, err = userDirectoryFilters(request.request.URL.Query()); err != nil {
 		return operationResult{}, err
 	}
-
 	if present {
 		query.AfterUsername, query.AfterID = cursor.Username, model.UserID(cursor.ID)
 	}
@@ -803,7 +802,6 @@ func userDirectoryCursorSpec() opaqueCursorSpec[userDirectoryCursor] {
 			if cursor.Username == "" || len(cursor.Username) > 64 || !model.UserID(cursor.ID).IsValid() {
 				return errors.New("invalid User directory keyset")
 			}
-
 			return nil
 		},
 	}

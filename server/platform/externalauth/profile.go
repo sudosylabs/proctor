@@ -58,7 +58,6 @@ func (m *ProfileMapper) Assertion(
 		if items := values[name]; len(items) != 0 {
 			return strings.TrimSpace(items[0])
 		}
-
 		return ""
 	}
 	subject := first(m.claims.Subject)

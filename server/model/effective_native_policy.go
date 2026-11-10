@@ -282,7 +282,6 @@ func resolveNativeRequirements(policy NativeSecurityPolicy, agreement *DesktopNa
 			if f.Strategy == "private_attempt" {
 				add("candidate_private_clipboard", NativeClaimEnforce)
 			}
-
 			if f.ObserveOSClipboardChanges {
 				add("os_clipboard_change", NativeClaimObserve)
 			}
@@ -290,7 +289,6 @@ func resolveNativeRequirements(policy NativeSecurityPolicy, agreement *DesktopNa
 			if f.CandidatePrintCommands == "deny" {
 				add("candidate_print_commands", NativeClaimEnforce)
 			}
-
 			if f.MonitoredSpooler == "required" {
 				add("monitored_spooler_job", claim)
 			}

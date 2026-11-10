@@ -291,7 +291,6 @@ func (s *Service) ListGrantablePersonalAccessTokenScopes(
 		if units[i].DisplayName != units[j].DisplayName {
 			return units[i].DisplayName < units[j].DisplayName
 		}
-
 		return units[i].ID < units[j].ID
 	})
 	result := &PersonalAccessTokenGrantableScopes{
@@ -351,7 +350,6 @@ func (s *Service) RevokePersonalAccessToken(
 		if err == nil {
 			err = store.NewErrNotFound("personal_access_token", command.TokenID.String())
 		}
-
 		return nil, personalAccessTokenFailure("personal_access_token", err)
 	}
 
@@ -441,7 +439,6 @@ func (s *Service) SetPersonalAccessTokenDisabled(
 		if err == nil {
 			err = store.NewErrNotFound("personal_access_token", command.TokenID.String())
 		}
-
 		return nil, personalAccessTokenFailure("personal_access_token", err)
 	}
 
@@ -650,7 +647,6 @@ func personalAccessTokenFailure(resource string, err error) error {
 	if _, ok := apperror.As(err); ok {
 		return apperror.New("personal_access_token.unavailable").WithField("resource", resource).Wrap(err)
 	}
-
 	return apperror.StoreTable{
 		Rules: []apperror.StoreRule{{
 			Kind:       apperror.StoreConflict,

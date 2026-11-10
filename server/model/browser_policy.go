@@ -127,7 +127,6 @@ func (p BrowserPolicy) Validate() error {
 		if p.StartRuleID != "" || len(p.Rules) != 0 {
 			return invalidModelError("BrowserPolicy.Validate", "browser_policy", "", "disabled Browser Policy contains enabled fields", "")
 		}
-
 		return nil
 	}
 

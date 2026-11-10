@@ -258,7 +258,6 @@ func classResponseFromModel(class *model.Class) classResponse {
 	if class == nil {
 		return classResponse{}
 	}
-
 	return classResponse{
 		Revision:         class.Revision,
 		ID:               class.ID.String(),

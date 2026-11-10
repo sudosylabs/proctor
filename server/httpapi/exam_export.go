@@ -211,7 +211,6 @@ func (m examExportsHTTPModule) create(request operationRequest) (operationResult
 	if len(categories) == 2 && categories[0] == model.RetentionCategoryIntegrity && categories[1] == model.RetentionCategoryWork {
 		categories[0], categories[1] = categories[1], categories[0]
 	}
-
 	if !model.ValidExamExportCategories(categories) {
 		return operationResult{}, invalidRequestError(errors.New("select distinct work and/or integrity categories"))
 	}
@@ -268,7 +267,6 @@ func (m examExportsHTTPModule) open(request operationRequest) (protocolResult, e
 		if opened.Body != nil {
 			_ = opened.Body.Close()
 		}
-
 		return protocolResult{}, errUnpresentableResult
 	}
 

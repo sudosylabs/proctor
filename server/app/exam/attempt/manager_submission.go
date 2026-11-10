@@ -229,7 +229,6 @@ func (s *Service) prepareManagerEndReceiptMail(
 			if prepareErr == nil {
 				prepareErr = errors.New("invalid manager-ended Submission receipt mail preparation")
 			}
-
 			return nil, 0, apperror.New("exam.attempt.unavailable").Wrap(prepareErr)
 		}
 

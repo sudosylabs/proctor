@@ -33,7 +33,6 @@ func academicNameCursorSpec() opaqueCursorSpec[academicNameCursor] {
 			if cursor.Name == "" || len(cursor.Name) > 256 || !utf8.ValidString(cursor.Name) || !model.IsValidOpaqueID(cursor.ID) {
 				return errors.New("invalid academic keyset")
 			}
-
 			return nil
 		},
 	}

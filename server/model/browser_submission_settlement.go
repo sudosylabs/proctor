@@ -65,7 +65,6 @@ func BrowserSourceSettlementFacts(status BrowserSourceStatus, unresolvedProvenan
 	if status.Summary != nil {
 		incomplete = incomplete || status.Summary.UnretainedRecordCount > 0 || !status.Summary.CountComplete
 	}
-
 	if status.Closure.FinalSequence != nil && !pending && status.HighestContiguous < *status.Closure.FinalSequence {
 		incomplete = true
 	}

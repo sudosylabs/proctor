@@ -265,7 +265,6 @@ func academicPeriodResponseFromModel(period *model.AcademicPeriod) academicPerio
 	if period == nil {
 		return academicPeriodResponse{}
 	}
-
 	return academicPeriodResponse{
 		Revision:    period.Revision,
 		ID:          period.ID.String(),

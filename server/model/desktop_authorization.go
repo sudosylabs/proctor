@@ -498,7 +498,6 @@ func validAuthenticationPath(method, providerID string) bool {
 	if method == "password" {
 		return providerID == ""
 	}
-
 	return method != "" &&
 		len(method) <= SessionAuthenticationMaxLength &&
 		validName.MatchString(method) &&
@@ -578,7 +577,6 @@ func (t *BrowserAuthenticationTransaction) Auditable() map[string]any {
 	if t == nil {
 		return map[string]any{}
 	}
-
 	return map[string]any{
 		"id":                             t.ID.String(),
 		"purpose":                        t.Purpose,

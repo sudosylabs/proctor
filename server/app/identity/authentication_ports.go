@@ -59,7 +59,6 @@ func (s *Service) resolvePersonalAccessTokenBearer(
 		if store.IsNotFound(err) {
 			return nil, access.InvalidTokenAppError()
 		}
-
 		return nil, authenticationUnavailable(err)
 	}
 

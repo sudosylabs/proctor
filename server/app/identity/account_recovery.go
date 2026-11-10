@@ -269,7 +269,6 @@ func (s *Service) RequestPasswordReset(
 		if !store.IsNotFound(err) {
 			s.logHiddenRecoveryFailure(ctx, "password reset user lookup failed", err)
 		}
-
 		return nil
 	}
 
@@ -281,7 +280,6 @@ func (s *Service) RequestPasswordReset(
 		if !store.IsNotFound(err) {
 			s.logHiddenRecoveryFailure(ctx, "password credential lookup failed", err)
 		}
-
 		return nil
 	}
 
@@ -385,7 +383,6 @@ func (s *Service) CompleteEmailVerification(
 		if store.IsNotFound(err) {
 			return nil, invalidAccountCredential()
 		}
-
 		return nil, accountRecoveryStoreFailure(err)
 	}
 
@@ -438,7 +435,6 @@ func (s *Service) CompletePasswordReset(
 		if store.IsNotFound(err) {
 			return nil, invalidAccountCredential()
 		}
-
 		return nil, accountRecoveryStoreFailure(err)
 	}
 
@@ -447,7 +443,6 @@ func (s *Service) CompletePasswordReset(
 		if store.IsNotFound(err) {
 			return nil, invalidAccountCredential()
 		}
-
 		return nil, accountRecoveryStoreFailure(err)
 	}
 

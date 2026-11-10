@@ -636,7 +636,6 @@ func recordsCompletionResponse(value model.ExamSittingRecordsCompletion) examRec
 	if value.CompletedAt.Valid {
 		out.CompletedAt = model.FormatRFC3339(value.CompletedAt.Time)
 	}
-
 	if value.StaleAt.Valid {
 		out.StaleAt = model.FormatRFC3339(value.StaleAt.Time)
 	}
@@ -647,7 +646,6 @@ func recordsWaiverResponse(value *model.SubmissionReviewWaiver) *submissionRevie
 	if value == nil {
 		return nil
 	}
-
 	return &submissionReviewWaiverResponse{
 		DeliveryInventoryRevision: value.DeliveryInventoryRevision,
 		InventoryInvalidated:      value.InventoryInvalidated,

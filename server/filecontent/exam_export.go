@@ -231,7 +231,6 @@ func (c *Content) storeExamExport(
 			if matching {
 				return result, nil
 			}
-
 			return nil, errors.New("Exam export object conflict")
 		}
 

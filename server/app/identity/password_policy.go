@@ -63,7 +63,6 @@ func passwordIdentityOf(user *model.User) PasswordIdentity {
 	if user == nil {
 		return PasswordIdentity{}
 	}
-
 	return PasswordIdentity{
 		Username:    user.Username,
 		Email:       user.Email,

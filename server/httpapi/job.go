@@ -349,7 +349,6 @@ func jobAttemptCursorSpec() opaqueCursorSpec[jobAttemptCursor] {
 			if cursor.Number <= 0 {
 				return errors.New("invalid job attempt keyset")
 			}
-
 			return nil
 		},
 	}
@@ -373,11 +372,9 @@ func jobResponseFromApplication(view job.View) jobResponse {
 	if view.StartedAt.Valid {
 		response.StartedAt = model.FormatRFC3339(view.StartedAt.Time)
 	}
-
 	if view.CompletedAt.Valid {
 		response.CompletedAt = model.FormatRFC3339(view.CompletedAt.Time)
 	}
-
 	if view.Progress != nil {
 		response.Progress = &jobProgressResponse{Current: view.Progress.Current, Total: view.Progress.Total, Stage: view.Progress.Stage}
 	}

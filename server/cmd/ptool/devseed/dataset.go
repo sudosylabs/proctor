@@ -364,7 +364,6 @@ func (r *runner) populate() error {
 		if classUnits[classIndex] == units[1] {
 			teacher = teachers[1]
 		}
-
 		if err = r.exam(i, classUnits[classIndex], classes[classIndex], teacher); err != nil {
 			return err
 		}

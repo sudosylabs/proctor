@@ -545,7 +545,6 @@ func (s *Service) EditExamResourceMetadata(
 	if command.DisplayName != nil {
 		displayName = *command.DisplayName
 	}
-
 	if command.DescriptionMarkdown != nil {
 		descriptionMarkdown = *command.DescriptionMarkdown
 	}
@@ -601,7 +600,6 @@ func (s *Service) metadataMutation(
 	if c.DisplayName != nil {
 		displayName = *c.DisplayName
 	}
-
 	if c.DescriptionMarkdown != nil {
 		descriptionMarkdown = *c.DescriptionMarkdown
 	}

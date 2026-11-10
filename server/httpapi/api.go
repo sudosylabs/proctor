@@ -183,7 +183,6 @@ func (a *API) localize(request *http.Request) *http.Request {
 	if a.localizer == nil {
 		return request
 	}
-
 	return request.WithContext(withRequestLocalization(
 		request.Context(),
 		a.localizer,

@@ -40,7 +40,6 @@ func validateDatabase(database Database, add func(string, string)) {
 	if database.MaxOpenConnections < 2 {
 		add("database.max_open_connections", "must be at least 2 for locked migrations")
 	}
-
 	if database.MaxIdleConnections < 0 || database.MaxIdleConnections > database.MaxOpenConnections {
 		add("database.max_idle_connections", "must be between zero and max_open_connections")
 	}

@@ -180,7 +180,6 @@ func retentionPolicyResponseFromModel(policy *model.RetentionPolicy) retentionPo
 	if policy == nil {
 		return retentionPolicyResponse{}
 	}
-
 	return retentionPolicyResponse{
 		Revision:                         policy.Revision,
 		SubmissionRetentionDays:          policy.SubmissionRetentionDays,

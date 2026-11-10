@@ -60,7 +60,6 @@ func candidateWorkspaceCursorSpec() opaqueCursorSpec[candidateWorkspaceCursorWir
 			if cursor.ExpectedCursor < 0 || cursor.ID != "" && !model.AttemptWorkspaceEntryID(cursor.ID).IsValid() {
 				return errors.New("invalid candidate Workspace keyset")
 			}
-
 			return nil
 		},
 	}
@@ -172,7 +171,6 @@ func candidateWorkspaceJournalCursorSpec() opaqueCursorSpec[candidateWorkspaceJo
 			if cursor.After < 1 {
 				return errors.New("invalid Workspace journal keyset")
 			}
-
 			return nil
 		},
 	}

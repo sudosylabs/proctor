@@ -212,7 +212,6 @@ func programmeLevelResponseFromModel(level *model.ProgrammeLevel) programmeLevel
 	if level == nil {
 		return programmeLevelResponse{}
 	}
-
 	return programmeLevelResponse{
 		Revision:    level.Revision,
 		ID:          level.ID.String(),

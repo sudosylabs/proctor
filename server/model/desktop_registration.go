@@ -183,7 +183,6 @@ func (r *DesktopRegistration) Auditable() map[string]any {
 	if r == nil {
 		return nil
 	}
-
 	return map[string]any{
 		"id":             r.ID.String(),
 		"user_id":        r.UserID.String(),

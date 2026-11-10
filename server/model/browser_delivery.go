@@ -200,11 +200,9 @@ func (v BrowserSourceStatus) Validate() error {
 	if v.PredecessorSourceSessionID != nil {
 		transition.PredecessorSourceSessionID = *v.PredecessorSourceSessionID
 	}
-
 	if v.RuntimeResetReason != nil {
 		transition.Reason = *v.RuntimeResetReason
 	}
-
 	if transition.Validate() != nil {
 		return ErrDeliveryInvalid
 	}
@@ -304,7 +302,6 @@ func ValidateBrowserPolicyEvent(event BrowserActivityEvent, policy BrowserPolicy
 		if schemeAllowed {
 			return false, ErrDeliveryConflict
 		}
-
 		return event.RedirectFromSequence == nil || prior != nil, nil
 	}
 

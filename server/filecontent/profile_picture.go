@@ -100,7 +100,6 @@ func (c *Content) NormalizeAndStoreProfilePicture(
 		if dimension < squareSize {
 			normalized = imaging.Resize(square, dimension, dimension, imaging.Lanczos)
 		}
-
 		if err = ctx.Err(); err != nil {
 			return nil, err
 		}

@@ -214,11 +214,9 @@ func (r *runner) step(key, token, method, path string, body object, content []by
 	if err != nil {
 		return nil, fmt.Errorf("seed step %s: %w", key, err)
 	}
-
 	if len(raw) == 0 {
 		raw = json.RawMessage(`{}`)
 	}
-
 	if !json.Valid(raw) {
 		return nil, fmt.Errorf("seed step %s returned invalid JSON", key)
 	}

@@ -576,7 +576,6 @@ func (d *MailDelivery) Auditable() map[string]any {
 	if d == nil {
 		return map[string]any{}
 	}
-
 	return map[string]any{
 		"id":            d.ID.String(),
 		"occurrence_id": d.OccurrenceID.String(),

@@ -380,7 +380,6 @@ func (s *Service) SubmitExamAttempt(
 			if prepareErr == nil {
 				prepareErr = errors.New("invalid Submission receipt mail preparation")
 			}
-
 			return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, apperror.New("exam.attempt.unavailable").Wrap(prepareErr))
 		}
 

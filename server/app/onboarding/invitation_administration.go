@@ -32,7 +32,6 @@ func (s *Service) ListInvitations(
 	if err != nil {
 		return InvitationAdministrationPage{}, err
 	}
-
 	if query.Limit == 0 {
 		query.Limit = 50
 	}
@@ -223,7 +222,6 @@ func (s *Service) ResendInvitation(
 					if replayed.Duplicate {
 						return nil, apperror.New("onboarding_batch.duplicate")
 					}
-
 					return replayed, nil
 				}
 
@@ -376,7 +374,6 @@ func (s *Service) RevokeInvitation(
 					if replayed.Duplicate {
 						return nil, apperror.New("onboarding_batch.duplicate")
 					}
-
 					return replayed, nil
 				}
 

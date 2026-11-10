@@ -53,7 +53,6 @@ func (a *Authoring) ListExams(ctx context.Context, invocation invocation.Invocat
 	if query.Limit == 0 {
 		query.Limit = 50
 	}
-
 	if query.ArchiveFilter == "" {
 		query.ArchiveFilter = store.ExamArchiveActive
 	}

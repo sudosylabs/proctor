@@ -690,7 +690,6 @@ func (i *Invitation) Auditable() map[string]any {
 	if i == nil {
 		return map[string]any{}
 	}
-
 	return map[string]any{
 		"id":                               i.ID.String(),
 		"purpose":                          i.Purpose,

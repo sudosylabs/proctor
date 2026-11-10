@@ -61,7 +61,6 @@ func validateExamResourceJSONSyntax(source io.Reader) error {
 			if err == io.EOF && depth == 0 && states[0] == jsonRootDone {
 				return nil
 			}
-
 			return ErrInvalidExamResourceContent
 		}
 
@@ -234,7 +233,6 @@ func readJSONNumber(reader *bufio.Reader, first byte) error {
 			if err == io.EOF {
 				return nil
 			}
-
 			return ErrInvalidExamResourceContent
 		}
 	}
@@ -244,7 +242,6 @@ func readJSONNumber(reader *bufio.Reader, first byte) error {
 		if err == io.EOF {
 			return nil
 		}
-
 		return ErrInvalidExamResourceContent
 	}
 
@@ -264,7 +261,6 @@ func readJSONNumber(reader *bufio.Reader, first byte) error {
 			if err == io.EOF {
 				return nil
 			}
-
 			return ErrInvalidExamResourceContent
 		}
 	}
@@ -275,7 +271,6 @@ func readJSONNumber(reader *bufio.Reader, first byte) error {
 		if err != nil {
 			return ErrInvalidExamResourceContent
 		}
-
 		if next[0] == '+' || next[0] == '-' {
 			_, _ = reader.ReadByte()
 		}

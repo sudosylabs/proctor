@@ -132,7 +132,6 @@ func buildBackend(cfg Config, diagnostics *diagnostics) (*backend, error) {
 		if queueSize == 0 {
 			queueSize = defaultTargetQueueSize
 		}
-
 		if queueSize < 1 {
 			return cleanup(fmt.Errorf("target %q queue size must be positive", target.Name))
 		}
@@ -171,7 +170,6 @@ func targetOutput(target Target) (logr.Target, error) {
 		if target.File != "" || strings.EqualFold(target.Type, "file") {
 			return nil, errors.New("writer and file cannot both be configured")
 		}
-
 		return targets.NewWriterTarget(target.Writer), nil
 	}
 

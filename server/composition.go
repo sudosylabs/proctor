@@ -150,7 +150,6 @@ func defaultConsumerConstructors(
 			if runner := application.JobEngine(); runner != nil {
 				return runner
 			}
-
 			return nil
 		},
 	}, nil

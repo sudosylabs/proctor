@@ -227,7 +227,6 @@ func (s *Exports) authorizeSources(
 			if err := s.deps.Authorizer.RecordDenial(ctx, invocation, view, resource, unit); err != nil {
 				return err
 			}
-
 			return apperror.New("exam.not_found")
 		}
 
@@ -424,7 +423,6 @@ func (s *Exports) OpenExamExport(
 	if err == nil {
 		err = requireReadyExport(current)
 	}
-
 	if err == nil && current.Artifact != result.Artifact {
 		err = apperror.New("exam.export.unavailable").Wrap(errors.New("export artifact changed during open"))
 	}

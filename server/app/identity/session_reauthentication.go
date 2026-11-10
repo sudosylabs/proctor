@@ -87,7 +87,6 @@ func (s *Service) ReauthenticatePassword(
 		if errors.Is(err, ErrPasswordMismatch) {
 			return nil, invalidCredentialsAppError()
 		}
-
 		return nil, passwordWorkError(err, "authentication.internal")
 	}
 

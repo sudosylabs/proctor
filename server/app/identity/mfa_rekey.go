@@ -254,7 +254,6 @@ func (s *Service) GetMFARekeyStatus(
 		if store.IsNotFound(err) {
 			return MFARekeyStatusView{}, apperror.New("resource.not_found")
 		}
-
 		return MFARekeyStatusView{}, apperror.New("authentication.mfa.unavailable").Wrap(err)
 	}
 
@@ -318,7 +317,6 @@ func projectMFARekeyStatus(job *model.Job) (MFARekeyStatusView, error) {
 		if job.Status == model.JobStatusSucceeded {
 			return MFARekeyStatusView{}, errors.New("successful MFA rekey has no proof")
 		}
-
 		return view, nil
 	}
 

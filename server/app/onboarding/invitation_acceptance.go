@@ -311,7 +311,6 @@ func (s *Service) acceptTeacherAcademicUnitByClaimHash(
 	if err != nil {
 		return nil, invalidInvitationError(err)
 	}
-
 	if !result.Replayed && result.User != nil {
 		s.membershipEffects.InvalidateAuthorization(ctx, result.User.ID)
 	}
@@ -495,7 +494,6 @@ func (s *Service) acceptExternalIdentity(
 	if err != nil {
 		return nil, err
 	}
-
 	if result.User != nil && (result.AcademicUnitMember != nil || result.RoleBinding != nil) {
 		s.membershipEffects.InvalidateAuthorization(ctx, result.User.ID)
 	}
@@ -595,7 +593,6 @@ func (s *Service) acceptScopedRoleByClaimHash(
 	if err != nil {
 		return nil, err
 	}
-
 	if !result.Replayed && result.User != nil {
 		s.membershipEffects.InvalidateAuthorization(ctx, result.User.ID)
 	}

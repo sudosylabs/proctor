@@ -361,7 +361,6 @@ func retentionCursorSpec() opaqueCursorSpec[retentionCursor] {
 			if !model.SubmissionID(c.After).IsValid() {
 				return errors.New("invalid retention cursor")
 			}
-
 			return nil
 		},
 	}
@@ -402,7 +401,6 @@ func retentionPreviewDTO(p *model.RetentionPreview) retentionPreviewResponse {
 	if p == nil {
 		return retentionPreviewResponse{}
 	}
-
 	return retentionPreviewResponse{
 		Audit:               retentionExpiryCountsDTO(p.Audit),
 		Receipts:            retentionExpiryCountsDTO(p.Receipts),

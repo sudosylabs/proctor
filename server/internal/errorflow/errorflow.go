@@ -615,7 +615,6 @@ func (a *Analysis) summarize(function *ssa.Function, functions map[*ssa.Function
 		if codes, ok := carried[value]; ok {
 			return codes
 		}
-
 		return nil
 	}
 	for changed := true; changed; {
@@ -732,7 +731,6 @@ func (a *Analysis) callCodes(
 				if common.IsInvoke() {
 					index--
 				}
-
 				if index >= 0 && index < len(common.Args) {
 					codes.union(a.argumentCodes(function, common.Args[index]))
 				}

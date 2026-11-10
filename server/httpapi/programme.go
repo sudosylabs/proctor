@@ -200,7 +200,6 @@ func programmeResponseFromModel(programme *model.Programme) programmeResponse {
 	if programme == nil {
 		return programmeResponse{}
 	}
-
 	return programmeResponse{
 		Revision:       programme.Revision,
 		ID:             programme.ID.String(),

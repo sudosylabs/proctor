@@ -171,7 +171,6 @@ func (s *Service) evaluateDesktopBuild(
 	if err != nil {
 		return DesktopCompatibilityResult{}, err
 	}
-
 	if result.RetryAt.Valid && !result.RetryAt.Time.After(model.TimeUTC(s.now())) {
 		result.RetryAt = model.OptionalTime{}
 	}

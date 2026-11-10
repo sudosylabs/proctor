@@ -140,7 +140,6 @@ func (s *Service) expireLapsedParticipation(
 		if store.IsNotFound(err) {
 			return apperror.New("exam.attempt.connection_lost").Wrap(cause)
 		}
-
 		return storeError(storeErrors, err)
 	}
 

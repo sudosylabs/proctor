@@ -178,11 +178,9 @@ func (s *Service) requireDesktopAuthorization() error {
 	if s.newCredential == nil || s.now == nil {
 		return errors.New("desktop authorization security dependencies are required")
 	}
-
 	if s.desktopPolicy.TransactionLifetime == 0 {
 		s.desktopPolicy.TransactionLifetime = model.BrowserAuthenticationTransactionLifetime
 	}
-
 	if s.desktopPolicy.CodeLifetime == 0 {
 		s.desktopPolicy.CodeLifetime = model.DesktopAuthorizationCodeLifetime
 	}
@@ -304,7 +302,6 @@ func (s *Service) DesktopAuthorizationContext(
 		if allowErr != nil {
 			return nil, apperror.New("authentication.desktop_authorization.unavailable").Wrap(allowErr)
 		}
-
 		if allowed {
 			result.ExternalProviders = append(result.ExternalProviders, configured.Descriptor)
 		}
@@ -387,7 +384,6 @@ func (s *Service) AuthenticateDesktopAuthorizationLocally(
 	if err != nil {
 		return nil, err
 	}
-
 	if !result.Denied {
 		s.resetLocalAuthenticationAttempts(ctx, proof)
 	}
@@ -952,7 +948,6 @@ func (s *Service) beginDesktopIssueAudit(
 	if s.securityAudit == nil || !userID.IsValid() || !institutionID.IsValid() {
 		return nil, apperror.New("audit.unavailable")
 	}
-
 	return s.securityAudit.BeginAccountActionAtScope(
 		ctx,
 		access.AccountAuditActor{
@@ -981,7 +976,6 @@ func (s *Service) beginDesktopExchangeAudit(
 	if s.securityAudit == nil || !userID.IsValid() || !institutionID.IsValid() {
 		return nil, apperror.New("audit.unavailable")
 	}
-
 	return s.securityAudit.BeginAccountActionAtScope(
 		ctx,
 		access.AccountAuditActor{UserID: userID, ClientType: model.SessionClientDesktop},
@@ -1044,7 +1038,6 @@ func (s *Service) beginDesktopWithdrawalAudit(
 	if s.securityAudit == nil || !userID.IsValid() || !institutionID.IsValid() || !sessionID.IsValid() {
 		return nil, apperror.New("audit.unavailable")
 	}
-
 	return s.securityAudit.BeginAccountActionAtScope(
 		ctx,
 		access.AccountAuditActor{UserID: userID, ClientType: model.SessionClientDesktop},

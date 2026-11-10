@@ -57,7 +57,6 @@ func (s *Service) ScanExpiredDeliveries(ctx context.Context, system invocation.S
 			if auditErr := s.deps.SystemAuditor.Fail(ctx, audit, "exam.attempt.unavailable"); auditErr != nil {
 				return result, errors.Join(storeError(storeErrors, err), auditErr)
 			}
-
 			return result, storeError(storeErrors, err)
 		}
 

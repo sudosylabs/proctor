@@ -479,7 +479,6 @@ func (s *Service) stageWorkspaceFile(
 		if !isAttemptUnavailable(err) {
 			_ = s.deps.Workspace.MarkObjectReclaimable(ctx, objectID)
 		}
-
 		return WorkspaceMutationResult{}, err
 	}
 
@@ -552,7 +551,6 @@ func projectWorkspaceMutation(
 		if stored.Entry != nil {
 			return WorkspaceMutationResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("deleted Workspace entry remained visible"))
 		}
-
 		return WorkspaceMutationResult{
 			AttemptID:       attemptID,
 			SittingID:       stored.SittingID,

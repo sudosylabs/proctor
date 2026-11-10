@@ -158,7 +158,6 @@ func (s *mfaMechanics) consumeSecondFactor(
 		if store.IsNotFound(err) {
 			return mfaInvalidCodeError()
 		}
-
 		return mfaStoreErrors.Translate(err)
 	}
 
@@ -184,7 +183,6 @@ func (s *mfaMechanics) verifySecondFactor(
 		if store.IsNotFound(err) {
 			return mfaFactorProof{}, mfaInvalidCodeError()
 		}
-
 		return mfaFactorProof{}, mfaStoreErrors.Translate(err)
 	}
 

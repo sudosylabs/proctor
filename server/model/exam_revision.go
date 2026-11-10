@@ -253,7 +253,6 @@ func NewExamRevision(spec ExamRevisionSpecification) (*ExamRevision, error) {
 		if order := strings.Compare(left.Path, right.Path); order != 0 {
 			return order
 		}
-
 		return strings.Compare(left.EntryID.String(), right.EntryID.String())
 	})
 	var err error
@@ -351,7 +350,6 @@ func CandidateCorrectionChangedAreas(
 	if base.InstructionsMarkdown != instructionsMarkdown {
 		changedAreas = append(changedAreas, ExamCorrectionChangedInstructions)
 	}
-
 	if !sameExamRevisionResources(base.Resources, resources) {
 		changedAreas = append(changedAreas, ExamCorrectionChangedResources)
 	}
@@ -360,7 +358,6 @@ func CandidateCorrectionChangedAreas(
 	if err != nil {
 		return nil, err
 	}
-
 	if browserDigest != base.BrowserPolicyDigest {
 		changedAreas = append(changedAreas, ExamCorrectionChangedBrowserPolicy)
 	}
@@ -708,7 +705,6 @@ func candidateCorrectionNoticeWireFromModel(notice *CandidateCorrectionNotice) *
 	if notice == nil {
 		return nil
 	}
-
 	return &candidateCorrectionNoticeWire{
 		Summary:                 notice.Summary,
 		ChangedAreas:            slices.Clone(notice.ChangedAreas),

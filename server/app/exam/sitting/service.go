@@ -763,19 +763,15 @@ func (s *Service) UpdateExamSittingSchedule(
 	if command.ExamRevisionID != nil {
 		revisionID = *command.ExamRevisionID
 	}
-
 	if command.ClassID != nil {
 		classID = *command.ClassID
 	}
-
 	if command.ScheduledStartAt != nil {
 		startAt = model.TimeUTC(*command.ScheduledStartAt)
 	}
-
 	if command.ScheduledEndAt != nil {
 		endAt = model.TimeUTC(*command.ScheduledEndAt)
 	}
-
 	if !startAt.Before(endAt) {
 		return store.ExamSittingSnapshot{}, apperror.Invalid("exam.sitting.invalid", "schedule")
 	}

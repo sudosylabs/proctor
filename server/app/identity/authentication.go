@@ -197,7 +197,6 @@ func (s *Service) recordLocalLoginFailure(
 	if s.securityAudit == nil {
 		return access.AuditUnavailable(errors.New("local login audit service is unavailable"))
 	}
-
 	return s.securityAudit.RecordLocalLoginFailure(ctx, target, clientType, invocation.RequestMetadata(), errorCode)
 }
 
@@ -228,7 +227,6 @@ func (s *Service) validatePrincipal(ctx context.Context, principal model.Princip
 		if store.IsNotFound(err) {
 			return access.InvalidTokenAppError()
 		}
-
 		return authenticationUnavailable(err)
 	}
 
@@ -269,7 +267,6 @@ func (s *Service) validatePrincipal(ctx context.Context, principal model.Princip
 			if registrationErr == nil || store.IsNotFound(registrationErr) {
 				return access.InvalidTokenAppError()
 			}
-
 			return authenticationUnavailable(registrationErr)
 		}
 	}
@@ -279,7 +276,6 @@ func (s *Service) validatePrincipal(ctx context.Context, principal model.Princip
 		if store.IsNotFound(err) {
 			return access.InvalidTokenAppError()
 		}
-
 		return authenticationUnavailable(err)
 	}
 
@@ -509,7 +505,6 @@ func (s *Service) proveLocalSubject(
 		if dummyErr := s.hasher.VerifyDummy(ctx, command.Password); dummyErr != nil {
 			return nil, passwordWorkError(dummyErr, "authentication.internal")
 		}
-
 		return nil, authenticationUnavailable(err)
 	}
 
@@ -526,7 +521,6 @@ func (s *Service) proveLocalSubject(
 		if dummyErr := s.hasher.VerifyDummy(ctx, command.Password); dummyErr != nil {
 			return nil, passwordWorkError(dummyErr, "authentication.internal")
 		}
-
 		return nil, s.recordLoginFailure(ctx, failures)
 	}
 
@@ -548,7 +542,6 @@ func (s *Service) proveLocalSubject(
 		if dummyErr := s.hasher.VerifyDummy(ctx, command.Password); dummyErr != nil {
 			return nil, passwordWorkError(dummyErr, "authentication.internal")
 		}
-
 		return nil, s.recordLoginFailure(ctx, failures)
 	}
 
@@ -561,7 +554,6 @@ func (s *Service) proveLocalSubject(
 		if !errors.Is(verifyErr, ErrPasswordMismatch) {
 			return nil, passwordWorkError(verifyErr, "authentication.internal")
 		}
-
 		return nil, s.recordLoginFailure(ctx, failures)
 	}
 
@@ -587,7 +579,6 @@ func (s *Service) proveLocalSubject(
 	if err != nil {
 		return nil, err
 	}
-
 	if err = s.applyLocalRehash(ctx, credential, rehashed); err != nil {
 		return nil, err
 	}
@@ -641,7 +632,6 @@ func (s *Service) applyLocalRehash(ctx context.Context, credential *model.Passwo
 			if errors.Is(rehashErr, store.ErrPasswordCredentialChanged) {
 				return invalidCredentialsAppError()
 			}
-
 			return authenticationUnavailable(rehashErr)
 		}
 	}
@@ -862,7 +852,6 @@ func sessionCreationError(command sessionIssuance, saveErr error) error {
 		if command.AuthenticationProviderID != "" {
 			return invalidExternalAuthenticationError()
 		}
-
 		return invalidCredentialsAppError()
 	}
 
@@ -988,7 +977,6 @@ func (s *Service) authenticateAccess(
 		if store.IsNotFound(err) {
 			return nil, access.InvalidTokenAppError()
 		}
-
 		return nil, authenticationUnavailable(err)
 	}
 
@@ -997,7 +985,6 @@ func (s *Service) authenticateAccess(
 		if store.IsNotFound(err) {
 			return nil, access.InvalidTokenAppError()
 		}
-
 		return nil, authenticationUnavailable(err)
 	}
 
@@ -1083,7 +1070,6 @@ func (s *Service) updateActivity(
 		if store.IsNotFound(err) {
 			return access.InvalidTokenAppError()
 		}
-
 		return authenticationUnavailable(err)
 	}
 
@@ -1118,7 +1104,6 @@ func (s *Service) RefreshSession(
 		if store.IsNotFound(err) {
 			return nil, nil, access.InvalidTokenAppError()
 		}
-
 		return nil, nil, authenticationUnavailable(err)
 	}
 
@@ -1307,7 +1292,6 @@ func (s *Service) enforceSessionExpiry(
 		if store.IsNotFound(err) {
 			return nil, access.InvalidTokenAppError()
 		}
-
 		return nil, authenticationUnavailable(err)
 	}
 

@@ -240,7 +240,6 @@ func (c DeliveryClosure) Validate(native bool) error {
 		if !c.UnknownTail || c.FinalDeclarationID != nil || c.FinalBoundaryOrigin != nil {
 			return ErrDeliveryInvalid
 		}
-
 		return nil
 	}
 
@@ -316,7 +315,6 @@ func (c DeliveryClosure) Close(
 		if !securityInstant(*retirement) {
 			return c, ErrDeliveryInvalid
 		}
-
 		if retirement.Before(expiry) {
 			expiry = *retirement
 		}
@@ -360,7 +358,6 @@ func (c DeliveryClosure) DeclareFinal(
 	if native {
 		width = NativeReceiveWindow
 	}
-
 	if request.FinalSequence-*c.KnownAtClose > width || summaryOnly && request.FinalSequence > allocated {
 		return c, 0, ErrDeliveryConflict
 	}
@@ -524,7 +521,6 @@ func ValidateDeliveryGapPlacement(
 		if closure.FinalSequence != nil {
 			boundary = *closure.FinalSequence
 		}
-
 		if request.AllocatedThroughSequence > boundary {
 			return ErrDeliveryConflict
 		}

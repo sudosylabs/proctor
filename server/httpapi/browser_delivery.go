@@ -317,11 +317,9 @@ func (m examAttemptHTTPModule) browserDeliveryReceipts(request operationRequest)
 	if err != nil {
 		return operationResult{}, err
 	}
-
 	if !request.request.URL.Query().Has("limit") {
 		page.Limit = browserReceiptPageLimit
 	}
-
 	if page.Limit > browserReceiptPageLimit {
 		return operationResult{}, invalidRequestError(errors.New("limit must be between 1 and 64"))
 	}
@@ -376,7 +374,6 @@ func browserReceiptCursorSpec() opaqueCursorSpec[browserReceiptCursor] {
 			if cursor.Sequence < 1 || cursor.Sequence > model.BrowserParticipationPositionLimit {
 				return errors.New("invalid Browser receipt keyset")
 			}
-
 			return nil
 		},
 	}

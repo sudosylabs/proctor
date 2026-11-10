@@ -139,7 +139,6 @@ func invitationBatchDuplicateWinners(
 		if duplicateKey == "" {
 			continue
 		}
-
 		if winner, exists := winners[duplicateKey]; !exists || item.IdempotencyKey < winner {
 			winners[duplicateKey] = item.IdempotencyKey
 		}
@@ -266,7 +265,6 @@ func (s *Service) recoverInvitationIssueOutcome(
 	if store.IsNotFound(err) {
 		return InvitationView{}, false, nil
 	}
-
 	if err == nil && found.Invitation != nil {
 		attempt.Value = found.Invitation.Auditable()
 	}
@@ -312,7 +310,6 @@ func (s *Service) recoverInvitationAdministrationOutcome(
 	if store.IsNotFound(err) {
 		return InvitationAdministrationView{}, false, nil
 	}
-
 	if err == nil && found.Invitation != nil {
 		attempt.Value = found.Invitation.Auditable()
 	}

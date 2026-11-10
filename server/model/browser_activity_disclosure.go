@@ -23,7 +23,6 @@ func NewBrowserActivityDisclosure(policy *RetentionPolicy, mayCreateEvidence boo
 	if policy == nil || policy.Validate() != nil {
 		return BrowserActivityDisclosure{}, errRetentionPolicyInvalid
 	}
-
 	return BrowserActivityDisclosure{
 		NoticeID:                     "integrated_browser_activity",
 		Audience:                     "exam_managers_with_browser_activity_permission",

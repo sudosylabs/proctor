@@ -557,7 +557,6 @@ func decodeStrictExamAttemptObject[T any](document json.RawMessage, label string
 		if err == nil {
 			return value, errors.New(label + " contains trailing JSON")
 		}
-
 		return value, err
 	}
 

@@ -600,7 +600,6 @@ func (t *Transport) fanOut(
 	if len(payload) > packetLimit {
 		return broadcastMembers(ctx, t.cfg.NodeID, members, payload, t.queueReliable(event))
 	}
-
 	return broadcastMembers(
 		ctx,
 		t.cfg.NodeID,

@@ -332,7 +332,6 @@ func (s *Service) ChallengeMFA(
 		if failure, ok := apperror.As(err); ok {
 			code = failure.Code()
 		}
-
 		if auditErr := s.completeMFAAudit(ctx, auditID, model.AuditStatusFail, code, nil); auditErr != nil {
 			return nil, errors.Join(err, auditErr)
 		}
@@ -353,7 +352,6 @@ func (s *Service) ChallengeMFA(
 			if auditErr := s.completeMFAAudit(ctx, auditID, model.AuditStatusFail, "authentication.mfa.code_invalid", nil); auditErr != nil {
 				return nil, errors.Join(mfaInvalidCodeError(), auditErr)
 			}
-
 			return nil, mfaInvalidCodeError()
 		}
 
@@ -515,7 +513,6 @@ func mfaSecurityNotice(prepared *store.PreparedMail) store.MFASecurityNotice {
 	if prepared == nil {
 		return store.MFASecurityNotice{}
 	}
-
 	return store.MFASecurityNotice{
 		Occurrence: prepared.Occurrence,
 		Delivery:   prepared.Delivery,

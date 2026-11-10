@@ -30,7 +30,6 @@ func TestAuthenticationAttemptAccountingHasOneProductionOwner(t *testing.T) {
 	require.True(t, ok, "local login does not retain the shared private attempt accounting")
 	require.Equal(t, accountingType, local.Type, "local login does not retain the shared private attempt accounting")
 	for name, service := range map[string]reflect.Type{
-		"account recovery":        reflect.TypeOf(accountTokenService{}),
 		"external authentication": reflect.TypeOf(externalAuthenticationService{}),
 		"installation bootstrap":  reflect.TypeOf(bootstrapService{}),
 	} {
@@ -76,7 +75,6 @@ func TestMigratedAuthenticationFlowsDoNotReclaimAttemptMechanics(t *testing.T) {
 	for _, name := range []string{
 		"authentication.go",
 		"account_recovery.go",
-		"account_recovery_ports.go",
 		"external_authentication.go",
 		"bootstrap.go",
 	} {

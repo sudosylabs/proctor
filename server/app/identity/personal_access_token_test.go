@@ -54,7 +54,7 @@ func TestPersonalAccessTokenCreationCannotExceedCurrentRoleAuthority(t *testing.
 	userID := model.NewUserID()
 	unitID := model.NewAcademicUnitID()
 	tokens := &personalAccessTokenStoreFake{events: &[]string{}}
-	service, err := newPersonalAccessTokenAdministrationService(personalAccessTokenAdministrationServiceDependencies{Tokens: tokens, Users: &personalAccessTokenUserStoreFake{}, AcademicUnits: &personalAccessTokenAcademicUnitStoreFake{unit: &model.AcademicUnit{ID: unitID}}, Institutions: &personalAccessTokenInstitutionStoreFake{}, Audit: &personalAccessTokenAuditorFake{}, Authorization: &personalAccessTokenScopeAuthorizerFake{allowed: false}, Mail: &personalAccessTokenMailPreparerFake{}, Policy: PersonalAccessTokenPolicy{MinimumLifetime: time.Minute, MaximumLifetime: 24 * time.Hour, MaximumPerUser: 3}, RecentAuthenticationTTL: 15 * time.Minute, NewCredential: func() string { return "must-not-be-generated" }, Now: func() time.Time { return now }})
+	service, err := personalAccessTokenTestService(&Service{personalAccessTokens: tokens, users: &personalAccessTokenUserStoreFake{}, academicUnits: &personalAccessTokenAcademicUnitStoreFake{unit: &model.AcademicUnit{ID: unitID}}, institutions: &personalAccessTokenInstitutionStoreFake{}, securityAudit: &personalAccessTokenAuditorFake{}, authorizer: &personalAccessTokenScopeAuthorizerFake{allowed: false}, mail: &personalAccessTokenMailPreparerFake{}, personalAccessTokenPolicy: PersonalAccessTokenPolicy{MinimumLifetime: time.Minute, MaximumLifetime: 24 * time.Hour, MaximumPerUser: 3}, recentAuthenticationTTL: 15 * time.Minute, newCredential: func() string { return "must-not-be-generated" }, now: func() time.Time { return now }})
 	require.NoError(t, err)
 	_, err = service.CreatePersonalAccessToken(
 		context.Background(),
@@ -85,9 +85,9 @@ func TestPersonalAccessTokenAdministrationCreatesThroughFocusedContracts(t *test
 	audit := &personalAccessTokenAuditorFake{events: &events}
 	authorization := &personalAccessTokenScopeAuthorizerFake{events: &events, allowed: true}
 	mail := &personalAccessTokenMailPreparerFake{}
-	service, err := newPersonalAccessTokenAdministrationService(personalAccessTokenAdministrationServiceDependencies{Tokens: tokens, Users: &personalAccessTokenUserStoreFake{}, AcademicUnits: units, Institutions: institutions, Audit: audit, Authorization: authorization, Mail: mail, Policy: PersonalAccessTokenPolicy{
+	service, err := personalAccessTokenTestService(&Service{personalAccessTokens: tokens, users: &personalAccessTokenUserStoreFake{}, academicUnits: units, institutions: institutions, securityAudit: audit, authorizer: authorization, mail: mail, personalAccessTokenPolicy: PersonalAccessTokenPolicy{
 		MinimumLifetime: time.Minute, MaximumLifetime: 24 * time.Hour, MaximumPerUser: 3,
-	}, RecentAuthenticationTTL: 15 * time.Minute, NewCredential: func() string { return raw }, Now: func() time.Time { return now }})
+	}, recentAuthenticationTTL: 15 * time.Minute, newCredential: func() string { return raw }, now: func() time.Time { return now }})
 	require.NoError(t, err)
 
 	created, err := service.CreatePersonalAccessToken(
@@ -118,6 +118,8 @@ func TestPersonalAccessTokenAdministrationCreatesThroughFocusedContracts(t *test
 	require.NotContains(t, got, tokens.candidate.TokenHash)
 	require.NotContains(t, got, string(model.ActionClassView))
 	require.Equal(t, model.ActionPersonalAccessTokenCreate, audit.action, "audit action")
+	require.Equal(t, userID, audit.principal.UserID, "audit actor")
+	require.Equal(t, "request-a", audit.metadata.RequestID, "audit request")
 	require.Equal(t, model.Resource{Type: model.ResourceInstitution, ID: institutionID.String()}, audit.resource, "audit action")
 	require.NotContains(t, fmt.Sprintf("%#v %#v %#v", audit.parameters, audit.prior, audit.result), raw)
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
@@ -135,7 +137,7 @@ func TestPersonalAccessTokenAdministrationExactStateReplayEmitsNoAuditOrMail(t *
 	tokens := &personalAccessTokenStoreFake{events: &[]string{}, current: token}
 	audit := &personalAccessTokenAuditorFake{}
 	mail := &personalAccessTokenMailPreparerFake{}
-	service, err := newPersonalAccessTokenAdministrationService(personalAccessTokenAdministrationServiceDependencies{Tokens: tokens, Users: &personalAccessTokenUserStoreFake{}, AcademicUnits: &personalAccessTokenAcademicUnitStoreFake{}, Institutions: &personalAccessTokenInstitutionStoreFake{}, Audit: audit, Authorization: &personalAccessTokenScopeAuthorizerFake{allowed: true}, Mail: mail, Policy: PersonalAccessTokenPolicy{MinimumLifetime: time.Minute, MaximumLifetime: 24 * time.Hour, MaximumPerUser: 3}, RecentAuthenticationTTL: 15 * time.Minute, NewCredential: func() string { return "credential" }, Now: func() time.Time { return now }})
+	service, err := personalAccessTokenTestService(&Service{personalAccessTokens: tokens, users: &personalAccessTokenUserStoreFake{}, academicUnits: &personalAccessTokenAcademicUnitStoreFake{}, institutions: &personalAccessTokenInstitutionStoreFake{}, securityAudit: audit, authorizer: &personalAccessTokenScopeAuthorizerFake{allowed: true}, mail: mail, personalAccessTokenPolicy: PersonalAccessTokenPolicy{MinimumLifetime: time.Minute, MaximumLifetime: 24 * time.Hour, MaximumPerUser: 3}, recentAuthenticationTTL: 15 * time.Minute, newCredential: func() string { return "credential" }, now: func() time.Time { return now }})
 	require.NoError(t, err)
 
 	got, appErr := service.SetPersonalAccessTokenDisabled(context.Background(), invocation.New(personalAccessTokenSessionPrincipal(userID, now), model.RequestMetadata{}), SetPersonalAccessTokenDisabledCommand{TokenID: token.ID, Disabled: true})
@@ -185,7 +187,7 @@ func TestPersonalAccessTokenAdministrationUsesControlledClockForStateChanges(t *
 	token := personalAccessTokenForTest(userID, now)
 	tokens := &personalAccessTokenStoreFake{events: &[]string{}, current: token}
 	mail := &personalAccessTokenMailPreparerFake{}
-	service, err := newPersonalAccessTokenAdministrationService(personalAccessTokenAdministrationServiceDependencies{Tokens: tokens, Users: &personalAccessTokenUserStoreFake{}, AcademicUnits: &personalAccessTokenAcademicUnitStoreFake{}, Institutions: &personalAccessTokenInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, Audit: &personalAccessTokenAuditorFake{}, Authorization: &personalAccessTokenScopeAuthorizerFake{allowed: true}, Mail: mail, Policy: PersonalAccessTokenPolicy{MinimumLifetime: time.Minute, MaximumLifetime: 24 * time.Hour, MaximumPerUser: 3}, RecentAuthenticationTTL: 15 * time.Minute, NewCredential: func() string { return "credential" }, Now: func() time.Time { return now }})
+	service, err := personalAccessTokenTestService(&Service{personalAccessTokens: tokens, users: &personalAccessTokenUserStoreFake{}, academicUnits: &personalAccessTokenAcademicUnitStoreFake{}, institutions: &personalAccessTokenInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, securityAudit: &personalAccessTokenAuditorFake{}, authorizer: &personalAccessTokenScopeAuthorizerFake{allowed: true}, mail: mail, personalAccessTokenPolicy: PersonalAccessTokenPolicy{MinimumLifetime: time.Minute, MaximumLifetime: 24 * time.Hour, MaximumPerUser: 3}, recentAuthenticationTTL: 15 * time.Minute, newCredential: func() string { return "credential" }, now: func() time.Time { return now }})
 	require.NoError(t, err)
 	invocation := invocation.New(personalAccessTokenSessionPrincipal(userID, now), model.RequestMetadata{})
 
@@ -278,49 +280,70 @@ func TestPersonalAccessTokenAdministrationRequiresFocusedDependencies(t *testing
 
 	tests := []struct {
 		name string
-		make func() (*personalAccessTokenAdministrationService, error)
+		make func() (*Service, error)
 	}{
-		{"token store", func() (*personalAccessTokenAdministrationService, error) {
-			return newPersonalAccessTokenAdministrationService(personalAccessTokenAdministrationServiceDependencies{Tokens: nil, Users: users, AcademicUnits: units, Institutions: institutions, Audit: audit, Authorization: authorization, Mail: mail, Policy: policy, RecentAuthenticationTTL: time.Minute, NewCredential: generator, Now: time.Now})
+		{"token store", func() (*Service, error) {
+			return personalAccessTokenTestService(&Service{personalAccessTokens: nil, users: users, academicUnits: units, institutions: institutions, securityAudit: audit, authorizer: authorization, mail: mail, personalAccessTokenPolicy: policy, recentAuthenticationTTL: time.Minute, newCredential: generator, now: time.Now})
 		}},
-		{"user store", func() (*personalAccessTokenAdministrationService, error) {
-			return newPersonalAccessTokenAdministrationService(personalAccessTokenAdministrationServiceDependencies{Tokens: tokens, Users: nil, AcademicUnits: units, Institutions: institutions, Audit: audit, Authorization: authorization, Mail: mail, Policy: policy, RecentAuthenticationTTL: time.Minute, NewCredential: generator, Now: time.Now})
+		{"user store", func() (*Service, error) {
+			return personalAccessTokenTestService(&Service{personalAccessTokens: tokens, users: nil, academicUnits: units, institutions: institutions, securityAudit: audit, authorizer: authorization, mail: mail, personalAccessTokenPolicy: policy, recentAuthenticationTTL: time.Minute, newCredential: generator, now: time.Now})
 		}},
-		{"academic unit store", func() (*personalAccessTokenAdministrationService, error) {
-			return newPersonalAccessTokenAdministrationService(personalAccessTokenAdministrationServiceDependencies{Tokens: tokens, Users: users, AcademicUnits: nil, Institutions: institutions, Audit: audit, Authorization: authorization, Mail: mail, Policy: policy, RecentAuthenticationTTL: time.Minute, NewCredential: generator, Now: time.Now})
+		{"academic unit store", func() (*Service, error) {
+			return personalAccessTokenTestService(&Service{personalAccessTokens: tokens, users: users, academicUnits: nil, institutions: institutions, securityAudit: audit, authorizer: authorization, mail: mail, personalAccessTokenPolicy: policy, recentAuthenticationTTL: time.Minute, newCredential: generator, now: time.Now})
 		}},
-		{"institution store", func() (*personalAccessTokenAdministrationService, error) {
-			return newPersonalAccessTokenAdministrationService(personalAccessTokenAdministrationServiceDependencies{Tokens: tokens, Users: users, AcademicUnits: units, Institutions: nil, Audit: audit, Authorization: authorization, Mail: mail, Policy: policy, RecentAuthenticationTTL: time.Minute, NewCredential: generator, Now: time.Now})
+		{"institution store", func() (*Service, error) {
+			return personalAccessTokenTestService(&Service{personalAccessTokens: tokens, users: users, academicUnits: units, institutions: nil, securityAudit: audit, authorizer: authorization, mail: mail, personalAccessTokenPolicy: policy, recentAuthenticationTTL: time.Minute, newCredential: generator, now: time.Now})
 		}},
-		{"audit", func() (*personalAccessTokenAdministrationService, error) {
-			return newPersonalAccessTokenAdministrationService(personalAccessTokenAdministrationServiceDependencies{Tokens: tokens, Users: users, AcademicUnits: units, Institutions: institutions, Audit: nil, Authorization: authorization, Mail: mail, Policy: policy, RecentAuthenticationTTL: time.Minute, NewCredential: generator, Now: time.Now})
+		{"audit", func() (*Service, error) {
+			return personalAccessTokenTestService(&Service{personalAccessTokens: tokens, users: users, academicUnits: units, institutions: institutions, securityAudit: nil, authorizer: authorization, mail: mail, personalAccessTokenPolicy: policy, recentAuthenticationTTL: time.Minute, newCredential: generator, now: time.Now})
 		}},
-		{"authorization", func() (*personalAccessTokenAdministrationService, error) {
-			return newPersonalAccessTokenAdministrationService(personalAccessTokenAdministrationServiceDependencies{Tokens: tokens, Users: users, AcademicUnits: units, Institutions: institutions, Audit: audit, Authorization: nil, Mail: mail, Policy: policy, RecentAuthenticationTTL: time.Minute, NewCredential: generator, Now: time.Now})
+		{"authorization", func() (*Service, error) {
+			return personalAccessTokenTestService(&Service{personalAccessTokens: tokens, users: users, academicUnits: units, institutions: institutions, securityAudit: audit, authorizer: nil, mail: mail, personalAccessTokenPolicy: policy, recentAuthenticationTTL: time.Minute, newCredential: generator, now: time.Now})
 		}},
-		{"mail", func() (*personalAccessTokenAdministrationService, error) {
-			return newPersonalAccessTokenAdministrationService(personalAccessTokenAdministrationServiceDependencies{Tokens: tokens, Users: users, AcademicUnits: units, Institutions: institutions, Audit: audit, Authorization: authorization, Mail: nil, Policy: policy, RecentAuthenticationTTL: time.Minute, NewCredential: generator, Now: time.Now})
+		{"mail", func() (*Service, error) {
+			return personalAccessTokenTestService(&Service{personalAccessTokens: tokens, users: users, academicUnits: units, institutions: institutions, securityAudit: audit, authorizer: authorization, mail: nil, personalAccessTokenPolicy: policy, recentAuthenticationTTL: time.Minute, newCredential: generator, now: time.Now})
 		}},
-		{"generator", func() (*personalAccessTokenAdministrationService, error) {
-			return newPersonalAccessTokenAdministrationService(personalAccessTokenAdministrationServiceDependencies{Tokens: tokens, Users: users, AcademicUnits: units, Institutions: institutions, Audit: audit, Authorization: authorization, Mail: mail, Policy: policy, RecentAuthenticationTTL: time.Minute, NewCredential: nil, Now: time.Now})
+		{"generator", func() (*Service, error) {
+			return personalAccessTokenTestService(&Service{personalAccessTokens: tokens, users: users, academicUnits: units, institutions: institutions, securityAudit: audit, authorizer: authorization, mail: mail, personalAccessTokenPolicy: policy, recentAuthenticationTTL: time.Minute, newCredential: nil, now: time.Now})
 		}},
-		{"clock", func() (*personalAccessTokenAdministrationService, error) {
-			return newPersonalAccessTokenAdministrationService(personalAccessTokenAdministrationServiceDependencies{Tokens: tokens, Users: users, AcademicUnits: units, Institutions: institutions, Audit: audit, Authorization: authorization, Mail: mail, Policy: policy, RecentAuthenticationTTL: time.Minute, NewCredential: generator, Now: nil})
+		{"clock", func() (*Service, error) {
+			return personalAccessTokenTestService(&Service{personalAccessTokens: tokens, users: users, academicUnits: units, institutions: institutions, securityAudit: audit, authorizer: authorization, mail: mail, personalAccessTokenPolicy: policy, recentAuthenticationTTL: time.Minute, newCredential: generator, now: nil})
 		}},
 	}
+	var withoutAudit func() (*Service, error)
 	for _, test := range tests {
+		if test.name == "audit" {
+			withoutAudit = test.make
+			continue
+		}
 		t.Run(test.name, func(t *testing.T) {
 			_, err := test.make()
 			require.Error(t, err, "nil dependency was accepted")
 		})
 	}
+	// Composition without an Auditor still builds, as it did when the token
+	// audit was an adapter over a nil Auditor; every audited token mutation
+	// then fails closed before it prepares anything durable.
+	t.Run("audit", func(t *testing.T) {
+		require.NotNil(t, withoutAudit, "the dependency table has no audit case")
+		service, err := withoutAudit()
+		require.NoError(t, err)
+		service.now = func() time.Time { return time.Date(2026, 8, 12, 12, 0, 0, 0, time.UTC) }
+		service.institutions = &personalAccessTokenInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}
+		now := service.now()
+		_, err = service.CreatePersonalAccessToken(context.Background(),
+			invocation.New(personalAccessTokenSessionPrincipal(model.NewUserID(), now), model.RequestMetadata{}),
+			CreatePersonalAccessTokenCommand{Scopes: []string{string(model.ActionClassView)}, ExpiresAt: now.Add(time.Hour).UnixMilli()})
+		require.True(t, apperror.Is(err, "audit.unavailable"), "unaudited creation = %v", err)
+		require.Zero(t, tokens.prepareCalls, "unaudited creation prepared a durable mutation")
+	})
 }
 
 func TestPersonalAccessTokenAdministrationDoesNotRetainRootStore(t *testing.T) {
 	t.Parallel()
 
 	rootStoreType := reflect.TypeOf((*store.Store)(nil)).Elem()
-	serviceType := reflect.TypeOf(personalAccessTokenAdministrationService{})
+	serviceType := reflect.TypeOf(Service{})
 	for index := range serviceType.NumField() {
 		field := serviceType.Field(index)
 		require.NotEqual(t, rootStoreType, field.Type, "field %q retains store.Store", field.Name)
@@ -328,21 +351,28 @@ func TestPersonalAccessTokenAdministrationDoesNotRetainRootStore(t *testing.T) {
 	}
 }
 
+// personalAccessTokenTestService checks the personal access token
+// administration collaborators of a test Service, as New does.
+func personalAccessTokenTestService(service *Service) (*Service, error) {
+	return service, service.requirePersonalAccessTokenAdministration()
+}
+
 func mustPersonalAccessTokenAdministrationService(
 	t *testing.T,
 	tokens store.PersonalAccessTokenStore,
 	units store.AcademicUnitStore,
 	institutions store.InstitutionStore,
-	audit personalAccessTokenAuditor,
+	audit securityAuditor,
 	now time.Time,
-) *personalAccessTokenAdministrationService {
+) *Service {
 	t.Helper()
-	service, err := newPersonalAccessTokenAdministrationService(personalAccessTokenAdministrationServiceDependencies{Tokens: tokens, Users: &personalAccessTokenUserStoreFake{}, AcademicUnits: units, Institutions: institutions, Audit: audit, Authorization: &personalAccessTokenScopeAuthorizerFake{allowed: true}, Mail: &personalAccessTokenMailPreparerFake{}, Policy: PersonalAccessTokenPolicy{MinimumLifetime: time.Minute, MaximumLifetime: 24 * time.Hour, MaximumPerUser: 3}, RecentAuthenticationTTL: 15 * time.Minute, NewCredential: func() string { return "credential" }, Now: func() time.Time { return now }})
+	service, err := personalAccessTokenTestService(&Service{personalAccessTokens: tokens, users: &personalAccessTokenUserStoreFake{}, academicUnits: units, institutions: institutions, securityAudit: audit, authorizer: &personalAccessTokenScopeAuthorizerFake{allowed: true}, mail: &personalAccessTokenMailPreparerFake{}, personalAccessTokenPolicy: PersonalAccessTokenPolicy{MinimumLifetime: time.Minute, MaximumLifetime: 24 * time.Hour, MaximumPerUser: 3}, recentAuthenticationTTL: 15 * time.Minute, newCredential: func() string { return "credential" }, now: func() time.Time { return now }})
 	require.NoError(t, err)
 	return service
 }
 
 type personalAccessTokenScopeAuthorizerFake struct {
+	resourceAuthorizer
 	events     *[]string
 	allowed    bool
 	err        error
@@ -380,7 +410,7 @@ func TestPersonalAccessTokenAdministrationRendersPostgreSQLPreparedActionTime(t 
 	sealer := mailTestSealer(t)
 	composer, err := mail.NewComposer(mail.ComposerDependencies{Renderer: personalAccessTokenActionTimeRenderer{}, Sender: &mailSenderFake{enabled: true, from: mail.Address{Name: "Proctor", Address: "no-reply@example.test"}}, Sealer: sealer, Institution: nil})
 	require.NoError(t, err)
-	service, err := newPersonalAccessTokenAdministrationService(personalAccessTokenAdministrationServiceDependencies{Tokens: tokens, Users: &personalAccessTokenUserStoreFake{}, AcademicUnits: &personalAccessTokenAcademicUnitStoreFake{}, Institutions: &personalAccessTokenInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, Audit: &personalAccessTokenAuditorFake{}, Authorization: &personalAccessTokenScopeAuthorizerFake{allowed: true}, Mail: composer, Policy: PersonalAccessTokenPolicy{MinimumLifetime: time.Minute, MaximumLifetime: 24 * time.Hour, MaximumPerUser: 3}, RecentAuthenticationTTL: 15 * time.Minute, NewCredential: func() string { return "credential" }, Now: func() time.Time { return nodeAt }})
+	service, err := personalAccessTokenTestService(&Service{personalAccessTokens: tokens, users: &personalAccessTokenUserStoreFake{}, academicUnits: &personalAccessTokenAcademicUnitStoreFake{}, institutions: &personalAccessTokenInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, securityAudit: &personalAccessTokenAuditorFake{}, authorizer: &personalAccessTokenScopeAuthorizerFake{allowed: true}, mail: composer, personalAccessTokenPolicy: PersonalAccessTokenPolicy{MinimumLifetime: time.Minute, MaximumLifetime: 24 * time.Hour, MaximumPerUser: 3}, recentAuthenticationTTL: 15 * time.Minute, newCredential: func() string { return "credential" }, now: func() time.Time { return nodeAt }})
 	require.NoError(t, err)
 	_, appErr := service.SetPersonalAccessTokenDisabled(context.Background(), invocation.New(personalAccessTokenSessionPrincipal(userID, nodeAt), model.RequestMetadata{}), SetPersonalAccessTokenDisabledCommand{TokenID: token.ID, Disabled: true})
 	require.NoError(t, appErr)
@@ -426,7 +456,7 @@ func TestPersonalAccessTokenAdministrationTerminalizesPreparationWhenRenderingFa
 	token := personalAccessTokenForTest(userID, now)
 	tokens := &personalAccessTokenStoreFake{current: token, preparedAt: now}
 	mail := &personalAccessTokenMailPreparerFake{err: errors.New("render unavailable")}
-	service, err := newPersonalAccessTokenAdministrationService(personalAccessTokenAdministrationServiceDependencies{Tokens: tokens, Users: &personalAccessTokenUserStoreFake{}, AcademicUnits: &personalAccessTokenAcademicUnitStoreFake{}, Institutions: &personalAccessTokenInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, Audit: &personalAccessTokenAuditorFake{}, Authorization: &personalAccessTokenScopeAuthorizerFake{allowed: true}, Mail: mail, Policy: PersonalAccessTokenPolicy{MinimumLifetime: time.Minute, MaximumLifetime: 24 * time.Hour, MaximumPerUser: 3}, RecentAuthenticationTTL: 15 * time.Minute, NewCredential: func() string { return "credential" }, Now: func() time.Time { return now }})
+	service, err := personalAccessTokenTestService(&Service{personalAccessTokens: tokens, users: &personalAccessTokenUserStoreFake{}, academicUnits: &personalAccessTokenAcademicUnitStoreFake{}, institutions: &personalAccessTokenInstitutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}, securityAudit: &personalAccessTokenAuditorFake{}, authorizer: &personalAccessTokenScopeAuthorizerFake{allowed: true}, mail: mail, personalAccessTokenPolicy: PersonalAccessTokenPolicy{MinimumLifetime: time.Minute, MaximumLifetime: 24 * time.Hour, MaximumPerUser: 3}, recentAuthenticationTTL: 15 * time.Minute, newCredential: func() string { return "credential" }, now: func() time.Time { return now }})
 	require.NoError(t, err)
 	_, appErr := service.SetPersonalAccessTokenDisabled(context.Background(), invocation.New(personalAccessTokenSessionPrincipal(userID, now), model.RequestMetadata{}), SetPersonalAccessTokenDisabledCommand{TokenID: token.ID, Disabled: true})
 	require.True(t, apperror.Is(appErr, "personal_access_token.unavailable"), "SetDisabled(render failure) error = %v", appErr)
@@ -552,7 +582,7 @@ func (s *personalAccessTokenStoreFake) resultFresh() bool {
 	return s.fresh == nil || *s.fresh
 }
 
-type personalAccessTokenUserStoreFake struct{}
+type personalAccessTokenUserStoreFake struct{ store.UserStore }
 
 func (*personalAccessTokenUserStoreFake) Get(_ context.Context, id model.UserID) (*model.User, error) {
 	user := &model.User{
@@ -564,6 +594,7 @@ func (*personalAccessTokenUserStoreFake) Get(_ context.Context, id model.UserID)
 }
 
 type personalAccessTokenMailPreparerFake struct {
+	mailComposer
 	requests []mail.PersonalAccessTokenPreparation
 	err      error
 }
@@ -612,9 +643,14 @@ func (s *personalAccessTokenInstitutionStoreFake) GetSingleton(context.Context) 
 	return s.institution, nil
 }
 
+// personalAccessTokenAuditorFake stands in for *access.Auditor preparing a
+// token mutation's audit draft and records what it was asked to prepare.
 type personalAccessTokenAuditorFake struct {
+	securityAuditor
 	events     *[]string
 	beginCalls int
+	principal  model.Principal
+	metadata   model.RequestMetadata
 	action     model.Action
 	resource   model.Resource
 	parameters map[string]any
@@ -624,12 +660,15 @@ type personalAccessTokenAuditorFake struct {
 	result     map[string]any
 }
 
-func (a *personalAccessTokenAuditorFake) Prepare(_ context.Context, principal model.Principal, action model.Action, resource model.Resource, _ model.RequestMetadata, parameters, prior map[string]any) (*model.AuditEvent, error) {
+func (a *personalAccessTokenAuditorFake) PrepareCriticalAction(_ context.Context, principal model.Principal, action model.Action, resource model.Resource, metadata model.RequestMetadata, parameters, prior any) (*model.AuditEvent, error) {
 	if a.events != nil {
 		*a.events = append(*a.events, "audit_begin")
 	}
 	a.beginCalls++
-	a.action, a.resource, a.parameters, a.prior = action, resource, parameters, prior
+	a.principal, a.metadata = principal, metadata
+	a.action, a.resource = action, resource
+	a.parameters, _ = parameters.(map[string]any)
+	a.prior, _ = prior.(map[string]any)
 	return &model.AuditEvent{ActorID: principal.UserID, SessionID: principal.SessionID, Action: string(action), Resource: resource,
 		ScopeType: model.RoleScopeInstitution, ScopeID: resource.ID, Status: model.AuditStatusAttempt, NodeID: "test",
 		ClientType: string(principal.ClientType), AuthMethod: principal.AuthenticationMethod}, nil

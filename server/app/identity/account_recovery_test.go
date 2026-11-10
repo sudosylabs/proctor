@@ -29,7 +29,7 @@ func TestAccountTokenServiceDoesNotRetainRootStore(t *testing.T) {
 	t.Parallel()
 
 	typeOfStore := reflect.TypeOf((*store.Store)(nil)).Elem()
-	typeOfService := reflect.TypeOf(accountTokenService{})
+	typeOfService := reflect.TypeOf(Service{})
 	for i := 0; i < typeOfService.NumField(); i++ {
 		field := typeOfService.Field(i)
 		require.NotEqual(t, typeOfStore, field.Type, "account token service field %q retains root store", field.Name)
@@ -51,7 +51,7 @@ func TestAccountTokenServiceRequiresDependencies(t *testing.T) {
 		{"mailer", func(a *accountTokenConstructorArgs) { a.mailer = nil }},
 		{"attempt accounting", func(a *accountTokenConstructorArgs) { a.attempts = nil }},
 		{"hasher", func(a *accountTokenConstructorArgs) { a.hasher = nil }},
-		{"audit", func(a *accountTokenConstructorArgs) { a.audit = accountTokenAuditRecorder{} }},
+		{"audit", func(a *accountTokenConstructorArgs) { a.nodeID = "" }},
 		{"effects", func(a *accountTokenConstructorArgs) { a.effects = nil }},
 		{"diagnostics", func(a *accountTokenConstructorArgs) { a.diagnostics = nil }},
 		{"generator", func(a *accountTokenConstructorArgs) { a.newToken = nil }},
@@ -62,8 +62,7 @@ func TestAccountTokenServiceRequiresDependencies(t *testing.T) {
 			t.Parallel()
 			args := validAccountTokenConstructorArgs(t)
 			test.remove(&args)
-			_, err := args.build()
-			require.Error(t, err, "constructor accepted missing dependency")
+			require.Error(t, args.build().requireAccountTokens(), "constructor accepted missing dependency")
 		})
 	}
 }
@@ -72,9 +71,9 @@ func TestAccountRecoveryAttemptAccountingIsolatesAndNormalizesOperations(t *test
 	t.Parallel()
 
 	cache := newExpiringAuthenticationAttemptCache(time.Now)
-	service := &accountTokenService{deps: accountTokenServiceDependencies{Attempts: mustAuthenticationAttemptAccounting(t, cache), Policy: AccountRecoveryPolicy{RateLimit: LoginRateLimitPolicy{
+	service := &Service{attempts: mustAuthenticationAttemptAccounting(t, cache), accountRecoveryPolicy: AccountRecoveryPolicy{RateLimit: LoginRateLimitPolicy{
 		Window: time.Minute, MaximumAttempts: 10, MaximumSourceAttempts: 100,
-	}}}}
+	}}}
 	operations := []accountRecoveryAttemptOperation{
 		accountRecoveryAttemptEmailVerificationRequest,
 		accountRecoveryAttemptPasswordResetRequest,
@@ -119,11 +118,11 @@ func TestAccountRecoveryAttemptAccountingUsesExactThresholdForEveryOperation(t *
 		operation := operation
 		t.Run(operationNameForTest(operation), func(t *testing.T) {
 			t.Parallel()
-			service := &accountTokenService{deps: accountTokenServiceDependencies{Attempts: mustAuthenticationAttemptAccounting(
+			service := &Service{attempts: mustAuthenticationAttemptAccounting(
 				t, newExpiringAuthenticationAttemptCache(time.Now),
-			), Policy: AccountRecoveryPolicy{RateLimit: LoginRateLimitPolicy{
+			), accountRecoveryPolicy: AccountRecoveryPolicy{RateLimit: LoginRateLimitPolicy{
 				Window: time.Minute, MaximumAttempts: 1, MaximumSourceAttempts: 100,
-			}}}}
+			}}}
 			require.NoError(t, service.checkAccountRecoveryRateLimit(
 				context.Background(), operation, "student@example.edu", "192.0.2.10:443",
 			))
@@ -146,9 +145,9 @@ func TestAccountRecoveryAttemptAccountingFailsClosedWithoutCounterRollback(t *te
 				expiringAuthenticationAttemptCache: newExpiringAuthenticationAttemptCache(time.Now),
 				failAt:                             failAt,
 			}
-			service := &accountTokenService{deps: accountTokenServiceDependencies{Attempts: mustAuthenticationAttemptAccounting(t, cache), Policy: AccountRecoveryPolicy{RateLimit: LoginRateLimitPolicy{
+			service := &Service{attempts: mustAuthenticationAttemptAccounting(t, cache), accountRecoveryPolicy: AccountRecoveryPolicy{RateLimit: LoginRateLimitPolicy{
 				Window: time.Minute, MaximumAttempts: 10, MaximumSourceAttempts: 100,
-			}}}}
+			}}}
 			err := service.checkAccountRecoveryRateLimit(
 				context.Background(), accountRecoveryAttemptPasswordResetRequest,
 				"student@example.edu", "192.0.2.10:443",
@@ -304,6 +303,7 @@ func TestCompletePasswordResetCommitsBeforeEffects(t *testing.T) {
 	user := &model.User{ID: model.NewUserID(), Email: "student@example.edu"}
 	session := &model.Session{ID: model.NewSessionID(), UserID: user.ID}
 	order := make([]string, 0, 2)
+	var hashed []string
 	tokens := &accountTokenStoreFake{
 		byHash: &model.UserToken{UserID: user.ID, Purpose: model.UserTokenPasswordReset},
 		consumeReset: func(hash, passwordHash string, at time.Time, event *model.AuditEvent) (*store.PasswordResetResult, error) {
@@ -329,7 +329,7 @@ func TestCompletePasswordResetCommitsBeforeEffects(t *testing.T) {
 		users: &accountTokenUserStoreFake{byID: user}, passwords: &accountTokenPasswordStoreFake{},
 		tokens: tokens, institution: &model.Institution{ID: model.NewInstitutionID()},
 		mailer: &accountTokenMailerFake{enabled: true}, effects: effects,
-		hasher: accountTokenHasherFake{hash: "encoded-new-password"},
+		hasher: accountTokenHasherFake{hash: "encoded-new-password", passwords: &hashed},
 		now:    func() time.Time { return now },
 	})
 
@@ -341,6 +341,7 @@ func TestCompletePasswordResetCommitsBeforeEffects(t *testing.T) {
 	require.Same(t, user, got, "complete password reset")
 	// Contract (guardrail 14): the reset commits before its effects.
 	require.Equal(t, []string{"commit", "effects"}, order)
+	require.Equal(t, []string{"new password"}, hashed, "the reset hashed another password")
 }
 
 func TestCompletePasswordResetMapsTerminalAccessPolicyFenceToInvalidCredential(t *testing.T) {
@@ -466,7 +467,7 @@ func TestPasswordResetWorkFailuresDoNotConsumeResetToken(t *testing.T) {
 		application := newAccountTokenTestApp(t, accountTokenTestDependencies{
 			users: &accountTokenUserStoreFake{byID: user}, passwords: &accountTokenPasswordStoreFake{}, tokens: tokens,
 			institution: &model.Institution{ID: model.NewInstitutionID()},
-			mailer:      &accountTokenMailerFake{enabled: true}, hasher: hasher.(accountTokenPasswordHasher),
+			mailer:      &accountTokenMailerFake{enabled: true}, hasher: accountTokenHasherFake{hashFunc: hasher.Hash},
 		})
 		user, err := application.CompletePasswordReset(ctx, invocation.Invocation{}, CompletePasswordResetCommand{
 			Token: accountTokenTestRawToken, Password: "correct horse battery staple", Source: "192.0.2.34",
@@ -485,9 +486,9 @@ type accountTokenTestDependencies struct {
 	passwords    store.PasswordCredentialStore
 	tokens       store.UserTokenStore
 	institution  *model.Institution
-	mailer       accountTokenMailPreparer
-	effects      accountTokenEffects
-	hasher       accountTokenPasswordHasher
+	mailer       mailComposer
+	effects      SecurityEffects
+	hasher       passwordHasher
 	attempts     *AttemptAccounting
 	rateLimit    LoginRateLimitPolicy
 	now          func() time.Time
@@ -518,14 +519,17 @@ func newAccountTokenTestApp(t *testing.T, deps accountTokenTestDependencies) *Se
 	if deps.accessPolicy == nil {
 		deps.accessPolicy = allowAllAuthenticationAccessPolicy()
 	}
-	service, err := newAccountTokenService(accountTokenServiceDependencies{Users: deps.users, Passwords: deps.passwords, Tokens: deps.tokens, AccessPolicy: deps.accessPolicy, Institutions: &accountTokenInstitutionStoreFake{institution: deps.institution}, Mail: deps.mailer, Attempts: deps.attempts, Hasher: deps.hasher, Audit: accountTokenAuditRecorder{nodeID: "node-1"}, Effects: deps.effects, Diagnostics: newDiscardLogger(t), Policy: AccountRecoveryPolicy{
-		EmailVerificationTTL: 24 * time.Hour,
-		PasswordResetTTL:     45 * time.Minute,
-		EmailChangeUndoTTL:   72 * time.Hour,
-		RateLimit:            deps.rateLimit,
-	}, PublicURL: "https://proctor.example.edu", NewToken: func() string { return accountTokenTestRawToken }, Now: deps.now})
-	require.NoError(t, err)
-	return &Service{accountTokenService: service}
+	service := &Service{users: deps.users, passwords: deps.passwords, userTokens: deps.tokens, accessPolicy: deps.accessPolicy,
+		institutions: &accountTokenInstitutionStoreFake{institution: deps.institution}, mail: deps.mailer, attempts: deps.attempts,
+		hasher: deps.hasher, nodeID: "node-1", effects: deps.effects, recoveryDiagnostics: newDiscardLogger(t),
+		accountRecoveryPolicy: AccountRecoveryPolicy{
+			EmailVerificationTTL: 24 * time.Hour,
+			PasswordResetTTL:     45 * time.Minute,
+			EmailChangeUndoTTL:   72 * time.Hour,
+			RateLimit:            deps.rateLimit,
+		}, publicURL: "https://proctor.example.edu", newCredential: func() string { return accountTokenTestRawToken }, now: deps.now}
+	require.NoError(t, service.requireAccountTokens())
+	return service
 }
 
 type accountTokenUserStoreFake struct {
@@ -631,6 +635,7 @@ func (s *accountTokenInstitutionStoreFake) GetSingleton(context.Context) (*model
 }
 
 type accountTokenMailerFake struct {
+	mailComposer
 	enabled  bool
 	messages []string
 	err      error
@@ -674,12 +679,26 @@ func (m *accountTokenMailerFake) PrepareEmailVerifiedByAdministrator(mail.Notice
 	return nil, errors.New("unexpected privileged email verification")
 }
 
+// accountTokenHasherFake stands in for the shared password hasher in account
+// recovery. It records each password it is asked to hash and returns hash and
+// err, or what hashFunc returns.
 type accountTokenHasherFake struct {
-	hash string
-	err  error
+	passwordHasher
+	hash      string
+	err       error
+	hashFunc  func(context.Context, string) (string, error)
+	passwords *[]string
 }
 
-func (f accountTokenHasherFake) Hash(context.Context, string) (string, error) { return f.hash, f.err }
+func (f accountTokenHasherFake) Hash(ctx context.Context, password string) (string, error) {
+	if f.passwords != nil {
+		*f.passwords = append(*f.passwords, password)
+	}
+	if f.hashFunc != nil {
+		return f.hashFunc(ctx, password)
+	}
+	return f.hash, f.err
+}
 
 func (accountTokenHasherFake) ReuseCheck(string) store.PasswordReuseCheck {
 	return store.PasswordReuseCheck{}
@@ -687,6 +706,9 @@ func (accountTokenHasherFake) ReuseCheck(string) store.PasswordReuseCheck {
 
 type accountTokenEffectsFake struct {
 	called func(model.UserID, []model.SessionID, []string)
+}
+
+func (*accountTokenEffectsFake) AuthenticationCacheInvalidated(context.Context, model.UserID, []string) {
 }
 
 func (f *accountTokenEffectsFake) SessionsRevoked(
@@ -705,11 +727,11 @@ type accountTokenConstructorArgs struct {
 	passwords    store.PasswordCredentialStore
 	tokens       store.UserTokenStore
 	institutions store.InstitutionStore
-	mailer       accountTokenMailPreparer
+	mailer       mailComposer
 	attempts     *AttemptAccounting
-	hasher       accountTokenPasswordHasher
-	audit        accountTokenAuditRecorder
-	effects      accountTokenEffects
+	hasher       passwordHasher
+	nodeID       string
+	effects      SecurityEffects
 	diagnostics  *logging.Logger
 	newToken     func() string
 }
@@ -723,42 +745,44 @@ func validAccountTokenConstructorArgs(t testing.TB) accountTokenConstructorArgs 
 		mailer:       &accountTokenMailerFake{enabled: true},
 		attempts:     &AttemptAccounting{deps: AttemptAccountingDependencies{Cache: newExpiringAuthenticationAttemptCache(time.Now)}},
 		hasher:       accountTokenHasherFake{},
-		audit:        accountTokenAuditRecorder{nodeID: "node-1"},
+		nodeID:       "node-1",
 		effects:      &accountTokenEffectsFake{},
 		diagnostics:  newDiscardLogger(t),
 		newToken:     func() string { return accountTokenTestRawToken },
 	}
 }
 
-func (a accountTokenConstructorArgs) build() (*accountTokenService, error) {
-	return newAccountTokenService(accountTokenServiceDependencies{Users: a.users, Passwords: a.passwords, Tokens: a.tokens, AccessPolicy: allowAllAuthenticationAccessPolicy(), Institutions: a.institutions, Mail: a.mailer, Attempts: a.attempts, Hasher: a.hasher, Audit: a.audit, Effects: a.effects, Diagnostics: a.diagnostics, Policy: AccountRecoveryPolicy{}, PublicURL: "https://proctor.example.edu", NewToken: a.newToken, Now: time.Now})
-}
-
-type countingAccountTokenHasher struct{ calls *int }
-
-func (countingAccountTokenHasher) ReuseCheck(string) store.PasswordReuseCheck {
-	return store.PasswordReuseCheck{}
-}
-
-func (h countingAccountTokenHasher) Hash(context.Context, string) (string, error) {
-	*h.calls++
-	return "encoded-password", nil
+func (a accountTokenConstructorArgs) build() *Service {
+	service := &Service{users: a.users, passwords: a.passwords, userTokens: a.tokens, accessPolicy: allowAllAuthenticationAccessPolicy(),
+		institutions: a.institutions, attempts: a.attempts, nodeID: a.nodeID, recoveryDiagnostics: a.diagnostics,
+		publicURL: "https://proctor.example.edu", newCredential: a.newToken, now: time.Now}
+	// Interfaces are set only when present, as composition sets them.
+	if a.mailer != nil {
+		service.mail = a.mailer
+	}
+	if a.hasher != nil {
+		service.hasher = a.hasher
+	}
+	if a.effects != nil {
+		service.effects = a.effects
+	}
+	return service
 }
 
 func TestCompletePasswordResetUnknownTokenDoesNotSpendPasswordWork(t *testing.T) {
 	t.Parallel()
 
-	hashes := 0
+	var hashed []string
 	app := newAccountTokenTestApp(t, accountTokenTestDependencies{
 		users: &accountTokenUserStoreFake{}, passwords: &accountTokenPasswordStoreFake{},
 		tokens:      &accountTokenStoreFake{},
 		institution: &model.Institution{ID: model.NewInstitutionID()}, mailer: &accountTokenMailerFake{enabled: true},
-		hasher: countingAccountTokenHasher{calls: &hashes},
+		hasher: accountTokenHasherFake{hash: "encoded-password", passwords: &hashed},
 	})
 	result, err := app.CompletePasswordReset(context.Background(), invocation.Invocation{}, CompletePasswordResetCommand{
 		Token: model.NewCredentialToken(), Password: "NewCorrectHorseBatteryStaple1!", Source: "192.0.2.9",
 	})
 	require.Nil(t, result, "result=%#v err=%v", result, err)
 	require.True(t, apperror.Is(err, "authentication.account_token.invalid"), "result=%#v err=%v", result, err)
-	require.Equal(t, 0, hashes, "unknown reset token spent")
+	require.Empty(t, hashed, "unknown reset token spent")
 }

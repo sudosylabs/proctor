@@ -264,6 +264,11 @@ func (h *PasswordHasher) NeedsRehash(encoded string) bool {
 		uint32(len(key)) != h.parameters.keyBytes
 }
 
+// maximumPasswordLength is the configured maximum password length in bytes.
+func (h *PasswordHasher) maximumPasswordLength() int {
+	return h.maximumLength
+}
+
 // Validate reports whether password is valid UTF-8 and within the configured
 // minimum length in characters and maximum length in bytes.
 func (h *PasswordHasher) Validate(password string) error {

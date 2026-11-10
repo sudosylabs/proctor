@@ -50,6 +50,7 @@ func (e *accountStateEffectsFake) SessionsRevoked(context.Context, model.UserID,
 }
 
 type securityNoticeMailerFake struct {
+	mailComposer
 	events   *[]string
 	requests []DirectMailPreparation
 	err      error

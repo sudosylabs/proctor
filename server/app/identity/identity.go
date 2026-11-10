@@ -48,16 +48,15 @@ var (
 )
 
 // resourceAuthorizer is the one authorization port. A use case authorizes an
-// Action on a concrete Resource immediately before the work it guards.
+// Action on a concrete Resource immediately before the work it guards, and
+// personal access token creation asks which actions the caller may delegate.
 type resourceAuthorizer interface {
 	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
+	CanDelegateActionsAtScope(context.Context, model.Principal, []string, model.RoleScopeType, string) (bool, error)
+	PersonalAccessTokenDelegation(context.Context, model.Principal) (access.PersonalAccessTokenDelegation, error)
 }
 
-// institutionAuthorizer authorizes an Action on the installation's singleton
-// Institution and returns that Resource for the caller's audit.
-type institutionAuthorizer interface {
-	AuthorizeInstitution(context.Context, invocation.Invocation, model.Action) (model.Resource, error)
-}
+var _ resourceAuthorizer = (*access.Authorizer)(nil)
 
 // OperationalRecorder receives the outcome of each authentication entry point
 // the package observes. It is optional; a Service built without one records
@@ -157,14 +156,20 @@ type Dependencies struct {
 
 // securityAuditor is the part of *access.Auditor that records security
 // actions proved outside an authenticated mutation: a local password sign-in
-// (the admitted attempt, its completion and a terminal failure) and the
-// Desktop authorization and reauthentication handoffs, which act for a proved
-// account at Institution scope. Mutations are audited through the Service's
+// (the admitted attempt, its completion and a terminal failure), the Desktop
+// authorization and reauthentication handoffs, which act for a proved account
+// at Institution scope, the two-step verification transitions, recorded for
+// the acting User as their subject, and the personal access token drafts that
+// the token aggregate completes. Mutations are audited through the Service's
 // access.MutationAuditor.
 type securityAuditor interface {
 	BeginLocalLogin(context.Context, model.UserID, model.SessionClientType, model.RequestMetadata) (*model.AuditEvent, error)
 	BeginAccountActionAtScope(context.Context, access.AccountAuditActor, model.Action, model.Resource, model.RoleScopeType,
 		string, model.RequestMetadata, any) (*model.AuditEvent, error)
+	BeginCriticalActionForSubject(context.Context, model.Principal, model.UserID, model.Action, model.Resource,
+		model.RequestMetadata, any, any) (*model.AuditEvent, error)
+	PrepareCriticalAction(context.Context, model.Principal, model.Action, model.Resource, model.RequestMetadata,
+		any, any) (*model.AuditEvent, error)
 	CompleteCriticalAction(context.Context, model.AuditEventID, model.AuditStatus, string, any) (*model.AuditEvent, error)
 	RecordLocalLoginFailure(context.Context, model.UserID, model.SessionClientType, model.RequestMetadata, string) error
 }
@@ -172,19 +177,43 @@ type securityAuditor interface {
 var _ securityAuditor = (*access.Auditor)(nil)
 
 // mailComposer is the part of *mail.Composer the Service prepares frozen
-// security notices with.
+// account-token mail and security notices with.
 type mailComposer interface {
+	Enabled() bool
+	PrepareEmailVerification(mail.AccountTokenPreparation) (*store.PreparedMail, error)
+	PreparePasswordReset(mail.AccountTokenPreparation) (*store.PreparedMail, error)
+	PreparePasswordChanged(mail.NoticePreparation) (*store.PreparedMail, error)
+	PrepareEmailChangeWarning(mail.AccountTokenPreparation) (*store.PreparedMail, error)
+	PrepareEmailChangeVerification(mail.AccountTokenPreparation) (*store.PreparedMail, error)
+	PrepareEmailVerifiedByAdministrator(mail.NoticePreparation) (*store.PreparedMail, error)
+	PrepareMFANotice(mail.NoticePreparation, mail.MFANoticeKind) (*store.PreparedMail, error)
+	PreparePersonalAccessTokenSecurityNotice(mail.PersonalAccessTokenPreparation) (*store.PreparedMail, error)
 	PrepareSessionsRevokedByAdministrator(mail.NoticePreparation) (*store.PreparedMail, error)
 }
 
 var _ mailComposer = (*mail.Composer)(nil)
 
-// Service holds every identity use case. Sign-in, Sessions and Desktop
-// authorization, reauthentication, registration and compatibility live on the
-// Service itself: its fields are the Store contracts those use cases call and
-// one of each collaborator. The remaining concerns keep their own focused
-// implementation, embedded here so the Service's method set is their exported
-// methods.
+// passwordHasher is the part of the one shared *PasswordHasher the Service
+// hashes, verifies and checks password reuse with. Account recovery tests
+// substitute password work failures through it.
+type passwordHasher interface {
+	Hash(context.Context, string) (string, error)
+	ReuseCheck(string) store.PasswordReuseCheck
+	Verify(context.Context, string, string) error
+	VerifyDummy(context.Context, string) error
+	NeedsRehash(string) bool
+	maximumPasswordLength() int
+}
+
+var _ passwordHasher = (*PasswordHasher)(nil)
+
+// Service holds every identity use case. Sign-in, Sessions, Desktop
+// authorization, reauthentication, registration and compatibility, two-step
+// verification and the MFA key ring, account tokens and email changes, and
+// personal access token administration live on the Service itself: its fields
+// are the Store contracts those use cases call and one of each collaborator.
+// The remaining concerns keep their own focused implementation, embedded here
+// so the Service's method set is their exported methods.
 type Service struct {
 	users                        store.UserStore
 	passwords                    store.PasswordCredentialStore
@@ -195,6 +224,10 @@ type Service struct {
 	browserAuthentications       store.BrowserAuthenticationStore
 	institutions                 store.InstitutionStore
 	desktopCompatibilityPolicies store.DesktopCompatibilityPolicyStore
+	mfaCredentials               store.MFAStore
+	userTokens                   store.UserTokenStore
+	academicUnits                store.AcademicUnitStore
+	jobs                         store.JobStore
 
 	// accessPolicy is the one *currentAuthenticationAccessPolicy every flow
 	// shares; dpop is the one DPoP nonce and replay guard, shared with
@@ -204,29 +237,42 @@ type Service struct {
 	cache        AuthenticationCache
 	capabilities AccessPolicyCapabilitySource
 	attempts     *AttemptAccounting
-	hasher       *PasswordHasher
-	authorizer   resourceAuthorizer
-	auditor      access.MutationAuditor
+	// hasher is the one shared *PasswordHasher; it is nil when composition
+	// supplies none, and construction then refuses.
+	hasher     passwordHasher
+	authorizer resourceAuthorizer
+	auditor    access.MutationAuditor
 	// securityAudit is nil when composition supplies no Auditor; local
-	// sign-in and the Desktop handoffs then fail closed with the audit
+	// sign-in, the Desktop handoffs, two-step verification transitions and
+	// personal access token changes then fail closed with the audit
 	// unavailable.
 	securityAudit securityAuditor
 	mail          mailComposer
 	effects       SecurityEffects
-	// mfa is the embedded two-step verification implementation, which
-	// sign-in asks for the recovery state and the login second factor.
-	mfa         authenticationMFAVerifier
+	// mfa is the TOTP and recovery-code mechanics, which own secret sealing.
+	mfa         *mfaMechanics
 	operational OperationalRecorder
 	diagnostics *logging.Logger
+	// recoveryDiagnostics logs account recovery failures hidden from callers.
+	recoveryDiagnostics *logging.Logger
 
 	// desktopBuilds is the immutable verified Desktop build catalog;
 	// skipDesktopBuildChecks admits any well-formed build in development.
 	desktopBuilds          *desktopBuildCatalog
 	skipDesktopBuildChecks bool
 
+	// mfaRekeyEnabled is set only when the catalog has Job and MFA stores;
+	// without it the MFA key ring use cases are unavailable. mfaRekeyWake
+	// wakes the Job engine after a rekey is queued.
+	mfaRekeyEnabled bool
+	mfaRekeyWake    func()
+
+	nodeID                    string
+	publicURL                 string
 	sessionPolicy             SessionPolicy
 	loginRateLimit            LoginRateLimitPolicy
 	personalAccessTokenPolicy PersonalAccessTokenPolicy
+	accountRecoveryPolicy     AccountRecoveryPolicy
 	desktopPolicy             DesktopAuthorizationPolicy
 	recentAuthenticationTTL   time.Duration
 	newCredential             func() string
@@ -236,10 +282,6 @@ type Service struct {
 
 	*externalAuthenticationService
 	*authenticationMethodService
-	*mfaApplicationService
-	*mfaKeyService
-	*accountTokenService
-	*personalAccessTokenAdministrationService
 	*accountStateService
 	*bootstrapService
 }
@@ -270,7 +312,7 @@ func New(deps Dependencies) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := service.constructAccountServices(deps, authenticationAccess); err != nil {
+	if err := service.constructAccountServices(deps); err != nil {
 		return nil, err
 	}
 	if err := service.constructExternalAuthentication(deps, authenticationAccess); err != nil {
@@ -282,9 +324,9 @@ func New(deps Dependencies) (*Service, error) {
 	return service, nil
 }
 
-// constructSessionAuthentication builds DPoP, the authentication access
-// policy and MFA, and sets the Service's sign-in, Session and Desktop
-// authorization and reauthentication collaborators.
+// constructSessionAuthentication builds DPoP and the authentication access
+// policy, and sets and checks the Service's two-step verification, sign-in,
+// Session and Desktop authorization and reauthentication collaborators.
 func (s *Service) constructSessionAuthentication(deps Dependencies, mfa *mfaMechanics) (*currentAuthenticationAccessPolicy, error) {
 	dpop, err := newDPoPSecurity(dpopSecurityDependencies{Cache: deps.Cache, Policy: dpopPolicy{Origin: deps.PublicURL,
 		NonceLifetime: 5 * time.Minute, ProofLifetime: 5 * time.Minute, ClockSkew: time.Minute,
@@ -296,25 +338,28 @@ func (s *Service) constructSessionAuthentication(deps Dependencies, mfa *mfaMech
 	if err != nil {
 		return nil, err
 	}
-	mfaApplication, err := newMFAApplicationService(mfaApplicationServiceDependencies{Users: deps.Store.User(), Credentials: deps.Store.MFA(), Passwords: deps.Store.PasswordCredential(), Sessions: deps.Store.Session(), Institutions: deps.Store.Institution(), Audit: mfaAuditAdapter{audit: deps.Auditor}, Effects: deps.Effects, Mail: deps.Mail, Mechanics: mfa, Security: mfaSecurityDependencies{authorization: deps.Authorizer, capabilities: deps.Capabilities, attempts: deps.Attempts, rateLimit: deps.LoginRateLimit}, RoleHolderMFA: authenticationAccess, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Now: time.Now})
-	if err != nil {
-		return nil, err
-	}
 	s.users, s.passwords = deps.Store.User(), deps.Store.PasswordCredential()
 	s.sessions, s.sessionCredentials = deps.Store.Session(), deps.Store.SessionCredential()
 	s.desktopRegistrations, s.personalAccessTokens = deps.Store.DesktopRegistration(), deps.Store.PersonalAccessToken()
-	s.accessPolicy, s.dpop, s.cache, s.attempts, s.hasher = authenticationAccess, dpop, deps.Cache, deps.Attempts, deps.Hasher
-	s.mail, s.effects = deps.Mail, deps.Effects
+	s.mfaCredentials, s.mfa = deps.Store.MFA(), mfa
+	s.accessPolicy, s.dpop, s.cache, s.attempts = authenticationAccess, dpop, deps.Cache, deps.Attempts
+	if deps.Hasher != nil {
+		s.hasher = deps.Hasher
+	}
+	s.mail, s.effects, s.capabilities = deps.Mail, deps.Effects, deps.Capabilities
 	if deps.Auditor != nil {
 		s.securityAudit = deps.Auditor
 	}
-	s.mfa, s.operational, s.diagnostics = mfaApplication, deps.Operational, deps.AuthenticationDiagnostics
+	s.operational, s.diagnostics = deps.Operational, deps.AuthenticationDiagnostics
 	s.sessionPolicy, s.loginRateLimit, s.personalAccessTokenPolicy = deps.Sessions, deps.LoginRateLimit, deps.PersonalAccessToken
 	s.newCredential, s.wait = model.NewCredentialToken, waitContext
+	if err = s.requireMFA(); err != nil {
+		return nil, err
+	}
 	if err = s.requireSessionAuthentication(); err != nil {
 		return nil, err
 	}
-	s.browserAuthentications, s.capabilities = deps.Store.BrowserAuthentication(), deps.Capabilities
+	s.browserAuthentications = deps.Store.BrowserAuthentication()
 	s.desktopPolicy = DesktopAuthorizationPolicy{Issuer: deps.PublicURL, AllowLoopbackHTTPDevelopment: deps.LoopbackHTTPDevelopment}
 	if err = s.requireDesktopAuthorization(); err != nil {
 		return nil, err
@@ -322,30 +367,23 @@ func (s *Service) constructSessionAuthentication(deps Dependencies, mfa *mfaMech
 	if err = s.requireDesktopReauthentication(); err != nil {
 		return nil, err
 	}
-	s.mfaApplicationService = mfaApplication
 	return authenticationAccess, nil
 }
 
-// constructAccountServices builds account tokens and token administration and
-// checks the Desktop Registration collaborators.
-func (s *Service) constructAccountServices(deps Dependencies, authenticationAccess *currentAuthenticationAccessPolicy) error {
-	accountTokens, err := newAccountTokenService(accountTokenServiceDependencies{Users: deps.Store.User(), Passwords: deps.Store.PasswordCredential(), Tokens: deps.Store.UserToken(), AccessPolicy: authenticationAccess, Institutions: deps.Store.Institution(), Mail: deps.Mail, Attempts: deps.Attempts, Hasher: deps.Hasher, Audit: accountTokenAuditRecorder{nodeID: deps.NodeID}, Effects: deps.Effects, Diagnostics: deps.RecoveryDiagnostics, Policy: deps.AccountRecovery, PublicURL: deps.PublicURL, NewToken: model.NewCredentialToken, Now: time.Now})
-	if err != nil {
+// constructAccountServices sets and checks the account token and personal
+// access token administration collaborators and checks the Desktop
+// Registration collaborators.
+func (s *Service) constructAccountServices(deps Dependencies) error {
+	s.userTokens, s.academicUnits = deps.Store.UserToken(), deps.Store.AcademicUnit()
+	s.recoveryDiagnostics, s.accountRecoveryPolicy = deps.RecoveryDiagnostics, deps.AccountRecovery
+	s.nodeID, s.publicURL = deps.NodeID, deps.PublicURL
+	if err := s.requireAccountTokens(); err != nil {
 		return err
 	}
-	accountTokens.administration = userEmailAdministration{
-		authorization: deps.Authorizer, audit: deps.Auditor.MutationAudit(),
-		recentAuthenticationTTL: deps.RecentAuthenticationTTL,
-	}
-	personalAccessTokenAdministration, err := newPersonalAccessTokenAdministrationService(personalAccessTokenAdministrationServiceDependencies{Tokens: deps.Store.PersonalAccessToken(), Users: deps.Store.User(), AcademicUnits: deps.Store.AcademicUnit(), Institutions: deps.Store.Institution(), Audit: personalAccessTokenAuditAdapter{audit: deps.Auditor}, Authorization: deps.Authorizer, Mail: deps.Mail, Policy: deps.PersonalAccessToken, RecentAuthenticationTTL: deps.RecentAuthenticationTTL, NewCredential: model.NewCredentialToken, Now: time.Now})
-	if err != nil {
+	if err := s.requirePersonalAccessTokenAdministration(); err != nil {
 		return err
 	}
-	if err = s.requireDesktopRegistration(); err != nil {
-		return err
-	}
-	s.accountTokenService, s.personalAccessTokenAdministrationService = accountTokens, personalAccessTokenAdministration
-	return nil
+	return s.requireDesktopRegistration()
 }
 
 // constructExternalAuthentication builds external authentication and authentication method management.
@@ -372,22 +410,19 @@ func (s *Service) constructExternalAuthentication(deps Dependencies, authenticat
 	return nil
 }
 
-// constructAdministration builds account state, bootstrap and, when the
-// catalog has Jobs, the MFA key ring.
+// constructAdministration builds account state and bootstrap and, when the
+// catalog has Jobs and MFA credentials, enables the MFA key ring.
 func (s *Service) constructAdministration(deps Dependencies) error {
 	s.accountStateService = newAccountStateService(accountStateServiceDependencies{Users: deps.Store.User(), Authorization: deps.Authorizer, Capabilities: deps.Capabilities, Audit: deps.Auditor.MutationAudit(), Mail: deps.Mail, Effects: accountStateRealtimeEffects{effects: deps.Effects}, Now: time.Now})
 	s.bootstrapService = newBootstrapService(bootstrapServiceDependencies{Installations: deps.Store.Installation(), Hasher: deps.Hasher, Attempts: deps.Attempts, RateLimit: deps.LoginRateLimit, Protection: deps.BootstrapProtection, NodeID: deps.NodeID, Now: time.Now, RecoveryPolicy: administratorRecoveryPolicy{capabilities: deps.Capabilities, mfaEnabled: deps.MFA.Enabled}})
 	if deps.Store.Job() == nil || deps.Store.MFA() == nil {
 		return nil
 	}
-	mfaKeys, err := newMFAKeyService(mfaKeyServiceDependencies{Keys: deps.Store.MFA(), Jobs: deps.Store.Job(),
-		Authorization: mfaKeyAuthorization{authorization: deps.Authorizer, institutions: deps.Store.Institution()},
-		Audit:         deps.Auditor.MutationAudit(), Sealer: deps.MFASecretSealer,
-		RecentAuthenticationTTL: deps.RecentAuthenticationTTL, Now: time.Now, Wake: deps.MFARekeyWake})
-	if err != nil {
+	s.jobs, s.mfaRekeyWake = deps.Store.Job(), deps.MFARekeyWake
+	if err := s.requireMFARekey(); err != nil {
 		return err
 	}
-	s.mfaKeyService = mfaKeys
+	s.mfaRekeyEnabled = true
 	return nil
 }
 

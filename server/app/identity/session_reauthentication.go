@@ -54,7 +54,7 @@ func (s *Service) ReauthenticatePassword(ctx context.Context, invocation invocat
 	if err != nil {
 		return nil, authenticationUnavailable(err)
 	}
-	if !allowed || command.Password == "" || len(command.Password) > s.hasher.maximumLength {
+	if !allowed || command.Password == "" || len(command.Password) > s.hasher.maximumPasswordLength() {
 		return nil, invalidCredentialsAppError()
 	}
 	user, err := s.users.Get(ctx, principal.UserID)

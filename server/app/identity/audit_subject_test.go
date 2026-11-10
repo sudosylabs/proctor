@@ -38,12 +38,13 @@ func TestAuditWritersNameTheSubjectUser(t *testing.T) {
 	me := caller.Principal().UserID
 	institution := model.Resource{Type: model.ResourceInstitution, ID: singleton.ID.String()}
 
-	_, err = (mfaAuditAdapter{audit: service}).Begin(context.Background(), caller, model.ActionMFAActivate, institution, nil)
+	mfa := &Service{securityAudit: service}
+	_, err = mfa.beginMFAAudit(context.Background(), caller, model.ActionMFAActivate, institution, nil)
 	require.NoError(t, err)
 	require.Equal(t, me, audits.saved.SubjectUserID, "self MFA audit is not in the caller's history")
 
 	target := model.NewUserID()
-	_, err = (mfaAuditAdapter{audit: service}).Begin(context.Background(), caller, model.ActionUserMFAReset,
+	_, err = mfa.beginMFAAudit(context.Background(), caller, model.ActionUserMFAReset,
 		model.Resource{Type: model.ResourceUser, ID: target.String()}, nil)
 	require.NoError(t, err)
 	require.Equal(t, target, audits.saved.SubjectUserID, "an administrator reset names its target")

@@ -36,9 +36,8 @@ func TestEmailChangeAuditOmitsOldAndNewMailboxes(t *testing.T) {
 		users: &accountTokenUserStoreFake{byID: user}, passwords: &accountTokenPasswordStoreFake{}, tokens: tokens,
 		institution: &model.Institution{ID: model.NewInstitutionID()}, mailer: &emailTransitionMailerFake{}, now: func() time.Time { return now },
 	})
-	application.accountTokenService.administration = userEmailAdministration{
-		authorization: &accountAuthorizerFake{events: &events}, audit: auditor, recentAuthenticationTTL: 15 * time.Minute,
-	}
+	application.authorizer, application.auditor = &accountAuthorizerFake{events: &events}, auditor
+	application.recentAuthenticationTTL = 15 * time.Minute
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
@@ -63,7 +62,7 @@ func TestEmailChangePreparesFrozenOldWarningAndNewTargetVerification(t *testing.
 	mailer := &emailTransitionMailerFake{}
 	app := newAccountTokenTestApp(t, accountTokenTestDependencies{users: &accountTokenUserStoreFake{byID: user}, passwords: &accountTokenPasswordStoreFake{},
 		tokens: tokens, institution: &model.Institution{ID: model.NewInstitutionID()}, mailer: mailer, now: func() time.Time { return now }})
-	result, err := app.accountTokenService.changeUserEmail(context.Background(), user, "new@example.edu", now, access.MutationReference{ID: model.NewAuditEventID(), MutationAt: now})
+	result, err := app.changeUserEmail(context.Background(), user, "new@example.edu", now, access.MutationReference{ID: model.NewAuditEventID(), MutationAt: now})
 	require.NoError(t, err)
 	require.Equal(t, "new@example.edu", result.Email, "result/aggregate = %#v", result)
 	require.NotNil(t, tokens.emailChange, "result/aggregate = %#v", result)
@@ -163,10 +162,9 @@ func TestEmailChangeUndoAndNoticeAreRateLimited(t *testing.T) {
 	changes := newAccountTokenTestApp(t, accountTokenTestDependencies{users: &accountTokenUserStoreFake{byID: user}, passwords: &accountTokenPasswordStoreFake{},
 		tokens: &accountTokenStoreFake{}, institution: &model.Institution{ID: model.NewInstitutionID()}, mailer: &emailTransitionMailerFake{},
 		now: func() time.Time { return now }, rateLimit: LoginRateLimitPolicy{Window: time.Minute, MaximumAttempts: 1, MaximumSourceAttempts: 100}})
-	changes.accountTokenService.administration = userEmailAdministration{
-		authorization: &accountAuthorizerFake{events: &events}, audit: &mutationAttemptAuditorFake{events: &events, beginID: model.NewAuditEventID().String()},
-		recentAuthenticationTTL: 15 * time.Minute,
-	}
+	changes.authorizer = &accountAuthorizerFake{events: &events}
+	changes.auditor = &mutationAttemptAuditorFake{events: &events, beginID: model.NewAuditEventID().String()}
+	changes.recentAuthenticationTTL = 15 * time.Minute
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(),
 		CredentialID: model.PrincipalCredentialID(model.NewID()), CredentialType: model.CredentialSessionAccess,
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
@@ -179,7 +177,10 @@ func TestEmailChangeUndoAndNoticeAreRateLimited(t *testing.T) {
 	require.Equal(t, "authentication.rate_limited", apperror.CodeOf(err, ""), "a second change notice inside the window")
 }
 
-type emailTransitionMailerFake struct{ requests []DirectMailPreparation }
+type emailTransitionMailerFake struct {
+	mailComposer
+	requests []DirectMailPreparation
+}
 
 func (*emailTransitionMailerFake) Enabled() bool { return true }
 func (m *emailTransitionMailerFake) prepare(request DirectMailPreparation) (*store.PreparedMail, error) {

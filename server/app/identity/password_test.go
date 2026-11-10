@@ -185,6 +185,14 @@ func (r *passwordWorkRecorderFake) Finished(elapsed time.Duration) {
 
 func (r *passwordWorkRecorderFake) Rejected() { r.rejected.Add(1) }
 
+// passwordHasherOf is the shared *PasswordHasher a test Service holds.
+func passwordHasherOf(t testing.TB, service *Service) *PasswordHasher {
+	t.Helper()
+	hasher, ok := service.hasher.(*PasswordHasher)
+	require.True(t, ok, "the Service holds %T, not the shared password hasher", service.hasher)
+	return hasher
+}
+
 func saturatePasswordWork(t *testing.T, hasher *PasswordHasher) func() {
 	t.Helper()
 	var releases []func()

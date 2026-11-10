@@ -106,15 +106,15 @@ func newGrantableScopeFixture(t *testing.T) grantableScopeFixture {
 	return fixture
 }
 
-func (f grantableScopeFixture) service(t *testing.T, authorization personalAccessTokenScopeAuthorizer) *personalAccessTokenAdministrationService {
+func (f grantableScopeFixture) service(t *testing.T, authorization resourceAuthorizer) *Service {
 	t.Helper()
-	service, err := newPersonalAccessTokenAdministrationService(personalAccessTokenAdministrationServiceDependencies{
-		Tokens: &personalAccessTokenStoreFake{saveAt: f.now}, Users: &personalAccessTokenUserStoreFake{},
-		AcademicUnits: f.units, Institutions: f.institutions, Audit: &personalAccessTokenAuditorFake{},
-		Authorization: authorization, Mail: &personalAccessTokenMailPreparerFake{},
-		Policy:                  PersonalAccessTokenPolicy{MinimumLifetime: time.Minute, MaximumLifetime: 24 * time.Hour, MaximumPerUser: 1000},
-		RecentAuthenticationTTL: 15 * time.Minute, NewCredential: func() string { return "credential" },
-		Now: func() time.Time { return f.now },
+	service, err := personalAccessTokenTestService(&Service{
+		personalAccessTokens: &personalAccessTokenStoreFake{saveAt: f.now}, users: &personalAccessTokenUserStoreFake{},
+		academicUnits: f.units, institutions: f.institutions, securityAudit: &personalAccessTokenAuditorFake{},
+		authorizer: authorization, mail: &personalAccessTokenMailPreparerFake{},
+		personalAccessTokenPolicy: PersonalAccessTokenPolicy{MinimumLifetime: time.Minute, MaximumLifetime: 24 * time.Hour, MaximumPerUser: 1000},
+		recentAuthenticationTTL:   15 * time.Minute, newCredential: func() string { return "credential" },
+		now: func() time.Time { return f.now },
 	})
 	require.NoError(t, err)
 	return service

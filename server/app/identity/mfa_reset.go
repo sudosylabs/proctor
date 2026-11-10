@@ -30,12 +30,14 @@ type ResetUserMFACommand struct {
 	VerificationReference string
 }
 
-func (s *mfaApplicationService) ResetUserMFA(ctx context.Context, invocation invocation.Invocation, command ResetUserMFACommand) error {
+// ResetUserMFA removes another User's second factor after an
+// institution-assisted identity verification and requires reenrollment.
+func (s *Service) ResetUserMFA(ctx context.Context, invocation invocation.Invocation, command ResetUserMFACommand) error {
 	principal := invocation.Principal()
-	if err := s.requireStrongRecentSession(principal); err != nil {
+	if err := s.requireMFAStrongRecentSession(principal); err != nil {
 		return err
 	}
-	if err := s.requireEnabled(); err != nil {
+	if err := s.requireMFAEnabled(); err != nil {
 		return err
 	}
 	userID, err := model.ParseUserID(command.UserID.String())
@@ -44,26 +46,26 @@ func (s *mfaApplicationService) ResetUserMFA(ctx context.Context, invocation inv
 		return apperror.New("authentication.mfa.reset_invalid")
 	}
 	resource := model.Resource{Type: model.ResourceUser, ID: userID.String()}
-	if err = s.deps.Security.authorization.Authorize(ctx, invocation, model.ActionUserMFAReset, resource); err != nil {
+	if err = s.authorizer.Authorize(ctx, invocation, model.ActionUserMFAReset, resource); err != nil {
 		return err
 	}
-	at := model.TimeUTC(s.deps.Now())
-	prepared, err := s.prepareSecurityNotice(ctx, userID, mail.MFANoticeReset, at)
+	at := model.TimeUTC(s.now())
+	prepared, err := s.prepareMFANotice(ctx, userID, mail.MFANoticeReset, at)
 	if err != nil {
 		return err
 	}
-	auditID, err := s.deps.Audit.Begin(ctx, invocation, model.ActionUserMFAReset, resource, map[string]any{"identity_verified": true, "reason": reason, "verification_reference": reference})
+	auditID, err := s.beginMFAAudit(ctx, invocation, model.ActionUserMFAReset, resource, map[string]any{"identity_verified": true, "reason": reason, "verification_reference": reference})
 	if err != nil {
 		return err
 	}
-	result, err := s.deps.Credentials.Reset(ctx, &store.MFAAssistedReset{Principal: principal, UserID: userID, IdentityVerified: true, Reason: reason, VerificationReference: reference, RecentAuthenticationTTL: s.deps.RecentAuthenticationTTL, AuditEventID: auditID, Capabilities: AccessDeploymentCapabilities(s.deps.Security.capabilities.Snapshot()), Notice: mfaSecurityNotice(prepared), NoticeAt: at})
+	result, err := s.mfaCredentials.Reset(ctx, &store.MFAAssistedReset{Principal: principal, UserID: userID, IdentityVerified: true, Reason: reason, VerificationReference: reference, RecentAuthenticationTTL: s.recentAuthenticationTTL, AuditEventID: auditID, Capabilities: AccessDeploymentCapabilities(s.capabilities.Snapshot()), Notice: mfaSecurityNotice(prepared), NoticeAt: at})
 	if err != nil {
-		return s.failMutation(ctx, auditID, err)
+		return s.failMFAMutation(ctx, auditID, err)
 	}
 	if result == nil || result.Recovery == nil {
 		return authenticationUnavailable(errors.New("MFA reset returned no recovery state"))
 	}
-	s.deps.Effects.SessionsRevoked(ctx, userID, mfaResetSessionIDs(result.Sessions), result.AccessTokenHashes)
+	s.effects.SessionsRevoked(ctx, userID, mfaResetSessionIDs(result.Sessions), result.AccessTokenHashes)
 	return nil
 }
 

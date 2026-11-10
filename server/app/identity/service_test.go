@@ -314,7 +314,10 @@ func (s *accessPolicyStoreFake) Replace(_ context.Context, input *store.AccessPo
 	return s.result, s.replaceErr
 }
 
-type accessPolicyAuthorizationFake struct{ action model.Action }
+type accessPolicyAuthorizationFake struct {
+	resourceAuthorizer
+	action model.Action
+}
 
 func (a *accessPolicyAuthorizationFake) Authorize(_ context.Context, _ invocation.Invocation, action model.Action, _ model.Resource) error {
 	a.action = action
@@ -439,17 +442,19 @@ func oldSealerKeyID(t *testing.T, key string) string {
 	return sealer.PrimaryKeyID()
 }
 
+// mailAuthorizerFake records each operator authorization of the key rings:
+// the action and the Resource it was asked to authorize.
 type mailAuthorizerFake struct {
-	actions []model.Action
-	err     error
+	resourceAuthorizer
+	actions   []model.Action
+	resources []model.Resource
+	err       error
 }
 
-func (a *mailAuthorizerFake) AuthorizeInstitution(_ context.Context, _ invocation.Invocation, action model.Action) (model.Resource, error) {
+func (a *mailAuthorizerFake) Authorize(_ context.Context, _ invocation.Invocation, action model.Action, resource model.Resource) error {
 	a.actions = append(a.actions, action)
-	if a.err != nil {
-		return model.Resource{}, a.err
-	}
-	return model.Resource{Type: model.ResourceInstitution, ID: model.NewInstitutionID().String()}, nil
+	a.resources = append(a.resources, resource)
+	return a.err
 }
 
 type mailRendererFake struct{ content mail.FrozenContent }
@@ -513,7 +518,10 @@ type DirectMailPreparation struct {
 
 // accountAuthorizerFake authorizes every account-state and email action and
 // records the decision for the call-order assertions of those tests.
-type accountAuthorizerFake struct{ events *[]string }
+type accountAuthorizerFake struct {
+	resourceAuthorizer
+	events *[]string
+}
 
 func (a *accountAuthorizerFake) Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error {
 	*a.events = append(*a.events, "authorize-manage")

@@ -18,6 +18,7 @@ import (
 )
 
 type mfaSecretKeyStoreFake struct {
+	store.MFAStore
 	usage    []store.MFASecretKeyUsage
 	required string
 	err      error

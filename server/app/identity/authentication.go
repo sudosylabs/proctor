@@ -215,7 +215,7 @@ func (s *Service) validatePrincipal(ctx context.Context, principal model.Princip
 	if session.UserID != principal.UserID {
 		return access.InvalidTokenAppError()
 	}
-	recovery, recoveryErr := s.mfa.recoveryState(ctx, principal.UserID)
+	recovery, recoveryErr := s.mfaRecoveryState(ctx, principal.UserID)
 	if recoveryErr != nil {
 		return recoveryErr
 	}
@@ -471,7 +471,7 @@ func (s *Service) proveLocalSubject(
 		}
 		return nil, s.recordLoginFailure(ctx, failures)
 	}
-	recovery, err := s.mfa.recoveryState(ctx, user.ID)
+	recovery, err := s.mfaRecoveryState(ctx, user.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -495,7 +495,7 @@ func (s *Service) proveLocalSubject(
 		}
 	}
 	now := s.now()
-	authenticationStrength, mfaCompletedAt, err := s.mfa.verifyLogin(
+	authenticationStrength, mfaCompletedAt, err := s.verifyLoginMFA(
 		ctx, user.ID.String(), command.MFACode, now,
 	)
 	if err != nil {
@@ -525,7 +525,7 @@ func (s *Service) admitLocalLogin(ctx context.Context, command LoginCommand) err
 	}
 	if command.LoginID == "" ||
 		len(command.LoginID) > model.UserEmailMaxLength ||
-		len(command.Password) > s.hasher.maximumLength {
+		len(command.Password) > s.hasher.maximumPasswordLength() {
 		if dummyErr := s.hasher.VerifyDummy(ctx, "invalid-password-length"); dummyErr != nil {
 			return passwordWorkError(dummyErr, "authentication.internal")
 		}
@@ -1176,10 +1176,4 @@ func authenticationUnavailable(err error) error {
 // attempt is refused rather than admitted unbounded.
 func RateLimitUnavailableAppError(err error) error {
 	return apperror.New("authentication.rate_limit_unavailable").Wrap(err)
-}
-
-// mfaRecoveryState is the two-step verification recovery state external
-// sign-in checks before it issues a Session.
-func (s *Service) mfaRecoveryState(ctx context.Context, userID model.UserID) (*model.UserMFARecovery, error) {
-	return s.mfa.recoveryState(ctx, userID)
 }

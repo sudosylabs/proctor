@@ -202,7 +202,7 @@ func TestAuthenticationAttemptAccountingIsolatesAllFourCallerFlowsAndProtectsInp
 		Window: time.Minute, MaximumAttempts: 1, MaximumSourceAttempts: 1,
 	}
 	login := &Service{attempts: accounting, loginRateLimit: policy}
-	recovery := &accountTokenService{deps: accountTokenServiceDependencies{Attempts: accounting, Policy: AccountRecoveryPolicy{RateLimit: policy}}}
+	recovery := &Service{attempts: accounting, accountRecoveryPolicy: AccountRecoveryPolicy{RateLimit: policy}}
 	external := &externalAuthenticationService{deps: externalAuthenticationServiceDependencies{Attempts: accounting, Policy: ExternalAuthenticationPolicy{LoginRateLimit: policy}}}
 	bootstrap := &bootstrapService{deps: bootstrapServiceDependencies{Attempts: accounting}, rateLimitWindow: policy.Window, maximumSourceAttempts: policy.MaximumSourceAttempts}
 

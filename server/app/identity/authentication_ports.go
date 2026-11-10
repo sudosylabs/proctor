@@ -18,16 +18,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type authenticationMFAVerifier interface {
-	recoveryState(context.Context, model.UserID) (*model.UserMFARecovery, error)
-	verifyLogin(
-		context.Context,
-		string,
-		string,
-		time.Time,
-	) (model.AuthenticationStrength, int64, error)
-}
-
 type sessionIssuance struct {
 	AuthenticationGeneration int64
 	MFARecoveryRequired      bool

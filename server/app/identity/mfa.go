@@ -394,15 +394,11 @@ var mfaStoreErrors = apperror.StoreTable{
 	Unavailable: "authentication.mfa.unavailable",
 }
 
-type mfaSecretKeyStore interface {
-	InspectKeyState(context.Context) (*store.MFAKeyState, error)
-}
-
 // validateMFASecretKeys fails startup when a stored TOTP secret is sealed with
 // a key the configured ring no longer holds. Without it, dropping an old key
 // from Authentication.MFA.DecryptionKeys silently strands every secret sealed
 // with that key until each affected User fails to sign in.
-func validateMFASecretKeys(ctx context.Context, persistence mfaSecretKeyStore, sealer interface{ HasKey(string) bool }) error {
+func validateMFASecretKeys(ctx context.Context, persistence store.MFAStore, sealer interface{ HasKey(string) bool }) error {
 	if persistence == nil {
 		return errors.New("MFA secret-key persistence is unavailable")
 	}

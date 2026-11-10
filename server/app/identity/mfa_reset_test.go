@@ -43,8 +43,9 @@ func TestMFAAssistedResetRequiresIndependentVerifiedAdministrator(t *testing.T) 
 			base := &mfaApplicationStoreFake{}
 			persistence := &assistedResetStoreFake{mfaApplicationStoreFake: base}
 			effects := &mfaApplicationEffectsFake{}
-			service := newTestMFAApplicationService(t, base, &mfaApplicationAuditFake{}, effects, now)
-			service.deps.Credentials = persistence
+			audit := &securityAuditorFake{}
+			service := newTestMFAApplicationService(t, base, audit, effects, now)
+			service.mfaCredentials = persistence
 			command := ResetUserMFACommand{UserID: model.NewUserID(), IdentityVerified: true, Reason: "Authenticator lost", VerificationReference: "helpdesk-124"}
 			switch name {
 			case "self":
@@ -65,9 +66,9 @@ func TestMFAAssistedResetRequiresIndependentVerifiedAdministrator(t *testing.T) 
 				principal.AuthenticationGeneration = 1
 				principal.MFARecoveryRequired = true
 			case "denied":
-				service.deps.Security.authorization = mfaResetAuthorizationFake{err: apperror.New("authorization.denied")}
+				service.authorizer = mfaResetAuthorizationFake{err: apperror.New("authorization.denied")}
 			case "disabled":
-				service.deps.Mechanics.deps.Settings.Enabled = false
+				service.mfa.deps.Settings.Enabled = false
 			case "commit failure":
 				persistence.err = errors.New("atomic reset failed")
 			}
@@ -87,6 +88,15 @@ func TestMFAAssistedResetRequiresIndependentVerifiedAdministrator(t *testing.T) 
 			require.True(t, persistence.input.IdentityVerified, "assisted reset lost its exact actor, target, attestation, notice or post-commit effects")
 			require.Equal(t, model.MailTemplateIdentityMFAReset, persistence.input.Notice.Occurrence.TemplateKey, "assisted reset lost its exact actor, target, attestation, notice or post-commit effects")
 			require.Equal(t, command.UserID, effects.userID, "assisted reset lost its exact actor, target, attestation, notice or post-commit effects")
+			// The reset is audited against the target User, which is its own
+			// subject, with the attestation as its prior state.
+			require.Len(t, audit.events, 1)
+			record := audit.events[0]
+			require.Equal(t, principal.UserID, record.actor)
+			require.Empty(t, record.target, "a User resource is its own audit subject")
+			require.Equal(t, model.ActionUserMFAReset, record.action)
+			require.Equal(t, model.Resource{Type: model.ResourceUser, ID: command.UserID.String()}, record.resource)
+			require.Equal(t, map[string]any{"identity_verified": true, "reason": "Authenticator lost", "verification_reference": "helpdesk-124"}, record.prior)
 		})
 	}
 }
@@ -97,8 +107,8 @@ func TestMFARestrictedContextSurvivesDisabledService(t *testing.T) {
 	principal.AuthenticationGeneration = 2
 	principal.MFARecoveryRequired = true
 	base := &mfaApplicationStoreFake{}
-	service := newTestMFAApplicationService(t, base, &mfaApplicationAuditFake{}, &mfaApplicationEffectsFake{}, now)
-	service.deps.Mechanics.deps.Settings.Enabled = false
+	service := newTestMFAApplicationService(t, base, &securityAuditorFake{}, &mfaApplicationEffectsFake{}, now)
+	service.mfa.deps.Settings.Enabled = false
 	status, err := service.GetMFAStatus(context.Background(), invocation.New(principal, model.RequestMetadata{}), GetMFAStatusQuery{})
 	require.NoError(t, err)
 	require.False(t, status.ServiceEnabled, "disabled service concealed mandatory reenrollment")
@@ -114,8 +124,8 @@ func TestMFAFactorAttemptsAreBoundedBeforeVerification(t *testing.T) {
 	now := time.Now()
 	principal := mfaTestPrincipal(now, model.AuthenticationSingleFactor)
 	base := &mfaApplicationStoreFake{}
-	service := newTestMFAApplicationService(t, base, &mfaApplicationAuditFake{}, &mfaApplicationEffectsFake{}, now)
-	service.deps.Security.rateLimit.MaximumAttempts = 1
+	service := newTestMFAApplicationService(t, base, &securityAuditorFake{}, &mfaApplicationEffectsFake{}, now)
+	service.loginRateLimit.MaximumAttempts = 1
 	invocation := invocation.New(principal, model.RequestMetadata{IPAddress: "127.0.0.1"})
 	_, _ = service.ChallengeMFA(context.Background(), invocation, ChallengeMFACommand{Code: "000000"})
 	_, err := service.ChallengeMFA(context.Background(), invocation, ChallengeMFACommand{Code: "000001"})

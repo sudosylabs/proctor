@@ -50,7 +50,7 @@ func TestAuthenticationServiceRequiresSecurityDependencies(t *testing.T) {
 		attempts           *AttemptAccounting
 		audit              access.MutationAuditor
 		effects            SecurityEffects
-		mfa                authenticationMFAVerifier
+		mfa                *mfaMechanics
 		personalTokens     store.PersonalAccessTokenStore
 		newCredential      func() string
 	}
@@ -60,7 +60,7 @@ func TestAuthenticationServiceRequiresSecurityDependencies(t *testing.T) {
 		attempts: mustAuthenticationAttemptAccounting(t, cache),
 		audit:    &mutationAttemptAuditorFake{},
 		effects:  discardAuthenticationSecurityEffects{},
-		mfa:      discardAuthenticationMFAVerifier{}, personalTokens: discardPersonalAccessTokenStore{},
+		mfa:      mustTestMFAMechanics(t), personalTokens: discardPersonalAccessTokenStore{},
 		newCredential: model.NewCredentialToken,
 	}
 	dpop := testAuthenticationDPoP(t, cache)
@@ -68,7 +68,7 @@ func TestAuthenticationServiceRequiresSecurityDependencies(t *testing.T) {
 		service := &Service{users: deps.users, passwords: deps.passwords, sessions: deps.sessions, sessionCredentials: deps.sessionCredentials,
 			desktopRegistrations: authenticationDesktopRegistrationLookupFake{}, personalAccessTokens: deps.personalTokens,
 			accessPolicy: allowAllAuthenticationAccessPolicy(), dpop: dpop, cache: cache, attempts: deps.attempts, hasher: hasher,
-			auditor: deps.audit, securityAudit: &securityAuditorFake{}, effects: deps.effects, mfa: deps.mfa,
+			auditor: deps.audit, securityAudit: &securityAuditorFake{}, effects: deps.effects, mfaCredentials: &mfaApplicationStoreFake{}, mfa: deps.mfa,
 			diagnostics: newDiscardLogger(t), newCredential: deps.newCredential, now: time.Now}
 		return service.requireSessionAuthentication()
 	}
@@ -84,7 +84,7 @@ func TestAuthenticationServiceRequiresSecurityDependencies(t *testing.T) {
 		{name: "attempt accounting", mutate: func(deps *dependencies) { deps.attempts = nil }},
 		{name: "audit", mutate: func(deps *dependencies) { deps.audit = nil }},
 		{name: "effects", mutate: func(deps *dependencies) { deps.effects = nil }},
-		{name: "MFA verifier", mutate: func(deps *dependencies) { deps.mfa = nil }},
+		{name: "MFA mechanics", mutate: func(deps *dependencies) { deps.mfa = nil }},
 		{name: "personal access token store", mutate: func(deps *dependencies) { deps.personalTokens = nil }},
 		{name: "credential generator", mutate: func(deps *dependencies) { deps.newCredential = nil }},
 	}
@@ -150,8 +150,10 @@ func TestAuthenticationRetainsOnlyClockAndCredentialFunctions(t *testing.T) {
 	authenticationType := reflect.TypeOf(Service{})
 	for index := 0; index < authenticationType.NumField(); index++ {
 		field := authenticationType.Field(index)
-		// now and wait are clock primitives, not sibling callbacks.
-		if field.Type.Kind() == reflect.Func && field.Name != "now" && field.Name != "wait" {
+		// now and wait are clock primitives, not sibling callbacks;
+		// mfaRekeyWake is the Job engine wake composition binds, which the MFA
+		// key ring use cases held before they moved onto the Service.
+		if field.Type.Kind() == reflect.Func && field.Name != "now" && field.Name != "wait" && field.Name != "mfaRekeyWake" {
 			require.Equal(t, "newCredential", field.Name)
 		}
 	}

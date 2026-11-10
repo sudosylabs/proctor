@@ -275,7 +275,7 @@ func (s *Service) AuthenticateDesktopReauthenticationPassword(ctx context.Contex
 	if err != nil {
 		return nil, authenticationUnavailable(err)
 	}
-	if !allowed || command.Password == "" || len(command.Password) > s.hasher.maximumLength {
+	if !allowed || command.Password == "" || len(command.Password) > s.hasher.maximumPasswordLength() {
 		return nil, invalidCredentialsAppError()
 	}
 	user, err := s.users.Get(ctx, current.UserID)

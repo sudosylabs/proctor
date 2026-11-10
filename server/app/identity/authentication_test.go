@@ -540,7 +540,7 @@ func newTestAuthenticationServiceWithRuntime(
 		t,
 		persistence,
 		cache,
-		discardAuthenticationMFAVerifier{},
+		&mfaApplicationStoreFake{},
 		discardPersonalAccessTokenStore{},
 		newCredential,
 		now,
@@ -551,13 +551,13 @@ func newTestAuthenticationServiceWithPorts(
 	t *testing.T,
 	persistence *authenticationStoreFake,
 	cache AuthenticationCache,
-	mfa authenticationMFAVerifier,
+	mfaCredentials store.MFAStore,
 	personalTokens store.PersonalAccessTokenStore,
 	newCredential func() string,
 	now func() time.Time,
 ) *Service {
 	return newTestAuthenticationServiceWithEffects(
-		t, persistence, cache, discardAuthenticationSecurityEffects{}, mfa,
+		t, persistence, cache, discardAuthenticationSecurityEffects{}, mfaCredentials,
 		personalTokens, newCredential, now,
 	)
 }
@@ -567,7 +567,7 @@ func newTestAuthenticationServiceWithEffects(
 	persistence *authenticationStoreFake,
 	cache AuthenticationCache,
 	effects SecurityEffects,
-	mfa authenticationMFAVerifier,
+	mfaCredentials store.MFAStore,
 	personalTokens store.PersonalAccessTokenStore,
 	newCredential func() string,
 	now func() time.Time,
@@ -583,7 +583,7 @@ func newTestAuthenticationServiceWithEffects(
 		accessPolicy: allowAllAuthenticationAccessPolicy(), dpop: testAuthenticationDPoP(t, cache), cache: cache,
 		attempts: mustAuthenticationAttemptAccounting(t, cache), hasher: hasher,
 		auditor:       &mutationAttemptAuditorFake{events: &[]string{}, beginID: model.NewID()},
-		securityAudit: &securityAuditorFake{}, effects: effects, mfa: mfa, diagnostics: newDiscardLogger(t),
+		securityAudit: &securityAuditorFake{}, effects: effects, mfaCredentials: mfaCredentials, mfa: mustTestMFAMechanics(t), diagnostics: newDiscardLogger(t),
 		sessionPolicy: SessionPolicy{
 			AccessTTL:              time.Hour,
 			RefreshTTL:             24 * time.Hour,
@@ -627,7 +627,7 @@ func TestAuthenticationValidatesLongLivedSessionPrincipal(t *testing.T) {
 	persistence.sessions[session.ID.String()] = session
 	service := newTestAuthenticationServiceWithPorts(
 		t, persistence, newAuthenticationCacheFake(),
-		discardAuthenticationMFAVerifier{}, discardPersonalAccessTokenStore{},
+		&mfaApplicationStoreFake{}, discardPersonalAccessTokenStore{},
 		model.NewCredentialToken, func() time.Time { return at },
 	)
 	principal := model.Principal{
@@ -662,7 +662,7 @@ func TestAuthenticationExpiryEnforcementClosesEstablishedWebSocketSession(t *tes
 	effects := &authenticationEffectsRecorder{}
 	service := newTestAuthenticationServiceWithEffects(
 		t, persistence, newAuthenticationCacheFake(), effects,
-		discardAuthenticationMFAVerifier{}, discardPersonalAccessTokenStore{},
+		&mfaApplicationStoreFake{}, discardPersonalAccessTokenStore{},
 		model.NewCredentialToken, func() time.Time { return at },
 	)
 	principal := model.Principal{
@@ -701,7 +701,7 @@ func TestAuthenticationExpiryEnforcementRejectsHTTPAccessAndRefresh(t *testing.T
 	effects := &authenticationEffectsRecorder{}
 	service := newTestAuthenticationServiceWithEffects(
 		t, persistence, newAuthenticationCacheFake(), effects,
-		discardAuthenticationMFAVerifier{}, discardPersonalAccessTokenStore{},
+		&mfaApplicationStoreFake{}, discardPersonalAccessTokenStore{},
 		model.NewCredentialToken, func() time.Time { return at },
 	)
 	principal, err := service.authenticateAccess(context.Background(), accessRaw)
@@ -752,7 +752,7 @@ func TestAuthenticationAuthoritativeIdleExtensionOverridesStaleExpiredCache(t *t
 	persistence.sessionByCredential[accessHash] = authoritative
 	cache := newAuthenticationCacheFake()
 	service := newTestAuthenticationServiceWithPorts(
-		t, persistence, cache, discardAuthenticationMFAVerifier{}, discardPersonalAccessTokenStore{},
+		t, persistence, cache, &mfaApplicationStoreFake{}, discardPersonalAccessTokenStore{},
 		model.NewCredentialToken, func() time.Time { return at },
 	)
 	stale := *authoritative
@@ -796,7 +796,7 @@ func TestAuthenticationRefreshUsesControlledRuntimeAndPreservesReplayEffects(t *
 			next := 0
 			service := newTestAuthenticationServiceWithEffects(
 				t, persistence, newAuthenticationCacheFake(), effects,
-				discardAuthenticationMFAVerifier{}, discardPersonalAccessTokenStore{},
+				&mfaApplicationStoreFake{}, discardPersonalAccessTokenStore{},
 				func() string { value := credentials[next]; next++; return value },
 				func() time.Time { return at },
 			)
@@ -876,10 +876,7 @@ func TestAuthenticationConsumesMFAAndPATThroughBehavioralPorts(t *testing.T) {
 
 	at := time.Date(2026, 8, 12, 11, 0, 0, 0, time.UTC)
 	persistence := newAuthenticationStoreFake()
-	mfa := &authenticationMFAVerifierFake{
-		strength:    model.AuthenticationMultiFactor,
-		completedAt: at.UnixMilli(),
-	}
+	mfa := &mfaApplicationStoreFake{}
 	patPrincipal := &model.Principal{
 		UserID:               model.NewUserID(),
 		CredentialID:         model.PrincipalCredentialID(model.NewPersonalAccessTokenID()),
@@ -908,16 +905,27 @@ func TestAuthenticationConsumesMFAAndPATThroughBehavioralPorts(t *testing.T) {
 		Password: "CorrectHorseBatteryStaple1!",
 	})
 	require.NoError(t, err)
+	// The User has an active authenticator; sign-in verifies and consumes
+	// the current TOTP step through the MFA Store.
+	const secret = "JBSWY3DPEHPK3PXP" // #nosec G101 -- Public synthetic TOTP seed.
+	sealed, err := service.mfa.sealTOTPSecret(user.ID.String(), secret)
+	require.NoError(t, err)
+	mfa.credential = &model.MFACredential{ID: model.NewMFACredentialID(), UserID: user.ID, State: model.MFAStateActive,
+		EncryptedSecret: sealed.encoded, EncryptionKeyID: sealed.keyID}
+	code, err := computeTOTP(secret, at.Unix()/30)
+	require.NoError(t, err)
 	login, err := service.Login(context.Background(), invocation.Invocation{}, LoginCommand{
 		LoginID:    user.Username,
 		Password:   "CorrectHorseBatteryStaple1!",
 		ClientType: model.SessionClientCLI,
-		MFACode:    "123456",
+		MFACode:    code,
 		Source:     "127.0.0.1:1",
 	})
 	require.NoError(t, err)
-	require.Equal(t, 1, mfa.calls, "MFA calls=%d session=%#v", mfa.calls, login.Session)
-	require.Equal(t, model.AuthenticationMultiFactor, login.Session.AuthenticationStrength, "MFA calls=%d session=%#v", mfa.calls, login.Session)
+	require.Len(t, mfa.consumptions, 1, "MFA consumptions=%d session=%#v", len(mfa.consumptions), login.Session)
+	require.Equal(t, user.ID, mfa.consumptions[0].UserID, "MFA consumed another User's factor")
+	require.Equal(t, at.Unix()/30, mfa.consumptions[0].TimeStep, "MFA consumed another TOTP step")
+	require.Equal(t, model.AuthenticationMultiFactor, login.Session.AuthenticationStrength, "MFA consumptions=%d session=%#v", len(mfa.consumptions), login.Session)
 
 	rawToken := model.NewCredentialToken()
 	resolved, err := service.AuthenticateBearer(context.Background(), rawToken)
@@ -926,39 +934,6 @@ func TestAuthenticationConsumesMFAAndPATThroughBehavioralPorts(t *testing.T) {
 	require.True(t, pat.at.Equal(at), "PAT resolution time = %s", pat.at)
 	require.Equal(t, 1, pat.calls, "PAT calls=%d principal=%#v", pat.calls, resolved)
 	require.Equal(t, patPrincipal.UserID, resolved.UserID, "PAT calls=%d principal=%#v", pat.calls, resolved)
-}
-
-type authenticationMFAVerifierFake struct {
-	recoveryCalls int
-	recoveryErr   error
-	calls         int
-	strength      model.AuthenticationStrength
-	completedAt   int64
-	afterVerify   func()
-}
-
-func (f *authenticationMFAVerifierFake) verifyLogin(
-	context.Context,
-	string,
-	string,
-	time.Time,
-) (model.AuthenticationStrength, int64, error) {
-	f.calls++
-	if f.afterVerify != nil {
-		f.afterVerify()
-	}
-	return f.strength, f.completedAt, nil
-}
-
-type discardAuthenticationMFAVerifier struct{}
-
-func (discardAuthenticationMFAVerifier) verifyLogin(
-	context.Context,
-	string,
-	string,
-	time.Time,
-) (model.AuthenticationStrength, int64, error) {
-	return model.AuthenticationSingleFactor, 0, nil
 }
 
 // discardPersonalAccessTokenStore resolves no personal access token.
@@ -1040,15 +1015,15 @@ func TestLoginRejectsDisabledUserBeforeMFARecoveryRead(t *testing.T) {
 			})
 			require.NoError(t, err)
 			persistence.usersByEmail[user.Email].DisabledAt = model.OptionalTimeFrom(time.Now())
-			mfa := &authenticationMFAVerifierFake{recoveryErr: errors.New("disabled User has no active MFA recovery state")}
-			service.mfa = mfa
+			mfa := &mfaApplicationStoreFake{recoveryErr: errors.New("disabled User has no active MFA recovery state")}
+			service.mfaCredentials = mfa
 			result, err := service.Login(context.Background(), invocation.Invocation{}, LoginCommand{
 				LoginID: user.Email, Password: password, ClientType: model.SessionClientCLI, Source: "192.0.2.7",
 			})
 			require.Nil(t, result, "disabled login reached MFA or issued a Session: %v; recovery reads", err)
 			require.True(t, apperror.Is(err, "authentication.credentials_invalid"), "disabled login reached MFA or issued a Session: %v; recovery reads", err)
-			require.Equal(t, 0, mfa.recoveryCalls, "disabled login reached MFA or issued a Session: %v; recovery reads", err)
-			require.Equal(t, 0, mfa.calls, "disabled login reached MFA or issued a Session: %v; recovery reads", err)
+			require.Equal(t, 0, mfa.recoveryReads, "disabled login reached MFA or issued a Session: %v; recovery reads", err)
+			require.Equal(t, 0, mfa.credentialGets, "disabled login reached MFA or issued a Session: %v; recovery reads", err)
 			require.Empty(t, persistence.sessions, "disabled login reached MFA or issued a Session: %v; recovery reads", err)
 		})
 	}
@@ -1080,9 +1055,9 @@ func TestLoginPasswordCapacityPreservesAccountParity(t *testing.T) {
 			case "invalid login":
 				command.LoginID = ""
 			case "oversized password":
-				command.Password = strings.Repeat("x", service.hasher.maximumLength+1)
+				command.Password = strings.Repeat("x", passwordHasherOf(t, service).maximumLength+1)
 			}
-			saturatePasswordWork(t, service.hasher)
+			saturatePasswordWork(t, passwordHasherOf(t, service))
 			result, err := service.Login(context.Background(), invocation.Invocation{}, command)
 			require.Nil(t, result, "saturated login = %#v/%v, want service.busy", result, err)
 			require.True(t, apperror.Is(err, "service.busy"), "saturated login = %#v/%v, want service.busy", result, err)
@@ -1105,7 +1080,7 @@ func TestLoginPasswordCapacityPreservesAccountParity(t *testing.T) {
 func TestLocalUserCreationRejectsPasswordWorkBeforePersistence(t *testing.T) {
 	persistence := newAuthenticationStoreFake()
 	service := newTestAuthenticationService(t, persistence)
-	saturatePasswordWork(t, service.hasher)
+	saturatePasswordWork(t, passwordHasherOf(t, service))
 	command := CreateLocalUserCommand{User: &model.User{Username: "new-user", Email: "new-user@example.edu"}, Password: "CorrectHorseBatteryStaple1!"}
 	user, err := service.CreateLocalUser(context.Background(), command)
 	require.Nil(t, user, "saturated creation = %#v/%v", user, err)
@@ -1130,18 +1105,18 @@ func TestLocalAuthenticationRejectsRehashCapacityBeforeProofAndMutation(t *testi
 	})
 	require.NoError(t, err)
 	credential := *persistence.passwords[user.ID.String()]
-	service.hasher.parameters.iterations++
+	passwordHasherOf(t, service).parameters.iterations++
 	recorder := &passwordWorkRecorderFake{}
-	service.hasher.deps.Recorder = recorder
-	mfa := &authenticationMFAVerifierFake{strength: model.AuthenticationSingleFactor}
-	service.mfa = mfa
+	passwordHasherOf(t, service).deps.Recorder = recorder
+	mfa := &mfaApplicationStoreFake{}
+	service.mfaCredentials = mfa
 	// Admit competing work at the next context check after verification has
 	// returned its permit. This selects the rehash admission boundary without
 	// sleeps, cryptographic substitutes, or a production-only test hook.
 	var competed sync.Once
 	ctx := passwordWorkBoundaryContext{Context: context.Background(), check: func() {
-		if recorder.finished.Load() == 1 && len(service.hasher.work) == 0 {
-			competed.Do(func() { saturatePasswordWork(t, service.hasher) })
+		if recorder.finished.Load() == 1 && len(passwordHasherOf(t, service).work) == 0 {
+			competed.Do(func() { saturatePasswordWork(t, passwordHasherOf(t, service)) })
 		}
 	}}
 	proof, err := service.authenticateLocal(ctx, LoginCommand{
@@ -1150,7 +1125,7 @@ func TestLocalAuthenticationRejectsRehashCapacityBeforeProofAndMutation(t *testi
 	require.Nil(t, proof, "saturated rehash = %#v/%v, rejected work", proof, err)
 	require.True(t, apperror.Is(err, "service.busy"), "saturated rehash = %#v/%v, rejected work", proof, err)
 	require.Equal(t, int64(1), recorder.rejected.Load(), "saturated rehash = %#v/%v, rejected work", proof, err)
-	require.Equal(t, 0, mfa.calls, "saturated rehash = %#v/%v, rejected work", proof, err)
+	require.Equal(t, 0, mfa.credentialGets, "saturated rehash = %#v/%v, rejected work", proof, err)
 	require.Equal(t, credential, *persistence.passwords[user.ID.String()], "rejected rehash changed credentials or created a Session")
 	require.Empty(t, persistence.sessions, "rejected rehash changed credentials or created a Session")
 }
@@ -1209,19 +1184,18 @@ func TestLoginRejectsPasswordChangedAfterVerification(t *testing.T) {
 			})
 			require.NoError(t, err)
 			if rehash {
-				service.hasher.parameters.iterations++
+				passwordHasherOf(t, service).parameters.iterations++
 			}
 			replacement := *persistence.passwords[user.ID.String()]
-			replacement.PasswordHash, err = service.hasher.Hash(context.Background(), "ReplacementPasswordForReset1!")
+			replacement.PasswordHash, err = passwordHasherOf(t, service).Hash(context.Background(), "ReplacementPasswordForReset1!")
 			require.NoError(t, err)
 			replacement.Revision++
 			replacement.PasswordChangedAt = replacement.PasswordChangedAt.Add(time.Microsecond)
 			replacement.UpdatedAt = replacement.PasswordChangedAt
 			// MFA is the existing seam immediately after password verification.
 			// Commit reset here to force the otherwise nondeterministic ordering.
-			service.mfa = &authenticationMFAVerifierFake{
-				strength:    model.AuthenticationSingleFactor,
-				afterVerify: func() { persistence.passwords[user.ID.String()] = &replacement },
+			service.mfaCredentials = &mfaApplicationStoreFake{
+				afterCredentialGet: func() { persistence.passwords[user.ID.String()] = &replacement },
 			}
 			result, err := service.Login(ctx, invocation.Invocation{}, LoginCommand{
 				LoginID: user.Email, Password: oldPassword, ClientType: model.SessionClientWeb, Source: "192.0.2.10",
@@ -1245,10 +1219,9 @@ func TestLocalAuthenticationRejectsRehashConflictBeforeReturningProof(t *testing
 		User: &model.User{Username: "removed-password", Email: "removed-password@example.edu"}, Password: password,
 	})
 	require.NoError(t, err)
-	service.hasher.parameters.iterations++
-	service.mfa = &authenticationMFAVerifierFake{
-		strength:    model.AuthenticationSingleFactor,
-		afterVerify: func() { delete(persistence.passwords, user.ID.String()) },
+	passwordHasherOf(t, service).parameters.iterations++
+	service.mfaCredentials = &mfaApplicationStoreFake{
+		afterCredentialGet: func() { delete(persistence.passwords, user.ID.String()) },
 	}
 	proof, err := service.authenticateLocal(ctx, LoginCommand{
 		LoginID: user.Email, Password: password, ClientType: model.SessionClientWeb, Source: "192.0.2.11",
@@ -1269,14 +1242,14 @@ func TestLocalAuthenticationRehashPreservesPasswordProof(t *testing.T) {
 	})
 	require.NoError(t, err)
 	before := *persistence.passwords[user.ID.String()]
-	service.hasher.parameters.iterations++
+	passwordHasherOf(t, service).parameters.iterations++
 	recorder := &passwordWorkRecorderFake{}
-	service.hasher.deps.Recorder = recorder
+	passwordHasherOf(t, service).deps.Recorder = recorder
 	base := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
 	service.now = func() time.Time { return base.Add(time.Duration(recorder.finished.Load()) * time.Second) }
-	service.mfa = &authenticationMFAVerifierFake{strength: model.AuthenticationSingleFactor, afterVerify: func() {
+	service.mfaCredentials = &mfaApplicationStoreFake{afterCredentialGet: func() {
 		require.Equal(t, int64(2), recorder.finished.Load(), "MFA ran before password work completed and released its permits")
-		require.Empty(t, service.hasher.work, "MFA ran before password work completed and released its permits")
+		require.Empty(t, passwordHasherOf(t, service).work, "MFA ran before password work completed and released its permits")
 	}}
 	proof, err := service.authenticateLocal(ctx, LoginCommand{
 		LoginID: user.Email, Password: password, ClientType: model.SessionClientWeb, Source: "192.0.2.12",
@@ -1289,8 +1262,8 @@ func TestLocalAuthenticationRehashPreservesPasswordProof(t *testing.T) {
 	require.Equal(t, before.Revision, after.Revision, "rehash changed the proved password identity or revision")
 	require.Equal(t, before.PasswordChangedAt, after.PasswordChangedAt, "rehash changed the proved password identity or revision")
 	require.NotEqual(t, before.PasswordHash, after.PasswordHash, "rehash did not preserve password verification under the new parameters")
-	require.False(t, service.hasher.NeedsRehash(after.PasswordHash), "rehash did not preserve password verification under the new parameters")
-	require.NoError(t, service.hasher.Verify(context.Background(), after.PasswordHash, password), "rehash did not preserve password verification under the new parameters")
+	require.False(t, passwordHasherOf(t, service).NeedsRehash(after.PasswordHash), "rehash did not preserve password verification under the new parameters")
+	require.NoError(t, passwordHasherOf(t, service).Verify(context.Background(), after.PasswordHash, password), "rehash did not preserve password verification under the new parameters")
 }
 
 func TestLoginAndAuthenticateAccessConstructPrincipal(t *testing.T) {
@@ -1397,15 +1370,4 @@ func TestLoginRateLimitsRepeatedFailures(t *testing.T) {
 	failure, ok := apperror.As(err)
 	require.True(t, ok)
 	require.Equal(t, "authentication.rate_limited", failure.Code())
-}
-
-func (discardAuthenticationMFAVerifier) recoveryState(_ context.Context, userID model.UserID) (*model.UserMFARecovery, error) {
-	return &model.UserMFARecovery{UserID: userID}, nil
-}
-func (f *authenticationMFAVerifierFake) recoveryState(_ context.Context, userID model.UserID) (*model.UserMFARecovery, error) {
-	f.recoveryCalls++
-	if f.recoveryErr != nil {
-		return nil, f.recoveryErr
-	}
-	return &model.UserMFARecovery{UserID: userID}, nil
 }

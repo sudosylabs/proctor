@@ -24,7 +24,10 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// mfaKeyStoreFake stands in for the MFA and Job stores of the key ring.
 type mfaKeyStoreFake struct {
+	store.MFAStore
+	store.JobStore
 	state  *store.MFAKeyState
 	input  *store.MFARekeyStart
 	err    error
@@ -53,15 +56,16 @@ func (f *mfaKeyStoreFake) Get(_ context.Context, id model.JobID) (*model.Job, er
 }
 
 type mfaKeyServiceFixture struct {
-	service    *mfaKeyService
-	store      *mfaKeyStoreFake
-	authorizer *mailAuthorizerFake
-	auditor    *mailRekeyAuditFake
-	events     []string
-	woke       int
-	sealer     *secretseal.Sealer
-	retiringID string
-	principal  model.Principal
+	service     *Service
+	institution model.InstitutionID
+	store       *mfaKeyStoreFake
+	authorizer  *mailAuthorizerFake
+	auditor     *mailRekeyAuditFake
+	events      []string
+	woke        int
+	sealer      *secretseal.Sealer
+	retiringID  string
+	principal   model.Principal
 }
 
 func newMFAKeyServiceFixture(t *testing.T) *mfaKeyServiceFixture {
@@ -74,10 +78,13 @@ func newMFAKeyServiceFixture(t *testing.T) *mfaKeyServiceFixture {
 	fixture := &mfaKeyServiceFixture{authorizer: &mailAuthorizerFake{}, sealer: sealer, retiringID: oldSealerKeyID(t, oldKey)}
 	fixture.store = &mfaKeyStoreFake{events: &fixture.events}
 	fixture.auditor = &mailRekeyAuditFake{beginID: model.NewID(), events: &fixture.events}
-	fixture.service, err = newMFAKeyService(mfaKeyServiceDependencies{Keys: fixture.store, Jobs: fixture.store,
-		Authorization: fixture.authorizer, Audit: fixture.auditor, Sealer: sealer, RecentAuthenticationTTL: 15 * time.Minute,
-		Now: func() time.Time { return now }, Wake: func() { fixture.woke++ }})
-	require.NoError(t, err)
+	fixture.institution = model.NewInstitutionID()
+	fixture.service = &Service{mfaCredentials: fixture.store, jobs: fixture.store,
+		institutions: &accessPolicyInstitutionFake{institution: &model.Institution{ID: fixture.institution}},
+		authorizer:   fixture.authorizer, auditor: fixture.auditor, mfa: &mfaMechanics{deps: mfaMechanicsDependencies{Sealer: sealer}},
+		recentAuthenticationTTL: 15 * time.Minute, now: func() time.Time { return now }, mfaRekeyWake: func() { fixture.woke++ }}
+	require.NoError(t, fixture.service.requireMFARekey())
+	fixture.service.mfaRekeyEnabled = true
 	fixture.principal = mailTestPrincipal(now)
 	fixture.principal.AuthenticationStrength = model.AuthenticationMultiFactor
 	fixture.principal.MFACompletedAt = model.OptionalTimeFrom(now.Add(-time.Minute))
@@ -98,6 +105,10 @@ func TestStartMFARekeyAuditsThenFencesAndWakesTheEngine(t *testing.T) {
 	// Contract: the audit attempt precedes the fenced start.
 	require.Equal(t, []string{"audit", "store"}, fixture.events)
 	require.Equal(t, []model.Action{model.ActionMFARekey}, fixture.authorizer.actions)
+	require.Equal(t, []model.Resource{{Type: model.ResourceInstitution, ID: fixture.institution.String()}}, fixture.authorizer.resources,
+		"the key ring is authorized on the installation's Institution")
+	require.Equal(t, model.RoleScopeInstitution, fixture.auditor.attempt.ScopeType)
+	require.Equal(t, fixture.institution.String(), fixture.auditor.attempt.ScopeID)
 	input := fixture.store.input
 	require.Equal(t, model.JobTypeMFARekey, input.Job.Type)
 	require.Equal(t, fixture.principal.UserID, input.Job.CreatedByUserID, "the rekey Job names the operator who started it")
@@ -187,4 +198,20 @@ func TestMFARekeyStatusHidesOtherJobTypesAndProjectsTheProof(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, &MFARekeyProofView{RetirementSafe: true}, view.Proof)
 	require.Equal(t, int64(3), view.Resealed)
+}
+
+func TestMFAKeyRingIsUnavailableWithoutJobAndMFAStores(t *testing.T) {
+	t.Parallel()
+	fixture := newMFAKeyServiceFixture(t)
+	fixture.service.mfaRekeyEnabled = false
+
+	_, err := fixture.service.GetMFAKeyState(context.Background(), fixture.invocation())
+	require.True(t, apperror.Is(err, "authentication.mfa.unavailable"), "key state error = %v", err)
+	_, err = fixture.service.StartMFARekey(context.Background(), fixture.invocation(), StartMFARekeyCommand{RetiringKeyID: fixture.retiringID})
+	require.True(t, apperror.Is(err, "authentication.mfa.unavailable"), "start error = %v", err)
+	_, err = fixture.service.GetMFARekeyStatus(context.Background(), fixture.invocation(), GetMFARekeyStatusQuery{JobID: model.NewJobID()})
+	require.True(t, apperror.Is(err, "authentication.mfa.unavailable"), "status error = %v", err)
+	require.Empty(t, fixture.authorizer.actions, "an unavailable key ring authorizes nothing")
+	require.Empty(t, fixture.events, "an unavailable key ring audits or writes nothing")
+	require.Zero(t, fixture.woke)
 }

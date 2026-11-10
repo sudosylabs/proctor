@@ -65,7 +65,7 @@ func TestSessionCreationAndRefreshUseThePolicySessionLengths(t *testing.T) {
 	refreshing.rotation = &store.SessionRotation{Session: &model.Session{ID: model.NewSessionID(), UserID: user.ID, ClientType: model.SessionClientWeb,
 		AuthenticationStrength: model.AuthenticationMultiFactor}}
 	refresher := newTestAuthenticationServiceWithEffects(t, refreshing, newAuthenticationCacheFake(), &authenticationEffectsRecorder{},
-		discardAuthenticationMFAVerifier{}, discardPersonalAccessTokenStore{}, model.NewCredentialToken, func() time.Time { return at })
+		&mfaApplicationStoreFake{}, discardPersonalAccessTokenStore{}, model.NewCredentialToken, func() time.Time { return at })
 	refresher.accessPolicy = policy
 	_, _, err = refresher.RefreshSession(context.Background(), invocation.Invocation{}, RefreshSessionCommand{RefreshToken: model.NewCredentialToken()})
 	require.NoError(t, err)

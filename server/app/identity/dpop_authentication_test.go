@@ -19,15 +19,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type dpopRecoveryVerifier struct {
-	discardAuthenticationMFAVerifier
-	generation int64
-}
-
-func (v *dpopRecoveryVerifier) recoveryState(_ context.Context, id model.UserID) (*model.UserMFARecovery, error) {
-	return &model.UserMFARecovery{UserID: id, Generation: v.generation}, nil
-}
-
 type dpopRegistrationLookup struct {
 	store.DesktopRegistrationStore
 	registration *model.DesktopRegistration
@@ -58,7 +49,7 @@ func TestDPoPAuthenticationAfterMFARecoverySupportsPrincipalRevalidation(t *test
 	persistence.sessions[session.ID.String()] = session
 	persistence.accessByHash[credential.TokenHash] = credential
 	persistence.sessionByCredential[credential.TokenHash] = session
-	recovery := &dpopRecoveryVerifier{generation: 2}
+	recovery := &mfaApplicationStoreFake{recoveryGeneration: 2}
 	service := newTestAuthenticationServiceWithPorts(t, persistence, newAuthenticationCacheFake(), recovery,
 		discardPersonalAccessTokenStore{}, model.NewCredentialToken, func() time.Time { return at })
 	service.desktopRegistrations = dpopRegistrationLookup{registration: registration}
@@ -73,7 +64,7 @@ func TestDPoPAuthenticationAfterMFARecoverySupportsPrincipalRevalidation(t *test
 	require.NoError(t, err)
 	err = service.validatePrincipal(ctx, *principal)
 	require.NoError(t, err)
-	recovery.generation++
+	recovery.recoveryGeneration++
 	err = service.validatePrincipal(ctx, *principal)
 	require.True(t, apperror.Is(err, "authentication.token_invalid"), "a subsequent recovery did not invalidate the old Desktop principal: %v", err)
 	session.MFARecoveryRequired = true

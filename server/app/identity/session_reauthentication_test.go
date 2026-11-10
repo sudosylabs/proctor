@@ -74,8 +74,8 @@ func TestPasswordReauthenticationBindsCurrentIdentityAndRequiresCommit(t *testin
 			fake := &reauthenticationSessionStoreFake{events: &events, result: &store.SessionReauthenticationResult{Session: session}, err: test.storeErr}
 			service.sessions = fake
 			service.auditor = &mutationAttemptAuditorFake{events: &events, beginID: model.NewID(), beginErr: test.auditErr}
-			mfa := &authenticationMFAVerifierFake{}
-			service.mfa = mfa
+			mfa := &mfaApplicationStoreFake{}
+			service.mfaCredentials = mfa
 			actual, err := service.ReauthenticatePassword(ctx, invocation.New(principal, model.RequestMetadata{}), ReauthenticatePasswordCommand{Password: test.password, Source: "192.0.2.45"})
 			if test.code != "" {
 				require.True(t, apperror.Is(err, test.code), "result=%v err=%v", actual, err)
@@ -94,6 +94,7 @@ func TestPasswordReauthenticationBindsCurrentIdentityAndRequiresCommit(t *testin
 				require.Equal(t, credential.Revision, fake.input.PasswordProof.Revision)
 				require.True(t, fake.input.AuditEventID.IsValid())
 			}
+			require.Zero(t, mfa.credentialGets+len(mfa.consumptions), "password reauthentication read or consumed a second factor")
 			require.True(t, session.AuthenticatedAt.Equal(principal.AuthenticatedAt), "primary refresh changed original authentication or MFA history")
 			require.Equal(t, principal.MFACompletedAt, session.MFACompletedAt, "primary refresh changed original authentication or MFA history")
 		})

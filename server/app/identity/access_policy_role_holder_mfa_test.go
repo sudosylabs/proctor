@@ -101,7 +101,7 @@ func TestRefreshEnforcesRoleHolderMFARequirementBySessionKind(t *testing.T) {
 			persistence.users[user.ID.String()] = user
 			persistence.rotation = &store.SessionRotation{Session: session}
 			service := newTestAuthenticationServiceWithEffects(t, persistence, newAuthenticationCacheFake(), &authenticationEffectsRecorder{},
-				discardAuthenticationMFAVerifier{}, discardPersonalAccessTokenStore{}, model.NewCredentialToken, func() time.Time { return at })
+				&mfaApplicationStoreFake{}, discardPersonalAccessTokenStore{}, model.NewCredentialToken, func() time.Time { return at })
 			service.accessPolicy = authenticationAccessPolicyFake{local: true, roleHolderMFA: map[model.UserID]bool{user.ID: test.covered}}
 			_, _, err := service.RefreshSession(context.Background(), invocation.Invocation{}, RefreshSessionCommand{RefreshToken: model.NewCredentialToken()})
 			if test.wantCode != "" {
@@ -165,7 +165,7 @@ func TestDesktopExchangeCarriesRoleHolderMFARequirementToTheStore(t *testing.T) 
 func TestMFAChallengeAdmitsEnrollmentRestrictionButNotRecovery(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC)
-	service := newTestMFAApplicationService(t, &mfaApplicationStoreFake{}, &mfaApplicationAuditFake{}, &mfaApplicationEffectsFake{}, at)
+	service := newTestMFAApplicationService(t, &mfaApplicationStoreFake{}, &securityAuditorFake{}, &mfaApplicationEffectsFake{}, at)
 	base := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: at}
@@ -184,13 +184,13 @@ func TestMFADisableIsRefusedWhileThePolicyRequiresIt(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC)
 	events := []string{}
-	audit := &mfaApplicationAuditFake{events: &events}
+	audit := &securityAuditorFake{trace: &events}
 	persistence := &mfaApplicationStoreFake{}
 	service := newTestMFAApplicationService(t, persistence, audit, &mfaApplicationEffectsFake{}, at)
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		ClientType: model.SessionClientWeb, AuthenticatedAt: at, MFACompletedAt: model.OptionalTimeFrom(at)}
-	service.deps.RoleHolderMFA = authenticationAccessPolicyFake{roleHolderMFA: map[model.UserID]bool{principal.UserID: true}}
+	service.accessPolicy = authenticationAccessPolicyFake{roleHolderMFA: map[model.UserID]bool{principal.UserID: true}}
 	err := service.DisableMFA(context.Background(), invocation.New(principal, model.RequestMetadata{}), DisableMFACommand{})
 	require.True(t, apperror.Is(err, "mfa.required_by_policy"), "err=%v", err)
 	// The refusal is an audited failure of the attempted disablement.

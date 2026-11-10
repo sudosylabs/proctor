@@ -45,22 +45,16 @@ func userEmailState(user *model.User) *UserEmailState {
 	return &UserEmailState{UserID: user.ID, EmailVerified: user.EmailVerified}
 }
 
-// userEmailAdministration carries the policy an administrator email-security
-// mutation needs beyond the account-token mechanics. Composition sets it once.
-type userEmailAdministration struct {
-	authorization           resourceAuthorizer
-	audit                   access.MutationAuditor
-	recentAuthenticationTTL time.Duration
-}
-
-func (s *accountTokenService) ChangeUserEmail(ctx context.Context, invocation invocation.Invocation, command ChangeUserEmailCommand) (*UserEmailState, error) {
-	if s.administration.authorization == nil || s.administration.audit == nil {
+// ChangeUserEmail changes a User's email address as an administrator and
+// sends the warning and verification mail.
+func (s *Service) ChangeUserEmail(ctx context.Context, invocation invocation.Invocation, command ChangeUserEmailCommand) (*UserEmailState, error) {
+	if s.authorizer == nil || s.auditor == nil {
 		return nil, apperror.New("administration.unavailable")
 	}
-	if err := RequireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.administration.recentAuthenticationTTL); err != nil {
+	if err := RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 		return nil, err
 	}
-	if err := s.administration.authorization.Authorize(ctx, invocation, model.ActionUserManage, model.Resource{Type: model.ResourceUser, ID: command.UserID.String()}); err != nil {
+	if err := s.authorizer.Authorize(ctx, invocation, model.ActionUserManage, model.Resource{Type: model.ResourceUser, ID: command.UserID.String()}); err != nil {
 		return nil, err
 	}
 	id := command.UserID
@@ -68,7 +62,7 @@ func (s *accountTokenService) ChangeUserEmail(ctx context.Context, invocation in
 	if !id.IsValid() || !model.IsValidEmail(newEmail) {
 		return nil, apperror.New("user.invalid").WithField("field", "email")
 	}
-	current, err := s.deps.Users.Get(ctx, id)
+	current, err := s.users.Get(ctx, id)
 	if err != nil || current == nil || !current.IsActive() {
 		return nil, user.StoreErrors.Translate(err)
 	}
@@ -80,8 +74,8 @@ func (s *accountTokenService) ChangeUserEmail(ctx context.Context, invocation in
 	if err := s.checkAccountRecoveryRateLimit(ctx, accountRecoveryAttemptEmailChangeNotice, id.String(), invocation.RequestMetadata().IPAddress); err != nil {
 		return nil, err
 	}
-	at := model.TimeUTC(s.deps.Now())
-	return access.RunAudited(ctx, s.administration.audit, access.Mutation{Invocation: invocation, Action: model.ActionUserManage,
+	at := model.TimeUTC(s.now())
+	return access.RunAudited(ctx, s.auditor, access.Mutation{Invocation: invocation, Action: model.ActionUserManage,
 		Resource: model.Resource{Type: model.ResourceUser, ID: id.String()}, Operation: "change_email",
 		Value: map[string]any{"email_changed": true, "email_verified": false}, Prior: current.Auditable()}, func() time.Time { return at },
 		func(ctx context.Context, reference access.MutationReference) (*UserEmailState, error) {
@@ -90,29 +84,31 @@ func (s *accountTokenService) ChangeUserEmail(ctx context.Context, invocation in
 		}, user.StoreErrors.Translate)
 }
 
-func (s *accountTokenService) VerifyUserEmailPrivileged(ctx context.Context, invocation invocation.Invocation, command VerifyUserEmailPrivilegedCommand) (*UserEmailState, error) {
-	if s.administration.authorization == nil || s.administration.audit == nil {
+// VerifyUserEmailPrivileged marks a User's email address verified as an
+// administrator and notifies the User.
+func (s *Service) VerifyUserEmailPrivileged(ctx context.Context, invocation invocation.Invocation, command VerifyUserEmailPrivilegedCommand) (*UserEmailState, error) {
+	if s.authorizer == nil || s.auditor == nil {
 		return nil, apperror.New("administration.unavailable")
 	}
-	if err := RequireStrongRecentSession(invocation.Principal(), s.deps.Now(), s.administration.recentAuthenticationTTL); err != nil {
+	if err := RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 		return nil, err
 	}
-	if err := s.administration.authorization.Authorize(ctx, invocation, model.ActionUserManage, model.Resource{Type: model.ResourceUser, ID: command.UserID.String()}); err != nil {
+	if err := s.authorizer.Authorize(ctx, invocation, model.ActionUserManage, model.Resource{Type: model.ResourceUser, ID: command.UserID.String()}); err != nil {
 		return nil, err
 	}
 	id := command.UserID
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "user_id")
 	}
-	current, err := s.deps.Users.Get(ctx, id)
+	current, err := s.users.Get(ctx, id)
 	if err != nil || current == nil || !current.IsActive() {
 		return nil, user.StoreErrors.Translate(err)
 	}
 	if current.EmailVerified {
 		return userEmailState(current), nil
 	}
-	at := model.TimeUTC(s.deps.Now())
-	return access.RunAudited(ctx, s.administration.audit, access.Mutation{Invocation: invocation, Action: model.ActionUserManage,
+	at := model.TimeUTC(s.now())
+	return access.RunAudited(ctx, s.auditor, access.Mutation{Invocation: invocation, Action: model.ActionUserManage,
 		Resource: model.Resource{Type: model.ResourceUser, ID: id.String()}, Operation: "verify_email_privileged",
 		Value: map[string]any{"email_verified": true}, Prior: current.Auditable()}, func() time.Time { return at },
 		func(ctx context.Context, reference access.MutationReference) (*UserEmailState, error) {
@@ -121,36 +117,36 @@ func (s *accountTokenService) VerifyUserEmailPrivileged(ctx context.Context, inv
 		}, user.StoreErrors.Translate)
 }
 
-func (s *accountTokenService) changeUserEmail(ctx context.Context, current *model.User, newEmail string, now time.Time, reference access.MutationReference) (*model.User, error) {
-	rawToken := s.deps.NewToken()
-	token := &model.UserToken{UserID: current.ID, Purpose: model.UserTokenEmailVerification, TokenHash: model.HashToken(rawToken), Target: newEmail, ExpiresAt: now.Add(s.deps.Policy.EmailVerificationTTL)}
+func (s *Service) changeUserEmail(ctx context.Context, current *model.User, newEmail string, now time.Time, reference access.MutationReference) (*model.User, error) {
+	rawToken := s.newCredential()
+	token := &model.UserToken{UserID: current.ID, Purpose: model.UserTokenEmailVerification, TokenHash: model.HashToken(rawToken), Target: newEmail, ExpiresAt: now.Add(s.accountRecoveryPolicy.EmailVerificationTTL)}
 	token.PrepareCreate(model.NewUserTokenID(), now)
-	link, err := AccountCredentialLink(s.deps.PublicURL, "/account/verify-email", rawToken)
+	link, err := AccountCredentialLink(s.publicURL, "/account/verify-email", rawToken)
 	if err != nil {
 		return nil, accountRecoveryUnavailable(err)
 	}
-	rawUndo := s.deps.NewToken()
-	undo := &model.UserToken{UserID: current.ID, Purpose: model.UserTokenEmailChangeUndo, TokenHash: model.HashToken(rawUndo), Target: current.Email, ExpiresAt: now.Add(s.deps.Policy.EmailChangeUndoTTL)}
+	rawUndo := s.newCredential()
+	undo := &model.UserToken{UserID: current.ID, Purpose: model.UserTokenEmailChangeUndo, TokenHash: model.HashToken(rawUndo), Target: current.Email, ExpiresAt: now.Add(s.accountRecoveryPolicy.EmailChangeUndoTTL)}
 	undo.PrepareCreate(model.NewUserTokenID(), now)
-	undoLink, err := AccountCredentialLink(s.deps.PublicURL, "/account/undo-email-change", rawUndo)
+	undoLink, err := AccountCredentialLink(s.publicURL, "/account/undo-email-change", rawUndo)
 	if err != nil {
 		return nil, accountRecoveryUnavailable(err)
 	}
 	oldRecipient, newRecipient := *current, *current
 	newRecipient.Email, newRecipient.EmailVerified = newEmail, false
-	warning, err := s.deps.Mail.PrepareEmailChangeWarning(mail.AccountTokenPreparation{Recipient: &oldRecipient,
+	warning, err := s.mail.PrepareEmailChangeWarning(mail.AccountTokenPreparation{Recipient: &oldRecipient,
 		OccurrenceID: model.MailOccurrenceID(undo.ID.String()), ActionURL: undoLink, At: now, Deadline: undo.ExpiresAt,
 		NewAddress: newEmail})
 	if err != nil {
 		return nil, accountRecoveryUnavailable(err)
 	}
-	verification, err := s.deps.Mail.PrepareEmailChangeVerification(mail.AccountTokenPreparation{Recipient: &newRecipient,
+	verification, err := s.mail.PrepareEmailChangeVerification(mail.AccountTokenPreparation{Recipient: &newRecipient,
 		OccurrenceID: model.MailOccurrenceID(token.ID.String()), ActionURL: link, At: now, Deadline: token.ExpiresAt})
 	if err != nil {
 		return nil, accountRecoveryUnavailable(err)
 	}
-	result, err := s.deps.Tokens.ChangeEmail(ctx, &store.UserEmailChange{UserID: current.ID, ExpectedRevision: current.Revision, NewEmail: newEmail, Token: token,
-		UndoToken: undo, TokenLifetime: s.deps.Policy.EmailVerificationTTL, WarningLifetime: s.deps.Policy.EmailChangeUndoTTL,
+	result, err := s.userTokens.ChangeEmail(ctx, &store.UserEmailChange{UserID: current.ID, ExpectedRevision: current.Revision, NewEmail: newEmail, Token: token,
+		UndoToken: undo, TokenLifetime: s.accountRecoveryPolicy.EmailVerificationTTL, WarningLifetime: s.accountRecoveryPolicy.EmailChangeUndoTTL,
 		WarningOccurrence: warning.Occurrence, WarningDelivery: warning.Delivery, WarningJob: warning.Job,
 		VerificationOccurrence: verification.Occurrence, VerificationDelivery: verification.Delivery, VerificationJob: verification.Job,
 		AuditEventID: reference.ID, AuditAt: reference.MutationAt})
@@ -170,7 +166,7 @@ type CompleteEmailChangeUndoCommand struct {
 // CompleteEmailChangeUndo restores the previous address an undo credential
 // names, signs every Session of the account out, and audits the undo. The
 // response conceals whether the credential ever existed.
-func (s *accountTokenService) CompleteEmailChangeUndo(ctx context.Context, invocation invocation.Invocation, command CompleteEmailChangeUndoCommand) error {
+func (s *Service) CompleteEmailChangeUndo(ctx context.Context, invocation invocation.Invocation, command CompleteEmailChangeUndoCommand) error {
 	if err := s.checkAccountRecoveryRateLimit(ctx, accountRecoveryAttemptEmailChangeUndoComplete,
 		recoveryCredentialRateIdentity(command.Token), command.Source); err != nil {
 		return err
@@ -182,9 +178,9 @@ func (s *accountTokenService) CompleteEmailChangeUndo(ctx context.Context, invoc
 	if err != nil {
 		return err
 	}
-	event := s.deps.Audit.Success(model.ActionAuthenticationEmailChangeUndo, model.Resource{Type: model.ResourceUser},
+	event := s.recoveryAuditEvent(model.ActionAuthenticationEmailChangeUndo, model.Resource{Type: model.ResourceUser},
 		institution.ID, invocation, nil, "email_change_undo_token")
-	result, err := s.deps.Tokens.ConsumeEmailChangeUndo(ctx, &store.EmailChangeUndo{TokenHash: model.HashToken(command.Token),
+	result, err := s.userTokens.ConsumeEmailChangeUndo(ctx, &store.EmailChangeUndo{TokenHash: model.HashToken(command.Token),
 		RevocationReason: model.SessionRevocationEmailChangeUndone, AuditEvent: event})
 	switch {
 	case err == nil:
@@ -195,16 +191,16 @@ func (s *accountTokenService) CompleteEmailChangeUndo(ctx context.Context, invoc
 	default:
 		return accountRecoveryStoreFailure(err)
 	}
-	s.deps.Effects.SessionsRevoked(ctx, result.User.ID, sessionIDs(result.RevokedSessions), result.RevokedAccessHashes)
+	s.effects.SessionsRevoked(ctx, result.User.ID, sessionIDs(result.RevokedSessions), result.RevokedAccessHashes)
 	return nil
 }
 
-func (s *accountTokenService) verifyUserEmailPrivileged(ctx context.Context, current *model.User, now time.Time, reference access.MutationReference) (*model.User, error) {
-	prepared, err := s.deps.Mail.PrepareEmailVerifiedByAdministrator(mail.NoticePreparation{Recipient: current, At: now})
+func (s *Service) verifyUserEmailPrivileged(ctx context.Context, current *model.User, now time.Time, reference access.MutationReference) (*model.User, error) {
+	prepared, err := s.mail.PrepareEmailVerifiedByAdministrator(mail.NoticePreparation{Recipient: current, At: now})
 	if err != nil {
 		return nil, accountRecoveryUnavailable(err)
 	}
-	updated, err := s.deps.Tokens.VerifyEmailPrivileged(ctx, &store.PrivilegedEmailVerification{UserID: current.ID, ExpectedRevision: current.Revision, Occurrence: prepared.Occurrence, Delivery: prepared.Delivery, Job: prepared.Job,
+	updated, err := s.userTokens.VerifyEmailPrivileged(ctx, &store.PrivilegedEmailVerification{UserID: current.ID, ExpectedRevision: current.Revision, Occurrence: prepared.Occurrence, Delivery: prepared.Delivery, Job: prepared.Job,
 		AuditEventID: reference.ID, AuditAt: reference.MutationAt})
 	if err != nil {
 		return nil, err

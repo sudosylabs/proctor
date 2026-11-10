@@ -65,7 +65,10 @@ func (s *sessionAdministrationStoreFake) RevokeAllForUser(_ context.Context, inp
 	return s.revokeAllResult, s.revokeAllErr
 }
 
-type sessionAdministrationAuthorizerFake struct{ events *[]string }
+type sessionAdministrationAuthorizerFake struct {
+	resourceAuthorizer
+	events *[]string
+}
 
 func (a *sessionAdministrationAuthorizerFake) Authorize(_ context.Context, _ invocation.Invocation, action model.Action, _ model.Resource) error {
 	event := "authorize-view"

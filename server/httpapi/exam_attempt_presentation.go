@@ -122,7 +122,7 @@ type acknowledgeExamCorrectionResponse struct {
 	AcknowledgedAt       string                               `json:"acknowledged_at"`
 }
 
-func (m examAttemptHTTPModule) acknowledgeCorrection(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) acknowledgeCorrection(request operationRequest) (operationResult, error) {
 	access, err := candidateAccess(request)
 	if err != nil {
 		return operationResult{}, err
@@ -151,7 +151,7 @@ func (m examAttemptHTTPModule) acknowledgeCorrection(request operationRequest) (
 		return operationResult{}, invalidRequestError(err)
 	}
 
-	result, err := m.application.AcknowledgeExamAttemptCorrection(request.context, request.invocation(), attempt.AcknowledgeCorrectionCommand{
+	result, err := h.app.AcknowledgeExamAttemptCorrection(request.context, request.invocation(), attempt.AcknowledgeCorrectionCommand{
 		Access:                    mutationAccess,
 		CorrectionRevisionID:      correctionRevisionID,
 		ExpectedCurrentRevisionID: currentRevisionID,
@@ -173,13 +173,13 @@ func (m examAttemptHTTPModule) acknowledgeCorrection(request operationRequest) (
 	}).withHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) presentation(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) presentation(request operationRequest) (operationResult, error) {
 	access, err := candidateAccess(request)
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	view, err := m.application.GetCandidateExamPresentation(request.context, request.invocation(), access)
+	view, err := h.app.GetCandidateExamPresentation(request.context, request.invocation(), access)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -295,7 +295,7 @@ func candidateRuntimeCapabilitiesFromStore(value store.CandidateRuntimeCapabilit
 	}
 }
 
-func (m examAttemptHTTPModule) openResource(request operationRequest) (protocolResult, error) {
+func (h examAttemptHandlers) openResource(request operationRequest) (protocolResult, error) {
 	access, err := candidateAccess(request)
 	if err != nil {
 		return protocolResult{}, err
@@ -306,7 +306,7 @@ func (m examAttemptHTTPModule) openResource(request operationRequest) (protocolR
 		return protocolResult{}, err
 	}
 
-	opened, err := m.application.OpenCandidateExamResource(
+	opened, err := h.app.OpenCandidateExamResource(
 		request.context,
 		request.invocation(),
 		attempt.OpenResourceQuery{Access: access, ResourceID: resourceID},

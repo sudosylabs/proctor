@@ -83,13 +83,13 @@ const (
 	selfAuditOrderOldest = "asc"
 )
 
-func (m auditResourceModule) listSelf(request operationRequest) (operationResult, error) {
+func (h auditHandlers) listSelf(request operationRequest) (operationResult, error) {
 	page, err := request.pageRequest()
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	query, err := selfAuditQueryFromValues(request.request.URL.Query())
+	query, err := selfAuditQueryFromValues(request.http.URL.Query())
 	if err != nil {
 		return operationResult{}, invalidRequestError(err)
 	}
@@ -114,7 +114,7 @@ func (m auditResourceModule) listSelf(request operationRequest) (operationResult
 		query.BeforeCreatedAt, query.BeforeID = createdAt, model.AuditEventID(cursor.ID)
 	}
 
-	result, err := m.audits.ListSelfAuditEvents(request.context, request.invocation(), query)
+	result, err := h.app.ListSelfAuditEvents(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}

@@ -25,7 +25,7 @@ type archiveAcademicRequest struct {
 }
 
 func (r operationRequest) academicRevision() (*int64, error) {
-	if r.request.ContentLength == 0 && r.request.Header.Get("Content-Type") == "" {
+	if r.http.ContentLength == 0 && r.http.Header.Get("Content-Type") == "" {
 		return nil, nil
 	}
 	var body archiveAcademicRequest

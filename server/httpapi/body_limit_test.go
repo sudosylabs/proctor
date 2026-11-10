@@ -31,7 +31,7 @@ func TestOversizedJSONBodyReturnsContentTooLargeProblem(t *testing.T) {
 	logger, _ := newTestLogger(t)
 	decode := func(request operationRequest) (operationResult, error) {
 		var body map[string]string
-		if err := decodeRequestJSON(request.request, &body); err != nil {
+		if err := decodeRequestJSON(request.http, &body); err != nil {
 			return operationResult{}, invalidRequestError(err)
 		}
 		return noContentResult(), nil

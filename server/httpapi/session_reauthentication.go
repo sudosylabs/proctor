@@ -25,9 +25,9 @@ type SessionReauthentication interface {
 	) (*model.ExternalAuthenticationStart, error)
 }
 
-type sessionReauthenticationResourceModule struct {
-	authentication SessionReauthentication
-	cookies        browserCookies
+type sessionReauthenticationHandlers struct {
+	app     SessionReauthentication
+	cookies browserCookies
 }
 
 type passwordReauthenticationRequest struct {
@@ -42,8 +42,8 @@ type externalReauthenticationResponse struct {
 	RedirectURL string `json:"redirect_url"`
 }
 
-func sessionReauthenticationResource(authentication SessionReauthentication, cookies browserCookies) apiResource {
-	module := sessionReauthenticationResourceModule{authentication: authentication, cookies: cookies}
+func sessionReauthenticationResource(app SessionReauthentication, cookies browserCookies) apiResource {
+	h := sessionReauthenticationHandlers{app: app, cookies: cookies}
 	return newResource("session-reauthentication",
 		endpoint{
 			Method: http.MethodPost,
@@ -63,7 +63,7 @@ func sessionReauthenticationResource(authentication SessionReauthentication, coo
 				"authentication.desktop_authorization.invalid",
 				"authentication.external.account_not_linked",
 			},
-			Handle: module.external,
+			Handle: h.external,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -79,18 +79,18 @@ func sessionReauthenticationResource(authentication SessionReauthentication, coo
 				"authentication.internal",
 				"audit.unavailable",
 			),
-			Handle: module.password,
+			Handle: h.password,
 		},
 	)
 }
 
-func (m sessionReauthenticationResourceModule) password(request operationRequest) (operationResult, error) {
+func (h sessionReauthenticationHandlers) password(request operationRequest) (operationResult, error) {
 	var input passwordReauthenticationRequest
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
 
-	session, err := m.authentication.ReauthenticatePassword(request.context, request.invocation(), identity.ReauthenticatePasswordCommand{
+	session, err := h.app.ReauthenticatePassword(request.context, request.invocation(), identity.ReauthenticatePasswordCommand{
 		Password: input.Password,
 		Source:   request.metadata.IPAddress,
 	})
@@ -98,16 +98,16 @@ func (m sessionReauthenticationResourceModule) password(request operationRequest
 		return operationResult{}, err
 	}
 
-	return jsonResult(http.StatusOK, sessionResponseFromModel(request.request, session)).withHeaders(noStoreHeaders()), nil
+	return jsonResult(http.StatusOK, sessionResponseFromModel(request.http, session)).withHeaders(noStoreHeaders()), nil
 }
 
-func (m sessionReauthenticationResourceModule) external(request operationRequest) (operationResult, error) {
+func (h sessionReauthenticationHandlers) external(request operationRequest) (operationResult, error) {
 	var input externalReauthenticationRequest
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
 
-	start, err := m.authentication.BeginExternalReauthentication(
+	start, err := h.app.BeginExternalReauthentication(
 		request.context,
 		request.invocation(),
 		identity.BeginExternalReauthenticationCommand{Task: input.Task, Source: request.metadata.IPAddress},
@@ -117,7 +117,7 @@ func (m sessionReauthenticationResourceModule) external(request operationRequest
 	}
 
 	headers := captureResponseHeaders(func(writer http.ResponseWriter) {
-		m.cookies.attachExternalLoginBinding(writer, start.Binding, start.ExpiresAt)
+		h.cookies.attachExternalLoginBinding(writer, start.Binding, start.ExpiresAt)
 	})
 	return jsonResult(
 		http.StatusOK,

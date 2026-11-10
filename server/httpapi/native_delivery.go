@@ -15,8 +15,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-func nativeDeliveryResource(application ExamAttemptApplication) apiResource {
-	m := examAttemptHTTPModule{application: application}
+func nativeDeliveryResource(app ExamAttemptApplication) apiResource {
+	h := examAttemptHandlers{app: app}
 	return newResource(
 		"native-delivery",
 		endpoint{
@@ -50,7 +50,7 @@ func nativeDeliveryResource(application ExamAttemptApplication) apiResource {
 				"exam.delivery.pending_capacity",
 				"exam.delivery.append_rate_limited",
 			},
-			Handle: m.appendNativeDelivery,
+			Handle: h.appendNativeDelivery,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -75,7 +75,7 @@ func nativeDeliveryResource(application ExamAttemptApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			Handle: m.nativeDeliveryStatus,
+			Handle: h.nativeDeliveryStatus,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -100,7 +100,7 @@ func nativeDeliveryResource(application ExamAttemptApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			Handle: m.nativeDeliveryReceipt,
+			Handle: h.nativeDeliveryReceipt,
 		},
 		endpoint{
 			Method:       http.MethodPost,
@@ -130,7 +130,7 @@ func nativeDeliveryResource(application ExamAttemptApplication) apiResource {
 				"idempotency.key_required",
 				"idempotency.key_invalid",
 			},
-			Handle: m.declareNativeDeliveryGaps,
+			Handle: h.declareNativeDeliveryGaps,
 		},
 		endpoint{
 			Method:       http.MethodPost,
@@ -160,7 +160,7 @@ func nativeDeliveryResource(application ExamAttemptApplication) apiResource {
 				"idempotency.key_required",
 				"idempotency.key_invalid",
 			},
-			Handle: m.sealNativeDelivery,
+			Handle: h.sealNativeDelivery,
 		},
 		endpoint{
 			Method:       http.MethodPost,
@@ -190,7 +190,7 @@ func nativeDeliveryResource(application ExamAttemptApplication) apiResource {
 				"idempotency.key_required",
 				"idempotency.key_invalid",
 			},
-			Handle: m.updateNativeDeliverySummary,
+			Handle: h.updateNativeDeliverySummary,
 		},
 	)
 }
@@ -211,9 +211,9 @@ func nativeDeliveryQuery(request operationRequest, streamID string) (attempt.Nat
 	query := attempt.NativeDeliveryQuery{Access: attempt.CandidateAccess{AttemptID: attemptID}, StreamID: streamID}
 	// Omission does not select historical authority. The Store decides from the
 	// recorded source closure, and rejects omission for a live source.
-	if len(request.request.Header.Values(candidateAttemptCredentialHeader)) > 0 ||
-		len(request.request.Header.Values(candidateAttemptConnectionHeader)) > 0 {
-		headers, err := candidateAttemptAccessHeaders(request.request)
+	if len(request.http.Header.Values(candidateAttemptCredentialHeader)) > 0 ||
+		len(request.http.Header.Values(candidateAttemptConnectionHeader)) > 0 {
+		headers, err := candidateAttemptAccessHeaders(request.http)
 		if err != nil {
 			return query, invalidRequestError(err)
 		}
@@ -224,18 +224,18 @@ func nativeDeliveryQuery(request operationRequest, streamID string) (attempt.Nat
 
 	return query, nil
 }
-func (m examAttemptHTTPModule) nativeDeliveryStatus(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) nativeDeliveryStatus(request operationRequest) (operationResult, error) {
 	query, err := nativeDeliveryQuery(request, request.params["stream_id"])
 	if err != nil {
 		return operationResult{}, err
 	}
-	value, err := m.application.NativeDeliveryStatus(request.context, request.invocation(), query)
+	value, err := h.app.NativeDeliveryStatus(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
 	return nativeDeliveryStatusResult(value)
 }
-func (m examAttemptHTTPModule) nativeDeliveryReceipt(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) nativeDeliveryReceipt(request operationRequest) (operationResult, error) {
 	query, err := nativeDeliveryQuery(request, request.params["stream_id"])
 	if err != nil {
 		return operationResult{}, err
@@ -244,7 +244,7 @@ func (m examAttemptHTTPModule) nativeDeliveryReceipt(request operationRequest) (
 	if err != nil || sequence < 1 || sequence > model.NativeParticipationPositionLimit {
 		return operationResult{}, invalidRequestError(err)
 	}
-	value, err := m.application.NativeDeliveryReceipt(request.context, request.invocation(), query, sequence)
+	value, err := h.app.NativeDeliveryReceipt(request.context, request.invocation(), query, sequence)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -253,7 +253,7 @@ func (m examAttemptHTTPModule) nativeDeliveryReceipt(request operationRequest) (
 	}
 	return jsonResult(http.StatusOK, value).withHeaders(noStoreHeaders()), nil
 }
-func (m examAttemptHTTPModule) declareNativeDeliveryGaps(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) declareNativeDeliveryGaps(request operationRequest) (operationResult, error) {
 	query, err := nativeDeliveryQuery(request, request.params["stream_id"])
 	if err != nil {
 		return operationResult{}, err
@@ -264,7 +264,7 @@ func (m examAttemptHTTPModule) declareNativeDeliveryGaps(request operationReques
 		return operationResult{}, err
 	}
 
-	value, err := m.application.DeclareNativeDeliveryGaps(request.context, request.invocation(), attempt.NativeDeliveryGapsCommand{
+	value, err := h.app.DeclareNativeDeliveryGaps(request.context, request.invocation(), attempt.NativeDeliveryGapsCommand{
 		Query:          query,
 		Declaration:    body,
 		IdempotencyKey: request.idempotencyKey,
@@ -275,7 +275,7 @@ func (m examAttemptHTTPModule) declareNativeDeliveryGaps(request operationReques
 
 	return jsonResult(http.StatusOK, value).withHeaders(noStoreHeaders()), nil
 }
-func (m examAttemptHTTPModule) sealNativeDelivery(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) sealNativeDelivery(request operationRequest) (operationResult, error) {
 	query, err := nativeDeliveryQuery(request, request.params["stream_id"])
 	if err != nil {
 		return operationResult{}, err
@@ -286,7 +286,7 @@ func (m examAttemptHTTPModule) sealNativeDelivery(request operationRequest) (ope
 		return operationResult{}, err
 	}
 
-	value, err := m.application.SealNativeDelivery(request.context, request.invocation(), attempt.NativeDeliveryFinalCommand{
+	value, err := h.app.SealNativeDelivery(request.context, request.invocation(), attempt.NativeDeliveryFinalCommand{
 		Query:          query,
 		Declaration:    body,
 		IdempotencyKey: request.idempotencyKey,
@@ -297,7 +297,7 @@ func (m examAttemptHTTPModule) sealNativeDelivery(request operationRequest) (ope
 
 	return nativeDeliveryStatusResult(value)
 }
-func (m examAttemptHTTPModule) updateNativeDeliverySummary(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) updateNativeDeliverySummary(request operationRequest) (operationResult, error) {
 	query, err := nativeDeliveryQuery(request, request.params["stream_id"])
 	if err != nil {
 		return operationResult{}, err
@@ -308,7 +308,7 @@ func (m examAttemptHTTPModule) updateNativeDeliverySummary(request operationRequ
 		return operationResult{}, err
 	}
 
-	value, err := m.application.UpdateNativeDeliverySummary(request.context, request.invocation(), attempt.NativeDeliverySummaryCommand{
+	value, err := h.app.UpdateNativeDeliverySummary(request.context, request.invocation(), attempt.NativeDeliverySummaryCommand{
 		Query:          query,
 		Summary:        body,
 		IdempotencyKey: request.idempotencyKey,
@@ -326,7 +326,7 @@ func nativeDeliveryStatusResult(value *model.NativeSecurityStreamStatus) (operat
 	return jsonResult(http.StatusOK, value).withHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) appendNativeDelivery(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) appendNativeDelivery(request operationRequest) (operationResult, error) {
 	var body model.NativeSecurityBatch
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
@@ -338,7 +338,7 @@ func (m examAttemptHTTPModule) appendNativeDelivery(request operationRequest) (o
 		return operationResult{}, err
 	}
 
-	value, err := m.application.AppendNativeDelivery(request.context, request.invocation(), attempt.NativeDeliveryAppendCommand{
+	value, err := h.app.AppendNativeDelivery(request.context, request.invocation(), attempt.NativeDeliveryAppendCommand{
 		Query:          query,
 		Batch:          body,
 		IdempotencyKey: request.idempotencyKey,

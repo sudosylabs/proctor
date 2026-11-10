@@ -61,13 +61,13 @@ type browserInvitationSessionAcceptanceRequest struct {
 	Handle string `json:"handle"`
 }
 
-type browserInvitationResourceModule struct {
-	application BrowserInvitationApplication
-	cookies     browserCookies
+type browserInvitationHandlers struct {
+	app     BrowserInvitationApplication
+	cookies browserCookies
 }
 
-func browserInvitationResource(application BrowserInvitationApplication, cookies browserCookies) apiResource {
-	module := browserInvitationResourceModule{application: application, cookies: cookies}
+func browserInvitationResource(app BrowserInvitationApplication, cookies browserCookies) apiResource {
+	h := browserInvitationHandlers{app: app, cookies: cookies}
 	return newResource(
 		"browser-invitations",
 		endpoint{
@@ -81,7 +81,7 @@ func browserInvitationResource(application BrowserInvitationApplication, cookies
 				"invitation.invalid",
 				"invitation.unavailable",
 			},
-			Handle: module.start,
+			Handle: h.start,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -101,7 +101,7 @@ func browserInvitationResource(application BrowserInvitationApplication, cookies
 				"authentication.password.identity_invalid",
 				"service.busy",
 			},
-			Handle: module.accept,
+			Handle: h.accept,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -115,18 +115,18 @@ func browserInvitationResource(application BrowserInvitationApplication, cookies
 				"audit.unavailable",
 				"request.invalid",
 			},
-			Handle: module.acceptWithSession,
+			Handle: h.acceptWithSession,
 		},
 	)
 }
 
-func (m browserInvitationResourceModule) start(request operationRequest) (operationResult, error) {
+func (h browserInvitationHandlers) start(request operationRequest) (operationResult, error) {
 	var body browserInvitationStartRequest
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
 
-	started, err := m.application.StartBrowserInvitation(
+	started, err := h.app.StartBrowserInvitation(
 		request.context,
 		request.invocation(),
 		onboarding.StartBrowserInvitationCommand{Claim: body.Claim, Source: request.metadata.IPAddress},
@@ -136,7 +136,7 @@ func (m browserInvitationResourceModule) start(request operationRequest) (operat
 	}
 
 	headers := captureResponseHeaders(func(writer http.ResponseWriter) {
-		m.cookies.attachInvitationProof(writer, started.BrowserProof, started.ExpiresAt)
+		h.cookies.attachInvitationProof(writer, started.BrowserProof, started.ExpiresAt)
 	})
 	headers.Set("Cache-Control", "no-store")
 	return jsonResult(http.StatusCreated, browserInvitationStartResponse{
@@ -149,14 +149,14 @@ func (m browserInvitationResourceModule) start(request operationRequest) (operat
 	}).withHeaders(headers), nil
 }
 
-func (m browserInvitationResourceModule) accept(request operationRequest) (operationResult, error) {
+func (h browserInvitationHandlers) accept(request operationRequest) (operationResult, error) {
 	var body browserInvitationAcceptanceRequest
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
 
-	proof := m.proof(request.request)
-	accepted, err := m.application.AcceptBrowserInvitation(
+	proof := h.proof(request.http)
+	accepted, err := h.app.AcceptBrowserInvitation(
 		request.context,
 		request.invocation(),
 		onboarding.BrowserInvitationAcceptanceCommand{
@@ -176,17 +176,17 @@ func (m browserInvitationResourceModule) accept(request operationRequest) (opera
 		return operationResult{}, err
 	}
 
-	return jsonResult(http.StatusOK, invitationAcceptanceResponseFromView(accepted)).withHeaders(m.successHeaders()), nil
+	return jsonResult(http.StatusOK, invitationAcceptanceResponseFromView(accepted)).withHeaders(h.successHeaders()), nil
 }
 
-func (m browserInvitationResourceModule) acceptWithSession(request operationRequest) (operationResult, error) {
+func (h browserInvitationHandlers) acceptWithSession(request operationRequest) (operationResult, error) {
 	var body browserInvitationSessionAcceptanceRequest
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
 
-	proof := m.proof(request.request)
-	accepted, err := m.application.AcceptBrowserInvitationWithSession(
+	proof := h.proof(request.http)
+	accepted, err := h.app.AcceptBrowserInvitationWithSession(
 		request.context,
 		request.invocation(),
 		onboarding.BrowserInvitationSessionAcceptanceCommand{
@@ -199,13 +199,13 @@ func (m browserInvitationResourceModule) acceptWithSession(request operationRequ
 		return operationResult{}, err
 	}
 
-	return jsonResult(http.StatusOK, invitationAcceptanceResponseFromView(accepted)).withHeaders(m.successHeaders()), nil
+	return jsonResult(http.StatusOK, invitationAcceptanceResponseFromView(accepted)).withHeaders(h.successHeaders()), nil
 }
 
 // proof returns the browser proof cookie, or "" when it is absent or
 // ambiguous. The application owns the decision and rejects a missing proof as
 // invitation.invalid.
-func (m browserInvitationResourceModule) proof(request *http.Request) string {
+func (h browserInvitationHandlers) proof(request *http.Request) string {
 	proof, err := singleCookieValue(request, BrowserInvitationProofCookieName)
 	if err != nil {
 		return ""
@@ -213,8 +213,8 @@ func (m browserInvitationResourceModule) proof(request *http.Request) string {
 	return proof
 }
 
-func (m browserInvitationResourceModule) successHeaders() http.Header {
-	headers := captureResponseHeaders(m.cookies.clearInvitationProof)
+func (h browserInvitationHandlers) successHeaders() http.Header {
+	headers := captureResponseHeaders(h.cookies.clearInvitationProof)
 	headers.Set("Cache-Control", "no-store")
 	return headers
 }

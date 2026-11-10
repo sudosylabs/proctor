@@ -56,12 +56,12 @@ type academicAdministrationBatchResponse struct {
 	Failed    int                                       `json:"failed"`
 }
 
-type academicAdministrationBatchResourceModule struct {
-	batches AcademicAdministrationBatchApplication
+type academicAdministrationBatchHandlers struct {
+	app AcademicAdministrationBatchApplication
 }
 
-func academicAdministrationBatchResource(batches AcademicAdministrationBatchApplication) apiResource {
-	module := academicAdministrationBatchResourceModule{batches: batches}
+func academicAdministrationBatchResource(app AcademicAdministrationBatchApplication) apiResource {
+	h := academicAdministrationBatchHandlers{app: app}
 	return newResource("academic-administration-batches",
 		endpoint{
 			Method:      http.MethodPost,
@@ -82,12 +82,12 @@ func academicAdministrationBatchResource(batches AcademicAdministrationBatchAppl
 				"administration.unavailable",
 				"invitation.unavailable",
 			},
-			Handle: module.run,
+			Handle: h.run,
 		},
 	)
 }
 
-func (m academicAdministrationBatchResourceModule) run(request operationRequest) (operationResult, error) {
+func (h academicAdministrationBatchHandlers) run(request operationRequest) (operationResult, error) {
 	var body academicAdministrationBatchRequest
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, invalidRequestError(err)
@@ -116,7 +116,7 @@ func (m academicAdministrationBatchResourceModule) run(request operationRequest)
 		})
 	}
 
-	result, err := m.batches.RunAcademicAdministrationBatch(
+	result, err := h.app.RunAcademicAdministrationBatch(
 		request.context,
 		request.invocation(),
 		onboarding.RunAcademicAdministrationBatchCommand{

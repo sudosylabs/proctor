@@ -64,12 +64,12 @@ type mfaStatusResponse struct {
 	RecentlyAuthenticatedUntil  string `json:"recently_authenticated_until,omitempty"`
 }
 
-type mfaResourceModule struct {
-	mfa MFA
+type mfaHandlers struct {
+	app MFA
 }
 
-func mfaResource(mfa MFA) apiResource {
-	module := mfaResourceModule{mfa: mfa}
+func mfaResource(app MFA) apiResource {
+	h := mfaHandlers{app: app}
 	base := "/users/me/mfa"
 	return newResource(
 		"multi-factor-authentication",
@@ -78,7 +78,7 @@ func mfaResource(mfa MFA) apiResource {
 			Path:   base,
 			Auth:   AuthMFARecoverySessionRequired,
 			Errors: []string{"authentication.mfa.unavailable", "authentication.reauthentication_required", "authentication.session_required"},
-			Handle: module.status,
+			Handle: h.status,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -93,7 +93,7 @@ func mfaResource(mfa MFA) apiResource {
 				"audit.unavailable",
 				"authentication.session_required",
 			},
-			Handle: module.setup,
+			Handle: h.setup,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -112,7 +112,7 @@ func mfaResource(mfa MFA) apiResource {
 				"audit.unavailable",
 				"authentication.session_required",
 			},
-			Handle: module.activate,
+			Handle: h.activate,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -132,7 +132,7 @@ func mfaResource(mfa MFA) apiResource {
 				"authentication.reauthentication_required",
 				"authentication.session_required",
 			},
-			Handle: module.challenge,
+			Handle: h.challenge,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -147,7 +147,7 @@ func mfaResource(mfa MFA) apiResource {
 				"audit.unavailable",
 				"authentication.session_required",
 			},
-			Handle: module.regenerateRecoveryCodes,
+			Handle: h.regenerateRecoveryCodes,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -162,13 +162,13 @@ func mfaResource(mfa MFA) apiResource {
 				"audit.unavailable",
 				"authentication.session_required",
 			},
-			Handle: module.disable,
+			Handle: h.disable,
 		},
 	)
 }
 
-func (m mfaResourceModule) status(request operationRequest) (operationResult, error) {
-	status, err := m.mfa.GetMFAStatus(
+func (h mfaHandlers) status(request operationRequest) (operationResult, error) {
+	status, err := h.app.GetMFAStatus(
 		request.context,
 		request.invocation(),
 		identity.GetMFAStatusQuery{},
@@ -199,8 +199,8 @@ func (m mfaResourceModule) status(request operationRequest) (operationResult, er
 	}).withHeaders(noStoreHeaders()), nil
 }
 
-func (m mfaResourceModule) setup(request operationRequest) (operationResult, error) {
-	setup, err := m.mfa.SetupMFA(
+func (h mfaHandlers) setup(request operationRequest) (operationResult, error) {
+	setup, err := h.app.SetupMFA(
 		request.context,
 		request.invocation(),
 		identity.SetupMFACommand{},
@@ -215,12 +215,12 @@ func (m mfaResourceModule) setup(request operationRequest) (operationResult, err
 	}).withHeaders(noStoreHeaders()), nil
 }
 
-func (m mfaResourceModule) activate(request operationRequest) (operationResult, error) {
+func (h mfaHandlers) activate(request operationRequest) (operationResult, error) {
 	code, err := mfaCode(request)
 	if err != nil {
 		return operationResult{}, err
 	}
-	activation, err := m.mfa.ActivateMFA(
+	activation, err := h.app.ActivateMFA(
 		request.context,
 		request.invocation(),
 		identity.ActivateMFACommand{Code: code},
@@ -233,12 +233,12 @@ func (m mfaResourceModule) activate(request operationRequest) (operationResult, 
 	}).withHeaders(noStoreHeaders()), nil
 }
 
-func (m mfaResourceModule) challenge(request operationRequest) (operationResult, error) {
+func (h mfaHandlers) challenge(request operationRequest) (operationResult, error) {
 	code, err := mfaCode(request)
 	if err != nil {
 		return operationResult{}, err
 	}
-	session, err := m.mfa.ChallengeMFA(
+	session, err := h.app.ChallengeMFA(
 		request.context,
 		request.invocation(),
 		identity.ChallengeMFACommand{Code: code},
@@ -246,11 +246,11 @@ func (m mfaResourceModule) challenge(request operationRequest) (operationResult,
 	if err != nil {
 		return operationResult{}, err
 	}
-	return jsonResult(http.StatusOK, sessionResponseFromModel(request.request, session)).withHeaders(noStoreHeaders()), nil
+	return jsonResult(http.StatusOK, sessionResponseFromModel(request.http, session)).withHeaders(noStoreHeaders()), nil
 }
 
-func (m mfaResourceModule) regenerateRecoveryCodes(request operationRequest) (operationResult, error) {
-	codes, err := m.mfa.RegenerateMFARecoveryCodes(
+func (h mfaHandlers) regenerateRecoveryCodes(request operationRequest) (operationResult, error) {
+	codes, err := h.app.RegenerateMFARecoveryCodes(
 		request.context,
 		request.invocation(),
 		identity.RegenerateMFARecoveryCodesCommand{},
@@ -263,8 +263,8 @@ func (m mfaResourceModule) regenerateRecoveryCodes(request operationRequest) (op
 	}).withHeaders(noStoreHeaders()), nil
 }
 
-func (m mfaResourceModule) disable(request operationRequest) (operationResult, error) {
-	if err := m.mfa.DisableMFA(
+func (h mfaHandlers) disable(request operationRequest) (operationResult, error) {
+	if err := h.app.DisableMFA(
 		request.context,
 		request.invocation(),
 		identity.DisableMFACommand{},

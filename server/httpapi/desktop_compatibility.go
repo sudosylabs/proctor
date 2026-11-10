@@ -64,12 +64,12 @@ type desktopCompatibilityPolicyResponse struct {
 	UpdatedAt              string   `json:"updated_at"`
 }
 
-type desktopCompatibilityPolicyResourceModule struct {
-	application DesktopCompatibilityApplication
+type desktopCompatibilityPolicyHandlers struct {
+	app DesktopCompatibilityApplication
 }
 
-func desktopCompatibilityPolicyResource(application DesktopCompatibilityApplication) apiResource {
-	module := desktopCompatibilityPolicyResourceModule{application: application}
+func desktopCompatibilityPolicyResource(app DesktopCompatibilityApplication) apiResource {
+	h := desktopCompatibilityPolicyHandlers{app: app}
 	replace := endpoint{
 		Method:      http.MethodPut,
 		Path:        "/desktop-compatibility-policy",
@@ -90,7 +90,7 @@ func desktopCompatibilityPolicyResource(application DesktopCompatibilityApplicat
 			"desktop_compatibility_policy.unavailable",
 			"resource.not_found",
 		},
-		Handle: module.replace,
+		Handle: h.replace,
 	}
 	return newResource(
 		"desktop-compatibility-policy",
@@ -106,16 +106,16 @@ func desktopCompatibilityPolicyResource(application DesktopCompatibilityApplicat
 				"desktop_compatibility_policy.revision_conflict",
 				"resource.not_found",
 			},
-			Handle: module.get,
+			Handle: h.get,
 		},
 		replace,
 	)
 }
 
-func (m desktopCompatibilityPolicyResourceModule) get(
+func (h desktopCompatibilityPolicyHandlers) get(
 	request operationRequest,
 ) (operationResult, error) {
-	policy, err := m.application.GetDesktopCompatibilityPolicy(
+	policy, err := h.app.GetDesktopCompatibilityPolicy(
 		request.context,
 		request.invocation(),
 	)
@@ -128,7 +128,7 @@ func (m desktopCompatibilityPolicyResourceModule) get(
 	).withHeaders(privateNoStoreHeaders()), nil
 }
 
-func (m desktopCompatibilityPolicyResourceModule) replace(
+func (h desktopCompatibilityPolicyHandlers) replace(
 	request operationRequest,
 ) (operationResult, error) {
 	var body desktopCompatibilityPolicyRequest
@@ -139,7 +139,7 @@ func (m desktopCompatibilityPolicyResourceModule) replace(
 	if err != nil {
 		return operationResult{}, err
 	}
-	policy, err := m.application.ReplaceDesktopCompatibilityPolicy(
+	policy, err := h.app.ReplaceDesktopCompatibilityPolicy(
 		request.context,
 		request.invocation(),
 		identity.ReplaceDesktopCompatibilityPolicyCommand{

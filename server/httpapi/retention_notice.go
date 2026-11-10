@@ -51,8 +51,8 @@ func retentionNoticeCursorSpec() opaqueCursorSpec[retentionNoticeCursor] {
 		},
 	}
 }
-func (m retentionHTTPModule) notices(request operationRequest) (operationResult, error) {
-	values := request.request.URL.Query()
+func (h retentionHandlers) notices(request operationRequest) (operationResult, error) {
+	values := request.http.URL.Query()
 	for key, items := range values {
 		if len(items) != 1 || (key != "limit" && key != "cursor") {
 			return operationResult{}, invalidRequestError(nil)
@@ -74,7 +74,7 @@ func (m retentionHTTPModule) notices(request operationRequest) (operationResult,
 		after = model.RetentionRetirementID(cursor.After)
 	}
 
-	page, err := m.application.ListRetentionNotices(request.context, request.invocation(), after, limit)
+	page, err := h.app.ListRetentionNotices(request.context, request.invocation(), after, limit)
 	if err != nil {
 		return operationResult{}, err
 	}

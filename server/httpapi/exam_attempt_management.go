@@ -339,7 +339,7 @@ type endExamAttemptByManagerRequest struct {
 	Reason                  string `json:"reason"`
 }
 
-func (m examAttemptHTTPModule) endByManager(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) endByManager(request operationRequest) (operationResult, error) {
 	examID, sittingID, attemptID, err := managedExamAttemptIDs(request)
 	if err != nil {
 		return operationResult{}, err
@@ -353,7 +353,7 @@ func (m examAttemptHTTPModule) endByManager(request operationRequest) (operation
 		return operationResult{}, invalidRequestError(errors.New("must be positive"))
 	}
 
-	receipt, err := m.application.EndExamAttemptByManager(
+	receipt, err := h.app.EndExamAttemptByManager(
 		request.context,
 		request.invocation(),
 		attempt.ManagerEndCommand{
@@ -383,14 +383,14 @@ func (m examAttemptHTTPModule) endByManager(request operationRequest) (operation
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) listCandidateStatuses(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) listCandidateStatuses(request operationRequest) (operationResult, error) {
 	examID, sittingID, err := managedExamAttemptScope(request)
 	if err != nil {
 		return operationResult{}, err
 	}
 
 	query := attempt.SittingCandidateStatusesQuery{ExamID: examID, SittingID: sittingID, Limit: 50}
-	values := request.request.URL.Query()
+	values := request.http.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		query.Limit, err = strconv.Atoi(raw)
 		if err != nil || query.Limit < 1 || query.Limit > 200 {
@@ -407,7 +407,7 @@ func (m examAttemptHTTPModule) listCandidateStatuses(request operationRequest) (
 		query.AfterCandidateUserID = model.UserID(cursor.CandidateUserID)
 	}
 
-	page, err := m.application.ListSittingCandidateStatuses(request.context, request.invocation(), query)
+	page, err := h.app.ListSittingCandidateStatuses(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -497,7 +497,7 @@ func sittingCandidateStatusCursorSpec() opaqueCursorSpec[sittingCandidateStatusC
 		}}
 }
 
-func (m examAttemptHTTPModule) reallow(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) reallow(request operationRequest) (operationResult, error) {
 	examID, sittingID, attemptID, err := managedExamAttemptIDs(request)
 	if err != nil {
 		return operationResult{}, err
@@ -513,7 +513,7 @@ func (m examAttemptHTTPModule) reallow(request operationRequest) (operationResul
 		return operationResult{}, invalidRequestError(err)
 	}
 
-	result, err := m.application.ReallowExamAttempt(request.context, request.invocation(), attempt.ReallowCommand{
+	result, err := h.app.ReallowExamAttempt(request.context, request.invocation(), attempt.ReallowCommand{
 		ExamID:                  examID,
 		SittingID:               sittingID,
 		AttemptID:               attemptID,
@@ -539,7 +539,7 @@ func (m examAttemptHTTPModule) reallow(request operationRequest) (operationResul
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) suspend(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) suspend(request operationRequest) (operationResult, error) {
 	examID, sittingID, attemptID, err := managedExamAttemptIDs(request)
 	if err != nil {
 		return operationResult{}, err
@@ -553,7 +553,7 @@ func (m examAttemptHTTPModule) suspend(request operationRequest) (operationResul
 		return operationResult{}, invalidRequestError(errors.New("expected_revision must be positive"))
 	}
 
-	result, err := m.application.SuspendExamAttempt(request.context, request.invocation(), attempt.ManualSuspensionCommand{
+	result, err := h.app.SuspendExamAttempt(request.context, request.invocation(), attempt.ManualSuspensionCommand{
 		ExamID:                  examID,
 		SittingID:               sittingID,
 		AttemptID:               attemptID,
@@ -580,13 +580,13 @@ func (m examAttemptHTTPModule) suspend(request operationRequest) (operationResul
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) getManaged(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) getManaged(request operationRequest) (operationResult, error) {
 	examID, sittingID, attemptID, err := managedExamAttemptIDs(request)
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	view, err := m.application.GetExamAttempt(request.context, request.invocation(), attempt.GetManagedAttemptQuery{
+	view, err := h.app.GetExamAttempt(request.context, request.invocation(), attempt.GetManagedAttemptQuery{
 		ExamID:    examID,
 		SittingID: sittingID,
 		AttemptID: attemptID,
@@ -603,14 +603,14 @@ func (m examAttemptHTTPModule) getManaged(request operationRequest) (operationRe
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) listManaged(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) listManaged(request operationRequest) (operationResult, error) {
 	examID, sittingID, err := managedExamAttemptScope(request)
 	if err != nil {
 		return operationResult{}, err
 	}
 
 	query := attempt.ListManagedAttemptsQuery{ExamID: examID, SittingID: sittingID, Limit: 50}
-	values := request.request.URL.Query()
+	values := request.http.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		query.Limit, err = strconv.Atoi(raw)
 		if err != nil || query.Limit < 1 || query.Limit > 200 {
@@ -644,7 +644,7 @@ func (m examAttemptHTTPModule) listManaged(request operationRequest) (operationR
 		query.BeforeCreatedAt, query.BeforeAttemptID = cursor.CreatedAt, cursor.ID
 	}
 
-	page, err := m.application.ListExamAttempts(request.context, request.invocation(), query)
+	page, err := h.app.ListExamAttempts(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -674,14 +674,14 @@ func (m examAttemptHTTPModule) listManaged(request operationRequest) (operationR
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) listBrowserActivity(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) listBrowserActivity(request operationRequest) (operationResult, error) {
 	examID, sittingID, attemptID, err := managedExamAttemptIDs(request)
 	if err != nil {
 		return operationResult{}, err
 	}
 
 	query := attempt.BrowserActivityPageQuery{ExamID: examID, SittingID: sittingID, AttemptID: attemptID, Limit: 50}
-	values := request.request.URL.Query()
+	values := request.http.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		query.Limit, err = strconv.Atoi(raw)
 		if err != nil || query.Limit < 1 || query.Limit > 200 {
@@ -698,7 +698,7 @@ func (m examAttemptHTTPModule) listBrowserActivity(request operationRequest) (op
 		query.AfterReceivedAt, query.AfterSourceID, query.AfterSequence = cursor.ReceivedAt, cursor.SourceSessionID, cursor.Sequence
 	}
 
-	page, err := m.application.ListExamAttemptBrowserActivity(request.context, request.invocation(), query)
+	page, err := h.app.ListExamAttemptBrowserActivity(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}

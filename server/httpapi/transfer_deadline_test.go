@@ -85,7 +85,7 @@ func TestTransferRoutesOutliveServerTimeouts(t *testing.T) {
 		AuthenticatedAt:        time.Now(),
 	}}
 	upload := func(request operationRequest) (protocolResult, error) {
-		body, err := io.ReadAll(request.request.Body)
+		body, err := io.ReadAll(request.http.Body)
 		return streamingUploadProtocolResult(http.StatusCreated, map[string]any{"read": err == nil, "bytes": len(body)}), nil
 	}
 	download := func(operationRequest) (protocolResult, error) {

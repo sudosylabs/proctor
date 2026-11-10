@@ -44,12 +44,12 @@ type updateClassRequest struct {
 	Description      Optional[string] `json:"description"`
 }
 
-type classResourceModule struct {
-	classes ClassApplication
+type classHandlers struct {
+	app ClassApplication
 }
 
-func classResource(classes ClassApplication) apiResource {
-	module := classResourceModule{classes: classes}
+func classResource(app ClassApplication) apiResource {
+	h := classHandlers{app: app}
 	return newResource(
 		"classes",
 		endpoint{
@@ -57,42 +57,42 @@ func classResource(classes ClassApplication) apiResource {
 			Path:   "/academic-units/{academic_unit_id}/classes",
 			Auth:   AuthPrincipalRequired,
 			Errors: classReadErrorCodes(),
-			Handle: module.search,
+			Handle: h.search,
 		},
 		endpoint{
 			Method: http.MethodGet,
 			Path:   "/programme-levels/{programme_level_id}/classes",
 			Auth:   AuthPrincipalRequired,
 			Errors: classReadErrorCodes(),
-			Handle: module.list,
+			Handle: h.list,
 		},
 		endpoint{
 			Method: http.MethodPost,
 			Path:   "/programme-levels/{programme_level_id}/classes",
 			Auth:   AuthPrincipalRequired,
 			Errors: classMutationErrorCodes("class.invalid", "class.conflict"),
-			Handle: module.create,
+			Handle: h.create,
 		},
 		endpoint{
 			Method: http.MethodGet,
 			Path:   "/classes/{class_id}",
 			Auth:   AuthPrincipalRequired,
 			Errors: classReadErrorCodes(),
-			Handle: module.get,
+			Handle: h.get,
 		},
 		endpoint{
 			Method: http.MethodPatch,
 			Path:   "/classes/{class_id}",
 			Auth:   AuthPrincipalRequired,
 			Errors: classMutationErrorCodes("class.invalid", "class.conflict"),
-			Handle: module.patch,
+			Handle: h.patch,
 		},
 		endpoint{
 			Method: http.MethodDelete,
 			Path:   "/classes/{class_id}",
 			Auth:   AuthPrincipalRequired,
 			Errors: classMutationErrorCodes("class.conflict"),
-			Handle: module.archive,
+			Handle: h.archive,
 		},
 	)
 }
@@ -121,7 +121,7 @@ func classMutationErrorCodes(specific ...string) []string {
 	return append(codes, "administration.unavailable")
 }
 
-func (m classResourceModule) search(request operationRequest) (operationResult, error) {
+func (h classHandlers) search(request operationRequest) (operationResult, error) {
 	academicUnitID, err := pathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
 		return operationResult{}, err
@@ -130,12 +130,12 @@ func (m classResourceModule) search(request operationRequest) (operationResult, 
 	if err != nil {
 		return operationResult{}, err
 	}
-	page, err := m.classes.SearchClasses(
+	page, err := h.app.SearchClasses(
 		request.context,
 		request.invocation(),
 		academic.SearchClassesQuery{
 			AcademicUnitID: academicUnitID,
-			Query:          request.request.URL.Query().Get("q"),
+			Query:          request.http.URL.Query().Get("q"),
 			NameQuery:      pageQuery,
 		},
 	)
@@ -147,7 +147,7 @@ func (m classResourceModule) search(request operationRequest) (operationResult, 
 	})
 }
 
-func (m classResourceModule) list(request operationRequest) (operationResult, error) {
+func (h classHandlers) list(request operationRequest) (operationResult, error) {
 	programmeLevelID, err := pathID[model.ProgrammeLevelID](request, "programme_level_id")
 	if err != nil {
 		return operationResult{}, err
@@ -156,7 +156,7 @@ func (m classResourceModule) list(request operationRequest) (operationResult, er
 	if err != nil {
 		return operationResult{}, err
 	}
-	page, err := m.classes.ListClasses(
+	page, err := h.app.ListClasses(
 		request.context,
 		request.invocation(),
 		academic.ListClassesQuery{ProgrammeLevelID: programmeLevelID, NameQuery: pageQuery},
@@ -169,7 +169,7 @@ func (m classResourceModule) list(request operationRequest) (operationResult, er
 	})
 }
 
-func (m classResourceModule) create(request operationRequest) (operationResult, error) {
+func (h classHandlers) create(request operationRequest) (operationResult, error) {
 	programmeLevelID, err := pathID[model.ProgrammeLevelID](request, "programme_level_id")
 	if err != nil {
 		return operationResult{}, err
@@ -178,7 +178,7 @@ func (m classResourceModule) create(request operationRequest) (operationResult, 
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
-	class, err := m.classes.CreateClass(
+	class, err := h.app.CreateClass(
 		request.context,
 		request.invocation(),
 		academic.CreateClassCommand{
@@ -195,12 +195,12 @@ func (m classResourceModule) create(request operationRequest) (operationResult, 
 	return jsonResult(http.StatusCreated, classResponseFromModel(class)), nil
 }
 
-func (m classResourceModule) get(request operationRequest) (operationResult, error) {
+func (h classHandlers) get(request operationRequest) (operationResult, error) {
 	id, err := pathID[model.ClassID](request, "class_id")
 	if err != nil {
 		return operationResult{}, err
 	}
-	class, err := m.classes.GetClass(
+	class, err := h.app.GetClass(
 		request.context,
 		request.invocation(),
 		academic.GetClassQuery{ID: id},
@@ -211,7 +211,7 @@ func (m classResourceModule) get(request operationRequest) (operationResult, err
 	return jsonResult(http.StatusOK, classResponseFromModel(class)), nil
 }
 
-func (m classResourceModule) patch(request operationRequest) (operationResult, error) {
+func (h classHandlers) patch(request operationRequest) (operationResult, error) {
 	id, err := pathID[model.ClassID](request, "class_id")
 	if err != nil {
 		return operationResult{}, err
@@ -223,7 +223,7 @@ func (m classResourceModule) patch(request operationRequest) (operationResult, e
 	if err := validateAcademicRevision(body.ExpectedRevision); err != nil {
 		return operationResult{}, err
 	}
-	class, err := m.classes.UpdateClass(
+	class, err := h.app.UpdateClass(
 		request.context,
 		request.invocation(),
 		academic.UpdateClassCommand{ExpectedRevision: body.ExpectedRevision.ValuePointer(),
@@ -241,7 +241,7 @@ func (m classResourceModule) patch(request operationRequest) (operationResult, e
 	return jsonResult(http.StatusOK, classResponseFromModel(class)), nil
 }
 
-func (m classResourceModule) archive(request operationRequest) (operationResult, error) {
+func (h classHandlers) archive(request operationRequest) (operationResult, error) {
 	id, err := pathID[model.ClassID](request, "class_id")
 	if err != nil {
 		return operationResult{}, err
@@ -250,7 +250,7 @@ func (m classResourceModule) archive(request operationRequest) (operationResult,
 	if err != nil {
 		return operationResult{}, err
 	}
-	if err := m.classes.ArchiveClass(
+	if err := h.app.ArchiveClass(
 		request.context,
 		request.invocation(),
 		academic.ArchiveClassCommand{ExpectedRevision: expectedRevision, ID: id},

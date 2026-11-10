@@ -34,7 +34,7 @@ func TestExamStarterWorkspaceHTTPFileUploadUsesMetadataFirstStreaming(t *testing
 	t.Parallel()
 	logger, _ := newTestLogger(t)
 	fake := newExamStarterWorkspaceHTTPFake(testExamHTTPPrincipal())
-	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceHTTPResource(fake))
+	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceResource(fake))
 	raw := []byte("package main\n")
 	checksum := fmt.Sprintf("%x", sha256.Sum256(raw))
 	body, contentType := examResourceMultipart(t, `{"expected_revision":1,"path":"cmd/main.go","media_type":"text/x-go","size":13,"sha256":"`+checksum+`"}`, raw, false)
@@ -58,7 +58,7 @@ func TestExamStarterWorkspaceHTTPFileUploadRequiresSizeButAcceptsExplicitZero(t 
 	t.Parallel()
 	logger, _ := newTestLogger(t)
 	fake := newExamStarterWorkspaceHTTPFake(testExamHTTPPrincipal())
-	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceHTTPResource(fake))
+	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceResource(fake))
 	path := "/api/v1/exams/" + fake.examID.String() + "/draft/starter-workspace/files"
 
 	omittedBody, omittedType := examResourceMultipart(t, `{"expected_revision":1,"path":"empty.txt","media_type":"text/plain","sha256":"`+fmt.Sprintf("%x", sha256.Sum256(nil))+`"}`, nil, false)
@@ -86,7 +86,7 @@ func TestExamStarterWorkspaceHTTPFileReplacementRequiresSize(t *testing.T) {
 	t.Parallel()
 	logger, _ := newTestLogger(t)
 	fake := newExamStarterWorkspaceHTTPFake(testExamHTTPPrincipal())
-	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceHTTPResource(fake))
+	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceResource(fake))
 	path := "/api/v1/exams/" + fake.examID.String() + "/draft/starter-workspace/files/" + fake.entry.ID.String() + "/content"
 	body, contentType := examResourceMultipart(t, `{"expected_revision":1,"expected_content_version":"`+fake.object.ContentVersion.String()+`","media_type":"text/plain","sha256":"`+fmt.Sprintf("%x", sha256.Sum256(nil))+`"}`, nil, false)
 	request := httptest.NewRequest(http.MethodPut, path, body)
@@ -103,7 +103,7 @@ func TestExamStarterWorkspaceHTTPFileReplacementRequiresAndCarriesExpectedConten
 	t.Parallel()
 	logger, _ := newTestLogger(t)
 	fake := newExamStarterWorkspaceHTTPFake(testExamHTTPPrincipal())
-	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceHTTPResource(fake))
+	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceResource(fake))
 	path := "/api/v1/exams/" + fake.examID.String() + "/draft/starter-workspace/files/" + fake.entry.ID.String() + "/content"
 	checksum := fmt.Sprintf("%x", sha256.Sum256(nil))
 
@@ -132,7 +132,7 @@ func TestExamStarterWorkspaceHTTPDirectoryAndMoveUseStrictJSON(t *testing.T) {
 	t.Parallel()
 	logger, _ := newTestLogger(t)
 	fake := newExamStarterWorkspaceHTTPFake(testExamHTTPPrincipal())
-	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceHTTPResource(fake))
+	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceResource(fake))
 	base := "/api/v1/exams/" + fake.examID.String() + "/draft/starter-workspace"
 	create := httptest.NewRequestWithContext(t.Context(), http.MethodPost, base+"/directories", strings.NewReader(`{"expected_revision":1,"path":"cmd"}`))
 	create.Header.Set("Authorization", "Bearer credential")
@@ -156,7 +156,7 @@ func TestExamStarterWorkspaceHTTPContentIsInlinePrivateAndConditional(t *testing
 	t.Parallel()
 	logger, _ := newTestLogger(t)
 	fake := newExamStarterWorkspaceHTTPFake(testExamHTTPPrincipal())
-	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceHTTPResource(fake))
+	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceResource(fake))
 	path := "/api/v1/exams/" + fake.examID.String() + "/draft/starter-workspace/files/" + fake.entry.ID.String() + "/content"
 	request := httptest.NewRequest(http.MethodGet, path, nil)
 	request.Header.Set("Authorization", "Bearer credential")
@@ -184,7 +184,7 @@ func TestExamStarterWorkspaceHTTPRemoveReturnsNoContent(t *testing.T) {
 	t.Parallel()
 	logger, _ := newTestLogger(t)
 	fake := newExamStarterWorkspaceHTTPFake(testExamHTTPPrincipal())
-	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceHTTPResource(fake))
+	api := newFocusedResourceAPI(t, logger, fake, examStarterWorkspaceResource(fake))
 	path := "/api/v1/exams/" + fake.examID.String() + "/draft/starter-workspace/entries/" + fake.entry.ID.String()
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, path, strings.NewReader(`{"expected_revision":1}`))
 	request.Header.Set("Authorization", "Bearer credential")

@@ -28,12 +28,12 @@ type desktopRegistrationResponse struct {
 	Current          bool   `json:"current"`
 }
 
-type desktopRegistrationResourceModule struct {
-	application *identity.Service
+type desktopRegistrationHandlers struct {
+	app *identity.Service
 }
 
-func desktopRegistrationResource(application *identity.Service) apiResource {
-	module := desktopRegistrationResourceModule{application: application}
+func desktopRegistrationResource(app *identity.Service) apiResource {
+	h := desktopRegistrationHandlers{app: app}
 	collection := "/users/me/desktop-registrations"
 	item := "/users/me/desktop-registrations/{desktop_registration_id}"
 	return newResource(
@@ -48,7 +48,7 @@ func desktopRegistrationResource(application *identity.Service) apiResource {
 				"authentication.session_required",
 				"request.invalid",
 			},
-			Handle: module.list,
+			Handle: h.list,
 		},
 		endpoint{
 			Method: http.MethodDelete,
@@ -61,13 +61,13 @@ func desktopRegistrationResource(application *identity.Service) apiResource {
 				"audit.unavailable",
 				"authentication.session_required",
 			},
-			Handle: module.revoke,
+			Handle: h.revoke,
 		},
 	)
 }
 
-func (m desktopRegistrationResourceModule) list(request operationRequest) (operationResult, error) {
-	registrations, err := m.application.ListDesktopRegistrations(
+func (h desktopRegistrationHandlers) list(request operationRequest) (operationResult, error) {
+	registrations, err := h.app.ListDesktopRegistrations(
 		request.context, request.invocation(), identity.ListDesktopRegistrationsQuery{},
 	)
 	if err != nil {
@@ -93,13 +93,13 @@ func (m desktopRegistrationResourceModule) list(request operationRequest) (opera
 	return jsonResult(http.StatusOK, response).withHeaders(privateNoStoreHeaders()), nil
 }
 
-func (m desktopRegistrationResourceModule) revoke(request operationRequest) (operationResult, error) {
+func (h desktopRegistrationHandlers) revoke(request operationRequest) (operationResult, error) {
 	registrationID, err := pathID[model.DesktopRegistrationID](request, "desktop_registration_id")
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	if err = m.application.RevokeDesktopRegistration(
+	if err = h.app.RevokeDesktopRegistration(
 		request.context,
 		request.invocation(),
 		identity.RevokeDesktopRegistrationCommand{RegistrationID: registrationID},

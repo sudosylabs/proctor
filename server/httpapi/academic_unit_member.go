@@ -59,12 +59,12 @@ type createAcademicUnitMemberRequest struct {
 	StartAt string `json:"start_at"`
 }
 
-type academicUnitMemberResourceModule struct {
-	members AcademicUnitMemberApplication
+type academicUnitMemberHandlers struct {
+	app AcademicUnitMemberApplication
 }
 
-func academicUnitMemberResource(members AcademicUnitMemberApplication) apiResource {
-	module := academicUnitMemberResourceModule{members: members}
+func academicUnitMemberResource(app AcademicUnitMemberApplication) apiResource {
+	h := academicUnitMemberHandlers{app: app}
 	return newResource(
 		"academic-unit-members",
 		endpoint{
@@ -72,7 +72,7 @@ func academicUnitMemberResource(members AcademicUnitMemberApplication) apiResour
 			Path:   "/academic-units/{academic_unit_id}/members",
 			Auth:   AuthPrincipalRequired,
 			Errors: academicRelationshipReadErrorCodes(),
-			Handle: module.list,
+			Handle: h.list,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -90,7 +90,7 @@ func academicUnitMemberResource(members AcademicUnitMemberApplication) apiResour
 				"administration.unavailable",
 				"mail.unavailable",
 			},
-			Handle: module.create,
+			Handle: h.create,
 		},
 		endpoint{
 			Method: http.MethodDelete,
@@ -107,24 +107,24 @@ func academicUnitMemberResource(members AcademicUnitMemberApplication) apiResour
 				"administration.unavailable",
 				"mail.unavailable",
 			},
-			Handle: module.end,
+			Handle: h.end,
 		},
 	)
 }
 
-func (m academicUnitMemberResourceModule) list(request operationRequest) (operationResult, error) {
+func (h academicUnitMemberHandlers) list(request operationRequest) (operationResult, error) {
 	unitID, err := pathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
 		return operationResult{}, err
 	}
 
 	scope := model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()}
-	query, after, err := membershipPageQuery(request.request, scope)
+	query, after, err := membershipPageQuery(request.http, scope)
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	page, err := m.members.ListAcademicUnitMembersPage(request.context, request.invocation(), academic.ListAcademicUnitMembersPageQuery{
+	page, err := h.app.ListAcademicUnitMembersPage(request.context, request.invocation(), academic.ListAcademicUnitMembersPageQuery{
 		AcademicUnitID:      unitID,
 		MembershipPageQuery: query,
 		AfterUserID:         model.UserID(after.AfterUserID),
@@ -149,7 +149,7 @@ func (m academicUnitMemberResourceModule) list(request operationRequest) (operat
 	)
 }
 
-func (m academicUnitMemberResourceModule) create(request operationRequest) (operationResult, error) {
+func (h academicUnitMemberHandlers) create(request operationRequest) (operationResult, error) {
 	unitID, err := pathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
 		return operationResult{}, err
@@ -165,7 +165,7 @@ func (m academicUnitMemberResourceModule) create(request operationRequest) (oper
 		return operationResult{}, err
 	}
 
-	saved, err := m.members.CreateAcademicUnitMember(request.context, request.invocation(), academic.CreateAcademicUnitMemberCommand{
+	saved, err := h.app.CreateAcademicUnitMember(request.context, request.invocation(), academic.CreateAcademicUnitMemberCommand{
 		AcademicUnitID: unitID,
 		UserID:         model.UserID(body.UserID),
 		StartAt:        startAt,
@@ -177,12 +177,12 @@ func (m academicUnitMemberResourceModule) create(request operationRequest) (oper
 	return jsonResult(http.StatusCreated, academicUnitMemberResponseFromModel(saved)), nil
 }
 
-func (m academicUnitMemberResourceModule) end(request operationRequest) (operationResult, error) {
+func (h academicUnitMemberHandlers) end(request operationRequest) (operationResult, error) {
 	id, err := pathID[model.AcademicUnitMemberID](request, "academic_unit_member_id")
 	if err != nil {
 		return operationResult{}, err
 	}
-	ended, err := m.members.EndAcademicUnitMember(request.context, request.invocation(), academic.EndAcademicUnitMemberCommand{ID: id})
+	ended, err := h.app.EndAcademicUnitMember(request.context, request.invocation(), academic.EndAcademicUnitMemberCommand{ID: id})
 	if err != nil {
 		return operationResult{}, err
 	}

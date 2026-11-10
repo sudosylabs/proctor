@@ -76,10 +76,10 @@ type mfaKeyStateResponse struct {
 	Active               []mfaSecretKeyUsageResponse `json:"active"`
 }
 
-type mfaKeyResourceModule struct{ application MFAKeyApplication }
+type mfaKeyHandlers struct{ app MFAKeyApplication }
 
-func mfaKeyResource(application MFAKeyApplication) apiResource {
-	module := mfaKeyResourceModule{application: application}
+func mfaKeyResource(app MFAKeyApplication) apiResource {
+	h := mfaKeyHandlers{app: app}
 	return newResource("mfa-keys",
 		endpoint{
 			Method: http.MethodGet,
@@ -92,7 +92,7 @@ func mfaKeyResource(application MFAKeyApplication) apiResource {
 				"authentication.mfa.unavailable",
 				"resource.not_found",
 			},
-			Handle: module.getKeyState,
+			Handle: h.getKeyState,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -109,20 +109,20 @@ func mfaKeyResource(application MFAKeyApplication) apiResource {
 				"authentication.mfa.unavailable",
 				"resource.not_found",
 			},
-			Handle: module.startRekey,
+			Handle: h.startRekey,
 		},
 		endpoint{
 			Method: http.MethodGet,
 			Path:   "/mfa/rekey/{job_id}",
 			Auth:   AuthStrongRecentSessionRequired,
 			Errors: operatorReadErrorCodes("request.invalid", "resource.not_found", "authentication.mfa.unavailable"),
-			Handle: module.getRekeyStatus,
+			Handle: h.getRekeyStatus,
 		},
 	)
 }
 
-func (m mfaKeyResourceModule) getKeyState(request operationRequest) (operationResult, error) {
-	view, err := m.application.GetMFAKeyState(request.context, request.invocation())
+func (h mfaKeyHandlers) getKeyState(request operationRequest) (operationResult, error) {
+	view, err := h.app.GetMFAKeyState(request.context, request.invocation())
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -144,13 +144,13 @@ func (m mfaKeyResourceModule) getKeyState(request operationRequest) (operationRe
 	return jsonResult(http.StatusOK, response), nil
 }
 
-func (m mfaKeyResourceModule) startRekey(request operationRequest) (operationResult, error) {
+func (h mfaKeyHandlers) startRekey(request operationRequest) (operationResult, error) {
 	var body mfaRekeyRequest
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
 
-	view, err := m.application.StartMFARekey(
+	view, err := h.app.StartMFARekey(
 		request.context,
 		request.invocation(),
 		identity.StartMFARekeyCommand{RetiringKeyID: body.RetiringKeyID},
@@ -167,13 +167,13 @@ func (m mfaKeyResourceModule) startRekey(request operationRequest) (operationRes
 	}), nil
 }
 
-func (m mfaKeyResourceModule) getRekeyStatus(request operationRequest) (operationResult, error) {
+func (h mfaKeyHandlers) getRekeyStatus(request operationRequest) (operationResult, error) {
 	jobID, err := pathID[model.JobID](request, "job_id")
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	view, err := m.application.GetMFARekeyStatus(request.context, request.invocation(), identity.GetMFARekeyStatusQuery{JobID: jobID})
+	view, err := h.app.GetMFARekeyStatus(request.context, request.invocation(), identity.GetMFARekeyStatusQuery{JobID: jobID})
 	if err != nil {
 		return operationResult{}, err
 	}

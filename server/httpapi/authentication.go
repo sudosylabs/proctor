@@ -298,7 +298,7 @@ type authenticationEntryApplication interface {
 	CompletePasswordReset(context.Context, invocation.Invocation, identity.CompletePasswordResetCommand) (*model.User, error)
 }
 
-type authenticationResourceModule struct {
+type authenticationHandlers struct {
 	registration   RegistrationApplication
 	authentication authenticationEntryApplication
 	cookies        browserCookies
@@ -309,7 +309,7 @@ func authenticationResource(
 	authentication authenticationEntryApplication,
 	cookies browserCookies,
 ) apiResource {
-	module := authenticationResourceModule{registration: registration, authentication: authentication, cookies: cookies}
+	h := authenticationHandlers{registration: registration, authentication: authentication, cookies: cookies}
 	return newResource(
 		"authentication",
 		endpoint{
@@ -329,7 +329,7 @@ func authenticationResource(
 				"authentication.rate_limited",
 				"authentication.rate_limit_unavailable",
 			},
-			Handle: module.register,
+			Handle: h.register,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -354,7 +354,7 @@ func authenticationResource(
 				"authentication.external.invalid",
 				"authentication.session.invalid",
 			},
-			Handle: module.login,
+			Handle: h.login,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -369,14 +369,14 @@ func authenticationResource(
 				"authentication.dpop.use_nonce",
 				"authentication.dpop.unavailable",
 			},
-			Handle: module.refresh,
+			Handle: h.refresh,
 		},
 		endpoint{
 			Method: http.MethodPost,
 			Path:   "/auth/logout",
 			Auth:   AuthMFARecoverySessionRequired,
 			Errors: []string{"authentication.internal", "audit.unavailable"},
-			Handle: module.logout,
+			Handle: h.logout,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -387,7 +387,7 @@ func authenticationResource(
 				"authentication.rate_limit_unavailable",
 				"authentication.account_recovery.unavailable",
 			),
-			Handle: module.requestEmailVerification,
+			Handle: h.requestEmailVerification,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -400,7 +400,7 @@ func authenticationResource(
 				"authentication.account_token.invalid",
 				"authentication.account_recovery.unavailable",
 			},
-			Handle: module.completeEmailVerification,
+			Handle: h.completeEmailVerification,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -413,7 +413,7 @@ func authenticationResource(
 				"authentication.account_token.invalid",
 				"authentication.account_recovery.unavailable",
 			},
-			Handle: module.inspectEmailVerification,
+			Handle: h.inspectEmailVerification,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -427,7 +427,7 @@ func authenticationResource(
 				"authentication.account_recovery.unavailable",
 				"authentication.email_change_undo.conflict",
 			},
-			Handle: module.completeEmailChangeUndo,
+			Handle: h.completeEmailChangeUndo,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -440,7 +440,7 @@ func authenticationResource(
 				"authentication.account_token.invalid",
 				"authentication.account_recovery.unavailable",
 			},
-			Handle: module.inspectEmailChangeUndo,
+			Handle: h.inspectEmailChangeUndo,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -452,7 +452,7 @@ func authenticationResource(
 				"authentication.rate_limit_unavailable",
 				"authentication.account_recovery.unavailable",
 			},
-			Handle: module.requestPasswordReset,
+			Handle: h.requestPasswordReset,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -471,18 +471,18 @@ func authenticationResource(
 				"authentication.account_token.invalid",
 				"authentication.account_recovery.unavailable",
 			},
-			Handle: module.completePasswordReset,
+			Handle: h.completePasswordReset,
 		},
 	)
 }
 
-func (m authenticationResourceModule) register(request operationRequest) (operationResult, error) {
+func (h authenticationHandlers) register(request operationRequest) (operationResult, error) {
 	var input publicRegistrationRequest
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
 
-	if err := m.registration.RegisterLocalUser(
+	if err := h.registration.RegisterLocalUser(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
 		onboarding.RegisterLocalUserCommand{
@@ -504,13 +504,13 @@ func sessionAuthenticationMutationErrorCodes(extra ...string) []string {
 	return append([]string(nil), extra...)
 }
 
-func (m authenticationResourceModule) login(request operationRequest) (operationResult, error) {
+func (h authenticationHandlers) login(request operationRequest) (operationResult, error) {
 	var input loginRequest
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
 
-	result, err := m.authentication.Login(
+	result, err := h.authentication.Login(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
 		identity.LoginCommand{
@@ -527,12 +527,12 @@ func (m authenticationResourceModule) login(request operationRequest) (operation
 		return operationResult{}, err
 	}
 
-	response := authenticationResponseFromLogin(request.request, result)
+	response := authenticationResponseFromLogin(request.http, result)
 	headers := http.Header{"Cache-Control": {"no-store"}}
 	if usesBrowserCookieTransport(input.ClientType) {
 		headers = combineResponseHeaders(headers, captureResponseHeaders(func(writer http.ResponseWriter) {
 			if result != nil {
-				m.cookies.attach(writer, result.Tokens)
+				h.cookies.attach(writer, result.Tokens)
 			}
 		}))
 		response.Tokens = nil
@@ -541,7 +541,7 @@ func (m authenticationResourceModule) login(request operationRequest) (operation
 	return jsonResult(http.StatusOK, response).withHeaders(headers), nil
 }
 
-func (m authenticationResourceModule) refresh(request operationRequest) (operationResult, error) {
+func (h authenticationHandlers) refresh(request operationRequest) (operationResult, error) {
 	credential, ok := credentialFromContext(request.context)
 	if !ok {
 		return operationResult{}, authenticationRequiredError()
@@ -549,19 +549,19 @@ func (m authenticationResourceModule) refresh(request operationRequest) (operati
 
 	command := identity.RefreshSessionCommand{RefreshToken: credential.token}
 	if credential.source == credentialSourceDPoP {
-		proof, proofErr := requestDPoPProof(request.request)
+		proof, proofErr := requestDPoPProof(request.http)
 		if proofErr != nil {
 			return operationResult{}, errorWithHeaders(proofErr, dpopErrorHeaders(proofErr))
 		}
 
 		command.DPoP = &identity.DPoPRequestProof{
 			Proof:  proof,
-			Method: request.request.Method,
-			Path:   request.request.URL.EscapedPath(),
+			Method: request.http.Method,
+			Path:   request.http.URL.EscapedPath(),
 		}
 	}
 
-	session, tokens, err := m.authentication.RefreshSession(
+	session, tokens, err := h.authentication.RefreshSession(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
 		command,
@@ -572,18 +572,18 @@ func (m authenticationResourceModule) refresh(request operationRequest) (operati
 			headers = dpopErrorHeaders(err)
 		}
 		if credential.source == credentialSourceCookie {
-			headers = combineResponseHeaders(headers, captureResponseHeaders(m.cookies.clear))
+			headers = combineResponseHeaders(headers, captureResponseHeaders(h.cookies.clear))
 		}
 
 		return operationResult{}, errorWithHeaders(err, headers)
 	}
 
-	response := authenticationResponseFromRefresh(request.request, session, tokens)
+	response := authenticationResponseFromRefresh(request.http, session, tokens)
 	headers := http.Header{"Cache-Control": {"no-store"}}
 	if credential.source == credentialSourceCookie {
 		response.Tokens = nil
 		headers = combineResponseHeaders(headers, captureResponseHeaders(func(writer http.ResponseWriter) {
-			m.cookies.attach(writer, tokens)
+			h.cookies.attach(writer, tokens)
 		}))
 	}
 
@@ -599,19 +599,19 @@ func dpopErrorHeaders(err error) http.Header {
 	return headers
 }
 
-func (m authenticationResourceModule) logout(request operationRequest) (operationResult, error) {
-	if err := m.authentication.Logout(request.context, request.invocation(), identity.LogoutCommand{}); err != nil {
+func (h authenticationHandlers) logout(request operationRequest) (operationResult, error) {
+	if err := h.authentication.Logout(request.context, request.invocation(), identity.LogoutCommand{}); err != nil {
 		return operationResult{}, err
 	}
 	result := noContentResult().withHeaders(http.Header{"Cache-Control": {"no-store"}})
 	if credentialSourceFromContext(request.context) == credentialSourceCookie {
-		result = result.withHeaders(combineResponseHeaders(result.headers, captureResponseHeaders(m.cookies.clear)))
+		result = result.withHeaders(combineResponseHeaders(result.headers, captureResponseHeaders(h.cookies.clear)))
 	}
 	return result, nil
 }
 
-func (m authenticationResourceModule) requestEmailVerification(request operationRequest) (operationResult, error) {
-	err := m.authentication.RequestEmailVerification(
+func (h authenticationHandlers) requestEmailVerification(request operationRequest) (operationResult, error) {
+	err := h.authentication.RequestEmailVerification(
 		request.context,
 		request.invocation(),
 		identity.RequestEmailVerificationCommand{Source: request.metadata.IPAddress},
@@ -623,12 +623,12 @@ func (m authenticationResourceModule) requestEmailVerification(request operation
 	return statusResult(http.StatusAccepted), nil
 }
 
-func (m authenticationResourceModule) completeEmailVerification(request operationRequest) (operationResult, error) {
+func (h authenticationHandlers) completeEmailVerification(request operationRequest) (operationResult, error) {
 	var input emailVerificationCompletion
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
-	_, err := m.authentication.CompleteEmailVerification(
+	_, err := h.authentication.CompleteEmailVerification(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
 		identity.CompleteEmailVerificationCommand{Token: input.Token, Source: request.metadata.IPAddress},
@@ -639,13 +639,13 @@ func (m authenticationResourceModule) completeEmailVerification(request operatio
 	return noContentResult(), nil
 }
 
-func (m authenticationResourceModule) completeEmailChangeUndo(request operationRequest) (operationResult, error) {
+func (h authenticationHandlers) completeEmailChangeUndo(request operationRequest) (operationResult, error) {
 	var input emailChangeUndoCompletion
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
 
-	if err := m.authentication.CompleteEmailChangeUndo(
+	if err := h.authentication.CompleteEmailChangeUndo(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
 		identity.CompleteEmailChangeUndoCommand{Token: input.Token, Source: request.metadata.IPAddress},
@@ -656,13 +656,13 @@ func (m authenticationResourceModule) completeEmailChangeUndo(request operationR
 	return noContentResult(), nil
 }
 
-func (m authenticationResourceModule) inspectEmailVerification(request operationRequest) (operationResult, error) {
+func (h authenticationHandlers) inspectEmailVerification(request operationRequest) (operationResult, error) {
 	var input accountTokenInspectionRequest
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
 
-	inspected, err := m.authentication.InspectEmailVerification(
+	inspected, err := h.authentication.InspectEmailVerification(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
 		identity.InspectAccountTokenCommand{Token: input.Token, Source: request.metadata.IPAddress},
@@ -674,13 +674,13 @@ func (m authenticationResourceModule) inspectEmailVerification(request operation
 	return jsonResult(http.StatusOK, emailVerificationInspectionResponse{Email: inspected.Email}).withHeaders(noStoreHeaders()), nil
 }
 
-func (m authenticationResourceModule) inspectEmailChangeUndo(request operationRequest) (operationResult, error) {
+func (h authenticationHandlers) inspectEmailChangeUndo(request operationRequest) (operationResult, error) {
 	var input accountTokenInspectionRequest
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
 
-	inspected, err := m.authentication.InspectEmailChangeUndo(
+	inspected, err := h.authentication.InspectEmailChangeUndo(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
 		identity.InspectAccountTokenCommand{Token: input.Token, Source: request.metadata.IPAddress},
@@ -696,12 +696,12 @@ func (m authenticationResourceModule) inspectEmailChangeUndo(request operationRe
 	}).withHeaders(noStoreHeaders()), nil
 }
 
-func (m authenticationResourceModule) requestPasswordReset(request operationRequest) (operationResult, error) {
+func (h authenticationHandlers) requestPasswordReset(request operationRequest) (operationResult, error) {
 	var input passwordResetRequest
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
-	if err := m.authentication.RequestPasswordReset(
+	if err := h.authentication.RequestPasswordReset(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
 		identity.RequestPasswordResetCommand{Email: input.Email, Source: request.metadata.IPAddress},
@@ -711,13 +711,13 @@ func (m authenticationResourceModule) requestPasswordReset(request operationRequ
 	return statusResult(http.StatusAccepted), nil
 }
 
-func (m authenticationResourceModule) completePasswordReset(request operationRequest) (operationResult, error) {
+func (h authenticationHandlers) completePasswordReset(request operationRequest) (operationResult, error) {
 	var input passwordResetCompletion
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
 
-	_, err := m.authentication.CompletePasswordReset(
+	_, err := h.authentication.CompletePasswordReset(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
 		identity.CompletePasswordResetCommand{
@@ -730,7 +730,7 @@ func (m authenticationResourceModule) completePasswordReset(request operationReq
 		return operationResult{}, err
 	}
 
-	return noContentResult().withHeaders(captureResponseHeaders(m.cookies.clear)), nil
+	return noContentResult().withHeaders(captureResponseHeaders(h.cookies.clear)), nil
 }
 
 func usesBrowserCookieTransport(clientType model.SessionClientType) bool {

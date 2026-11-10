@@ -14,9 +14,9 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-type authenticationMethodResourceModule struct {
-	application *identity.Service
-	cookies     browserCookies
+type authenticationMethodHandlers struct {
+	app     *identity.Service
+	cookies browserCookies
 }
 
 type enrollPasswordRequest struct {
@@ -43,8 +43,8 @@ type providerConnectionResponse struct {
 	ExpiresAt   string `json:"expires_at"`
 }
 
-func authenticationMethodResource(application *identity.Service, cookies browserCookies) apiResource {
-	m := authenticationMethodResourceModule{application: application, cookies: cookies}
+func authenticationMethodResource(app *identity.Service, cookies browserCookies) apiResource {
+	h := authenticationMethodHandlers{app: app, cookies: cookies}
 	base := "/authentication-methods"
 	password := "/authentication-methods/password"
 	return newResource("authentication-method",
@@ -52,7 +52,7 @@ func authenticationMethodResource(application *identity.Service, cookies browser
 			Method: http.MethodGet,
 			Path:   base,
 			Auth:   AuthSessionRequired,
-			Handle: m.list,
+			Handle: h.list,
 		},
 		endpoint{
 			Method: http.MethodPut,
@@ -71,7 +71,7 @@ func authenticationMethodResource(application *identity.Service, cookies browser
 				"authentication.method.unavailable",
 				"audit.unavailable",
 			),
-			Handle: m.enrollPassword,
+			Handle: h.enrollPassword,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -87,7 +87,7 @@ func authenticationMethodResource(application *identity.Service, cookies browser
 				"authentication.method.unavailable",
 				"audit.unavailable",
 			)...),
-			Handle: m.changePassword,
+			Handle: h.changePassword,
 		},
 		endpoint{
 			Method: http.MethodDelete,
@@ -100,7 +100,7 @@ func authenticationMethodResource(application *identity.Service, cookies browser
 				"authentication.method.unavailable",
 				"audit.unavailable",
 			},
-			Handle: m.removePassword,
+			Handle: h.removePassword,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -119,14 +119,14 @@ func authenticationMethodResource(application *identity.Service, cookies browser
 				"authentication.external.rejected",
 				"authentication.external.request.invalid",
 			},
-			Handle: m.connect,
+			Handle: h.connect,
 		},
 		endpoint{
 			Method: http.MethodDelete,
 			Path:   "/authentication-methods/providers/{external_identity_id}",
 			Auth:   AuthStrongRecentSessionRequired,
 			Errors: authenticationMethodRemovalCodes(),
-			Handle: m.unlink,
+			Handle: h.unlink,
 		},
 	)
 }
@@ -158,8 +158,8 @@ func authenticationMethodRemovalCodes() []string {
 	)
 }
 
-func (m authenticationMethodResourceModule) list(request operationRequest) (operationResult, error) {
-	view, err := m.application.AuthenticationMethods(request.context, request.invocation())
+func (h authenticationMethodHandlers) list(request operationRequest) (operationResult, error) {
+	view, err := h.app.AuthenticationMethods(request.context, request.invocation())
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -177,24 +177,24 @@ func (m authenticationMethodResourceModule) list(request operationRequest) (oper
 	return jsonResult(http.StatusOK, authenticationMethodResponse{Password: view.Password, Providers: providers}), nil
 }
 
-func (m authenticationMethodResourceModule) enrollPassword(request operationRequest) (operationResult, error) {
+func (h authenticationMethodHandlers) enrollPassword(request operationRequest) (operationResult, error) {
 	var body enrollPasswordRequest
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
-	if err := m.application.EnrollPassword(request.context, request.invocation(), body.Password); err != nil {
+	if err := h.app.EnrollPassword(request.context, request.invocation(), body.Password); err != nil {
 		return operationResult{}, err
 	}
 	return noContentResult(), nil
 }
 
-func (m authenticationMethodResourceModule) changePassword(request operationRequest) (operationResult, error) {
+func (h authenticationMethodHandlers) changePassword(request operationRequest) (operationResult, error) {
 	var body changePasswordRequest
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
 
-	if err := m.application.ChangePassword(
+	if err := h.app.ChangePassword(
 		request.context,
 		request.invocation(),
 		identity.ChangePasswordCommand{Password: body.Password},
@@ -205,14 +205,14 @@ func (m authenticationMethodResourceModule) changePassword(request operationRequ
 	return noContentResult(), nil
 }
 
-func (m authenticationMethodResourceModule) removePassword(request operationRequest) (operationResult, error) {
-	if err := m.application.RemovePassword(request.context, request.invocation()); err != nil {
+func (h authenticationMethodHandlers) removePassword(request operationRequest) (operationResult, error) {
+	if err := h.app.RemovePassword(request.context, request.invocation()); err != nil {
 		return operationResult{}, err
 	}
 	return noContentResult(), nil
 }
 
-func (m authenticationMethodResourceModule) connect(request operationRequest) (operationResult, error) {
+func (h authenticationMethodHandlers) connect(request operationRequest) (operationResult, error) {
 	providerID, err := pathProviderID(request, "provider_id")
 	if err != nil {
 		return operationResult{}, err
@@ -223,7 +223,7 @@ func (m authenticationMethodResourceModule) connect(request operationRequest) (o
 		return operationResult{}, err
 	}
 
-	start, err := m.application.BeginProviderConnection(request.context, request.invocation(), identity.BeginProviderConnectionCommand{
+	start, err := h.app.BeginProviderConnection(request.context, request.invocation(), identity.BeginProviderConnectionCommand{
 		ProviderID: providerID,
 		ReturnTo:   body.ReturnTo,
 		Source:     request.metadata.IPAddress,
@@ -233,7 +233,7 @@ func (m authenticationMethodResourceModule) connect(request operationRequest) (o
 	}
 
 	headers := captureResponseHeaders(func(writer http.ResponseWriter) {
-		m.cookies.attachExternalLoginBinding(writer, start.Binding, start.ExpiresAt)
+		h.cookies.attachExternalLoginBinding(writer, start.Binding, start.ExpiresAt)
 	})
 	headers.Set("Cache-Control", "no-store")
 	return jsonResult(
@@ -242,12 +242,12 @@ func (m authenticationMethodResourceModule) connect(request operationRequest) (o
 	).withHeaders(headers), nil
 }
 
-func (m authenticationMethodResourceModule) unlink(request operationRequest) (operationResult, error) {
+func (h authenticationMethodHandlers) unlink(request operationRequest) (operationResult, error) {
 	parsed, err := pathID[model.ExternalIdentityID](request, "external_identity_id")
 	if err != nil {
 		return operationResult{}, err
 	}
-	if err = m.application.UnlinkExternalIdentity(request.context, request.invocation(), parsed); err != nil {
+	if err = h.app.UnlinkExternalIdentity(request.context, request.invocation(), parsed); err != nil {
 		return operationResult{}, err
 	}
 	return noContentResult(), nil

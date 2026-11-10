@@ -54,12 +54,12 @@ type retentionPolicyResponse struct {
 	UpdatedAt                        string `json:"updated_at"`
 }
 
-type retentionPolicyResourceModule struct {
-	application RetentionPolicyApplication
+type retentionPolicyHandlers struct {
+	app RetentionPolicyApplication
 }
 
-func retentionPolicyResource(application RetentionPolicyApplication) apiResource {
-	module := retentionPolicyResourceModule{application: application}
+func retentionPolicyResource(app RetentionPolicyApplication) apiResource {
+	h := retentionPolicyHandlers{app: app}
 	replace := endpoint{
 		Method:      http.MethodPut,
 		Path:        "/retention-policy",
@@ -80,7 +80,7 @@ func retentionPolicyResource(application RetentionPolicyApplication) apiResource
 			"retention_policy.unavailable",
 			"resource.not_found",
 		},
-		Handle: module.replace,
+		Handle: h.replace,
 	}
 	return newResource(
 		"retention-policy",
@@ -96,16 +96,16 @@ func retentionPolicyResource(application RetentionPolicyApplication) apiResource
 				"resource.not_found",
 				"retention_policy.revision_conflict",
 			},
-			Handle: module.get,
+			Handle: h.get,
 		},
 		replace,
 	)
 }
 
-func (m retentionPolicyResourceModule) get(
+func (h retentionPolicyHandlers) get(
 	request operationRequest,
 ) (operationResult, error) {
-	policy, err := m.application.GetRetentionPolicy(
+	policy, err := h.app.GetRetentionPolicy(
 		request.context,
 		request.invocation(),
 	)
@@ -118,7 +118,7 @@ func (m retentionPolicyResourceModule) get(
 	).withHeaders(privateNoStoreHeaders()), nil
 }
 
-func (m retentionPolicyResourceModule) replace(
+func (h retentionPolicyHandlers) replace(
 	request operationRequest,
 ) (operationResult, error) {
 	var body retentionPolicyRequest
@@ -129,7 +129,7 @@ func (m retentionPolicyResourceModule) replace(
 	if err != nil {
 		return operationResult{}, err
 	}
-	policy, err := m.application.ReplaceRetentionPolicy(
+	policy, err := h.app.ReplaceRetentionPolicy(
 		request.context,
 		request.invocation(),
 		administration.ReplaceRetentionPolicyCommand{

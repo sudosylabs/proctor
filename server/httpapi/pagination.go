@@ -77,7 +77,7 @@ type pageRequest struct {
 // pageRequest parses the collection parameters. A repeated, empty, or
 // out-of-range value is invalid.
 func (r operationRequest) pageRequest() (pageRequest, error) {
-	values := r.request.URL.Query()
+	values := r.http.URL.Query()
 	page := pageRequest{Limit: defaultPageLimit}
 	for _, name := range []string{"limit", "cursor"} {
 		if entries, present := values[name]; present && (len(entries) != 1 || entries[0] == "") {

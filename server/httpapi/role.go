@@ -72,12 +72,12 @@ func roleResponseFromModel(request *http.Request, role *model.Role) roleResponse
 	}
 }
 
-type roleResourceModule struct {
-	roles RoleApplication
+type roleHandlers struct {
+	app RoleApplication
 }
 
-func roleResource(roles RoleApplication) apiResource {
-	module := roleResourceModule{roles: roles}
+func roleResource(app RoleApplication) apiResource {
+	h := roleHandlers{app: app}
 	return newResource(
 		"roles",
 		endpoint{
@@ -92,7 +92,7 @@ func roleResource(roles RoleApplication) apiResource {
 				"request.invalid",
 				"resource.not_found",
 			},
-			Handle: module.list,
+			Handle: h.list,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -110,14 +110,14 @@ func roleResource(roles RoleApplication) apiResource {
 				"administration.unavailable",
 				"resource.not_found",
 			},
-			Handle: module.create,
+			Handle: h.create,
 		},
 		endpoint{
 			Method: http.MethodGet,
 			Path:   "/roles/{role_id}",
 			Auth:   AuthPrincipalRequired,
 			Errors: operatorReadErrorCodes("request.invalid", "resource.not_found", "administration.unavailable"),
-			Handle: module.get,
+			Handle: h.get,
 		},
 		endpoint{
 			Method: http.MethodPatch,
@@ -132,7 +132,7 @@ func roleResource(roles RoleApplication) apiResource {
 				"role.permission.invalid",
 				"administration.unavailable",
 			),
-			Handle: module.patch,
+			Handle: h.patch,
 		},
 		endpoint{
 			Method: http.MethodDelete,
@@ -145,7 +145,7 @@ func roleResource(roles RoleApplication) apiResource {
 				"role.conflict",
 				"administration.unavailable",
 			),
-			Handle: module.archive,
+			Handle: h.archive,
 		},
 	)
 }
@@ -164,8 +164,8 @@ func operatorMutationErrorCodes(specific ...string) []string {
 	return append(codes, specific...)
 }
 
-func (m roleResourceModule) list(request operationRequest) (operationResult, error) {
-	roles, err := m.roles.ListRoles(
+func (h roleHandlers) list(request operationRequest) (operationResult, error) {
+	roles, err := h.app.ListRoles(
 		request.context,
 		request.invocation(),
 		administration.ListRolesQuery{},
@@ -179,7 +179,7 @@ func (m roleResourceModule) list(request operationRequest) (operationResult, err
 		"Role",
 		roles,
 		func(role *model.Role) boundedPageKey { return boundedPageKey{Name: role.Name, ID: role.ID.String()} },
-		func(role *model.Role) roleResponse { return roleResponseFromModel(request.request, role) },
+		func(role *model.Role) roleResponse { return roleResponseFromModel(request.http, role) },
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -188,12 +188,12 @@ func (m roleResourceModule) list(request operationRequest) (operationResult, err
 	return jsonResult(http.StatusOK, response), nil
 }
 
-func (m roleResourceModule) get(request operationRequest) (operationResult, error) {
+func (h roleHandlers) get(request operationRequest) (operationResult, error) {
 	roleID, err := pathID[model.RoleID](request, "role_id")
 	if err != nil {
 		return operationResult{}, err
 	}
-	role, err := m.roles.GetRole(
+	role, err := h.app.GetRole(
 		request.context,
 		request.invocation(),
 		administration.GetRoleQuery{ID: roleID},
@@ -201,16 +201,16 @@ func (m roleResourceModule) get(request operationRequest) (operationResult, erro
 	if err != nil {
 		return operationResult{}, err
 	}
-	return jsonResult(http.StatusOK, roleResponseFromModel(request.request, role)), nil
+	return jsonResult(http.StatusOK, roleResponseFromModel(request.http, role)), nil
 }
 
-func (m roleResourceModule) create(request operationRequest) (operationResult, error) {
+func (h roleHandlers) create(request operationRequest) (operationResult, error) {
 	var input createRoleRequest
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
 
-	saved, err := m.roles.CreateRole(
+	saved, err := h.app.CreateRole(
 		request.context,
 		request.invocation(),
 		administration.CreateRoleCommand{
@@ -224,10 +224,10 @@ func (m roleResourceModule) create(request operationRequest) (operationResult, e
 		return operationResult{}, err
 	}
 
-	return jsonResult(http.StatusCreated, roleResponseFromModel(request.request, saved)), nil
+	return jsonResult(http.StatusCreated, roleResponseFromModel(request.http, saved)), nil
 }
 
-func (m roleResourceModule) patch(request operationRequest) (operationResult, error) {
+func (h roleHandlers) patch(request operationRequest) (operationResult, error) {
 	roleID, err := pathID[model.RoleID](request, "role_id")
 	if err != nil {
 		return operationResult{}, err
@@ -238,7 +238,7 @@ func (m roleResourceModule) patch(request operationRequest) (operationResult, er
 		return operationResult{}, err
 	}
 
-	updated, err := m.roles.UpdateRole(
+	updated, err := h.app.UpdateRole(
 		request.context,
 		request.invocation(),
 		administration.UpdateRoleCommand{
@@ -252,15 +252,15 @@ func (m roleResourceModule) patch(request operationRequest) (operationResult, er
 		return operationResult{}, err
 	}
 
-	return jsonResult(http.StatusOK, roleResponseFromModel(request.request, updated)), nil
+	return jsonResult(http.StatusOK, roleResponseFromModel(request.http, updated)), nil
 }
 
-func (m roleResourceModule) archive(request operationRequest) (operationResult, error) {
+func (h roleHandlers) archive(request operationRequest) (operationResult, error) {
 	roleID, err := pathID[model.RoleID](request, "role_id")
 	if err != nil {
 		return operationResult{}, err
 	}
-	if err := m.roles.ArchiveRole(
+	if err := h.app.ArchiveRole(
 		request.context,
 		request.invocation(),
 		administration.ArchiveRoleCommand{ID: roleID},

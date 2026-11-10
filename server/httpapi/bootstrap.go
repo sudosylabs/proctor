@@ -140,12 +140,12 @@ func installationBootstrapResponseFromModel(
 	}
 }
 
-type bootstrapResourceModule struct {
-	bootstrap BootstrapApplication
+type bootstrapHandlers struct {
+	app BootstrapApplication
 }
 
-func bootstrapResource(bootstrap BootstrapApplication) apiResource {
-	module := bootstrapResourceModule{bootstrap: bootstrap}
+func bootstrapResource(app BootstrapApplication) apiResource {
+	h := bootstrapHandlers{app: app}
 	return newResource(
 		"bootstrap",
 		endpoint{
@@ -153,7 +153,7 @@ func bootstrapResource(bootstrap BootstrapApplication) apiResource {
 			Path:   "/bootstrap",
 			Auth:   AuthPublic,
 			Errors: []string{"installation.unavailable"},
-			Handle: module.status,
+			Handle: h.status,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -172,20 +172,20 @@ func bootstrapResource(bootstrap BootstrapApplication) apiResource {
 				"authentication.rate_limited",
 				"administration.unavailable",
 			},
-			Handle: module.install,
+			Handle: h.install,
 		},
 	)
 }
 
-func (m bootstrapResourceModule) status(request operationRequest) (operationResult, error) {
-	status, err := m.bootstrap.GetInstallationStatus(request.context, request.invocation(), identity.GetInstallationStatusQuery{})
+func (h bootstrapHandlers) status(request operationRequest) (operationResult, error) {
+	status, err := h.app.GetInstallationStatus(request.context, request.invocation(), identity.GetInstallationStatusQuery{})
 	if err != nil {
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, installationStatusResponse{Initialized: status.Initialized}), nil
 }
 
-func (m bootstrapResourceModule) install(request operationRequest) (operationResult, error) {
+func (h bootstrapHandlers) install(request operationRequest) (operationResult, error) {
 	var input bootstrapRequest
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, apperror.New("request.invalid").WithField("field", "body").Wrap(err)
@@ -194,7 +194,7 @@ func (m bootstrapResourceModule) install(request operationRequest) (operationRes
 		return operationResult{}, apperror.New("request.invalid").WithField("field", "bootstrap")
 	}
 
-	result, err := m.bootstrap.BootstrapInstallation(
+	result, err := h.app.BootstrapInstallation(
 		request.context,
 		invocation.New(model.Principal{}, request.metadata),
 		identity.BootstrapInstallationCommand{
@@ -217,7 +217,7 @@ func (m bootstrapResourceModule) install(request operationRequest) (operationRes
 		return operationResult{}, err
 	}
 
-	return jsonResult(http.StatusCreated, installationBootstrapResponseFromModel(request.request, result)), nil
+	return jsonResult(http.StatusCreated, installationBootstrapResponseFromModel(request.http, result)), nil
 }
 
 // BootstrapApplication is the application port its handlers call; it reports and performs installation bootstrap.

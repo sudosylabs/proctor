@@ -47,7 +47,7 @@ type OnboardingImportApplication interface {
 	OnboardingImportReport(context.Context, invocation.Invocation, model.OnboardingImportID, io.Writer) error
 }
 
-type onboardingImportModule struct{ imports OnboardingImportApplication }
+type onboardingImportHandlers struct{ app OnboardingImportApplication }
 
 type onboardingImportCommitRequest struct {
 	ExpectedRevision int64  `json:"expected_revision"`
@@ -127,8 +127,8 @@ type onboardingImportRowResponse struct {
 	ResourceID   string `json:"resource_id,omitempty"`
 }
 
-func onboardingImportResource(imports OnboardingImportApplication) apiResource {
-	module := onboardingImportModule{imports: imports}
+func onboardingImportResource(app OnboardingImportApplication) apiResource {
+	h := onboardingImportHandlers{app: app}
 	return newResource("onboarding-imports",
 		endpoint{
 			Method:       http.MethodPost,
@@ -155,7 +155,7 @@ func onboardingImportResource(imports OnboardingImportApplication) apiResource {
 				"student_progression.conflict",
 				"student_progression.unavailable",
 			},
-			Protocol: module.upload,
+			Protocol: h.upload,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -170,7 +170,7 @@ func onboardingImportResource(imports OnboardingImportApplication) apiResource {
 				"onboarding_import.unavailable",
 				"invitation.unavailable",
 			},
-			Handle: module.list,
+			Handle: h.list,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -185,7 +185,7 @@ func onboardingImportResource(imports OnboardingImportApplication) apiResource {
 				"onboarding_import.unavailable",
 				"invitation.unavailable",
 			},
-			Handle: module.get,
+			Handle: h.get,
 		},
 		endpoint{
 			Method:      http.MethodPost,
@@ -210,7 +210,7 @@ func onboardingImportResource(imports OnboardingImportApplication) apiResource {
 				"student_progression.conflict",
 				"student_progression.unavailable",
 			},
-			Handle: module.commit,
+			Handle: h.commit,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -230,7 +230,7 @@ func onboardingImportResource(imports OnboardingImportApplication) apiResource {
 				"student_progression.conflict",
 				"student_progression.unavailable",
 			},
-			Handle: module.cancel,
+			Handle: h.cancel,
 		},
 		endpoint{
 			Method:       http.MethodGet,
@@ -248,19 +248,19 @@ func onboardingImportResource(imports OnboardingImportApplication) apiResource {
 				"onboarding_import.unavailable",
 				"invitation.unavailable",
 			},
-			Protocol: module.report,
+			Protocol: h.report,
 		},
 	)
 }
 
-func (m onboardingImportModule) upload(request operationRequest) (protocolResult, error) {
-	query := request.request.URL.Query()
+func (h onboardingImportHandlers) upload(request operationRequest) (protocolResult, error) {
+	query := request.http.URL.Query()
 	command := onboarding.UploadOnboardingImportCommand{
 		Mode:      model.OnboardingImportMode(query.Get("mode")),
 		ScopeType: model.RoleScopeType(query.Get("scope_type")),
 		ScopeID:   query.Get("scope_id"),
 		RoleID:    model.RoleID(query.Get("role_id")),
-		Body:      request.request.Body,
+		Body:      request.http.Body,
 	}
 	if names, given := query["file_name"]; given {
 		if len(names) != 1 {
@@ -270,7 +270,7 @@ func (m onboardingImportModule) upload(request operationRequest) (protocolResult
 		command.FileName = &names[0]
 	}
 
-	view, err := m.imports.UploadOnboardingImport(request.context, request.invocation(), command)
+	view, err := h.app.UploadOnboardingImport(request.context, request.invocation(), command)
 	if err != nil {
 		return protocolResult{}, err
 	}
@@ -278,13 +278,13 @@ func (m onboardingImportModule) upload(request operationRequest) (protocolResult
 	return streamingUploadProtocolResult(http.StatusAccepted, onboardingImportResponseFromView(view, nil)).withHeaders(noStoreHeaders()), nil
 }
 
-func (m onboardingImportModule) list(request operationRequest) (operationResult, error) {
+func (h onboardingImportHandlers) list(request operationRequest) (operationResult, error) {
 	page, err := request.pageRequest()
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	values := request.request.URL.Query()
+	values := request.http.URL.Query()
 	for key := range values {
 		if key != "state" && key != "limit" && key != "cursor" {
 			return operationResult{}, invalidRequestError(errors.New("unknown onboarding import query parameter"))
@@ -310,7 +310,7 @@ func (m onboardingImportModule) list(request operationRequest) (operationResult,
 		query.BeforeID = model.OnboardingImportID(cursor.ID)
 	}
 
-	result, err := m.imports.ListOnboardingImports(request.context, request.invocation(), query)
+	result, err := h.app.ListOnboardingImports(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -333,19 +333,19 @@ func (m onboardingImportModule) list(request operationRequest) (operationResult,
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
-func (m onboardingImportModule) get(request operationRequest) (operationResult, error) {
+func (h onboardingImportHandlers) get(request operationRequest) (operationResult, error) {
 	id, err := pathID[model.OnboardingImportID](request, "onboarding_import_id")
 	if err != nil {
 		return operationResult{}, err
 	}
-	view, rows, err := m.imports.GetOnboardingImport(request.context, request.invocation(), id)
+	view, rows, err := h.app.GetOnboardingImport(request.context, request.invocation(), id)
 	if err != nil {
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, onboardingImportResponseFromView(view, rows)).withHeaders(noStoreHeaders()), nil
 }
 
-func (m onboardingImportModule) commit(request operationRequest) (operationResult, error) {
+func (h onboardingImportHandlers) commit(request operationRequest) (operationResult, error) {
 	id, err := pathID[model.OnboardingImportID](request, "onboarding_import_id")
 	if err != nil {
 		return operationResult{}, err
@@ -356,7 +356,7 @@ func (m onboardingImportModule) commit(request operationRequest) (operationResul
 		return operationResult{}, invalidRequestError(err)
 	}
 
-	view, err := m.imports.CommitOnboardingImport(request.context, request.invocation(), onboarding.CommitOnboardingImportCommand{
+	view, err := h.app.CommitOnboardingImport(request.context, request.invocation(), onboarding.CommitOnboardingImportCommand{
 		ID:               id,
 		ExpectedRevision: body.ExpectedRevision,
 		PreviewDigest:    body.PreviewDigest,
@@ -370,25 +370,25 @@ func (m onboardingImportModule) commit(request operationRequest) (operationResul
 	return jsonResult(http.StatusAccepted, onboardingImportResponseFromView(view, nil)).withHeaders(noStoreHeaders()), nil
 }
 
-func (m onboardingImportModule) cancel(request operationRequest) (operationResult, error) {
+func (h onboardingImportHandlers) cancel(request operationRequest) (operationResult, error) {
 	id, err := pathID[model.OnboardingImportID](request, "onboarding_import_id")
 	if err != nil {
 		return operationResult{}, err
 	}
-	view, err := m.imports.CancelOnboardingImport(request.context, request.invocation(), id)
+	view, err := h.app.CancelOnboardingImport(request.context, request.invocation(), id)
 	if err != nil {
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, onboardingImportResponseFromView(view, nil)).withHeaders(noStoreHeaders()), nil
 }
 
-func (m onboardingImportModule) report(request operationRequest) (protocolResult, error) {
+func (h onboardingImportHandlers) report(request operationRequest) (protocolResult, error) {
 	id, err := pathID[model.OnboardingImportID](request, "onboarding_import_id")
 	if err != nil {
 		return protocolResult{}, err
 	}
 	var body bytes.Buffer
-	if err = m.imports.OnboardingImportReport(request.context, request.invocation(), id, &body); err != nil {
+	if err = h.app.OnboardingImportReport(request.context, request.invocation(), id, &body); err != nil {
 		return protocolResult{}, err
 	}
 	headers := noStoreHeaders()

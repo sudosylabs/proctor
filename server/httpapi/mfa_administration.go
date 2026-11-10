@@ -14,7 +14,7 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-type mfaAdministrationResourceModule struct{ application *identity.Service }
+type mfaAdministrationHandlers struct{ app *identity.Service }
 
 type resetUserMFARequest struct {
 	IdentityVerified      bool   `json:"identity_verified"`
@@ -22,8 +22,8 @@ type resetUserMFARequest struct {
 	VerificationReference string `json:"verification_reference"`
 }
 
-func mfaAdministrationResource(application *identity.Service) apiResource {
-	module := mfaAdministrationResourceModule{application: application}
+func mfaAdministrationResource(app *identity.Service) apiResource {
+	h := mfaAdministrationHandlers{app: app}
 	return newResource(
 		"mfa-administration",
 		endpoint{
@@ -45,11 +45,11 @@ func mfaAdministrationResource(application *identity.Service) apiResource {
 				"authentication.internal",
 				"authentication.session_required",
 			},
-			Handle: module.reset,
+			Handle: h.reset,
 		},
 	)
 }
-func (m mfaAdministrationResourceModule) reset(request operationRequest) (operationResult, error) {
+func (h mfaAdministrationHandlers) reset(request operationRequest) (operationResult, error) {
 	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
@@ -60,7 +60,7 @@ func (m mfaAdministrationResourceModule) reset(request operationRequest) (operat
 		return operationResult{}, err
 	}
 
-	if err := m.application.ResetUserMFA(request.context, request.invocation(), identity.ResetUserMFACommand{
+	if err := h.app.ResetUserMFA(request.context, request.invocation(), identity.ResetUserMFACommand{
 		UserID:                userID,
 		IdentityVerified:      body.IdentityVerified,
 		Reason:                body.Reason,

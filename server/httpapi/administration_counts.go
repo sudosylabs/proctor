@@ -34,12 +34,12 @@ type administrationCountsResponse struct {
 	OpenOnboardingImportsIsLowerBound *bool `json:"open_onboarding_imports_is_lower_bound,omitempty"`
 }
 
-type administrationCountsResourceModule struct {
-	application AdministrationCountsApplication
+type administrationCountsHandlers struct {
+	app AdministrationCountsApplication
 }
 
 func administrationCountsResource(application AdministrationCountsApplication) apiResource {
-	module := administrationCountsResourceModule{application: application}
+	h := administrationCountsHandlers{app: application}
 	return newResource(
 		"administration-counts",
 		endpoint{
@@ -59,16 +59,16 @@ func administrationCountsResource(application AdministrationCountsApplication) a
 				"request.invalid",
 				"resource.not_found",
 			},
-			Handle: module.get,
+			Handle: h.get,
 		},
 	)
 }
 
-func (m administrationCountsResourceModule) get(request operationRequest) (operationResult, error) {
-	if m.application == nil {
+func (h administrationCountsHandlers) get(request operationRequest) (operationResult, error) {
+	if h.app == nil {
 		return operationResult{}, errUnpresentableResult
 	}
-	counts, err := m.application.AdministrationCounts(request.context, request.invocation())
+	counts, err := h.app.AdministrationCounts(request.context, request.invocation())
 	if err != nil {
 		return operationResult{}, err
 	}

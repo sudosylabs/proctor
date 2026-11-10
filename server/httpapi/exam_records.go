@@ -37,10 +37,10 @@ type ExamRecordsApplication interface {
 	ReleaseRetentionHold(context.Context, invocation.Invocation, exam.ReleaseRetentionHoldCommand) (*model.RetentionHold, error)
 }
 
-type examRecordsHTTPModule struct{ application ExamRecordsApplication }
+type examRecordsHandlers struct{ app ExamRecordsApplication }
 
-func examRecordsResource(application ExamRecordsApplication) apiResource {
-	m := examRecordsHTTPModule{application: application}
+func examRecordsResource(app ExamRecordsApplication) apiResource {
+	h := examRecordsHandlers{app: app}
 	completion := "/exams/{exam_id}/sittings/{exam_sitting_id}/records-completion"
 	waiver := "/exams/{exam_id}/sittings/{exam_sitting_id}/submissions/{submission_id}/review-waiver"
 	holds := "/exams/{exam_id}/retention-holds"
@@ -64,7 +64,7 @@ func examRecordsResource(application ExamRecordsApplication) apiResource {
 			"idempotency.conflict",
 			"idempotency.in_progress",
 		},
-		Handle: m.complete,
+		Handle: h.complete,
 	}
 	waiveRoute := endpoint{
 		Method:      http.MethodPost,
@@ -85,7 +85,7 @@ func examRecordsResource(application ExamRecordsApplication) apiResource {
 			"idempotency.conflict",
 			"idempotency.in_progress",
 		},
-		Handle: m.waive,
+		Handle: h.waive,
 	}
 	createRoute := endpoint{
 		Method:      http.MethodPost,
@@ -106,7 +106,7 @@ func examRecordsResource(application ExamRecordsApplication) apiResource {
 			"idempotency.conflict",
 			"idempotency.in_progress",
 		},
-		Handle: m.createHold,
+		Handle: h.createHold,
 	}
 	releaseRoute := endpoint{
 		Method:      http.MethodPost,
@@ -127,7 +127,7 @@ func examRecordsResource(application ExamRecordsApplication) apiResource {
 			"idempotency.conflict",
 			"idempotency.in_progress",
 		},
-		Handle: m.releaseHold,
+		Handle: h.releaseHold,
 	}
 	return newResource(
 		"exam-records",
@@ -143,7 +143,7 @@ func examRecordsResource(application ExamRecordsApplication) apiResource {
 				"exam.invalid",
 				"exam.unavailable",
 			},
-			Handle: m.getCompletion,
+			Handle: h.getCompletion,
 		},
 		completeRoute,
 		endpoint{
@@ -158,7 +158,7 @@ func examRecordsResource(application ExamRecordsApplication) apiResource {
 				"exam.invalid",
 				"exam.unavailable",
 			},
-			Handle: m.getWaiver,
+			Handle: h.getWaiver,
 		},
 		waiveRoute,
 		endpoint{
@@ -173,7 +173,7 @@ func examRecordsResource(application ExamRecordsApplication) apiResource {
 				"exam.invalid",
 				"exam.unavailable",
 			},
-			Handle: m.listHolds,
+			Handle: h.listHolds,
 		},
 		createRoute,
 		releaseRoute,
@@ -296,13 +296,13 @@ type retentionHoldPageResponse struct {
 	NextCursor string                  `json:"next_cursor,omitempty"`
 }
 
-func (m examRecordsHTTPModule) getCompletion(request operationRequest) (operationResult, error) {
+func (h examRecordsHandlers) getCompletion(request operationRequest) (operationResult, error) {
 	examID, sittingID, err := examSittingIDs(request)
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	value, err := m.application.GetExamSittingRecords(request.context, request.invocation(), examID, sittingID)
+	value, err := h.app.GetExamSittingRecords(request.context, request.invocation(), examID, sittingID)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -317,7 +317,7 @@ func (m examRecordsHTTPModule) getCompletion(request operationRequest) (operatio
 		PendingReviews:  value.PendingReviews,
 	}).withHeaders(privateNoStoreHeaders()), nil
 }
-func (m examRecordsHTTPModule) complete(request operationRequest) (operationResult, error) {
+func (h examRecordsHandlers) complete(request operationRequest) (operationResult, error) {
 	examID, sittingID, err := examSittingIDs(request)
 	if err != nil {
 		return operationResult{}, err
@@ -338,7 +338,7 @@ func (m examRecordsHTTPModule) complete(request operationRequest) (operationResu
 		return operationResult{}, err
 	}
 
-	value, err := m.application.CompleteExamSittingRecords(request.context, request.invocation(), exam.CompleteRecordsCommand{
+	value, err := h.app.CompleteExamSittingRecords(request.context, request.invocation(), exam.CompleteRecordsCommand{
 		Scope:                        model.RetentionHoldScope{ExamID: examID, SittingID: sittingID},
 		ExpectedRevision:             revision,
 		AcknowledgedEvidenceRevision: evidence,
@@ -353,13 +353,13 @@ func (m examRecordsHTTPModule) complete(request operationRequest) (operationResu
 
 	return jsonResult(http.StatusOK, recordsCompletionResponse(*value)).withHeaders(privateNoStoreHeaders()), nil
 }
-func (m examRecordsHTTPModule) getWaiver(request operationRequest) (operationResult, error) {
+func (h examRecordsHandlers) getWaiver(request operationRequest) (operationResult, error) {
 	scope, err := recordsSubmissionScope(request)
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	value, err := m.application.GetSubmissionReviewWaiver(request.context, request.invocation(), scope)
+	value, err := h.app.GetSubmissionReviewWaiver(request.context, request.invocation(), scope)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -369,7 +369,7 @@ func (m examRecordsHTTPModule) getWaiver(request operationRequest) (operationRes
 		submissionReviewWaiverEnvelope{Waiver: recordsWaiverResponse(value)},
 	).withHeaders(privateNoStoreHeaders()), nil
 }
-func (m examRecordsHTTPModule) waive(request operationRequest) (operationResult, error) {
+func (h examRecordsHandlers) waive(request operationRequest) (operationResult, error) {
 	scope, err := recordsSubmissionScope(request)
 	if err != nil {
 		return operationResult{}, err
@@ -406,7 +406,7 @@ func (m examRecordsHTTPModule) waive(request operationRequest) (operationResult,
 		}
 	}
 
-	value, err := m.application.WaiveSubmissionReview(request.context, request.invocation(), exam.WaiveReviewCommand{
+	value, err := h.app.WaiveSubmissionReview(request.context, request.invocation(), exam.WaiveReviewCommand{
 		Scope:                             scope,
 		ExpectedRevision:                  revision,
 		ExpectedDeliveryInventoryRevision: deliveryRevision,
@@ -428,7 +428,7 @@ func (m examRecordsHTTPModule) waive(request operationRequest) (operationResult,
 		submissionReviewWaiverEnvelope{Waiver: recordsWaiverResponse(value)},
 	).withHeaders(privateNoStoreHeaders()), nil
 }
-func (m examRecordsHTTPModule) createHold(request operationRequest) (operationResult, error) {
+func (h examRecordsHandlers) createHold(request operationRequest) (operationResult, error) {
 	examID, err := examSittingExamID(request)
 	if err != nil {
 		return operationResult{}, err
@@ -447,7 +447,7 @@ func (m examRecordsHTTPModule) createHold(request operationRequest) (operationRe
 		return operationResult{}, invalidRequestError(err)
 	}
 
-	value, err := m.application.CreateRetentionHold(request.context, request.invocation(), exam.CreateRetentionHoldCommand{
+	value, err := h.app.CreateRetentionHold(request.context, request.invocation(), exam.CreateRetentionHoldCommand{
 		Scope:          scope,
 		ReasonCode:     body.ReasonCode,
 		PrivateReason:  body.PrivateReason,
@@ -462,7 +462,7 @@ func (m examRecordsHTTPModule) createHold(request operationRequest) (operationRe
 
 	return jsonResult(http.StatusCreated, recordsHoldResponse(*value)).withHeaders(privateNoStoreHeaders()), nil
 }
-func (m examRecordsHTTPModule) releaseHold(request operationRequest) (operationResult, error) {
+func (h examRecordsHandlers) releaseHold(request operationRequest) (operationResult, error) {
 	examID, err := examSittingExamID(request)
 	if err != nil {
 		return operationResult{}, err
@@ -491,7 +491,7 @@ func (m examRecordsHTTPModule) releaseHold(request operationRequest) (operationR
 		return operationResult{}, invalidRequestError(err)
 	}
 
-	value, err := m.application.ReleaseRetentionHold(request.context, request.invocation(), exam.ReleaseRetentionHoldCommand{
+	value, err := h.app.ReleaseRetentionHold(request.context, request.invocation(), exam.ReleaseRetentionHoldCommand{
 		Scope:            scope,
 		HoldID:           holdID,
 		ExpectedRevision: revision,
@@ -509,13 +509,13 @@ func (m examRecordsHTTPModule) releaseHold(request operationRequest) (operationR
 	return jsonResult(http.StatusOK, recordsHoldResponse(*value)).withHeaders(privateNoStoreHeaders()), nil
 }
 
-func (m examRecordsHTTPModule) listHolds(request operationRequest) (operationResult, error) {
+func (h examRecordsHandlers) listHolds(request operationRequest) (operationResult, error) {
 	examID, err := examSittingExamID(request)
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	values := request.request.URL.Query()
+	values := request.http.URL.Query()
 	for key, items := range values {
 		if len(items) != 1 {
 			return operationResult{}, invalidRequestError(nil)
@@ -561,7 +561,7 @@ func (m examRecordsHTTPModule) listHolds(request operationRequest) (operationRes
 		query.After = model.RetentionHoldID(cursor.AfterID)
 	}
 
-	page, err := m.application.ListRetentionHolds(request.context, request.invocation(), query)
+	page, err := h.app.ListRetentionHolds(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}

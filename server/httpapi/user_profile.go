@@ -195,14 +195,14 @@ type candidateExamActivityResultResponse struct {
 	ReleasedAt string `json:"released_at"`
 }
 
-type userProfileResourceModule struct {
+type userProfileHandlers struct {
 	profiles UserProfileApplication
 	accounts UserAccountApplication
 	emails   UserEmailApplication
 }
 
 func userProfileResource(profiles UserProfileApplication, accounts UserAccountApplication, emails UserEmailApplication) apiResource {
-	module := userProfileResourceModule{profiles: profiles, accounts: accounts, emails: emails}
+	h := userProfileHandlers{profiles: profiles, accounts: accounts, emails: emails}
 	userPath := "/users/{user_id}"
 	picture := "/users/{user_id}/profile-picture"
 	email := "/users/{user_id}/email"
@@ -221,7 +221,7 @@ func userProfileResource(profiles UserProfileApplication, accounts UserAccountAp
 				"administration.unavailable",
 				"resource.not_found",
 			},
-			Handle: module.search,
+			Handle: h.search,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -235,35 +235,35 @@ func userProfileResource(profiles UserProfileApplication, accounts UserAccountAp
 				"administration.unavailable",
 				"request.invalid",
 			},
-			Handle: module.current,
+			Handle: h.current,
 		},
 		endpoint{
 			Method: http.MethodGet,
 			Path:   "/users/me/context",
 			Auth:   AuthSessionRequired,
 			Errors: currentUserContextSessionCodes("administration.unavailable"),
-			Handle: module.context,
+			Handle: h.context,
 		},
 		endpoint{
 			Method: http.MethodGet,
 			Path:   "/users/me/exam-activity",
 			Auth:   AuthSessionRequired,
 			Errors: []string{"request.invalid", "exam.attempt.unavailable", "exam.attempt.invalid", "exam.delivery.metadata_capacity"},
-			Handle: module.examActivity,
+			Handle: h.examActivity,
 		},
 		endpoint{
 			Method: http.MethodGet,
 			Path:   userPath,
 			Auth:   AuthPrincipalRequired,
 			Errors: userProfileReadCodes("request.invalid", "resource.not_found"),
-			Handle: module.get,
+			Handle: h.get,
 		},
 		endpoint{
 			Method: http.MethodPatch,
 			Path:   userPath,
 			Auth:   AuthPrincipalRequired,
 			Errors: userProfileMutationCodes("request.invalid", "resource.not_found", "user.invalid", "user.conflict"),
-			Handle: module.update,
+			Handle: h.update,
 		},
 		endpoint{
 			Method: http.MethodPut,
@@ -278,14 +278,14 @@ func userProfileResource(profiles UserProfileApplication, accounts UserAccountAp
 				"authentication.rate_limited",
 				"authentication.rate_limit_unavailable",
 			),
-			Handle: module.changeEmail,
+			Handle: h.changeEmail,
 		},
 		endpoint{
 			Method: http.MethodPost,
 			Path:   "/users/{user_id}/email/verify",
 			Auth:   AuthStrongRecentSessionRequired,
 			Errors: userProfileMutationCodes("request.invalid", "resource.not_found", "user.conflict", "authentication.account_recovery.unavailable"),
-			Handle: module.verifyEmail,
+			Handle: h.verifyEmail,
 		},
 		endpoint{
 			Method:       http.MethodGet,
@@ -303,7 +303,7 @@ func userProfileResource(profiles UserProfileApplication, accounts UserAccountAp
 				"profile_picture.unavailable",
 				"administration.unavailable",
 			},
-			Protocol: module.downloadPicture,
+			Protocol: h.downloadPicture,
 		},
 		endpoint{
 			Method:       http.MethodPut,
@@ -324,7 +324,7 @@ func userProfileResource(profiles UserProfileApplication, accounts UserAccountAp
 				"user.conflict",
 				"administration.unavailable",
 			},
-			Protocol: module.uploadPicture,
+			Protocol: h.uploadPicture,
 		},
 		endpoint{
 			Method: http.MethodDelete,
@@ -341,14 +341,14 @@ func userProfileResource(profiles UserProfileApplication, accounts UserAccountAp
 				"user.conflict",
 				"administration.unavailable",
 			},
-			Handle: module.removePicture,
+			Handle: h.removePicture,
 		},
 	)
 }
 
-func (m userProfileResourceModule) examActivity(request operationRequest) (operationResult, error) {
+func (h userProfileHandlers) examActivity(request operationRequest) (operationResult, error) {
 	query := attempt.CandidateActivityQuery{Limit: 50}
-	values := request.request.URL.Query()
+	values := request.http.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		limit, err := strconv.Atoi(raw)
 		if err != nil || limit < 1 || limit > 200 {
@@ -368,7 +368,7 @@ func (m userProfileResourceModule) examActivity(request operationRequest) (opera
 		query.BeforeSittingID = model.ExamSittingID(cursor.ExamSittingID)
 	}
 
-	page, err := m.accounts.ListCandidateExamActivity(request.context, request.invocation(), query)
+	page, err := h.accounts.ListCandidateExamActivity(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -457,8 +457,8 @@ func currentUserContextSessionCodes(extra ...string) []string {
 	return append([]string(nil), extra...)
 }
 
-func (m userProfileResourceModule) context(request operationRequest) (operationResult, error) {
-	view, err := m.profiles.GetCurrentUserContext(request.context, request.invocation())
+func (h userProfileHandlers) context(request operationRequest) (operationResult, error) {
+	view, err := h.profiles.GetCurrentUserContext(request.context, request.invocation())
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -502,7 +502,7 @@ func (m userProfileResourceModule) context(request operationRequest) (operationR
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
-func (m userProfileResourceModule) changeEmail(request operationRequest) (operationResult, error) {
+func (h userProfileHandlers) changeEmail(request operationRequest) (operationResult, error) {
 	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
@@ -513,7 +513,7 @@ func (m userProfileResourceModule) changeEmail(request operationRequest) (operat
 		return operationResult{}, err
 	}
 
-	state, appErr := m.emails.ChangeUserEmail(
+	state, appErr := h.emails.ChangeUserEmail(
 		request.context,
 		request.invocation(),
 		identity.ChangeUserEmailCommand{UserID: userID, Email: body.Email},
@@ -525,13 +525,13 @@ func (m userProfileResourceModule) changeEmail(request operationRequest) (operat
 	return jsonResult(http.StatusOK, userEmailStateResponseFromApplication(state)), nil
 }
 
-func (m userProfileResourceModule) verifyEmail(request operationRequest) (operationResult, error) {
+func (h userProfileHandlers) verifyEmail(request operationRequest) (operationResult, error) {
 	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	state, appErr := m.emails.VerifyUserEmailPrivileged(
+	state, appErr := h.emails.VerifyUserEmailPrivileged(
 		request.context,
 		request.invocation(),
 		identity.VerifyUserEmailPrivilegedCommand{UserID: userID},
@@ -577,22 +577,22 @@ func userProfilePrincipalMutationCodes(extra ...string) []string {
 	return append(codes, extra...)
 }
 
-func (m userProfileResourceModule) uploadPicture(request operationRequest) (protocolResult, error) {
+func (h userProfileHandlers) uploadPicture(request operationRequest) (protocolResult, error) {
 	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return protocolResult{}, err
 	}
 
-	expectedSHA256, err := profilePictureIfMatch(request.request.Header.Get("If-Match"), false)
+	expectedSHA256, err := profilePictureIfMatch(request.http.Header.Get("If-Match"), false)
 	if err != nil {
 		return protocolResult{}, invalidRequestError(err)
 	}
 
-	account, err := m.profiles.UploadProfilePicture(request.context, request.invocation(), user.UploadProfilePictureCommand{
+	account, err := h.profiles.UploadProfilePicture(request.context, request.invocation(), user.UploadProfilePictureCommand{
 		UserID:         userID,
 		ExpectedSHA256: expectedSHA256,
-		Body:           request.request.Body,
-		Size:           request.request.ContentLength,
+		Body:           request.http.Body,
+		Size:           request.http.ContentLength,
 	})
 	if err != nil {
 		return protocolResult{}, err
@@ -601,18 +601,18 @@ func (m userProfileResourceModule) uploadPicture(request operationRequest) (prot
 	return streamingUploadProtocolResult(http.StatusOK, userProfileResponseFromModel(account)), nil
 }
 
-func (m userProfileResourceModule) removePicture(request operationRequest) (operationResult, error) {
+func (h userProfileHandlers) removePicture(request operationRequest) (operationResult, error) {
 	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	expectedSHA256, err := profilePictureIfMatch(request.request.Header.Get("If-Match"), true)
+	expectedSHA256, err := profilePictureIfMatch(request.http.Header.Get("If-Match"), true)
 	if err != nil {
 		return operationResult{}, invalidRequestError(err)
 	}
 
-	account, appErr := m.profiles.RemoveProfilePicture(
+	account, appErr := h.profiles.RemoveProfilePicture(
 		request.context,
 		request.invocation(),
 		user.RemoveProfilePictureCommand{UserID: userID, ExpectedSHA256: expectedSHA256},
@@ -642,18 +642,18 @@ func profilePictureIfMatch(header string, required bool) (string, error) {
 	return checksum, nil
 }
 
-func (m userProfileResourceModule) downloadPicture(request operationRequest) (protocolResult, error) {
+func (h userProfileHandlers) downloadPicture(request operationRequest) (protocolResult, error) {
 	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return protocolResult{}, err
 	}
 
-	size, err := strconv.Atoi(defaultQuery(request.request, "size", "256"))
+	size, err := strconv.Atoi(defaultQuery(request.http, "size", "256"))
 	if err != nil {
 		return protocolResult{}, invalidRequestError(err)
 	}
 
-	content, appErr := m.profiles.GetProfilePicture(
+	content, appErr := h.profiles.GetProfilePicture(
 		request.context,
 		request.invocation(),
 		user.GetProfilePictureQuery{UserID: userID, Size: size},
@@ -667,7 +667,7 @@ func (m userProfileResourceModule) downloadPicture(request operationRequest) (pr
 		"Cache-Control": []string{"private, max-age=86400"},
 		"Content-Type":  []string{content.MediaType},
 	}
-	if etagMatches(request.request.Header.Get("If-None-Match"), content.ETag) {
+	if etagMatches(request.http.Header.Get("If-None-Match"), content.ETag) {
 		_ = content.Body.Close()
 		return notModifiedProtocolResult(content.Size).withHeaders(headers), nil
 	}
@@ -686,7 +686,7 @@ func etagMatches(header, current string) bool {
 	return false
 }
 
-func (m userProfileResourceModule) search(request operationRequest) (operationResult, error) {
+func (h userProfileHandlers) search(request operationRequest) (operationResult, error) {
 	paging, err := request.pageRequest()
 	if err != nil {
 		return operationResult{}, err
@@ -697,20 +697,20 @@ func (m userProfileResourceModule) search(request operationRequest) (operationRe
 		return operationResult{}, err
 	}
 
-	includeDisabled, err := strconv.ParseBool(defaultQuery(request.request, "include_disabled", "false"))
+	includeDisabled, err := strconv.ParseBool(defaultQuery(request.http, "include_disabled", "false"))
 	if err != nil {
 		return operationResult{}, invalidRequestError(err)
 	}
 
-	query := user.SearchUsersQuery{Query: request.request.URL.Query().Get("q"), Limit: paging.Limit, IncludeDisabled: includeDisabled}
-	if query.Affiliations, query.AcademicUnitID, err = userDirectoryFilters(request.request.URL.Query()); err != nil {
+	query := user.SearchUsersQuery{Query: request.http.URL.Query().Get("q"), Limit: paging.Limit, IncludeDisabled: includeDisabled}
+	if query.Affiliations, query.AcademicUnitID, err = userDirectoryFilters(request.http.URL.Query()); err != nil {
 		return operationResult{}, err
 	}
 	if present {
 		query.AfterUsername, query.AfterID = cursor.Username, model.UserID(cursor.ID)
 	}
 
-	page, err := m.profiles.SearchUsers(request.context, request.invocation(), query)
+	page, err := h.profiles.SearchUsers(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -821,27 +821,27 @@ func userDirectoryCursorSpec() opaqueCursorSpec[userDirectoryCursor] {
 	}
 }
 
-func (m userProfileResourceModule) current(request operationRequest) (operationResult, error) {
-	account, err := m.profiles.GetUserProfile(request.context, request.invocation(), user.GetUserProfileQuery{ID: request.principal.UserID})
+func (h userProfileHandlers) current(request operationRequest) (operationResult, error) {
+	account, err := h.profiles.GetUserProfile(request.context, request.invocation(), user.GetUserProfileQuery{ID: request.principal.UserID})
 	if err != nil {
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, userProfileResponseFromModel(account)), nil
 }
 
-func (m userProfileResourceModule) get(request operationRequest) (operationResult, error) {
+func (h userProfileHandlers) get(request operationRequest) (operationResult, error) {
 	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
 	}
-	account, err := m.profiles.GetUserProfile(request.context, request.invocation(), user.GetUserProfileQuery{ID: userID})
+	account, err := h.profiles.GetUserProfile(request.context, request.invocation(), user.GetUserProfileQuery{ID: userID})
 	if err != nil {
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, userProfileResponseFromModel(account)), nil
 }
 
-func (m userProfileResourceModule) update(request operationRequest) (operationResult, error) {
+func (h userProfileHandlers) update(request operationRequest) (operationResult, error) {
 	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
@@ -852,7 +852,7 @@ func (m userProfileResourceModule) update(request operationRequest) (operationRe
 		return operationResult{}, err
 	}
 
-	account, err := m.profiles.UpdateUserProfile(request.context, request.invocation(), user.UpdateUserProfileCommand{
+	account, err := h.profiles.UpdateUserProfile(request.context, request.invocation(), user.UpdateUserProfileCommand{
 		ID:          userID,
 		Username:    body.Username,
 		DisplayName: body.DisplayName,

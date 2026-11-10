@@ -158,10 +158,13 @@ type ExamAttemptApplication interface {
 	OpenExamSubmissionFile(context.Context, invocation.Invocation, attempt.OpenSubmissionFileQuery) (attempt.OpenedContent, error)
 }
 
-type examAttemptHTTPModule struct{ application ExamAttemptApplication }
+// examAttemptHandlers serves every route backed by the Attempt service: the
+// Exam Attempt routes here and the security preflight, native delivery,
+// browser delivery and delivery budget resources in their own files.
+type examAttemptHandlers struct{ app ExamAttemptApplication }
 
-func examAttemptResource(application ExamAttemptApplication) apiResource {
-	module := examAttemptHTTPModule{application: application}
+func examAttemptResource(app ExamAttemptApplication) apiResource {
+	h := examAttemptHandlers{app: app}
 	managerCollection := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts"
 	managerMember := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}"
 	managerBrowserActivity := "/exams/{exam_id}/sittings/{exam_sitting_id}/attempts/{exam_attempt_id}/browser-activity"
@@ -198,7 +201,7 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			Handle: module.listManaged,
+			Handle: h.listManaged,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -215,7 +218,7 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			Handle: module.listCandidateStatuses,
+			Handle: h.listCandidateStatuses,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -233,7 +236,7 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			Handle: module.getManaged,
+			Handle: h.getManaged,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -252,7 +255,7 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.sitting.not_found",
 				"exam.sitting.unavailable",
 			},
-			Handle: module.listBrowserActivity,
+			Handle: h.listBrowserActivity,
 		},
 		endpoint{
 			Method:      http.MethodPost,
@@ -280,7 +283,7 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			Handle: module.endByManager,
+			Handle: h.endByManager,
 		},
 		endpoint{
 			Method:      http.MethodPost,
@@ -308,7 +311,7 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			Handle: module.reallow,
+			Handle: h.reallow,
 		},
 		endpoint{
 			Method:      http.MethodPost,
@@ -336,7 +339,7 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			Handle: module.suspend,
+			Handle: h.suspend,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -352,7 +355,7 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			Handle: module.presentation,
+			Handle: h.presentation,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -368,7 +371,7 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			Handle: module.workspace,
+			Handle: h.workspace,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -384,7 +387,7 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			Handle: module.workspaceChanges,
+			Handle: h.workspaceChanges,
 		},
 		endpoint{
 			Method:      http.MethodPost,
@@ -411,7 +414,7 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			Handle: module.createWorkspaceDirectory,
+			Handle: h.createWorkspaceDirectory,
 		},
 		endpoint{
 			Method:       http.MethodPost,
@@ -443,7 +446,7 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			Protocol: module.createWorkspaceFile,
+			Protocol: h.createWorkspaceFile,
 		},
 		endpoint{
 			Method:      http.MethodPatch,
@@ -469,7 +472,7 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			Handle: module.moveWorkspaceEntry,
+			Handle: h.moveWorkspaceEntry,
 		},
 		endpoint{
 			Method:       http.MethodPut,
@@ -501,7 +504,7 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			Protocol: module.replaceWorkspaceFile,
+			Protocol: h.replaceWorkspaceFile,
 		},
 		endpoint{
 			Method:      http.MethodDelete,
@@ -530,7 +533,7 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			Handle: module.deleteWorkspaceEntry,
+			Handle: h.deleteWorkspaceEntry,
 		},
 		endpoint{
 			Method:       http.MethodGet,
@@ -548,7 +551,7 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			Protocol: module.openResource,
+			Protocol: h.openResource,
 		},
 		endpoint{
 			Method:       http.MethodGet,
@@ -566,7 +569,7 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			Protocol: module.openWorkspaceFile,
+			Protocol: h.openWorkspaceFile,
 		},
 		endpoint{
 			Method:      http.MethodPost,
@@ -596,7 +599,7 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			Handle: module.submit,
+			Handle: h.submit,
 		},
 		endpoint{
 			Method:      http.MethodPut,
@@ -621,7 +624,7 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.attempt.registered_desktop_required",
 				"exam.delivery.metadata_capacity",
 			},
-			Handle: module.acknowledgeCorrection,
+			Handle: h.acknowledgeCorrection,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -638,7 +641,7 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			Handle: module.getSubmission,
+			Handle: h.getSubmission,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -655,7 +658,7 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			Handle: module.listSubmissionManifest,
+			Handle: h.listSubmissionManifest,
 		},
 		endpoint{
 			Method:       http.MethodGet,
@@ -674,7 +677,7 @@ func examAttemptResource(application ExamAttemptApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			Protocol: module.openSubmissionFile,
+			Protocol: h.openSubmissionFile,
 		},
 	)
 }
@@ -696,7 +699,7 @@ func candidateAttemptContentResult(
 	}
 
 	headers.Set("ETag", etag)
-	if etagMatches(request.request.Header.Get("If-None-Match"), etag) {
+	if etagMatches(request.http.Header.Get("If-None-Match"), etag) {
 		_ = opened.Body.Close()
 		return notModifiedProtocolResult(opened.SizeBytes).withHeaders(headers), nil
 	}
@@ -710,7 +713,7 @@ func candidateAccess(request operationRequest) (attempt.CandidateAccess, error) 
 		return attempt.CandidateAccess{}, err
 	}
 
-	headers, err := candidateAttemptAccessHeaders(request.request)
+	headers, err := candidateAttemptAccessHeaders(request.http)
 	if err != nil {
 		return attempt.CandidateAccess{}, invalidRequestError(err)
 	}

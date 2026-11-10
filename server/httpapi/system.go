@@ -21,24 +21,24 @@ type healthResponse struct {
 	Status string `json:"status"`
 }
 
-type systemResourceModule struct {
-	health               Health
-	buildInfo            BuildInfo
-	desktopCompatibility DesktopCompatibilityApplication
-	now                  func() time.Time
+type systemHandlers struct {
+	health    Health
+	buildInfo BuildInfo
+	app       DesktopCompatibilityApplication
+	now       func() time.Time
 }
 
 func systemResourceWithApplication(
 	health Health,
 	buildInfo BuildInfo,
-	desktopCompatibility DesktopCompatibilityApplication,
+	app DesktopCompatibilityApplication,
 	now func() time.Time,
 ) apiResource {
-	module := systemResourceModule{
-		health:               health,
-		buildInfo:            buildInfo,
-		desktopCompatibility: desktopCompatibility,
-		now:                  now,
+	h := systemHandlers{
+		health:    health,
+		buildInfo: buildInfo,
+		app:       app,
+		now:       now,
 	}
 	return newResource(
 		"system",
@@ -48,7 +48,7 @@ func systemResourceWithApplication(
 			RootMounted: true,
 			Auth:        AuthPublic,
 			Errors:      []string{healthNotLiveCode},
-			Handle:      module.liveness,
+			Handle:      h.liveness,
 		},
 		endpoint{
 			Method:      http.MethodGet,
@@ -56,20 +56,20 @@ func systemResourceWithApplication(
 			RootMounted: true,
 			Auth:        AuthPublic,
 			Errors:      []string{healthNotReadyCode},
-			Handle:      module.readiness,
+			Handle:      h.readiness,
 		},
 		endpoint{
 			Method: http.MethodGet,
 			Path:   "/system/ping",
 			Auth:   AuthPublic,
 			Errors: []string{"request.invalid", "desktop_compatibility_policy.revision_conflict", "desktop_compatibility_policy.unavailable"},
-			Handle: module.ping,
+			Handle: h.ping,
 		},
 		endpoint{
 			Method: http.MethodGet,
 			Path:   "/system/version",
 			Auth:   AuthPublic,
-			Handle: module.version,
+			Handle: h.version,
 		},
 	)
 }
@@ -89,15 +89,15 @@ type systemPingResponse struct {
 	MaximumRealtimeProtocol int    `json:"maximum_realtime_protocol,omitempty"`
 }
 
-func (m systemResourceModule) liveness(request operationRequest) (operationResult, error) {
-	if !m.health.Live() {
-		title, detail := localizedNamedProblemPresentation(request.request, "not_live")
+func (h systemHandlers) liveness(request operationRequest) (operationResult, error) {
+	if !h.health.Live() {
+		title, detail := localizedNamedProblemPresentation(request.http, "not_live")
 		return problemResult(Problem{
 			Type:      problemType(healthNotLiveCode),
 			Title:     title,
 			Status:    http.StatusServiceUnavailable,
 			Detail:    detail,
-			Instance:  request.request.URL.Path,
+			Instance:  request.http.URL.Path,
 			Code:      healthNotLiveCode,
 			RequestID: RequestID(request.context),
 		}), nil
@@ -105,15 +105,15 @@ func (m systemResourceModule) liveness(request operationRequest) (operationResul
 	return jsonResult(http.StatusOK, healthResponse{Status: "ok"}), nil
 }
 
-func (m systemResourceModule) readiness(request operationRequest) (operationResult, error) {
-	if !m.health.Ready() {
-		title, detail := localizedNamedProblemPresentation(request.request, "not_ready")
+func (h systemHandlers) readiness(request operationRequest) (operationResult, error) {
+	if !h.health.Ready() {
+		title, detail := localizedNamedProblemPresentation(request.http, "not_ready")
 		return problemResult(Problem{
 			Type:      problemType(healthNotReadyCode),
 			Title:     title,
 			Status:    http.StatusServiceUnavailable,
 			Detail:    detail,
-			Instance:  request.request.URL.Path,
+			Instance:  request.http.URL.Path,
 			Code:      healthNotReadyCode,
 			RequestID: RequestID(request.context),
 		}), nil
@@ -121,17 +121,17 @@ func (m systemResourceModule) readiness(request operationRequest) (operationResu
 	return jsonResult(http.StatusOK, healthResponse{Status: "ok"}), nil
 }
 
-func (m systemResourceModule) version(operationRequest) (operationResult, error) {
-	return jsonResult(http.StatusOK, m.buildInfo), nil
+func (h systemHandlers) version(operationRequest) (operationResult, error) {
+	return jsonResult(http.StatusOK, h.buildInfo), nil
 }
 
-func (m systemResourceModule) ping(request operationRequest) (operationResult, error) {
-	query, err := desktopCompatibilityQuery(request.request)
+func (h systemHandlers) ping(request operationRequest) (operationResult, error) {
+	query, err := desktopCompatibilityQuery(request.http)
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	result, evaluationErr := m.desktopCompatibility.EvaluateDesktopCompatibility(
+	result, evaluationErr := h.app.EvaluateDesktopCompatibility(
 		request.context,
 		request.invocation(),
 		query,
@@ -140,8 +140,8 @@ func (m systemResourceModule) ping(request operationRequest) (operationResult, e
 		return operationResult{}, evaluationErr
 	}
 
-	responseTime := model.TimeUTC(m.now())
-	ready := m.health.Ready() && evaluationErr == nil
+	responseTime := model.TimeUTC(h.now())
+	ready := h.health.Ready() && evaluationErr == nil
 	response := systemPingResponse{
 		SchemaVersion:       1,
 		ServerTime:          model.FormatRFC3339(responseTime),

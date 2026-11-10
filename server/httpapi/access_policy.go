@@ -124,10 +124,10 @@ type publicAccessDiscoveryResponse struct {
 	PasswordMinimumLength int    `json:"password_minimum_length"`
 }
 
-type accessPolicyResourceModule struct{ application AccessPolicyApplication }
+type accessPolicyHandlers struct{ app AccessPolicyApplication }
 
-func accessPolicyResource(application AccessPolicyApplication) apiResource {
-	module := accessPolicyResourceModule{application: application}
+func accessPolicyResource(app AccessPolicyApplication) apiResource {
+	h := accessPolicyHandlers{app: app}
 	replace := endpoint{
 		Method:      http.MethodPut,
 		Path:        "/access-policy",
@@ -149,7 +149,7 @@ func accessPolicyResource(application AccessPolicyApplication) apiResource {
 			"access_policy.unavailable",
 			"resource.not_found",
 		},
-		Handle: module.replace,
+		Handle: h.replace,
 	}
 	return newResource("access-policy",
 		endpoint{
@@ -157,7 +157,7 @@ func accessPolicyResource(application AccessPolicyApplication) apiResource {
 			Path:   "/discovery",
 			Auth:   AuthPublic,
 			Errors: []string{"access_policy.unavailable", "access_policy.blocked", "access_policy.revision_conflict"},
-			Handle: module.discover,
+			Handle: h.discover,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -172,7 +172,7 @@ func accessPolicyResource(application AccessPolicyApplication) apiResource {
 				"access_policy.revision_conflict",
 				"resource.not_found",
 			},
-			Handle: module.get,
+			Handle: h.get,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -189,21 +189,21 @@ func accessPolicyResource(application AccessPolicyApplication) apiResource {
 				"access_policy.blocked",
 				"resource.not_found",
 			},
-			Handle: module.preflight,
+			Handle: h.preflight,
 		},
 		replace,
 	)
 }
 
-func (m accessPolicyResourceModule) get(request operationRequest) (operationResult, error) {
-	view, err := m.application.GetAccessPolicy(request.context, request.invocation())
+func (h accessPolicyHandlers) get(request operationRequest) (operationResult, error) {
+	view, err := h.app.GetAccessPolicy(request.context, request.invocation())
 	if err != nil {
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, accessPolicyResponseFromView(view)), nil
 }
 
-func (m accessPolicyResourceModule) preflight(request operationRequest) (operationResult, error) {
+func (h accessPolicyHandlers) preflight(request operationRequest) (operationResult, error) {
 	var body accessPolicySettingsRequest
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
@@ -214,7 +214,7 @@ func (m accessPolicyResourceModule) preflight(request operationRequest) (operati
 		return operationResult{}, err
 	}
 
-	result, err := m.application.PreflightAccessPolicy(request.context, request.invocation(), administration.PreflightAccessPolicyCommand{
+	result, err := h.app.PreflightAccessPolicy(request.context, request.invocation(), administration.PreflightAccessPolicyCommand{
 		ExpectedRevision:       body.ExpectedRevision,
 		Settings:               settings,
 		RevokeExistingSessions: revokeExistingSessions,
@@ -235,7 +235,7 @@ func (m accessPolicyResourceModule) preflight(request operationRequest) (operati
 	return jsonResult(http.StatusOK, response), nil
 }
 
-func (m accessPolicyResourceModule) replace(request operationRequest) (operationResult, error) {
+func (h accessPolicyHandlers) replace(request operationRequest) (operationResult, error) {
 	var body accessPolicySettingsRequest
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
@@ -246,7 +246,7 @@ func (m accessPolicyResourceModule) replace(request operationRequest) (operation
 		return operationResult{}, err
 	}
 
-	view, err := m.application.ReplaceAccessPolicy(request.context, request.invocation(), administration.ReplaceAccessPolicyCommand{
+	view, err := h.app.ReplaceAccessPolicy(request.context, request.invocation(), administration.ReplaceAccessPolicyCommand{
 		ExpectedRevision:       body.ExpectedRevision,
 		Settings:               settings,
 		RevokeExistingSessions: revokeExistingSessions,
@@ -348,8 +348,8 @@ func requiredAccessPolicySettings(body accessPolicySettingsRequest) (model.Acces
 	}, revoke, nil
 }
 
-func (m accessPolicyResourceModule) discover(request operationRequest) (operationResult, error) {
-	discovery, err := m.application.DiscoverAccess(request.context, request.invocation())
+func (h accessPolicyHandlers) discover(request operationRequest) (operationResult, error) {
+	discovery, err := h.app.DiscoverAccess(request.context, request.invocation())
 	if err != nil {
 		return operationResult{}, err
 	}

@@ -20,7 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-type userAdministrationResourceModule struct {
+type userAdministrationHandlers struct {
 	accounts AccountStateApplication
 	sessions SessionAdministrationApplication
 }
@@ -29,7 +29,7 @@ func userAdministrationResource(
 	accounts AccountStateApplication,
 	sessions SessionAdministrationApplication,
 ) apiResource {
-	module := userAdministrationResourceModule{accounts: accounts, sessions: sessions}
+	h := userAdministrationHandlers{accounts: accounts, sessions: sessions}
 	return newResource(
 		"user-administration",
 		endpoint{
@@ -37,35 +37,35 @@ func userAdministrationResource(
 			Path:   "/users/{user_id}/disable",
 			Auth:   AuthPrincipalRequired,
 			Errors: userAdministrationMutationCodes("user.invalid", "user.conflict", "user.last_system_admin"),
-			Handle: module.disable,
+			Handle: h.disable,
 		},
 		endpoint{
 			Method: http.MethodPost,
 			Path:   "/users/{user_id}/enable",
 			Auth:   AuthPrincipalRequired,
 			Errors: userAdministrationMutationCodes("user.invalid", "user.conflict", "user.last_system_admin"),
-			Handle: module.enable,
+			Handle: h.enable,
 		},
 		endpoint{
 			Method: http.MethodGet,
 			Path:   "/users/{user_id}/sessions",
 			Auth:   AuthPrincipalRequired,
 			Errors: userAdministrationReadCodes("session.not_found"),
-			Handle: module.listSessions,
+			Handle: h.listSessions,
 		},
 		endpoint{
 			Method: http.MethodPost,
 			Path:   "/users/{user_id}/sessions/revoke-all",
 			Auth:   AuthPrincipalRequired,
 			Errors: userAdministrationMutationCodes("session.not_found"),
-			Handle: module.revokeAllSessions,
+			Handle: h.revokeAllSessions,
 		},
 		endpoint{
 			Method: http.MethodDelete,
 			Path:   "/users/{user_id}/sessions/{session_id}",
 			Auth:   AuthPrincipalRequired,
 			Errors: userAdministrationMutationCodes("session.not_found"),
-			Handle: module.revokeSession,
+			Handle: h.revokeSession,
 		},
 	)
 }
@@ -102,9 +102,9 @@ type disableUserRequest struct {
 	Reason string `json:"reason,omitempty"`
 }
 
-func (m userAdministrationResourceModule) disable(request operationRequest) (operationResult, error) {
+func (h userAdministrationHandlers) disable(request operationRequest) (operationResult, error) {
 	var reason *string
-	if request.request.ContentLength != 0 || request.request.Header.Get("Content-Type") != "" {
+	if request.http.ContentLength != 0 || request.http.Header.Get("Content-Type") != "" {
 		var body disableUserRequest
 		if err := request.decodeJSON(&body); err != nil {
 			return operationResult{}, err
@@ -113,19 +113,19 @@ func (m userAdministrationResourceModule) disable(request operationRequest) (ope
 			reason = &body.Reason
 		}
 	}
-	return m.setEnabled(request, false, reason)
+	return h.setEnabled(request, false, reason)
 }
 
-func (m userAdministrationResourceModule) enable(request operationRequest) (operationResult, error) {
-	return m.setEnabled(request, true, nil)
+func (h userAdministrationHandlers) enable(request operationRequest) (operationResult, error) {
+	return h.setEnabled(request, true, nil)
 }
 
-func (m userAdministrationResourceModule) setEnabled(request operationRequest, enabled bool, reason *string) (operationResult, error) {
+func (h userAdministrationHandlers) setEnabled(request operationRequest, enabled bool, reason *string) (operationResult, error) {
 	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
 	}
-	user, err := m.accounts.SetUserEnabled(
+	user, err := h.accounts.SetUserEnabled(
 		request.context,
 		request.invocation(),
 		identity.SetUserEnabledCommand{ID: userID, Enabled: enabled, Reason: reason},
@@ -136,12 +136,12 @@ func (m userAdministrationResourceModule) setEnabled(request operationRequest, e
 	return jsonResult(http.StatusOK, userProfileResponseFromModel(user)), nil
 }
 
-func (m userAdministrationResourceModule) revokeAllSessions(request operationRequest) (operationResult, error) {
+func (h userAdministrationHandlers) revokeAllSessions(request operationRequest) (operationResult, error) {
 	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
 	}
-	err = m.sessions.RevokeUserSessions(
+	err = h.sessions.RevokeUserSessions(
 		request.context,
 		request.invocation(),
 		identity.RevokeUserSessionsCommand{UserID: userID},
@@ -152,21 +152,21 @@ func (m userAdministrationResourceModule) revokeAllSessions(request operationReq
 	return noContentResult(), nil
 }
 
-func (m userAdministrationResourceModule) listSessions(request operationRequest) (operationResult, error) {
+func (h userAdministrationHandlers) listSessions(request operationRequest) (operationResult, error) {
 	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
 	}
 
 	includeRevoked, err := strconv.ParseBool(
-		defaultQuery(request.request, "include_revoked", "false"),
+		defaultQuery(request.http, "include_revoked", "false"),
 	)
 	if err != nil {
 		return operationResult{}, apperror.New("request.invalid").WithField("field", "include_revoked")
 	}
 
 	query := identity.ListUserSessionsQuery{UserID: userID, IncludeRevoked: includeRevoked, Limit: defaultSessionPageSize}
-	values := request.request.URL.Query()
+	values := request.http.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		limit, parseErr := strconv.Atoi(raw)
 		if parseErr != nil || limit < 1 || limit > maximumSessionPageSize {
@@ -186,12 +186,12 @@ func (m userAdministrationResourceModule) listSessions(request operationRequest)
 		query.BeforeID = model.SessionID(cursor.ID)
 	}
 
-	page, listErr := m.sessions.ListUserSessions(request.context, request.invocation(), query)
+	page, listErr := h.sessions.ListUserSessions(request.context, request.invocation(), query)
 	if listErr != nil {
 		return operationResult{}, listErr
 	}
 
-	response := sessionAdministrationListResponse{Items: sessionResponsesFromModels(request.request, page.Items)}
+	response := sessionAdministrationListResponse{Items: sessionResponsesFromModels(request.http, page.Items)}
 	if page.HasMore && len(page.Items) == 0 {
 		return operationResult{}, unpresentableResult(errors.New("session page made no progress"))
 	}
@@ -248,7 +248,7 @@ func sessionCursorSpec() opaqueCursorSpec[sessionCursor] {
 	}
 }
 
-func (m userAdministrationResourceModule) revokeSession(request operationRequest) (operationResult, error) {
+func (h userAdministrationHandlers) revokeSession(request operationRequest) (operationResult, error) {
 	userID, err := pathID[model.UserID](request, "user_id")
 	if err != nil {
 		return operationResult{}, err
@@ -257,7 +257,7 @@ func (m userAdministrationResourceModule) revokeSession(request operationRequest
 	if err != nil {
 		return operationResult{}, err
 	}
-	err = m.sessions.RevokeUserSession(
+	err = h.sessions.RevokeUserSession(
 		request.context,
 		request.invocation(),
 		identity.RevokeUserSessionCommand{UserID: userID, SessionID: sessionID},

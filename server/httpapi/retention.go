@@ -35,10 +35,10 @@ type RetentionApplication interface {
 	ListRetentionRecords(context.Context, invocation.Invocation, model.SubmissionID, int) (*administration.RetentionRecordPage, error)
 }
 
-type retentionHTTPModule struct{ application RetentionApplication }
+type retentionHandlers struct{ app RetentionApplication }
 
-func retentionResource(application RetentionApplication) apiResource {
-	m := retentionHTTPModule{application: application}
+func retentionResource(app RetentionApplication) apiResource {
+	h := retentionHandlers{app: app}
 	mutationErrors := operatorMutationErrorCodes(
 		"request.invalid",
 		"retention.invalid",
@@ -58,7 +58,7 @@ func retentionResource(application RetentionApplication) apiResource {
 		Auth:        AuthSessionRequired,
 		Idempotency: IdempotencyRequired,
 		Errors:      mutationErrors,
-		Handle:      m.preview,
+		Handle:      h.preview,
 	}
 	control := endpoint{
 		Method:      http.MethodPut,
@@ -66,7 +66,7 @@ func retentionResource(application RetentionApplication) apiResource {
 		Auth:        AuthStrongRecentSessionRequired,
 		Idempotency: IdempotencyRequired,
 		Errors:      mutationErrors,
-		Handle:      m.changeControl,
+		Handle:      h.changeControl,
 	}
 	return newResource(
 		"retention",
@@ -84,7 +84,7 @@ func retentionResource(application RetentionApplication) apiResource {
 				"resource.not_found",
 				"retention_policy.revision_conflict",
 			},
-			Handle: m.getControl,
+			Handle: h.getControl,
 		},
 		control,
 		preview,
@@ -103,7 +103,7 @@ func retentionResource(application RetentionApplication) apiResource {
 				"resource.not_found",
 				"retention_policy.revision_conflict",
 			},
-			Handle: m.getPreview,
+			Handle: h.getPreview,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -120,7 +120,7 @@ func retentionResource(application RetentionApplication) apiResource {
 				"resource.not_found",
 				"retention_policy.revision_conflict",
 			},
-			Handle: m.records,
+			Handle: h.records,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -134,7 +134,7 @@ func retentionResource(application RetentionApplication) apiResource {
 				"retention_policy.revision_conflict",
 				"retention_policy.unavailable",
 			},
-			Handle: m.notices,
+			Handle: h.notices,
 		},
 	)
 }
@@ -226,20 +226,20 @@ type retentionRecordsResponse struct {
 	NextCursor     string                    `json:"next_cursor,omitempty"`
 }
 
-func (m retentionHTTPModule) getControl(request operationRequest) (operationResult, error) {
-	c, err := m.application.GetRetentionControl(request.context, request.invocation())
+func (h retentionHandlers) getControl(request operationRequest) (operationResult, error) {
+	c, err := h.app.GetRetentionControl(request.context, request.invocation())
 	if err != nil {
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, retentionControlDTO(c)).withHeaders(privateNoStoreHeaders()), nil
 }
-func (m retentionHTTPModule) changeControl(request operationRequest) (operationResult, error) {
+func (h retentionHandlers) changeControl(request operationRequest) (operationResult, error) {
 	var body retentionControlRequest
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
 
-	c, err := m.application.ChangeRetentionControl(request.context, request.invocation(), administration.ChangeRetentionControlCommand{
+	c, err := h.app.ChangeRetentionControl(request.context, request.invocation(), administration.ChangeRetentionControlCommand{
 		ExpectedRevision:       body.ExpectedRevision,
 		ExpectedPolicyRevision: body.ExpectedPolicyRevision,
 		PreviewID:              model.RetentionPreviewID(body.PreviewID),
@@ -252,13 +252,13 @@ func (m retentionHTTPModule) changeControl(request operationRequest) (operationR
 
 	return jsonResult(http.StatusOK, retentionControlDTO(c)).withHeaders(privateNoStoreHeaders()), nil
 }
-func (m retentionHTTPModule) preview(request operationRequest) (operationResult, error) {
+func (h retentionHandlers) preview(request operationRequest) (operationResult, error) {
 	var body retentionPreviewRequest
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
 
-	p, err := m.application.CreateRetentionPreview(
+	p, err := h.app.CreateRetentionPreview(
 		request.context,
 		request.invocation(),
 		administration.CreateRetentionPreviewCommand{ExpectedPolicyRevision: body.ExpectedPolicyRevision, IdempotencyKey: request.idempotencyKey},
@@ -269,19 +269,19 @@ func (m retentionHTTPModule) preview(request operationRequest) (operationResult,
 
 	return jsonResult(http.StatusCreated, retentionPreviewDTO(p)).withHeaders(privateNoStoreHeaders()), nil
 }
-func (m retentionHTTPModule) getPreview(request operationRequest) (operationResult, error) {
+func (h retentionHandlers) getPreview(request operationRequest) (operationResult, error) {
 	id, err := model.ParseRetentionPreviewID(request.params["retention_preview_id"])
 	if err != nil {
 		return operationResult{}, invalidRequestError(err)
 	}
-	p, err := m.application.GetRetentionPreview(request.context, request.invocation(), id)
+	p, err := h.app.GetRetentionPreview(request.context, request.invocation(), id)
 	if err != nil {
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, retentionPreviewDTO(p)).withHeaders(privateNoStoreHeaders()), nil
 }
-func (m retentionHTTPModule) records(request operationRequest) (operationResult, error) {
-	values := request.request.URL.Query()
+func (h retentionHandlers) records(request operationRequest) (operationResult, error) {
+	values := request.http.URL.Query()
 	for key, items := range values {
 		if len(items) != 1 || (key != "limit" && key != "cursor") {
 			return operationResult{}, invalidRequestError(nil)
@@ -303,7 +303,7 @@ func (m retentionHTTPModule) records(request operationRequest) (operationResult,
 		after = model.SubmissionID(cursor.After)
 	}
 
-	page, err := m.application.ListRetentionRecords(request.context, request.invocation(), after, limit)
+	page, err := h.app.ListRetentionRecords(request.context, request.invocation(), after, limit)
 	if err != nil {
 		return operationResult{}, err
 	}

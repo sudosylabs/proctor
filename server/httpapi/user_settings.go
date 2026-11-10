@@ -39,12 +39,12 @@ type userSettingsReplacementResponse struct {
 	Changed       bool   `json:"changed"`
 }
 
-type userSettingsResourceModule struct {
-	settings UserSettingsApplication
+type userSettingsHandlers struct {
+	app UserSettingsApplication
 }
 
-func userSettingsResource(settings UserSettingsApplication) apiResource {
-	module := userSettingsResourceModule{settings: settings}
+func userSettingsResource(app UserSettingsApplication) apiResource {
+	h := userSettingsHandlers{app: app}
 	path := "/users/me/settings"
 	replace := endpoint{
 		Method:       http.MethodPut,
@@ -64,7 +64,7 @@ func userSettingsResource(settings UserSettingsApplication) apiResource {
 			"idempotency.conflict",
 			"idempotency.in_progress",
 		),
-		Handle: module.replace,
+		Handle: h.replace,
 	}
 	return newResource(
 		"user-settings",
@@ -73,7 +73,7 @@ func userSettingsResource(settings UserSettingsApplication) apiResource {
 			Path:   path,
 			Auth:   AuthSessionRequired,
 			Errors: userSettingsSessionCodes("user_settings.unavailable"),
-			Handle: module.read,
+			Handle: h.read,
 		},
 		replace,
 	)
@@ -87,8 +87,8 @@ func userSettingsSessionMutationCodes(extra ...string) []string {
 	return userSettingsSessionCodes(extra...)
 }
 
-func (m userSettingsResourceModule) read(request operationRequest) (operationResult, error) {
-	view, err := m.settings.ReadOwnUserSettings(request.context, request.invocation())
+func (h userSettingsHandlers) read(request operationRequest) (operationResult, error) {
+	view, err := h.app.ReadOwnUserSettings(request.context, request.invocation())
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -101,7 +101,7 @@ func (m userSettingsResourceModule) read(request operationRequest) (operationRes
 	}).withHeaders(http.Header{"Cache-Control": []string{"private, no-store"}}), nil
 }
 
-func (m userSettingsResourceModule) replace(request operationRequest) (operationResult, error) {
+func (h userSettingsHandlers) replace(request operationRequest) (operationResult, error) {
 	var input userSettingsReplaceRequest
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
@@ -112,7 +112,7 @@ func (m userSettingsResourceModule) replace(request operationRequest) (operation
 		return operationResult{}, invalidRequestError(err)
 	}
 
-	result, err := m.settings.ReplaceOwnUserSettings(
+	result, err := h.app.ReplaceOwnUserSettings(
 		request.context,
 		request.invocation(),
 		user.ReplaceOwnUserSettingsCommand{

@@ -146,7 +146,7 @@ type securityPolicyResponse struct {
 	BrowserActivityDisclosure  model.BrowserActivityDisclosure   `json:"browser_activity_disclosure"`
 }
 
-func (m examAttemptHTTPModule) prepareSecurityPreflight(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) prepareSecurityPreflight(request operationRequest) (operationResult, error) {
 	sittingID, err := pathID[model.ExamSittingID](request, "exam_sitting_id")
 	if err != nil {
 		return operationResult{}, err
@@ -157,7 +157,7 @@ func (m examAttemptHTTPModule) prepareSecurityPreflight(request operationRequest
 		return operationResult{}, err
 	}
 
-	prepared, err := m.application.PrepareExamSecurityPreflight(request.context, request.invocation(), attempt.PrepareSecurityPreflightCommand{
+	prepared, err := h.app.PrepareExamSecurityPreflight(request.context, request.invocation(), attempt.PrepareSecurityPreflightCommand{
 		SittingID:                        sittingID,
 		AttemptID:                        model.ExamAttemptID(body.AttemptID),
 		NativeRegistryDigest:             body.NativeRegistryDigest,
@@ -189,7 +189,7 @@ func (m examAttemptHTTPModule) prepareSecurityPreflight(request operationRequest
 
 	return jsonResult(http.StatusOK, result), nil
 }
-func (m examAttemptHTTPModule) reportSecurityPreflight(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) reportSecurityPreflight(request operationRequest) (operationResult, error) {
 	id, err := opaquePathID(request, "security_preflight_id")
 	if err != nil {
 		return operationResult{}, err
@@ -200,7 +200,7 @@ func (m examAttemptHTTPModule) reportSecurityPreflight(request operationRequest)
 		return operationResult{}, err
 	}
 
-	result, err := m.application.ReportExamSecurityPreflight(request.context, request.invocation(), attempt.ReportSecurityPreflightCommand{
+	result, err := h.app.ReportExamSecurityPreflight(request.context, request.invocation(), attempt.ReportSecurityPreflightCommand{
 		PreflightID:    id,
 		Report:         report,
 		IdempotencyKey: request.idempotencyKey,
@@ -215,8 +215,8 @@ func (m examAttemptHTTPModule) reportSecurityPreflight(request operationRequest)
 	return jsonResult(http.StatusOK, result), nil
 }
 
-func securityPreflightResource(application ExamAttemptApplication) apiResource {
-	module := examAttemptHTTPModule{application: application}
+func securityPreflightResource(app ExamAttemptApplication) apiResource {
+	h := examAttemptHandlers{app: app}
 	return newResource(
 		"security-preflights",
 		endpoint{
@@ -248,7 +248,7 @@ func securityPreflightResource(application ExamAttemptApplication) apiResource {
 				"idempotency.in_progress",
 				"exam.delivery.metadata_capacity",
 			},
-			Handle: module.recoverSecurityPolicy,
+			Handle: h.recoverSecurityPolicy,
 		},
 		endpoint{
 			Method:      http.MethodPost,
@@ -283,7 +283,7 @@ func securityPreflightResource(application ExamAttemptApplication) apiResource {
 				"idempotency.in_progress",
 				"exam.delivery.metadata_capacity",
 			},
-			Handle: module.prepareSecurityPreflight,
+			Handle: h.prepareSecurityPreflight,
 		},
 		endpoint{
 			Method:      http.MethodPost,
@@ -318,18 +318,18 @@ func securityPreflightResource(application ExamAttemptApplication) apiResource {
 				"idempotency.in_progress",
 				"exam.delivery.metadata_capacity",
 			},
-			Handle: module.reportSecurityPreflight,
+			Handle: h.reportSecurityPreflight,
 		},
 	)
 }
 
-func (m examAttemptHTTPModule) recoverSecurityPolicy(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) recoverSecurityPolicy(request operationRequest) (operationResult, error) {
 	attemptID, err := pathID[model.ExamAttemptID](request, "exam_attempt_id")
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	recovered, err := m.application.RecoverExamSecurityPolicy(request.context, request.invocation(), attemptID)
+	recovered, err := h.app.RecoverExamSecurityPolicy(request.context, request.invocation(), attemptID)
 	if err != nil {
 		return operationResult{}, err
 	}

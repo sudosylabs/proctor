@@ -26,7 +26,7 @@ import (
 
 func paginationTestRequest(t *testing.T, target string) operationRequest {
 	t.Helper()
-	return operationRequest{request: httptest.NewRequestWithContext(t.Context(), http.MethodGet, target, nil)}
+	return operationRequest{http: httptest.NewRequestWithContext(t.Context(), http.MethodGet, target, nil)}
 }
 
 func TestPageRequestUsesOneLimitAndCursorIdiom(t *testing.T) {

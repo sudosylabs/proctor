@@ -46,13 +46,13 @@ func sessionResponsesFromModels(request *http.Request, sessions []*model.Session
 	return items
 }
 
-type sessionResourceModule struct {
-	sessions Sessions
-	cookies  browserCookies
+type sessionHandlers struct {
+	app     Sessions
+	cookies browserCookies
 }
 
-func sessionResource(sessions Sessions, cookies browserCookies) apiResource {
-	module := sessionResourceModule{sessions: sessions, cookies: cookies}
+func sessionResource(app Sessions, cookies browserCookies) apiResource {
+	h := sessionHandlers{app: app, cookies: cookies}
 	base := "/users/me/sessions"
 	return newResource(
 		"sessions",
@@ -61,34 +61,34 @@ func sessionResource(sessions Sessions, cookies browserCookies) apiResource {
 			Path:   base,
 			Auth:   AuthSessionRequired,
 			Errors: []string{"authentication.internal", "request.invalid"},
-			Handle: module.list,
+			Handle: h.list,
 		},
 		endpoint{
 			Method: http.MethodPost,
 			Path:   "/users/me/sessions/revoke",
 			Auth:   AuthSessionRequired,
 			Errors: []string{"request.invalid", "session.id.invalid", "session.not_found", "authentication.internal", "audit.unavailable"},
-			Handle: module.revoke,
+			Handle: h.revoke,
 		},
 		endpoint{
 			Method: http.MethodPost,
 			Path:   "/users/me/sessions/revoke-all",
 			Auth:   AuthSessionRequired,
 			Errors: []string{"authentication.internal", "audit.unavailable"},
-			Handle: module.revokeAll,
+			Handle: h.revokeAll,
 		},
 		endpoint{
 			Method: http.MethodPost,
 			Path:   "/users/me/sessions/revoke-others",
 			Auth:   AuthSessionRequired,
 			Errors: []string{"authentication.internal", "audit.unavailable"},
-			Handle: module.revokeOthers,
+			Handle: h.revokeOthers,
 		},
 	)
 }
 
-func (m sessionResourceModule) list(request operationRequest) (operationResult, error) {
-	sessions, err := m.sessions.ListSessions(
+func (h sessionHandlers) list(request operationRequest) (operationResult, error) {
+	sessions, err := h.app.ListSessions(
 		request.context,
 		request.invocation(),
 		identity.ListSessionsQuery{},
@@ -99,7 +99,7 @@ func (m sessionResourceModule) list(request operationRequest) (operationResult, 
 
 	presentable := make([]*model.Session, 0, len(sessions))
 	for _, session := range sessions {
-		if sessionResponseFromModel(request.request, session) != nil {
+		if sessionResponseFromModel(request.http, session) != nil {
 			presentable = append(presentable, session)
 		}
 	}
@@ -113,7 +113,7 @@ func (m sessionResourceModule) list(request operationRequest) (operationResult, 
 		},
 		func(session *model.Session) currentUserSessionResponse {
 			return currentUserSessionResponse{
-				sessionResponse: *sessionResponseFromModel(request.request, session),
+				sessionResponse: *sessionResponseFromModel(request.http, session),
 				Current:         session.ID == request.principal.SessionID,
 			}
 		},
@@ -125,12 +125,12 @@ func (m sessionResourceModule) list(request operationRequest) (operationResult, 
 	return jsonResult(http.StatusOK, response), nil
 }
 
-func (m sessionResourceModule) revoke(request operationRequest) (operationResult, error) {
+func (h sessionHandlers) revoke(request operationRequest) (operationResult, error) {
 	var input revokeSessionRequest
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
-	if err := m.sessions.RevokeSession(
+	if err := h.app.RevokeSession(
 		request.context,
 		request.invocation(),
 		identity.RevokeSessionCommand{SessionID: model.SessionID(input.SessionID)},
@@ -140,13 +140,13 @@ func (m sessionResourceModule) revoke(request operationRequest) (operationResult
 	result := noContentResult()
 	if input.SessionID == request.principal.SessionID.String() &&
 		credentialSourceFromContext(request.context) == credentialSourceCookie {
-		result = result.withHeaders(captureResponseHeaders(m.cookies.clear))
+		result = result.withHeaders(captureResponseHeaders(h.cookies.clear))
 	}
 	return result, nil
 }
 
-func (m sessionResourceModule) revokeAll(request operationRequest) (operationResult, error) {
-	if err := m.sessions.RevokeAllSessions(
+func (h sessionHandlers) revokeAll(request operationRequest) (operationResult, error) {
+	if err := h.app.RevokeAllSessions(
 		request.context,
 		request.invocation(),
 		identity.RevokeAllSessionsCommand{},
@@ -155,14 +155,14 @@ func (m sessionResourceModule) revokeAll(request operationRequest) (operationRes
 	}
 	result := noContentResult()
 	if credentialSourceFromContext(request.context) == credentialSourceCookie {
-		result = result.withHeaders(captureResponseHeaders(m.cookies.clear))
+		result = result.withHeaders(captureResponseHeaders(h.cookies.clear))
 	}
 	return result, nil
 }
 
 // revokeOthers keeps the requesting Session, so its cookies stay in place.
-func (m sessionResourceModule) revokeOthers(request operationRequest) (operationResult, error) {
-	result, err := m.sessions.RevokeOtherSessions(
+func (h sessionHandlers) revokeOthers(request operationRequest) (operationResult, error) {
+	result, err := h.app.RevokeOtherSessions(
 		request.context,
 		request.invocation(),
 		identity.RevokeOtherSessionsCommand{},

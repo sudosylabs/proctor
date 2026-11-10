@@ -85,12 +85,12 @@ func auditEventResponseFromModel(event *model.AuditEvent) auditEventResponse {
 	}
 }
 
-type auditResourceModule struct {
-	audits AuditListingApplication
+type auditHandlers struct {
+	app AuditListingApplication
 }
 
-func auditResource(audits AuditListingApplication) apiResource {
-	module := auditResourceModule{audits: audits}
+func auditResource(app AuditListingApplication) apiResource {
+	h := auditHandlers{app: app}
 	return newResource(
 		"audits",
 		endpoint{
@@ -106,24 +106,24 @@ func auditResource(audits AuditListingApplication) apiResource {
 				"request.invalid",
 				"resource.not_found",
 			},
-			Handle: module.list,
+			Handle: h.list,
 		},
 		endpoint{
 			Method: http.MethodGet,
 			Path:   "/users/me/audits",
 			Auth:   AuthSessionRequired,
 			Errors: []string{"audit.query.invalid", "audit.unavailable", "request.invalid"},
-			Handle: module.listSelf,
+			Handle: h.listSelf,
 		},
 	)
 }
 
-func (m auditResourceModule) list(request operationRequest) (operationResult, error) {
-	query, err := auditQueryFromRequest(request.request)
+func (h auditHandlers) list(request operationRequest) (operationResult, error) {
+	query, err := auditQueryFromRequest(request.http)
 	if err != nil {
 		return operationResult{}, apperror.Invalid("request.invalid", "query")
 	}
-	page, listErr := m.audits.ListAuditEvents(
+	page, listErr := h.app.ListAuditEvents(
 		request.context,
 		request.invocation(),
 		query,

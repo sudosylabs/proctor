@@ -257,7 +257,7 @@ func TestRoutingKernelAppliesPerRouteBodyLimitsAndProtocolIdempotency(t *testing
 		AuthenticatedAt:        time.Now(),
 	}}
 	readBody := func(request operationRequest) (protocolResult, error) {
-		body, err := io.ReadAll(request.request.Body)
+		body, err := io.ReadAll(request.http.Body)
 		if err != nil {
 			return streamingUploadProtocolResult(http.StatusCreated, map[string]bool{"read": false}), nil
 		}
@@ -391,7 +391,7 @@ func TestRoutingKernelAppliesTypedHeadersProblemsAndNamedProtocolOperations(t *t
 					return problemResult(Problem{
 						Type: "https://proctor.sudosylabs.com/problems/health.not_ready", Title: "Service unavailable",
 						Status: http.StatusServiceUnavailable, Detail: "The service is not ready to accept requests.",
-						Instance: request.request.URL.Path, Code: "health.not_ready", RequestID: RequestID(request.context),
+						Instance: request.http.URL.Path, Code: "health.not_ready", RequestID: RequestID(request.context),
 					}), nil
 				},
 			},
@@ -403,7 +403,7 @@ func TestRoutingKernelAppliesTypedHeadersProblemsAndNamedProtocolOperations(t *t
 				ProtocolKind: RouteProtocolRedirect,
 				Errors:       []string{"request.invalid"},
 				Protocol: func(request operationRequest) (protocolResult, error) {
-					if request.request.URL.Query().Get("fail") != "" {
+					if request.http.URL.Query().Get("fail") != "" {
 						return protocolResult{}, invalidRequestError(errors.New("invalid"))
 					}
 					return redirectProtocolResult("/destination"), nil
@@ -457,7 +457,7 @@ func TestRoutingKernelValidatesResultsBeforeEmittingResponseEffects(t *testing.T
 				Path:   "/undeclared-problem",
 				Auth:   AuthPublic,
 				Handle: func(request operationRequest) (operationResult, error) {
-					return problemResult(Problem{Status: http.StatusServiceUnavailable, Code: "health.not_ready", Instance: request.request.URL.Path}).withHeaders(cookieHeaders), nil
+					return problemResult(Problem{Status: http.StatusServiceUnavailable, Code: "health.not_ready", Instance: request.http.URL.Path}).withHeaders(cookieHeaders), nil
 				},
 			},
 			endpoint{

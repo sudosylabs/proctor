@@ -176,14 +176,14 @@ func candidateWorkspaceJournalCursorSpec() opaqueCursorSpec[candidateWorkspaceJo
 	}
 }
 
-func (m examAttemptHTTPModule) workspace(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) workspace(request operationRequest) (operationResult, error) {
 	access, err := candidateAccess(request)
 	if err != nil {
 		return operationResult{}, err
 	}
 
 	query := attempt.WorkspaceQuery{Access: access, ExpectedCursor: -1, Limit: 50}
-	values := request.request.URL.Query()
+	values := request.http.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		query.Limit, err = strconv.Atoi(raw)
 		if err != nil || query.Limit < 1 || query.Limit > 200 {
@@ -200,7 +200,7 @@ func (m examAttemptHTTPModule) workspace(request operationRequest) (operationRes
 		query.ExpectedCursor, query.AfterEntryID = cursor.ExpectedCursor, cursor.ID
 	}
 
-	page, err := m.application.ListCandidateExamWorkspace(request.context, request.invocation(), query)
+	page, err := h.app.ListCandidateExamWorkspace(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -243,7 +243,7 @@ func (m examAttemptHTTPModule) workspace(request operationRequest) (operationRes
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) workspaceChanges(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) workspaceChanges(request operationRequest) (operationResult, error) {
 	access, err := candidateAccess(request)
 	if err != nil {
 		return operationResult{}, err
@@ -258,7 +258,7 @@ func (m examAttemptHTTPModule) workspaceChanges(request operationRequest) (opera
 	}
 
 	query := attempt.WorkspaceJournalQuery{Access: access, Limit: paging.Limit}
-	values := request.request.URL.Query()
+	values := request.http.URL.Query()
 	cursor, continued, err := decodePageCursor(paging, candidateWorkspaceJournalCursorSpec())
 	if err != nil {
 		return operationResult{}, err
@@ -276,7 +276,7 @@ func (m examAttemptHTTPModule) workspaceChanges(request operationRequest) (opera
 		}
 	}
 
-	page, err := m.application.ListCandidateExamWorkspaceJournal(request.context, request.invocation(), query)
+	page, err := h.app.ListCandidateExamWorkspaceJournal(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -315,7 +315,7 @@ func (m examAttemptHTTPModule) workspaceChanges(request operationRequest) (opera
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) createWorkspaceDirectory(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) createWorkspaceDirectory(request operationRequest) (operationResult, error) {
 	access, err := candidateAccess(request)
 	if err != nil {
 		return operationResult{}, err
@@ -334,7 +334,7 @@ func (m examAttemptHTTPModule) createWorkspaceDirectory(request operationRequest
 		return operationResult{}, err
 	}
 
-	result, err := m.application.CreateCandidateExamWorkspaceDirectory(
+	result, err := h.app.CreateCandidateExamWorkspaceDirectory(
 		request.context,
 		request.invocation(),
 		attempt.CreateWorkspaceDirectoryCommand{
@@ -350,14 +350,14 @@ func (m examAttemptHTTPModule) createWorkspaceDirectory(request operationRequest
 	return jsonResult(http.StatusCreated, candidateWorkspaceMutationResult(result)).withHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) createWorkspaceFile(request operationRequest) (protocolResult, error) {
+func (h examAttemptHandlers) createWorkspaceFile(request operationRequest) (protocolResult, error) {
 	access, err := candidateAccess(request)
 	if err != nil {
 		return protocolResult{}, err
 	}
 
 	var metadata candidateWorkspaceFileUploadMetadata
-	content, err := decodeExamResourceMultipart(request.request, &metadata)
+	content, err := decodeExamResourceMultipart(request.http, &metadata)
 	if err != nil || metadata.Size == nil {
 		return protocolResult{}, invalidRequestError(errors.New("valid metadata and size are required"))
 	}
@@ -370,7 +370,7 @@ func (m examAttemptHTTPModule) createWorkspaceFile(request operationRequest) (pr
 		return protocolResult{}, err
 	}
 
-	result, err := m.application.CreateCandidateExamWorkspaceFile(
+	result, err := h.app.CreateCandidateExamWorkspaceFile(
 		request.context,
 		request.invocation(),
 		attempt.CreateWorkspaceFileCommand{
@@ -390,7 +390,7 @@ func (m examAttemptHTTPModule) createWorkspaceFile(request operationRequest) (pr
 	return streamingUploadProtocolResult(http.StatusCreated, candidateWorkspaceMutationResult(result)).withHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) moveWorkspaceEntry(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) moveWorkspaceEntry(request operationRequest) (operationResult, error) {
 	access, entryID, err := candidateWorkspaceEntryAccess(request)
 	if err != nil {
 		return operationResult{}, err
@@ -409,7 +409,7 @@ func (m examAttemptHTTPModule) moveWorkspaceEntry(request operationRequest) (ope
 		return operationResult{}, err
 	}
 
-	result, err := m.application.MoveCandidateExamWorkspaceEntry(
+	result, err := h.app.MoveCandidateExamWorkspaceEntry(
 		request.context,
 		request.invocation(),
 		attempt.MoveWorkspaceEntryCommand{
@@ -427,14 +427,14 @@ func (m examAttemptHTTPModule) moveWorkspaceEntry(request operationRequest) (ope
 	return jsonResult(http.StatusOK, candidateWorkspaceMutationResult(result)).withHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) replaceWorkspaceFile(request operationRequest) (protocolResult, error) {
+func (h examAttemptHandlers) replaceWorkspaceFile(request operationRequest) (protocolResult, error) {
 	access, entryID, err := candidateWorkspaceEntryAccess(request)
 	if err != nil {
 		return protocolResult{}, err
 	}
 
 	var metadata replaceCandidateWorkspaceFileMetadata
-	content, err := decodeExamResourceMultipart(request.request, &metadata)
+	content, err := decodeExamResourceMultipart(request.http, &metadata)
 	if err != nil || metadata.Size == nil {
 		return protocolResult{}, invalidRequestError(errors.New("valid metadata and size are required"))
 	}
@@ -452,7 +452,7 @@ func (m examAttemptHTTPModule) replaceWorkspaceFile(request operationRequest) (p
 		return protocolResult{}, invalidRequestError(err)
 	}
 
-	result, err := m.application.ReplaceCandidateExamWorkspaceFile(
+	result, err := h.app.ReplaceCandidateExamWorkspaceFile(
 		request.context,
 		request.invocation(),
 		attempt.ReplaceWorkspaceFileCommand{
@@ -474,7 +474,7 @@ func (m examAttemptHTTPModule) replaceWorkspaceFile(request operationRequest) (p
 	return streamingUploadProtocolResult(http.StatusOK, candidateWorkspaceMutationResult(result)).withHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) deleteWorkspaceEntry(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) deleteWorkspaceEntry(request operationRequest) (operationResult, error) {
 	access, entryID, err := candidateWorkspaceEntryAccess(request)
 	if err != nil {
 		return operationResult{}, err
@@ -510,7 +510,7 @@ func (m examAttemptHTTPModule) deleteWorkspaceEntry(request operationRequest) (o
 		}
 	}
 
-	result, err := m.application.DeleteCandidateExamWorkspaceEntry(
+	result, err := h.app.DeleteCandidateExamWorkspaceEntry(
 		request.context,
 		request.invocation(),
 		attempt.DeleteWorkspaceEntryCommand{
@@ -546,13 +546,13 @@ func candidateWorkspaceMutationAccess(access attempt.CandidateAccess,
 }
 
 func decodeCandidateWorkspaceJSON(request operationRequest, target any) error {
-	if request.request == nil || request.request.Body == nil {
+	if request.http == nil || request.http.Body == nil {
 		return invalidRequestError(errors.New("request body is required"))
 	}
-	if err := requireJSONMediaType(request.request); err != nil {
+	if err := requireJSONMediaType(request.http); err != nil {
 		return invalidRequestError(err)
 	}
-	raw, err := io.ReadAll(io.LimitReader(request.request.Body, (64<<10)+1))
+	raw, err := io.ReadAll(io.LimitReader(request.http.Body, (64<<10)+1))
 	if err != nil || len(raw) > 64<<10 || rejectDuplicateTopLevelJSONMembers(raw) != nil {
 		return invalidRequestError(errors.New("invalid strict JSON body"))
 	}
@@ -606,7 +606,7 @@ func candidateWorkspaceMutationResult(result attempt.WorkspaceMutationResult) ca
 	return response
 }
 
-func (m examAttemptHTTPModule) openWorkspaceFile(request operationRequest) (protocolResult, error) {
+func (h examAttemptHandlers) openWorkspaceFile(request operationRequest) (protocolResult, error) {
 	access, err := candidateAccess(request)
 	if err != nil {
 		return protocolResult{}, err
@@ -617,7 +617,7 @@ func (m examAttemptHTTPModule) openWorkspaceFile(request operationRequest) (prot
 		return protocolResult{}, err
 	}
 
-	opened, err := m.application.OpenCandidateExamWorkspaceFile(
+	opened, err := h.app.OpenCandidateExamWorkspaceFile(
 		request.context,
 		request.invocation(),
 		attempt.OpenWorkspaceFileQuery{Access: access, EntryID: entryID},

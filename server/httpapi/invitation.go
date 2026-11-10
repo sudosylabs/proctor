@@ -264,10 +264,10 @@ type invitationCursor struct {
 	ID        string `json:"id"`
 }
 
-type invitationResourceModule struct{ invitations InvitationApplication }
+type invitationHandlers struct{ app InvitationApplication }
 
-func invitationResource(invitations InvitationApplication) apiResource {
-	module := invitationResourceModule{invitations: invitations}
+func invitationResource(app InvitationApplication) apiResource {
+	h := invitationHandlers{app: app}
 	return newResource("invitations",
 		endpoint{
 			Method:      http.MethodPost,
@@ -287,7 +287,7 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"idempotency.key_required",
 				"idempotency.key_invalid",
 			},
-			Handle: module.batch,
+			Handle: h.batch,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -302,7 +302,7 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"invitation.query.invalid",
 				"invitation.unavailable",
 			},
-			Handle: module.list,
+			Handle: h.list,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -316,7 +316,7 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"resource.not_found",
 				"invitation.unavailable",
 			},
-			Handle: module.get,
+			Handle: h.get,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -336,7 +336,7 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"authentication.strong_required",
 				"onboarding_batch.duplicate",
 			},
-			Handle: module.resend,
+			Handle: h.resend,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -356,7 +356,7 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"authentication.strong_required",
 				"onboarding_batch.duplicate",
 			},
-			Handle: module.revoke,
+			Handle: h.revoke,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -377,7 +377,7 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"authentication.strong_required",
 				"authentication.reauthentication_required",
 			},
-			Handle: module.replace,
+			Handle: h.replace,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -397,7 +397,7 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"invitation.unavailable",
 				"onboarding_batch.duplicate",
 			},
-			Handle: module.issueStudentClass,
+			Handle: h.issueStudentClass,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -417,7 +417,7 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"authentication.password.identity_invalid",
 				"service.busy",
 			},
-			Handle: module.acceptStudentClass,
+			Handle: h.acceptStudentClass,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -437,7 +437,7 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"invitation.unavailable",
 				"onboarding_batch.duplicate",
 			},
-			Handle: module.issueTeacherAcademicUnit,
+			Handle: h.issueTeacherAcademicUnit,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -457,7 +457,7 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"authentication.password.identity_invalid",
 				"service.busy",
 			},
-			Handle: module.acceptTeacherAcademicUnit,
+			Handle: h.acceptTeacherAcademicUnit,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -477,7 +477,7 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"invitation.unavailable",
 				"onboarding_batch.duplicate",
 			},
-			Handle: module.issueAcademicUnitRole,
+			Handle: h.issueAcademicUnitRole,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -490,7 +490,7 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"audit.unavailable",
 				"request.invalid",
 			},
-			Handle: module.acceptAcademicUnitRole,
+			Handle: h.acceptAcademicUnitRole,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -510,7 +510,7 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"invitation.unavailable",
 				"onboarding_batch.duplicate",
 			},
-			Handle: module.issueInstitutionRole,
+			Handle: h.issueInstitutionRole,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -523,12 +523,12 @@ func invitationResource(invitations InvitationApplication) apiResource {
 				"audit.unavailable",
 				"request.invalid",
 			},
-			Handle: module.acceptInstitutionRole,
+			Handle: h.acceptInstitutionRole,
 		},
 	)
 }
 
-func (m invitationResourceModule) batch(request operationRequest) (operationResult, error) {
+func (h invitationHandlers) batch(request operationRequest) (operationResult, error) {
 	var body invitationBatchRequest
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, invalidRequestError(err)
@@ -558,7 +558,7 @@ func (m invitationResourceModule) batch(request operationRequest) (operationResu
 		})
 	}
 
-	result, err := m.invitations.RunInvitationBatch(request.context, request.invocation(), onboarding.RunInvitationBatchCommand{
+	result, err := h.app.RunInvitationBatch(request.context, request.invocation(), onboarding.RunInvitationBatchCommand{
 		Operation:      onboarding.InvitationBatchOperation(body.Operation),
 		ScopeType:      model.RoleScopeType(body.ScopeType),
 		ScopeID:        body.ScopeID,
@@ -588,13 +588,13 @@ func (m invitationResourceModule) batch(request operationRequest) (operationResu
 	return jsonResult(http.StatusOK, response), nil
 }
 
-func (m invitationResourceModule) list(request operationRequest) (operationResult, error) {
-	query, err := invitationListQuery(request.request)
+func (h invitationHandlers) list(request operationRequest) (operationResult, error) {
+	query, err := invitationListQuery(request.http)
 	if err != nil {
 		return operationResult{}, apperror.Invalid("request.invalid", "query").Wrap(err)
 	}
 
-	page, err := m.invitations.ListInvitations(request.context, request.invocation(), query)
+	page, err := h.app.ListInvitations(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -626,21 +626,21 @@ func (m invitationResourceModule) list(request operationRequest) (operationResul
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
-func (m invitationResourceModule) get(request operationRequest) (operationResult, error) {
+func (h invitationHandlers) get(request operationRequest) (operationResult, error) {
 	id, err := pathID[model.InvitationID](request, "invitation_id")
 	if err != nil {
 		return operationResult{}, err
 	}
-	view, err := m.invitations.GetInvitation(request.context, request.invocation(), id)
+	view, err := h.app.GetInvitation(request.context, request.invocation(), id)
 	if err != nil {
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, invitationAdministrationResponseFromView(view)).withHeaders(noStoreHeaders()), nil
 }
 
-func (m invitationResourceModule) resend(request operationRequest) (operationResult, error) {
-	return m.mutate(request, func(id model.InvitationID, revision int64) (onboarding.InvitationAdministrationView, error) {
-		return m.invitations.ResendInvitation(
+func (h invitationHandlers) resend(request operationRequest) (operationResult, error) {
+	return h.mutate(request, func(id model.InvitationID, revision int64) (onboarding.InvitationAdministrationView, error) {
+		return h.app.ResendInvitation(
 			request.context,
 			request.invocation(),
 			onboarding.ResendInvitationCommand{ID: id, ExpectedRevision: revision},
@@ -648,9 +648,9 @@ func (m invitationResourceModule) resend(request operationRequest) (operationRes
 	})
 }
 
-func (m invitationResourceModule) revoke(request operationRequest) (operationResult, error) {
-	return m.mutate(request, func(id model.InvitationID, revision int64) (onboarding.InvitationAdministrationView, error) {
-		return m.invitations.RevokeInvitation(
+func (h invitationHandlers) revoke(request operationRequest) (operationResult, error) {
+	return h.mutate(request, func(id model.InvitationID, revision int64) (onboarding.InvitationAdministrationView, error) {
+		return h.app.RevokeInvitation(
 			request.context,
 			request.invocation(),
 			onboarding.RevokeInvitationCommand{ID: id, ExpectedRevision: revision},
@@ -658,7 +658,7 @@ func (m invitationResourceModule) revoke(request operationRequest) (operationRes
 	})
 }
 
-func (m invitationResourceModule) mutate(
+func (h invitationHandlers) mutate(
 	request operationRequest,
 	mutation func(model.InvitationID, int64) (onboarding.InvitationAdministrationView, error),
 ) (operationResult, error) {
@@ -683,7 +683,7 @@ func (m invitationResourceModule) mutate(
 	return jsonResult(http.StatusOK, invitationAdministrationResponseFromView(view)).withHeaders(noStoreHeaders()), nil
 }
 
-func (m invitationResourceModule) replace(request operationRequest) (operationResult, error) {
+func (h invitationHandlers) replace(request operationRequest) (operationResult, error) {
 	id, err := pathID[model.InvitationID](request, "invitation_id")
 	if err != nil {
 		return operationResult{}, err
@@ -702,7 +702,7 @@ func (m invitationResourceModule) replace(request operationRequest) (operationRe
 		return operationResult{}, err
 	}
 
-	view, err := m.invitations.ReplaceInvitation(request.context, request.invocation(), onboarding.ReplaceInvitationCommand{
+	view, err := h.app.ReplaceInvitation(request.context, request.invocation(), onboarding.ReplaceInvitationCommand{
 		ID:                   id,
 		ExpectedRevision:     body.ExpectedRevision,
 		Purpose:              body.Purpose,
@@ -818,7 +818,7 @@ func invitationCursorSpec() opaqueCursorSpec[invitationCursor] {
 	}
 }
 
-func (m invitationResourceModule) issueAcademicUnitRole(request operationRequest) (operationResult, error) {
+func (h invitationHandlers) issueAcademicUnitRole(request operationRequest) (operationResult, error) {
 	unitID, err := pathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
 		return operationResult{}, err
@@ -834,7 +834,7 @@ func (m invitationResourceModule) issueAcademicUnitRole(request operationRequest
 		return operationResult{}, err
 	}
 
-	created, err := m.invitations.IssueAcademicUnitRoleInvitation(
+	created, err := h.app.IssueAcademicUnitRoleInvitation(
 		request.context,
 		request.invocation(),
 		onboarding.IssueAcademicUnitRoleInvitationCommand{
@@ -853,7 +853,7 @@ func (m invitationResourceModule) issueAcademicUnitRole(request operationRequest
 	return jsonResult(http.StatusCreated, invitationResponseFromView(created)), nil
 }
 
-func (m invitationResourceModule) issueInstitutionRole(request operationRequest) (operationResult, error) {
+func (h invitationHandlers) issueInstitutionRole(request operationRequest) (operationResult, error) {
 	institutionID, err := pathID[model.InstitutionID](request, "institution_id")
 	if err != nil {
 		return operationResult{}, err
@@ -869,7 +869,7 @@ func (m invitationResourceModule) issueInstitutionRole(request operationRequest)
 		return operationResult{}, err
 	}
 
-	created, err := m.invitations.IssueInstitutionRoleInvitation(
+	created, err := h.app.IssueInstitutionRoleInvitation(
 		request.context,
 		request.invocation(),
 		onboarding.IssueInstitutionRoleInvitationCommand{
@@ -888,13 +888,13 @@ func (m invitationResourceModule) issueInstitutionRole(request operationRequest)
 	return jsonResult(http.StatusCreated, invitationResponseFromView(created)), nil
 }
 
-func (m invitationResourceModule) acceptAcademicUnitRole(request operationRequest) (operationResult, error) {
+func (h invitationHandlers) acceptAcademicUnitRole(request operationRequest) (operationResult, error) {
 	var body acceptScopedRoleInvitationRequest
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
 
-	accepted, err := m.invitations.AcceptAcademicUnitRoleInvitation(
+	accepted, err := h.app.AcceptAcademicUnitRoleInvitation(
 		request.context,
 		request.invocation(),
 		onboarding.AcceptAcademicUnitRoleInvitationCommand{
@@ -909,13 +909,13 @@ func (m invitationResourceModule) acceptAcademicUnitRole(request operationReques
 	return jsonResult(http.StatusOK, invitationAcceptanceResponseFromView(accepted)), nil
 }
 
-func (m invitationResourceModule) acceptInstitutionRole(request operationRequest) (operationResult, error) {
+func (h invitationHandlers) acceptInstitutionRole(request operationRequest) (operationResult, error) {
 	var body acceptScopedRoleInvitationRequest
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
 
-	accepted, err := m.invitations.AcceptInstitutionRoleInvitation(
+	accepted, err := h.app.AcceptInstitutionRoleInvitation(
 		request.context,
 		request.invocation(),
 		onboarding.AcceptInstitutionRoleInvitationCommand{
@@ -930,7 +930,7 @@ func (m invitationResourceModule) acceptInstitutionRole(request operationRequest
 	return jsonResult(http.StatusOK, invitationAcceptanceResponseFromView(accepted)), nil
 }
 
-func (m invitationResourceModule) issueTeacherAcademicUnit(request operationRequest) (operationResult, error) {
+func (h invitationHandlers) issueTeacherAcademicUnit(request operationRequest) (operationResult, error) {
 	unitID, err := pathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
 		return operationResult{}, err
@@ -946,7 +946,7 @@ func (m invitationResourceModule) issueTeacherAcademicUnit(request operationRequ
 		return operationResult{}, err
 	}
 
-	created, err := m.invitations.IssueTeacherAcademicUnitInvitation(
+	created, err := h.app.IssueTeacherAcademicUnitInvitation(
 		request.context,
 		request.invocation(),
 		onboarding.IssueTeacherAcademicUnitInvitationCommand{
@@ -971,13 +971,13 @@ func (m invitationResourceModule) issueTeacherAcademicUnit(request operationRequ
 	return jsonResult(http.StatusCreated, invitationResponseFromView(created)), nil
 }
 
-func (m invitationResourceModule) acceptTeacherAcademicUnit(request operationRequest) (operationResult, error) {
+func (h invitationHandlers) acceptTeacherAcademicUnit(request operationRequest) (operationResult, error) {
 	var body acceptTeacherAcademicUnitInvitationRequest
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
 
-	accepted, err := m.invitations.AcceptTeacherAcademicUnitInvitation(
+	accepted, err := h.app.AcceptTeacherAcademicUnitInvitation(
 		request.context,
 		request.invocation(),
 		onboarding.AcceptTeacherAcademicUnitInvitationCommand{
@@ -999,7 +999,7 @@ func (m invitationResourceModule) acceptTeacherAcademicUnit(request operationReq
 	return jsonResult(http.StatusOK, invitationAcceptanceResponseFromView(accepted)), nil
 }
 
-func (m invitationResourceModule) issueStudentClass(request operationRequest) (operationResult, error) {
+func (h invitationHandlers) issueStudentClass(request operationRequest) (operationResult, error) {
 	classID, err := pathID[model.ClassID](request, "class_id")
 	if err != nil {
 		return operationResult{}, err
@@ -1015,7 +1015,7 @@ func (m invitationResourceModule) issueStudentClass(request operationRequest) (o
 		return operationResult{}, err
 	}
 
-	created, err := m.invitations.IssueStudentClassInvitation(
+	created, err := h.app.IssueStudentClassInvitation(
 		request.context,
 		request.invocation(),
 		onboarding.IssueStudentClassInvitationCommand{
@@ -1039,13 +1039,13 @@ func (m invitationResourceModule) issueStudentClass(request operationRequest) (o
 	return jsonResult(http.StatusCreated, invitationResponseFromView(created)), nil
 }
 
-func (m invitationResourceModule) acceptStudentClass(request operationRequest) (operationResult, error) {
+func (h invitationHandlers) acceptStudentClass(request operationRequest) (operationResult, error) {
 	var body acceptStudentClassInvitationRequest
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
 
-	accepted, err := m.invitations.AcceptStudentClassInvitation(
+	accepted, err := h.app.AcceptStudentClassInvitation(
 		request.context,
 		request.invocation(),
 		onboarding.AcceptStudentClassInvitationCommand{

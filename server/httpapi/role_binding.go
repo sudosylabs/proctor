@@ -53,12 +53,12 @@ func roleBindingResponseFromModel(binding *model.RoleBinding) roleBindingRespons
 	}
 }
 
-type roleBindingResourceModule struct {
-	bindings RoleBindingApplication
+type roleBindingHandlers struct {
+	app RoleBindingApplication
 }
 
-func roleBindingResource(bindings RoleBindingApplication) apiResource {
-	module := roleBindingResourceModule{bindings: bindings}
+func roleBindingResource(app RoleBindingApplication) apiResource {
+	h := roleBindingHandlers{app: app}
 	return newResource(
 		"role-bindings",
 		endpoint{
@@ -73,7 +73,7 @@ func roleBindingResource(bindings RoleBindingApplication) apiResource {
 				"administration.unavailable",
 				"resource.not_found",
 			},
-			Handle: module.list,
+			Handle: h.list,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -92,7 +92,7 @@ func roleBindingResource(bindings RoleBindingApplication) apiResource {
 				"administration.unavailable",
 				"mail.unavailable",
 			},
-			Handle: module.create,
+			Handle: h.create,
 		},
 		endpoint{
 			Method: http.MethodDelete,
@@ -110,14 +110,14 @@ func roleBindingResource(bindings RoleBindingApplication) apiResource {
 				"administration.unavailable",
 				"mail.unavailable",
 			},
-			Handle: module.end,
+			Handle: h.end,
 		},
 	)
 }
 
-func (m roleBindingResourceModule) list(request operationRequest) (operationResult, error) {
-	values := request.request.URL.Query()
-	bindings, err := m.bindings.ListRoleBindings(
+func (h roleBindingHandlers) list(request operationRequest) (operationResult, error) {
+	values := request.http.URL.Query()
+	bindings, err := h.app.ListRoleBindings(
 		request.context,
 		request.invocation(),
 		administration.ListRoleBindingsQuery{
@@ -146,7 +146,7 @@ func (m roleBindingResourceModule) list(request operationRequest) (operationResu
 	return jsonResult(http.StatusOK, response), nil
 }
 
-func (m roleBindingResourceModule) create(request operationRequest) (operationResult, error) {
+func (h roleBindingHandlers) create(request operationRequest) (operationResult, error) {
 	var input createRoleBindingRequest
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
@@ -157,7 +157,7 @@ func (m roleBindingResourceModule) create(request operationRequest) (operationRe
 		return operationResult{}, err
 	}
 
-	saved, err := m.bindings.CreateRoleBinding(
+	saved, err := h.app.CreateRoleBinding(
 		request.context,
 		request.invocation(),
 		administration.CreateRoleBindingCommand{
@@ -176,12 +176,12 @@ func (m roleBindingResourceModule) create(request operationRequest) (operationRe
 	return jsonResult(http.StatusCreated, roleBindingResponseFromModel(saved)), nil
 }
 
-func (m roleBindingResourceModule) end(request operationRequest) (operationResult, error) {
+func (h roleBindingHandlers) end(request operationRequest) (operationResult, error) {
 	bindingID, err := pathID[model.RoleBindingID](request, "role_binding_id")
 	if err != nil {
 		return operationResult{}, err
 	}
-	ended, err := m.bindings.EndRoleBinding(
+	ended, err := h.app.EndRoleBinding(
 		request.context,
 		request.invocation(),
 		administration.EndRoleBindingCommand{ID: bindingID},

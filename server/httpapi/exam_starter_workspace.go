@@ -30,8 +30,8 @@ type ExamStarterWorkspaceApplication interface {
 	RemoveExamStarterWorkspaceEntry(context.Context, invocation.Invocation, workspace.RemoveEntryCommand) (workspace.Result, error)
 }
 
-type examStarterWorkspaceHTTPModule struct {
-	application ExamStarterWorkspaceApplication
+type examStarterWorkspaceHandlers struct {
+	app ExamStarterWorkspaceApplication
 }
 
 type createExamStarterWorkspaceDirectoryRequest struct {
@@ -84,8 +84,8 @@ type examStarterWorkspaceListItemResponse struct {
 	UpdatedAt      string `json:"updated_at"`
 }
 
-func examStarterWorkspaceHTTPResource(application ExamStarterWorkspaceApplication) apiResource {
-	module := examStarterWorkspaceHTTPModule{application: application}
+func examStarterWorkspaceResource(app ExamStarterWorkspaceApplication) apiResource {
+	h := examStarterWorkspaceHandlers{app: app}
 	collection := "/exams/{exam_id}/draft/starter-workspace"
 	directories := "/exams/{exam_id}/draft/starter-workspace/directories"
 	files := "/exams/{exam_id}/draft/starter-workspace/files"
@@ -104,7 +104,7 @@ func examStarterWorkspaceHTTPResource(application ExamStarterWorkspaceApplicatio
 				"exam.starter_workspace.invalid",
 				"exam.starter_workspace.unavailable",
 			},
-			Handle: module.list,
+			Handle: h.list,
 		},
 		endpoint{
 			Method:      http.MethodPost,
@@ -130,7 +130,7 @@ func examStarterWorkspaceHTTPResource(application ExamStarterWorkspaceApplicatio
 				"exam.starter_workspace.parent_not_found",
 				"exam.starter_workspace.entry_limit",
 			},
-			Handle: module.createDirectory,
+			Handle: h.createDirectory,
 		},
 		endpoint{
 			Method:       http.MethodPost,
@@ -162,7 +162,7 @@ func examStarterWorkspaceHTTPResource(application ExamStarterWorkspaceApplicatio
 				"exam.starter_workspace.upload_expired",
 				"exam.starter_workspace.object_conflict",
 			},
-			Protocol: module.createFile,
+			Protocol: h.createFile,
 		},
 		endpoint{
 			Method:      http.MethodPatch,
@@ -189,7 +189,7 @@ func examStarterWorkspaceHTTPResource(application ExamStarterWorkspaceApplicatio
 				"exam.starter_workspace.no_changes",
 				"exam.starter_workspace.move_conflict",
 			},
-			Handle: module.moveEntry,
+			Handle: h.moveEntry,
 		},
 		endpoint{
 			Method:       http.MethodPut,
@@ -220,7 +220,7 @@ func examStarterWorkspaceHTTPResource(application ExamStarterWorkspaceApplicatio
 				"exam.starter_workspace.content_conflict",
 				"exam.starter_workspace.entry_kind",
 			},
-			Protocol: module.replaceFile,
+			Protocol: h.replaceFile,
 		},
 		endpoint{
 			Method:      http.MethodDelete,
@@ -244,7 +244,7 @@ func examStarterWorkspaceHTTPResource(application ExamStarterWorkspaceApplicatio
 				"idempotency.in_progress",
 				"exam.starter_workspace.directory_not_empty",
 			},
-			Handle: module.removeEntry,
+			Handle: h.removeEntry,
 		},
 		endpoint{
 			Method:       http.MethodGet,
@@ -260,18 +260,18 @@ func examStarterWorkspaceHTTPResource(application ExamStarterWorkspaceApplicatio
 				"exam.starter_workspace.invalid",
 				"exam.starter_workspace.unavailable",
 			},
-			Protocol: module.openFile,
+			Protocol: h.openFile,
 		},
 	)
 }
 
-func (m examStarterWorkspaceHTTPModule) list(request operationRequest) (operationResult, error) {
+func (h examStarterWorkspaceHandlers) list(request operationRequest) (operationResult, error) {
 	examID, err := examStarterWorkspaceExamID(request)
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	items, err := m.application.ListExamStarterWorkspace(request.context, request.invocation(), workspace.ListQuery{ExamID: examID})
+	items, err := h.app.ListExamStarterWorkspace(request.context, request.invocation(), workspace.ListQuery{ExamID: examID})
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -294,7 +294,7 @@ func (m examStarterWorkspaceHTTPModule) list(request operationRequest) (operatio
 	return jsonResult(http.StatusOK, response), nil
 }
 
-func (m examStarterWorkspaceHTTPModule) createDirectory(request operationRequest) (operationResult, error) {
+func (h examStarterWorkspaceHandlers) createDirectory(request operationRequest) (operationResult, error) {
 	examID, err := examStarterWorkspaceExamID(request)
 	if err != nil {
 		return operationResult{}, err
@@ -305,7 +305,7 @@ func (m examStarterWorkspaceHTTPModule) createDirectory(request operationRequest
 		return operationResult{}, err
 	}
 
-	result, err := m.application.CreateExamStarterWorkspaceDirectory(request.context, request.invocation(), workspace.CreateDirectoryCommand{
+	result, err := h.app.CreateExamStarterWorkspaceDirectory(request.context, request.invocation(), workspace.CreateDirectoryCommand{
 		ExamID:                examID,
 		ExpectedDraftRevision: body.ExpectedDraftRevision,
 		Path:                  body.Path,
@@ -318,14 +318,14 @@ func (m examStarterWorkspaceHTTPModule) createDirectory(request operationRequest
 	return jsonResult(http.StatusCreated, examStarterWorkspaceResultResponse(result)), nil
 }
 
-func (m examStarterWorkspaceHTTPModule) createFile(request operationRequest) (protocolResult, error) {
+func (h examStarterWorkspaceHandlers) createFile(request operationRequest) (protocolResult, error) {
 	examID, err := examStarterWorkspaceExamID(request)
 	if err != nil {
 		return protocolResult{}, err
 	}
 
 	var metadata examStarterWorkspaceFileUploadMetadata
-	content, err := decodeExamResourceMultipart(request.request, &metadata)
+	content, err := decodeExamResourceMultipart(request.http, &metadata)
 	if err != nil {
 		return protocolResult{}, invalidRequestError(err)
 	}
@@ -333,7 +333,7 @@ func (m examStarterWorkspaceHTTPModule) createFile(request operationRequest) (pr
 		return protocolResult{}, invalidRequestError(errors.New("metadata size is required"))
 	}
 
-	result, err := m.application.CreateExamStarterWorkspaceFile(request.context, request.invocation(), workspace.CreateFileCommand{
+	result, err := h.app.CreateExamStarterWorkspaceFile(request.context, request.invocation(), workspace.CreateFileCommand{
 		ExamID:                examID,
 		ExpectedDraftRevision: metadata.ExpectedDraftRevision,
 		Path:                  metadata.Path,
@@ -350,7 +350,7 @@ func (m examStarterWorkspaceHTTPModule) createFile(request operationRequest) (pr
 	return streamingUploadProtocolResult(http.StatusCreated, examStarterWorkspaceResultResponse(result)), nil
 }
 
-func (m examStarterWorkspaceHTTPModule) moveEntry(request operationRequest) (operationResult, error) {
+func (h examStarterWorkspaceHandlers) moveEntry(request operationRequest) (operationResult, error) {
 	examID, entryID, err := examStarterWorkspaceIDs(request)
 	if err != nil {
 		return operationResult{}, err
@@ -361,7 +361,7 @@ func (m examStarterWorkspaceHTTPModule) moveEntry(request operationRequest) (ope
 		return operationResult{}, err
 	}
 
-	result, err := m.application.MoveExamStarterWorkspaceEntry(request.context, request.invocation(), workspace.MoveEntryCommand{
+	result, err := h.app.MoveExamStarterWorkspaceEntry(request.context, request.invocation(), workspace.MoveEntryCommand{
 		ExamID:                examID,
 		EntryID:               entryID,
 		ExpectedDraftRevision: body.ExpectedDraftRevision,
@@ -375,14 +375,14 @@ func (m examStarterWorkspaceHTTPModule) moveEntry(request operationRequest) (ope
 	return jsonResult(http.StatusOK, examStarterWorkspaceResultResponse(result)), nil
 }
 
-func (m examStarterWorkspaceHTTPModule) replaceFile(request operationRequest) (protocolResult, error) {
+func (h examStarterWorkspaceHandlers) replaceFile(request operationRequest) (protocolResult, error) {
 	examID, entryID, err := examStarterWorkspaceIDs(request)
 	if err != nil {
 		return protocolResult{}, err
 	}
 
 	var metadata examStarterWorkspaceFileReplacementMetadata
-	content, err := decodeExamResourceMultipart(request.request, &metadata)
+	content, err := decodeExamResourceMultipart(request.http, &metadata)
 	if err != nil {
 		return protocolResult{}, invalidRequestError(err)
 	}
@@ -395,7 +395,7 @@ func (m examStarterWorkspaceHTTPModule) replaceFile(request operationRequest) (p
 		return protocolResult{}, invalidRequestError(err)
 	}
 
-	result, err := m.application.ReplaceExamStarterWorkspaceFile(request.context, request.invocation(), workspace.ReplaceFileCommand{
+	result, err := h.app.ReplaceExamStarterWorkspaceFile(request.context, request.invocation(), workspace.ReplaceFileCommand{
 		ExamID:                 examID,
 		EntryID:                entryID,
 		ExpectedDraftRevision:  metadata.ExpectedDraftRevision,
@@ -413,7 +413,7 @@ func (m examStarterWorkspaceHTTPModule) replaceFile(request operationRequest) (p
 	return streamingUploadProtocolResult(http.StatusOK, examStarterWorkspaceResultResponse(result)), nil
 }
 
-func (m examStarterWorkspaceHTTPModule) removeEntry(request operationRequest) (operationResult, error) {
+func (h examStarterWorkspaceHandlers) removeEntry(request operationRequest) (operationResult, error) {
 	examID, entryID, err := examStarterWorkspaceIDs(request)
 	if err != nil {
 		return operationResult{}, err
@@ -424,7 +424,7 @@ func (m examStarterWorkspaceHTTPModule) removeEntry(request operationRequest) (o
 		return operationResult{}, err
 	}
 
-	_, err = m.application.RemoveExamStarterWorkspaceEntry(request.context, request.invocation(), workspace.RemoveEntryCommand{
+	_, err = h.app.RemoveExamStarterWorkspaceEntry(request.context, request.invocation(), workspace.RemoveEntryCommand{
 		ExamID:                examID,
 		EntryID:               entryID,
 		ExpectedDraftRevision: body.ExpectedDraftRevision,
@@ -438,13 +438,13 @@ func (m examStarterWorkspaceHTTPModule) removeEntry(request operationRequest) (o
 	return noContentResult(), nil
 }
 
-func (m examStarterWorkspaceHTTPModule) openFile(request operationRequest) (protocolResult, error) {
+func (h examStarterWorkspaceHandlers) openFile(request operationRequest) (protocolResult, error) {
 	examID, entryID, err := examStarterWorkspaceIDs(request)
 	if err != nil {
 		return protocolResult{}, err
 	}
 
-	opened, err := m.application.OpenExamStarterWorkspaceFile(
+	opened, err := h.app.OpenExamStarterWorkspaceFile(
 		request.context,
 		request.invocation(),
 		workspace.OpenFileQuery{ExamID: examID, EntryID: entryID},
@@ -459,7 +459,7 @@ func (m examStarterWorkspaceHTTPModule) openFile(request operationRequest) (prot
 	etag := `"` + opened.SHA256 + `"`
 	headers := http.Header{"Content-Type": {opened.MediaType}, "Cache-Control": {"private, no-store"}, "ETag": {etag}}
 	untrustedWorkspaceContentHeaders(headers)
-	if request.request.Header.Get("If-None-Match") == etag {
+	if request.http.Header.Get("If-None-Match") == etag {
 		_ = opened.Body.Close()
 		return notModifiedProtocolResult(opened.SizeBytes).withHeaders(headers), nil
 	}

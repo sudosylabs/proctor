@@ -96,13 +96,13 @@ func TestMailResourceRejectsCallerSuppliedContentAndProjectsNoSecrets(t *testing
 	at := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
 	id := model.NewMailDeliveryID()
 	fake := &recordingMailAPI{view: app.MailDeliveryView{ID: id, OccurrenceID: model.NewMailOccurrenceID(), TargetUserID: model.NewUserID(), TemplateKey: model.MailTemplateSystemTest, TemplateDigest: strings.Repeat("a", 64), MaskedRecipient: "o***@example.test", State: model.MailDeliveryQueued, CreatedAt: at, UpdatedAt: at, MessageDate: at, Deadline: at.Add(time.Hour), MessageID: "<mail." + id.String() + "@example.test>"}}
-	module := mailResourceModule{mail: fake}
+	h := mailHandlers{app: fake}
 	request, _ := http.NewRequest(http.MethodPost, "/api/v1/mail/test", bytes.NewBufferString(`{"recipient":"attacker@example.test","body":"chosen"}`))
-	_, err := module.sendTest(operationRequest{request: request})
+	_, err := h.sendTest(operationRequest{http: request})
 	require.True(t, apperror.Is(err, "request.invalid"), "caller content accepted: %v sends", err)
 	require.Equal(t, 0, fake.sends, "caller content accepted: %v sends", err)
 	request, _ = http.NewRequest(http.MethodPost, "/api/v1/mail/test", nil)
-	result, err := module.sendTest(operationRequest{request: request})
+	result, err := h.sendTest(operationRequest{http: request})
 	require.NoError(t, err, "empty test = %#v", result)
 	require.Equal(t, http.StatusAccepted, result.status, "empty test = %#v", result)
 	require.Equal(t, 1, fake.sends, "empty test = %#v", result)
@@ -124,9 +124,9 @@ func TestMailDeliveryListCursorFiltersAndMutationBodiesAreBounded(t *testing.T) 
 	at := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
 	id := model.NewMailDeliveryID()
 	fake := &recordingMailAPI{view: app.MailDeliveryView{ID: id, OccurrenceID: model.NewMailOccurrenceID(), TargetUserID: model.NewUserID(), TemplateKey: model.MailTemplateSystemTest, TemplateDigest: strings.Repeat("a", 64), MaskedRecipient: "o***@example.test", State: model.MailDeliveryFailed, CreatedAt: at, UpdatedAt: at, MessageDate: at, Deadline: at.Add(time.Hour), MessageID: "<mail." + id.String() + "@example.test>"}}
-	module := mailResourceModule{mail: fake}
+	h := mailHandlers{app: fake}
 	request, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/mail/deliveries?state=failed&template_key=system.mail_test&created_after=1970-01-01T00:00:00.001Z&created_before=2286-11-20T17:46:39.999Z&limit=1", nil)
-	result, err := module.listDeliveries(operationRequest{request: request})
+	result, err := h.listDeliveries(operationRequest{http: request})
 	require.NoError(t, err, "list result=%#v err=%v lists", result, err)
 	require.Equal(t, http.StatusOK, result.status, "list result=%#v err=%v lists", result, err)
 	require.Equal(t, 1, fake.lists, "list result=%#v err=%v lists", result, err)
@@ -137,11 +137,11 @@ func TestMailDeliveryListCursorFiltersAndMutationBodiesAreBounded(t *testing.T) 
 	require.Equal(t, id.String(), decoded.ID, "cursor=%#v err", decoded)
 	require.Equal(t, at.Format(time.RFC3339Nano), decoded.CreatedAt, "cursor=%#v err", decoded)
 	request, _ = http.NewRequest(http.MethodGet, "/api/v1/mail/deliveries?state=not-a-state", nil)
-	_, err = module.listDeliveries(operationRequest{request: request})
+	_, err = h.listDeliveries(operationRequest{http: request})
 	require.True(t, apperror.Is(err, "request.invalid"), "invalid filter err=%v lists", err)
 	require.Equal(t, 1, fake.lists, "invalid filter err=%v lists", err)
 	request, _ = http.NewRequest(http.MethodPost, "/api/v1/mail/deliveries/"+id.String()+"/retry", bytes.NewBufferString(`{"body":"forbidden"}`))
-	_, err = module.retryDelivery(operationRequest{request: request, params: Params{"mail_delivery_id": id.String()}})
+	_, err = h.retryDelivery(operationRequest{http: request, params: Params{"mail_delivery_id": id.String()}})
 	require.True(t, apperror.Is(err, "request.invalid"), "retry body err=%v ids", err)
 	require.Empty(t, fake.ids, "retry body err=%v ids", err)
 }
@@ -173,7 +173,7 @@ func TestMailDeliveryEndpointForwardsExactCursorAndMapsMalformedCursor(t *testin
 func TestMailMetricsProjectsOnlyBoundedOperationalDimensions(t *testing.T) {
 	t.Parallel()
 	fake := &recordingMailAPI{}
-	result, err := (mailResourceModule{mail: fake}).getMetrics(operationRequest{request: &http.Request{}})
+	result, err := (mailHandlers{app: fake}).getMetrics(operationRequest{http: &http.Request{}})
 	require.NoError(t, err, "getMetrics() = %#v, %v calls", result, err)
 	require.Equal(t, http.StatusOK, result.status, "getMetrics() = %#v, %v calls", result, err)
 	require.Equal(t, 1, fake.metrics, "getMetrics() = %#v, %v calls", result, err)
@@ -182,11 +182,11 @@ func TestMailMetricsProjectsOnlyBoundedOperationalDimensions(t *testing.T) {
 func TestMailRekeyAcceptsOnlyAKeyIdentityAndProjectsSafeOperation(t *testing.T) {
 	t.Parallel()
 	fake := &recordingMailAPI{}
-	module := mailResourceModule{mail: fake}
+	h := mailHandlers{app: fake}
 	request, _ := http.NewRequest(http.MethodPost, "/api/v1/mail/rekey",
 		bytes.NewBufferString(`{"retiring_key_id":"11111111111111111111111111111111"}`))
 	request.Header.Set("Content-Type", "application/json")
-	result, err := module.startRekey(operationRequest{request: request})
+	result, err := h.startRekey(operationRequest{http: request})
 	require.NoError(t, err, "startRekey() = %#v, %v calls", result, err)
 	require.Equal(t, http.StatusAccepted, result.status, "startRekey() = %#v, %v calls", result, err)
 	require.Len(t, fake.rekeys, 1, "startRekey() = %#v, %v calls", result, err)
@@ -200,10 +200,10 @@ func TestMailRekeyAcceptsOnlyAKeyIdentityAndProjectsSafeOperation(t *testing.T) 
 	invalid, _ := http.NewRequest(http.MethodPost, "/api/v1/mail/rekey",
 		bytes.NewBufferString(`{"retiring_key_id":"11111111111111111111111111111111","encryption_key":"secret"}`))
 	invalid.Header.Set("Content-Type", "application/json")
-	_, err = module.startRekey(operationRequest{request: invalid})
+	_, err = h.startRekey(operationRequest{http: invalid})
 	require.True(t, apperror.Is(err, "request.invalid"), "secret-bearing rekey body error = %v calls", err)
 	require.Len(t, fake.rekeys, 1, "secret-bearing rekey body error = %v calls", err)
-	stateResult, err := module.getKeyState(operationRequest{request: &http.Request{}})
+	stateResult, err := h.getKeyState(operationRequest{http: &http.Request{}})
 	state, ok := stateResult.body.(mailKeyStateResponse)
 	require.NoError(t, err, "key state response = %#v", stateResult.body)
 	require.True(t, ok, "key state response = %#v", stateResult.body)
@@ -218,8 +218,8 @@ func TestMailRekeyStatusProjectsSafeProgressAndFinalProof(t *testing.T) {
 	t.Parallel()
 	jobID := model.NewJobID()
 	fake := &recordingMailAPI{}
-	result, err := (mailResourceModule{mail: fake}).getRekeyStatus(operationRequest{
-		request: &http.Request{}, params: Params{"job_id": jobID.String()},
+	result, err := (mailHandlers{app: fake}).getRekeyStatus(operationRequest{
+		http: &http.Request{}, params: Params{"job_id": jobID.String()},
 	})
 	require.NoError(t, err, "getRekeyStatus() = %#v, %v ids", result, err)
 	require.Equal(t, http.StatusOK, result.status, "getRekeyStatus() = %#v, %v ids", result, err)

@@ -45,10 +45,10 @@ func (f *mfaKeyAPIFake) GetMFARekeyStatus(_ context.Context, _ invocation.Invoca
 func TestMFARekeyAcceptsOnlyAKeyIdentity(t *testing.T) {
 	t.Parallel()
 	fake := &mfaKeyAPIFake{}
-	module := mfaKeyResourceModule{application: fake}
+	h := mfaKeyHandlers{app: fake}
 	request, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/mfa/rekey", bytes.NewBufferString(`{"retiring_key_id":"11111111111111111111111111111111"}`))
 	request.Header.Set("Content-Type", "application/json")
-	result, err := module.startRekey(operationRequest{request: request})
+	result, err := h.startRekey(operationRequest{http: request})
 	require.NoError(t, err)
 	require.Equal(t, http.StatusAccepted, result.status)
 	require.Equal(t, identity.StartMFARekeyCommand{RetiringKeyID: "11111111111111111111111111111111"}, fake.started)
@@ -57,7 +57,7 @@ func TestMFARekeyAcceptsOnlyAKeyIdentity(t *testing.T) {
 	secretBearing, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/mfa/rekey",
 		bytes.NewBufferString(`{"retiring_key_id":"11111111111111111111111111111111","encryption_key":"secret"}`))
 	secretBearing.Header.Set("Content-Type", "application/json")
-	_, err = module.startRekey(operationRequest{request: secretBearing})
+	_, err = h.startRekey(operationRequest{http: secretBearing})
 	require.True(t, apperror.Is(err, "request.invalid"), "a body carrying key material: error = %v", err)
 	require.Equal(t, identity.StartMFARekeyCommand{}, fake.started, "the use case never saw the secret-bearing body")
 }
@@ -68,7 +68,7 @@ func TestMFAKeyStateProjectsIdentitiesAndCountsOnly(t *testing.T) {
 	fake := &mfaKeyAPIFake{state: identity.MFAKeyStateView{PrimaryKeyID: "0123456789abcdef0123456789abcdef",
 		RequiredPrimaryKeyID: "0123456789abcdef0123456789abcdef", ActiveRekeyJobID: jobID,
 		Active: []identity.MFASecretKeyUsageView{{KeyID: "11111111111111111111111111111111", Credentials: 4}}}}
-	result, err := mfaKeyResourceModule{application: fake}.getKeyState(operationRequest{request: &http.Request{}})
+	result, err := mfaKeyHandlers{app: fake}.getKeyState(operationRequest{http: &http.Request{}})
 	require.NoError(t, err)
 	require.Equal(t, mfaKeyStateResponse{PrimaryKeyID: "0123456789abcdef0123456789abcdef",
 		RequiredPrimaryKeyID: "0123456789abcdef0123456789abcdef", ActiveRekeyJobID: jobID.String(),

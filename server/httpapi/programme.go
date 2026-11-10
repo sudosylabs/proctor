@@ -42,12 +42,12 @@ type updateProgrammeRequest struct {
 	Description      Optional[string] `json:"description"`
 }
 
-type programmeResourceModule struct {
-	programmes ProgrammeApplication
+type programmeHandlers struct {
+	app ProgrammeApplication
 }
 
-func programmeResource(programmes ProgrammeApplication) apiResource {
-	module := programmeResourceModule{programmes: programmes}
+func programmeResource(app ProgrammeApplication) apiResource {
+	h := programmeHandlers{app: app}
 	collection := "/academic-units/{academic_unit_id}/programmes"
 	member := "/programmes/{programme_id}"
 	return newResource(
@@ -57,40 +57,40 @@ func programmeResource(programmes ProgrammeApplication) apiResource {
 			Path:   collection,
 			Auth:   AuthPrincipalRequired,
 			Errors: academicReadErrorCodes("request.invalid", "resource.not_found"),
-			Handle: module.list,
+			Handle: h.list,
 		},
 		endpoint{
 			Method: http.MethodPost,
 			Path:   collection,
 			Auth:   AuthPrincipalRequired,
 			Errors: academicMutationErrorCodes("request.invalid", "resource.not_found", "programme.invalid", "programme.conflict"),
-			Handle: module.create,
+			Handle: h.create,
 		},
 		endpoint{
 			Method: http.MethodGet,
 			Path:   member,
 			Auth:   AuthPrincipalRequired,
 			Errors: academicReadErrorCodes("request.invalid", "resource.not_found"),
-			Handle: module.get,
+			Handle: h.get,
 		},
 		endpoint{
 			Method: http.MethodPatch,
 			Path:   member,
 			Auth:   AuthPrincipalRequired,
 			Errors: academicMutationErrorCodes("request.invalid", "resource.not_found", "programme.invalid", "programme.conflict"),
-			Handle: module.patch,
+			Handle: h.patch,
 		},
 		endpoint{
 			Method: http.MethodDelete,
 			Path:   member,
 			Auth:   AuthPrincipalRequired,
 			Errors: academicMutationErrorCodes("request.invalid", "resource.not_found", "programme.conflict"),
-			Handle: module.archive,
+			Handle: h.archive,
 		},
 	)
 }
 
-func (m programmeResourceModule) list(request operationRequest) (operationResult, error) {
+func (h programmeHandlers) list(request operationRequest) (operationResult, error) {
 	unitID, err := pathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
 		return operationResult{}, err
@@ -101,10 +101,10 @@ func (m programmeResourceModule) list(request operationRequest) (operationResult
 		return operationResult{}, err
 	}
 
-	page, err := m.programmes.ListProgrammes(
+	page, err := h.app.ListProgrammes(
 		request.context,
 		request.invocation(),
-		academic.ListProgrammesQuery{AcademicUnitID: unitID, Query: request.request.URL.Query().Get("q"), NameQuery: pageQuery},
+		academic.ListProgrammesQuery{AcademicUnitID: unitID, Query: request.http.URL.Query().Get("q"), NameQuery: pageQuery},
 	)
 	if err != nil {
 		return operationResult{}, err
@@ -115,7 +115,7 @@ func (m programmeResourceModule) list(request operationRequest) (operationResult
 	})
 }
 
-func (m programmeResourceModule) create(request operationRequest) (operationResult, error) {
+func (h programmeHandlers) create(request operationRequest) (operationResult, error) {
 	unitID, err := pathID[model.AcademicUnitID](request, "academic_unit_id")
 	if err != nil {
 		return operationResult{}, err
@@ -126,7 +126,7 @@ func (m programmeResourceModule) create(request operationRequest) (operationResu
 		return operationResult{}, err
 	}
 
-	saved, err := m.programmes.CreateProgramme(
+	saved, err := h.app.CreateProgramme(
 		request.context,
 		request.invocation(),
 		academic.CreateProgrammeCommand{AcademicUnitID: unitID, Name: body.Name, DisplayName: body.DisplayName, Description: body.Description},
@@ -138,13 +138,13 @@ func (m programmeResourceModule) create(request operationRequest) (operationResu
 	return jsonResult(http.StatusCreated, programmeResponseFromModel(saved)), nil
 }
 
-func (m programmeResourceModule) get(request operationRequest) (operationResult, error) {
+func (h programmeHandlers) get(request operationRequest) (operationResult, error) {
 	id, err := pathID[model.ProgrammeID](request, "programme_id")
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	programme, err := m.programmes.GetProgramme(
+	programme, err := h.app.GetProgramme(
 		request.context,
 		request.invocation(),
 		academic.GetProgrammeQuery{ID: id},
@@ -156,7 +156,7 @@ func (m programmeResourceModule) get(request operationRequest) (operationResult,
 	return jsonResult(http.StatusOK, programmeResponseFromModel(programme)), nil
 }
 
-func (m programmeResourceModule) patch(request operationRequest) (operationResult, error) {
+func (h programmeHandlers) patch(request operationRequest) (operationResult, error) {
 	id, err := pathID[model.ProgrammeID](request, "programme_id")
 	if err != nil {
 		return operationResult{}, err
@@ -170,7 +170,7 @@ func (m programmeResourceModule) patch(request operationRequest) (operationResul
 		return operationResult{}, err
 	}
 
-	programme, err := m.programmes.UpdateProgramme(
+	programme, err := h.app.UpdateProgramme(
 		request.context,
 		request.invocation(),
 		academic.UpdateProgrammeCommand{
@@ -188,7 +188,7 @@ func (m programmeResourceModule) patch(request operationRequest) (operationResul
 	return jsonResult(http.StatusOK, programmeResponseFromModel(programme)), nil
 }
 
-func (m programmeResourceModule) archive(request operationRequest) (operationResult, error) {
+func (h programmeHandlers) archive(request operationRequest) (operationResult, error) {
 	id, err := pathID[model.ProgrammeID](request, "programme_id")
 	if err != nil {
 		return operationResult{}, err
@@ -199,7 +199,7 @@ func (m programmeResourceModule) archive(request operationRequest) (operationRes
 		return operationResult{}, err
 	}
 
-	err = m.programmes.ArchiveProgramme(
+	err = h.app.ArchiveProgramme(
 		request.context,
 		request.invocation(),
 		academic.ArchiveProgrammeCommand{ExpectedRevision: expectedRevision, ID: id},

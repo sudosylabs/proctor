@@ -136,12 +136,12 @@ func personalAccessTokenGrantableScopesResponseFromApp(
 	return response
 }
 
-type personalAccessTokenResourceModule struct {
-	tokens PersonalAccessTokens
+type personalAccessTokenHandlers struct {
+	app PersonalAccessTokens
 }
 
-func personalAccessTokenResource(tokens PersonalAccessTokens) apiResource {
-	module := personalAccessTokenResourceModule{tokens: tokens}
+func personalAccessTokenResource(app PersonalAccessTokens) apiResource {
+	h := personalAccessTokenHandlers{app: app}
 	collection := "/users/me/tokens"
 	item := "/users/me/tokens/{personal_access_token_id}"
 	grantableScopes := "/users/me/tokens/grantable-scopes"
@@ -160,7 +160,7 @@ func personalAccessTokenResource(tokens PersonalAccessTokens) apiResource {
 				"audit.unavailable",
 				"authentication.session_required",
 			},
-			Handle: module.create,
+			Handle: h.create,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -172,14 +172,14 @@ func personalAccessTokenResource(tokens PersonalAccessTokens) apiResource {
 				"authentication.session_required",
 				"request.invalid",
 			},
-			Handle: module.list,
+			Handle: h.list,
 		},
 		endpoint{
 			Method: http.MethodGet,
 			Path:   grantableScopes,
 			Auth:   AuthSessionRequired,
 			Errors: []string{"personal_access_token.unavailable", "authentication.reauthentication_required", "authentication.session_required"},
-			Handle: module.grantableScopes,
+			Handle: h.grantableScopes,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -194,7 +194,7 @@ func personalAccessTokenResource(tokens PersonalAccessTokens) apiResource {
 				"authentication.session_required",
 				"personal_access_token.invalid",
 			},
-			Handle: module.disable,
+			Handle: h.disable,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -209,7 +209,7 @@ func personalAccessTokenResource(tokens PersonalAccessTokens) apiResource {
 				"authentication.session_required",
 				"personal_access_token.invalid",
 			},
-			Handle: module.enable,
+			Handle: h.enable,
 		},
 		endpoint{
 			Method: http.MethodDelete,
@@ -224,7 +224,7 @@ func personalAccessTokenResource(tokens PersonalAccessTokens) apiResource {
 				"authentication.session_required",
 				"personal_access_token.invalid",
 			},
-			Handle: module.revoke,
+			Handle: h.revoke,
 		},
 	)
 }
@@ -237,20 +237,20 @@ func personalAccessTokenSessionMutationCodes(extra ...string) []string {
 	return personalAccessTokenSessionCodes(extra...)
 }
 
-func (m personalAccessTokenResourceModule) disable(request operationRequest) (operationResult, error) {
-	return m.setDisabled(request, true)
+func (h personalAccessTokenHandlers) disable(request operationRequest) (operationResult, error) {
+	return h.setDisabled(request, true)
 }
 
-func (m personalAccessTokenResourceModule) enable(request operationRequest) (operationResult, error) {
-	return m.setDisabled(request, false)
+func (h personalAccessTokenHandlers) enable(request operationRequest) (operationResult, error) {
+	return h.setDisabled(request, false)
 }
 
-func (m personalAccessTokenResourceModule) setDisabled(request operationRequest, disabled bool) (operationResult, error) {
+func (h personalAccessTokenHandlers) setDisabled(request operationRequest, disabled bool) (operationResult, error) {
 	tokenID, err := pathID[model.PersonalAccessTokenID](request, "personal_access_token_id")
 	if err != nil {
 		return operationResult{}, err
 	}
-	updated, err := m.tokens.SetPersonalAccessTokenDisabled(
+	updated, err := h.app.SetPersonalAccessTokenDisabled(
 		request.context,
 		request.invocation(),
 		identity.SetPersonalAccessTokenDisabledCommand{TokenID: tokenID, Disabled: disabled},
@@ -261,7 +261,7 @@ func (m personalAccessTokenResourceModule) setDisabled(request operationRequest,
 	return jsonResult(http.StatusOK, personalAccessTokenResponseFromModel(updated)).withHeaders(noStoreHeaders()), nil
 }
 
-func (m personalAccessTokenResourceModule) create(request operationRequest) (operationResult, error) {
+func (h personalAccessTokenHandlers) create(request operationRequest) (operationResult, error) {
 	var input createPersonalAccessTokenRequest
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
@@ -272,7 +272,7 @@ func (m personalAccessTokenResourceModule) create(request operationRequest) (ope
 		return operationResult{}, err
 	}
 
-	created, err := m.tokens.CreatePersonalAccessToken(
+	created, err := h.app.CreatePersonalAccessToken(
 		request.context,
 		request.invocation(),
 		identity.CreatePersonalAccessTokenCommand{
@@ -292,8 +292,8 @@ func (m personalAccessTokenResourceModule) create(request operationRequest) (ope
 	}).withHeaders(noStoreHeaders()), nil
 }
 
-func (m personalAccessTokenResourceModule) list(request operationRequest) (operationResult, error) {
-	tokens, err := m.tokens.ListPersonalAccessTokens(
+func (h personalAccessTokenHandlers) list(request operationRequest) (operationResult, error) {
+	tokens, err := h.app.ListPersonalAccessTokens(
 		request.context,
 		request.invocation(),
 		identity.ListPersonalAccessTokensQuery{},
@@ -318,8 +318,8 @@ func (m personalAccessTokenResourceModule) list(request operationRequest) (opera
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
-func (m personalAccessTokenResourceModule) grantableScopes(request operationRequest) (operationResult, error) {
-	catalogue, err := m.tokens.ListGrantablePersonalAccessTokenScopes(
+func (h personalAccessTokenHandlers) grantableScopes(request operationRequest) (operationResult, error) {
+	catalogue, err := h.app.ListGrantablePersonalAccessTokenScopes(
 		request.context,
 		request.invocation(),
 		identity.ListGrantablePersonalAccessTokenScopesQuery{},
@@ -327,16 +327,16 @@ func (m personalAccessTokenResourceModule) grantableScopes(request operationRequ
 	if err != nil {
 		return operationResult{}, err
 	}
-	return jsonResult(http.StatusOK, personalAccessTokenGrantableScopesResponseFromApp(request.request, catalogue)).
+	return jsonResult(http.StatusOK, personalAccessTokenGrantableScopesResponseFromApp(request.http, catalogue)).
 		withHeaders(noStoreHeaders()), nil
 }
 
-func (m personalAccessTokenResourceModule) revoke(request operationRequest) (operationResult, error) {
+func (h personalAccessTokenHandlers) revoke(request operationRequest) (operationResult, error) {
 	tokenID, err := pathID[model.PersonalAccessTokenID](request, "personal_access_token_id")
 	if err != nil {
 		return operationResult{}, err
 	}
-	if _, err := m.tokens.RevokePersonalAccessToken(
+	if _, err := h.app.RevokePersonalAccessToken(
 		request.context,
 		request.invocation(),
 		identity.RevokePersonalAccessTokenCommand{TokenID: tokenID},

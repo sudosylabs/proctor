@@ -72,7 +72,7 @@ word leads you through each step.
 1. **Route.** `httpapi/class.go` declares the route in `classResource` as an
    `endpoint` literal. Its `Auth: AuthPrincipalRequired` field says the route
    needs a signed-in principal, and its `Errors` field lists the errors it
-   may return. `classResourceModule.create` decodes
+   may return. `classHandlers.create` decodes
    the body into `createClassRequest` and builds an
    `academic.CreateClassCommand`.
 2. **Use case.** `app/academic/class.go`, `academic.Service.CreateClass`,
@@ -101,7 +101,7 @@ word leads you through each step.
    literal with `Auth: AuthSessionRequired` and
    `Idempotency: IdempotencyRequired`, so it requires a Session and an
    idempotency key.
-   The handler is `examAttemptHTTPModule.submit` in
+   The handler is `examAttemptHandlers.submit` in
    `httpapi/exam_attempt_submission.go`.
 2. **Use case.** `app/exam/attempt/submission.go`, `SubmitExamAttempt`,
    takes the request through these steps:

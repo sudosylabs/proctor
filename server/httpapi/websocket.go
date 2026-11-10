@@ -14,7 +14,7 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-type webSocketModule struct {
+type webSocketHandlers struct {
 	transport WebSocketTransport
 }
 
@@ -25,7 +25,7 @@ const (
 )
 
 func webSocketResource(transport WebSocketTransport) apiResource {
-	module := webSocketModule{transport: transport}
+	h := webSocketHandlers{transport: transport}
 	return newResource(webSocketResourceName,
 		endpoint{
 			Method:       http.MethodGet,
@@ -38,20 +38,20 @@ func webSocketResource(transport WebSocketTransport) apiResource {
 				"websocket.origin.invalid",
 				"websocket.unavailable",
 			},
-			Upgrade: module.connect,
+			Upgrade: h.connect,
 		},
 	)
 }
 
-func (m webSocketModule) connect(writer http.ResponseWriter, request operationRequest) error {
+func (h webSocketHandlers) connect(writer http.ResponseWriter, request operationRequest) error {
 	connectionID, sequence, err := parseWebSocketResume(request.queryValue("connection_id"), request.queryValue("sequence_number"))
 	if err != nil {
 		return err
 	}
 	allowMissingOrigin := credentialSourceFromContext(request.context) == credentialSourceBearer
-	return m.transport.Accept(
+	return h.transport.Accept(
 		writer,
-		request.request,
+		request.http,
 		request.principal,
 		request.metadata,
 		connectionID,

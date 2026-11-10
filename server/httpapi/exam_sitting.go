@@ -211,10 +211,10 @@ type examSittingCursorWire struct {
 	ID      string `json:"id"`
 }
 
-type examSittingHTTPModule struct{ application ExamSittingApplication }
+type examSittingHandlers struct{ app ExamSittingApplication }
 
-func examSittingResource(application ExamSittingApplication) apiResource {
-	module := examSittingHTTPModule{application: application}
+func examSittingResource(app ExamSittingApplication) apiResource {
+	h := examSittingHandlers{app: app}
 	collection := "/exams/{exam_id}/sittings"
 	member := "/exams/{exam_id}/sittings/{exam_sitting_id}"
 	cancel := "/exams/{exam_id}/sittings/{exam_sitting_id}/cancel"
@@ -248,7 +248,7 @@ func examSittingResource(application ExamSittingApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			Handle: module.schedule,
+			Handle: h.schedule,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -262,7 +262,7 @@ func examSittingResource(application ExamSittingApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			Handle: module.list,
+			Handle: h.list,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -276,7 +276,7 @@ func examSittingResource(application ExamSittingApplication) apiResource {
 				"exam.sitting.invalid",
 				"exam.sitting.unavailable",
 			},
-			Handle: module.get,
+			Handle: h.get,
 		},
 		endpoint{
 			Method:      http.MethodPatch,
@@ -304,7 +304,7 @@ func examSittingResource(application ExamSittingApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			Handle: module.updateSchedule,
+			Handle: h.updateSchedule,
 		},
 		endpoint{
 			Method:      http.MethodPost,
@@ -328,7 +328,7 @@ func examSittingResource(application ExamSittingApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			Handle: module.cancel,
+			Handle: h.cancel,
 		},
 		endpoint{
 			Method:      http.MethodPost,
@@ -353,7 +353,7 @@ func examSittingResource(application ExamSittingApplication) apiResource {
 				"idempotency.in_progress",
 				"exam.archived",
 			},
-			Handle: module.pause,
+			Handle: h.pause,
 		},
 		endpoint{
 			Method:      http.MethodPost,
@@ -378,7 +378,7 @@ func examSittingResource(application ExamSittingApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			Handle: module.resume,
+			Handle: h.resume,
 		},
 		endpoint{
 			Method:      http.MethodPost,
@@ -406,7 +406,7 @@ func examSittingResource(application ExamSittingApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			Handle: module.extend,
+			Handle: h.extend,
 		},
 		endpoint{
 			Method:      http.MethodPost,
@@ -431,7 +431,7 @@ func examSittingResource(application ExamSittingApplication) apiResource {
 				"idempotency.in_progress",
 				"exam.archived",
 			},
-			Handle: module.close,
+			Handle: h.close,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -446,19 +446,19 @@ func examSittingResource(application ExamSittingApplication) apiResource {
 				"exam.sitting.unavailable",
 				"exam.sitting.state_conflict",
 			},
-			Handle: module.listNoShows,
+			Handle: h.listNoShows,
 		},
 	)
 }
 
-func (m examSittingHTTPModule) listNoShows(request operationRequest) (operationResult, error) {
+func (h examSittingHandlers) listNoShows(request operationRequest) (operationResult, error) {
 	examID, sittingID, err := examSittingIDs(request)
 	if err != nil {
 		return operationResult{}, err
 	}
 
 	query := sitting.ListNoShowsQuery{ExamID: examID, SittingID: sittingID, Limit: 50}
-	values := request.request.URL.Query()
+	values := request.http.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		query.Limit, err = strconv.Atoi(raw)
 		if err != nil || query.Limit < 1 || query.Limit > 200 {
@@ -473,7 +473,7 @@ func (m examSittingHTTPModule) listNoShows(request operationRequest) (operationR
 		}
 	}
 
-	page, err := m.application.ListExamSittingNoShows(request.context, request.invocation(), query)
+	page, err := h.app.ListExamSittingNoShows(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -527,7 +527,7 @@ func examSittingNoShowCursorSpec() opaqueCursorSpec[examSittingNoShowCursorWire]
 	}
 }
 
-func (m examSittingHTTPModule) schedule(request operationRequest) (operationResult, error) {
+func (h examSittingHandlers) schedule(request operationRequest) (operationResult, error) {
 	examID, err := examSittingExamID(request)
 	if err != nil {
 		return operationResult{}, err
@@ -561,7 +561,7 @@ func (m examSittingHTTPModule) schedule(request operationRequest) (operationResu
 		return operationResult{}, invalidRequestError(errors.New("must be a nonempty interval"))
 	}
 
-	view, err := m.application.ScheduleExamSitting(request.context, request.invocation(), sitting.ScheduleCommand{
+	view, err := h.app.ScheduleExamSitting(request.context, request.invocation(), sitting.ScheduleCommand{
 		ExamID:           examID,
 		ExamRevisionID:   revisionID,
 		ClassID:          classID,
@@ -576,26 +576,26 @@ func (m examSittingHTTPModule) schedule(request operationRequest) (operationResu
 	return jsonResult(http.StatusCreated, examSittingResponseFromView(view)), nil
 }
 
-func (m examSittingHTTPModule) get(request operationRequest) (operationResult, error) {
+func (h examSittingHandlers) get(request operationRequest) (operationResult, error) {
 	examID, sittingID, err := examSittingIDs(request)
 	if err != nil {
 		return operationResult{}, err
 	}
-	view, err := m.application.GetExamSitting(request.context, request.invocation(), sitting.GetQuery{ExamID: examID, SittingID: sittingID})
+	view, err := h.app.GetExamSitting(request.context, request.invocation(), sitting.GetQuery{ExamID: examID, SittingID: sittingID})
 	if err != nil {
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, examSittingResponseFromView(view)), nil
 }
 
-func (m examSittingHTTPModule) list(request operationRequest) (operationResult, error) {
+func (h examSittingHandlers) list(request operationRequest) (operationResult, error) {
 	examID, err := examSittingExamID(request)
 	if err != nil {
 		return operationResult{}, err
 	}
 
 	query := sitting.ListQuery{ExamID: examID, Limit: 50}
-	values := request.request.URL.Query()
+	values := request.http.URL.Query()
 	if raw := values.Get("class_id"); raw != "" {
 		query.ClassID, err = model.ParseClassID(raw)
 		if err != nil {
@@ -644,7 +644,7 @@ func (m examSittingHTTPModule) list(request operationRequest) (operationResult, 
 		query.BeforeScheduledStartAt, query.BeforeSittingID = cursor.StartAt, cursor.ID
 	}
 
-	page, err := m.application.ListExamSittings(request.context, request.invocation(), query)
+	page, err := h.app.ListExamSittings(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -673,7 +673,7 @@ func (m examSittingHTTPModule) list(request operationRequest) (operationResult, 
 	return jsonResult(http.StatusOK, response), nil
 }
 
-func (m examSittingHTTPModule) updateSchedule(request operationRequest) (operationResult, error) {
+func (h examSittingHandlers) updateSchedule(request operationRequest) (operationResult, error) {
 	examID, sittingID, err := examSittingIDs(request)
 	if err != nil {
 		return operationResult{}, err
@@ -732,7 +732,7 @@ func (m examSittingHTTPModule) updateSchedule(request operationRequest) (operati
 		return operationResult{}, err
 	}
 
-	view, err := m.application.UpdateExamSittingSchedule(request.context, request.invocation(), command)
+	view, err := h.app.UpdateExamSittingSchedule(request.context, request.invocation(), command)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -740,7 +740,7 @@ func (m examSittingHTTPModule) updateSchedule(request operationRequest) (operati
 	return jsonResult(http.StatusOK, examSittingResponseFromView(view)), nil
 }
 
-func (m examSittingHTTPModule) cancel(request operationRequest) (operationResult, error) {
+func (h examSittingHandlers) cancel(request operationRequest) (operationResult, error) {
 	examID, sittingID, err := examSittingIDs(request)
 	if err != nil {
 		return operationResult{}, err
@@ -760,7 +760,7 @@ func (m examSittingHTTPModule) cancel(request operationRequest) (operationResult
 		)
 	}
 
-	view, err := m.application.CancelExamSitting(request.context, request.invocation(), sitting.CancelCommand{
+	view, err := h.app.CancelExamSitting(request.context, request.invocation(), sitting.CancelCommand{
 		ExamID:           examID,
 		SittingID:        sittingID,
 		ExpectedRevision: body.ExpectedRevision,
@@ -776,19 +776,19 @@ func (m examSittingHTTPModule) cancel(request operationRequest) (operationResult
 
 type examSittingManagerCommandCall func(context.Context, invocation.Invocation, sitting.PauseCommand) (store.ExamSittingSnapshot, error)
 
-func (m examSittingHTTPModule) pause(request operationRequest) (operationResult, error) {
-	return m.managerTransition(request, "pauseExamSitting", m.application.PauseExamSitting)
+func (h examSittingHandlers) pause(request operationRequest) (operationResult, error) {
+	return h.managerTransition(request, "pauseExamSitting", h.app.PauseExamSitting)
 }
 
-func (m examSittingHTTPModule) resume(request operationRequest) (operationResult, error) {
-	return m.managerTransition(request, "resumeExamSitting", m.application.ResumeExamSitting)
+func (h examSittingHandlers) resume(request operationRequest) (operationResult, error) {
+	return h.managerTransition(request, "resumeExamSitting", h.app.ResumeExamSitting)
 }
 
-func (m examSittingHTTPModule) close(request operationRequest) (operationResult, error) {
-	return m.managerTransition(request, "closeExamSitting", m.application.CloseExamSitting)
+func (h examSittingHandlers) close(request operationRequest) (operationResult, error) {
+	return h.managerTransition(request, "closeExamSitting", h.app.CloseExamSitting)
 }
 
-func (m examSittingHTTPModule) managerTransition(
+func (h examSittingHandlers) managerTransition(
 	request operationRequest,
 	operation string,
 	run examSittingManagerCommandCall,
@@ -826,7 +826,7 @@ func (m examSittingHTTPModule) managerTransition(
 	return jsonResult(http.StatusOK, examSittingResponseFromView(view)), nil
 }
 
-func (m examSittingHTTPModule) extend(request operationRequest) (operationResult, error) {
+func (h examSittingHandlers) extend(request operationRequest) (operationResult, error) {
 	examID, sittingID, err := examSittingIDs(request)
 	if err != nil {
 		return operationResult{}, err
@@ -851,7 +851,7 @@ func (m examSittingHTTPModule) extend(request operationRequest) (operationResult
 		)
 	}
 
-	view, err := m.application.ExtendExamSitting(request.context, request.invocation(), sitting.ExtendCommand{
+	view, err := h.app.ExtendExamSitting(request.context, request.invocation(), sitting.ExtendCommand{
 		ExamID:           examID,
 		SittingID:        sittingID,
 		ExpectedRevision: body.ExpectedRevision,

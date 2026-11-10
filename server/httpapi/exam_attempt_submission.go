@@ -110,7 +110,7 @@ type examSubmissionManifestResponse struct {
 	NextCursor      string                               `json:"next_cursor,omitempty"`
 }
 
-func (m examAttemptHTTPModule) submit(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) submit(request operationRequest) (operationResult, error) {
 	access, err := candidateAccess(request)
 	if err != nil {
 		return operationResult{}, err
@@ -137,7 +137,7 @@ func (m examAttemptHTTPModule) submit(request operationRequest) (operationResult
 		return operationResult{}, err
 	}
 
-	receipt, err := m.application.SubmitExamAttempt(
+	receipt, err := h.app.SubmitExamAttempt(
 		request.context,
 		request.invocation(),
 		attempt.SubmitCommand{
@@ -166,13 +166,13 @@ func (m examAttemptHTTPModule) submit(request operationRequest) (operationResult
 	return jsonResult(http.StatusCreated, response).withHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) getSubmission(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) getSubmission(request operationRequest) (operationResult, error) {
 	query, err := managedSubmissionQuery(request)
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	view, err := m.application.GetExamSubmission(request.context, request.invocation(), query)
+	view, err := h.app.GetExamSubmission(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -204,14 +204,14 @@ func (m examAttemptHTTPModule) getSubmission(request operationRequest) (operatio
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) listSubmissionManifest(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) listSubmissionManifest(request operationRequest) (operationResult, error) {
 	ownership, err := managedSubmissionQuery(request)
 	if err != nil {
 		return operationResult{}, err
 	}
 
 	query := attempt.ListSubmissionManifestQuery{GetSubmissionQuery: ownership, Limit: 50}
-	values := request.request.URL.Query()
+	values := request.http.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		query.Limit, err = strconv.Atoi(raw)
 		if err != nil || query.Limit < 1 || query.Limit > model.ExamSubmissionManifestReadMaximum {
@@ -228,7 +228,7 @@ func (m examAttemptHTTPModule) listSubmissionManifest(request operationRequest) 
 		query.AfterEntryID = cursor.EntryID
 	}
 
-	page, err := m.application.ListExamSubmissionManifest(request.context, request.invocation(), query)
+	page, err := h.app.ListExamSubmissionManifest(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -270,7 +270,7 @@ func (m examAttemptHTTPModule) listSubmissionManifest(request operationRequest) 
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) openSubmissionFile(request operationRequest) (protocolResult, error) {
+func (h examAttemptHandlers) openSubmissionFile(request operationRequest) (protocolResult, error) {
 	ownership, err := managedSubmissionQuery(request)
 	if err != nil {
 		return protocolResult{}, err
@@ -281,7 +281,7 @@ func (m examAttemptHTTPModule) openSubmissionFile(request operationRequest) (pro
 		return protocolResult{}, err
 	}
 
-	opened, err := m.application.OpenExamSubmissionFile(
+	opened, err := h.app.OpenExamSubmissionFile(
 		request.context,
 		request.invocation(),
 		attempt.OpenSubmissionFileQuery{GetSubmissionQuery: ownership, EntryID: entryID},

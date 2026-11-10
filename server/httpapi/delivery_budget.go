@@ -13,8 +13,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-func deliveryBudgetResource(application ExamAttemptApplication) apiResource {
-	m := examAttemptHTTPModule{application: application}
+func deliveryBudgetResource(app ExamAttemptApplication) apiResource {
+	h := examAttemptHandlers{app: app}
 	return newResource(
 		"delivery-budget",
 		endpoint{
@@ -40,7 +40,7 @@ func deliveryBudgetResource(application ExamAttemptApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			Handle: m.deliveryBudget,
+			Handle: h.deliveryBudget,
 		},
 		endpoint{
 			Method:       http.MethodPost,
@@ -70,17 +70,17 @@ func deliveryBudgetResource(application ExamAttemptApplication) apiResource {
 				"idempotency.key_required",
 				"idempotency.key_invalid",
 			},
-			Handle: m.stopDeliveryDetails,
+			Handle: h.stopDeliveryDetails,
 		},
 	)
 }
-func (m examAttemptHTTPModule) deliveryBudget(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) deliveryBudget(request operationRequest) (operationResult, error) {
 	query, err := browserSourceQuery(request, true)
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	value, err := m.application.DeliveryBudget(
+	value, err := h.app.DeliveryBudget(
 		request.context,
 		request.invocation(),
 		attempt.DeliveryBudgetQuery{Access: query.Access, ParticipationID: query.ParticipationID},
@@ -94,13 +94,13 @@ func (m examAttemptHTTPModule) deliveryBudget(request operationRequest) (operati
 
 	return jsonResult(http.StatusOK, value).withHeaders(noStoreHeaders()), nil
 }
-func (m examAttemptHTTPModule) stopDeliveryDetails(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) stopDeliveryDetails(request operationRequest) (operationResult, error) {
 	attemptID, err := pathID[model.ExamAttemptID](request, "exam_attempt_id")
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	headers, err := candidateAttemptAccessHeaders(request.request)
+	headers, err := candidateAttemptAccessHeaders(request.http)
 	if err != nil {
 		return operationResult{}, invalidRequestError(err)
 	}
@@ -113,7 +113,7 @@ func (m examAttemptHTTPModule) stopDeliveryDetails(request operationRequest) (op
 		return operationResult{}, invalidRequestError(nil)
 	}
 
-	value, err := m.application.StopDeliveryDetails(request.context, request.invocation(), attempt.StopDeliveryDetailsCommand{
+	value, err := h.app.StopDeliveryDetails(request.context, request.invocation(), attempt.StopDeliveryDetailsCommand{
 		Access: attempt.CandidateAccess{
 			AttemptID:            attemptID,
 			ConnectionID:         headers.ConnectionID,

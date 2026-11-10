@@ -47,7 +47,7 @@ type StudentProgressionApplication interface {
 	StudentProgressionReport(context.Context, invocation.Invocation, model.OnboardingImportID, io.Writer) error
 }
 
-type studentProgressionModule struct{ progressions StudentProgressionApplication }
+type studentProgressionHandlers struct{ app StudentProgressionApplication }
 
 type studentProgressionDryRunRequest struct {
 	SourcePeriodID      string `json:"source_period_id"`
@@ -62,8 +62,8 @@ type studentProgressionCommitRequest struct {
 	PreviewDigest    string `json:"preview_digest"`
 }
 
-func studentProgressionResource(progressions StudentProgressionApplication) apiResource {
-	module := studentProgressionModule{progressions: progressions}
+func studentProgressionResource(app StudentProgressionApplication) apiResource {
+	h := studentProgressionHandlers{app: app}
 	return newResource("student-progressions",
 		endpoint{
 			Method: http.MethodPost,
@@ -87,7 +87,7 @@ func studentProgressionResource(progressions StudentProgressionApplication) apiR
 				"onboarding_import.file_invalid",
 				"onboarding_import.unavailable",
 			},
-			Handle: module.dryRun,
+			Handle: h.dryRun,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -103,7 +103,7 @@ func studentProgressionResource(progressions StudentProgressionApplication) apiR
 				"invitation.unavailable",
 				"student_progression.conflict",
 			},
-			Handle: module.list,
+			Handle: h.list,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -120,7 +120,7 @@ func studentProgressionResource(progressions StudentProgressionApplication) apiR
 				"onboarding_import.unavailable",
 				"student_progression.conflict",
 			},
-			Handle: module.get,
+			Handle: h.get,
 		},
 		endpoint{
 			Method:      http.MethodPost,
@@ -144,7 +144,7 @@ func studentProgressionResource(progressions StudentProgressionApplication) apiR
 				"onboarding_import.file_invalid",
 				"onboarding_import.unavailable",
 			},
-			Handle: module.commit,
+			Handle: h.commit,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -163,7 +163,7 @@ func studentProgressionResource(progressions StudentProgressionApplication) apiR
 				"onboarding_import.file_invalid",
 				"onboarding_import.unavailable",
 			},
-			Handle: module.cancel,
+			Handle: h.cancel,
 		},
 		endpoint{
 			Method:       http.MethodGet,
@@ -180,12 +180,12 @@ func studentProgressionResource(progressions StudentProgressionApplication) apiR
 				"student_progression.unavailable",
 				"student_progression.conflict",
 			},
-			Protocol: module.report,
+			Protocol: h.report,
 		},
 	)
 }
 
-func (m studentProgressionModule) dryRun(request operationRequest) (operationResult, error) {
+func (h studentProgressionHandlers) dryRun(request operationRequest) (operationResult, error) {
 	var body studentProgressionDryRunRequest
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, invalidRequestError(err)
@@ -196,7 +196,7 @@ func (m studentProgressionModule) dryRun(request operationRequest) (operationRes
 		return operationResult{}, invalidRequestError(err)
 	}
 
-	view, err := m.progressions.DryRunStudentProgression(request.context, request.invocation(), onboarding.DryRunStudentProgressionCommand{
+	view, err := h.app.DryRunStudentProgression(request.context, request.invocation(), onboarding.DryRunStudentProgressionCommand{
 		SourcePeriodID:      model.AcademicPeriodID(body.SourcePeriodID),
 		SourceClassID:       model.ClassID(body.SourceClassID),
 		DestinationPeriodID: model.AcademicPeriodID(body.DestinationPeriodID),
@@ -237,13 +237,13 @@ func studentProgressionCursorSpec() opaqueCursorSpec[studentProgressionCursor] {
 // the progression listing; state repeats.
 var studentProgressionListFilters = []string{"source_period_id", "source_class_id", "destination_period_id", "destination_class_id"}
 
-func (m studentProgressionModule) list(request operationRequest) (operationResult, error) {
+func (h studentProgressionHandlers) list(request operationRequest) (operationResult, error) {
 	page, err := request.pageRequest()
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	values := request.request.URL.Query()
+	values := request.http.URL.Query()
 	for key := range values {
 		if key != "state" && key != "limit" && key != "cursor" && !slices.Contains(studentProgressionListFilters, key) {
 			return operationResult{}, invalidRequestError(errors.New("unknown student progression query parameter"))
@@ -286,7 +286,7 @@ func (m studentProgressionModule) list(request operationRequest) (operationResul
 		query.BeforeID = model.OnboardingImportID(cursor.ID)
 	}
 
-	result, err := m.progressions.ListStudentProgressions(request.context, request.invocation(), query)
+	result, err := h.app.ListStudentProgressions(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -314,19 +314,19 @@ func (m studentProgressionModule) list(request operationRequest) (operationResul
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
-func (m studentProgressionModule) get(request operationRequest) (operationResult, error) {
+func (h studentProgressionHandlers) get(request operationRequest) (operationResult, error) {
 	id, err := pathID[model.OnboardingImportID](request, "student_progression_id")
 	if err != nil {
 		return operationResult{}, err
 	}
-	view, rows, err := m.progressions.GetStudentProgression(request.context, request.invocation(), id)
+	view, rows, err := h.app.GetStudentProgression(request.context, request.invocation(), id)
 	if err != nil {
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, onboardingImportResponseFromView(view, rows)).withHeaders(noStoreHeaders()), nil
 }
 
-func (m studentProgressionModule) commit(request operationRequest) (operationResult, error) {
+func (h studentProgressionHandlers) commit(request operationRequest) (operationResult, error) {
 	id, err := pathID[model.OnboardingImportID](request, "student_progression_id")
 	if err != nil {
 		return operationResult{}, err
@@ -337,7 +337,7 @@ func (m studentProgressionModule) commit(request operationRequest) (operationRes
 		return operationResult{}, invalidRequestError(err)
 	}
 
-	view, err := m.progressions.CommitStudentProgression(request.context, request.invocation(), onboarding.CommitStudentProgressionCommand{
+	view, err := h.app.CommitStudentProgression(request.context, request.invocation(), onboarding.CommitStudentProgressionCommand{
 		ID:               id,
 		ExpectedRevision: body.ExpectedRevision,
 		PreviewDigest:    body.PreviewDigest,
@@ -350,25 +350,25 @@ func (m studentProgressionModule) commit(request operationRequest) (operationRes
 	return jsonResult(http.StatusAccepted, onboardingImportResponseFromView(view, nil)).withHeaders(noStoreHeaders()), nil
 }
 
-func (m studentProgressionModule) cancel(request operationRequest) (operationResult, error) {
+func (h studentProgressionHandlers) cancel(request operationRequest) (operationResult, error) {
 	id, err := pathID[model.OnboardingImportID](request, "student_progression_id")
 	if err != nil {
 		return operationResult{}, err
 	}
-	view, err := m.progressions.CancelStudentProgression(request.context, request.invocation(), id)
+	view, err := h.app.CancelStudentProgression(request.context, request.invocation(), id)
 	if err != nil {
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, onboardingImportResponseFromView(view, nil)).withHeaders(noStoreHeaders()), nil
 }
 
-func (m studentProgressionModule) report(request operationRequest) (protocolResult, error) {
+func (h studentProgressionHandlers) report(request operationRequest) (protocolResult, error) {
 	id, err := pathID[model.OnboardingImportID](request, "student_progression_id")
 	if err != nil {
 		return protocolResult{}, err
 	}
 	var body bytes.Buffer
-	if err = m.progressions.StudentProgressionReport(request.context, request.invocation(), id, &body); err != nil {
+	if err = h.app.StudentProgressionReport(request.context, request.invocation(), id, &body); err != nil {
 		return protocolResult{}, err
 	}
 	headers := noStoreHeaders()

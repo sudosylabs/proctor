@@ -24,15 +24,17 @@ type ExamExportsApplication interface {
 	OpenExamExport(context.Context, invocation.Invocation, exam.ExportQuery) (*exam.ExportDownload, error)
 }
 
-type examExportsHTTPModule struct {
-	application ExamExportsApplication
-	submission  bool
+// examExportsHandlers serves the Exam export routes of one scope: a whole
+// Sitting, or one Submission when submission is set.
+type examExportsHandlers struct {
+	app        ExamExportsApplication
+	submission bool
 }
 
-func examExportsResource(application ExamExportsApplication) apiResource {
+func examExportsResource(app ExamExportsApplication) apiResource {
 	var routes []endpoint
 	for _, submission := range []bool{false, true} {
-		m := examExportsHTTPModule{application: application, submission: submission}
+		h := examExportsHandlers{app: app, submission: submission}
 		base := "/exams/{exam_id}/sittings/{exam_sitting_id}"
 		if submission {
 			base += "/submissions/{submission_id}"
@@ -66,7 +68,7 @@ func examExportsResource(application ExamExportsApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			Handle: m.create,
+			Handle: h.create,
 		}
 		protocol := "sitting-export-content"
 		if submission {
@@ -91,7 +93,7 @@ func examExportsResource(application ExamExportsApplication) apiResource {
 					"exam.export.conflict",
 					"exam.export.unavailable",
 				},
-				Handle: m.get,
+				Handle: h.get,
 			},
 			endpoint{
 				Method:       http.MethodGet,
@@ -112,7 +114,7 @@ func examExportsResource(application ExamExportsApplication) apiResource {
 					"exam.export.expired",
 					"exam.export.not_ready",
 				},
-				Protocol: m.open,
+				Protocol: h.open,
 			},
 		)
 	}
@@ -178,16 +180,16 @@ func exportResponse(e *model.ExamExport) examExportResponse {
 	return r
 }
 
-func (m examExportsHTTPModule) scope(request operationRequest) (model.RetentionHoldScope, error) {
-	if m.submission {
+func (h examExportsHandlers) scope(request operationRequest) (model.RetentionHoldScope, error) {
+	if h.submission {
 		return recordsSubmissionScope(request)
 	}
 	exam, sitting, err := examSittingIDs(request)
 	return model.RetentionHoldScope{ExamID: exam, SittingID: sitting}, err
 }
 
-func (m examExportsHTTPModule) query(request operationRequest) (exam.ExportQuery, error) {
-	scope, err := m.scope(request)
+func (h examExportsHandlers) query(request operationRequest) (exam.ExportQuery, error) {
+	scope, err := h.scope(request)
 	if err != nil {
 		return exam.ExportQuery{}, err
 	}
@@ -198,8 +200,8 @@ func (m examExportsHTTPModule) query(request operationRequest) (exam.ExportQuery
 	return exam.ExportQuery{Scope: scope, ExportID: id}, nil
 }
 
-func (m examExportsHTTPModule) create(request operationRequest) (operationResult, error) {
-	scope, err := m.scope(request)
+func (h examExportsHandlers) create(request operationRequest) (operationResult, error) {
+	scope, err := h.scope(request)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -217,7 +219,7 @@ func (m examExportsHTTPModule) create(request operationRequest) (operationResult
 		return operationResult{}, invalidRequestError(errors.New("select distinct work and/or integrity categories"))
 	}
 
-	value, err := m.application.CreateExamExport(request.context, request.invocation(), exam.CreateExportCommand{
+	value, err := h.app.CreateExamExport(request.context, request.invocation(), exam.CreateExportCommand{
 		Scope:          scope,
 		Categories:     categories,
 		IdempotencyKey: request.idempotencyKey,
@@ -232,12 +234,12 @@ func (m examExportsHTTPModule) create(request operationRequest) (operationResult
 	return jsonResult(http.StatusAccepted, exportResponse(value)).withHeaders(privateNoStoreHeaders()), nil
 }
 
-func (m examExportsHTTPModule) get(request operationRequest) (operationResult, error) {
-	query, err := m.query(request)
+func (h examExportsHandlers) get(request operationRequest) (operationResult, error) {
+	query, err := h.query(request)
 	if err != nil {
 		return operationResult{}, err
 	}
-	value, err := m.application.GetExamExport(request.context, request.invocation(), query)
+	value, err := h.app.GetExamExport(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -247,13 +249,13 @@ func (m examExportsHTTPModule) get(request operationRequest) (operationResult, e
 	return jsonResult(http.StatusOK, exportResponse(value)).withHeaders(privateNoStoreHeaders()), nil
 }
 
-func (m examExportsHTTPModule) open(request operationRequest) (protocolResult, error) {
-	query, err := m.query(request)
+func (h examExportsHandlers) open(request operationRequest) (protocolResult, error) {
+	query, err := h.query(request)
 	if err != nil {
 		return protocolResult{}, err
 	}
 
-	opened, err := m.application.OpenExamExport(request.context, request.invocation(), query)
+	opened, err := h.app.OpenExamExport(request.context, request.invocation(), query)
 	if err != nil {
 		return protocolResult{}, err
 	}

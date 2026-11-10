@@ -27,7 +27,7 @@ type operationRequest struct {
 	principal      model.Principal
 	metadata       model.RequestMetadata
 	params         Params
-	request        *http.Request
+	http           *http.Request
 	idempotencyKey string
 }
 
@@ -120,7 +120,7 @@ func (a *API) prepareOperation(
 		principal:      principal,
 		metadata:       RequestMetadata(request.Context()),
 		params:         params,
-		request:        request,
+		http:           request,
 		idempotencyKey: idempotencyKeyFromContext(request.Context()),
 	}, true
 }
@@ -486,7 +486,7 @@ func (r operationRequest) invocation() invocation.Invocation {
 }
 
 func (r operationRequest) decodeJSON(target any) error {
-	if err := decodeRequestJSON(r.request, target); err != nil {
+	if err := decodeRequestJSON(r.http, target); err != nil {
 		return invalidRequestError(err)
 	}
 	return nil
@@ -495,7 +495,7 @@ func (r operationRequest) decodeJSON(target any) error {
 // queryValue returns the named query parameter's first value without
 // surrounding whitespace, or "" when the request does not carry it.
 func (r operationRequest) queryValue(name string) string {
-	return strings.TrimSpace(r.request.URL.Query().Get(name))
+	return strings.TrimSpace(r.http.URL.Query().Get(name))
 }
 
 // queryLimit returns the collection page size with the shared default and

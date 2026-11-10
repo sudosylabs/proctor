@@ -68,12 +68,12 @@ type searchUserItemResponse struct {
 	Username    string `json:"username"`
 }
 
-type searchResourceModule struct {
-	search SearchApplication
+type searchHandlers struct {
+	app SearchApplication
 }
 
-func searchResource(search SearchApplication) apiResource {
-	module := searchResourceModule{search: search}
+func searchResource(application SearchApplication) apiResource {
+	h := searchHandlers{app: application}
 	return newResource(
 		"search",
 		endpoint{
@@ -91,7 +91,7 @@ func searchResource(search SearchApplication) apiResource {
 				"administration.unavailable",
 				"resource.not_found",
 			},
-			Handle: module.find,
+			Handle: h.find,
 		},
 	)
 }
@@ -99,8 +99,8 @@ func searchResource(search SearchApplication) apiResource {
 // find decodes the search parameters. q, limit and cursor take one value;
 // types repeats. Search answers one bounded page per type, so any cursor is
 // rejected rather than silently ignored.
-func (m searchResourceModule) find(request operationRequest) (operationResult, error) {
-	values := request.request.URL.Query()
+func (h searchHandlers) find(request operationRequest) (operationResult, error) {
+	values := request.http.URL.Query()
 	for _, name := range []string{"q", "limit", "cursor"} {
 		if entries, present := values[name]; present && len(entries) != 1 {
 			return operationResult{}, invalidRequestError(errors.New(name + " must be one value"))
@@ -120,7 +120,7 @@ func (m searchResourceModule) find(request operationRequest) (operationResult, e
 	for _, raw := range values["types"] {
 		query.Types = append(query.Types, app.SearchType(raw))
 	}
-	result, err := m.search.Search(request.context, request.invocation(), query)
+	result, err := h.app.Search(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}

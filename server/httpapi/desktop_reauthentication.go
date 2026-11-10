@@ -82,13 +82,13 @@ type desktopReauthenticationContextResponse struct {
 	ExpiresAt            string                                  `json:"expires_at"`
 }
 
-type desktopReauthenticationResourceModule struct {
-	application DesktopReauthentication
-	cookies     browserCookies
+type desktopReauthenticationHandlers struct {
+	app     DesktopReauthentication
+	cookies browserCookies
 }
 
-func desktopReauthenticationResource(application DesktopReauthentication, cookies browserCookies) apiResource {
-	m := desktopReauthenticationResourceModule{application: application, cookies: cookies}
+func desktopReauthenticationResource(app DesktopReauthentication, cookies browserCookies) apiResource {
+	h := desktopReauthenticationHandlers{app: app, cookies: cookies}
 	base := "/auth/desktop/reauthentications"
 	return newResource("desktop_reauthentication",
 		endpoint{
@@ -102,21 +102,21 @@ func desktopReauthenticationResource(application DesktopReauthentication, cookie
 				"authentication.desktop_reauthentication.invalid",
 				"authentication.internal",
 			},
-			Handle: m.start,
+			Handle: h.start,
 		},
 		endpoint{
 			Method: http.MethodPost,
 			Path:   "/auth/desktop/reauthentications/bind",
 			Auth:   AuthPublic,
 			Errors: []string{"request.invalid", "authentication.desktop_reauthentication.invalid", "authentication.internal"},
-			Handle: m.bind,
+			Handle: h.bind,
 		},
 		endpoint{
 			Method: http.MethodGet,
 			Path:   "/auth/desktop/reauthentications/context",
 			Auth:   AuthPublic,
 			Errors: []string{"authentication.desktop_reauthentication.invalid", "authentication.internal", "authentication.credential_ambiguous"},
-			Handle: m.context,
+			Handle: h.context,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -135,7 +135,7 @@ func desktopReauthenticationResource(application DesktopReauthentication, cookie
 				"audit.unavailable",
 				"service.busy",
 			},
-			Handle: m.authenticatePassword,
+			Handle: h.authenticatePassword,
 		},
 		endpoint{
 			Method:       http.MethodGet,
@@ -159,7 +159,7 @@ func desktopReauthenticationResource(application DesktopReauthentication, cookie
 				"authentication.rate_limit_unavailable",
 				"authentication.credential_ambiguous",
 			},
-			Protocol: m.authenticateExternal,
+			Protocol: h.authenticateExternal,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -171,7 +171,7 @@ func desktopReauthenticationResource(application DesktopReauthentication, cookie
 				"authentication.internal",
 				"authentication.credential_ambiguous",
 			},
-			Handle: m.approve,
+			Handle: h.approve,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -183,7 +183,7 @@ func desktopReauthenticationResource(application DesktopReauthentication, cookie
 				"authentication.internal",
 				"authentication.credential_ambiguous",
 			},
-			Handle: m.cancel,
+			Handle: h.cancel,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -198,18 +198,18 @@ func desktopReauthenticationResource(application DesktopReauthentication, cookie
 				"authentication.internal",
 				"audit.unavailable",
 			},
-			Handle: m.complete,
+			Handle: h.complete,
 		},
 	)
 }
 
-func (m desktopReauthenticationResourceModule) start(request operationRequest) (operationResult, error) {
+func (h desktopReauthenticationHandlers) start(request operationRequest) (operationResult, error) {
 	var input desktopReauthenticationStartRequest
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
 
-	result, err := m.application.StartDesktopReauthentication(
+	result, err := h.app.StartDesktopReauthentication(
 		request.context,
 		request.invocation(),
 		identity.StartDesktopReauthenticationCommand{
@@ -227,13 +227,13 @@ func (m desktopReauthenticationResourceModule) start(request operationRequest) (
 		ExpiresAt: model.FormatRFC3339(result.ExpiresAt)}).withHeaders(noStoreHeaders()), nil
 }
 
-func (m desktopReauthenticationResourceModule) bind(request operationRequest) (operationResult, error) {
+func (h desktopReauthenticationHandlers) bind(request operationRequest) (operationResult, error) {
 	var input desktopAuthorizationProofRequest
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
 
-	result, err := m.application.BindDesktopReauthentication(request.context, request.invocation(), identity.BindDesktopAuthorizationCommand{
+	result, err := h.app.BindDesktopReauthentication(request.context, request.invocation(), identity.BindDesktopAuthorizationCommand{
 		Handle:       input.Handle,
 		BrowserProof: input.BrowserProof,
 		State:        input.State,
@@ -243,26 +243,26 @@ func (m desktopReauthenticationResourceModule) bind(request operationRequest) (o
 	}
 
 	headers := captureResponseHeaders(func(writer http.ResponseWriter) {
-		m.cookies.attachDesktopReauthenticationBinding(writer, result.Binding, result.ExpiresAt)
+		h.cookies.attachDesktopReauthenticationBinding(writer, result.Binding, result.ExpiresAt)
 	})
 	headers.Set("Cache-Control", "no-store")
 	return noContentResult().withHeaders(headers), nil
 }
 
-func (m desktopReauthenticationResourceModule) context(request operationRequest) (operationResult, error) {
-	binding, err := m.binding(request.request)
+func (h desktopReauthenticationHandlers) context(request operationRequest) (operationResult, error) {
+	binding, err := h.binding(request.http)
 	if err != nil {
 		return operationResult{}, err
 	}
-	result, err := m.application.DesktopReauthenticationContext(request.context, request.invocation(), binding)
+	result, err := h.app.DesktopReauthenticationContext(request.context, request.invocation(), binding)
 	if err != nil {
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, desktopReauthenticationContextResponseFromApplication(result)).withHeaders(noStoreHeaders()), nil
 }
 
-func (m desktopReauthenticationResourceModule) authenticatePassword(request operationRequest) (operationResult, error) {
-	binding, err := m.binding(request.request)
+func (h desktopReauthenticationHandlers) authenticatePassword(request operationRequest) (operationResult, error) {
+	binding, err := h.binding(request.http)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -272,7 +272,7 @@ func (m desktopReauthenticationResourceModule) authenticatePassword(request oper
 		return operationResult{}, err
 	}
 
-	result, err := m.application.AuthenticateDesktopReauthenticationPassword(
+	result, err := h.app.AuthenticateDesktopReauthenticationPassword(
 		request.context,
 		request.invocation(),
 		identity.AuthenticateDesktopReauthenticationPasswordCommand{
@@ -288,8 +288,8 @@ func (m desktopReauthenticationResourceModule) authenticatePassword(request oper
 	return jsonResult(http.StatusOK, desktopReauthenticationContextResponseFromApplication(result)).withHeaders(noStoreHeaders()), nil
 }
 
-func (m desktopReauthenticationResourceModule) authenticateExternal(request operationRequest) (protocolResult, error) {
-	binding, err := m.binding(request.request)
+func (h desktopReauthenticationHandlers) authenticateExternal(request operationRequest) (protocolResult, error) {
+	binding, err := h.binding(request.http)
 	if err != nil {
 		return protocolResult{}, err
 	}
@@ -299,13 +299,13 @@ func (m desktopReauthenticationResourceModule) authenticateExternal(request oper
 		return protocolResult{}, err
 	}
 
-	start, err := m.application.BeginDesktopReauthenticationExternalAuthentication(
+	start, err := h.app.BeginDesktopReauthenticationExternalAuthentication(
 		request.context,
 		request.invocation(),
 		identity.BeginDesktopReauthenticationExternalAuthenticationCommand{
 			ProviderID: provider,
 			Binding:    binding,
-			State:      request.request.URL.Query().Get("state"),
+			State:      request.http.URL.Query().Get("state"),
 			Source:     request.metadata.IPAddress,
 		},
 	)
@@ -314,14 +314,14 @@ func (m desktopReauthenticationResourceModule) authenticateExternal(request oper
 	}
 
 	headers := captureResponseHeaders(func(writer http.ResponseWriter) {
-		m.cookies.attachExternalLoginBinding(writer, start.Binding, start.ExpiresAt)
+		h.cookies.attachExternalLoginBinding(writer, start.Binding, start.ExpiresAt)
 	})
 	headers.Set("Cache-Control", "no-store")
 	return redirectProtocolResult(start.RedirectURL).withHeaders(headers), nil
 }
 
-func (m desktopReauthenticationResourceModule) approve(request operationRequest) (operationResult, error) {
-	binding, err := m.binding(request.request)
+func (h desktopReauthenticationHandlers) approve(request operationRequest) (operationResult, error) {
+	binding, err := h.binding(request.http)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -331,7 +331,7 @@ func (m desktopReauthenticationResourceModule) approve(request operationRequest)
 		return operationResult{}, err
 	}
 
-	result, err := m.application.ApproveDesktopReauthentication(
+	result, err := h.app.ApproveDesktopReauthentication(
 		request.context,
 		request.invocation(),
 		identity.ApproveDesktopAuthorizationCommand{Binding: binding, State: input.State},
@@ -340,7 +340,7 @@ func (m desktopReauthenticationResourceModule) approve(request operationRequest)
 		return operationResult{}, err
 	}
 
-	headers := captureResponseHeaders(m.cookies.clearDesktopReauthenticationBinding)
+	headers := captureResponseHeaders(h.cookies.clearDesktopReauthenticationBinding)
 	headers.Set("Cache-Control", "no-store")
 	return jsonResult(
 		http.StatusOK,
@@ -348,8 +348,8 @@ func (m desktopReauthenticationResourceModule) approve(request operationRequest)
 	).withHeaders(headers), nil
 }
 
-func (m desktopReauthenticationResourceModule) cancel(request operationRequest) (operationResult, error) {
-	binding, err := m.binding(request.request)
+func (h desktopReauthenticationHandlers) cancel(request operationRequest) (operationResult, error) {
+	binding, err := h.binding(request.http)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -359,7 +359,7 @@ func (m desktopReauthenticationResourceModule) cancel(request operationRequest) 
 		return operationResult{}, err
 	}
 
-	if err = m.application.CancelDesktopReauthentication(
+	if err = h.app.CancelDesktopReauthentication(
 		request.context,
 		request.invocation(),
 		identity.ApproveDesktopAuthorizationCommand{Binding: binding, State: input.State},
@@ -367,18 +367,18 @@ func (m desktopReauthenticationResourceModule) cancel(request operationRequest) 
 		return operationResult{}, err
 	}
 
-	headers := captureResponseHeaders(m.cookies.clearDesktopReauthenticationBinding)
+	headers := captureResponseHeaders(h.cookies.clearDesktopReauthenticationBinding)
 	headers.Set("Cache-Control", "no-store")
 	return noContentResult().withHeaders(headers), nil
 }
 
-func (m desktopReauthenticationResourceModule) complete(request operationRequest) (operationResult, error) {
+func (h desktopReauthenticationHandlers) complete(request operationRequest) (operationResult, error) {
 	var input desktopReauthenticationCompleteRequest
 	if err := request.decodeJSON(&input); err != nil {
 		return operationResult{}, err
 	}
 
-	result, err := m.application.CompleteDesktopReauthentication(
+	result, err := h.app.CompleteDesktopReauthentication(
 		request.context,
 		request.invocation(),
 		identity.CompleteDesktopReauthenticationCommand{
@@ -397,7 +397,7 @@ func (m desktopReauthenticationResourceModule) complete(request operationRequest
 	}).withHeaders(noStoreHeaders()), nil
 }
 
-func (m desktopReauthenticationResourceModule) binding(request *http.Request) (string, error) {
+func (h desktopReauthenticationHandlers) binding(request *http.Request) (string, error) {
 	binding, err := singleCookieValue(request, BrowserDesktopReauthenticationCookieName)
 	if err != nil || binding == "" {
 		return "", apperror.New("authentication.desktop_reauthentication.invalid")

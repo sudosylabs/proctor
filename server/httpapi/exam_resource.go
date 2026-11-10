@@ -36,7 +36,9 @@ type ExamResourceApplication interface {
 	OpenExamResource(context.Context, invocation.Invocation, resource.OpenQuery) (resource.Opened, error)
 }
 
-type examResourceHTTPModule struct{ application ExamResourceApplication }
+// examResourceHandlers serves the Exam Resource routes: the files attached to
+// an Exam draft. The Exam routes themselves are examHandlers.
+type examResourceHandlers struct{ app ExamResourceApplication }
 type examResourceUploadMetadata struct {
 	ExpectedDraftRevision int64  `json:"expected_revision"`
 	DisplayName           string `json:"display_name"`
@@ -76,8 +78,10 @@ type examResourceResponse struct {
 	DraftRevision       int64  `json:"draft_revision"`
 }
 
-func examResourceHTTPResource(application ExamResourceApplication) apiResource {
-	m := examResourceHTTPModule{application: application}
+// examResourceResource is the HTTP resource of the Exam Resource entity, hence
+// the doubled word; examResource is the Exam's.
+func examResourceResource(app ExamResourceApplication) apiResource {
+	h := examResourceHandlers{app: app}
 	collection := "/exams/{exam_id}/draft/resources"
 	member := "/exams/{exam_id}/draft/resources/{exam_resource_id}"
 	order := "/exams/{exam_id}/draft/resources/order"
@@ -96,7 +100,7 @@ func examResourceHTTPResource(application ExamResourceApplication) apiResource {
 				"exam.resource.invalid",
 				"exam.resource.unavailable",
 			},
-			Handle: m.list,
+			Handle: h.list,
 		},
 		endpoint{
 			Method:       http.MethodPost,
@@ -127,7 +131,7 @@ func examResourceHTTPResource(application ExamResourceApplication) apiResource {
 				"exam.resource.upload_invalid",
 				"exam.resource.revision_conflict",
 			},
-			Protocol: m.create,
+			Protocol: h.create,
 		},
 		endpoint{
 			Method:      http.MethodPatch,
@@ -152,7 +156,7 @@ func examResourceHTTPResource(application ExamResourceApplication) apiResource {
 				"exam.resource.no_changes",
 				"exam.resource.revision_conflict",
 			},
-			Handle: m.editMetadata,
+			Handle: h.editMetadata,
 		},
 		endpoint{
 			Method:      http.MethodPut,
@@ -177,7 +181,7 @@ func examResourceHTTPResource(application ExamResourceApplication) apiResource {
 				"exam.resource.no_changes",
 				"exam.resource.order_invalid",
 			},
-			Handle: m.reorder,
+			Handle: h.reorder,
 		},
 		endpoint{
 			Method:       http.MethodPut,
@@ -207,7 +211,7 @@ func examResourceHTTPResource(application ExamResourceApplication) apiResource {
 				"exam.resource.upload_invalid",
 				"exam.resource.revision_conflict",
 			},
-			Protocol: m.replaceContent,
+			Protocol: h.replaceContent,
 		},
 		endpoint{
 			Method:      http.MethodDelete,
@@ -231,7 +235,7 @@ func examResourceHTTPResource(application ExamResourceApplication) apiResource {
 				"idempotency.in_progress",
 				"exam.resource.revision_conflict",
 			},
-			Handle: m.remove,
+			Handle: h.remove,
 		},
 		endpoint{
 			Method:       http.MethodGet,
@@ -247,18 +251,18 @@ func examResourceHTTPResource(application ExamResourceApplication) apiResource {
 				"exam.resource.invalid",
 				"exam.resource.unavailable",
 			},
-			Protocol: m.open,
+			Protocol: h.open,
 		},
 	)
 }
 
-func (m examResourceHTTPModule) list(request operationRequest) (operationResult, error) {
+func (h examResourceHandlers) list(request operationRequest) (operationResult, error) {
 	examID, err := examResourceExamID(request)
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	items, err := m.application.ListExamResources(request.context, request.invocation(), resource.ListQuery{ExamID: examID})
+	items, err := h.app.ListExamResources(request.context, request.invocation(), resource.ListQuery{ExamID: examID})
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -280,14 +284,14 @@ func (m examResourceHTTPModule) list(request operationRequest) (operationResult,
 
 	return jsonResult(http.StatusOK, response), nil
 }
-func (m examResourceHTTPModule) create(request operationRequest) (protocolResult, error) {
+func (h examResourceHandlers) create(request operationRequest) (protocolResult, error) {
 	examID, err := examResourceExamID(request)
 	if err != nil {
 		return protocolResult{}, err
 	}
 
 	var metadata examResourceUploadMetadata
-	content, err := decodeExamResourceMultipart(request.request, &metadata)
+	content, err := decodeExamResourceMultipart(request.http, &metadata)
 	if err != nil {
 		return protocolResult{}, invalidRequestError(err)
 	}
@@ -295,7 +299,7 @@ func (m examResourceHTTPModule) create(request operationRequest) (protocolResult
 		return protocolResult{}, invalidRequestError(errors.New("size is required"))
 	}
 
-	result, err := m.application.CreateExamResource(request.context, request.invocation(), resource.CreateCommand{
+	result, err := h.app.CreateExamResource(request.context, request.invocation(), resource.CreateCommand{
 		ExamID:                examID,
 		ExpectedDraftRevision: metadata.ExpectedDraftRevision,
 		DisplayName:           metadata.DisplayName,
@@ -312,14 +316,14 @@ func (m examResourceHTTPModule) create(request operationRequest) (protocolResult
 
 	return streamingUploadProtocolResult(http.StatusCreated, examResourceResponseFromRecord(result)), nil
 }
-func (m examResourceHTTPModule) replaceContent(request operationRequest) (protocolResult, error) {
+func (h examResourceHandlers) replaceContent(request operationRequest) (protocolResult, error) {
 	examID, resourceID, err := examResourceIDs(request)
 	if err != nil {
 		return protocolResult{}, err
 	}
 
 	var metadata examResourceContentReplacementMetadata
-	content, err := decodeExamResourceMultipart(request.request, &metadata)
+	content, err := decodeExamResourceMultipart(request.http, &metadata)
 	if err != nil {
 		return protocolResult{}, invalidRequestError(err)
 	}
@@ -327,7 +331,7 @@ func (m examResourceHTTPModule) replaceContent(request operationRequest) (protoc
 		return protocolResult{}, invalidRequestError(errors.New("size is required"))
 	}
 
-	result, err := m.application.ReplaceExamResourceContent(request.context, request.invocation(), resource.ReplaceContentCommand{
+	result, err := h.app.ReplaceExamResourceContent(request.context, request.invocation(), resource.ReplaceContentCommand{
 		ExamID:                examID,
 		ResourceID:            resourceID,
 		ExpectedDraftRevision: metadata.ExpectedDraftRevision,
@@ -343,7 +347,7 @@ func (m examResourceHTTPModule) replaceContent(request operationRequest) (protoc
 
 	return streamingUploadProtocolResult(http.StatusOK, examResourceResponseFromRecord(result)), nil
 }
-func (m examResourceHTTPModule) editMetadata(request operationRequest) (operationResult, error) {
+func (h examResourceHandlers) editMetadata(request operationRequest) (operationResult, error) {
 	examID, resourceID, err := examResourceIDs(request)
 	if err != nil {
 		return operationResult{}, err
@@ -357,7 +361,7 @@ func (m examResourceHTTPModule) editMetadata(request operationRequest) (operatio
 		return operationResult{}, invalidRequestError(errors.New("at least one metadata field is required"))
 	}
 
-	result, err := m.application.EditExamResourceMetadata(request.context, request.invocation(), resource.EditMetadataCommand{
+	result, err := h.app.EditExamResourceMetadata(request.context, request.invocation(), resource.EditMetadataCommand{
 		ExamID:                examID,
 		ResourceID:            resourceID,
 		ExpectedDraftRevision: body.ExpectedDraftRevision,
@@ -371,7 +375,7 @@ func (m examResourceHTTPModule) editMetadata(request operationRequest) (operatio
 
 	return jsonResult(http.StatusOK, examResourceResponseFromRecord(result)), nil
 }
-func (m examResourceHTTPModule) reorder(request operationRequest) (operationResult, error) {
+func (h examResourceHandlers) reorder(request operationRequest) (operationResult, error) {
 	examID, err := examResourceExamID(request)
 	if err != nil {
 		return operationResult{}, err
@@ -392,7 +396,7 @@ func (m examResourceHTTPModule) reorder(request operationRequest) (operationResu
 		ids[i] = id
 	}
 
-	items, err := m.application.ReorderExamResources(request.context, request.invocation(), resource.ReorderCommand{
+	items, err := h.app.ReorderExamResources(request.context, request.invocation(), resource.ReorderCommand{
 		ExamID:                examID,
 		ExpectedDraftRevision: body.ExpectedDraftRevision,
 		ResourceIDs:           ids,
@@ -411,7 +415,7 @@ func (m examResourceHTTPModule) reorder(request operationRequest) (operationResu
 
 	return jsonResult(http.StatusOK, response), nil
 }
-func (m examResourceHTTPModule) remove(request operationRequest) (operationResult, error) {
+func (h examResourceHandlers) remove(request operationRequest) (operationResult, error) {
 	examID, resourceID, err := examResourceIDs(request)
 	if err != nil {
 		return operationResult{}, err
@@ -422,7 +426,7 @@ func (m examResourceHTTPModule) remove(request operationRequest) (operationResul
 		return operationResult{}, err
 	}
 
-	_, err = m.application.RemoveExamResource(request.context, request.invocation(), resource.RemoveCommand{
+	_, err = h.app.RemoveExamResource(request.context, request.invocation(), resource.RemoveCommand{
 		ExamID:                examID,
 		ResourceID:            resourceID,
 		ExpectedDraftRevision: body.ExpectedDraftRevision,
@@ -434,13 +438,13 @@ func (m examResourceHTTPModule) remove(request operationRequest) (operationResul
 
 	return noContentResult(), nil
 }
-func (m examResourceHTTPModule) open(request operationRequest) (protocolResult, error) {
+func (h examResourceHandlers) open(request operationRequest) (protocolResult, error) {
 	examID, resourceID, err := examResourceIDs(request)
 	if err != nil {
 		return protocolResult{}, err
 	}
 
-	opened, err := m.application.OpenExamResource(
+	opened, err := h.app.OpenExamResource(
 		request.context,
 		request.invocation(),
 		resource.OpenQuery{ExamID: examID, ResourceID: resourceID},
@@ -454,7 +458,7 @@ func (m examResourceHTTPModule) open(request operationRequest) (protocolResult, 
 
 	etag := `"` + opened.Record.Rendition.SHA256 + `"`
 	headers := http.Header{"Content-Type": {opened.Record.Rendition.MediaType}, "Cache-Control": {"private, max-age=300"}, "ETag": {etag}}
-	if request.request.Header.Get("If-None-Match") == etag {
+	if request.http.Header.Get("If-None-Match") == etag {
 		_ = opened.Body.Close()
 		return notModifiedProtocolResult(opened.Record.Rendition.Size).withHeaders(headers), nil
 	}

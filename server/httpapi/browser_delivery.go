@@ -16,8 +16,8 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-func browserDeliveryResource(application ExamAttemptApplication) apiResource {
-	m := examAttemptHTTPModule{application: application}
+func browserDeliveryResource(app ExamAttemptApplication) apiResource {
+	h := examAttemptHandlers{app: app}
 	return newResource(
 		"browser-delivery",
 		endpoint{
@@ -42,7 +42,7 @@ func browserDeliveryResource(application ExamAttemptApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			Handle: m.browserSourceList,
+			Handle: h.browserSourceList,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -66,7 +66,7 @@ func browserDeliveryResource(application ExamAttemptApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			Handle: m.browserSourceStatus,
+			Handle: h.browserSourceStatus,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -91,7 +91,7 @@ func browserDeliveryResource(application ExamAttemptApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			Handle: m.browserDeliveryReceipts,
+			Handle: h.browserDeliveryReceipts,
 		},
 		endpoint{
 			Method:       http.MethodPost,
@@ -121,7 +121,7 @@ func browserDeliveryResource(application ExamAttemptApplication) apiResource {
 				"idempotency.key_required",
 				"idempotency.key_invalid",
 			},
-			Handle: m.declareBrowserDeliveryGaps,
+			Handle: h.declareBrowserDeliveryGaps,
 		},
 		endpoint{
 			Method:       http.MethodPost,
@@ -151,7 +151,7 @@ func browserDeliveryResource(application ExamAttemptApplication) apiResource {
 				"idempotency.key_required",
 				"idempotency.key_invalid",
 			},
-			Handle: m.sealBrowserDelivery,
+			Handle: h.sealBrowserDelivery,
 		},
 		endpoint{
 			Method:       http.MethodPost,
@@ -181,7 +181,7 @@ func browserDeliveryResource(application ExamAttemptApplication) apiResource {
 				"idempotency.key_required",
 				"idempotency.key_invalid",
 			},
-			Handle: m.updateBrowserDeliverySummary,
+			Handle: h.updateBrowserDeliverySummary,
 		},
 		endpoint{
 			Method:       http.MethodPost,
@@ -215,7 +215,7 @@ func browserDeliveryResource(application ExamAttemptApplication) apiResource {
 				"exam.delivery.append_rate_limited",
 				"exam.attempt.browser_activity_conflict",
 			},
-			Handle: m.appendHistoricalBrowserDelivery,
+			Handle: h.appendHistoricalBrowserDelivery,
 		},
 	)
 }
@@ -231,7 +231,7 @@ func browserSourceQuery(request operationRequest, list bool) (attempt.BrowserSou
 		SourceSessionID: model.BrowserSourceSessionID(request.params["source_session_id"]),
 	}
 	if list {
-		values := request.request.URL.Query()["participation_id"]
+		values := request.http.URL.Query()["participation_id"]
 		if len(values) != 1 || !model.AttemptParticipationID(values[0]).IsValid() {
 			return query, invalidRequestError(nil)
 		}
@@ -241,9 +241,9 @@ func browserSourceQuery(request operationRequest, list bool) (attempt.BrowserSou
 		return query, invalidRequestError(nil)
 	}
 
-	if len(request.request.Header.Values(candidateAttemptCredentialHeader)) > 0 ||
-		len(request.request.Header.Values(candidateAttemptConnectionHeader)) > 0 {
-		headers, err := candidateAttemptAccessHeaders(request.request)
+	if len(request.http.Header.Values(candidateAttemptCredentialHeader)) > 0 ||
+		len(request.http.Header.Values(candidateAttemptConnectionHeader)) > 0 {
+		headers, err := candidateAttemptAccessHeaders(request.http)
 		if err != nil {
 			return query, invalidRequestError(err)
 		}
@@ -254,12 +254,12 @@ func browserSourceQuery(request operationRequest, list bool) (attempt.BrowserSou
 
 	return query, nil
 }
-func (m examAttemptHTTPModule) browserSourceStatus(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) browserSourceStatus(request operationRequest) (operationResult, error) {
 	query, err := browserSourceQuery(request, false)
 	if err != nil {
 		return operationResult{}, err
 	}
-	value, err := m.application.BrowserSourceStatus(request.context, request.invocation(), query)
+	value, err := h.app.BrowserSourceStatus(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -268,13 +268,13 @@ func (m examAttemptHTTPModule) browserSourceStatus(request operationRequest) (op
 	}
 	return jsonResult(http.StatusOK, value).withHeaders(noStoreHeaders()), nil
 }
-func (m examAttemptHTTPModule) browserSourceList(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) browserSourceList(request operationRequest) (operationResult, error) {
 	query, err := browserSourceQuery(request, true)
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	values, err := m.application.BrowserSourceList(request.context, request.invocation(), query)
+	values, err := h.app.BrowserSourceList(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -306,7 +306,7 @@ func (m examAttemptHTTPModule) browserSourceList(request operationRequest) (oper
 	return jsonResult(http.StatusOK, response).withHeaders(noStoreHeaders()), nil
 }
 
-func (m examAttemptHTTPModule) browserDeliveryReceipts(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) browserDeliveryReceipts(request operationRequest) (operationResult, error) {
 	query, err := browserSourceQuery(request, false)
 	if err != nil {
 		return operationResult{}, err
@@ -316,7 +316,7 @@ func (m examAttemptHTTPModule) browserDeliveryReceipts(request operationRequest)
 	if err != nil {
 		return operationResult{}, err
 	}
-	if !request.request.URL.Query().Has("limit") {
+	if !request.http.URL.Query().Has("limit") {
 		page.Limit = browserReceiptPageLimit
 	}
 	if page.Limit > browserReceiptPageLimit {
@@ -333,7 +333,7 @@ func (m examAttemptHTTPModule) browserDeliveryReceipts(request operationRequest)
 		first = cursor.Sequence
 	}
 
-	value, err := m.application.BrowserDeliveryReceipts(request.context, request.invocation(), query, first, page.Limit)
+	value, err := h.app.BrowserDeliveryReceipts(request.context, request.invocation(), query, first, page.Limit)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -377,7 +377,7 @@ func browserReceiptCursorSpec() opaqueCursorSpec[browserReceiptCursor] {
 		},
 	}
 }
-func (m examAttemptHTTPModule) declareBrowserDeliveryGaps(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) declareBrowserDeliveryGaps(request operationRequest) (operationResult, error) {
 	query, err := browserSourceQuery(request, false)
 	if err != nil {
 		return operationResult{}, err
@@ -388,7 +388,7 @@ func (m examAttemptHTTPModule) declareBrowserDeliveryGaps(request operationReque
 		return operationResult{}, err
 	}
 
-	value, err := m.application.DeclareBrowserDeliveryGaps(request.context, request.invocation(), attempt.BrowserDeliveryGapsCommand{
+	value, err := h.app.DeclareBrowserDeliveryGaps(request.context, request.invocation(), attempt.BrowserDeliveryGapsCommand{
 		Query:          query,
 		Declaration:    body,
 		IdempotencyKey: request.idempotencyKey,
@@ -413,7 +413,7 @@ type browserDeliveryGapResponse struct {
 	Status  model.BrowserSourceStatus `json:"status"`
 }
 
-func (m examAttemptHTTPModule) sealBrowserDelivery(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) sealBrowserDelivery(request operationRequest) (operationResult, error) {
 	query, err := browserSourceQuery(request, false)
 	if err != nil {
 		return operationResult{}, err
@@ -424,7 +424,7 @@ func (m examAttemptHTTPModule) sealBrowserDelivery(request operationRequest) (op
 		return operationResult{}, err
 	}
 
-	value, err := m.application.SealBrowserDelivery(request.context, request.invocation(), attempt.BrowserDeliveryFinalCommand{
+	value, err := h.app.SealBrowserDelivery(request.context, request.invocation(), attempt.BrowserDeliveryFinalCommand{
 		Query:          query,
 		Declaration:    body,
 		IdempotencyKey: request.idempotencyKey,
@@ -438,7 +438,7 @@ func (m examAttemptHTTPModule) sealBrowserDelivery(request operationRequest) (op
 
 	return jsonResult(http.StatusOK, value).withHeaders(noStoreHeaders()), nil
 }
-func (m examAttemptHTTPModule) updateBrowserDeliverySummary(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) updateBrowserDeliverySummary(request operationRequest) (operationResult, error) {
 	query, err := browserSourceQuery(request, false)
 	if err != nil {
 		return operationResult{}, err
@@ -449,7 +449,7 @@ func (m examAttemptHTTPModule) updateBrowserDeliverySummary(request operationReq
 		return operationResult{}, err
 	}
 
-	value, err := m.application.UpdateBrowserDeliverySummary(request.context, request.invocation(), attempt.BrowserDeliverySummaryCommand{
+	value, err := h.app.UpdateBrowserDeliverySummary(request.context, request.invocation(), attempt.BrowserDeliverySummaryCommand{
 		Query:          query,
 		Summary:        body,
 		IdempotencyKey: request.idempotencyKey,
@@ -463,7 +463,7 @@ func (m examAttemptHTTPModule) updateBrowserDeliverySummary(request operationReq
 
 	return jsonResult(http.StatusOK, value).withHeaders(noStoreHeaders()), nil
 }
-func (m examAttemptHTTPModule) appendHistoricalBrowserDelivery(request operationRequest) (operationResult, error) {
+func (h examAttemptHandlers) appendHistoricalBrowserDelivery(request operationRequest) (operationResult, error) {
 	query, err := browserSourceQuery(request, false)
 	if err != nil {
 		return operationResult{}, err
@@ -477,7 +477,7 @@ func (m examAttemptHTTPModule) appendHistoricalBrowserDelivery(request operation
 		return operationResult{}, err
 	}
 
-	value, err := m.application.AppendHistoricalBrowserDelivery(request.context, request.invocation(), attempt.BrowserDeliveryAppendCommand{
+	value, err := h.app.AppendHistoricalBrowserDelivery(request.context, request.invocation(), attempt.BrowserDeliveryAppendCommand{
 		Query:          query,
 		Batch:          body,
 		IdempotencyKey: request.idempotencyKey,

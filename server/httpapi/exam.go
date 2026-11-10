@@ -368,10 +368,10 @@ type examFocusPolicyResponse struct {
 	Outcome                     string `json:"outcome"`
 }
 
-type examResourceModule struct{ exams ExamApplication }
+type examHandlers struct{ app ExamApplication }
 
-func examResource(exams ExamApplication) apiResource {
-	module := examResourceModule{exams: exams}
+func examResource(app ExamApplication) apiResource {
+	h := examHandlers{app: app}
 	collection := "/exams"
 	member := "/exams/{exam_id}"
 	draft := "/exams/{exam_id}/draft"
@@ -397,7 +397,7 @@ func examResource(exams ExamApplication) apiResource {
 				"exam.unavailable",
 				"resource.not_found",
 			},
-			Handle: module.list,
+			Handle: h.list,
 		},
 		endpoint{
 			Method:      http.MethodPost,
@@ -419,7 +419,7 @@ func examResource(exams ExamApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			Handle: module.create,
+			Handle: h.create,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -433,7 +433,7 @@ func examResource(exams ExamApplication) apiResource {
 				"exam.unavailable",
 				"exam.invalid",
 			},
-			Handle: module.get,
+			Handle: h.get,
 		},
 		endpoint{
 			Method:      http.MethodPatch,
@@ -456,7 +456,7 @@ func examResource(exams ExamApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			Handle: module.editDraftText,
+			Handle: h.editDraftText,
 		},
 		endpoint{
 			Method:      http.MethodPut,
@@ -479,7 +479,7 @@ func examResource(exams ExamApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			Handle: module.configureDraftFocusLoss,
+			Handle: h.configureDraftFocusLoss,
 		},
 		endpoint{
 			Method:      http.MethodPut,
@@ -502,7 +502,7 @@ func examResource(exams ExamApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			Handle: module.configureDraftNativePolicy,
+			Handle: h.configureDraftNativePolicy,
 		},
 		endpoint{
 			Method:      http.MethodPut,
@@ -525,7 +525,7 @@ func examResource(exams ExamApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			Handle: module.configureDraftBrowserPolicy,
+			Handle: h.configureDraftBrowserPolicy,
 		},
 		endpoint{
 			Method:      http.MethodPost,
@@ -547,7 +547,7 @@ func examResource(exams ExamApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			Handle: module.archive,
+			Handle: h.archive,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -561,7 +561,7 @@ func examResource(exams ExamApplication) apiResource {
 				"exam.invalid",
 				"exam.unavailable",
 			},
-			Handle: module.listManagers,
+			Handle: h.listManagers,
 		},
 		endpoint{
 			Method:      http.MethodPost,
@@ -586,7 +586,7 @@ func examResource(exams ExamApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			Handle: module.addManager,
+			Handle: h.addManager,
 		},
 		endpoint{
 			Method:      http.MethodDelete,
@@ -610,7 +610,7 @@ func examResource(exams ExamApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			Handle: module.removeManager,
+			Handle: h.removeManager,
 		},
 		endpoint{
 			Method:      http.MethodPut,
@@ -636,18 +636,18 @@ func examResource(exams ExamApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			Handle: module.transferOwner,
+			Handle: h.transferOwner,
 		},
 	)
 }
 
-func (m examResourceModule) list(request operationRequest) (operationResult, error) {
-	query, err := examListQuery(request.request)
+func (h examHandlers) list(request operationRequest) (operationResult, error) {
+	query, err := examListQuery(request.http)
 	if err != nil {
 		return operationResult{}, invalidRequestError(err)
 	}
 
-	page, err := m.exams.ListExams(request.context, request.invocation(), query)
+	page, err := h.app.ListExams(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -675,7 +675,7 @@ func (m examResourceModule) list(request operationRequest) (operationResult, err
 	return jsonResult(http.StatusOK, response), nil
 }
 
-func (m examResourceModule) create(request operationRequest) (operationResult, error) {
+func (h examHandlers) create(request operationRequest) (operationResult, error) {
 	var body createExamRequest
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
@@ -686,7 +686,7 @@ func (m examResourceModule) create(request operationRequest) (operationResult, e
 		return operationResult{}, invalidRequestError(err)
 	}
 
-	view, err := m.exams.CreateExam(request.context, request.invocation(), exam.CreateCommand{
+	view, err := h.app.CreateExam(request.context, request.invocation(), exam.CreateCommand{
 		AcademicUnitID:       unitID,
 		Title:                body.Title,
 		InstructionsMarkdown: body.InstructionsMarkdown,
@@ -699,19 +699,19 @@ func (m examResourceModule) create(request operationRequest) (operationResult, e
 	return jsonResult(http.StatusCreated, examResponseFromView(view)), nil
 }
 
-func (m examResourceModule) get(request operationRequest) (operationResult, error) {
+func (h examHandlers) get(request operationRequest) (operationResult, error) {
 	examID, err := pathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return operationResult{}, err
 	}
-	view, err := m.exams.GetExam(request.context, request.invocation(), exam.GetQuery{ExamID: examID})
+	view, err := h.app.GetExam(request.context, request.invocation(), exam.GetQuery{ExamID: examID})
 	if err != nil {
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, examResponseFromView(view)), nil
 }
 
-func (m examResourceModule) editDraftText(request operationRequest) (operationResult, error) {
+func (h examHandlers) editDraftText(request operationRequest) (operationResult, error) {
 	examID, err := pathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return operationResult{}, err
@@ -731,7 +731,7 @@ func (m examResourceModule) editDraftText(request operationRequest) (operationRe
 		return operationResult{}, invalidRequestError(errors.New("must be positive"))
 	}
 
-	view, err := m.exams.EditExamDraftText(request.context, request.invocation(), exam.EditDraftTextCommand{
+	view, err := h.app.EditExamDraftText(request.context, request.invocation(), exam.EditDraftTextCommand{
 		ExamID:                examID,
 		ExpectedDraftRevision: body.ExpectedDraftRevision,
 		Title:                 title,
@@ -745,7 +745,7 @@ func (m examResourceModule) editDraftText(request operationRequest) (operationRe
 	return jsonResult(http.StatusOK, examResponseFromView(view)), nil
 }
 
-func (m examResourceModule) configureDraftFocusLoss(request operationRequest) (operationResult, error) {
+func (h examHandlers) configureDraftFocusLoss(request operationRequest) (operationResult, error) {
 	examID, err := pathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return operationResult{}, err
@@ -775,7 +775,7 @@ func (m examResourceModule) configureDraftFocusLoss(request operationRequest) (o
 		return operationResult{}, invalidRequestError(errors.New("is not supported"))
 	}
 
-	view, err := m.exams.ConfigureExamDraftFocusLoss(request.context, request.invocation(), exam.ConfigureDraftFocusLossCommand{
+	view, err := h.app.ConfigureExamDraftFocusLoss(request.context, request.invocation(), exam.ConfigureDraftFocusLossCommand{
 		ExamID:                examID,
 		ExpectedDraftRevision: body.ExpectedDraftRevision,
 		Enabled:               body.Enabled,
@@ -792,7 +792,7 @@ func (m examResourceModule) configureDraftFocusLoss(request operationRequest) (o
 	return jsonResult(http.StatusOK, examResponseFromView(view)), nil
 }
 
-func (m examResourceModule) configureDraftBrowserPolicy(request operationRequest) (operationResult, error) {
+func (h examHandlers) configureDraftBrowserPolicy(request operationRequest) (operationResult, error) {
 	examID, err := pathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return operationResult{}, err
@@ -811,7 +811,7 @@ func (m examResourceModule) configureDraftBrowserPolicy(request operationRequest
 		return operationResult{}, invalidRequestError(err)
 	}
 
-	view, err := m.exams.ConfigureExamDraftBrowserPolicy(request.context, request.invocation(), exam.ConfigureDraftBrowserPolicyCommand{
+	view, err := h.app.ConfigureExamDraftBrowserPolicy(request.context, request.invocation(), exam.ConfigureDraftBrowserPolicyCommand{
 		ExamID:                examID,
 		ExpectedDraftRevision: body.ExpectedDraftRevision,
 		Policy:                policy,
@@ -824,7 +824,7 @@ func (m examResourceModule) configureDraftBrowserPolicy(request operationRequest
 	return jsonResult(http.StatusOK, examResponseFromView(view)), nil
 }
 
-func (m examResourceModule) configureDraftNativePolicy(request operationRequest) (operationResult, error) {
+func (h examHandlers) configureDraftNativePolicy(request operationRequest) (operationResult, error) {
 	examID, err := pathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return operationResult{}, err
@@ -841,7 +841,7 @@ func (m examResourceModule) configureDraftNativePolicy(request operationRequest)
 		return operationResult{}, invalidRequestError(err)
 	}
 
-	view, err := m.exams.ConfigureExamDraftNativePolicy(request.context, request.invocation(), exam.ConfigureDraftNativePolicyCommand{
+	view, err := h.app.ConfigureExamDraftNativePolicy(request.context, request.invocation(), exam.ConfigureDraftNativePolicyCommand{
 		ExamID:                examID,
 		ExpectedDraftRevision: body.ExpectedDraftRevision,
 		NativePolicy:          body.Native,
@@ -854,7 +854,7 @@ func (m examResourceModule) configureDraftNativePolicy(request operationRequest)
 	return jsonResult(http.StatusOK, examResponseFromView(view)), nil
 }
 
-func (m examResourceModule) archive(request operationRequest) (operationResult, error) {
+func (h examHandlers) archive(request operationRequest) (operationResult, error) {
 	examID, err := pathID[model.ExamID](request, "exam_id")
 	if err != nil {
 		return operationResult{}, err
@@ -868,7 +868,7 @@ func (m examResourceModule) archive(request operationRequest) (operationResult, 
 		return operationResult{}, invalidRequestError(errors.New("must be positive"))
 	}
 
-	exam, err := m.exams.ArchiveExam(request.context, request.invocation(), exam.ArchiveCommand{
+	exam, err := h.app.ArchiveExam(request.context, request.invocation(), exam.ArchiveCommand{
 		ExamID:               examID,
 		ExpectedExamRevision: body.ExpectedExamRevision,
 		IdempotencyKey:       request.idempotencyKey,
@@ -880,14 +880,14 @@ func (m examResourceModule) archive(request operationRequest) (operationResult, 
 	return jsonResult(http.StatusOK, examIdentityResponseFromModel(exam)), nil
 }
 
-func (m examResourceModule) listManagers(request operationRequest) (operationResult, error) {
+func (h examHandlers) listManagers(request operationRequest) (operationResult, error) {
 	examID, err := examIDFromRequest(request)
 	if err != nil {
 		return operationResult{}, err
 	}
 
 	query := exam.ListManagersQuery{ExamID: examID, Limit: 50}
-	values := request.request.URL.Query()
+	values := request.http.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		query.Limit, err = strconv.Atoi(raw)
 		if err != nil || query.Limit < 1 || query.Limit > 200 {
@@ -905,7 +905,7 @@ func (m examResourceModule) listManagers(request operationRequest) (operationRes
 		query.BeforeUserID = model.UserID(cursor.UserID)
 	}
 
-	page, err := m.exams.ListExamManagers(request.context, request.invocation(), query)
+	page, err := h.app.ListExamManagers(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -933,7 +933,7 @@ func (m examResourceModule) listManagers(request operationRequest) (operationRes
 	return jsonResult(http.StatusOK, response), nil
 }
 
-func (m examResourceModule) addManager(request operationRequest) (operationResult, error) {
+func (h examHandlers) addManager(request operationRequest) (operationResult, error) {
 	examID, err := examIDFromRequest(request)
 	if err != nil {
 		return operationResult{}, err
@@ -949,7 +949,7 @@ func (m examResourceModule) addManager(request operationRequest) (operationResul
 		return operationResult{}, err
 	}
 
-	change, err := m.exams.AddExamManager(request.context, request.invocation(), exam.AddManagerCommand{
+	change, err := h.app.AddExamManager(request.context, request.invocation(), exam.AddManagerCommand{
 		ExamID:               examID,
 		UserID:               userID,
 		ExpectedExamRevision: body.ExpectedExamRevision,
@@ -962,7 +962,7 @@ func (m examResourceModule) addManager(request operationRequest) (operationResul
 	return jsonResult(http.StatusCreated, examManagerChangeResponseFromApplication(change, true)), nil
 }
 
-func (m examResourceModule) removeManager(request operationRequest) (operationResult, error) {
+func (h examHandlers) removeManager(request operationRequest) (operationResult, error) {
 	examID, err := examIDFromRequest(request)
 	if err != nil {
 		return operationResult{}, err
@@ -981,7 +981,7 @@ func (m examResourceModule) removeManager(request operationRequest) (operationRe
 		return operationResult{}, invalidRequestError(errors.New("must be positive"))
 	}
 
-	change, err := m.exams.RemoveExamManager(request.context, request.invocation(), exam.RemoveManagerCommand{
+	change, err := h.app.RemoveExamManager(request.context, request.invocation(), exam.RemoveManagerCommand{
 		ExamID:               examID,
 		UserID:               userID,
 		ExpectedExamRevision: body.ExpectedExamRevision,
@@ -994,7 +994,7 @@ func (m examResourceModule) removeManager(request operationRequest) (operationRe
 	return jsonResult(http.StatusOK, examManagerChangeResponseFromApplication(change, false)), nil
 }
 
-func (m examResourceModule) transferOwner(request operationRequest) (operationResult, error) {
+func (h examHandlers) transferOwner(request operationRequest) (operationResult, error) {
 	examID, err := examIDFromRequest(request)
 	if err != nil {
 		return operationResult{}, err
@@ -1010,7 +1010,7 @@ func (m examResourceModule) transferOwner(request operationRequest) (operationRe
 		return operationResult{}, err
 	}
 
-	change, err := m.exams.TransferExamOwnership(request.context, request.invocation(), exam.TransferOwnerCommand{
+	change, err := h.app.TransferExamOwnership(request.context, request.invocation(), exam.TransferOwnerCommand{
 		ExamID:               examID,
 		UserID:               userID,
 		ExpectedExamRevision: body.ExpectedExamRevision,

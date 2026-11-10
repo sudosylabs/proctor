@@ -59,10 +59,10 @@ type examRevisionCursor struct {
 	RevisionID string `json:"revision_id"`
 }
 
-type examRevisionHTTPModule struct{ application ExamRevisionApplication }
+type examRevisionHandlers struct{ app ExamRevisionApplication }
 
-func examRevisionResource(application ExamRevisionApplication) apiResource {
-	module := examRevisionHTTPModule{application: application}
+func examRevisionResource(app ExamRevisionApplication) apiResource {
+	h := examRevisionHandlers{app: app}
 	collection := "/exams/{exam_id}/revisions"
 	member := "/exams/{exam_id}/revisions/{exam_revision_id}"
 	return newResource(
@@ -90,7 +90,7 @@ func examRevisionResource(application ExamRevisionApplication) apiResource {
 				"idempotency.conflict",
 				"idempotency.in_progress",
 			},
-			Handle: module.publish,
+			Handle: h.publish,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -104,7 +104,7 @@ func examRevisionResource(application ExamRevisionApplication) apiResource {
 				"exam.invalid",
 				"exam.unavailable",
 			},
-			Handle: module.list,
+			Handle: h.list,
 		},
 		endpoint{
 			Method: http.MethodGet,
@@ -118,12 +118,12 @@ func examRevisionResource(application ExamRevisionApplication) apiResource {
 				"exam.invalid",
 				"exam.unavailable",
 			},
-			Handle: module.get,
+			Handle: h.get,
 		},
 	)
 }
 
-func (m examRevisionHTTPModule) publish(request operationRequest) (operationResult, error) {
+func (h examRevisionHandlers) publish(request operationRequest) (operationResult, error) {
 	examID, err := examRevisionExamID(request)
 	if err != nil {
 		return operationResult{}, err
@@ -137,7 +137,7 @@ func (m examRevisionHTTPModule) publish(request operationRequest) (operationResu
 		return operationResult{}, invalidRequestError(errors.New("must be positive"))
 	}
 
-	summary, err := m.application.PublishExamRevision(request.context, request.invocation(), exam.PublishRevisionCommand{
+	summary, err := h.app.PublishExamRevision(request.context, request.invocation(), exam.PublishRevisionCommand{
 		ExamID:                examID,
 		ExpectedDraftRevision: body.ExpectedDraftRevision,
 		IdempotencyKey:        request.idempotencyKey,
@@ -149,13 +149,13 @@ func (m examRevisionHTTPModule) publish(request operationRequest) (operationResu
 	return jsonResult(http.StatusCreated, examRevisionResponseFromSummary(summary)), nil
 }
 
-func (m examRevisionHTTPModule) get(request operationRequest) (operationResult, error) {
+func (h examRevisionHandlers) get(request operationRequest) (operationResult, error) {
 	examID, revisionID, err := examRevisionIDs(request)
 	if err != nil {
 		return operationResult{}, err
 	}
 
-	summary, err := m.application.GetExamRevision(
+	summary, err := h.app.GetExamRevision(
 		request.context,
 		request.invocation(),
 		exam.GetRevisionQuery{ExamID: examID, RevisionID: revisionID},
@@ -167,14 +167,14 @@ func (m examRevisionHTTPModule) get(request operationRequest) (operationResult, 
 	return jsonResult(http.StatusOK, examRevisionResponseFromSummary(summary)), nil
 }
 
-func (m examRevisionHTTPModule) list(request operationRequest) (operationResult, error) {
+func (h examRevisionHandlers) list(request operationRequest) (operationResult, error) {
 	examID, err := examRevisionExamID(request)
 	if err != nil {
 		return operationResult{}, err
 	}
 
 	query := exam.ListRevisionsQuery{ExamID: examID, Limit: 50}
-	values := request.request.URL.Query()
+	values := request.http.URL.Query()
 	if raw := values.Get("limit"); raw != "" {
 		query.Limit, err = strconv.Atoi(raw)
 		if err != nil || query.Limit < 1 || query.Limit > 200 {
@@ -192,7 +192,7 @@ func (m examRevisionHTTPModule) list(request operationRequest) (operationResult,
 		query.BeforeRevisionID = model.ExamRevisionID(cursor.RevisionID)
 	}
 
-	page, err := m.application.ListExamRevisions(request.context, request.invocation(), query)
+	page, err := h.app.ListExamRevisions(request.context, request.invocation(), query)
 	if err != nil {
 		return operationResult{}, err
 	}

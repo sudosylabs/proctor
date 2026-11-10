@@ -42,12 +42,12 @@ type updateProgrammeLevelRequest struct {
 	Description      Optional[string] `json:"description"`
 }
 
-type programmeLevelResourceModule struct {
-	programmeLevels ProgrammeLevelApplication
+type programmeLevelHandlers struct {
+	app ProgrammeLevelApplication
 }
 
-func programmeLevelResource(programmeLevels ProgrammeLevelApplication) apiResource {
-	module := programmeLevelResourceModule{programmeLevels: programmeLevels}
+func programmeLevelResource(app ProgrammeLevelApplication) apiResource {
+	h := programmeLevelHandlers{app: app}
 	collection := "/programmes/{programme_id}/levels"
 	member := "/programme-levels/{programme_level_id}"
 	return newResource(
@@ -57,7 +57,7 @@ func programmeLevelResource(programmeLevels ProgrammeLevelApplication) apiResour
 			Path:   collection,
 			Auth:   AuthPrincipalRequired,
 			Errors: academicReadErrorCodes("request.invalid", "resource.not_found"),
-			Handle: module.list,
+			Handle: h.list,
 		},
 		endpoint{
 			Method: http.MethodPost,
@@ -69,14 +69,14 @@ func programmeLevelResource(programmeLevels ProgrammeLevelApplication) apiResour
 				"programme_level.invalid",
 				"programme_level.conflict",
 			),
-			Handle: module.create,
+			Handle: h.create,
 		},
 		endpoint{
 			Method: http.MethodGet,
 			Path:   member,
 			Auth:   AuthPrincipalRequired,
 			Errors: academicReadErrorCodes("request.invalid", "resource.not_found"),
-			Handle: module.get,
+			Handle: h.get,
 		},
 		endpoint{
 			Method: http.MethodPatch,
@@ -88,7 +88,7 @@ func programmeLevelResource(programmeLevels ProgrammeLevelApplication) apiResour
 				"programme_level.invalid",
 				"programme_level.conflict",
 			),
-			Handle: module.patch,
+			Handle: h.patch,
 		},
 		endpoint{
 			Method: http.MethodDelete,
@@ -97,12 +97,12 @@ func programmeLevelResource(programmeLevels ProgrammeLevelApplication) apiResour
 			Errors: academicMutationErrorCodes(
 				"request.invalid", "resource.not_found", "programme_level.conflict",
 			),
-			Handle: module.archive,
+			Handle: h.archive,
 		},
 	)
 }
 
-func (m programmeLevelResourceModule) list(request operationRequest) (operationResult, error) {
+func (h programmeLevelHandlers) list(request operationRequest) (operationResult, error) {
 	programmeID, err := pathID[model.ProgrammeID](request, "programme_id")
 	if err != nil {
 		return operationResult{}, err
@@ -111,12 +111,12 @@ func (m programmeLevelResourceModule) list(request operationRequest) (operationR
 	if err != nil {
 		return operationResult{}, err
 	}
-	page, err := m.programmeLevels.ListProgrammeLevels(
+	page, err := h.app.ListProgrammeLevels(
 		request.context,
 		request.invocation(),
 		academic.ListProgrammeLevelsQuery{
 			ProgrammeID: programmeID,
-			Query:       request.request.URL.Query().Get("q"),
+			Query:       request.http.URL.Query().Get("q"),
 			NameQuery:   pageQuery,
 		},
 	)
@@ -128,7 +128,7 @@ func (m programmeLevelResourceModule) list(request operationRequest) (operationR
 	})
 }
 
-func (m programmeLevelResourceModule) create(request operationRequest) (operationResult, error) {
+func (h programmeLevelHandlers) create(request operationRequest) (operationResult, error) {
 	programmeID, err := pathID[model.ProgrammeID](request, "programme_id")
 	if err != nil {
 		return operationResult{}, err
@@ -137,7 +137,7 @@ func (m programmeLevelResourceModule) create(request operationRequest) (operatio
 	if err = request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
 	}
-	saved, err := m.programmeLevels.CreateProgrammeLevel(
+	saved, err := h.app.CreateProgrammeLevel(
 		request.context,
 		request.invocation(),
 		academic.CreateProgrammeLevelCommand{
@@ -153,12 +153,12 @@ func (m programmeLevelResourceModule) create(request operationRequest) (operatio
 	return jsonResult(http.StatusCreated, programmeLevelResponseFromModel(saved)), nil
 }
 
-func (m programmeLevelResourceModule) get(request operationRequest) (operationResult, error) {
+func (h programmeLevelHandlers) get(request operationRequest) (operationResult, error) {
 	id, err := pathID[model.ProgrammeLevelID](request, "programme_level_id")
 	if err != nil {
 		return operationResult{}, err
 	}
-	level, err := m.programmeLevels.GetProgrammeLevel(
+	level, err := h.app.GetProgrammeLevel(
 		request.context, request.invocation(), academic.GetProgrammeLevelQuery{ID: id},
 	)
 	if err != nil {
@@ -167,7 +167,7 @@ func (m programmeLevelResourceModule) get(request operationRequest) (operationRe
 	return jsonResult(http.StatusOK, programmeLevelResponseFromModel(level)), nil
 }
 
-func (m programmeLevelResourceModule) patch(request operationRequest) (operationResult, error) {
+func (h programmeLevelHandlers) patch(request operationRequest) (operationResult, error) {
 	id, err := pathID[model.ProgrammeLevelID](request, "programme_level_id")
 	if err != nil {
 		return operationResult{}, err
@@ -179,7 +179,7 @@ func (m programmeLevelResourceModule) patch(request operationRequest) (operation
 	if err := validateAcademicRevision(body.ExpectedRevision); err != nil {
 		return operationResult{}, err
 	}
-	level, err := m.programmeLevels.UpdateProgrammeLevel(
+	level, err := h.app.UpdateProgrammeLevel(
 		request.context,
 		request.invocation(),
 		academic.UpdateProgrammeLevelCommand{ExpectedRevision: body.ExpectedRevision.ValuePointer(),
@@ -195,7 +195,7 @@ func (m programmeLevelResourceModule) patch(request operationRequest) (operation
 	return jsonResult(http.StatusOK, programmeLevelResponseFromModel(level)), nil
 }
 
-func (m programmeLevelResourceModule) archive(request operationRequest) (operationResult, error) {
+func (h programmeLevelHandlers) archive(request operationRequest) (operationResult, error) {
 	id, err := pathID[model.ProgrammeLevelID](request, "programme_level_id")
 	if err != nil {
 		return operationResult{}, err
@@ -204,7 +204,7 @@ func (m programmeLevelResourceModule) archive(request operationRequest) (operati
 	if err != nil {
 		return operationResult{}, err
 	}
-	err = m.programmeLevels.ArchiveProgrammeLevel(
+	err = h.app.ArchiveProgrammeLevel(
 		request.context, request.invocation(), academic.ArchiveProgrammeLevelCommand{ExpectedRevision: expectedRevision, ID: id},
 	)
 	if err != nil {

@@ -73,12 +73,12 @@ type updateInstitutionRequest struct {
 	ExamCapacity Optional[examCapacityPolicyRequest] `json:"exam_capacity"`
 }
 
-type institutionResourceModule struct {
-	institutions InstitutionApplication
+type institutionHandlers struct {
+	app InstitutionApplication
 }
 
-func institutionResource(institutions InstitutionApplication) apiResource {
-	module := institutionResourceModule{institutions: institutions}
+func institutionResource(app InstitutionApplication) apiResource {
+	h := institutionHandlers{app: app}
 	return newResource(
 		"institution",
 		endpoint{
@@ -86,7 +86,7 @@ func institutionResource(institutions InstitutionApplication) apiResource {
 			Path:   "/institution",
 			Auth:   AuthPrincipalRequired,
 			Errors: academicReadErrorCodes("resource.not_found"),
-			Handle: module.get,
+			Handle: h.get,
 		},
 		endpoint{
 			Method: http.MethodPatch,
@@ -98,7 +98,7 @@ func institutionResource(institutions InstitutionApplication) apiResource {
 				"institution.invalid",
 				"institution.conflict",
 			),
-			Handle: module.patch,
+			Handle: h.patch,
 		},
 	)
 }
@@ -124,8 +124,8 @@ func academicMutationErrorCodes(specific ...string) []string {
 	return append(codes, "administration.unavailable")
 }
 
-func (m institutionResourceModule) get(request operationRequest) (operationResult, error) {
-	institution, err := m.institutions.GetInstitution(
+func (h institutionHandlers) get(request operationRequest) (operationResult, error) {
+	institution, err := h.app.GetInstitution(
 		request.context,
 		request.invocation(),
 		academic.GetInstitutionQuery{},
@@ -136,7 +136,7 @@ func (m institutionResourceModule) get(request operationRequest) (operationResul
 	return jsonResult(http.StatusOK, institutionResponseFromModel(institution)), nil
 }
 
-func (m institutionResourceModule) patch(request operationRequest) (operationResult, error) {
+func (h institutionHandlers) patch(request operationRequest) (operationResult, error) {
 	var body updateInstitutionRequest
 	if err := request.decodeJSON(&body); err != nil {
 		return operationResult{}, err
@@ -148,7 +148,7 @@ func (m institutionResourceModule) patch(request operationRequest) (operationRes
 		capacity = &value
 	}
 
-	institution, err := m.institutions.UpdateInstitution(
+	institution, err := h.app.UpdateInstitution(
 		request.context,
 		request.invocation(),
 		academic.UpdateInstitutionCommand{

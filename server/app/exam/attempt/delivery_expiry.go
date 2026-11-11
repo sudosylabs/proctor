@@ -24,7 +24,7 @@ func (s *Service) ScanExpiredDeliveries(ctx context.Context, system invocation.S
 		return ExpiryScanResult{}, apperror.Invalid("exam.attempt.invalid", "delivery_expiry_limit")
 	}
 
-	due, err := s.deps.Persistence.ListExpiredDeliveries(ctx, limit)
+	due, err := s.attempts.ListExpiredDeliveries(ctx, limit)
 	if err != nil {
 		return ExpiryScanResult{}, storeError(storeErrors, err)
 	}
@@ -39,7 +39,7 @@ func (s *Service) ScanExpiredDeliveries(ctx context.Context, system invocation.S
 			return result, apperror.New("exam.attempt.unavailable").Wrap(model.ErrDeliveryInvalid)
 		}
 
-		audit, err := s.deps.SystemAuditor.Begin(
+		audit, err := s.systemAuditor.Begin(
 			ctx,
 			model.ActionExamSittingManage,
 			model.Resource{Type: model.ResourceExamSitting, ID: d.SittingID.String()},
@@ -52,9 +52,9 @@ func (s *Service) ScanExpiredDeliveries(ctx context.Context, system invocation.S
 			return result, err
 		}
 
-		changed, err := s.deps.Persistence.ExpireDelivery(ctx, &store.DeliveryExpiry{Due: d, AuditEventID: audit, AuditAt: s.deps.Now()})
+		changed, err := s.attempts.ExpireDelivery(ctx, &store.DeliveryExpiry{Due: d, AuditEventID: audit, AuditAt: s.now()})
 		if err != nil {
-			if auditErr := s.deps.SystemAuditor.Fail(ctx, audit, "exam.attempt.unavailable"); auditErr != nil {
+			if auditErr := s.systemAuditor.Fail(ctx, audit, "exam.attempt.unavailable"); auditErr != nil {
 				return result, errors.Join(storeError(storeErrors, err), auditErr)
 			}
 			return result, storeError(storeErrors, err)

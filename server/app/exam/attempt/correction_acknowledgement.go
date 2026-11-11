@@ -75,7 +75,7 @@ func (s *Service) AcknowledgeExamAttemptCorrection(
 		CorrectionRevisionID:      command.CorrectionRevisionID,
 		ExpectedCurrentRevisionID: command.ExpectedCurrentRevisionID,
 	}
-	target, err := s.deps.Persistence.ResolveCorrectionAcknowledgementTarget(ctx, input)
+	target, err := s.attempts.ResolveCorrectionAcknowledgementTarget(ctx, input)
 	if err != nil {
 		return CorrectionAcknowledgementResult{}, storeError(storeErrors, err)
 	}
@@ -85,7 +85,7 @@ func (s *Service) AcknowledgeExamAttemptCorrection(
 	}
 
 	resource := model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()}
-	if err = s.deps.Auditor.RecordAuthorizationDecision(
+	if err = s.auditor.RecordAuthorizationDecision(
 		ctx,
 		invocation,
 		model.ActionExamSittingParticipate,
@@ -97,7 +97,7 @@ func (s *Service) AcknowledgeExamAttemptCorrection(
 		return CorrectionAcknowledgementResult{}, err
 	}
 
-	auditEvent, err := s.deps.Auditor.PrepareAtScope(
+	auditEvent, err := s.auditor.PrepareAtScope(
 		ctx,
 		invocation,
 		model.ActionExamSittingParticipate,
@@ -116,7 +116,7 @@ func (s *Service) AcknowledgeExamAttemptCorrection(
 	}
 
 	input.AuditEvent = auditEvent
-	stored, err := s.deps.Persistence.AcknowledgeCorrection(ctx, &input, commandIdempotency)
+	stored, err := s.attempts.AcknowledgeCorrection(ctx, &input, commandIdempotency)
 	if err != nil {
 		return CorrectionAcknowledgementResult{}, storeError(storeErrors, err)
 	}

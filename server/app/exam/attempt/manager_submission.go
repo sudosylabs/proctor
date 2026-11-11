@@ -52,20 +52,20 @@ func (s *Service) EndExamAttemptByManager(
 		return store.ExamSubmissionReceipt{}, apperror.Invalid("exam.attempt.invalid", "manager_end")
 	}
 
-	idempotency, err := prepareManagerEndIdempotency(invocation, command)
+	commandIdempotency, err := prepareManagerEndIdempotency(invocation, command)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, err
 	}
 
 	// Authorize the exact Sitting before reading the Attempt so existence is
 	// not probeable; later exits complete the audit attempt as failed.
-	management, err := s.deps.Managers.AuthorizeSittingManage(ctx, invocation, command.SittingID)
+	management, err := s.managers.AuthorizeSittingManage(ctx, invocation, command.SittingID)
 	override := management.Override
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, err
 	}
 
-	sitting, err := s.deps.Sittings.Resolve(ctx, command.SittingID)
+	sitting, err := s.sittings.Resolve(ctx, command.SittingID)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, storeError(storeErrors, err)
 	}
@@ -81,7 +81,7 @@ func (s *Service) EndExamAttemptByManager(
 		action = model.ActionExamSittingManageOverride
 	}
 
-	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+	auditID, err := s.auditor.Begin(ctx, access.Mutation{
 		Invocation: invocation,
 		Action:     action,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
@@ -102,7 +102,7 @@ func (s *Service) EndExamAttemptByManager(
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, apperror.New("exam.attempt.not_found"))
 	}
 
-	managerSnapshot, err := s.deps.Persistence.Get(ctx, command.ExamID, command.AttemptID)
+	managerSnapshot, err := s.attempts.Get(ctx, command.ExamID, command.AttemptID)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, err)
 	}
@@ -128,7 +128,7 @@ func (s *Service) EndExamAttemptByManager(
 		ExpectedAttemptRevision: command.ExpectedAttemptRevision,
 		PrivateReason:           command.PrivateReason,
 	}
-	preparation, err := s.deps.Submissions.PrepareManagerEnd(ctx, request)
+	preparation, err := s.submissions.PrepareManagerEnd(ctx, request)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, storeError(storeErrors, err))
 	}
@@ -136,7 +136,7 @@ func (s *Service) EndExamAttemptByManager(
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, err)
 	}
 
-	proposed, receiptCode := s.deps.NewSubmission(), s.deps.NewReceiptCode()
+	proposed, receiptCode := s.newSubmissionID(), s.newReceiptCode()
 	if !proposed.IsValid() {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, apperror.Invalid("exam.attempt.invalid", "submission_id"))
 	}
@@ -149,7 +149,7 @@ func (s *Service) EndExamAttemptByManager(
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, err)
 	}
 
-	stored, err := s.deps.Submissions.EndByManager(ctx, &store.ExamSubmissionManagerEnd{
+	stored, err := s.submissions.EndByManager(ctx, &store.ExamSubmissionManagerEnd{
 		Request:                   request,
 		Target:                    preparation.Target,
 		SubmissionID:              proposed,
@@ -158,7 +158,7 @@ func (s *Service) EndExamAttemptByManager(
 		AuditAt:                   preparation.SealAt,
 		Notice:                    notice,
 		ExpectedRecipientRevision: expectedRecipientRevision,
-	}, idempotency)
+	}, commandIdempotency)
 	if err != nil {
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, storeError(storeErrors, err))
 	}
@@ -170,7 +170,7 @@ func (s *Service) EndExamAttemptByManager(
 
 	if !result.Replayed {
 		if effectErr := s.publishAttemptSubmitted(ctx, result); effectErr != nil {
-			s.deps.Publisher.Report(ctx, "exam_attempt_manager_ended", effectErr)
+			s.publisher.Report(ctx, "exam_attempt_manager_ended", effectErr)
 		}
 	}
 
@@ -211,7 +211,7 @@ func (s *Service) prepareManagerEndReceiptMail(
 	var notice *store.PreparedMail
 	var expectedRecipientRevision int64
 	if !preparation.Replayed {
-		preparedMail, prepareErr := s.deps.Mail.PrepareSubmissionReceipt(ctx, SubmissionMailPreparation{
+		preparedMail, prepareErr := s.mail.PrepareSubmissionReceipt(ctx, SubmissionMailPreparation{
 			CandidateUserID: preparation.Target.CandidateUserID,
 			ExamID:          preparation.Target.ExamID,
 			SittingID:       preparation.Target.SittingID,

@@ -76,7 +76,7 @@ func (a *Authoring) ListExams(ctx context.Context, invocation invocation.Invocat
 		return CatalogPage{}, apperror.Invalid("exam.invalid", "archive_filter")
 	}
 
-	visibility, err := a.deps.Authorizer.AuthorizeExamList(ctx, invocation)
+	visibility, err := a.authorizer.AuthorizeExamList(ctx, invocation)
 	if err != nil {
 		return CatalogPage{}, err
 	}
@@ -96,7 +96,7 @@ func (a *Authoring) ListExams(ctx context.Context, invocation invocation.Invocat
 		states = append(states, state)
 	}
 
-	items, err := a.deps.Persistence.List(ctx, store.ExamListOptions{
+	items, err := a.exams.List(ctx, store.ExamListOptions{
 		AcademicUnitID:  query.AcademicUnitID,
 		Query:           strings.TrimSpace(query.Query),
 		ArchiveFilter:   query.ArchiveFilter,
@@ -140,8 +140,8 @@ func (a *Authoring) ArchiveExam(
 		return model.Exam{}, err
 	}
 
-	at := model.TimeUTC(a.deps.Now())
-	examAccess, err := a.deps.Persistence.Access(ctx, command.ExamID, principal.UserID)
+	at := model.TimeUTC(a.now())
+	examAccess, err := a.exams.Access(ctx, command.ExamID, principal.UserID)
 	if err != nil {
 		return model.Exam{}, examStoreErrors.Translate(err)
 	}
@@ -155,11 +155,11 @@ func (a *Authoring) ArchiveExam(
 	}
 
 	resource := model.Resource{Type: model.ResourceExam, ID: command.ExamID.String()}
-	if err = a.deps.Authorizer.Authorize(ctx, invocation, action, resource); err != nil {
+	if err = a.authorizer.Authorize(ctx, invocation, action, resource); err != nil {
 		return model.Exam{}, err
 	}
 
-	auditID, err := a.deps.Auditor.Begin(ctx, access.Mutation{
+	auditID, err := a.auditor.Begin(ctx, access.Mutation{
 		Invocation: invocation,
 		Action:     action,
 		Resource:   resource,
@@ -176,7 +176,7 @@ func (a *Authoring) ArchiveExam(
 		return model.Exam{}, err
 	}
 
-	result, err := a.deps.Persistence.Archive(ctx, &store.ExamArchive{
+	result, err := a.exams.Archive(ctx, &store.ExamArchive{
 		ExamID:           command.ExamID,
 		ActorUserID:      principal.UserID,
 		ManagerOverride:  action == model.ActionExamManageOverride,
@@ -187,7 +187,7 @@ func (a *Authoring) ArchiveExam(
 	}, commandIdempotency)
 	if err != nil {
 		mapped := examStoreErrors.Translate(err)
-		if auditErr := a.deps.Auditor.Fail(ctx, auditID, apperror.CodeOf(mapped, "exam.unavailable")); auditErr != nil {
+		if auditErr := a.auditor.Fail(ctx, auditID, apperror.CodeOf(mapped, "exam.unavailable")); auditErr != nil {
 			return model.Exam{}, errors.Join(mapped, auditErr)
 		}
 
@@ -200,7 +200,7 @@ func (a *Authoring) ArchiveExam(
 
 	if !result.Replayed {
 		if effectErr := a.publishExamArchived(ctx, result.Value.ID, result.Value.Revision, result.Value.ArchivedAt.Time); effectErr != nil {
-			a.deps.Publisher.Report(ctx, "exam_archived", effectErr)
+			a.publisher.Report(ctx, "exam_archived", effectErr)
 		}
 	}
 

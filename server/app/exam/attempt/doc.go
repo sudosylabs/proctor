@@ -22,7 +22,7 @@
 // or run Jobs; the Sitting-close Job calls into it. It imports only model,
 // store, app/access, app/apperror, app/invocation, app/idempotency,
 // app/realtime, app/mail and app/exam/safemarkdown; it reaches the Sitting
-// area through the SittingAuthorizer port. Start with service.go for Service
+// area through the SittingAuthorizer port. Start with attempt.go for Service
 // and its dependencies, then the file named for the use case (connection.go,
 // workspace.go, submission.go, ...). manager_authorization.go holds who may
 // act as a manager on a Sitting's Attempts and Submissions, and

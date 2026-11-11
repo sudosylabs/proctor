@@ -15,5 +15,5 @@
 // their acknowledgement. An applied correction is announced to the Sitting's
 // managers and candidates by the events built in effects.go. It imports only
 // model, store, app/access, app/apperror, app/invocation, app/idempotency,
-// app/realtime and app/exam/manageraccess. Start with Service in service.go.
+// app/realtime and app/exam/manageraccess. Start with Service in correction.go.
 package correction

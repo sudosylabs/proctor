@@ -22,7 +22,7 @@ import (
 func TestExamStarterWorkspaceRealtimeEffectContainsOnlySafeChangeMetadata(t *testing.T) {
 	t.Parallel()
 	publisher := &realtimetest.Publisher{}
-	service := &Service{deps: Dependencies{Publisher: publisher}}
+	service := &Service{publisher: publisher}
 	examID, entryID := model.NewExamID(), model.NewStarterWorkspaceEntryID()
 	changedAt := time.Date(2026, 8, 15, 8, 30, 0, 123456789, time.UTC)
 	require.NoError(t, service.publishChanged(context.Background(), examID, entryID, 4, ChangeFileReplaced, changedAt))

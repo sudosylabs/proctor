@@ -49,7 +49,7 @@ func TestObservedUseCaseRecordsItsConcealedOutcome(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	recorder := &operationalRecorderFake{}
-	f.service.deps.Operational = recorder
+	f.service.operational = recorder
 	f.authorizer.err = apperror.New("authorization.denied")
 	_, err := f.service.PauseExamSitting(t.Context(), f.invocation, ManagerTransitionCommand{
 		ExamID: f.examID, SittingID: f.sittingID, ExpectedRevision: 1,

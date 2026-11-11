@@ -237,8 +237,12 @@
       },
       "review_triggers": [
         ".agents/skills/identity-and-access/references/access-and-onboarding.md",
-        "server/app/onboarding/onboarding_import.go",
+        "server/app/onboarding/import.go",
+        "server/app/onboarding/import_commit.go",
+        "server/app/onboarding/import_execute.go",
+        "server/app/onboarding/import_parse.go",
         "server/app/onboarding/student_progression.go",
+        "server/app/onboarding/student_progression_preview.go",
         "server/openapi/fragments/invitations-and-onboarding/onboarding-imports.yaml"
       ]
     },
@@ -269,7 +273,8 @@
       },
       "review_triggers": [
         ".agents/skills/exam-lifecycle/references/examinations.md",
-        "server/app/exam/sitting/service.go",
+        "server/app/exam/sitting/lifecycle.go",
+        "server/app/exam/sitting/system_lifecycle.go",
         "server/openapi/fragments/sittings/shared.yaml",
         "server/openapi/fragments/attempts-and-workspaces/exams-sittings-attempts.yaml"
       ]
@@ -301,7 +306,8 @@
       },
       "review_triggers": [
         ".agents/skills/exam-lifecycle/references/examinations.md",
-        "server/app/exam/correction/service.go",
+        "server/app/exam/correction/apply.go",
+        "server/app/exam/correction/resource_stage.go",
         "server/openapi/fragments/sittings/exams-sittings-corrections.yaml",
         "server/openapi/fragments/attempts-and-workspaces/exam-attempts-presentation.yaml"
       ]
@@ -951,7 +957,7 @@
       "visual_system": "proctor-assurance-v1",
       "last_reviewed": "2026-08-30",
       "visual_review": {"status": "approved", "source_sha256": "a5ca5b3cafa817aac98b4212b9c93785ddf9a4ffadc8974c5019cef51aff31e2", "reviewed": "2026-08-30", "method": "Exact SVG bytes inspected full-size in a browser and in-page at 1440x1024 and 390x844; responsive review confirmed containment, connector continuity, no horizontal overflow, and usable caption/full-size controls, while print-emulated element capture confirmed contrast and non-color meaning.", "checks": ["text_containment", "connector_continuity", "rendered_legibility", "narrow_viewport", "print_contrast"], "viewports": [{"name": "desktop", "width": 1440, "height": 1024}, {"name": "mobile", "width": 390, "height": 844}]},
-      "review_triggers": [".agents/skills/exam-lifecycle/references/examinations.md", ".agents/skills/identity-and-access/references/identity.md", "server/app/exam/attempt/service.go", "server/httpapi/exam_attempt.go"]
+      "review_triggers": [".agents/skills/exam-lifecycle/references/examinations.md", ".agents/skills/identity-and-access/references/identity.md", "server/app/exam/attempt/candidate_access.go", "server/app/exam/attempt/connection.go", "server/httpapi/exam_attempt.go"]
     },
     {
       "id": "participation-lease-timeline",
@@ -971,7 +977,7 @@
       "visual_system": "proctor-assurance-v1",
       "last_reviewed": "2026-08-30",
       "visual_review": {"status": "approved", "source_sha256": "44034fa48a2e4f1801fcd9abd9fa91a8e9810aec420678a0d752c0beaf071410", "reviewed": "2026-08-30", "method": "Exact SVG bytes inspected full-size in a browser and in-page at 1440x1024 and 390x844; responsive review confirmed containment, connector continuity, no horizontal overflow, and usable caption/full-size controls, while print-emulated element capture confirmed contrast and non-color meaning.", "checks": ["text_containment", "connector_continuity", "rendered_legibility", "narrow_viewport", "print_contrast"], "viewports": [{"name": "desktop", "width": 1440, "height": 1024}, {"name": "mobile", "width": 390, "height": 844}]},
-      "review_triggers": [".agents/skills/exam-lifecycle/references/examinations.md", "server/app/exam/attempt/service.go", "server/app/jobs/exam_attempt_expiry.go", "server/model/exam_attempt.go", "server/store/sqlstore/exam_attempt_store.go"]
+      "review_triggers": [".agents/skills/exam-lifecycle/references/examinations.md", "server/app/exam/attempt/participation_renewal.go", "server/app/exam/attempt/participation_expiry.go", "server/app/exam/attempt/reallow.go", "server/app/jobs/exam_attempt_expiry.go", "server/model/exam_attempt.go", "server/store/sqlstore/exam_attempt_store.go"]
     },
     {
       "id": "browser-activity-privacy-boundary",

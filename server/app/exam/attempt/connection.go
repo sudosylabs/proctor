@@ -110,7 +110,7 @@ func (s *Service) ConnectExamAttempt(
 		return ConnectionResult{}, apperror.Invalid("exam.attempt.invalid", "continuity_credential")
 	}
 
-	build, err := s.deps.DesktopBuilds.ResolveAttemptDesktopBuild(ctx, principal)
+	build, err := s.desktopBuilds.ResolveAttemptDesktopBuild(ctx, principal)
 	if err != nil || build.Build.Validate() != nil || build.CompatibilityPolicyRevision < 1 {
 		return ConnectionResult{}, apperror.New("exam.attempt.desktop_incompatible").Wrap(err)
 	}
@@ -118,12 +118,12 @@ func (s *Service) ConnectExamAttempt(
 		return ConnectionResult{}, err
 	}
 
-	idempotency, err := prepareConnectIdempotency(invocation, command)
+	commandIdempotency, err := prepareConnectIdempotency(invocation, command)
 	if err != nil {
 		return ConnectionResult{}, err
 	}
 
-	snapshot, err := s.deps.Sittings.Resolve(ctx, command.SittingID)
+	snapshot, err := s.sittings.Resolve(ctx, command.SittingID)
 	if err != nil {
 		return ConnectionResult{}, storeError(storeErrors, err)
 	}
@@ -138,13 +138,13 @@ func (s *Service) ConnectExamAttempt(
 
 	sitting := snapshot.Sitting
 
-	attemptID := s.deps.NewAttemptID()
-	at := model.TimeUTC(s.deps.Now())
-	workspaceID := s.deps.NewWorkspaceID()
+	attemptID := s.newAttemptID()
+	at := model.TimeUTC(s.now())
+	workspaceID := s.newWorkspaceID()
 	credentialHash := model.HashToken(command.ContinuityCredential)
-	participationID, connectionID := s.deps.NewParticipation(), s.deps.NewConnection()
+	participationID, connectionID := s.newParticipationID(), s.newConnectionID()
 
-	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+	auditID, err := s.auditor.Begin(ctx, access.Mutation{
 		Invocation: invocation,
 		Action:     model.ActionExamSittingParticipate,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
@@ -157,7 +157,7 @@ func (s *Service) ConnectExamAttempt(
 		return ConnectionResult{}, err
 	}
 
-	stored, err := s.deps.Persistence.Connect(ctx, &store.ExamAttemptConnect{
+	stored, err := s.attempts.Connect(ctx, &store.ExamAttemptConnect{
 		Security:                           command.Security,
 		SittingID:                          command.SittingID,
 		CandidateUserID:                    principal.UserID,
@@ -175,7 +175,7 @@ func (s *Service) ConnectExamAttempt(
 		DesktopCompatibilityPolicyRevision: build.CompatibilityPolicyRevision,
 		AuditEventID:                       auditID,
 		AuditAt:                            at,
-	}, idempotency)
+	}, commandIdempotency)
 	if err != nil {
 		return ConnectionResult{}, s.failAudit(ctx, auditID, err)
 	}
@@ -187,7 +187,7 @@ func (s *Service) ConnectExamAttempt(
 
 	if result.ConnectionOpened && !result.Replayed {
 		if effectErr := s.publishConnectionOpened(ctx, result); effectErr != nil {
-			s.deps.Publisher.Report(ctx, "exam_attempt_connection_opened", effectErr)
+			s.publisher.Report(ctx, "exam_attempt_connection_opened", effectErr)
 		}
 	}
 
@@ -262,7 +262,7 @@ func (s *Service) CloseExamAttemptConnection(
 		return ConnectionClosedResult{}, apperror.Invalid("exam.attempt.invalid", "connection")
 	}
 
-	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+	auditID, err := s.auditor.Begin(ctx, access.Mutation{
 		Invocation: invocation,
 		Action:     model.ActionExamSittingParticipate,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
@@ -275,13 +275,13 @@ func (s *Service) CloseExamAttemptConnection(
 		return ConnectionClosedResult{}, err
 	}
 
-	stored, err := s.deps.Persistence.CloseConnection(ctx, &store.ExamAttemptConnectionClose{
+	stored, err := s.attempts.CloseConnection(ctx, &store.ExamAttemptConnectionClose{
 		ConnectionID:    command.ConnectionID,
 		CandidateUserID: invocation.Principal().UserID,
 		SessionID:       invocation.Principal().SessionID,
 		Reason:          command.Reason,
 		AuditEventID:    auditID,
-		AuditAt:         model.TimeUTC(s.deps.Now()),
+		AuditAt:         model.TimeUTC(s.now()),
 	})
 	if err != nil {
 		return ConnectionClosedResult{}, s.failAudit(ctx, auditID, err)
@@ -301,7 +301,7 @@ func (s *Service) CloseExamAttemptConnection(
 	}
 	if result.Changed {
 		if effectErr := s.publishConnectionClosed(ctx, result); effectErr != nil {
-			s.deps.Publisher.Report(ctx, "exam_attempt_connection_closed", effectErr)
+			s.publisher.Report(ctx, "exam_attempt_connection_closed", effectErr)
 		}
 	}
 

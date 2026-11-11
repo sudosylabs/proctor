@@ -35,7 +35,7 @@ func reviewEventFact(result Result) realtime.ExamIntegrityReviewEventFact {
 func (s *Service) publishSittingBoardChanged(ctx context.Context, result Result) error {
 	return realtime.PublishSittingBoardChanged(
 		ctx,
-		s.deps.Publisher,
+		s.publisher,
 		result.Authorization.ExamID,
 		result.Authorization.SittingID,
 	)
@@ -49,7 +49,7 @@ func (s *Service) publishReviewChanged(ctx context.Context, result Result) error
 		return err
 	}
 
-	return errors.Join(s.deps.Publisher.Publish(ctx, event), s.publishSittingBoardChanged(ctx, result))
+	return errors.Join(s.publisher.Publish(ctx, event), s.publishSittingBoardChanged(ctx, result))
 }
 
 // publishReviewFinalized tells managers that a Review was finalized, then
@@ -60,7 +60,7 @@ func (s *Service) publishReviewFinalized(ctx context.Context, result Result) err
 		return err
 	}
 
-	return errors.Join(s.deps.Publisher.Publish(ctx, event), s.publishSittingBoardChanged(ctx, result))
+	return errors.Join(s.publisher.Publish(ctx, event), s.publishSittingBoardChanged(ctx, result))
 }
 
 // publishResultReleased announces a released student result, in this order:
@@ -86,9 +86,27 @@ func (s *Service) publishResultReleased(ctx context.Context, result Result) erro
 	}
 
 	return errors.Join(
-		s.deps.Publisher.Publish(ctx, manager),
-		s.deps.Publisher.Publish(ctx, candidate),
-		s.deps.Publisher.Publish(ctx, activity),
+		s.publisher.Publish(ctx, manager),
+		s.publisher.Publish(ctx, candidate),
+		s.publisher.Publish(ctx, activity),
 		s.publishSittingBoardChanged(ctx, result),
 	)
+}
+
+// publishUnlessReplayed delivers one committed Review change unless the Store replayed an
+// earlier outcome. A failed publication is reported under operation and the
+// command still succeeds.
+func (s *Service) publishUnlessReplayed(
+	ctx context.Context,
+	operation string,
+	result Result,
+	replayed bool,
+	deliver func(context.Context, Result) error,
+) {
+	if replayed {
+		return
+	}
+	if err := deliver(ctx, result); err != nil {
+		s.publisher.Report(ctx, operation, err)
+	}
 }

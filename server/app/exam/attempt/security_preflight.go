@@ -46,7 +46,7 @@ func (s *Service) securityPreflightAccess(
 		return store.SecurityPreflightAccess{}, apperror.New("exam.attempt.registered_desktop_required")
 	}
 
-	build, err := s.deps.DesktopBuilds.ResolveAttemptDesktopBuild(ctx, principal)
+	build, err := s.desktopBuilds.ResolveAttemptDesktopBuild(ctx, principal)
 	if err != nil || build.Build.Validate() != nil || build.Build.NativeAgreement == nil || build.CompatibilityPolicyRevision < 1 {
 		return store.SecurityPreflightAccess{}, apperror.New("exam.attempt.desktop_incompatible").Wrap(err)
 	}
@@ -67,7 +67,7 @@ func (s *Service) beginPreflightAudit(
 	sittingID model.ExamSittingID,
 	operation string,
 ) (model.AuditEventID, error) {
-	snapshot, err := s.deps.Sittings.Resolve(ctx, sittingID)
+	snapshot, err := s.sittings.Resolve(ctx, sittingID)
 	if err != nil {
 		return "", storeError(storeErrors, err)
 	}
@@ -75,7 +75,7 @@ func (s *Service) beginPreflightAudit(
 		return "", apperror.New("exam.attempt.unavailable").Wrap(errors.New("preflight Sitting ownership is invalid"))
 	}
 
-	return s.deps.Auditor.Begin(ctx, access.Mutation{
+	return s.auditor.Begin(ctx, access.Mutation{
 		Invocation: invocation,
 		Action:     model.ActionExamSittingParticipate,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
@@ -142,7 +142,7 @@ func (s *Service) PrepareExamSecurityPreflight(
 		return nil, err
 	}
 
-	result, err := s.deps.Persistence.PrepareSecurityPreflight(
+	result, err := s.attempts.PrepareSecurityPreflight(
 		ctx,
 		&store.SecurityPreflightPrepare{
 			Access:                           preflightAccess,
@@ -153,7 +153,7 @@ func (s *Service) PrepareExamSecurityPreflight(
 			SourceManifestDigest:             command.SourceManifestDigest,
 			ConfigurationManifestFingerprint: command.ConfigurationManifestFingerprint,
 			AuditEventID:                     audit,
-			AuditAt:                          s.deps.Now(),
+			AuditAt:                          s.now(),
 		},
 		commandIdempotency,
 	)
@@ -194,7 +194,7 @@ func (s *Service) ReportExamSecurityPreflight(
 		return nil, err
 	}
 
-	sittingID, err := s.deps.Persistence.ResolveSecurityPreflightSitting(ctx, command.PreflightID, principal.UserID, principal.SessionID)
+	sittingID, err := s.attempts.ResolveSecurityPreflightSitting(ctx, command.PreflightID, principal.UserID, principal.SessionID)
 	if err != nil {
 		return nil, storeError(securityPreflightStoreErrors, err)
 	}
@@ -213,14 +213,14 @@ func (s *Service) ReportExamSecurityPreflight(
 		return nil, err
 	}
 
-	result, err := s.deps.Persistence.ReportSecurityPreflight(
+	result, err := s.attempts.ReportSecurityPreflight(
 		ctx,
 		&store.SecurityPreflightReport{
 			Access:       preflightAccess,
 			PreflightID:  command.PreflightID,
 			Report:       command.Report,
 			AuditEventID: audit,
-			AuditAt:      s.deps.Now(),
+			AuditAt:      s.now(),
 		},
 		commandIdempotency,
 	)
@@ -273,7 +273,7 @@ func (s *Service) RecoverExamSecurityPolicy(
 		return nil, err
 	}
 
-	result, err := s.deps.Persistence.RecoverSecurityPolicy(ctx, preflightAccess, attemptID)
+	result, err := s.attempts.RecoverSecurityPolicy(ctx, preflightAccess, attemptID)
 	if err != nil {
 		return nil, storeError(securityPreflightStoreErrors, err)
 	}
@@ -316,12 +316,12 @@ func (s *Service) UpdateExamSecurityCoverage(
 	}
 	defer release()
 
-	build, err := s.deps.DesktopBuilds.ResolveAttemptDesktopBuild(ctx, invocation.Principal())
+	build, err := s.desktopBuilds.ResolveAttemptDesktopBuild(ctx, invocation.Principal())
 	if err != nil || build.Build.Validate() != nil || build.Build.NativeAgreement == nil || build.CompatibilityPolicyRevision < 1 {
 		return model.SecurityCoverageResult{}, apperror.New("exam.attempt.desktop_incompatible").Wrap(err)
 	}
 
-	result, err := s.deps.Persistence.UpdateSecurityCoverage(ctx, &store.ExamAttemptSecurityCoverageUpdate{
+	result, err := s.attempts.UpdateSecurityCoverage(ctx, &store.ExamAttemptSecurityCoverageUpdate{
 		Access:                             selector,
 		ParticipationID:                    command.ParticipationID,
 		Generation:                         command.Generation,

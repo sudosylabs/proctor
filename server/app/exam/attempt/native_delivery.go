@@ -96,7 +96,7 @@ func (s *Service) NativeDeliveryStatus(
 		return nil, err
 	}
 
-	value, err := s.deps.Persistence.NativeDeliveryStatus(ctx, a)
+	value, err := s.attempts.NativeDeliveryStatus(ctx, a)
 	if err != nil {
 		return nil, s.nativeDeliveryFailure(ctx, a, err)
 	}
@@ -130,7 +130,7 @@ func (s *Service) NativeDeliveryReceipt(
 		return nil, apperror.Invalid("exam.attempt.invalid", "batch_sequence")
 	}
 
-	value, err := s.deps.Persistence.NativeDeliveryReceipt(ctx, a, sequence)
+	value, err := s.attempts.NativeDeliveryReceipt(ctx, a, sequence)
 	if err != nil {
 		return nil, s.nativeDeliveryFailure(ctx, a, err)
 	}
@@ -146,7 +146,7 @@ func (s *Service) beginNativeDeliveryAudit(
 	deliveryAccess store.NativeDeliveryAccess,
 	operation string,
 ) (model.AuditEventID, error) {
-	target, err := s.deps.Persistence.ResolveNativeDeliveryTarget(ctx, deliveryAccess)
+	target, err := s.attempts.ResolveNativeDeliveryTarget(ctx, deliveryAccess)
 	if err != nil {
 		return "", deliveryStoreError(err)
 	}
@@ -154,7 +154,7 @@ func (s *Service) beginNativeDeliveryAudit(
 		return "", apperror.New("exam.attempt.unavailable").Wrap(model.ErrNativeDeliveryInvalid)
 	}
 
-	return s.deps.Auditor.Begin(ctx, access.Mutation{
+	return s.auditor.Begin(ctx, access.Mutation{
 		Invocation: invocation,
 		Action:     model.ActionExamSittingParticipate,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
@@ -201,9 +201,9 @@ func (s *Service) DeclareNativeDeliveryGaps(
 		return nil, err
 	}
 
-	value, err := s.deps.Persistence.DeclareNativeDeliveryGaps(
+	value, err := s.attempts.DeclareNativeDeliveryGaps(
 		ctx,
-		&store.NativeDeliveryGapDeclaration{Access: deliveryAccess, Declaration: command.Declaration, AuditEventID: audit, AuditAt: s.deps.Now()},
+		&store.NativeDeliveryGapDeclaration{Access: deliveryAccess, Declaration: command.Declaration, AuditEventID: audit, AuditAt: s.now()},
 		commandIdempotency,
 	)
 	if err != nil {
@@ -267,9 +267,9 @@ func (s *Service) SealNativeDelivery(
 		return nil, err
 	}
 
-	value, err := s.deps.Persistence.SealNativeDelivery(
+	value, err := s.attempts.SealNativeDelivery(
 		ctx,
-		&store.NativeDeliveryFinalDeclaration{Access: deliveryAccess, Declaration: command.Declaration, AuditEventID: audit, AuditAt: s.deps.Now()},
+		&store.NativeDeliveryFinalDeclaration{Access: deliveryAccess, Declaration: command.Declaration, AuditEventID: audit, AuditAt: s.now()},
 		commandIdempotency,
 	)
 	if err != nil {
@@ -329,9 +329,9 @@ func (s *Service) UpdateNativeDeliverySummary(
 		return nil, err
 	}
 
-	value, err := s.deps.Persistence.UpdateNativeDeliverySummary(
+	value, err := s.attempts.UpdateNativeDeliverySummary(
 		ctx,
-		&store.NativeDeliverySummaryUpdate{Access: deliveryAccess, Summary: command.Summary, AuditEventID: audit, AuditAt: s.deps.Now()},
+		&store.NativeDeliverySummaryUpdate{Access: deliveryAccess, Summary: command.Summary, AuditEventID: audit, AuditAt: s.now()},
 		commandIdempotency,
 	)
 	if err != nil {
@@ -386,7 +386,7 @@ func (s *Service) AppendNativeDelivery(
 	}
 
 	deliveryAccess.ParticipationID, deliveryAccess.Generation = command.Batch.ParticipationID, command.Batch.Generation
-	target, err := s.deps.Persistence.ResolveNativeDeliveryTarget(ctx, deliveryAccess)
+	target, err := s.attempts.ResolveNativeDeliveryTarget(ctx, deliveryAccess)
 	if err != nil {
 		return nil, s.nativeDeliveryFailure(ctx, deliveryAccess, err)
 	}
@@ -395,7 +395,7 @@ func (s *Service) AppendNativeDelivery(
 	}
 
 	policy := target.Security.Policy
-	build, err := s.deps.DesktopBuilds.ResolveNativeDeliveryBuild(ctx, NativeDeliveryBuildIdentity{
+	build, err := s.desktopBuilds.ResolveNativeDeliveryBuild(ctx, NativeDeliveryBuildIdentity{
 		ReleaseID:    policy.ApplicationReleaseID,
 		MatrixID:     policy.MatrixID,
 		MatrixDigest: target.MatrixDigest,
@@ -418,9 +418,9 @@ func (s *Service) AppendNativeDelivery(
 		return nil, err
 	}
 
-	value, err := s.deps.Persistence.AppendNativeDelivery(
+	value, err := s.attempts.AppendNativeDelivery(
 		ctx,
-		&store.NativeDeliveryAppend{Access: deliveryAccess, Batch: command.Batch, DesktopBuild: build, AuditEventID: audit, AuditAt: s.deps.Now()},
+		&store.NativeDeliveryAppend{Access: deliveryAccess, Batch: command.Batch, DesktopBuild: build, AuditEventID: audit, AuditAt: s.now()},
 		commandIdempotency,
 	)
 	if err != nil {

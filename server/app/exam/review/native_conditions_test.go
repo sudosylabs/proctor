@@ -43,8 +43,8 @@ func TestNativeConditionsRequireCurrentDetailedReviewAuthority(t *testing.T) {
 	denied := errors.New("review denied")
 	auth := &nativeReviewAuthorizer{Authorizer: f.authorizer, err: denied}
 	p := &nativeReviewStore{ExamIntegrityReviewStore: f.persistence}
-	f.service.deps.Authorizer = auth
-	f.service.deps.Persistence = p
+	f.service.authorizer = auth
+	f.service.reviews = p
 	query := store.NativeConditionListOptions{SubmissionID: f.submissionID, Limit: 100}
 	_, err := f.service.ListNativeConditions(context.Background(), f.invocation, query)
 	require.ErrorIs(t, err, denied, "private conditions read before authorization")

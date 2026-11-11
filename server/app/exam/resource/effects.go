@@ -12,6 +12,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
 )
 
 // publishDraftUpdated tells everyone who may view the Exam that its Draft
@@ -23,5 +24,18 @@ func (s *Service) publishDraftUpdated(ctx context.Context, examID model.ExamID, 
 		return err
 	}
 
-	return s.deps.Publisher.Publish(ctx, event)
+	return s.publisher.Publish(ctx, event)
+}
+
+// publishChanged announces a committed Exam Resource command unless the
+// Store replayed an earlier outcome. A failed publication is reported and the
+// command still succeeds.
+func (s *Service) publishChanged(ctx context.Context, result *store.ExamResourceCommandResult) {
+	if result.Replayed || result.Value == nil {
+		return
+	}
+
+	if err := s.publishDraftUpdated(ctx, result.Value.Resource.ExamID, result.Value.DraftRevision); err != nil {
+		s.publisher.Report(ctx, "exam_resource_changed", err)
+	}
 }

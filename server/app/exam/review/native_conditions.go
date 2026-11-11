@@ -28,11 +28,11 @@ func (s *Service) ListNativeConditions(
 	if !query.SubmissionID.IsValid() || query.Limit < 1 || query.Limit > 100 || query.AfterID != "" && !query.AfterID.IsValid() {
 		return nil, apperror.Invalid("exam.integrity_review.invalid", "native_condition_list")
 	}
-	if err := s.deps.Authorizer.AuthorizeSubmissionView(ctx, invocation, query.SubmissionID); err != nil {
+	if err := s.authorizer.AuthorizeSubmissionView(ctx, invocation, query.SubmissionID); err != nil {
 		return nil, err
 	}
 
-	page, err := s.deps.Persistence.ListNativeConditions(ctx, query)
+	page, err := s.reviews.ListNativeConditions(ctx, query)
 	if err != nil {
 		return nil, storeErrors.Translate(err)
 	}

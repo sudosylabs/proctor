@@ -213,5 +213,5 @@ func (s *Service) enterControl(ctx context.Context, invocation invocation.Invoca
 	if live {
 		budget = &s.liveControls
 	}
-	return budget.enter(ctx, invocation.Principal().UserID, s.deps.Now())
+	return budget.enter(ctx, invocation.Principal().UserID, s.now())
 }

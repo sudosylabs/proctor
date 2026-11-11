@@ -16,5 +16,5 @@
 // Exam's viewers as a Draft update, built in effects.go. The package imports
 // only model, store, app/access, app/apperror, app/invocation,
 // app/idempotency, app/realtime and app/exam/manageraccess. Start with
-// Service in service.go.
+// Service in resource.go.
 package resource

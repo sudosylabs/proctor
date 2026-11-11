@@ -45,9 +45,9 @@ func (s *Service) publishCorrected(ctx context.Context, result Result) error {
 	}
 
 	return errors.Join(
-		s.deps.Publisher.Publish(ctx, managerEvent),
-		s.deps.Publisher.Publish(ctx, candidateEvent),
-		realtime.PublishSittingBoardChanged(ctx, s.deps.Publisher, result.ExamID, result.SittingID),
-		realtime.PublishCandidateActivityChangedForSitting(ctx, s.deps.Publisher, s.deps.Sittings, result.SittingID),
+		s.publisher.Publish(ctx, managerEvent),
+		s.publisher.Publish(ctx, candidateEvent),
+		realtime.PublishSittingBoardChanged(ctx, s.publisher, result.ExamID, result.SittingID),
+		realtime.PublishCandidateActivityChangedForSitting(ctx, s.publisher, s.sittings, result.SittingID),
 	)
 }

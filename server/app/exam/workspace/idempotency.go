@@ -30,7 +30,7 @@ func prepareWorkspaceIdempotency(
 	expectedContentVersion model.WorkspaceContentVersion,
 	entryID, path, mediaType string,
 	size int64,
-	sha256 string,
+	contentSHA256 string,
 ) (*store.CommandIdempotency, error) {
 	return idempotency.Require(invocation, operation, key, struct {
 		ExamID                 string `json:"exam_id"`
@@ -41,5 +41,5 @@ func prepareWorkspaceIdempotency(
 		MediaType              string `json:"media_type,omitempty"`
 		Size                   int64  `json:"size,omitempty"`
 		SHA256                 string `json:"sha256,omitempty"`
-	}{examID.String(), revision, expectedContentVersion.String(), entryID, path, mediaType, size, sha256})
+	}{examID.String(), revision, expectedContentVersion.String(), entryID, path, mediaType, size, contentSHA256})
 }

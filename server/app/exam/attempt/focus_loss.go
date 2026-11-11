@@ -86,7 +86,7 @@ func (s *Service) EvaluateExamAttemptFocusLoss(
 		return FocusLossEvaluation{}, err
 	}
 
-	target, err := s.deps.Persistence.ResolveFocusLossTarget(ctx, selector)
+	target, err := s.attempts.ResolveFocusLossTarget(ctx, selector)
 	if err != nil {
 		if endedFocusLossCandidate(err) {
 			return s.evaluateEndedFocusLoss(ctx, invocation, command, selector)
@@ -98,7 +98,7 @@ func (s *Service) EvaluateExamAttemptFocusLoss(
 		return FocusLossEvaluation{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Focus Loss audit target"))
 	}
 
-	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+	auditID, err := s.auditor.Begin(ctx, access.Mutation{
 		Invocation: invocation,
 		Action:     model.ActionExamSittingParticipate,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
@@ -115,21 +115,21 @@ func (s *Service) EvaluateExamAttemptFocusLoss(
 		return FocusLossEvaluation{}, err
 	}
 
-	stored, err := s.deps.Persistence.RecordFocusLoss(ctx, &store.ExamAttemptFocusLossSignal{
+	stored, err := s.attempts.RecordFocusLoss(ctx, &store.ExamAttemptFocusLossSignal{
 		Access:               selector,
-		SignalID:             s.deps.NewFocusLossSignal(),
-		EvidenceID:           s.deps.NewEvidence(),
-		FlagID:               s.deps.NewFlag(),
-		SuspensionID:         s.deps.NewSuspension(),
+		SignalID:             s.newFocusLossSignalID(),
+		EvidenceID:           s.newEvidenceID(),
+		FlagID:               s.newFlagID(),
+		SuspensionID:         s.newSuspensionID(),
 		Sequence:             command.Sequence,
 		DurationMilliseconds: command.DurationMilliseconds,
 		Source:               command.Source,
 		AuditEventID:         auditID,
-		AuditAt:              model.TimeUTC(s.deps.Now()),
+		AuditAt:              model.TimeUTC(s.now()),
 	})
 	if err != nil {
 		if endedFocusLossCandidate(err) {
-			if auditErr := s.deps.Auditor.Fail(ctx, auditID, "exam.attempt.state_conflict"); auditErr != nil {
+			if auditErr := s.auditor.Fail(ctx, auditID, "exam.attempt.state_conflict"); auditErr != nil {
 				return FocusLossEvaluation{}, auditErr
 			}
 			return s.evaluateEndedFocusLoss(ctx, invocation, command, selector)
@@ -150,7 +150,7 @@ func (s *Service) EvaluateExamAttemptFocusLoss(
 			result.CandidateWarningCreated ||
 			result.SuspensionCreated) {
 		if effectErr := s.publishFocusLossEvaluated(ctx, result); effectErr != nil {
-			s.deps.Publisher.Report(ctx, "exam_attempt_focus_loss_evaluated", effectErr)
+			s.publisher.Report(ctx, "exam_attempt_focus_loss_evaluated", effectErr)
 		}
 	}
 
@@ -170,7 +170,7 @@ func (s *Service) evaluateEndedFocusLoss(
 	command FocusLossCommand,
 	selector store.ExamAttemptFocusLossAccess,
 ) (FocusLossEvaluation, error) {
-	target, err := s.deps.Persistence.ResolveEndedFocusLossTarget(ctx, selector)
+	target, err := s.attempts.ResolveEndedFocusLossTarget(ctx, selector)
 	if err != nil {
 		return FocusLossEvaluation{}, storeError(storeErrors, err)
 	}
@@ -178,7 +178,7 @@ func (s *Service) evaluateEndedFocusLoss(
 		return FocusLossEvaluation{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent late Focus Loss audit target"))
 	}
 
-	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+	auditID, err := s.auditor.Begin(ctx, access.Mutation{
 		Invocation: invocation,
 		Action:     model.ActionExamSittingParticipate,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
@@ -196,9 +196,9 @@ func (s *Service) evaluateEndedFocusLoss(
 		return FocusLossEvaluation{}, err
 	}
 
-	discrepancyID := s.deps.NewDiscrepancy()
-	signalID := s.deps.NewFocusLossSignal()
-	stored, err := s.deps.Persistence.RecordEndedFocusLoss(ctx, &store.ExamAttemptFocusLossDiscrepancy{
+	discrepancyID := s.newDiscrepancyID()
+	signalID := s.newFocusLossSignalID()
+	stored, err := s.attempts.RecordEndedFocusLoss(ctx, &store.ExamAttemptFocusLossDiscrepancy{
 		Access:               selector,
 		DiscrepancyID:        discrepancyID,
 		SignalID:             signalID,
@@ -206,7 +206,7 @@ func (s *Service) evaluateEndedFocusLoss(
 		DurationMilliseconds: command.DurationMilliseconds,
 		Source:               command.Source,
 		AuditEventID:         auditID,
-		AuditAt:              model.TimeUTC(s.deps.Now()),
+		AuditAt:              model.TimeUTC(s.now()),
 	})
 	if err != nil {
 		return FocusLossEvaluation{}, s.failAudit(ctx, auditID, err)
@@ -233,7 +233,7 @@ func (s *Service) evaluateEndedFocusLoss(
 	}
 	if !result.Duplicate {
 		if effectErr := s.publishFocusLossEvaluated(ctx, result); effectErr != nil {
-			s.deps.Publisher.Report(ctx, "exam_attempt_focus_loss_discrepancy_recorded", effectErr)
+			s.publisher.Report(ctx, "exam_attempt_focus_loss_discrepancy_recorded", effectErr)
 		}
 	}
 

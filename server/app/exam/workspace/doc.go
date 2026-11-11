@@ -16,5 +16,5 @@
 // choice of file store live elsewhere. A committed change is announced to the
 // Exam's viewers by the event built in effects.go. The package imports only
 // model, store, app/access, app/apperror, app/invocation, app/idempotency,
-// app/realtime and app/exam/manageraccess. Start with Service in service.go.
+// app/realtime and app/exam/manageraccess. Start with Service in workspace.go.
 package workspace

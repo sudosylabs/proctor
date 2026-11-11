@@ -52,15 +52,15 @@ type Resource struct {
 func (s *Service) GetCandidateExamPresentation(
 	ctx context.Context,
 	invocation invocation.Invocation,
-	access CandidateAccess,
+	candidateAccess CandidateAccess,
 ) (_ Presentation, resultErr error) {
 	defer func() { resultErr = publicFailures.Conceal(resultErr) }()
-	selector, err := candidateSelector(invocation, access)
+	selector, err := candidateSelector(invocation, candidateAccess)
 	if err != nil {
 		return Presentation{}, err
 	}
 
-	stored, err := s.deps.Persistence.GetCandidatePresentation(ctx, selector)
+	stored, err := s.attempts.GetCandidatePresentation(ctx, selector)
 	if err != nil {
 		return Presentation{}, storeError(storeErrors, err)
 	}
@@ -119,7 +119,7 @@ func (s *Service) OpenCandidateExamResource(
 		return OpenedContent{}, apperror.Invalid("exam.attempt.invalid", "exam_resource_id")
 	}
 
-	resolved, err := s.deps.Persistence.ResolveCandidateResource(ctx, selector, query.ResourceID)
+	resolved, err := s.attempts.ResolveCandidateResource(ctx, selector, query.ResourceID)
 	if err != nil {
 		return OpenedContent{}, storeError(storeErrors, err)
 	}
@@ -128,7 +128,7 @@ func (s *Service) OpenCandidateExamResource(
 		return OpenedContent{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("incomplete candidate Resource selector"))
 	}
 
-	body, err := s.deps.Content.OpenExamResource(ctx, resolved.FileRevisionID, resolved.RenditionID)
+	body, err := s.content.OpenExamResource(ctx, resolved.FileRevisionID, resolved.RenditionID)
 	if err != nil {
 		return OpenedContent{}, apperror.New("exam.attempt.unavailable").Wrap(err)
 	}
@@ -139,4 +139,13 @@ func (s *Service) OpenCandidateExamResource(
 		SizeBytes: resolved.Resource.SizeBytes,
 		SHA256:    resolved.Resource.SHA256,
 	}, nil
+}
+
+func cloneCandidateBrowserPolicy(value *store.CandidateBrowserPolicy) *store.CandidateBrowserPolicy {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	clone.Policy = value.Policy.Clone()
+	return &clone
 }

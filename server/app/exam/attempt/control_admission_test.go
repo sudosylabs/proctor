@@ -39,7 +39,7 @@ func TestControlAllowanceSeparatesRenewalAndRecoveryAndSharesSessions(t *testing
 	release()
 	// A public status operation rejects before its Store can observe selectors.
 	p := &recoveryStoreFake{ExamAttemptStore: f.persistence}
-	f.service.deps.Persistence = p
+	f.service.attempts = p
 	_, err = f.service.BrowserDeliveryReceipts(ctx, other, BrowserSourceQuery{Access: CandidateAccess{AttemptID: f.attemptID}, ParticipationID: model.NewAttemptParticipationID(), SourceSessionID: "00000000-0000-4000-8000-000000000001"}, 1, 32)
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault, "control overload reached persistence or lost its code")

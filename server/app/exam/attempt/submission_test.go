@@ -9,7 +9,6 @@ package attempt
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"slices"
@@ -20,7 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -53,25 +51,25 @@ func TestSubmitSealsExactAcknowledgedStateBeforePublishingEffects(t *testing.T) 
 	})
 	require.NoError(t, err)
 	principal := f.invocation.Principal()
-	access := f.submissions.resolvedAccess
-	require.Equal(t, f.attemptID, access.AttemptID, "access=%#v seal=%#v result=%#v effects=%#v", access, f.submissions.seal, result, f.publisher.Calls())
-	require.Equal(t, participationID, access.ParticipationID, "access=%#v seal=%#v result=%#v effects=%#v", access, f.submissions.seal, result, f.publisher.Calls())
-	require.Equal(t, int64(3), access.Generation, "access=%#v seal=%#v result=%#v effects=%#v", access, f.submissions.seal, result, f.publisher.Calls())
-	require.Equal(t, f.connectionID, access.ConnectionID, "access=%#v seal=%#v result=%#v effects=%#v", access, f.submissions.seal, result, f.publisher.Calls())
-	require.Equal(t, principal.UserID, access.CandidateUserID, "access=%#v seal=%#v result=%#v effects=%#v", access, f.submissions.seal, result, f.publisher.Calls())
-	require.Equal(t, principal.SessionID, access.SessionID, "access=%#v seal=%#v result=%#v effects=%#v", access, f.submissions.seal, result, f.publisher.Calls())
-	require.Equal(t, model.HashToken(credential), access.ContinuityCredentialHash, "access=%#v seal=%#v result=%#v effects=%#v", access, f.submissions.seal, result, f.publisher.Calls())
-	require.Equal(t, revisionID, access.ExpectedCurrentRevisionID, "access=%#v seal=%#v result=%#v effects=%#v", access, f.submissions.seal, result, f.publisher.Calls())
-	require.Equal(t, int64(11), access.ExpectedWorkspaceCursor, "access=%#v seal=%#v result=%#v effects=%#v", access, f.submissions.seal, result, f.publisher.Calls())
-	require.Equal(t, int64(7), access.FinalFocusLossSequence, "access=%#v seal=%#v result=%#v effects=%#v", access, f.submissions.seal, result, f.publisher.Calls())
-	require.NotNil(t, f.submissions.seal, "access=%#v seal=%#v result=%#v effects=%#v", access, f.submissions.seal, result, f.publisher.Calls())
-	require.True(t, f.submissions.seal.SubmissionID.IsValid(), "access=%#v seal=%#v result=%#v effects=%#v", access, f.submissions.seal, result, f.publisher.Calls())
-	require.True(t, f.submissions.seal.AuditEventID.IsValid(), "access=%#v seal=%#v result=%#v effects=%#v", access, f.submissions.seal, result, f.publisher.Calls())
-	require.Equal(t, submissionID, result.SubmissionID, "access=%#v seal=%#v result=%#v effects=%#v", access, f.submissions.seal, result, f.publisher.Calls())
+	sealAccess := f.submissions.resolvedAccess
+	require.Equal(t, f.attemptID, sealAccess.AttemptID, "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
+	require.Equal(t, participationID, sealAccess.ParticipationID, "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
+	require.Equal(t, int64(3), sealAccess.Generation, "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
+	require.Equal(t, f.connectionID, sealAccess.ConnectionID, "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
+	require.Equal(t, principal.UserID, sealAccess.CandidateUserID, "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
+	require.Equal(t, principal.SessionID, sealAccess.SessionID, "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
+	require.Equal(t, model.HashToken(credential), sealAccess.ContinuityCredentialHash, "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
+	require.Equal(t, revisionID, sealAccess.ExpectedCurrentRevisionID, "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
+	require.Equal(t, int64(11), sealAccess.ExpectedWorkspaceCursor, "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
+	require.Equal(t, int64(7), sealAccess.FinalFocusLossSequence, "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
+	require.NotNil(t, f.submissions.seal, "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
+	require.True(t, f.submissions.seal.SubmissionID.IsValid(), "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
+	require.True(t, f.submissions.seal.AuditEventID.IsValid(), "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
+	require.Equal(t, submissionID, result.SubmissionID, "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
 	require.Equal(t, receiptCode, f.submissions.seal.ReceiptCode, "the proposed receipt code reaches the seal")
 	require.Equal(t, receiptCode, result.ReceiptCode, "the sealed receipt code reaches the candidate")
 	require.Equal(t, receiptCode, f.mail.request.ReceiptCode, "the receipt mail carries the proposed code")
-	require.Equal(t, submittedCalls(t, sealedSubmission(*f.submissions.sealResult, model.ExamSubmissionCandidateSubmitted), false), f.publisher.Calls(), "access=%#v seal=%#v result=%#v effects=%#v", access, f.submissions.seal, result, f.publisher.Calls())
+	require.Equal(t, submittedCalls(t, sealedSubmission(*f.submissions.sealResult, model.ExamSubmissionCandidateSubmitted), false), f.publisher.Calls(), "access=%#v seal=%#v result=%#v effects=%#v", sealAccess, f.submissions.seal, result, f.publisher.Calls())
 	audit := fmt.Sprintf("%#v", f.audit.values)
 	for _, private := range []string{credential, model.HashToken(credential), participationID.String()} {
 		require.NotContains(t, audit, private)
@@ -103,7 +101,7 @@ func TestSubmitReplayReturnsRetainedReceiptAndSuppressesEffects(t *testing.T) {
 	proposedCode, retainedCode := model.NewSubmissionReceiptCode(), model.NewSubmissionReceiptCode()
 	revisionID := model.NewExamRevisionID()
 	f.submissionID, f.receiptCode = proposedID, proposedCode
-	access := validWorkspaceMutationAccess(f)
+	mutationAccess := validWorkspaceMutationAccess(f)
 	f.submissions.target = &store.ExamSubmissionSealTarget{ExamID: f.sitting.ExamID, SittingID: f.sitting.ID,
 		ClassID: f.sitting.ClassID, CandidateUserID: f.userID, WorkspaceID: model.NewExamAttemptWorkspaceID(),
 		CurrentRevisionID: revisionID, Replayed: true, SealAt: f.at}
@@ -111,9 +109,9 @@ func TestSubmitReplayReturnsRetainedReceiptAndSuppressesEffects(t *testing.T) {
 		AttemptID: f.attemptID, ExamRevisionID: revisionID, State: model.ExamAttemptSubmitted, WorkspaceCursor: 0,
 		ManifestDigest: strings.Repeat("e", 64), SubmittedAt: f.at}, ExamID: f.sitting.ExamID,
 		SittingID: f.sitting.ID, ClassID: f.sitting.ClassID, CandidateUserID: f.userID,
-		ParticipationID: access.ParticipationID, Generation: access.Generation, ConnectionID: access.ConnectionID, Replayed: true}
+		ParticipationID: mutationAccess.ParticipationID, Generation: mutationAccess.Generation, ConnectionID: mutationAccess.ConnectionID, Replayed: true}
 
-	result, err := f.service.SubmitExamAttempt(context.Background(), f.invocation, SubmitCommand{Access: access,
+	result, err := f.service.SubmitExamAttempt(context.Background(), f.invocation, SubmitCommand{Access: mutationAccess,
 		ExpectedCurrentRevisionID: revisionID, ExpectedWorkspaceCursor: 0, FinalFocusLossSequence: 0,
 		IdempotencyKey: "test-key"})
 	require.NoError(t, err)
@@ -125,143 +123,6 @@ func TestSubmitReplayReturnsRetainedReceiptAndSuppressesEffects(t *testing.T) {
 	require.Nil(t, f.submissions.seal.Notice, "result=%#v seal=%#v effects=%#v", result, f.submissions.seal, f.publisher.Calls())
 	require.Equal(t, int64(0), f.submissions.seal.ExpectedRecipientRevision, "result=%#v seal=%#v effects=%#v", result, f.submissions.seal, f.publisher.Calls())
 	require.False(t, f.mail.request.SubmissionID.IsValid(), "result=%#v seal=%#v effects=%#v", result, f.submissions.seal, f.publisher.Calls())
-}
-
-func TestAutomaticSealUsesBoundedSystemAuditAndPublishesOnlyFreshResult(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	target := store.ExamSubmissionAutomaticSealTarget{ExamID: f.sitting.ExamID, SittingID: f.sitting.ID,
-		ClassID: f.sitting.ClassID, AcademicUnitID: model.NewAcademicUnitID(), CandidateUserID: f.userID,
-		AttemptID: f.attemptID, WorkspaceID: model.NewExamAttemptWorkspaceID(), CurrentRevisionID: model.NewExamRevisionID(),
-		ParticipationID: model.NewAttemptParticipationID(),
-		Generation:      2, ConnectionID: f.connectionID}
-	retained, retainedCode := model.NewSubmissionID(), model.NewSubmissionReceiptCode()
-	f.submissionID, f.receiptCode = retained, retainedCode
-	f.submissions.automaticTargets = []store.ExamSubmissionAutomaticSealTarget{target}
-	f.submissions.automaticResult = &store.ExamSubmissionAutomaticSealResult{ExamSubmissionSealResult: store.ExamSubmissionSealResult{
-		Receipt: store.ExamSubmissionReceipt{BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1}, SubmissionID: retained, ReceiptCode: retainedCode, AttemptID: target.AttemptID,
-			ExamRevisionID: target.CurrentRevisionID, State: model.ExamAttemptSubmitted, WorkspaceCursor: 4,
-			ManifestDigest: strings.Repeat("a", 64), SubmittedAt: f.at},
-		ExamID: target.ExamID, SittingID: target.SittingID, ClassID: target.ClassID, CandidateUserID: target.CandidateUserID,
-		ParticipationID: target.ParticipationID, Generation: target.Generation, ConnectionID: target.ConnectionID},
-		ConnectionClosed: true}
-	_, err := f.service.ListAutomaticSealTargets(context.Background(), invocation.System{}, target.SittingID, model.ExamAttemptID(""), 20)
-	require.Equal(t, "exam.attempt.invalid", apperror.CodeOf(err, ""), "a seal-target page without its Job identity")
-	items, err := f.service.ListAutomaticSealTargets(context.Background(), invocation.Job(model.NewJobID(), model.NewJobAttemptID()), target.SittingID, model.ExamAttemptID(""), 20)
-	require.NoError(t, err, "targets=%#v options=%#v err", items, f.submissions.automaticOptions)
-	require.Len(t, items, 1, "targets=%#v options=%#v err", items, f.submissions.automaticOptions)
-	require.Equal(t, target, items[0], "targets=%#v options=%#v err", items, f.submissions.automaticOptions)
-	require.Equal(t, 20, f.submissions.automaticOptions.Limit, "targets=%#v options=%#v err", items, f.submissions.automaticOptions)
-	jobID, jobAttemptID := model.NewJobID(), model.NewJobAttemptID()
-	result, err := f.service.SealForSittingClose(context.Background(), invocation.System{JobID: jobID, AttemptID: jobAttemptID}, target)
-	require.NoError(t, err, "result=%#v input=%#v effects=%d err", result, f.submissions.automaticInput, len(f.publisher.Calls()))
-	require.Equal(t, retained, result.Receipt.SubmissionID, "result=%#v input=%#v effects=%d err", result, f.submissions.automaticInput, len(f.publisher.Calls()))
-	require.True(t, result.ConnectionClosed, "result=%#v input=%#v effects=%d err", result, f.submissions.automaticInput, len(f.publisher.Calls()))
-	require.Equal(t, submittedCalls(t, result.SubmissionResult, true), f.publisher.Calls(), "result=%#v input=%#v effects=%d err", result, f.submissions.automaticInput, len(f.publisher.Calls()))
-	require.NotNil(t, f.submissions.automaticInput, "result=%#v input=%#v effects=%d err", result, f.submissions.automaticInput, len(f.publisher.Calls()))
-	require.Equal(t, target, f.submissions.automaticInput.Target, "result=%#v input=%#v effects=%d err", result, f.submissions.automaticInput, len(f.publisher.Calls()))
-	require.Equal(t, model.ExamSubmissionSittingClosed, f.mail.request.Provenance, "automatic mail request=%#v input=%#v", f.mail.request, f.submissions.automaticInput)
-	require.Equal(t, retained, f.mail.request.SubmissionID, "automatic mail request=%#v input=%#v", f.mail.request, f.submissions.automaticInput)
-	require.Equal(t, retainedCode, f.mail.request.ReceiptCode, "automatic mail request=%#v input=%#v", f.mail.request, f.submissions.automaticInput)
-	require.Equal(t, retainedCode, f.submissions.automaticInput.ReceiptCode, "automatic mail request=%#v input=%#v", f.mail.request, f.submissions.automaticInput)
-	require.Equal(t, retainedCode, result.Receipt.ReceiptCode, "result=%#v", result)
-	require.True(t, f.mail.request.SealedAt.Equal(f.at), "automatic mail request=%#v input=%#v", f.mail.request, f.submissions.automaticInput)
-	require.True(t, model.TimeUTC(f.at).Equal(f.submissions.automaticInput.AuditAt), "automatic mail request=%#v input=%#v", f.mail.request, f.submissions.automaticInput)
-	require.NotNil(t, f.submissions.automaticInput.Notice, "automatic mail request=%#v input=%#v", f.mail.request, f.submissions.automaticInput)
-	require.Equal(t, int64(2), f.submissions.automaticInput.ExpectedRecipientRevision, "automatic mail request=%#v input=%#v", f.mail.request, f.submissions.automaticInput)
-	require.Equal(t, jobID.String(), f.systemAudit.values["job_id"])
-	require.Equal(t, jobAttemptID.String(), f.systemAudit.values["job_attempt_id"])
-	require.Equal(t, target.AttemptID.String(), f.systemAudit.values["exam_attempt_id"])
-	f.submissions.automaticResult.Replayed = true
-	f.submissions.automaticResult.ConnectionClosed = false
-	_, err = f.service.SealForSittingClose(context.Background(), invocation.System{JobID: jobID, AttemptID: jobAttemptID}, target)
-	require.NoError(t, err)
-	require.Equal(t, submittedCalls(t, result.SubmissionResult, true), f.publisher.Calls(), "replay duplicated effects")
-}
-
-func TestManagerEndSealsWithPrivateReasonOutsideCandidateReceipt(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	managerID := useManagerCall(f)
-	f.persistence.attempt, _ = managerAttemptFixture(t, f, model.ExamAttemptActive, 4, "")
-	target := store.ExamSubmissionAutomaticSealTarget{ExamID: f.sitting.ExamID, SittingID: f.sitting.ID,
-		ClassID: f.sitting.ClassID, AcademicUnitID: model.NewAcademicUnitID(), CandidateUserID: f.userID,
-		AttemptID: f.attemptID, WorkspaceID: model.NewExamAttemptWorkspaceID(), CurrentRevisionID: model.NewExamRevisionID(),
-		ParticipationID: model.NewAttemptParticipationID(), Generation: 2, ConnectionID: f.connectionID}
-	submissionID, receiptCode := model.NewSubmissionID(), model.NewSubmissionReceiptCode()
-	f.submissionID, f.receiptCode = submissionID, receiptCode
-	f.submissions.managerPreparation = &store.ExamSubmissionManagerEndPreparation{Target: target,
-		ExpectedAttemptRevision: 4, SealAt: f.at}
-	f.submissions.managerResult = &store.ExamSubmissionManagerEndResult{ExamSubmissionSealResult: store.ExamSubmissionSealResult{
-		Receipt: store.ExamSubmissionReceipt{BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1}, SubmissionID: submissionID, ReceiptCode: receiptCode, AttemptID: target.AttemptID,
-			ExamRevisionID: target.CurrentRevisionID, State: model.ExamAttemptSubmitted, WorkspaceCursor: 8,
-			ManifestDigest: strings.Repeat("f", 64), SubmittedAt: f.at}, ExamID: target.ExamID, SittingID: target.SittingID,
-		ClassID: target.ClassID, CandidateUserID: target.CandidateUserID, ParticipationID: target.ParticipationID,
-		Generation: target.Generation, ConnectionID: target.ConnectionID}, ConnectionClosed: true}
-	privateReason := "candidate requested an assisted early end"
-	result, err := f.service.EndExamAttemptByManager(context.Background(), f.invocation, ManagerEndCommand{ExamID: target.ExamID,
-		SittingID: target.SittingID, AttemptID: target.AttemptID, ExpectedAttemptRevision: 4,
-		PrivateReason: privateReason, IdempotencyKey: "manager-end-once"})
-	require.NoError(t, err)
-	require.Equal(t, submissionID, result.SubmissionID, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
-	require.Equal(t, receiptCode, result.ReceiptCode, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
-	require.Equal(t, receiptCode, f.submissions.managerInput.ReceiptCode, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
-	require.Equal(t, receiptCode, f.mail.request.ReceiptCode, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
-	require.Equal(t, submittedCalls(t, sealedSubmission(f.submissions.managerResult.ExamSubmissionSealResult, model.ExamSubmissionManagerEndedAttempt), false), f.publisher.Calls(), "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
-	require.NotNil(t, f.submissions.managerInput, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
-	require.Equal(t, privateReason, f.submissions.managerInput.Request.PrivateReason, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
-	require.Equal(t, managerID, f.submissions.managerInput.Request.ActorUserID, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
-	require.Equal(t, model.ExamSubmissionManagerEndedAttempt, f.mail.request.Provenance, "result=%#v input=%#v mail=%#v effects", result, f.submissions.managerInput, f.mail.request)
-	require.NotContains(t, fmt.Sprintf("%#v", f.audit.values), privateReason, "private reason entered ordinary audit fields: %#v", f.audit.values)
-	wantIdempotency, prepareErr := prepareManagerEndIdempotency(f.invocation, ManagerEndCommand{ExamID: target.ExamID,
-		SittingID: target.SittingID, AttemptID: target.AttemptID, ExpectedAttemptRevision: 4,
-		PrivateReason: privateReason, IdempotencyKey: "manager-end-once"})
-	require.NoError(t, prepareErr)
-	require.Equal(t, wantIdempotency, f.submissions.idempotency)
-}
-
-func TestManagerEndConcealsSelfAccessAndFailsClosedOnAuditFailure(t *testing.T) {
-	t.Parallel()
-
-	for _, test := range []struct {
-		name     string
-		auditErr error
-	}{
-		{name: "records concealed denial"},
-		{name: "audit failure fails closed", auditErr: errors.New("audit unavailable")},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			f := newFixture(t)
-			f.persistence.attempt, _ = managerAttemptFixture(t, f, model.ExamAttemptActive, 4, "")
-			f.audit.failErr = test.auditErr
-			privateReason := "manager must never end their own Attempt"
-			_, err := f.service.EndExamAttemptByManager(context.Background(), f.invocation, ManagerEndCommand{
-				ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID,
-				ExpectedAttemptRevision: 4, PrivateReason: privateReason, IdempotencyKey: "self-manager-end",
-			})
-			if test.auditErr != nil {
-				require.ErrorIs(t, err, test.auditErr)
-			} else {
-				require.True(t, apperror.Is(err, "resource.not_found"))
-				require.True(t, chainHasCode(err, "exam.attempt.not_found"))
-			}
-			require.Equal(t, model.ActionExamSittingManage, f.audit.action)
-			require.Equal(t, model.Resource{Type: model.ResourceExamSitting, ID: f.sitting.ID.String()}, f.audit.resource)
-			require.Equal(t, model.RoleScopeClass, f.audit.scopeType)
-			require.Equal(t, f.sitting.ClassID.String(), f.audit.scopeID)
-			require.Equal(t, store.ExamSubmissionManagerEndOperation, f.audit.operation)
-			require.Equal(t, "exam.attempt.not_found", f.audit.failedCode)
-			require.Equal(t, f.sitting.ExamID.String(), f.audit.values["exam_id"])
-			require.Equal(t, f.sitting.ID.String(), f.audit.values["exam_sitting_id"])
-			require.Equal(t, f.attemptID.String(), f.audit.values["exam_attempt_id"])
-			require.Equal(t, int64(4), f.audit.values["expected_attempt_revision"])
-			require.NotContains(t, fmt.Sprintf("%#v", f.audit.values), privateReason, "self-denial leaked or mutated: audit=%#v submissions=%#v mail=%#v effects", f.audit.values, f.submissions, f.mail.request)
-			require.Nil(t, f.submissions.managerPreparation, "self-denial leaked or mutated: audit=%#v submissions=%#v mail=%#v effects", f.audit.values, f.submissions, f.mail.request)
-			require.Nil(t, f.submissions.managerInput, "self-denial leaked or mutated: audit=%#v submissions=%#v mail=%#v effects", f.audit.values, f.submissions, f.mail.request)
-			require.False(t, f.mail.request.SubmissionID.IsValid(), "self-denial leaked or mutated: audit=%#v submissions=%#v mail=%#v effects", f.audit.values, f.submissions, f.mail.request)
-			require.Empty(t, f.publisher.Calls(), "self-denial leaked or mutated: audit=%#v submissions=%#v mail=%#v effects", f.audit.values, f.submissions, f.mail.request)
-		})
-	}
 }
 
 func TestManagedSubmissionNestedOwnershipMismatchIsConcealed(t *testing.T) {
@@ -472,9 +333,9 @@ func (f *submissionStoreFake) PrepareManagerEnd(_ context.Context, request store
 }
 
 func (f *submissionStoreFake) EndByManager(_ context.Context, input *store.ExamSubmissionManagerEnd,
-	idempotency *store.CommandIdempotency,
+	commandIdempotency *store.CommandIdempotency,
 ) (*store.ExamSubmissionManagerEndResult, error) {
-	f.managerInput, f.idempotency = input, idempotency
+	f.managerInput, f.idempotency = input, commandIdempotency
 	return f.managerResult, f.err
 }
 
@@ -483,9 +344,9 @@ func (f *submissionStoreFake) SealForSittingClose(_ context.Context, input *stor
 	return f.automaticResult, f.err
 }
 
-func (f *submissionStoreFake) ResolveSealTarget(_ context.Context, access store.ExamSubmissionSealAccess) (*store.ExamSubmissionSealTarget, error) {
+func (f *submissionStoreFake) ResolveSealTarget(_ context.Context, sealAccess store.ExamSubmissionSealAccess) (*store.ExamSubmissionSealTarget, error) {
 	f.f.order = append(f.f.order, "submission.resolve")
-	f.resolvedAccess = access
+	f.resolvedAccess = sealAccess
 	return f.target, f.err
 }
 

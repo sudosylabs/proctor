@@ -38,7 +38,7 @@ func (s *Service) ListAutomaticSealTargets(
 		return nil, apperror.Invalid("exam.attempt.invalid", "automatic_seal_list")
 	}
 
-	items, err := s.deps.Submissions.ListAutomaticSealTargets(ctx, store.ExamSubmissionAutomaticSealListOptions{
+	items, err := s.submissions.ListAutomaticSealTargets(ctx, store.ExamSubmissionAutomaticSealListOptions{
 		SittingID:      sittingID,
 		AfterAttemptID: after,
 		Limit:          limit,
@@ -90,7 +90,7 @@ func (s *Service) SealForSittingClose(
 		return AutomaticSubmissionResult{}, apperror.Invalid("exam.attempt.invalid", "automatic_seal")
 	}
 
-	preparation, err := s.deps.Submissions.PrepareAutomaticSeal(ctx, target)
+	preparation, err := s.submissions.PrepareAutomaticSeal(ctx, target)
 	if err != nil {
 		return AutomaticSubmissionResult{}, storeError(storeErrors, err)
 	}
@@ -98,7 +98,7 @@ func (s *Service) SealForSittingClose(
 		return AutomaticSubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("invalid automatic Submission preparation"))
 	}
 
-	auditID, err := s.deps.SystemAuditor.Begin(
+	auditID, err := s.systemAuditor.Begin(
 		ctx,
 		model.ActionExamSittingManage,
 		model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
@@ -118,7 +118,7 @@ func (s *Service) SealForSittingClose(
 	}
 
 	at := preparation.SealAt
-	proposed, receiptCode := s.deps.NewSubmission(), s.deps.NewReceiptCode()
+	proposed, receiptCode := s.newSubmissionID(), s.newReceiptCode()
 	if !proposed.IsValid() {
 		return AutomaticSubmissionResult{}, s.failSystemAudit(ctx, auditID, apperror.Invalid("exam.attempt.invalid", "submission_id"))
 	}
@@ -129,7 +129,7 @@ func (s *Service) SealForSittingClose(
 	var notice *store.PreparedMail
 	var expectedRecipientRevision int64
 	if !preparation.Replayed {
-		preparedMail, prepareErr := s.deps.Mail.PrepareSubmissionReceipt(ctx, SubmissionMailPreparation{
+		preparedMail, prepareErr := s.mail.PrepareSubmissionReceipt(ctx, SubmissionMailPreparation{
 			CandidateUserID: target.CandidateUserID,
 			ExamID:          target.ExamID,
 			SittingID:       target.SittingID,
@@ -148,7 +148,7 @@ func (s *Service) SealForSittingClose(
 		notice, expectedRecipientRevision = preparedMail.Notice, preparedMail.ExpectedRecipientRevision
 	}
 
-	stored, err := s.deps.Submissions.SealForSittingClose(ctx, &store.ExamSubmissionAutomaticSeal{
+	stored, err := s.submissions.SealForSittingClose(ctx, &store.ExamSubmissionAutomaticSeal{
 		Target:                    target,
 		SubmissionID:              proposed,
 		ReceiptCode:               receiptCode,
@@ -168,7 +168,7 @@ func (s *Service) SealForSittingClose(
 
 	if !result.Replayed {
 		if effectErr := s.publishAttemptSealedForSittingClose(ctx, result); effectErr != nil {
-			s.deps.Publisher.Report(ctx, "exam_attempt_sealed_for_sitting_close", effectErr)
+			s.publisher.Report(ctx, "exam_attempt_sealed_for_sitting_close", effectErr)
 		}
 	}
 
@@ -201,7 +201,7 @@ func projectAutomaticSubmissionResult(
 
 func (s *Service) failSystemAudit(ctx context.Context, auditID model.AuditEventID, err error) error {
 	code := apperror.CodeOf(err, "exam.attempt.unavailable")
-	if auditErr := s.deps.SystemAuditor.Fail(ctx, auditID, code); auditErr != nil {
+	if auditErr := s.systemAuditor.Fail(ctx, auditID, code); auditErr != nil {
 		return errors.Join(err, auditErr)
 	}
 	return err

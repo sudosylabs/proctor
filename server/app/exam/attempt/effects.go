@@ -24,7 +24,7 @@ func (s *Service) publishCandidateActivityChanged(ctx context.Context,
 	if err != nil {
 		return err
 	}
-	return s.deps.Publisher.Publish(ctx, event)
+	return s.publisher.Publish(ctx, event)
 }
 
 // publishOperationalInvalidations follows a change to what an Attempt may do,
@@ -38,8 +38,8 @@ func (s *Service) publishOperationalInvalidations(
 ) error {
 	return errors.Join(
 		s.publishCandidateActivityChanged(ctx, candidateID),
-		realtime.PublishSittingBoardChanged(ctx, s.deps.Publisher, examID, sittingID),
-		s.deps.Publisher.InvalidateCurrentUserContext(ctx, candidateID),
+		realtime.PublishSittingBoardChanged(ctx, s.publisher, examID, sittingID),
+		s.publisher.InvalidateCurrentUserContext(ctx, candidateID),
 	)
 }
 
@@ -49,7 +49,7 @@ func (s *Service) publishOperationalInvalidations(
 // operational invalidations.
 func (s *Service) publishConnectionOpened(ctx context.Context, result ConnectionResult) error {
 	if len(result.RevokedSessionIDs) > 0 || len(result.RevokedAccessTokenDigests) > 0 {
-		s.deps.Publisher.SessionsRevoked(ctx, result.Attempt.CandidateUserID, result.RevokedSessionIDs, result.RevokedAccessTokenDigests)
+		s.publisher.SessionsRevoked(ctx, result.Attempt.CandidateUserID, result.RevokedSessionIDs, result.RevokedAccessTokenDigests)
 	}
 
 	event, err := realtime.NewExamAttemptConnectionOpenedEvent(
@@ -63,7 +63,7 @@ func (s *Service) publishConnectionOpened(ctx context.Context, result Connection
 		return err
 	}
 
-	return errors.Join(s.deps.Publisher.Publish(ctx, event), s.publishOperationalInvalidations(
+	return errors.Join(s.publisher.Publish(ctx, event), s.publishOperationalInvalidations(
 		ctx,
 		result.Attempt.ExamID,
 		result.Attempt.SittingID,
@@ -86,8 +86,8 @@ func (s *Service) publishConnectionClosed(ctx context.Context, result Connection
 		return err
 	}
 
-	return errors.Join(s.deps.Publisher.Publish(ctx, event),
-		realtime.PublishSittingBoardChanged(ctx, s.deps.Publisher, result.ExamID, result.SittingID))
+	return errors.Join(s.publisher.Publish(ctx, event),
+		realtime.PublishSittingBoardChanged(ctx, s.publisher, result.ExamID, result.SittingID))
 }
 
 // publishParticipationExpired announces a Participation whose lease ran out
@@ -127,8 +127,8 @@ func (s *Service) publishParticipationExpired(ctx context.Context, result Partic
 
 	if !result.ConnectionClosed {
 		return errors.Join(
-			s.deps.Publisher.Publish(ctx, managerEvent),
-			s.deps.Publisher.Publish(ctx, candidateEvent),
+			s.publisher.Publish(ctx, managerEvent),
+			s.publisher.Publish(ctx, candidateEvent),
 			s.publishOperationalInvalidations(ctx, result.ExamID, result.SittingID, result.CandidateUserID),
 		)
 	}
@@ -146,16 +146,16 @@ func (s *Service) publishParticipationExpired(ctx context.Context, result Partic
 	}
 
 	return errors.Join(
-		s.deps.Publisher.Publish(ctx, connectionEvent),
-		s.deps.Publisher.Publish(ctx, managerEvent),
-		s.deps.Publisher.Publish(ctx, candidateEvent),
+		s.publisher.Publish(ctx, connectionEvent),
+		s.publisher.Publish(ctx, managerEvent),
+		s.publisher.Publish(ctx, candidateEvent),
 		s.publishOperationalInvalidations(
 			ctx,
 			result.ExamID,
 			result.SittingID,
 			result.CandidateUserID,
 		),
-		s.deps.Publisher.UnbindExamAttemptConnection(ctx, result.Connection.ID),
+		s.publisher.UnbindExamAttemptConnection(ctx, result.Connection.ID),
 	)
 }
 
@@ -185,8 +185,8 @@ func (s *Service) publishAttemptReallowed(ctx context.Context, result ReallowRes
 	}
 
 	return errors.Join(
-		s.deps.Publisher.Publish(ctx, managerEvent),
-		s.deps.Publisher.Publish(ctx, candidateEvent),
+		s.publisher.Publish(ctx, managerEvent),
+		s.publisher.Publish(ctx, candidateEvent),
 		s.publishOperationalInvalidations(ctx, result.ExamID, result.SittingID, result.CandidateUserID),
 	)
 }
@@ -227,8 +227,8 @@ func (s *Service) publishAttemptSuspendedByManager(ctx context.Context, result M
 
 	if !result.ConnectionClosed || result.Connection == nil {
 		return errors.Join(
-			s.deps.Publisher.Publish(ctx, managerEvent),
-			s.deps.Publisher.Publish(ctx, candidateEvent),
+			s.publisher.Publish(ctx, managerEvent),
+			s.publisher.Publish(ctx, candidateEvent),
 			s.publishOperationalInvalidations(ctx, result.ExamID, result.SittingID, result.CandidateUserID),
 		)
 	}
@@ -246,16 +246,16 @@ func (s *Service) publishAttemptSuspendedByManager(ctx context.Context, result M
 	}
 
 	return errors.Join(
-		s.deps.Publisher.Publish(ctx, connectionEvent),
-		s.deps.Publisher.Publish(ctx, managerEvent),
-		s.deps.Publisher.Publish(ctx, candidateEvent),
+		s.publisher.Publish(ctx, connectionEvent),
+		s.publisher.Publish(ctx, managerEvent),
+		s.publisher.Publish(ctx, candidateEvent),
 		s.publishOperationalInvalidations(
 			ctx,
 			result.ExamID,
 			result.SittingID,
 			result.CandidateUserID,
 		),
-		s.deps.Publisher.UnbindExamAttemptConnection(ctx, result.Connection.ID),
+		s.publisher.UnbindExamAttemptConnection(ctx, result.Connection.ID),
 	)
 }
 
@@ -276,7 +276,7 @@ func (s *Service) publishWorkspaceChanged(ctx context.Context, result WorkspaceM
 		return err
 	}
 
-	return errors.Join(s.deps.Publisher.Publish(ctx, event))
+	return errors.Join(s.publisher.Publish(ctx, event))
 }
 
 // publishFocusLossEvaluated announces what one Focus Loss report caused. A
@@ -301,8 +301,8 @@ func (s *Service) publishFocusLossEvaluated(ctx context.Context, result FocusLos
 			return err
 		}
 
-		return errors.Join(s.deps.Publisher.Publish(ctx, event),
-			realtime.PublishSittingBoardChanged(ctx, s.deps.Publisher, result.ExamID, result.SittingID))
+		return errors.Join(s.publisher.Publish(ctx, event),
+			realtime.PublishSittingBoardChanged(ctx, s.publisher, result.ExamID, result.SittingID))
 	}
 
 	events := make([]realtime.Event, 0, 5)
@@ -386,17 +386,17 @@ func (s *Service) publishFocusLossEvaluated(ctx context.Context, result FocusLos
 
 	var joined error
 	for _, event := range events {
-		joined = errors.Join(joined, s.deps.Publisher.Publish(ctx, event))
+		joined = errors.Join(joined, s.publisher.Publish(ctx, event))
 	}
 
 	if result.GapDetected || result.FlagCreated || result.SuspensionCreated {
-		joined = errors.Join(joined, realtime.PublishSittingBoardChanged(ctx, s.deps.Publisher, result.ExamID, result.SittingID))
+		joined = errors.Join(joined, realtime.PublishSittingBoardChanged(ctx, s.publisher, result.ExamID, result.SittingID))
 	}
 	if result.SuspensionCreated {
 		joined = errors.Join(joined, s.publishCandidateActivityChanged(ctx, result.CandidateUserID))
 	}
 	if result.ConnectionClosed {
-		joined = errors.Join(joined, s.deps.Publisher.UnbindExamAttemptConnection(ctx, result.Connection.ID))
+		joined = errors.Join(joined, s.publisher.UnbindExamAttemptConnection(ctx, result.Connection.ID))
 	}
 
 	return joined
@@ -416,7 +416,7 @@ func (s *Service) publishAttemptSubmitted(ctx context.Context, result Submission
 		result.ExamID,
 		result.SittingID,
 		result.CandidateUserID,
-	), s.deps.Publisher.UnbindExamAttemptConnection(ctx, result.ConnectionID))
+	), s.publisher.UnbindExamAttemptConnection(ctx, result.ConnectionID))
 }
 
 // publishSubmittedFacts publishes the manager and candidate Submission facts,
@@ -453,7 +453,7 @@ func (s *Service) publishSubmittedFacts(ctx context.Context,
 		return nil, err
 	}
 
-	return errors.Join(s.deps.Publisher.Publish(ctx, managerEvent), s.deps.Publisher.Publish(ctx, candidateEvent)), nil
+	return errors.Join(s.publisher.Publish(ctx, managerEvent), s.publisher.Publish(ctx, candidateEvent)), nil
 }
 
 // publishAttemptSealedForSittingClose announces a Submission sealed because
@@ -479,7 +479,7 @@ func (s *Service) publishAttemptSealedForSittingClose(ctx context.Context, resul
 			return eventErr
 		}
 
-		publishErr = errors.Join(publishErr, s.deps.Publisher.Publish(ctx, connectionEvent))
+		publishErr = errors.Join(publishErr, s.publisher.Publish(ctx, connectionEvent))
 	}
 
 	return errors.Join(publishErr, s.publishOperationalInvalidations(
@@ -487,5 +487,5 @@ func (s *Service) publishAttemptSealedForSittingClose(ctx context.Context, resul
 		result.ExamID,
 		result.SittingID,
 		result.CandidateUserID,
-	), s.deps.Publisher.UnbindExamAttemptConnection(ctx, result.ConnectionID))
+	), s.publisher.UnbindExamAttemptConnection(ctx, result.ConnectionID))
 }

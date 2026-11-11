@@ -66,7 +66,7 @@ func (s *Service) ListCandidateExamActivity(
 		options.DPoPKeyThumbprint = principal.DPoPKeyThumbprint
 	}
 
-	stored, err := s.deps.Persistence.ListCandidateActivity(ctx, options)
+	stored, err := s.attempts.ListCandidateActivity(ctx, options)
 	if err != nil {
 		return CandidateActivityPage{}, storeError(storeErrors, err)
 	}

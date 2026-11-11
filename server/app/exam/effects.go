@@ -28,7 +28,7 @@ func (a *Authoring) publishExamCreated(ctx context.Context, examID model.ExamID)
 		return err
 	}
 
-	return a.deps.Publisher.Publish(ctx, event)
+	return a.publisher.Publish(ctx, event)
 }
 
 // publishDraftUpdated tells everyone who may view the Exam that its Draft
@@ -39,7 +39,7 @@ func (a *Authoring) publishDraftUpdated(ctx context.Context, examID model.ExamID
 		return err
 	}
 
-	return a.deps.Publisher.Publish(ctx, event)
+	return a.publisher.Publish(ctx, event)
 }
 
 // publishExamArchived announces the archive to the Exam's viewers, then
@@ -56,7 +56,7 @@ func (a *Authoring) publishExamArchived(
 		return err
 	}
 
-	return errors.Join(a.deps.Publisher.Publish(ctx, event), a.publishArchivedExamSittings(ctx, examID))
+	return errors.Join(a.publisher.Publish(ctx, event), a.publishArchivedExamSittings(ctx, examID))
 }
 
 // publishArchivedExamSittings walks the Sittings of an archived Exam in pages
@@ -64,14 +64,14 @@ func (a *Authoring) publishExamArchived(
 // candidates. A failed publication never stops the rest; a failed read of the
 // Sittings ends the walk. Every failure is returned, joined in order.
 func (a *Authoring) publishArchivedExamSittings(ctx context.Context, examID model.ExamID) error {
-	if a.deps.Sittings == nil || a.deps.Publisher == nil {
+	if a.sittings == nil || a.publisher == nil {
 		return errors.New("Exam collection invalidation dependencies are invalid")
 	}
 
 	var after model.ExamSittingID
 	var errs []error
 	for {
-		targets, err := a.deps.Sittings.ListInvalidationTargetsByExam(ctx, examID, after, archivedExamSittingPage)
+		targets, err := a.sittings.ListInvalidationTargetsByExam(ctx, examID, after, archivedExamSittingPage)
 		if err != nil {
 			return errors.Join(append(errs, err)...)
 		}
@@ -79,8 +79,8 @@ func (a *Authoring) publishArchivedExamSittings(ctx context.Context, examID mode
 		for _, target := range targets {
 			errs = append(
 				errs,
-				realtime.PublishSittingBoardChanged(ctx, a.deps.Publisher, target.ExamID, target.SittingID),
-				realtime.PublishCandidateActivityChangedForSitting(ctx, a.deps.Publisher, a.deps.Sittings, target.SittingID),
+				realtime.PublishSittingBoardChanged(ctx, a.publisher, target.ExamID, target.SittingID),
+				realtime.PublishCandidateActivityChangedForSitting(ctx, a.publisher, a.sittings, target.SittingID),
 			)
 		}
 
@@ -131,8 +131,8 @@ func (a *Authoring) publishManagerChanged(
 		return err
 	}
 
-	a.deps.Publisher.InvalidateAuthorization(ctx, userID)
-	return a.deps.Publisher.Publish(ctx, event)
+	a.publisher.InvalidateAuthorization(ctx, userID)
+	return a.publisher.Publish(ctx, event)
 }
 
 // publishOwnerTransferred tells the Exam's viewers who its Exam Owner now is.
@@ -148,7 +148,7 @@ func (a *Authoring) publishOwnerTransferred(
 		return err
 	}
 
-	return a.deps.Publisher.Publish(ctx, event)
+	return a.publisher.Publish(ctx, event)
 }
 
 // publishRevisionPublished tells the Exam's viewers that a Draft was frozen
@@ -166,5 +166,5 @@ func (p *Publication) publishRevisionPublished(ctx context.Context, revision sto
 		return err
 	}
 
-	return p.deps.Publisher.Publish(ctx, event)
+	return p.publisher.Publish(ctx, event)
 }

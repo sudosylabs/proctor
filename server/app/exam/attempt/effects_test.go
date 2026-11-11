@@ -217,7 +217,7 @@ func requireEventDataOmits(t *testing.T, calls []realtimetest.Call, forbidden ..
 func TestConnectionOpenedEffectRevokesSupersededSessionsBeforeAnnouncingTheConnection(t *testing.T) {
 	t.Parallel()
 	publisher := &realtimetest.Publisher{}
-	service := &Service{deps: Dependencies{Publisher: publisher}}
+	service := &Service{publisher: publisher}
 	at := time.Date(2026, time.August, 18, 9, 0, 0, 0, time.UTC)
 	result := ConnectionResult{
 		Attempt: model.ExamAttempt{ID: model.NewExamAttemptID(), ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(),
@@ -238,7 +238,7 @@ func TestConnectionOpenedEffectRevokesSupersededSessionsBeforeAnnouncingTheConne
 func TestParticipationExpiryEffectPublishesCloseManagerSuspensionAndCandidateSuspension(t *testing.T) {
 	t.Parallel()
 	publisher := &realtimetest.Publisher{}
-	service := &Service{deps: Dependencies{Publisher: publisher}}
+	service := &Service{publisher: publisher}
 	at := time.Date(2026, time.August, 18, 10, 0, 0, 0, time.UTC)
 	result := ParticipationExpiry{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(), CandidateUserID: model.NewUserID(), DatabaseTime: at,
 		Attempt: model.ExamAttempt{ID: model.NewExamAttemptID(), Revision: 2},
@@ -273,7 +273,7 @@ func TestParticipationExpiryEffectPublishesCloseManagerSuspensionAndCandidateSus
 func TestManualSuspensionEffectPublishesKickedCloseAndSafeCandidateReason(t *testing.T) {
 	t.Parallel()
 	publisher := &realtimetest.Publisher{}
-	service := &Service{deps: Dependencies{Publisher: publisher}}
+	service := &Service{publisher: publisher}
 	at := time.Date(2026, time.August, 18, 10, 0, 0, 0, time.UTC)
 	result := ManualSuspensionResult{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(),
 		CandidateUserID: model.NewUserID(), Attempt: model.ExamAttempt{ID: model.NewExamAttemptID(), Revision: 3},
@@ -302,7 +302,7 @@ func TestManualSuspensionEffectPublishesKickedCloseAndSafeCandidateReason(t *tes
 func TestSubmissionEffectPublishesSafeManagerAndCandidateFactsThenUnbindsExactConnection(t *testing.T) {
 	t.Parallel()
 	publisher := &realtimetest.Publisher{}
-	service := &Service{deps: Dependencies{Publisher: publisher}}
+	service := &Service{publisher: publisher}
 	result := SubmissionResult{Receipt: store.ExamSubmissionReceipt{BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1},
 		SubmissionID: model.NewSubmissionID(), AttemptID: model.NewExamAttemptID(), State: model.ExamAttemptSubmitted,
 		WorkspaceCursor: 13, ManifestDigest: strings.Repeat("d", 64),
@@ -331,7 +331,7 @@ func TestSubmissionEffectPublishesSafeManagerAndCandidateFactsThenUnbindsExactCo
 func TestAutomaticSubmissionEffectPublishesSittingClosedFactsAndUnbindsExactConnection(t *testing.T) {
 	t.Parallel()
 	publisher := &realtimetest.Publisher{}
-	service := &Service{deps: Dependencies{Publisher: publisher}}
+	service := &Service{publisher: publisher}
 	result := AutomaticSubmissionResult{SubmissionResult: SubmissionResult{
 		Receipt: store.ExamSubmissionReceipt{BrowserActivity: model.BrowserSubmissionSettlement{State: "not_applicable", InventoryRevision: 1}, SubmissionID: model.NewSubmissionID(), AttemptID: model.NewExamAttemptID(),
 			State: model.ExamAttemptSubmitted, WorkspaceCursor: 21, ManifestDigest: strings.Repeat("e", 64),
@@ -361,7 +361,7 @@ func TestAutomaticSubmissionEffectPublishesSittingClosedFactsAndUnbindsExactConn
 func TestFocusLossWarningEffectPublishesBoundedManagerFlagAndNeutralCandidateWarning(t *testing.T) {
 	t.Parallel()
 	publisher := &realtimetest.Publisher{}
-	service := &Service{deps: Dependencies{Publisher: publisher}}
+	service := &Service{publisher: publisher}
 	at := time.Date(2026, time.August, 20, 10, 0, 0, 0, time.UTC)
 	result := FocusLossEvaluation{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(), CandidateUserID: model.NewUserID(),
 		AttemptID: model.NewExamAttemptID(), ReceivedAt: at, PolicyOutcome: model.IntegrityOutcomeFlagAndWarn,
@@ -388,7 +388,7 @@ func TestFocusLossWarningEffectPublishesBoundedManagerFlagAndNeutralCandidateWar
 func TestFocusLossSuspensionEffectPublishesCloseFlagAndSeparatedSuspensions(t *testing.T) {
 	t.Parallel()
 	publisher := &realtimetest.Publisher{}
-	service := &Service{deps: Dependencies{Publisher: publisher}}
+	service := &Service{publisher: publisher}
 	at := time.Date(2026, time.August, 20, 10, 5, 0, 0, time.UTC)
 	flagID := model.NewIntegrityFlagID()
 	result := FocusLossEvaluation{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(), CandidateUserID: model.NewUserID(),
@@ -434,7 +434,7 @@ func TestFocusLossSuspensionEffectPublishesCloseFlagAndSeparatedSuspensions(t *t
 func TestParticipationExpiryEffectOmitsDuplicateCloseAfterTransportTeardown(t *testing.T) {
 	t.Parallel()
 	publisher := &realtimetest.Publisher{}
-	service := &Service{deps: Dependencies{Publisher: publisher}}
+	service := &Service{publisher: publisher}
 	at := time.Date(2026, time.August, 18, 10, 0, 0, 0, time.UTC)
 	result := ParticipationExpiry{ExamID: model.NewExamID(), SittingID: model.NewExamSittingID(), CandidateUserID: model.NewUserID(), DatabaseTime: at,
 		Attempt: model.ExamAttempt{ID: model.NewExamAttemptID(), Revision: 2},

@@ -88,10 +88,10 @@ func (s *Service) publishLifecycleChanged(
 	}
 
 	return errors.Join(
-		s.deps.Publisher.Publish(ctx, managerEvent),
-		s.deps.Publisher.Publish(ctx, candidateEvent),
-		realtime.PublishSittingBoardChanged(ctx, s.deps.Publisher, sitting.ExamID, sitting.ID),
-		realtime.PublishCandidateActivityChangedForSitting(ctx, s.deps.Publisher, s.deps.Persistence, sitting.ID),
+		s.publisher.Publish(ctx, managerEvent),
+		s.publisher.Publish(ctx, candidateEvent),
+		realtime.PublishSittingBoardChanged(ctx, s.publisher, sitting.ExamID, sitting.ID),
+		realtime.PublishCandidateActivityChangedForSitting(ctx, s.publisher, s.sittings, sitting.ID),
 	)
 }
 
@@ -105,8 +105,21 @@ func (s *Service) publishWithInvalidations(
 	event realtime.Event,
 ) error {
 	return errors.Join(
-		s.deps.Publisher.Publish(ctx, event),
-		realtime.PublishSittingBoardChanged(ctx, s.deps.Publisher, sitting.ExamID, sitting.ID),
-		realtime.PublishCandidateActivityChangedForSitting(ctx, s.deps.Publisher, s.deps.Persistence, sitting.ID),
+		s.publisher.Publish(ctx, event),
+		realtime.PublishSittingBoardChanged(ctx, s.publisher, sitting.ExamID, sitting.ID),
+		realtime.PublishCandidateActivityChangedForSitting(ctx, s.publisher, s.sittings, sitting.ID),
 	)
+}
+
+// publishLifecycle announces a lifecycle result that changed the Sitting and
+// was not replayed. A failed publication is reported under operation and the
+// command or Job still succeeds.
+func (s *Service) publishLifecycle(ctx context.Context, result *store.ExamSittingLifecycleResult, operation string) {
+	if result == nil || !result.Changed || result.Replayed || result.Value == nil || result.Value.Sitting == nil {
+		return
+	}
+
+	if err := s.publishLifecycleChanged(ctx, result.Value.Sitting, result.Transition); err != nil {
+		s.publisher.Report(ctx, "exam_sitting_"+operation, err)
+	}
 }

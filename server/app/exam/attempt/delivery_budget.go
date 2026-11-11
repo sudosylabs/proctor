@@ -50,7 +50,7 @@ func (s *Service) DeliveryBudget(
 		return nil, err
 	}
 
-	value, err := s.deps.Persistence.DeliveryBudget(
+	value, err := s.attempts.DeliveryBudget(
 		ctx,
 		store.DeliveryBudgetAccess{Access: deliveryAccess.Access, ParticipationID: query.ParticipationID},
 	)
@@ -96,7 +96,7 @@ func (s *Service) StopDeliveryDetails(
 		return nil, err
 	}
 
-	target, err := s.deps.Persistence.ResolveLiveDeliveryTarget(ctx, candidateAccess)
+	target, err := s.attempts.ResolveLiveDeliveryTarget(ctx, candidateAccess)
 	if err != nil {
 		return nil, storeError(storeErrors, err)
 	}
@@ -104,7 +104,7 @@ func (s *Service) StopDeliveryDetails(
 		return nil, apperror.New("exam.attempt.unavailable").Wrap(model.ErrDeliveryInvalid)
 	}
 
-	audit, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+	audit, err := s.auditor.Begin(ctx, access.Mutation{
 		Invocation: invocation,
 		Action:     model.ActionExamSittingParticipate,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
@@ -117,9 +117,9 @@ func (s *Service) StopDeliveryDetails(
 		return nil, err
 	}
 
-	value, err := s.deps.Persistence.StopDeliveryDetails(
+	value, err := s.attempts.StopDeliveryDetails(
 		ctx,
-		&store.DeliveryDetailsStop{Access: candidateAccess, Request: command.Request, AuditEventID: audit, AuditAt: s.deps.Now()},
+		&store.DeliveryDetailsStop{Access: candidateAccess, Request: command.Request, AuditEventID: audit, AuditAt: s.now()},
 		commandIdempotency,
 	)
 	if err != nil {

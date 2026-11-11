@@ -46,7 +46,7 @@ func (s *Service) beginBrowserDeliveryAudit(
 	deliveryAccess store.BrowserDeliveryAccess,
 	operation string,
 ) (model.AuditEventID, error) {
-	target, err := s.deps.Persistence.ResolveBrowserDeliveryTarget(ctx, deliveryAccess)
+	target, err := s.attempts.ResolveBrowserDeliveryTarget(ctx, deliveryAccess)
 	if err != nil {
 		return "", deliveryStoreError(err)
 	}
@@ -54,7 +54,7 @@ func (s *Service) beginBrowserDeliveryAudit(
 		return "", apperror.New("exam.attempt.unavailable").Wrap(model.ErrDeliveryInvalid)
 	}
 
-	return s.deps.Auditor.Begin(ctx, access.Mutation{
+	return s.auditor.Begin(ctx, access.Mutation{
 		Invocation: invocation,
 		Action:     model.ActionExamSittingParticipate,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()},
@@ -102,9 +102,9 @@ func (s *Service) DeclareBrowserDeliveryGaps(
 		return nil, err
 	}
 
-	value, err := s.deps.Persistence.DeclareBrowserDeliveryGaps(
+	value, err := s.attempts.DeclareBrowserDeliveryGaps(
 		ctx,
-		&store.BrowserDeliveryGapDeclaration{Access: deliveryAccess, Declaration: command.Declaration, AuditEventID: audit, AuditAt: s.deps.Now()},
+		&store.BrowserDeliveryGapDeclaration{Access: deliveryAccess, Declaration: command.Declaration, AuditEventID: audit, AuditAt: s.now()},
 		commandIdempotency,
 	)
 	if err != nil {
@@ -170,9 +170,9 @@ func (s *Service) SealBrowserDelivery(
 		return nil, err
 	}
 
-	value, err := s.deps.Persistence.SealBrowserDelivery(
+	value, err := s.attempts.SealBrowserDelivery(
 		ctx,
-		&store.BrowserDeliveryFinalDeclaration{Access: deliveryAccess, Declaration: command.Declaration, AuditEventID: audit, AuditAt: s.deps.Now()},
+		&store.BrowserDeliveryFinalDeclaration{Access: deliveryAccess, Declaration: command.Declaration, AuditEventID: audit, AuditAt: s.now()},
 		commandIdempotency,
 	)
 	if err != nil {
@@ -232,9 +232,9 @@ func (s *Service) UpdateBrowserDeliverySummary(
 		return nil, err
 	}
 
-	value, err := s.deps.Persistence.UpdateBrowserDeliverySummary(
+	value, err := s.attempts.UpdateBrowserDeliverySummary(
 		ctx,
-		&store.BrowserDeliverySummaryUpdate{Access: deliveryAccess, Summary: command.Summary, AuditEventID: audit, AuditAt: s.deps.Now()},
+		&store.BrowserDeliverySummaryUpdate{Access: deliveryAccess, Summary: command.Summary, AuditEventID: audit, AuditAt: s.now()},
 		idem,
 	)
 	if err != nil {
@@ -276,7 +276,7 @@ func (s *Service) BrowserDeliveryReceipts(
 		return nil, apperror.Invalid("exam.attempt.invalid", "receipt_page")
 	}
 
-	value, err := s.deps.Persistence.BrowserDeliveryReceipts(ctx, deliveryAccess, first, limit)
+	value, err := s.attempts.BrowserDeliveryReceipts(ctx, deliveryAccess, first, limit)
 	if err != nil {
 		return nil, s.browserDeliveryFailure(ctx, deliveryAccess, err)
 	}
@@ -338,7 +338,7 @@ func (s *Service) AppendHistoricalBrowserDelivery(
 	}
 
 	b := command.Batch
-	value, err := s.deps.Persistence.AppendHistoricalBrowserDelivery(
+	value, err := s.attempts.AppendHistoricalBrowserDelivery(
 		ctx,
 		&store.BrowserActivityAppend{
 			Access:           deliveryAccess.Access,
@@ -349,7 +349,7 @@ func (s *Service) AppendHistoricalBrowserDelivery(
 			PolicyDigest:     b.PolicyDigest,
 			Events:           b.Events,
 			AuditEventID:     audit,
-			AuditAt:          s.deps.Now(),
+			AuditAt:          s.now(),
 		},
 		idem,
 	)

@@ -69,20 +69,20 @@ func (s *Service) ReallowExamAttempt(
 		return ReallowResult{}, apperror.Invalid("exam.attempt.invalid", "reallow")
 	}
 
-	idempotency, err := prepareReallowIdempotency(invocation, command)
+	commandIdempotency, err := prepareReallowIdempotency(invocation, command)
 	if err != nil {
 		return ReallowResult{}, err
 	}
 
 	// Authorize the exact Sitting before reading the Attempt so existence is
 	// not probeable; later exits complete the audit attempt as failed.
-	management, err := s.deps.Managers.AuthorizeSittingManage(ctx, invocation, command.SittingID)
+	management, err := s.managers.AuthorizeSittingManage(ctx, invocation, command.SittingID)
 	override := management.Override
 	if err != nil {
 		return ReallowResult{}, err
 	}
 
-	snapshot, err := s.deps.Sittings.Resolve(ctx, command.SittingID)
+	snapshot, err := s.sittings.Resolve(ctx, command.SittingID)
 	if err != nil {
 		return ReallowResult{}, storeError(storeErrors, err)
 	}
@@ -95,7 +95,7 @@ func (s *Service) ReallowExamAttempt(
 		action = model.ActionExamSittingManageOverride
 	}
 
-	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+	auditID, err := s.auditor.Begin(ctx, access.Mutation{
 		Invocation: invocation,
 		Action:     action,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
@@ -117,7 +117,7 @@ func (s *Service) ReallowExamAttempt(
 		return ReallowResult{}, s.failAudit(ctx, auditID, apperror.New("exam.attempt.not_found"))
 	}
 
-	managerSnapshot, err := s.deps.Persistence.Get(ctx, command.ExamID, command.AttemptID)
+	managerSnapshot, err := s.attempts.Get(ctx, command.ExamID, command.AttemptID)
 	if err != nil {
 		return ReallowResult{}, s.failAudit(ctx, auditID, err)
 	}
@@ -134,8 +134,8 @@ func (s *Service) ReallowExamAttempt(
 		return ReallowResult{}, s.failAudit(ctx, auditID, apperror.New("exam.attempt.not_found"))
 	}
 
-	at := model.TimeUTC(s.deps.Now())
-	stored, err := s.deps.Persistence.ReallowAttempt(ctx, &store.ExamAttemptReallow{
+	at := model.TimeUTC(s.now())
+	stored, err := s.attempts.ReallowAttempt(ctx, &store.ExamAttemptReallow{
 		ExamID:           command.ExamID,
 		SittingID:        command.SittingID,
 		AttemptID:        command.AttemptID,
@@ -146,7 +146,7 @@ func (s *Service) ReallowExamAttempt(
 		PrivateReason:    command.PrivateReason,
 		AuditEventID:     auditID,
 		AuditAt:          at,
-	}, idempotency)
+	}, commandIdempotency)
 	if err != nil {
 		return ReallowResult{}, s.failAudit(ctx, auditID, err)
 	}
@@ -174,7 +174,7 @@ func (s *Service) ReallowExamAttempt(
 	}
 	if !result.Replayed {
 		if effectErr := s.publishAttemptReallowed(ctx, result); effectErr != nil {
-			s.deps.Publisher.Report(ctx, "exam_attempt_reallowed", effectErr)
+			s.publisher.Report(ctx, "exam_attempt_reallowed", effectErr)
 		}
 	}
 

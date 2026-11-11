@@ -18,6 +18,15 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// ExpiryScanResult counts one bounded expiry scan: the items found due, those
+// whose expiry committed, and how many of the committed were replays of an
+// expiry already recorded.
+type ExpiryScanResult struct {
+	Due       int
+	Completed int
+	Replayed  int
+}
+
 // ParticipationExpiry is the durable outcome of one Connection Loss: the
 // suspended Attempt, its expired Attempt Participation and latest Attempt
 // Connection, and the Integrity Evidence, Integrity Flag, and policy Attempt
@@ -45,7 +54,7 @@ func (s *Service) ScanExpiredParticipations(ctx context.Context, system invocati
 	if !system.Valid() || limit < 1 || limit > 200 {
 		return ExpiryScanResult{}, apperror.Invalid("exam.attempt.invalid", "expiry_limit")
 	}
-	due, err := s.deps.Persistence.ListExpiredParticipations(ctx, limit)
+	due, err := s.attempts.ListExpiredParticipations(ctx, limit)
 	if err != nil {
 		return ExpiryScanResult{}, storeError(storeErrors, err)
 	}
@@ -68,7 +77,7 @@ func (s *Service) expireParticipation(ctx context.Context, due store.ExamAttempt
 		return ParticipationExpiry{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("invalid Participation expiry target"))
 	}
 
-	auditID, err := s.deps.SystemAuditor.Begin(
+	auditID, err := s.systemAuditor.Begin(
 		ctx,
 		model.ActionExamSittingManage,
 		model.Resource{Type: model.ResourceExamSitting, ID: due.SittingID.String()},
@@ -87,21 +96,21 @@ func (s *Service) expireParticipation(ctx context.Context, due store.ExamAttempt
 		return ParticipationExpiry{}, err
 	}
 
-	at := model.TimeUTC(s.deps.Now())
-	stored, err := s.deps.Persistence.ExpireParticipation(ctx, &store.ExamAttemptParticipationExpiry{
+	at := model.TimeUTC(s.now())
+	stored, err := s.attempts.ExpireParticipation(ctx, &store.ExamAttemptParticipationExpiry{
 		AttemptID:       due.AttemptID,
 		ParticipationID: due.ParticipationID,
 		Generation:      due.Generation,
-		EvidenceID:      s.deps.NewEvidence(),
-		FlagID:          s.deps.NewFlag(),
-		SuspensionID:    s.deps.NewSuspension(),
+		EvidenceID:      s.newEvidenceID(),
+		FlagID:          s.newFlagID(),
+		SuspensionID:    s.newSuspensionID(),
 		AuditEventID:    auditID,
 		AuditAt:         at,
 	})
 	if err != nil {
 		mapped := storeError(storeErrors, err)
 		code := apperror.CodeOf(mapped, "exam.attempt.unavailable")
-		if auditErr := s.deps.SystemAuditor.Fail(ctx, auditID, code); auditErr != nil {
+		if auditErr := s.systemAuditor.Fail(ctx, auditID, code); auditErr != nil {
 			return ParticipationExpiry{}, errors.Join(mapped, auditErr)
 		}
 
@@ -115,7 +124,7 @@ func (s *Service) expireParticipation(ctx context.Context, due store.ExamAttempt
 
 	if !result.Replayed {
 		if effectErr := s.publishParticipationExpired(ctx, result); effectErr != nil {
-			s.deps.Publisher.Report(ctx, "exam_attempt_participation_expired", effectErr)
+			s.publisher.Report(ctx, "exam_attempt_participation_expired", effectErr)
 		}
 	}
 
@@ -135,7 +144,7 @@ func (s *Service) expireLapsedParticipation(
 	generation int64,
 	cause error,
 ) error {
-	due, err := s.deps.Persistence.ResolveParticipationExpiry(ctx, attemptID, participationID, generation)
+	due, err := s.attempts.ResolveParticipationExpiry(ctx, attemptID, participationID, generation)
 	if err != nil {
 		if store.IsNotFound(err) {
 			return apperror.New("exam.attempt.connection_lost").Wrap(cause)

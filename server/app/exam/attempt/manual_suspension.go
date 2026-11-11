@@ -71,18 +71,18 @@ func (s *Service) SuspendExamAttempt(
 		return ManualSuspensionResult{}, apperror.Invalid("exam.attempt.invalid", "manual_suspension")
 	}
 
-	idempotency, err := prepareManualSuspensionIdempotency(invocation, command)
+	commandIdempotency, err := prepareManualSuspensionIdempotency(invocation, command)
 	if err != nil {
 		return ManualSuspensionResult{}, err
 	}
 
-	management, err := s.deps.Managers.AuthorizeSittingManage(ctx, invocation, command.SittingID)
+	management, err := s.managers.AuthorizeSittingManage(ctx, invocation, command.SittingID)
 	override := management.Override
 	if err != nil {
 		return ManualSuspensionResult{}, err
 	}
 
-	sitting, err := s.deps.Sittings.Resolve(ctx, command.SittingID)
+	sitting, err := s.sittings.Resolve(ctx, command.SittingID)
 	if err != nil {
 		return ManualSuspensionResult{}, storeError(storeErrors, err)
 	}
@@ -95,7 +95,7 @@ func (s *Service) SuspendExamAttempt(
 		action = model.ActionExamSittingManageOverride
 	}
 
-	auditID, err := s.deps.Auditor.Begin(ctx, access.Mutation{
+	auditID, err := s.auditor.Begin(ctx, access.Mutation{
 		Invocation: invocation,
 		Action:     action,
 		Resource:   model.Resource{Type: model.ResourceExamSitting, ID: command.SittingID.String()},
@@ -116,7 +116,7 @@ func (s *Service) SuspendExamAttempt(
 		return ManualSuspensionResult{}, s.failAudit(ctx, auditID, apperror.New("exam.attempt.not_found"))
 	}
 
-	managerSnapshot, err := s.deps.Persistence.Get(ctx, command.ExamID, command.AttemptID)
+	managerSnapshot, err := s.attempts.Get(ctx, command.ExamID, command.AttemptID)
 	if err != nil {
 		return ManualSuspensionResult{}, s.failAudit(ctx, auditID, err)
 	}
@@ -133,12 +133,12 @@ func (s *Service) SuspendExamAttempt(
 		return ManualSuspensionResult{}, s.failAudit(ctx, auditID, apperror.New("exam.attempt.not_found"))
 	}
 
-	suspensionID := s.deps.NewSuspension()
+	suspensionID := s.newSuspensionID()
 	if !suspensionID.IsValid() {
 		return ManualSuspensionResult{}, s.failAudit(ctx, auditID, apperror.Invalid("exam.attempt.invalid", "suspension_id"))
 	}
 
-	stored, err := s.deps.Persistence.SuspendAttempt(ctx, &store.ExamAttemptManualSuspension{
+	stored, err := s.attempts.SuspendAttempt(ctx, &store.ExamAttemptManualSuspension{
 		ExamID:           command.ExamID,
 		SittingID:        command.SittingID,
 		AttemptID:        command.AttemptID,
@@ -148,8 +148,8 @@ func (s *Service) SuspendExamAttempt(
 		ExpectedRevision: command.ExpectedAttemptRevision,
 		PrivateReason:    command.PrivateReason,
 		AuditEventID:     auditID,
-		AuditAt:          s.deps.Now(),
-	}, idempotency)
+		AuditAt:          s.now(),
+	}, commandIdempotency)
 	var conflict *store.ErrConflict
 	if errors.As(err, &conflict) && conflict.Constraint == "attempt_participation_expired" {
 		// The generation lapsed before the kick: that is Connection Loss,
@@ -178,7 +178,7 @@ func (s *Service) SuspendExamAttempt(
 
 	if !result.Replayed {
 		if effectErr := s.publishAttemptSuspendedByManager(ctx, result); effectErr != nil {
-			s.deps.Publisher.Report(ctx, "exam_attempt_suspended_by_manager", effectErr)
+			s.publisher.Report(ctx, "exam_attempt_suspended_by_manager", effectErr)
 		}
 	}
 

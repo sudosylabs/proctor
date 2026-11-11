@@ -21,6 +21,6 @@
 // its Sitting change, but it does not run Jobs. Attempts and Submission
 // sealing belong to attempt. It imports only model, store, app/access,
 // app/apperror, app/invocation, app/idempotency, app/realtime, app/mail and
-// app/exam/manageraccess. Start with Service in service.go; schedule_mail.go
+// app/exam/manageraccess. Start with Service in sitting.go; schedule_mail.go
 // prepares the schedule notices.
 package sitting

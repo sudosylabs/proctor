@@ -87,12 +87,12 @@ func (s *Service) RenewExamAttemptParticipation(
 	}
 	defer release()
 
-	build, err := s.deps.DesktopBuilds.ResolveAttemptDesktopBuild(ctx, principal)
+	build, err := s.desktopBuilds.ResolveAttemptDesktopBuild(ctx, principal)
 	if err != nil || build.Build.Validate() != nil || build.CompatibilityPolicyRevision < 1 {
 		return ParticipationRenewal{}, apperror.New("exam.attempt.desktop_incompatible").Wrap(err)
 	}
 
-	stored, err := s.deps.Persistence.RenewParticipation(ctx, &store.ExamAttemptParticipationRenewal{
+	stored, err := s.attempts.RenewParticipation(ctx, &store.ExamAttemptParticipationRenewal{
 		SecurityCoverage:                   command.SecurityCoverage,
 		DesktopBuild:                       build.Build,
 		AttemptID:                          command.AttemptID,
@@ -134,8 +134,8 @@ func (s *Service) RenewExamAttemptParticipation(
 		Duplicate:        stored.Duplicate,
 	}
 	if !result.Duplicate {
-		if effectErr := realtime.PublishSittingBoardChanged(ctx, s.deps.Publisher, result.ExamID, result.SittingID); effectErr != nil {
-			s.deps.Publisher.Report(ctx, "exam_attempt_participation_renewed", effectErr)
+		if effectErr := realtime.PublishSittingBoardChanged(ctx, s.publisher, result.ExamID, result.SittingID); effectErr != nil {
+			s.publisher.Report(ctx, "exam_attempt_participation_renewed", effectErr)
 		}
 	}
 

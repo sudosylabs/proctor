@@ -36,17 +36,31 @@ import (
 //   - A Role Binding counts when it and its Role are unarchived and
 //     start_at <= at < end_at (no end_at means open-ended).
 //   - A Role grants an Action when its permissions array contains it.
-//   - An Institution binding covers every resource; an Academic Unit binding
-//     covers that unit and its unarchived descendants (walked upwards from
-//     the resource as the "ancestors" of its unit); a Class binding covers
-//     exactly that Class.
+//   - Which binding scopes can grant an Action is part of the Action's
+//     definition (model.ActionDefinition.SupportsRoleScope). An Institution
+//     binding reaches every resource for an Action with
+//     InheritInstitutionScope; an Academic Unit binding reaches that unit and
+//     its unarchived descendants (walked upwards from the resource as the
+//     "ancestors" of its unit) for an Action with InheritAcademicUnitScopes;
+//     a Class binding reaches exactly that Class for an Action that accepts a
+//     Class resource. access.roleBindingApplies applies those definition
+//     flags to every decision. Here only lockInviterActionGrantAtAcademicUnit
+//     binds them; every other statement counts each scope it names without
+//     reading the flags, and so assumes an Action that every one of those
+//     scopes can grant. Each lock*ActionGrant* helper states that assumption,
+//     its callers and the Actions they pass.
 //   - Ordinary Exam management needs the exam.manage Action, the Exam Manager
 //     relationship and a current membership of the Exam's Academic Unit; the
 //     system administrator Role's exam.manage.override at the Institution
 //     needs neither.
 //
-// The helpers return the executor's error unchanged (sql.ErrNoRows when no
-// binding grants the Action) so each caller keeps its own Store error.
+// The lock* helpers return the executor's error unchanged (sql.ErrNoRows when
+// no binding grants the Action, or the relationship does not hold) so each
+// caller keeps its own Store error.
+// roleBindingGrantsExamManagementOverUnresolvedAttempt also returns it
+// unchanged, beside its answer. hasEffectiveExamManagementAuthority and
+// isActiveSystemAdministrator report their answer as a bool and wrap the
+// executor's error with what they were inspecting.
 
 // Role Bindings that grant one Action, locked for the transaction.
 //
@@ -115,8 +129,9 @@ const classAncestorsCTE = `WITH RECURSIVE class_unit AS (
 // Institution whose Role grants the Action. It shares the granting Role
 // Binding and Role rows. It returns sql.ErrNoRows when nothing grants.
 //
-// It is the in-transaction counterpart of access.Authorizer.Authorize for an
-// Institution resource.
+// It is the in-transaction counterpart of the Role Binding decision in
+// access.Authorizer.Authorize for an Institution resource. It does not read
+// the Action's InheritInstitutionScope; every Action a Role can carry has it.
 func lockActionGrantAtInstitution(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -147,8 +162,15 @@ func lockActionGrantAtInstitution(
 // reads the unit's ancestry and shares the granting Role Binding and Role
 // rows. It returns sql.ErrNoRows when nothing grants.
 //
-// It is the in-transaction counterpart of access.Authorizer.Authorize for an
-// Academic Unit resource.
+// It assumes an Action that inherits both Institution and Academic Unit scope
+// (InheritInstitutionScope and InheritAcademicUnitScopes) and reads neither
+// flag. For such an Action it is the in-transaction counterpart of the Role
+// Binding decision in access.Authorizer.Authorize for an Academic Unit
+// resource; for an Action without InheritAcademicUnitScopes it would count a
+// unit binding the application refuses. Its one caller,
+// requireInvitationManagementAuthority, passes invitation.manage, which
+// inherits both. A new caller whose Action may not inherit both must bind the
+// definition's flags instead, as lockInviterActionGrantAtAcademicUnit does.
 func lockActionGrantAtAcademicUnit(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -183,9 +205,43 @@ func lockActionGrantAtAcademicUnit(
 // at the unit itself does not count: the grant must come from the Institution
 // or a unit above, so nobody widens authority at their own level.
 //
-// It is the in-transaction counterpart of
+// Like lockActionGrantAtAcademicUnit it assumes an Action that inherits both
+// Institution and Academic Unit scope and reads neither flag. For such an
+// Action it is the in-transaction counterpart of
 // access.Authorizer.CanDelegateActionsAtScope, whose strict-parent rule covers
-// the protected delegation Actions.
+// the protected delegation Actions; for an Action without
+// InheritAcademicUnitScopes it would count a unit binding the application
+// refuses.
+//
+// Its one caller is requireUserActionAtScopeWithDelegation, reached through
+// requirePrincipalActionAtScope at Academic Unit scope:
+//   - lockCommandAuthorization, for a batch's own Actions:
+//     onboarding_batch.manage with academic_unit.members.manage or
+//     role_binding.manage. All inherit both scopes. (user.manage and
+//     session.manage do not inherit Academic Unit scope; the application
+//     admits their batches at Institution scope only, which this helper never
+//     sees.)
+//   - lockExamRecordsAuthority: exam.records.complete, exam.records.hold,
+//     their overrides and retention_hold.release. All inherit both.
+//   - lockExamExportAuthority: exam.records.export or its override,
+//     submission.view and exam.sitting.view or their overrides, and
+//     exam.attempt.browser_activity.view. All inherit both.
+//   - requireOnboardingImportValueAuthorityAt (onboarding_batch.manage) and
+//     requireAcademicAdministrationImportRowAuthority for a row's own Action
+//     (academic_unit.members.manage, role_binding.manage). All inherit both.
+//   - lockCommandAuthorization (DelegatedActions) and
+//     requireAcademicAdministrationImportRowAuthority, for a Role Binding
+//     being created: every permission of the Role being bound. That set is
+//     open, so the assumption does NOT hold there: a Role may carry an Action
+//     without InheritAcademicUnitScopes (user.manage, session.manage,
+//     audit.view, role.manage and the other Institution-only Actions), and
+//     for it this recheck accepts an actor's unit binding that
+//     CanDelegateActionsAtScope does not count. The application decides
+//     first and refuses, so the recheck is weaker than that decision, not a
+//     way round it.
+//
+// A new caller whose Action may not inherit both scopes must bind the
+// definition's flags instead, as lockInviterActionGrantAtAcademicUnit does.
 func lockDelegableActionGrantAtAcademicUnit(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -226,8 +282,16 @@ func lockDelegableActionGrantAtAcademicUnit(
 // shares the granting Role Binding and Role rows. It returns sql.ErrNoRows
 // when nothing grants.
 //
-// It is the in-transaction counterpart of access.Authorizer.Authorize for a
-// Class resource.
+// It assumes an Action that inherits both Institution and Academic Unit scope
+// and accepts a Class resource (model.ActionDefinition.SupportsRoleScope for
+// all three scopes) and reads none of that. For such an Action it is the
+// in-transaction counterpart of the Role Binding decision in
+// access.Authorizer.Authorize for a Class resource; for any other Action it
+// would count a binding the application refuses. Its one caller,
+// requireInvitationManagementAuthority, passes invitation.manage, which
+// satisfies all three. A new caller whose Action may not must first refuse
+// the scopes the definition does not support, or bind its flags as
+// lockInviterActionGrantAtAcademicUnit does.
 func lockActionGrantAtClass(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -264,8 +328,38 @@ func lockActionGrantAtClass(
 // itself does not count: the grant must come from the Institution or an
 // Academic Unit above the Class.
 //
-// It is the in-transaction counterpart of
-// access.Authorizer.CanDelegateActionsAtScope.
+// Like lockActionGrantAtClass it assumes an Action that inherits both
+// Institution and Academic Unit scope and accepts a Class resource, and reads
+// none of that. For such an Action it is the in-transaction counterpart of
+// access.Authorizer.CanDelegateActionsAtScope; for any other Action it would
+// count a binding the application refuses.
+//
+// Its one caller is requireUserActionAtScopeWithDelegation, reached through
+// requirePrincipalActionAtScope at Class scope:
+//   - lockCommandAuthorization, for a batch's own Actions:
+//     class.members.manage for a named Class member, and
+//     onboarding_batch.manage or academic.progression.manage with
+//     class.members.manage or role_binding.manage. All satisfy the
+//     assumption.
+//   - requireOnboardingImportValueAuthorityAt (onboarding_batch.manage; for
+//     student progression academic.progression.manage and
+//     class.members.manage) and
+//     requireAcademicAdministrationImportRowAuthority for a row's own Action
+//     (class.members.manage, role_binding.manage). All satisfy it.
+//   - lockCommandAuthorization (DelegatedActions) and
+//     requireAcademicAdministrationImportRowAuthority, for a Role Binding
+//     being created: every permission of the Role being bound. That set is
+//     open, so the assumption does NOT hold there: for an Action that does
+//     not accept a Class resource (exam.manage, user.manage) this recheck
+//     accepts an actor's binding at the Class, and for an Action without
+//     InheritAcademicUnitScopes a binding at a unit above it, neither of
+//     which CanDelegateActionsAtScope counts. The application decides first
+//     and refuses, so the recheck is weaker than that decision, not a way
+//     round it.
+//
+// A new caller whose Action may not satisfy the assumption must first refuse
+// the scopes the definition does not support, or bind its flags as
+// lockInviterActionGrantAtAcademicUnit does.
 func lockDelegableActionGrantAtClass(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -424,8 +518,12 @@ func lockInviterActionGrantAtAcademicUnit(
 // reach the Class. It shares the granting Role and Role Binding rows. It
 // returns sql.ErrNoRows when nothing grants.
 //
-// It is the in-transaction counterpart of access.Authorizer.Authorize for a
-// Class resource.
+// Like lockActionGrantAtClass it assumes an Action that inherits both
+// Institution and Academic Unit scope and accepts a Class resource, and for
+// such an Action is the in-transaction counterpart of the Role Binding
+// decision in access.Authorizer.Authorize for a Class resource. Its one
+// caller, requireStudentClassInvitationAuthority, passes invitation.create and
+// class.members.manage, which both satisfy that.
 func lockInviterActionGrantAtClass(
 	ctx context.Context,
 	tx *sqlxTxWrapper,

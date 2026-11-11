@@ -31,9 +31,6 @@ type Auditor interface {
 	Fail(context.Context, model.AuditEventID, string) error
 }
 
-type CommandOutcomes interface {
-}
-
 type ManagerMailRelationship string
 
 const (
@@ -83,8 +80,7 @@ type OperationalRecorder interface {
 }
 
 // AuthoringDependencies are the collaborators NewAuthoring validates once and
-// distributes to the Authoring. Outcomes is required but not retained: no
-// Authoring use case reads it.
+// distributes to the Authoring.
 type AuthoringDependencies struct {
 	Persistence       store.ExamAuthoringStore
 	Memberships       store.AcademicUnitMemberStore
@@ -93,7 +89,6 @@ type AuthoringDependencies struct {
 	Mail              ManagerMailPreparer
 	Authorizer        Authorizer
 	Auditor           Auditor
-	Outcomes          CommandOutcomes
 	Publisher         realtime.Publisher
 	Now               func() time.Time
 	NewID             func() model.ExamID
@@ -111,7 +106,6 @@ func NewAuthoring(deps AuthoringDependencies) (*Authoring, error) {
 		deps.Mail == nil ||
 		deps.Authorizer == nil ||
 		deps.Auditor == nil ||
-		deps.Outcomes == nil ||
 		deps.Publisher == nil ||
 		deps.Now == nil ||
 		deps.NewID == nil {

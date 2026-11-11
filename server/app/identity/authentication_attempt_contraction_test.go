@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -71,28 +72,28 @@ func TestAuthenticationAttemptAccountingHasOneProductionOwner(t *testing.T) {
 func TestMigratedAuthenticationFlowsDoNotReclaimAttemptMechanics(t *testing.T) {
 	t.Parallel()
 
+	// The files are discovered, not listed: every production file of the
+	// package is a flow file unless it is named here as an owner of the
+	// mechanics, so a file split or a new flow is covered without an edit.
+	mechanicsOwners := map[string]struct{}{
+		"authentication_attempt.go": {},
+	}
 	files := parseProductionGoFiles(t, ".")
-	for _, name := range []string{
-		"login.go",
-		"local_proof.go",
-		"login_rate_limit.go",
-		"local_user.go",
-		"session_issuance.go",
-		"access_authentication.go",
-		"session_refresh.go",
-		"logout.go",
-		"account_recovery.go",
-		"email_verification.go",
-		"password_reset.go",
-		"external_authentication.go",
-		"external_authentication_callback.go",
-		"external_identity_resolution.go",
-		"external_provider.go",
-		"provider_connection.go",
-		"bootstrap.go",
-	} {
+	for owner := range mechanicsOwners {
+		require.Contains(t, files, owner, "attempt-mechanics owner %s is no longer a production source", owner)
+	}
+	require.Greater(t, len(files), len(mechanicsOwners), "no authentication flow source was discovered")
+
+	names := make([]string, 0, len(files))
+	for name := range files {
+		if _, owner := mechanicsOwners[name]; !owner {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+
+	for _, name := range names {
 		file := files[name]
-		require.NotNil(t, file, "production source %s was not parsed", name)
 		forbiddenNamespaces := []string{
 			"authentication/attempts/",
 			"authentication/login/",

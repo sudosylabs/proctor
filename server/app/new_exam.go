@@ -111,7 +111,6 @@ func newExamAuthoring(
 		Mail:              shared.mail,
 		Authorizer:        authorizer,
 		Auditor:           shared.audit.MutationAudit(),
-		Outcomes:          deps.Store.CommandOutcome(),
 		Publisher:         shared.realtime,
 		Now:               time.Now,
 		NewID:             model.NewExamID,

@@ -289,5 +289,6 @@ func New(deps Dependencies) (*Service, error) {
 		newSubmissionID:      deps.NewSubmission,
 		newReceiptCode:       deps.NewReceiptCode,
 		liveControls:         controlAdmission{lane: liveControlLane},
+		deliveryControls:     controlAdmission{lane: deliveryControlLane},
 	}, nil
 }

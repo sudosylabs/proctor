@@ -50,7 +50,6 @@ type authoringFixture struct {
 	users       *usersFake
 	mail        *managerMailPreparerFake
 	auditor     *auditorFake
-	outcomes    *commandOutcomesFake
 	persistence *authoringStoreFake
 	publisher   *realtimetest.Publisher
 	sittings    *sittingsFake
@@ -65,7 +64,6 @@ func newAuthoringFixture(t *testing.T) authoringFixture {
 	users := &usersFake{order: &order, user: activeTestUser(userID)}
 	mail := &managerMailPreparerFake{order: &order}
 	auditor := &auditorFake{order: &order}
-	outcomes := &commandOutcomesFake{}
 	persistence := &authoringStoreFake{order: &order, examID: examID, unitID: unitID, actorID: userID}
 	publisher := publisherIn(&order)
 	sittings := &sittingsFake{order: &order}
@@ -77,7 +75,6 @@ func newAuthoringFixture(t *testing.T) authoringFixture {
 		Mail:        mail,
 		Authorizer:  authorizer,
 		Auditor:     auditor,
-		Outcomes:    outcomes,
 		Publisher:   publisher,
 		Now: func() time.Time {
 			return time.Date(2026, 8, 14, 8, 0, 0, 0, time.UTC)
@@ -86,18 +83,7 @@ func newAuthoringFixture(t *testing.T) authoringFixture {
 		InstitutionOrigin: "https://institution.example",
 	})
 	require.NoError(t, err)
-	return authoringFixture{service: service, inv: invocation.New(testPrincipal(userID), model.RequestMetadata{}), unitID: unitID, examID: examID, userID: userID, order: &order, authorizer: authorizer, memberships: memberships, users: users, mail: mail, auditor: auditor, outcomes: outcomes, persistence: persistence, publisher: publisher, sittings: sittings}
-}
-
-type commandOutcomesFake struct {
-	found bool
-	err   error
-	calls int
-}
-
-func (f *commandOutcomesFake) Has(context.Context, *store.CommandIdempotency) (bool, error) {
-	f.calls++
-	return f.found, f.err
+	return authoringFixture{service: service, inv: invocation.New(testPrincipal(userID), model.RequestMetadata{}), unitID: unitID, examID: examID, userID: userID, order: &order, authorizer: authorizer, memberships: memberships, users: users, mail: mail, auditor: auditor, persistence: persistence, publisher: publisher, sittings: sittings}
 }
 
 func testPrincipal(userID model.UserID) model.Principal {

@@ -394,7 +394,7 @@ const retentionFactsQuery = `SELECT sub.id AS submission_id,a.exam_id,a.exam_sit
 	JOIN exam_sittings sit ON sit.id=a.exam_sitting_id JOIN exams e ON e.id=a.exam_id JOIN academic_units u ON u.id=e.academic_unit_id
 	LEFT JOIN exam_sitting_records_completions c ON c.exam_sitting_id=sit.id WHERE sub.sealed=true AND u.institution_id=?`
 
-func (r retentionFactsRow) records() [4]model.RetentionRecord {
+func (r retentionFactsRow) records() [model.RetentionRecordsPerSubmission]model.RetentionRecord {
 	base := model.RetentionRecord{Scope: model.RetentionHoldScope{ExamID: model.ExamID(r.ExamID), SittingID: model.ExamSittingID(r.SittingID), SubmissionID: model.SubmissionID(r.SubmissionID)},
 		CompletionRevision: r.CompletionRevision, CompletedAt: optionalTime(r.CompletedAt), CompletionCurrent: r.CompletionCurrent,
 		HasIntegrity: r.HasIntegrity, Held: r.Held}
@@ -404,7 +404,7 @@ func (r retentionFactsRow) records() [4]model.RetentionRecord {
 	browser, security := base, base
 	browser.Category, browser.ExportProtectedUntil, browser.RetiredAt = model.RetentionCategoryBrowserActivity, optionalTime(r.BrowserProtection), optionalTime(r.BrowserRetiredAt)
 	security.Category, security.ExportProtectedUntil, security.RetiredAt = model.RetentionCategorySecurityOperational, optionalTime(r.SecurityProtection), optionalTime(r.SecurityRetiredAt)
-	return [4]model.RetentionRecord{work, integrity, browser, security}
+	return [model.RetentionRecordsPerSubmission]model.RetentionRecord{work, integrity, browser, security}
 }
 
 func countRetentionRecords(ctx context.Context, tx *sqlxTxWrapper, policy *model.RetentionPolicy, at time.Time) (retentionPreviewCounts, error) {

@@ -172,7 +172,7 @@ func (s *retentionPolicyService) ListRetentionRecords(ctx context.Context, invoc
 	if err != nil {
 		return nil, retentionError(err)
 	}
-	if stored == nil || stored.PolicyRevision < 1 || stored.AsOf.IsZero() || len(stored.Items) > 4*limit {
+	if stored == nil || stored.PolicyRevision < 1 || stored.AsOf.IsZero() || len(stored.Items) > model.RetentionRecordsPerSubmission*limit {
 		return nil, apperror.New("retention.unavailable")
 	}
 	page := &RetentionRecordPage{PolicyRevision: stored.PolicyRevision, AsOf: stored.AsOf, Items: make([]RetentionRecordView, len(stored.Items)), HasMore: stored.HasMore}

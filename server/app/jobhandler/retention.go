@@ -114,10 +114,10 @@ func (h retentionHandler) reconcilePage(ctx context.Context, e job.Execution, co
 	if err != nil {
 		return err
 	}
-	if page == nil || len(page.Items) > 4*limit || len(page.Items)%4 != 0 || (page.HasMore && len(page.Items) == 0) {
+	if page == nil || len(page.Items) > model.RetentionRecordsPerSubmission*limit || len(page.Items)%model.RetentionRecordsPerSubmission != 0 || (page.HasMore && len(page.Items) == 0) {
 		return errors.New("invalid retention page")
 	}
-	for i := 0; i < len(page.Items); i += 4 {
+	for i := 0; i < len(page.Items); i += model.RetentionRecordsPerSubmission {
 		work, integrity, browser, security := page.Items[i], page.Items[i+1], page.Items[i+2], page.Items[i+3]
 		id := work.Record.Scope.SubmissionID
 		if !id.IsValid() || id <= cp.AfterSubmissionID || integrity.Record.Scope != work.Record.Scope || work.Record.Category != model.RetentionCategoryWork || integrity.Record.Category != model.RetentionCategoryIntegrity || browser.Record.Scope != work.Record.Scope || security.Record.Scope != work.Record.Scope || browser.Record.Category != model.RetentionCategoryBrowserActivity || security.Record.Category != model.RetentionCategorySecurityOperational {

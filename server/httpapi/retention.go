@@ -195,7 +195,7 @@ func (m retentionHTTPModule) records(request operationRequest) (operationResult,
 	if err != nil {
 		return operationResult{}, err
 	}
-	if page == nil || len(page.Items) > limit*2 || (page.HasMore && len(page.Items) == 0) {
+	if page == nil || len(page.Items) > model.RetentionRecordsPerSubmission*limit || len(page.Items)%model.RetentionRecordsPerSubmission != 0 || (page.HasMore && len(page.Items) == 0) {
 		return operationResult{}, errUnpresentableResult
 	}
 	response := retentionRecordsResponse{PolicyRevision: page.PolicyRevision, AsOf: retentionTime(page.AsOf), Items: make([]retentionRecordResponse, 0, len(page.Items))}

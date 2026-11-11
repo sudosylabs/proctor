@@ -142,6 +142,11 @@ const (
 	RetentionBlockerDeadline       RetentionBlocker = "retention_period"
 )
 
+// RetentionRecordsPerSubmission is the number of RetentionRecord values each
+// Submission contributes to a record listing: one per RetentionCategory, in the
+// order work, integrity, Browser Activity, security operational.
+const RetentionRecordsPerSubmission = 4
+
 // RetentionRecord is a content-free projection used for review and scheduling.
 // SharedPublishedObjects reports references which will survive work retirement;
 // retirement releases the Submission's reference, never the published material.

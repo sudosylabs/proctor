@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/job"
@@ -24,11 +23,11 @@ import (
 const defaultJobPageSize = 50
 
 type JobOperationsApplication interface {
-	ListJobs(context.Context, invocation.Invocation, app.ListJobsQuery) (job.Page, error)
+	ListJobs(context.Context, invocation.Invocation, job.ListQuery) (job.Page, error)
 	GetJob(context.Context, invocation.Invocation, model.JobID) (job.View, error)
-	ListJobAttempts(context.Context, invocation.Invocation, app.ListJobAttemptsQuery) (job.AttemptPage, error)
-	CancelJob(context.Context, invocation.Invocation, app.CancelJobCommand) (job.View, error)
-	RetryJob(context.Context, invocation.Invocation, app.RetryJobCommand) (job.View, error)
+	ListJobAttempts(context.Context, invocation.Invocation, job.AttemptListQuery) (job.AttemptPage, error)
+	CancelJob(context.Context, invocation.Invocation, job.CancelCommand) (job.View, error)
+	RetryJob(context.Context, invocation.Invocation, job.RetryCommand) (job.View, error)
 }
 
 type jobProgressResponse struct {
@@ -227,7 +226,7 @@ func (h jobHandlers) listAttempts(request operationRequest) (operationResult, er
 		return operationResult{}, apperror.Invalid("request.invalid", "query")
 	}
 
-	page, appErr := h.app.ListJobAttempts(request.context, request.invocation(), app.ListJobAttemptsQuery{
+	page, appErr := h.app.ListJobAttempts(request.context, request.invocation(), job.AttemptListQuery{
 		JobID:        jobID,
 		BeforeNumber: before,
 		Limit:        limit,
@@ -259,7 +258,7 @@ func (h jobHandlers) cancel(request operationRequest) (operationResult, error) {
 	if err != nil {
 		return operationResult{}, err
 	}
-	view, err := h.app.CancelJob(request.context, request.invocation(), app.CancelJobCommand{ID: jobID})
+	view, err := h.app.CancelJob(request.context, request.invocation(), job.CancelCommand{ID: jobID})
 	if err != nil {
 		return operationResult{}, err
 	}
@@ -270,22 +269,22 @@ func (h jobHandlers) retry(request operationRequest) (operationResult, error) {
 	if err != nil {
 		return operationResult{}, err
 	}
-	view, err := h.app.RetryJob(request.context, request.invocation(), app.RetryJobCommand{ID: jobID})
+	view, err := h.app.RetryJob(request.context, request.invocation(), job.RetryCommand{ID: jobID})
 	if err != nil {
 		return operationResult{}, err
 	}
 	return jsonResult(http.StatusOK, jobResponseFromApplication(view)), nil
 }
-func listJobsQuery(r *http.Request) (app.ListJobsQuery, error) {
+func listJobsQuery(r *http.Request) (job.ListQuery, error) {
 	limit := defaultJobPageSize
 	if raw := r.URL.Query().Get("limit"); raw != "" {
 		value, err := strconv.Atoi(raw)
 		if err != nil || value < 1 || value > 200 {
-			return app.ListJobsQuery{}, err
+			return job.ListQuery{}, err
 		}
 		limit = value
 	}
-	query := app.ListJobsQuery{Limit: limit}
+	query := job.ListQuery{Limit: limit}
 	if raw := r.URL.Query().Get("cursor"); raw != "" {
 		cursor, err := decodeJobCursor(raw)
 		if err != nil {

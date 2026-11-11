@@ -538,9 +538,9 @@ never extend retention or create a cleanup prerequisite.
 
 ## Operations, authorization, and retention
 
-The mail-domain operator surface provides bounded list and detail with state,
-template, and time filters; retry and cancellation; explicit rekey; and a
-controlled test message. It never exposes arbitrary message creation. The test
+The mail-domain operator surface, `mail.Operations` in `server/app/mail`,
+provides bounded list and detail with state, template, and time filters; retry
+and cancellation; explicit rekey; and a controlled test message. It never exposes arbitrary message creation. The test
 operation is rate-limited and audited, requires a recent interactive operator,
 and can target only that principal's verified address. The initial controlled
 test limit is three request attempts per operator in one hour.

@@ -18,6 +18,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/exam/workspace"
 	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/search"
 
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
@@ -75,11 +77,11 @@ type App struct {
 	Users *user.Service
 	// Search finds Exams, Classes and Users within the caller's own list
 	// visibility for each type.
-	Search *SearchService
+	Search *search.Service
 	// Counts summarises the administration work waiting on the caller:
 	// pending Invitations, failed Jobs and mail deliveries, and open
 	// onboarding imports.
-	Counts *AdministrationCounts
+	Counts *administration.Counts
 	// Realtime delivers committed events locally and to peers, unbinds
 	// Attempt Connections, propagates Session revocation and authentication
 	// or authorization invalidation, and receives the WebSocket sink and
@@ -90,11 +92,11 @@ type App struct {
 	RealtimeAdmission *RealtimeAdmission
 	// Jobs lists, inspects, cancels and retries Jobs and lists their attempts
 	// for operators; it is nil when the graph has no Job store.
-	Jobs *JobOperations
+	Jobs *job.Operations
 	// Mail holds the operator mail controls: deliveries, metrics, test mail
 	// and payload-key rotation; it is nil when the graph has no Job or mail
 	// store.
-	Mail *MailService
+	Mail *mail.Operations
 
 	jobEngine *job.Engine
 }

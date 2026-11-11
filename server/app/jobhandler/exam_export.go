@@ -43,7 +43,7 @@ func (h examExportBuildHandler) Run(ctx context.Context, e job.Execution) job.Ou
 		!e.Attempt.ID.IsValid() ||
 		!e.Attempt.ClaimToken.IsValid() ||
 		e.Attempt.JobID != e.Job.ID ||
-		decodeStrictUniqueJobDocument(e.Job.Command, &command) != nil ||
+		job.DecodeStrictUniqueDocument(e.Job.Command, &command) != nil ||
 		!command.ExportID.IsValid() ||
 		e.Job.WorkReserved < 0 ||
 		e.Job.WorkReserved > model.ExamExportMaximumAttempts {
@@ -101,7 +101,7 @@ func (h examExportCleanupHandler) Run(ctx context.Context, e job.Execution) job.
 	var command examExportCleanupCommand
 	if h.exports == nil ||
 		h.content == nil ||
-		decodeStrictUniqueJobDocument(e.Job.Command, &command) != nil ||
+		job.DecodeStrictUniqueDocument(e.Job.Command, &command) != nil ||
 		command.BatchSize < 1 ||
 		command.BatchSize > 100 ||
 		e.Job.WorkReserved < 0 ||

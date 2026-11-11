@@ -26,14 +26,26 @@
 // server retains the constructed Engine and owns when it starts and closes;
 // construction itself is inert.
 //
-// Operator inspection and descriptor-governed transition mechanics live here.
-// Actor-sensitive authorization, resource resolution, durable audit ordering,
-// and transport error translation remain in app. This package never imports
-// its parent, transports, platform services, or concrete persistence adapters;
-// it depends inward only on model and store.JobStore.
+// Operator inspection and descriptor-governed transition mechanics live in
+// operations.go, as Engine methods. Operations, in operator.go, is the
+// operator Job service built on them: the use cases that list and inspect
+// Jobs and their attempts and cancel or retry a Job. It authorizes the caller
+// on the Institution, names who started each Job and what it is about, orders
+// the durable audit before the transition, and translates engine and Store
+// failures into application errors. DecodeStrictUniqueDocument, in
+// document.go, is the strict decoder Job documents are read with.
+//
+// Start with engine.go for execution, registry.go for what a handler
+// declares, and operator.go for what an operator may do.
+//
+// The engine depends inward only on logging, model and store.JobStore.
+// Operations adds app/access, app/apperror and app/invocation. This package
+// never imports its parent, an area package, app/jobhandler, app/mail,
+// transports, platform services, or concrete persistence adapters.
 //
 // Tests at this boundary cover registration, execution, fencing, recovery,
-// recurrence, projections, controls, races, and shutdown. Concrete handler
+// recurrence, projections, controls, operator authorization and audit order,
+// races, and shutdown. Concrete handler
 // tests live in app/jobhandler, while PostgreSQL and root-lifecycle tests provide
 // cross-component recovery and wiring evidence.
 package job

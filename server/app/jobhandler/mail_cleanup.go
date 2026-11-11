@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/job"
+	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -41,9 +42,9 @@ type MailCleanupResult struct {
 }
 
 type mailCleanupHandler struct {
-	mail     store.MailStore
-	sittings store.ExamSittingStore
-	recorder MailDeliveryRecorder
+	deliveries store.MailStore
+	sittings   store.ExamSittingStore
+	recorder   mail.DeliveryRecorder
 }
 
 func (h mailCleanupHandler) Run(ctx context.Context, execution job.Execution) job.Outcome {
@@ -53,7 +54,7 @@ func (h mailCleanupHandler) Run(ctx context.Context, execution job.Execution) jo
 		command.PageSize > mailCleanupPageSize ||
 		command.MaxPages < 1 ||
 		command.MaxPages > mailCleanupMaximumPages ||
-		h.mail == nil ||
+		h.deliveries == nil ||
 		h.sittings == nil {
 		return job.PermanentFailure("job.command.invalid", errors.New("mail cleanup command is invalid"))
 	}
@@ -73,7 +74,7 @@ func (h mailCleanupHandler) Run(ctx context.Context, execution job.Execution) jo
 	}
 
 	for page := 0; page < command.MaxPages; page++ {
-		deleted, err := h.mail.CleanupTerminal(ctx, command.PageSize)
+		deleted, err := h.deliveries.CleanupTerminal(ctx, command.PageSize)
 		if err != nil {
 			return job.RetryableFailure("dependency.unavailable", err)
 		}
@@ -85,13 +86,13 @@ func (h mailCleanupHandler) Run(ctx context.Context, execution job.Execution) jo
 	}
 
 	for page := 0; page < command.MaxPages; page++ {
-		expired, err := h.mail.SuppressExpired(ctx, command.PageSize)
+		expired, err := h.deliveries.SuppressExpired(ctx, command.PageSize)
 		if err != nil {
 			return job.RetryableFailure("dependency.unavailable", err)
 		}
 
 		result.Expired += expired.Affected
-		recordMailMaintenanceDeliveries(ctx, h.recorder, expired)
+		mail.RecordMaintenanceDeliveries(ctx, h.recorder, expired)
 		if !expired.More {
 			break
 		}
@@ -99,21 +100,6 @@ func (h mailCleanupHandler) Run(ctx context.Context, execution job.Execution) jo
 
 	document, err := json.Marshal(result)
 	return job.Outcome{Kind: job.OutcomeSucceeded, Result: document, Err: err}
-}
-
-func recordMailMaintenanceDeliveries(ctx context.Context, recorder MailDeliveryRecorder, result *store.MailMaintenanceResult) {
-	if recorder == nil || result == nil {
-		return
-	}
-
-	for _, delivery := range result.Deliveries {
-		recorder.RecordJobMailDelivery(ctx, MailDeliveryMetric{
-			TemplateKey:       delivery.TemplateKey,
-			State:             delivery.State,
-			OutcomeCode:       delivery.PublicFailureCode,
-			ProcessingLatency: delivery.ProcessingLatency,
-		})
-	}
 }
 
 type mailCleanupProposer struct {
@@ -170,8 +156,8 @@ func mailCleanupDescriptor(handler job.Handler) job.Descriptor {
 
 // NewMailCleanupDescriptor registers the bounded cleanup of terminal mail
 // deliveries and Sitting mail maintenance.
-func NewMailCleanupDescriptor(mail store.MailStore, sittings store.ExamSittingStore, recorder MailDeliveryRecorder) job.Descriptor {
-	return mailCleanupDescriptor(mailCleanupHandler{mail: mail, sittings: sittings, recorder: recorder})
+func NewMailCleanupDescriptor(deliveries store.MailStore, sittings store.ExamSittingStore, recorder mail.DeliveryRecorder) job.Descriptor {
+	return mailCleanupDescriptor(mailCleanupHandler{deliveries: deliveries, sittings: sittings, recorder: recorder})
 }
 
 // NewMailCleanupRecurrence proposes the daily mail cleanup Job.

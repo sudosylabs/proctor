@@ -14,9 +14,9 @@ import (
 	"strings"
 
 	"github.com/sudosylabs/proctor/server/app/academic"
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
@@ -112,7 +112,7 @@ func (s *Service) resolveAcademicAdministrationImportRow(
 	row.TargetRevision = revision
 
 	if operation.requiresStrongRecentSession() {
-		if err = identity.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+		if err = access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 			return err
 		}
 	}
@@ -529,7 +529,7 @@ func (s *Service) previewRoleAuthorization(
 	scopeType model.RoleScopeType,
 	scopeID string,
 ) error {
-	if err := identity.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+	if err := access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 		return err
 	}
 	if err := validateInvitationDelegableRole(role, scopeType); err != nil {

@@ -130,7 +130,7 @@ func TestApplicationFacadeDoesNotRetainPersistenceLocator(t *testing.T) {
 
 // Every use case is declared once, on the focused service that owns it. App
 // names each service in an exported field (Academic *academic.Service,
-// Search *SearchService) and embeds nothing, so it declares no method of its
+// Search *search.Service) and embeds nothing, so it declares no method of its
 // own beyond the runtime handle composition borrows, and holds no other
 // field.
 func TestApplicationSurfaceIsNamedServices(t *testing.T) {

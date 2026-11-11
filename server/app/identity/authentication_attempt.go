@@ -16,6 +16,8 @@ import (
 	"net"
 	"strings"
 	"time"
+
+	"github.com/sudosylabs/proctor/server/model"
 )
 
 // AttemptCache is the disposable counter store behind AttemptAccounting.
@@ -55,8 +57,7 @@ const (
 	authenticationAttemptPurposeAccountRecovery
 	authenticationAttemptPurposeExternalAuthentication
 	authenticationAttemptPurposeInstallationBootstrap
-	// AttemptPurposeMailTest counts administrator test mail.
-	AttemptPurposeMailTest
+	authenticationAttemptPurposeMailTest
 	// AttemptPurposeInvitation counts Invitation claim acceptance.
 	AttemptPurposeInvitation
 	authenticationAttemptPurposeDesktopAuthorization
@@ -76,7 +77,7 @@ func (p AttemptPurpose) keySegment() (string, bool) {
 		return "external-authentication", true
 	case authenticationAttemptPurposeInstallationBootstrap:
 		return "installation-bootstrap", true
-	case AttemptPurposeMailTest:
+	case authenticationAttemptPurposeMailTest:
 		return "mail-test", true
 	case AttemptPurposeInvitation:
 		return "invitation", true
@@ -196,8 +197,8 @@ func SourceAttemptLimit(source string, maximum int) AttemptLimit {
 }
 
 // Account counts one attempt of purpose and qualifier against every limit
-// within window, and reports whether any limit is now exceeded. The parent
-// app package uses it for Invitations, public registration and test mail.
+// within window, and reports whether any limit is now exceeded. The
+// onboarding area uses it for Invitations and public registration.
 func (a *AttemptAccounting) Account(
 	ctx context.Context,
 	purpose AttemptPurpose,
@@ -207,6 +208,18 @@ func (a *AttemptAccounting) Account(
 ) (bool, error) {
 	_, limited, err := a.account(ctx, authenticationAttemptIntent{purpose: purpose, qualifier: qualifier, window: window, limits: limits})
 	return limited, err
+}
+
+// AccountMailTest counts one administrator test mail sent by userID and
+// reports whether that User has now sent more than maximum within window. It
+// is the rate limit the operator mail service in app/mail holds.
+func (a *AttemptAccounting) AccountMailTest(
+	ctx context.Context,
+	userID model.UserID,
+	window time.Duration,
+	maximum int,
+) (bool, error) {
+	return a.Account(ctx, authenticationAttemptPurposeMailTest, "", window, IdentityAttemptLimit(userID.String(), maximum))
 }
 
 func (a *AttemptAccounting) reset(

@@ -65,7 +65,7 @@ func (s *Service) requireAuthenticationMethods() error {
 // requireAuthenticationMethodSession admits a change to the caller's own
 // authentication methods only from a strong, recently authenticated Session.
 func (s *Service) requireAuthenticationMethodSession(invocation invocation.Invocation) error {
-	return RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL)
+	return access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL)
 }
 
 // AuthenticationMethods lists the current User's local password and linked

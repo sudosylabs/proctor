@@ -55,8 +55,8 @@ type Dependencies struct {
 	Cache                identity.AuthenticationCache
 	MailDeliverySender   mail.Sender
 	MailTemplateRenderer mail.Renderer
-	MailDeliveryRecorder MailDeliveryRecorder
-	MailMetricsReader    MailMetricsReader
+	MailDeliveryRecorder mail.DeliveryRecorder
+	MailMetricsReader    mail.MetricsReader
 	JobRecorder          job.Recorder
 	// JobTracer, when set, encloses each claimed Job execution in a span.
 	JobTracer           job.Tracer

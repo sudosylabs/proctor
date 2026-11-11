@@ -40,7 +40,11 @@ Each domain area is one package under `app/`: `app/access`, `app/academic`,
 exports a `Service` (or a few, when one would be too wide) whose exported
 methods are the area's use cases, together with that area's effects and
 adapters. A contributor looking for a feature opens the area directory; nothing
-about one flow lives in the parent package.
+about one flow lives in the parent package. A service that spans areas has a
+package too: `app/search` (`search.Service`), the administration counts in
+`app/administration` (`administration.Counts`), the operator Job service in
+`app/job` (`job.Operations`) and the operator mail service in `app/mail`
+(`mail.Operations`).
 
 Background jobs call application use cases with a system/service invocation. They do not manipulate stores directly.
 
@@ -60,9 +64,12 @@ The `app/job` child module owns the generic durable execution engine: immutable
 descriptor validation, claiming, leases, fenced transitions, checkpoints,
 work budgets, retry, cancellation observation, and bounded lifecycle. Domain
 Job handlers remain beside their owning use cases and cross that seam through
-strict typed documents and safe outcomes. The engine depends only on the
-domain Job records and `store.JobStore`; it never imports its parent package or
-selects infrastructure.
+strict typed documents (`job.DecodeStrictUniqueDocument`) and safe outcomes.
+The engine depends only on the domain Job records and `store.JobStore`. The
+same package holds `job.Operations`, the operator Job service built on the
+engine, which adds `app/access`, `app/apperror` and `app/invocation`. The
+package never imports its parent, an area package, `app/jobhandler` or
+`app/mail`, and never selects infrastructure.
 
 The `app/realtime` child module owns transport-neutral realtime events and
 connection-close reasons, local-first delivery, peer propagation codecs,
@@ -89,16 +96,25 @@ closed typed presentation requests, safe render inputs, disabled/ineligible
 suppression, shared frozen-payload mechanics, stable Message-ID construction,
 and locale-indexed Sitting fan-out bundles. It receives rendering and sending
 capabilities at construction and returns validated `MailOccurrence`,
-`MailDelivery`, and Job records; it does not send during a business mutation or
-persist anything itself. The use case that sends a mail retains authorization,
+`MailDelivery`, and Job records; composition does not send during a business
+mutation or persist anything itself. The same package holds what an operator
+and the delivery Jobs share: `mail.Operations` (delivery listing, cancel,
+retry, metrics, test mail and payload-key rotation), the telemetry contracts
+the module root implements (`mail.DeliveryRecorder`, `mail.MetricsReader`),
+`mail.Health`, the `mail.MaintenanceMonitor` periodic task, the delivery
+relevance policy (`mail.DeliveryIsRelevant`) and the rekey Job's documents.
+The use case that sends a mail retains authorization,
 audit, idempotency, recipient lookup, and named transaction coordination, and
 its area prepares the mail: `sitting.ScheduleMail`,
 `attempt.SubmissionReceiptMail` and `review.ResultReleaseMail` read what the
 notice shows and call the composer, each behind the small preparer interface
 its area's tests fake. Consumers use the child package's owned contracts
 directly rather than redeclaring aliases; the child never imports the parent
-application, an area that sends mail, transports, platform, SQL, or deployment
-configuration.
+application, an area that sends mail, `app/jobhandler`, transports, platform,
+SQL, or deployment configuration. `mail.Operations` reaches the identity
+area's test-mail rate limit through a port
+(`identity.AttemptAccounting.AccountMailTest`), and the session assurance guard
+it shares with the areas is `access.RequireStrongRecentSession`.
 
 The examination capability is a cohesive `app/exam` boundary.
 It owns authoring and publication policy, manager relationships, Sitting and
@@ -203,10 +219,11 @@ admission, principal revalidation and subscription authorization, is one
 focused service that composes the authentication, Exam, Sitting, and Access
 Control decisions.
 
-Operator Job use cases depend on the engine rather than a separate Job Store
-and descriptor catalog. They retain Principal authorization, resource
-resolution, durable audit ordering, and application-error translation; the
-engine owns safe projections and descriptor-governed persistence mechanics.
+Operator Job use cases (`job.Operations`) depend on the engine rather than a
+separate Job Store and descriptor catalog. They retain Principal
+authorization, resource resolution, durable audit ordering, and
+application-error translation; the engine owns safe projections and
+descriptor-governed persistence mechanics.
 
 Atomic store operations are explicit named aggregate operations such as bootstrap, enrollment transfer, or password-reset consumption. The application decides policy; the adapter owns locking, constraints, concurrency checks, and commit/rollback. Raw SQL transactions and generic `WithTransaction(func(Store))` callbacks do not cross into `app`.
 
@@ -283,8 +300,9 @@ as its typed dependencies.
 
 Work a wrapper would add belongs in the owning service method: operational
 outcome recording, error concealment, input normalization, defensive copies,
-and result narrowing. A service whose construction is optional, such as Mail
-or Job operations when the graph has no Job Store, answers its own
+and result narrowing. A service whose construction is optional, such as
+`mail.Operations` or `job.Operations` when the graph has no Job Store, answers
+its own
 unavailability with a nil-receiver guard. A use case that needs several areas
 lives on the service that owns its policy and receives the others as
 collaborators; it never reads another service's fields.
@@ -318,9 +336,14 @@ real composition graph provide shared persistence and wiring evidence.
 The move to area packages (plan of 2026-11-10) is complete. Every area lives
 in its package, and `App` names every service in its own field and embeds
 nothing; `TestApplicationSurfaceIsNamedServices` keeps it that way. The parent
-keeps only the services that span areas or own no area (`SearchService`,
-`AdministrationCounts`, `RealtimeService`, `RealtimeAdmission`,
-`JobOperations`, `MailService`), each named on `App` like an area service.
+package assembles: it holds `App`, `New` and `Dependencies`. The services that
+span areas are in child packages (`search.Service`, `administration.Counts`,
+`job.Operations`, `mail.Operations`), each named on `App` like an area
+service. `RealtimeService` and `RealtimeAdmission` are the two services still
+declared in the parent, because both read Store contracts that `app/realtime`
+may not import; readiness (`health.go`), the operational event seam
+(`operational_metrics.go`) and build information (`version.go`) stay beside
+them.
 
 Every area service is flat: `academic.Service`, `user.Service`,
 `administration.Service`, `onboarding.Service` and `identity.Service` are each
@@ -343,11 +366,12 @@ through `access.SystemAuditAdapter`. Periodic runtime tasks are built beside
 what they run: `jobhandler.NewExamAttemptExpiryTask`,
 `jobhandler.NewSittingMailReconciliationTask`, `identity.MaintenanceTasks`.
 
-Three seams stay in the parent because one side of each is a parent type:
-`mailAuthorizationAdapter` and `jobOperationsAuthorization` give `MailService`
-and `JobOperations` their own unavailable code when the Institution cannot be
-read; `job_adapters.go` forwards Job mail telemetry to the
-`MailDeliveryRecorder` and `MailHealth` the module root implements and reads;
-and `deploymentAccessPolicyCapabilities` reports durable mail from that
-`MailHealth`. `operationalRecorderAdapter` likewise turns an area's outcome
-into the parent's `OperationalEvent`.
+`mail.InstitutionAuthorization` and `job.InstitutionAuthorization` give
+`mail.Operations` and `job.Operations` their own unavailable code when the
+Institution cannot be read. The mail delivery and cleanup Jobs record
+`mail.DeliveryMetric` values straight into the `mail.DeliveryRecorder` the
+module root implements and set `mail.Health` directly, with no forwarding
+type between them. `identity.DeploymentCapabilities` reports durable mail from
+that `mail.Health`. One seam stays in the parent because one side of it is a
+parent type: `operationalRecorderAdapter` turns an area's outcome into the
+parent's `OperationalEvent`.

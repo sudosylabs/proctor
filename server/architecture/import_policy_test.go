@@ -286,6 +286,9 @@ var dependencyRules = []dependencyRule{
 		),
 	},
 	{
+		// The engine needs only logging, model and store. The operator Job
+		// service beside it authorizes, audits and reports application errors,
+		// so it adds the access, apperror and invocation leaves.
 		name:           "job engine",
 		sources:        []pathPattern{subtree(serverModule + "/app/job")},
 		deniedStandard: standardInfrastructure,
@@ -293,6 +296,9 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/logging"),
 			exact(serverModule+"/model"),
 			exact(serverModule+"/store"),
+			exact(serverModule+"/app/access"),
+			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/app/invocation"),
 		),
 	},
 	{
@@ -306,12 +312,21 @@ var dependencyRules = []dependencyRule{
 		sources:        []pathPattern{subtree(serverModule + "/app/mail")},
 		deniedStandard: standardInfrastructureExceptFS,
 		thirdParty:     only(exact("golang.org/x/net/html")),
+		// Composition needs model, store, secretseal, the Exam Manager
+		// contract and localization. The operator mail service beside it
+		// authorizes, audits, pages and reports application errors, and reads
+		// the rekey Job's documents through the engine's strict decoder.
 		project: only(
 			exact(serverModule+"/model"),
 			exact(serverModule+"/store"),
 			exact(serverModule+"/secretseal"),
 			exact(serverModule+"/app/exam"),
 			exact(serverModule+"/localization"),
+			exact(serverModule+"/app/access"),
+			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/app/invocation"),
+			exact(serverModule+"/app/job"),
+			exact(serverModule+"/app/paging"),
 		),
 	},
 	{
@@ -577,6 +592,21 @@ var dependencyRules = []dependencyRule{
 		),
 	},
 	{
+		name:           "search application",
+		sources:        []pathPattern{exact(serverModule + "/app/search")},
+		deniedStandard: standardInfrastructure,
+		project: only(
+			exact(serverModule+"/app/access"),
+			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/app/exam"),
+			exact(serverModule+"/app/invocation"),
+			exact(serverModule+"/app/paging"),
+			exact(serverModule+"/app/user"),
+			exact(serverModule+"/model"),
+			exact(serverModule+"/store"),
+		),
+	},
+	{
 		name:           "application",
 		sources:        []pathPattern{subtree(serverModule + "/app")},
 		deniedStandard: standardInfrastructure,
@@ -599,6 +629,7 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/jobhandler"),
 			exact(serverModule+"/app/realtime"),
 			exact(serverModule+"/app/mail"),
+			exact(serverModule+"/app/search"),
 			exact(serverModule+"/secretseal"),
 			subtree(serverModule+"/app/exam"),
 		),
@@ -624,9 +655,11 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/identity"),
 			exact(serverModule+"/app/invocation"),
 			exact(serverModule+"/app/job"),
+			exact(serverModule+"/app/mail"),
 			exact(serverModule+"/app/onboarding"),
 			exact(serverModule+"/app/paging"),
 			exact(serverModule+"/app/realtime"),
+			exact(serverModule+"/app/search"),
 			exact(serverModule+"/app/user"),
 			subtree(serverModule+"/app/exam"),
 			exact(serverModule+"/model"),
@@ -808,6 +841,9 @@ func TestDependencyRulePrecedence(t *testing.T) {
 		{packagePath: serverModule + "/app/identity", wantRule: "identity application"},
 		{packagePath: serverModule + "/app/administration", wantRule: "administration application"},
 		{packagePath: serverModule + "/app/onboarding", wantRule: "onboarding application"},
+		{packagePath: serverModule + "/app/search", wantRule: "search application"},
+		{packagePath: serverModule + "/app/job", wantRule: "job engine"},
+		{packagePath: serverModule + "/app/mail", wantRule: "mail application"},
 		{packagePath: serverModule + "/app/exam/manageraccess", wantRule: "exam manager access"},
 		{packagePath: serverModule + "/app/exam", wantRule: "exam manager access consumers"},
 		{packagePath: serverModule + "/app/exam/review", wantRule: "exam idempotency consumers"},

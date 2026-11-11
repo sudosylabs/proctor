@@ -110,7 +110,7 @@
         ".agents/skills/server-boundaries/references/application.md",
         ".agents/skills/http-api/references/transport.md",
         "server/httpapi/handler.go",
-        "server/app/identity/session_assurance.go",
+        "server/app/access/session_assurance.go",
         "server/app/access/authorization.go"
       ]
     },

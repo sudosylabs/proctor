@@ -239,7 +239,7 @@ func (s *Service) ReplaceDesktopCompatibilityPolicy(
 	invocation invocation.Invocation,
 	command ReplaceDesktopCompatibilityPolicyCommand,
 ) (*model.DesktopCompatibilityPolicy, error) {
-	if err := RequireStrongRecentSession(
+	if err := access.RequireStrongRecentSession(
 		invocation.Principal(),
 		s.now(),
 		s.recentAuthenticationTTL,

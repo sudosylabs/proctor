@@ -27,6 +27,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/workspace"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/app/search"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -74,7 +75,7 @@ func completeHTTPApplication() *app.App {
 	return &app.App{
 		Identity: &identity.Service{}, Onboarding: &onboarding.Service{},
 		Administration: &administration.Service{}, Academic: &academic.Service{},
-		Users: &user.Service{}, Search: &app.SearchService{}, Counts: &app.AdministrationCounts{},
+		Users: &user.Service{}, Search: &search.Service{}, Counts: &administration.Counts{},
 		ExamAuthoring: &exam.Authoring{}, ExamPublication: &exam.Publication{},
 		Sittings: &sitting.Service{}, Corrections: &correction.Service{},
 		Resources: &resource.Service{}, StarterWorkspaces: &workspace.Service{},

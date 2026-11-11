@@ -18,6 +18,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
@@ -103,7 +104,7 @@ func (s *Service) authorizeMFARekey(ctx context.Context, invocation invocation.I
 	if !s.mfaRekeyEnabled {
 		return model.Resource{}, apperror.New("authentication.mfa.unavailable")
 	}
-	if err := RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+	if err := access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 		return model.Resource{}, err
 	}
 	institution, err := s.institutions.GetSingleton(ctx)
@@ -274,8 +275,8 @@ func projectMFARekeyStatus(job *model.Job) (MFARekeyStatusView, error) {
 
 	command, err := jobhandler.DecodeMFARekeyCommand(job.Command)
 	if err != nil ||
-		!ValidRekeyKeyID(command.PrimaryKeyID) ||
-		!ValidRekeyKeyID(command.RetiringKeyID) ||
+		!secretseal.ValidKeyID(command.PrimaryKeyID) ||
+		!secretseal.ValidKeyID(command.RetiringKeyID) ||
 		command.PrimaryKeyID == command.RetiringKeyID {
 		return MFARekeyStatusView{}, errors.New("MFA rekey command is invalid")
 	}

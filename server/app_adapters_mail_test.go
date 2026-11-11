@@ -19,7 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	mailpkg "github.com/sudosylabs/proctor/packages/mail"
-	"github.com/sudosylabs/proctor/server/app"
 	appmail "github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -66,17 +65,17 @@ func TestProductionMailTelemetryRetainsBoundedSafeMetrics(t *testing.T) {
 	key := mailDeliveryMetricKey{template: model.MailTemplateSystemTest, state: model.MailDeliveryQueued, code: "mail.transport.temporary"}
 	attemptKey := mailDeliveryMetricKey{template: model.MailTemplateSystemTest, state: model.MailDeliverySending, code: "mail.attempt_started"}
 	for range 2 {
-		recorder.RecordMailDelivery(ctx, app.MailDeliveryMetric{
+		recorder.RecordMailDelivery(ctx, appmail.DeliveryMetric{
 			TemplateKey: key.template, State: key.state, OutcomeCode: key.code,
 			ProcessingLatency: time.Second,
 		})
-		recorder.RecordMailAttempt(ctx, app.MailAttemptMetric{TemplateKey: attemptKey.template, State: attemptKey.state})
+		recorder.RecordMailAttempt(ctx, appmail.AttemptMetric{TemplateKey: attemptKey.template, State: attemptKey.state})
 	}
-	recorder.RecordMailQueueSnapshot(ctx, []app.MailQueueMetric{{
+	recorder.RecordMailQueueSnapshot(ctx, []appmail.QueueMetric{{
 		TemplateKey: key.template, State: key.state, OutcomeCode: key.code,
-		Count: 7, OldestAge: 6 * time.Minute, HealthCode: app.MailHealthQueueDelayed,
+		Count: 7, OldestAge: 6 * time.Minute, HealthCode: appmail.HealthQueueDelayed,
 	}})
-	recorder.RecordMailHealth(ctx, app.MailHealthMetric{Code: app.MailHealthQueueDelayed})
+	recorder.RecordMailHealth(ctx, appmail.HealthMetric{Code: appmail.HealthQueueDelayed})
 	snapshot := reader.Snapshot()
 
 	operational.mu.Lock()
@@ -90,7 +89,7 @@ func TestProductionMailTelemetryRetainsBoundedSafeMetrics(t *testing.T) {
 	require.Equal(t, uint64(2), attemptAggregate.attempts, "operational telemetry = deliveries %#v queues %#v buckets %#v health", operational.deliveries, operational.queues, operational.queueBuckets)
 	require.Equal(t, int64(7), operational.queues[key].Count, "operational telemetry = deliveries %#v queues %#v buckets %#v health", operational.deliveries, operational.queues, operational.queueBuckets)
 	require.Equal(t, "lt_15m0s", operational.queueBuckets[key], "operational telemetry = deliveries %#v queues %#v buckets %#v health", operational.deliveries, operational.queues, operational.queueBuckets)
-	require.Equal(t, app.MailHealthQueueDelayed, operational.health, "operational telemetry = deliveries %#v queues %#v buckets %#v health", operational.deliveries, operational.queues, operational.queueBuckets)
+	require.Equal(t, appmail.HealthQueueDelayed, operational.health, "operational telemetry = deliveries %#v queues %#v buckets %#v health", operational.deliveries, operational.queues, operational.queueBuckets)
 	require.Len(t, snapshot.Deliveries, 2, "operational telemetry = deliveries %#v queues %#v buckets %#v health", operational.deliveries, operational.queues, operational.queueBuckets)
 	require.Len(t, snapshot.Queues, 1, "operational telemetry = deliveries %#v queues %#v buckets %#v health", operational.deliveries, operational.queues, operational.queueBuckets)
 	operational.mu.Unlock()

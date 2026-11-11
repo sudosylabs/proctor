@@ -20,35 +20,16 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type MailDeliveryMetric struct {
-	TemplateKey       model.MailTemplateKey
-	State             model.MailDeliveryState
-	OutcomeCode       string
-	ProcessingLatency time.Duration
-}
-
-type MailAttemptMetric struct {
-	TemplateKey model.MailTemplateKey
-	State       model.MailDeliveryState
-}
-
-type MailDeliveryRecorder interface {
-	RecordJobMailDelivery(context.Context, MailDeliveryMetric)
-	RecordJobMailAttempt(context.Context, MailAttemptMetric)
-}
-
-type MailHealth interface {
-	SetJobMailHealth(string)
-}
-
+// MailDeliveryRelevance reports whether a delivery should still be sent;
+// production passes mail.DeliveryIsRelevant.
 type MailDeliveryRelevance func(context.Context, *model.MailDelivery) (bool, error)
 
 type mailDeliveryHandler struct {
 	deliveries store.MailStore
 	sender     mail.Sender
 	sealer     *secretseal.Sealer
-	recorder   MailDeliveryRecorder
-	health     MailHealth
+	recorder   mail.DeliveryRecorder
+	health     *mail.Health
 	relevance  MailDeliveryRelevance
 	class      store.MailSendClass
 	now        func() time.Time
@@ -177,7 +158,7 @@ func (h mailDeliveryHandler) send(ctx context.Context, execution job.Execution, 
 		return mailDeliveryDependencyOutcome(err)
 	}
 	if h.health != nil {
-		h.health.SetJobMailHealth("mail.healthy")
+		h.health.Set(mail.HealthHealthy)
 	}
 
 	h.record(ctx, accepted, accepted.State, "mail.accepted", accepted.UpdatedAt)
@@ -199,7 +180,7 @@ func (h mailDeliveryHandler) transportFailed(
 
 	code := mailTransportFailureCode(classification)
 	if h.health != nil && classification != mail.TransportPermanent {
-		h.health.SetJobMailHealth("mail.smtp_outage")
+		h.health.Set(mail.HealthSMTPOutage)
 	}
 
 	// The delivery and its Job count attempts separately. On the Job's last
@@ -333,7 +314,7 @@ func (h mailDeliveryHandler) record(
 		latency = 0
 	}
 
-	h.recorder.RecordJobMailDelivery(ctx, MailDeliveryMetric{
+	h.recorder.RecordMailDelivery(ctx, mail.DeliveryMetric{
 		TemplateKey:       delivery.TemplateKey,
 		State:             state,
 		OutcomeCode:       code,
@@ -345,7 +326,7 @@ func (h mailDeliveryHandler) recordAttempt(ctx context.Context, delivery *model.
 	if h.recorder == nil || delivery == nil {
 		return
 	}
-	h.recorder.RecordJobMailAttempt(ctx, MailAttemptMetric{TemplateKey: delivery.TemplateKey, State: delivery.State})
+	h.recorder.RecordMailAttempt(ctx, mail.AttemptMetric{TemplateKey: delivery.TemplateKey, State: delivery.State})
 }
 
 func mailTransportFailureCode(outcome mail.TransportOutcome) string {
@@ -435,8 +416,8 @@ type MailDeliveryDependencies struct {
 	Deliveries store.MailStore
 	Sender     mail.Sender
 	Sealer     *secretseal.Sealer
-	Recorder   MailDeliveryRecorder
-	Health     MailHealth
+	Recorder   mail.DeliveryRecorder
+	Health     *mail.Health
 	Relevance  MailDeliveryRelevance
 	Now        func() time.Time
 }

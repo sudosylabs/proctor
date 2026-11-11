@@ -25,6 +25,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
 
 	"github.com/sudosylabs/proctor/server/app/job"
@@ -35,8 +36,8 @@ import (
 
 type constructionCatalogStub struct{ store.Catalog }
 type constructionCacheStub struct{ identity.AuthenticationCache }
-type constructionMailDeliverySenderStub struct{ MailDeliverySender }
-type constructionMailTemplateRendererStub struct{ DirectMailTemplateRenderer }
+type constructionMailDeliverySenderStub struct{ mail.Sender }
+type constructionMailTemplateRendererStub struct{ mail.Renderer }
 type constructionRegistryStub struct {
 	identity.ExternalProviderSource
 }
@@ -345,7 +346,7 @@ func TestApplicationJobDefinitionsIncludeSittingLifecycleAndDailyRecovery(t *tes
 		nil,
 		jobhandler.NewDefaultProfilePictureJobs(jobhandler.DefaultProfilePictureJobsDependencies{Jobs: constructionJobStoreStub{}}),
 		onboarding.Ports{ImportJobs: constructionOnboardingImportJobsStub{}},
-		newMailHealth(false),
+		mail.NewHealth(false),
 	)
 	_, err := job.NewRegistry(definitions.descriptors)
 	require.NoError(t, err)

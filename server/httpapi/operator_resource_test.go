@@ -19,7 +19,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -196,29 +195,29 @@ func TestAuditResourcePreservesOpaqueCursorAndSafeErrors(t *testing.T) {
 }
 
 type focusedJobApplication struct {
-	listQuery    app.ListJobsQuery
-	attemptQuery app.ListJobAttemptsQuery
-	cancel       app.CancelJobCommand
-	retry        app.RetryJobCommand
+	listQuery    job.ListQuery
+	attemptQuery job.AttemptListQuery
+	cancel       job.CancelCommand
+	retry        job.RetryCommand
 	view         job.View
 }
 
-func (f *focusedJobApplication) ListJobs(_ context.Context, _ invocation.Invocation, query app.ListJobsQuery) (job.Page, error) {
+func (f *focusedJobApplication) ListJobs(_ context.Context, _ invocation.Invocation, query job.ListQuery) (job.Page, error) {
 	f.listQuery = query
 	return job.Page{Items: []job.View{f.view}, Counted: query.BeforeID.IsZero(), Total: 1}, nil
 }
 func (f *focusedJobApplication) GetJob(context.Context, invocation.Invocation, model.JobID) (job.View, error) {
 	return f.view, nil
 }
-func (f *focusedJobApplication) ListJobAttempts(_ context.Context, _ invocation.Invocation, query app.ListJobAttemptsQuery) (job.AttemptPage, error) {
+func (f *focusedJobApplication) ListJobAttempts(_ context.Context, _ invocation.Invocation, query job.AttemptListQuery) (job.AttemptPage, error) {
 	f.attemptQuery = query
 	return job.AttemptPage{}, nil
 }
-func (f *focusedJobApplication) CancelJob(_ context.Context, _ invocation.Invocation, command app.CancelJobCommand) (job.View, error) {
+func (f *focusedJobApplication) CancelJob(_ context.Context, _ invocation.Invocation, command job.CancelCommand) (job.View, error) {
 	f.cancel = command
 	return f.view, nil
 }
-func (f *focusedJobApplication) RetryJob(_ context.Context, _ invocation.Invocation, command app.RetryJobCommand) (job.View, error) {
+func (f *focusedJobApplication) RetryJob(_ context.Context, _ invocation.Invocation, command job.RetryCommand) (job.View, error) {
 	f.retry = command
 	return f.view, nil
 }

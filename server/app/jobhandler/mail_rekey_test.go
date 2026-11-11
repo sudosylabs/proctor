@@ -74,7 +74,7 @@ func TestMailRekeyHandlerReencryptsBoundPayloadAndCheckpoints(t *testing.T) {
 			{PrimaryKeyID: sealer.PrimaryKeyID(), RetiringKeyID: envelope.KeyID, RetirementSafe: true},
 		},
 	}
-	command, _ := json.Marshal(MailRekeyCommand{PrimaryKeyID: sealer.PrimaryKeyID(), RetiringKeyID: envelope.KeyID})
+	command, _ := json.Marshal(mail.RekeyCommand{PrimaryKeyID: sealer.PrimaryKeyID(), RetiringKeyID: envelope.KeyID})
 	record := &model.Job{ID: model.NewJobID(), Type: model.JobType("mail.rekey"), Command: command}
 	attempt := &model.JobAttempt{ID: model.NewJobAttemptID()}
 	var checkpoints []job.CheckpointValue
@@ -104,13 +104,13 @@ func TestMailRekeyHandlerReencryptsBoundPayloadAndCheckpoints(t *testing.T) {
 	plaintext, err := sealer.Open(secretseal.Binding{Purpose: mail.DeliverySealingPurpose, Owner: deliveryID.String()}, rotated)
 	require.NoError(t, err, "rotated plaintext")
 	require.Equal(t, `{"version":1,"secret":"payload"}`, string(plaintext), "rotated plaintext")
-	var checkpoint MailRekeyCheckpoint
+	var checkpoint mail.RekeyCheckpoint
 	err = json.Unmarshal(checkpoints[0].Document, &checkpoint)
 	require.NoError(t, err, "checkpoint = %#v, error", checkpoint)
 	require.Equal(t, deliveryID.String(), checkpoint.AfterID, "checkpoint = %#v, error", checkpoint)
 	require.Equal(t, int64(1), checkpoint.Processed, "checkpoint = %#v, error", checkpoint)
 	require.Equal(t, int64(1), checkpoint.Reencrypted, "checkpoint = %#v, error", checkpoint)
-	var result MailRekeyResult
+	var result mail.RekeyResult
 	err = json.Unmarshal(outcome.Result, &result)
 	require.NoError(t, err, "result = %#v, error", result)
 	require.True(t, result.RetirementSafe, "result = %#v, error", result)
@@ -133,7 +133,7 @@ func TestMailRekeyHandlerFailsClosedForUnavailableActiveKey(t *testing.T) {
 	persistence := &mailRekeyStoreFake{pages: []*store.MailRekeyTargetPage{{Targets: []store.MailRekeyTarget{{
 		Kind: store.MailRekeyTargetDelivery, ID: deliveryID.String(), KeyID: envelope.KeyID, EncryptedPayload: encrypted,
 	}}}}}
-	command, _ := json.Marshal(MailRekeyCommand{PrimaryKeyID: sealer.PrimaryKeyID(), RetiringKeyID: oldSealerKeyID(t, oldKey)})
+	command, _ := json.Marshal(mail.RekeyCommand{PrimaryKeyID: sealer.PrimaryKeyID(), RetiringKeyID: oldSealerKeyID(t, oldKey)})
 	execution := job.NewExecution(&model.Job{ID: model.NewJobID(), Type: model.JobTypeMailRekey,
 		Command: command}, &model.JobAttempt{ID: model.NewJobAttemptID()}, nil, nil)
 
@@ -153,7 +153,7 @@ func TestMailRekeyHandlerRefusesRetirementUntilEveryActiveReferenceIsPrimary(t *
 		PrimaryKeyID: sealer.PrimaryKeyID(), RetiringKeyID: retiringKeyID,
 		NonPrimaryReferences: 2, RetiringReferences: 2, RetirementSafe: false,
 	}}
-	command, _ := json.Marshal(MailRekeyCommand{PrimaryKeyID: sealer.PrimaryKeyID(), RetiringKeyID: retiringKeyID})
+	command, _ := json.Marshal(mail.RekeyCommand{PrimaryKeyID: sealer.PrimaryKeyID(), RetiringKeyID: retiringKeyID})
 	execution := job.NewExecution(&model.Job{ID: model.NewJobID(), Type: model.JobTypeMailRekey,
 		Command: command}, &model.JobAttempt{ID: model.NewJobAttemptID()}, nil, nil)
 
@@ -169,7 +169,7 @@ func TestMailRekeyHandlerRelinquishesToANodeWithTheFencedPrimary(t *testing.T) {
 	require.NoError(t, err)
 	newNodeSealer, err := secretseal.New(secretseal.Settings{EncryptionKey: newKey, DecryptionKeys: []string{oldKey}, MaximumPlaintext: 1024})
 	require.NoError(t, err)
-	command, _ := json.Marshal(MailRekeyCommand{PrimaryKeyID: newNodeSealer.PrimaryKeyID(), RetiringKeyID: oldNodeSealer.PrimaryKeyID()})
+	command, _ := json.Marshal(mail.RekeyCommand{PrimaryKeyID: newNodeSealer.PrimaryKeyID(), RetiringKeyID: oldNodeSealer.PrimaryKeyID()})
 	execution := job.NewExecution(&model.Job{ID: model.NewJobID(), Type: model.JobTypeMailRekey,
 		Command: command}, &model.JobAttempt{ID: model.NewJobAttemptID()}, nil, nil)
 	persistence := &mailRekeyStoreFake{}

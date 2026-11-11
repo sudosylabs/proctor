@@ -108,13 +108,24 @@ func (sittingMailRendererFake) Render(request mail.RenderRequest) (mail.FrozenCo
 }
 
 type mailSenderFake struct {
-	enabled bool
-	from    mail.Address
+	enabled   bool
+	from      mail.Address
+	messages  []mail.Outbound
+	err       error
+	outcome   mail.TransportOutcome
+	afterSend func()
 }
 
 func (s *mailSenderFake) Enabled() bool      { return s.enabled }
 func (s *mailSenderFake) From() mail.Address { return s.from }
-func (s *mailSenderFake) Send(context.Context, mail.Outbound) (mail.TransportOutcome, error) {
+func (s *mailSenderFake) Send(_ context.Context, message mail.Outbound) (mail.TransportOutcome, error) {
+	s.messages = append(s.messages, message)
+	if s.afterSend != nil {
+		s.afterSend()
+	}
+	if s.err != nil {
+		return s.outcome, s.err
+	}
 	return mail.TransportUnknown, nil
 }
 

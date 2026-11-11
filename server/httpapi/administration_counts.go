@@ -11,14 +11,14 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 )
 
 // AdministrationCountsApplication summarises the administration work waiting
 // on the caller for navigation badges.
 type AdministrationCountsApplication interface {
-	AdministrationCounts(context.Context, invocation.Invocation) (app.AdministrationCountsResult, error)
+	AdministrationCounts(context.Context, invocation.Invocation) (administration.CountsResult, error)
 }
 
 // administrationCountsResponse carries each count the caller may see with its
@@ -80,7 +80,7 @@ func (h administrationCountsHandlers) get(request operationRequest) (operationRe
 	return jsonResult(http.StatusOK, response).withHeaders(privateNoStoreHeaders()), nil
 }
 
-func administrationCountMembers(count *app.AdministrationCount) (*int, *bool) {
+func administrationCountMembers(count *administration.Count) (*int, *bool) {
 	if count == nil {
 		return nil, nil
 	}

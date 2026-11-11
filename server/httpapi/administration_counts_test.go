@@ -16,7 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/administration"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
@@ -24,12 +24,12 @@ import (
 )
 
 type administrationCountsHTTPApplication struct {
-	counts app.AdministrationCountsResult
+	counts administration.CountsResult
 	err    error
 	calls  int
 }
 
-func (a *administrationCountsHTTPApplication) AdministrationCounts(context.Context, invocation.Invocation) (app.AdministrationCountsResult, error) {
+func (a *administrationCountsHTTPApplication) AdministrationCounts(context.Context, invocation.Invocation) (administration.CountsResult, error) {
 	a.calls++
 	return a.counts, a.err
 }
@@ -37,9 +37,9 @@ func (a *administrationCountsHTTPApplication) AdministrationCounts(context.Conte
 func TestAdministrationCountsOmitsCountsTheCallerMayNotList(t *testing.T) {
 	t.Parallel()
 	logger, _ := newTestLogger(t)
-	application := &administrationCountsHTTPApplication{counts: app.AdministrationCountsResult{
-		PendingInvitations:   &app.AdministrationCount{Count: 12},
-		FailedMailDeliveries: &app.AdministrationCount{Count: app.MaximumAdministrationCount, IsLowerBound: true},
+	application := &administrationCountsHTTPApplication{counts: administration.CountsResult{
+		PendingInvitations:   &administration.Count{Count: 12},
+		FailedMailDeliveries: &administration.Count{Count: administration.MaximumCount, IsLowerBound: true},
 	}}
 	httpAPI := newFocusedResourceAPI(t, logger, &academicUnitHTTPApplication{principal: operatorTestPrincipal()}, administrationCountsResource(application))
 
@@ -50,10 +50,10 @@ func TestAdministrationCountsOmitsCountsTheCallerMayNotList(t *testing.T) {
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
 	require.Equal(t, map[string]any{
 		"pending_invitations": float64(12), "pending_invitations_is_lower_bound": false,
-		"failed_mail_deliveries": float64(app.MaximumAdministrationCount), "failed_mail_deliveries_is_lower_bound": true,
+		"failed_mail_deliveries": float64(administration.MaximumCount), "failed_mail_deliveries_is_lower_bound": true,
 	}, body, "a count the caller may not list is omitted with its flag")
 
-	application.counts = app.AdministrationCountsResult{}
+	application.counts = administration.CountsResult{}
 	empty := serveOperatorRequest(httpAPI, http.MethodGet, "/api/v1/administration/counts", "", true)
 	require.Equal(t, http.StatusOK, empty.Code, empty.Body.String())
 	require.JSONEq(t, `{}`, empty.Body.String())

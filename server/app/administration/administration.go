@@ -18,6 +18,12 @@
 // outside Service; composition builds them with NewRetentionJobs for the Job
 // catalog.
 //
+// Counts, in counts.go, is a second, small service: the bounded counts of
+// work waiting on an administrator (pending Invitations, failed Jobs and mail
+// deliveries, open onboarding imports) behind the administration navigation.
+// It holds one counting function per resource, supplied by the service that
+// owns the resource, so it imports none of them.
+//
 // Start with administration.go for the Service and its collaborators, then
 // open the file named for the concern you are changing.
 package administration

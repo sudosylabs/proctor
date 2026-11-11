@@ -158,7 +158,7 @@ func (s *Service) ResendInvitation(
 		}
 
 		if invitationPurposeRequiresInteractiveBatch(current.Invitation.Purpose) {
-			if err = identity.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+			if err = access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 				return InvitationAdministrationView{}, err
 			}
 		}
@@ -314,7 +314,7 @@ func (s *Service) RevokeInvitation(
 		}
 
 		if invitationPurposeRequiresInteractiveBatch(current.Invitation.Purpose) {
-			if err = identity.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+			if err = access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 				return InvitationAdministrationView{}, err
 			}
 		}

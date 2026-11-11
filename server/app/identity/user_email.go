@@ -55,7 +55,7 @@ func (s *Service) ChangeUserEmail(
 	if s.authorizer == nil || s.auditor == nil {
 		return nil, apperror.New("administration.unavailable")
 	}
-	if err := RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+	if err := access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 		return nil, err
 	}
 
@@ -124,7 +124,7 @@ func (s *Service) VerifyUserEmailPrivileged(
 	if s.authorizer == nil || s.auditor == nil {
 		return nil, apperror.New("administration.unavailable")
 	}
-	if err := RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+	if err := access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 		return nil, err
 	}
 

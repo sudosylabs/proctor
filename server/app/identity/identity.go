@@ -36,7 +36,6 @@ package identity
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"time"
 
@@ -543,14 +542,4 @@ func sessionIDs(sessions []*model.Session) []model.SessionID {
 		}
 	}
 	return ids
-}
-
-// ValidRekeyKeyID reports whether value is a key ring key identifier: exactly
-// 32 lowercase hexadecimal characters. Mail and MFA rekey commands share it.
-func ValidRekeyKeyID(value string) bool {
-	if len(value) != 32 {
-		return false
-	}
-	decoded, err := hex.DecodeString(value)
-	return err == nil && hex.EncodeToString(decoded) == value
 }

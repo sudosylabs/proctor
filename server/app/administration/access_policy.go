@@ -242,7 +242,7 @@ func (s *Service) authorizeAccessPolicy(
 }
 
 func (s *Service) requireStrongRecent(invocation invocation.Invocation) error {
-	return identity.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL)
+	return access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL)
 }
 
 func (s *Service) preflightInput(

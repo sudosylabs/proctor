@@ -17,11 +17,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/search"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store/storetest"
 	"github.com/sudosylabs/proctor/server/testlib"
@@ -102,7 +102,7 @@ func TestSearchIntegrationScopesEveryTypeToTheCaller(t *testing.T) {
 	_, appErr = helper.App.ExamAuthoring.CreateExam(ctx, chemistCall, exam.CreateCommand{AcademicUnitID: chemistry.unit.ID, Title: "Orbital chemistry", IdempotencyKey: "search-chemistry-exam"})
 	require.NoError(t, appErr)
 
-	result, appErr := helper.App.Search.Search(ctx, physicistCall, app.SearchQuery{Query: "  ORBIT  "})
+	result, appErr := helper.App.Search.Search(ctx, physicistCall, search.Query{Query: "  ORBIT  "})
 	require.NoError(t, appErr)
 	require.Len(t, result.Exams, 1, "physicist Exams = %#v", result.Exams)
 	require.Equal(t, physicsExam.Exam.ID, result.Exams[0].ID)
@@ -112,7 +112,7 @@ func TestSearchIntegrationScopesEveryTypeToTheCaller(t *testing.T) {
 	require.Equal(t, physicist.ID, result.Users[0].ID)
 	require.Empty(t, result.Users[0].Email, "scoped directory projection exposes email")
 
-	limited, appErr := helper.App.Search.Search(ctx, physicistCall, app.SearchQuery{Query: "orbit", Types: []app.SearchType{app.SearchTypeClass}, Limit: 1})
+	limited, appErr := helper.App.Search.Search(ctx, physicistCall, search.Query{Query: "orbit", Types: []search.Type{search.TypeClass}, Limit: 1})
 	require.NoError(t, appErr)
 	require.Empty(t, limited.Exams)
 	require.Empty(t, limited.Users)
@@ -123,25 +123,25 @@ func TestSearchIntegrationScopesEveryTypeToTheCaller(t *testing.T) {
 	classOnly, classOnlyCall := newCaller("search-class-only")
 	_, err = storetest.SaveRoleBinding(ctx, persistence, &model.RoleBinding{UserID: classOnly.ID, RoleID: classViewer.ID, ScopeType: model.RoleScopeAcademicUnit, ScopeID: chemistry.unit.ID.String(), StartsAt: startedAt})
 	require.NoError(t, err)
-	partial, appErr := helper.App.Search.Search(ctx, classOnlyCall, app.SearchQuery{Query: "orbit"})
+	partial, appErr := helper.App.Search.Search(ctx, classOnlyCall, search.Query{Query: "orbit"})
 	require.NoError(t, appErr)
 	require.Empty(t, partial.Exams)
 	require.Empty(t, partial.Users)
 	require.Len(t, partial.Classes, 1)
 	require.Equal(t, chemistry.class.ID, partial.Classes[0].ID)
-	_, appErr = helper.App.Search.Search(ctx, classOnlyCall, app.SearchQuery{Query: "orbit", Types: []app.SearchType{app.SearchTypeExam, app.SearchTypeUser}})
+	_, appErr = helper.App.Search.Search(ctx, classOnlyCall, search.Query{Query: "orbit", Types: []search.Type{search.TypeExam, search.TypeUser}})
 	require.True(t, apperror.Is(appErr, "authorization.denied"), "unauthorized types error = %v", appErr)
 
 	_, outsiderCall := newCaller("search-outsider")
-	_, appErr = helper.App.Search.Search(ctx, outsiderCall, app.SearchQuery{Query: "orbit"})
+	_, appErr = helper.App.Search.Search(ctx, outsiderCall, search.Query{Query: "orbit"})
 	require.True(t, apperror.Is(appErr, "authorization.denied"), "outsider error = %v", appErr)
 
-	for _, query := range []app.SearchQuery{
+	for _, query := range []search.Query{
 		{Query: " o "},
 		{Query: strings.Repeat("a", 101)},
 		{Query: "orbit", Limit: 21},
-		{Query: "orbit", Types: []app.SearchType{"exam", "exam"}},
-		{Query: "orbit", Types: []app.SearchType{"programme"}},
+		{Query: "orbit", Types: []search.Type{"exam", "exam"}},
+		{Query: "orbit", Types: []search.Type{"programme"}},
 	} {
 		_, appErr = helper.App.Search.Search(ctx, physicistCall, query)
 		require.True(t, apperror.Is(appErr, "search.query.invalid"), "query %#v error = %v", query, appErr)

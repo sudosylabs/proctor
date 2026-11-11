@@ -17,19 +17,19 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/search"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 type searchHTTPApplication struct {
 	calls  int
-	query  app.SearchQuery
-	result app.SearchResult
+	query  search.Query
+	result search.Result
 }
 
-func (a *searchHTTPApplication) Search(_ context.Context, _ invocation.Invocation, query app.SearchQuery) (app.SearchResult, error) {
+func (a *searchHTTPApplication) Search(_ context.Context, _ invocation.Invocation, query search.Query) (search.Result, error) {
 	a.calls++
 	a.query = query
 	return a.result, nil
@@ -47,10 +47,10 @@ func TestSearchResourcePresentsTypedItemsWithoutEmail(t *testing.T) {
 	examSummary.ID, examSummary.AcademicUnitID, examSummary.Title = model.ExamID(model.NewID()), model.AcademicUnitID(model.NewID()), "Algorithms midterm"
 	class := &model.Class{ID: model.ClassID(model.NewID()), ProgrammeLevelID: model.ProgrammeLevelID(model.NewID()), DisplayName: "Algorithms A"}
 	user := &model.User{ID: model.NewUserID(), Username: "ada.example", DisplayName: "Ada Example", Email: "ada@example.invalid"}
-	search := &searchHTTPApplication{result: app.SearchResult{
+	application := &searchHTTPApplication{result: search.Result{
 		Exams: []store.ExamSummary{examSummary}, Classes: []*model.Class{class}, Users: []*model.User{user},
 	}}
-	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, searchResource(search))
+	httpAPI := newFocusedResourceAPI(t, logger, classRouteAuthenticator{principal: principal}, searchResource(application))
 	serve := func(target string) *httptest.ResponseRecorder {
 		request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, target, nil)
 		request.Header.Set("Authorization", "Bearer credential")
@@ -61,7 +61,7 @@ func TestSearchResourcePresentsTypedItemsWithoutEmail(t *testing.T) {
 
 	response := serve("/api/v1/search?q=algo&types=exam&types=user&limit=7")
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	require.Equal(t, app.SearchQuery{Query: "algo", Types: []app.SearchType{"exam", "user"}, Limit: 7}, search.query)
+	require.Equal(t, search.Query{Query: "algo", Types: []search.Type{"exam", "user"}, Limit: 7}, application.query)
 	require.NotContains(t, response.Body.String(), "ada@example.invalid")
 	require.NotContains(t, response.Body.String(), "next_cursor")
 	var body struct {
@@ -74,7 +74,7 @@ func TestSearchResourcePresentsTypedItemsWithoutEmail(t *testing.T) {
 		{"type": "user", "id": user.ID.String(), "display_name": "Ada Example", "username": "ada.example"},
 	}, body.Items)
 
-	calls := search.calls
+	calls := application.calls
 	for _, target := range []string{
 		"/api/v1/search?q=algo&cursor=abc",
 		"/api/v1/search?q=algo&limit=0",
@@ -86,7 +86,7 @@ func TestSearchResourcePresentsTypedItemsWithoutEmail(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, rejected.Code, "%s: %s", target, rejected.Body.String())
 		require.Contains(t, rejected.Body.String(), `"request.invalid"`, target)
 	}
-	require.Equal(t, calls, search.calls, "rejected requests reached the application")
+	require.Equal(t, calls, application.calls, "rejected requests reached the application")
 }
 
 func TestSearchOpenAPIDocument(t *testing.T) {

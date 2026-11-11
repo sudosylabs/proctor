@@ -305,7 +305,7 @@ func composeApplicationDependencies(
 func attachApplicationTelemetry(
 	applicationDeps *app.Dependencies,
 	capabilities constructionCapabilities,
-	mailMetrics app.MailDeliveryRecorder,
+	mailMetrics mail.DeliveryRecorder,
 ) {
 	if capabilities.metrics.Enabled() {
 		applicationDeps.JobRecorder = jobMetricsRecorder{metrics: capabilities.metrics}

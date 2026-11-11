@@ -20,6 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/search"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -48,11 +49,11 @@ func New(deps Dependencies) (*App, error) {
 		return nil, err
 	}
 
-	capabilities := deploymentAccessPolicyCapabilities{
-		providers:  deps.Registry,
-		mail:       deps.MailDeliverySender,
-		health:     shared.mailHealth,
-		mfaEnabled: deps.MFA.Enabled,
+	capabilities := identity.DeploymentCapabilities{
+		Providers:  deps.Registry,
+		Mail:       deps.MailDeliverySender,
+		Health:     shared.mailHealth,
+		MFAEnabled: deps.MFA.Enabled,
 	}
 	administrations, err := newAdministration(deps, shared, authorizer, capabilities)
 	if err != nil {
@@ -100,13 +101,13 @@ func New(deps Dependencies) (*App, error) {
 	// Search spans Exams, Users and Classes, and the administration counts
 	// span Invitations, Jobs, mail and onboarding imports, so both are built
 	// once every one of those services exists.
-	search := newSearchService(searchServiceDependencies{
+	searches := search.New(search.Dependencies{
 		Exams:              exams.authoring,
 		Users:              users,
 		ClassAuthorization: authorizer,
 		Classes:            deps.Store.Class(),
 	})
-	counts := newAdministrationCountsService(administrationCountsDependencies(onboardingPorts, jobs))
+	counts := administration.NewCounts(administrationCountsDependencies(onboardingPorts, jobs))
 	return &App{
 		Identity:          identities,
 		Onboarding:        onboardings,
@@ -123,7 +124,7 @@ func New(deps Dependencies) (*App, error) {
 		Corrections:       exams.corrections,
 		StarterWorkspaces: exams.starterWorkspaces,
 		Users:             users,
-		Search:            search,
+		Search:            searches,
 		Counts:            counts,
 		Realtime:          shared.realtime,
 		RealtimeAdmission: &RealtimeAdmission{
@@ -185,7 +186,7 @@ type sharedMechanics struct {
 	realtime    *RealtimeService
 	audit       *access.Auditor
 	mail        *mail.Composer
-	mailHealth  *MailHealth
+	mailHealth  *mail.Health
 }
 
 func newSharedMechanics(deps Dependencies) (sharedMechanics, error) {
@@ -230,8 +231,12 @@ func newSharedMechanics(deps Dependencies) (sharedMechanics, error) {
 		return sharedMechanics{}, err
 	}
 
-	institutionName := &institutionNameCache{institutions: deps.Store.Institution(), now: time.Now}
-	composer, err := newDirectMailPreparer(deps.MailTemplateRenderer, deps.MailDeliverySender, deps.MailSecretSealer, institutionName.Name)
+	composer, err := mail.NewComposer(mail.ComposerDependencies{
+		Renderer:    deps.MailTemplateRenderer,
+		Sender:      deps.MailDeliverySender,
+		Sealer:      deps.MailSecretSealer,
+		Institution: newInstitutionName(deps),
+	})
 	if err != nil {
 		return sharedMechanics{}, err
 	}
@@ -243,8 +248,17 @@ func newSharedMechanics(deps Dependencies) (sharedMechanics, error) {
 		realtime:    publication,
 		audit:       audit,
 		mail:        composer,
-		mailHealth:  newMailHealth(deps.MailDeliverySender.Enabled()),
+		mailHealth:  mail.NewHealth(deps.MailDeliverySender.Enabled()),
 	}, nil
+}
+
+// newInstitutionName supplies the institution display name to mail copy,
+// read through its own short-lived cache.
+func newInstitutionName(deps Dependencies) func() string {
+	return mail.NewInstitutionNameCache(mail.InstitutionNameCacheDependencies{
+		Institutions: deps.Store.Institution(),
+		Now:          time.Now,
+	}).Name
 }
 
 // newAuthorizer builds Access Control over the Role and Role Binding stores
@@ -279,7 +293,7 @@ func newAdministration(
 	deps Dependencies,
 	shared sharedMechanics,
 	authorizer *access.Authorizer,
-	capabilities deploymentAccessPolicyCapabilities,
+	capabilities identity.DeploymentCapabilities,
 ) (*administration.Service, error) {
 	return administration.New(administration.Dependencies{
 		Store:                   deps.Store,

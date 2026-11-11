@@ -14,8 +14,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/search"
 )
 
 // searchResponse is one bounded page per requested type. Search never
@@ -109,7 +109,7 @@ func (h searchHandlers) find(request operationRequest) (operationResult, error) 
 	if _, present := values["cursor"]; present {
 		return operationResult{}, invalidRequestError(errors.New("search does not continue; cursor is not accepted"))
 	}
-	query := app.SearchQuery{Query: values.Get("q")}
+	query := search.Query{Query: values.Get("q")}
 	if raw, present := values["limit"]; present {
 		limit, err := strconv.Atoi(raw[0])
 		if err != nil || limit < 1 {
@@ -118,7 +118,7 @@ func (h searchHandlers) find(request operationRequest) (operationResult, error) 
 		query.Limit = limit
 	}
 	for _, raw := range values["types"] {
-		query.Types = append(query.Types, app.SearchType(raw))
+		query.Types = append(query.Types, search.Type(raw))
 	}
 	result, err := h.app.Search(request.context, request.invocation(), query)
 	if err != nil {
@@ -127,11 +127,11 @@ func (h searchHandlers) find(request operationRequest) (operationResult, error) 
 	return jsonResult(http.StatusOK, searchResponseFromResult(result)), nil
 }
 
-func searchResponseFromResult(result app.SearchResult) searchResponse {
+func searchResponseFromResult(result search.Result) searchResponse {
 	response := searchResponse{Items: make([]searchItemResponse, 0, len(result.Exams)+len(result.Classes)+len(result.Users))}
 	for _, exam := range result.Exams {
 		response.Items = append(response.Items, searchItemResponse{exam: &searchExamItemResponse{
-			Type:           string(app.SearchTypeExam),
+			Type:           string(search.TypeExam),
 			ID:             exam.ID.String(),
 			Title:          exam.Title,
 			AcademicUnitID: exam.AcademicUnitID.String(),
@@ -140,7 +140,7 @@ func searchResponseFromResult(result app.SearchResult) searchResponse {
 
 	for _, class := range result.Classes {
 		response.Items = append(response.Items, searchItemResponse{class: &searchClassItemResponse{
-			Type:             string(app.SearchTypeClass),
+			Type:             string(search.TypeClass),
 			ID:               class.ID.String(),
 			DisplayName:      class.DisplayName,
 			ProgrammeLevelID: class.ProgrammeLevelID.String(),
@@ -149,7 +149,7 @@ func searchResponseFromResult(result app.SearchResult) searchResponse {
 
 	for _, user := range result.Users {
 		response.Items = append(response.Items, searchItemResponse{user: &searchUserItemResponse{
-			Type:        string(app.SearchTypeUser),
+			Type:        string(search.TypeUser),
 			ID:          user.ID.String(),
 			DisplayName: user.DisplayName,
 			Username:    user.Username,
@@ -162,5 +162,5 @@ func searchResponseFromResult(result app.SearchResult) searchResponse {
 // SearchApplication finds Exams, Classes and Users within the caller's own
 // list visibility for each type.
 type SearchApplication interface {
-	Search(context.Context, invocation.Invocation, app.SearchQuery) (app.SearchResult, error)
+	Search(context.Context, invocation.Invocation, search.Query) (search.Result, error)
 }

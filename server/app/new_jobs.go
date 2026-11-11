@@ -18,6 +18,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
@@ -29,8 +30,8 @@ import (
 // and mail is nil when the graph has no mail store.
 type jobRuntime struct {
 	engine     *job.Engine
-	operations *JobOperations
-	mail       *MailService
+	operations *job.Operations
+	mail       *mail.Operations
 }
 
 // newJobRuntime builds the Job engine over every application Job definition,
@@ -64,7 +65,7 @@ func newJobRuntime(
 
 	mailHealth := shared.mailHealth
 	if mailHealth == nil {
-		mailHealth = newMailHealth(deps.MailDeliverySender != nil && deps.MailDeliverySender.Enabled())
+		mailHealth = mail.NewHealth(deps.MailDeliverySender != nil && deps.MailDeliverySender.Enabled())
 	}
 
 	definitions := buildApplicationJobDefinitions(deps, shared, exams, users, defaultPictureJobs, onboardingPorts, mailHealth)
@@ -89,12 +90,12 @@ func newJobRuntime(
 		wake.wake = engine.Wake
 	}
 
-	var mailOperations *MailService
+	var mailOperations *mail.Operations
 	if deps.Store.Mail() != nil {
-		mailOperations, err = newMailService(mailServiceDependencies{
+		mailOperations, err = mail.NewOperations(mail.OperationsDependencies{
 			Mail:                    deps.Store.Mail(),
 			Users:                   deps.Store.User(),
-			Authorization:           mailAuthorizationAdapter{authorization: authorizer, institutions: deps.Store.Institution()},
+			Authorization:           mail.InstitutionAuthorization{Authorizer: authorizer, Institutions: deps.Store.Institution()},
 			Audit:                   shared.audit.MailAudit(),
 			Attempts:                shared.attempts,
 			Renderer:                deps.MailTemplateRenderer,
@@ -103,20 +104,19 @@ func newJobRuntime(
 			Sealer:                  deps.MailSecretSealer,
 			RecentAuthenticationTTL: deps.RecentAuthenticationTTL,
 			Now:                     time.Now,
-			InstitutionName:         (&institutionNameCache{institutions: deps.Store.Institution(), now: time.Now}).Name,
+			InstitutionName:         newInstitutionName(deps),
+			RekeyJobs:               deps.Store.Job(),
+			RekeyAudit:              shared.audit.MutationAudit(),
+			Wake:                    engine.Wake,
 		})
 		if err != nil {
 			return jobRuntime{}, err
 		}
-
-		mailOperations.rekeyJobs = deps.Store.Job()
-		mailOperations.rekeyAudit = shared.audit.MutationAudit()
-		mailOperations.wake = engine.Wake
 	}
 
-	operations, err := newJobOperationsService(jobOperationsServiceDependencies{
+	operations, err := job.NewOperations(job.OperationsDependencies{
 		Jobs:          engine,
-		Authorization: jobOperationsAuthorization{authorization: authorizer, institutions: deps.Store.Institution()},
+		Authorization: job.InstitutionAuthorization{Authorizer: authorizer, Institutions: deps.Store.Institution()},
 		Audit:         shared.audit.MutationAudit(),
 		Users:         deps.Store.User(),
 		ExamExports:   deps.Store.ExamExport(),
@@ -189,19 +189,19 @@ func buildApplicationJobDefinitions(
 	users *user.Service,
 	defaultPictureJobs *jobhandler.DefaultProfilePictureJobs,
 	onboardingPorts onboarding.Ports,
-	mailHealth *MailHealth,
+	mailHealth *mail.Health,
 ) applicationJobDefinitions {
 	if mailHealth == nil {
-		mailHealth = newMailHealth(deps.MailDeliverySender != nil && deps.MailDeliverySender.Enabled())
+		mailHealth = mail.NewHealth(deps.MailDeliverySender != nil && deps.MailDeliverySender.Enabled())
 	}
 
 	mailDelivery := jobhandler.MailDeliveryDependencies{
 		Deliveries: deps.Store.Mail(),
 		Sender:     deps.MailDeliverySender,
 		Sealer:     deps.MailSecretSealer,
-		Recorder:   jobMailDeliveryRecorder{recorder: deps.MailDeliveryRecorder},
-		Health:     jobMailHealth{health: mailHealth},
-		Relevance:  jobMailDeliveryIsRelevant,
+		Recorder:   deps.MailDeliveryRecorder,
+		Health:     mailHealth,
+		Relevance:  mail.DeliveryIsRelevant,
 		Now:        time.Now,
 	}
 	retentionJobs := administration.NewRetentionJobs(shared.audit, deps.Store.Retention(), deps.Store.User(), shared.mail, time.Now)
@@ -272,12 +272,12 @@ func buildApplicationJobDefinitions(
 		periodicTasks = append(periodicTasks, job.PeriodicTask{
 			Name:     "mail-maintenance-monitor",
 			Interval: time.Minute,
-			Runner: mailMaintenanceMonitor{
-				mail:     deps.Store.Mail(),
-				sender:   deps.MailDeliverySender,
-				health:   mailHealth,
-				recorder: deps.MailDeliveryRecorder,
-				now:      time.Now,
+			Runner: mail.MaintenanceMonitor{
+				Mail:     deps.Store.Mail(),
+				Sender:   deps.MailDeliverySender,
+				Health:   mailHealth,
+				Recorder: deps.MailDeliveryRecorder,
+				Now:      time.Now,
 			},
 		})
 	}
@@ -288,19 +288,16 @@ func buildApplicationJobDefinitions(
 // administrationCountsDependencies projects the summary's counters from the
 // services that exist; a reduced lifecycle test graph may lack some, and
 // their counts are then left out.
-func administrationCountsDependencies(onboardingPorts onboarding.Ports, jobs jobRuntime) administrationCountsServiceDependencies {
-	var deps administrationCountsServiceDependencies
-	if onboardingPorts.CountPendingInvitations != nil {
-		deps.Invitations = pendingInvitationCounter(onboardingPorts.CountPendingInvitations)
-	}
-	if onboardingPorts.CountOpenImports != nil {
-		deps.Imports = openImportCounter(onboardingPorts.CountOpenImports)
+func administrationCountsDependencies(onboardingPorts onboarding.Ports, jobs jobRuntime) administration.CountsDependencies {
+	deps := administration.CountsDependencies{
+		PendingInvitations:    onboardingPorts.CountPendingInvitations,
+		OpenOnboardingImports: onboardingPorts.CountOpenImports,
 	}
 	if jobs.operations != nil {
-		deps.Jobs = jobs.operations
+		deps.RecentJobFailures = jobs.operations.CountRecentJobFailures
 	}
 	if jobs.mail != nil {
-		deps.Mail = jobs.mail
+		deps.FailedMailDeliveries = jobs.mail.CountFailedMailDeliveries
 	}
 	return deps
 }

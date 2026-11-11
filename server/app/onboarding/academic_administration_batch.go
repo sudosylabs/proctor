@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/internal/batchitem"
 
@@ -155,7 +156,7 @@ func (s *Service) RunAcademicAdministrationBatch(
 	}
 
 	if command.Operation.requiresStrongRecentSession() {
-		if err = identity.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+		if err = access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 			return AcademicAdministrationBatchResult{}, err
 		}
 	}

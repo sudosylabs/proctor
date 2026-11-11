@@ -12,12 +12,12 @@
 // formats live in httpapi and websocket, SQL in store/sqlstore, and stored
 // file bytes in filecontent.
 //
-// App, built once by New, is the application's public surface. It names
-// each service in its own field and embeds none, so each use case is
-// declared once, as a method on its service. Each area lives in its own
-// child package; this package keeps only the services that span areas
-// (search, administration counts, realtime publication and admission, Job
-// and mail operations).
+// This package itself only assembles the application. App, built once by
+// New, is the application's public surface: it names each service in its own
+// field and embeds none, so each use case is declared once, as a method on
+// its service, in the child package that owns it. A reader looking for
+// behaviour opens that child package; what is here is the App type, its
+// construction and the Dependencies the server package supplies.
 //
 // Where to look:
 //   - app.go: App
@@ -27,12 +27,24 @@
 //   - leaf packages: access (authorization and access.RunAudited, the shared
 //     begin, mutate and audit sequence most audited changes use), paging,
 //     apperror (the one application error type), invocation
-//     (the call context every use case takes), idempotency, job (the durable
-//     Job engine), jobhandler, mail, realtime and exam
+//     (the call context every use case takes), idempotency, realtime and exam
+//   - job (the durable Job engine and job.Operations, the operator Job
+//     service), jobhandler (the Job handlers) and mail (mail composition and
+//     mail.Operations, the operator mail service, with the mail telemetry
+//     contracts, health and delivery relevance policy)
 //   - area packages: academic, user, identity (sign-in, Sessions, MFA,
 //     tokens, Desktop authorization, account recovery and account state),
-//     administration (Roles, Role Bindings, the Access Policy, retention and
-//     the audit listings) and onboarding (Invitations, public registration,
-//     academic administration batches, onboarding imports and Student
-//     Progression)
+//     administration (Roles, Role Bindings, the Access Policy, retention,
+//     the audit listings and the administration counts), onboarding
+//     (Invitations, public registration, academic administration batches,
+//     onboarding imports and Student Progression) and search (one search
+//     across Exams, Classes and Users)
+//
+// Four things besides assembly still live here. realtime.go and
+// realtime_admission.go hold the realtime publication service and WebSocket
+// admission: both read Store contracts, which the app/realtime child may not
+// import. health.go (node readiness), operational_metrics.go (the
+// operational event seam the module root records) and version.go (build
+// information) are what the module root and transports read from the
+// application as a whole.
 package app

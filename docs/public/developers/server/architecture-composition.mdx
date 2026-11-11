@@ -46,7 +46,7 @@ Use this as an orientation map, not as a complete package inventory.
 | --- | --- | --- |
 | `server/model` | Cohesive domain values, records, constructors, and local transitions | Adding transport or SQL fields to a domain type |
 | `server/app` | Use-case policy, current authorization, audit intent, coordination, and effect timing | Retaining the root Store or configuration as a service locator |
-| `server/app/job` | Generic durable Job execution mechanics | Importing the parent application or a concrete handler catalog |
+| `server/app/job` | Generic durable Job execution mechanics and the operator Job service | Importing the parent application or a concrete handler catalog |
 | `server/app/realtime` | Transport-neutral events and peer propagation semantics | Owning WebSocket connection state or retrying transient publication |
 | `server/store` | Bounded Store contracts and named aggregate operations | Exposing raw transaction callbacks or SQL rows |
 | `server/store/sqlstore` | PostgreSQL implementation, locks, constraints, and migrations | Re-deciding application policy inside SQL code |

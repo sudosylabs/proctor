@@ -360,7 +360,7 @@ func (s *Service) prepareInstitutionRoleReplacement(
 	command ReplaceInvitationCommand,
 	draft invitationReplacementDraft,
 ) (*model.Invitation, error) {
-	if err := identity.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+	if err := access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 		return nil, err
 	}
 

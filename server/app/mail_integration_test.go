@@ -17,10 +17,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -66,7 +66,7 @@ func TestControlledMailUsesRealApplicationGraphAndDurableWorker(t *testing.T) {
 	require.Equal(t, operator.ID, queued.TargetUserID)
 	require.Equal(t, model.MailDeliveryQueued, queued.State)
 	require.Equal(t, "m***@example.edu", queued.MaskedRecipient)
-	page, appErr := helper.App.Mail.ListMailDeliveries(ctx, invocation, app.ListMailDeliveriesQuery{States: []model.MailDeliveryState{model.MailDeliveryQueued}, TemplateKeys: []model.MailTemplateKey{model.MailTemplateSystemTest}, Limit: 20})
+	page, appErr := helper.App.Mail.ListMailDeliveries(ctx, invocation, mail.ListDeliveriesQuery{States: []model.MailDeliveryState{model.MailDeliveryQueued}, TemplateKeys: []model.MailTemplateKey{model.MailTemplateSystemTest}, Limit: 20})
 	require.NoError(t, appErr, "queued delivery page = %#v", page)
 	require.Len(t, page.Items, 1, "queued delivery page = %#v", page)
 	require.Equal(t, queued.ID, page.Items[0].ID, "queued delivery page = %#v", page)

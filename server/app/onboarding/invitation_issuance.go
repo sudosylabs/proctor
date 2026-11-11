@@ -605,7 +605,7 @@ func (s *Service) IssueInstitutionRoleInvitation(
 	invocation invocation.Invocation,
 	command IssueInstitutionRoleInvitationCommand,
 ) (InvitationView, error) {
-	if err := identity.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
+	if err := access.RequireStrongRecentSession(invocation.Principal(), s.now(), s.recentAuthenticationTTL); err != nil {
 		return InvitationView{}, err
 	}
 

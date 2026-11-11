@@ -20,6 +20,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
@@ -45,7 +46,7 @@ func TestMailRekeyOldPrimaryRelinquishesOnceAndNewPrimaryCompletes(t *testing.T)
 	require.NoError(t, err)
 	newSealer, err := secretseal.New(secretseal.Settings{EncryptionKey: newKey, DecryptionKeys: []string{oldKey}, MaximumPlaintext: 1024})
 	require.NoError(t, err)
-	command, _ := json.Marshal(jobhandler.MailRekeyCommand{PrimaryKeyID: newSealer.PrimaryKeyID(), RetiringKeyID: oldSealer.PrimaryKeyID()})
+	command, _ := json.Marshal(mail.RekeyCommand{PrimaryKeyID: newSealer.PrimaryKeyID(), RetiringKeyID: oldSealer.PrimaryKeyID()})
 	rekeyJob, err := model.NewJob(model.NewJobID(), model.JobTypeMailRekey, command,
 		"mail-rekey:"+newSealer.PrimaryKeyID()+":"+oldSealer.PrimaryKeyID(), at, at, 10)
 	require.NoError(t, err)
@@ -96,7 +97,7 @@ func TestMailRekeyOldPrimaryRelinquishesOnceAndNewPrimaryCompletes(t *testing.T)
 
 	completed, err := persistence.Job().Get(ctx, rekeyJob.ID)
 	require.NoError(t, err)
-	var proof jobhandler.MailRekeyResult
+	var proof mail.RekeyResult
 	err = json.Unmarshal(completed.Result, &proof)
 	require.NoError(t, err, "completed retirement proof = %#v", proof)
 	require.True(t, proof.RetirementSafe, "completed retirement proof = %#v", proof)

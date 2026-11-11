@@ -5,10 +5,11 @@
 ~~~text
 identityprovider ← {model, config}
 internal/canonicaljson ← model ← store ← app/job
+{model, store, logging, app/access, app/apperror, app/invocation} ← app/job ← {app, app/identity, app/jobhandler, app/mail, httpapi, server}
 {model, store} ← app/apperror ← {app, app/idempotency, app/exam, httpapi, websocket}
 model ← app/invocation ← {app, app/idempotency, app/exam}
-{model, store, app/apperror, app/invocation} ← app/access ← {app, app/academic, app/user, app/identity, app/administration, app/onboarding, app/exam}
-{store, app/apperror} ← app/paging ← {app, app/academic, app/user, app/identity, app/administration, app/onboarding, httpapi}
+{model, store, app/apperror, app/invocation} ← app/access ← {app, app/academic, app/user, app/identity, app/administration, app/onboarding, app/exam, app/job, app/mail, app/search}
+{store, app/apperror} ← app/paging ← {app, app/academic, app/user, app/identity, app/administration, app/onboarding, app/mail, app/search, httpapi}
 {model, store} ← app/internal/batchitem ← {app, app/academic, app/identity, app/administration, app/onboarding}
 {model, store, app/access, app/paging, app/apperror, app/invocation, app/idempotency, app/mail, app/realtime, app/internal/batchitem} ← app/academic ← {app, httpapi}
 {model, store, app/access, app/paging, app/apperror, app/invocation, app/idempotency, app/realtime} ← app/user ← {app, httpapi, filecontent}
@@ -19,7 +20,8 @@ model ← app/invocation ← {app, app/idempotency, app/exam}
 {model, store, secretseal, app/invocation, app/job, app/mail, app/user, app/exam, app/exam/attempt, app/exam/sitting} ← app/jobhandler ← {app, app/identity, app/administration, app/onboarding}
 model ← app/realtime ← {app, app/academic, app/user, app/identity, app/administration, app/onboarding, app/exam, websocket}
 {model, store} ← app/exam ← app
-{model, store, secretseal, app/exam, localization} ← app/mail ← {app, app/exam/sitting, app/exam/attempt, app/exam/review}
+{model, store, secretseal, app/exam, localization, app/access, app/apperror, app/invocation, app/paging, app/job} ← app/mail ← {app, app/academic, app/identity, app/administration, app/onboarding, app/jobhandler, app/exam/sitting, app/exam/attempt, app/exam/review, httpapi, server}
+{model, store, app/access, app/apperror, app/invocation, app/paging, app/exam, app/user} ← app/search ← {app, httpapi}
 localization ← {httpapi, websocket}
 internal/weborigin ← {httpapi, websocket}
 app/exam/safemarkdown ← {app/exam/attempt, app/exam/review}
@@ -57,7 +59,7 @@ inside `app/` are application-owned modules, not transports.
 | `config` | Standard library, `identityprovider`, and narrowly scoped IDNA hostname validation | Domain models, application, persistence, transports |
 | `store` | `model` | `sqlstore`, HTTP, application services |
 | `store/sqlstore` | `model`, `store`, `config`, `migrations`, `internal/canonicaljson`, SQL libraries | Application services, transports, runtime composition |
-| `app/job` | `model`, `store.JobStore`, `logging`, standard library | parent `app`, concrete Jobs, transports, concrete adapters |
+| `app/job` | `model`, `store.JobStore`, `logging`, standard library; for the operator Job service (`job.Operations`), `app/access`, `app/apperror`, `app/invocation` and the Store contracts it reads names and titles from | parent `app`, area packages, concrete Jobs, `app/mail`, transports, concrete adapters |
 | `app/apperror` | `store` error contracts, the `model` validation error, standard library | SQL, HTTP status, localization, transports, concrete adapters |
 | `app/invocation` | `model`, standard library | authorization or audit policy, `store`, parent `app`, Exam modules, transports, concrete adapters |
 | `app/idempotency` | `model`, `store`, `app/apperror`, `app/invocation`, standard library | business operation policy, parent `app`, Exam modules, transports, concrete adapters |
@@ -70,7 +72,8 @@ inside `app/` are application-owned modules, not transports.
 | `app/exam` | `model`, bounded `store` contracts, standard library, consumer-owned ports, `app/apperror`, `app/invocation`, `app/idempotency`, `app/access` for the `access.Mutation` an audit attempt begins with, `app/realtime` for the Publisher and events of the seven use-case packages (`app/exam` and its `attempt`, `correction`, `resource`, `review`, `sitting` and `workspace` children), `app/mail` for the three children that prepare the mail they send (`sitting`, `attempt`, `review`), and explicitly shared leaf packages such as `app/exam/safemarkdown` | parent `app`, a sibling use-case package (`attempt` and `review` reach the Sitting service through a port), `app/mail` from `app/exam` itself or the other children, transports, platform, concrete adapters |
 | `app/exam/safemarkdown` | Standard library | model, store, parent `app`, transports, concrete adapters |
 | `app/exam/manageraccess` | `model`, bounded Store access projection, narrow membership port, standard library | parent `app` or `app/exam`, sibling use cases, transports, concrete adapters |
-| `app/mail` | `model`, bounded `store` mail records, `secretseal`, `localization`, the Exam Manager preparation contract, standard-library templating, and consumer-owned sending ports | parent `app`, transports, platform, SQL, configuration, concrete adapters |
+| `app/mail` | `model`, bounded `store` mail records, `secretseal`, `localization`, the Exam Manager preparation contract, standard-library templating, and consumer-owned sending ports; for the operator mail service (`mail.Operations`), `app/access`, `app/apperror`, `app/invocation`, `app/paging`, and `app/job` for the strict decoder of its rekey Job documents | parent `app`, area packages (the identity test-mail rate limit is a port), `app/jobhandler`, transports, platform, SQL, configuration, concrete adapters |
+| `app/search` | `model`, `store`, `app/access`, `app/apperror`, `app/invocation`, `app/paging`, and the `app/exam` and `app/user` services it searches through, standard library | parent `app`, other area packages, `app/job`, `app/mail`, transports, platform, concrete adapters |
 | `secretseal` | Standard library cryptography and encoding | model, persistence, configuration, transports, concrete adapters |
 | `localization` | Standard library, caller-supplied catalog filesystems, and the CLDR-aware localization engine | application, domain, persistence, transports, concrete adapters |
 | `logging` | Standard library and the hidden logging engine/target implementation | domain, persistence, global logger state, and any import of application or transport packages |
@@ -80,9 +83,9 @@ inside `app/` are application-owned modules, not transports.
 | `app/identity` | `model`, `store`, `secretseal`, `logging`, `app/access`, `app/paging`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/internal/batchitem`, `app/job`, `app/jobhandler`, `app/mail`, `app/realtime`, `app/user`, the `app/exam/attempt` native-build contract, `golang.org/x/crypto/argon2`, standard library | parent `app`, `app/academic`, other `app/exam` modules, transports, platform, concrete adapters |
 | `app/administration` | `model`, `store`, `app/access`, `app/paging`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/identity`, `app/internal/batchitem`, `app/jobhandler`, `app/mail`, `app/realtime`, standard library | parent `app`, `app/academic`, `app/exam`, `app/job`, transports, platform, concrete adapters |
 | `app/onboarding` | `model`, `store`, `app/academic`, `app/access`, `app/administration`, `app/paging`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/identity`, `app/internal/batchitem`, `app/jobhandler`, `app/mail`, `app/realtime`, `app/user`, standard library | parent `app`, `app/exam`, `app/job`, transports, platform, concrete adapters |
-| `app` | `model`, `store`, `logging`, `app/access`, `app/paging`, `app/academic`, `app/user`, `app/identity`, `app/administration`, `app/onboarding`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/job`, `app/jobhandler`, `app/realtime`, `app/exam`, `app/mail`, consumer-owned ports | `platform`, `httpapi`, `sqlstore` |
+| `app` | `model`, `store`, `logging`, `app/access`, `app/paging`, `app/academic`, `app/user`, `app/identity`, `app/administration`, `app/onboarding`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/job`, `app/jobhandler`, `app/realtime`, `app/exam`, `app/mail`, `app/search`, consumer-owned ports | `platform`, `httpapi`, `sqlstore` |
 | `filecontent` | `model`, `app/user` content contracts, `app/exam` export archive types, `packages/vfs`, narrowly allowlisted content codecs | persistence, transports, platform service location, Jobs, configuration, concrete VFS backends |
-| `httpapi` | `app`, `logging`, `app/academic`, `app/user`, `app/identity`, `app/paging`, `app/apperror`, `app/invocation`, `app/job`, `app/realtime`, `app/exam` and its children, `store` result types, `model`, `localization`, `internal/weborigin`, HTTP libraries | Store contracts and functions, `sqlstore`, `platform` |
+| `httpapi` | `app`, `logging`, `app/academic`, `app/administration`, `app/onboarding`, `app/user`, `app/identity`, `app/paging`, `app/apperror`, `app/invocation`, `app/job`, `app/mail` and `app/search` for the command, query and result types their services declare, `app/realtime`, `app/exam` and its children, `store` result types, `model`, `localization`, `internal/weborigin`, HTTP libraries | Store contracts and functions, `sqlstore`, `platform` |
 | `webui` | Standard-library HTTP and filesystem contracts | Application, domain, persistence, configuration, concrete filesystems, third-party libraries |
 | `websocket` | the `httpapi` allowance with WebSocket libraries in place of HTTP libraries | Store contracts and functions, SQL and platform service location |
 | concrete adapters | Their inward contracts and implementation libraries | Application policy |

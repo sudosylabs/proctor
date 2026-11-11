@@ -69,7 +69,7 @@ var typedIDAllowlist = map[string]string{
 	"store.MailRekeyTarget ID":                                     "mail rekey target: delivery or occurrence by target kind",
 	"store.MailRekeyReplacement ID":                                "mail rekey target: delivery or occurrence by target kind",
 	"store.MailRekeyTargetPageRequest AfterID":                     "mail rekey target cursor: delivery or occurrence",
-	"app/jobhandler.MailRekeyCheckpoint AfterID":                   "mail rekey target cursor: delivery or occurrence",
+	"app/mail.RekeyCheckpoint AfterID":                             "mail rekey target cursor: delivery or occurrence",
 	"store.AcademicNameListOptions AfterID":                        "cursor shared by every academic name listing",
 	"app/paging.NameQuery AfterID":                                 "cursor shared by every academic name listing",
 	"store.RetentionExpiryListOptions AfterID":                     "retention record cursor: RetentionExpiryKind chooses the entity",

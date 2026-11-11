@@ -8,11 +8,9 @@
 package jobhandler
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
@@ -57,7 +55,7 @@ func EncodeExamSittingLifecycleRecoveryCommand(value ExamSittingLifecycleRecover
 // DecodeExamSittingLifecycleRecoveryCommand strictly decodes and validates an Exam Sitting lifecycle recovery Job command.
 func DecodeExamSittingLifecycleRecoveryCommand(document json.RawMessage) (ExamSittingLifecycleRecoveryCommand, error) {
 	var value ExamSittingLifecycleRecoveryCommand
-	if err := decodeStrictUniqueJobDocument(document, &value); err != nil {
+	if err := job.DecodeStrictUniqueDocument(document, &value); err != nil {
 		return value, err
 	}
 	if value.WorkLimit < 1 || value.WorkLimit > maximumExamSittingLifecycleRecoveryWork {
@@ -77,7 +75,7 @@ func EncodeExamSittingLifecycleRecoveryCheckpoint(value ExamSittingLifecycleReco
 // DecodeExamSittingLifecycleRecoveryCheckpoint strictly decodes and validates an Exam Sitting lifecycle recovery Job checkpoint.
 func DecodeExamSittingLifecycleRecoveryCheckpoint(document json.RawMessage) (ExamSittingLifecycleRecoveryCheckpoint, error) {
 	var value ExamSittingLifecycleRecoveryCheckpoint
-	if err := decodeStrictUniqueJobDocument(document, &value); err != nil {
+	if err := job.DecodeStrictUniqueDocument(document, &value); err != nil {
 		return value, err
 	}
 	return value, validateExamSittingLifecycleRecoveryCheckpoint(value)
@@ -91,56 +89,6 @@ func validateExamSittingLifecycleRecoveryCheckpoint(value ExamSittingLifecycleRe
 		value.Changed < 0 ||
 		value.Changed > value.Processed {
 		return errors.New("Exam Sitting lifecycle recovery checkpoint is invalid")
-	}
-
-	return nil
-}
-
-func decodeStrictUniqueJobDocument(document json.RawMessage, target any) error {
-	decoder := json.NewDecoder(bytes.NewReader(document))
-	token, err := decoder.Token()
-	if err != nil || token != json.Delim('{') {
-		return errors.New("Job document must be an object")
-	}
-
-	seen := make(map[string]struct{})
-	for decoder.More() {
-		member, tokenErr := decoder.Token()
-		if tokenErr != nil {
-			return tokenErr
-		}
-
-		name, ok := member.(string)
-		if !ok {
-			return errors.New("Job document member is invalid")
-		}
-		if _, duplicate := seen[name]; duplicate {
-			return errors.New("Job document contains a duplicate member")
-		}
-
-		seen[name] = struct{}{}
-		var value json.RawMessage
-		if err = decoder.Decode(&value); err != nil {
-			return err
-		}
-	}
-
-	if _, err = decoder.Token(); err != nil {
-		return err
-	}
-
-	strict := json.NewDecoder(bytes.NewReader(document))
-	strict.DisallowUnknownFields()
-	if err = strict.Decode(target); err != nil {
-		return err
-	}
-
-	var trailing any
-	if err = strict.Decode(&trailing); !errors.Is(err, io.EOF) {
-		if err == nil {
-			return errors.New("Job document contains trailing JSON")
-		}
-		return err
 	}
 
 	return nil

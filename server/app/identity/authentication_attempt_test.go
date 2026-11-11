@@ -286,6 +286,27 @@ func TestAuthenticationAttemptAccountingUsesFixedWindowAndThresholdEdge(t *testi
 	require.False(t, limited, "attempt in the next fixed window = limited")
 }
 
+func TestAccountMailTestLimitsEachUserWithinTheWindow(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.August, 17, 12, 0, 0, 0, time.UTC)
+	accounting := mustAuthenticationAttemptAccounting(t, newExpiringAuthenticationAttemptCache(func() time.Time { return now }))
+	sender, other := model.NewUserID(), model.NewUserID()
+	for attempt := 1; attempt <= 3; attempt++ {
+		limited, err := accounting.AccountMailTest(context.Background(), sender, time.Hour, 3)
+		require.NoError(t, err, "attempt %d", attempt)
+		require.False(t, limited, "attempt %d", attempt)
+	}
+
+	limited, err := accounting.AccountMailTest(context.Background(), sender, time.Hour, 3)
+	require.NoError(t, err)
+	require.True(t, limited, "fourth test mail within the window")
+
+	limited, err = accounting.AccountMailTest(context.Background(), other, time.Hour, 3)
+	require.NoError(t, err)
+	require.False(t, limited, "another User's first test mail")
+}
+
 func TestAuthenticationAttemptReceiptResetsOnlySelectedDimension(t *testing.T) {
 	t.Parallel()
 

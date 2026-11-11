@@ -1,0 +1,42 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+
+package mail
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/sudosylabs/proctor/server/model"
+)
+
+func TestExamManagerNoticesRemainRelevantAsHistoricalFacts(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
+	for _, key := range []model.MailTemplateKey{
+		model.MailTemplateExamManagerAdded,
+		model.MailTemplateExamManagerRemoved,
+		model.MailTemplateExamOwnershipTransferredToYou,
+		model.MailTemplateExamOwnershipTransferredFromYou,
+	} {
+		delivery := &model.MailDelivery{
+			ID: model.NewMailDeliveryID(), OccurrenceID: model.NewMailOccurrenceID(), JobID: model.NewJobID(),
+			TargetUserID: model.NewUserID(), TemplateKey: key, TemplateDigest: strings.Repeat("a", 64),
+			MaskedRecipient: "m***@example.test", State: model.MailDeliveryQueued,
+			CreatedAt: at, UpdatedAt: at, MessageDate: at, Deadline: at.Add(72 * time.Hour),
+			MessageID: "<mail." + model.NewID() + "@example.test>", EncryptedPayload: json.RawMessage(`{"ciphertext":"secret"}`), Revision: 1,
+		}
+		got, err := evaluateDeliveryRelevance(context.Background(), delivery)
+		require.NoError(t, err, "evaluateDeliveryRelevance(%q)", key)
+		require.Equal(t, deliveryRelevant, got, "evaluateDeliveryRelevance(%q)", key)
+	}
+}

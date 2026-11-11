@@ -15,7 +15,6 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
-	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -51,7 +50,7 @@ func (s *Service) ReplaceRetentionPolicy(
 	invocation invocation.Invocation,
 	command ReplaceRetentionPolicyCommand,
 ) (*model.RetentionPolicy, error) {
-	if err := identity.RequireStrongRecentSession(
+	if err := access.RequireStrongRecentSession(
 		invocation.Principal(),
 		s.now(),
 		s.recentAuthenticationTTL,

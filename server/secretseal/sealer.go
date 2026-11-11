@@ -149,7 +149,7 @@ type Sealer struct {
 // supplied non-secret key identifier. It does not validate ciphertext and is
 // intended for startup reconciliation of persisted envelope metadata.
 func (s *Sealer) HasKey(keyID string) bool {
-	if s == nil || !validKeyID(keyID) {
+	if s == nil || !ValidKeyID(keyID) {
 		return false
 	}
 	_, ok := s.keys[keyID]
@@ -250,7 +250,7 @@ func (s *Sealer) Open(binding Binding, envelope Envelope) ([]byte, error) {
 		!validBinding(binding) ||
 		envelope.Version != EnvelopeVersion1 ||
 		envelope.Algorithm != AlgorithmAES256GCM ||
-		!validKeyID(envelope.KeyID) {
+		!ValidKeyID(envelope.KeyID) {
 		return nil, ErrInvalidEnvelope
 	}
 
@@ -329,7 +329,9 @@ func keyIdentity(key [32]byte) string {
 	return hex.EncodeToString(digest[:keyIDBytes])
 }
 
-func validKeyID(keyID string) bool {
+// ValidKeyID reports whether keyID is a key ring key identifier: exactly 32
+// lowercase hexadecimal characters. Mail and MFA rekey commands share it.
+func ValidKeyID(keyID string) bool {
 	if len(keyID) != keyIDBytes*2 {
 		return false
 	}

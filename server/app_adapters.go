@@ -439,16 +439,16 @@ type operationalMailTelemetry struct {
 
 	mu           sync.Mutex
 	deliveries   map[mailDeliveryMetricKey]mailDeliveryMetricAggregate
-	queues       map[mailDeliveryMetricKey]app.MailQueueMetric
+	queues       map[mailDeliveryMetricKey]appmail.QueueMetric
 	queueBuckets map[mailDeliveryMetricKey]string
 	health       string
 }
 
-func newMailTelemetry(log *logging.Logger, metrics app.MailDeliveryRecorder) (app.MailDeliveryRecorder, app.MailMetricsReader) {
+func newMailTelemetry(log *logging.Logger, metrics appmail.DeliveryRecorder) (appmail.DeliveryRecorder, appmail.MetricsReader) {
 	operational := &operationalMailTelemetry{
 		log:          log,
 		deliveries:   make(map[mailDeliveryMetricKey]mailDeliveryMetricAggregate),
-		queues:       make(map[mailDeliveryMetricKey]app.MailQueueMetric),
+		queues:       make(map[mailDeliveryMetricKey]appmail.QueueMetric),
 		queueBuckets: make(map[mailDeliveryMetricKey]string),
 	}
 	if metrics == nil {
@@ -458,7 +458,7 @@ func newMailTelemetry(log *logging.Logger, metrics app.MailDeliveryRecorder) (ap
 	return fanoutMailDeliveryRecorder{first: metrics, second: operational}, operational
 }
 
-func (r *operationalMailTelemetry) RecordMailDelivery(ctx context.Context, metric app.MailDeliveryMetric) {
+func (r *operationalMailTelemetry) RecordMailDelivery(ctx context.Context, metric appmail.DeliveryMetric) {
 	key := mailDeliveryMetricKey{template: metric.TemplateKey, state: metric.State, code: metric.OutcomeCode}
 	r.mu.Lock()
 	aggregate := r.deliveries[key]
@@ -482,7 +482,7 @@ func (r *operationalMailTelemetry) RecordMailDelivery(ctx context.Context, metri
 	}
 }
 
-func (r *operationalMailTelemetry) RecordMailAttempt(ctx context.Context, metric app.MailAttemptMetric) {
+func (r *operationalMailTelemetry) RecordMailAttempt(ctx context.Context, metric appmail.AttemptMetric) {
 	key := mailDeliveryMetricKey{template: metric.TemplateKey, state: metric.State, code: "mail.attempt_started"}
 	r.mu.Lock()
 	aggregate := r.deliveries[key]
@@ -499,8 +499,8 @@ func (r *operationalMailTelemetry) RecordMailAttempt(ctx context.Context, metric
 	}
 }
 
-func (r *operationalMailTelemetry) RecordMailQueueSnapshot(ctx context.Context, metrics []app.MailQueueMetric) {
-	next := make(map[mailDeliveryMetricKey]app.MailQueueMetric, len(metrics))
+func (r *operationalMailTelemetry) RecordMailQueueSnapshot(ctx context.Context, metrics []appmail.QueueMetric) {
+	next := make(map[mailDeliveryMetricKey]appmail.QueueMetric, len(metrics))
 	for _, metric := range metrics {
 		key := mailDeliveryMetricKey{template: metric.TemplateKey, state: metric.State, code: metric.OutcomeCode}
 		next[key] = metric
@@ -509,7 +509,7 @@ func (r *operationalMailTelemetry) RecordMailQueueSnapshot(ctx context.Context, 
 	r.mu.Lock()
 	previous := r.queues
 	r.queues = next
-	observations := make([]app.MailQueueMetric, 0, len(next)+len(previous))
+	observations := make([]appmail.QueueMetric, 0, len(next)+len(previous))
 	for key, metric := range next {
 		bucket := mailQueueAgeBucket(metric.OldestAge)
 		prior, exists := previous[key]
@@ -556,7 +556,7 @@ func (r *operationalMailTelemetry) RecordMailQueueSnapshot(ctx context.Context, 
 	}
 }
 
-func (r *operationalMailTelemetry) RecordMailHealth(ctx context.Context, metric app.MailHealthMetric) {
+func (r *operationalMailTelemetry) RecordMailHealth(ctx context.Context, metric appmail.HealthMetric) {
 	r.mu.Lock()
 	changed := r.health != metric.Code
 	r.health = metric.Code
@@ -566,16 +566,16 @@ func (r *operationalMailTelemetry) RecordMailHealth(ctx context.Context, metric 
 	}
 }
 
-func (r *operationalMailTelemetry) Snapshot() app.MailMetricsSnapshot {
+func (r *operationalMailTelemetry) Snapshot() appmail.MetricsSnapshot {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	snapshot := app.MailMetricsSnapshot{
-		Deliveries: make([]app.MailDeliveryMetricAggregate, 0, len(r.deliveries)),
-		Queues:     make([]app.MailQueueMetric, 0, len(r.queues)),
+	snapshot := appmail.MetricsSnapshot{
+		Deliveries: make([]appmail.DeliveryMetricAggregate, 0, len(r.deliveries)),
+		Queues:     make([]appmail.QueueMetric, 0, len(r.queues)),
 		HealthCode: r.health,
 	}
 	for key, aggregate := range r.deliveries {
-		snapshot.Deliveries = append(snapshot.Deliveries, app.MailDeliveryMetricAggregate{
+		snapshot.Deliveries = append(snapshot.Deliveries, appmail.DeliveryMetricAggregate{
 			TemplateKey:              key.template,
 			State:                    key.state,
 			OutcomeCode:              key.code,

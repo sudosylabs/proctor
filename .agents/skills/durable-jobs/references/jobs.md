@@ -129,11 +129,11 @@ and omit raw commands, checkpoints, result documents, deduplication keys,
 claim ownership, tokens, and internal errors. Transports name them in
 `app/job` directly. The engine owns descriptor visibility,
 cursor validation, persistence reads, and descriptor-governed cancel/retry
-transitions. Application use cases still authorize the Principal, resolve the
-institution resource, create the fail-closed audit attempt, and translate
-engine/store failures. Cancellation is therefore actor-sensitive in the
-parent application even though descriptor checks and the cooperative state
-transition belong to the engine. An opaque prepared control target carries the
+transitions. The operator use cases beside it, `job.Operations` in the same
+package, still authorize the Principal, resolve the institution resource,
+create the fail-closed audit attempt, and translate engine/store failures.
+Cancellation is therefore actor-sensitive in that service even though
+descriptor checks and the cooperative state transition belong to the engine. An opaque prepared control target carries the
 engine's validated transition and revision across that audit boundary without
 exposing persistence mechanics.
 

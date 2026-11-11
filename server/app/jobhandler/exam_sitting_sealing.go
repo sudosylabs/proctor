@@ -206,7 +206,7 @@ func decodeExamSittingSealingCheckpoint(document json.RawMessage) (ExamSittingSe
 	if len(document) == 0 {
 		return value, nil
 	}
-	if err := decodeStrictUniqueJobDocument(document, &value); err != nil {
+	if err := job.DecodeStrictUniqueDocument(document, &value); err != nil {
 		return value, err
 	}
 

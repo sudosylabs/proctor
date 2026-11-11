@@ -20,9 +20,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/app/paging"
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -30,64 +30,64 @@ import (
 type recordingMailAPI struct {
 	sends     int
 	ids       []model.MailDeliveryID
-	view      app.MailDeliveryView
+	view      mail.DeliveryView
 	lists     int
-	listQuery app.ListMailDeliveriesQuery
+	listQuery mail.ListDeliveriesQuery
 	metrics   int
 	rekeys    []string
 	rekeyIDs  []model.JobID
 }
 
-func (m *recordingMailAPI) GetMailKeyState(context.Context, invocation.Invocation) (app.MailKeyStateView, error) {
-	return app.MailKeyStateView{PrimaryKeyID: "22222222222222222222222222222222",
-		RequiredPrimaryKeyID: "22222222222222222222222222222222", Active: []app.MailPayloadKeyUsageView{{
+func (m *recordingMailAPI) GetMailKeyState(context.Context, invocation.Invocation) (mail.KeyStateView, error) {
+	return mail.KeyStateView{PrimaryKeyID: "22222222222222222222222222222222",
+		RequiredPrimaryKeyID: "22222222222222222222222222222222", Active: []mail.PayloadKeyUsageView{{
 			KeyID: "11111111111111111111111111111111", ActiveReferences: 7,
 		}}}, nil
 }
 
-func (m *recordingMailAPI) StartMailRekey(_ context.Context, _ invocation.Invocation, retiringKeyID string) (app.MailRekeyView, error) {
+func (m *recordingMailAPI) StartMailRekey(_ context.Context, _ invocation.Invocation, retiringKeyID string) (mail.RekeyView, error) {
 	m.rekeys = append(m.rekeys, retiringKeyID)
-	return app.MailRekeyView{JobID: model.NewJobID(), PrimaryKeyID: "22222222222222222222222222222222",
+	return mail.RekeyView{JobID: model.NewJobID(), PrimaryKeyID: "22222222222222222222222222222222",
 		RetiringKeyID: retiringKeyID, CreatedAt: time.Unix(100, 0).UTC()}, nil
 }
 
-func (m *recordingMailAPI) GetMailRekeyStatus(_ context.Context, _ invocation.Invocation, jobID model.JobID) (app.MailRekeyStatusView, error) {
+func (m *recordingMailAPI) GetMailRekeyStatus(_ context.Context, _ invocation.Invocation, jobID model.JobID) (mail.RekeyStatusView, error) {
 	m.rekeyIDs = append(m.rekeyIDs, jobID)
-	return app.MailRekeyStatusView{JobID: jobID, Status: model.JobStatusSucceeded,
+	return mail.RekeyStatusView{JobID: jobID, Status: model.JobStatusSucceeded,
 		PrimaryKeyID: "22222222222222222222222222222222", RetiringKeyID: "11111111111111111111111111111111",
 		CreatedAt: time.Unix(100, 0).UTC(), UpdatedAt: time.Unix(103, 0).UTC(), CompletedAt: model.OptionalTimeFrom(time.Unix(103, 0).UTC()),
 		AttemptCount: 2, MaximumAttempts: 11, Processed: 9, Reencrypted: 8,
-		Progress: &app.MailRekeyProgressView{Current: 4, Total: 9, Stage: "reencrypting"},
-		Proof:    &app.MailRekeyProofView{RetirementSafe: true}}, nil
+		Progress: &mail.RekeyProgressView{Current: 4, Total: 9, Stage: "reencrypting"},
+		Proof:    &mail.RekeyProofView{RetirementSafe: true}}, nil
 }
 
-func (m *recordingMailAPI) GetMailMetrics(context.Context, invocation.Invocation) (app.MailMetricsSnapshot, error) {
+func (m *recordingMailAPI) GetMailMetrics(context.Context, invocation.Invocation) (mail.MetricsSnapshot, error) {
 	m.metrics++
-	return app.MailMetricsSnapshot{HealthCode: app.MailHealthHealthy}, nil
+	return mail.MetricsSnapshot{HealthCode: mail.HealthHealthy}, nil
 }
 
-func (m *recordingMailAPI) SendTestMail(context.Context, invocation.Invocation) (app.MailDeliveryView, error) {
+func (m *recordingMailAPI) SendTestMail(context.Context, invocation.Invocation) (mail.DeliveryView, error) {
 	m.sends++
 	return m.view, nil
 }
-func (m *recordingMailAPI) GetMailDelivery(_ context.Context, _ invocation.Invocation, id model.MailDeliveryID) (app.MailDeliveryView, error) {
+func (m *recordingMailAPI) GetMailDelivery(_ context.Context, _ invocation.Invocation, id model.MailDeliveryID) (mail.DeliveryView, error) {
 	m.ids = append(m.ids, id)
 	return m.view, nil
 }
-func (m *recordingMailAPI) ListMailDeliveries(_ context.Context, _ invocation.Invocation, query app.ListMailDeliveriesQuery) (app.MailDeliveryPage, error) {
+func (m *recordingMailAPI) ListMailDeliveries(_ context.Context, _ invocation.Invocation, query mail.ListDeliveriesQuery) (mail.DeliveryPage, error) {
 	m.lists++
 	m.listQuery = query
-	page := app.MailDeliveryPage{Items: []app.MailDeliveryView{m.view}}
+	page := mail.DeliveryPage{Items: []mail.DeliveryView{m.view}}
 	if query.BeforeID.IsZero() {
 		page.Total = paging.Total{Counted: true, Total: 1}
 	}
 	return page, nil
 }
-func (m *recordingMailAPI) CancelMailDelivery(_ context.Context, _ invocation.Invocation, id model.MailDeliveryID) (app.MailDeliveryView, error) {
+func (m *recordingMailAPI) CancelMailDelivery(_ context.Context, _ invocation.Invocation, id model.MailDeliveryID) (mail.DeliveryView, error) {
 	m.ids = append(m.ids, id)
 	return m.view, nil
 }
-func (m *recordingMailAPI) RetryMailDelivery(_ context.Context, _ invocation.Invocation, id model.MailDeliveryID) (app.MailDeliveryView, error) {
+func (m *recordingMailAPI) RetryMailDelivery(_ context.Context, _ invocation.Invocation, id model.MailDeliveryID) (mail.DeliveryView, error) {
 	m.ids = append(m.ids, id)
 	return m.view, nil
 }
@@ -95,7 +95,7 @@ func (m *recordingMailAPI) RetryMailDelivery(_ context.Context, _ invocation.Inv
 func TestMailResourceRejectsCallerSuppliedContentAndProjectsNoSecrets(t *testing.T) {
 	at := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
 	id := model.NewMailDeliveryID()
-	fake := &recordingMailAPI{view: app.MailDeliveryView{ID: id, OccurrenceID: model.NewMailOccurrenceID(), TargetUserID: model.NewUserID(), TemplateKey: model.MailTemplateSystemTest, TemplateDigest: strings.Repeat("a", 64), MaskedRecipient: "o***@example.test", State: model.MailDeliveryQueued, CreatedAt: at, UpdatedAt: at, MessageDate: at, Deadline: at.Add(time.Hour), MessageID: "<mail." + id.String() + "@example.test>"}}
+	fake := &recordingMailAPI{view: mail.DeliveryView{ID: id, OccurrenceID: model.NewMailOccurrenceID(), TargetUserID: model.NewUserID(), TemplateKey: model.MailTemplateSystemTest, TemplateDigest: strings.Repeat("a", 64), MaskedRecipient: "o***@example.test", State: model.MailDeliveryQueued, CreatedAt: at, UpdatedAt: at, MessageDate: at, Deadline: at.Add(time.Hour), MessageID: "<mail." + id.String() + "@example.test>"}}
 	h := mailHandlers{app: fake}
 	request, _ := http.NewRequest(http.MethodPost, "/api/v1/mail/test", bytes.NewBufferString(`{"recipient":"attacker@example.test","body":"chosen"}`))
 	_, err := h.sendTest(operationRequest{http: request})
@@ -123,7 +123,7 @@ func TestMailResourceRejectsCallerSuppliedContentAndProjectsNoSecrets(t *testing
 func TestMailDeliveryListCursorFiltersAndMutationBodiesAreBounded(t *testing.T) {
 	at := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
 	id := model.NewMailDeliveryID()
-	fake := &recordingMailAPI{view: app.MailDeliveryView{ID: id, OccurrenceID: model.NewMailOccurrenceID(), TargetUserID: model.NewUserID(), TemplateKey: model.MailTemplateSystemTest, TemplateDigest: strings.Repeat("a", 64), MaskedRecipient: "o***@example.test", State: model.MailDeliveryFailed, CreatedAt: at, UpdatedAt: at, MessageDate: at, Deadline: at.Add(time.Hour), MessageID: "<mail." + id.String() + "@example.test>"}}
+	fake := &recordingMailAPI{view: mail.DeliveryView{ID: id, OccurrenceID: model.NewMailOccurrenceID(), TargetUserID: model.NewUserID(), TemplateKey: model.MailTemplateSystemTest, TemplateDigest: strings.Repeat("a", 64), MaskedRecipient: "o***@example.test", State: model.MailDeliveryFailed, CreatedAt: at, UpdatedAt: at, MessageDate: at, Deadline: at.Add(time.Hour), MessageID: "<mail." + id.String() + "@example.test>"}}
 	h := mailHandlers{app: fake}
 	request, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/mail/deliveries?state=failed&template_key=system.mail_test&created_after=1970-01-01T00:00:00.001Z&created_before=2286-11-20T17:46:39.999Z&limit=1", nil)
 	result, err := h.listDeliveries(operationRequest{http: request})
@@ -150,7 +150,7 @@ func TestMailDeliveryEndpointForwardsExactCursorAndMapsMalformedCursor(t *testin
 	t.Parallel()
 	at := time.Date(2026, 8, 24, 10, 11, 12, 345000, time.UTC)
 	id := model.NewMailDeliveryID()
-	fake := &recordingMailAPI{view: app.MailDeliveryView{ID: model.NewMailDeliveryID(), CreatedAt: at.Add(-time.Minute)}}
+	fake := &recordingMailAPI{view: mail.DeliveryView{ID: model.NewMailDeliveryID(), CreatedAt: at.Add(-time.Minute)}}
 	logger, _ := newTestLogger(t)
 	httpAPI := newFocusedResourceAPI(t, logger, &academicUnitHTTPApplication{principal: operatorTestPrincipal()}, mailResource(fake))
 	cursor, err := encodeMailDeliveryCursor(mailDeliveryCursor{CreatedAt: at.Format(time.RFC3339Nano), ID: id.String()})
@@ -247,7 +247,7 @@ func TestMailRekeyStatusProjectsSafeProgressAndFinalProof(t *testing.T) {
 func TestMailDeliveryResponseNamesExactlyOneTarget(t *testing.T) {
 	t.Parallel()
 	invitation := model.NewInvitationID()
-	encoded, err := json.Marshal(mailResponse(app.MailDeliveryView{ID: model.NewMailDeliveryID(), OccurrenceID: model.NewMailOccurrenceID(),
+	encoded, err := json.Marshal(mailResponse(mail.DeliveryView{ID: model.NewMailDeliveryID(), OccurrenceID: model.NewMailOccurrenceID(),
 		TargetInvitationID: invitation, TemplateKey: model.MailTemplateAccessStudentClassInvitation}))
 	require.NoError(t, err)
 	var wire map[string]json.RawMessage
@@ -256,7 +256,7 @@ func TestMailDeliveryResponseNamesExactlyOneTarget(t *testing.T) {
 	require.JSONEq(t, `"`+invitation.String()+`"`, string(wire["target_invitation_id"]))
 
 	user := model.NewUserID()
-	encoded, err = json.Marshal(mailResponse(app.MailDeliveryView{ID: model.NewMailDeliveryID(), OccurrenceID: model.NewMailOccurrenceID(),
+	encoded, err = json.Marshal(mailResponse(mail.DeliveryView{ID: model.NewMailDeliveryID(), OccurrenceID: model.NewMailOccurrenceID(),
 		TargetUserID: user, TemplateKey: model.MailTemplateSystemTest}))
 	require.NoError(t, err)
 	wire = nil

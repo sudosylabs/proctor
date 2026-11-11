@@ -15,9 +15,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -454,7 +454,7 @@ func (h mailHandlers) retryDelivery(request operationRequest) (operationResult, 
 
 func (h mailHandlers) mutateDelivery(
 	request operationRequest,
-	mutate func(context.Context, invocation.Invocation, model.MailDeliveryID) (app.MailDeliveryView, error),
+	mutate func(context.Context, invocation.Invocation, model.MailDeliveryID) (mail.DeliveryView, error),
 ) (operationResult, error) {
 	if h.app == nil {
 		return operationResult{}, errUnpresentableResult
@@ -487,8 +487,8 @@ func requireEmptyMailBody(request *http.Request) error {
 	return nil
 }
 
-func listMailDeliveriesQuery(request *http.Request) (app.ListMailDeliveriesQuery, error) {
-	query := app.ListMailDeliveriesQuery{Limit: defaultMailDeliveryPageSize}
+func listMailDeliveriesQuery(request *http.Request) (mail.ListDeliveriesQuery, error) {
+	query := mail.ListDeliveriesQuery{Limit: defaultMailDeliveryPageSize}
 	if raw := request.URL.Query().Get("limit"); raw != "" {
 		limit, err := strconv.Atoi(raw)
 		if err != nil || limit < 1 || limit > 200 {
@@ -592,7 +592,7 @@ func mailDeliveryCursorSpec() opaqueCursorSpec[mailDeliveryCursor] {
 	}
 }
 
-func mailResponse(view app.MailDeliveryView) mailDeliveryResponse {
+func mailResponse(view mail.DeliveryView) mailDeliveryResponse {
 	result := mailDeliveryResponse{
 		ID:                 view.ID.String(),
 		OccurrenceID:       view.OccurrenceID.String(),
@@ -622,13 +622,13 @@ func mailResponse(view app.MailDeliveryView) mailDeliveryResponse {
 
 // MailApplication is the application port its handlers call; it reports on and operates transactional mail: keys, rekeying, test mail, metrics and deliveries.
 type MailApplication interface {
-	GetMailKeyState(context.Context, invocation.Invocation) (app.MailKeyStateView, error)
-	StartMailRekey(context.Context, invocation.Invocation, string) (app.MailRekeyView, error)
-	GetMailRekeyStatus(context.Context, invocation.Invocation, model.JobID) (app.MailRekeyStatusView, error)
-	SendTestMail(context.Context, invocation.Invocation) (app.MailDeliveryView, error)
-	GetMailMetrics(context.Context, invocation.Invocation) (app.MailMetricsSnapshot, error)
-	GetMailDelivery(context.Context, invocation.Invocation, model.MailDeliveryID) (app.MailDeliveryView, error)
-	ListMailDeliveries(context.Context, invocation.Invocation, app.ListMailDeliveriesQuery) (app.MailDeliveryPage, error)
-	CancelMailDelivery(context.Context, invocation.Invocation, model.MailDeliveryID) (app.MailDeliveryView, error)
-	RetryMailDelivery(context.Context, invocation.Invocation, model.MailDeliveryID) (app.MailDeliveryView, error)
+	GetMailKeyState(context.Context, invocation.Invocation) (mail.KeyStateView, error)
+	StartMailRekey(context.Context, invocation.Invocation, string) (mail.RekeyView, error)
+	GetMailRekeyStatus(context.Context, invocation.Invocation, model.JobID) (mail.RekeyStatusView, error)
+	SendTestMail(context.Context, invocation.Invocation) (mail.DeliveryView, error)
+	GetMailMetrics(context.Context, invocation.Invocation) (mail.MetricsSnapshot, error)
+	GetMailDelivery(context.Context, invocation.Invocation, model.MailDeliveryID) (mail.DeliveryView, error)
+	ListMailDeliveries(context.Context, invocation.Invocation, mail.ListDeliveriesQuery) (mail.DeliveryPage, error)
+	CancelMailDelivery(context.Context, invocation.Invocation, model.MailDeliveryID) (mail.DeliveryView, error)
+	RetryMailDelivery(context.Context, invocation.Invocation, model.MailDeliveryID) (mail.DeliveryView, error)
 }

@@ -133,7 +133,7 @@ func newSittingMail(deps Dependencies) (*mail.SittingComposer, error) {
 		deps.MailDeliverySender,
 		deps.MailSecretSealer,
 		time.Now,
-		(&institutionNameCache{institutions: deps.Store.Institution(), now: time.Now}).Name,
+		newInstitutionName(deps),
 	)
 }
 

@@ -160,19 +160,19 @@ func (s SQLExamAuthoringStore) runManagerMutation(
 			return &store.ExamManagerCommandResult{Exam: exam, Manager: manager}, nil
 		},
 		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, result *store.ExamManagerCommandResult, originalAuditID string) error {
-			encoded, err := model.EncodeAuditData(map[string]any{
+			encoded, encodeErr := model.EncodeAuditData(map[string]any{
 				"exam_id":                 result.Exam.ID.String(),
 				"user_id":                 result.Manager.UserID.String(),
 				"exam_revision":           result.Exam.Revision,
 				"idempotency_replayed":    true,
 				"original_audit_event_id": originalAuditID,
 			})
-			if err != nil {
-				return err
+			if encodeErr != nil {
+				return encodeErr
 			}
 
-			_, err = completeAuditEvent(ctx, tx, prepared.AuditEventID, model.AuditStatusSuccess, "", encoded, prepared.AuditAt)
-			return err
+			_, encodeErr = completeAuditEvent(ctx, tx, prepared.AuditEventID, model.AuditStatusSuccess, "", encoded, prepared.AuditAt)
+			return encodeErr
 		},
 	})
 	if err != nil {
@@ -211,8 +211,8 @@ func addExamManager(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamMan
 	if err != nil {
 		return nil, err
 	}
-	if err := guardExamManagerMutation(ctx, tx, exam, actorIsManager, input, true); err != nil {
-		return nil, err
+	if guardErr := guardExamManagerMutation(ctx, tx, exam, actorIsManager, input, true); guardErr != nil {
+		return nil, guardErr
 	}
 
 	manager, err := model.NewExamManager(input.ExamID, input.TargetUserID, input.ActorUserID, model.TimeUTC(input.ChangedAt))
@@ -256,8 +256,8 @@ func removeExamManager(ctx context.Context, tx *sqlxTxWrapper, input *store.Exam
 	if err != nil {
 		return nil, err
 	}
-	if err := guardExamManagerMutation(ctx, tx, exam, actorIsManager, input, false); err != nil {
-		return nil, err
+	if guardErr := guardExamManagerMutation(ctx, tx, exam, actorIsManager, input, false); guardErr != nil {
+		return nil, guardErr
 	}
 
 	manager, err := getExamManager(ctx, tx, input.ExamID, input.TargetUserID)
@@ -303,8 +303,8 @@ func transferExamOwner(ctx context.Context, tx *sqlxTxWrapper, input *store.Exam
 	if err != nil {
 		return nil, err
 	}
-	if err := guardExamManagerMutation(ctx, tx, exam, actorIsManager, input, true); err != nil {
-		return nil, err
+	if guardErr := guardExamManagerMutation(ctx, tx, exam, actorIsManager, input, true); guardErr != nil {
+		return nil, guardErr
 	}
 	if exam.OwnerUserID == input.TargetUserID {
 		return nil, store.NewErrConflict("exam", "exam_owner_no_changes", nil)
@@ -504,9 +504,9 @@ func completeExamManagerMutation(
 		return nil, fmt.Errorf("update Exam management revision: %w", err)
 	}
 
-	if affected, err := result.RowsAffected(); err != nil || affected != 1 {
-		if err != nil {
-			return nil, fmt.Errorf("inspect Exam management revision: %w", err)
+	if affected, rowsAffectedErr := result.RowsAffected(); rowsAffectedErr != nil || affected != 1 {
+		if rowsAffectedErr != nil {
+			return nil, fmt.Errorf("inspect Exam management revision: %w", rowsAffectedErr)
 		}
 		return nil, store.NewErrConflict("exam", "exam_revision", nil)
 	}

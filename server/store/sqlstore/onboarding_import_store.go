@@ -846,8 +846,8 @@ func (s SQLInvitationStore) CommitOnboardingImport(
 		if input.Policy == model.OnboardingImportRequireAllValid && current.InvalidRows != 0 {
 			return nil, store.NewErrConflict("onboarding_import", "invalid_rows", nil)
 		}
-		if _, err := insertQueuedJob(ctx, tx, input.ExecutionJob, false); err != nil {
-			return nil, translateError("job", input.ExecutionJob.ID.String(), err)
+		if _, insertErr := insertQueuedJob(ctx, tx, input.ExecutionJob, false); insertErr != nil {
+			return nil, translateError("job", input.ExecutionJob.ID.String(), insertErr)
 		}
 
 		if _, execErr := tx.Exec(

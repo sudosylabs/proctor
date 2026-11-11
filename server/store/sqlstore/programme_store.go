@@ -362,8 +362,8 @@ func (s SQLProgrammeStore) archiveProgramme(
 		if err = requireRevisionAffected(ctx, tx, result, "programme", "programmes", id.String()); err != nil {
 			return nil, err
 		}
-		if err := tx.GetBuilder(ctx, &row, s.programmesQuery.Where(sq.Eq{"programmes.id": id})); err != nil {
-			return nil, fmt.Errorf("read archived programme: %w", err)
+		if getBuilderErr := tx.GetBuilder(ctx, &row, s.programmesQuery.Where(sq.Eq{"programmes.id": id})); getBuilderErr != nil {
+			return nil, fmt.Errorf("read archived programme: %w", getBuilderErr)
 		}
 
 		programme, err := row.model()

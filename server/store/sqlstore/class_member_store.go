@@ -954,8 +954,8 @@ func (s SQLClassMemberStore) End(
 		}
 
 		if payloadKeyID != "" {
-			if err := requireMailPayloadPrimary(ctx, tx, payloadKeyID); err != nil {
-				return nil, err
+			if requireErr := requireMailPayloadPrimary(ctx, tx, payloadKeyID); requireErr != nil {
+				return nil, requireErr
 			}
 		}
 

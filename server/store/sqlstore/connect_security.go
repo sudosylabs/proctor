@@ -79,8 +79,8 @@ func (s *SQLExamAttemptStore) prepareConnectSecurity(
 	}
 
 	var report model.SecurityPreflightReport
-	if err := json.Unmarshal(row.Report, &report); err != nil {
-		return zero, invalidPersistedState("security_preflight", "report", err)
+	if unmarshalErr := json.Unmarshal(row.Report, &report); unmarshalErr != nil {
+		return zero, invalidPersistedState("security_preflight", "report", unmarshalErr)
 	}
 	if model.SHA256Fingerprint(row.Report) != input.Security.ReportDigest {
 		return zero, preflightConflict("preflight_report_changed")
@@ -177,8 +177,8 @@ func (s *SQLExamAttemptStore) prepareConnectSecurity(
 		}
 	}
 
-	if _, err := model.ReserveDeliveryMetadata(used, model.NativeOwnerReservationBytes); err != nil {
-		return zero, err
+	if _, reserveErr := model.ReserveDeliveryMetadata(used, model.NativeOwnerReservationBytes); reserveErr != nil {
+		return zero, reserveErr
 	}
 
 	binding := admittedSecurityBinding{
@@ -514,8 +514,8 @@ func (s *SQLSecurityPreflightStore) RecoverSecurityPolicy(
 		if err != nil {
 			return nil, err
 		}
-		if err := readOwner(); err != nil {
-			return nil, translateError("security_owner", attemptID.String(), err)
+		if readOwnerErr := readOwner(); readOwnerErr != nil {
+			return nil, translateError("security_owner", attemptID.String(), readOwnerErr)
 		}
 		if !guard.DatabaseNow.Before(row.LeaseExpiresAt) {
 			return nil, store.NewErrConflict("attempt_participation", "attempt_participation_expired", nil)

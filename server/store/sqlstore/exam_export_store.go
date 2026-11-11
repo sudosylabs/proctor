@@ -567,14 +567,14 @@ func createExamExport(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamE
 				return nil, err
 			}
 
-			retirement, err := getActiveRetirement(ctx, tx, a.SubmissionID, c)
-			if err != nil {
-				return nil, err
+			retirement, getErr := getActiveRetirement(ctx, tx, a.SubmissionID, c)
+			if getErr != nil {
+				return nil, getErr
 			}
 
 			if retirement != nil && retirement.State == model.RetentionRetirementGrace {
-				if err := cancelOneRetirement(ctx, tx, retirement.ID, at, "source_protected"); err != nil {
-					return nil, err
+				if cancelErr := cancelOneRetirement(ctx, tx, retirement.ID, at, "source_protected"); cancelErr != nil {
+					return nil, cancelErr
 				}
 			}
 		}
@@ -583,8 +583,8 @@ func createExamExport(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamE
 	// A construction reference can be reserved and released between scheduler
 	// scans. Cancel grace now so resumed eligibility always receives fresh grace.
 	// Exact idempotent replay never enters this creation transaction again.
-	if err := cancelScopeExpirySchedules(ctx, tx, e.Scope); err != nil {
-		return nil, err
+	if cancelErr := cancelScopeExpirySchedules(ctx, tx, e.Scope); cancelErr != nil {
+		return nil, cancelErr
 	}
 
 	payload, _ := json.Marshal(struct {

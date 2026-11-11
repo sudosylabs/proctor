@@ -780,13 +780,13 @@ func browserSourceState(
 		}
 
 		row.Terminal = allocated
-		raw, err := canonicalPreflightValue(value.Closure)
-		if err != nil {
-			return nil, err
+		raw, canonicalErr := canonicalPreflightValue(value.Closure)
+		if canonicalErr != nil {
+			return nil, canonicalErr
 		}
 
 		if persist {
-			if _, err := tx.Exec(
+			if _, execErr := tx.Exec(
 				ctx,
 				`UPDATE browser_activity_sources
 				SET closure_canonical = ?, terminal_missing_through_sequence = ?,
@@ -796,8 +796,8 @@ func browserSourceState(
 				row.Terminal,
 				allocated,
 				string(id),
-			); err != nil {
-				return nil, err
+			); execErr != nil {
+				return nil, execErr
 			}
 		}
 	}

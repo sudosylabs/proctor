@@ -78,8 +78,8 @@ func (ss *SQLStore) ApplyPendingMigrations(ctx context.Context) (result Migratio
 	if err != nil {
 		return result, fmt.Errorf("inspect pending migrations: %w", err)
 	}
-	if err := engine.ApplyAll(); err != nil {
-		return result, fmt.Errorf("apply database migrations: %w", err)
+	if applyAllErr := engine.ApplyAll(); applyAllErr != nil {
+		return result, fmt.Errorf("apply database migrations: %w", applyAllErr)
 	}
 	result.Applied = len(pending)
 	result.SchemaVersion, err = ss.GetDBSchemaVersion(ctx)

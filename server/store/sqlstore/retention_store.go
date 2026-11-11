@@ -429,9 +429,9 @@ func (s *SQLRetentionStore) ChangeControl(
 			}
 
 			if input.State == model.RetentionControlEnabled {
-				preview, err := getRetentionPreview(ctx, tx, input.PreviewID)
-				if err != nil {
-					return nil, err
+				preview, getErr := getRetentionPreview(ctx, tx, input.PreviewID)
+				if getErr != nil {
+					return nil, getErr
 				}
 
 				if preview.InstitutionID != policy.InstitutionID ||
@@ -708,14 +708,14 @@ func countRetentionRecords(
 	defer rows.Close()
 	for rows.Next() {
 		var row retentionFactsRow
-		if err := rows.StructScan(&row); err != nil {
-			return counts, err
+		if structScanErr := rows.StructScan(&row); structScanErr != nil {
+			return counts, structScanErr
 		}
 
 		for _, record := range row.records() {
-			eligibility, err := record.Eligibility(policy, at)
-			if err != nil {
-				return counts, invalidPersistedState("retention_preview", "record", err)
+			eligibility, eligibilityErr := record.Eligibility(policy, at)
+			if eligibilityErr != nil {
+				return counts, invalidPersistedState("retention_preview", "record", eligibilityErr)
 			}
 
 			counter := &counts.Work
@@ -752,11 +752,11 @@ func countRetentionRecords(
 		}
 	}
 
-	if err := rows.Err(); err != nil {
-		return counts, err
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return counts, rowsErr
 	}
-	if err := rows.Close(); err != nil {
-		return counts, err
+	if closeErr := rows.Close(); closeErr != nil {
+		return counts, closeErr
 	}
 
 	counts.Audit, counts.Receipts, err = countRetentionExpiry(ctx, tx, policy, at)

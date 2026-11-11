@@ -95,14 +95,14 @@ func (s SQLPersonalAccessTokenStore) Create(
 			return nil, preparationErr
 		}
 
-		if err := requireMFARecoveryPATSource(ctx, tx, preparation.UserID, preparation.SessionID.String, databaseAt); err != nil {
-			return nil, err
+		if requireErr := requireMFARecoveryPATSource(ctx, tx, preparation.UserID, preparation.SessionID.String, databaseAt); requireErr != nil {
+			return nil, requireErr
 		}
 
 		actionAt := preparation.CreatedAt
 		candidate.PrepareCreate(model.NewPersonalAccessTokenID(), actionAt)
-		if err := validatePersonalAccessTokenCandidate(candidate); err != nil {
-			return nil, err
+		if validateErr := validatePersonalAccessTokenCandidate(candidate); validateErr != nil {
+			return nil, validateErr
 		}
 		if candidate.ExpiresAt.Before(actionAt.Add(input.MinimumLifetime)) || candidate.ExpiresAt.After(actionAt.Add(input.MaximumLifetime)) {
 			return nil, store.NewErrInvalidInput("personal_access_token", "expires_at", nil)
@@ -130,11 +130,11 @@ func (s SQLPersonalAccessTokenStore) Create(
 			return nil, maximumErr
 		}
 
-		if err := insertPersonalAccessToken(ctx, tx, candidate); err != nil {
-			return nil, err
+		if insertErr := insertPersonalAccessToken(ctx, tx, candidate); insertErr != nil {
+			return nil, insertErr
 		}
-		if err := insertSecurityNoticeMail(ctx, tx, notice.Occurrence, notice.Delivery, notice.Job, payloadKeyID); err != nil {
-			return nil, err
+		if insertErr := insertSecurityNoticeMail(ctx, tx, notice.Occurrence, notice.Delivery, notice.Job, payloadKeyID); insertErr != nil {
+			return nil, insertErr
 		}
 
 		encoded, err := model.EncodeAuditData(candidate.Auditable())
@@ -267,10 +267,10 @@ func (s SQLPersonalAccessTokenStore) Resolve(
 			tokenRow.LastUsedAt = sql.NullTime{Time: latestTime(tokenRow.CreatedAt, at), Valid: true}
 		}
 
-		var userRow userRow
+		var ownerRow userRow
 		if err := tx.Get(
 			ctx,
-			&userRow,
+			&ownerRow,
 			`
 		SELECT id, created_at, updated_at, archived_at, revision, username, email,
 		       email_verified, display_name, first_name, last_name, locale,
@@ -290,7 +290,7 @@ func (s SQLPersonalAccessTokenStore) Resolve(
 			return nil, err
 		}
 
-		user, err := userRow.model()
+		user, err := ownerRow.model()
 		if err != nil {
 			return nil, err
 		}
@@ -344,21 +344,21 @@ func (s SQLPersonalAccessTokenStore) ChangeState(
 		if err = requirePersonalAccessTokenPreparation(preparation, kind, input.UserID.String(), input.ID.String(), databaseAt); err != nil {
 			return nil, err
 		}
-		if err := requireMFARecoveryPATSource(ctx, tx, preparation.UserID, preparation.SessionID.String, databaseAt); err != nil {
-			return nil, err
+		if requireErr := requireMFARecoveryPATSource(ctx, tx, preparation.UserID, preparation.SessionID.String, databaseAt); requireErr != nil {
+			return nil, requireErr
 		}
 
 		actionAt := preparation.CreatedAt
 		var current personalAccessTokenRow
-		if err := tx.Get(ctx, &current, `
+		if getErr := tx.Get(ctx, &current, `
 		SELECT id, created_at, updated_at, archived_at, user_id, description,
 		       token_hash, scopes, academic_unit_id, expires_at, last_used_at,
 		       disabled_at, revoked_at
 		  FROM personal_access_tokens
 		 WHERE id = ? AND user_id = ?
 		   AND archived_at IS NULL AND revoked_at IS NULL AND expires_at > ?
-		 FOR UPDATE`, input.ID, input.UserID, databaseAt); err != nil {
-			return nil, translateError("personal_access_token", input.ID.String(), err)
+		 FOR UPDATE`, input.ID, input.UserID, databaseAt); getErr != nil {
+			return nil, translateError("personal_access_token", input.ID.String(), getErr)
 		}
 
 		if input.Disabled == current.DisabledAt.Valid {
@@ -366,8 +366,8 @@ func (s SQLPersonalAccessTokenStore) ChangeState(
 			if modelErr != nil {
 				return nil, modelErr
 			}
-			if err := deletePersonalAccessTokenPreparation(ctx, tx, preparation.ID); err != nil {
-				return nil, err
+			if deleteErr := deletePersonalAccessTokenPreparation(ctx, tx, preparation.ID); deleteErr != nil {
+				return nil, deleteErr
 			}
 
 			return &store.PersonalAccessTokenMutationResult{Token: currentModel, Fresh: false}, nil
@@ -402,22 +402,22 @@ func (s SQLPersonalAccessTokenStore) ChangeState(
 			disabledAt = sql.NullTime{Time: actionAt, Valid: true}
 		}
 
-		if err := tx.Get(ctx, &current, `
+		if getErr := tx.Get(ctx, &current, `
 		UPDATE personal_access_tokens
 			   SET updated_at = GREATEST(updated_at, ?), disabled_at = ?
 		 WHERE id = ? AND user_id = ?
 		 RETURNING id, created_at, updated_at, archived_at, user_id, description,
 		           token_hash, scopes, academic_unit_id, expires_at, last_used_at,
-		           disabled_at, revoked_at`, actionAt, disabledAt, input.ID, input.UserID); err != nil {
-			return nil, translateError("personal_access_token", input.ID.String(), err)
+		           disabled_at, revoked_at`, actionAt, disabledAt, input.ID, input.UserID); getErr != nil {
+			return nil, translateError("personal_access_token", input.ID.String(), getErr)
 		}
 
 		updated, err := current.model()
 		if err != nil {
 			return nil, err
 		}
-		if err := insertSecurityNoticeMail(ctx, tx, notice.Occurrence, notice.Delivery, notice.Job, payloadKeyID); err != nil {
-			return nil, err
+		if insertErr := insertSecurityNoticeMail(ctx, tx, notice.Occurrence, notice.Delivery, notice.Job, payloadKeyID); insertErr != nil {
+			return nil, insertErr
 		}
 
 		encoded, err := model.EncodeAuditData(updated.Auditable())
@@ -465,16 +465,16 @@ func (s SQLPersonalAccessTokenStore) Revoke(
 			return nil, err
 		}
 
-		if err := requireMFARecoveryPATSource(ctx, tx, preparation.UserID, preparation.SessionID.String, databaseAt); err != nil {
-			return nil, err
+		if requireErr := requireMFARecoveryPATSource(ctx, tx, preparation.UserID, preparation.SessionID.String, databaseAt); requireErr != nil {
+			return nil, requireErr
 		}
 
 		actionAt := preparation.CreatedAt
 		var row personalAccessTokenRow
-		if err := tx.Get(ctx, &row, `SELECT id, created_at, updated_at, archived_at, user_id, description,
+		if getErr := tx.Get(ctx, &row, `SELECT id, created_at, updated_at, archived_at, user_id, description,
 		       token_hash, scopes, academic_unit_id, expires_at, last_used_at, disabled_at, revoked_at
-		  FROM personal_access_tokens WHERE id = ? AND user_id = ? AND archived_at IS NULL FOR UPDATE`, input.ID, input.UserID); err != nil {
-			return nil, translateError("personal_access_token", input.ID.String(), err)
+		  FROM personal_access_tokens WHERE id = ? AND user_id = ? AND archived_at IS NULL FOR UPDATE`, input.ID, input.UserID); getErr != nil {
+			return nil, translateError("personal_access_token", input.ID.String(), getErr)
 		}
 
 		if row.RevokedAt.Valid {
@@ -482,8 +482,8 @@ func (s SQLPersonalAccessTokenStore) Revoke(
 			if modelErr != nil {
 				return nil, modelErr
 			}
-			if err := deletePersonalAccessTokenPreparation(ctx, tx, preparation.ID); err != nil {
-				return nil, err
+			if deleteErr := deletePersonalAccessTokenPreparation(ctx, tx, preparation.ID); deleteErr != nil {
+				return nil, deleteErr
 			}
 
 			return &store.PersonalAccessTokenMutationResult{Token: current, Fresh: false}, nil
@@ -519,8 +519,8 @@ func (s SQLPersonalAccessTokenStore) Revoke(
 		if err != nil {
 			return nil, err
 		}
-		if err := insertSecurityNoticeMail(ctx, tx, notice.Occurrence, notice.Delivery, notice.Job, payloadKeyID); err != nil {
-			return nil, err
+		if insertErr := insertSecurityNoticeMail(ctx, tx, notice.Occurrence, notice.Delivery, notice.Job, payloadKeyID); insertErr != nil {
+			return nil, insertErr
 		}
 
 		encoded, err := model.EncodeAuditData(revoked.Auditable())

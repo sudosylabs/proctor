@@ -183,8 +183,8 @@ func (s SQLExternalIdentityStore) Unlink(
 		}
 
 		var at time.Time
-		if err := tx.Get(ctx, &at, `SELECT clock_timestamp()`); err != nil {
-			return nil, fmt.Errorf("read external identity unlink time: %w", err)
+		if getErr := tx.Get(ctx, &at, `SELECT clock_timestamp()`); getErr != nil {
+			return nil, fmt.Errorf("read external identity unlink time: %w", getErr)
 		}
 
 		at = model.TimeUTC(at)

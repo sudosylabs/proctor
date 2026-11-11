@@ -667,8 +667,8 @@ func scheduleExamSitting(ctx context.Context, tx *sqlxTxWrapper, input *store.Ex
 	if err != nil {
 		return nil, err
 	}
-	if err := lockExamSittingLifecycle(ctx, tx); err != nil {
-		return nil, err
+	if lockErr := lockExamSittingLifecycle(ctx, tx); lockErr != nil {
+		return nil, lockErr
 	}
 
 	if selectionErr := guardExamSittingSelection(
@@ -727,11 +727,11 @@ func updateExamSittingSchedule(ctx context.Context, tx *sqlxTxWrapper, input *st
 	if err != nil {
 		return nil, err
 	}
-	if err := lockExamSittingLifecycle(ctx, tx); err != nil {
-		return nil, err
+	if lockErr := lockExamSittingLifecycle(ctx, tx); lockErr != nil {
+		return nil, lockErr
 	}
-	if err := guardExamSittingExam(ctx, tx, input.ExamID, input.ActorUserID, input.ManagerOverride); err != nil {
-		return nil, err
+	if guardErr := guardExamSittingExam(ctx, tx, input.ExamID, input.ActorUserID, input.ManagerOverride); guardErr != nil {
+		return nil, guardErr
 	}
 
 	current, err := lockExamSitting(ctx, tx, input.ExamID, input.SittingID)
@@ -827,11 +827,11 @@ func cancelExamSitting(ctx context.Context, tx *sqlxTxWrapper, input *store.Exam
 	if err != nil {
 		return nil, err
 	}
-	if err := lockExamSittingLifecycle(ctx, tx); err != nil {
-		return nil, err
+	if lockErr := lockExamSittingLifecycle(ctx, tx); lockErr != nil {
+		return nil, lockErr
 	}
-	if err := guardExamSittingExam(ctx, tx, input.ExamID, input.ActorUserID, input.ManagerOverride); err != nil {
-		return nil, err
+	if guardErr := guardExamSittingExam(ctx, tx, input.ExamID, input.ActorUserID, input.ManagerOverride); guardErr != nil {
+		return nil, guardErr
 	}
 
 	current, err := lockExamSitting(ctx, tx, input.ExamID, input.SittingID)

@@ -46,8 +46,8 @@ func TestNativeDeliveryAppendStore(t *testing.T, ss store.Store, probes ...Nativ
 	}
 	appendBatch := func(b model.NativeSecurityBatch, key string) (*model.NativeSecurityAcknowledgement, error) {
 		t.Helper()
-		raw, err := b.Canonical()
-		require.NoError(t, err)
+		raw, canonicalErr := b.Canonical()
+		require.NoError(t, canonicalErr)
 		return ss.NativeDelivery().AppendNativeDelivery(ctx, &store.NativeDeliveryAppend{Access: access, Batch: b, DesktopBuild: connect.DesktopBuild, AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}, examCommand(fixture.candidate.ID, store.NativeDeliveryAppendOperation, key, model.SHA256Fingerprint(raw)))
 	}
 	repeated := opened

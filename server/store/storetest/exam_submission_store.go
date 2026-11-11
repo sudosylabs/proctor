@@ -1051,7 +1051,7 @@ func testExamSubmissionIntegrityGap(t *testing.T, ctx context.Context, ss store.
 	require.Equal(t, int64(1), gap.MissingBefore)
 	require.True(t, gap.Qualified)
 	require.False(t, gap.ThresholdCrossed)
-	stale := store.ExamSubmissionSealAccess(submissionAccess(focusAccess, fixture.sitting.ExamRevisionID, connected.Workspace.Cursor, 1))
+	stale := submissionAccess(focusAccess, fixture.sitting.ExamRevisionID, connected.Workspace.Cursor, 1)
 	staleInput := &store.ExamSubmissionSeal{SubmissionID: model.NewSubmissionID(), ReceiptCode: model.NewSubmissionReceiptCode(), Access: stale,
 		AuditEventID: saveExamAttemptAudit(t, ctx, ss, fixture).ID, AuditAt: model.NowUTC()}
 	if _, err := submissions.Seal(ctx, staleInput,

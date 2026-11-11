@@ -501,8 +501,8 @@ func (s SQLClassStore) archiveClass(
 		if err = requireClassRevisionAffected(ctx, tx, result, id.String()); err != nil {
 			return nil, err
 		}
-		if err := tx.GetBuilder(ctx, &row, s.classesQuery.Where(sq.Eq{"classes.id": id})); err != nil {
-			return nil, fmt.Errorf("read archived class: %w", err)
+		if getBuilderErr := tx.GetBuilder(ctx, &row, s.classesQuery.Where(sq.Eq{"classes.id": id})); getBuilderErr != nil {
+			return nil, fmt.Errorf("read archived class: %w", getBuilderErr)
 		}
 
 		class, err := row.model()

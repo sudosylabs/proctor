@@ -563,8 +563,8 @@ func advanceNativeInterpretation(ctx context.Context, tx *sqlxTxWrapper, owner n
 			return execErr
 		}
 
-		if err := retainNativeCondition(ctx, tx, owner, row, *record.Occurrence, value.UnresolvedOpener); err != nil {
-			return err
+		if retainErr := retainNativeCondition(ctx, tx, owner, row, *record.Occurrence, value.UnresolvedOpener); retainErr != nil {
+			return retainErr
 		}
 
 		if value.UnresolvedOpener {
@@ -574,12 +574,12 @@ func advanceNativeInterpretation(ctx context.Context, tx *sqlxTxWrapper, owner n
 			}
 
 			meta.UnresolvedOpener = true
-			raw, err := canonicalPreflightValue(meta)
-			if err != nil {
-				return err
+			raw, canonicalErr := canonicalPreflightValue(meta)
+			if canonicalErr != nil {
+				return canonicalErr
 			}
 
-			if _, err := tx.Exec(
+			if _, execErr := tx.Exec(
 				ctx,
 				`UPDATE exam_native_delivery_records
 				SET metadata_canonical = ?
@@ -590,8 +590,8 @@ func advanceNativeInterpretation(ctx context.Context, tx *sqlxTxWrapper, owner n
 				owner.ParticipationID,
 				row.Sequence,
 				row.Index,
-			); err != nil {
-				return err
+			); execErr != nil {
+				return execErr
 			}
 		}
 	}

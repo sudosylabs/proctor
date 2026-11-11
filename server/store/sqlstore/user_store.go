@@ -1086,11 +1086,11 @@ func (s SQLUserStore) UpdateProfile(ctx context.Context, input *store.UserProfil
 		candidate.ApplyProfileChanges(&input.Changes)
 		candidate.PrepareUpdate(model.TimeUTC(input.AuditAt))
 		candidate.Revision = input.ExpectedRevision + 1
-		if err := candidate.Validate(); err != nil {
-			return nil, store.NewErrInvalidInput("user", "value", nil).Wrap(err)
+		if validateErr := candidate.Validate(); validateErr != nil {
+			return nil, store.NewErrInvalidInput("user", "value", nil).Wrap(validateErr)
 		}
-		if err := updateUserProfile(ctx, tx, &candidate, input.ExpectedRevision); err != nil {
-			return nil, err
+		if updateErr := updateUserProfile(ctx, tx, &candidate, input.ExpectedRevision); updateErr != nil {
+			return nil, updateErr
 		}
 
 		updated, err := getUserByID(ctx, tx, candidate.ID.String())

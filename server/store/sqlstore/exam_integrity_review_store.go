@@ -546,8 +546,8 @@ func (row examIntegrityEvidenceRow) value() (*model.IntegrityEvidence, error) {
 	}
 	if len(row.BrowserDetail) > 0 {
 		var detail model.BrowserIntegrityEvidence
-		if err := json.Unmarshal(row.BrowserDetail, &detail); err != nil {
-			return nil, err
+		if unmarshalErr := json.Unmarshal(row.BrowserDetail, &detail); unmarshalErr != nil {
+			return nil, unmarshalErr
 		}
 
 		evidence.Browser = &detail

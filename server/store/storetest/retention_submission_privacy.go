@@ -86,18 +86,18 @@ func testRetentionSubmissionPrivacy(t *testing.T, ss store.Store, probe Retentio
 		blocked.BlockReason = &reason
 		blocked.RedirectFromSequence = &prior
 		blocked.Location = &model.BrowserLocation{Scheme: "https", Host: "outside.example", Path: "/"}
-		_, err := appendBrowserActivityFixture(t, ctx, ss, &store.BrowserActivityAppend{Access: access, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, SourceSessionID: current, Events: []model.BrowserActivityEvent{nav}})
-		require.NoError(t, err)
-		sourceStatus, err := ss.BrowserDelivery().BrowserSourceStatus(ctx, store.BrowserDeliveryAccess{Access: access, SourceSessionID: current})
-		require.NoError(t, err)
+		_, appendErr := appendBrowserActivityFixture(t, ctx, ss, &store.BrowserActivityAppend{Access: access, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, SourceSessionID: current, Events: []model.BrowserActivityEvent{nav}})
+		require.NoError(t, appendErr)
+		sourceStatus, appendErr := ss.BrowserDelivery().BrowserSourceStatus(ctx, store.BrowserDeliveryAccess{Access: access, SourceSessionID: current})
+		require.NoError(t, appendErr)
 		blocked = maximumBrowserEvidenceEvent(t, blocked, current, connected.Participation.ID, connected.Participation.Generation, sourceStatus.PolicyDigest)
 		appendInput.Events = []model.BrowserActivityEvent{blocked}
 	}
 	firstAck, err := appendBrowserActivityFixture(t, ctx, ss, appendInput)
 	require.NoError(t, err)
 	if browserFirst {
-		replay, err := appendBrowserActivityFixture(t, ctx, ss, appendInput)
-		require.NoError(t, err)
+		replay, appendErr := appendBrowserActivityFixture(t, ctx, ss, appendInput)
+		require.NoError(t, appendErr)
 		require.Len(t, firstAck.Receipts, 1, "maximum Browser event retry changed receipt")
 		require.Len(t, replay.Receipts, 1, "maximum Browser event retry changed receipt")
 		require.Equal(t, firstAck.Receipts[0], replay.Receipts[0], "maximum Browser event retry changed receipt")
@@ -142,21 +142,21 @@ func testRetentionSubmissionPrivacy(t *testing.T, ss store.Store, probe Retentio
 	var browserFlag model.IntegrityFlagID
 	var browserDigest string
 	if browserFirst {
-		flags, err := ss.ExamIntegrityReview().ListFlags(ctx, store.ExamIntegrityFlagListOptions{SubmissionID: subID, Limit: 100})
-		require.NoError(t, err)
+		flags, examErr := ss.ExamIntegrityReview().ListFlags(ctx, store.ExamIntegrityFlagListOptions{SubmissionID: subID, Limit: 100})
+		require.NoError(t, examErr)
 		require.Len(t, flags.Items, 1, "fixture lacks independent Browser evidence")
 		require.Equal(t, 1, flags.Items[0].EvidenceCount, "fixture lacks independent Browser evidence")
 		browserFlag = flags.Items[0].Flag.ID
-		initialEvidence, err := ss.ExamIntegrityReview().ListEvidence(ctx, store.ExamIntegrityEvidenceListOptions{SubmissionID: subID, FlagID: browserFlag, Limit: 100})
-		require.NoError(t, err)
+		initialEvidence, examErr := ss.ExamIntegrityReview().ListEvidence(ctx, store.ExamIntegrityEvidenceListOptions{SubmissionID: subID, FlagID: browserFlag, Limit: 100})
+		require.NoError(t, examErr)
 		require.Len(t, initialEvidence.Items, 1, "missing evidence fixture")
 		require.NotNil(t, initialEvidence.Items[0].Browser, "missing evidence fixture")
 		browserDigest = initialEvidence.Items[0].Browser.PolicyDigest
-		evidenceRaw, err := json.Marshal(initialEvidence.Items[0].Browser)
-		require.NoError(t, err)
+		evidenceRaw, examErr := json.Marshal(initialEvidence.Items[0].Browser)
+		require.NoError(t, examErr)
 		require.Greater(t, len(evidenceRaw), model.BrowserActivityAppendMaximumBytes, "maximum evidence fixture did not exceed request bound")
-		decided, err := ss.ExamIntegrityReview().SaveDecision(ctx, &store.ExamIntegrityReviewDecisionMutation{SubmissionID: subID, ReviewID: drafted.Review.ID, DecisionID: model.NewIntegrityReviewDecisionID(), FlagID: browserFlag, ActorUserID: f.manager.ID, ExpectedReviewRevision: drafted.Review.Revision, Outcome: model.IntegrityReviewInconclusive, PrivateRationale: "Retain the minimized Review copy independently", ChangedAt: model.NowUTC(), AuditEventID: saveIntegrityReviewAudit(t, ctx, ss, f, subID, model.ActionSubmissionReview).ID, AuditAt: model.NowUTC()}, examCommand(f.manager.ID, store.ExamIntegrityReviewDecisionOperation, "retirement-browser-decision", "retirement-browser-decision"))
-		require.NoError(t, err)
+		decided, examErr := ss.ExamIntegrityReview().SaveDecision(ctx, &store.ExamIntegrityReviewDecisionMutation{SubmissionID: subID, ReviewID: drafted.Review.ID, DecisionID: model.NewIntegrityReviewDecisionID(), FlagID: browserFlag, ActorUserID: f.manager.ID, ExpectedReviewRevision: drafted.Review.Revision, Outcome: model.IntegrityReviewInconclusive, PrivateRationale: "Retain the minimized Review copy independently", ChangedAt: model.NowUTC(), AuditEventID: saveIntegrityReviewAudit(t, ctx, ss, f, subID, model.ActionSubmissionReview).ID, AuditAt: model.NowUTC()}, examCommand(f.manager.ID, store.ExamIntegrityReviewDecisionOperation, "retirement-browser-decision", "retirement-browser-decision"))
+		require.NoError(t, examErr)
 		drafted.Review = decided.Review
 	}
 	_, err = ss.ExamIntegrityReview().Finalize(ctx, &store.ExamIntegrityReviewFinalize{SubmissionID: subID,
@@ -197,10 +197,10 @@ func testRetentionSubmissionPrivacy(t *testing.T, ss store.Store, probe Retentio
 	changed, err := ss.RetentionPolicy().Replace(ctx, replace, retentionPolicyCommand(f.manager.ID, "privacy-policy"))
 	require.NoError(t, err)
 	mutation := func(action model.Action) store.RetentionMutation {
-		audit, err := ss.Audit().Save(ctx, &model.AuditEvent{ActorID: principal.UserID, SessionID: principal.SessionID, Action: string(action),
+		audit, auditErr := ss.Audit().Save(ctx, &model.AuditEvent{ActorID: principal.UserID, SessionID: principal.SessionID, Action: string(action),
 			Resource: model.Resource{Type: model.ResourceInstitution, ID: f.institutionID.String()}, ScopeType: model.RoleScopeInstitution,
 			ScopeID: f.institutionID.String(), Status: model.AuditStatusAttempt, NodeID: "retirement-privacy"})
-		require.NoError(t, err)
+		require.NoError(t, auditErr)
 		return store.RetentionMutation{Principal: principal, AuditEventID: audit.ID, AuditAt: model.NowUTC(), RecentAuthenticationTTL: 10 * time.Minute}
 	}
 	preview, err := ss.Retention().CreatePreview(ctx, &store.RetentionPreviewCreation{RetentionMutation: mutation(model.ActionRetentionPolicyView),
@@ -225,12 +225,12 @@ func testRetentionSubmissionPrivacy(t *testing.T, ss store.Store, probe Retentio
 		examCommand(f.manager.ID, store.RetentionControlOperation, "privacy-enable", "privacy-enable"))
 	require.NoError(t, err)
 	reconcile := func(want store.RetentionReconciliationResult) {
-		audit, err := ss.Audit().Save(ctx, &model.AuditEvent{Action: string(model.ActionRetentionCleanupManage),
+		audit, auditErr := ss.Audit().Save(ctx, &model.AuditEvent{Action: string(model.ActionRetentionCleanupManage),
 			Resource: model.Resource{Type: model.ResourceSubmission, ID: subID.String()}, ScopeType: model.RoleScopeInstitution,
 			ScopeID: f.institutionID.String(), Status: model.AuditStatusAttempt, NodeID: "retirement-privacy"})
-		require.NoError(t, err)
-		got, err := ss.Retention().ReconcileSubmission(ctx, &store.RetentionReconciliation{SubmissionID: subID, AuditEventID: audit.ID, AuditAt: model.NowUTC()})
-		require.NoError(t, err)
+		require.NoError(t, auditErr)
+		got, auditErr := ss.Retention().ReconcileSubmission(ctx, &store.RetentionReconciliation{SubmissionID: subID, AuditEventID: audit.ID, AuditAt: model.NowUTC()})
+		require.NoError(t, auditErr)
 		require.NotNil(t, got, "retirement result")
 		require.Equal(t, want, *got, "retirement result")
 	}
@@ -243,19 +243,19 @@ func testRetentionSubmissionPrivacy(t *testing.T, ss store.Store, probe Retentio
 		}
 		if browserFirst {
 			probe.InspectBrowser(t, ctx, subID)
-			evidence, err := ss.ExamIntegrityReview().ListEvidence(ctx, store.ExamIntegrityEvidenceListOptions{SubmissionID: subID, FlagID: browserFlag, Limit: 100})
-			require.NoError(t, err)
+			evidence, examErr := ss.ExamIntegrityReview().ListEvidence(ctx, store.ExamIntegrityEvidenceListOptions{SubmissionID: subID, FlagID: browserFlag, Limit: 100})
+			require.NoError(t, examErr)
 			require.Len(t, evidence.Items, 1, "Browser retirement erased the Review copy")
 			require.NotNil(t, evidence.Items[0].Browser, "Browser retirement erased the Review copy")
 			require.NoError(t, evidence.Items[0].Validate(), "Browser retirement erased the Review copy")
 			require.Equal(t, browserDigest, evidence.Items[0].Browser.PolicyDigest, "Browser retirement erased the Review copy")
 		}
-		page, err := ss.ExamIntegrityReview().ListNativeConditions(ctx, store.NativeConditionListOptions{SubmissionID: subID, Limit: 100})
-		require.NoError(t, err)
+		page, examErr := ss.ExamIntegrityReview().ListNativeConditions(ctx, store.NativeConditionListOptions{SubmissionID: subID, Limit: 100})
+		require.NoError(t, examErr)
 		require.Len(t, page.Items, 1, "operational retirement erased independent native review evidence")
 		require.NoError(t, page.Items[0].Validate(), "operational retirement erased independent native review evidence")
-		snapshot, err := ss.ExamIntegrityReview().Get(ctx, subID)
-		require.NoError(t, err)
+		snapshot, examErr := ss.ExamIntegrityReview().Get(ctx, subID)
+		require.NoError(t, examErr)
 		require.NotNil(t, snapshot.Review, "operational retirement invalidated retained integrity inventory")
 		require.Equal(t, model.SubmissionReviewFinalized, snapshot.Review.State, "operational retirement invalidated retained integrity inventory")
 		require.Equal(t, int64(1), snapshot.NativeConditions.Records, "operational retirement invalidated retained integrity inventory")

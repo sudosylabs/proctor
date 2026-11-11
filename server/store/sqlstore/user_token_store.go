@@ -897,18 +897,18 @@ func (s SQLUserTokenStore) ConsumeEmailVerification(
 			return nil, fmt.Errorf("verify user email: %w", execErr)
 		}
 
-		if err := consumeUserTokens(
+		if consumeErr := consumeUserTokens(
 			ctx, tx, token.UserID, token.Purpose, at,
-		); err != nil {
-			return nil, err
+		); consumeErr != nil {
+			return nil, consumeErr
 		}
 
 		event, err := tokenAuditEvent(auditEvent, token.UserID, model.ActionAuthenticationEmailVerificationComplete)
 		if err != nil {
 			return nil, err
 		}
-		if _, err := insertAuditEventAt(ctx, tx, event, at); err != nil {
-			return nil, fmt.Errorf("audit email verification: %w", err)
+		if _, insertErr := insertAuditEventAt(ctx, tx, event, at); insertErr != nil {
+			return nil, fmt.Errorf("audit email verification: %w", insertErr)
 		}
 
 		token.ConsumedAt = sql.NullTime{Time: latestTime(token.CreatedAt, at), Valid: true}
@@ -1100,24 +1100,24 @@ func (s SQLUserTokenStore) ConsumePasswordReset(
 			return nil, err
 		}
 
-		if err := consumeUserTokens(
+		if consumeErr := consumeUserTokens(
 			ctx, tx, token.UserID, token.Purpose, at,
-		); err != nil {
-			return nil, err
+		); consumeErr != nil {
+			return nil, consumeErr
 		}
 
 		event, err := tokenAuditEvent(input.AuditEvent, token.UserID, model.ActionAuthenticationPasswordResetComplete)
 		if err != nil {
 			return nil, err
 		}
-		if _, err := insertAuditEventAt(ctx, tx, event, at); err != nil {
-			return nil, fmt.Errorf("audit password reset: %w", err)
+		if _, insertErr := insertAuditEventAt(ctx, tx, event, at); insertErr != nil {
+			return nil, fmt.Errorf("audit password reset: %w", insertErr)
 		}
 		if occurrence.ActorUserID.String() != token.UserID || delivery.TargetUserID.String() != token.UserID {
 			return nil, store.NewErrInvalidInput("user_token", "password_reset_mail_target", nil)
 		}
-		if err := insertRecoveryMail(ctx, tx, occurrence, delivery, job, payloadKeyID); err != nil {
-			return nil, err
+		if insertErr := insertRecoveryMail(ctx, tx, occurrence, delivery, job, payloadKeyID); insertErr != nil {
+			return nil, insertErr
 		}
 
 		token.ConsumedAt = sql.NullTime{Time: latestTime(token.CreatedAt, at), Valid: true}

@@ -363,8 +363,8 @@ func (s SQLProgrammeLevelStore) archiveProgrammeLevel(
 		if err = requireRevisionAffected(ctx, tx, result, "programme_level", "programme_levels", id.String()); err != nil {
 			return nil, err
 		}
-		if err := tx.GetBuilder(ctx, &row, s.programmeLevelsQuery.Where(sq.Eq{"programme_levels.id": id})); err != nil {
-			return nil, fmt.Errorf("read archived programme level: %w", err)
+		if getBuilderErr := tx.GetBuilder(ctx, &row, s.programmeLevelsQuery.Where(sq.Eq{"programme_levels.id": id})); getBuilderErr != nil {
+			return nil, fmt.Errorf("read archived programme level: %w", getBuilderErr)
 		}
 
 		level, err := row.model()

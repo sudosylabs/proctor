@@ -149,8 +149,8 @@ func (s SQLUserSettingsStore) Replace(
 			if !input.UpdatedAt.After(current.UpdatedAt) {
 				return userSettingsReplacementOutcome{}, store.NewErrInvalidInput("user_settings_document", "updated_at", nil)
 			}
-			if err := validateUserSettingsReplacementAudit(input); err != nil {
-				return userSettingsReplacementOutcome{}, err
+			if validateErr := validateUserSettingsReplacementAudit(input); validateErr != nil {
+				return userSettingsReplacementOutcome{}, validateErr
 			}
 
 			result, err := tx.Exec(
@@ -173,8 +173,8 @@ func (s SQLUserSettingsStore) Replace(
 				)
 			}
 
-			if affected, err := result.RowsAffected(); err != nil {
-				return userSettingsReplacementOutcome{}, fmt.Errorf("inspect user settings replacement: %w", err)
+			if affected, rowsAffectedErr := result.RowsAffected(); rowsAffectedErr != nil {
+				return userSettingsReplacementOutcome{}, fmt.Errorf("inspect user settings replacement: %w", rowsAffectedErr)
 			} else if affected != 1 {
 				return userSettingsReplacementOutcome{}, &store.ErrUserSettingsRevisionConflict{CurrentRevision: current.Revision}
 			}

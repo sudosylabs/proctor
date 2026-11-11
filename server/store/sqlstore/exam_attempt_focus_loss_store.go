@@ -927,8 +927,8 @@ func suspendForFocusLoss(
 		return false, store.NewErrConflict("attempt_participation", "attempt_participation_expired", nil)
 	}
 
-	if err := closeNativeDelivery(ctx, tx, participation.ID, model.DeliveryClosedSuspension, participation.EndedAt.Time); err != nil {
-		return false, err
+	if closeErr := closeNativeDelivery(ctx, tx, participation.ID, model.DeliveryClosedSuspension, participation.EndedAt.Time); closeErr != nil {
+		return false, closeErr
 	}
 
 	result, err = tx.Exec(

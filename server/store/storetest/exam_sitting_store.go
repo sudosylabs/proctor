@@ -1702,7 +1702,7 @@ func newExamSittingFixture(t *testing.T, ctx context.Context, ss store.Store) ex
 
 func newExamSittingFixtureWithCapacity(t *testing.T, ctx context.Context, ss store.Store, capacity model.ExamCapacityPolicy) examSittingFixture {
 	t.Helper()
-	classFixture := saveClassFixture(t, ctx, ss)
+	savedClass := saveClassFixture(t, ctx, ss)
 	if !capacity.IsZero() {
 		institution, err := ss.Institution().GetSingleton(ctx)
 		require.NoError(t, err)
@@ -1710,15 +1710,15 @@ func newExamSittingFixtureWithCapacity(t *testing.T, ctx context.Context, ss sto
 		_, err = UpdateInstitution(ctx, ss, institution)
 		require.NoError(t, err)
 	}
-	class := saveClass(t, ctx, ss, classFixture.level.ID.String(), classFixture.period.ID.String(), "sitting-class")
+	class := saveClass(t, ctx, ss, savedClass.level.ID.String(), savedClass.period.ID.String(), "sitting-class")
 	actor := saveUser(t, ctx, ss)
-	created := createCatalogExam(t, ctx, ss, classFixture.programme.AcademicUnitID, actor.ID, model.NowUTC(), "sitting-exam")
-	publication := examRevisionPublication(t, ctx, ss, created.Value.Exam.ID, actor.ID, classFixture.programme.AcademicUnitID, 1, model.NowUTC())
+	created := createCatalogExam(t, ctx, ss, savedClass.programme.AcademicUnitID, actor.ID, model.NowUTC(), "sitting-exam")
+	publication := examRevisionPublication(t, ctx, ss, created.Value.Exam.ID, actor.ID, savedClass.programme.AcademicUnitID, 1, model.NowUTC())
 	published, err := ss.ExamRevision().Publish(ctx, publication, examCommand(actor.ID, "exam.revision.publish", "sitting-revision", "sitting-revision-command"))
 	require.NoError(t, err)
-	return examSittingFixture{actor: actor, institutionID: classFixture.institution.ID, unitID: classFixture.programme.AcademicUnitID,
-		levelID: classFixture.level.ID, examID: created.Value.Exam.ID,
-		revisionID: published.Revision.ID, class: class, period: classFixture.period}
+	return examSittingFixture{actor: actor, institutionID: savedClass.institution.ID, unitID: savedClass.programme.AcademicUnitID,
+		levelID: savedClass.level.ID, examID: created.Value.Exam.ID,
+		revisionID: published.Revision.ID, class: class, period: savedClass.period}
 }
 
 func saveExamSittingAudit(t *testing.T, ctx context.Context, ss store.Store, actor model.UserID, exam model.ExamID, unit model.AcademicUnitID) *model.AuditEvent {

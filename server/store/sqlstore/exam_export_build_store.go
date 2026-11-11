@@ -153,9 +153,9 @@ func (s *SQLExamExportStore) BeginBuild(ctx context.Context, input *store.ExamEx
 				continue
 			}
 
-			entries, err := loadExamExportEntries(ctx, tx, a.SubmissionID, model.ExamExportMaximumEntries-count)
-			if err != nil {
-				return nil, err
+			entries, loadErr := loadExamExportEntries(ctx, tx, a.SubmissionID, model.ExamExportMaximumEntries-count)
+			if loadErr != nil {
+				return nil, loadErr
 			}
 
 			count += len(entries)

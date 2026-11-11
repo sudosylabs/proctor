@@ -189,8 +189,8 @@ func retainBrowserIntegrity(
 		RuleID:           rule.RuleID,
 		Event:            event,
 	}
-	if err := detail.Validate(); err != nil {
-		return err
+	if validateErr := detail.Validate(); validateErr != nil {
+		return validateErr
 	}
 
 	raw, err := json.Marshal(detail)

@@ -117,8 +117,8 @@ func (s SQLMFAStore) Reset(ctx context.Context, input *store.MFAAssistedReset) (
 		if err != nil {
 			return nil, err
 		}
-		if err := insertSecurityNoticeMail(ctx, tx, input.Notice.Occurrence, input.Notice.Delivery, input.Notice.Job, payloadKeyID); err != nil {
-			return nil, err
+		if insertErr := insertSecurityNoticeMail(ctx, tx, input.Notice.Occurrence, input.Notice.Delivery, input.Notice.Job, payloadKeyID); insertErr != nil {
+			return nil, insertErr
 		}
 
 		encoded, err := model.EncodeAuditData(result.Recovery.Auditable())
@@ -184,9 +184,9 @@ func resetMFAUserAccess(ctx context.Context, tx *sqlxTxWrapper, userID model.Use
 
 	sessions := make([]*model.Session, 0, len(rows))
 	for _, row := range rows {
-		session, err := row.model()
-		if err != nil {
-			return nil, err
+		session, modelErr := row.model()
+		if modelErr != nil {
+			return nil, modelErr
 		}
 
 		// Revocation SQL clamps PostgreSQL time to the node-clock creation.

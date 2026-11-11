@@ -851,8 +851,8 @@ func persistAutomaticSubmittedExamAttempt(
 	}
 
 	if beforeParticipation == model.AttemptParticipationActive {
-		if err := closeNativeDelivery(ctx, tx, participation.ID, model.DeliveryClosedSitting, participation.EndedAt.Time); err != nil {
-			return err
+		if closeErr := closeNativeDelivery(ctx, tx, participation.ID, model.DeliveryClosedSitting, participation.EndedAt.Time); closeErr != nil {
+			return closeErr
 		}
 	}
 

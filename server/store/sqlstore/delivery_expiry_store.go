@@ -197,8 +197,8 @@ func expireDeliveryOwner(ctx context.Context, tx *sqlxTxWrapper, d store.Deliver
 				return false, getErr
 			}
 
-			if _, err := settleBrowserSource(ctx, tx, model.BrowserSourceSessionID(d.SourceID)); err != nil {
-				return false, err
+			if _, settleErr := settleBrowserSource(ctx, tx, model.BrowserSourceSessionID(d.SourceID)); settleErr != nil {
+				return false, settleErr
 			}
 			if _, execErr := tx.Exec(ctx, `UPDATE browser_activity_sources
 				SET upload_expired = true
@@ -218,14 +218,14 @@ func expireDeliveryOwner(ctx context.Context, tx *sqlxTxWrapper, d store.Deliver
 			}
 
 			if after != before {
-				if err := invalidateDeliveryReviewInventory(ctx, tx, d.AttemptID); err != nil {
-					return false, err
+				if invalidateErr := invalidateDeliveryReviewInventory(ctx, tx, d.AttemptID); invalidateErr != nil {
+					return false, invalidateErr
 				}
 			}
 		} else {
 			var closure model.DeliveryClosure
-			if err := json.Unmarshal(row.Raw, &closure); err != nil {
-				return false, invalidPersistedState("delivery_expiry", "closure", err)
+			if unmarshalErr := json.Unmarshal(row.Raw, &closure); unmarshalErr != nil {
+				return false, invalidPersistedState("delivery_expiry", "closure", unmarshalErr)
 			}
 
 			if closure.Validate(true) != nil ||

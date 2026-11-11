@@ -96,11 +96,14 @@ func TestAdministratorMFAResetStore(t *testing.T, ss store.Store, probes ...Admi
 		defer release()
 		leaseDone, resetDone := make(chan error, 1), make(chan error, 1)
 		go func() {
-			_, err := ss.ServingNodeLease().Upsert(fenceCtx, &store.ServingNodeLeaseClaim{NodeID: "mfa-reset-starting", LeaseID: leaseID, Lifetime: 30 * time.Second})
-			leaseDone <- err
+			_, servingErr := ss.ServingNodeLease().Upsert(fenceCtx, &store.ServingNodeLeaseClaim{NodeID: "mfa-reset-starting", LeaseID: leaseID, Lifetime: 30 * time.Second})
+			leaseDone <- servingErr
 		}()
 		fence.WaitForBlockedTransactions(t, fenceCtx, pid, 1)
-		go func() { _, err := ss.Installation().ResetAdministratorMFA(fenceCtx, input); resetDone <- err }()
+		go func() {
+			_, installationErr := ss.Installation().ResetAdministratorMFA(fenceCtx, input)
+			resetDone <- installationErr
+		}()
 		fence.WaitForBlockedTransactions(t, fenceCtx, pid, 2)
 		release()
 		require.NoError(t, <-leaseDone)

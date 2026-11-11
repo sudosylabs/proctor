@@ -32,13 +32,13 @@ func TestAcademicLifecycleRevisionConformance(t *testing.T, ss store.Store) {
 			require.NoError(t, err)
 			action := map[model.ResourceType]model.Action{model.ResourceAcademicUnit: model.ActionAcademicUnitManage, model.ResourceProgramme: model.ActionProgrammeManage, model.ResourceProgrammeLevel: model.ActionProgrammeLevelManage, model.ResourceAcademicPeriod: model.ActionAcademicPeriodManage, model.ResourceClass: model.ActionClassManage}[kind]
 			attempt := func() model.AuditEventID {
-				audit, err := ss.Audit().Save(ctx, &model.AuditEvent{Action: string(action), Resource: resource, ScopeType: model.RoleScopeInstitution, ScopeID: institution.ID.String(), Status: model.AuditStatusAttempt, NodeID: "test-node"})
-				require.NoError(t, err)
+				audit, auditErr := ss.Audit().Save(ctx, &model.AuditEvent{Action: string(action), Resource: resource, ScopeType: model.RoleScopeInstitution, ScopeID: institution.ID.String(), Status: model.AuditStatusAttempt, NodeID: "test-node"})
+				require.NoError(t, auditErr)
 				return audit.ID
 			}
 			assertAttempt := func(id model.AuditEventID, status model.AuditStatus) {
-				audit, err := ss.Audit().Get(ctx, id)
-				require.NoError(t, err)
+				audit, auditErr := ss.Audit().Get(ctx, id)
+				require.NoError(t, auditErr)
 				require.Equal(t, status, audit.Status, "audit status")
 			}
 			require.NoError(t, update(1, "legacy", ""))

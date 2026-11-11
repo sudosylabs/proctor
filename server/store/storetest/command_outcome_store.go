@@ -34,8 +34,8 @@ func TestCommandOutcomeStore(t *testing.T, ss store.Store) {
 	require.True(t, found, "Has(committed)")
 	deadline := time.Now().Add(time.Second)
 	for {
-		deleted, err := ss.CommandOutcome().DeleteExpired(ctx, 500)
-		require.NoError(t, err)
+		deleted, commandErr := ss.CommandOutcome().DeleteExpired(ctx, 500)
+		require.NoError(t, commandErr)
 		if deleted == 1 {
 			break
 		}

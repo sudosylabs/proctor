@@ -76,43 +76,43 @@ func (s SQLInstallationStore) Bootstrap(
 		if !pristine {
 			return replayInstallationBootstrap(ctx, tx, input)
 		}
-		if err := insertInstallationInstitution(ctx, tx, prepared.Institution); err != nil {
-			return nil, err
+		if insertErr := insertInstallationInstitution(ctx, tx, prepared.Institution); insertErr != nil {
+			return nil, insertErr
 		}
-		if err := insertUser(ctx, tx, prepared.Administrator); err != nil {
-			return nil, err
+		if insertUserErr := insertUser(ctx, tx, prepared.Administrator); insertUserErr != nil {
+			return nil, insertUserErr
 		}
-		if err := insertUserSettingsDocument(ctx, tx, prepared.AdministratorSettings); err != nil {
-			return nil, err
+		if insertErr := insertUserSettingsDocument(ctx, tx, prepared.AdministratorSettings); insertErr != nil {
+			return nil, insertErr
 		}
-		if err := insertPasswordCredential(ctx, tx, prepared.credential); err != nil {
-			return nil, err
+		if insertErr := insertPasswordCredential(ctx, tx, prepared.credential); insertErr != nil {
+			return nil, insertErr
 		}
 
-		if _, err := insertQueuedJob(ctx, tx, prepared.DefaultProfilePictureJob, false); err != nil {
+		if _, insertErr := insertQueuedJob(ctx, tx, prepared.DefaultProfilePictureJob, false); insertErr != nil {
 			return nil, fmt.Errorf(
 				"enqueue bootstrap default profile picture generation: %w",
-				translateError("job", prepared.DefaultProfilePictureJob.ID.String(), err),
+				translateError("job", prepared.DefaultProfilePictureJob.ID.String(), insertErr),
 			)
 		}
 
-		if err := insertInstallationRole(ctx, tx, prepared.Role); err != nil {
-			return nil, err
+		if insertErr := insertInstallationRole(ctx, tx, prepared.Role); insertErr != nil {
+			return nil, insertErr
 		}
-		if err := insertInstallationRoleBinding(ctx, tx, prepared.RoleBinding); err != nil {
-			return nil, err
+		if insertErr := insertInstallationRoleBinding(ctx, tx, prepared.RoleBinding); insertErr != nil {
+			return nil, insertErr
 		}
-		if err := insertInitialAccessPolicy(ctx, tx, prepared.AccessPolicy); err != nil {
-			return nil, err
+		if insertErr := insertInitialAccessPolicy(ctx, tx, prepared.AccessPolicy); insertErr != nil {
+			return nil, insertErr
 		}
-		if err := insertInitialRetentionPolicy(ctx, tx, prepared.RetentionPolicy); err != nil {
-			return nil, err
+		if insertErr := insertInitialRetentionPolicy(ctx, tx, prepared.RetentionPolicy); insertErr != nil {
+			return nil, insertErr
 		}
-		if err := insertInitialDesktopCompatibilityPolicy(ctx, tx, prepared.DesktopCompatibilityPolicy); err != nil {
-			return nil, err
+		if insertErr := insertInitialDesktopCompatibilityPolicy(ctx, tx, prepared.DesktopCompatibilityPolicy); insertErr != nil {
+			return nil, insertErr
 		}
-		if err := insertInstallationAudit(ctx, tx, prepared.auditEvent); err != nil {
-			return nil, err
+		if insertErr := insertInstallationAudit(ctx, tx, prepared.auditEvent); insertErr != nil {
+			return nil, insertErr
 		}
 
 		bootstrapResult, err := json.Marshal(prepared.InstallationBootstrapResult)
@@ -181,15 +181,15 @@ func (s SQLInstallationStore) ReconcileSystemAdministratorRole(
 		}
 
 		var row roleRow
-		if err := tx.Get(ctx, &row, `
+		if getErr := tx.Get(ctx, &row, `
 			SELECT id, created_at, updated_at, archived_at, name, display_name, description,
 				permissions, built_in
 			FROM roles
 			WHERE name = ?
-			FOR UPDATE`, model.SystemAdministratorRoleName); err != nil {
+			FOR UPDATE`, model.SystemAdministratorRoleName); getErr != nil {
 			return nil, fmt.Errorf(
 				"get protected role for reconciliation: %w",
-				translateError("role", "name="+model.SystemAdministratorRoleName, err),
+				translateError("role", "name="+model.SystemAdministratorRoleName, getErr),
 			)
 		}
 
@@ -214,8 +214,8 @@ func (s SQLInstallationStore) ReconcileSystemAdministratorRole(
 		}
 
 		candidate.PrepareUpdate(at)
-		if err := candidate.Validate(); err != nil {
-			return nil, store.NewErrInvalidInput("role", "reconciliation", nil).Wrap(err)
+		if validateErr := candidate.Validate(); validateErr != nil {
+			return nil, store.NewErrInvalidInput("role", "reconciliation", nil).Wrap(validateErr)
 		}
 
 		updated := newRoleRow(candidate)

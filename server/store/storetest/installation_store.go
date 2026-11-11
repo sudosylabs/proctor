@@ -87,11 +87,11 @@ func TestInstallationStore(t *testing.T, ss store.Store) {
 		wait.Add(1)
 		go func(index int) {
 			defer wait.Done()
-			result, err := ss.Installation().Bootstrap(
+			result, installationErr := ss.Installation().Bootstrap(
 				ctx,
 				inputs[index],
 			)
-			outcomes <- outcome{result: result, err: err}
+			outcomes <- outcome{result: result, err: installationErr}
 		}(index)
 	}
 	wait.Wait()
@@ -209,11 +209,11 @@ func TestInstallationStore(t *testing.T, ss store.Store) {
 		wait.Add(1)
 		go func(index int) {
 			defer wait.Done()
-			result, err := ss.Installation().ReconcileSystemAdministratorRole(
+			result, installationErr := ss.Installation().ReconcileSystemAdministratorRole(
 				ctx,
 				testSystemAdministratorRoleReconciliation(index+1),
 			)
-			reconciliations <- reconciliationOutcome{result: result, err: err}
+			reconciliations <- reconciliationOutcome{result: result, err: installationErr}
 		}(index)
 	}
 	wait.Wait()

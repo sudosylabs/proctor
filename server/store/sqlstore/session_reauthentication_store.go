@@ -206,8 +206,8 @@ func (s SQLSessionStore) ReauthenticateExternal(
 		}
 
 		var at time.Time
-		if err := tx.Get(ctx, &at, `SELECT clock_timestamp()`); err != nil {
-			return nil, err
+		if getErr := tx.Get(ctx, &at, `SELECT clock_timestamp()`); getErr != nil {
+			return nil, getErr
 		}
 
 		recovery, err := getMFARecoveryState(ctx, tx, state.TargetUserID)
@@ -269,8 +269,8 @@ func (s SQLSessionStore) ReauthenticateExternal(
 			state.SessionCredentialID.String(),
 			at,
 		).Suffix("FOR UPDATE")
-		if err := tx.GetBuilder(ctx, &row, sessionQuery); err != nil {
-			return nil, translateError("session", state.SessionID.String(), err)
+		if getBuilderErr := tx.GetBuilder(ctx, &row, sessionQuery); getBuilderErr != nil {
+			return nil, translateError("session", state.SessionID.String(), getBuilderErr)
 		}
 
 		session, err := row.model()

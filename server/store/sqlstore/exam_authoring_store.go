@@ -193,13 +193,13 @@ func (s SQLExamAuthoringStore) Create(
 			data := snapshot.Exam.Auditable()
 			data["idempotency_replayed"] = true
 			data["original_audit_event_id"] = originalAuditID
-			encoded, err := model.EncodeAuditData(data)
-			if err != nil {
-				return err
+			encoded, encodeErr := model.EncodeAuditData(data)
+			if encodeErr != nil {
+				return encodeErr
 			}
 
-			_, err = completeAuditEvent(ctx, tx, prepared.AuditEventID, model.AuditStatusSuccess, "", encoded, prepared.AuditAt)
-			return err
+			_, encodeErr = completeAuditEvent(ctx, tx, prepared.AuditEventID, model.AuditStatusSuccess, "", encoded, prepared.AuditAt)
+			return encodeErr
 		},
 	})
 	if err != nil {
@@ -238,18 +238,18 @@ func (s SQLExamAuthoringStore) UpdateDraftText(
 			return outcome.model()
 		},
 		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, snapshot *store.ExamAuthoringSnapshot, originalAuditID string) error {
-			encoded, err := model.EncodeAuditData(map[string]any{
+			encoded, encodeErr := model.EncodeAuditData(map[string]any{
 				"exam_id":                 snapshot.Exam.ID.String(),
 				"draft_revision":          snapshot.Draft.Revision,
 				"idempotency_replayed":    true,
 				"original_audit_event_id": originalAuditID,
 			})
-			if err != nil {
-				return err
+			if encodeErr != nil {
+				return encodeErr
 			}
 
-			_, err = completeAuditEvent(ctx, tx, prepared.AuditEventID, model.AuditStatusSuccess, "", encoded, prepared.AuditAt)
-			return err
+			_, encodeErr = completeAuditEvent(ctx, tx, prepared.AuditEventID, model.AuditStatusSuccess, "", encoded, prepared.AuditAt)
+			return encodeErr
 		},
 	})
 	if err != nil {
@@ -594,8 +594,8 @@ func updateExamDraftText(ctx context.Context, tx *sqlxTxWrapper, input *store.Ex
 		return nil, fmt.Errorf("update exam Draft text: %w", translateError("exam_draft", input.ExamID.String(), err))
 	}
 
-	if affected, err := result.RowsAffected(); err != nil {
-		return nil, fmt.Errorf("inspect exam Draft text update: %w", err)
+	if affected, rowsAffectedErr := result.RowsAffected(); rowsAffectedErr != nil {
+		return nil, fmt.Errorf("inspect exam Draft text update: %w", rowsAffectedErr)
 	} else if affected != 1 {
 		return nil, store.NewErrConflict("exam_draft", "exam_draft_revision", nil)
 	}
@@ -719,8 +719,8 @@ func updateExamDraftBrowserPolicy(
 	}
 
 	candidate := *snapshot.Draft
-	if err := input.Policy.ValidateInstitutionOrigin(input.InstitutionOrigin); err != nil {
-		return nil, store.NewErrInvalidInput("exam_draft", "browser_policy", nil).Wrap(err)
+	if validateErr := input.Policy.ValidateInstitutionOrigin(input.InstitutionOrigin); validateErr != nil {
+		return nil, store.NewErrInvalidInput("exam_draft", "browser_policy", nil).Wrap(validateErr)
 	}
 
 	changed, err := candidate.ApplyBrowserPolicy(input.Policy, model.TimeUTC(input.UpdatedAt))
@@ -949,8 +949,8 @@ func (r examAuthoringRow) model() (*store.ExamAuthoringSnapshot, error) {
 		UpdatedAt:            r.DraftUpdatedAt,
 		Revision:             r.DraftRevision,
 	}
-	if err := validatePersistedModel("exam_draft", draft); err != nil {
-		return nil, err
+	if validateErr := validatePersistedModel("exam_draft", draft); validateErr != nil {
+		return nil, validateErr
 	}
 	if r.ManagerCount < 1 || !r.OwnerIsManager || r.ResourceCount < 0 {
 		return nil, invalidPersistedState("exam", "aggregate", fmt.Errorf("invalid aggregate counts"))

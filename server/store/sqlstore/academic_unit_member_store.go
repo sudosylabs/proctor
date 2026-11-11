@@ -154,20 +154,20 @@ func (s SQLAcademicUnitMemberStore) Create(
 			}
 		}
 
-		if err := ensureAcademicUnitMemberRangeAvailable(ctx, tx, &candidate); err != nil {
-			return nil, err
+		if ensureErr := ensureAcademicUnitMemberRangeAvailable(ctx, tx, &candidate); ensureErr != nil {
+			return nil, ensureErr
 		}
 
 		row := newAcademicUnitMemberRow(&candidate)
-		if _, err := tx.NamedExec(ctx, `INSERT INTO academic_unit_members (
+		if _, namedExecErr := tx.NamedExec(ctx, `INSERT INTO academic_unit_members (
 				id, created_at, updated_at, archived_at, revision, academic_unit_id, user_id,
 				start_at, end_at
 			)
 			VALUES (
 				:id, :created_at, :updated_at, :archived_at, :revision, :academic_unit_id, :user_id,
 				:start_at, :end_at
-			)`, &row); err != nil {
-			return nil, fmt.Errorf("create academic unit member: %w", translateError("academic_unit_member", candidate.ID.String(), err))
+			)`, &row); namedExecErr != nil {
+			return nil, fmt.Errorf("create academic unit member: %w", translateError("academic_unit_member", candidate.ID.String(), namedExecErr))
 		}
 
 		if input.Notice != nil {

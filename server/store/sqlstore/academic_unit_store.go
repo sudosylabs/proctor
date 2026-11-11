@@ -520,12 +520,12 @@ func (s SQLAcademicUnitStore) archiveAcademicUnit(
 		if err != nil {
 			return nil, err
 		}
-		if err := requireAcademicRevision("academic_unit", expectedRevision, current.Revision); err != nil {
-			return nil, err
+		if requireErr := requireAcademicRevision("academic_unit", expectedRevision, current.Revision); requireErr != nil {
+			return nil, requireErr
 		}
 
 		var dependent bool
-		if err := tx.Get(ctx, &dependent, `
+		if getErr := tx.Get(ctx, &dependent, `
 			SELECT EXISTS (
 				SELECT 1
 				FROM academic_units
@@ -549,8 +549,8 @@ func (s SQLAcademicUnitStore) archiveAcademicUnit(
 					AND scope_id = ?
 					AND archived_at IS NULL
 					AND end_at IS NULL
-			)`, id, id, id, id); err != nil {
-			return nil, fmt.Errorf("check academic unit archive dependencies: %w", err)
+			)`, id, id, id, id); getErr != nil {
+			return nil, fmt.Errorf("check academic unit archive dependencies: %w", getErr)
 		}
 
 		if dependent {
@@ -572,8 +572,8 @@ func (s SQLAcademicUnitStore) archiveAcademicUnit(
 		}
 
 		var row academicUnitRow
-		if err := tx.GetBuilder(ctx, &row, s.academicUnitsQuery.Where(sq.Eq{"academic_units.id": id})); err != nil {
-			return nil, fmt.Errorf("read archived academic unit: %w", err)
+		if getBuilderErr := tx.GetBuilder(ctx, &row, s.academicUnitsQuery.Where(sq.Eq{"academic_units.id": id})); getBuilderErr != nil {
+			return nil, fmt.Errorf("read archived academic unit: %w", getBuilderErr)
 		}
 
 		current, err = row.model()

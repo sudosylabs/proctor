@@ -283,19 +283,19 @@ func (s SQLExamStarterWorkspaceStore) runMutation(
 			value *store.ExamStarterWorkspaceMutationResult,
 			originalAuditID string,
 		) error {
-			encoded, err := model.EncodeAuditData(map[string]any{
+			encoded, encodeErr := model.EncodeAuditData(map[string]any{
 				"exam_id":                 value.Entry.ExamID.String(),
 				"entry_id":                value.Entry.ID.String(),
 				"draft_revision":          value.DraftRevision,
 				"idempotency_replayed":    true,
 				"original_audit_event_id": originalAuditID,
 			})
-			if err != nil {
-				return err
+			if encodeErr != nil {
+				return encodeErr
 			}
 
-			_, err = completeAuditEvent(ctx, tx, prepared.AuditEventID, model.AuditStatusSuccess, "", encoded, prepared.AuditAt)
-			return err
+			_, encodeErr = completeAuditEvent(ctx, tx, prepared.AuditEventID, model.AuditStatusSuccess, "", encoded, prepared.AuditAt)
+			return encodeErr
 		},
 	})
 	if err != nil {
@@ -708,8 +708,8 @@ func replaceStarterWorkspaceFile(
 	if !input.ExpectedContentVersion.IsValid() || input.ExpectedContentVersion != item.Object.ContentVersion {
 		return nil, store.NewErrConflict("exam_starter_workspace_entry", "workspace_content_version", nil)
 	}
-	if err := ensureStarterWorkspaceCapacity(ctx, tx, input.ExamID, 0, input.SizeBytes-item.Object.SizeBytes, input.SizeBytes); err != nil {
-		return nil, err
+	if ensureErr := ensureStarterWorkspaceCapacity(ctx, tx, input.ExamID, 0, input.SizeBytes-item.Object.SizeBytes, input.SizeBytes); ensureErr != nil {
+		return nil, ensureErr
 	}
 
 	object, err := consumeStarterWorkspaceObject(ctx, tx, input)

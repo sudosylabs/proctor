@@ -167,8 +167,8 @@ func (s SQLInstallationStore) ReconcileAdministratorRecovery(
 		}
 
 		var databaseNow time.Time
-		if err := tx.Get(ctx, &databaseNow, `SELECT clock_timestamp()`); err != nil {
-			return nil, fmt.Errorf("read administrator recovery reconciliation time: %w", err)
+		if getErr := tx.Get(ctx, &databaseNow, `SELECT clock_timestamp()`); getErr != nil {
+			return nil, fmt.Errorf("read administrator recovery reconciliation time: %w", getErr)
 		}
 
 		changedFields := make([]string, 0, 4)

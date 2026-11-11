@@ -183,8 +183,8 @@ func (s SQLRoleBindingStore) Save(
 			}
 		}
 
-		if err := insertRoleBinding(ctx, tx, &candidate); err != nil {
-			return nil, err
+		if insertErr := insertRoleBinding(ctx, tx, &candidate); insertErr != nil {
+			return nil, insertErr
 		}
 
 		if input.Notice != nil {

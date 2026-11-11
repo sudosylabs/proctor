@@ -494,8 +494,8 @@ func persistManagerEndedExamAttempt(
 	}
 
 	if beforeParticipation == model.AttemptParticipationActive {
-		if err := closeNativeDelivery(ctx, tx, participation.ID, model.DeliveryClosedManagerEnd, participation.EndedAt.Time); err != nil {
-			return err
+		if closeErr := closeNativeDelivery(ctx, tx, participation.ID, model.DeliveryClosedManagerEnd, participation.EndedAt.Time); closeErr != nil {
+			return closeErr
 		}
 	}
 

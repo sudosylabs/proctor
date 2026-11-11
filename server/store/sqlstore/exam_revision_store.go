@@ -137,7 +137,7 @@ func (s SQLExamRevisionStore) Publish(
 			return outcome, nil
 		},
 		completeReplay: func(ctx context.Context, tx *sqlxTxWrapper, outcome examRevisionPublicationOutcomeRow, originalAuditID string) error {
-			data, err := model.EncodeAuditData(map[string]any{
+			data, encodeErr := model.EncodeAuditData(map[string]any{
 				"exam_id":                 outcome.ExamID,
 				"exam_revision_id":        outcome.RevisionID,
 				"number":                  outcome.Number,
@@ -145,12 +145,12 @@ func (s SQLExamRevisionStore) Publish(
 				"idempotency_replayed":    true,
 				"original_audit_event_id": originalAuditID,
 			})
-			if err != nil {
-				return err
+			if encodeErr != nil {
+				return encodeErr
 			}
 
-			_, err = completeAuditEvent(ctx, tx, prepared.AuditEventID, model.AuditStatusSuccess, "", data, prepared.AuditAt)
-			return err
+			_, encodeErr = completeAuditEvent(ctx, tx, prepared.AuditEventID, model.AuditStatusSuccess, "", data, prepared.AuditAt)
+			return encodeErr
 		},
 	})
 	if err != nil {

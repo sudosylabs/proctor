@@ -293,7 +293,7 @@ func TestGeneratedForwardingIsCurrent(t *testing.T) {
 
 	temporary := t.TempDir()
 	generatedPath := filepath.Join(temporary, "forwarding_gen.go")
-	command := exec.Command(
+	command := exec.CommandContext(t.Context(),
 		"go", "run", "../storetest/layergen", "-layer", "timer", "-source", "..", "-output", generatedPath,
 	)
 	command.Env = append(os.Environ(), "GOCACHE="+filepath.Join(temporary, "go-cache"))

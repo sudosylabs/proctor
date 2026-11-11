@@ -388,9 +388,9 @@ func resolveSecurityControlContinuity(
 	}
 	history := make([]model.NativeSourceReset, 0, len(historyRaw))
 	for _, encoded := range historyRaw {
-		record, err := decodeNativeResetRecord(encoded, input.ParticipationID, "")
-		if err != nil {
-			return model.NativeContinuityDecision{}, err
+		record, decodeErr := decodeNativeResetRecord(encoded, input.ParticipationID, "")
+		if decodeErr != nil {
+			return model.NativeContinuityDecision{}, decodeErr
 		}
 		history = append(history, record.Reset)
 	}
@@ -787,7 +787,7 @@ func recoverNativeControl(
 	}
 
 	var ledger nativeControlLedger
-	if err := json.Unmarshal(owner.Ledger, &ledger); err != nil || ledger.Validate() != nil {
+	if unmarshalErr := json.Unmarshal(owner.Ledger, &ledger); unmarshalErr != nil || ledger.Validate() != nil {
 		return nil, invalidPersistedState("security_owner", "control_ledger", model.ErrSecurityControlInvalid)
 	}
 

@@ -155,10 +155,10 @@ func testBrowserSourceReservationRace(t *testing.T, ss store.Store) {
 	close(start)
 	successes := 0
 	for range 2 {
-		if err := <-results; err == nil {
+		if startErr := <-results; startErr == nil {
 			successes++
 		} else {
-			requireConflictConstraint(t, err, "browser_source_current")
+			requireConflictConstraint(t, startErr, "browser_source_current")
 		}
 	}
 	require.Equal(t, 1, successes, "concurrent initial starts succeeded")
@@ -210,10 +210,10 @@ func testBrowserPendingRepairReservation(t *testing.T, ss store.Store) {
 			events[i] = event(next + int64(i))
 		}
 		before := budget()
-		_, err := appendEvents(events)
-		if err != nil {
+		_, appendEventsErr := appendEvents(events)
+		if appendEventsErr != nil {
 			var conflict *store.ErrConflict
-			require.ErrorAs(t, err, &conflict)
+			require.ErrorAs(t, appendEventsErr, &conflict)
 			require.Equal(t, "pending_capacity", conflict.Constraint)
 			after := budget()
 			require.Equal(t, before.Browser.PendingBytes, after.Browser.PendingBytes, "pending refusal retained partial bytes or latched detail stop")

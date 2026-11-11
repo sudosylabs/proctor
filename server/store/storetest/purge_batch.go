@@ -120,8 +120,8 @@ func TestPurgeBatchProgress[K comparable](t *testing.T, probe PurgeBatchProbe[K]
 	for _, begin := range []func(context.Context, int) ([]K, error){probe.Begin, probe.PeerBegin} {
 		go func() {
 			<-start
-			keys, err := begin(ctx, batch)
-			results <- selected{keys: keys, err: err}
+			keys, beginErr := begin(ctx, batch)
+			results <- selected{keys: keys, err: beginErr}
 		}()
 	}
 	close(start)

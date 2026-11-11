@@ -1021,8 +1021,8 @@ func (s SQLExamResourceStore) Reorder(
 				}
 			}
 
-			if err := advanceExamResourceDraft(ctx, tx, input.ExamID, input.ExpectedDraftRevision, input.ChangedAt); err != nil {
-				return examResourceReorderOutcome{}, err
+			if advanceErr := advanceExamResourceDraft(ctx, tx, input.ExamID, input.ExpectedDraftRevision, input.ChangedAt); advanceErr != nil {
+				return examResourceReorderOutcome{}, advanceErr
 			}
 
 			data, _ := model.EncodeAuditData(map[string]any{
@@ -1030,8 +1030,8 @@ func (s SQLExamResourceStore) Reorder(
 				"resource_count": len(input.ResourceIDs),
 				"draft_revision": input.ExpectedDraftRevision + 1,
 			})
-			if _, err := completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", data, input.AuditAt); err != nil {
-				return examResourceReorderOutcome{}, err
+			if _, completeErr := completeAuditEvent(ctx, tx, input.AuditEventID, model.AuditStatusSuccess, "", data, input.AuditAt); completeErr != nil {
+				return examResourceReorderOutcome{}, completeErr
 			}
 
 			items, err := listExamResourceRecords(ctx, tx, input.ExamID)

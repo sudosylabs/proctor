@@ -1104,8 +1104,8 @@ func advanceBrowserInterpretation(
 		state := 2
 		if validationErr == nil && verified {
 			state = 1
-			if err := retainBrowserIntegrity(ctx, tx, source, attempt, event, policy, row.ReceivedAt); err != nil {
-				return err
+			if retainErr := retainBrowserIntegrity(ctx, tx, source, attempt, event, policy, row.ReceivedAt); retainErr != nil {
+				return retainErr
 			}
 		}
 

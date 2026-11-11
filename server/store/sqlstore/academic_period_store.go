@@ -516,8 +516,8 @@ func (s SQLAcademicPeriodStore) archiveAcademicPeriod(
 		if err = requireRevisionAffected(ctx, tx, result, "academic_period", "academic_periods", id.String()); err != nil {
 			return nil, err
 		}
-		if err := tx.GetBuilder(ctx, &row, s.academicPeriodsQuery.Where(sq.Eq{"academic_periods.id": id})); err != nil {
-			return nil, fmt.Errorf("read archived academic period: %w", err)
+		if getBuilderErr := tx.GetBuilder(ctx, &row, s.academicPeriodsQuery.Where(sq.Eq{"academic_periods.id": id})); getBuilderErr != nil {
+			return nil, fmt.Errorf("read archived academic period: %w", getBuilderErr)
 		}
 
 		period, err := row.model()

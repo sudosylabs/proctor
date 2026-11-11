@@ -392,8 +392,8 @@ func prepareConnectSecurityFixture(t *testing.T, ctx context.Context, ss store.S
 		}
 	}
 	audit := func() model.AuditEventID {
-		event, err := ss.Audit().Save(ctx, &model.AuditEvent{ActorID: input.CandidateUserID, Action: string(model.ActionExamSittingParticipate), Resource: model.Resource{Type: model.ResourceExamSitting, ID: input.SittingID.String()}, ScopeType: model.RoleScopeClass, ScopeID: sitting.Sitting.ClassID.String(), Status: model.AuditStatusAttempt, NodeID: "test-node"})
-		require.NoError(t, err)
+		event, auditErr := ss.Audit().Save(ctx, &model.AuditEvent{ActorID: input.CandidateUserID, Action: string(model.ActionExamSittingParticipate), Resource: model.Resource{Type: model.ResourceExamSitting, ID: input.SittingID.String()}, ScopeType: model.RoleScopeClass, ScopeID: sitting.Sitting.ClassID.String(), Status: model.AuditStatusAttempt, NodeID: "test-node"})
+		require.NoError(t, auditErr)
 		return event.ID
 	}
 	prepare := &store.SecurityPreflightPrepare{Access: access, AttemptID: attemptID, PreflightID: model.NewID(), Challenge: model.NewCredentialToken(), NativeRegistryDigest: access.DesktopBuild.NativeAgreement.RegistryDigest(), SourceManifestDigest: access.DesktopBuild.NativeAgreement.SourceManifestDigest(), ConfigurationManifestFingerprint: input.ConfigurationManifestFingerprint, AuditEventID: audit(), AuditAt: model.NowUTC()}

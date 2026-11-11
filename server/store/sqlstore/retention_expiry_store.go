@@ -645,21 +645,21 @@ func (s *SQLRetentionStore) ReconcileExpiry(
 				return nil, err
 			}
 
-			record, err := row.record(input.Kind, policy, at)
-			if err != nil {
-				return nil, err
+			record, recordErr := row.record(input.Kind, policy, at)
+			if recordErr != nil {
+				return nil, recordErr
 			}
 
 			permitted := control.Permits(policy) && record.Blocker == model.RetentionExpiryEligible
 			if row.ScheduledAt.Valid &&
 				(!permitted || row.PolicyRevision.Int64 != policy.Revision || row.ControlRevision.Int64 != control.Revision) {
-				if _, err = tx.Exec(
+				if _, recordErr = tx.Exec(
 					ctx,
 					`DELETE FROM retention_expiry_schedules WHERE record_kind = ? AND record_id = ?`,
 					input.Kind,
 					input.RecordID,
-				); err != nil {
-					return nil, err
+				); recordErr != nil {
+					return nil, recordErr
 				}
 
 				result.Canceled = true
@@ -668,7 +668,7 @@ func (s *SQLRetentionStore) ReconcileExpiry(
 
 			if permitted {
 				if !row.ScheduledAt.Valid {
-					_, err = tx.Exec(
+					_, recordErr = tx.Exec(
 						ctx,
 						`INSERT INTO retention_expiry_schedules(
 							record_kind, record_id, policy_revision, control_revision, scheduled_at,
@@ -682,14 +682,14 @@ func (s *SQLRetentionStore) ReconcileExpiry(
 						at,
 						at.Add(time.Duration(policy.DeletionGraceDays)*24*time.Hour),
 					)
-					if err != nil {
-						return nil, err
+					if recordErr != nil {
+						return nil, recordErr
 					}
 
 					result.Scheduled = true
 				} else if !at.Before(row.ExpiresAfter.Time) {
-					if err = expireRetentionRecord(ctx, tx, input.Kind, input.RecordID, policy, at); err != nil {
-						return nil, err
+					if recordErr = expireRetentionRecord(ctx, tx, input.Kind, input.RecordID, policy, at); recordErr != nil {
+						return nil, recordErr
 					}
 
 					result.Expired = true

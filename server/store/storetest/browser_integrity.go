@@ -57,8 +57,8 @@ func TestBrowserIntegrityStore(t *testing.T, ss store.Store) {
 	}
 	for from := 0; from < len(events); from += 64 {
 		end := min(from+64, len(events))
-		_, err := appendBrowserActivityFixture(t, ctx, ss, &store.BrowserActivityAppend{Access: access, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, SourceSessionID: source, Events: events[from:end]})
-		require.NoError(t, err)
+		_, appendErr := appendBrowserActivityFixture(t, ctx, ss, &store.BrowserActivityAppend{Access: access, ParticipationID: connected.Participation.ID, Generation: connected.Participation.Generation, SourceSessionID: source, Events: events[from:end]})
+		require.NoError(t, appendErr)
 	}
 	budget, err := ss.DeliveryBudget().DeliveryBudget(ctx, store.DeliveryBudgetAccess{Access: access, ParticipationID: connected.Participation.ID})
 	require.NoError(t, err)

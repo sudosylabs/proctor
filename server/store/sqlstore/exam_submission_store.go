@@ -1199,8 +1199,8 @@ func persistSubmittedExamAttempt(
 	if affected, rowsErr := result.RowsAffected(); rowsErr != nil || affected != 1 {
 		return store.NewErrConflict("attempt_participation", "attempt_participation_expired", rowsErr)
 	}
-	if err := closeNativeDelivery(ctx, tx, participation.ID, model.DeliveryClosedSubmission, participation.EndedAt.Time); err != nil {
-		return err
+	if closeErr := closeNativeDelivery(ctx, tx, participation.ID, model.DeliveryClosedSubmission, participation.EndedAt.Time); closeErr != nil {
+		return closeErr
 	}
 
 	result, err = tx.Exec(

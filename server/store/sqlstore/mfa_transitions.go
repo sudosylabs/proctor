@@ -185,8 +185,8 @@ func (s SQLMFAStore) SavePending(ctx context.Context, input *store.MFAPendingEnr
 		candidate := *input.Credential
 		candidate.PendingExpiresAt = model.OptionalTimeFrom(at.Add(input.Lifetime))
 		candidate.PrepareCreate(model.NewMFACredentialID(), at)
-		if err := candidate.Validate(); err != nil {
-			return nil, err
+		if validateErr := candidate.Validate(); validateErr != nil {
+			return nil, validateErr
 		}
 
 		if _, execErr := tx.Exec(
@@ -202,8 +202,8 @@ func (s SQLMFAStore) SavePending(ctx context.Context, input *store.MFAPendingEnr
 			return nil, execErr
 		}
 
-		if err := insertMFACredential(ctx, tx, &candidate); err != nil {
-			return nil, err
+		if insertErr := insertMFACredential(ctx, tx, &candidate); insertErr != nil {
+			return nil, insertErr
 		}
 
 		encoded, err := model.EncodeAuditData(candidate.Auditable())

@@ -75,9 +75,9 @@ func retireSubmissionBrowserActivity(ctx context.Context, tx *sqlxTxWrapper, sub
 			closure.UploadExpiresAt = &expiry
 		}
 
-		raw, err := canonicalPreflightValue(closure)
-		if err != nil {
-			return err
+		raw, canonicalErr := canonicalPreflightValue(closure)
+		if canonicalErr != nil {
+			return canonicalErr
 		}
 		if _, execErr := tx.Exec(ctx, `UPDATE browser_activity_sources
 			SET closure_canonical = ?
@@ -85,12 +85,12 @@ func retireSubmissionBrowserActivity(ctx context.Context, tx *sqlxTxWrapper, sub
 			return execErr
 		}
 
-		status, err := browserSourceStatus(ctx, tx, model.BrowserSourceSessionID(row.ID))
-		if err != nil {
-			return err
+		status, canonicalErr := browserSourceStatus(ctx, tx, model.BrowserSourceSessionID(row.ID))
+		if canonicalErr != nil {
+			return canonicalErr
 		}
-		if err := updateBrowserSourceSettlement(ctx, tx, status); err != nil {
-			return err
+		if updateErr := updateBrowserSourceSettlement(ctx, tx, status); updateErr != nil {
+			return updateErr
 		}
 	}
 
@@ -119,13 +119,13 @@ func retireSubmissionBrowserActivity(ctx context.Context, tx *sqlxTxWrapper, sub
 		`DELETE FROM browser_activity_events WHERE exam_attempt_id = ?`,
 		`DELETE FROM browser_activity_sources WHERE exam_attempt_id = ?`,
 	} {
-		if _, err := tx.Exec(ctx, q, attempt.String()); err != nil {
-			return err
+		if _, execErr := tx.Exec(ctx, q, attempt.String()); execErr != nil {
+			return execErr
 		}
 	}
 
-	if err := deleteDeliveryRetryCopies(ctx, tx, attempt, true); err != nil {
-		return err
+	if deleteErr := deleteDeliveryRetryCopies(ctx, tx, attempt, true); deleteErr != nil {
+		return deleteErr
 	}
 
 	_, err = tx.Exec(
@@ -208,8 +208,8 @@ func retireSubmissionSecurityOperational(ctx context.Context, tx *sqlxTxWrapper,
 		return execErr
 	}
 
-	if err := deleteDeliveryRetryCopies(ctx, tx, attempt, false); err != nil {
-		return err
+	if deleteErr := deleteDeliveryRetryCopies(ctx, tx, attempt, false); deleteErr != nil {
+		return deleteErr
 	}
 
 	_, err = tx.Exec(

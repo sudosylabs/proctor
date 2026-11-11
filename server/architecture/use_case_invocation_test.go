@@ -21,26 +21,28 @@ import (
 
 // nonUseCaseSurface names the exported App methods that are not use cases,
 // with the reason each takes no Invocation. Every other exported method is a
-// use case.
+// use case. A key is the App field that holds the service, then the method
+// ("Realtime.Publish"), or "App" for a method of App itself, so an exemption
+// covers one method of one service and not every method of that name.
 var nonUseCaseSurface = map[string]string{
-	"JobEngine":                      "runtime handle that composition borrows",
-	"AttachSink":                     "composition attaches the WebSocket sink once before readiness",
-	"AttachClusterFanout":            "composition attaches the cluster fan-out once before readiness",
-	"AuthenticateAccess":             principalResolution,
-	"AuthenticateBearer":             principalResolution,
-	"AuthenticateDPoP":               principalResolution,
-	"ValidateWebSocketPrincipal":     "WebSocket admission revalidates the Principal a connection was opened with before it builds any Invocation",
-	"ValidatePrincipal":              "WebSocket admission and onboarding import revalidate a Principal established earlier before they build an Invocation from it",
-	"AuthenticationCacheInvalidated": realtimePropagation,
-	"SessionsRevoked":                realtimePropagation,
-	"InvalidateAuthorization":        realtimePropagation,
-	"InvalidateCurrentUserContext":   realtimePropagation,
-	"Publish":                        realtimePropagation,
-	"UnbindExamAttemptConnection":    realtimePropagation,
-	"Report":                         "realtime.Publisher's record of a post-commit effect that failed; the area use case that owns the Invocation calls it and still succeeds",
-	"ResolveAttemptDesktopBuild":     attemptPort,
-	"ResolveNativeDeliveryBuild":     attemptPort,
-	"CreateLocalUser":                "unauthorized provisioning seam that only integration tests reach; production creates Users through bootstrap, registration and Invitations",
+	"App.JobEngine":                                "runtime handle that composition borrows",
+	"Realtime.AttachSink":                          "composition attaches the WebSocket sink once before readiness",
+	"Realtime.AttachClusterFanout":                 "composition attaches the cluster fan-out once before readiness",
+	"Identity.AuthenticateAccess":                  principalResolution,
+	"Identity.AuthenticateBearer":                  principalResolution,
+	"Identity.AuthenticateDPoP":                    principalResolution,
+	"RealtimeAdmission.ValidateWebSocketPrincipal": "WebSocket admission revalidates the Principal a connection was opened with before it builds any Invocation",
+	"Identity.ValidatePrincipal":                   "WebSocket admission and onboarding import revalidate a Principal established earlier before they build an Invocation from it",
+	"Realtime.AuthenticationCacheInvalidated":      realtimePropagation,
+	"Realtime.SessionsRevoked":                     realtimePropagation,
+	"Realtime.InvalidateAuthorization":             realtimePropagation,
+	"Realtime.InvalidateCurrentUserContext":        realtimePropagation,
+	"Realtime.Publish":                             realtimePropagation,
+	"Realtime.UnbindExamAttemptConnection":         realtimePropagation,
+	"Realtime.Report":                              "realtime.Publisher's record of a post-commit effect that failed; the area use case that owns the Invocation calls it and still succeeds",
+	"Identity.ResolveAttemptDesktopBuild":          attemptPort,
+	"Identity.ResolveNativeDeliveryBuild":          attemptPort,
+	"Identity.CreateLocalUser":                     "unauthorized provisioning seam that only integration tests reach; production creates Users through bootstrap, registration and Invitations",
 }
 
 const (
@@ -104,7 +106,7 @@ type App struct {
 		"fixture/app.App.Area.ArchiveThing takes (context.Context, string); a use case takes (context.Context, invocation.Invocation or invocation.System, ...)",
 		"fixture/app.App.CountThings takes (invocation.Invocation); a use case takes (context.Context, invocation.Invocation or invocation.System, ...)",
 		"fixture/app.App.ListThings takes (context.Context, string); a use case takes (context.Context, invocation.Invocation or invocation.System, ...)",
-	}, useCaseInvocationViolations(loaded, "fixture", map[string]string{"Attach": "composition hook"}))
+	}, useCaseInvocationViolations(loaded, "fixture", map[string]string{"App.Attach": "composition hook"}))
 }
 
 func useCaseInvocationViolations(loaded []*packages.Package, module string, exempt map[string]string) []string {
@@ -140,7 +142,7 @@ func surfaceInvocationViolations(owner string, surface types.Type, module string
 		if !method.Exported() {
 			continue
 		}
-		if _, ok := exempt[method.Name()]; ok {
+		if _, ok := exempt[owner[strings.LastIndex(owner, ".")+1:]+"."+method.Name()]; ok {
 			continue
 		}
 		signature := method.Type().(*types.Signature)

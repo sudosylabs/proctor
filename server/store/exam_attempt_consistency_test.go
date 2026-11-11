@@ -166,6 +166,7 @@ func TestExamAttemptConnectResultConfigurationConsistentRejectsEachInconsistency
 	check := func(r *ExamAttemptConnectResult) bool { return r.ConfigurationConsistent() }
 
 	require.False(t, (*ExamAttemptConnectResult)(nil).ConfigurationConsistent())
+	require.False(t, (&ExamAttemptConnectResult{}).ConfigurationConsistent(), "no Attempt or Participation")
 	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[ExamAttemptConnectResult]{
 		{"invalid admitted security", func(r *ExamAttemptConnectResult) { r.Security.RenewalIntervalSeconds = 0 }},
 		{"security of another Participation", func(r *ExamAttemptConnectResult) {

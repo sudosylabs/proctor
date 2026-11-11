@@ -112,11 +112,12 @@ func (r *ExamAttemptConnectResult) ConsistentWith(
 // ConfigurationConsistent reports whether the admitted security posture,
 // frozen Attempt configuration, runtime capabilities, browser policy and live
 // corrections are each valid and agree with the outcome's Attempt and
-// Participation. It reads the Attempt and Participation without checking that
-// they are present, so it is asked only of an outcome that already passed
-// ConsistentWith.
+// Participation. An outcome without its Attempt or Participation is
+// inconsistent.
 func (r *ExamAttemptConnectResult) ConfigurationConsistent() bool {
 	return !(r == nil ||
+		r.Attempt == nil ||
+		r.Participation == nil ||
 		r.Security.Validate() != nil ||
 		r.Security.ParticipationID != r.Participation.ID ||
 		r.Security.Policy.Scope.AttemptID != r.Attempt.ID ||

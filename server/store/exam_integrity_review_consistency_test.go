@@ -195,6 +195,11 @@ func TestExamCorrectionResultConsistencyChecksRejectEachInconsistency(t *testing
 	}
 
 	require.False(t, (*ExamCorrectionResult)(nil).Consistent())
+	require.False(
+		t,
+		(&ExamCorrectionResult{}).ConsistentWith(examID, sittingID, previousID, expectedSittingRevision),
+		"no Revision or Sitting",
+	)
 	requireEachInconsistencyRejected(t, consistent, func(r *ExamCorrectionResult) bool { return r.Consistent() }, []bad{
 		{"no Revision", func(r *ExamCorrectionResult) { r.Revision = nil }},
 		{"no Sitting snapshot", func(r *ExamCorrectionResult) { r.Sitting = nil }},

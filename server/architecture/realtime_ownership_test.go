@@ -28,8 +28,8 @@ func TestRealtimeContractsHaveOneProductionOwner(t *testing.T) {
 	parentContracts := map[string]bool{
 		"Event":                 true,
 		"ConnectionCloseReason": true,
-		"RealtimeSink":          true,
-		"RealtimeClusterFanout": true,
+		"Sink":                  true,
+		"ClusterFanout":         true,
 	}
 	parentMechanics := map[string]bool{
 		"realtimePublication":                 true,

@@ -189,9 +189,8 @@ func (r *ExamCorrectionResult) Consistent() bool {
 // live-correction Revision of the commanded Exam that follows the expected
 // current Revision, its Sitting is the commanded one, now on that Revision at
 // the next Sitting revision and still open or paused, and the correction took
-// effect at the instant the Revision was published. It reads the Revision and
-// Sitting without checking that they are present, so it is asked only of an
-// outcome that already passed Consistent.
+// effect at the instant the Revision was published. An outcome without its
+// Revision or Sitting is inconsistent.
 func (r *ExamCorrectionResult) ConsistentWith(
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
@@ -199,6 +198,9 @@ func (r *ExamCorrectionResult) ConsistentWith(
 	expectedSittingRevision int64,
 ) bool {
 	return !(r == nil ||
+		r.Revision == nil ||
+		r.Sitting == nil ||
+		r.Sitting.Sitting == nil ||
 		r.Revision.ExamID != examID ||
 		r.Revision.ID == expectedCurrentRevisionID ||
 		r.Revision.Kind != model.ExamRevisionPublicationLiveCorrection ||

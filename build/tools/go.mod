@@ -1,6 +1,6 @@
 module github.com/sudosylabs/proctor/build/tools
 
-go 1.26.10
+go 1.26.11
 
 tool (
 	github.com/go-delve/delve/cmd/dlv

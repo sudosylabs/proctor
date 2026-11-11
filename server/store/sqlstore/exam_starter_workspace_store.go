@@ -895,12 +895,7 @@ func lockStarterWorkspaceDraft(
 		ActorIsManager bool         `db:"actor_is_manager"`
 	}
 	err := tx.Get(ctx, &row, `SELECT d.revision, e.archived_at,
-			EXISTS (
-				SELECT 1
-				FROM exam_managers m
-				WHERE m.exam_id = e.id
-					AND m.user_id = ?
-			) AS actor_is_manager
+			`+examManagerExistsSQL+` AS actor_is_manager
 		FROM exams e
 		JOIN exam_drafts d ON d.exam_id = e.id
 		WHERE e.id = ?

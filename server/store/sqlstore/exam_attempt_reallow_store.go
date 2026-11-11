@@ -100,12 +100,7 @@ func guardExamAttemptReallowAuthority(
 ) error {
 	var guard examAttemptReallowGuard
 	query := `SELECT a.state AS attempt_state, s.state AS sitting_state, a.candidate_user_id,
-			EXISTS (
-				SELECT 1
-				FROM exam_managers m
-				WHERE m.exam_id = a.exam_id
-					AND m.user_id = ?
-			) AS actor_is_manager
+			` + attemptExamManagerExistsSQL + ` AS actor_is_manager
 		FROM exam_attempts a
 		JOIN exam_sittings s ON s.id = a.exam_sitting_id
 			AND s.exam_id = a.exam_id

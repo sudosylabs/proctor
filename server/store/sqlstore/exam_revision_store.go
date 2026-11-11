@@ -342,12 +342,7 @@ func lockExamRevisionDraft(ctx context.Context, tx *sqlxTxWrapper, input *store.
 		ctx,
 		&draft,
 		`SELECT e.academic_unit_id, e.archived_at, e.revision AS exam_revision,
-			EXISTS (
-				SELECT 1
-				FROM exam_managers m
-				WHERE m.exam_id = e.id
-					AND m.user_id = ?
-			) AS actor_is_manager, d.title, d.instructions_markdown, d.policy, d.browser_policy,
+			`+examManagerExistsSQL+` AS actor_is_manager, d.title, d.instructions_markdown, d.policy, d.browser_policy,
 			d.base_revision_id, d.revision AS draft_revision
 		FROM exams e
 		JOIN exam_drafts d ON d.exam_id = e.id

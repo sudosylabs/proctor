@@ -324,18 +324,7 @@ func lockExamExportAuthority(
 
 	ordinary := a.Action == model.ActionExamRecordsExport
 	if ordinary {
-		var allowed bool
-		err = tx.Get(ctx, &allowed, `SELECT true
-			FROM exam_managers m
-			JOIN academic_unit_members u ON u.user_id = m.user_id
-			WHERE m.exam_id = ?
-				AND m.user_id = ?
-				AND u.academic_unit_id = ?
-				AND u.archived_at IS NULL
-				AND u.start_at <= ?
-				AND (u.end_at IS NULL OR u.end_at > ?)
-			LIMIT 1
-			FOR SHARE OF m, u`, a.Scope.ExamID.String(), a.Principal.UserID.String(), scope.AcademicUnitID.String(), at, at)
+		err = lockExamManagerWithUnitMembership(ctx, tx, a.Scope.ExamID, a.Principal.UserID, scope.AcademicUnitID, at)
 		if errors.Is(err, sql.ErrNoRows) {
 			return time.Time{}, store.NewErrConflict("authorization", "authority", nil)
 		}
@@ -345,12 +334,7 @@ func lockExamExportAuthority(
 	}
 
 	if !ordinary && slices.Contains(a.Categories, model.RetentionCategoryBrowserActivity) {
-		var manager bool
-		err = tx.Get(ctx, &manager, `SELECT true
-			FROM exam_managers
-			WHERE exam_id = ?
-				AND user_id = ?
-			FOR SHARE`, a.Scope.ExamID.String(), a.Principal.UserID.String())
+		err = lockExamManager(ctx, tx, a.Scope.ExamID, a.Principal.UserID)
 		if errors.Is(err, sql.ErrNoRows) {
 			return time.Time{}, store.NewErrConflict("authorization", "authority", nil)
 		}

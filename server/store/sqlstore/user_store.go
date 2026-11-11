@@ -681,36 +681,9 @@ func (s SQLUserStore) currentUserProductAreas(
 	err := s.GetMaster().Get(
 		ctx,
 		&row,
-		`WITH RECURSIVE active_bindings AS (
-			SELECT binding.scope_type, binding.scope_id, role.name, role.permissions
-			FROM role_bindings binding
-			JOIN roles role ON role.id = binding.role_id
-			WHERE binding.user_id = ?
-				AND binding.archived_at IS NULL
-				AND role.archived_at IS NULL
-				AND binding.start_at <= statement_timestamp()
-				AND (binding.end_at IS NULL OR binding.end_at > statement_timestamp())
-		),
-		unit_ancestors(root_id, id) AS (
-			SELECT id, id
-			FROM academic_units
-			WHERE archived_at IS NULL
-			UNION ALL
-			SELECT child.root_id, parent.id
-			FROM unit_ancestors child
-			JOIN academic_units current ON current.id = child.id
-			JOIN academic_units parent ON parent.id = current.parent_id AND parent.archived_at IS NULL
-		),
-		managed_exams AS (
-			SELECT exam.id, exam.academic_unit_id
-			FROM exams exam
-			JOIN exam_managers manager ON manager.exam_id = exam.id AND manager.user_id = ?
-			JOIN academic_unit_members member ON member.academic_unit_id = exam.academic_unit_id
-				AND member.user_id = ?
-			WHERE member.archived_at IS NULL
-				AND member.start_at <= statement_timestamp()
-				AND (member.end_at IS NULL OR member.end_at > statement_timestamp())
-		)
+		`WITH RECURSIVE `+activeRoleBindingsCTE+`,
+		`+unitAncestorsByRootCTE+`,
+		`+managedExamsCTE+`
 		SELECT u.id AS user_id, u.username, u.display_name,
 			u.custom_profile_picture_file_id IS NOT NULL AS custom_picture,
 			EXISTS(
@@ -741,23 +714,7 @@ func (s SQLUserStore) currentUserProductAreas(
 			EXISTS(
 				SELECT 1
 				FROM active_bindings binding
-				WHERE (binding.name = ? AND ? = ANY(binding.permissions) AND binding.scope_type = 'institution')
-					OR (
-						binding.permissions && ?::text[]
-						AND EXISTS (
-							SELECT 1
-							FROM managed_exams managed
-							WHERE binding.scope_type = 'institution'
-								OR (
-									binding.scope_type = 'academic_unit'
-									AND binding.scope_id IN (
-										SELECT id
-										FROM unit_ancestors
-										WHERE root_id = managed.academic_unit_id
-									)
-								)
-						)
-					)
+				WHERE `+examManagementBindingSQL+`
 			) AS has_exam_management,
 			EXISTS(
 				SELECT 1
@@ -830,35 +787,13 @@ func (s SQLUserStore) loadCurrentUserManagementScopes(
 	if err := s.GetMaster().Select(
 		ctx,
 		&rows,
-		`WITH RECURSIVE active_bindings AS (
-		SELECT binding.scope_type, binding.scope_id, role.name, role.permissions
-		FROM role_bindings binding JOIN roles role ON role.id = binding.role_id
-		WHERE binding.user_id = ?
-			AND binding.archived_at IS NULL
-			AND role.archived_at IS NULL
-			AND binding.start_at <= statement_timestamp()
-			AND (binding.end_at IS NULL OR binding.end_at > statement_timestamp())
-	), unit_ancestors(root_id, id) AS (
-		SELECT id, id FROM academic_units WHERE archived_at IS NULL
-		UNION ALL
-		SELECT child.root_id, parent.id FROM unit_ancestors child
-		JOIN academic_units current ON current.id = child.id
-		JOIN academic_units parent ON parent.id = current.parent_id AND parent.archived_at IS NULL
-	), managed_exams AS (
-		SELECT exam.id, exam.academic_unit_id FROM exams exam
-		JOIN exam_managers manager ON manager.exam_id = exam.id AND manager.user_id = ?
-		JOIN academic_unit_members member ON member.academic_unit_id = exam.academic_unit_id AND member.user_id = ?
-		WHERE member.archived_at IS NULL
-			AND member.start_at <= statement_timestamp()
-			AND (member.end_at IS NULL OR member.end_at > statement_timestamp())
-	), navigable_bindings AS (
+		`WITH RECURSIVE `+activeRoleBindingsCTE+`,
+	`+unitAncestorsByRootCTE+`,
+	`+managedExamsCTE+`,
+	navigable_bindings AS (
 		SELECT binding.* FROM active_bindings binding WHERE binding.scope_type IN ('institution', 'academic_unit') AND (
 			binding.permissions && ?::text[] OR
-			(binding.name = ? AND ? = ANY(binding.permissions) AND binding.scope_type = 'institution') OR
-			(binding.permissions && ?::text[] AND EXISTS (
-				SELECT 1 FROM managed_exams managed WHERE binding.scope_type = 'institution' OR
-					(binding.scope_type = 'academic_unit' AND binding.scope_id IN (
-						SELECT id FROM unit_ancestors WHERE root_id = managed.academic_unit_id))))
+			`+examManagementBindingSQL+`
 		)
 	), scopes AS (
 		SELECT 'institution'::text AS scope_type, institution.id AS scope_id, institution.display_name

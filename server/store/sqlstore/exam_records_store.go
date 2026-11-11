@@ -377,27 +377,7 @@ func lockExamRecordsAuthority(
 
 	ordinary := input.Action == model.ActionExamRecordsComplete || input.Action == model.ActionExamRecordsHold
 	if ordinary {
-		var member bool
-		err = tx.Get(
-			ctx,
-			&member,
-			`SELECT true
-			FROM exam_managers m
-			JOIN academic_unit_members u ON u.user_id = m.user_id
-			WHERE m.exam_id = ?
-				AND m.user_id = ?
-				AND u.academic_unit_id = ?
-				AND u.archived_at IS NULL
-				AND u.start_at <= ?
-				AND (u.end_at IS NULL OR u.end_at > ?)
-			LIMIT 1
-			FOR SHARE OF m, u`,
-			input.Scope.ExamID.String(),
-			input.Principal.UserID.String(),
-			scope.AcademicUnitID.String(),
-			at,
-			at,
-		)
+		err = lockExamManagerWithUnitMembership(ctx, tx, input.Scope.ExamID, input.Principal.UserID, scope.AcademicUnitID, at)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, time.Time{}, store.NewErrConflict("authorization", "authority", nil)
 		}

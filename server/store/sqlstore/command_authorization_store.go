@@ -305,123 +305,14 @@ func requireUserActionAtScopeWithDelegation(
 		return store.NewErrInvalidInput("authorization", "scope", nil)
 	}
 
-	var active bool
 	var err error
-	actionName := string(action)
 	switch scopeType {
 	case model.RoleScopeInstitution:
-		err = tx.Get(
-			ctx,
-			&active,
-			`SELECT true
-			FROM role_bindings rb
-			JOIN roles r ON r.id = rb.role_id
-				AND r.archived_at IS NULL
-			WHERE rb.user_id = ?
-				AND rb.archived_at IS NULL
-				AND rb.start_at <= ?
-				AND (rb.end_at IS NULL OR rb.end_at > ?)
-				AND rb.scope_type = 'institution'
-				AND rb.scope_id = ?
-				AND ? = ANY(r.permissions)
-			LIMIT 1
-			FOR SHARE OF rb, r`,
-			userID.String(),
-			at,
-			at,
-			scopeID,
-			actionName,
-		)
+		err = lockActionGrantAtInstitution(ctx, tx, userID, action, scopeID, at)
 	case model.RoleScopeAcademicUnit:
-		err = tx.Get(
-			ctx,
-			&active,
-			`WITH RECURSIVE ancestors AS (
-				SELECT id, parent_id
-				FROM academic_units
-				WHERE id = ?
-					AND archived_at IS NULL
-				UNION ALL
-				SELECT au.id, au.parent_id
-				FROM academic_units au
-				JOIN ancestors child ON au.id = child.parent_id
-				WHERE au.archived_at IS NULL
-			)
-			SELECT true
-			FROM role_bindings rb
-			JOIN roles r ON r.id = rb.role_id
-				AND r.archived_at IS NULL
-			WHERE rb.user_id = ?
-				AND rb.archived_at IS NULL
-				AND rb.start_at <= ?
-				AND (rb.end_at IS NULL OR rb.end_at > ?)
-				AND ? = ANY(r.permissions)
-				AND (
-					rb.scope_type = 'institution'
-					OR (
-						rb.scope_type = 'academic_unit'
-						AND rb.scope_id IN (SELECT id FROM ancestors)
-						AND (NOT ? OR rb.scope_id <> ?)
-					)
-				)
-			LIMIT 1
-			FOR SHARE OF rb, r`,
-			scopeID,
-			userID.String(),
-			at,
-			at,
-			actionName,
-			strictParent,
-			scopeID,
-		)
+		err = lockDelegableActionGrantAtAcademicUnit(ctx, tx, userID, action, scopeID, at, strictParent)
 	case model.RoleScopeClass:
-		err = tx.Get(
-			ctx,
-			&active,
-			`WITH RECURSIVE class_unit AS (
-				SELECT p.academic_unit_id
-				FROM classes c
-				JOIN programme_levels pl ON pl.id = c.programme_level_id
-				JOIN programmes p ON p.id = pl.programme_id
-				WHERE c.id = ?
-			),
-			ancestors AS (
-				SELECT academic_unit_id id
-				FROM class_unit
-				UNION ALL
-				SELECT au.parent_id
-				FROM academic_units au
-				JOIN ancestors child ON au.id = child.id
-				WHERE au.parent_id IS NOT NULL
-					AND au.archived_at IS NULL
-			)
-			SELECT true
-			FROM role_bindings rb
-			JOIN roles r ON r.id = rb.role_id
-				AND r.archived_at IS NULL
-			WHERE rb.user_id = ?
-				AND rb.archived_at IS NULL
-				AND rb.start_at <= ?
-				AND (rb.end_at IS NULL OR rb.end_at > ?)
-				AND ? = ANY(r.permissions)
-				AND (
-					rb.scope_type = 'institution'
-					OR (rb.scope_type = 'class' AND rb.scope_id = ? AND NOT ?)
-					OR (
-						rb.scope_type = 'academic_unit'
-						AND rb.scope_id IN (SELECT id FROM ancestors)
-					)
-				)
-			LIMIT 1
-			FOR SHARE OF rb, r`,
-			scopeID,
-			userID.String(),
-			at,
-			at,
-			actionName,
-			scopeID,
-			strictParent,
-		)
+		err = lockDelegableActionGrantAtClass(ctx, tx, userID, action, scopeID, at, strictParent)
 	default:
 		return store.NewErrInvalidInput("authorization", "scope_type", nil)
 	}

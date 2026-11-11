@@ -402,12 +402,7 @@ func (s SQLExamAuthoringStore) getAccess(ctx context.Context, examID model.ExamI
 
 const examAccessSelect = `SELECT e.id, e.academic_unit_id, e.creator_user_id, e.owner_user_id,
 		e.default_revision_id, e.created_at, e.updated_at, e.archived_at, e.revision,
-		EXISTS (
-			SELECT 1
-			FROM exam_managers actor_manager
-			WHERE actor_manager.exam_id = e.id
-				AND actor_manager.user_id = ?
-		) AS actor_is_manager
+		` + actorExamManagerExistsSQL + ` AS actor_is_manager
 	FROM exams e
 	WHERE e.id = ?`
 
@@ -421,12 +416,7 @@ const examAuthoringSelect = `SELECT e.id, e.academic_unit_id, e.creator_user_id,
 			FROM exam_managers count_managers
 			WHERE count_managers.exam_id = e.id
 		) AS manager_count,
-		EXISTS (
-			SELECT 1
-			FROM exam_managers actor_manager
-			WHERE actor_manager.exam_id = e.id
-				AND actor_manager.user_id = ?
-		) AS actor_is_manager,
+		` + actorExamManagerExistsSQL + ` AS actor_is_manager,
 		EXISTS (
 			SELECT 1
 			FROM exam_managers owner_manager

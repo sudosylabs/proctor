@@ -1197,12 +1197,7 @@ func guardExamSittingManagerExam(
 ) error {
 	var guard examSittingExamGuard
 	if err := tx.Get(ctx, &guard, `SELECT e.archived_at,
-			EXISTS (
-				SELECT 1
-				FROM exam_managers m
-				WHERE m.exam_id = e.id
-					AND m.user_id = ?
-			) AS actor_is_manager
+			`+examManagerExistsSQL+` AS actor_is_manager
 		FROM exams e
 		WHERE e.id = ?
 		FOR UPDATE OF e`, actorID.String(), examID.String()); err != nil {

@@ -916,7 +916,6 @@ func requireInvitationManagementAuthority(
 		return fmt.Errorf("lock Invitation manager: %w", err)
 	}
 
-	var allowed bool
 	var err error
 	if invitation.ScopeType == model.RoleScopeAcademicUnit || invitation.ScopeType == model.RoleScopeClass {
 		if err = lockAcademicUnitHierarchy(ctx, tx); err != nil {
@@ -926,104 +925,11 @@ func requireInvitationManagementAuthority(
 
 	switch invitation.ScopeType {
 	case model.RoleScopeInstitution:
-		err = tx.Get(
-			ctx,
-			&allowed,
-			`SELECT true
-			FROM role_bindings rb
-			JOIN roles r ON r.id = rb.role_id
-				AND r.archived_at IS NULL
-			WHERE rb.user_id = ?
-				AND rb.archived_at IS NULL
-				AND rb.start_at <= ?
-				AND (rb.end_at IS NULL OR rb.end_at > ?)
-				AND rb.scope_type = 'institution'
-				AND rb.scope_id = ?
-				AND ? = ANY(r.permissions)
-			LIMIT 1
-			FOR SHARE OF rb, r`,
-			actor.String(),
-			at,
-			at,
-			invitation.ScopeID,
-			string(model.ActionInvitationManage),
-		)
+		err = lockActionGrantAtInstitution(ctx, tx, actor, model.ActionInvitationManage, invitation.ScopeID, at)
 	case model.RoleScopeAcademicUnit:
-		err = tx.Get(ctx, &allowed, `WITH RECURSIVE ancestors AS (
-				SELECT id, parent_id
-				FROM academic_units
-				WHERE id = ?
-					AND archived_at IS NULL
-				UNION ALL
-				SELECT au.id, au.parent_id
-				FROM academic_units au
-				JOIN ancestors child ON au.id = child.parent_id
-				WHERE au.archived_at IS NULL
-			)
-			SELECT true
-			FROM role_bindings rb
-			JOIN roles r ON r.id = rb.role_id
-				AND r.archived_at IS NULL
-			WHERE rb.user_id = ?
-				AND rb.archived_at IS NULL
-				AND rb.start_at <= ?
-				AND (rb.end_at IS NULL OR rb.end_at > ?)
-				AND ? = ANY(r.permissions)
-				AND (
-					rb.scope_type = 'institution'
-					OR (
-						rb.scope_type = 'academic_unit'
-						AND rb.scope_id IN (SELECT id FROM ancestors)
-					)
-				)
-			LIMIT 1
-			FOR SHARE OF rb, r`, invitation.ScopeID, actor.String(), at, at, string(model.ActionInvitationManage))
+		err = lockActionGrantAtAcademicUnit(ctx, tx, actor, model.ActionInvitationManage, invitation.ScopeID, at)
 	case model.RoleScopeClass:
-		err = tx.Get(
-			ctx,
-			&allowed,
-			`WITH RECURSIVE class_unit AS (
-				SELECT p.academic_unit_id
-				FROM classes c
-				JOIN programme_levels pl ON pl.id = c.programme_level_id
-				JOIN programmes p ON p.id = pl.programme_id
-				WHERE c.id = ?
-			), ancestors AS (
-				SELECT academic_unit_id id
-				FROM class_unit
-				UNION ALL
-				SELECT au.parent_id
-				FROM academic_units au
-				JOIN ancestors child ON au.id = child.id
-				WHERE au.parent_id IS NOT NULL
-					AND au.archived_at IS NULL
-			)
-			SELECT true
-			FROM role_bindings rb
-			JOIN roles r ON r.id = rb.role_id
-				AND r.archived_at IS NULL
-			WHERE rb.user_id = ?
-				AND rb.archived_at IS NULL
-				AND rb.start_at <= ?
-				AND (rb.end_at IS NULL OR rb.end_at > ?)
-				AND ? = ANY(r.permissions)
-				AND (
-					rb.scope_type = 'institution'
-					OR (rb.scope_type = 'class' AND rb.scope_id = ?)
-					OR (
-						rb.scope_type = 'academic_unit'
-						AND rb.scope_id IN (SELECT id FROM ancestors)
-					)
-				)
-			LIMIT 1
-			FOR SHARE OF rb, r`,
-			invitation.ScopeID,
-			actor.String(),
-			at,
-			at,
-			string(model.ActionInvitationManage),
-			invitation.ScopeID,
-		)
+		err = lockActionGrantAtClass(ctx, tx, actor, model.ActionInvitationManage, invitation.ScopeID, at)
 	default:
 		return store.NewErrInvalidInput("invitation", "scope", nil)
 	}

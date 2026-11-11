@@ -111,25 +111,3 @@ func hasUsableSystemAdministratorAuthenticationPath(
 
 	return found, nil
 }
-
-func isActiveSystemAdministrator(ctx context.Context, executor sqlxExecutor, userID string, at time.Time) (bool, error) {
-	var found bool
-	if err := executor.Get(ctx, &found, `SELECT EXISTS (
-		SELECT 1 FROM role_bindings rb
-		JOIN roles r ON r.id = rb.role_id
-		JOIN users u ON u.id = rb.user_id
-		WHERE rb.user_id = $1
-			AND r.name = $2
-			AND r.built_in = TRUE
-			AND r.archived_at IS NULL
-			AND rb.scope_type = 'institution'
-			AND rb.archived_at IS NULL
-			AND rb.start_at <= $3
-			AND (rb.end_at IS NULL OR rb.end_at > $3)
-			AND u.archived_at IS NULL
-			AND u.disabled_at IS NULL
-	)`, userID, model.SystemAdministratorRoleName, at); err != nil {
-		return false, fmt.Errorf("check active system administrator: %w", err)
-	}
-	return found, nil
-}

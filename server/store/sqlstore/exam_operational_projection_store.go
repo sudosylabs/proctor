@@ -176,17 +176,7 @@ func listCandidateActivity(
 // candidateActivityQuery builds the Candidate activity page query and its
 // arguments evaluated at serverTime.
 func candidateActivityQuery(options store.CandidateExamActivityListOptions, serverTime time.Time) (string, []any) {
-	query := `WITH RECURSIVE unit_ancestors(root_id, id) AS (
-			SELECT id, id
-			FROM academic_units
-			WHERE archived_at IS NULL
-			UNION ALL
-			SELECT child.root_id, parent.id
-			FROM unit_ancestors child
-			JOIN academic_units current ON current.id = child.id
-			JOIN academic_units parent ON parent.id = current.parent_id
-				AND parent.archived_at IS NULL
-		)
+	query := `WITH RECURSIVE ` + unitAncestorsByRootCTE + `
 		SELECT ?::timestamptz AS server_time,
 			EXISTS (
 				SELECT 1
@@ -217,50 +207,7 @@ func candidateActivityQuery(options store.CandidateExamActivityListOptions, serv
 					AND (current_member.archived_at IS NULL OR current_member.archived_at > ?)
 			) AS current_membership,
 			EXISTS (
-				SELECT 1
-				FROM role_bindings binding
-				JOIN roles role ON role.id = binding.role_id
-				WHERE binding.user_id = ?
-					AND binding.archived_at IS NULL
-					AND binding.start_at <= ?
-					AND (binding.end_at IS NULL OR binding.end_at > ?)
-					AND role.archived_at IS NULL
-					AND (
-						(
-							role.name = ?
-							AND ? = ANY(role.permissions)
-							AND binding.scope_type = 'institution'
-						)
-						OR (
-							? = ANY(role.permissions)
-							AND (
-								binding.scope_type = 'institution'
-								OR (
-									binding.scope_type = 'academic_unit'
-									AND binding.scope_id IN (
-										SELECT id
-										FROM unit_ancestors
-										WHERE root_id = e.academic_unit_id
-									)
-								)
-							)
-							AND EXISTS (
-								SELECT 1
-								FROM exam_managers manager
-								WHERE manager.exam_id = e.id
-									AND manager.user_id = ?
-							)
-							AND EXISTS (
-								SELECT 1
-								FROM academic_unit_members member
-								WHERE member.academic_unit_id = e.academic_unit_id
-									AND member.user_id = ?
-									AND member.archived_at IS NULL
-									AND member.start_at <= ?
-									AND (member.end_at IS NULL OR member.end_at > ?)
-							)
-						)
-					)
+				` + candidateActivityManagementAuthoritySQL() + `
 			) AS management_authority,
 			EXISTS (
 				SELECT 1

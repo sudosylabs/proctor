@@ -179,51 +179,93 @@ func lockExamAttemptAdmissionLineage(
 	return initial, nil
 }
 
-// lockExamAttemptSessionEligibility shares the candidate's User, Desktop
-// Session and Registration, Class membership and academic lineage, requiring
-// each to be current for the input Desktop build.
-func lockExamAttemptSessionEligibility(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamAttemptConnect, classID string) error {
-	var eligible bool
-	if err := tx.Get(
-		ctx,
-		&eligible,
-		`SELECT true
-		FROM users u
-		JOIN sessions se ON se.id = ?
-			AND se.user_id = u.id
-		JOIN desktop_registrations dr ON dr.id = se.desktop_registration_id
-			AND dr.user_id = se.user_id
-		JOIN class_members cm ON cm.user_id = u.id
-			AND cm.class_id = ?
-		JOIN classes c ON c.id = cm.class_id
-			AND c.academic_period_id = cm.academic_period_id
-		JOIN programme_levels pl ON pl.id = c.programme_level_id
-		JOIN programmes p ON p.id = pl.programme_id
-		JOIN academic_units au ON au.id = p.academic_unit_id
-		JOIN academic_periods ap ON ap.id = c.academic_period_id
-			AND ap.institution_id = au.institution_id
-		WHERE u.id = ?
-			AND u.archived_at IS NULL
-			AND u.disabled_at IS NULL
-			AND se.archived_at IS NULL
-			AND se.revoked_at IS NULL
-			AND se.client_type = 'desktop'
-			AND se.desktop_registration_id = ?
-			AND se.dpop_key_thumbprint = ?
-			AND se.desktop_release = ?
-			AND se.desktop_build_id = ?
-			AND se.desktop_platform = ?
-			AND se.desktop_architecture = ?
-			AND se.desktop_realtime_protocol = ?
-			AND dr.revoked_at IS NULL
-			AND dr.key_thumbprint = ?
-			AND cm.archived_at IS NULL
-			AND c.archived_at IS NULL
-			AND pl.archived_at IS NULL
-			AND p.archived_at IS NULL
-			AND au.archived_at IS NULL
-			AND ap.archived_at IS NULL
-		FOR SHARE OF u, se, dr, cm, c, pl, p, au, ap`,
+// Attempt eligibility is one join, used twice during admission: first to
+// lock the rows it reads, then, once the decision time is known, to recheck
+// the windows that depend on that time. Both uses require the candidate User
+// to be active, the Desktop Session and its Registration to be the unrevoked
+// ones the input Desktop build and DPoP key name, the candidate to hold a
+// membership of the Sitting's Class, and the Class lineage (Class, Programme
+// Level, Programme, Academic Unit, Academic Period) to be unarchived and
+// consistent. The three fragments below are that join in order; the two
+// statements differ only in what they put around and between them.
+
+// examAttemptEligibilitySessionSQL joins the candidate User to the Desktop
+// Session, its Registration, the Class membership and the Class lineage, and
+// requires the User, Session and Registration to be current for the input
+// Desktop build. Placeholders are bound by examAttemptEligibilityArgs.
+const examAttemptEligibilitySessionSQL = `
+	FROM users u
+	JOIN sessions se ON se.id = ?
+		AND se.user_id = u.id
+	JOIN desktop_registrations dr ON dr.id = se.desktop_registration_id
+		AND dr.user_id = se.user_id
+	JOIN class_members cm ON cm.user_id = u.id
+		AND cm.class_id = ?
+	JOIN classes c ON c.id = cm.class_id
+		AND c.academic_period_id = cm.academic_period_id
+	JOIN programme_levels pl ON pl.id = c.programme_level_id
+	JOIN programmes p ON p.id = pl.programme_id
+	JOIN academic_units au ON au.id = p.academic_unit_id
+	JOIN academic_periods ap ON ap.id = c.academic_period_id
+		AND ap.institution_id = au.institution_id
+	WHERE u.id = ?
+		AND u.archived_at IS NULL
+		AND u.disabled_at IS NULL
+		AND se.archived_at IS NULL
+		AND se.revoked_at IS NULL
+		AND se.client_type = 'desktop'
+		AND se.desktop_registration_id = ?
+		AND se.dpop_key_thumbprint = ?
+		AND se.desktop_release = ?
+		AND se.desktop_build_id = ?
+		AND se.desktop_platform = ?
+		AND se.desktop_architecture = ?
+		AND se.desktop_realtime_protocol = ?
+		AND dr.revoked_at IS NULL
+		AND dr.key_thumbprint = ?`
+
+// examAttemptEligibilityMembershipSQL requires the Class membership to be
+// unarchived.
+const examAttemptEligibilityMembershipSQL = `
+		AND cm.archived_at IS NULL`
+
+// examAttemptEligibilityLineageSQL requires the Class and everything above it
+// to be unarchived.
+const examAttemptEligibilityLineageSQL = `
+		AND c.archived_at IS NULL
+		AND pl.archived_at IS NULL
+		AND p.archived_at IS NULL
+		AND au.archived_at IS NULL
+		AND ap.archived_at IS NULL`
+
+// lockExamAttemptEligibilitySQL selects the eligibility join with no time
+// comparison and shares every row it read, so none can be revoked, ended or
+// archived before the admission commits.
+const lockExamAttemptEligibilitySQL = `SELECT true` +
+	examAttemptEligibilitySessionSQL +
+	examAttemptEligibilityMembershipSQL +
+	examAttemptEligibilityLineageSQL + `
+	FOR SHARE OF u, se, dr, cm, c, pl, p, au, ap`
+
+// examAttemptEligibilityAtDecisionTimeSQL is the same join with the Session
+// expiry and Class membership window compared against the decision time,
+// bound four times after examAttemptEligibilityArgs. It takes no locks: the
+// rows are already shared by lockExamAttemptEligibilitySQL.
+const examAttemptEligibilityAtDecisionTimeSQL = `SELECT EXISTS (
+	SELECT 1` +
+	examAttemptEligibilitySessionSQL + `
+		AND se.idle_expires_at > ?
+		AND se.expires_at > ?` +
+	examAttemptEligibilityMembershipSQL + `
+		AND cm.start_at <= ?
+		AND (cm.end_at IS NULL OR cm.end_at > ?)` +
+	examAttemptEligibilityLineageSQL + `
+	)`
+
+// examAttemptEligibilityArgs binds the placeholders of
+// examAttemptEligibilitySessionSQL in order.
+func examAttemptEligibilityArgs(input *store.ExamAttemptConnect, classID string) []any {
+	return []any{
 		input.SessionID.String(),
 		classID,
 		input.CandidateUserID.String(),
@@ -235,7 +277,15 @@ func lockExamAttemptSessionEligibility(ctx context.Context, tx *sqlxTxWrapper, i
 		string(input.DesktopBuild.Architecture),
 		input.DesktopBuild.RealtimeProtocol,
 		input.DPoPKeyThumbprint,
-	); err != nil {
+	}
+}
+
+// lockExamAttemptSessionEligibility shares the candidate's User, Desktop
+// Session and Registration, Class membership and academic lineage, requiring
+// each to be current for the input Desktop build.
+func lockExamAttemptSessionEligibility(ctx context.Context, tx *sqlxTxWrapper, input *store.ExamAttemptConnect, classID string) error {
+	var eligible bool
+	if err := tx.Get(ctx, &eligible, lockExamAttemptEligibilitySQL, examAttemptEligibilityArgs(input, classID)...); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return store.NewErrNotFound("exam_attempt_eligibility", input.SittingID.String())
 		}
@@ -257,68 +307,15 @@ func requireExamAttemptEligibilityAtDecisionTime(
 	input *store.ExamAttemptConnect,
 	guard examAttemptAdmissionGuard,
 ) error {
+	args := append(
+		examAttemptEligibilityArgs(input, guard.ClassID),
+		guard.DatabaseNow,
+		guard.DatabaseNow,
+		guard.DatabaseNow,
+		guard.DatabaseNow,
+	)
 	var eligible bool
-	if err := tx.Get(
-		ctx,
-		&eligible,
-		`SELECT EXISTS (
-			SELECT 1
-			FROM users u
-			JOIN sessions se ON se.id = ?
-				AND se.user_id = u.id
-			JOIN desktop_registrations dr ON dr.id = se.desktop_registration_id
-				AND dr.user_id = se.user_id
-			JOIN class_members cm ON cm.user_id = u.id
-				AND cm.class_id = ?
-			JOIN classes c ON c.id = cm.class_id
-				AND c.academic_period_id = cm.academic_period_id
-			JOIN programme_levels pl ON pl.id = c.programme_level_id
-			JOIN programmes p ON p.id = pl.programme_id
-			JOIN academic_units au ON au.id = p.academic_unit_id
-			JOIN academic_periods ap ON ap.id = c.academic_period_id
-				AND ap.institution_id = au.institution_id
-			WHERE u.id = ?
-				AND u.archived_at IS NULL
-				AND u.disabled_at IS NULL
-				AND se.archived_at IS NULL
-				AND se.revoked_at IS NULL
-				AND se.client_type = 'desktop'
-				AND se.desktop_registration_id = ?
-				AND se.dpop_key_thumbprint = ?
-				AND se.desktop_release = ?
-				AND se.desktop_build_id = ?
-				AND se.desktop_platform = ?
-				AND se.desktop_architecture = ?
-				AND se.desktop_realtime_protocol = ?
-				AND dr.revoked_at IS NULL
-				AND dr.key_thumbprint = ?
-				AND se.idle_expires_at > ?
-				AND se.expires_at > ?
-				AND cm.archived_at IS NULL
-				AND cm.start_at <= ?
-				AND (cm.end_at IS NULL OR cm.end_at > ?)
-				AND c.archived_at IS NULL
-				AND pl.archived_at IS NULL
-				AND p.archived_at IS NULL
-				AND au.archived_at IS NULL
-				AND ap.archived_at IS NULL
-		)`,
-		input.SessionID.String(),
-		guard.ClassID,
-		input.CandidateUserID.String(),
-		input.DesktopRegistrationID.String(),
-		input.DPoPKeyThumbprint,
-		input.DesktopBuild.DesktopRelease,
-		input.DesktopBuild.DesktopBuildID,
-		string(input.DesktopBuild.Platform),
-		string(input.DesktopBuild.Architecture),
-		input.DesktopBuild.RealtimeProtocol,
-		input.DPoPKeyThumbprint,
-		guard.DatabaseNow,
-		guard.DatabaseNow,
-		guard.DatabaseNow,
-		guard.DatabaseNow,
-	); err != nil {
+	if err := tx.Get(ctx, &eligible, examAttemptEligibilityAtDecisionTimeSQL, args...); err != nil {
 		return fmt.Errorf("revalidate Exam Attempt eligibility at decision time: %w", err)
 	}
 
@@ -327,90 +324,6 @@ func requireExamAttemptEligibilityAtDecisionTime(
 	}
 
 	return nil
-}
-
-func hasEffectiveExamManagementAuthority(
-	ctx context.Context,
-	tx *sqlxTxWrapper,
-	userID, examID, academicUnitID string,
-	at time.Time,
-) (bool, error) {
-	var authoritative bool
-	err := tx.Get(
-		ctx,
-		&authoritative,
-		`WITH RECURSIVE ancestors AS (
-			SELECT id, parent_id
-			FROM academic_units
-			WHERE id = ?
-				AND archived_at IS NULL
-			UNION ALL
-			SELECT parent.id, parent.parent_id
-			FROM academic_units parent
-			JOIN ancestors child ON parent.id = child.parent_id
-			WHERE parent.archived_at IS NULL
-		)
-		SELECT EXISTS (
-			SELECT 1
-			FROM role_bindings binding
-			JOIN roles role ON role.id = binding.role_id
-			WHERE binding.user_id = ?
-				AND binding.archived_at IS NULL
-				AND binding.start_at <= ?
-				AND (binding.end_at IS NULL OR binding.end_at > ?)
-				AND role.archived_at IS NULL
-				AND (
-					(
-						role.name = ?
-						AND ? = ANY(role.permissions)
-						AND binding.scope_type = 'institution'
-					)
-					OR (
-						? = ANY(role.permissions)
-						AND (
-							binding.scope_type = 'institution'
-							OR (
-								binding.scope_type = 'academic_unit'
-								AND binding.scope_id IN (SELECT id FROM ancestors)
-							)
-						)
-						AND EXISTS (
-							SELECT 1
-							FROM exam_managers manager
-							WHERE manager.exam_id = ?
-								AND manager.user_id = ?
-						)
-						AND EXISTS (
-							SELECT 1
-							FROM academic_unit_members member
-							WHERE member.academic_unit_id = ?
-								AND member.user_id = ?
-								AND member.archived_at IS NULL
-								AND member.start_at <= ?
-								AND (member.end_at IS NULL OR member.end_at > ?)
-						)
-					)
-				)
-		)`,
-		academicUnitID,
-		userID,
-		at,
-		at,
-		model.SystemAdministratorRoleName,
-		string(model.ActionExamManageOverride),
-		string(model.ActionExamManage),
-		examID,
-		userID,
-		academicUnitID,
-		userID,
-		at,
-		at,
-	)
-	if err != nil {
-		return false, fmt.Errorf("inspect effective Exam management authority: %w", err)
-	}
-
-	return authoritative, nil
 }
 
 // firstAdmission freezes the Attempt Configuration and creates the Attempt,

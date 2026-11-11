@@ -476,62 +476,17 @@ func requireScopedRoleInvitationAuthority(ctx context.Context, tx *sqlxTxWrapper
 		}
 
 		strictParent := index >= 2 && teacherInvitationProtectedDelegationAction(model.Action(action))
-		var authority bool
 		var err error
 		if invitation.Purpose == model.InvitationPurposeInstitutionRole {
-			err = tx.Get(ctx, &authority, `SELECT true
-				FROM role_bindings rb
-				JOIN roles r ON r.id = rb.role_id
-					AND r.archived_at IS NULL
-				WHERE rb.user_id = $1
-					AND rb.archived_at IS NULL
-					AND rb.start_at <= $2
-					AND (rb.end_at IS NULL OR rb.end_at > $2)
-					AND rb.scope_type = 'institution'
-					AND rb.scope_id = $3
-					AND $4 = ANY(r.permissions)
-				ORDER BY r.id, rb.id
-				LIMIT 1
-				FOR SHARE OF r, rb`, invitation.InviterUserID.String(), model.TimeUTC(at), invitation.ScopeID, action)
+			err = lockInviterActionGrantAtInstitution(ctx, tx, invitation.InviterUserID, model.Action(action), invitation.ScopeID, at)
 		} else {
-			err = tx.Get(
+			err = lockInviterActionGrantAtAcademicUnit(
 				ctx,
-				&authority,
-				`WITH RECURSIVE ancestors AS (
-					SELECT id, parent_id, 0 depth
-					FROM academic_units
-					WHERE id = $1
-						AND archived_at IS NULL
-					UNION ALL
-					SELECT au.id, au.parent_id, a.depth+1
-					FROM academic_units au
-					JOIN ancestors a ON au.id = a.parent_id
-					WHERE au.archived_at IS NULL
-				)
-				SELECT true
-				FROM role_bindings rb
-				JOIN roles r ON r.id = rb.role_id
-					AND r.archived_at IS NULL
-				WHERE rb.user_id = $2
-					AND rb.archived_at IS NULL
-					AND rb.start_at <= $3
-					AND (rb.end_at IS NULL OR rb.end_at > $3)
-					AND $4 = ANY(r.permissions)
-					AND (
-						(rb.scope_type = 'institution' AND $5)
-						OR (
-							rb.scope_type = 'academic_unit'
-							AND $6
-							AND rb.scope_id IN (SELECT id FROM ancestors WHERE NOT $7 OR depth > 0)
-						)
-					)
-				ORDER BY r.id, rb.id
-				LIMIT 1
-				FOR SHARE OF r, rb`,
-				invitation.AcademicUnitID.String(),
-				invitation.InviterUserID.String(),
-				model.TimeUTC(at),
-				action,
+				tx,
+				invitation.InviterUserID,
+				model.Action(action),
+				invitation.AcademicUnitID,
+				at,
 				definition.InheritInstitutionScope,
 				definition.InheritAcademicUnitScopes,
 				strictParent,
@@ -580,45 +535,13 @@ func requireTeacherAcademicUnitInvitationAuthority(
 			return err
 		}
 
-		var authority bool
-		err = tx.Get(
+		err = lockInviterActionGrantAtAcademicUnit(
 			ctx,
-			&authority,
-			`WITH RECURSIVE ancestors AS (
-				SELECT id, parent_id, 0 depth
-				FROM academic_units
-				WHERE id = $1
-					AND archived_at IS NULL
-				UNION ALL
-				SELECT au.id, au.parent_id, a.depth+1
-				FROM academic_units au
-				JOIN ancestors a ON au.id = a.parent_id
-				WHERE au.archived_at IS NULL
-			)
-			SELECT true
-			FROM role_bindings rb
-			JOIN roles r ON r.id = rb.role_id
-				AND r.archived_at IS NULL
-			WHERE rb.user_id = $2
-				AND rb.archived_at IS NULL
-				AND rb.start_at <= $3
-				AND (rb.end_at IS NULL OR rb.end_at > $3)
-				AND $4 = ANY(r.permissions)
-				AND (
-					(rb.scope_type = 'institution' AND $5)
-					OR (
-						rb.scope_type = 'academic_unit'
-						AND $6
-						AND rb.scope_id IN (SELECT id FROM ancestors WHERE NOT $7 OR depth > 0)
-					)
-				)
-			ORDER BY r.id, rb.id
-			LIMIT 1
-			FOR SHARE OF r, rb`,
-			invitation.AcademicUnitID.String(),
-			invitation.InviterUserID.String(),
-			model.TimeUTC(at),
-			action,
+			tx,
+			invitation.InviterUserID,
+			model.Action(action),
+			invitation.AcademicUnitID,
+			at,
 			requirement.Institution,
 			requirement.AcademicUnit,
 			requirement.StrictParent,
@@ -795,49 +718,7 @@ func requireStudentClassInvitationAuthority(
 	}
 
 	for _, action := range []model.Action{model.ActionInvitationCreate, model.ActionClassMembersManage} {
-		var authority struct {
-			RoleID        string `db:"role_id"`
-			RoleBindingID string `db:"role_binding_id"`
-		}
-		err := tx.Get(ctx, &authority, `WITH RECURSIVE class_unit AS (
-				SELECT p.academic_unit_id
-				FROM classes c
-				JOIN programme_levels pl ON pl.id = c.programme_level_id
-					AND pl.archived_at IS NULL
-				JOIN programmes p ON p.id = pl.programme_id
-					AND p.archived_at IS NULL
-				WHERE c.id = $1
-					AND c.archived_at IS NULL
-			), ancestors AS (
-				SELECT academic_unit_id id
-				FROM class_unit
-				UNION ALL
-				SELECT au.parent_id
-				FROM academic_units au
-				JOIN ancestors a ON au.id = a.id
-				WHERE au.parent_id IS NOT NULL
-					AND au.archived_at IS NULL
-			)
-			SELECT r.id role_id, rb.id role_binding_id
-			FROM role_bindings rb
-			JOIN roles r ON r.id = rb.role_id
-				AND r.archived_at IS NULL
-			WHERE rb.user_id = $2
-				AND rb.archived_at IS NULL
-				AND rb.start_at <= $3
-				AND (rb.end_at IS NULL OR rb.end_at > $3)
-				AND $4 = ANY(r.permissions)
-				AND (
-					rb.scope_type = 'institution'
-					OR (rb.scope_type = 'class' AND rb.scope_id = $1)
-					OR (
-						rb.scope_type = 'academic_unit'
-						AND rb.scope_id IN (SELECT id FROM ancestors)
-					)
-				)
-			ORDER BY r.id, rb.id
-			LIMIT 1
-			FOR SHARE OF r, rb`, classID.String(), inviterID.String(), model.TimeUTC(at), string(action))
+		err := lockInviterActionGrantAtClass(ctx, tx, inviterID, action, classID, at)
 		if errors.Is(err, sql.ErrNoRows) {
 			return store.NewErrConflict("invitation", "invitation_authority", nil)
 		}

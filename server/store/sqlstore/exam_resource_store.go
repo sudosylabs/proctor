@@ -399,12 +399,7 @@ func lockExamResourceDraft(
 		ctx,
 		&row,
 		`SELECT e.archived_at, d.revision,
-			EXISTS (
-				SELECT 1
-				FROM exam_managers m
-				WHERE m.exam_id = e.id
-					AND m.user_id = ?
-			) actor_is_manager
+			`+examManagerExistsSQL+` actor_is_manager
 		FROM exams e
 		JOIN exam_drafts d ON d.exam_id = e.id
 		WHERE e.id = ?

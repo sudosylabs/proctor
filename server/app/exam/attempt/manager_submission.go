@@ -169,8 +169,8 @@ func (s *Service) EndExamAttemptByManager(
 	}
 
 	if !result.Replayed {
-		if effectErr := s.deps.Effects.AttemptSubmitted(ctx, result); effectErr != nil {
-			s.deps.Effects.Report(ctx, "exam_attempt_manager_ended", effectErr)
+		if effectErr := s.publishAttemptSubmitted(ctx, result); effectErr != nil {
+			s.deps.Publisher.Report(ctx, "exam_attempt_manager_ended", effectErr)
 		}
 	}
 

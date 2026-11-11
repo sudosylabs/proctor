@@ -634,8 +634,8 @@ func (s *Service) applyWorkspaceMutation(
 	}
 
 	if !result.Replayed {
-		if effectErr := s.deps.Effects.WorkspaceChanged(ctx, result); effectErr != nil {
-			s.deps.Effects.Report(ctx, "exam_attempt_workspace_changed", effectErr)
+		if effectErr := s.publishWorkspaceChanged(ctx, result); effectErr != nil {
+			s.deps.Publisher.Report(ctx, "exam_attempt_workspace_changed", effectErr)
 		}
 	}
 

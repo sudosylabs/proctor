@@ -19,6 +19,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/manageraccess"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -114,12 +115,6 @@ const (
 	ChangeEntryRemoved     ChangeOperation = "entry_removed"
 )
 
-type Effects interface {
-	Changed(context.Context, model.ExamID, model.StarterWorkspaceEntryID, int64, ChangeOperation, time.Time) error
-	// Report records an Effect failure; the committed change stands.
-	Report(ctx context.Context, operation string, err error)
-}
-
 // Service manages the Starter Workspace of an Exam Draft.
 type Service struct{ deps Dependencies }
 
@@ -132,7 +127,7 @@ type Dependencies struct {
 	Authorizer  Authorizer
 	Auditor     Auditor
 	Content     Content
-	Effects     Effects
+	Publisher   realtime.Publisher
 	Now         func() time.Time
 	NewEntryID  func() model.StarterWorkspaceEntryID
 	NewObjectID func() model.StarterWorkspaceObjectID
@@ -148,7 +143,7 @@ func New(deps Dependencies) (*Service, error) {
 		deps.Authorizer == nil ||
 		deps.Auditor == nil ||
 		deps.Content == nil ||
-		deps.Effects == nil ||
+		deps.Publisher == nil ||
 		deps.Now == nil ||
 		deps.NewEntryID == nil ||
 		deps.NewObjectID == nil ||
@@ -607,7 +602,7 @@ func (s *Service) runMutation(
 	}
 
 	if !result.Replayed {
-		if effectErr := s.deps.Effects.Changed(
+		if effectErr := s.publishChanged(
 			ctx,
 			mutation.ExamID,
 			result.Entry.ID,
@@ -615,7 +610,7 @@ func (s *Service) runMutation(
 			effectOperation,
 			mutation.ChangedAt,
 		); effectErr != nil {
-			s.deps.Effects.Report(ctx, "exam_starter_workspace_"+string(effectOperation), effectErr)
+			s.deps.Publisher.Report(ctx, "exam_starter_workspace_"+string(effectOperation), effectErr)
 		}
 	}
 

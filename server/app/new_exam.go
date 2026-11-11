@@ -53,17 +53,15 @@ func newExamServices(
 	authorizer *access.Authorizer,
 	desktopBuilds *identity.Service,
 ) (examServices, error) {
-	collections := examCollectionInvalidationEffects{sittings: deps.Store.ExamSitting(), realtime: shared.realtime}
-	effects := examRealtimeEffects{realtime: shared.realtime, collections: collections}
 	var built examServices
 	var err error
-	if built.authoring, err = newExamAuthoring(deps, shared, authorizer, effects); err != nil {
+	if built.authoring, err = newExamAuthoring(deps, shared, authorizer); err != nil {
 		return examServices{}, err
 	}
 	if built.sittingMail, err = newSittingMail(deps); err != nil {
 		return examServices{}, err
 	}
-	if built.publication, err = newExamPublication(deps, shared, authorizer, effects); err != nil {
+	if built.publication, err = newExamPublication(deps, shared, authorizer); err != nil {
 		return examServices{}, err
 	}
 
@@ -72,7 +70,7 @@ func newExamServices(
 		revisions: deps.Store.ExamRevision(),
 		classes:   deps.Store.Class(),
 	}
-	if built.sittings, err = newSittings(deps, shared, authorizer, collections, built.sittingMailPreparation); err != nil {
+	if built.sittings, err = newSittings(deps, shared, authorizer, built.sittingMailPreparation); err != nil {
 		return examServices{}, err
 	}
 	if built.attempts, err = newAttempts(deps, shared, built.sittings, desktopBuilds); err != nil {
@@ -84,7 +82,7 @@ func newExamServices(
 	if built.resources, err = newExamResources(deps, shared, authorizer); err != nil {
 		return examServices{}, err
 	}
-	if built.corrections, err = newCorrections(deps, shared, authorizer, collections); err != nil {
+	if built.corrections, err = newCorrections(deps, shared, authorizer); err != nil {
 		return examServices{}, err
 	}
 	if built.starterWorkspaces, err = newStarterWorkspaces(deps, shared, authorizer); err != nil {
@@ -104,17 +102,17 @@ func newExamAuthoring(
 	deps Dependencies,
 	shared sharedMechanics,
 	authorizer *access.Authorizer,
-	effects examRealtimeEffects,
 ) (*exam.Authoring, error) {
 	return exam.NewAuthoring(exam.AuthoringDependencies{
 		Persistence:       deps.Store.ExamAuthoring(),
 		Memberships:       deps.Store.AcademicUnitMember(),
 		Users:             deps.Store.User(),
+		Sittings:          deps.Store.ExamSitting(),
 		Mail:              shared.mail,
 		Authorizer:        examAuthorizationAdapter{authorization: authorizer},
 		Auditor:           shared.audit.MutationAudit(),
 		Outcomes:          deps.Store.CommandOutcome(),
-		Effects:           effects,
+		Publisher:         shared.realtime,
 		Now:               time.Now,
 		NewID:             model.NewExamID,
 		InstitutionOrigin: deps.PublicURL,
@@ -143,7 +141,6 @@ func newExamPublication(
 	deps Dependencies,
 	shared sharedMechanics,
 	authorizer *access.Authorizer,
-	effects examRealtimeEffects,
 ) (*exam.Publication, error) {
 	return exam.NewPublication(exam.PublicationDependencies{
 		Persistence:       deps.Store.ExamRevision(),
@@ -151,7 +148,7 @@ func newExamPublication(
 		Memberships:       deps.Store.AcademicUnitMember(),
 		Authorizer:        examAuthorizationAdapter{authorization: authorizer},
 		Auditor:           shared.audit.MutationAudit(),
-		Effects:           effects,
+		Publisher:         shared.realtime,
 		Now:               time.Now,
 		NewID:             model.NewExamRevisionID,
 		InstitutionOrigin: deps.PublicURL,
@@ -163,10 +160,8 @@ func newSittings(
 	deps Dependencies,
 	shared sharedMechanics,
 	authorizer *access.Authorizer,
-	collections examCollectionInvalidationEffects,
 	scheduleMail sittingScheduleMailPreparationAdapter,
 ) (*sitting.Service, error) {
-	effects := examSittingRealtimeEffects{realtime: shared.realtime, collections: collections}
 	return sitting.New(sitting.Dependencies{
 		Persistence:   deps.Store.ExamSitting(),
 		Access:        deps.Store.ExamAuthoring(),
@@ -174,7 +169,7 @@ func newSittings(
 		Authorizer:    authorizer,
 		Auditor:       shared.audit.MutationAudit(),
 		SystemAuditor: examSittingSystemAuditAdapter{audit: shared.audit},
-		Effects:       effects,
+		Publisher:     shared.realtime,
 		Jobs:          jobhandler.NewExamSittingLifecycleJobFactory(time.Now, model.NewJobID),
 		Mail:          scheduleMail,
 		Now:           time.Now,
@@ -189,7 +184,6 @@ func newAttempts(
 	sittings *sitting.Service,
 	desktopBuilds *identity.Service,
 ) (*attempt.Service, error) {
-	effects := examAttemptRealtimeEffects{realtime: shared.realtime}
 	submissionMail := examSubmissionMailPreparationAdapter{
 		preparer:  shared.mail,
 		users:     deps.Store.User(),
@@ -208,7 +202,7 @@ func newAttempts(
 		},
 		Auditor:             shared.audit.MutationAudit(),
 		SystemAuditor:       examAttemptSystemAuditAdapter{audit: shared.audit},
-		Effects:             effects,
+		Publisher:           shared.realtime,
 		Content:             deps.FileContent,
 		Mail:                submissionMail,
 		DesktopBuilds:       desktopBuilds,
@@ -232,7 +226,6 @@ func newAttempts(
 }
 
 func newReviews(deps Dependencies, shared sharedMechanics, sittings *sitting.Service) (*review.Service, error) {
-	effects := examIntegrityReviewRealtimeEffects{realtime: shared.realtime}
 	resultReleaseMail := examResultReleaseMailPreparationAdapter{
 		preparer:  shared.mail,
 		users:     deps.Store.User(),
@@ -247,7 +240,7 @@ func newReviews(deps Dependencies, shared sharedMechanics, sittings *sitting.Ser
 			audit:    shared.audit,
 		},
 		Auditor:       shared.audit.MutationAudit(),
-		Effects:       effects,
+		Publisher:     shared.realtime,
 		Mail:          resultReleaseMail,
 		Now:           time.Now,
 		NewReviewID:   model.NewSubmissionReviewID,
@@ -256,14 +249,13 @@ func newReviews(deps Dependencies, shared sharedMechanics, sittings *sitting.Ser
 }
 
 func newExamResources(deps Dependencies, shared sharedMechanics, authorizer *access.Authorizer) (*resource.Service, error) {
-	effects := examResourceRealtimeEffects{realtime: shared.realtime}
 	return resource.New(resource.Dependencies{
 		Persistence:   deps.Store.ExamResource(),
 		Access:        deps.Store.ExamAuthoring(),
 		Memberships:   deps.Store.AcademicUnitMember(),
 		Authorizer:    authorizer,
 		Auditor:       shared.audit.MutationAudit(),
-		Effects:       effects,
+		Publisher:     shared.realtime,
 		Content:       deps.FileContent,
 		Now:           time.Now,
 		NewResourceID: model.NewExamResourceID,
@@ -277,17 +269,16 @@ func newCorrections(
 	deps Dependencies,
 	shared sharedMechanics,
 	authorizer *access.Authorizer,
-	collections examCollectionInvalidationEffects,
 ) (*correction.Service, error) {
-	effects := examCorrectionRealtimeEffects{realtime: shared.realtime, collections: collections}
 	return correction.New(correction.Dependencies{
 		Persistence:       deps.Store.ExamCorrection(),
 		Revisions:         deps.Store.ExamRevision(),
+		Sittings:          deps.Store.ExamSitting(),
 		Access:            deps.Store.ExamAuthoring(),
 		Memberships:       deps.Store.AcademicUnitMember(),
 		Authorizer:        authorizer,
 		Auditor:           shared.audit.MutationAudit(),
-		Effects:           effects,
+		Publisher:         shared.realtime,
 		Content:           deps.FileContent,
 		Now:               time.Now,
 		NewStageID:        model.NewExamCorrectionResourceStageID,
@@ -302,7 +293,6 @@ func newCorrections(
 }
 
 func newStarterWorkspaces(deps Dependencies, shared sharedMechanics, authorizer *access.Authorizer) (*workspace.Service, error) {
-	effects := examStarterWorkspaceRealtimeEffects{realtime: shared.realtime}
 	return workspace.New(workspace.Dependencies{
 		Persistence: deps.Store.ExamStarterWorkspace(),
 		Access:      deps.Store.ExamAuthoring(),
@@ -310,7 +300,7 @@ func newStarterWorkspaces(deps Dependencies, shared sharedMechanics, authorizer 
 		Authorizer:  authorizer,
 		Auditor:     shared.audit.MutationAudit(),
 		Content:     deps.FileContent,
-		Effects:     effects,
+		Publisher:   shared.realtime,
 		Now:         time.Now,
 		NewEntryID:  model.NewStarterWorkspaceEntryID,
 		NewObjectID: model.NewStarterWorkspaceObjectID,

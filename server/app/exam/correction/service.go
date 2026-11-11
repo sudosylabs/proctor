@@ -22,6 +22,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/manageraccess"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -32,11 +33,6 @@ type Authorizer interface {
 type Auditor interface {
 	Begin(context.Context, access.Mutation) (model.AuditEventID, error)
 	Fail(context.Context, model.AuditEventID, string) error
-}
-type Effects interface {
-	Corrected(context.Context, Result) error
-	// Report records an Effect failure; the committed change stands.
-	Report(ctx context.Context, operation string, err error)
 }
 type Content interface {
 	StoreExamResourceRendition(
@@ -152,11 +148,12 @@ type Service struct{ deps Dependencies }
 type Dependencies struct {
 	Persistence       store.ExamCorrectionStore
 	Revisions         store.ExamRevisionStore
+	Sittings          store.ExamSittingStore
 	Access            store.ExamAuthoringStore
 	Memberships       store.AcademicUnitMemberStore
 	Authorizer        Authorizer
 	Auditor           Auditor
-	Effects           Effects
+	Publisher         realtime.Publisher
 	Content           Content
 	Now               func() time.Time
 	NewStageID        func() model.ExamCorrectionResourceStageID
@@ -174,11 +171,12 @@ type Dependencies struct {
 func New(deps Dependencies) (*Service, error) {
 	if deps.Persistence == nil ||
 		deps.Revisions == nil ||
+		deps.Sittings == nil ||
 		deps.Access == nil ||
 		deps.Memberships == nil ||
 		deps.Authorizer == nil ||
 		deps.Auditor == nil ||
-		deps.Effects == nil ||
+		deps.Publisher == nil ||
 		deps.Content == nil ||
 		deps.Now == nil ||
 		deps.NewStageID == nil ||
@@ -514,8 +512,8 @@ func (s *Service) ApplyExamSittingCorrection(
 	}
 
 	if !result.Replayed {
-		if effectErr := s.deps.Effects.Corrected(ctx, result); effectErr != nil {
-			s.deps.Effects.Report(ctx, "exam_sitting_content_corrected", effectErr)
+		if effectErr := s.publishCorrected(ctx, result); effectErr != nil {
+			s.deps.Publisher.Report(ctx, "exam_sitting_content_corrected", effectErr)
 		}
 	}
 

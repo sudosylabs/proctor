@@ -15,6 +15,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -194,12 +195,13 @@ func (s *Service) AppendExamAttemptBrowserActivity(
 	}
 
 	if acknowledgement.GapAttentionChanged {
-		if effectErr := s.deps.Effects.BrowserActivityGapChanged(
+		if effectErr := realtime.PublishSittingBoardChanged(
 			ctx,
+			s.deps.Publisher,
 			acknowledgement.ExamID,
 			acknowledgement.SittingID,
 		); effectErr != nil {
-			s.deps.Effects.Report(ctx, "browser_activity_gap_changed", effectErr)
+			s.deps.Publisher.Report(ctx, "browser_activity_gap_changed", effectErr)
 		}
 	}
 

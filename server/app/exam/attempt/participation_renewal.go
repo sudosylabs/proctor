@@ -14,6 +14,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -133,8 +134,8 @@ func (s *Service) RenewExamAttemptParticipation(
 		Duplicate:        stored.Duplicate,
 	}
 	if !result.Duplicate {
-		if effectErr := s.deps.Effects.ParticipationRenewed(ctx, result); effectErr != nil {
-			s.deps.Effects.Report(ctx, "exam_attempt_participation_renewed", effectErr)
+		if effectErr := realtime.PublishSittingBoardChanged(ctx, s.deps.Publisher, result.ExamID, result.SittingID); effectErr != nil {
+			s.deps.Publisher.Report(ctx, "exam_attempt_participation_renewed", effectErr)
 		}
 	}
 

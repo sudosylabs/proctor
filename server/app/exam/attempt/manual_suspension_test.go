@@ -21,12 +21,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-func (f *effectsFake) AttemptSuspendedByManager(context.Context, ManualSuspensionResult) error {
-	f.f.order = append(f.f.order, "effect.kick")
-	f.kicked++
-	return nil
-}
-
 func manualSuspensionResultFixture(t *testing.T, f *fixture, managerID model.UserID, revision int64,
 	replayed bool,
 ) *store.ExamAttemptManualSuspensionResult {
@@ -72,11 +66,11 @@ func TestSuspendByManagerAuthorizesFirstAndKeepsPrivateReasonOutOfAuditAndEffect
 	require.Equal(t, model.ExamAttemptSuspended, result.Attempt.State, "result=%#v input=%#v order=%v", result, input, f.order)
 	require.Equal(t, model.AttemptSuspensionSourceManual, result.Suspension.Source, "result=%#v input=%#v order=%v", result, input, f.order)
 	require.True(t, result.ConnectionClosed, "result=%#v input=%#v order=%v", result, input, f.order)
-	require.Equal(t, 1, f.effects.kicked, "result=%#v input=%#v order=%v", result, input, f.order)
+	require.Equal(t, manualSuspensionCalls(t, result, true), f.publisher.Calls(), "result=%#v input=%#v order=%v", result, input, f.order)
 	// Contract: the Manager authorization precedes the audit, the audit begins
 	// before the durable suspension (guardrail 8), and the suspension commits
 	// before the kick (guardrail 14).
-	require.Equal(t, []string{"manager.manage", "sitting", "audit", "manager.get", "suspend", "effect.kick"}, f.order)
+	require.Equal(t, []string{"manager.manage", "sitting", "audit", "manager.get", "suspend", "effects"}, f.order)
 	require.Equal(t, model.ActionExamSittingManage, f.audit.action, "audit=%#v result=%#v", f.audit, result)
 	require.Equal(t, store.ExamAttemptSuspendOperation, f.audit.operation, "audit=%#v result=%#v", f.audit, result)
 	require.NotContains(t, fmt.Sprintf("%#v", f.audit.values), reason, "audit=%#v result=%#v", f.audit, result)
@@ -96,11 +90,11 @@ func TestSuspendByManagerReplaySuppressesEffectAndPropagatesOverride(t *testing.
 	result, err := f.service.SuspendExamAttempt(context.Background(), f.invocation, ManualSuspensionCommand{ExamID: f.sitting.ExamID,
 		SittingID: f.sitting.ID, AttemptID: f.attemptID, ExpectedAttemptRevision: 3, PrivateReason: "override kick",
 		IdempotencyKey: "kick-key"})
-	require.NoError(t, err, "result=%#v err=%v effects=%d input=%#v", result, err, f.effects.kicked, f.persistence.manualSuspension)
-	require.True(t, result.Replayed, "result=%#v err=%v effects=%d input=%#v", result, err, f.effects.kicked, f.persistence.manualSuspension)
-	require.Equal(t, 0, f.effects.kicked, "result=%#v err=%v effects=%d input=%#v", result, err, f.effects.kicked, f.persistence.manualSuspension)
-	require.True(t, f.persistence.manualSuspension.ManagerOverride, "result=%#v err=%v effects=%d input=%#v", result, err, f.effects.kicked, f.persistence.manualSuspension)
-	require.Equal(t, model.ActionExamSittingManageOverride, f.audit.action, "result=%#v err=%v effects=%d input=%#v", result, err, f.effects.kicked, f.persistence.manualSuspension)
+	require.NoError(t, err, "result=%#v err=%v effects=%d input=%#v", result, err, len(f.publisher.Calls()), f.persistence.manualSuspension)
+	require.True(t, result.Replayed, "result=%#v err=%v effects=%d input=%#v", result, err, len(f.publisher.Calls()), f.persistence.manualSuspension)
+	require.Empty(t, f.publisher.Calls(), "result=%#v err=%v effects=%d input=%#v", result, err, len(f.publisher.Calls()), f.persistence.manualSuspension)
+	require.True(t, f.persistence.manualSuspension.ManagerOverride, "result=%#v err=%v effects=%d input=%#v", result, err, len(f.publisher.Calls()), f.persistence.manualSuspension)
+	require.Equal(t, model.ActionExamSittingManageOverride, f.audit.action, "result=%#v err=%v effects=%d input=%#v", result, err, len(f.publisher.Calls()), f.persistence.manualSuspension)
 }
 
 func TestSuspendByManagerConcealsSelfAndValidatesBeforeAuthorization(t *testing.T) {
@@ -113,7 +107,7 @@ func TestSuspendByManagerConcealsSelfAndValidatesBeforeAuthorization(t *testing.
 	require.True(t, chainHasCode(err, "exam.attempt.not_found"), "self kick error=%v audit=%#v", err, f.audit)
 	require.Equal(t, "exam.attempt.not_found", f.audit.failedCode, "self kick error=%v audit=%#v", err, f.audit)
 	require.Nil(t, f.persistence.manualSuspension, "self kick error=%v audit=%#v", err, f.audit)
-	require.Equal(t, 0, f.effects.kicked, "self kick error=%v audit=%#v", err, f.audit)
+	require.Empty(t, f.publisher.Calls(), "self kick error=%v audit=%#v", err, f.audit)
 	for _, reason := range []string{"", " padded ", "\xff", strings.Repeat("é", model.AttemptSuspensionPrivateReasonMaximumRunes+1)} {
 		f := newFixture(t)
 		useManagerCall(f)
@@ -137,7 +131,7 @@ func TestSuspendByManagerRejectsInconsistentStoreOutcome(t *testing.T) {
 	var fault *apperror.Error
 	require.ErrorAs(t, err, &fault)
 	require.Equal(t, "exam.attempt.unavailable", fault.Code())
-	require.Equal(t, 0, f.effects.kicked)
+	require.Empty(t, f.publisher.Calls())
 }
 
 func TestReallowAcceptsClosedManualSuspension(t *testing.T) {
@@ -159,7 +153,7 @@ func TestReallowAcceptsClosedManualSuspension(t *testing.T) {
 		IdempotencyKey: "reallow-key"})
 	require.NoError(t, err, "Reallow(manual) = %#v", result)
 	require.Equal(t, model.AttemptSuspensionSourceManual, result.Suspension.Source, "Reallow(manual) = %#v", result)
-	require.Equal(t, 1, f.effects.reallowed, "Reallow(manual) = %#v", result)
+	require.Equal(t, reallowedCalls(t, result), f.publisher.Calls(), "Reallow(manual) = %#v", result)
 	require.Equal(t, managerID, result.Suspension.ReallowedByUserID, "Reallow(manual) = %#v", result)
 }
 
@@ -185,11 +179,12 @@ func TestSuspendByManagerRecordsLapsedLeaseAsConnectionLossInsteadOfKick(t *test
 	require.NotNil(t, f.persistence.expireInput, "the lapsed generation was not expired")
 	require.Equal(t, due.ParticipationID, f.persistence.expireInput.ParticipationID)
 	require.Equal(t, due.Generation, f.persistence.expireInput.Generation)
-	require.Equal(t, 1, f.effects.expired, "error=%v order=%v", err, f.order)
-	require.Equal(t, 0, f.effects.kicked, "error=%v order=%v", err, f.order)
+	// Contract: the lapsed generation publishes its expiry and nothing of the
+	// refused kick.
+	require.Equal(t, expiryCalls(t, expiryOf(f.persistence.expireResult), true), f.publisher.Calls(), "error=%v order=%v", err, f.order)
 	// Contract (guardrails 8 and 14): the refused kick stays audited as
 	// failed, and the expiry audit begins before its commit and effect.
-	require.Equal(t, []string{"manager.manage", "sitting", "audit", "manager.get", "suspend", "expiry.resolve", "system.audit", "expiry.commit", "effect.expire", "audit.fail"}, f.order)
+	require.Equal(t, []string{"manager.manage", "sitting", "audit", "manager.get", "suspend", "expiry.resolve", "system.audit", "expiry.commit", "effects", "audit.fail"}, f.order)
 }
 
 func TestSuspendByManagerRefusesPastScheduledEnd(t *testing.T) {
@@ -206,5 +201,5 @@ func TestSuspendByManagerRefusesPastScheduledEnd(t *testing.T) {
 	require.Equal(t, "exam.attempt.sitting_not_open", fault.Code(), "error=%v order=%v", err, f.order)
 	require.Equal(t, fault.Code(), f.audit.failedCode)
 	require.Nil(t, f.persistence.expireInput)
-	require.Equal(t, 0, f.effects.kicked)
+	require.Empty(t, f.publisher.Calls())
 }

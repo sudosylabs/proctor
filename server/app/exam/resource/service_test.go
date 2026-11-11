@@ -20,6 +20,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -38,6 +40,9 @@ func TestCreateStagesVerifiedBytesBeforeAuditAndAtomicVisibility(t *testing.T) {
 	// inside the reservation before the audit begins (guardrail 8) and the
 	// atomic finalization commits before its effect (guardrail 14).
 	require.Equal(t, []string{"access", "membership", "authorize", "list", "reserve", "content.store", "audit.begin", "finalize", "effect"}, f.order)
+	// Contract: the committed create publishes exactly one Draft update, at the
+	// revision the Store committed.
+	require.Equal(t, []realtimetest.Call{draftUpdated(t, f.examID, 2)}, f.publisher.Calls())
 	require.Equal(t, "Read **carefully**.", f.persistence.finalization.Resource.DescriptionMarkdown)
 	require.NotEmpty(t, f.persistence.finalization.Rendition.SHA256)
 	require.Equal(t, 1, f.content.storeCalls, "content storage calls")
@@ -84,7 +89,7 @@ func TestContentCapacityRefusalRemainsInvisibleAndUnaudited(t *testing.T) {
 			require.ErrorIs(t, err, f.content.storeErr)
 			require.Nil(t, f.persistence.finalization, "partial visibility/audit: finalize")
 			require.False(t, f.auditor.began, "partial visibility/audit: finalize")
-			require.Equal(t, 0, f.effects.calls, "partial visibility/audit: finalize")
+			require.Empty(t, f.publisher.Calls(), "partial visibility/audit: finalize")
 		})
 	}
 }
@@ -95,7 +100,7 @@ func TestFinalizeReplayDoesNotRepublish(t *testing.T) {
 	f.persistence.replayed = true
 	_, err := f.service.CreateExamResource(context.Background(), f.invocation, CreateCommand{ExamID: f.examID, ExpectedDraftRevision: 1, DisplayName: "Reference", MediaType: model.ExamResourceMediaText, Body: strings.NewReader("notes"), Size: 5, ExpectedSHA256: strings.Repeat("a", 64), IdempotencyKey: "test-key"})
 	require.NoError(t, err)
-	require.Equal(t, 0, f.effects.calls, "replay effects")
+	require.Empty(t, f.publisher.Calls(), "replay effects")
 }
 
 func TestExactCreateRetryRecoversUnknownCommitWithoutRepublishing(t *testing.T) {
@@ -114,7 +119,9 @@ func TestExactCreateRetryRecoversUnknownCommitWithoutRepublishing(t *testing.T) 
 	require.Equal(t, first.Resource.ID, recovered.Resource.ID, "first=%#v recovered=%#v reserve=%d finalize=%d effects", first, recovered, f.persistence.reserveCalls, f.persistence.finalizeCalls)
 	require.Equal(t, 2, f.persistence.reserveCalls, "first=%#v recovered=%#v reserve=%d finalize=%d effects", first, recovered, f.persistence.reserveCalls, f.persistence.finalizeCalls)
 	require.Equal(t, 2, f.persistence.finalizeCalls, "first=%#v recovered=%#v reserve=%d finalize=%d effects", first, recovered, f.persistence.reserveCalls, f.persistence.finalizeCalls)
-	require.Equal(t, 1, f.effects.calls, "first=%#v recovered=%#v reserve=%d finalize=%d effects", first, recovered, f.persistence.reserveCalls, f.persistence.finalizeCalls)
+	// Contract: the first commit publishes one Draft update and the replayed
+	// retry publishes nothing.
+	require.Equal(t, []realtimetest.Call{draftUpdated(t, f.examID, 2)}, f.publisher.Calls())
 }
 
 func TestExactTenthCreateRetryReachesStoredOutcome(t *testing.T) {
@@ -137,7 +144,9 @@ func TestExactTenthCreateRetryReachesStoredOutcome(t *testing.T) {
 	require.Equal(t, first.Resource.ID, recovered.Resource.ID, "first=%#v recovered=%#v reserve=%d finalize=%d effects", first, recovered, f.persistence.reserveCalls, f.persistence.finalizeCalls)
 	require.Equal(t, 2, f.persistence.reserveCalls, "first=%#v recovered=%#v reserve=%d finalize=%d effects", first, recovered, f.persistence.reserveCalls, f.persistence.finalizeCalls)
 	require.Equal(t, 2, f.persistence.finalizeCalls, "first=%#v recovered=%#v reserve=%d finalize=%d effects", first, recovered, f.persistence.reserveCalls, f.persistence.finalizeCalls)
-	require.Equal(t, 1, f.effects.calls, "first=%#v recovered=%#v reserve=%d finalize=%d effects", first, recovered, f.persistence.reserveCalls, f.persistence.finalizeCalls)
+	// Contract: the first commit publishes one Draft update and the replayed
+	// retry publishes nothing.
+	require.Equal(t, []realtimetest.Call{draftUpdated(t, f.examID, 2)}, f.publisher.Calls())
 }
 
 func TestExactReplacementRetryRecoversUnknownCommitWithoutRepublishing(t *testing.T) {
@@ -158,7 +167,9 @@ func TestExactReplacementRetryRecoversUnknownCommitWithoutRepublishing(t *testin
 	require.Equal(t, first.Resource.SelectedFileRevisionID, recovered.Resource.SelectedFileRevisionID, "first=%#v recovered=%#v reserve=%d finalize=%d effects", first, recovered, f.persistence.reserveCalls, f.persistence.finalizeCalls)
 	require.Equal(t, 2, f.persistence.reserveCalls, "first=%#v recovered=%#v reserve=%d finalize=%d effects", first, recovered, f.persistence.reserveCalls, f.persistence.finalizeCalls)
 	require.Equal(t, 2, f.persistence.finalizeCalls, "first=%#v recovered=%#v reserve=%d finalize=%d effects", first, recovered, f.persistence.reserveCalls, f.persistence.finalizeCalls)
-	require.Equal(t, 1, f.effects.calls, "first=%#v recovered=%#v reserve=%d finalize=%d effects", first, recovered, f.persistence.reserveCalls, f.persistence.finalizeCalls)
+	// Contract: the first commit publishes one Draft update and the replayed
+	// retry publishes nothing.
+	require.Equal(t, []realtimetest.Call{draftUpdated(t, f.examID, 2)}, f.publisher.Calls())
 	wantIdempotency, prepareErr := prepareResourceIdempotency(f.invocation, idempotencyOperationReplaceResourceContent, "test-key",
 		f.examID, 1, current.Resource.ID.String(), "", "", model.ExamResourceMediaText, 5, strings.Repeat("a", 64), nil)
 	require.NoError(t, prepareErr)
@@ -246,13 +257,18 @@ func TestReorderPublishesCommittedRevisionAndReportsTransientFailure(t *testing.
 	second.Resource.Position = 1
 	f.persistence.items = []store.ExamResourceRecord{first, second}
 	f.persistence.reorderResult = &store.ExamResourceCommandResult{Items: []store.ExamResourceRecord{second, first}, DraftRevision: 7}
-	f.effects.changedErr = errors.New("realtime unavailable")
+	unavailable := errors.New("realtime unavailable")
+	f.publisher.Fail = func(realtimetest.Call) error { return unavailable }
 
 	items, err := f.service.ReorderExamResources(context.Background(), f.invocation, ReorderCommand{ExamID: f.examID, ExpectedDraftRevision: 1, ResourceIDs: []model.ExamResourceID{second.Resource.ID, first.Resource.ID}, IdempotencyKey: "test-key"})
-	require.NoError(t, err, "items=%#v error=%v effect=%#v", items, err, f.effects)
-	require.Len(t, items, 2, "items=%#v error=%v effect=%#v", items, err, f.effects)
-	require.Equal(t, int64(7), f.effects.draftRevision, "items=%#v error=%v effect=%#v", items, err, f.effects)
-	require.Equal(t, 1, f.effects.reportCalls, "items=%#v error=%v effect=%#v", items, err, f.effects)
+	require.NoError(t, err)
+	require.Len(t, items, 2)
+	// Contract: the reorder publishes the Draft update at the committed
+	// revision, then reports the failed publication under its operation.
+	require.Equal(t, []realtimetest.Call{
+		draftUpdated(t, f.examID, 7),
+		{Method: realtimetest.Report, Operation: "exam_resource_changed", Err: unavailable},
+	}, f.publisher.Calls())
 	want, prepareErr := prepareResourceIdempotency(f.invocation, idempotencyOperationReorderResources, "test-key",
 		f.examID, 1, "", "", "", "", 0, "", []string{second.Resource.ID.String(), first.Resource.ID.String()})
 	require.NoError(t, prepareErr)
@@ -367,7 +383,7 @@ type fixture struct {
 	memberships *membershipFake
 	authorizer  *authFake
 	auditor     *auditFake
-	effects     *effectFake
+	publisher   *realtimetest.Publisher
 	content     *contentFake
 }
 
@@ -378,7 +394,11 @@ func newFixture(t *testing.T) *fixture {
 	f.access = &accessFake{f: f, draftRevision: 1}
 	f.memberships = &membershipFake{f: f}
 	f.auditor = &auditFake{f: f}
-	f.effects = &effectFake{f: f}
+	f.publisher = &realtimetest.Publisher{Observe: func(call realtimetest.Call) {
+		if call.Method == realtimetest.PublishRealtimeEvent {
+			f.order = append(f.order, "effect")
+		}
+	}}
 	f.content = &contentFake{f: f}
 	f.authorizer = &authFake{f: f}
 	at := time.Date(2026, 8, 14, 12, 0, 0, 0, time.UTC)
@@ -388,7 +408,7 @@ func newFixture(t *testing.T) *fixture {
 		Memberships:   f.memberships,
 		Authorizer:    f.authorizer,
 		Auditor:       f.auditor,
-		Effects:       f.effects,
+		Publisher:     f.publisher,
 		Content:       f.content,
 		Now:           func() time.Time { return at },
 		NewResourceID: model.NewExamResourceID,
@@ -537,21 +557,14 @@ func (a *auditFake) Fail(context.Context, model.AuditEventID, string) error {
 	return nil
 }
 
-type effectFake struct {
-	f             *fixture
-	calls         int
-	draftRevision int64
-	changedErr    error
-	reportCalls   int
+// draftUpdated is the call a committed Exam Resource change publishes: the
+// Draft update of its Exam at the committed revision.
+func draftUpdated(t *testing.T, examID model.ExamID, draftRevision int64) realtimetest.Call {
+	t.Helper()
+	event, err := realtime.NewExamDraftUpdatedEvent(examID, draftRevision)
+	require.NoError(t, err)
+	return realtimetest.Call{Method: realtimetest.PublishRealtimeEvent, Event: event}
 }
-
-func (e *effectFake) Changed(_ context.Context, _ model.ExamID, _ model.ExamResourceID, draftRevision int64, _ string) error {
-	e.f.order = append(e.f.order, "effect")
-	e.calls++
-	e.draftRevision = draftRevision
-	return e.changedErr
-}
-func (e *effectFake) Report(context.Context, string, error) { e.reportCalls++ }
 
 type contentFake struct {
 	f               *fixture

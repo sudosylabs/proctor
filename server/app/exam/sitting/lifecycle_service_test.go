@@ -49,8 +49,12 @@ func TestPauseAuthorizesCurrentManagerAndKeepsPrivateReasonOutOfAuditAndEffect(t
 	})
 	require.NoError(t, err)
 	require.Equal(t, wantIdempotency, fixture.persistence.command)
-	require.Len(t, fixture.effects.events, 1)
-	require.Equal(t, string(store.ExamSittingTransitionManagerPaused), fixture.effects.events[0].kind)
+	// Contract: the pause reaches managers before candidates, then the Sitting
+	// board is invalidated; neither fact carries the private reason.
+	require.Equal(t, lifecycleCalls(t, paused, store.ExamSittingTransitionManagerPaused), fixture.publisher.Calls())
+	for _, call := range fixture.publisher.Calls() {
+		require.NotContains(t, string(call.Event.Data), "clarification")
+	}
 }
 
 func TestLifecycleManagerCommandsUseExplicitStatesJobsAndReplaySuppression(t *testing.T) {
@@ -173,7 +177,7 @@ func TestLifecycleManagerCommandsUseExplicitStatesJobsAndReplaySuppression(t *te
 	_, err := fixture.service.PauseExamSitting(context.Background(), fixture.invocation, ManagerTransitionCommand{ExamID: fixture.examID, SittingID: fixture.sittingID,
 		ExpectedRevision: current.Revision, PrivateReason: "Replay", IdempotencyKey: "test-key"})
 	require.NoError(t, err)
-	require.Empty(t, fixture.effects.events)
+	require.Empty(t, fixture.publisher.Calls())
 }
 
 func TestPauseUsesExplicitOverrideWithoutCurrentExactUnitMembership(t *testing.T) {
@@ -245,15 +249,16 @@ func TestSystemAdvancePublishesOnlyChangedOutcomeAndUsesSystemAudit(t *testing.T
 	require.Equal(t, model.RoleScopeAcademicUnit, fixture.systemAudit.scopeType, "AdvanceDue() = %#v, audit=%#v, input", got, fixture.systemAudit)
 	require.Equal(t, fixture.unitID.String(), fixture.systemAudit.scopeID, "AdvanceDue() = %#v, audit=%#v, input", got, fixture.systemAudit)
 	require.NotNil(t, fixture.persistence.advance, "AdvanceDue() = %#v, audit=%#v, input", got, fixture.systemAudit)
-	require.Len(t, fixture.effects.events, 1)
-	require.Equal(t, string(store.ExamSittingTransitionOpened), fixture.effects.events[0].kind)
+	// Contract: the changed outcome publishes the opening to managers, then to
+	// candidates, then invalidates the Sitting board.
+	openedCalls := lifecycleCalls(t, opened, store.ExamSittingTransitionOpened)
+	require.Equal(t, openedCalls, fixture.publisher.Calls())
 	require.True(t, fixture.jobs.finalizeAvailableAt.Equal(current.ScheduledEndAt), "system finalize availability = %s, want deadline", fixture.jobs.finalizeAvailableAt)
 
-	fixture.effects.events = nil
 	fixture.persistence.lifecycle = lifecycleResult(current, "", false, false)
 	_, err = fixture.service.AdvanceDue(context.Background(), system, fixture.sittingID)
 	require.NoError(t, err)
-	require.Empty(t, fixture.effects.events)
+	require.Equal(t, openedCalls, fixture.publisher.Calls(), "an unchanged outcome published")
 
 	structurallyInvalid := cloneSitting(current)
 	err = structurallyInvalid.Cancel(model.ExamSittingReasonAcademicStructureInvalid, testNow)
@@ -261,8 +266,10 @@ func TestSystemAdvancePublishesOnlyChangedOutcomeAndUsesSystemAudit(t *testing.T
 	fixture.persistence.lifecycle = lifecycleResult(structurallyInvalid, store.ExamSittingTransitionAcademicStructureInvalid, true, false)
 	_, err = fixture.service.AdvanceDue(context.Background(), system, fixture.sittingID)
 	require.NoError(t, err)
-	require.Len(t, fixture.effects.events, 1)
-	require.Equal(t, string(store.ExamSittingTransitionAcademicStructureInvalid), fixture.effects.events[0].kind)
+	// Contract: the structural cancellation is published after, and in the
+	// same order as, the opening.
+	require.Equal(t, append(openedCalls, lifecycleCalls(t, structurallyInvalid, store.ExamSittingTransitionAcademicStructureInvalid)...),
+		fixture.publisher.Calls())
 }
 
 func TestSystemCloseAndDueListingUseBoundedSystemSeam(t *testing.T) {
@@ -279,7 +286,9 @@ func TestSystemCloseAndDueListingUseBoundedSystemSeam(t *testing.T) {
 	_, err := fixture.service.FinishSealing(context.Background(), system, fixture.sittingID)
 	require.NoError(t, err)
 	require.NotNil(t, fixture.persistence.finish, "finish input/effects")
-	require.Len(t, fixture.effects.events, 1, "finish input/effects")
+	// Contract: finishing a Sitting without Attempts publishes its closure to
+	// managers, then to candidates, then invalidates the Sitting board.
+	require.Equal(t, lifecycleCalls(t, closed, store.ExamSittingTransitionClosedNoAttempts), fixture.publisher.Calls(), "finish input/effects")
 
 	dueAt := testNow.Add(-time.Minute)
 	fixture.persistence.due = []store.ExamSittingLifecycleDue{{Value: &store.ExamSittingSnapshot{Sitting: closing}, DueAt: dueAt}}

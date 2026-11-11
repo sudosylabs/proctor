@@ -21,6 +21,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -66,8 +68,10 @@ func TestScheduleCreatesAuthorizedSittingAndPublishesSafeEffect(t *testing.T) {
 	require.Equal(t, model.ActionExamSittingCreate, fixture.auditor.action, "audit")
 	require.Equal(t, "schedule", fixture.auditor.operation, "audit")
 	require.Equal(t, wantAudit, fixture.auditor.value, "audit")
-	require.Len(t, fixture.effects.events, 1)
-	require.Equal(t, effectEvent{kind: "scheduled", examID: fixture.examID, sittingID: fixture.sittingID, state: model.ExamSittingScheduled, revision: 1, at: testNow}, fixture.effects.events[0])
+	// Contract: the scheduled fact reaches managers before the Sitting board is
+	// invalidated; this Sitting has no candidate to invalidate after it.
+	require.Equal(t, scheduleCalls(t, realtime.NewExamSittingScheduledEvent, fixture.examID, fixture.sittingID, model.ExamSittingScheduled, 1, testNow),
+		fixture.publisher.Calls())
 }
 
 func TestGetAuthorizesExactSittingResource(t *testing.T) {
@@ -282,9 +286,10 @@ func TestUpdateScheduleUsesSittingManagementAndOptimisticFence(t *testing.T) {
 		"exam_revision_id": fixture.revisionID.String(), "class_id": fixture.classID.String(), "expected_sitting_revision": int64(1)}
 	require.Equal(t, "update_schedule", fixture.auditor.operation, "audit")
 	require.Equal(t, wantAudit, fixture.auditor.value, "audit")
-	require.Len(t, fixture.effects.events, 1)
-	require.Equal(t, "schedule_updated", fixture.effects.events[0].kind)
-	require.Equal(t, int64(2), fixture.effects.events[0].revision)
+	// Contract: the updated schedule reaches managers at the committed
+	// revision before the Sitting board is invalidated.
+	require.Equal(t, scheduleCalls(t, realtime.NewExamSittingScheduleUpdatedEvent, fixture.examID, fixture.sittingID, got.Sitting.State, 2, testNow),
+		fixture.publisher.Calls())
 }
 
 func TestUpdateScheduleReturnsCurrentNoChangesOnlyForCurrentActiveScheduledState(t *testing.T) {
@@ -423,7 +428,7 @@ func TestReplayedCommandsDoNotPublishEffects(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, got.Sitting, "replayed Sitting = %#v, want original", got)
 	require.Equal(t, original.ID, got.Sitting.ID, "replayed Sitting = %#v, want original", got)
-	require.Empty(t, fixture.effects.events)
+	require.Empty(t, fixture.publisher.Calls())
 }
 
 func TestReplayedUpdateAndCancellationDoNotPublishEffects(t *testing.T) {
@@ -443,7 +448,7 @@ func TestReplayedUpdateAndCancellationDoNotPublishEffects(t *testing.T) {
 			ScheduledStartAt: &start, ScheduledEndAt: &end, IdempotencyKey: "test-key",
 		})
 		require.NoError(t, err)
-		require.Empty(t, fixture.effects.events)
+		require.Empty(t, fixture.publisher.Calls())
 	})
 
 	t.Run("cancel", func(t *testing.T) {
@@ -459,7 +464,7 @@ func TestReplayedUpdateAndCancellationDoNotPublishEffects(t *testing.T) {
 			PrivateReason: "Manager canceled", IdempotencyKey: "test-key",
 		})
 		require.NoError(t, err)
-		require.Empty(t, fixture.effects.events)
+		require.Empty(t, fixture.publisher.Calls())
 	})
 }
 
@@ -564,7 +569,7 @@ func TestUpdateRejectsMismatchedStoreOutcome(t *testing.T) {
 		ScheduledStartAt: &start, IdempotencyKey: "test-key",
 	})
 	assertFaultCode(t, err, "exam.sitting.unavailable")
-	require.Empty(t, fixture.effects.events)
+	require.Empty(t, fixture.publisher.Calls())
 }
 
 func TestCancelRetainsPrivateReasonOnlyInStoreCommand(t *testing.T) {
@@ -597,9 +602,10 @@ func TestCancelRetainsPrivateReasonOnlyInStoreCommand(t *testing.T) {
 	require.Equal(t, "cancel", fixture.auditor.operation, "audit")
 	require.Equal(t, wantAudit, fixture.auditor.value, "audit")
 	require.NotEqual(t, "Room became unavailable", reflect.ValueOf(fixture.auditor.value).String(), "private cancellation reason leaked into audit")
-	require.Len(t, fixture.effects.events, 1)
-	require.Equal(t, "canceled", fixture.effects.events[0].kind)
-	require.Equal(t, model.ExamSittingCanceled, fixture.effects.events[0].state)
+	// Contract: the cancellation reaches managers in the canceled state before
+	// the Sitting board is invalidated.
+	require.Equal(t, scheduleCalls(t, realtime.NewExamSittingCanceledEvent, fixture.examID, fixture.sittingID, model.ExamSittingCanceled, got.Sitting.Revision, testNow),
+		fixture.publisher.Calls())
 }
 
 type fixture struct {
@@ -617,7 +623,7 @@ type fixture struct {
 	authorizer  *authorizerFake
 	auditor     *auditorFake
 	systemAudit *systemAuditorFake
-	effects     *effectsFake
+	publisher   *realtimetest.Publisher
 	jobs        *lifecycleJobFactoryFake
 	mail        *scheduleMailPreparerFake
 }
@@ -662,7 +668,7 @@ func newFixture(t *testing.T) fixture {
 	persistence := &sittingStoreFake{}
 	accessStore := &accessFake{snapshot: &store.ExamAccessSnapshot{Exam: exam, ActorIsManager: true}}
 	memberships := &membershipsFake{items: []*model.AcademicUnitMember{{AcademicUnitID: unitID}}}
-	authorizer, auditor, systemAudit, effects := &authorizerFake{}, &auditorFake{id: model.NewID()}, &systemAuditorFake{id: model.NewID()}, &effectsFake{}
+	authorizer, auditor, systemAudit, publisher := &authorizerFake{}, &auditorFake{id: model.NewID()}, &systemAuditorFake{id: model.NewID()}, &realtimetest.Publisher{}
 	jobs := &lifecycleJobFactoryFake{open: &model.Job{}, deadline: &model.Job{}, finalize: &model.Job{}}
 	mail := &scheduleMailPreparerFake{result: &store.ExamSittingMailFanout{}}
 	service, err := New(Dependencies{
@@ -672,7 +678,7 @@ func newFixture(t *testing.T) fixture {
 		Authorizer:    authorizer,
 		Auditor:       auditor,
 		SystemAuditor: systemAudit,
-		Effects:       effects,
+		Publisher:     publisher,
 		Jobs:          jobs,
 		Mail:          mail,
 		Now:           func() time.Time { return testNow },
@@ -682,7 +688,7 @@ func newFixture(t *testing.T) fixture {
 	return fixture{service: service, invocation: invocation.New(testPrincipal(userID), model.RequestMetadata{}), userID: userID,
 		unitID: unitID, examID: examID, revisionID: revisionID, classID: classID, sittingID: sittingID,
 		persistence: persistence, access: accessStore, memberships: memberships, authorizer: authorizer, auditor: auditor,
-		systemAudit: systemAudit, effects: effects, jobs: jobs, mail: mail}
+		systemAudit: systemAudit, publisher: publisher, jobs: jobs, mail: mail}
 }
 
 func assertFaultCode(t *testing.T, err error, want string) {
@@ -700,6 +706,7 @@ func testPrincipal(userID model.UserID) model.Principal {
 
 type sittingStoreFake struct {
 	store.ExamSittingStore
+	candidateIDs  []model.UserID
 	schedule      *store.ExamSittingSchedule
 	command       *store.CommandIdempotency
 	result        *store.ExamSittingCommandResult
@@ -877,44 +884,61 @@ func (f *auditorFake) Fail(_ context.Context, _ model.AuditEventID, code string)
 	return f.failErr
 }
 
-type effectEvent struct {
-	kind      string
-	examID    model.ExamID
-	sittingID model.ExamSittingID
-	state     model.ExamSittingState
-	revision  int64
-	at        time.Time
+// scheduleCalls are the calls of a schedule change to a Sitting without
+// candidates: the fact newEvent builds, then the Sitting board invalidation.
+func scheduleCalls(
+	t *testing.T,
+	newEvent func(model.ExamID, model.ExamSittingID, model.ExamSittingState, int64, time.Time) (realtime.RealtimeEvent, error),
+	examID model.ExamID,
+	sittingID model.ExamSittingID,
+	state model.ExamSittingState,
+	revision int64,
+	at time.Time,
+) []realtimetest.Call {
+	t.Helper()
+	event, err := newEvent(examID, sittingID, state, revision, at)
+	require.NoError(t, err)
+	board, err := realtime.NewManagerSittingBoardChangedEvent(examID, sittingID)
+	require.NoError(t, err)
+	return []realtimetest.Call{
+		{Method: realtimetest.PublishRealtimeEvent, Event: event},
+		{Method: realtimetest.PublishRealtimeEvent, Event: board},
+	}
 }
 
-type effectsFake struct {
-	events   []effectEvent
-	reported []error
+// lifecycleCalls are the calls of a lifecycle transition of a Sitting without
+// candidates: the transition to managers, the same fact to candidates, then
+// the Sitting board invalidation.
+func lifecycleCalls(
+	t *testing.T,
+	sitting *model.ExamSitting,
+	transition store.ExamSittingLifecycleTransitionCode,
+) []realtimetest.Call {
+	t.Helper()
+	managerEvent, err := realtime.NewExamSittingLifecycleChangedEvent(sitting.ExamID, sitting.ID, sitting.State, sitting.Revision,
+		string(transition), sitting.ScheduledEndAt, sitting.UpdatedAt)
+	require.NoError(t, err)
+	candidateEvent, err := realtime.NewCandidateExamSittingLifecycleChangedEvent(sitting.ExamID, sitting.ID, sitting.State, sitting.Revision,
+		string(transition), sitting.ScheduledEndAt, sitting.UpdatedAt)
+	require.NoError(t, err)
+	board, err := realtime.NewManagerSittingBoardChangedEvent(sitting.ExamID, sitting.ID)
+	require.NoError(t, err)
+	return []realtimetest.Call{
+		{Method: realtimetest.PublishRealtimeEvent, Event: managerEvent},
+		{Method: realtimetest.PublishRealtimeEvent, Event: candidateEvent},
+		{Method: realtimetest.PublishRealtimeEvent, Event: board},
+	}
 }
 
-func (f *effectsFake) LifecycleChanged(_ context.Context, examID model.ExamID, sittingID model.ExamSittingID,
-	state model.ExamSittingState, revision int64, transition store.ExamSittingLifecycleTransitionCode, scheduledEndAt, at time.Time,
-) error {
-	f.events = append(f.events, effectEvent{kind: string(transition), examID: examID, sittingID: sittingID, state: state, revision: revision, at: at})
-	return nil
-}
-
-func (f *effectsFake) Scheduled(_ context.Context, examID model.ExamID, sittingID model.ExamSittingID, state model.ExamSittingState, revision int64, at time.Time) error {
-	f.events = append(f.events, effectEvent{kind: "scheduled", examID: examID, sittingID: sittingID, state: state, revision: revision, at: at})
-	return nil
-}
-
-func (f *effectsFake) ScheduleUpdated(_ context.Context, examID model.ExamID, sittingID model.ExamSittingID, state model.ExamSittingState, revision int64, at time.Time) error {
-	f.events = append(f.events, effectEvent{kind: "schedule_updated", examID: examID, sittingID: sittingID, state: state, revision: revision, at: at})
-	return nil
-}
-
-func (f *effectsFake) Canceled(_ context.Context, examID model.ExamID, sittingID model.ExamSittingID, state model.ExamSittingState, revision int64, at time.Time) error {
-	f.events = append(f.events, effectEvent{kind: "canceled", examID: examID, sittingID: sittingID, state: state, revision: revision, at: at})
-	return nil
-}
-
-func (f *effectsFake) Report(_ context.Context, _ string, err error) {
-	f.reported = append(f.reported, err)
+// ListCandidateInvalidationTargetsBySitting answers the candidates whose Exam
+// activity a Sitting change invalidates.
+func (f *sittingStoreFake) ListCandidateInvalidationTargetsBySitting(
+	context.Context,
+	model.ExamSittingID,
+	model.UserID,
+	int,
+) ([]model.UserID, error) {
+	return f.candidateIDs, nil
 }
 
 type systemAuditorFake struct {

@@ -20,6 +20,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -93,7 +95,7 @@ func TestStageResourceContentCapacityRefusalLeavesOnlyPendingReservation(t *test
 	require.NotNil(t, f.persistence.reservation, "refused content became ready or published: store=%#v effects", f.persistence)
 	require.Equal(t, 0, f.persistence.readyCalls, "refused content became ready or published: store=%#v effects", f.persistence)
 	require.Nil(t, f.persistence.application, "refused content became ready or published: store=%#v effects", f.persistence)
-	require.Equal(t, 0, f.effects.calls, "refused content became ready or published: store=%#v effects", f.persistence)
+	require.Empty(t, f.publisher.Calls(), "refused content became ready or published: store=%#v effects", f.persistence)
 	// Contract (guardrail 8): the audit begins before the durable reservation that
 	// the refused bytes were stored under.
 	require.Equal(t, []string{"access", "membership", "authorize", "audit.begin", "reserve", "content.store"}, f.order)
@@ -159,12 +161,12 @@ func TestApplyUsesOneAtomicStoreCommandAndSuppressesReplayEffects(t *testing.T) 
 	require.False(t, result.RevisionID.IsZero())
 	require.Equal(t, int64(4), result.SittingRevision)
 	require.True(t, result.EffectiveAt.Equal(f.at.Add(-time.Minute)))
-	require.Equal(t, 0, f.effects.calls)
+	require.Empty(t, f.publisher.Calls())
 	require.NotNil(t, f.persistence.application)
 	require.NotNil(t, f.persistence.application.InstructionsMarkdown)
 	require.Equal(t, "Updated", *f.persistence.application.InstructionsMarkdown)
 	require.NotEmpty(t, f.persistence.application.PrivateReason)
-	require.Equal(t, 0, f.effects.calls, "replay effects")
+	require.Empty(t, f.publisher.Calls(), "replay effects")
 	for _, forbidden := range []string{"instructions_markdown", "resources", "private_reason", "stage_id", "sha256"} {
 		_, ok := f.auditor.value[forbidden]
 		require.False(t, ok, "unsafe audit field %q", forbidden)
@@ -181,15 +183,35 @@ func TestApplyUsesOneAtomicStoreCommandAndSuppressesReplayEffects(t *testing.T) 
 func TestApplyPublishesOnlyAfterCommitAndReportsTransientFailure(t *testing.T) {
 	t.Parallel()
 	f := newCorrectionFixture(t)
-	f.effects.err = errors.New("realtime unavailable")
-	_, err := f.service.ApplyExamSittingCorrection(context.Background(), f.invocation, ApplyCommand{ExamID: f.examID, SittingID: f.sittingID, ExpectedSittingRevision: 3, ExpectedCurrentRevisionID: f.baseRevisionID, Instructions: OptionalInstructions{Present: true, Markdown: "Updated"}, Resources: []ResourceManifestItem{}, AffectedCapabilities: []model.CandidateCapability{model.CandidateCapabilityBrowser, model.CandidateCapabilitySubmission, model.CandidateCapabilityWorkspace}, CandidateSummary: "The instructions were corrected.", PrivateReason: "Correct a discovered ambiguity", IdempotencyKey: "test-key"})
+	unavailable := errors.New("realtime unavailable")
+	f.publisher.Fail = func(realtimetest.Call) error { return unavailable }
+	candidateID := model.NewUserID()
+	f.sittings.candidateIDs = []model.UserID{candidateID}
+	result, err := f.service.ApplyExamSittingCorrection(context.Background(), f.invocation, ApplyCommand{ExamID: f.examID, SittingID: f.sittingID, ExpectedSittingRevision: 3, ExpectedCurrentRevisionID: f.baseRevisionID, Instructions: OptionalInstructions{Present: true, Markdown: "Updated"}, Resources: []ResourceManifestItem{}, AffectedCapabilities: []model.CandidateCapability{model.CandidateCapabilityBrowser, model.CandidateCapabilitySubmission, model.CandidateCapabilityWorkspace}, CandidateSummary: "The instructions were corrected.", PrivateReason: "Correct a discovered ambiguity", IdempotencyKey: "test-key"})
 	require.NoError(t, err)
-	require.NotNil(t, f.persistence.application, "application=%#v effects=%#v order=%v", f.persistence.application, f.effects, f.order)
-	require.Equal(t, 1, f.effects.calls, "application=%#v effects=%#v order=%v", f.persistence.application, f.effects, f.order)
-	require.Equal(t, 1, f.effects.reportCalls, "application=%#v effects=%#v order=%v", f.persistence.application, f.effects, f.order)
+	require.NotNil(t, f.persistence.application)
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
-	// begins before the durable write, and the write commits before its effect.
-	require.Equal(t, []string{"access", "membership", "authorize", "audit.begin", "apply", "effect"}, f.order)
+	// begins before the durable write, and the write commits before its effects;
+	// the candidates are read only after the three Sitting-wide publications.
+	require.Equal(t, []string{"access", "membership", "authorize", "audit.begin", "apply", "effect", "effect", "effect", "candidates", "effect"}, f.order)
+	managerEvent, err := realtime.NewExamSittingContentCorrectedEvent(f.examID, f.sittingID, f.baseRevisionID, result.RevisionID, 4, result.EffectiveAt)
+	require.NoError(t, err)
+	candidateEvent, err := realtime.NewCandidateExamSittingContentCorrectedEvent(f.examID, f.sittingID, f.baseRevisionID, result.RevisionID, 4, result.EffectiveAt)
+	require.NoError(t, err)
+	boardEvent, err := realtime.NewManagerSittingBoardChangedEvent(f.examID, f.sittingID)
+	require.NoError(t, err)
+	activityEvent, err := realtime.NewCandidateExamActivityChangedEvent(candidateID)
+	require.NoError(t, err)
+	// Contract: managers learn of the correction before candidates, the board
+	// and candidate activity invalidations follow, every publication is
+	// attempted despite the failures, and the joined failure is reported once.
+	require.Equal(t, []realtimetest.Call{
+		{Method: realtimetest.PublishRealtimeEvent, Event: managerEvent},
+		{Method: realtimetest.PublishRealtimeEvent, Event: candidateEvent},
+		{Method: realtimetest.PublishRealtimeEvent, Event: boardEvent},
+		{Method: realtimetest.PublishRealtimeEvent, Event: activityEvent},
+		{Method: realtimetest.Report, Operation: "exam_sitting_content_corrected", Err: errors.Join(unavailable, unavailable, unavailable, errors.Join(unavailable))},
+	}, f.publisher.Calls())
 }
 
 func TestApplyRejectsNonCanonicalPrivateReasonBeforeAuthorization(t *testing.T) {
@@ -217,7 +239,8 @@ type correctionFixture struct {
 	memberships    *correctionMembershipFake
 	authorizer     *correctionAuthorizerFake
 	auditor        *correctionAuditFake
-	effects        *correctionEffectFake
+	publisher      *realtimetest.Publisher
+	sittings       *correctionSittingsFake
 	content        *correctionContentFake
 	revisions      *correctionRevisionsFake
 }
@@ -230,17 +253,23 @@ func newCorrectionFixture(t *testing.T) *correctionFixture {
 	f.memberships = &correctionMembershipFake{f: f}
 	f.authorizer = &correctionAuthorizerFake{f: f}
 	f.auditor = &correctionAuditFake{f: f}
-	f.effects = &correctionEffectFake{f: f}
+	f.publisher = &realtimetest.Publisher{Observe: func(call realtimetest.Call) {
+		if call.Method == realtimetest.PublishRealtimeEvent {
+			f.order = append(f.order, "effect")
+		}
+	}}
+	f.sittings = &correctionSittingsFake{f: f}
 	f.content = &correctionContentFake{f: f}
 	f.revisions = &correctionRevisionsFake{}
 	service, err := New(Dependencies{
 		Persistence:       f.persistence,
 		Revisions:         f.revisions,
+		Sittings:          f.sittings,
 		Access:            f.access,
 		Memberships:       f.memberships,
 		Authorizer:        f.authorizer,
 		Auditor:           f.auditor,
-		Effects:           f.effects,
+		Publisher:         f.publisher,
 		Content:           f.content,
 		Now:               func() time.Time { return f.at },
 		NewStageID:        model.NewExamCorrectionResourceStageID,
@@ -365,19 +394,23 @@ func (a *correctionAuditFake) Fail(context.Context, model.AuditEventID, string) 
 	return nil
 }
 
-type correctionEffectFake struct {
-	f           *correctionFixture
-	calls       int
-	reportCalls int
-	err         error
+// correctionSittingsFake answers the candidates of the corrected Sitting in
+// one page and places the read in the fixture's order log.
+type correctionSittingsFake struct {
+	store.ExamSittingStore
+	f            *correctionFixture
+	candidateIDs []model.UserID
 }
 
-func (e *correctionEffectFake) Corrected(context.Context, Result) error {
-	e.f.order = append(e.f.order, "effect")
-	e.calls++
-	return e.err
+func (s *correctionSittingsFake) ListCandidateInvalidationTargetsBySitting(
+	context.Context,
+	model.ExamSittingID,
+	model.UserID,
+	int,
+) ([]model.UserID, error) {
+	s.f.order = append(s.f.order, "candidates")
+	return s.candidateIDs, nil
 }
-func (e *correctionEffectFake) Report(context.Context, string, error) { e.reportCalls++ }
 
 type correctionContentFake struct {
 	f         *correctionFixture

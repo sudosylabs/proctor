@@ -25,7 +25,9 @@
 // effects of a committed change: the area builds its events beside the use
 // case that causes them and calls a Publisher, which the parent application's
 // realtime service implements over Service. The realtimetest child holds the
-// recording Publisher that area tests assert.
+// recording Publisher that area tests assert. sitting_invalidation.go holds
+// the two Sitting invalidations that several Exam areas owe, as functions
+// over a Publisher.
 //
 // Construction is inert. The package starts no goroutines, owns no queue or
 // retry loop, and has no infrastructure lifecycle. Callers remain responsible

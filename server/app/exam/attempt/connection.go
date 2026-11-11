@@ -186,8 +186,8 @@ func (s *Service) ConnectExamAttempt(
 	}
 
 	if result.ConnectionOpened && !result.Replayed {
-		if effectErr := s.deps.Effects.ConnectionOpened(ctx, result); effectErr != nil {
-			s.deps.Effects.Report(ctx, "exam_attempt_connection_opened", effectErr)
+		if effectErr := s.publishConnectionOpened(ctx, result); effectErr != nil {
+			s.deps.Publisher.Report(ctx, "exam_attempt_connection_opened", effectErr)
 		}
 	}
 
@@ -300,8 +300,8 @@ func (s *Service) CloseExamAttemptConnection(
 		Changed:         stored.Changed,
 	}
 	if result.Changed {
-		if effectErr := s.deps.Effects.ConnectionClosed(ctx, result); effectErr != nil {
-			s.deps.Effects.Report(ctx, "exam_attempt_connection_closed", effectErr)
+		if effectErr := s.publishConnectionClosed(ctx, result); effectErr != nil {
+			s.deps.Publisher.Report(ctx, "exam_attempt_connection_closed", effectErr)
 		}
 	}
 

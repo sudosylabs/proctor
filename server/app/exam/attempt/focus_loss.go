@@ -149,8 +149,8 @@ func (s *Service) EvaluateExamAttemptFocusLoss(
 			result.ManagerNotificationRequired ||
 			result.CandidateWarningCreated ||
 			result.SuspensionCreated) {
-		if effectErr := s.deps.Effects.FocusLossEvaluated(ctx, result); effectErr != nil {
-			s.deps.Effects.Report(ctx, "exam_attempt_focus_loss_evaluated", effectErr)
+		if effectErr := s.publishFocusLossEvaluated(ctx, result); effectErr != nil {
+			s.deps.Publisher.Report(ctx, "exam_attempt_focus_loss_evaluated", effectErr)
 		}
 	}
 
@@ -232,8 +232,8 @@ func (s *Service) evaluateEndedFocusLoss(
 		DiscrepancyRecorded: true,
 	}
 	if !result.Duplicate {
-		if effectErr := s.deps.Effects.FocusLossEvaluated(ctx, result); effectErr != nil {
-			s.deps.Effects.Report(ctx, "exam_attempt_focus_loss_discrepancy_recorded", effectErr)
+		if effectErr := s.publishFocusLossEvaluated(ctx, result); effectErr != nil {
+			s.deps.Publisher.Report(ctx, "exam_attempt_focus_loss_discrepancy_recorded", effectErr)
 		}
 	}
 

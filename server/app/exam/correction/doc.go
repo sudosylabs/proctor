@@ -12,7 +12,8 @@
 //
 // The package does not edit Drafts, admit Attempts, or deliver the corrected
 // Exam to candidates; attempt shows candidates the correction and records
-// their acknowledgement. It imports only model, store, app/apperror,
-// app/invocation, app/idempotency and app/exam/manageraccess. Start with
-// Service in service.go.
+// their acknowledgement. An applied correction is announced to the Sitting's
+// managers and candidates by the events built in effects.go. It imports only
+// model, store, app/access, app/apperror, app/invocation, app/idempotency,
+// app/realtime and app/exam/manageraccess. Start with Service in service.go.
 package correction

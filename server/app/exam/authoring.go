@@ -19,6 +19,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/manageraccess"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -76,16 +77,6 @@ type Auditor interface {
 	Fail(context.Context, model.AuditEventID, string) error
 }
 
-type Effects interface {
-	Created(context.Context, model.ExamID) error
-	DraftUpdated(context.Context, model.ExamID, int64) error
-	Archived(context.Context, model.ExamID, int64, time.Time) error
-	ManagerChanged(context.Context, model.ExamID, model.UserID, bool, int64, time.Time) error
-	OwnerTransferred(context.Context, model.ExamID, model.UserID, int64, time.Time) error
-	// Report records an Effect failure; the committed change stands.
-	Report(ctx context.Context, operation string, err error)
-}
-
 type CommandOutcomes interface {
 }
 
@@ -126,11 +117,12 @@ type AuthoringDependencies struct {
 	Persistence       store.ExamAuthoringStore
 	Memberships       store.AcademicUnitMemberStore
 	Users             store.UserStore
+	Sittings          store.ExamSittingStore
 	Mail              ManagerMailPreparer
 	Authorizer        Authorizer
 	Auditor           Auditor
 	Outcomes          CommandOutcomes
-	Effects           Effects
+	Publisher         realtime.Publisher
 	Now               func() time.Time
 	NewID             func() model.ExamID
 	InstitutionOrigin string
@@ -143,11 +135,12 @@ func NewAuthoring(deps AuthoringDependencies) (*Authoring, error) {
 	if deps.Persistence == nil ||
 		deps.Memberships == nil ||
 		deps.Users == nil ||
+		deps.Sittings == nil ||
 		deps.Mail == nil ||
 		deps.Authorizer == nil ||
 		deps.Auditor == nil ||
 		deps.Outcomes == nil ||
-		deps.Effects == nil ||
+		deps.Publisher == nil ||
 		deps.Now == nil ||
 		deps.NewID == nil {
 		return nil, errors.New("exam authoring dependencies are required")
@@ -253,8 +246,8 @@ func (a *Authoring) CreateExam(ctx context.Context, invocation invocation.Invoca
 	}
 
 	if !result.Replayed {
-		if effectErr := a.deps.Effects.Created(ctx, result.Value.Exam.ID); effectErr != nil {
-			a.deps.Effects.Report(ctx, "exam_created", effectErr)
+		if effectErr := a.publishExamCreated(ctx, result.Value.Exam.ID); effectErr != nil {
+			a.deps.Publisher.Report(ctx, "exam_created", effectErr)
 		}
 	}
 
@@ -460,8 +453,8 @@ func (a *Authoring) EditExamDraftText(
 	}
 
 	if !result.Replayed {
-		if effectErr := a.deps.Effects.DraftUpdated(ctx, result.Value.Exam.ID, result.Value.Draft.Revision); effectErr != nil {
-			a.deps.Effects.Report(ctx, "exam_draft_updated", effectErr)
+		if effectErr := a.publishDraftUpdated(ctx, result.Value.Exam.ID, result.Value.Draft.Revision); effectErr != nil {
+			a.deps.Publisher.Report(ctx, "exam_draft_updated", effectErr)
 		}
 	}
 
@@ -595,8 +588,8 @@ func (a *Authoring) ConfigureExamDraftFocusLoss(
 	}
 
 	if !result.Replayed {
-		if effectErr := a.deps.Effects.DraftUpdated(ctx, result.Value.Exam.ID, result.Value.Draft.Revision); effectErr != nil {
-			a.deps.Effects.Report(ctx, "exam_draft_updated", effectErr)
+		if effectErr := a.publishDraftUpdated(ctx, result.Value.Exam.ID, result.Value.Draft.Revision); effectErr != nil {
+			a.deps.Publisher.Report(ctx, "exam_draft_updated", effectErr)
 		}
 	}
 
@@ -722,8 +715,8 @@ func (a *Authoring) ConfigureExamDraftBrowserPolicy(
 	}
 
 	if !result.Replayed {
-		if effectErr := a.deps.Effects.DraftUpdated(ctx, result.Value.Exam.ID, result.Value.Draft.Revision); effectErr != nil {
-			a.deps.Effects.Report(ctx, "exam_draft_updated", effectErr)
+		if effectErr := a.publishDraftUpdated(ctx, result.Value.Exam.ID, result.Value.Draft.Revision); effectErr != nil {
+			a.deps.Publisher.Report(ctx, "exam_draft_updated", effectErr)
 		}
 	}
 
@@ -907,8 +900,8 @@ func (a *Authoring) ConfigureExamDraftNativePolicy(
 	}
 
 	if !result.Replayed {
-		if effectErr := a.deps.Effects.DraftUpdated(ctx, result.Value.Exam.ID, result.Value.Draft.Revision); effectErr != nil {
-			a.deps.Effects.Report(ctx, "exam_draft_updated", effectErr)
+		if effectErr := a.publishDraftUpdated(ctx, result.Value.Exam.ID, result.Value.Draft.Revision); effectErr != nil {
+			a.deps.Publisher.Report(ctx, "exam_draft_updated", effectErr)
 		}
 	}
 

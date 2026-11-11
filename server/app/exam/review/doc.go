@@ -12,7 +12,8 @@
 // not change. The student sees only the released result.
 //
 // Collecting Integrity evidence and sealing Submissions belong to attempt.
-// The package does not grade, speak HTTP, or run SQL. It imports only model,
-// store, app/apperror, app/invocation, app/idempotency and
-// app/exam/safemarkdown. Start with Service in service.go.
+// The package does not grade, speak HTTP, or run SQL. A committed Review
+// change is announced by the events built in effects.go. It imports only
+// model, store, app/access, app/apperror, app/invocation, app/idempotency,
+// app/realtime and app/exam/safemarkdown. Start with Service in service.go.
 package review

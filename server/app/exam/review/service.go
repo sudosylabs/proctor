@@ -16,6 +16,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/safemarkdown"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -36,14 +37,6 @@ type Authorizer interface {
 type Auditor interface {
 	Begin(context.Context, access.Mutation) (model.AuditEventID, error)
 	Fail(context.Context, model.AuditEventID, string) error
-}
-
-type Effects interface {
-	ReviewChanged(context.Context, Result) error
-	ReviewFinalized(context.Context, Result) error
-	ResultReleased(context.Context, Result) error
-	// Report records an Effect failure; the committed change stands.
-	Report(ctx context.Context, operation string, err error)
 }
 
 type ResultReleaseMailPreparation struct {
@@ -70,7 +63,7 @@ type Dependencies struct {
 	Persistence   store.ExamIntegrityReviewStore
 	Authorizer    Authorizer
 	Auditor       Auditor
-	Effects       Effects
+	Publisher     realtime.Publisher
 	Mail          ResultReleaseMailPreparer
 	Now           func() time.Time
 	NewReviewID   func() model.SubmissionReviewID
@@ -83,7 +76,7 @@ func New(deps Dependencies) (*Service, error) {
 	if deps.Persistence == nil ||
 		deps.Authorizer == nil ||
 		deps.Auditor == nil ||
-		deps.Effects == nil ||
+		deps.Publisher == nil ||
 		deps.Mail == nil ||
 		deps.Now == nil ||
 		deps.NewReviewID == nil ||
@@ -211,7 +204,7 @@ func (s *Service) SaveExamIntegrityDecision(
 		return Result{}, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("unexpected fresh Review decision identities"))
 	}
 
-	s.effect(ctx, "exam_integrity_review_changed", result, result.Replayed, s.deps.Effects.ReviewChanged)
+	s.effect(ctx, "exam_integrity_review_changed", result, result.Replayed, s.publishReviewChanged)
 	return result, nil
 }
 
@@ -305,7 +298,7 @@ func (s *Service) UpdateExamIntegrityReview(
 		return Result{}, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("unexpected fresh Review identity"))
 	}
 
-	s.effect(ctx, "exam_integrity_review_changed", result, result.Replayed, s.deps.Effects.ReviewChanged)
+	s.effect(ctx, "exam_integrity_review_changed", result, result.Replayed, s.publishReviewChanged)
 	return result, nil
 }
 
@@ -520,9 +513,9 @@ func (s *Service) terminalMutation(
 	}
 
 	if kind == terminalRelease {
-		s.effect(ctx, "exam_integrity_result_released", result, result.Replayed, s.deps.Effects.ResultReleased)
+		s.effect(ctx, "exam_integrity_result_released", result, result.Replayed, s.publishResultReleased)
 	} else {
-		s.effect(ctx, "exam_integrity_review_finalized", result, result.Replayed, s.deps.Effects.ReviewFinalized)
+		s.effect(ctx, "exam_integrity_review_finalized", result, result.Replayed, s.publishReviewFinalized)
 	}
 
 	return result, nil
@@ -818,6 +811,9 @@ func cloneSnapshot(snapshot *store.ExamSubmissionReviewSnapshot) *store.ExamSubm
 	return &clone
 }
 
+// effect delivers one committed Review change unless the Store replayed an
+// earlier outcome. A failed publication is reported under operation and the
+// command still succeeds.
 func (s *Service) effect(
 	ctx context.Context,
 	operation string,
@@ -829,7 +825,7 @@ func (s *Service) effect(
 		return
 	}
 	if err := deliver(ctx, result); err != nil {
-		s.deps.Effects.Report(ctx, operation, err)
+		s.deps.Publisher.Report(ctx, operation, err)
 	}
 }
 

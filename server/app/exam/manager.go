@@ -130,7 +130,9 @@ func (a *Authoring) TransferExamOwnership(
 
 type managerMutation func(context.Context, *store.ExamManagerMutation, *store.CommandIdempotency) (*store.ExamManagerCommandResult, error)
 
-type managerEffect func(context.Context, Effects, model.ExamID, model.UserID, int64, time.Time) error
+// managerEffect announces one committed Exam Manager transition: the Exam,
+// the User it concerns, the Exam revision and the instant of the change.
+type managerEffect func(*Authoring, context.Context, model.ExamID, model.UserID, int64, time.Time) error
 
 type managerTransition struct {
 	operation            string
@@ -149,27 +151,21 @@ var (
 		eligibilityRequired:  true,
 		templateKey:          model.MailTemplateExamManagerAdded,
 		relationship:         ManagerMailRelationshipManager,
-		publish: func(ctx context.Context, effects Effects, examID model.ExamID, userID model.UserID, revision int64, changedAt time.Time) error {
-			return effects.ManagerChanged(ctx, examID, userID, true, revision, changedAt)
-		},
+		publish:              (*Authoring).publishManagerAdded,
 	}
 	managerRemoval = managerTransition{
 		operation:            "remove_manager",
 		idempotencyOperation: idempotencyOperationRemoveManager,
 		templateKey:          model.MailTemplateExamManagerRemoved,
 		relationship:         ManagerMailRelationshipNoLongerManager,
-		publish: func(ctx context.Context, effects Effects, examID model.ExamID, userID model.UserID, revision int64, changedAt time.Time) error {
-			return effects.ManagerChanged(ctx, examID, userID, false, revision, changedAt)
-		},
+		publish:              (*Authoring).publishManagerRemoved,
 	}
 	ownershipTransfer = managerTransition{
 		operation:            "transfer_owner",
 		idempotencyOperation: idempotencyOperationTransferOwner,
 		eligibilityRequired:  true,
 		ownershipTransfer:    true,
-		publish: func(ctx context.Context, effects Effects, examID model.ExamID, userID model.UserID, revision int64, changedAt time.Time) error {
-			return effects.OwnerTransferred(ctx, examID, userID, revision, changedAt)
-		},
+		publish:              (*Authoring).publishOwnerTransferred,
 	}
 )
 
@@ -278,9 +274,9 @@ func (a *Authoring) changeManager(
 	}
 
 	if !result.Replayed {
-		effectErr := transition.publish(ctx, a.deps.Effects, result.Exam.ID, command.UserID, result.Exam.Revision, at)
+		effectErr := transition.publish(a, ctx, result.Exam.ID, command.UserID, result.Exam.Revision, at)
 		if effectErr != nil {
-			a.deps.Effects.Report(ctx, transition.operation, effectErr)
+			a.deps.Publisher.Report(ctx, transition.operation, effectErr)
 		}
 	}
 

@@ -199,8 +199,8 @@ func (a *Authoring) ArchiveExam(
 	}
 
 	if !result.Replayed {
-		if effectErr := a.deps.Effects.Archived(ctx, result.Value.ID, result.Value.Revision, result.Value.ArchivedAt.Time); effectErr != nil {
-			a.deps.Effects.Report(ctx, "exam_archived", effectErr)
+		if effectErr := a.publishExamArchived(ctx, result.Value.ID, result.Value.Revision, result.Value.ArchivedAt.Time); effectErr != nil {
+			a.deps.Publisher.Report(ctx, "exam_archived", effectErr)
 		}
 	}
 

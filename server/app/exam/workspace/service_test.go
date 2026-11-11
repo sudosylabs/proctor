@@ -21,6 +21,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -38,12 +40,12 @@ func TestServiceCreatesAFileOnlyAfterOpaqueContentAndDurableFinalize(t *testing.
 	require.Equal(t, int64(2), result.DraftRevision, "result/store = %#v/%#v", result, fixture.persistence)
 	require.NotNil(t, fixture.persistence.reservation, "result/store = %#v/%#v", result, fixture.persistence)
 	require.NotNil(t, fixture.persistence.mutation, "result/store = %#v/%#v", result, fixture.persistence)
-	require.True(t, fixture.content.stagedBeforeFinalize, "effect/content ordering = %#v/%#v", fixture.effects, fixture.content)
-	require.Equal(t, "file_created", string(fixture.effects.operation), "effect/content ordering = %#v/%#v", fixture.effects, fixture.content)
-	require.Equal(t, fixture.examID, fixture.effects.examID)
-	require.Equal(t, result.Entry.ID, fixture.effects.entryID)
-	require.Equal(t, int64(2), fixture.effects.revision)
-	require.Equal(t, time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC), fixture.effects.changedAt)
+	require.True(t, fixture.content.stagedBeforeFinalize, "content must be staged before the mutation is finalized")
+	// Contract: the committed create publishes exactly one change, naming the
+	// new entry, the committed Draft revision and the mutation instant.
+	require.Equal(t, []realtimetest.Call{
+		starterWorkspaceChanged(t, fixture.examID, result.Entry.ID, 2, ChangeFileCreated, time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)),
+	}, fixture.publisher.Calls())
 	require.Nil(t, fixture.auditor.values["path"])
 	require.Nil(t, fixture.auditor.values["sha256"])
 	wantIdempotency, prepareErr := prepareWorkspaceIdempotency(fixture.invocation, idempotencyOperationCreateFile,
@@ -57,7 +59,7 @@ func TestFileFinalizationPreservesReservationMicroseconds(t *testing.T) {
 	fixture := newServiceFixture(t)
 	at := time.Date(2026, 8, 14, 10, 0, 0, 123456789, time.UTC)
 	fixture.service.deps.Now = func() time.Time { return at }
-	_, err := fixture.service.CreateExamStarterWorkspaceFile(context.Background(), fixture.invocation, CreateFileCommand{
+	result, err := fixture.service.CreateExamStarterWorkspaceFile(context.Background(), fixture.invocation, CreateFileCommand{
 		ExamID: fixture.examID, ExpectedDraftRevision: 1, Path: "empty.txt", MediaType: "text/plain",
 		ExpectedSHA256: strings.Repeat("a", 64), Body: bytes.NewReader(nil), Size: 0, IdempotencyKey: "microsecond-file",
 	})
@@ -65,7 +67,10 @@ func TestFileFinalizationPreservesReservationMicroseconds(t *testing.T) {
 	want := model.TimeUTC(at)
 	require.True(t, fixture.persistence.reservation.Object.CreatedAt.Equal(want), "reservation, finalization, and publication must preserve the same microsecond instant")
 	require.True(t, fixture.persistence.mutation.ChangedAt.Equal(want), "reservation, finalization, and publication must preserve the same microsecond instant")
-	require.True(t, fixture.effects.changedAt.Equal(want), "reservation, finalization, and publication must preserve the same microsecond instant")
+	// Contract: the one published change carries the same microsecond instant.
+	require.Equal(t, []realtimetest.Call{
+		starterWorkspaceChanged(t, fixture.examID, result.Entry.ID, result.DraftRevision, ChangeFileCreated, want),
+	}, fixture.publisher.Calls())
 }
 
 func TestServiceStopsWhenCurrentManagerMembershipCannotBeRead(t *testing.T) {
@@ -112,12 +117,16 @@ func TestServiceExactCreateFileRetryReturnsCommittedOutcomeWithoutRepublishing(t
 	require.NotNil(t, first.Object, "first=%#v replayed=%#v", first, replayed)
 	require.Equal(t, first.Object.ID, replayed.Object.ID, "first=%#v replayed=%#v", first, replayed)
 	require.Equal(t, first.DraftRevision, replayed.DraftRevision, "first=%#v replayed=%#v", first, replayed)
-	require.Equal(t, 2, fixture.persistence.finalizeCalls, "store=%#v content=%#v effects=%#v", fixture.persistence, fixture.content, fixture.effects)
-	require.Len(t, fixture.persistence.reservations, 2, "store=%#v content=%#v effects=%#v", fixture.persistence, fixture.content, fixture.effects)
-	require.Len(t, fixture.content.stagedIDs, 2, "store=%#v content=%#v effects=%#v", fixture.persistence, fixture.content, fixture.effects)
-	require.Len(t, fixture.persistence.reclaimedIDs, 1, "store=%#v content=%#v effects=%#v", fixture.persistence, fixture.content, fixture.effects)
-	require.Equal(t, fixture.content.stagedIDs[1], fixture.persistence.reclaimedIDs[0], "store=%#v content=%#v effects=%#v", fixture.persistence, fixture.content, fixture.effects)
-	require.Equal(t, 1, fixture.effects.count, "store=%#v content=%#v effects=%#v", fixture.persistence, fixture.content, fixture.effects)
+	require.Equal(t, 2, fixture.persistence.finalizeCalls, "store=%#v content=%#v", fixture.persistence, fixture.content)
+	require.Len(t, fixture.persistence.reservations, 2, "store=%#v content=%#v", fixture.persistence, fixture.content)
+	require.Len(t, fixture.content.stagedIDs, 2, "store=%#v content=%#v", fixture.persistence, fixture.content)
+	require.Len(t, fixture.persistence.reclaimedIDs, 1, "store=%#v content=%#v", fixture.persistence, fixture.content)
+	require.Equal(t, fixture.content.stagedIDs[1], fixture.persistence.reclaimedIDs[0], "store=%#v content=%#v", fixture.persistence, fixture.content)
+	// Contract: the first commit publishes one change and the replayed retry
+	// publishes nothing.
+	require.Equal(t, []realtimetest.Call{
+		starterWorkspaceChanged(t, fixture.examID, first.Entry.ID, first.DraftRevision, ChangeFileCreated, time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)),
+	}, fixture.publisher.Calls())
 }
 
 func TestServiceExactReplaceFileRetryReturnsCommittedOutcomeWithoutRepublishing(t *testing.T) {
@@ -138,9 +147,13 @@ func TestServiceExactReplaceFileRetryReturnsCommittedOutcomeWithoutRepublishing(
 	require.NotNil(t, first.Object, "first=%#v replayed=%#v", first, replayed)
 	require.Equal(t, first.Object.ID, replayed.Object.ID, "first=%#v replayed=%#v", first, replayed)
 	require.Equal(t, first.DraftRevision, replayed.DraftRevision, "first=%#v replayed=%#v", first, replayed)
-	require.Len(t, fixture.persistence.reclaimedIDs, 1, "store=%#v content=%#v effects=%#v", fixture.persistence, fixture.content, fixture.effects)
-	require.Equal(t, fixture.content.stagedIDs[1], fixture.persistence.reclaimedIDs[0], "store=%#v content=%#v effects=%#v", fixture.persistence, fixture.content, fixture.effects)
-	require.Equal(t, 1, fixture.effects.count, "store=%#v content=%#v effects=%#v", fixture.persistence, fixture.content, fixture.effects)
+	require.Len(t, fixture.persistence.reclaimedIDs, 1, "store=%#v content=%#v", fixture.persistence, fixture.content)
+	require.Equal(t, fixture.content.stagedIDs[1], fixture.persistence.reclaimedIDs[0], "store=%#v content=%#v", fixture.persistence, fixture.content)
+	// Contract: the first commit publishes one change and the replayed retry
+	// publishes nothing.
+	require.Equal(t, []realtimetest.Call{
+		starterWorkspaceChanged(t, fixture.examID, first.Entry.ID, first.DraftRevision, ChangeFileReplaced, time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)),
+	}, fixture.publisher.Calls())
 }
 
 func TestServiceReplaceRequiresAndCarriesExpectedContentVersion(t *testing.T) {
@@ -265,7 +278,7 @@ type serviceFixture struct {
 	persistence *fakeWorkspaceStore
 	authorizer  *fakeWorkspaceAuthorizer
 	auditor     *fakeWorkspaceAuditor
-	effects     *fakeWorkspaceEffects
+	publisher   *realtimetest.Publisher
 	content     *fakeWorkspaceContent
 }
 
@@ -278,7 +291,7 @@ func newServiceFixture(t *testing.T) *serviceFixture {
 	persistence := &fakeWorkspaceStore{access: &store.ExamAccessSnapshot{Exam: exam, ActorIsManager: true}}
 	authorizer := &fakeWorkspaceAuthorizer{}
 	auditor := &fakeWorkspaceAuditor{}
-	effects := &fakeWorkspaceEffects{}
+	publisher := &realtimetest.Publisher{}
 	content := &fakeWorkspaceContent{persistence: persistence}
 	service, err := New(Dependencies{
 		Persistence: persistence,
@@ -287,7 +300,7 @@ func newServiceFixture(t *testing.T) *serviceFixture {
 		Authorizer:  authorizer,
 		Auditor:     auditor,
 		Content:     content,
-		Effects:     effects,
+		Publisher:   publisher,
 		Now:         func() time.Time { return at },
 		NewEntryID:  model.NewStarterWorkspaceEntryID,
 		NewObjectID: model.NewStarterWorkspaceObjectID,
@@ -299,7 +312,7 @@ func newServiceFixture(t *testing.T) *serviceFixture {
 		AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationSingleFactor, ClientType: model.SessionClientWeb,
 		AuthenticatedAt: at}
 	return &serviceFixture{service: service, invocation: invocation.New(principal, model.RequestMetadata{}),
-		examID: examID, persistence: persistence, authorizer: authorizer, auditor: auditor, effects: effects, content: content}
+		examID: examID, persistence: persistence, authorizer: authorizer, auditor: auditor, publisher: publisher, content: content}
 }
 
 type fakeWorkspaceStore struct {
@@ -425,23 +438,21 @@ func (f *fakeWorkspaceAuditor) Begin(_ context.Context, attempt access.Mutation)
 }
 func (f *fakeWorkspaceAuditor) Fail(context.Context, model.AuditEventID, string) error { return nil }
 
-type fakeWorkspaceEffects struct {
-	operation ChangeOperation
-	count     int
-	examID    model.ExamID
-	entryID   model.StarterWorkspaceEntryID
-	revision  int64
-	changedAt time.Time
+// starterWorkspaceChanged is the call a committed Starter Workspace mutation
+// publishes.
+func starterWorkspaceChanged(
+	t *testing.T,
+	examID model.ExamID,
+	entryID model.StarterWorkspaceEntryID,
+	draftRevision int64,
+	operation ChangeOperation,
+	changedAt time.Time,
+) realtimetest.Call {
+	t.Helper()
+	event, err := realtime.NewExamStarterWorkspaceChangedEvent(examID, entryID, draftRevision, string(operation), changedAt)
+	require.NoError(t, err)
+	return realtimetest.Call{Method: realtimetest.PublishRealtimeEvent, Event: event}
 }
-
-func (f *fakeWorkspaceEffects) Changed(_ context.Context, examID model.ExamID, entryID model.StarterWorkspaceEntryID, revision int64, operation ChangeOperation, changedAt time.Time) error {
-	f.operation = operation
-	f.count++
-	f.examID, f.entryID, f.revision, f.changedAt = examID, entryID, revision, changedAt
-	return nil
-}
-
-func (*fakeWorkspaceEffects) Report(context.Context, string, error) {}
 
 type fakeWorkspaceContent struct {
 	persistence          *fakeWorkspaceStore

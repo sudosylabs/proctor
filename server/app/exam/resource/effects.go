@@ -5,30 +5,23 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-package app
+package resource
 
 import (
 	"context"
 
-	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/realtime"
-	"github.com/sudosylabs/proctor/server/store"
+	"github.com/sudosylabs/proctor/server/model"
 )
 
-func (e examRealtimeEffects) RevisionPublished(ctx context.Context, revision store.ExamRevisionSummary) error {
-	event, err := realtime.NewExamRevisionPublishedEvent(
-		revision.ID,
-		revision.ExamID,
-		revision.Number,
-		revision.PolicyDigest,
-		revision.Kind,
-		revision.PublishedAt,
-	)
+// publishDraftUpdated tells everyone who may view the Exam that its Draft
+// reached draftRevision. An Exam Resource change is announced as a Draft
+// update: the event names neither the Resource nor what was done to it.
+func (s *Service) publishDraftUpdated(ctx context.Context, examID model.ExamID, draftRevision int64) error {
+	event, err := realtime.NewExamDraftUpdatedEvent(examID, draftRevision)
 	if err != nil {
 		return err
 	}
 
-	return e.realtime.PublishRealtimeEvent(ctx, event)
+	return s.deps.Publisher.PublishRealtimeEvent(ctx, event)
 }
-
-var _ exam.PublicationEffects = examRealtimeEffects{}

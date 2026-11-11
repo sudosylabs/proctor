@@ -8,36 +8,9 @@
 package app
 
 import (
-	"context"
-	"time"
-
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/exam/workspace"
-	"github.com/sudosylabs/proctor/server/app/realtime"
-	"github.com/sudosylabs/proctor/server/model"
 )
-
-type examStarterWorkspaceRealtimeEffects struct{ realtime *RealtimeService }
-
-func (e examStarterWorkspaceRealtimeEffects) Changed(
-	ctx context.Context,
-	examID model.ExamID,
-	entryID model.StarterWorkspaceEntryID,
-	draftRevision int64,
-	operation workspace.ChangeOperation,
-	changedAt time.Time,
-) error {
-	event, err := realtime.NewExamStarterWorkspaceChangedEvent(examID, entryID, draftRevision, string(operation), changedAt)
-	if err != nil {
-		return err
-	}
-
-	return e.realtime.PublishRealtimeEvent(ctx, event)
-}
-func (e examStarterWorkspaceRealtimeEffects) Report(ctx context.Context, operation string, err error) {
-	e.realtime.reportTransientFailure(ctx, operation, err)
-}
 
 var _ workspace.Authorizer = (*access.Authorizer)(nil)
 var _ workspace.Auditor = access.MutationAuditAdapter{}
-var _ workspace.Effects = examStarterWorkspaceRealtimeEffects{}

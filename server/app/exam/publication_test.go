@@ -16,6 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -26,14 +28,14 @@ func TestPublicationPublishesAfterCurrentManagerAuthorizationAndSuppressesReplay
 	f.persistence.actorIsManager = true
 	f.memberships.items = []*model.AcademicUnitMember{{AcademicUnitID: f.unitID}}
 	revisions := &revisionStoreFake{}
-	effects := &publicationEffectsFake{}
+	publisher := &realtimetest.Publisher{}
 	service, err := NewPublication(PublicationDependencies{
 		Persistence:       revisions,
 		Access:            f.persistence,
 		Memberships:       f.memberships,
 		Authorizer:        f.authorizer,
 		Auditor:           f.auditor,
-		Effects:           effects,
+		Publisher:         publisher,
 		Now:               fixedPublicationTime,
 		NewID:             model.NewExamRevisionID,
 		InstitutionOrigin: "https://institution.example",
@@ -46,13 +48,17 @@ func TestPublicationPublishesAfterCurrentManagerAuthorizationAndSuppressesReplay
 	require.NotNil(t, revisions.input, "publication action=%q input=%#v result=%#v effects", f.authorizer.action, revisions.input, got)
 	require.False(t, revisions.input.ManagerOverride, "publication action=%q input=%#v result=%#v effects", f.authorizer.action, revisions.input, got)
 	require.Equal(t, revisions.summary.ID, got.ID, "publication action=%q input=%#v result=%#v effects", f.authorizer.action, revisions.input, got)
-	require.Equal(t, 1, effects.calls, "publication action=%q input=%#v result=%#v effects", f.authorizer.action, revisions.input, got)
+	published, eventErr := realtime.NewExamRevisionPublishedEvent(got.ID, f.examID, got.Number, got.PolicyDigest, got.Kind, got.PublishedAt)
+	require.NoError(t, eventErr)
+	// Contract: a fresh publication publishes exactly the Revision's published
+	// fact, and the replay below adds nothing to it.
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.PublishRealtimeEvent, Event: published}}, publisher.Calls())
 	assertStoreIdempotency(t, revisions.idempotency, f.userID, idempotencyOperationPublishRevision, "test-key",
 		fmt.Sprintf(`{"exam_id":%q,"expected_draft_revision":3}`, f.examID))
 	revisions.replayed = true
 	_, err = service.PublishExamRevision(context.Background(), f.invocation, command)
 	require.NoError(t, err)
-	require.Equal(t, 1, effects.calls, "replay republished effect")
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.PublishRealtimeEvent, Event: published}}, publisher.Calls(), "replay republished effect")
 }
 
 func TestPublicationUsesOverrideForNonManager(t *testing.T) {
@@ -65,7 +71,7 @@ func TestPublicationUsesOverrideForNonManager(t *testing.T) {
 		Memberships:       f.memberships,
 		Authorizer:        f.authorizer,
 		Auditor:           f.auditor,
-		Effects:           &publicationEffectsFake{},
+		Publisher:         &realtimetest.Publisher{},
 		Now:               fixedPublicationTime,
 		NewID:             model.NewExamRevisionID,
 		InstitutionOrigin: "https://institution.example",
@@ -89,7 +95,7 @@ func TestPublicationMapsCapacityConflict(t *testing.T) {
 		Memberships:       f.memberships,
 		Authorizer:        f.authorizer,
 		Auditor:           f.auditor,
-		Effects:           &publicationEffectsFake{},
+		Publisher:         &realtimetest.Publisher{},
 		Now:               fixedPublicationTime,
 		NewID:             model.NewExamRevisionID,
 		InstitutionOrigin: "https://institution.example",
@@ -103,13 +109,6 @@ func TestPublicationMapsCapacityConflict(t *testing.T) {
 }
 
 func fixedPublicationTime() time.Time { return time.Date(2026, 8, 15, 8, 0, 0, 0, time.UTC) }
-
-type publicationEffectsFake struct{ calls int }
-
-func (f *publicationEffectsFake) RevisionPublished(context.Context, store.ExamRevisionSummary) error {
-	f.calls++
-	return nil
-}
 
 type revisionStoreFake struct {
 	store.ExamRevisionStore
@@ -132,5 +131,3 @@ func (f *revisionStoreFake) Publish(_ context.Context, input *store.ExamRevision
 	}
 	return &store.ExamRevisionPublicationResult{Revision: &f.summary, ExamRevision: 2, DraftRevision: input.ExpectedDraftRevision + 1, Replayed: f.replayed}, nil
 }
-
-func (f *publicationEffectsFake) Report(context.Context, string, error) {}

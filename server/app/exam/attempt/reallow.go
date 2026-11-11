@@ -173,8 +173,8 @@ func (s *Service) ReallowExamAttempt(
 		Replayed:        stored.Replayed,
 	}
 	if !result.Replayed {
-		if effectErr := s.deps.Effects.AttemptReallowed(ctx, result); effectErr != nil {
-			s.deps.Effects.Report(ctx, "exam_attempt_reallowed", effectErr)
+		if effectErr := s.publishAttemptReallowed(ctx, result); effectErr != nil {
+			s.deps.Publisher.Report(ctx, "exam_attempt_reallowed", effectErr)
 		}
 	}
 

@@ -22,6 +22,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -37,7 +38,9 @@ func TestConnectDelegatesAtomicAdmissionAndPassesOnlyCredentialHash(t *testing.T
 	require.Equal(t, f.sitting.ClassID, result.ClassID)
 	require.True(t, result.FirstAdmission)
 	require.True(t, result.ConnectionOpened)
-	require.Equal(t, 1, f.effects.opened)
+	// Contract: a first admission that revoked no Session publishes the opened
+	// Connection to managers, then the operational invalidations.
+	require.Equal(t, connectionOpenedCalls(t, result), f.publisher.Calls())
 	input := f.persistence.connect
 	require.NotNil(t, input)
 	require.Equal(t, model.HashToken(credential), input.ContinuityCredentialHash)
@@ -51,7 +54,7 @@ func TestConnectDelegatesAtomicAdmissionAndPassesOnlyCredentialHash(t *testing.T
 	require.Equal(t, f.configuration.Digest, result.RuntimeCapabilities.AttemptConfiguration.Digest)
 	// Contract (guardrails 8 and 14): the audit begins before the durable write,
 	// and the write commits before its effect.
-	require.Equal(t, []string{"sitting", "audit", "connect", "effect.open"}, f.order)
+	require.Equal(t, []string{"sitting", "audit", "connect", "effects"}, f.order)
 	require.NotContains(t, strings.ToLower(fmt.Sprintf("%#v", result.Participation)), "credential")
 	require.NotContains(t, fmt.Sprintf("%#v", result.Participation), credential)
 	require.NotContains(t, fmt.Sprintf("%#v", result.Participation), model.HashToken(credential))
@@ -214,20 +217,20 @@ func TestCreateWorkspaceDirectoryRevalidatesMutationAccessAuditsAndPublishesSafe
 	require.NoError(t, err)
 	principal := f.invocation.Principal()
 	workspaceAccess := f.workspace.resolvedAccess
-	require.Equal(t, f.attemptID, workspaceAccess.AttemptID, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
-	require.Equal(t, participationID, workspaceAccess.ParticipationID, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
-	require.Equal(t, int64(4), workspaceAccess.Generation, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
-	require.Equal(t, principal.UserID, workspaceAccess.CandidateUserID, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
-	require.Equal(t, principal.SessionID, workspaceAccess.SessionID, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
-	require.Equal(t, f.connectionID, workspaceAccess.ConnectionID, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
-	require.Equal(t, model.HashToken(credential), workspaceAccess.ContinuityCredentialHash, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
-	require.NotNil(t, f.workspace.mutation, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
-	require.Equal(t, entryID, f.workspace.mutation.EntryID, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
-	require.Equal(t, "src", f.workspace.mutation.DestinationPath, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
-	require.Equal(t, model.AttemptWorkspaceMutationCreateDirectory, f.workspace.mutation.Operation, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
-	require.True(t, f.workspace.mutation.AuditEventID.IsValid(), "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
-	require.Equal(t, int64(9), result.Change.Cursor, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
-	require.Equal(t, 1, f.effects.workspaceChanged, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.effects)
+	require.Equal(t, f.attemptID, workspaceAccess.AttemptID, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.publisher.Calls())
+	require.Equal(t, participationID, workspaceAccess.ParticipationID, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.publisher.Calls())
+	require.Equal(t, int64(4), workspaceAccess.Generation, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.publisher.Calls())
+	require.Equal(t, principal.UserID, workspaceAccess.CandidateUserID, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.publisher.Calls())
+	require.Equal(t, principal.SessionID, workspaceAccess.SessionID, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.publisher.Calls())
+	require.Equal(t, f.connectionID, workspaceAccess.ConnectionID, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.publisher.Calls())
+	require.Equal(t, model.HashToken(credential), workspaceAccess.ContinuityCredentialHash, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.publisher.Calls())
+	require.NotNil(t, f.workspace.mutation, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.publisher.Calls())
+	require.Equal(t, entryID, f.workspace.mutation.EntryID, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.publisher.Calls())
+	require.Equal(t, "src", f.workspace.mutation.DestinationPath, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.publisher.Calls())
+	require.Equal(t, model.AttemptWorkspaceMutationCreateDirectory, f.workspace.mutation.Operation, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.publisher.Calls())
+	require.True(t, f.workspace.mutation.AuditEventID.IsValid(), "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.publisher.Calls())
+	require.Equal(t, int64(9), result.Change.Cursor, "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.publisher.Calls())
+	require.Equal(t, workspaceChangedCalls(t, result), f.publisher.Calls(), "access=%#v mutation=%#v result=%#v effects=%#v", workspaceAccess, f.workspace.mutation, result, f.publisher.Calls())
 	auditCapture := fmt.Sprintf("%#v", f.audit.values)
 	require.Len(t, f.audit.values, 2)
 	require.Equal(t, f.attemptID.String(), f.audit.values["exam_attempt_id"])
@@ -237,7 +240,7 @@ func TestCreateWorkspaceDirectoryRevalidatesMutationAccessAuditsAndPublishesSafe
 	require.NotContains(t, auditCapture, participationID.String())
 	// Contract (guardrails 8 and 14): the audit begins before the durable write,
 	// and the write commits before its effect.
-	require.Equal(t, []string{"workspace.resolve", "audit", "workspace.apply", "effect.workspace"}, f.order)
+	require.Equal(t, []string{"workspace.resolve", "audit", "workspace.apply", "effects"}, f.order)
 	wantIdempotency, prepareErr := prepareWorkspaceMutationIdempotency(f.invocation, "test-key", f.attemptID,
 		model.AttemptWorkspaceMutationCreateDirectory, struct {
 			Path string `json:"path"`
@@ -277,7 +280,7 @@ func TestCreateWorkspaceFileStagesBeforeAtomicMutationAndSuppressesPrivateEffect
 	require.Equal(t, "main.go", f.workspace.mutation.DestinationPath, "reservation=%#v ready=%#v mutation=%#v result=%#v", f.workspace.reservation, f.workspace.ready, f.workspace.mutation, result)
 	require.NotNil(t, result.Entry, "reservation=%#v ready=%#v mutation=%#v result=%#v", f.workspace.reservation, f.workspace.ready, f.workspace.mutation, result)
 	require.Equal(t, version, result.Entry.ContentVersion, "reservation=%#v ready=%#v mutation=%#v result=%#v", f.workspace.reservation, f.workspace.ready, f.workspace.mutation, result)
-	require.Equal(t, 1, f.effects.workspaceChanged, "reservation=%#v ready=%#v mutation=%#v result=%#v", f.workspace.reservation, f.workspace.ready, f.workspace.mutation, result)
+	require.Equal(t, workspaceChangedCalls(t, result), f.publisher.Calls(), "reservation=%#v ready=%#v mutation=%#v result=%#v", f.workspace.reservation, f.workspace.ready, f.workspace.mutation, result)
 	capture := fmt.Sprintf("%#v", f.audit.values)
 	require.NotContains(t, capture, "main.go")
 	require.NotContains(t, capture, checksum)
@@ -286,7 +289,7 @@ func TestCreateWorkspaceFileStagesBeforeAtomicMutationAndSuppressesPrivateEffect
 	// Contract: bytes are staged only inside a reserved upload, the audit begins
 	// before the durable apply (guardrail 8), and the apply commits before its
 	// effect (guardrail 14).
-	require.Equal(t, []string{"workspace.resolve", "workspace.reserve", "content.stage", "workspace.ready", "audit", "workspace.apply", "effect.workspace"}, f.order)
+	require.Equal(t, []string{"workspace.resolve", "workspace.reserve", "content.stage", "workspace.ready", "audit", "workspace.apply", "effects"}, f.order)
 	wantIdempotency, prepareErr := prepareWorkspaceMutationIdempotency(f.invocation, "test-key", f.attemptID,
 		model.AttemptWorkspaceMutationCreateFile, struct {
 			Path, MediaType, SHA256 string
@@ -336,13 +339,13 @@ func TestWorkspaceFileReplayReclaimsLosingStageAndPublishesNoEffect(t *testing.T
 	_, err := f.service.CreateCandidateExamWorkspaceFile(context.Background(), f.invocation, CreateWorkspaceFileCommand{Access: validWorkspaceMutationAccess(f), Path: "retry.txt", MediaType: "text/plain", ExpectedSHA256: checksum,
 		Body: strings.NewReader("x"), Size: 1, IdempotencyKey: "test-key",
 	})
-	require.NoError(t, err, "error=%v reclaimable=%v effects=%#v", err, f.workspace.reclaimable, f.effects)
-	require.Len(t, f.workspace.reclaimable, 1, "error=%v reclaimable=%v effects=%#v", err, f.workspace.reclaimable, f.effects)
-	require.Equal(t, 0, f.effects.workspaceChanged, "error=%v reclaimable=%v effects=%#v", err, f.workspace.reclaimable, f.effects)
-	require.Equal(t, f.workspace.proposedEntryID, f.workspace.mutation.EntryID, "error=%v reclaimable=%v effects=%#v", err, f.workspace.reclaimable, f.effects)
-	require.NotEqual(t, entryID, f.workspace.mutation.EntryID, "error=%v reclaimable=%v effects=%#v", err, f.workspace.reclaimable, f.effects)
-	require.Equal(t, f.workspace.proposedVersion, f.workspace.ready.ContentVersion, "error=%v reclaimable=%v effects=%#v", err, f.workspace.reclaimable, f.effects)
-	require.Equal(t, version, resultVersion(f.workspace.mutationResult), "error=%v reclaimable=%v effects=%#v", err, f.workspace.reclaimable, f.effects)
+	require.NoError(t, err, "error=%v reclaimable=%v effects=%#v", err, f.workspace.reclaimable, f.publisher.Calls())
+	require.Len(t, f.workspace.reclaimable, 1, "error=%v reclaimable=%v effects=%#v", err, f.workspace.reclaimable, f.publisher.Calls())
+	require.Empty(t, f.publisher.Calls(), "error=%v reclaimable=%v effects=%#v", err, f.workspace.reclaimable, f.publisher.Calls())
+	require.Equal(t, f.workspace.proposedEntryID, f.workspace.mutation.EntryID, "error=%v reclaimable=%v effects=%#v", err, f.workspace.reclaimable, f.publisher.Calls())
+	require.NotEqual(t, entryID, f.workspace.mutation.EntryID, "error=%v reclaimable=%v effects=%#v", err, f.workspace.reclaimable, f.publisher.Calls())
+	require.Equal(t, f.workspace.proposedVersion, f.workspace.ready.ContentVersion, "error=%v reclaimable=%v effects=%#v", err, f.workspace.reclaimable, f.publisher.Calls())
+	require.Equal(t, version, resultVersion(f.workspace.mutationResult), "error=%v reclaimable=%v effects=%#v", err, f.workspace.reclaimable, f.publisher.Calls())
 }
 
 func TestWorkspaceDirectoryReplayAcceptsRetainedEntryInsteadOfFreshProposal(t *testing.T) {
@@ -360,7 +363,7 @@ func TestWorkspaceDirectoryReplayAcceptsRetainedEntryInsteadOfFreshProposal(t *t
 	require.Equal(t, retainedID, result.Entry.EntryID, "result=%#v mutation=%#v error", result, f.workspace.mutation)
 	require.Equal(t, f.workspace.proposedEntryID, f.workspace.mutation.EntryID, "result=%#v mutation=%#v error", result, f.workspace.mutation)
 	require.NotEqual(t, retainedID, f.workspace.mutation.EntryID, "result=%#v mutation=%#v error", result, f.workspace.mutation)
-	require.Equal(t, 0, f.effects.workspaceChanged, "result=%#v mutation=%#v error", result, f.workspace.mutation)
+	require.Empty(t, f.publisher.Calls(), "result=%#v mutation=%#v error", result, f.workspace.mutation)
 }
 
 func TestWorkspaceReadyObjectReclamationDistinguishesStableAndUnknownApplyOutcomes(t *testing.T) {
@@ -503,7 +506,7 @@ func TestRenewParticipationBindsAuthenticatedConnectionAndPassesOnlyCredentialHa
 	require.Equal(t, model.HashToken(credential), input.ContinuityCredentialHash, "renewal input/result = %#v / %#v", input, result)
 	require.Equal(t, int64(7), result.AcceptedSequence, "renewal input/result = %#v / %#v", input, result)
 	require.True(t, result.DatabaseTime.Equal(databaseNow), "renewal input/result = %#v / %#v", input, result)
-	require.Equal(t, 1, f.effects.renewed, "renewal input/result = %#v / %#v", input, result)
+	require.Equal(t, []realtimetest.Call{sittingBoardChangedCall(t, result.ExamID, result.SittingID)}, f.publisher.Calls(), "renewal input/result = %#v / %#v", input, result)
 	require.NotContains(t, fmt.Sprintf("%#v", result), credential, "renewal input/result = %#v / %#v", input, result)
 	require.NotContains(t, fmt.Sprintf("%#v", result), model.HashToken(credential), "renewal input/result = %#v / %#v", input, result)
 }
@@ -522,7 +525,7 @@ func TestDuplicateParticipationRenewalDoesNotRepublishRenewal(t *testing.T) {
 		Generation: 2, Sequence: 4, ContinuityCredential: model.NewCredentialToken(),
 	})
 	require.NoError(t, err)
-	require.Equal(t, 0, f.effects.renewed)
+	require.Empty(t, f.publisher.Calls())
 }
 
 func TestRenewParticipationRejectsInvalidPrincipalAndFieldsBeforeStore(t *testing.T) {
@@ -598,12 +601,12 @@ func TestLateRenewalUsesExactExpiryTransitionAndReturnsSafeConnectionLoss(t *tes
 		Generation: due.Generation, Sequence: 5, ContinuityCredential: model.NewCredentialToken(),
 	})
 	var fault *apperror.Error
-	require.ErrorAs(t, err, &fault, "error=%v effects=%#v order=%v", err, f.effects, f.order)
-	require.Equal(t, "exam.attempt.connection_lost", fault.Code(), "error=%v effects=%#v order=%v", err, f.effects, f.order)
-	require.Equal(t, 1, f.effects.expired, "error=%v effects=%#v order=%v", err, f.effects, f.order)
+	require.ErrorAs(t, err, &fault, "error=%v effects=%#v order=%v", err, f.publisher.Calls(), f.order)
+	require.Equal(t, "exam.attempt.connection_lost", fault.Code(), "error=%v effects=%#v order=%v", err, f.publisher.Calls(), f.order)
+	require.Equal(t, expiryCalls(t, expiryOf(f.persistence.expireResult), true), f.publisher.Calls(), "error=%v effects=%#v order=%v", err, f.publisher.Calls(), f.order)
 	// Contract (guardrails 8 and 14): the audit begins before the durable write,
 	// and the write commits before its effect.
-	require.Equal(t, []string{"renew", "expiry.resolve", "system.audit", "expiry.commit", "effect.expire"}, f.order)
+	require.Equal(t, []string{"renew", "expiry.resolve", "system.audit", "expiry.commit", "effects"}, f.order)
 }
 
 func TestLateRenewalConcealsScannerWinningBeforeTargetResolution(t *testing.T) {
@@ -616,9 +619,9 @@ func TestLateRenewalConcealsScannerWinningBeforeTargetResolution(t *testing.T) {
 		Generation: 2, Sequence: 5, ContinuityCredential: model.NewCredentialToken(),
 	})
 	var fault *apperror.Error
-	require.ErrorAs(t, err, &fault, "error=%v effects=%#v order=%v", err, f.effects, f.order)
-	require.Equal(t, "exam.attempt.connection_lost", fault.Code(), "error=%v effects=%#v order=%v", err, f.effects, f.order)
-	require.Equal(t, 0, f.effects.expired, "error=%v effects=%#v order=%v", err, f.effects, f.order)
+	require.ErrorAs(t, err, &fault, "error=%v effects=%#v order=%v", err, f.publisher.Calls(), f.order)
+	require.Equal(t, "exam.attempt.connection_lost", fault.Code(), "error=%v effects=%#v order=%v", err, f.publisher.Calls(), f.order)
+	require.Empty(t, f.publisher.Calls(), "error=%v effects=%#v order=%v", err, f.publisher.Calls(), f.order)
 	// An already ended Participation is neither audited nor expired again.
 	require.Nil(t, f.systemAudit.values, "an ended Participation was audited")
 	require.Nil(t, f.persistence.expireInput, "an ended Participation was expired again")
@@ -633,22 +636,22 @@ func TestScanExpiredParticipationsCommitsAuditedAggregateBeforeSafeEffect(t *tes
 	result, err := f.service.ScanExpiredParticipations(context.Background(), expiryScanSystem, 200)
 	require.NoError(t, err)
 	input := f.persistence.expireInput
-	require.Equal(t, 1, result.Due, "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.effects)
-	require.Equal(t, 1, result.Completed, "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.effects)
-	require.Equal(t, 0, result.Replayed, "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.effects)
-	require.NotNil(t, input, "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.effects)
-	require.Equal(t, due.AttemptID, input.AttemptID, "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.effects)
-	require.Equal(t, due.ParticipationID, input.ParticipationID, "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.effects)
-	require.Equal(t, due.Generation, input.Generation, "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.effects)
-	require.True(t, input.EvidenceID.IsValid(), "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.effects)
-	require.True(t, input.FlagID.IsValid(), "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.effects)
-	require.True(t, input.SuspensionID.IsValid(), "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.effects)
-	require.True(t, input.AuditEventID.IsValid(), "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.effects)
-	require.False(t, input.AuditAt.IsZero(), "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.effects)
-	require.Equal(t, 1, f.effects.expired, "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.effects)
+	require.Equal(t, 1, result.Due, "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.publisher.Calls())
+	require.Equal(t, 1, result.Completed, "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.publisher.Calls())
+	require.Equal(t, 0, result.Replayed, "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.publisher.Calls())
+	require.NotNil(t, input, "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.publisher.Calls())
+	require.Equal(t, due.AttemptID, input.AttemptID, "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.publisher.Calls())
+	require.Equal(t, due.ParticipationID, input.ParticipationID, "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.publisher.Calls())
+	require.Equal(t, due.Generation, input.Generation, "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.publisher.Calls())
+	require.True(t, input.EvidenceID.IsValid(), "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.publisher.Calls())
+	require.True(t, input.FlagID.IsValid(), "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.publisher.Calls())
+	require.True(t, input.SuspensionID.IsValid(), "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.publisher.Calls())
+	require.True(t, input.AuditEventID.IsValid(), "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.publisher.Calls())
+	require.False(t, input.AuditAt.IsZero(), "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.publisher.Calls())
+	require.Equal(t, expiryCalls(t, expiryOf(f.persistence.expireResult), true), f.publisher.Calls(), "scan=%#v input=%#v order=%v effects=%#v", result, input, f.order, f.publisher.Calls())
 	// Contract (guardrails 8 and 14): the audit begins before the durable write,
 	// and the write commits before its effect.
-	require.Equal(t, []string{"expiry.list", "system.audit", "expiry.commit", "effect.expire"}, f.order)
+	require.Equal(t, []string{"expiry.list", "system.audit", "expiry.commit", "effects"}, f.order)
 	require.Nil(t, f.systemAudit.values["continuity_credential"])
 	require.Nil(t, f.systemAudit.values["credential_hash"])
 	require.Nil(t, f.systemAudit.values["private_reason"])
@@ -667,9 +670,9 @@ func TestScanExpiredParticipationPublishesSuspensionAfterTransportAlreadyClosed(
 	f.persistence.expireResult.Connection.CloseReason = model.AttemptConnectionCloseTransport
 
 	result, err := f.service.ScanExpiredParticipations(context.Background(), expiryScanSystem, 1)
-	require.NoError(t, err, "scan=%#v error=%v effects=%#v", result, err, f.effects)
-	require.Equal(t, 1, result.Completed, "scan=%#v error=%v effects=%#v", result, err, f.effects)
-	require.Equal(t, 1, f.effects.expired, "scan=%#v error=%v effects=%#v", result, err, f.effects)
+	require.NoError(t, err, "scan=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
+	require.Equal(t, 1, result.Completed, "scan=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
+	require.Equal(t, expiryCalls(t, expiryOf(f.persistence.expireResult), false), f.publisher.Calls(), "scan=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
 }
 
 func TestScanExpiredParticipationsSuppressesReplayEffectsAndRejectsUnboundedLimit(t *testing.T) {
@@ -679,9 +682,9 @@ func TestScanExpiredParticipationsSuppressesReplayEffectsAndRejectsUnboundedLimi
 	f.persistence.expiryDue = []store.ExamAttemptParticipationExpiryDue{due}
 	f.persistence.expireResult = expiryResultFixture(t, f, due, true)
 	result, err := f.service.ScanExpiredParticipations(context.Background(), expiryScanSystem, 1)
-	require.NoError(t, err, "scan=%#v error=%v effects=%#v", result, err, f.effects)
-	require.Equal(t, 1, result.Replayed, "scan=%#v error=%v effects=%#v", result, err, f.effects)
-	require.Equal(t, 0, f.effects.expired, "scan=%#v error=%v effects=%#v", result, err, f.effects)
+	require.NoError(t, err, "scan=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
+	require.Equal(t, 1, result.Replayed, "scan=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
+	require.Empty(t, f.publisher.Calls(), "scan=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
 	for _, limit := range []int{0, 201} {
 		other := newFixture(t)
 		_, err = other.service.ScanExpiredParticipations(context.Background(), expiryScanSystem, limit)
@@ -697,10 +700,10 @@ func TestScanExpiredParticipationsFailsAuditAndPublishesNothingOnCommitFailure(t
 	f.persistence.expireErr = store.NewErrConflict("attempt_participation", "attempt_participation_generation", nil)
 	_, err := f.service.ScanExpiredParticipations(context.Background(), expiryScanSystem, 10)
 	var fault *apperror.Error
-	require.ErrorAs(t, err, &fault, "error=%v audit=%#v effects=%#v order=%v", err, f.systemAudit, f.effects, f.order)
-	require.Equal(t, "exam.attempt.connection_closed", fault.Code(), "error=%v audit=%#v effects=%#v order=%v", err, f.systemAudit, f.effects, f.order)
-	require.Equal(t, fault.Code(), f.systemAudit.failedCode, "error=%v audit=%#v effects=%#v order=%v", err, f.systemAudit, f.effects, f.order)
-	require.Equal(t, 0, f.effects.expired, "error=%v audit=%#v effects=%#v order=%v", err, f.systemAudit, f.effects, f.order)
+	require.ErrorAs(t, err, &fault, "error=%v audit=%#v effects=%#v order=%v", err, f.systemAudit, f.publisher.Calls(), f.order)
+	require.Equal(t, "exam.attempt.connection_closed", fault.Code(), "error=%v audit=%#v effects=%#v order=%v", err, f.systemAudit, f.publisher.Calls(), f.order)
+	require.Equal(t, fault.Code(), f.systemAudit.failedCode, "error=%v audit=%#v effects=%#v order=%v", err, f.systemAudit, f.publisher.Calls(), f.order)
+	require.Empty(t, f.publisher.Calls(), "error=%v audit=%#v effects=%#v order=%v", err, f.systemAudit, f.publisher.Calls(), f.order)
 	// Contract (guardrail 8): the audit begins before the durable write and
 	// records the failed commit; no effect follows.
 	require.Equal(t, []string{"expiry.list", "system.audit", "expiry.commit", "system.audit.fail"}, f.order)
@@ -720,19 +723,19 @@ func TestReallowRequiresExactSuspensionAndKeepsPrivateReasonOutOfEffects(t *test
 	})
 	require.NoError(t, err)
 	input := f.persistence.reallow
-	require.NotNil(t, input, "result=%#v input=%#v effects=%#v order=%v", result, input, f.effects, f.order)
-	require.Equal(t, suspensionID, input.SuspensionID, "result=%#v input=%#v effects=%#v order=%v", result, input, f.effects, f.order)
-	require.Equal(t, int64(2), input.ExpectedRevision, "result=%#v input=%#v effects=%#v order=%v", result, input, f.effects, f.order)
-	require.Equal(t, reason, input.PrivateReason, "result=%#v input=%#v effects=%#v order=%v", result, input, f.effects, f.order)
-	require.Equal(t, managerID, input.ActorUserID, "result=%#v input=%#v effects=%#v order=%v", result, input, f.effects, f.order)
-	require.False(t, input.ManagerOverride, "result=%#v input=%#v effects=%#v order=%v", result, input, f.effects, f.order)
-	require.Equal(t, model.ExamAttemptReady, result.Attempt.State, "result=%#v input=%#v effects=%#v order=%v", result, input, f.effects, f.order)
-	require.Equal(t, model.AttemptSuspensionClosed, result.Suspension.State, "result=%#v input=%#v effects=%#v order=%v", result, input, f.effects, f.order)
-	require.Equal(t, 1, f.effects.reallowed, "result=%#v input=%#v effects=%#v order=%v", result, input, f.effects, f.order)
+	require.NotNil(t, input, "result=%#v input=%#v effects=%#v order=%v", result, input, f.publisher.Calls(), f.order)
+	require.Equal(t, suspensionID, input.SuspensionID, "result=%#v input=%#v effects=%#v order=%v", result, input, f.publisher.Calls(), f.order)
+	require.Equal(t, int64(2), input.ExpectedRevision, "result=%#v input=%#v effects=%#v order=%v", result, input, f.publisher.Calls(), f.order)
+	require.Equal(t, reason, input.PrivateReason, "result=%#v input=%#v effects=%#v order=%v", result, input, f.publisher.Calls(), f.order)
+	require.Equal(t, managerID, input.ActorUserID, "result=%#v input=%#v effects=%#v order=%v", result, input, f.publisher.Calls(), f.order)
+	require.False(t, input.ManagerOverride, "result=%#v input=%#v effects=%#v order=%v", result, input, f.publisher.Calls(), f.order)
+	require.Equal(t, model.ExamAttemptReady, result.Attempt.State, "result=%#v input=%#v effects=%#v order=%v", result, input, f.publisher.Calls(), f.order)
+	require.Equal(t, model.AttemptSuspensionClosed, result.Suspension.State, "result=%#v input=%#v effects=%#v order=%v", result, input, f.publisher.Calls(), f.order)
+	require.Equal(t, reallowedCalls(t, result), f.publisher.Calls(), "result=%#v input=%#v effects=%#v order=%v", result, input, f.publisher.Calls(), f.order)
 	// Contract: the Manager authorization precedes the audit, the audit begins
 	// before the durable reallow (guardrail 8), and the reallow commits before
 	// its effect (guardrail 14).
-	require.Equal(t, []string{"manager.manage", "sitting", "audit", "manager.get", "reallow", "effect.reallow"}, f.order)
+	require.Equal(t, []string{"manager.manage", "sitting", "audit", "manager.get", "reallow", "effects"}, f.order)
 	require.Nil(t, f.audit.values["private_reason"], "private reason escaped persistence input: audit=%#v result=%#v", f.audit.values, result)
 	require.NotContains(t, fmt.Sprintf("%#v", result), reason, "private reason escaped persistence input: audit=%#v result=%#v", f.audit.values, result)
 	for _, capture := range []any{f.audit.values, result} {
@@ -760,7 +763,7 @@ func TestReallowAcceptsClosedFocusLossSuspension(t *testing.T) {
 	})
 	require.NoError(t, err, "Reallow() error")
 	require.Equal(t, model.AttemptSuspensionCandidateReasonFocusLossPolicy, result.Suspension.CandidateReason)
-	require.Equal(t, 1, f.effects.reallowed, "Reallow() effects")
+	require.Equal(t, reallowedCalls(t, result), f.publisher.Calls(), "Reallow() effects")
 }
 
 func TestManagerAttemptOperationsAuthorizeBeforeReadingAttempts(t *testing.T) {
@@ -868,10 +871,10 @@ func TestReallowReplaySuppressesEffectAndPropagatesAuthorizedOverride(t *testing
 		ExamID: f.sitting.ExamID, SittingID: f.sitting.ID, AttemptID: f.attemptID, SuspensionID: suspensionID,
 		ExpectedAttemptRevision: 2, PrivateReason: "authorized override review", IdempotencyKey: "test-key",
 	})
-	require.NoError(t, err, "result=%#v input=%#v error=%v effects=%#v", result, f.persistence.reallow, err, f.effects)
-	require.True(t, result.Replayed, "result=%#v input=%#v error=%v effects=%#v", result, f.persistence.reallow, err, f.effects)
-	require.True(t, f.persistence.reallow.ManagerOverride, "result=%#v input=%#v error=%v effects=%#v", result, f.persistence.reallow, err, f.effects)
-	require.Equal(t, 0, f.effects.reallowed, "result=%#v input=%#v error=%v effects=%#v", result, f.persistence.reallow, err, f.effects)
+	require.NoError(t, err, "result=%#v input=%#v error=%v effects=%#v", result, f.persistence.reallow, err, f.publisher.Calls())
+	require.True(t, result.Replayed, "result=%#v input=%#v error=%v effects=%#v", result, f.persistence.reallow, err, f.publisher.Calls())
+	require.True(t, f.persistence.reallow.ManagerOverride, "result=%#v input=%#v error=%v effects=%#v", result, f.persistence.reallow, err, f.publisher.Calls())
+	require.Empty(t, f.publisher.Calls(), "result=%#v input=%#v error=%v effects=%#v", result, f.persistence.reallow, err, f.publisher.Calls())
 }
 
 func expiryDueFixture(f *fixture) store.ExamAttemptParticipationExpiryDue {
@@ -933,9 +936,9 @@ func TestConnectReplayAfterCorrectionAndPauseSuppressesTransientOpenEvent(t *tes
 	f.sitting.State = model.ExamSittingPaused
 	f.sitting.ExamRevisionID = model.NewExamRevisionID()
 	result, err := f.service.ConnectExamAttempt(context.Background(), f.invocation, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
-	require.NoError(t, err, "result=%#v error=%v effects=%#v", result, err, f.effects)
-	require.True(t, result.Replayed, "result=%#v error=%v effects=%#v", result, err, f.effects)
-	require.Equal(t, 0, f.effects.opened, "result=%#v error=%v effects=%#v", result, err, f.effects)
+	require.NoError(t, err, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
+	require.True(t, result.Replayed, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
+	require.Empty(t, f.publisher.Calls(), "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
 	// Contract (guardrail 8): the audit begins before the durable write.
 	require.Equal(t, []string{"sitting", "audit", "connect"}, f.order)
 }
@@ -945,11 +948,11 @@ func TestReconnectThatOpensANewConnectionPublishesOneOpenEffect(t *testing.T) {
 	f := newFixture(t)
 	f.persistence.firstAdmission = false
 	result, err := f.service.ConnectExamAttempt(context.Background(), f.invocation, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
-	require.NoError(t, err, "result=%#v error=%v effects=%#v", result, err, f.effects)
-	require.False(t, result.FirstAdmission, "result=%#v error=%v effects=%#v", result, err, f.effects)
-	require.True(t, result.ConnectionOpened, "result=%#v error=%v effects=%#v", result, err, f.effects)
-	require.False(t, result.Replayed, "result=%#v error=%v effects=%#v", result, err, f.effects)
-	require.Equal(t, 1, f.effects.opened, "result=%#v error=%v effects=%#v", result, err, f.effects)
+	require.NoError(t, err, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
+	require.False(t, result.FirstAdmission, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
+	require.True(t, result.ConnectionOpened, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
+	require.False(t, result.Replayed, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
+	require.Equal(t, connectionOpenedCalls(t, result), f.publisher.Calls(), "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
 }
 
 func TestDifferentKeyConvergenceOnExistingOpenConnectionPublishesNoEffect(t *testing.T) {
@@ -958,11 +961,11 @@ func TestDifferentKeyConvergenceOnExistingOpenConnectionPublishesNoEffect(t *tes
 	f.persistence.firstAdmission = false
 	f.persistence.connectionOpened = false
 	result, err := f.service.ConnectExamAttempt(context.Background(), f.invocation, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
-	require.NoError(t, err, "result=%#v error=%v effects=%#v", result, err, f.effects)
-	require.False(t, result.FirstAdmission, "result=%#v error=%v effects=%#v", result, err, f.effects)
-	require.False(t, result.ConnectionOpened, "result=%#v error=%v effects=%#v", result, err, f.effects)
-	require.False(t, result.Replayed, "result=%#v error=%v effects=%#v", result, err, f.effects)
-	require.Equal(t, 0, f.effects.opened, "result=%#v error=%v effects=%#v", result, err, f.effects)
+	require.NoError(t, err, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
+	require.False(t, result.FirstAdmission, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
+	require.False(t, result.ConnectionOpened, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
+	require.False(t, result.Replayed, "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
+	require.Empty(t, f.publisher.Calls(), "result=%#v error=%v effects=%#v", result, err, f.publisher.Calls())
 }
 
 func TestConnectReplayOfClosedConnectionRequiresNewKey(t *testing.T) {
@@ -972,9 +975,9 @@ func TestConnectReplayOfClosedConnectionRequiresNewKey(t *testing.T) {
 	f.persistence.connectClosed = true
 	_, err := f.service.ConnectExamAttempt(context.Background(), f.invocation, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
 	var fault *apperror.Error
-	require.ErrorAs(t, err, &fault, "error=%v effects=%#v", err, f.effects)
-	require.Equal(t, "exam.attempt.connection_closed", fault.Code(), "error=%v effects=%#v", err, f.effects)
-	require.Equal(t, 0, f.effects.opened, "error=%v effects=%#v", err, f.effects)
+	require.ErrorAs(t, err, &fault, "error=%v effects=%#v", err, f.publisher.Calls())
+	require.Equal(t, "exam.attempt.connection_closed", fault.Code(), "error=%v effects=%#v", err, f.publisher.Calls())
+	require.Empty(t, f.publisher.Calls(), "error=%v effects=%#v", err, f.publisher.Calls())
 }
 
 func TestConnectReplayOfEndedParticipationRequiresNewKey(t *testing.T) {
@@ -984,9 +987,9 @@ func TestConnectReplayOfEndedParticipationRequiresNewKey(t *testing.T) {
 	f.persistence.participationEnded = true
 	_, err := f.service.ConnectExamAttempt(context.Background(), f.invocation, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
 	var fault *apperror.Error
-	require.ErrorAs(t, err, &fault, "error=%v effects=%#v", err, f.effects)
-	require.Equal(t, "exam.attempt.connection_closed", fault.Code(), "error=%v effects=%#v", err, f.effects)
-	require.Equal(t, 0, f.effects.opened, "error=%v effects=%#v", err, f.effects)
+	require.ErrorAs(t, err, &fault, "error=%v effects=%#v", err, f.publisher.Calls())
+	require.Equal(t, "exam.attempt.connection_closed", fault.Code(), "error=%v effects=%#v", err, f.publisher.Calls())
+	require.Empty(t, f.publisher.Calls(), "error=%v effects=%#v", err, f.publisher.Calls())
 }
 
 func TestConnectRejectsAConnectionOutcomeBoundToAnotherSession(t *testing.T) {
@@ -995,9 +998,9 @@ func TestConnectRejectsAConnectionOutcomeBoundToAnotherSession(t *testing.T) {
 	f.persistence.connectionSession = model.NewSessionID()
 	_, err := f.service.ConnectExamAttempt(context.Background(), f.invocation, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
 	var fault *apperror.Error
-	require.ErrorAs(t, err, &fault, "error=%v effects=%#v", err, f.effects)
-	require.Equal(t, "exam.attempt.unavailable", fault.Code(), "error=%v effects=%#v", err, f.effects)
-	require.Equal(t, 0, f.effects.opened, "error=%v effects=%#v", err, f.effects)
+	require.ErrorAs(t, err, &fault, "error=%v effects=%#v", err, f.publisher.Calls())
+	require.Equal(t, "exam.attempt.unavailable", fault.Code(), "error=%v effects=%#v", err, f.publisher.Calls())
+	require.Empty(t, f.publisher.Calls(), "error=%v effects=%#v", err, f.publisher.Calls())
 }
 
 func TestConnectFailureCompletesAuditAndPublishesNoEffect(t *testing.T) {
@@ -1006,10 +1009,10 @@ func TestConnectFailureCompletesAuditAndPublishesNoEffect(t *testing.T) {
 	f.persistence.connectErr = store.NewErrConflict("exam_sitting", "exam_sitting_state", nil)
 	_, err := f.service.ConnectExamAttempt(context.Background(), f.invocation, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
 	var fault *apperror.Error
-	require.ErrorAs(t, err, &fault, "error=%v audit=%q effects=%#v order=%v", err, f.audit.failedCode, f.effects, f.order)
-	require.Equal(t, "exam.attempt.sitting_not_open", fault.Code(), "error=%v audit=%q effects=%#v order=%v", err, f.audit.failedCode, f.effects, f.order)
-	require.Equal(t, fault.Code(), f.audit.failedCode, "error=%v audit=%q effects=%#v order=%v", err, f.audit.failedCode, f.effects, f.order)
-	require.Equal(t, 0, f.effects.opened, "error=%v audit=%q effects=%#v order=%v", err, f.audit.failedCode, f.effects, f.order)
+	require.ErrorAs(t, err, &fault, "error=%v audit=%q effects=%#v order=%v", err, f.audit.failedCode, f.publisher.Calls(), f.order)
+	require.Equal(t, "exam.attempt.sitting_not_open", fault.Code(), "error=%v audit=%q effects=%#v order=%v", err, f.audit.failedCode, f.publisher.Calls(), f.order)
+	require.Equal(t, fault.Code(), f.audit.failedCode, "error=%v audit=%q effects=%#v order=%v", err, f.audit.failedCode, f.publisher.Calls(), f.order)
+	require.Empty(t, f.publisher.Calls(), "error=%v audit=%q effects=%#v order=%v", err, f.audit.failedCode, f.publisher.Calls(), f.order)
 	// Contract (guardrail 8): the audit begins before the durable write and
 	// records the rejected commit.
 	require.Equal(t, []string{"sitting", "audit", "connect", "audit.fail"}, f.order)
@@ -1021,9 +1024,9 @@ func TestExpiredReplayReturnsCandidateSafeConnectionLoss(t *testing.T) {
 	f.persistence.connectErr = store.NewErrConflict("attempt_participation", "attempt_participation_expired", nil)
 	_, err := f.service.ConnectExamAttempt(context.Background(), f.invocation, validConnectCommand(f, model.NewCredentialToken(), "test-key"))
 	var fault *apperror.Error
-	require.ErrorAs(t, err, &fault, "error=%v effects=%#v", err, f.effects)
-	require.Equal(t, "exam.attempt.connection_lost", fault.Code(), "error=%v effects=%#v", err, f.effects)
-	require.Equal(t, 0, f.effects.opened, "error=%v effects=%#v", err, f.effects)
+	require.ErrorAs(t, err, &fault, "error=%v effects=%#v", err, f.publisher.Calls())
+	require.Equal(t, "exam.attempt.connection_lost", fault.Code(), "error=%v effects=%#v", err, f.publisher.Calls())
+	require.Empty(t, f.publisher.Calls(), "error=%v effects=%#v", err, f.publisher.Calls())
 }
 
 func TestProtectedPresentationUsesCurrentRevisionAndSanitizesCandidateMarkdown(t *testing.T) {
@@ -1273,7 +1276,7 @@ func TestTrustedCloseCommitsBeforeManagerEffectAndSuppressesNoop(t *testing.T) {
 	require.True(t, closed.Changed, "closed=%#v error=%v order=%v", closed, err, f.order)
 	// Contract (guardrails 8 and 14): the audit begins before the durable write,
 	// and the write commits before its effect.
-	require.Equal(t, []string{"audit", "close", "effect.close"}, f.order)
+	require.Equal(t, []string{"audit", "close", "effects"}, f.order)
 	f.order = nil
 	f.persistence.closeChanged = false
 	_, err = f.service.CloseExamAttemptConnection(context.Background(), f.invocation, CloseConnectionCommand{
@@ -1281,7 +1284,9 @@ func TestTrustedCloseCommitsBeforeManagerEffectAndSuppressesNoop(t *testing.T) {
 		ConnectionID: connected.Connection.ID, Reason: model.AttemptConnectionCloseTransport,
 	})
 	require.NoError(t, err)
-	require.Equal(t, 1, f.effects.closed, "close effects")
+	// Contract: the close that changed the Connection publishes it and the
+	// Sitting board invalidation after the open; the unchanged close adds nothing.
+	require.Equal(t, append(connectionOpenedCalls(t, connected), connectionClosedCalls(t, closed)...), f.publisher.Calls(), "close effects")
 }
 
 func TestTrustedCloseStillFencesCandidateAndSessionOwnership(t *testing.T) {
@@ -1299,9 +1304,10 @@ func TestTrustedCloseStillFencesCandidateAndSessionOwnership(t *testing.T) {
 			AttemptID: connected.Attempt.ID, SittingID: f.sitting.ID, ClassID: f.sitting.ClassID,
 			ConnectionID: connected.Connection.ID, Reason: model.AttemptConnectionCloseTransport,
 		})
-		require.True(t, apperror.Is(err, "resource.not_found"), "error=%v effects=%#v", err, f.effects)
-		require.True(t, chainHasCode(err, "exam.attempt.not_found"), "error=%v effects=%#v", err, f.effects)
-		require.Equal(t, 0, f.effects.closed, "error=%v effects=%#v", err, f.effects)
+		require.True(t, apperror.Is(err, "resource.not_found"), "error=%v effects=%#v", err, f.publisher.Calls())
+		require.True(t, chainHasCode(err, "exam.attempt.not_found"), "error=%v effects=%#v", err, f.publisher.Calls())
+		// Contract: the refused close publishes nothing after the open.
+		require.Equal(t, connectionOpenedCalls(t, connected), f.publisher.Calls())
 	}
 }
 
@@ -1334,7 +1340,7 @@ type fixture struct {
 	mail                      *submissionMailFake
 	audit                     *auditFake
 	systemAudit               *systemAuditFake
-	effects                   *effectsFake
+	publisher                 *realtimetest.Publisher
 	content                   *contentFake
 	managerOverride           bool
 	managerErr                error
@@ -1366,7 +1372,7 @@ func newFixture(t *testing.T) *fixture {
 	f.mail = &submissionMailFake{f: f}
 	f.audit = &auditFake{f: f}
 	f.systemAudit = &systemAuditFake{f: f}
-	f.effects = &effectsFake{f: f}
+	f.publisher = publisherIn(&f.order)
 	f.content = &contentFake{f: f}
 	f.desktopBuild = model.DesktopBuildTuple{DesktopRelease: "1.0.0", DesktopBuildID: "attempt-test",
 		Platform: model.DesktopPlatformDarwin, Architecture: model.DesktopArchitectureARM64, RealtimeProtocol: 1,
@@ -1379,7 +1385,7 @@ func newFixture(t *testing.T) *fixture {
 	require.NoError(t, configurationErr)
 	service, err := New(Dependencies{
 		Persistence: f.persistence, Workspace: f.workspace, Submissions: f.submissions, Sittings: &sittingFake{f: f}, Managers: &managerFake{f: f},
-		Auditor: f.audit, SystemAuditor: f.systemAudit, Effects: f.effects, Content: f.content, Mail: f.mail,
+		Auditor: f.audit, SystemAuditor: f.systemAudit, Publisher: f.publisher, Content: f.content, Mail: f.mail,
 		DesktopBuilds: &desktopBuildResolverFake{f: f},
 		Now:           func() time.Time { return f.at }, NewAttemptID: model.NewExamAttemptID, NewWorkspaceID: model.NewExamAttemptWorkspaceID,
 		NewParticipation: model.NewAttemptParticipationID, NewConnection: model.NewAttemptConnectionID,
@@ -1567,71 +1573,6 @@ func (f *auditFake) Fail(_ context.Context, _ model.AuditEventID, code string) e
 func (f *auditFake) Complete(_ context.Context, _ model.AuditEventID, _ map[string]any) error {
 	f.f.order = append(f.f.order, "audit.complete")
 	return nil
-}
-
-type effectsFake struct {
-	f                *fixture
-	opened, closed   int
-	renewed          int
-	expired          int
-	reallowed        int
-	workspaceChanged int
-	focusLoss        int
-	submitted        int
-	kicked           int
-}
-
-func (f *effectsFake) BrowserActivityGapChanged(context.Context, model.ExamID, model.ExamSittingID) error {
-	f.f.order = append(f.f.order, "effect.browser_gap")
-	return nil
-}
-
-func (f *effectsFake) ConnectionOpened(context.Context, ConnectionResult) error {
-	f.f.order = append(f.f.order, "effect.open")
-	f.opened++
-	return nil
-}
-func (f *effectsFake) ConnectionClosed(context.Context, ConnectionClosedResult) error {
-	f.f.order = append(f.f.order, "effect.close")
-	f.closed++
-	return nil
-}
-func (f *effectsFake) ParticipationRenewed(context.Context, ParticipationRenewal) error {
-	f.f.order = append(f.f.order, "effect.renew")
-	f.renewed++
-	return nil
-}
-func (f *effectsFake) ParticipationExpired(context.Context, ParticipationExpiry) error {
-	f.f.order = append(f.f.order, "effect.expire")
-	f.expired++
-	return nil
-}
-func (f *effectsFake) AttemptReallowed(context.Context, ReallowResult) error {
-	f.f.order = append(f.f.order, "effect.reallow")
-	f.reallowed++
-	return nil
-}
-func (f *effectsFake) WorkspaceChanged(context.Context, WorkspaceMutationResult) error {
-	f.f.order = append(f.f.order, "effect.workspace")
-	f.workspaceChanged++
-	return nil
-}
-func (f *effectsFake) FocusLossEvaluated(context.Context, FocusLossEvaluation) error {
-	f.f.order = append(f.f.order, "effect.focus_loss")
-	f.focusLoss++
-	return nil
-}
-func (f *effectsFake) AttemptSubmitted(context.Context, SubmissionResult) error {
-	f.f.order = append(f.f.order, "effect.submit")
-	f.submitted++
-	return nil
-}
-func (f *effectsFake) AttemptSealedForSittingClose(context.Context, AutomaticSubmissionResult) error {
-	f.f.order = append(f.f.order, "effect.automatic_submit")
-	f.submitted++
-	return nil
-}
-func (f *effectsFake) Report(_ context.Context, kind string, _ error) {
 }
 
 type contentFake struct {

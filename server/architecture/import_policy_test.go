@@ -365,6 +365,7 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/idempotency"),
 			exact(serverModule+"/app/invocation"),
 			exact(serverModule+"/app/exam/manageraccess"),
+			exact(serverModule+"/app/realtime"),
 			exact(serverModule+"/model"),
 			exact(serverModule+"/store"),
 			exact(serverModule+"/app/exam/safemarkdown"),
@@ -382,6 +383,7 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/apperror"),
 			exact(serverModule+"/app/idempotency"),
 			exact(serverModule+"/app/invocation"),
+			exact(serverModule+"/app/realtime"),
 			exact(serverModule+"/model"),
 			exact(serverModule+"/store"),
 			exact(serverModule+"/app/exam/safemarkdown"),
@@ -822,6 +824,19 @@ func TestExamIdempotencyConsumerAllowlist(t *testing.T) {
 	}
 	assert.True(t, forbiddenImport(serverModule+"/app/exam/safemarkdown", serverModule+"/app/idempotency"), "unlisted Exam child can import the shared idempotency leaf")
 	assert.True(t, forbiddenImport(serverModule+"/app/exam/attempt/internal", serverModule+"/app/idempotency"), "descendant of a listed Exam command owner can import the shared idempotency leaf")
+}
+
+func TestExamRealtimePublisherAllowlist(t *testing.T) {
+	t.Parallel()
+	publisher := serverModule + "/app/realtime"
+	for _, consumer := range []string{"/app/exam", "/app/exam/attempt", "/app/exam/correction", "/app/exam/resource",
+		"/app/exam/review", "/app/exam/sitting", "/app/exam/workspace"} {
+		assert.False(t, forbiddenImport(serverModule+consumer, publisher), "%s cannot import the realtime Publisher", consumer)
+		assert.True(t, forbiddenImport(publisher, serverModule+consumer), "realtime can import %s", consumer)
+	}
+	for _, consumer := range []string{"/app/exam/safemarkdown", "/app/exam/manageraccess"} {
+		assert.True(t, forbiddenImport(serverModule+consumer, publisher), "Exam leaf %s can import the realtime Publisher", consumer)
+	}
 }
 
 func TestInvocationLeafBoundary(t *testing.T) {

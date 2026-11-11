@@ -16,7 +16,6 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/review"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -143,75 +142,4 @@ func (a examIntegrityReviewAuthorizationAdapter) denySelf(
 	}
 
 	return apperror.New("exam.integrity_review.not_found")
-}
-
-type examIntegrityReviewRealtimeEffects struct{ realtime *RealtimeService }
-
-func (e examIntegrityReviewRealtimeEffects) publishManagerBoardInvalidation(ctx context.Context,
-	result review.Result,
-) error {
-	event, err := realtime.NewManagerSittingBoardChangedEvent(result.Authorization.ExamID,
-		result.Authorization.SittingID)
-	if err != nil {
-		return err
-	}
-	return e.realtime.PublishRealtimeEvent(ctx, event)
-}
-
-func examIntegrityReviewEventFact(result review.Result) realtime.ExamIntegrityReviewEventFact {
-	return realtime.ExamIntegrityReviewEventFact{
-		SubmissionID: result.Authorization.SubmissionID,
-		AttemptID:    result.Authorization.AttemptID,
-		CandidateID:  result.Authorization.CandidateUserID,
-		ReviewID:     result.Review.ID,
-		State:        result.Review.State,
-		Revision:     result.Review.Revision,
-		ReleaseState: result.Review.ReleaseState,
-		ChangedAt:    result.Review.UpdatedAt,
-	}
-}
-
-func (e examIntegrityReviewRealtimeEffects) ReviewChanged(ctx context.Context, result review.Result) error {
-	event, err := realtime.NewExamIntegrityReviewChangedEvent(examIntegrityReviewEventFact(result))
-	if err != nil {
-		return err
-	}
-	return errors.Join(e.realtime.PublishRealtimeEvent(ctx, event), e.publishManagerBoardInvalidation(ctx, result))
-}
-
-func (e examIntegrityReviewRealtimeEffects) ReviewFinalized(ctx context.Context, result review.Result) error {
-	event, err := realtime.NewExamIntegrityReviewFinalizedEvent(examIntegrityReviewEventFact(result))
-	if err != nil {
-		return err
-	}
-	return errors.Join(e.realtime.PublishRealtimeEvent(ctx, event), e.publishManagerBoardInvalidation(ctx, result))
-}
-
-func (e examIntegrityReviewRealtimeEffects) ResultReleased(ctx context.Context, result review.Result) error {
-	fact := examIntegrityReviewEventFact(result)
-	manager, err := realtime.NewExamStudentResultReleasedEvent(fact)
-	if err != nil {
-		return err
-	}
-
-	candidate, err := realtime.NewCandidateStudentResultReleasedEvent(fact)
-	if err != nil {
-		return err
-	}
-
-	activity, err := realtime.NewCandidateExamActivityChangedEvent(result.Authorization.CandidateUserID)
-	if err != nil {
-		return err
-	}
-
-	return errors.Join(
-		e.realtime.PublishRealtimeEvent(ctx, manager),
-		e.realtime.PublishRealtimeEvent(ctx, candidate),
-		e.realtime.PublishRealtimeEvent(ctx, activity),
-		e.publishManagerBoardInvalidation(ctx, result),
-	)
-}
-
-func (e examIntegrityReviewRealtimeEffects) Report(ctx context.Context, operation string, err error) {
-	e.realtime.reportTransientFailure(ctx, operation, err)
 }

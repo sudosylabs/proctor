@@ -17,6 +17,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/exam/manageraccess"
 	"github.com/sudosylabs/proctor/server/app/idempotency"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -39,12 +40,6 @@ type RevisionPage struct {
 	HasMore bool
 }
 
-type PublicationEffects interface {
-	RevisionPublished(context.Context, store.ExamRevisionSummary) error
-	// Report records an Effect failure; the committed change stands.
-	Report(ctx context.Context, operation string, err error)
-}
-
 // Publication owns the authorization, audit, persistence and after-commit
 // effect recipe for freezing Drafts into immutable Exam Revisions.
 type Publication struct{ deps PublicationDependencies }
@@ -57,7 +52,7 @@ type PublicationDependencies struct {
 	Memberships       store.AcademicUnitMemberStore
 	Authorizer        Authorizer
 	Auditor           Auditor
-	Effects           PublicationEffects
+	Publisher         realtime.Publisher
 	Now               func() time.Time
 	NewID             func() model.ExamRevisionID
 	InstitutionOrigin string
@@ -72,7 +67,7 @@ func NewPublication(deps PublicationDependencies) (*Publication, error) {
 		deps.Memberships == nil ||
 		deps.Authorizer == nil ||
 		deps.Auditor == nil ||
-		deps.Effects == nil ||
+		deps.Publisher == nil ||
 		deps.Now == nil ||
 		deps.NewID == nil {
 		return nil, errors.New("Exam Revision publication dependencies are required")
@@ -187,8 +182,8 @@ func (p *Publication) PublishExamRevision(
 	}
 
 	if !result.Replayed {
-		if effectErr := p.deps.Effects.RevisionPublished(ctx, *result.Revision); effectErr != nil {
-			p.deps.Effects.Report(ctx, "exam_revision_published", effectErr)
+		if effectErr := p.publishRevisionPublished(ctx, *result.Revision); effectErr != nil {
+			p.deps.Publisher.Report(ctx, "exam_revision_published", effectErr)
 		}
 	}
 

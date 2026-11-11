@@ -48,12 +48,12 @@ func TestConfigureDraftNativePolicyOrderAndFailures(t *testing.T) {
 			if test.want != "" {
 				require.Error(t, err, "error = %v, want %s", err, test.want)
 				require.False(t, !apperror.Is(err, test.want) && err.Error() != test.want, "error = %v, want %s", err, test.want)
-				require.Equal(t, int64(0), fixture.effects.updatedRevision, "effect published after failure")
+				require.Empty(t, fixture.publisher.Calls(), "effect published after failure")
 				return
 			}
 			require.NoError(t, err)
 			if test.replay {
-				require.Equal(t, int64(0), fixture.effects.updatedRevision, "replay republished")
+				require.Empty(t, fixture.publisher.Calls(), "replay republished")
 				return
 			}
 			require.Equal(t, model.NativeModeObserve, view.Draft.Policy.Native.Families[1].Mode(), "native selection was not authorized and saved")
@@ -79,7 +79,7 @@ func TestConfigureDraftNativePolicyNoOpAndMalformed(t *testing.T) {
 		_, err := fixture.service.ConfigureExamDraftNativePolicy(context.Background(), fixture.invocation, ConfigureDraftNativePolicyCommand{ExamID: fixture.examID, ExpectedDraftRevision: 1, NativePolicy: policy, IdempotencyKey: "native-key"})
 		require.Error(t, err, "invalid or no-op mutation reached persistence")
 		require.Nil(t, fixture.persistence.nativePolicyUpdate, "invalid or no-op mutation reached persistence")
-		require.Equal(t, int64(0), fixture.effects.updatedRevision, "invalid or no-op mutation reached persistence")
+		require.Empty(t, fixture.publisher.Calls(), "invalid or no-op mutation reached persistence")
 	}
 }
 
@@ -97,7 +97,7 @@ func TestConfigureBrowserPolicyUsesInstallationPin(t *testing.T) {
 				require.True(t, result.Draft.BrowserPolicy.Enabled, "matching exception: %#v", result)
 			} else {
 				require.Error(t, err, "foreign exception reached application effects")
-				require.Zero(t, fixture.effects.updatedRevision, "foreign exception reached application effects")
+				require.Empty(t, fixture.publisher.Calls(), "foreign exception reached application effects")
 				require.Empty(t, *fixture.order, "foreign exception reached application effects")
 			}
 		})

@@ -14,12 +14,12 @@
 // Ordinary actions need a current Exam Manager who belongs to the Exam's
 // Academic Unit and holds the role permission; administrators use separate,
 // audited override actions. The Store has the final say on revision,
-// lifecycle and Academic Period checks, and follow-up effects are published
-// only after a change commits.
+// lifecycle and Academic Period checks. The events that announce a committed
+// change are built in effects.go and published only after it commits.
 //
 // The package builds lifecycle Job requests and the Store saves each one with
 // its Sitting change, but it does not run Jobs. Attempts and Submission
-// sealing belong to attempt. It imports only model, store, app/apperror,
-// app/invocation, app/idempotency and app/exam/manageraccess. Start with
-// Service in service.go.
+// sealing belong to attempt. It imports only model, store, app/access,
+// app/apperror, app/invocation, app/idempotency, app/realtime and
+// app/exam/manageraccess. Start with Service in service.go.
 package sitting

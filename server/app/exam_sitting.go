@@ -9,15 +9,11 @@ package app
 
 import (
 	"context"
-	"errors"
-	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
-	"github.com/sudosylabs/proctor/server/store"
 )
 
 type examSittingSystemAuditAdapter struct{ audit *access.Auditor }
@@ -59,128 +55,6 @@ func (a examSittingSystemAuditAdapter) Fail(ctx context.Context, id model.AuditE
 	return err
 }
 
-type examSittingRealtimeEffects struct {
-	realtime    *RealtimeService
-	collections examCollectionInvalidationEffects
-}
-
-func (e examSittingRealtimeEffects) publishBoardInvalidation(
-	ctx context.Context,
-	examID model.ExamID,
-	sittingID model.ExamSittingID,
-) error {
-	return e.collections.SittingBoardChanged(ctx, examID, sittingID)
-}
-
-func (e examSittingRealtimeEffects) Scheduled(
-	ctx context.Context,
-	examID model.ExamID,
-	sittingID model.ExamSittingID,
-	state model.ExamSittingState,
-	revision int64,
-	at time.Time,
-) error {
-	event, err := realtime.NewExamSittingScheduledEvent(examID, sittingID, state, revision, at)
-	if err != nil {
-		return err
-	}
-
-	return errors.Join(
-		e.realtime.PublishRealtimeEvent(ctx, event),
-		e.publishBoardInvalidation(ctx, examID, sittingID),
-		e.collections.CandidateActivityChangedForSitting(ctx, sittingID),
-	)
-}
-
-func (e examSittingRealtimeEffects) ScheduleUpdated(
-	ctx context.Context,
-	examID model.ExamID,
-	sittingID model.ExamSittingID,
-	state model.ExamSittingState,
-	revision int64,
-	at time.Time,
-) error {
-	event, err := realtime.NewExamSittingScheduleUpdatedEvent(examID, sittingID, state, revision, at)
-	if err != nil {
-		return err
-	}
-
-	return errors.Join(
-		e.realtime.PublishRealtimeEvent(ctx, event),
-		e.publishBoardInvalidation(ctx, examID, sittingID),
-		e.collections.CandidateActivityChangedForSitting(ctx, sittingID),
-	)
-}
-
-func (e examSittingRealtimeEffects) Canceled(
-	ctx context.Context,
-	examID model.ExamID,
-	sittingID model.ExamSittingID,
-	state model.ExamSittingState,
-	revision int64,
-	at time.Time,
-) error {
-	event, err := realtime.NewExamSittingCanceledEvent(examID, sittingID, state, revision, at)
-	if err != nil {
-		return err
-	}
-
-	return errors.Join(
-		e.realtime.PublishRealtimeEvent(ctx, event),
-		e.publishBoardInvalidation(ctx, examID, sittingID),
-		e.collections.CandidateActivityChangedForSitting(ctx, sittingID),
-	)
-}
-
-func (e examSittingRealtimeEffects) LifecycleChanged(
-	ctx context.Context,
-	examID model.ExamID,
-	sittingID model.ExamSittingID,
-	state model.ExamSittingState,
-	revision int64,
-	transition store.ExamSittingLifecycleTransitionCode,
-	scheduledEndAt,
-	changedAt time.Time,
-) error {
-	managerEvent, err := realtime.NewExamSittingLifecycleChangedEvent(
-		examID,
-		sittingID,
-		state,
-		revision,
-		string(transition),
-		scheduledEndAt,
-		changedAt,
-	)
-	if err != nil {
-		return err
-	}
-
-	candidateEvent, err := realtime.NewCandidateExamSittingLifecycleChangedEvent(
-		examID,
-		sittingID,
-		state,
-		revision,
-		string(transition),
-		scheduledEndAt,
-		changedAt,
-	)
-	if err != nil {
-		return err
-	}
-
-	return errors.Join(
-		e.realtime.PublishRealtimeEvent(ctx, managerEvent),
-		e.realtime.PublishRealtimeEvent(ctx, candidateEvent),
-		e.publishBoardInvalidation(ctx, examID, sittingID),
-		e.collections.CandidateActivityChangedForSitting(ctx, sittingID),
-	)
-}
-
-func (e examSittingRealtimeEffects) Report(ctx context.Context, operation string, err error) {
-	e.realtime.reportTransientFailure(ctx, operation, err)
-}
-
 var _ sitting.Authorizer = (*access.Authorizer)(nil)
 var _ sitting.Auditor = access.MutationAuditAdapter{}
 var _ sitting.SystemAuditor = examSittingSystemAuditAdapter{}
-var _ sitting.Effects = examSittingRealtimeEffects{}

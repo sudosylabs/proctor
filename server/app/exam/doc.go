@@ -32,8 +32,10 @@
 //
 // Child packages own the rest: sitting, attempt, review, resource, workspace
 // (the Starter Workspace), correction, manageraccess and safemarkdown. HTTP,
-// SQL, file bytes, Job execution and grading live elsewhere. The package may
-// import only model, store, the app/apperror, app/invocation and
-// app/idempotency packages, and app/exam/manageraccess; it never imports app
-// itself, a transport, or a concrete adapter.
+// SQL, file bytes, Job execution and grading live elsewhere. Each package
+// builds the realtime events of its own committed changes in its effects.go
+// and publishes them through a realtime.Publisher. The package may import
+// only model, store, the app/access, app/apperror, app/invocation,
+// app/idempotency and app/realtime packages, and app/exam/manageraccess; it
+// never imports app itself, a transport, or a concrete adapter.
 package exam

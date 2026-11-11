@@ -12,7 +12,9 @@
 //
 // Freezing Resources into a Revision belongs to the parent exam package, and
 // showing them to candidates during a Sitting belongs to attempt. HTTP, SQL
-// and file storage live elsewhere. The package imports only model, store,
-// app/apperror, app/invocation, app/idempotency and app/exam/manageraccess.
-// Start with Service in service.go.
+// and file storage live elsewhere. A committed change is announced to the
+// Exam's viewers as a Draft update, built in effects.go. The package imports
+// only model, store, app/access, app/apperror, app/invocation,
+// app/idempotency, app/realtime and app/exam/manageraccess. Start with
+// Service in service.go.
 package resource

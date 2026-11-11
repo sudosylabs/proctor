@@ -18,6 +18,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/manageraccess"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -140,24 +141,6 @@ type ScheduleMailRequest struct {
 	ChangeKind      store.ExamSittingMailChangeKind
 }
 
-type Effects interface {
-	Scheduled(context.Context, model.ExamID, model.ExamSittingID, model.ExamSittingState, int64, time.Time) error
-	ScheduleUpdated(context.Context, model.ExamID, model.ExamSittingID, model.ExamSittingState, int64, time.Time) error
-	Canceled(context.Context, model.ExamID, model.ExamSittingID, model.ExamSittingState, int64, time.Time) error
-	LifecycleChanged(
-		context.Context,
-		model.ExamID,
-		model.ExamSittingID,
-		model.ExamSittingState,
-		int64,
-		store.ExamSittingLifecycleTransitionCode,
-		time.Time,
-		time.Time,
-	) error
-	// Report records an Effect failure; the committed change stands.
-	Report(ctx context.Context, operation string, err error)
-}
-
 // Service schedules Exam Sittings and drives their lifecycle, both on manager
 // commands and on lifecycle Jobs.
 type Service struct{ deps Dependencies }
@@ -177,7 +160,7 @@ type Dependencies struct {
 	Authorizer    Authorizer
 	Auditor       Auditor
 	SystemAuditor SystemAuditor
-	Effects       Effects
+	Publisher     realtime.Publisher
 	Jobs          LifecycleJobFactory
 	Mail          ScheduleMailPreparer
 	Now           func() time.Time
@@ -194,7 +177,7 @@ func New(deps Dependencies) (*Service, error) {
 		deps.Authorizer == nil ||
 		deps.Auditor == nil ||
 		deps.SystemAuditor == nil ||
-		deps.Effects == nil ||
+		deps.Publisher == nil ||
 		deps.Jobs == nil ||
 		deps.Mail == nil ||
 		deps.Now == nil ||
@@ -334,15 +317,8 @@ func (s *Service) ScheduleExamSitting(
 	}
 
 	if !result.Replayed {
-		if effectErr := s.deps.Effects.Scheduled(
-			ctx,
-			value.Sitting.ExamID,
-			value.Sitting.ID,
-			value.Sitting.State,
-			value.Sitting.Revision,
-			at,
-		); effectErr != nil {
-			s.deps.Effects.Report(ctx, "exam_sitting_scheduled", effectErr)
+		if effectErr := s.publishScheduled(ctx, value.Sitting, at); effectErr != nil {
+			s.deps.Publisher.Report(ctx, "exam_sitting_scheduled", effectErr)
 		}
 	}
 
@@ -840,15 +816,8 @@ func (s *Service) UpdateExamSittingSchedule(
 	}
 
 	if !result.Replayed {
-		if effectErr := s.deps.Effects.ScheduleUpdated(
-			ctx,
-			value.Sitting.ExamID,
-			value.Sitting.ID,
-			value.Sitting.State,
-			value.Sitting.Revision,
-			at,
-		); effectErr != nil {
-			s.deps.Effects.Report(ctx, "exam_sitting_schedule_updated", effectErr)
+		if effectErr := s.publishScheduleUpdated(ctx, value.Sitting, at); effectErr != nil {
+			s.deps.Publisher.Report(ctx, "exam_sitting_schedule_updated", effectErr)
 		}
 	}
 
@@ -959,15 +928,8 @@ func (s *Service) CancelExamSitting(
 	}
 
 	if !result.Replayed {
-		if effectErr := s.deps.Effects.Canceled(
-			ctx,
-			value.Sitting.ExamID,
-			value.Sitting.ID,
-			value.Sitting.State,
-			value.Sitting.Revision,
-			at,
-		); effectErr != nil {
-			s.deps.Effects.Report(ctx, "exam_sitting_canceled", effectErr)
+		if effectErr := s.publishCanceled(ctx, value.Sitting, at); effectErr != nil {
+			s.deps.Publisher.Report(ctx, "exam_sitting_canceled", effectErr)
 		}
 	}
 
@@ -1567,23 +1529,16 @@ func validLifecycleTransition(value store.ExamSittingLifecycleTransitionCode) bo
 	}
 }
 
+// publishLifecycle announces a lifecycle result that changed the Sitting and
+// was not replayed. A failed publication is reported under operation and the
+// command or Job still succeeds.
 func (s *Service) publishLifecycle(ctx context.Context, result *store.ExamSittingLifecycleResult, operation string) {
 	if result == nil || !result.Changed || result.Replayed || result.Value == nil || result.Value.Sitting == nil {
 		return
 	}
 
-	sitting := result.Value.Sitting
-	if err := s.deps.Effects.LifecycleChanged(
-		ctx,
-		sitting.ExamID,
-		sitting.ID,
-		sitting.State,
-		sitting.Revision,
-		result.Transition,
-		sitting.ScheduledEndAt,
-		sitting.UpdatedAt,
-	); err != nil {
-		s.deps.Effects.Report(ctx, "exam_sitting_"+operation, err)
+	if err := s.publishLifecycleChanged(ctx, result.Value.Sitting, result.Transition); err != nil {
+		s.deps.Publisher.Report(ctx, "exam_sitting_"+operation, err)
 	}
 }
 

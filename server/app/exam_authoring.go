@@ -9,13 +9,10 @@ package app
 
 import (
 	"context"
-	"errors"
-	"time"
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/exam"
 	"github.com/sudosylabs/proctor/server/app/invocation"
-	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -88,66 +85,5 @@ func (a examAuthorizationAdapter) AuthorizeList(
 	}, nil
 }
 
-type examRealtimeEffects struct {
-	realtime    *RealtimeService
-	collections examCollectionInvalidationEffects
-}
-
-func (e examRealtimeEffects) Created(ctx context.Context, examID model.ExamID) error {
-	event, err := realtime.NewExamCreatedEvent(examID)
-	if err != nil {
-		return err
-	}
-	return e.realtime.PublishRealtimeEvent(ctx, event)
-}
-func (e examRealtimeEffects) DraftUpdated(ctx context.Context, examID model.ExamID, revision int64) error {
-	event, err := realtime.NewExamDraftUpdatedEvent(examID, revision)
-	if err != nil {
-		return err
-	}
-	return e.realtime.PublishRealtimeEvent(ctx, event)
-}
-func (e examRealtimeEffects) Archived(ctx context.Context, examID model.ExamID, revision int64, archivedAt time.Time) error {
-	event, err := realtime.NewExamArchivedEvent(examID, revision, archivedAt)
-	if err != nil {
-		return err
-	}
-	return errors.Join(e.realtime.PublishRealtimeEvent(ctx, event), e.collections.ExamArchived(ctx, examID))
-}
-func (e examRealtimeEffects) ManagerChanged(
-	ctx context.Context,
-	examID model.ExamID,
-	userID model.UserID,
-	present bool,
-	revision int64,
-	changedAt time.Time,
-) error {
-	event, err := realtime.NewExamManagerChangedEvent(examID, userID, present, revision, changedAt)
-	if err != nil {
-		return err
-	}
-
-	e.realtime.InvalidateAuthorization(ctx, userID)
-	return e.realtime.PublishRealtimeEvent(ctx, event)
-}
-func (e examRealtimeEffects) OwnerTransferred(
-	ctx context.Context,
-	examID model.ExamID,
-	ownerID model.UserID,
-	revision int64,
-	changedAt time.Time,
-) error {
-	event, err := realtime.NewExamOwnerTransferredEvent(examID, ownerID, revision, changedAt)
-	if err != nil {
-		return err
-	}
-
-	return e.realtime.PublishRealtimeEvent(ctx, event)
-}
-func (e examRealtimeEffects) Report(ctx context.Context, operation string, err error) {
-	e.realtime.reportTransientFailure(ctx, operation, err)
-}
-
 var _ exam.Authorizer = examAuthorizationAdapter{}
 var _ exam.Auditor = access.MutationAuditAdapter{}
-var _ exam.Effects = examRealtimeEffects{}

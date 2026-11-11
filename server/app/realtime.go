@@ -90,21 +90,13 @@ func (s *RealtimeService) UnbindExamAttemptConnection(ctx context.Context, conne
 	return internalRealtimeError(err)
 }
 
-// Report records an effect that failed after commit, for the area use case
-// that still succeeds.
+// Report records an effect that failed after commit, for the use case that
+// still succeeds. operation names what failed.
 func (s *RealtimeService) Report(ctx context.Context, operation string, err error) {
-	s.reportTransientFailure(ctx, operation, err)
-}
-
-func (s *RealtimeService) reportTransientFailure(
-	ctx context.Context,
-	event string,
-	err error,
-) {
 	if s.deps.Diagnostics == nil {
 		return
 	}
-	fields := []logging.Field{logging.String("event", event)}
+	fields := []logging.Field{logging.String("event", operation)}
 	if err != nil {
 		fields = append(fields, logging.Err(err))
 	}
@@ -127,7 +119,7 @@ func (s *RealtimeService) SessionsRevoked(
 
 	candidateID, err := model.ParseUserID(userID.String())
 	if err != nil {
-		s.reportTransientFailure(ctx, "session_revocation.attempt_invalidations", err)
+		s.Report(ctx, "session_revocation.attempt_invalidations", err)
 		return
 	}
 
@@ -135,14 +127,14 @@ func (s *RealtimeService) SessionsRevoked(
 	for index, sessionID := range sessionIDs {
 		parsedSessionIDs[index], err = model.ParseSessionID(sessionID.String())
 		if err != nil {
-			s.reportTransientFailure(ctx, "session_revocation.attempt_invalidations", err)
+			s.Report(ctx, "session_revocation.attempt_invalidations", err)
 			return
 		}
 	}
 
 	targets, err := s.attempts.ListSessionRevocationInvalidationTargets(ctx, candidateID, parsedSessionIDs)
 	if err != nil {
-		s.reportTransientFailure(ctx, "session_revocation.attempt_invalidations", err)
+		s.Report(ctx, "session_revocation.attempt_invalidations", err)
 		return
 	}
 
@@ -159,7 +151,7 @@ func (s *RealtimeService) SessionsRevoked(
 
 		publishErr = errors.Join(publishErr, s.InvalidateCurrentUserContext(ctx, target.CandidateUserID))
 		if publishErr != nil {
-			s.reportTransientFailure(ctx, "session_revocation.attempt_invalidations", publishErr)
+			s.Report(ctx, "session_revocation.attempt_invalidations", publishErr)
 		}
 	}
 }
@@ -191,7 +183,7 @@ func (s *RealtimeService) InvalidateAuthorization(ctx context.Context, userID mo
 		}
 	}
 	if err != nil {
-		s.reportTransientFailure(ctx, "authorization.current_user_context_invalidation", err)
+		s.Report(ctx, "authorization.current_user_context_invalidation", err)
 	}
 }
 

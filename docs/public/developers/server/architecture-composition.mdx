@@ -113,11 +113,11 @@ word leads you through each step.
 3. **Store contract.** `store.ExamSubmissionStore.Seal` freezes the
    Submission. It writes the prepared mail and the Job that delivers it in
    the same transaction (`store/sqlstore/exam_submission_store.go`).
-4. **After commit.** The service calls its `Effects` port. In the parent
-   application that is `examAttemptRealtimeEffects` (`app/exam_attempt.go`),
-   which publishes realtime events through `app/realtime` and unbinds the
-   Attempt connection. Effects run only after the Submission is durable, and
-   their failures never undo it.
+4. **After commit.** The service calls `publishAttemptSubmitted`
+   (`app/exam/attempt/effects.go`), which builds the realtime events and
+   publishes them through its `realtime.Publisher`, then unbinds the Attempt
+   connection. Effects run only after the Submission is durable, and their
+   failures never undo it.
 5. **Background.** When a Sitting closes, the `exam_sitting.sealing` Job in
    `app/jobhandler/exam_sitting_sealing.go` seals the remaining Attempts
    through `attempt.Service.SealForSittingClose`.

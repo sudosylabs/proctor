@@ -8,55 +8,9 @@
 package app
 
 import (
-	"context"
-	"errors"
-
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/exam/correction"
-	"github.com/sudosylabs/proctor/server/app/realtime"
 )
-
-type examCorrectionRealtimeEffects struct {
-	realtime    *RealtimeService
-	collections examCollectionInvalidationEffects
-}
-
-func (e examCorrectionRealtimeEffects) Corrected(ctx context.Context, result correction.Result) error {
-	managerEvent, err := realtime.NewExamSittingContentCorrectedEvent(
-		result.ExamID,
-		result.SittingID,
-		result.PreviousRevisionID,
-		result.RevisionID,
-		result.SittingRevision,
-		result.EffectiveAt,
-	)
-	if err != nil {
-		return err
-	}
-
-	candidateEvent, err := realtime.NewCandidateExamSittingContentCorrectedEvent(
-		result.ExamID,
-		result.SittingID,
-		result.PreviousRevisionID,
-		result.RevisionID,
-		result.SittingRevision,
-		result.EffectiveAt,
-	)
-	if err != nil {
-		return err
-	}
-
-	return errors.Join(
-		e.realtime.PublishRealtimeEvent(ctx, managerEvent),
-		e.realtime.PublishRealtimeEvent(ctx, candidateEvent),
-		e.collections.SittingBoardChanged(ctx, result.ExamID, result.SittingID),
-		e.collections.CandidateActivityChangedForSitting(ctx, result.SittingID),
-	)
-}
-func (e examCorrectionRealtimeEffects) Report(ctx context.Context, operation string, err error) {
-	e.realtime.reportTransientFailure(ctx, operation, err)
-}
 
 var _ correction.Authorizer = (*access.Authorizer)(nil)
 var _ correction.Auditor = access.MutationAuditAdapter{}
-var _ correction.Effects = examCorrectionRealtimeEffects{}

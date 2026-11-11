@@ -75,8 +75,10 @@ Publisher, builds its own events in private `publish<Subject><Change>` methods
 (`effects.go` in the area package) and calls them from the use case after
 commit; a failed publication is passed to `Publisher.Report` and the use case
 still succeeds. Area tests pass `realtimetest.Publisher` and assert its
-recorded calls whole. The Exam areas still reach the Publisher through an
-`Effects` port and a parent adapter until they are converted. The parent
+recorded calls whole. Two publications several Exam areas owe, the Sitting
+board invalidation and the Exam activity invalidation of a Sitting's
+candidates, are functions of this module that take the Publisher and, for the
+second, a narrow candidate reader the Exam Sitting Store satisfies. The parent
 application's realtime service implements the Publisher and retains Principal
 validation, WebSocket subscription authorization, and translation between
 delivery failures and public application errors.
@@ -110,7 +112,8 @@ module owns the one shared candidate-facing sanitizer used by protected Exam
 presentation and released Review remarks; it contains no authorization or
 transport policy. `app/exam/attempt`
 consumes separate bounded Store contracts for the Attempt lifecycle and mutable
-Workspace aggregate and narrow audit, content, and realtime ports. None imports
+Workspace aggregate, narrow audit and content ports, and the shared
+`realtime.Publisher`. None imports
 the parent application package or selects SQL, VFS, WebSocket, Jobs, or other
 infrastructure.
 

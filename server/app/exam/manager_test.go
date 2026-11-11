@@ -17,6 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -90,6 +92,14 @@ func TestAddManagerChecksEligibilityBeforeAuditedAtomicMutation(t *testing.T) {
 	require.Equal(t, target, fixture.persistence.managerMutation.Notices[0].Delivery.TargetUserID)
 	assertStoreIdempotency(t, fixture.persistence.idempotency, fixture.userID, idempotencyOperationAddManager, "test-key",
 		fmt.Sprintf(`{"exam_id":%q,"user_id":%q,"expected_exam_revision":1}`, fixture.examID, target))
+	managerChanged, eventErr := realtime.NewExamManagerChangedEvent(fixture.examID, target, true, result.Exam.Revision, fixture.persistence.managerMutation.ChangedAt)
+	require.NoError(t, eventErr)
+	// Contract: the new manager's cached authorization is dropped before the
+	// Exam's viewers learn of the change.
+	require.Equal(t, []realtimetest.Call{
+		{Method: realtimetest.InvalidateAuthorization, UserID: target},
+		{Method: realtimetest.PublishRealtimeEvent, Event: managerChanged},
+	}, fixture.publisher.Calls())
 }
 
 func TestAddManagerUsesNativeMembershipDecisionAndMutationTime(t *testing.T) {
@@ -230,6 +240,11 @@ func TestRemoveAndTransferPreserveStoreInvariantFailures(t *testing.T) {
 	require.Equal(t, ManagerMailRelationshipOwner, fixture.mail.requests[1].Relationship)
 	assertStoreIdempotency(t, fixture.persistence.idempotency, fixture.userID, idempotencyOperationTransferOwner, "test-key",
 		fmt.Sprintf(`{"exam_id":%q,"user_id":%q,"expected_exam_revision":1}`, fixture.examID, target))
+	ownerTransferred, eventErr := realtime.NewExamOwnerTransferredEvent(fixture.examID, target, transferred.Exam.Revision, fixture.persistence.managerMutation.ChangedAt)
+	require.NoError(t, eventErr)
+	// Contract: an ownership transfer publishes exactly the new owner; no
+	// authorization cache is dropped.
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.PublishRealtimeEvent, Event: ownerTransferred}}, fixture.publisher.Calls())
 }
 
 func activeTestUser(id model.UserID) *model.User {

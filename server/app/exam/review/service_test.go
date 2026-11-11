@@ -18,6 +18,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -34,7 +36,9 @@ func TestSaveDecisionAuthorizesAuditsAtomicallyAndSuppressesPrivateRationale(t *
 	require.NotNil(t, result.Review, "result=%#v mutation=%#v effects", result, f.persistence.decision)
 	require.NotNil(t, result.Decision, "result=%#v mutation=%#v effects", result, f.persistence.decision)
 	require.NotNil(t, f.persistence.decision, "result=%#v mutation=%#v effects", result, f.persistence.decision)
-	require.Equal(t, 1, f.effects.changed, "result=%#v mutation=%#v effects", result, f.persistence.decision)
+	// Contract: a fresh decision tells managers the Review changed, then
+	// invalidates the Sitting board.
+	require.Equal(t, reviewCalls(t, realtime.NewExamIntegrityReviewChangedEvent, result), f.publisher.Calls())
 	require.Equal(t, f.submissionID, f.authorizer.reviewSubmission, "authorization=%#v mutation=%#v", f.authorizer, f.persistence.decision)
 	require.False(t, f.persistence.decision.ManagerOverride, "authorization=%#v mutation=%#v", f.authorizer, f.persistence.decision)
 	require.Equal(t, f.userID, f.persistence.decision.ActorUserID, "authorization=%#v mutation=%#v", f.authorizer, f.persistence.decision)
@@ -74,7 +78,7 @@ func TestExactDecisionReplayReturnsRetainedResultWithoutEffect(t *testing.T) {
 	})
 	require.NoError(t, err, "result=%#v error=%v effects", result, err)
 	require.True(t, result.Replayed, "result=%#v error=%v effects", result, err)
-	require.Equal(t, 0, f.effects.changed, "result=%#v error=%v effects", result, err)
+	require.Empty(t, f.publisher.Calls(), "a replayed decision republished")
 }
 
 func TestFinalizeAndReleaseUseDistinctAuthorizationAndEffects(t *testing.T) {
@@ -83,10 +87,13 @@ func TestFinalizeAndReleaseUseDistinctAuthorizationAndEffects(t *testing.T) {
 	f.persistence.mode = "finalize"
 	finalized, err := f.service.FinalizeExamIntegrityReview(context.Background(), f.invocation, TerminalCommand{SubmissionID: f.submissionID,
 		ReviewID: f.reviewID, ExpectedReviewRevision: 2, IdempotencyKey: "test-key"})
-	require.NoError(t, err, "finalized=%#v error=%v auth=%#v effects=%#v", finalized, err, f.authorizer, f.effects)
-	require.Equal(t, model.SubmissionReviewFinalized, finalized.Review.State, "finalized=%#v error=%v auth=%#v effects=%#v", finalized, err, f.authorizer, f.effects)
-	require.Equal(t, 1, f.authorizer.reviewCalls, "finalized=%#v error=%v auth=%#v effects=%#v", finalized, err, f.authorizer, f.effects)
-	require.Equal(t, 1, f.effects.finalized, "finalized=%#v error=%v auth=%#v effects=%#v", finalized, err, f.authorizer, f.effects)
+	require.NoError(t, err, "finalized=%#v error=%v auth=%#v", finalized, err, f.authorizer)
+	require.Equal(t, model.SubmissionReviewFinalized, finalized.Review.State, "finalized=%#v error=%v auth=%#v", finalized, err, f.authorizer)
+	require.Equal(t, 1, f.authorizer.reviewCalls, "finalized=%#v error=%v auth=%#v", finalized, err, f.authorizer)
+	// Contract: finalizing tells managers the Review was finalized, then
+	// invalidates the Sitting board.
+	finalizedCalls := reviewCalls(t, realtime.NewExamIntegrityReviewFinalizedEvent, finalized)
+	require.Equal(t, finalizedCalls, f.publisher.Calls())
 	wantFinalize, prepareErr := prepareTerminalIdempotency(f.invocation, store.ExamIntegrityReviewFinalizeOperation,
 		"test-key", f.submissionID, f.reviewID, 2)
 	require.NoError(t, prepareErr)
@@ -94,10 +101,26 @@ func TestFinalizeAndReleaseUseDistinctAuthorizationAndEffects(t *testing.T) {
 	f.persistence.mode = "release"
 	released, err := f.service.ReleaseStudentExamResult(context.Background(), f.invocation, TerminalCommand{SubmissionID: f.submissionID,
 		ReviewID: f.reviewID, ExpectedReviewRevision: 3, IdempotencyKey: "test-key"})
-	require.NoError(t, err, "released=%#v error=%v auth=%#v effects=%#v", released, err, f.authorizer, f.effects)
-	require.Equal(t, model.SubmissionReviewReleased, released.Review.ReleaseState, "released=%#v error=%v auth=%#v effects=%#v", released, err, f.authorizer, f.effects)
-	require.Equal(t, 1, f.authorizer.releaseCalls, "released=%#v error=%v auth=%#v effects=%#v", released, err, f.authorizer, f.effects)
-	require.Equal(t, 1, f.effects.released, "released=%#v error=%v auth=%#v effects=%#v", released, err, f.authorizer, f.effects)
+	require.NoError(t, err, "released=%#v error=%v auth=%#v", released, err, f.authorizer)
+	require.Equal(t, model.SubmissionReviewReleased, released.Review.ReleaseState, "released=%#v error=%v auth=%#v", released, err, f.authorizer)
+	require.Equal(t, 1, f.authorizer.releaseCalls, "released=%#v error=%v auth=%#v", released, err, f.authorizer)
+	managerRelease, eventErr := realtime.NewExamStudentResultReleasedEvent(reviewFact(released))
+	require.NoError(t, eventErr)
+	candidateRelease, eventErr := realtime.NewCandidateStudentResultReleasedEvent(reviewFact(released))
+	require.NoError(t, eventErr)
+	activity, eventErr := realtime.NewCandidateExamActivityChangedEvent(released.Authorization.CandidateUserID)
+	require.NoError(t, eventErr)
+	board, eventErr := realtime.NewManagerSittingBoardChangedEvent(released.Authorization.ExamID, released.Authorization.SittingID)
+	require.NoError(t, eventErr)
+	// Contract: after the finalization's publications, the release reaches
+	// managers before the candidate, then the candidate's Exam activity and
+	// the Sitting board are invalidated.
+	require.Equal(t, append(finalizedCalls,
+		realtimetest.Call{Method: realtimetest.PublishRealtimeEvent, Event: managerRelease},
+		realtimetest.Call{Method: realtimetest.PublishRealtimeEvent, Event: candidateRelease},
+		realtimetest.Call{Method: realtimetest.PublishRealtimeEvent, Event: activity},
+		realtimetest.Call{Method: realtimetest.PublishRealtimeEvent, Event: board},
+	), f.publisher.Calls())
 	wantRelease, prepareErr := prepareTerminalIdempotency(f.invocation, store.ExamIntegrityReviewReleaseOperation,
 		"test-key", f.submissionID, f.reviewID, 3)
 	require.NoError(t, prepareErr)
@@ -135,12 +158,12 @@ func TestReleaseReplayReturnsRetainedResultWithoutPreparingMail(t *testing.T) {
 	f.persistence.mode, f.persistence.replayed = "release", true
 	released, err := f.service.ReleaseStudentExamResult(context.Background(), f.invocation, TerminalCommand{SubmissionID: f.submissionID,
 		ReviewID: f.reviewID, ExpectedReviewRevision: 3, IdempotencyKey: "test-key"})
-	require.NoError(t, err, "released=%#v error=%v effects=%#v mail=%#v release", released, err, f.effects, f.mail)
-	require.True(t, released.Replayed, "released=%#v error=%v effects=%#v mail=%#v release", released, err, f.effects, f.mail)
-	require.Equal(t, 0, f.effects.released, "released=%#v error=%v effects=%#v mail=%#v release", released, err, f.effects, f.mail)
-	require.Equal(t, 0, f.mail.calls, "released=%#v error=%v effects=%#v mail=%#v release", released, err, f.effects, f.mail)
-	require.NotNil(t, f.persistence.release, "released=%#v error=%v effects=%#v mail=%#v release", released, err, f.effects, f.mail)
-	require.Nil(t, f.persistence.release.Notice, "released=%#v error=%v effects=%#v mail=%#v release", released, err, f.effects, f.mail)
+	require.NoError(t, err, "released=%#v error=%v mail=%#v release", released, err, f.mail)
+	require.True(t, released.Replayed, "released=%#v error=%v mail=%#v release", released, err, f.mail)
+	require.Empty(t, f.publisher.Calls(), "a replayed release republished")
+	require.Equal(t, 0, f.mail.calls, "released=%#v error=%v mail=%#v release", released, err, f.mail)
+	require.NotNil(t, f.persistence.release, "released=%#v error=%v mail=%#v release", released, err, f.mail)
+	require.Nil(t, f.persistence.release.Notice, "released=%#v error=%v mail=%#v release", released, err, f.mail)
 }
 
 func TestCandidateResultRequiresSessionOwnershipAndSanitizesRemarks(t *testing.T) {
@@ -171,7 +194,7 @@ type reviewFixture struct {
 	persistence  *reviewStoreFake
 	authorizer   *reviewAuthorizerFake
 	auditor      *reviewAuditorFake
-	effects      *reviewEffectsFake
+	publisher    *realtimetest.Publisher
 	mail         *reviewMailFake
 	userID       model.UserID
 	submissionID model.SubmissionID
@@ -188,10 +211,10 @@ func newReviewFixture(t *testing.T) *reviewFixture {
 	f.persistence = &reviewStoreFake{f: f}
 	f.authorizer = &reviewAuthorizerFake{}
 	f.auditor = &reviewAuditorFake{}
-	f.effects = &reviewEffectsFake{}
+	f.publisher = &realtimetest.Publisher{}
 	f.mail = &reviewMailFake{f: f}
 	service, err := New(Dependencies{Persistence: f.persistence, Authorizer: f.authorizer, Auditor: f.auditor,
-		Effects: f.effects, Mail: f.mail, Now: func() time.Time { return f.at },
+		Publisher: f.publisher, Mail: f.mail, Now: func() time.Time { return f.at },
 		NewReviewID: model.NewSubmissionReviewID, NewDecisionID: model.NewIntegrityReviewDecisionID})
 	require.NoError(t, err)
 	f.service = service
@@ -311,7 +334,38 @@ func (f *reviewAuditorFake) Fail(_ context.Context, _ model.AuditEventID, code s
 	return nil
 }
 
-type reviewEffectsFake struct{ changed, finalized, released int }
+// reviewFact is the bounded fact a Review event carries for result.
+func reviewFact(result Result) realtime.ExamIntegrityReviewEventFact {
+	return realtime.ExamIntegrityReviewEventFact{
+		SubmissionID: result.Authorization.SubmissionID,
+		AttemptID:    result.Authorization.AttemptID,
+		CandidateID:  result.Authorization.CandidateUserID,
+		ReviewID:     result.Review.ID,
+		State:        result.Review.State,
+		Revision:     result.Review.Revision,
+		ReleaseState: result.Review.ReleaseState,
+		ChangedAt:    result.Review.UpdatedAt,
+	}
+}
+
+// reviewCalls are the calls of a Review change that is announced to managers
+// with one event built by newEvent, followed by the Sitting board
+// invalidation.
+func reviewCalls(
+	t *testing.T,
+	newEvent func(realtime.ExamIntegrityReviewEventFact) (realtime.RealtimeEvent, error),
+	result Result,
+) []realtimetest.Call {
+	t.Helper()
+	event, err := newEvent(reviewFact(result))
+	require.NoError(t, err)
+	board, err := realtime.NewManagerSittingBoardChangedEvent(result.Authorization.ExamID, result.Authorization.SittingID)
+	require.NoError(t, err)
+	return []realtimetest.Call{
+		{Method: realtimetest.PublishRealtimeEvent, Event: event},
+		{Method: realtimetest.PublishRealtimeEvent, Event: board},
+	}
+}
 
 type reviewMailFake struct {
 	f       *reviewFixture
@@ -327,20 +381,6 @@ func (f *reviewMailFake) PrepareResultRelease(_ context.Context,
 	return &PreparedResultReleaseMail{Notice: &store.PreparedMail{Occurrence: &model.MailOccurrence{},
 		Delivery: &model.MailDelivery{}, Job: &model.Job{}}, ExpectedRecipientRevision: 2}, nil
 }
-
-func (f *reviewEffectsFake) ReviewChanged(context.Context, Result) error {
-	f.changed++
-	return nil
-}
-func (f *reviewEffectsFake) ReviewFinalized(context.Context, Result) error {
-	f.finalized++
-	return nil
-}
-func (f *reviewEffectsFake) ResultReleased(context.Context, Result) error {
-	f.released++
-	return nil
-}
-func (*reviewEffectsFake) Report(context.Context, string, error) {}
 
 func (f *reviewStoreFake) ListNativeConditions(context.Context, store.NativeConditionListOptions) (*store.NativeConditionPage, error) {
 	return &store.NativeConditionPage{Items: []model.NativeConditionEvidence{}}, nil

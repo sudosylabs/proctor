@@ -20,6 +20,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/manageraccess"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -30,11 +31,6 @@ type Authorizer interface {
 type Auditor interface {
 	Begin(context.Context, access.Mutation) (model.AuditEventID, error)
 	Fail(context.Context, model.AuditEventID, string) error
-}
-type Effects interface {
-	Changed(context.Context, model.ExamID, model.ExamResourceID, int64, string) error
-	// Report records an Effect failure; the committed change stands.
-	Report(ctx context.Context, operation string, err error)
 }
 type FileContent interface {
 	StoreExamResource(
@@ -119,7 +115,7 @@ type Dependencies struct {
 	Memberships   store.AcademicUnitMemberStore
 	Authorizer    Authorizer
 	Auditor       Auditor
-	Effects       Effects
+	Publisher     realtime.Publisher
 	Content       FileContent
 	Now           func() time.Time
 	NewResourceID func() model.ExamResourceID
@@ -136,7 +132,7 @@ func New(deps Dependencies) (*Service, error) {
 		deps.Memberships == nil ||
 		deps.Authorizer == nil ||
 		deps.Auditor == nil ||
-		deps.Effects == nil ||
+		deps.Publisher == nil ||
 		deps.Content == nil ||
 		deps.Now == nil ||
 		deps.NewResourceID == nil ||
@@ -481,7 +477,7 @@ func (s *Service) finalize(
 		return store.ExamResourceRecord{}, apperror.New("exam.resource.unavailable").Wrap(errors.New("missing resource outcome"))
 	}
 
-	s.effect(ctx, result, operation)
+	s.publishChanged(ctx, result)
 	return *result.Value, nil
 }
 
@@ -610,7 +606,7 @@ func (s *Service) metadataMutation(
 		return store.ExamResourceRecord{}, apperror.New("exam.resource.unavailable").Wrap(errors.New("missing metadata outcome"))
 	}
 
-	s.effect(ctx, result, "edit_metadata")
+	s.publishChanged(ctx, result)
 	return *result.Value, nil
 }
 
@@ -732,9 +728,9 @@ func (s *Service) ReorderExamResources(
 
 	if !result.Replayed {
 		if result.DraftRevision < 1 {
-			s.deps.Effects.Report(ctx, "exam_resource_changed", errors.New("missing committed Draft revision"))
-		} else if effectErr := s.deps.Effects.Changed(ctx, c.ExamID, "", result.DraftRevision, "reorder"); effectErr != nil {
-			s.deps.Effects.Report(ctx, "exam_resource_changed", effectErr)
+			s.deps.Publisher.Report(ctx, "exam_resource_changed", errors.New("missing committed Draft revision"))
+		} else if effectErr := s.publishDraftUpdated(ctx, c.ExamID, result.DraftRevision); effectErr != nil {
+			s.deps.Publisher.Report(ctx, "exam_resource_changed", effectErr)
 		}
 	}
 
@@ -816,7 +812,7 @@ func (s *Service) RemoveExamResource(
 		return store.ExamResourceRecord{}, apperror.New("exam.resource.unavailable").Wrap(errors.New("missing removal outcome"))
 	}
 
-	s.effect(ctx, result, "remove")
+	s.publishChanged(ctx, result)
 	return *result.Value, nil
 }
 
@@ -887,19 +883,17 @@ func (s *Service) failAudit(ctx context.Context, auditID model.AuditEventID, err
 	}
 	return mapped
 }
-func (s *Service) effect(ctx context.Context, result *store.ExamResourceCommandResult, operation string) {
+
+// publishChanged announces a committed Exam Resource command unless the
+// Store replayed an earlier outcome. A failed publication is reported and the
+// command still succeeds.
+func (s *Service) publishChanged(ctx context.Context, result *store.ExamResourceCommandResult) {
 	if result.Replayed || result.Value == nil {
 		return
 	}
 
-	if err := s.deps.Effects.Changed(
-		ctx,
-		result.Value.Resource.ExamID,
-		result.Value.Resource.ID,
-		result.Value.DraftRevision,
-		operation,
-	); err != nil {
-		s.deps.Effects.Report(ctx, "exam_resource_changed", err)
+	if err := s.publishDraftUpdated(ctx, result.Value.Resource.ExamID, result.Value.DraftRevision); err != nil {
+		s.deps.Publisher.Report(ctx, "exam_resource_changed", err)
 	}
 }
 func mapContent(err error) error {

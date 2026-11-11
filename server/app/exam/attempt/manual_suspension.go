@@ -177,8 +177,8 @@ func (s *Service) SuspendExamAttempt(
 	}
 
 	if !result.Replayed {
-		if effectErr := s.deps.Effects.AttemptSuspendedByManager(ctx, result); effectErr != nil {
-			s.deps.Effects.Report(ctx, "exam_attempt_suspended_by_manager", effectErr)
+		if effectErr := s.publishAttemptSuspendedByManager(ctx, result); effectErr != nil {
+			s.deps.Publisher.Report(ctx, "exam_attempt_suspended_by_manager", effectErr)
 		}
 	}
 

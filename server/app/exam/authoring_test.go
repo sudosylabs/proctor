@@ -19,6 +19,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -42,6 +44,10 @@ func TestCreateOwnsAuthorizationAuditPersistenceAndEffects(t *testing.T) {
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
 	require.Equal(t, []string{"membership", "authorize", "audit.begin", "store.create", "effect.created"}, *fixture.order)
+	created, eventErr := realtime.NewExamCreatedEvent(got.Exam.ID)
+	require.NoError(t, eventErr)
+	// Contract: creating an Exam publishes exactly its created fact.
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.PublishRealtimeEvent, Event: created}}, fixture.publisher.Calls())
 	require.Equal(t, fixture.persistence.creation.Draft.ExamID, fixture.persistence.creation.Exam.ID)
 	require.Equal(t, fixture.userID, fixture.persistence.creation.Manager.UserID)
 	require.True(t, fixture.persistence.creation.Draft.Policy.Equal(model.DefaultExamPolicySet()))
@@ -87,7 +93,7 @@ func TestCreateReplayDoesNotRepublish(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, fixture.persistence.idempotency, "idempotency/effects")
 	require.Equal(t, "exam.create", fixture.persistence.idempotency.Operation, "idempotency/effects")
-	require.Equal(t, 0, fixture.effects.calls, "idempotency/effects")
+	require.Empty(t, fixture.publisher.Calls(), "idempotency/effects")
 }
 
 func TestCreateFailureCompletesAuditAsFailed(t *testing.T) {
@@ -140,7 +146,9 @@ func TestEditDraftTextOwnsAuthorizationAuditPersistenceAndSafeEffect(t *testing.
 	require.Nil(t, fixture.auditor.value["instructions_markdown"], "unsafe audit/scope/effect = %#v / %s:%s", fixture.auditor.value, fixture.auditor.scopeType, fixture.auditor.scopeID)
 	require.Equal(t, model.RoleScopeAcademicUnit, fixture.auditor.scopeType, "unsafe audit/scope/effect = %#v / %s:%s", fixture.auditor.value, fixture.auditor.scopeType, fixture.auditor.scopeID)
 	require.Equal(t, fixture.unitID.String(), fixture.auditor.scopeID, "unsafe audit/scope/effect = %#v / %s:%s", fixture.auditor.value, fixture.auditor.scopeType, fixture.auditor.scopeID)
-	require.Equal(t, int64(2), fixture.effects.updatedRevision, "unsafe audit/scope/effect = %#v / %s:%s", fixture.auditor.value, fixture.auditor.scopeType, fixture.auditor.scopeID)
+	// Contract: the committed edit publishes exactly one Draft update, at the
+	// committed revision.
+	require.Equal(t, []realtimetest.Call{draftUpdated(t, fixture.examID, 2)}, fixture.publisher.Calls())
 	assertStoreIdempotency(t, fixture.persistence.idempotency, fixture.userID, idempotencyOperationEditDraftText, command,
 		fmt.Sprintf(`{"exam_id":%q,"expected_draft_revision":1,"title":"Distributed Systems","instructions_markdown":"Use **Go** and submit all files."}`, fixture.examID))
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
@@ -164,7 +172,7 @@ func TestEditDraftTextNoChangeSkipsAuditPersistenceAndEffect(t *testing.T) {
 	// A no-op edit is authorized but never audited, persisted, or published.
 	require.Nil(t, fixture.auditor.value, "no-op edit was audited")
 	require.Nil(t, fixture.persistence.textUpdate, "no-op edit was persisted")
-	require.Zero(t, fixture.effects.updatedRevision, "no-op edit was published")
+	require.Empty(t, fixture.publisher.Calls(), "no-op edit was published")
 }
 
 func TestEditDraftTextRejectsArchivedAndStaleDraftsWithoutPublishing(t *testing.T) {
@@ -195,7 +203,7 @@ func TestEditDraftTextRejectsArchivedAndStaleDraftsWithoutPublishing(t *testing.
 			require.Equal(t, test.want, fault.Code())
 			require.NotNil(t, fixture.auditor.value, "rejected update effects: audit")
 			require.NotNil(t, fixture.persistence.textUpdate, "rejected update effects: audit")
-			require.Equal(t, int64(0), fixture.effects.updatedRevision, "rejected update effects: audit")
+			require.Empty(t, fixture.publisher.Calls(), "rejected update effects: audit")
 			require.Equal(t, test.want, fixture.auditor.failedCode, "rejected update effects: audit")
 		})
 	}
@@ -217,7 +225,7 @@ func TestEditDraftTextArchivedNoOpStillRejectsAsArchived(t *testing.T) {
 	require.Equal(t, "exam.archived", fault.Code())
 	require.NotNil(t, fixture.auditor.value, "archived no-op effects: audit")
 	require.NotNil(t, fixture.persistence.textUpdate, "archived no-op effects: audit")
-	require.Equal(t, int64(0), fixture.effects.updatedRevision, "archived no-op effects: audit")
+	require.Empty(t, fixture.publisher.Calls(), "archived no-op effects: audit")
 	require.Equal(t, "exam.archived", fixture.auditor.failedCode, "archived no-op effects: audit")
 }
 
@@ -233,7 +241,7 @@ func TestEditDraftTextReplayDoesNotRepublish(t *testing.T) {
 		IdempotencyKey: "test-key",
 	})
 	require.NoError(t, err)
-	require.Equal(t, int64(0), fixture.effects.updatedRevision, "replay published revision")
+	require.Empty(t, fixture.publisher.Calls(), "replay published revision")
 }
 
 func TestEditDraftTextUsesExplicitOverrideWithoutManagerMembership(t *testing.T) {
@@ -276,7 +284,9 @@ func TestConfigureDraftFocusLossOwnsAuthorizationAuditPersistenceAndSafeEffect(t
 	require.Equal(t, fixture.examID.String(), fixture.auditor.value["exam_id"], "unsafe audit/effect")
 	require.Equal(t, int64(1), fixture.auditor.value["expected_draft_revision"], "unsafe audit/effect")
 	require.Equal(t, int64(2), fixture.auditor.value["draft_revision"], "unsafe audit/effect")
-	require.Equal(t, int64(2), fixture.effects.updatedRevision, "unsafe audit/effect")
+	// Contract: the committed edit publishes exactly one Draft update, at the
+	// committed revision.
+	require.Equal(t, []realtimetest.Call{draftUpdated(t, fixture.examID, 2)}, fixture.publisher.Calls())
 	assertStoreIdempotency(t, fixture.persistence.idempotency, fixture.userID, idempotencyOperationConfigureDraftFocusLoss, command,
 		fmt.Sprintf(`{"exam_id":%q,"expected_draft_revision":1,"enabled":false,"minimum_duration_milliseconds":500,"incident_count":100,"window_milliseconds":14400000,"outcome":"flag_and_suspend"}`, fixture.examID))
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
@@ -298,7 +308,7 @@ func TestConfigureDraftFocusLossNoChangeSkipsAuditPersistenceAndEffect(t *testin
 	// A no-op edit is authorized but never audited, persisted, or published.
 	require.Nil(t, fixture.auditor.value, "no-op edit was audited")
 	require.Nil(t, fixture.persistence.focusLossUpdate, "no-op edit was persisted")
-	require.Zero(t, fixture.effects.updatedRevision, "no-op edit was published")
+	require.Empty(t, fixture.publisher.Calls(), "no-op edit was published")
 }
 
 func TestConfigureDraftFocusLossArchivedNoOpAndStaleEditsReachAuditedStoreGuard(t *testing.T) {
@@ -325,7 +335,7 @@ func TestConfigureDraftFocusLossArchivedNoOpAndStaleEditsReachAuditedStoreGuard(
 			require.Equal(t, test.want, fault.Code())
 			require.NotNil(t, fixture.persistence.focusLossUpdate, "guard effects: update")
 			require.Equal(t, test.want, fixture.auditor.failedCode, "guard effects: update")
-			require.Equal(t, int64(0), fixture.effects.updatedRevision, "guard effects: update")
+			require.Empty(t, fixture.publisher.Calls(), "guard effects: update")
 		})
 	}
 }
@@ -343,7 +353,7 @@ func TestConfigureDraftFocusLossReplayDoesNotRepublish(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, fixture.persistence.focusLossUpdate, "replay update/effect")
-	require.Equal(t, int64(0), fixture.effects.updatedRevision, "replay update/effect")
+	require.Empty(t, fixture.publisher.Calls(), "replay update/effect")
 }
 
 func TestAuthorizeViewSelectsCurrentManagerOrExplicitOverride(t *testing.T) {
@@ -464,7 +474,8 @@ type authoringFixture struct {
 	auditor     *auditorFake
 	outcomes    *commandOutcomesFake
 	persistence *authoringStoreFake
-	effects     *effectsFake
+	publisher   *realtimetest.Publisher
+	sittings    *sittingsFake
 }
 
 func newAuthoringFixture(t *testing.T) authoringFixture {
@@ -478,16 +489,18 @@ func newAuthoringFixture(t *testing.T) authoringFixture {
 	auditor := &auditorFake{order: &order}
 	outcomes := &commandOutcomesFake{}
 	persistence := &authoringStoreFake{order: &order, examID: examID, unitID: unitID, actorID: userID}
-	effects := &effectsFake{order: &order}
+	publisher := publisherIn(&order)
+	sittings := &sittingsFake{order: &order}
 	service, err := NewAuthoring(AuthoringDependencies{
 		Persistence: persistence,
 		Memberships: memberships,
 		Users:       users,
+		Sittings:    sittings,
 		Mail:        mail,
 		Authorizer:  authorizer,
 		Auditor:     auditor,
 		Outcomes:    outcomes,
-		Effects:     effects,
+		Publisher:   publisher,
 		Now: func() time.Time {
 			return time.Date(2026, 8, 14, 8, 0, 0, 0, time.UTC)
 		},
@@ -495,7 +508,7 @@ func newAuthoringFixture(t *testing.T) authoringFixture {
 		InstitutionOrigin: "https://institution.example",
 	})
 	require.NoError(t, err)
-	return authoringFixture{service: service, invocation: invocation.New(testPrincipal(userID), model.RequestMetadata{}), unitID: unitID, examID: examID, userID: userID, order: &order, authorizer: authorizer, memberships: memberships, users: users, mail: mail, auditor: auditor, outcomes: outcomes, persistence: persistence, effects: effects}
+	return authoringFixture{service: service, invocation: invocation.New(testPrincipal(userID), model.RequestMetadata{}), unitID: unitID, examID: examID, userID: userID, order: &order, authorizer: authorizer, memberships: memberships, users: users, mail: mail, auditor: auditor, outcomes: outcomes, persistence: persistence, publisher: publisher, sittings: sittings}
 }
 
 type commandOutcomesFake struct {
@@ -811,37 +824,57 @@ func snapshotFromCreation(input *store.ExamAuthoringCreation, actor bool) *store
 	return &store.ExamAuthoringSnapshot{Exam: input.Exam, Draft: input.Draft, OwnerUserID: input.Exam.OwnerUserID, ManagerCount: 1, ActorIsManager: actor}
 }
 
-type effectsFake struct {
-	order            *[]string
-	calls            int
-	updatedRevision  int64
-	archivedRevision int64
-	err              error
+// publisherIn returns a recording Publisher that also places the created,
+// Draft-updated and archived facts in the log a test shares with its other
+// fakes, as "effect.created", "effect.updated" and "effect.archived".
+func publisherIn(order *[]string) *realtimetest.Publisher {
+	entries := map[string]string{
+		"exam_created":       "effect.created",
+		"exam_draft_updated": "effect.updated",
+		"exam_archived":      "effect.archived",
+	}
+	return &realtimetest.Publisher{Observe: func(call realtimetest.Call) {
+		if entry, ok := entries[call.Event.Name]; ok && call.Method == realtimetest.PublishRealtimeEvent {
+			*order = append(*order, entry)
+		}
+	}}
 }
 
-func (f *effectsFake) Archived(_ context.Context, _ model.ExamID, revision int64, _ time.Time) error {
-	*f.order = append(*f.order, "effect.archived")
-	f.archivedRevision = revision
-	return f.err
-}
-func (f *effectsFake) ManagerChanged(context.Context, model.ExamID, model.UserID, bool, int64, time.Time) error {
-	return f.err
-}
-func (f *effectsFake) OwnerTransferred(context.Context, model.ExamID, model.UserID, int64, time.Time) error {
-	return f.err
+// draftUpdated is the call a committed Draft edit publishes.
+func draftUpdated(t *testing.T, examID model.ExamID, revision int64) realtimetest.Call {
+	t.Helper()
+	event, err := realtime.NewExamDraftUpdatedEvent(examID, revision)
+	require.NoError(t, err)
+	return realtimetest.Call{Method: realtimetest.PublishRealtimeEvent, Event: event}
 }
 
-func (f *effectsFake) Created(context.Context, model.ExamID) error {
-	*f.order = append(*f.order, "effect.created")
-	f.calls++
-	return f.err
+// sittingsFake answers the Sittings of an archived Exam and their candidates,
+// and places the Sitting read in the shared log.
+type sittingsFake struct {
+	store.ExamSittingStore
+	order        *[]string
+	targets      []store.ExamSittingInvalidationTarget
+	candidateIDs []model.UserID
 }
-func (f *effectsFake) DraftUpdated(_ context.Context, _ model.ExamID, revision int64) error {
-	*f.order = append(*f.order, "effect.updated")
-	f.updatedRevision = revision
-	return f.err
+
+func (f *sittingsFake) ListInvalidationTargetsByExam(
+	context.Context,
+	model.ExamID,
+	model.ExamSittingID,
+	int,
+) ([]store.ExamSittingInvalidationTarget, error) {
+	*f.order = append(*f.order, "store.archived_sittings")
+	return f.targets, nil
 }
-func (f *effectsFake) Report(context.Context, string, error) {}
+
+func (f *sittingsFake) ListCandidateInvalidationTargetsBySitting(
+	context.Context,
+	model.ExamSittingID,
+	model.UserID,
+	int,
+) ([]model.UserID, error) {
+	return f.candidateIDs, nil
+}
 
 func (f *authoringStoreFake) UpdateDraftNativePolicy(_ context.Context, input *store.ExamDraftNativePolicyUpdate, command *store.CommandIdempotency) (*store.ExamAuthoringCommandResult, error) {
 	*f.order = append(*f.order, "store.update_native_policy")

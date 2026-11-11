@@ -394,8 +394,8 @@ func (s *Service) SubmitExamAttempt(
 	}
 
 	if !result.Replayed {
-		if effectErr := s.deps.Effects.AttemptSubmitted(ctx, result); effectErr != nil {
-			s.deps.Effects.Report(ctx, "exam_attempt_submitted", effectErr)
+		if effectErr := s.publishAttemptSubmitted(ctx, result); effectErr != nil {
+			s.deps.Publisher.Report(ctx, "exam_attempt_submitted", effectErr)
 		}
 	}
 

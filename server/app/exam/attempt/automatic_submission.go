@@ -167,8 +167,8 @@ func (s *Service) SealForSittingClose(
 	}
 
 	if !result.Replayed {
-		if effectErr := s.deps.Effects.AttemptSealedForSittingClose(ctx, result); effectErr != nil {
-			s.deps.Effects.Report(ctx, "exam_attempt_sealed_for_sitting_close", effectErr)
+		if effectErr := s.publishAttemptSealedForSittingClose(ctx, result); effectErr != nil {
+			s.deps.Publisher.Report(ctx, "exam_attempt_sealed_for_sitting_close", effectErr)
 		}
 	}
 

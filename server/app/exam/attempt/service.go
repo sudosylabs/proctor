@@ -18,6 +18,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -71,22 +72,6 @@ type Auditor interface {
 type SystemAuditor interface {
 	Begin(context.Context, model.Action, model.Resource, model.RoleScopeType, string, string, map[string]any) (model.AuditEventID, error)
 	Fail(context.Context, model.AuditEventID, string) error
-}
-
-type Effects interface {
-	ConnectionOpened(context.Context, ConnectionResult) error
-	ConnectionClosed(context.Context, ConnectionClosedResult) error
-	ParticipationRenewed(context.Context, ParticipationRenewal) error
-	ParticipationExpired(context.Context, ParticipationExpiry) error
-	AttemptReallowed(context.Context, ReallowResult) error
-	AttemptSuspendedByManager(context.Context, ManualSuspensionResult) error
-	WorkspaceChanged(context.Context, WorkspaceMutationResult) error
-	FocusLossEvaluated(context.Context, FocusLossEvaluation) error
-	BrowserActivityGapChanged(context.Context, model.ExamID, model.ExamSittingID) error
-	AttemptSubmitted(context.Context, SubmissionResult) error
-	AttemptSealedForSittingClose(context.Context, AutomaticSubmissionResult) error
-	// Report records an Effect failure; the committed change stands.
-	Report(ctx context.Context, operation string, err error)
 }
 
 type Content interface {
@@ -151,7 +136,7 @@ type Dependencies struct {
 	Managers            ManagerAuthorizer
 	Auditor             Auditor
 	SystemAuditor       SystemAuditor
-	Effects             Effects
+	Publisher           realtime.Publisher
 	Content             Content
 	Mail                SubmissionMailPreparer
 	DesktopBuilds       DesktopBuildResolver
@@ -199,7 +184,7 @@ func New(deps Dependencies) (*Service, error) {
 		deps.Managers == nil ||
 		deps.Auditor == nil ||
 		deps.SystemAuditor == nil ||
-		deps.Effects == nil ||
+		deps.Publisher == nil ||
 		deps.Content == nil ||
 		deps.Mail == nil ||
 		deps.DesktopBuilds == nil ||

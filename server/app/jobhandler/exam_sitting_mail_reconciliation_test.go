@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-package app
+package jobhandler
 
 import (
 	"context"
@@ -28,7 +28,7 @@ func TestSittingMailReconciliationPeriodicRunnerPreparesOneBoundedFanout(t *test
 		Sitting: record, ActorUserID: model.NewUserID(),
 	}}}
 	mail := &sittingMailReconciliationPreparerFake{prepared: &store.ExamSittingMailFanout{}}
-	err = (sittingMailReconciliationPeriodicRunner{sittings: persistence, mail: mail}).Run(context.Background())
+	err = (sittingMailReconciliationRunner{sittings: persistence, mail: mail}).Run(context.Background())
 	require.NoError(t, err)
 	require.NotNil(t, persistence.reconciled, "reconciliation=%#v request=%#v", persistence.reconciled, mail.request)
 	require.Equal(t, record.ID, persistence.reconciled.SittingID, "reconciliation=%#v request=%#v", persistence.reconciled, mail.request)

@@ -90,12 +90,15 @@ suppression, shared frozen-payload mechanics, stable Message-ID construction,
 and locale-indexed Sitting fan-out bundles. It receives rendering and sending
 capabilities at construction and returns validated `MailOccurrence`,
 `MailDelivery`, and Job records; it does not send during a business mutation or
-persist anything itself. Parent use cases retain authorization, audit,
-idempotency, recipient lookup, and named transaction coordination through
-narrow consumer-owned preparation ports. Production code in the parent uses
-the child package's owned contracts directly rather than redeclaring aliases;
-the child never imports the parent application, transports, platform, SQL, or
-deployment configuration.
+persist anything itself. The use case that sends a mail retains authorization,
+audit, idempotency, recipient lookup, and named transaction coordination, and
+its area prepares the mail: `sitting.ScheduleMail`,
+`attempt.SubmissionReceiptMail` and `review.ResultReleaseMail` read what the
+notice shows and call the composer, each behind the small preparer interface
+its area's tests fake. Consumers use the child package's owned contracts
+directly rather than redeclaring aliases; the child never imports the parent
+application, an area that sends mail, transports, platform, SQL, or deployment
+configuration.
 
 The examination capability is a cohesive `app/exam` boundary.
 It owns authoring and publication policy, manager relationships, Sitting and
@@ -329,3 +332,22 @@ sign-in, Desktop and MFA audit protocols that the mutation runner does not
 cover. No area service embeds another implementation. A new concern adds its
 methods and fields to its area's `Service`; it does not add an embedded
 implementation.
+
+The parent wires; a rule lives in `app/access` or in the area a reader opens
+for it. Collection visibility is a named `access.Authorizer` helper
+(`AuthorizeExamList`). The Attempt and Integrity review areas declare the
+`SittingManagerAuthorizer` that composes their Submission authorization from
+the Sitting service, and the three areas share `access.ManagerAuthorization`
+rather than translating one another's result. Actorless audit attempts begin
+through `access.SystemAuditAdapter`. Periodic runtime tasks are built beside
+what they run: `jobhandler.NewExamAttemptExpiryTask`,
+`jobhandler.NewSittingMailReconciliationTask`, `identity.MaintenanceTasks`.
+
+Three seams stay in the parent because one side of each is a parent type:
+`mailAuthorizationAdapter` and `jobOperationsAuthorization` give `MailService`
+and `JobOperations` their own unavailable code when the Institution cannot be
+read; `job_adapters.go` forwards Job mail telemetry to the
+`MailDeliveryRecorder` and `MailHealth` the module root implements and reads;
+and `deploymentAccessPolicyCapabilities` reports durable mail from that
+`MailHealth`. `operationalRecorderAdapter` likewise turns an area's outcome
+into the parent's `OperationalEvent`.

@@ -535,7 +535,7 @@ type authorizerFake struct {
 	listVisibility store.ExamListVisibility
 }
 
-func (f *authorizerFake) AuthorizeList(_ context.Context, _ invocation.Invocation, _ model.AcademicUnitID) (store.ExamListVisibility, error) {
+func (f *authorizerFake) AuthorizeExamList(context.Context, invocation.Invocation) (store.ExamListVisibility, error) {
 	*f.order = append(*f.order, "authorize.list")
 	return f.listVisibility, f.err
 }

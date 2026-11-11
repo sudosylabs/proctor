@@ -309,13 +309,13 @@ type reviewAuthorizerFake struct {
 func (*reviewAuthorizerFake) AuthorizeSubmissionView(context.Context, invocation.Invocation, model.SubmissionID) error {
 	return nil
 }
-func (f *reviewAuthorizerFake) AuthorizeSubmissionReview(_ context.Context, _ invocation.Invocation, id model.SubmissionID) (ManagerAuthorization, error) {
+func (f *reviewAuthorizerFake) AuthorizeSubmissionReview(_ context.Context, _ invocation.Invocation, id model.SubmissionID) (access.ManagerAuthorization, error) {
 	f.reviewSubmission, f.reviewCalls = id, f.reviewCalls+1
-	return ManagerAuthorization{}, nil
+	return access.ManagerAuthorization{}, nil
 }
-func (f *reviewAuthorizerFake) AuthorizeSubmissionRelease(_ context.Context, _ invocation.Invocation, _ model.SubmissionID) (ManagerAuthorization, error) {
+func (f *reviewAuthorizerFake) AuthorizeSubmissionRelease(_ context.Context, _ invocation.Invocation, _ model.SubmissionID) (access.ManagerAuthorization, error) {
 	f.releaseCalls++
-	return ManagerAuthorization{}, nil
+	return access.ManagerAuthorization{}, nil
 }
 
 type reviewAuditorFake struct {

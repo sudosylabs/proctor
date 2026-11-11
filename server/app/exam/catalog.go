@@ -76,7 +76,7 @@ func (a *Authoring) ListExams(ctx context.Context, invocation invocation.Invocat
 		return CatalogPage{}, apperror.Invalid("exam.invalid", "archive_filter")
 	}
 
-	visibility, err := a.deps.Authorizer.AuthorizeList(ctx, invocation, query.AcademicUnitID)
+	visibility, err := a.deps.Authorizer.AuthorizeExamList(ctx, invocation)
 	if err != nil {
 		return CatalogPage{}, err
 	}

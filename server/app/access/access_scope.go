@@ -273,6 +273,69 @@ func (s *Authorizer) AuthorizeClassSearch(
 	return visibility, nil
 }
 
+// AuthorizeExamList authorizes listing Exams and returns the visibility the
+// listing applies. A caller may list where it holds exam.view, as a current
+// Exam Manager and member of the Exam's Academic Unit, or exam.view.override,
+// with neither relationship; the Store applies both sets of scopes, so the
+// collection decision is recorded once at the Institution, under the override
+// Action when the caller holds it anywhere. Both grants are read at one
+// decision instant, which the Store also uses to check ordinary membership.
+func (s *Authorizer) AuthorizeExamList(
+	ctx context.Context,
+	invocation invocation.Invocation,
+) (store.ExamListVisibility, error) {
+	principal := invocation.Principal()
+	decisionAt := model.TimeUTC(s.now())
+	ordinary, err := s.GrantedScopesAt(ctx, principal, model.ActionExamView, model.ResourceExam, decisionAt)
+	if err != nil {
+		return store.ExamListVisibility{}, err
+	}
+
+	override, err := s.GrantedScopesAt(ctx, principal, model.ActionExamViewOverride, model.ResourceExam, decisionAt)
+	if err != nil {
+		return store.ExamListVisibility{}, err
+	}
+
+	hasOrdinary := ordinary.InstitutionWide || len(ordinary.AcademicUnitRootIDs) > 0
+	hasOverride := override.InstitutionWide || len(override.AcademicUnitRootIDs) > 0
+	institution, err := s.deps.Resolver.deps.Institutions.GetSingleton(ctx)
+	if err != nil {
+		return store.ExamListVisibility{}, ResourceError("institution", err)
+	}
+
+	action := model.ActionExamView
+	if hasOverride {
+		action = model.ActionExamViewOverride
+	}
+
+	resource := model.Resource{Type: model.ResourceInstitution, ID: institution.ID.String()}
+	if err := s.deps.Audit.RecordAuthorizationDecision(
+		ctx,
+		principal,
+		action,
+		resource,
+		model.RoleScopeInstitution,
+		institution.ID.String(),
+		invocation.RequestMetadata(),
+		hasOrdinary || hasOverride,
+	); err != nil {
+		return store.ExamListVisibility{}, err
+	}
+
+	if !hasOrdinary && !hasOverride {
+		return store.ExamListVisibility{}, DeniedError()
+	}
+
+	return store.ExamListVisibility{
+		ActorUserID:                 principal.UserID,
+		OrdinaryMembershipAt:        decisionAt,
+		OrdinaryInstitutionWide:     ordinary.InstitutionWide,
+		OrdinaryAcademicUnitRootIDs: append([]model.AcademicUnitID(nil), ordinary.AcademicUnitRootIDs...),
+		OverrideInstitutionWide:     override.InstitutionWide,
+		OverrideAcademicUnitRootIDs: append([]model.AcademicUnitID(nil), override.AcademicUnitRootIDs...),
+	}, nil
+}
+
 func (s *Authorizer) userVisibilityScope(
 	ctx context.Context,
 	principal model.Principal,

@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/sudosylabs/proctor/server/app"
+	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/model"
 )
 
@@ -90,7 +90,7 @@ func WriteError(writer http.ResponseWriter, request *http.Request, err error) {
 		var recovery interface {
 			DeliveryRecovery() *model.DeliveryRecovery
 		}
-		if app.SupportsDeliveryRecovery(failure.Code()) && errors.As(err, &recovery) {
+		if attempt.SupportsDeliveryRecovery(failure.Code()) && errors.As(err, &recovery) {
 			if value := recovery.DeliveryRecovery(); value != nil && value.Validate() == nil {
 				problem.Delivery = value
 			}

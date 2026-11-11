@@ -15,5 +15,8 @@
 // The package does not grade, speak HTTP, or run SQL. A committed Review
 // change is announced by the events built in effects.go. It imports only
 // model, store, app/access, app/apperror, app/invocation, app/idempotency,
-// app/realtime and app/exam/safemarkdown. Start with Service in service.go.
+// app/realtime, app/mail and app/exam/safemarkdown; it reaches the Sitting
+// area through the SittingAuthorizer port. Start with Service in service.go;
+// manager_authorization.go holds who may view, review and release a
+// Submission, and result_release_mail.go prepares the release notice.
 package review

@@ -67,9 +67,11 @@ type ConfigureDraftBrowserPolicyCommand struct {
 	IdempotencyKey        string
 }
 
+// Authorizer is the Access Control the Exam authoring and publication use
+// cases ask; *access.Authorizer satisfies it and tests substitute a fake.
 type Authorizer interface {
 	Authorize(context.Context, invocation.Invocation, model.Action, model.Resource) error
-	AuthorizeList(context.Context, invocation.Invocation, model.AcademicUnitID) (store.ExamListVisibility, error)
+	AuthorizeExamList(context.Context, invocation.Invocation) (store.ExamListVisibility, error)
 }
 
 type Auditor interface {

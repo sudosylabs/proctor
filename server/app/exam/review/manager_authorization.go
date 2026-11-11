@@ -4,8 +4,7 @@
 // See LICENSE in the server module root for license information.
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
-
-package app
+package review
 
 import (
 	"context"
@@ -13,20 +12,35 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/exam/review"
-	"github.com/sudosylabs/proctor/server/app/exam/sitting"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type examIntegrityReviewAuthorizationAdapter struct {
-	reviews  store.ExamIntegrityReviewStore
-	sittings *sitting.Service
-	audit    access.DecisionAudit
+// SittingAuthorizer is the current Exam Manager decision the Sitting area
+// makes for one Submission of an Exam. *sitting.Service satisfies it; this
+// package cannot import the Sitting area.
+type SittingAuthorizer interface {
+	AuthorizeSubmissionView(context.Context, invocation.Invocation, model.ExamID, model.SubmissionID) error
+	AuthorizeSubmissionReview(context.Context, invocation.Invocation, model.ExamID, model.SubmissionID) (access.ManagerAuthorization, error)
+	AuthorizeSubmissionRelease(context.Context, invocation.Invocation, model.ExamID, model.SubmissionID) (access.ManagerAuthorization, error)
 }
 
-func (a examIntegrityReviewAuthorizationAdapter) AuthorizeSubmissionView(
+// SittingManagerAuthorizer is the Authorizer the application runs. Every
+// decision first resolves the canonical Submission, because a caller names a
+// Submission without the Exam the Sitting area decides against. The candidate
+// who made the Submission never reviews it: that denial is recorded at the
+// Submission's Academic Unit and concealed as not found, whatever Role the
+// candidate holds, before the current Exam Manager decision is asked.
+type SittingManagerAuthorizer struct {
+	Reviews  store.ExamIntegrityReviewStore
+	Sittings SittingAuthorizer
+	Audit    access.DecisionAudit
+}
+
+// AuthorizeSubmissionView authorizes reading a Submission's flags, evidence
+// and Review.
+func (a SittingManagerAuthorizer) AuthorizeSubmissionView(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	submissionID model.SubmissionID,
@@ -39,7 +53,7 @@ func (a examIntegrityReviewAuthorizationAdapter) AuthorizeSubmissionView(
 		return a.denySelf(ctx, invocation, authorization, model.ActionSubmissionView)
 	}
 
-	return a.sittings.AuthorizeSubmissionView(
+	return a.Sittings.AuthorizeSubmissionView(
 		ctx,
 		invocation,
 		authorization.ExamID,
@@ -47,66 +61,71 @@ func (a examIntegrityReviewAuthorizationAdapter) AuthorizeSubmissionView(
 	)
 }
 
-func (a examIntegrityReviewAuthorizationAdapter) AuthorizeSubmissionReview(
+// AuthorizeSubmissionReview authorizes draft decisions and finalization, and
+// reports whether the decision rested on the override Action.
+func (a SittingManagerAuthorizer) AuthorizeSubmissionReview(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	submissionID model.SubmissionID,
-) (review.ManagerAuthorization, error) {
+) (access.ManagerAuthorization, error) {
 	authorization, err := a.resolve(ctx, submissionID)
 	if err != nil {
-		return review.ManagerAuthorization{}, err
+		return access.ManagerAuthorization{}, err
 	}
 	if authorization.CandidateUserID == invocation.Principal().UserID {
-		return review.ManagerAuthorization{}, a.denySelf(ctx, invocation, authorization, model.ActionSubmissionReview)
+		return access.ManagerAuthorization{}, a.denySelf(ctx, invocation, authorization, model.ActionSubmissionReview)
 	}
 
-	management, err := a.sittings.AuthorizeSubmissionReview(
+	management, err := a.Sittings.AuthorizeSubmissionReview(
 		ctx,
 		invocation,
 		authorization.ExamID,
 		submissionID,
 	)
 	if err != nil {
-		return review.ManagerAuthorization{}, err
+		return access.ManagerAuthorization{}, err
 	}
 
-	return review.ManagerAuthorization{Override: management.Override}, nil
+	return management, nil
 }
 
-func (a examIntegrityReviewAuthorizationAdapter) AuthorizeSubmissionRelease(
+// AuthorizeSubmissionRelease authorizes releasing a finalized result to the
+// candidate, and reports whether the decision rested on the override Action.
+func (a SittingManagerAuthorizer) AuthorizeSubmissionRelease(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	submissionID model.SubmissionID,
-) (review.ManagerAuthorization, error) {
+) (access.ManagerAuthorization, error) {
 	authorization, err := a.resolve(ctx, submissionID)
 	if err != nil {
-		return review.ManagerAuthorization{}, err
+		return access.ManagerAuthorization{}, err
 	}
 	if authorization.CandidateUserID == invocation.Principal().UserID {
-		return review.ManagerAuthorization{}, a.denySelf(ctx, invocation, authorization, model.ActionSubmissionRelease)
+		return access.ManagerAuthorization{}, a.denySelf(ctx, invocation, authorization, model.ActionSubmissionRelease)
 	}
 
-	management, err := a.sittings.AuthorizeSubmissionRelease(
+	management, err := a.Sittings.AuthorizeSubmissionRelease(
 		ctx,
 		invocation,
 		authorization.ExamID,
 		submissionID,
 	)
 	if err != nil {
-		return review.ManagerAuthorization{}, err
+		return access.ManagerAuthorization{}, err
 	}
 
-	return review.ManagerAuthorization{Override: management.Override}, nil
+	return management, nil
 }
 
-func (a examIntegrityReviewAuthorizationAdapter) resolve(ctx context.Context,
+func (a SittingManagerAuthorizer) resolve(
+	ctx context.Context,
 	submissionID model.SubmissionID,
 ) (*store.ExamIntegrityReviewAuthorization, error) {
-	if a.reviews == nil || a.sittings == nil || a.audit == nil || !submissionID.IsValid() {
+	if a.Reviews == nil || a.Sittings == nil || a.Audit == nil || !submissionID.IsValid() {
 		return nil, apperror.New("exam.integrity_review.unavailable").Wrap(errors.New("Review authorization dependencies are invalid"))
 	}
 
-	authorization, err := a.reviews.Resolve(ctx, submissionID)
+	authorization, err := a.Reviews.Resolve(ctx, submissionID)
 	if err != nil {
 		if store.IsNotFound(err) {
 			return nil, apperror.New("exam.integrity_review.not_found").Wrap(err)
@@ -121,13 +140,13 @@ func (a examIntegrityReviewAuthorizationAdapter) resolve(ctx context.Context,
 	return authorization, nil
 }
 
-func (a examIntegrityReviewAuthorizationAdapter) denySelf(
+func (a SittingManagerAuthorizer) denySelf(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	authorization *store.ExamIntegrityReviewAuthorization,
 	action model.Action,
 ) error {
-	err := a.audit.RecordAuthorizationDecision(
+	err := a.Audit.RecordAuthorizationDecision(
 		ctx,
 		invocation.Principal(),
 		action,

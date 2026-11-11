@@ -20,7 +20,11 @@
 //
 // The package does not speak HTTP or WebSocket, run SQL, choose a file store,
 // or run Jobs; the Sitting-close Job calls into it. It imports only model,
-// store, app/apperror, app/invocation, app/idempotency and app/exam/safemarkdown.
-// Start with service.go for Service and its dependencies, then the file named
-// for the use case (connection.go, workspace.go, submission.go, ...).
+// store, app/access, app/apperror, app/invocation, app/idempotency,
+// app/realtime, app/mail and app/exam/safemarkdown; it reaches the Sitting
+// area through the SittingAuthorizer port. Start with service.go for Service
+// and its dependencies, then the file named for the use case (connection.go,
+// workspace.go, submission.go, ...). manager_authorization.go holds who may
+// act as a manager on a Sitting's Attempts and Submissions, and
+// submission_mail.go prepares the candidate's receipt.
 package attempt

@@ -107,7 +107,7 @@ credential intervention require a strong recent interactive Session.
   takes a raw Principal and request metadata. Every `Authorize<Concept>`
   helper takes `(ctx, Invocation, ...)` and returns `error`, or `(R, error)`
   where `R` is a named struct that says what the helper reports beyond the
-  decision (`ManagerAuthorization{Override}`, `authorizationScope{Type, ID}`,
+  decision (`access.ManagerAuthorization{Override}`, `authorizationScope{Type, ID}`,
   `profileReadAuthorization{FullProfile}`, a `store` visibility scope); never
   a bare `bool`, ID, or several values. A non-audited predicate is
   `Can<Concept>` and returns `(bool, error)`; an error-returning check is an
@@ -118,7 +118,11 @@ credential intervention require a strong recent interactive Session.
   exporting the same ambiguous name. `TestAuthorizationHelpersShareOneShape`
   enforces the shape and the naming.
 - List/search queries constrain results by authorized scope in persistence;
-  they do not fetch everything and filter in memory.
+  they do not fetch everything and filter in memory. The list helpers live on
+  `access.Authorizer` beside one another (`AuthorizeExamList`,
+  `AuthorizeAcademicPeriodList`, `AuthorizeClassSearch`,
+  `AuthorizeUserSearch`); each records one collection decision at the
+  Institution and returns the `store` visibility the listing applies.
 - WebSocket commands/subscriptions and background jobs use the same application
   policy boundary and explicit `Invocation` as HTTP callers.
 - Role and binding changes invalidate affected authentication or connection
@@ -289,6 +293,13 @@ operation resolves the canonical Submission first, audits that resource and
 resolved Academic Unit scope, and conceals a denied or mismatched target as not
 found. An identical idempotent mutation replay repeats current authorization
 and audit before returning its retained result.
+The Sitting service makes the current Exam Manager decision
+(`AuthorizeSittingView`, `AuthorizeSubmissionReview`, ...) and reports it as
+`access.ManagerAuthorization`. The Attempt and Integrity review areas each
+declare a `SittingManagerAuthorizer` (`manager_authorization.go`) that
+resolves the canonical Submission and refuses the candidate who made it,
+recording that denial at the Submission's Academic Unit and concealing it as
+not found, before it asks the Sitting service.
 Browser Activity history always requires current exact Exam Manager membership
 plus `exam.attempt.browser_activity.view`. It has no
 administrator override action. Each page and history-bearing export repeats
@@ -350,7 +361,10 @@ the pending state:
   public error code (`access.RunAudited` owns this for ordinary mutations).
   Actor work begins from the Principal (or, for a handoff with no Principal
   yet, the proved account); trusted durable work begins an actorless system
-  attempt and never fabricates a User. This is the protocol for every
+  attempt and never fabricates a User. Exam Jobs and runtime tasks begin
+  theirs through `access.SystemAuditAdapter`: `BeginJob` names the Job
+  execution in the recorded value, and `Begin` serves a periodic task, which
+  runs under no Job. This is the protocol for every
   actor or system mutation unless the next rule applies.
 - **Draft.** When a named aggregate is itself the pending record (a Personal
   Access Token preparation, a Desktop authorization, a live-correction

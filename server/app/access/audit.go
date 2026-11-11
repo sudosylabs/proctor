@@ -816,6 +816,11 @@ func (s *Auditor) MutationAudit() MutationAuditAdapter {
 	return MutationAuditAdapter{audit: s}
 }
 
+// SystemAudit returns the actorless audit view for Jobs and runtime tasks.
+func (s *Auditor) SystemAudit() SystemAuditAdapter {
+	return SystemAuditAdapter{audit: s}
+}
+
 // MailAudit returns the mail delivery audit view.
 func (s *Auditor) MailAudit() MailAuditAdapter {
 	return MailAuditAdapter{audit: s}

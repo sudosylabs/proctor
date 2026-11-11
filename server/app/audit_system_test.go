@@ -46,7 +46,7 @@ func TestExamSittingSystemAuditAdapterRetainsJobIdentityAtAcademicUnitScope(t *t
 	require.NoError(t, err)
 	sittingID, unitID := model.NewExamSittingID(), model.NewAcademicUnitID()
 	call := invocation.System{JobID: model.NewJobID(), AttemptID: model.NewJobAttemptID()}
-	id, err := (examSittingSystemAuditAdapter{audit: service}).Begin(context.Background(), call,
+	id, err := service.SystemAudit().BeginJob(context.Background(), call,
 		model.ActionExamSittingManage, model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()},
 		model.RoleScopeAcademicUnit, unitID.String(), "advance_due", map[string]any{
 			"exam_sitting_id": sittingID.String(),

@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-package app
+package jobhandler
 
 import (
 	"context"
@@ -23,12 +23,12 @@ func TestExamAttemptExpiryPeriodicRunnerUsesBoundedBatchAndPreservesFailure(t *t
 	t.Parallel()
 	wantErr := errors.New("database unavailable")
 	fake := &recordingExamAttemptExpiryUseCases{err: wantErr}
-	err := (examAttemptExpiryPeriodicRunner{attempts: fake}).Run(context.Background())
+	err := (ExamAttemptExpiryRunner{Attempts: fake}).Run(context.Background())
 	require.ErrorIs(t, err, wantErr, "Run() error")
 	require.Equal(t, examAttemptExpiryBatchLimit, fake.limit, "Run() error")
-	require.Equal(t, invocation.Task(examAttemptExpiryPeriodicTaskName), fake.system, "Run() names its runtime task")
-	require.Equal(t, 2*time.Second, examAttemptExpiryScanInterval, "Run() error")
-	require.NotEmpty(t, examAttemptExpiryPeriodicTaskName, "Run() error")
+	require.Equal(t, invocation.Task(ExamAttemptExpiryTaskName), fake.system, "Run() names its runtime task")
+	require.Equal(t, 2*time.Second, ExamAttemptExpiryScanInterval, "Run() error")
+	require.NotEmpty(t, ExamAttemptExpiryTaskName, "Run() error")
 }
 
 type recordingExamAttemptExpiryUseCases struct {
@@ -50,6 +50,6 @@ func (f *recordingExamAttemptExpiryUseCases) ScanExpiredDeliveries(_ context.Con
 
 func TestExpiryRunnerAlsoSettlesAbandonedDeliveries(t *testing.T) {
 	fake := &recordingExamAttemptExpiryUseCases{}
-	require.NoError(t, (examAttemptExpiryPeriodicRunner{attempts: fake}).Run(context.Background()), "delivery scan bound")
+	require.NoError(t, (ExamAttemptExpiryRunner{Attempts: fake}).Run(context.Background()), "delivery scan bound")
 	require.Equal(t, 200, fake.deliveryLimit, "delivery scan bound")
 }

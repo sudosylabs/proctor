@@ -21,7 +21,6 @@ import (
 	"io"
 	"time"
 
-	"github.com/sudosylabs/proctor/server/app"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/invocation"
@@ -803,7 +802,7 @@ func (c *connectionRuntime) enqueueDeliveryError(sequence int64, code apperror.C
 	var recovery interface {
 		DeliveryRecovery() *model.DeliveryRecovery
 	}
-	if app.SupportsDeliveryRecovery(string(code)) && errors.As(err, &recovery) {
+	if attempt.SupportsDeliveryRecovery(string(code)) && errors.As(err, &recovery) {
 		if state := recovery.DeliveryRecovery(); state != nil && state.Validate() == nil {
 			value.Delivery = state
 		}

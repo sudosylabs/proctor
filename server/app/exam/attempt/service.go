@@ -29,24 +29,13 @@ type Sittings interface {
 	Resolve(context.Context, model.ExamSittingID) (*store.ExamSittingSnapshot, error)
 }
 
-// ManagerAuthorization reports a granted current Exam Manager decision:
-// Override is true when the decision rested on the explicit override Action
-// rather than the ordinary Manager relationship.
-type ManagerAuthorization struct {
-	Override bool
-}
-
-// BrowserActivityAuthorization reports the Academic Unit of the Exam whose
-// browser activity the caller may read.
-type BrowserActivityAuthorization struct {
-	AcademicUnitID model.AcademicUnitID
-}
-
+// ManagerAuthorizer is the manager authorization the Attempt use cases ask.
+// SittingManagerAuthorizer satisfies it and tests substitute a fake.
 type ManagerAuthorizer interface {
 	AuthorizeSittingView(context.Context, invocation.Invocation, model.ExamSittingID) error
-	AuthorizeSittingManage(context.Context, invocation.Invocation, model.ExamSittingID) (ManagerAuthorization, error)
+	AuthorizeSittingManage(context.Context, invocation.Invocation, model.ExamSittingID) (access.ManagerAuthorization, error)
 	AuthorizeSubmissionView(context.Context, invocation.Invocation, model.SubmissionID) error
-	AuthorizeBrowserActivityView(context.Context, invocation.Invocation, model.ExamSittingID) (BrowserActivityAuthorization, error)
+	AuthorizeBrowserActivityView(context.Context, invocation.Invocation, model.ExamSittingID) (access.BrowserActivityAuthorization, error)
 }
 
 type Auditor interface {
@@ -69,6 +58,7 @@ type Auditor interface {
 // SystemAuditor creates actor-less audit attempts for trusted periodic
 // continuity enforcement. A runtime scanner must never manufacture a User
 // Principal merely to persist this system decision.
+// access.SystemAuditAdapter satisfies it and tests substitute a fake.
 type SystemAuditor interface {
 	Begin(context.Context, model.Action, model.Resource, model.RoleScopeType, string, string, map[string]any) (model.AuditEventID, error)
 	Fail(context.Context, model.AuditEventID, string) error
@@ -88,8 +78,8 @@ type Content interface {
 }
 
 // SubmissionMailPreparation contains only the safe identity needed to freeze
-// a candidate receipt. The implementation resolves recipient and published
-// Exam title without exposing them to the Attempt package.
+// a candidate receipt. The preparer resolves recipient and published Exam
+// title without exposing them to the Attempt use cases.
 type SubmissionMailPreparation struct {
 	CandidateUserID model.UserID
 	ExamID          model.ExamID
@@ -105,6 +95,8 @@ type PreparedSubmissionMail struct {
 	ExpectedRecipientRevision int64
 }
 
+// SubmissionMailPreparer prepares the candidate's Submission receipt.
+// SubmissionReceiptMail satisfies it and tests substitute a fake.
 type SubmissionMailPreparer interface {
 	PrepareSubmissionReceipt(context.Context, SubmissionMailPreparation) (*PreparedSubmissionMail, error)
 }

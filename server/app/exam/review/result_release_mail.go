@@ -4,33 +4,39 @@
 // See LICENSE in the server module root for license information.
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
-
-package app
+package review
 
 import (
 	"context"
 	"errors"
 
-	"github.com/sudosylabs/proctor/server/app/exam/review"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type examResultReleaseMailPreparationAdapter struct {
-	preparer  *mail.Composer
-	users     store.UserStore
-	sittings  store.ExamSittingStore
-	revisions store.ExamRevisionStore
+// ResultReleaseMail is the ResultReleaseMailPreparer the application runs. It
+// reads the candidate, the Sitting and the published Exam title, and has the
+// mail composer freeze a notice that says only that a result is available.
+type ResultReleaseMail struct {
+	Composer  *mail.Composer
+	Users     store.UserStore
+	Sittings  store.ExamSittingStore
+	Revisions store.ExamRevisionStore
 }
 
-func (a examResultReleaseMailPreparationAdapter) PrepareResultRelease(ctx context.Context,
-	request review.ResultReleaseMailPreparation,
-) (*review.PreparedResultReleaseMail, error) {
-	if a.preparer == nil ||
-		a.users == nil ||
-		a.sittings == nil ||
-		a.revisions == nil ||
+// PrepareResultRelease prepares the notice for one release. The mail
+// occurrence is derived from the Review and the Review revision the release
+// expects, and the result carries the revision of the candidate the notice
+// was prepared from.
+func (m ResultReleaseMail) PrepareResultRelease(
+	ctx context.Context,
+	request ResultReleaseMailPreparation,
+) (*PreparedResultReleaseMail, error) {
+	if m.Composer == nil ||
+		m.Users == nil ||
+		m.Sittings == nil ||
+		m.Revisions == nil ||
 		!request.CandidateUserID.IsValid() ||
 		!request.ExamID.IsValid() ||
 		!request.SittingID.IsValid() ||
@@ -39,12 +45,12 @@ func (a examResultReleaseMailPreparationAdapter) PrepareResultRelease(ctx contex
 		return nil, errors.New("result release mail dependencies or request are invalid")
 	}
 
-	recipient, err := a.users.Get(ctx, request.CandidateUserID)
+	recipient, err := m.Users.Get(ctx, request.CandidateUserID)
 	if err != nil {
 		return nil, err
 	}
 
-	snapshot, err := a.sittings.Get(ctx, request.ExamID, request.SittingID)
+	snapshot, err := m.Sittings.Get(ctx, request.ExamID, request.SittingID)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +59,7 @@ func (a examResultReleaseMailPreparationAdapter) PrepareResultRelease(ctx contex
 		return nil, errors.New("result release Sitting projection is inconsistent")
 	}
 
-	revision, err := a.revisions.GetSummary(ctx, request.ExamID, snapshot.Sitting.ExamRevisionID)
+	revision, err := m.Revisions.GetSummary(ctx, request.ExamID, snapshot.Sitting.ExamRevisionID)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +73,7 @@ func (a examResultReleaseMailPreparationAdapter) PrepareResultRelease(ctx contex
 		return nil, err
 	}
 
-	prepared, err := a.preparer.PrepareResultReleaseMail(mail.ResultReleasePreparation{
+	prepared, err := m.Composer.PrepareResultReleaseMail(mail.ResultReleasePreparation{
 		Recipient:    recipient,
 		OccurrenceID: occurrence,
 		Details:      mail.ResultReleaseDetails{ExamTitle: revision.Title, ReleasedAt: request.ReleasedAt},
@@ -77,7 +83,7 @@ func (a examResultReleaseMailPreparationAdapter) PrepareResultRelease(ctx contex
 		return nil, err
 	}
 
-	return &review.PreparedResultReleaseMail{Notice: &store.PreparedMail{
+	return &PreparedResultReleaseMail{Notice: &store.PreparedMail{
 		Occurrence: prepared.Occurrence,
 		Delivery:   prepared.Delivery,
 		Job:        prepared.Job,

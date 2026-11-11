@@ -952,7 +952,7 @@ type systemAuditorFake struct {
 	err, failErr            error
 }
 
-func (f *systemAuditorFake) Begin(_ context.Context, system invocation.System, action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID, operation string, value map[string]any) (model.AuditEventID, error) {
+func (f *systemAuditorFake) BeginJob(_ context.Context, system invocation.System, action model.Action, resource model.Resource, scopeType model.RoleScopeType, scopeID, operation string, value map[string]any) (model.AuditEventID, error) {
 	f.system, f.action, f.resource, f.operation, f.value = system, action, resource, operation, value
 	f.scopeType, f.scopeID = scopeType, scopeID
 	return model.AuditEventID(f.id), f.err

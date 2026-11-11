@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-package app
+package attempt
 
 import (
 	"context"
@@ -26,10 +26,10 @@ func TestExamAttemptSubmissionAuthorizationResolvesCanonicalExamBeforeCurrentMan
 
 	submissionID, examID := model.NewSubmissionID(), model.NewExamID()
 	sittings := &submissionAuthorizationSittingFake{}
-	adapter := examAttemptManagerAuthorizationAdapter{
-		sittings: sittings,
-		audit:    &submissionAuthorizationAuditFake{},
-		submissions: &submissionAuthorizationStoreFake{authorization: &store.ExamSubmissionAuthorization{
+	adapter := SittingManagerAuthorizer{
+		Sittings: sittings,
+		Audit:    &submissionAuthorizationAuditFake{},
+		Submissions: &submissionAuthorizationStoreFake{authorization: &store.ExamSubmissionAuthorization{
 			SubmissionID: submissionID, ExamID: examID, SittingID: model.NewExamSittingID(),
 			AttemptID: model.NewExamAttemptID(), CandidateUserID: model.NewUserID(), AcademicUnitID: model.NewAcademicUnitID(),
 		}},
@@ -74,8 +74,8 @@ func TestExamAttemptSubmissionAuthorizationAuditsSelfDenialFailClosed(t *testing
 	t.Run("records denial before concealment", func(t *testing.T) {
 		t.Parallel()
 		audit := &submissionAuthorizationAuditFake{}
-		adapter := examAttemptManagerAuthorizationAdapter{sittings: &submissionAuthorizationSittingFake{},
-			submissions: &submissionAuthorizationStoreFake{authorization: authorization}, audit: audit}
+		adapter := SittingManagerAuthorizer{Sittings: &submissionAuthorizationSittingFake{},
+			Submissions: &submissionAuthorizationStoreFake{authorization: authorization}, Audit: audit}
 		err := adapter.AuthorizeSubmissionView(context.Background(), invocation.New(principal, metadata), submissionID)
 		var fault *apperror.Error
 		require.ErrorAs(t, err, &fault, "AuthorizeSubmissionView() error")
@@ -91,9 +91,9 @@ func TestExamAttemptSubmissionAuthorizationAuditsSelfDenialFailClosed(t *testing
 	t.Run("audit failure fails closed", func(t *testing.T) {
 		t.Parallel()
 		auditErr := errors.New("audit unavailable")
-		adapter := examAttemptManagerAuthorizationAdapter{sittings: &submissionAuthorizationSittingFake{},
-			submissions: &submissionAuthorizationStoreFake{authorization: authorization},
-			audit:       &submissionAuthorizationAuditFake{err: auditErr}}
+		adapter := SittingManagerAuthorizer{Sittings: &submissionAuthorizationSittingFake{},
+			Submissions: &submissionAuthorizationStoreFake{authorization: authorization},
+			Audit:       &submissionAuthorizationAuditFake{err: auditErr}}
 		require.ErrorIs(t, adapter.AuthorizeSubmissionView(context.Background(), invocation.New(principal, metadata), submissionID), auditErr, "AuthorizeSubmissionView() error")
 	})
 }
@@ -108,7 +108,7 @@ func (f *submissionAuthorizationStoreFake) Resolve(context.Context, model.Submis
 }
 
 type submissionAuthorizationSittingFake struct {
-	examAttemptSittingAuthorizer
+	SittingAuthorizer
 	invocation   invocation.Invocation
 	examID       model.ExamID
 	submissionID model.SubmissionID

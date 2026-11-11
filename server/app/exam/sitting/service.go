@@ -99,8 +99,9 @@ type Auditor interface {
 
 // SystemAuditor owns audit creation for trusted durable work. It deliberately
 // accepts invocation.System rather than an Invocation so Jobs cannot impersonate a User.
+// access.SystemAuditAdapter satisfies it and tests substitute a fake.
 type SystemAuditor interface {
-	Begin(
+	BeginJob(
 		context.Context,
 		invocation.System,
 		model.Action,
@@ -370,19 +371,6 @@ func (s *Service) GetExamSitting(
 	return value, nil
 }
 
-// ManagerAuthorization reports a granted current Exam Manager decision:
-// Override is true when the decision rested on the explicit override Action
-// rather than the ordinary Manager relationship.
-type ManagerAuthorization struct {
-	Override bool
-}
-
-// BrowserActivityAuthorization reports the Academic Unit of the Exam whose
-// browser activity the caller may read.
-type BrowserActivityAuthorization struct {
-	AcademicUnitID model.AcademicUnitID
-}
-
 // AuthorizeSittingView rechecks the current relationship and permission used by an
 // exact read without returning Sitting state. Realtime subscriptions use this
 // gate before accepting or retaining a resource-scoped subscription.
@@ -426,9 +414,9 @@ func (s *Service) AuthorizeBrowserActivityView(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	sittingID model.ExamSittingID,
-) (BrowserActivityAuthorization, error) {
+) (access.BrowserActivityAuthorization, error) {
 	unitID, err := s.authorizeBrowserActivityView(ctx, invocation, sittingID)
-	return BrowserActivityAuthorization{AcademicUnitID: unitID}, err
+	return access.BrowserActivityAuthorization{AcademicUnitID: unitID}, err
 }
 
 func (s *Service) authorizeBrowserActivityView(
@@ -512,7 +500,7 @@ func (s *Service) AuthorizeSubmissionReview(
 	invocation invocation.Invocation,
 	examID model.ExamID,
 	submissionID model.SubmissionID,
-) (ManagerAuthorization, error) {
+) (access.ManagerAuthorization, error) {
 	override, err := s.authorizeSubmission(
 		ctx,
 		invocation,
@@ -521,7 +509,7 @@ func (s *Service) AuthorizeSubmissionReview(
 		model.ActionSubmissionReview,
 		model.ActionSubmissionReviewOverride,
 	)
-	return ManagerAuthorization{Override: override}, err
+	return access.ManagerAuthorization{Override: override}, err
 }
 
 // AuthorizeSubmissionRelease keeps result release as a distinct, explicit
@@ -531,7 +519,7 @@ func (s *Service) AuthorizeSubmissionRelease(
 	invocation invocation.Invocation,
 	examID model.ExamID,
 	submissionID model.SubmissionID,
-) (ManagerAuthorization, error) {
+) (access.ManagerAuthorization, error) {
 	override, err := s.authorizeSubmission(
 		ctx,
 		invocation,
@@ -540,7 +528,7 @@ func (s *Service) AuthorizeSubmissionRelease(
 		model.ActionSubmissionRelease,
 		model.ActionSubmissionReleaseOverride,
 	)
-	return ManagerAuthorization{Override: override}, err
+	return access.ManagerAuthorization{Override: override}, err
 }
 
 func (s *Service) authorizeSubmission(
@@ -580,9 +568,9 @@ func (s *Service) AuthorizeSittingManage(
 	ctx context.Context,
 	invocation invocation.Invocation,
 	sittingID model.ExamSittingID,
-) (ManagerAuthorization, error) {
+) (access.ManagerAuthorization, error) {
 	override, err := s.authorizeSittingManage(ctx, invocation, sittingID)
-	return ManagerAuthorization{Override: override}, err
+	return access.ManagerAuthorization{Override: override}, err
 }
 
 func (s *Service) authorizeSittingManage(
@@ -1394,7 +1382,7 @@ func (s *Service) runSystemLifecycle(
 		"job_id":                    system.JobID.String(),
 		"job_attempt_id":            system.AttemptID.String(),
 	}
-	auditID, err := s.deps.SystemAuditor.Begin(
+	auditID, err := s.deps.SystemAuditor.BeginJob(
 		ctx,
 		system,
 		model.ActionExamSittingManage,

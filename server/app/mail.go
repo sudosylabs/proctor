@@ -66,6 +66,9 @@ type ListMailDeliveriesQuery struct {
 	Limit           int
 }
 
+// mailAuthorizationAdapter authorizes a mail operator Action on the singleton
+// Institution. It is not access.Authorizer.AuthorizeInstitution because an
+// Institution that cannot be read is presented as mail.unavailable here.
 type mailAuthorizationAdapter struct {
 	authorization *access.Authorizer
 	institutions  store.InstitutionStore

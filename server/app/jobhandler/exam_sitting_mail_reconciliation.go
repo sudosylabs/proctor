@@ -4,8 +4,7 @@
 // See LICENSE in the server module root for license information.
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
-
-package app
+package jobhandler
 
 import (
 	"context"
@@ -13,21 +12,26 @@ import (
 	"time"
 
 	"github.com/sudosylabs/proctor/server/app/exam/sitting"
+	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
 const (
+	sittingMailReconciliationTaskName     = "exam-sitting-mail-reconciliation"
 	sittingMailReconciliationPageSize     = 200
 	sittingMailReconciliationMaximumPages = 8
 	sittingMailReconciliationInterval     = time.Minute
 )
 
-type sittingMailReconciliationPeriodicRunner struct {
+// sittingMailReconciliationRunner prepares a fresh schedule notice for each
+// Sitting the Store reports as due for mail reconciliation and has the Store
+// reconcile it. A pass reads a bounded number of pages.
+type sittingMailReconciliationRunner struct {
 	sittings store.ExamSittingStore
 	mail     sitting.ScheduleMailPreparer
 }
 
-func (r sittingMailReconciliationPeriodicRunner) Run(ctx context.Context) error {
+func (r sittingMailReconciliationRunner) Run(ctx context.Context) error {
 	if r.sittings == nil || r.mail == nil {
 		return errors.New("Sitting mail reconciliation dependencies are unavailable")
 	}
@@ -80,4 +84,16 @@ func (r sittingMailReconciliationPeriodicRunner) Run(ctx context.Context) error 
 	}
 
 	return nil
+}
+
+// NewSittingMailReconciliationTask is the periodic runtime task that
+// reconciles Sitting schedule mail on every node. A Sitting that changed or
+// disappeared since it was listed is skipped; a later pass lists it again if
+// it is still due.
+func NewSittingMailReconciliationTask(sittings store.ExamSittingStore, mail sitting.ScheduleMailPreparer) job.PeriodicTask {
+	return job.PeriodicTask{
+		Name:     sittingMailReconciliationTaskName,
+		Interval: sittingMailReconciliationInterval,
+		Runner:   sittingMailReconciliationRunner{sittings: sittings, mail: mail},
+	}
 }

@@ -4,33 +4,41 @@
 // See LICENSE in the server module root for license information.
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
-
-package app
+package attempt
 
 import (
 	"context"
 	"errors"
 
-	"github.com/sudosylabs/proctor/server/app/exam/attempt"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type examSubmissionMailPreparationAdapter struct {
-	preparer  *mail.Composer
-	users     store.UserStore
-	sittings  store.ExamSittingStore
-	revisions store.ExamRevisionStore
+// SubmissionReceiptMail is the SubmissionMailPreparer the application runs.
+// It reads the candidate, the Sitting and the published Exam title the
+// receipt shows, and has the mail composer freeze the receipt for that
+// candidate alone.
+type SubmissionReceiptMail struct {
+	Composer  *mail.Composer
+	Users     store.UserStore
+	Sittings  store.ExamSittingStore
+	Revisions store.ExamRevisionStore
 }
 
-func (a examSubmissionMailPreparationAdapter) PrepareSubmissionReceipt(ctx context.Context,
-	request attempt.SubmissionMailPreparation,
-) (*attempt.PreparedSubmissionMail, error) {
-	if a.preparer == nil ||
-		a.users == nil ||
-		a.sittings == nil ||
-		a.revisions == nil ||
+// PrepareSubmissionReceipt prepares the receipt whose wording follows how the
+// Submission was sealed: by the candidate, by a manager ending the Attempt,
+// or by the Sitting closing. The Submission itself identifies the mail
+// occurrence, and the result carries the revision of the candidate the
+// receipt was prepared from.
+func (m SubmissionReceiptMail) PrepareSubmissionReceipt(
+	ctx context.Context,
+	request SubmissionMailPreparation,
+) (*PreparedSubmissionMail, error) {
+	if m.Composer == nil ||
+		m.Users == nil ||
+		m.Sittings == nil ||
+		m.Revisions == nil ||
 		!request.CandidateUserID.IsValid() ||
 		!request.ExamID.IsValid() ||
 		!request.SittingID.IsValid() ||
@@ -40,12 +48,12 @@ func (a examSubmissionMailPreparationAdapter) PrepareSubmissionReceipt(ctx conte
 		return nil, errors.New("Submission receipt dependencies or request are invalid")
 	}
 
-	recipient, err := a.users.Get(ctx, request.CandidateUserID)
+	recipient, err := m.Users.Get(ctx, request.CandidateUserID)
 	if err != nil {
 		return nil, err
 	}
 
-	snapshot, err := a.sittings.Get(ctx, request.ExamID, request.SittingID)
+	snapshot, err := m.Sittings.Get(ctx, request.ExamID, request.SittingID)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +62,7 @@ func (a examSubmissionMailPreparationAdapter) PrepareSubmissionReceipt(ctx conte
 		return nil, errors.New("Submission receipt Sitting projection is inconsistent")
 	}
 
-	revision, err := a.revisions.GetSummary(ctx, request.ExamID, snapshot.Sitting.ExamRevisionID)
+	revision, err := m.Revisions.GetSummary(ctx, request.ExamID, snapshot.Sitting.ExamRevisionID)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +81,7 @@ func (a examSubmissionMailPreparationAdapter) PrepareSubmissionReceipt(ctx conte
 		return nil, errors.New("Submission receipt provenance is invalid")
 	}
 
-	prepared, err := a.preparer.PrepareSubmissionReceiptMail(mail.SubmissionReceiptPreparation{
+	prepared, err := m.Composer.PrepareSubmissionReceiptMail(mail.SubmissionReceiptPreparation{
 		Recipient:    recipient,
 		OccurrenceID: model.MailOccurrenceID(request.SubmissionID.String()),
 		TemplateKey:  key,
@@ -90,7 +98,7 @@ func (a examSubmissionMailPreparationAdapter) PrepareSubmissionReceipt(ctx conte
 		return nil, err
 	}
 
-	return &attempt.PreparedSubmissionMail{Notice: &store.PreparedMail{
+	return &PreparedSubmissionMail{Notice: &store.PreparedMail{
 		Occurrence: prepared.Occurrence,
 		Delivery:   prepared.Delivery,
 		Job:        prepared.Job,

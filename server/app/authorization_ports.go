@@ -15,7 +15,8 @@ import (
 )
 
 // institutionAuthorizer authorizes an Action on the installation's singleton
-// Institution and returns that Resource for the caller's audit.
+// Institution and returns that Resource for the caller's audit. MailService
+// and JobOperations each hold one, and their tests substitute a fake.
 type institutionAuthorizer interface {
 	AuthorizeInstitution(context.Context, invocation.Invocation, model.Action) (model.Resource, error)
 }

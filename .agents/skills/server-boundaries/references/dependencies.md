@@ -19,7 +19,7 @@ model ← app/invocation ← {app, app/idempotency, app/exam}
 {model, store, secretseal, app/invocation, app/job, app/mail, app/user, app/exam, app/exam/attempt, app/exam/sitting} ← app/jobhandler ← {app, app/identity, app/administration, app/onboarding}
 model ← app/realtime ← {app, app/academic, app/user, app/identity, app/administration, app/onboarding, app/exam, websocket}
 {model, store} ← app/exam ← app
-{model, store, secretseal, app/exam, localization} ← app/mail ← app
+{model, store, secretseal, app/exam, localization} ← app/mail ← {app, app/exam/sitting, app/exam/attempt, app/exam/review}
 localization ← {httpapi, websocket}
 internal/weborigin ← {httpapi, websocket}
 app/exam/safemarkdown ← {app/exam/attempt, app/exam/review}
@@ -67,7 +67,7 @@ inside `app/` are application-owned modules, not transports.
 | `app/academic` | `model`, `store`, `app/access`, `app/paging`, `app/apperror`, `app/invocation`, `app/idempotency`, `app/mail`, `app/realtime`, `app/internal/batchitem`, standard library | parent `app`, `app/exam`, `app/job`, transports, platform, concrete adapters |
 | `app/jobhandler` | `model`, bounded `store` contracts, `app/invocation`, `app/job`, leaf `app/mail` capabilities, the `app/user`, `app/exam`, `app/exam/attempt` and `app/exam/sitting` services its handlers hold, `secretseal`, standard library | parent `app`, `store.Catalog`, transports, platform, concrete adapters |
 | `app/realtime` | `model`, `logging`, standard library, consumer-owned ports | parent `app`, area packages, HTTP, WebSocket libraries, cluster adapters |
-| `app/exam` | `model`, bounded `store` contracts, standard library, consumer-owned ports, `app/apperror`, `app/invocation`, `app/idempotency`, `app/access` for the `access.Mutation` an audit attempt begins with, `app/realtime` for the Publisher and events of the seven use-case packages (`app/exam` and its `attempt`, `correction`, `resource`, `review`, `sitting` and `workspace` children), and explicitly shared leaf packages such as `app/exam/safemarkdown` | parent `app`, transports, platform, concrete adapters |
+| `app/exam` | `model`, bounded `store` contracts, standard library, consumer-owned ports, `app/apperror`, `app/invocation`, `app/idempotency`, `app/access` for the `access.Mutation` an audit attempt begins with, `app/realtime` for the Publisher and events of the seven use-case packages (`app/exam` and its `attempt`, `correction`, `resource`, `review`, `sitting` and `workspace` children), `app/mail` for the three children that prepare the mail they send (`sitting`, `attempt`, `review`), and explicitly shared leaf packages such as `app/exam/safemarkdown` | parent `app`, a sibling use-case package (`attempt` and `review` reach the Sitting service through a port), `app/mail` from `app/exam` itself or the other children, transports, platform, concrete adapters |
 | `app/exam/safemarkdown` | Standard library | model, store, parent `app`, transports, concrete adapters |
 | `app/exam/manageraccess` | `model`, bounded Store access projection, narrow membership port, standard library | parent `app` or `app/exam`, sibling use cases, transports, concrete adapters |
 | `app/mail` | `model`, bounded `store` mail records, `secretseal`, `localization`, the Exam Manager preparation contract, standard-library templating, and consumer-owned sending ports | parent `app`, transports, platform, SQL, configuration, concrete adapters |
@@ -171,9 +171,9 @@ product meaning and policy:
   The `app/mail` child module concentrates server-owned composition,
   the complete definition registry, semantic preparation operations,
   suppression, shared payload freezing/encryption, stable routing metadata,
-  closed typed rendering, and family-specific meaning. Parent use cases
-  consume narrow preparation ports using the child package's contracts
-  directly and persist the result through named aggregate transactions. Mail
+  closed typed rendering, and family-specific meaning. The area that sends a
+  mail prepares it with the child package's contracts and persists the result
+  through a named aggregate transaction. Mail
   is not sent synchronously inside a durable business transaction.
 - `secretseal` owns versioned AES-256-GCM envelopes, bounded key rings,
   authenticated purpose/owner binding, and safe cryptographic failures for

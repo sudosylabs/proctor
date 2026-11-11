@@ -21,17 +21,12 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// ManagerAuthorization reports a granted current Exam Manager decision:
-// Override is true when the decision rested on the explicit override Action
-// rather than the ordinary Manager relationship.
-type ManagerAuthorization struct {
-	Override bool
-}
-
+// Authorizer is the Submission authorization the Integrity review use cases
+// ask. SittingManagerAuthorizer satisfies it and tests substitute a fake.
 type Authorizer interface {
 	AuthorizeSubmissionView(context.Context, invocation.Invocation, model.SubmissionID) error
-	AuthorizeSubmissionReview(context.Context, invocation.Invocation, model.SubmissionID) (ManagerAuthorization, error)
-	AuthorizeSubmissionRelease(context.Context, invocation.Invocation, model.SubmissionID) (ManagerAuthorization, error)
+	AuthorizeSubmissionReview(context.Context, invocation.Invocation, model.SubmissionID) (access.ManagerAuthorization, error)
+	AuthorizeSubmissionRelease(context.Context, invocation.Invocation, model.SubmissionID) (access.ManagerAuthorization, error)
 }
 
 type Auditor interface {
@@ -53,6 +48,9 @@ type PreparedResultReleaseMail struct {
 	ExpectedRecipientRevision int64
 }
 
+// ResultReleaseMailPreparer prepares the notice that tells a candidate a
+// result is available. ResultReleaseMail satisfies it and tests substitute a
+// fake.
 type ResultReleaseMailPreparer interface {
 	PrepareResultRelease(context.Context, ResultReleaseMailPreparation) (*PreparedResultReleaseMail, error)
 }

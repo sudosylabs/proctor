@@ -350,12 +350,30 @@ var dependencyRules = []dependencyRule{
 		),
 	},
 	{
+		// The Sitting area prepares its own schedule mail, so it alone among
+		// the Exam Manager access consumers composes through app/mail.
+		name:           "exam Sitting application",
+		sources:        []pathPattern{exact(serverModule + "/app/exam/sitting")},
+		deniedStandard: standardInfrastructure,
+		project: only(
+			exact(serverModule+"/app/access"),
+			exact(serverModule+"/app/apperror"),
+			exact(serverModule+"/app/idempotency"),
+			exact(serverModule+"/app/invocation"),
+			exact(serverModule+"/app/exam/manageraccess"),
+			exact(serverModule+"/app/mail"),
+			exact(serverModule+"/app/realtime"),
+			exact(serverModule+"/model"),
+			exact(serverModule+"/store"),
+			exact(serverModule+"/app/exam/safemarkdown"),
+		),
+	},
+	{
 		name: "exam manager access consumers",
 		sources: []pathPattern{
 			exact(serverModule + "/app/exam"),
 			exact(serverModule + "/app/exam/correction"),
 			exact(serverModule + "/app/exam/resource"),
-			exact(serverModule + "/app/exam/sitting"),
 			exact(serverModule + "/app/exam/workspace"),
 		},
 		deniedStandard: standardInfrastructure,
@@ -372,6 +390,9 @@ var dependencyRules = []dependencyRule{
 		),
 	},
 	{
+		// The Attempt and Integrity review areas prepare the Submission
+		// receipt and the result-release notice, so they compose through
+		// app/mail.
 		name: "exam idempotency consumers",
 		sources: []pathPattern{
 			exact(serverModule + "/app/exam/attempt"),
@@ -383,6 +404,7 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/apperror"),
 			exact(serverModule+"/app/idempotency"),
 			exact(serverModule+"/app/invocation"),
+			exact(serverModule+"/app/mail"),
 			exact(serverModule+"/app/realtime"),
 			exact(serverModule+"/model"),
 			exact(serverModule+"/store"),

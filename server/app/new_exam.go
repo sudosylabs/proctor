@@ -8,7 +8,6 @@
 package app
 
 import (
-	"context"
 	"errors"
 	"time"
 
@@ -24,6 +23,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
 	"github.com/sudosylabs/proctor/server/app/mail"
 	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/secretseal"
 )
 
 // examServices are the Exam area's services, together with the Sitting mail
@@ -40,7 +40,7 @@ type examServices struct {
 	corrections            *correction.Service
 	starterWorkspaces      *workspace.Service
 	sittingMail            *mail.SittingComposer
-	sittingMailPreparation sittingScheduleMailPreparationAdapter
+	sittingMailPreparation sitting.ScheduleMail
 }
 
 // newExamServices builds the Exam area in dependency order: authoring and
@@ -65,10 +65,10 @@ func newExamServices(
 		return examServices{}, err
 	}
 
-	built.sittingMailPreparation = sittingScheduleMailPreparationAdapter{
-		preparer:  built.sittingMail,
-		revisions: deps.Store.ExamRevision(),
-		classes:   deps.Store.Class(),
+	built.sittingMailPreparation = sitting.ScheduleMail{
+		Composer:  built.sittingMail,
+		Revisions: deps.Store.ExamRevision(),
+		Classes:   deps.Store.Class(),
 	}
 	if built.sittings, err = newSittings(deps, shared, authorizer, built.sittingMailPreparation); err != nil {
 		return examServices{}, err
@@ -109,7 +109,7 @@ func newExamAuthoring(
 		Users:             deps.Store.User(),
 		Sittings:          deps.Store.ExamSitting(),
 		Mail:              shared.mail,
-		Authorizer:        examAuthorizationAdapter{authorization: authorizer},
+		Authorizer:        authorizer,
 		Auditor:           shared.audit.MutationAudit(),
 		Outcomes:          deps.Store.CommandOutcome(),
 		Publisher:         shared.realtime,
@@ -137,6 +137,24 @@ func newSittingMail(deps Dependencies) (*mail.SittingComposer, error) {
 	)
 }
 
+// newSittingMailPreparer builds the Sitting mail composer over an explicit
+// clock, so its tests freeze time.
+func newSittingMailPreparer(
+	renderer mail.SittingRenderer,
+	sender mail.Sender,
+	sealer *secretseal.Sealer,
+	now func() time.Time,
+	institution func() string,
+) (*mail.SittingComposer, error) {
+	return mail.NewSittingComposer(mail.SittingComposerDependencies{
+		Renderer:    renderer,
+		Sender:      sender,
+		Sealer:      sealer,
+		Now:         now,
+		Institution: institution,
+	})
+}
+
 func newExamPublication(
 	deps Dependencies,
 	shared sharedMechanics,
@@ -146,7 +164,7 @@ func newExamPublication(
 		Persistence:       deps.Store.ExamRevision(),
 		Access:            deps.Store.ExamAuthoring(),
 		Memberships:       deps.Store.AcademicUnitMember(),
-		Authorizer:        examAuthorizationAdapter{authorization: authorizer},
+		Authorizer:        authorizer,
 		Auditor:           shared.audit.MutationAudit(),
 		Publisher:         shared.realtime,
 		Now:               time.Now,
@@ -160,7 +178,7 @@ func newSittings(
 	deps Dependencies,
 	shared sharedMechanics,
 	authorizer *access.Authorizer,
-	scheduleMail sittingScheduleMailPreparationAdapter,
+	scheduleMail sitting.ScheduleMail,
 ) (*sitting.Service, error) {
 	return sitting.New(sitting.Dependencies{
 		Persistence:   deps.Store.ExamSitting(),
@@ -168,7 +186,7 @@ func newSittings(
 		Memberships:   deps.Store.AcademicUnitMember(),
 		Authorizer:    authorizer,
 		Auditor:       shared.audit.MutationAudit(),
-		SystemAuditor: examSittingSystemAuditAdapter{audit: shared.audit},
+		SystemAuditor: shared.audit.SystemAudit(),
 		Publisher:     shared.realtime,
 		Jobs:          jobhandler.NewExamSittingLifecycleJobFactory(time.Now, model.NewJobID),
 		Mail:          scheduleMail,
@@ -184,24 +202,24 @@ func newAttempts(
 	sittings *sitting.Service,
 	desktopBuilds *identity.Service,
 ) (*attempt.Service, error) {
-	submissionMail := examSubmissionMailPreparationAdapter{
-		preparer:  shared.mail,
-		users:     deps.Store.User(),
-		sittings:  deps.Store.ExamSitting(),
-		revisions: deps.Store.ExamRevision(),
+	submissionMail := attempt.SubmissionReceiptMail{
+		Composer:  shared.mail,
+		Users:     deps.Store.User(),
+		Sittings:  deps.Store.ExamSitting(),
+		Revisions: deps.Store.ExamRevision(),
 	}
 	return attempt.New(attempt.Dependencies{
 		Persistence: deps.Store.ExamAttempt(),
 		Workspace:   deps.Store.ExamAttemptWorkspace(),
 		Submissions: deps.Store.ExamSubmission(),
 		Sittings:    deps.Store.ExamSitting(),
-		Managers: examAttemptManagerAuthorizationAdapter{
-			sittings:    sittings,
-			submissions: deps.Store.ExamSubmission(),
-			audit:       shared.audit,
+		Managers: attempt.SittingManagerAuthorizer{
+			Sittings:    sittings,
+			Submissions: deps.Store.ExamSubmission(),
+			Audit:       shared.audit,
 		},
 		Auditor:             shared.audit.MutationAudit(),
-		SystemAuditor:       examAttemptSystemAuditAdapter{audit: shared.audit},
+		SystemAuditor:       shared.audit.SystemAudit(),
 		Publisher:           shared.realtime,
 		Content:             deps.FileContent,
 		Mail:                submissionMail,
@@ -226,18 +244,18 @@ func newAttempts(
 }
 
 func newReviews(deps Dependencies, shared sharedMechanics, sittings *sitting.Service) (*review.Service, error) {
-	resultReleaseMail := examResultReleaseMailPreparationAdapter{
-		preparer:  shared.mail,
-		users:     deps.Store.User(),
-		sittings:  deps.Store.ExamSitting(),
-		revisions: deps.Store.ExamRevision(),
+	resultReleaseMail := review.ResultReleaseMail{
+		Composer:  shared.mail,
+		Users:     deps.Store.User(),
+		Sittings:  deps.Store.ExamSitting(),
+		Revisions: deps.Store.ExamRevision(),
 	}
 	return review.New(review.Dependencies{
 		Persistence: deps.Store.ExamIntegrityReview(),
-		Authorizer: examIntegrityReviewAuthorizationAdapter{
-			reviews:  deps.Store.ExamIntegrityReview(),
-			sittings: sittings,
-			audit:    shared.audit,
+		Authorizer: review.SittingManagerAuthorizer{
+			Reviews:  deps.Store.ExamIntegrityReview(),
+			Sittings: sittings,
+			Audit:    shared.audit,
 		},
 		Auditor:       shared.audit.MutationAudit(),
 		Publisher:     shared.realtime,
@@ -333,40 +351,4 @@ func newExamExports(deps Dependencies, shared sharedMechanics, authorizer *acces
 		NewID:       model.NewExamExportID,
 		NewJobID:    model.NewJobID,
 	})
-}
-
-type examAttemptSystemAuditAdapter struct{ audit *access.Auditor }
-
-func (a examAttemptSystemAuditAdapter) Begin(
-	ctx context.Context,
-	action model.Action,
-	target model.Resource,
-	scopeType model.RoleScopeType,
-	scopeID,
-	operation string,
-	value map[string]any,
-) (model.AuditEventID, error) {
-	auditValue := make(map[string]any, len(value))
-	for key, item := range value {
-		auditValue[key] = item
-	}
-
-	event, err := a.audit.BeginSystemCriticalActionAtScope(
-		ctx,
-		action,
-		target,
-		scopeType,
-		scopeID,
-		map[string]any{"operation": operation, "value": auditValue},
-	)
-	if err != nil {
-		return "", err
-	}
-
-	return event.ID, nil
-}
-
-func (a examAttemptSystemAuditAdapter) Fail(ctx context.Context, id model.AuditEventID, code string) error {
-	_, err := a.audit.CompleteCriticalAction(ctx, id, model.AuditStatusFail, code, nil)
-	return err
 }

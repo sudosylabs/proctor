@@ -395,13 +395,13 @@ func TestApplicationJobDefinitionsIncludeSittingLifecycleAndDailyRecovery(t *tes
 	for _, task := range definitions.periodicTasks {
 		periodicByName[task.Name] = task
 	}
-	periodic, exists := periodicByName[examAttemptExpiryPeriodicTaskName]
+	periodic, exists := periodicByName[jobhandler.ExamAttemptExpiryTaskName]
 	require.True(t, exists, "Attempt expiry periodic task is absent")
-	require.Equal(t, examAttemptExpiryPeriodicTaskName, periodic.Name)
-	require.Equal(t, examAttemptExpiryScanInterval, periodic.Interval)
-	runner, ok := periodic.Runner.(examAttemptExpiryPeriodicRunner)
+	require.Equal(t, jobhandler.ExamAttemptExpiryTaskName, periodic.Name)
+	require.Equal(t, jobhandler.ExamAttemptExpiryScanInterval, periodic.Interval)
+	runner, ok := periodic.Runner.(jobhandler.ExamAttemptExpiryRunner)
 	require.True(t, ok)
-	require.NotNil(t, runner.attempts)
+	require.NotNil(t, runner.Attempts)
 	// The identity area defines its maintenance passes; the application graph
 	// runs each one unchanged.
 	for _, maintenance := range identity.MaintenanceTasks(catalog) {

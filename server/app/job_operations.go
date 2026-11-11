@@ -69,6 +69,10 @@ type JobOperations struct {
 	deps jobOperationsServiceDependencies
 }
 
+// jobOperationsAuthorization authorizes a Job operator Action on the singleton
+// Institution. It is not access.Authorizer.AuthorizeInstitution because an
+// Institution that cannot be read is presented with the Job operator codes
+// here.
 type jobOperationsAuthorization struct {
 	authorization *access.Authorizer
 	institutions  store.InstitutionStore

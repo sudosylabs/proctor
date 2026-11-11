@@ -319,6 +319,21 @@ func (s *Authorizer) AuthorizeWithScope(
 	return AuthorizationScope{ScopeType: scopeType, ScopeID: scopeID}, nil
 }
 
+// ManagerAuthorization reports a granted current Exam Manager decision:
+// Override is true when the decision rested on the explicit override Action
+// rather than the ordinary Manager relationship. The Sitting area decides it;
+// the Attempt and Integrity review areas consume it, so it is declared here,
+// below all three.
+type ManagerAuthorization struct {
+	Override bool
+}
+
+// BrowserActivityAuthorization reports the Academic Unit of the Exam whose
+// browser activity the caller may read.
+type BrowserActivityAuthorization struct {
+	AcademicUnitID model.AcademicUnitID
+}
+
 // InstitutionResource returns the installation's singleton Institution as an
 // authorization Resource.
 func (s *Authorizer) InstitutionResource(ctx context.Context) (model.Resource, error) {
@@ -708,9 +723,4 @@ func (s *Authorizer) RecordAuthorizationDecision(
 // resolver's Store, returning the Store error untranslated.
 func (s *Authorizer) Institution(ctx context.Context) (*model.Institution, error) {
 	return s.deps.Resolver.deps.Institutions.GetSingleton(ctx)
-}
-
-// Now is the Authorizer's decision clock.
-func (s *Authorizer) Now() time.Time {
-	return s.now()
 }

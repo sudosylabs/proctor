@@ -1501,18 +1501,18 @@ func (f *managerFake) AuthorizeSittingView(context.Context, invocation.Invocatio
 	f.f.order = append(f.f.order, "manager.authorize")
 	return f.f.managerErr
 }
-func (f *managerFake) AuthorizeSittingManage(context.Context, invocation.Invocation, model.ExamSittingID) (ManagerAuthorization, error) {
+func (f *managerFake) AuthorizeSittingManage(context.Context, invocation.Invocation, model.ExamSittingID) (access.ManagerAuthorization, error) {
 	f.f.order = append(f.f.order, "manager.manage")
-	return ManagerAuthorization{Override: f.f.managerOverride}, f.f.managerErr
+	return access.ManagerAuthorization{Override: f.f.managerOverride}, f.f.managerErr
 }
 func (f *managerFake) AuthorizeSubmissionView(_ context.Context, _ invocation.Invocation, submissionID model.SubmissionID) error {
 	f.f.order = append(f.f.order, "submission.authorize")
 	f.f.submissionAuthorizationID = submissionID
 	return nil
 }
-func (f *managerFake) AuthorizeBrowserActivityView(context.Context, invocation.Invocation, model.ExamSittingID) (BrowserActivityAuthorization, error) {
+func (f *managerFake) AuthorizeBrowserActivityView(context.Context, invocation.Invocation, model.ExamSittingID) (access.BrowserActivityAuthorization, error) {
 	f.f.order = append(f.f.order, "browser.authorize")
-	return BrowserActivityAuthorization{AcademicUnitID: model.NewAcademicUnitID()}, f.f.managerErr
+	return access.BrowserActivityAuthorization{AcademicUnitID: model.NewAcademicUnitID()}, f.f.managerErr
 }
 
 type auditFake struct {

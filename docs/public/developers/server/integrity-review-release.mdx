@@ -24,9 +24,12 @@ authorization, audit, safe Markdown, and realtime ports. It does not own
 collection, Submission sealing or content, HTTP, SQL, grading, or academic
 outcomes.
 
-The parent application embeds the Review service, so its exported use cases
-are the public application surface; `server/app/exam_review.go` names the
-public types and composes Submission authorization. HTTP DTOs and
+`app.App` names the Review service in its `Reviews` field, so its exported use
+cases are the public application surface.
+`server/app/exam/review/manager_authorization.go` holds Submission
+authorization: it resolves the canonical Submission, refuses the candidate who
+made it, and then asks the Sitting service for the current Exam Manager
+decision. HTTP DTOs and
 route declarations live in `server/httpapi/exam_review.go`. Authored schemas
 live in `server/openapi/fragments/integrity-review` and the candidate result
 fragment under `submissions`.

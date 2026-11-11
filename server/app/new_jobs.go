@@ -265,21 +265,9 @@ func buildApplicationJobDefinitions(
 		jobhandler.NewRetentionPurgeRecurrence(jobs, now),
 		jobhandler.NewRetentionNoticeRecurrence(jobs, now),
 	}
-	periodicTasks := []job.PeriodicTask{
-		{
-			Name:     examAttemptExpiryPeriodicTaskName,
-			Interval: examAttemptExpiryScanInterval,
-			Runner:   examAttemptExpiryPeriodicRunner{attempts: exams.attempts},
-		},
-	}
+	periodicTasks := []job.PeriodicTask{jobhandler.NewExamAttemptExpiryTask(exams.attempts)}
 	periodicTasks = append(periodicTasks, identity.MaintenanceTasks(deps.Store)...)
-	periodicTasks = append(periodicTasks, []job.PeriodicTask{
-		{
-			Name:     "exam-sitting-mail-reconciliation",
-			Interval: sittingMailReconciliationInterval,
-			Runner:   sittingMailReconciliationPeriodicRunner{sittings: deps.Store.ExamSitting(), mail: exams.sittingMailPreparation},
-		},
-	}...)
+	periodicTasks = append(periodicTasks, jobhandler.NewSittingMailReconciliationTask(deps.Store.ExamSitting(), exams.sittingMailPreparation))
 	if deps.Store.Mail() != nil && deps.MailDeliverySender != nil {
 		periodicTasks = append(periodicTasks, job.PeriodicTask{
 			Name:     "mail-maintenance-monitor",

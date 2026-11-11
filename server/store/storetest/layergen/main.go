@@ -5,6 +5,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
+// Command layergen writes forwarding_gen.go for the three Store layers
+// (store/timerlayer, store/retrylayer and store/localcachelayer). It reads the
+// contracts in package store. For the timing layer it emits a timed method
+// for every contract method; for the retry and cache layers it emits wrappers
+// that embed each contract, so those layers hand-write only the methods they
+// retry or cache. Each layer's doc.go carries the go:generate line, and
+// make -C server generate runs them all.
 package main
 
 import (

@@ -196,6 +196,10 @@ object and place it in `Authentication.External.Providers`.
 | `Authentication.External.Providers[].CAS.Timeout`<br />Default: no CAS providers | Deadline for a CAS validation request. Must be between `1s` and `30s`. |
 | `Authentication.External.Providers[].CAS.MaxResponseBytes`<br />Default: no CAS providers | Maximum CAS response body. Must be between `1024` and `2097152` bytes. |
 
+`Claims.Subject: "user"` selects the `<cas:user>` value; another released
+attribute may be selected explicitly. Proctor never assumes that `<cas:user>`
+is an ePPN and never uses email as the external identity key.
+
 CAS does not standardize email-verification semantics. Leave `TrustEmail` false
 unless the provider contract guarantees ownership, and map an explicit
 boolean-like released attribute when available.
@@ -215,6 +219,15 @@ object and place it in `Authentication.External.Providers`.
 | `Authentication.External.Providers[].OIDC.UseUserInfo`<br />Default: `false` per provider | Fetches the OIDC UserInfo endpoint after token verification to supplement profile claims. Security claims remain constrained; the returned subject must match the ID token. |
 | `Authentication.External.Providers[].OIDC.Timeout`<br />Default: no OIDC providers | Deadline for OIDC discovery, token, key, and UserInfo HTTP work. Must be between `1s` and `30s`. |
 | `Authentication.External.Providers[].OIDC.MaxResponseBytes`<br />Default: no OIDC providers | Maximum accepted external HTTP response body. Must be between `1024` and `2097152` bytes. |
+
+OIDC uses issuer discovery, the Authorization Code flow, S256 PKCE, and a
+transaction-bound nonce. Proctor verifies the ID token's signature, issuer,
+audience, expiry, nonce, and `at_hash` when present. UserInfo cannot replace
+the ID token's authentication-time or MFA claims. The callback URL to register
+is `https://<proctor-origin>/api/v1/auth/providers/<provider-id>/callback`.
+An Apereo CAS installation must enable its OIDC provider support and register
+this callback as an OIDC relying party; installing Apereo CAS alone does not
+make OIDC endpoints available.
 
 Register the exact Proctor callback URL at the provider and prefer the narrowest
 scope set that releases the required claims. Provider discovery is deliberate:

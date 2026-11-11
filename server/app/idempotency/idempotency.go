@@ -5,12 +5,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package idempotency prepares the durable identity of retryable application
-// commands for every application module, parent or child, and reports its
-// failures as application errors. Command owners remain responsible for
-// requiring keys and defining their operation-specific semantic documents.
-// This leaf may depend only on the standard library, the inward model and
-// store contracts, and the app/apperror and app/invocation leaves.
+// Package idempotency makes a command safe to retry. Require and Prepare turn
+// the caller, the operation name, the client's Idempotency-Key and the
+// command's meaning into a store.CommandIdempotency, which the use case passes
+// to its Store operation; the Store saves the outcome with the change and
+// returns it again when the same command is repeated.
+//
+// Require is for commands that must carry a key, Prepare for commands where
+// the key is optional. Each use case chooses which one applies and what counts
+// as the command's meaning.
 package idempotency
 
 import (

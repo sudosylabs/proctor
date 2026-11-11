@@ -5,12 +5,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package invocation owns the one immutable call context that every
-// application module, parent or child, receives for an actor-sensitive use
-// case, plus the System identity of actorless work. It sits below
-// the parent app package so Exam child modules share the same type without
-// importing their parent. It owns no authorization, audit, or transport
-// policy and may depend only on model and the standard library.
+// Package invocation is the first argument after ctx of every use case: who is
+// calling and from where. Invocation carries the authenticated Principal and
+// the request metadata recorded in audit; a transport builds it and nothing
+// changes it afterwards. System names work that has no user behind it, either
+// one Job execution (Job) or a named runtime task such as a periodic scan
+// (Task).
+//
+// It is a separate package so that app and every area package can share the
+// type. Authorization is decided in app/access, not here.
 package invocation
 
 import "github.com/sudosylabs/proctor/server/model"

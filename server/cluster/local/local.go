@@ -5,9 +5,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package local implements the single-node degenerate cluster transport.
-// Peer broadcasts succeed without local delivery so multi-node fan-out stays
-// loop-free when only one process is present.
+// Package local is the cluster transport for an installation with one node.
+// There are no peers, so Broadcast checks the message and delivers nothing;
+// only SendToNode addressed to this node runs a registered handler.
 package local
 
 import (

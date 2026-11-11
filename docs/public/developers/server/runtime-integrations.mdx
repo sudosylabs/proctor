@@ -144,6 +144,22 @@ prove placeholder signatures, fallback behavior, and catalog completeness.
 Never store translated text in durable machine-state fields when the code or
 meaning is the real contract.
 
+`server/i18n` and `server/templates` hold data and build tooling only.
+Translation behavior lives in `server/localization`, and mail rendering beside
+mail composition in `server/app/mail`. Each server package registers every
+message it owns, including dynamic families that scanning source literals
+cannot find. The browser owns the delegated `webapp.*` namespace and checks
+its own coverage while generating its typed catalog.
+
+```sh
+make -C server i18n-check              # server coverage and placeholder contracts
+npm --prefix webapp run i18n:check     # browser ownership, from the repository root
+```
+
+From `server`, `go run ./cmd/ptool i18n` also offers `list`, `missing`, and
+`format`. Formatting is an explicit write; the normal check never rewrites a
+catalog.
+
 ## Instrument at Boundaries
 
 Request-driven application services return failures rather than logging them.

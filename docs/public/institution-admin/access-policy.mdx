@@ -67,6 +67,51 @@ the policy replacement and revocation of Sessions authenticated through newly
 disabled methods commit atomically. Sessions using retained methods are not
 touched. This is a one-shot transition decision, not a standing policy field.
 
+## Require Two-step Verification for Role Holders
+
+The policy setting `role_holder_mfa_required` requires a second factor from
+every role holder: any User with a current Role Binding at any scope, system
+administrators included.
+
+- A role holder without a second factor who signs in on the web receives a
+  Session marked `mfa_enrollment_required`. Until activation or a challenge
+  makes it multi-factor, that Session reaches only the MFA status, setup,
+  activation, and challenge operations, reauthentication, and logout.
+- A CLI or Desktop sign-in, a Desktop code exchange, or a refresh of a
+  single-factor Session of such a User fails with
+  `authentication.mfa.enrollment_required`. A Web refresh restricts the
+  Session instead, so becoming a role holder mid-Session takes effect at the
+  next refresh.
+- While the rule applies, a role holder cannot disable MFA; the request fails
+  with `mfa.required_by_policy`.
+
+Turning the rule on together with `revoke_existing_sessions` also revokes role
+holders' Sessions that have not proved a second factor. Preflight refuses the
+rule with the `mfa_unavailable` blocker while the operator has MFA disabled in
+deployment configuration. If MFA is disabled after the rule is on, the rule
+pauses rather than locking people out: nothing is restricted or refused, the
+node logs one warning, and the policy view reports
+`role_holder_mfa_enforced: false`.
+
+## Shorten Session Lengths
+
+The operator's configured idle and absolute Session lifetimes are the default
+Session lengths and also their ceiling. The policy may shorten either with
+`session_idle_minutes` and `session_absolute_minutes`; `null` keeps the
+default. The policy view reports each default and the longest length the
+policy may set.
+
+An idle length must outlast the configured access-credential lifetime and
+activity-update interval by at least a minute and can never exceed the
+effective absolute length. An absolute length must outlast the configured
+recent-authentication window and the idle minimum.
+
+New Sessions, activity, Web and Desktop refresh, and the Desktop code exchange
+use the shortened lengths. Access, refresh, and activity-interval lifetimes
+stay in deployment configuration. Shortening a length pulls in the deadlines
+of live Sessions and their credentials within the same replacement;
+lengthening one never extends a running Session.
+
 ## Govern Desktop Admission
 
 Access Policy enables or disables the Desktop Authorization capability. The

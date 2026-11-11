@@ -30,12 +30,15 @@
 //   - Review: a manager's decisions and remarks on one Submission's
 //     Integrity record; it holds no grade.
 //
-// Child packages own the rest: sitting, attempt, review, resource, workspace
-// (the Starter Workspace), correction, manageraccess and safemarkdown. HTTP,
-// SQL, file bytes, Job execution and grading live elsewhere. Each package
-// builds the realtime events of its own committed changes in its effects.go
-// and publishes them through a realtime.Publisher. The package may import
-// only model, store, the app/access, app/apperror, app/invocation,
-// app/idempotency and app/realtime packages, and app/exam/manageraccess; it
-// never imports app itself, a transport, or a concrete adapter.
+// Child packages hold the rest: sitting (scheduling and lifecycle), attempt
+// (the candidate side, from joining to Submission), review (Integrity Review
+// and result release), resource (Exam Resources), workspace (the Starter
+// Workspace), correction (changes to a running Sitting), manageraccess (which
+// action an Exam Manager needs) and safemarkdown. Nothing in the server
+// grades a Submission.
+//
+// Each package builds the realtime events of its own committed changes in
+// its effects.go and publishes them through a realtime.Publisher. Start with
+// authoring.go, publication.go, records.go or export.go for the service you
+// are changing. The package never imports app or a transport.
 package exam

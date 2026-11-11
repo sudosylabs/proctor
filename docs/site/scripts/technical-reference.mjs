@@ -175,8 +175,12 @@ if (check) {
     '"rotate-password"',
     '"json"',
   ];
+  // gofmt aligns struct fields, so the space after a key varies with its
+  // neighbours. Compare with runs of spaces and tabs collapsed.
+  const collapse = (text) => text.replace(/[ \t]+/g, ' ');
+  const collapsedSource = collapse(cliSource);
   for (const token of requiredSourceContracts) {
-    if (!cliSource.includes(token)) {
+    if (!collapsedSource.includes(collapse(token))) {
       throw new Error(`command-line source no longer declares ${token}`);
     }
   }

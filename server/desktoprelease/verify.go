@@ -5,10 +5,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package desktoprelease verifies exact packaged Desktop agreement artifacts.
-// The composition root supplies admitted release keys and immutable expectations;
-// no request, Institution preference or client upload can extend that trust set.
-// It owns signature/byte verification, not eligibility, leases or native effects.
+// Package desktoprelease checks that a packaged Proctor Desktop release is one
+// this server build trusts. Verify compares the release's artifacts with the
+// pinned Expectation byte for byte, checks the Ed25519 signature on its
+// capability matrix against the admitted keys, and returns the verified build.
+//
+// The keys and expectations are supplied when the node is built. No request,
+// Institution setting or client upload can add to them. README.md describes
+// the artifacts.
 package desktoprelease
 
 import (

@@ -5,6 +5,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
+// Package cas implements externalauth.Provider for a CAS server: it redirects
+// the browser to the CAS login and validates the returned service ticket.
 package cas
 
 import (

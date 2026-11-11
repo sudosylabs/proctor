@@ -5,6 +5,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
+// Command proctor is the server binary: "proctor serve" runs a node, and the
+// other subcommands validate configuration, migrate the database and inspect
+// or recover an installation. The command tree is in the commands package.
 package main
 
 import (

@@ -48,6 +48,7 @@ const sidebars: SidebarsConfig = {
         {type: 'doc', id: 'operator/topology-and-dependencies', label: 'Topology and Dependencies'},
         {type: 'doc', id: 'operator/tls-and-proxy', label: 'TLS and Proxy'},
         {type: 'doc', id: 'operator/health-and-observability', label: 'Health and Observability'},
+        {type: 'doc', id: 'operator/mail-delivery', label: 'Mail Delivery'},
         {type: 'doc', id: 'operator/maintenance-and-recovery', label: 'Maintenance and Recovery'},
         {type: 'doc', id: 'operator/backup-restore-and-upgrade', label: 'Backup, Restore, and Upgrade'},
         {type: 'doc', id: 'operator/pre-production-readiness', label: 'Pre-production Readiness'},

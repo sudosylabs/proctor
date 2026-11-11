@@ -14,28 +14,20 @@
 // delivery while using transport-neutral event intents and composition-owned
 // wire adapters. The server NOTICE records the complete provenance.
 
-// Package realtime owns transport-neutral realtime events and connection-close
-// reasons, local-first delivery, the stable peer-propagation names and codecs,
-// loop prevention, session revocation and authentication or authorization
-// invalidation propagation, bounded manager and candidate examination facts,
-// exact Attempt-Connection unbinding, required security-collaborator
-// construction, and thread-safe, attach-once sink and peer-fanout wiring.
+// Package realtime tells connected clients that something changed. Event is
+// one such notice (its name, who may receive it and a small payload), event.go
+// has one constructor per event, and Service delivers an event to this node's
+// sockets first and then to the other nodes.
 //
-// Publisher is the one port through which an application area delivers the
-// effects of a committed change: the area builds its events beside the use
-// case that causes them and calls a Publisher, which the parent application's
-// realtime service implements over Service. The realtimetest child holds the
-// recording Publisher that area tests assert. sitting_invalidation.go holds
-// the two Sitting invalidations that several Exam areas owe, as functions
-// over a Publisher.
+// An application area does not call Service directly. It holds a Publisher,
+// builds its events in its own effects.go, and publishes only after its Store
+// operation has committed. Delivery is best effort: nothing here queues or
+// retries, and a failed publication never undoes the committed change.
 //
-// Construction is inert. The package starts no goroutines, owns no queue or
-// retry loop, and has no infrastructure lifecycle. Callers remain responsible
-// for publishing only after durable commit and for translating typed failures
-// into public application errors. WebSocket authorization, Principal
-// validation, cluster envelopes, and transport lifecycle remain outside this
-// package.
-//
-// The package depends inward only on model and consumer-owned ports. It never
-// imports its parent app package or concrete WebSocket and cluster adapters.
+// The package knows nothing about WebSocket frames or the cluster wire format.
+// The websocket Hub is attached as the Sink and the cluster adapter as the
+// ClusterFanout, once each, while the node is built. Start with publisher.go,
+// then delivery.go. The realtimetest child holds the recording Publisher that
+// area tests use, and sitting_invalidation.go the two Sitting notices several
+// Exam packages share.
 package realtime

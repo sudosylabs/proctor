@@ -1,0 +1,110 @@
+---
+title: Deliver Transactional Mail
+description: Connect Proctor to a production SMTP relay, verify deliverability, handle a relay outage, and rotate the mail payload keys without losing queued mail.
+audience: operator
+maturity: preview
+---
+
+# Deliver Transactional Mail
+
+Proctor composes each message, stores it durably with the change that caused
+it, and submits it to your SMTP relay from a background Job. It does not sign
+mail and does not know whether a message reached an inbox. The relay and the
+sender domain are your responsibility.
+
+## Configure a Production Relay
+
+The [mail configuration reference](../reference/configuration/mail-and-files.mdx)
+documents every setting, and the same settings accept `PROCTOR_MAIL_`
+environment overrides. A production installation:
+
+- sets `Mail.Enabled` and uses the `smtp` backend;
+- sets `Mail.SMTP.Security` to `starttls` or `tls`, and configures SMTP
+  authentication only over TLS;
+- sets a stable sender address and `Mail.SMTP.MessageIDDomain`; and
+- supplies an independent `Mail.SecretSealing.EncryptionKey`: standard base64
+  for exactly 32 bytes.
+
+Cleartext SMTP without authentication is for a loopback capture server during
+development, not for a production relay.
+
+When mail is enabled, startup tests the SMTP connection and logs the result. A
+relay that is down at that moment does not stop the node from becoming ready;
+queued mail is retried when the relay returns.
+
+## Make the Sender Domain Deliverable
+
+The operator of the sender domain must authorize the selected relay through
+SPF, arrange DKIM signing at that relay, and publish an aligned DMARC policy.
+Proctor composes MIME and submits it to SMTP. It is not a DKIM signer, and it
+does not treat SMTP acceptance as inbox delivery.
+
+After configuration:
+
+1. Send the controlled test message with `POST /api/v1/mail/test` (no request
+   body). It goes only to the calling operator's own verified address.
+2. Confirm its stable `Message-ID` and the `accepted` state in
+   `GET /api/v1/mail/deliveries` or
+   `GET /api/v1/mail/deliveries/{mail_delivery_id}`. `accepted` means only
+   that the relay accepted the message data.
+3. Verify receipt and the SPF, DKIM, and DMARC results at an external mailbox.
+
+Reading deliveries and `GET /api/v1/mail/metrics` requires the `mail.view`
+action. The views expose bounded template, state, public-outcome, attempt,
+latency, queue, and mail-health data only. Canceling queued delivery work or
+retrying a failed, unexpired, still-relevant delivery uses the nested `/cancel`
+and `/retry` operations and requires `mail.manage` with a recent interactive
+Session; a Personal Access Token cannot perform them.
+
+Monitor the mail metrics together with the relay's own delivery diagnostics.
+Proctor logs deliberately contain no recipient, body, ciphertext, or SMTP
+dialogue.
+
+## Ride Out a Relay Outage
+
+During a transient relay outage, keep mail enabled so bounded retries and the
+mail-health view follow the normal recovery path. Setting `Mail.Enabled` to
+`false` is an explicit, terminal suppression: outstanding work converges to
+suppressed and is not resurrected when mail is enabled again.
+
+## Rotate the Mail Payload Keys
+
+Stored mail payloads that must be recoverable are encrypted with the
+`Mail.SecretSealing` key ring. Up to eight previous keys may remain in
+`Mail.SecretSealing.DecryptionKeys` while stored payloads are re-encrypted.
+The ring may be absent only while mail is disabled; enabling mail requires a
+primary key, and a partially or unsafely configured ring is rejected at
+startup. MFA, Memberlist, and mail keys are never interchangeable.
+
+Rotation is staged and each configuration change needs a restart:
+
+1. Add the new key to `DecryptionKeys` on every node, so every node can read
+   it.
+2. Restart every node with the new key promoted to `EncryptionKey` and the old
+   primary kept in `DecryptionKeys`.
+3. From a strong, recently authenticated Session, start
+   `POST /api/v1/mail/rekey` with the old key's ID as `retiring_key_id`. It
+   returns a durable Job.
+4. Follow `GET /api/v1/mail/rekey/{job_id}`. The Job must succeed and its
+   recorded proof must show zero retiring and zero non-primary references.
+5. Only then remove the old key from configuration and restart the nodes.
+
+Starting a node with the wrong promoted primary, or without a key that stored
+payloads still reference, fails closed. The operation and its diagnostics
+contain key IDs and counts only, never key material. Never remove a fallback
+key before the zero-reference proof succeeds.
+
+During a rolling deployment, a node that still has the old primary hands the
+rekey Job back with bounded backoff and cannot reclaim it under the same node
+identity. That does not consume the Job's failure budget, and a node with the
+new primary completes the work.
+
+For a later rotation, the previous successful zero-reference proof lets a node
+restart with the next primary while keeping the currently fenced key as a
+fallback. Until the next rekey request moves the fence, that node can deliver
+existing mail but cannot store new encrypted payloads; nodes still using the
+fenced primary can. A failed or missing proof does not permit this staged
+promotion.
+
+Back up the key ring with the database it protects, as described in
+[Back Up, Restore, Upgrade, and Roll Back](./backup-restore-and-upgrade.mdx).

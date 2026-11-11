@@ -42,7 +42,29 @@ selection. Static TLS may still protect the proxy-to-node hop.
 Set mode `static` with a certificate and matching private key readable only by
 the service account. The runtime requires TLS 1.2 or newer. Optional HTTP
 forwarding binds a distinct listener and redirects to the configured public
-authority while preserving path and query.
+authority while preserving path and query: a non-challenge HTTP request
+receives `308 Permanent Redirect`.
+
+Static TLS with port 80 forwarding looks like this in the `Server` section:
+
+```json
+{
+  "ListenAddress": ":443",
+  "PublicURL": "https://proctor.example.edu",
+  "TLS": {
+    "Mode": "static",
+    "CertificateFile": "/etc/proctor/tls/certificate.pem",
+    "PrivateKeyFile": "/etc/proctor/tls/private-key.pem",
+    "LetsEncrypt": {
+      "Email": "",
+      "CacheDirectory": "/var/lib/proctor/acme",
+      "AcceptTermsOfService": false
+    },
+    "ForwardHTTPToHTTPS": true,
+    "HTTPListenAddress": ":80"
+  }
+}
+```
 
 Rotate files as one coherent identity; no restart is needed. A serving node
 checks both files for replacement at most every 30 seconds during TLS
@@ -62,8 +84,32 @@ Set `LetsEncrypt.AcceptTermsOfService` to `true` to record that you have read
 and accept the current Let's Encrypt Subscriber Agreement; the mode is rejected
 until you do.
 
-Let's Encrypt is rejected in Memberlist mode because its cache and issuance are
-node-local and uncoordinated.
+For automatic single-node certificates, change the `TLS` block to:
+
+```json
+{
+  "Mode": "lets_encrypt",
+  "CertificateFile": "",
+  "PrivateKeyFile": "",
+  "LetsEncrypt": {
+    "Email": "operator@example.edu",
+    "CacheDirectory": "/var/lib/proctor/acme",
+    "AcceptTermsOfService": true
+  },
+  "ForwardHTTPToHTTPS": true,
+  "HTTPListenAddress": ":80"
+}
+```
+
+The account and certificate material stay in the node-local
+`LetsEncrypt.CacheDirectory`. Proctor creates that directory with mode `0700`,
+and startup rejects an existing cache directory that cannot be written or that
+exposes the private material to group or other users. Binding ports 80 and 443
+may need an operating-system capability or a supervisor that grants them.
+
+Let's Encrypt is rejected in Memberlist mode because its cache, issuance, and
+renewal are node-local and uncoordinated. Active-active deployments put the
+public certificate, ACME, and HTTP forwarding on the redundant load balancer.
 
 ### HTTP Strict Transport Security
 

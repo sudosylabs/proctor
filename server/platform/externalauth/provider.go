@@ -5,8 +5,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package externalauth defines the instance-scoped provider registry and the
-// protocol-neutral boundary used by Proctor's application layer.
+// Package externalauth is what the application sees of an external sign-in
+// provider. Provider is one configured provider: it starts a sign-in, completes
+// the callback and returns a normalized assertion about the person. Registry
+// holds the enabled providers and is rebuilt from configuration on reload.
+//
+// Finding or creating the User, audit and the Session stay in app/identity.
+// The protocols themselves are the child packages cas and oidc.
 package externalauth
 
 import (

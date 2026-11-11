@@ -5,7 +5,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package platform owns infrastructure shared by the Proctor application.
+// Package platform looks after the infrastructure one node shares: the
+// configuration store, logger, database, cache, cluster transport, mailer, file
+// store and external sign-in providers. The module root builds these and hands
+// them over with Accept. From then on Service starts the cluster transport and
+// tests the mail connection, answers the dependency check behind readiness,
+// reloads configuration, and closes each resource exactly once.
+//
+// Service is not a place for the application to look things up. No use case
+// receives it: the module root passes each one the narrow dependency it needs.
+// Start with service.go. infrastructure.go declares the Cache and Mailer
+// interfaces and adapts the packages/cache and packages/mail modules to them.
 package platform
 
 import (

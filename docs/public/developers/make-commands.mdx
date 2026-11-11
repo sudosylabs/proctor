@@ -258,11 +258,14 @@ cache module.
 | Complete hermetic server gate | `make -C server check` |
 | Dependency-direction and documentation architecture checks | `make -C server architecture` |
 | Server unit tests, race tests, vet, or build | `make -C server test`, `test-race`, `vet`, or `build` |
+| Rerun every server code generator (error mapping, OpenAPI artifact, typed IDs, Store layers) | `make -C server generate` |
 | Rebuild or verify the OpenAPI artifact | `make -C server openapi-build` or `openapi-check` |
+| Regenerate or verify the HTTP error mapping | `make -C server errors-generate` or `errors-check` |
+| Verify server translation catalogs | `make -C server i18n-check` |
 | Verify the OpenAPI artifact and route agreement | `make -C server openapi-agreement` |
 | Run all tagged server integration tests | `make -C server integration-all` |
 | Run one dependency-backed boundary | `make -C server integration-postgres`, `integration-redis`, `integration-s3`, `integration-providers`, or `integration-realtime` |
-| Generate and verify transactional-mail templates | `make -C server mail-templates-generate`, `mail-templates-check`, or `mail-templates-test` |
+| Install the template toolchain, then generate and verify transactional-mail templates | `make -C server mail-templates-install`, `mail-templates-generate`, `mail-templates-check`, or `mail-templates-test` |
 | Render synthetic transactional-mail previews | `make -C server mail-preview OUTPUT=/absolute/output/directory` |
 
 The server Makefile also contains narrow component and phase gates used by

@@ -38,7 +38,8 @@ Key changes require restart and a three-stage overlap:
 Skipping overlap partitions nodes that cannot decrypt each other. The fallback
 ring accepts at most eight distinct keys. This procedure rotates gossip
 encryption only; it does not rotate TLS, MFA, mail, or dependency credentials.
-MFA secret keys rotate as described below.
+MFA secret keys rotate as described below, and mail payload keys as described
+in [Deliver Transactional Mail](./mail-delivery.mdx#rotate-the-mail-payload-keys).
 
 ## Rotate MFA Secret Keys
 

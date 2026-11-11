@@ -5,33 +5,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-// Package config owns Proctor's operator-supplied deployment configuration and
-// its lifecycle.
+// Package config is the deployment configuration an operator supplies in
+// config.json and PROCTOR_ environment variables: listeners, database, cache,
+// cluster, mail, file store, logging and authentication settings. Policy an
+// institution changes while running, such as the Access Policy, is application
+// data in the database, not configuration.
 //
-// The package excludes durable application settings and business policy. It
-// depends only on the Go standard library. Open resolves the configuration
-// path (an explicit path, then PROCTOR_CONFIG, then config/config.json) and
-// loads it; the module-root composition code and the offline operator commands
-// call it, and composition projects validated values into runtime policies and
-// infrastructure adapters.
+// Open finds the file (an explicit path, then PROCTOR_CONFIG, then
+// config/config.json) and returns a Store. The Store keeps what the file says
+// separate from the effective configuration, which is the file plus environment
+// overrides. An override always wins and is never written back to the file. Get
+// returns a copy, and a load or change that fails validation leaves the running
+// configuration as it was and notifies no listener.
 //
-// A Store loads defaults, overlays a typed backing, and finally applies active
-// PROCTOR_ environment settings. It keeps the validated backing snapshot
-// separate from the effective snapshot observed by the runtime. Callers always
-// receive clones, so neither snapshot can be mutated outside the Store.
-//
-// Environment settings are operator-owned process inputs: they take precedence
-// in effective snapshots but are never written to the backing. Set protects the
-// fields overridden in the caller's prior snapshot before it validates and
-// persists the candidate, then reevaluates the current environment and validates
-// the next effective snapshot. A failed load, transformation, validation, or
-// save publishes neither snapshot and notifies no listener.
-//
-// Successful effective changes notify listeners after serialized Store work has
-// completed, allowing a listener to perform another configuration operation.
-// Store owns its backing lifecycle and Close is terminal.
-//
-// config.go declares the root Config, its defaults, cloning, redaction, and
-// the aggregate Validate. Each top-level section declares its types and
-// validation in the file named for it.
+// Start with config.go for the root Config, its defaults and Validate. Each
+// section has its own file (server.go, database.go, mail.go, ...), and
+// config.example.json shows every field.
 package config

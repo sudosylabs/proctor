@@ -5,6 +5,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
+// Package oidc implements externalauth.Provider for an OpenID Connect issuer,
+// using the authorization code flow with PKCE and a nonce.
 package oidc
 
 import (

@@ -16,6 +16,16 @@ Two kinds of rule do not belong here:
   or a helper is laid out) is a convention in the
   [server guide](../AGENTS.md) that review holds, not a test.
 
+Two tests look like shape rules but stay because each shape is a security
+property:
+
+- `TestAuthorizationHelpersShareOneShape`: an `Authorize…` helper takes the
+  Invocation and reports its decision as the error, so none decides for
+  nobody or fails open on a `(bool, error)` result checked only for its error.
+- `TestRecordedCallLogsAreAssertedWhole`: a fake's recorded call log is
+  compared whole, so a test notices an extra write, publication or audit
+  completion after a commit.
+
 Invoke
 [`$server-boundaries`](../../.agents/skills/server-boundaries/SKILL.md)
 before changing import policy and invoke
@@ -52,10 +62,8 @@ as a test; extend the linter configuration or leave the rule to review.
 | `TestTestsAssertThroughTestify` | review | Test style; `packages/mail` uses plain `testing` on purpose and the shared linter paths cannot tell the modules apart. |
 | `TestAssertionsAreNotHiddenInConditionals` | review | Test style; no `testifylint` checker expresses it. |
 | `TestTestHelpersAreNotAssertionAliases` | review | Test style; no linter expresses it. |
-| `TestRecordedCallLogsAreAssertedWhole` | review | Test style keyed on variable names (`events`, `order`, `calls`). |
 | `TestNamedCaseTablesRunAsSubtests` | review | Test style; no linter expresses it. |
 | `TestAdaptersDoNotWrapAdapters` | review | Shape; it recognized adapters by the form of their code. |
-| `TestAuthorizationHelpersShareOneShape` | review | Shape; the authorization boundary tests guard where decisions happen. |
 | `TestServicesTakeOneDependencies` | review | Shape of constructors. |
 | `TestStoreMutationsTakeOneInput` | review | Shape of Store method signatures. |
 | `TestStoreRevisionFencesNameTheirResource` | review | Shape of field names in Store inputs. |

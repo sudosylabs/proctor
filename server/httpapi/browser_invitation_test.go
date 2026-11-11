@@ -105,7 +105,7 @@ func TestBrowserInvitationSessionAcceptanceUsesAuthenticatedPrincipal(t *testing
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/browser/invitations/accept-session", strings.NewReader(`{"handle":"`+model.NewCredentialToken()+`"}`))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Authorization", "Bearer access")
-	request.AddCookie(&http.Cookie{Name: route.BrowserInvitationProofCookieName, Value: model.NewCredentialToken(), Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+	request.AddCookie(&http.Cookie{Name: route.BrowserInvitationProofCookieName, Value: model.NewCredentialToken()})
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusOK, response.Code, "accept session = %d command=%#v body=%s", response.Code, applicationFake.session, response.Body.String())

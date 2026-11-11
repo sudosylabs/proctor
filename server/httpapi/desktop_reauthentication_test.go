@@ -80,7 +80,7 @@ func TestDesktopReauthenticationHTTPScopesItsBindingAndReturnsRecency(t *testing
 	password = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/auth/desktop/reauthentications/authenticate/password",
 		strings.NewReader(`{"password":"synthetic-local-password"}`))
 	password.Header.Set("Content-Type", "application/json")
-	password.AddCookie(&http.Cookie{Name: route.BrowserDesktopReauthenticationCookieName, Value: "reauthentication-binding", HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
+	password.AddCookie(&http.Cookie{Name: route.BrowserDesktopReauthenticationCookieName, Value: "reauthentication-binding"})
 	response = httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, password)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())

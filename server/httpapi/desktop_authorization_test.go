@@ -121,7 +121,7 @@ func TestDesktopAuthorizationHTTPMapsPublicClientProtocolAndDisablesCaching(t *t
 			request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, test.path, strings.NewReader(test.body))
 			request.Header.Set("Content-Type", "application/json")
 			if strings.Contains(test.path, "/authorizations/") {
-				request.AddCookie(&http.Cookie{Name: route.BrowserDesktopAuthorizationCookieName, Value: "binding", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+				request.AddCookie(&http.Cookie{Name: route.BrowserDesktopAuthorizationCookieName, Value: "binding"})
 			}
 			if test.authorization != "" {
 				request.Header.Set("Authorization", test.authorization)

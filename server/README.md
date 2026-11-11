@@ -28,7 +28,7 @@ and run `go run ./server/cmd/proctor serve --config ./server/config/config.json`
 ```sh
 go test ./server/app/academic -run '^TestClassCreate' -count=1   # one test, while you work
 make -C server check          # architecture, error catalog, i18n, OpenAPI, tests, race, vet
-make -C server architecture   # only the import and convention tests (also checks Markdown links)
+make -C server architecture   # only the boundary, security and contract tests (also checks Markdown links)
 make -C server generate       # rerun every code generator; a clean tree stays unchanged
 ```
 
@@ -69,7 +69,7 @@ Top-level directories:
 | --- | --- |
 | *(module root)* | Builds and runs one node. `server.New` is the only place that picks the real database, cache, mail, file store and cluster adapters. Start with `doc.go`. |
 | `app/` | The use cases: what each person may do and what happens when they do it. See the next table. |
-| `architecture/` | Tests only. They fail when a package imports something it must not, when code breaks a convention from `AGENTS.md`, or when a Markdown link is broken. |
+| `architecture/` | Tests only. They protect package boundaries (who may import whom), security properties (where authorization and audit happen, what reaches the wire and the Store) and published contracts, and fail on a broken Markdown link. Style is left to the linter. |
 | `cluster/` | How nodes send each other messages. `local` is the one-node version, `memberlist` the multi-node one. Delivery is best effort. |
 | `cmd/` | The binaries: `proctor` (the server and its operator commands), `proctor-healthcheck` (container readiness probe), `ptool` (developer generators and checks), `mailpreview` (renders sample mail). |
 | `config/` | The `config.json` schema, its defaults, validation and `PROCTOR_` environment overrides. `config.example.json` shows every field. |
@@ -156,12 +156,21 @@ A typical change touches these places, in this order:
    `migrations/postgres/000001_baseline.up.sql`. The `store` package comment
    explains the naming.
 3. **Regenerate**: `make -C server generate`.
-4. **Use case**: a method on the area's `Service` in `app/<area>/<entity>.go`
-   that authorizes, audits and calls the Store. New error codes go in
+4. **Use case**: a method on the area's `Service` in `app/<area>/<entity>.go`.
+   A new Action is a `model.Action` constant with its definition in
+   `model/authorization.go`. A read calls `Authorize` (which records the
+   decision) and then the Store; a change also runs through
+   `access.RunAudited`, which audits it. New error codes go in
    `httpapi/route/error_catalog.yaml`.
 5. **Route and OpenAPI**: a `route.Endpoint{...}` in `httpapi/<resource>.go`
-   (a new resource is also listed in `httpapi/resources.go`), and the YAML
-   under `openapi/fragments/`. Then `make -C server openapi-build`.
+   (a new resource is also listed in `httpapi/resources.go`). Each resource
+   declares the application methods it calls in a small interface at the
+   bottom of its file (`ClassApplication` in `httpapi/class.go`); add the new
+   method there, and to the fakes its handler tests pass in. The OpenAPI path
+   goes in `openapi/fragments/<area>/`, where `<area>` is the operation's one
+   tag from `openapi/base.yaml` in kebab case (`Academic structure` is
+   `academic-structure/`), in the file named for the resource in its route
+   (`openapi/README.md` has the rule). Then `make -C server openapi-build`.
 6. **Tests**: `app/<area>/<entity>_test.go`, `httpapi/<resource>_test.go` and
    the contract's suite in `store/storetest/`. Run `make -C server check`.
 
@@ -172,8 +181,8 @@ which layer owns which decision and links a complete worked example.
 
 [`AGENTS.md`](AGENTS.md) has the conventions table: one answer per recurring
 question, and what enforces it: a test, a linter rule, or review. The tests in
-`architecture/` protect package boundaries and security properties; style is
-left to the linter. [`httpapi/CONTRACT.md`](httpapi/CONTRACT.md) is the HTTP
+`architecture/` protect package boundaries, security properties and published
+contracts; style is left to the linter. [`httpapi/CONTRACT.md`](httpapi/CONTRACT.md) is the HTTP
 contract, [`openapi/README.md`](openapi/README.md) the OpenAPI authoring
 workflow, [`cluster/GUARANTEES.md`](cluster/GUARANTEES.md) what cluster
 delivery promises, and [`templates/README.md`](templates/README.md) the mail

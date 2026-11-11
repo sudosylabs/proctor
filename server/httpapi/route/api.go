@@ -269,6 +269,8 @@ func writeJSON(writer http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(writer).Encode(value)
 }
 
-// Authenticator returns the authenticator the API resolves credentials with, so
-// a test of the production constructor can prove which one it passed.
+// Authenticator returns the authenticator the API resolves credentials with. It
+// exists for the tests of package httpapi, which prove that the production
+// constructor passes the application's Identity service; no production code
+// calls it.
 func (a *API) Authenticator() Authenticator { return a.authenticator }

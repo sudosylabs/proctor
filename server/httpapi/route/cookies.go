@@ -239,7 +239,7 @@ func (c Cookies) set(
 	if maxAge < 1 {
 		maxAge = 1
 	}
-	http.SetCookie(writer, &http.Cookie{
+	http.SetCookie(writer, &http.Cookie{ //nolint:gosec // G124: Secure follows the public URL's scheme; HttpOnly is off only for the CSRF token clients read.
 		Name:     name,
 		Value:    value,
 		Path:     path,
@@ -257,7 +257,7 @@ func (c Cookies) expire(
 	path string,
 	httpOnly bool,
 ) {
-	http.SetCookie(writer, &http.Cookie{
+	http.SetCookie(writer, &http.Cookie{ //nolint:gosec // G124: Secure follows the public URL's scheme; HttpOnly is off only for the CSRF token clients read.
 		Name:     name,
 		Value:    "",
 		Path:     path,

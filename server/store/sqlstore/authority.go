@@ -49,6 +49,18 @@ import (
 //     reading the flags, and so assumes an Action that every one of those
 //     scopes can grant. Each lock*ActionGrant* helper states that assumption,
 //     its callers and the Actions they pass.
+//   - A Personal Access Token may carry an Academic Unit ceiling
+//     (model.Principal.AcademicUnitID). The application counts a Role
+//     Binding for such a token only on resources within that unit
+//     (access.personalAccessTokenAllows for one resource, and
+//     accumulateBindingScope for a granted scope). The store does not
+//     recheck the ceiling: requireCurrentPrincipalCredential checks that the token is still
+//     current with the same scopes and the same ceiling,
+//     requirePrincipalActionAtScope that its scopes list the Action, and the
+//     helpers it reaches then count the User's Role Bindings wherever they
+//     are, inside the ceiling or not. For a token with a ceiling the recheck
+//     is weaker than the application's decision and is relied on only as a
+//     second line after it.
 //   - Ordinary Exam management needs the exam.manage Action, the Exam Manager
 //     relationship and a current membership of the Exam's Academic Unit; the
 //     system administrator Role's exam.manage.override at the Institution
@@ -132,6 +144,9 @@ const classAncestorsCTE = `WITH RECURSIVE class_unit AS (
 // It is the in-transaction counterpart of the Role Binding decision in
 // access.Authorizer.Authorize for an Institution resource. It does not read
 // the Action's InheritInstitutionScope; every Action a Role can carry has it.
+// Reached through requirePrincipalActionAtScope for a Personal Access Token,
+// it does not apply the token's Academic Unit ceiling, which the application
+// applies first (see the file comment).
 func lockActionGrantAtInstitution(
 	ctx context.Context,
 	tx *sqlxTxWrapper,
@@ -239,6 +254,11 @@ func lockActionGrantAtAcademicUnit(
 //     CanDelegateActionsAtScope does not count. The application decides
 //     first and refuses, so the recheck is weaker than that decision, not a
 //     way round it.
+//
+// For a Personal Access Token it does not apply the token's Academic Unit
+// ceiling either: it counts the User's binding at any unit above this one,
+// inside the ceiling or not. The application applies the ceiling first, and
+// this recheck is relied on only as a second line after it.
 //
 // A new caller whose Action may not inherit both scopes must bind the
 // definition's flags instead, as lockInviterActionGrantAtAcademicUnit does.
@@ -356,6 +376,11 @@ func lockActionGrantAtClass(
 //     which CanDelegateActionsAtScope counts. The application decides first
 //     and refuses, so the recheck is weaker than that decision, not a way
 //     round it.
+//
+// For a Personal Access Token it does not apply the token's Academic Unit
+// ceiling either: it counts the User's binding at the Class or at any unit
+// above it, inside the ceiling or not. The application applies the ceiling
+// first, and this recheck is relied on only as a second line after it.
 //
 // A new caller whose Action may not satisfy the assumption must first refuse
 // the scopes the definition does not support, or bind its flags as

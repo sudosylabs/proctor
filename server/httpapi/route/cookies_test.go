@@ -65,13 +65,13 @@ func TestBrowserCookiesAreBoundedSecureAndCSRFSigned(t *testing.T) {
 func TestRequestCredentialRejectsAmbiguousSourcesAndDuplicateCookies(t *testing.T) {
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me", nil)
 	request.Header.Set("Authorization", "Bearer header-token")
-	request.AddCookie(&http.Cookie{Name: BrowserAccessCookieName, Value: "cookie-token", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+	request.AddCookie(&http.Cookie{Name: BrowserAccessCookieName, Value: "cookie-token"})
 	_, appErr := requestAccessCredential(request)
 	require.Equal(t, "authentication.credential_ambiguous", applicationErrorCode(appErr), "header and cookie error")
 
 	request = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/users/me", nil)
-	request.AddCookie(&http.Cookie{Name: BrowserAccessCookieName, Value: "first", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
-	request.AddCookie(&http.Cookie{Name: BrowserAccessCookieName, Value: "second", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+	request.AddCookie(&http.Cookie{Name: BrowserAccessCookieName, Value: "first"})
+	request.AddCookie(&http.Cookie{Name: BrowserAccessCookieName, Value: "second"})
 	_, appErr = requestAccessCredential(request)
 	require.Equal(t, "authentication.credential_ambiguous", applicationErrorCode(appErr), "duplicate cookie error")
 }

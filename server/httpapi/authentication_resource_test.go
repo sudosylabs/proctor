@@ -108,7 +108,7 @@ func TestExternalAuthenticationCallbackReturnsValidatedRedirectAndCookies(t *tes
 	}
 	httpAPI := newFocusedResourceAPI(t, logger, routetest.Authenticator{}, externalAuthenticationResource(externalAuthentication, cookies))
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/auth/providers/oidc/callback?code=accepted", nil)
-	request.AddCookie(&http.Cookie{Name: route.BrowserExternalLoginCookieName, Value: "binding", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+	request.AddCookie(&http.Cookie{Name: route.BrowserExternalLoginCookieName, Value: "binding"})
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusSeeOther, response.Code, "callback redirect = %d %#v %s", response.Code, response.Header(), response.Body.String())

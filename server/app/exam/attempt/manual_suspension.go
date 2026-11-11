@@ -86,8 +86,8 @@ func (s *Service) SuspendExamAttempt(
 	if err != nil {
 		return ManualSuspensionResult{}, storeError(storeErrors, err)
 	}
-	if err = sitting.ConsistentWith(command.SittingID); err != nil {
-		return ManualSuspensionResult{}, apperror.New("exam.attempt.unavailable").Wrap(err)
+	if !sitting.ConsistentWithOwningClass(command.SittingID) {
+		return ManualSuspensionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("incomplete Sitting ownership projection"))
 	}
 
 	action := model.ActionExamSittingManage
@@ -121,7 +121,7 @@ func (s *Service) SuspendExamAttempt(
 		return ManualSuspensionResult{}, s.failAudit(ctx, auditID, err)
 	}
 
-	if managerSnapshot.ConsistentWith(command.ExamID) != nil {
+	if !managerSnapshot.ConsistentWith(command.ExamID) {
 		return ManualSuspensionResult{}, s.failAudit(
 			ctx,
 			auditID,
@@ -191,8 +191,8 @@ func projectManualSuspension(
 	classID model.ClassID,
 	actorID model.UserID,
 ) (ManualSuspensionResult, error) {
-	if err := stored.ConsistentWith(command.ExamID, command.SittingID, command.AttemptID, command.ExpectedAttemptRevision, classID, actorID); err != nil {
-		return ManualSuspensionResult{}, apperror.New("exam.attempt.unavailable").Wrap(err)
+	if !stored.ConsistentWith(command.ExamID, command.SittingID, command.AttemptID, command.ExpectedAttemptRevision, classID, actorID) {
+		return ManualSuspensionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Attempt manual suspension outcome"))
 	}
 
 	result := ManualSuspensionResult{

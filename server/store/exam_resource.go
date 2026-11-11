@@ -9,7 +9,6 @@ package store
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -24,16 +23,12 @@ type ExamResourceRecord struct {
 	DraftRevision int64
 }
 
-// Consistent reports an error unless the record carries both the Resource and
-// its current rendition.
-func (r *ExamResourceRecord) Consistent() error {
-	if r == nil ||
+// Consistent reports whether the record carries both the Resource and its
+// current rendition.
+func (r *ExamResourceRecord) Consistent() bool {
+	return !(r == nil ||
 		r.Resource == nil ||
-		r.Rendition == nil {
-		return errors.New("incomplete resource record")
-	}
-
-	return nil
+		r.Rendition == nil)
 }
 
 type ExamResourceUploadReservation struct {

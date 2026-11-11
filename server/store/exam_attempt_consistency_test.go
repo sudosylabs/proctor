@@ -19,7 +19,7 @@ import (
 
 func TestExamAttemptParticipationViewConsistentRejectsEachInconsistency(t *testing.T) {
 	t.Parallel()
-	check := func(v *ExamAttemptParticipationView) error { return v.Consistent() }
+	check := func(v *ExamAttemptParticipationView) bool { return v.Consistent() }
 	active := func(*testing.T) *ExamAttemptParticipationView {
 		return participationViewFixture(model.NewExamAttemptID())
 	}
@@ -27,8 +27,8 @@ func TestExamAttemptParticipationViewConsistentRejectsEachInconsistency(t *testi
 		return endedParticipationViewFixture(model.NewExamAttemptID(), model.AttemptParticipationEndInterrupted)
 	}
 
-	require.EqualError(t, (*ExamAttemptParticipationView)(nil).Consistent(), "incomplete Attempt Participation view")
-	requireEachInconsistencyRejected(t, active, check, "incomplete Attempt Participation view", []inconsistency[ExamAttemptParticipationView]{
+	require.False(t, (*ExamAttemptParticipationView)(nil).Consistent())
+	requireEachInconsistencyRejected(t, active, check, []inconsistency[ExamAttemptParticipationView]{
 		{"no Participation ID", func(v *ExamAttemptParticipationView) { v.ID = "" }},
 		{"no Attempt ID", func(v *ExamAttemptParticipationView) { v.AttemptID = "" }},
 		{"generation below one", func(v *ExamAttemptParticipationView) { v.Generation = 0 }},
@@ -39,12 +39,12 @@ func TestExamAttemptParticipationViewConsistentRejectsEachInconsistency(t *testi
 		{"no lease expiry", func(v *ExamAttemptParticipationView) { v.LeaseExpiresAt = time.Time{} }},
 		{"lease expires before it started", func(v *ExamAttemptParticipationView) { v.LeaseExpiresAt = v.StartedAt.Add(-time.Second) }},
 	})
-	requireEachInconsistencyRejected(t, active, check, "inconsistent Attempt Participation lifecycle", []inconsistency[ExamAttemptParticipationView]{
+	requireEachInconsistencyRejected(t, active, check, []inconsistency[ExamAttemptParticipationView]{
 		{"active with an end instant", func(v *ExamAttemptParticipationView) { v.EndedAt = model.OptionalTimeFrom(v.UpdatedAt) }},
 		{"active with an end reason", func(v *ExamAttemptParticipationView) { v.EndReason = model.AttemptParticipationEndKicked }},
 		{"unknown state", func(v *ExamAttemptParticipationView) { v.State = "paused" }},
 	})
-	requireEachInconsistencyRejected(t, ended, check, "inconsistent Attempt Participation lifecycle", []inconsistency[ExamAttemptParticipationView]{
+	requireEachInconsistencyRejected(t, ended, check, []inconsistency[ExamAttemptParticipationView]{
 		{"ended without an end instant", func(v *ExamAttemptParticipationView) { v.EndedAt = model.OptionalTime{} }},
 		{"ended at the zero instant", func(v *ExamAttemptParticipationView) { v.EndedAt = model.OptionalTime{Valid: true} }},
 		{"ended before it started", func(v *ExamAttemptParticipationView) {
@@ -57,17 +57,16 @@ func TestExamAttemptParticipationViewConsistentRejectsEachInconsistency(t *testi
 	})
 }
 
-func TestExamAttemptSuspensionViewConsistentActiveRejectsEachInconsistency(t *testing.T) {
+func TestExamAttemptSuspensionViewConsistentActiveOrAbsentRejectsEachInconsistency(t *testing.T) {
 	t.Parallel()
 	attemptID := model.NewExamAttemptID()
 	managerID := model.NewUserID()
-	check := func(v *ExamAttemptSuspensionView) error { return v.ConsistentActive(attemptID) }
+	check := func(v *ExamAttemptSuspensionView) bool { return v.ConsistentActiveOrAbsent(attemptID) }
 	policy := func(*testing.T) *ExamAttemptSuspensionView { return policySuspensionViewFixture(attemptID) }
 	manual := func(*testing.T) *ExamAttemptSuspensionView { return manualSuspensionViewFixture(attemptID, managerID) }
-	const message = "inconsistent active Attempt Suspension view"
 
-	require.NoError(t, (*ExamAttemptSuspensionView)(nil).ConsistentActive(attemptID), "an Attempt without an active Suspension is consistent")
-	requireEachInconsistencyRejected(t, policy, check, message, []inconsistency[ExamAttemptSuspensionView]{
+	require.True(t, (*ExamAttemptSuspensionView)(nil).ConsistentActiveOrAbsent(attemptID), "an Attempt without an active Suspension is consistent")
+	requireEachInconsistencyRejected(t, policy, check, []inconsistency[ExamAttemptSuspensionView]{
 		{"no Suspension ID", func(v *ExamAttemptSuspensionView) { v.ID = "" }},
 		{"another Attempt", func(v *ExamAttemptSuspensionView) { v.AttemptID = model.NewExamAttemptID() }},
 		{"no Participation ID", func(v *ExamAttemptSuspensionView) { v.ParticipationID = "" }},
@@ -83,7 +82,7 @@ func TestExamAttemptSuspensionViewConsistentActiveRejectsEachInconsistency(t *te
 		{"already ended", func(v *ExamAttemptSuspensionView) { v.EndedAt = model.OptionalTimeFrom(v.StartedAt) }},
 		{"already re-allowed", func(v *ExamAttemptSuspensionView) { v.ReallowedByUserID = managerID }},
 	})
-	requireEachInconsistencyRejected(t, manual, check, message, []inconsistency[ExamAttemptSuspensionView]{
+	requireEachInconsistencyRejected(t, manual, check, []inconsistency[ExamAttemptSuspensionView]{
 		{"manual episode with a Flag", func(v *ExamAttemptSuspensionView) { v.FlagID = model.NewIntegrityFlagID() }},
 		{"manual episode with a policy reason", func(v *ExamAttemptSuspensionView) {
 			v.CandidateReason = model.AttemptSuspensionCandidateReasonFocusLossPolicy
@@ -93,14 +92,14 @@ func TestExamAttemptSuspensionViewConsistentActiveRejectsEachInconsistency(t *te
 
 	focusLoss := policySuspensionViewFixture(attemptID)
 	focusLoss.CandidateReason = model.AttemptSuspensionCandidateReasonFocusLossPolicy
-	require.NoError(t, focusLoss.ConsistentActive(attemptID), "a Focus Loss policy episode is re-allowable")
+	require.True(t, focusLoss.ConsistentActiveOrAbsent(attemptID), "a Focus Loss policy episode is re-allowable")
 }
 
-func TestExamAttemptSuspensionViewConsistentClosedRejectsEachInconsistency(t *testing.T) {
+func TestExamAttemptSuspensionViewConsistentClosedByRejectsEachInconsistency(t *testing.T) {
 	t.Parallel()
 	attemptID := model.NewExamAttemptID()
 	actorID := model.NewUserID()
-	check := func(v *ExamAttemptSuspensionView) error { return v.ConsistentClosed(attemptID, actorID) }
+	check := func(v *ExamAttemptSuspensionView) bool { return v.ConsistentClosedBy(attemptID, actorID) }
 	closed := func(*testing.T) *ExamAttemptSuspensionView {
 		view := policySuspensionViewFixture(attemptID)
 		view.State = model.AttemptSuspensionClosed
@@ -108,10 +107,9 @@ func TestExamAttemptSuspensionViewConsistentClosedRejectsEachInconsistency(t *te
 		view.ReallowedByUserID = actorID
 		return view
 	}
-	const message = "inconsistent closed Attempt Suspension view"
 
-	require.EqualError(t, (*ExamAttemptSuspensionView)(nil).ConsistentClosed(attemptID, actorID), message)
-	requireEachInconsistencyRejected(t, closed, check, message, []inconsistency[ExamAttemptSuspensionView]{
+	require.False(t, (*ExamAttemptSuspensionView)(nil).ConsistentClosedBy(attemptID, actorID))
+	requireEachInconsistencyRejected(t, closed, check, []inconsistency[ExamAttemptSuspensionView]{
 		{"no Suspension ID", func(v *ExamAttemptSuspensionView) { v.ID = "" }},
 		{"another Attempt", func(v *ExamAttemptSuspensionView) { v.AttemptID = model.NewExamAttemptID() }},
 		{"no Participation ID", func(v *ExamAttemptSuspensionView) { v.ParticipationID = "" }},
@@ -134,13 +132,12 @@ func TestExamAttemptConnectResultConsistentWithRejectsEachInconsistency(t *testi
 	template := connectResultFixture(t, classID, sessionID)
 	candidateID, sittingID := template.Attempt.CandidateUserID, template.Attempt.SittingID
 	consistent := func(t *testing.T) *ExamAttemptConnectResult { return cloneConnectResultFixture(template) }
-	check := func(r *ExamAttemptConnectResult) error {
+	check := func(r *ExamAttemptConnectResult) bool {
 		return r.ConsistentWith(classID, candidateID, sessionID, sittingID)
 	}
-	const message = "inconsistent Exam Attempt connection outcome"
 
-	require.EqualError(t, (*ExamAttemptConnectResult)(nil).ConsistentWith(classID, candidateID, sessionID, sittingID), message)
-	requireEachInconsistencyRejected(t, consistent, check, message, []inconsistency[ExamAttemptConnectResult]{
+	require.False(t, (*ExamAttemptConnectResult)(nil).ConsistentWith(classID, candidateID, sessionID, sittingID))
+	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[ExamAttemptConnectResult]{
 		{"no Attempt", func(r *ExamAttemptConnectResult) { r.Attempt = nil }},
 		{"no Attempt Workspace", func(r *ExamAttemptConnectResult) { r.Workspace = nil }},
 		{"no Participation", func(r *ExamAttemptConnectResult) { r.Participation = nil }},
@@ -166,9 +163,10 @@ func TestExamAttemptConnectResultConfigurationConsistentRejectsEachInconsistency
 	t.Parallel()
 	template := connectResultFixture(t, model.NewClassID(), model.NewSessionID())
 	consistent := func(t *testing.T) *ExamAttemptConnectResult { return cloneConnectResultFixture(template) }
-	check := func(r *ExamAttemptConnectResult) error { return r.ConfigurationConsistent() }
+	check := func(r *ExamAttemptConnectResult) bool { return r.ConfigurationConsistent() }
 
-	requireEachInconsistencyRejected(t, consistent, check, "inconsistent Exam Attempt configuration outcome", []inconsistency[ExamAttemptConnectResult]{
+	require.False(t, (*ExamAttemptConnectResult)(nil).ConfigurationConsistent())
+	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[ExamAttemptConnectResult]{
 		{"invalid admitted security", func(r *ExamAttemptConnectResult) { r.Security.RenewalIntervalSeconds = 0 }},
 		{"security of another Participation", func(r *ExamAttemptConnectResult) {
 			r.Participation.ID = model.NewAttemptParticipationID()
@@ -203,13 +201,12 @@ func TestExamAttemptConnectionCloseResultConsistentWithRejectsEachInconsistency(
 			Changed:         true,
 		}
 	}
-	check := func(r *ExamAttemptConnectionCloseResult) error {
+	check := func(r *ExamAttemptConnectionCloseResult) bool {
 		return r.ConsistentWith(attemptID, sittingID, connectionID)
 	}
-	const message = "inconsistent Connection close outcome"
 
-	require.EqualError(t, (*ExamAttemptConnectionCloseResult)(nil).ConsistentWith(attemptID, sittingID, connectionID), message)
-	requireEachInconsistencyRejected(t, consistent, check, message, []inconsistency[ExamAttemptConnectionCloseResult]{
+	require.False(t, (*ExamAttemptConnectionCloseResult)(nil).ConsistentWith(attemptID, sittingID, connectionID))
+	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[ExamAttemptConnectionCloseResult]{
 		{"no Connection", func(r *ExamAttemptConnectionCloseResult) { r.Connection = nil }},
 		{"no Exam", func(r *ExamAttemptConnectionCloseResult) { r.ExamID = "" }},
 		{"another Attempt", func(r *ExamAttemptConnectionCloseResult) { r.AttemptID = model.NewExamAttemptID() }},
@@ -231,7 +228,7 @@ type browserPolicyAgreement struct {
 
 func TestCandidateRuntimeCapabilitiesConsistentWithBrowserPolicyRejectsEachInconsistency(t *testing.T) {
 	t.Parallel()
-	check := func(a *browserPolicyAgreement) error { return a.capabilities.ConsistentWithBrowserPolicy(a.policy) }
+	check := func(a *browserPolicyAgreement) bool { return a.capabilities.ConsistentWithBrowserPolicy(a.policy) }
 	disabled := func(t *testing.T) *browserPolicyAgreement {
 		capabilities := runtimeCapabilitiesFixture(t)
 		return &browserPolicyAgreement{capabilities, disabledBrowserPolicyFixture(t, capabilities.ExamRevision.CurrentRevisionID)}
@@ -253,13 +250,12 @@ func TestCandidateRuntimeCapabilitiesConsistentWithBrowserPolicyRejectsEachIncon
 		return &browserPolicyAgreement{capabilities: capabilities}
 	}
 
-	requireEachInconsistencyRejected(t, pending, check, "candidate browser policy delivered while its correction is pending",
-		[]inconsistency[browserPolicyAgreement]{
-			{"policy delivered", func(a *browserPolicyAgreement) {
-				a.policy = disabledBrowserPolicyFixture(t, a.capabilities.ExamRevision.CurrentRevisionID)
-			}},
-		})
-	requireEachInconsistencyRejected(t, disabled, check, "candidate browser policy is incomplete", []inconsistency[browserPolicyAgreement]{
+	requireEachInconsistencyRejected(t, pending, check, []inconsistency[browserPolicyAgreement]{
+		{"policy delivered", func(a *browserPolicyAgreement) {
+			a.policy = disabledBrowserPolicyFixture(t, a.capabilities.ExamRevision.CurrentRevisionID)
+		}},
+	})
+	requireEachInconsistencyRejected(t, disabled, check, []inconsistency[browserPolicyAgreement]{
 		{"no policy", func(a *browserPolicyAgreement) { a.policy = nil }},
 		{"no policy Revision", func(a *browserPolicyAgreement) { a.policy.PolicyRevisionID = "" }},
 		{"policy of another Revision", func(a *browserPolicyAgreement) { a.policy.PolicyRevisionID = model.NewExamRevisionID() }},
@@ -270,28 +266,25 @@ func TestCandidateRuntimeCapabilitiesConsistentWithBrowserPolicyRejectsEachIncon
 			a.policy.BrowserActivityDisclosure.MayCreateIntegrityEvidence = true
 		}},
 	})
-	requireEachInconsistencyRejected(t, disabled, check, "candidate browser policy disagrees with the browser capability state",
-		[]inconsistency[browserPolicyAgreement]{
-			{"disabled policy beside an available browser", func(a *browserPolicyAgreement) {
-				a.capabilities.Browser.State = CandidateBrowserAvailable
-			}},
-		})
-	requireEachInconsistencyRejected(t, enabled, check, "candidate browser policy disagrees with the browser capability state",
-		[]inconsistency[browserPolicyAgreement]{
-			{"enabled policy beside a disabled browser", func(a *browserPolicyAgreement) {
-				a.capabilities.Browser.State = CandidateBrowserDisabled
-			}},
-		})
-	requireEachInconsistencyRejected(t, enabled, check, "candidate browser policy disagrees with the browser capability metadata",
-		[]inconsistency[browserPolicyAgreement]{
-			{"capability names another policy Revision", func(a *browserPolicyAgreement) {
-				a.capabilities.Browser.PolicyRevisionID = model.NewExamRevisionID()
-			}},
-			{"capability names another policy digest", func(a *browserPolicyAgreement) {
-				a.capabilities.Browser.PolicyDigest = model.SHA256Fingerprint([]byte("another policy"))
-			}},
-		})
-	requireEachInconsistencyRejected(t, disabled, check, "candidate browser policy digest is inconsistent", []inconsistency[browserPolicyAgreement]{
+	requireEachInconsistencyRejected(t, disabled, check, []inconsistency[browserPolicyAgreement]{
+		{"disabled policy beside an available browser", func(a *browserPolicyAgreement) {
+			a.capabilities.Browser.State = CandidateBrowserAvailable
+		}},
+	})
+	requireEachInconsistencyRejected(t, enabled, check, []inconsistency[browserPolicyAgreement]{
+		{"enabled policy beside a disabled browser", func(a *browserPolicyAgreement) {
+			a.capabilities.Browser.State = CandidateBrowserDisabled
+		}},
+	})
+	requireEachInconsistencyRejected(t, enabled, check, []inconsistency[browserPolicyAgreement]{
+		{"capability names another policy Revision", func(a *browserPolicyAgreement) {
+			a.capabilities.Browser.PolicyRevisionID = model.NewExamRevisionID()
+		}},
+		{"capability names another policy digest", func(a *browserPolicyAgreement) {
+			a.capabilities.Browser.PolicyDigest = model.SHA256Fingerprint([]byte("another policy"))
+		}},
+	})
+	requireEachInconsistencyRejected(t, disabled, check, []inconsistency[browserPolicyAgreement]{
 		{"digest of another policy", func(a *browserPolicyAgreement) {
 			a.policy.PolicyDigest = model.SHA256Fingerprint([]byte("another policy"))
 		}},
@@ -307,7 +300,7 @@ type liveCorrectionAgreement struct {
 
 func TestCandidateRuntimeCapabilitiesConsistentWithLiveCorrectionsRejectsEachInconsistency(t *testing.T) {
 	t.Parallel()
-	check := func(a *liveCorrectionAgreement) error {
+	check := func(a *liveCorrectionAgreement) bool {
 		return a.capabilities.ConsistentWithLiveCorrections(a.corrections)
 	}
 	consistent := func(t *testing.T) *liveCorrectionAgreement {
@@ -319,25 +312,24 @@ func TestCandidateRuntimeCapabilitiesConsistentWithLiveCorrectionsRejectsEachInc
 	}
 
 	none := &liveCorrectionAgreement{capabilities: runtimeCapabilitiesFixture(t)}
-	require.NoError(t, check(none), "no live correction is consistent")
-	requireEachInconsistencyRejected(t, consistent, check, "inconsistent candidate live correction", []inconsistency[liveCorrectionAgreement]{
+	require.True(t, check(none), "no live correction is consistent")
+	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[liveCorrectionAgreement]{
 		{"invalid correction", func(a *liveCorrectionAgreement) { a.corrections[1].Summary = "" }},
 		{"revision numbers not ascending", func(a *liveCorrectionAgreement) { a.corrections[1].RevisionNumber = 2 }},
 		{"correction naming the admission Revision", func(a *liveCorrectionAgreement) {
 			a.corrections[1].RevisionID = a.capabilities.ExamRevision.AdmissionRevisionID
 		}},
 	})
-	requireEachInconsistencyRejected(t, consistent, check, "candidate live corrections disagree with pending capabilities",
-		[]inconsistency[liveCorrectionAgreement]{
-			{"pending capability the capabilities do not report", func(a *liveCorrectionAgreement) {
-				a.corrections[1].AcknowledgementRequired = true
-				a.corrections[1].AcknowledgementState = model.CorrectionAcknowledgementPending
-				a.capabilities.ExamRevision.AcknowledgementRequired = true
-			}},
-			{"acknowledgement required with nothing pending", func(a *liveCorrectionAgreement) {
-				a.capabilities.ExamRevision.AcknowledgementRequired = true
-			}},
-		})
+	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[liveCorrectionAgreement]{
+		{"pending capability the capabilities do not report", func(a *liveCorrectionAgreement) {
+			a.corrections[1].AcknowledgementRequired = true
+			a.corrections[1].AcknowledgementState = model.CorrectionAcknowledgementPending
+			a.capabilities.ExamRevision.AcknowledgementRequired = true
+		}},
+		{"acknowledgement required with nothing pending", func(a *liveCorrectionAgreement) {
+			a.capabilities.ExamRevision.AcknowledgementRequired = true
+		}},
+	})
 }
 
 func TestExamAttemptManagerSnapshotConsistentWithRejectsEachInconsistency(t *testing.T) {
@@ -348,11 +340,10 @@ func TestExamAttemptManagerSnapshotConsistentWithRejectsEachInconsistency(t *tes
 		attempt := *template
 		return &ExamAttemptManagerSnapshot{Attempt: &attempt, ActiveSuspension: policySuspensionViewFixture(attempt.ID)}
 	}
-	check := func(s *ExamAttemptManagerSnapshot) error { return s.ConsistentWith(examID) }
-	const message = "inconsistent managed Attempt projection"
+	check := func(s *ExamAttemptManagerSnapshot) bool { return s.ConsistentWith(examID) }
 
-	require.EqualError(t, (*ExamAttemptManagerSnapshot)(nil).ConsistentWith(examID), message)
-	requireEachInconsistencyRejected(t, consistent, check, message, []inconsistency[ExamAttemptManagerSnapshot]{
+	require.False(t, (*ExamAttemptManagerSnapshot)(nil).ConsistentWith(examID))
+	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[ExamAttemptManagerSnapshot]{
 		{"no Attempt", func(s *ExamAttemptManagerSnapshot) { s.Attempt = nil }},
 		{"invalid Attempt", func(s *ExamAttemptManagerSnapshot) { s.Attempt.Revision = 0 }},
 		{"Attempt of another Exam", func(s *ExamAttemptManagerSnapshot) { s.Attempt.ExamID = model.NewExamID() }},
@@ -363,10 +354,10 @@ func TestExamAttemptManagerSnapshotConsistentWithRejectsEachInconsistency(t *tes
 
 	unsuspended := consistent(t)
 	unsuspended.ActiveSuspension = nil
-	require.NoError(t, check(unsuspended), "an Attempt without an active Suspension is consistent")
+	require.True(t, check(unsuspended), "an Attempt without an active Suspension is consistent")
 }
 
-func TestExamAttemptManagerSnapshotConsistentWithSittingRejectsEachInconsistency(t *testing.T) {
+func TestExamAttemptManagerSnapshotConsistentWithExamAndSittingRejectsEachInconsistency(t *testing.T) {
 	t.Parallel()
 	template := attemptFixture(t, model.ExamAttemptSuspended)
 	examID, sittingID := template.ExamID, template.SittingID
@@ -374,9 +365,10 @@ func TestExamAttemptManagerSnapshotConsistentWithSittingRejectsEachInconsistency
 		attempt := *template
 		return &ExamAttemptManagerSnapshot{Attempt: &attempt, ActiveSuspension: policySuspensionViewFixture(attempt.ID)}
 	}
-	check := func(s *ExamAttemptManagerSnapshot) error { return s.ConsistentWithSitting(examID, sittingID) }
+	check := func(s *ExamAttemptManagerSnapshot) bool { return s.ConsistentWithExamAndSitting(examID, sittingID) }
 
-	requireEachInconsistencyRejected(t, consistent, check, "inconsistent managed Attempt page", []inconsistency[ExamAttemptManagerSnapshot]{
+	require.False(t, (*ExamAttemptManagerSnapshot)(nil).ConsistentWithExamAndSitting(examID, sittingID))
+	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[ExamAttemptManagerSnapshot]{
 		{"no Attempt", func(s *ExamAttemptManagerSnapshot) { s.Attempt = nil }},
 		{"invalid Attempt", func(s *ExamAttemptManagerSnapshot) { s.Attempt.Revision = 0 }},
 		{"Attempt of another Exam", func(s *ExamAttemptManagerSnapshot) { s.Attempt.ExamID = model.NewExamID() }},

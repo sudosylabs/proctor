@@ -273,8 +273,8 @@ func (a *Authoring) changeManager(
 		return store.ExamManagerCommandResult{}, mapped
 	}
 
-	if err = result.Consistent(); err != nil {
-		return store.ExamManagerCommandResult{}, apperror.New("exam.unavailable").Wrap(err)
+	if result == nil || result.Exam == nil || result.Manager == nil {
+		return store.ExamManagerCommandResult{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no manager result"))
 	}
 
 	if !result.Replayed {
@@ -343,8 +343,8 @@ func (a *Authoring) authorizeManagement(
 	if err != nil {
 		return nil, "", examStoreErrors.Translate(err)
 	}
-	if err = examAccess.Consistent(); err != nil {
-		return nil, "", apperror.New("exam.unavailable").Wrap(err)
+	if !examAccess.Consistent() {
+		return nil, "", apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no access projection"))
 	}
 
 	action, err := a.actionForAccess(ctx, principal.UserID, examAccess, at, model.ActionExamManage, model.ActionExamManageOverride)

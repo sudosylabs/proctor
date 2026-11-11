@@ -123,8 +123,8 @@ func (s *Service) ListCandidateExamWorkspaceJournal(
 		return WorkspaceJournalPage{}, storeError(storeErrors, err)
 	}
 
-	if err = stored.ConsistentWith(query.AfterCursor); err != nil {
-		return WorkspaceJournalPage{}, apperror.New("exam.attempt.unavailable").Wrap(err)
+	if !stored.ConsistentWith(query.AfterCursor) {
+		return WorkspaceJournalPage{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Attempt Workspace journal page"))
 	}
 
 	entries := make([]model.AttemptWorkspaceJournalEntry, len(stored.Entries))
@@ -529,8 +529,8 @@ func projectWorkspaceMutation(
 	expectedKind model.StarterWorkspaceEntryKind,
 	expectedVersion model.WorkspaceContentVersion,
 ) (WorkspaceMutationResult, error) {
-	if err := stored.ConsistentWith(target, operation, entryID); err != nil {
-		return WorkspaceMutationResult{}, apperror.New("exam.attempt.unavailable").Wrap(err)
+	if !stored.ConsistentWith(target, operation, entryID) {
+		return WorkspaceMutationResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Attempt Workspace mutation result"))
 	}
 
 	if operation == model.AttemptWorkspaceMutationDeleteEntry {

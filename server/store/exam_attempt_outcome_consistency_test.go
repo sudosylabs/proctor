@@ -17,21 +17,6 @@ import (
 	"github.com/sudosylabs/proctor/server/model"
 )
 
-func TestCandidateExamActivityPageConsistentRejectsEachInconsistency(t *testing.T) {
-	t.Parallel()
-	consistent := func(*testing.T) *CandidateExamActivityPage {
-		return &CandidateExamActivityPage{ServerTime: consistencyAt, Items: []CandidateExamActivityItem{}}
-	}
-	const message = "incomplete candidate activity projection"
-
-	require.EqualError(t, (*CandidateExamActivityPage)(nil).Consistent(), message)
-	requireEachInconsistencyRejected(t, consistent, func(p *CandidateExamActivityPage) error { return p.Consistent() }, message,
-		[]inconsistency[CandidateExamActivityPage]{
-			{"no server time", func(p *CandidateExamActivityPage) { p.ServerTime = time.Time{} }},
-			{"absent item list", func(p *CandidateExamActivityPage) { p.Items = nil }},
-		})
-}
-
 func TestExamAttemptCorrectionAcknowledgementConsistencyChecksRejectEachInconsistency(t *testing.T) {
 	t.Parallel()
 	attemptID, candidateID := model.NewExamAttemptID(), model.NewUserID()
@@ -51,10 +36,9 @@ func TestExamAttemptCorrectionAcknowledgementConsistencyChecksRejectEachInconsis
 				CurrentRevisionID:    currentID,
 			}
 		}
-		check := func(v *target) error { return v.ConsistentWith(attemptID, candidateID, correctionID, currentID) }
-		const message = "inconsistent correction acknowledgement target"
-		require.EqualError(t, (*target)(nil).ConsistentWith(attemptID, candidateID, correctionID, currentID), message)
-		requireEachInconsistencyRejected(t, consistent, check, message, []inconsistency[target]{
+		check := func(v *target) bool { return v.ConsistentWith(attemptID, candidateID, correctionID, currentID) }
+		require.False(t, (*target)(nil).ConsistentWith(attemptID, candidateID, correctionID, currentID))
+		requireEachInconsistencyRejected(t, consistent, check, []inconsistency[target]{
 			{"another Attempt", func(v *target) { v.AttemptID = model.NewExamAttemptID() }},
 			{"another candidate", func(v *target) { v.CandidateUserID = model.NewUserID() }},
 			{"another correction Revision", func(v *target) { v.CorrectionRevisionID = model.NewExamRevisionID() }},
@@ -69,10 +53,9 @@ func TestExamAttemptCorrectionAcknowledgementConsistencyChecksRejectEachInconsis
 		consistent := func(*testing.T) *result {
 			return &result{AttemptID: attemptID, CorrectionRevisionID: correctionID, CurrentRevisionID: currentID, AcknowledgedAt: consistencyAt}
 		}
-		check := func(r *result) error { return r.ConsistentWith(attemptID, correctionID, currentID) }
-		const message = "inconsistent correction acknowledgement outcome"
-		require.EqualError(t, (*result)(nil).ConsistentWith(attemptID, correctionID, currentID), message)
-		requireEachInconsistencyRejected(t, consistent, check, message, []inconsistency[result]{
+		check := func(r *result) bool { return r.ConsistentWith(attemptID, correctionID, currentID) }
+		require.False(t, (*result)(nil).ConsistentWith(attemptID, correctionID, currentID))
+		requireEachInconsistencyRejected(t, consistent, check, []inconsistency[result]{
 			{"another Attempt", func(r *result) { r.AttemptID = model.NewExamAttemptID() }},
 			{"another correction Revision", func(r *result) { r.CorrectionRevisionID = model.NewExamRevisionID() }},
 			{"another current Revision", func(r *result) { r.CurrentRevisionID = model.NewExamRevisionID() }},
@@ -130,13 +113,12 @@ func TestExamAttemptFocusLossDiscrepancyResultConsistentWithRejectsEachInconsist
 		require.NoError(t, err)
 		return &result{Target: *target, Discrepancy: discrepancy}
 	}
-	check := func(r *result) error {
+	check := func(r *result) bool {
 		return r.ConsistentWith(target, access, sequence, duration, source, discrepancyID, signalID)
 	}
-	const message = "inconsistent late Focus Loss outcome"
 
-	require.EqualError(t, (*result)(nil).ConsistentWith(target, access, sequence, duration, source, discrepancyID, signalID), message)
-	requireEachInconsistencyRejected(t, consistent, check, message, []inconsistency[result]{
+	require.False(t, (*result)(nil).ConsistentWith(target, access, sequence, duration, source, discrepancyID, signalID))
+	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[result]{
 		{"no Discrepancy", func(r *result) { r.Discrepancy = nil }},
 		{"invalid Discrepancy", func(r *result) { r.Discrepancy.ReceivedAt = time.Time{} }},
 		{"another target", func(r *result) { r.Target.ClassID = model.NewClassID() }},
@@ -154,7 +136,7 @@ func TestExamAttemptFocusLossDiscrepancyResultConsistentWithRejectsEachInconsist
 	duplicate := consistent(t)
 	duplicate.Duplicate = true
 	duplicate.Discrepancy.ID, duplicate.Discrepancy.SignalID = model.NewIntegrityDiscrepancyID(), model.NewFocusLossSignalID()
-	require.NoError(t, check(duplicate), "a duplicate keeps the identities of the earlier report")
+	require.True(t, check(duplicate), "a duplicate keeps the identities of the earlier report")
 }
 
 func TestExamAttemptFocusLossResultConsistentWithRejectsEachInconsistency(t *testing.T) {
@@ -190,11 +172,10 @@ func TestExamAttemptFocusLossResultConsistentWithRejectsEachInconsistency(t *tes
 			DatabaseTime:     consistencyAt,
 		}
 	}
-	check := func(r *result) error { return r.ConsistentWith(target, access, sequence, duration, source) }
-	const message = "inconsistent Focus Loss outcome"
+	check := func(r *result) bool { return r.ConsistentWith(target, access, sequence, duration, source) }
 
-	require.EqualError(t, (*result)(nil).ConsistentWith(target, access, sequence, duration, source), message)
-	requireEachInconsistencyRejected(t, consistent, check, message, []inconsistency[result]{
+	require.False(t, (*result)(nil).ConsistentWith(target, access, sequence, duration, source))
+	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[result]{
 		{"no signal", func(r *result) { r.Signal = nil }},
 		{"invalid signal", func(r *result) { r.Signal.ID = "" }},
 		{"another Exam", func(r *result) { r.ExamID = model.NewExamID() }},
@@ -235,11 +216,10 @@ func TestSittingCandidateStatusPageConsistentWithRejectsEachInconsistency(t *tes
 			Items:           []SittingCandidateStatusItem{},
 		}
 	}
-	check := func(p *page) error { return p.ConsistentWith(examID, sittingID) }
-	const message = "incomplete Sitting candidate-status projection"
+	check := func(p *page) bool { return p.ConsistentWith(examID, sittingID) }
 
-	require.EqualError(t, (*page)(nil).ConsistentWith(examID, sittingID), message)
-	requireEachInconsistencyRejected(t, consistent, check, message, []inconsistency[page]{
+	require.False(t, (*page)(nil).ConsistentWith(examID, sittingID))
+	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[page]{
 		{"another Exam", func(p *page) { p.ExamID = model.NewExamID() }},
 		{"another Sitting", func(p *page) { p.SittingID = model.NewExamSittingID() }},
 		{"no server time", func(p *page) { p.ServerTime = time.Time{} }},
@@ -279,14 +259,13 @@ func TestExamAttemptManualSuspensionResultConsistentWithRejectsEachInconsistency
 			Suspension:       suspension,
 		}
 	}
-	check := func(r *result) error {
+	check := func(r *result) bool {
 		return r.ConsistentWith(template.ExamID, template.SittingID, template.ID, expectedRevision, classID, actorID)
 	}
-	const message = "inconsistent Attempt manual suspension outcome"
 
-	require.EqualError(t,
-		(*result)(nil).ConsistentWith(template.ExamID, template.SittingID, template.ID, expectedRevision, classID, actorID), message)
-	requireEachInconsistencyRejected(t, consistent, check, message, []inconsistency[result]{
+	require.False(t,
+		(*result)(nil).ConsistentWith(template.ExamID, template.SittingID, template.ID, expectedRevision, classID, actorID))
+	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[result]{
 		{"no Attempt", func(r *result) { r.Attempt = nil }},
 		{"no Participation", func(r *result) { r.Participation = nil }},
 		{"no Suspension", func(r *result) { r.Suspension = nil }},
@@ -326,7 +305,7 @@ func TestExamAttemptManualSuspensionResultConsistentWithRejectsEachInconsistency
 
 	unconnected := consistent(t)
 	unconnected.Connection, unconnected.ConnectionClosed = nil, false
-	require.NoError(t, check(unconnected), "a suspension with no open Connection closes none")
+	require.True(t, check(unconnected), "a suspension with no open Connection closes none")
 }
 
 func TestExamAttemptParticipationExpiryDueConsistentWithRejectsEachInconsistency(t *testing.T) {
@@ -336,11 +315,10 @@ func TestExamAttemptParticipationExpiryDueConsistentWithRejectsEachInconsistency
 	consistent := func(*testing.T) *due {
 		return &due{AttemptID: attemptID, ParticipationID: participationID, Generation: 3}
 	}
-	check := func(d *due) error { return d.ConsistentWith(attemptID, participationID, 3) }
-	const message = "inconsistent lapsed Participation expiry target"
+	check := func(d *due) bool { return d.ConsistentWith(attemptID, participationID, 3) }
 
-	require.EqualError(t, (*due)(nil).ConsistentWith(attemptID, participationID, 3), message)
-	requireEachInconsistencyRejected(t, consistent, check, message, []inconsistency[due]{
+	require.False(t, (*due)(nil).ConsistentWith(attemptID, participationID, 3))
+	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[due]{
 		{"another Attempt", func(d *due) { d.AttemptID = model.NewExamAttemptID() }},
 		{"another Participation", func(d *due) { d.ParticipationID = model.NewAttemptParticipationID() }},
 		{"another generation", func(d *due) { d.Generation++ }},
@@ -381,13 +359,12 @@ func TestExamAttemptParticipationRenewalResultConsistentWithRejectsEachInconsist
 			LeaseExpiresAt:   consistencyAt.Add(model.AttemptParticipationInitialLease),
 		}
 	}
-	check := func(r *result) error {
+	check := func(r *result) bool {
 		return r.ConsistentWith(attemptID, participationID, candidateID, generation, sequence)
 	}
-	const message = "inconsistent Participation renewal outcome"
 
-	require.EqualError(t, (*result)(nil).ConsistentWith(attemptID, participationID, candidateID, generation, sequence), message)
-	requireEachInconsistencyRejected(t, consistent, check, message, []inconsistency[result]{
+	require.False(t, (*result)(nil).ConsistentWith(attemptID, participationID, candidateID, generation, sequence))
+	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[result]{
 		{"invalid security coverage", func(r *result) { r.SecurityCoverage.CoverageResult = "" }},
 		{"another Attempt", func(r *result) { r.AttemptID = model.NewExamAttemptID() }},
 		{"another Participation", func(r *result) { r.ParticipationID = model.NewAttemptParticipationID() }},
@@ -415,10 +392,9 @@ func TestCandidateExamPresentationConsistentRejectsEachInconsistency(t *testing.
 			BrowserPolicy:       disabledBrowserPolicyFixture(t, capabilities.ExamRevision.CurrentRevisionID),
 		}
 	}
-	const message = "missing candidate presentation"
 
-	require.EqualError(t, (*presentation)(nil).Consistent(), message)
-	requireEachInconsistencyRejected(t, consistent, func(p *presentation) error { return p.Consistent() }, message, []inconsistency[presentation]{
+	require.False(t, (*presentation)(nil).Consistent())
+	requireEachInconsistencyRejected(t, consistent, func(p *presentation) bool { return p.Consistent() }, []inconsistency[presentation]{
 		{"invalid capacity", func(p *presentation) { p.Capacity.ResourceMaximumCount = 0 }},
 		{"invalid runtime capabilities", func(p *presentation) { p.RuntimeCapabilities.SchemaVersion = 2 }},
 		{"no browser policy", func(p *presentation) { p.BrowserPolicy = nil }},
@@ -443,11 +419,10 @@ func TestCandidateResourceContentConsistentWithRejectsEachInconsistency(t *testi
 			RenditionID:    model.NewFileRenditionID(),
 		}
 	}
-	check := func(c *content) error { return c.ConsistentWith(resourceID) }
-	const message = "incomplete candidate Resource selector"
+	check := func(c *content) bool { return c.ConsistentWith(resourceID) }
 
-	require.EqualError(t, (*content)(nil).ConsistentWith(resourceID), message)
-	requireEachInconsistencyRejected(t, consistent, check, message, []inconsistency[content]{
+	require.False(t, (*content)(nil).ConsistentWith(resourceID))
+	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[content]{
 		{"another Resource", func(c *content) { c.Resource.ResourceID = model.NewExamResourceID() }},
 		{"no File Revision", func(c *content) { c.FileRevisionID = "" }},
 		{"no rendition", func(c *content) { c.RenditionID = "" }},
@@ -475,14 +450,13 @@ func TestExamAttemptReallowResultConsistentWithRejectsEachInconsistency(t *testi
 			Suspension:      suspension,
 		}
 	}
-	check := func(r *result) error {
+	check := func(r *result) bool {
 		return r.ConsistentWith(template.ExamID, template.SittingID, classID, template.ID, expectedRevision, suspensionID, actorID)
 	}
-	const message = "inconsistent Attempt re-allow outcome"
 
-	require.EqualError(t,
-		(*result)(nil).ConsistentWith(template.ExamID, template.SittingID, classID, template.ID, expectedRevision, suspensionID, actorID), message)
-	requireEachInconsistencyRejected(t, consistent, check, message, []inconsistency[result]{
+	require.False(t,
+		(*result)(nil).ConsistentWith(template.ExamID, template.SittingID, classID, template.ID, expectedRevision, suspensionID, actorID))
+	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[result]{
 		{"no Attempt", func(r *result) { r.Attempt = nil }},
 		{"no Suspension", func(r *result) { r.Suspension = nil }},
 		{"another Exam", func(r *result) { r.ExamID = model.NewExamID() }},
@@ -517,11 +491,10 @@ func TestSecurityPolicyRecoveryConsistentWithRejectsEachInconsistency(t *testing
 			FrozenAttemptConfiguration: connected.Configuration.Clone(),
 		}
 	}
-	check := func(r *recovery) error { return r.ConsistentWith(attemptID) }
-	const message = "inconsistent security policy recovery"
+	check := func(r *recovery) bool { return r.ConsistentWith(attemptID) }
 
-	require.EqualError(t, (*recovery)(nil).ConsistentWith(attemptID), message)
-	requireEachInconsistencyRejected(t, consistent, check, message, []inconsistency[recovery]{
+	require.False(t, (*recovery)(nil).ConsistentWith(attemptID))
+	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[recovery]{
 		{"no server time", func(r *recovery) { r.ServerTime = time.Time{} }},
 		{"invalid security coverage", func(r *recovery) { r.SecurityCoverage.CoverageResult = "" }},
 		{"absent source list", func(r *recovery) { r.CurrentSources = nil }},
@@ -533,7 +506,7 @@ func TestSecurityPolicyRecoveryConsistentWithRejectsEachInconsistency(t *testing
 		{"invalid admitted security", func(r *recovery) { r.Security.RenewalIntervalSeconds = 0 }},
 		{"frozen configuration is invalid", func(r *recovery) { r.FrozenAttemptConfiguration.Digest = "" }},
 	})
-	require.EqualError(t, consistent(t).ConsistentWith(model.NewExamAttemptID()), message, "security policy bound to another Attempt")
+	require.False(t, consistent(t).ConsistentWith(model.NewExamAttemptID()), "security policy bound to another Attempt")
 }
 
 func TestSecurityPreflightPreparedConsistentWithRejectsEachInconsistency(t *testing.T) {
@@ -554,15 +527,14 @@ func TestSecurityPreflightPreparedConsistentWithRejectsEachInconsistency(t *test
 			Resolved: resolved,
 		}
 	}
-	check := func(p *prepared) error { return p.ConsistentWith(sittingID) }
-	const message = "preflight Store returned an invalid policy"
+	check := func(p *prepared) bool { return p.ConsistentWith(sittingID) }
 
-	require.EqualError(t, (*prepared)(nil).ConsistentWith(sittingID), message)
-	requireEachInconsistencyRejected(t, consistent, check, message, []inconsistency[prepared]{
+	require.False(t, (*prepared)(nil).ConsistentWith(sittingID))
+	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[prepared]{
 		{"invalid challenge", func(p *prepared) { p.Challenge.Challenge = "" }},
 		{"policy not valid at the server time", func(p *prepared) { p.ServerTime = time.Time{} }},
 	})
-	require.EqualError(t, consistent(t).ConsistentWith(model.NewExamSittingID()), message, "policy resolved for another Sitting")
+	require.False(t, consistent(t).ConsistentWith(model.NewExamSittingID()), "policy resolved for another Sitting")
 }
 
 func journalEntryFixture(t *testing.T, workspaceID model.ExamAttemptWorkspaceID, entryID model.AttemptWorkspaceEntryID) model.AttemptWorkspaceJournalEntry {
@@ -590,10 +562,9 @@ func TestCandidateWorkspacePagesRejectEachInconsistency(t *testing.T) {
 		consistent := func(*testing.T) *page {
 			return &page{WorkspaceID: model.NewExamAttemptWorkspaceID(), CurrentCursor: 5, RefreshRequired: true}
 		}
-		check := func(p *page) error { return p.ConsistentWith(5) }
-		const message = "inconsistent Attempt Workspace journal page"
-		require.EqualError(t, (*page)(nil).ConsistentWith(5), message)
-		requireEachInconsistencyRejected(t, consistent, check, message, []inconsistency[page]{
+		check := func(p *page) bool { return p.ConsistentWith(5) }
+		require.False(t, (*page)(nil).ConsistentWith(5))
+		requireEachInconsistencyRejected(t, consistent, check, []inconsistency[page]{
 			{"no Attempt Workspace", func(p *page) { p.WorkspaceID = "" }},
 			{"current cursor behind the reader", func(p *page) { p.CurrentCursor = 4 }},
 			{"refresh with entries", func(p *page) { p.Entries = make([]model.AttemptWorkspaceJournalEntry, 1) }},
@@ -606,27 +577,12 @@ func TestCandidateWorkspacePagesRejectEachInconsistency(t *testing.T) {
 		consistent := func(*testing.T) *page {
 			return &page{WorkspaceID: model.NewExamAttemptWorkspaceID(), RefreshRequired: true}
 		}
-		const message = "missing candidate Workspace page"
-		require.EqualError(t, (*page)(nil).Consistent(), message)
-		requireEachInconsistencyRejected(t, consistent, func(p *page) error { return p.Consistent() }, message, []inconsistency[page]{
+		require.False(t, (*page)(nil).Consistent())
+		requireEachInconsistencyRejected(t, consistent, func(p *page) bool { return p.Consistent() }, []inconsistency[page]{
 			{"no Attempt Workspace", func(p *page) { p.WorkspaceID = "" }},
 			{"negative cursor", func(p *page) { p.Cursor = -1 }},
 			{"refresh with items", func(p *page) { p.Items = make([]CandidateAttemptWorkspaceItem, 1) }},
 			{"refresh with a further page", func(p *page) { p.HasMore = true }},
-		})
-	})
-	t.Run("file selector", func(t *testing.T) {
-		t.Parallel()
-		type content = CandidateWorkspaceContent
-		entryID := model.NewAttemptWorkspaceEntryID()
-		consistent := func(*testing.T) *content {
-			return &content{Entry: CandidateAttemptWorkspaceItem{EntryID: entryID}, ContentVersion: model.NewWorkspaceContentVersion()}
-		}
-		const message = "incomplete candidate Workspace selector"
-		require.EqualError(t, (*content)(nil).ConsistentWith(entryID), message)
-		requireEachInconsistencyRejected(t, consistent, func(c *content) error { return c.ConsistentWith(entryID) }, message, []inconsistency[content]{
-			{"another entry", func(c *content) { c.Entry.EntryID = model.NewAttemptWorkspaceEntryID() }},
-			{"no content version", func(c *content) { c.ContentVersion = "" }},
 		})
 	})
 }
@@ -651,13 +607,12 @@ func TestExamAttemptWorkspaceMutationResultConsistentWithRejectsEachInconsistenc
 			Change:          journalEntryFixture(t, target.WorkspaceID, entryID),
 		}
 	}
-	check := func(r *result) error {
+	check := func(r *result) bool {
 		return r.ConsistentWith(target, model.AttemptWorkspaceMutationCreateFile, entryID)
 	}
-	const message = "inconsistent Attempt Workspace mutation result"
 
-	require.EqualError(t, (*result)(nil).ConsistentWith(target, model.AttemptWorkspaceMutationCreateFile, entryID), message)
-	requireEachInconsistencyRejected(t, consistent, check, message, []inconsistency[result]{
+	require.False(t, (*result)(nil).ConsistentWith(target, model.AttemptWorkspaceMutationCreateFile, entryID))
+	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[result]{
 		{"another Sitting", func(r *result) { r.SittingID = model.NewExamSittingID() }},
 		{"another Class", func(r *result) { r.ClassID = model.NewClassID() }},
 		{"another candidate", func(r *result) { r.CandidateUserID = model.NewUserID() }},
@@ -669,12 +624,12 @@ func TestExamAttemptWorkspaceMutationResultConsistentWithRejectsEachInconsistenc
 		{"change in another Attempt Workspace", func(r *result) { r.Change.WorkspaceID = model.NewExamAttemptWorkspaceID() }},
 		{"fresh change for another entry", func(r *result) { r.Change.EntryID = model.NewAttemptWorkspaceEntryID() }},
 	})
-	require.EqualError(t, consistent(t).ConsistentWith(target, model.AttemptWorkspaceMutationDeleteEntry, entryID), message,
+	require.False(t, consistent(t).ConsistentWith(target, model.AttemptWorkspaceMutationDeleteEntry, entryID),
 		"change of another operation")
 
 	replayed := consistent(t)
 	replayed.Replayed, replayed.Change.EntryID = true, model.NewAttemptWorkspaceEntryID()
-	require.NoError(t, check(replayed), "a replay keeps the entry of the earlier mutation")
+	require.True(t, check(replayed), "a replay keeps the entry of the earlier mutation")
 }
 
 func TestIsValidWorkspaceSHA256AcceptsOnlyLowercaseHexDigests(t *testing.T) {

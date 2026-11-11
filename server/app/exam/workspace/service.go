@@ -201,8 +201,10 @@ func (s *Service) OpenExamStarterWorkspaceFile(
 		return OpenedFile{}, storeErrors.Translate(err)
 	}
 
-	if err = item.Consistent(); err != nil {
-		return OpenedFile{}, apperror.New("exam.starter_workspace.unavailable").Wrap(err)
+	if item == nil || item.Object == nil {
+		return OpenedFile{}, apperror.New("exam.starter_workspace.unavailable").Wrap(
+			errors.New("Starter Workspace Store returned incomplete file metadata"),
+		)
 	}
 
 	body, err := s.deps.Content.OpenStarterWorkspaceObject(ctx, item.Object.ID)
@@ -526,7 +528,7 @@ func (s *Service) authorize(
 	if err != nil {
 		return authorization{}, storeErrors.Translate(err)
 	}
-	if examAccess.Consistent() != nil {
+	if !examAccess.Consistent() {
 		return authorization{}, apperror.New("exam.starter_workspace.unavailable").Wrap(errors.New("Exam access projection is incomplete"))
 	}
 
@@ -598,8 +600,10 @@ func (s *Service) runMutation(
 		return Result{}, mapped
 	}
 
-	if err = result.Consistent(); err != nil {
-		return Result{}, apperror.New("exam.starter_workspace.unavailable").Wrap(err)
+	if result == nil || result.Entry == nil || result.DraftRevision < 1 {
+		return Result{}, apperror.New("exam.starter_workspace.unavailable").Wrap(
+			errors.New("Starter Workspace Store returned incomplete mutation result"),
+		)
 	}
 
 	if !result.Replayed {

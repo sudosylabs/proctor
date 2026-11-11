@@ -9,7 +9,6 @@ package store
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -36,17 +35,6 @@ type ExamRevisionPublicationResult struct {
 	Replayed      bool
 }
 
-// Consistent reports an error unless the publication outcome carries the
-// summary of the Exam Revision it published.
-func (r *ExamRevisionPublicationResult) Consistent() error {
-	if r == nil ||
-		r.Revision == nil {
-		return errors.New("Exam Revision store returned no result")
-	}
-
-	return nil
-}
-
 // ExamRevisionSummary is the bounded public-authoring projection. It excludes
 // instructions, canonical policy bytes, resource metadata, Starter Workspace
 // paths and every opaque content identity.
@@ -71,17 +59,13 @@ type ExamRevisionSummary struct {
 	Kind                    model.ExamRevisionPublicationKind
 }
 
-// ConsistentWith reports an error unless the summary is the Exam Revision that
-// was asked for, belongs to the given Exam, and carries a title.
-func (s *ExamRevisionSummary) ConsistentWith(revisionID model.ExamRevisionID, examID model.ExamID) error {
-	if s == nil ||
+// ConsistentWith reports whether the summary is the Exam Revision that was
+// asked for, belongs to the given Exam, and carries a title.
+func (s *ExamRevisionSummary) ConsistentWith(revisionID model.ExamRevisionID, examID model.ExamID) bool {
+	return !(s == nil ||
 		s.ID != revisionID ||
 		s.ExamID != examID ||
-		s.Title == "" {
-		return errors.New("result release Exam revision projection is inconsistent")
-	}
-
-	return nil
+		s.Title == "")
 }
 
 type ExamRevisionListOptions struct {

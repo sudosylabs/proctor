@@ -212,8 +212,8 @@ func (s *Service) evaluateEndedFocusLoss(
 		return FocusLossEvaluation{}, s.failAudit(ctx, auditID, err)
 	}
 
-	if err = stored.ConsistentWith(target, selector, command.Sequence, command.DurationMilliseconds, command.Source, discrepancyID, signalID); err != nil {
-		return FocusLossEvaluation{}, apperror.New("exam.attempt.unavailable").Wrap(err)
+	if !stored.ConsistentWith(target, selector, command.Sequence, command.DurationMilliseconds, command.Source, discrepancyID, signalID) {
+		return FocusLossEvaluation{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent late Focus Loss outcome"))
 	}
 
 	result := FocusLossEvaluation{
@@ -288,8 +288,8 @@ func projectFocusLoss(
 	focusLossAccess store.ExamAttemptFocusLossAccess,
 	command FocusLossCommand,
 ) (FocusLossEvaluation, error) {
-	if err := stored.ConsistentWith(target, focusLossAccess, command.Sequence, command.DurationMilliseconds, command.Source); err != nil {
-		return FocusLossEvaluation{}, apperror.New("exam.attempt.unavailable").Wrap(err)
+	if !stored.ConsistentWith(target, focusLossAccess, command.Sequence, command.DurationMilliseconds, command.Source) {
+		return FocusLossEvaluation{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Focus Loss outcome"))
 	}
 
 	if !validFocusLossEnforcement(stored, focusLossAccess) {
@@ -431,7 +431,7 @@ func validFocusLossEnforcement(result *store.ExamAttemptFocusLossResult, focusLo
 	}
 
 	if result.Participation != nil &&
-		(result.Participation.Consistent() != nil ||
+		(!result.Participation.Consistent() ||
 			result.Participation.ID != focusLossAccess.ParticipationID ||
 			result.Participation.Generation != focusLossAccess.Generation) {
 		return false
@@ -449,7 +449,7 @@ func validFocusLossEnforcement(result *store.ExamAttemptFocusLossResult, focusLo
 	}
 
 	if result.Suspension != nil &&
-		(result.Suspension.ConsistentActive(focusLossAccess.AttemptID) != nil ||
+		(!result.Suspension.ConsistentActiveOrAbsent(focusLossAccess.AttemptID) ||
 			result.Flag == nil ||
 			result.Suspension.ParticipationID != focusLossAccess.ParticipationID ||
 			result.Suspension.Generation != focusLossAccess.Generation ||

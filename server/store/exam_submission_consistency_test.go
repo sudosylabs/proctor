@@ -101,11 +101,10 @@ func TestExamSubmissionAutomaticSealResultConsistentWithRejectsEachInconsistency
 	consistent := func(*testing.T) *result {
 		return &result{ExamSubmissionSealResult: sealResultFixture(target, proposed, proposedCode), ConnectionClosed: true}
 	}
-	check := func(r *result) error { return r.ConsistentWith(target, proposed, proposedCode) }
-	const message = "inconsistent automatic Submission result"
+	check := func(r *result) bool { return r.ConsistentWith(target, proposed, proposedCode) }
 
-	require.EqualError(t, (*result)(nil).ConsistentWith(target, proposed, proposedCode), message)
-	requireEachInconsistencyRejected(t, consistent, check, message, onEmbeddedSeal(
+	require.False(t, (*result)(nil).ConsistentWith(target, proposed, proposedCode))
+	requireEachInconsistencyRejected(t, consistent, check, onEmbeddedSeal(
 		func(r *result) *ExamSubmissionSealResult { return &r.ExamSubmissionSealResult },
 		inconsistency[result]{"receipt of another Exam Revision", func(r *result) { r.Receipt.ExamRevisionID = model.NewExamRevisionID() }},
 		inconsistency[result]{"negative workspace cursor", func(r *result) { r.Receipt.WorkspaceCursor = -1 }},
@@ -115,7 +114,7 @@ func TestExamSubmissionAutomaticSealResultConsistentWithRejectsEachInconsistency
 	replayed := consistent(t)
 	replayed.Replayed, replayed.ConnectionClosed = true, false
 	replayed.Receipt.SubmissionID, replayed.Receipt.ReceiptCode = model.NewSubmissionID(), model.NewSubmissionReceiptCode()
-	require.NoError(t, check(replayed), "a replay keeps the identities of the earlier seal")
+	require.True(t, check(replayed), "a replay keeps the identities of the earlier seal")
 }
 
 func TestExamSubmissionManagerEndResultConsistentWithRejectsEachInconsistency(t *testing.T) {
@@ -126,13 +125,12 @@ func TestExamSubmissionManagerEndResultConsistentWithRejectsEachInconsistency(t 
 	consistent := func(*testing.T) *result {
 		return &result{ExamSubmissionSealResult: sealResultFixture(target, proposed, proposedCode), ConnectionClosed: true}
 	}
-	check := func(r *result) error {
+	check := func(r *result) bool {
 		return r.ConsistentWith(target.AttemptID, target.ExamID, target.SittingID, target, proposed, proposedCode)
 	}
-	const message = "inconsistent manager-ended Submission result"
 
-	require.EqualError(t, (*result)(nil).ConsistentWith(target.AttemptID, target.ExamID, target.SittingID, target, proposed, proposedCode), message)
-	requireEachInconsistencyRejected(t, consistent, check, message, onEmbeddedSeal(
+	require.False(t, (*result)(nil).ConsistentWith(target.AttemptID, target.ExamID, target.SittingID, target, proposed, proposedCode))
+	requireEachInconsistencyRejected(t, consistent, check, onEmbeddedSeal(
 		func(r *result) *ExamSubmissionSealResult { return &r.ExamSubmissionSealResult },
 		inconsistency[result]{"receipt without its Exam Revision", func(r *result) { r.Receipt.ExamRevisionID = "" }},
 		inconsistency[result]{"negative workspace cursor", func(r *result) { r.Receipt.WorkspaceCursor = -1 }},
@@ -167,11 +165,10 @@ func TestExamSubmissionSealResultConsistentWithRejectsEachInconsistency(t *testi
 		value := sealResultFixture(prepared, proposed, proposedCode)
 		return &value
 	}
-	check := func(r *result) error { return r.ConsistentWith(target, sealAccess, proposed, proposedCode) }
-	const message = "inconsistent Submission seal result"
+	check := func(r *result) bool { return r.ConsistentWith(target, sealAccess, proposed, proposedCode) }
 
-	require.EqualError(t, (*result)(nil).ConsistentWith(target, sealAccess, proposed, proposedCode), message)
-	requireEachInconsistencyRejected(t, consistent, check, message, append(sealScopeInconsistencies(),
+	require.False(t, (*result)(nil).ConsistentWith(target, sealAccess, proposed, proposedCode))
+	requireEachInconsistencyRejected(t, consistent, check, append(sealScopeInconsistencies(),
 		inconsistency[result]{"receipt at another workspace cursor", func(r *result) { r.Receipt.WorkspaceCursor++ }},
 		inconsistency[result]{"receipt of another Exam Revision", func(r *result) { r.Receipt.ExamRevisionID = model.NewExamRevisionID() }},
 		inconsistency[result]{"invalid browser settlement", func(r *result) { r.Receipt.BrowserActivity.InventoryRevision = 0 }},
@@ -194,10 +191,9 @@ func TestSubmissionAuthorizationsConsistentWithRejectEachInconsistency(t *testin
 
 	t.Run("Submission", func(t *testing.T) {
 		t.Parallel()
-		const message = "Submission authorization projection is incomplete"
-		check := func(a *ExamSubmissionAuthorization) error { return a.ConsistentWith(submissionID) }
-		require.EqualError(t, (*ExamSubmissionAuthorization)(nil).ConsistentWith(submissionID), message)
-		requireEachInconsistencyRejected(t, submission, check, message, []inconsistency[ExamSubmissionAuthorization]{
+		check := func(a *ExamSubmissionAuthorization) bool { return a.ConsistentWith(submissionID) }
+		require.False(t, (*ExamSubmissionAuthorization)(nil).ConsistentWith(submissionID))
+		requireEachInconsistencyRejected(t, submission, check, []inconsistency[ExamSubmissionAuthorization]{
 			{"another Submission", func(a *ExamSubmissionAuthorization) { a.SubmissionID = model.NewSubmissionID() }},
 			{"no Exam", func(a *ExamSubmissionAuthorization) { a.ExamID = "" }},
 			{"no Sitting", func(a *ExamSubmissionAuthorization) { a.SittingID = "" }},

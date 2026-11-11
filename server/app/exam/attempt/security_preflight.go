@@ -71,7 +71,7 @@ func (s *Service) beginPreflightAudit(
 	if err != nil {
 		return "", storeError(storeErrors, err)
 	}
-	if snapshot.ConsistentWith(sittingID) != nil {
+	if !snapshot.ConsistentWithOwningClass(sittingID) {
 		return "", apperror.New("exam.attempt.unavailable").Wrap(errors.New("preflight Sitting ownership is invalid"))
 	}
 
@@ -161,8 +161,8 @@ func (s *Service) PrepareExamSecurityPreflight(
 		return nil, s.failAudit(ctx, audit, storeError(securityPreflightStoreErrors, err))
 	}
 
-	if err = result.ConsistentWith(command.SittingID); err != nil {
-		return nil, apperror.New("exam.attempt.unavailable").Wrap(err)
+	if !result.ConsistentWith(command.SittingID) {
+		return nil, apperror.New("exam.attempt.unavailable").Wrap(errors.New("preflight Store returned an invalid policy"))
 	}
 
 	return result, nil
@@ -278,8 +278,8 @@ func (s *Service) RecoverExamSecurityPolicy(
 		return nil, storeError(securityPreflightStoreErrors, err)
 	}
 
-	if err = result.ConsistentWith(attemptID); err != nil {
-		return nil, apperror.New("exam.attempt.unavailable").Wrap(err)
+	if !result.ConsistentWith(attemptID) {
+		return nil, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent security policy recovery"))
 	}
 
 	return result, nil

@@ -191,8 +191,8 @@ func (s *Service) OpenExamResource(
 	if err != nil {
 		return Opened{}, storeErrors.Translate(err)
 	}
-	if err = record.Consistent(); err != nil {
-		return Opened{}, apperror.New("exam.resource.unavailable").Wrap(err)
+	if !record.Consistent() {
+		return Opened{}, apperror.New("exam.resource.unavailable").Wrap(errors.New("incomplete resource record"))
 	}
 	body, err := s.deps.Content.OpenExamResource(ctx, record.Resource.SelectedFileRevisionID, record.Rendition.ID)
 	if err != nil {
@@ -353,8 +353,8 @@ func (s *Service) ReplaceExamResourceContent(
 	if err != nil {
 		return store.ExamResourceRecord{}, storeErrors.Translate(err)
 	}
-	if err = current.Consistent(); err != nil {
-		return store.ExamResourceRecord{}, apperror.New("exam.resource.unavailable").Wrap(err)
+	if !current.Consistent() {
+		return store.ExamResourceRecord{}, apperror.New("exam.resource.unavailable").Wrap(errors.New("incomplete resource record"))
 	}
 
 	at := model.TimeUTC(s.deps.Now())
@@ -835,7 +835,7 @@ func (s *Service) authorize(
 	if err != nil {
 		return authorizationDecision{}, storeErrors.Translate(err)
 	}
-	if examAccess.Consistent() != nil {
+	if !examAccess.Consistent() {
 		return authorizationDecision{}, apperror.New("exam.resource.unavailable").Wrap(errors.New("missing access"))
 	}
 

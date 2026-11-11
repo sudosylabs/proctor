@@ -9,6 +9,7 @@ package attempt
 
 import (
 	"context"
+	"errors"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/exam/safemarkdown"
@@ -64,8 +65,8 @@ func (s *Service) GetCandidateExamPresentation(
 		return Presentation{}, storeError(storeErrors, err)
 	}
 
-	if err = stored.Consistent(); err != nil {
-		return Presentation{}, apperror.New("exam.attempt.unavailable").Wrap(err)
+	if !stored.Consistent() {
+		return Presentation{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("missing candidate presentation"))
 	}
 
 	result := Presentation{
@@ -123,8 +124,8 @@ func (s *Service) OpenCandidateExamResource(
 		return OpenedContent{}, storeError(storeErrors, err)
 	}
 
-	if err = resolved.ConsistentWith(query.ResourceID); err != nil {
-		return OpenedContent{}, apperror.New("exam.attempt.unavailable").Wrap(err)
+	if !resolved.ConsistentWith(query.ResourceID) {
+		return OpenedContent{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("incomplete candidate Resource selector"))
 	}
 
 	body, err := s.deps.Content.OpenExamResource(ctx, resolved.FileRevisionID, resolved.RenditionID)

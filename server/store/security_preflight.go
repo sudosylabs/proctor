@@ -8,7 +8,6 @@
 package store
 
 import (
-	"errors"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -50,18 +49,14 @@ type SecurityPreflightPrepared struct {
 	Replayed                   bool
 }
 
-// ConsistentWith reports an error unless the prepared preflight carries a
-// valid challenge and a policy that is valid at the server time and resolved for
-// the given Sitting.
-func (p *SecurityPreflightPrepared) ConsistentWith(sittingID model.ExamSittingID) error {
-	if p == nil ||
+// ConsistentWith reports whether the prepared preflight carries a valid
+// challenge and a policy that is valid at the server time and resolved for the
+// given Sitting.
+func (p *SecurityPreflightPrepared) ConsistentWith(sittingID model.ExamSittingID) bool {
+	return !(p == nil ||
 		p.Challenge.Validate() != nil ||
 		p.Resolved.Policy.Validate(p.ServerTime) != nil ||
-		p.Resolved.Policy.SittingID != sittingID {
-		return errors.New("preflight Store returned an invalid policy")
-	}
-
-	return nil
+		p.Resolved.Policy.SittingID != sittingID)
 }
 
 type SecurityPreflightReport struct {
@@ -84,12 +79,12 @@ type SecurityPolicyRecovery struct {
 	FrozenAttemptConfiguration model.AttemptConfiguration
 }
 
-// ConsistentWith reports an error unless the recovery carries its server
-// time, valid security coverage, bounded and present source, coverage and reset
-// receipt lists, a valid admitted security posture bound to the given Attempt,
-// and a valid frozen Attempt configuration.
-func (r *SecurityPolicyRecovery) ConsistentWith(attemptID model.ExamAttemptID) error {
-	if r == nil ||
+// ConsistentWith reports whether the recovery carries its server time, valid
+// security coverage, bounded and present source, coverage and reset receipt
+// lists, a valid admitted security posture bound to the given Attempt, and a
+// valid frozen Attempt configuration.
+func (r *SecurityPolicyRecovery) ConsistentWith(attemptID model.ExamAttemptID) bool {
+	return !(r == nil ||
 		r.ServerTime.IsZero() ||
 		r.SecurityCoverage.Validate() != nil ||
 		r.CurrentSources == nil ||
@@ -100,11 +95,7 @@ func (r *SecurityPolicyRecovery) ConsistentWith(attemptID model.ExamAttemptID) e
 		len(r.SourceResetReceipts) > 11 ||
 		r.Security.Validate() != nil ||
 		r.Security.Policy.Scope.AttemptID != attemptID ||
-		r.FrozenAttemptConfiguration.Validate() != nil {
-		return errors.New("inconsistent security policy recovery")
-	}
-
-	return nil
+		r.FrozenAttemptConfiguration.Validate() != nil)
 }
 
 type ExamAttemptSecurityCoverageUpdate struct {

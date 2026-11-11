@@ -50,7 +50,7 @@ func (a examSubmissionMailPreparationAdapter) PrepareSubmissionReceipt(ctx conte
 		return nil, err
 	}
 
-	if snapshot.ConsistentWithExam(request.SittingID, request.ExamID) != nil {
+	if !snapshot.ConsistentAndValidWith(request.SittingID, request.ExamID) {
 		return nil, errors.New("Submission receipt Sitting projection is inconsistent")
 	}
 
@@ -58,7 +58,7 @@ func (a examSubmissionMailPreparationAdapter) PrepareSubmissionReceipt(ctx conte
 	if err != nil {
 		return nil, err
 	}
-	if revision.ConsistentWith(snapshot.Sitting.ExamRevisionID, request.ExamID) != nil {
+	if !revision.ConsistentWith(snapshot.Sitting.ExamRevisionID, request.ExamID) {
 		return nil, errors.New("Submission receipt Exam revision projection is inconsistent")
 	}
 

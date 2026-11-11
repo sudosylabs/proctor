@@ -481,8 +481,8 @@ func (s *Service) authorizeBrowserActivityView(
 	if err != nil {
 		return "", storeErrors.Translate(err)
 	}
-	if err = examAccess.ConsistentWithValidExam(value.Sitting.ExamID); err != nil {
-		return "", apperror.New("exam.sitting.unavailable").Wrap(err)
+	if !examAccess.ConsistentAndValidWith(value.Sitting.ExamID) {
+		return "", apperror.New("exam.sitting.unavailable").Wrap(errors.New("Exam access projection is incomplete"))
 	}
 
 	resource := model.Resource{Type: model.ResourceExamSitting, ID: sittingID.String()}
@@ -1690,8 +1690,8 @@ func (s *Service) authorize(
 	if err != nil {
 		return authorizationDecision{}, storeErrors.Translate(err)
 	}
-	if err = examAccess.ConsistentWithValidExam(examID); err != nil {
-		return authorizationDecision{}, apperror.New("exam.sitting.unavailable").Wrap(err)
+	if !examAccess.ConsistentAndValidWith(examID) {
+		return authorizationDecision{}, apperror.New("exam.sitting.unavailable").Wrap(errors.New("Exam access projection is incomplete"))
 	}
 
 	action, err := manageraccess.SelectAction(ctx, s.deps.Memberships, principal.UserID, examAccess, at, ordinaryAction, overrideAction)
@@ -1711,16 +1711,18 @@ func (s *Service) authorize(
 }
 
 func requireSnapshot(snapshot *store.ExamSittingSnapshot) (store.ExamSittingSnapshot, error) {
-	if err := snapshot.Consistent(); err != nil {
-		return store.ExamSittingSnapshot{}, apperror.New("exam.sitting.unavailable").Wrap(err)
+	if !snapshot.ConsistentAndValid() {
+		return store.ExamSittingSnapshot{}, apperror.New("exam.sitting.unavailable").Wrap(errors.New("Exam Sitting Store returned an incomplete snapshot"))
 	}
 
 	return *snapshot, nil
 }
 
 func requireCommandResult(result *store.ExamSittingCommandResult) (store.ExamSittingSnapshot, error) {
-	if err := result.Consistent(); err != nil {
-		return store.ExamSittingSnapshot{}, apperror.New("exam.sitting.unavailable").Wrap(err)
+	if result == nil || result.Value == nil {
+		return store.ExamSittingSnapshot{}, apperror.New("exam.sitting.unavailable").Wrap(
+			errors.New("Exam Sitting Store returned an incomplete result"),
+		)
 	}
 
 	return requireSnapshot(result.Value)

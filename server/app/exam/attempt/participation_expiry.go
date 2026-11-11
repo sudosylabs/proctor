@@ -143,8 +143,8 @@ func (s *Service) expireLapsedParticipation(
 		return storeError(storeErrors, err)
 	}
 
-	if err = due.ConsistentWith(attemptID, participationID, generation); err != nil {
-		return apperror.New("exam.attempt.unavailable").Wrap(err)
+	if !due.ConsistentWith(attemptID, participationID, generation) {
+		return apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent lapsed Participation expiry target"))
 	}
 	if _, err = s.expireParticipation(ctx, *due); err != nil {
 		return err
@@ -231,7 +231,7 @@ func expiredAttemptMatches(attempt *model.ExamAttempt, due store.ExamAttemptPart
 // expiredParticipationMatches reports whether the target generation ended as
 // lease_expired.
 func expiredParticipationMatches(participation *store.ExamAttemptParticipationView, due store.ExamAttemptParticipationExpiryDue) bool {
-	return participation.Consistent() == nil &&
+	return participation.Consistent() &&
 		participation.ID == due.ParticipationID &&
 		participation.AttemptID == due.AttemptID &&
 		participation.Generation == due.Generation &&

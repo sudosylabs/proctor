@@ -181,8 +181,8 @@ func projectAutomaticSubmissionResult(
 	proposed model.SubmissionID,
 	proposedCode model.SubmissionReceiptCode,
 ) (AutomaticSubmissionResult, error) {
-	if err := stored.ConsistentWith(target, proposed, proposedCode); err != nil {
-		return AutomaticSubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(err)
+	if !stored.ConsistentWith(target, proposed, proposedCode) {
+		return AutomaticSubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent automatic Submission result"))
 	}
 
 	return AutomaticSubmissionResult{SubmissionResult: SubmissionResult{

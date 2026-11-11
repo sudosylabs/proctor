@@ -27,23 +27,22 @@ type inconsistency[T any] struct {
 }
 
 // requireEachInconsistencyRejected proves one consistency check clause by
-// clause: the value built by consistent passes, and the same value with any
-// single listed inconsistency applied fails with message.
+// clause: check reports true for the value built by consistent, and false for
+// the same value with any single listed inconsistency applied.
 func requireEachInconsistencyRejected[T any](
 	t *testing.T,
 	consistent func(*testing.T) *T,
-	check func(*T) error,
-	message string,
+	check func(*T) bool,
 	cases []inconsistency[T],
 ) {
 	t.Helper()
-	require.NoError(t, check(consistent(t)), "the consistent value was rejected")
+	require.True(t, check(consistent(t)), "the consistent value was rejected")
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			value := consistent(t)
 			test.apply(value)
-			require.EqualError(t, check(value), message)
+			require.False(t, check(value))
 		})
 	}
 }

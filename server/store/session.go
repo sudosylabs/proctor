@@ -9,7 +9,6 @@ package store
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -49,17 +48,6 @@ type SessionExpiryEnforcementResult struct {
 	Session     *model.Session
 	TokenHashes []string
 	Expired     bool
-}
-
-// Consistent reports an error unless the outcome carries the Session whose
-// expiry was enforced.
-func (r *SessionExpiryEnforcementResult) Consistent() error {
-	if r == nil ||
-		r.Session == nil {
-		return errors.New("session expiry result is incomplete")
-	}
-
-	return nil
 }
 
 // UserSessionsRevocation is the complete durable input for revoking every

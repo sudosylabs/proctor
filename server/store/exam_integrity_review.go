@@ -9,7 +9,6 @@ package store
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -36,21 +35,17 @@ type ExamIntegrityReviewAuthorization struct {
 	AcademicUnitID  model.AcademicUnitID
 }
 
-// ConsistentWith reports an error unless the projection is for the Submission
-// that was asked for and names its Exam, Sitting, Attempt, candidate and
-// owning Academic Unit.
-func (a *ExamIntegrityReviewAuthorization) ConsistentWith(submissionID model.SubmissionID) error {
-	if a == nil ||
+// ConsistentWith reports whether the projection is for the Submission that was
+// asked for and names its Exam, Sitting, Attempt, candidate and owning
+// Academic Unit.
+func (a *ExamIntegrityReviewAuthorization) ConsistentWith(submissionID model.SubmissionID) bool {
+	return !(a == nil ||
 		a.SubmissionID != submissionID ||
 		!a.ExamID.IsValid() ||
 		!a.SittingID.IsValid() ||
 		!a.AttemptID.IsValid() ||
 		!a.CandidateUserID.IsValid() ||
-		!a.AcademicUnitID.IsValid() {
-		return errors.New("Review authorization projection is incomplete")
-	}
-
-	return nil
+		!a.AcademicUnitID.IsValid())
 }
 
 // ExamIntegrityFlagSummary is the bounded manager projection of one Flag. It
@@ -74,19 +69,6 @@ type ExamIntegrityFlagPage struct {
 	HasMore bool
 }
 
-// ConsistentWith reports an error unless the page holds no more items than
-// the requested limit, and holds exactly that many when it reports a further
-// page.
-func (p *ExamIntegrityFlagPage) ConsistentWith(limit int) error {
-	if p == nil ||
-		len(p.Items) > limit ||
-		(p.HasMore && len(p.Items) != limit) {
-		return errors.New("inconsistent Flag page")
-	}
-
-	return nil
-}
-
 type ExamIntegrityEvidenceListOptions struct {
 	SubmissionID    model.SubmissionID
 	FlagID          model.IntegrityFlagID
@@ -99,19 +81,6 @@ type ExamIntegrityEvidencePage struct {
 	HasMore bool
 }
 
-// ConsistentWith reports an error unless the page holds no more items than
-// the requested limit, and holds exactly that many when it reports a further
-// page.
-func (p *ExamIntegrityEvidencePage) ConsistentWith(limit int) error {
-	if p == nil ||
-		len(p.Items) > limit ||
-		(p.HasMore && len(p.Items) != limit) {
-		return errors.New("inconsistent Evidence page")
-	}
-
-	return nil
-}
-
 type ExamIntegrityDiscrepancyListOptions struct {
 	SubmissionID       model.SubmissionID
 	AfterDiscrepancyID model.IntegrityDiscrepancyID
@@ -121,19 +90,6 @@ type ExamIntegrityDiscrepancyListOptions struct {
 type ExamIntegrityDiscrepancyPage struct {
 	Items   []model.IntegrityDiscrepancy
 	HasMore bool
-}
-
-// ConsistentWith reports an error unless the page holds no more items than
-// the requested limit, and holds exactly that many when it reports a further
-// page.
-func (p *ExamIntegrityDiscrepancyPage) ConsistentWith(limit int) error {
-	if p == nil ||
-		len(p.Items) > limit ||
-		(p.HasMore && len(p.Items) != limit) {
-		return errors.New("inconsistent Discrepancy page")
-	}
-
-	return nil
 }
 
 // ExamSubmissionReviewSnapshot is the bounded manager-visible Review state.
@@ -219,20 +175,16 @@ type ExamIntegrityReviewMutationResult struct {
 	Replayed      bool
 }
 
-// ConsistentWith reports an error unless the outcome carries a consistent
-// authorization projection and a valid Review for the given Submission, and its
-// Decision, when present, is valid and belongs to that Review.
-func (r *ExamIntegrityReviewMutationResult) ConsistentWith(submissionID model.SubmissionID) error {
-	if r == nil ||
-		r.Authorization.ConsistentWith(submissionID) != nil ||
+// ConsistentWith reports whether the outcome carries a consistent
+// authorization projection and a valid Review for the given Submission, and
+// its Decision, when present, is valid and belongs to that Review.
+func (r *ExamIntegrityReviewMutationResult) ConsistentWith(submissionID model.SubmissionID) bool {
+	return !(r == nil ||
+		!r.Authorization.ConsistentWith(submissionID) ||
 		r.Review == nil ||
 		r.Review.Validate() != nil ||
 		r.Review.SubmissionID != submissionID ||
-		(r.Decision != nil && (r.Decision.Validate() != nil || r.Decision.ReviewID != r.Review.ID)) {
-		return errors.New("inconsistent Review mutation result")
-	}
-
-	return nil
+		(r.Decision != nil && (r.Decision.Validate() != nil || r.Decision.ReviewID != r.Review.ID)))
 }
 
 // ExamIntegrityReviewStore owns the one Review aggregate for a sealed

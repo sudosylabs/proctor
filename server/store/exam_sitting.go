@@ -9,7 +9,6 @@ package store
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -23,55 +22,43 @@ type ExamSittingSnapshot struct {
 	AcademicUnitID model.AcademicUnitID
 }
 
-// ConsistentWith reports an error unless the snapshot carries the Sitting that
-// was asked for and that Sitting names the Class it belongs to.
-func (s *ExamSittingSnapshot) ConsistentWith(sittingID model.ExamSittingID) error {
-	if s == nil ||
+// ConsistentAndValid reports whether the snapshot carries a Sitting that
+// passes its own validation. It does not ask which Sitting that is.
+func (s *ExamSittingSnapshot) ConsistentAndValid() bool {
+	return !(s == nil ||
 		s.Sitting == nil ||
-		s.Sitting.ID != sittingID ||
-		!s.Sitting.ClassID.IsValid() {
-		return errors.New("incomplete Sitting ownership projection")
-	}
-
-	return nil
+		s.Sitting.Validate() != nil)
 }
 
-// ConsistentWithExam reports an error unless the snapshot carries a valid
-// Sitting that is the one asked for and belongs to the given Exam.
-func (s *ExamSittingSnapshot) ConsistentWithExam(sittingID model.ExamSittingID, examID model.ExamID) error {
-	if s == nil ||
+// ConsistentAndValidWith reports whether the snapshot carries a Sitting that
+// passes its own validation, is the one asked for, and belongs to the given
+// Exam.
+func (s *ExamSittingSnapshot) ConsistentAndValidWith(sittingID model.ExamSittingID, examID model.ExamID) bool {
+	return !(s == nil ||
 		s.Sitting == nil ||
 		s.Sitting.Validate() != nil ||
 		s.Sitting.ID != sittingID ||
-		s.Sitting.ExamID != examID {
-		return errors.New("result release Sitting projection is inconsistent")
-	}
-
-	return nil
+		s.Sitting.ExamID != examID)
 }
 
-// ConsistentWithOwningUnit reports an error unless the snapshot carries the
-// Sitting that was asked for and names the Academic Unit that owns it.
-func (s *ExamSittingSnapshot) ConsistentWithOwningUnit(sittingID model.ExamSittingID) error {
-	if s == nil ||
+// ConsistentWithOwningClass reports whether the snapshot carries the Sitting
+// that was asked for and that Sitting names the Class it belongs to. It does
+// not validate the Sitting or ask for its Academic Unit.
+func (s *ExamSittingSnapshot) ConsistentWithOwningClass(sittingID model.ExamSittingID) bool {
+	return !(s == nil ||
 		s.Sitting == nil ||
 		s.Sitting.ID != sittingID ||
-		!s.AcademicUnitID.IsValid() {
-		return errors.New("inconsistent managed Attempt Sitting projection")
-	}
-
-	return nil
+		!s.Sitting.ClassID.IsValid())
 }
 
-// Consistent reports an error unless the snapshot carries a valid Sitting.
-func (s *ExamSittingSnapshot) Consistent() error {
-	if s == nil ||
+// ConsistentWithOwningUnit reports whether the snapshot carries the Sitting
+// that was asked for and names the Academic Unit that owns it. It does not
+// validate the Sitting or ask for its Class.
+func (s *ExamSittingSnapshot) ConsistentWithOwningUnit(sittingID model.ExamSittingID) bool {
+	return !(s == nil ||
 		s.Sitting == nil ||
-		s.Sitting.Validate() != nil {
-		return errors.New("Exam Sitting Store returned an incomplete snapshot")
-	}
-
-	return nil
+		s.Sitting.ID != sittingID ||
+		!s.AcademicUnitID.IsValid())
 }
 
 // ExamSittingInvalidationTarget is the minimal selector needed to invalidate
@@ -183,19 +170,6 @@ type ExamSittingLifecycleResult struct {
 	Transition ExamSittingLifecycleTransitionCode
 	Changed    bool
 	Replayed   bool
-}
-
-// ConsistentWith reports an error unless the reconciliation outcome carries
-// the snapshot of the Sitting that was asked for.
-func (r *ExamSittingLifecycleResult) ConsistentWith(sittingID model.ExamSittingID) error {
-	if r == nil ||
-		r.Value == nil ||
-		r.Value.Sitting == nil ||
-		r.Value.Sitting.ID != sittingID {
-		return errors.New("Exam Sitting lifecycle reconciliation returned an incomplete result")
-	}
-
-	return nil
 }
 
 type ExamSittingLifecycleDueOptions struct {
@@ -349,17 +323,6 @@ type ExamSittingMailReconciliation struct {
 type ExamSittingCommandResult struct {
 	Value    *ExamSittingSnapshot
 	Replayed bool
-}
-
-// Consistent reports an error unless the command outcome carries the Sitting
-// snapshot it committed.
-func (r *ExamSittingCommandResult) Consistent() error {
-	if r == nil ||
-		r.Value == nil {
-		return errors.New("Exam Sitting Store returned an incomplete result")
-	}
-
-	return nil
 }
 
 // ExamSittingStore owns bounded Sitting discovery and atomic scheduling

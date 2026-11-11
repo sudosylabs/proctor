@@ -308,6 +308,7 @@ type accessPolicyAuditFake struct {
 func (a *accessPolicyAuditFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
 	// This fake keeps no subject, so it refuses a Mutation that names one
 	// instead of dropping it.
+	// It stands in for access.MutationAuditAdapter, which records it.
 	if !attempt.Subject.IsZero() {
 		return "", apperror.New("audit.internal")
 	}
@@ -385,6 +386,7 @@ type mailRekeyAuditFake struct {
 func (f *mailRekeyAuditFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
 	// This fake keeps no subject, so it refuses a Mutation that names one
 	// instead of dropping it.
+	// It stands in for access.MutationAuditAdapter, which records it.
 	if !attempt.Subject.IsZero() {
 		return "", apperror.New("audit.internal")
 	}

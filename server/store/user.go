@@ -9,7 +9,6 @@ package store
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/sudosylabs/proctor/server/model"
@@ -265,22 +264,17 @@ type CurrentUserContext struct {
 	UnresolvedAttempt       *CurrentUserAttemptSelector
 }
 
-// ConsistentWith reports an error unless the context is the given User's,
-// carries a username, display name and a known profile picture kind, lists at
-// least two available product areas, and lists at most twenty management
-// scopes.
-func (c *CurrentUserContext) ConsistentWith(userID model.UserID) error {
-	if c == nil ||
+// ConsistentWith reports whether the context is the given User's, carries a
+// username, display name and a known profile picture kind, lists at least two
+// available product areas, and lists at most twenty management scopes.
+func (c *CurrentUserContext) ConsistentWith(userID model.UserID) bool {
+	return !(c == nil ||
 		c.UserID != userID ||
 		c.Username == "" ||
 		c.DisplayName == "" ||
 		(c.ProfilePictureKind != model.ProfilePictureCustom && c.ProfilePictureKind != model.ProfilePictureDefault) ||
 		len(c.AvailableProductAreas) < 2 ||
-		len(c.ManagementScopes) > 20 {
-		return errors.New("current User context projection is incomplete")
-	}
-
-	return nil
+		len(c.ManagementScopes) > 20)
 }
 
 // UserLastLoginUpdate is the input to UserStore.UpdateLastLogin.

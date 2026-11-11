@@ -102,6 +102,7 @@ type jobOperationsAuditorFake struct {
 func (f *jobOperationsAuditorFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
 	// This fake keeps neither a scope nor a subject, so it refuses a Mutation
 	// that names one instead of dropping it.
+	// It stands in for access.MutationAuditAdapter, which records both.
 	if attempt.ScopeType != "" || attempt.ScopeID != "" || !attempt.Subject.IsZero() {
 		return "", apperror.New("audit.internal")
 	}

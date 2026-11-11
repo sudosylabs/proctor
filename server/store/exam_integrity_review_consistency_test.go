@@ -36,11 +36,10 @@ func TestExamIntegrityReviewAuthorizationConsistentWithRejectsEachInconsistency(
 		value := reviewAuthorizationFixture(submissionID)
 		return &value
 	}
-	check := func(a *ExamIntegrityReviewAuthorization) error { return a.ConsistentWith(submissionID) }
-	const message = "Review authorization projection is incomplete"
+	check := func(a *ExamIntegrityReviewAuthorization) bool { return a.ConsistentWith(submissionID) }
 
-	require.EqualError(t, (*ExamIntegrityReviewAuthorization)(nil).ConsistentWith(submissionID), message)
-	requireEachInconsistencyRejected(t, consistent, check, message, []bad{
+	require.False(t, (*ExamIntegrityReviewAuthorization)(nil).ConsistentWith(submissionID))
+	requireEachInconsistencyRejected(t, consistent, check, []bad{
 		{"another Submission", func(a *ExamIntegrityReviewAuthorization) { a.SubmissionID = model.NewSubmissionID() }},
 		{"no Exam", func(a *ExamIntegrityReviewAuthorization) { a.ExamID = "" }},
 		{"no Sitting", func(a *ExamIntegrityReviewAuthorization) { a.SittingID = "" }},
@@ -70,11 +69,10 @@ func TestExamIntegrityReviewMutationResultConsistentWithRejectsEachInconsistency
 		require.NoError(t, decision.Validate())
 		return &ExamIntegrityReviewMutationResult{Authorization: reviewAuthorizationFixture(submissionID), Review: review, Decision: decision}
 	}
-	check := func(r *ExamIntegrityReviewMutationResult) error { return r.ConsistentWith(submissionID) }
-	const message = "inconsistent Review mutation result"
+	check := func(r *ExamIntegrityReviewMutationResult) bool { return r.ConsistentWith(submissionID) }
 
-	require.EqualError(t, (*ExamIntegrityReviewMutationResult)(nil).ConsistentWith(submissionID), message)
-	requireEachInconsistencyRejected(t, consistent, check, message, []bad{
+	require.False(t, (*ExamIntegrityReviewMutationResult)(nil).ConsistentWith(submissionID))
+	requireEachInconsistencyRejected(t, consistent, check, []bad{
 		{"inconsistent authorization", func(r *ExamIntegrityReviewMutationResult) { r.Authorization.ExamID = "" }},
 		{"no Review", func(r *ExamIntegrityReviewMutationResult) { r.Review = nil }},
 		{"invalid Review", func(r *ExamIntegrityReviewMutationResult) { r.Review.Revision = 0 }},
@@ -85,46 +83,7 @@ func TestExamIntegrityReviewMutationResultConsistentWithRejectsEachInconsistency
 
 	undecided := consistent(t)
 	undecided.Decision = nil
-	require.NoError(t, check(undecided), "a mutation without a Decision is consistent")
-}
-
-func TestExamIntegrityPagesConsistentWithRejectEachInconsistency(t *testing.T) {
-	t.Parallel()
-	const limit = 2
-
-	t.Run("Flag page", func(t *testing.T) {
-		t.Parallel()
-		type page = ExamIntegrityFlagPage
-		const message = "inconsistent Flag page"
-		full := func(*testing.T) *page { return &page{Items: make([]ExamIntegrityFlagSummary, limit), HasMore: true} }
-		require.EqualError(t, (*page)(nil).ConsistentWith(limit), message)
-		requireEachInconsistencyRejected(t, full, func(p *page) error { return p.ConsistentWith(limit) }, message, []inconsistency[page]{
-			{"more items than the limit", func(p *page) { p.Items = make([]ExamIntegrityFlagSummary, limit+1) }},
-			{"further page after a short page", func(p *page) { p.Items = p.Items[:1] }},
-		})
-	})
-	t.Run("Evidence page", func(t *testing.T) {
-		t.Parallel()
-		type page = ExamIntegrityEvidencePage
-		const message = "inconsistent Evidence page"
-		full := func(*testing.T) *page { return &page{Items: make([]model.IntegrityEvidence, limit), HasMore: true} }
-		require.EqualError(t, (*page)(nil).ConsistentWith(limit), message)
-		requireEachInconsistencyRejected(t, full, func(p *page) error { return p.ConsistentWith(limit) }, message, []inconsistency[page]{
-			{"more items than the limit", func(p *page) { p.Items = make([]model.IntegrityEvidence, limit+1) }},
-			{"further page after a short page", func(p *page) { p.Items = p.Items[:1] }},
-		})
-	})
-	t.Run("Discrepancy page", func(t *testing.T) {
-		t.Parallel()
-		type page = ExamIntegrityDiscrepancyPage
-		const message = "inconsistent Discrepancy page"
-		full := func(*testing.T) *page { return &page{Items: make([]model.IntegrityDiscrepancy, limit), HasMore: true} }
-		require.EqualError(t, (*page)(nil).ConsistentWith(limit), message)
-		requireEachInconsistencyRejected(t, full, func(p *page) error { return p.ConsistentWith(limit) }, message, []inconsistency[page]{
-			{"more items than the limit", func(p *page) { p.Items = make([]model.IntegrityDiscrepancy, limit+1) }},
-			{"further page after a short page", func(p *page) { p.Items = p.Items[:1] }},
-		})
-	})
+	require.True(t, check(undecided), "a mutation without a Decision is consistent")
 }
 
 func fileRenditionFixture(t *testing.T) *model.FileRendition {
@@ -170,13 +129,12 @@ func TestExamCorrectionResourceStageConsistencyChecksRejectEachInconsistency(t *
 			}
 		}
 	}
-	replacement := func(s *ExamCorrectionResourceStage) error {
+	replacement := func(s *ExamCorrectionResourceStage) bool {
 		return s.ConsistentWith(examID, sittingID, baseID, ExamCorrectionResourceReplacement, resourceID, actor)
 	}
-	const message = "inconsistent stage outcome"
 
-	require.EqualError(t, replacement(nil), message)
-	requireEachInconsistencyRejected(t, ready(ExamCorrectionResourceReplacement), replacement, message, []bad{
+	require.False(t, replacement(nil))
+	requireEachInconsistencyRejected(t, ready(ExamCorrectionResourceReplacement), replacement, []bad{
 		{"no stage ID", func(s *ExamCorrectionResourceStage) { s.ID = "" }},
 		{"another Exam", func(s *ExamCorrectionResourceStage) { s.ExamID = model.NewExamID() }},
 		{"another Sitting", func(s *ExamCorrectionResourceStage) { s.SittingID = model.NewExamSittingID() }},
@@ -193,13 +151,14 @@ func TestExamCorrectionResourceStageConsistencyChecksRejectEachInconsistency(t *
 	})
 
 	addition := ready(ExamCorrectionResourceAddition)(t)
-	require.NoError(t,
+	require.True(t,
 		addition.ConsistentWith(examID, sittingID, baseID, ExamCorrectionResourceAddition, model.NewExamResourceID(), actor),
 		"an addition names its own new Resource",
 	)
 
-	rendition := func(s *ExamCorrectionResourceStage) error { return s.RenditionConsistent() }
-	requireEachInconsistencyRejected(t, ready(ExamCorrectionResourceReplacement), rendition, "incomplete ready stage", []bad{
+	rendition := func(s *ExamCorrectionResourceStage) bool { return s.RenditionConsistent() }
+	require.False(t, rendition(nil))
+	requireEachInconsistencyRejected(t, ready(ExamCorrectionResourceReplacement), rendition, []bad{
 		{"ready without its rendition", func(s *ExamCorrectionResourceStage) { s.Rendition = nil }},
 		{"rendition other than the one named", func(s *ExamCorrectionResourceStage) { s.Rendition.ID = model.NewFileRenditionID() }},
 		{"rendition of another File Revision", func(s *ExamCorrectionResourceStage) { s.Rendition.RevisionID = model.NewFileRevisionID() }},
@@ -208,7 +167,7 @@ func TestExamCorrectionResourceStageConsistencyChecksRejectEachInconsistency(t *
 
 	pending := ready(ExamCorrectionResourceReplacement)(t)
 	pending.State, pending.Rendition = ExamCorrectionResourceStagePending, nil
-	require.NoError(t, pending.RenditionConsistent(), "a pending stage has no rendition yet")
+	require.True(t, pending.RenditionConsistent(), "a pending stage has no rendition yet")
 }
 
 func TestExamCorrectionResultConsistencyChecksRejectEachInconsistency(t *testing.T) {
@@ -235,17 +194,18 @@ func TestExamCorrectionResultConsistencyChecksRejectEachInconsistency(t *testing
 		}
 	}
 
-	require.EqualError(t, (*ExamCorrectionResult)(nil).Consistent(), "missing correction outcome")
-	requireEachInconsistencyRejected(t, consistent, func(r *ExamCorrectionResult) error { return r.Consistent() }, "missing correction outcome", []bad{
+	require.False(t, (*ExamCorrectionResult)(nil).Consistent())
+	requireEachInconsistencyRejected(t, consistent, func(r *ExamCorrectionResult) bool { return r.Consistent() }, []bad{
 		{"no Revision", func(r *ExamCorrectionResult) { r.Revision = nil }},
 		{"no Sitting snapshot", func(r *ExamCorrectionResult) { r.Sitting = nil }},
 		{"Sitting snapshot without its Sitting", func(r *ExamCorrectionResult) { r.Sitting.Sitting = nil }},
 	})
 
-	check := func(r *ExamCorrectionResult) error {
+	check := func(r *ExamCorrectionResult) bool {
 		return r.ConsistentWith(examID, sittingID, previousID, expectedSittingRevision)
 	}
-	requireEachInconsistencyRejected(t, consistent, check, "inconsistent correction outcome", []bad{
+	require.False(t, check(nil))
+	requireEachInconsistencyRejected(t, consistent, check, []bad{
 		{"Revision of another Exam", func(r *ExamCorrectionResult) { r.Revision.ExamID = model.NewExamID() }},
 		{"Revision is the expected current one", func(r *ExamCorrectionResult) {
 			r.Revision.ID, r.Sitting.Sitting.ExamRevisionID = previousID, previousID
@@ -265,5 +225,5 @@ func TestExamCorrectionResultConsistencyChecksRejectEachInconsistency(t *testing
 
 	paused := consistent(t)
 	paused.Sitting.Sitting.State = model.ExamSittingPaused
-	require.NoError(t, check(paused), "a paused Sitting can be corrected")
+	require.True(t, check(paused), "a paused Sitting can be corrected")
 }

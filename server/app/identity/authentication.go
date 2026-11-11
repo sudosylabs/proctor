@@ -1295,7 +1295,7 @@ func (s *Service) enforceSessionExpiry(
 		return nil, authenticationUnavailable(err)
 	}
 
-	if result.Consistent() != nil {
+	if result == nil || result.Session == nil {
 		return nil, authenticationUnavailable(errors.New("session expiry result is incomplete"))
 	}
 	if !result.Expired {

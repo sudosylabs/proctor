@@ -80,8 +80,8 @@ func (s *Service) AcknowledgeExamAttemptCorrection(
 		return CorrectionAcknowledgementResult{}, storeError(storeErrors, err)
 	}
 
-	if err = target.ConsistentWith(selector.AttemptID, selector.CandidateUserID, command.CorrectionRevisionID, command.ExpectedCurrentRevisionID); err != nil {
-		return CorrectionAcknowledgementResult{}, apperror.New("exam.attempt.unavailable").Wrap(err)
+	if !target.ConsistentWith(selector.AttemptID, selector.CandidateUserID, command.CorrectionRevisionID, command.ExpectedCurrentRevisionID) {
+		return CorrectionAcknowledgementResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent correction acknowledgement target"))
 	}
 
 	resource := model.Resource{Type: model.ResourceExamSitting, ID: target.SittingID.String()}
@@ -121,8 +121,8 @@ func (s *Service) AcknowledgeExamAttemptCorrection(
 		return CorrectionAcknowledgementResult{}, storeError(storeErrors, err)
 	}
 
-	if err = stored.ConsistentWith(selector.AttemptID, command.CorrectionRevisionID, command.ExpectedCurrentRevisionID); err != nil {
-		return CorrectionAcknowledgementResult{}, apperror.New("exam.attempt.unavailable").Wrap(err)
+	if !stored.ConsistentWith(selector.AttemptID, command.CorrectionRevisionID, command.ExpectedCurrentRevisionID) {
+		return CorrectionAcknowledgementResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent correction acknowledgement outcome"))
 	}
 
 	// The receipt is immutable; the gates are freshly resolved after commit,

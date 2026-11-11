@@ -86,8 +86,8 @@ func (s *Service) ReallowExamAttempt(
 	if err != nil {
 		return ReallowResult{}, storeError(storeErrors, err)
 	}
-	if err = snapshot.ConsistentWith(command.SittingID); err != nil {
-		return ReallowResult{}, apperror.New("exam.attempt.unavailable").Wrap(err)
+	if !snapshot.ConsistentWithOwningClass(command.SittingID) {
+		return ReallowResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("incomplete Sitting ownership projection"))
 	}
 
 	action := model.ActionExamSittingManage
@@ -122,7 +122,7 @@ func (s *Service) ReallowExamAttempt(
 		return ReallowResult{}, s.failAudit(ctx, auditID, err)
 	}
 
-	if managerSnapshot.ConsistentWith(command.ExamID) != nil {
+	if !managerSnapshot.ConsistentWith(command.ExamID) {
 		return ReallowResult{}, s.failAudit(
 			ctx,
 			auditID,
@@ -151,7 +151,7 @@ func (s *Service) ReallowExamAttempt(
 		return ReallowResult{}, s.failAudit(ctx, auditID, err)
 	}
 
-	err = stored.ConsistentWith(
+	if !stored.ConsistentWith(
 		command.ExamID,
 		command.SittingID,
 		snapshot.Sitting.ClassID,
@@ -159,9 +159,8 @@ func (s *Service) ReallowExamAttempt(
 		command.ExpectedAttemptRevision,
 		command.SuspensionID,
 		principal.UserID,
-	)
-	if err != nil {
-		return ReallowResult{}, apperror.New("exam.attempt.unavailable").Wrap(err)
+	) {
+		return ReallowResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Attempt re-allow outcome"))
 	}
 
 	result := ReallowResult{

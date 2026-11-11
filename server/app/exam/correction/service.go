@@ -364,8 +364,8 @@ func (s *Service) StageExamSittingCorrectionResourceContent(
 }
 
 func validateStage(stage *store.ExamCorrectionResourceStage, c StageResourceContentCommand, actor model.UserID) error {
-	if err := stage.ConsistentWith(c.ExamID, c.SittingID, c.BaseRevisionID, c.Target, c.ResourceID, actor); err != nil {
-		return apperror.New("exam.sitting.correction.unavailable").Wrap(err)
+	if !stage.ConsistentWith(c.ExamID, c.SittingID, c.BaseRevisionID, c.Target, c.ResourceID, actor) {
+		return apperror.New("exam.sitting.correction.unavailable").Wrap(errors.New("inconsistent stage outcome"))
 	}
 
 	if stage.State != store.ExamCorrectionResourceStagePending &&
@@ -374,8 +374,8 @@ func validateStage(stage *store.ExamCorrectionResourceStage, c StageResourceCont
 		return apperror.New("exam.sitting.correction.unavailable").Wrap(errors.New("invalid stage state"))
 	}
 
-	if err := stage.RenditionConsistent(); err != nil {
-		return apperror.New("exam.sitting.correction.unavailable").Wrap(err)
+	if !stage.RenditionConsistent() {
+		return apperror.New("exam.sitting.correction.unavailable").Wrap(errors.New("incomplete ready stage"))
 	}
 
 	if stage.Rendition != nil &&
@@ -652,13 +652,13 @@ func (s *Service) failAudit(ctx context.Context, id model.AuditEventID, err erro
 	return mapped
 }
 func projectResult(stored *store.ExamCorrectionResult, c ApplyCommand) (Result, error) {
-	if err := stored.Consistent(); err != nil {
-		return Result{}, apperror.New("exam.sitting.correction.unavailable").Wrap(err)
+	if !stored.Consistent() {
+		return Result{}, apperror.New("exam.sitting.correction.unavailable").Wrap(errors.New("missing correction outcome"))
 	}
 
 	s := stored.Sitting.Sitting
-	if err := stored.ConsistentWith(c.ExamID, c.SittingID, c.ExpectedCurrentRevisionID, c.ExpectedSittingRevision); err != nil {
-		return Result{}, apperror.New("exam.sitting.correction.unavailable").Wrap(err)
+	if !stored.ConsistentWith(c.ExamID, c.SittingID, c.ExpectedCurrentRevisionID, c.ExpectedSittingRevision) {
+		return Result{}, apperror.New("exam.sitting.correction.unavailable").Wrap(errors.New("inconsistent correction outcome"))
 	}
 
 	return Result{

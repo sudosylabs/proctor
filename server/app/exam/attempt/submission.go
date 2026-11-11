@@ -267,7 +267,7 @@ func (s *Service) resolveManagedSubmission(
 	if err != nil {
 		return nil, storeError(storeErrors, err)
 	}
-	if authorization.ConsistentWith(query.SubmissionID) != nil {
+	if !authorization.ConsistentWith(query.SubmissionID) {
 		return nil, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Submission authorization projection"))
 	}
 
@@ -420,8 +420,8 @@ func projectSubmissionResult(
 	proposedID model.SubmissionID,
 	proposedCode model.SubmissionReceiptCode,
 ) (SubmissionResult, error) {
-	if err := stored.ConsistentWith(target, sealAccess, proposedID, proposedCode); err != nil {
-		return SubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(err)
+	if !stored.ConsistentWith(target, sealAccess, proposedID, proposedCode) {
+		return SubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent Submission seal result"))
 	}
 
 	return SubmissionResult{

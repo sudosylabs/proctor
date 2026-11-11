@@ -10,7 +10,6 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"errors"
 
 	"github.com/sudosylabs/proctor/server/model"
 )
@@ -42,32 +41,18 @@ type ExamExportSnapshot struct {
 	Files   []ExamExportFile
 }
 
-// ConsistentWith reports an error unless the build snapshot carries the valid
-// Examination Export that was asked for.
-func (s *ExamExportSnapshot) ConsistentWith(exportID model.ExamExportID) error {
-	if s == nil ||
-		s.Export.Validate() != nil ||
-		s.Export.ID != exportID {
-		return errors.New("invalid export build snapshot")
-	}
-
-	return nil
-}
-
-// BuildInputConsistent reports an error unless the snapshot is buildable: its
+// BuildInputConsistent reports whether the snapshot is buildable: its
 // Examination Export is still queued, its frozen records are present and
 // within the snapshot size bound, and it lists exactly as many files as the
-// Export counted. It reads the Export, so it is asked only of a snapshot that
-// already passed ConsistentWith.
-func (s *ExamExportSnapshot) BuildInputConsistent() error {
-	if s.Export.State != model.ExamExportQueued ||
+// Export counted. It reads the Export without checking that it is present, so
+// it is asked only of a snapshot whose Export the caller has already
+// validated.
+func (s *ExamExportSnapshot) BuildInputConsistent() bool {
+	return !(s == nil ||
+		s.Export.State != model.ExamExportQueued ||
 		len(s.Records) < 1 ||
 		len(s.Records) > model.ExamExportMaximumSnapshotBytes ||
-		len(s.Files) != s.Export.FileCount {
-		return errors.New("invalid export build input")
-	}
-
-	return nil
+		len(s.Files) != s.Export.FileCount)
 }
 
 type ExamExportArtifact struct {
@@ -93,36 +78,18 @@ type ExamExportDownload struct {
 	Submissions []ExamSubmissionAuthorization
 }
 
-// ConsistentWith reports an error unless the read result carries the valid
-// Examination Export that was asked for, on the given scope, requested by the
-// given User.
+// ConsistentWith reports whether the read result carries the valid Examination
+// Export that was asked for, on the given scope, requested by the given User.
 func (d *ExamExportDownload) ConsistentWith(
 	exportID model.ExamExportID,
 	scope model.RetentionHoldScope,
 	requesterID model.UserID,
-) error {
-	if d == nil ||
+) bool {
+	return !(d == nil ||
 		d.Export.Validate() != nil ||
 		d.Export.ID != exportID ||
 		d.Export.Scope != scope ||
-		d.Export.RequesterUserID != requesterID {
-		return errors.New("invalid export read result")
-	}
-
-	return nil
-}
-
-// ArtifactConsistent reports an error unless the artifact belongs to the
-// result's Examination Export and names the build attempt that wrote it. It
-// reads the Export, so it is asked only of a result that already passed
-// ConsistentWith.
-func (d *ExamExportDownload) ArtifactConsistent() error {
-	if d.Artifact.ExportID != d.Export.ID ||
-		!d.Artifact.AttemptID.IsValid() {
-		return errors.New("invalid export artifact")
-	}
-
-	return nil
+		d.Export.RequesterUserID != requesterID)
 }
 
 // ExamExportStore freezes an authorized exact scope/category snapshot and

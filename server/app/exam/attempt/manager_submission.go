@@ -70,7 +70,7 @@ func (s *Service) EndExamAttemptByManager(
 		return store.ExamSubmissionReceipt{}, storeError(storeErrors, err)
 	}
 
-	if sitting.ConsistentWith(command.SittingID) != nil {
+	if !sitting.ConsistentWithOwningClass(command.SittingID) {
 		return store.ExamSubmissionReceipt{}, apperror.New("exam.attempt.unavailable").Wrap(
 			errors.New("inconsistent manager-ended Sitting projection"),
 		)
@@ -107,7 +107,7 @@ func (s *Service) EndExamAttemptByManager(
 		return store.ExamSubmissionReceipt{}, s.failAudit(ctx, auditID, err)
 	}
 
-	if managerSnapshot.ConsistentWith(command.ExamID) != nil {
+	if !managerSnapshot.ConsistentWith(command.ExamID) {
 		return store.ExamSubmissionReceipt{}, s.failAudit(
 			ctx,
 			auditID,
@@ -248,8 +248,8 @@ func projectManagerEndResult(
 	proposed model.SubmissionID,
 	proposedCode model.SubmissionReceiptCode,
 ) (SubmissionResult, error) {
-	if err := stored.ConsistentWith(command.AttemptID, command.ExamID, command.SittingID, target, proposed, proposedCode); err != nil {
-		return SubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(err)
+	if !stored.ConsistentWith(command.AttemptID, command.ExamID, command.SittingID, target, proposed, proposedCode) {
+		return SubmissionResult{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent manager-ended Submission result"))
 	}
 
 	return SubmissionResult{

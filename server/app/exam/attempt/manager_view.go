@@ -45,8 +45,8 @@ func (s *Service) GetExamAttempt(
 		return store.ExamAttemptManagerSnapshot{}, storeError(storeErrors, err)
 	}
 
-	if err = sitting.ConsistentWithOwningUnit(sittingID); err != nil {
-		return store.ExamAttemptManagerSnapshot{}, apperror.New("exam.attempt.unavailable").Wrap(err)
+	if !sitting.ConsistentWithOwningUnit(sittingID) {
+		return store.ExamAttemptManagerSnapshot{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent managed Attempt Sitting projection"))
 	}
 
 	if sitting.Sitting.ExamID != examID {
@@ -58,8 +58,8 @@ func (s *Service) GetExamAttempt(
 		return store.ExamAttemptManagerSnapshot{}, storeError(storeErrors, err)
 	}
 
-	if err = snapshot.ConsistentWith(examID); err != nil {
-		return store.ExamAttemptManagerSnapshot{}, apperror.New("exam.attempt.unavailable").Wrap(err)
+	if !snapshot.ConsistentWith(examID) {
+		return store.ExamAttemptManagerSnapshot{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent managed Attempt projection"))
 	}
 
 	if snapshot.Attempt.SittingID != sittingID {
@@ -180,8 +180,8 @@ func (s *Service) ListSittingCandidateStatuses(
 		return SittingCandidateStatusesPage{}, storeError(storeErrors, err)
 	}
 
-	if err = stored.ConsistentWith(query.ExamID, query.SittingID); err != nil {
-		return SittingCandidateStatusesPage{}, apperror.New("exam.attempt.unavailable").Wrap(err)
+	if !stored.ConsistentWith(query.ExamID, query.SittingID) {
+		return SittingCandidateStatusesPage{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("incomplete Sitting candidate-status projection"))
 	}
 
 	page := SittingCandidateStatusesPage{SittingCandidateStatusPage: *stored, HasMore: len(stored.Items) > query.Limit}
@@ -243,8 +243,8 @@ func (s *Service) ListExamAttempts(
 			break
 		}
 
-		if err = row.ConsistentWithSitting(query.ExamID, query.SittingID); err != nil {
-			return ManagedAttemptPage{}, apperror.New("exam.attempt.unavailable").Wrap(err)
+		if !row.ConsistentWithExamAndSitting(query.ExamID, query.SittingID) {
+			return ManagedAttemptPage{}, apperror.New("exam.attempt.unavailable").Wrap(errors.New("inconsistent managed Attempt page"))
 		}
 
 		page.Items = append(page.Items, *cloneManagerSnapshot(&row))

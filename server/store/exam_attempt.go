@@ -80,24 +80,24 @@ type ExamAttemptConnectResult struct {
 	Replayed                  bool
 }
 
-// ConsistentWith reports an error unless the outcome carries a valid Attempt,
-// Attempt Workspace, Participation and Connection that all belong to that one
-// Attempt, the Attempt is the candidate's in the Sitting and Class the command
-// named, and the Connection was opened by the given Session.
+// ConsistentWith reports whether the outcome carries a valid Attempt, Attempt
+// Workspace, Participation and Connection that all belong to that one Attempt,
+// the Attempt is the candidate's in the Sitting and Class the command named,
+// and the Connection was opened by the given Session.
 func (r *ExamAttemptConnectResult) ConsistentWith(
 	classID model.ClassID,
 	candidateID model.UserID,
 	sessionID model.SessionID,
 	sittingID model.ExamSittingID,
-) error {
-	if r == nil ||
+) bool {
+	return !(r == nil ||
 		r.Attempt == nil ||
 		r.Workspace == nil ||
 		r.Participation == nil ||
 		r.Connection == nil ||
 		r.Attempt.Validate() != nil ||
 		r.Workspace.Validate() != nil ||
-		r.Participation.Consistent() != nil ||
+		!r.Participation.Consistent() ||
 		r.Connection.Validate() != nil ||
 		r.Attempt.CandidateUserID != candidateID ||
 		r.Attempt.SittingID != sittingID ||
@@ -106,31 +106,25 @@ func (r *ExamAttemptConnectResult) ConsistentWith(
 		r.Participation.AttemptID != r.Attempt.ID ||
 		r.Connection.AttemptID != r.Attempt.ID ||
 		r.Connection.ParticipationID != r.Participation.ID ||
-		r.Connection.SessionID != sessionID {
-		return errors.New("inconsistent Exam Attempt connection outcome")
-	}
-
-	return nil
+		r.Connection.SessionID != sessionID)
 }
 
-// ConfigurationConsistent reports an error unless the admitted security
-// posture, frozen Attempt configuration, runtime capabilities, browser policy
-// and live corrections are each valid and agree with the outcome's Attempt and
-// Participation. It reads the Attempt and Participation, so it is asked only
-// of an outcome that already passed ConsistentWith.
-func (r *ExamAttemptConnectResult) ConfigurationConsistent() error {
-	if r.Security.Validate() != nil ||
+// ConfigurationConsistent reports whether the admitted security posture,
+// frozen Attempt configuration, runtime capabilities, browser policy and live
+// corrections are each valid and agree with the outcome's Attempt and
+// Participation. It reads the Attempt and Participation without checking that
+// they are present, so it is asked only of an outcome that already passed
+// ConsistentWith.
+func (r *ExamAttemptConnectResult) ConfigurationConsistent() bool {
+	return !(r == nil ||
+		r.Security.Validate() != nil ||
 		r.Security.ParticipationID != r.Participation.ID ||
 		r.Security.Policy.Scope.AttemptID != r.Attempt.ID ||
 		r.Security.Generation != r.Participation.Generation ||
 		r.Configuration.Validate() != nil ||
 		r.RuntimeCapabilities.Validate() != nil ||
-		r.RuntimeCapabilities.ConsistentWithBrowserPolicy(r.BrowserPolicy) != nil ||
-		r.RuntimeCapabilities.ConsistentWithLiveCorrections(r.LiveCorrections) != nil {
-		return errors.New("inconsistent Exam Attempt configuration outcome")
-	}
-
-	return nil
+		!r.RuntimeCapabilities.ConsistentWithBrowserPolicy(r.BrowserPolicy) ||
+		!r.RuntimeCapabilities.ConsistentWithLiveCorrections(r.LiveCorrections))
 }
 
 // ExamAttemptParticipationView is safe for application results and command
@@ -148,10 +142,10 @@ type ExamAttemptParticipationView struct {
 	EndReason       model.AttemptParticipationEndReason
 }
 
-// Consistent reports an error unless the view names its Participation and
-// Attempt, its generation, renewal sequence and instants are in order, and its
-// end instant and end reason are present exactly when the Participation ended.
-func (v *ExamAttemptParticipationView) Consistent() error {
+// Consistent reports whether the view names its Participation and Attempt, its
+// generation, renewal sequence and instants are in order, and its end instant
+// and end reason are present exactly when the Participation ended.
+func (v *ExamAttemptParticipationView) Consistent() bool {
 	if v == nil ||
 		!v.ID.IsValid() ||
 		!v.AttemptID.IsValid() ||
@@ -162,25 +156,21 @@ func (v *ExamAttemptParticipationView) Consistent() error {
 		v.UpdatedAt.Before(v.StartedAt) ||
 		v.LeaseExpiresAt.IsZero() ||
 		v.LeaseExpiresAt.Before(v.StartedAt) {
-		return errors.New("incomplete Attempt Participation view")
+		return false
 	}
 
-	consistent := false
 	switch v.State {
 	case model.AttemptParticipationActive:
-		consistent = !v.EndedAt.Valid && v.EndReason == ""
+		return !v.EndedAt.Valid && v.EndReason == ""
 	case model.AttemptParticipationEnded:
-		consistent = v.EndedAt.Valid &&
+		return v.EndedAt.Valid &&
 			!v.EndedAt.Time.IsZero() &&
 			!v.EndedAt.Time.Before(v.StartedAt) &&
 			!v.EndedAt.Time.After(v.UpdatedAt) &&
 			v.EndReason != ""
 	}
-	if !consistent {
-		return errors.New("inconsistent Attempt Participation lifecycle")
-	}
 
-	return nil
+	return false
 }
 
 // ExamAttemptParticipationRenewal is the complete sensitive selector for one
@@ -222,18 +212,18 @@ type ExamAttemptParticipationRenewalResult struct {
 	Duplicate        bool
 }
 
-// ConsistentWith reports an error unless the renewal carries valid security
-// coverage, is the given candidate's Attempt, Participation and generation in a
-// named Exam and Sitting, accepted the given sequence, and grants a lease that
-// ends after the decision time and no later than one initial lease from it.
+// ConsistentWith reports whether the renewal carries valid security coverage,
+// is the given candidate's Attempt, Participation and generation in a named
+// Exam and Sitting, accepted the given sequence, and grants a lease that ends
+// after the decision time and no later than one initial lease from it.
 func (r *ExamAttemptParticipationRenewalResult) ConsistentWith(
 	attemptID model.ExamAttemptID,
 	participationID model.AttemptParticipationID,
 	candidateID model.UserID,
 	generation int64,
 	sequence int64,
-) error {
-	if r == nil ||
+) bool {
+	return !(r == nil ||
 		r.SecurityCoverage.Validate() != nil ||
 		r.AttemptID != attemptID ||
 		r.ParticipationID != participationID ||
@@ -245,11 +235,7 @@ func (r *ExamAttemptParticipationRenewalResult) ConsistentWith(
 		r.DatabaseTime.IsZero() ||
 		r.LeaseExpiresAt.IsZero() ||
 		!r.LeaseExpiresAt.After(r.DatabaseTime) ||
-		r.LeaseExpiresAt.After(r.DatabaseTime.Add(model.AttemptParticipationInitialLease)) {
-		return errors.New("inconsistent Participation renewal outcome")
-	}
-
-	return nil
+		r.LeaseExpiresAt.After(r.DatabaseTime.Add(model.AttemptParticipationInitialLease)))
 }
 
 // ExamAttemptFocusLossAccess is the complete hash-only selector for one
@@ -354,20 +340,20 @@ type ExamAttemptFocusLossResult struct {
 	Duplicate                   bool
 }
 
-// ConsistentWith reports an error unless the outcome carries a valid signal,
-// names the resolved target's Exam, Sitting and Class and the reporting
-// candidate, Attempt, Participation and generation, repeats the reported
-// sequence, duration and source, was decided at the instant the signal was
-// received, and carries counts within their bounds. It reads target, which the
-// caller has already checked.
+// ConsistentWith reports whether the outcome carries a valid signal, names the
+// resolved target's Exam, Sitting and Class and the reporting candidate,
+// Attempt, Participation and generation, repeats the reported sequence,
+// duration and source, was decided at the instant the signal was received, and
+// carries counts within their bounds. It reads target, which the caller has
+// already checked.
 func (r *ExamAttemptFocusLossResult) ConsistentWith(
 	target *ExamAttemptFocusLossTarget,
 	focusLossAccess ExamAttemptFocusLossAccess,
 	sequence int64,
 	durationMilliseconds int64,
 	source model.FocusLossSource,
-) error {
-	if r == nil ||
+) bool {
+	return !(r == nil ||
 		r.Signal == nil ||
 		r.Signal.Validate() != nil ||
 		r.ExamID != target.ExamID ||
@@ -390,11 +376,7 @@ func (r *ExamAttemptFocusLossResult) ConsistentWith(
 		r.WindowIncidentCount < 0 ||
 		r.RetainedEvidenceCount < 0 ||
 		r.RetainedEvidenceCount > model.FocusLossMaximumEvidenceEpisodes ||
-		r.DiagnosticCount < 0 {
-		return errors.New("inconsistent Focus Loss outcome")
-	}
-
-	return nil
+		r.DiagnosticCount < 0)
 }
 
 // ExamAttemptFocusLossDiscrepancyTarget is the safe scope for one claim that
@@ -425,11 +407,11 @@ type ExamAttemptFocusLossDiscrepancyResult struct {
 	Duplicate   bool
 }
 
-// ConsistentWith reports an error unless the outcome carries a valid
-// Discrepancy for the resolved target and its Submission, bound to the reporting
-// Attempt, Participation and generation, repeating the reported sequence,
-// duration and source, and using the proposed Discrepancy and signal IDs unless
-// it is a duplicate of an earlier report. It reads target, which the caller has
+// ConsistentWith reports whether the outcome carries a valid Discrepancy for
+// the resolved target and its Submission, bound to the reporting Attempt,
+// Participation and generation, repeating the reported sequence, duration and
+// source, and using the proposed Discrepancy and signal IDs unless it is a
+// duplicate of an earlier report. It reads target, which the caller has
 // already checked.
 func (r *ExamAttemptFocusLossDiscrepancyResult) ConsistentWith(
 	target *ExamAttemptFocusLossDiscrepancyTarget,
@@ -439,8 +421,8 @@ func (r *ExamAttemptFocusLossDiscrepancyResult) ConsistentWith(
 	source model.FocusLossSource,
 	discrepancyID model.IntegrityDiscrepancyID,
 	signalID model.FocusLossSignalID,
-) error {
-	if r == nil ||
+) bool {
+	return !(r == nil ||
 		r.Discrepancy == nil ||
 		r.Discrepancy.Validate() != nil ||
 		r.Target != *target ||
@@ -451,11 +433,7 @@ func (r *ExamAttemptFocusLossDiscrepancyResult) ConsistentWith(
 		r.Discrepancy.Sequence != sequence ||
 		r.Discrepancy.DurationMilliseconds != durationMilliseconds ||
 		r.Discrepancy.Source != source ||
-		(!r.Duplicate && (r.Discrepancy.ID != discrepancyID || r.Discrepancy.SignalID != signalID)) {
-		return errors.New("inconsistent late Focus Loss outcome")
-	}
-
-	return nil
+		(!r.Duplicate && (r.Discrepancy.ID != discrepancyID || r.Discrepancy.SignalID != signalID)))
 }
 
 // ExamAttemptParticipationExpiryDue is a bounded, hash-free candidate from
@@ -473,21 +451,17 @@ type ExamAttemptParticipationExpiryDue struct {
 	LeaseExpiresAt  time.Time
 }
 
-// ConsistentWith reports an error unless the expiry target is the given
-// generation of the given Attempt's Participation.
+// ConsistentWith reports whether the expiry target is the given generation of
+// the given Attempt's Participation.
 func (d *ExamAttemptParticipationExpiryDue) ConsistentWith(
 	attemptID model.ExamAttemptID,
 	participationID model.AttemptParticipationID,
 	generation int64,
-) error {
-	if d == nil ||
+) bool {
+	return !(d == nil ||
 		d.AttemptID != attemptID ||
 		d.ParticipationID != participationID ||
-		d.Generation != generation {
-		return errors.New("inconsistent lapsed Participation expiry target")
-	}
-
-	return nil
+		d.Generation != generation)
 }
 
 // ExamAttemptParticipationExpiry supplies proposed append-only identities for
@@ -523,16 +497,21 @@ type ExamAttemptSuspensionView struct {
 	SuspendedByUserID model.UserID
 }
 
-// ConsistentActive reports an error unless the view is absent, or is the given
+// ConsistentActiveOrAbsent reports whether the view is absent, or is the given
 // Attempt's active Suspension: it names its Participation and generation,
 // carries the provenance of its source, has started, and has neither ended nor
-// been re-allowed. An Attempt with no active Suspension has no view, so a nil
-// view is consistent.
-func (v *ExamAttemptSuspensionView) ConsistentActive(attemptID model.ExamAttemptID) error {
+// been re-allowed.
+//
+// It is the one consistency check that answers true for a nil receiver. An
+// Attempt that is not suspended has no active Suspension view, so absence is a
+// consistent answer wherever this is asked; a caller that requires a
+// Suspension checks for nil itself.
+func (v *ExamAttemptSuspensionView) ConsistentActiveOrAbsent(attemptID model.ExamAttemptID) bool {
 	if v == nil {
-		return nil
+		return true
 	}
-	if !v.ID.IsValid() ||
+
+	return !(!v.ID.IsValid() ||
 		v.AttemptID != attemptID ||
 		!v.ParticipationID.IsValid() ||
 		!v.validProvenance() ||
@@ -540,19 +519,16 @@ func (v *ExamAttemptSuspensionView) ConsistentActive(attemptID model.ExamAttempt
 		v.State != model.AttemptSuspensionActive ||
 		v.StartedAt.IsZero() ||
 		v.EndedAt.Valid ||
-		!v.ReallowedByUserID.IsZero() {
-		return errors.New("inconsistent active Attempt Suspension view")
-	}
-
-	return nil
+		!v.ReallowedByUserID.IsZero())
 }
 
-// ConsistentClosed reports an error unless the view is the given Attempt's
-// closed Suspension: it names its Participation and generation, carries the
+// ConsistentClosedBy reports whether the view is the given Attempt's closed
+// Suspension: it names its Participation and generation, carries the
 // provenance of its source, ended no earlier than it started, and was
-// re-allowed by the given actor.
-func (v *ExamAttemptSuspensionView) ConsistentClosed(attemptID model.ExamAttemptID, actorID model.UserID) error {
-	if v == nil ||
+// re-allowed by the given actor. Unlike ConsistentActiveOrAbsent, an absent
+// view is not consistent.
+func (v *ExamAttemptSuspensionView) ConsistentClosedBy(attemptID model.ExamAttemptID, actorID model.UserID) bool {
+	return !(v == nil ||
 		!v.ID.IsValid() ||
 		v.AttemptID != attemptID ||
 		!v.ParticipationID.IsValid() ||
@@ -562,11 +538,7 @@ func (v *ExamAttemptSuspensionView) ConsistentClosed(attemptID model.ExamAttempt
 		v.StartedAt.IsZero() ||
 		!v.EndedAt.Valid ||
 		v.EndedAt.Time.Before(v.StartedAt) ||
-		v.ReallowedByUserID != actorID {
-		return errors.New("inconsistent closed Attempt Suspension view")
-	}
-
-	return nil
+		v.ReallowedByUserID != actorID)
 }
 
 // validProvenance accepts a policy episode that links its Flag or a manual
@@ -650,10 +622,10 @@ type ExamAttemptReallowResult struct {
 	Replayed             bool
 }
 
-// ConsistentWith reports an error unless the outcome is the commanded
-// Attempt, valid and ready again at the next revision, in the commanded Exam,
-// Sitting and Class for one candidate, and its Suspension is the commanded
-// episode, consistently closed by the acting manager.
+// ConsistentWith reports whether the outcome is the commanded Attempt, valid
+// and ready again at the next revision, in the commanded Exam, Sitting and
+// Class for one candidate, and its Suspension is the commanded episode,
+// consistently closed by the acting manager.
 func (r *ExamAttemptReallowResult) ConsistentWith(
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
@@ -662,8 +634,8 @@ func (r *ExamAttemptReallowResult) ConsistentWith(
 	expectedAttemptRevision int64,
 	suspensionID model.AttemptSuspensionID,
 	actorID model.UserID,
-) error {
-	if r == nil ||
+) bool {
+	return !(r == nil ||
 		r.Attempt == nil ||
 		r.Suspension == nil ||
 		r.ExamID != examID ||
@@ -678,11 +650,7 @@ func (r *ExamAttemptReallowResult) ConsistentWith(
 		r.Attempt.Validate() != nil ||
 		r.Attempt.Revision != expectedAttemptRevision+1 ||
 		r.Suspension.ID != suspensionID ||
-		r.Suspension.ConsistentClosed(attemptID, actorID) != nil {
-		return errors.New("inconsistent Attempt re-allow outcome")
-	}
-
-	return nil
+		!r.Suspension.ConsistentClosedBy(attemptID, actorID))
 }
 
 // ExamAttemptManualSuspension is one exact, revision-fenced Exam Manager kick
@@ -718,12 +686,12 @@ type ExamAttemptManualSuspensionResult struct {
 	Replayed         bool
 }
 
-// ConsistentWith reports an error unless the outcome is the commanded
-// Attempt, valid and suspended at the next revision, in the commanded Exam,
-// Sitting and Class for one candidate; its Participation ended as kicked; its
-// Suspension is that Attempt's active manual episode for that Participation and
-// generation, placed by the acting manager; and a Connection is reported exactly
-// when one was closed, as kicked.
+// ConsistentWith reports whether the outcome is the commanded Attempt, valid
+// and suspended at the next revision, in the commanded Exam, Sitting and Class
+// for one candidate; its Participation ended as kicked; its Suspension is that
+// Attempt's active manual episode for that Participation and generation,
+// placed by the acting manager; and a Connection is reported exactly when one
+// was closed, as kicked.
 func (r *ExamAttemptManualSuspensionResult) ConsistentWith(
 	examID model.ExamID,
 	sittingID model.ExamSittingID,
@@ -731,8 +699,8 @@ func (r *ExamAttemptManualSuspensionResult) ConsistentWith(
 	expectedAttemptRevision int64,
 	classID model.ClassID,
 	actorID model.UserID,
-) error {
-	if r == nil ||
+) bool {
+	return !(r == nil ||
 		r.Attempt == nil ||
 		r.Participation == nil ||
 		r.Suspension == nil ||
@@ -747,11 +715,11 @@ func (r *ExamAttemptManualSuspensionResult) ConsistentWith(
 		r.Attempt.State != model.ExamAttemptSuspended ||
 		r.Attempt.Validate() != nil ||
 		r.Attempt.Revision != expectedAttemptRevision+1 ||
-		r.Participation.Consistent() != nil ||
+		!r.Participation.Consistent() ||
 		r.Participation.AttemptID != attemptID ||
 		r.Participation.State != model.AttemptParticipationEnded ||
 		r.Participation.EndReason != model.AttemptParticipationEndKicked ||
-		r.Suspension.ConsistentActive(attemptID) != nil ||
+		!r.Suspension.ConsistentActiveOrAbsent(attemptID) ||
 		r.Suspension.Source != model.AttemptSuspensionSourceManual ||
 		r.Suspension.ParticipationID != r.Participation.ID ||
 		r.Suspension.Generation != r.Participation.Generation ||
@@ -761,11 +729,7 @@ func (r *ExamAttemptManualSuspensionResult) ConsistentWith(
 			(!r.Connection.ID.IsValid() ||
 				r.Connection.State != model.AttemptConnectionClosed ||
 				r.Connection.CloseReason != model.AttemptConnectionCloseKicked ||
-				!r.Connection.ClosedAt.Valid)) {
-		return errors.New("inconsistent Attempt manual suspension outcome")
-	}
-
-	return nil
+				!r.Connection.ClosedAt.Valid)))
 }
 
 type ExamAttemptConnectionClose struct {
@@ -786,26 +750,22 @@ type ExamAttemptConnectionCloseResult struct {
 	Changed         bool
 }
 
-// ConsistentWith reports an error unless the outcome names an Exam and carries
-// the valid Connection that was asked to close, belonging to the given Attempt
-// in the given Sitting.
+// ConsistentWith reports whether the outcome names an Exam and carries the
+// valid Connection that was asked to close, belonging to the given Attempt in
+// the given Sitting.
 func (r *ExamAttemptConnectionCloseResult) ConsistentWith(
 	attemptID model.ExamAttemptID,
 	sittingID model.ExamSittingID,
 	connectionID model.AttemptConnectionID,
-) error {
-	if r == nil ||
+) bool {
+	return !(r == nil ||
 		r.Connection == nil ||
 		!r.ExamID.IsValid() ||
 		r.AttemptID != attemptID ||
 		r.SittingID != sittingID ||
 		r.Connection.ID != connectionID ||
 		r.Connection.AttemptID != attemptID ||
-		r.Connection.Validate() != nil {
-		return errors.New("inconsistent Connection close outcome")
-	}
-
-	return nil
+		r.Connection.Validate() != nil)
 }
 
 // CandidateAttemptAccess is the sensitive selector shared by protected reads.
@@ -927,26 +887,22 @@ type ExamAttemptCorrectionAcknowledgementTarget struct {
 	CurrentRevisionID    model.ExamRevisionID
 }
 
-// ConsistentWith reports an error unless the target is the given candidate's
-// Attempt, names the correction Revision being acknowledged and the expected
-// current Revision, and names its Sitting and Class.
+// ConsistentWith reports whether the target is the given candidate's Attempt,
+// names the correction Revision being acknowledged and the expected current
+// Revision, and names its Sitting and Class.
 func (t *ExamAttemptCorrectionAcknowledgementTarget) ConsistentWith(
 	attemptID model.ExamAttemptID,
 	candidateID model.UserID,
 	correctionRevisionID model.ExamRevisionID,
 	currentRevisionID model.ExamRevisionID,
-) error {
-	if t == nil ||
+) bool {
+	return !(t == nil ||
 		t.AttemptID != attemptID ||
 		t.CandidateUserID != candidateID ||
 		t.CorrectionRevisionID != correctionRevisionID ||
 		t.CurrentRevisionID != currentRevisionID ||
 		!t.SittingID.IsValid() ||
-		!t.ClassID.IsValid() {
-		return errors.New("inconsistent correction acknowledgement target")
-	}
-
-	return nil
+		!t.ClassID.IsValid())
 }
 
 type ExamAttemptCorrectionAcknowledgementResult struct {
@@ -959,23 +915,19 @@ type ExamAttemptCorrectionAcknowledgementResult struct {
 	Replayed             bool
 }
 
-// ConsistentWith reports an error unless the outcome is for the given
-// Attempt, names the acknowledged correction Revision and the expected current
-// Revision, and records when the acknowledgement happened.
+// ConsistentWith reports whether the outcome is for the given Attempt, names
+// the acknowledged correction Revision and the expected current Revision, and
+// records when the acknowledgement happened.
 func (r *ExamAttemptCorrectionAcknowledgementResult) ConsistentWith(
 	attemptID model.ExamAttemptID,
 	correctionRevisionID model.ExamRevisionID,
 	currentRevisionID model.ExamRevisionID,
-) error {
-	if r == nil ||
+) bool {
+	return !(r == nil ||
 		r.AttemptID != attemptID ||
 		r.CorrectionRevisionID != correctionRevisionID ||
 		r.CurrentRevisionID != currentRevisionID ||
-		r.AcknowledgedAt.IsZero() {
-		return errors.New("inconsistent correction acknowledgement outcome")
-	}
-
-	return nil
+		r.AcknowledgedAt.IsZero())
 }
 
 // CandidateExamResource omits managed-file identities and storage selectors.
@@ -1006,22 +958,18 @@ type CandidateExamPresentation struct {
 	LiveCorrections      []model.CandidateLiveCorrection
 }
 
-// Consistent reports an error unless the presentation carries valid delivery
-// capacity and runtime capabilities, a browser policy and live corrections that
-// agree with those capabilities, and both the admission and the current Exam
+// Consistent reports whether the presentation carries valid delivery capacity
+// and runtime capabilities, a browser policy and live corrections that agree
+// with those capabilities, and both the admission and the current Exam
 // Revision.
-func (p *CandidateExamPresentation) Consistent() error {
-	if p == nil ||
+func (p *CandidateExamPresentation) Consistent() bool {
+	return !(p == nil ||
 		p.Capacity.Validate() != nil ||
 		p.RuntimeCapabilities.Validate() != nil ||
-		p.RuntimeCapabilities.ConsistentWithBrowserPolicy(p.BrowserPolicy) != nil ||
-		p.RuntimeCapabilities.ConsistentWithLiveCorrections(p.LiveCorrections) != nil ||
+		!p.RuntimeCapabilities.ConsistentWithBrowserPolicy(p.BrowserPolicy) ||
+		!p.RuntimeCapabilities.ConsistentWithLiveCorrections(p.LiveCorrections) ||
 		p.RuntimeCapabilities.ExamRevision.AdmissionRevisionID.IsZero() ||
-		p.RuntimeCapabilities.ExamRevision.CurrentRevisionID.IsZero() {
-		return errors.New("missing candidate presentation")
-	}
-
-	return nil
+		p.RuntimeCapabilities.ExamRevision.CurrentRevisionID.IsZero())
 }
 
 type CandidateInteractionState string
@@ -1142,18 +1090,16 @@ func (c CandidateRuntimeCapabilities) Validate() error {
 	return nil
 }
 
-// ConsistentWithBrowserPolicy reports an error unless the delivered browser
-// policy agrees with these capabilities. While a browser correction awaits
+// ConsistentWithBrowserPolicy reports whether the delivered browser policy
+// agrees with these capabilities. While a browser correction awaits
 // acknowledgement no policy is delivered. Otherwise the policy is that of the
-// current Exam Revision, is valid with a disclosure that matches it, is enabled
-// exactly when the browser capability is not disabled, names the capability's
-// policy revision and digest when enabled, and carries its own true digest.
-func (c CandidateRuntimeCapabilities) ConsistentWithBrowserPolicy(policy *CandidateBrowserPolicy) error {
+// current Exam Revision, is valid with a disclosure that matches it, is
+// enabled exactly when the browser capability is not disabled, names the
+// capability's policy revision and digest when enabled, and carries its own
+// true digest.
+func (c CandidateRuntimeCapabilities) ConsistentWithBrowserPolicy(policy *CandidateBrowserPolicy) bool {
 	if slices.Contains(c.PendingCorrectionCapabilities, model.CandidateCapabilityBrowser) {
-		if policy != nil {
-			return errors.New("candidate browser policy delivered while its correction is pending")
-		}
-		return nil
+		return policy == nil
 	}
 
 	if policy == nil ||
@@ -1163,50 +1109,43 @@ func (c CandidateRuntimeCapabilities) ConsistentWithBrowserPolicy(policy *Candid
 		policy.Policy.Validate() != nil ||
 		policy.BrowserActivityDisclosure.Validate() != nil ||
 		policy.BrowserActivityDisclosure.MayCreateIntegrityEvidence != policy.Policy.MayCreateIntegrityEvidence() {
-		return errors.New("candidate browser policy is incomplete")
+		return false
 	}
 
 	if policy.Policy.Enabled != (c.Browser.State != CandidateBrowserDisabled) {
-		return errors.New("candidate browser policy disagrees with the browser capability state")
+		return false
 	}
 
 	if policy.Policy.Enabled &&
 		(policy.PolicyRevisionID != c.Browser.PolicyRevisionID || policy.PolicyDigest != c.Browser.PolicyDigest) {
-		return errors.New("candidate browser policy disagrees with the browser capability metadata")
+		return false
 	}
 
 	digest, err := model.BrowserPolicyDigest(policy.Policy)
-	if err != nil || policy.PolicyDigest != digest {
-		return errors.New("candidate browser policy digest is inconsistent")
-	}
 
-	return nil
+	return !(err != nil || policy.PolicyDigest != digest)
 }
 
-// ConsistentWithLiveCorrections reports an error unless the delivered live
-// corrections are each valid, ascend strictly by revision number, never name
-// the admission Revision, and leave pending exactly the capabilities these
-// capabilities report, with acknowledgement required exactly when any is
-// pending.
-func (c CandidateRuntimeCapabilities) ConsistentWithLiveCorrections(corrections []model.CandidateLiveCorrection) error {
+// ConsistentWithLiveCorrections reports whether the delivered live corrections
+// are each valid, ascend strictly by revision number, never name the admission
+// Revision, and leave pending exactly the capabilities these capabilities
+// report, with acknowledgement required exactly when any is pending.
+func (c CandidateRuntimeCapabilities) ConsistentWithLiveCorrections(corrections []model.CandidateLiveCorrection) bool {
 	var previous int64
 	for _, correction := range corrections {
 		if correction.Validate() != nil ||
 			correction.RevisionNumber <= previous ||
 			correction.RevisionID == c.ExamRevision.AdmissionRevisionID {
-			return errors.New("inconsistent candidate live correction")
+			return false
 		}
 
 		previous = correction.RevisionNumber
 	}
 
 	pending := model.PendingCorrectionCapabilities(corrections)
-	if !slices.Equal(pending, c.PendingCorrectionCapabilities) ||
-		(len(pending) != 0) != c.ExamRevision.AcknowledgementRequired {
-		return errors.New("candidate live corrections disagree with pending capabilities")
-	}
 
-	return nil
+	return !(!slices.Equal(pending, c.PendingCorrectionCapabilities) ||
+		(len(pending) != 0) != c.ExamRevision.AcknowledgementRequired)
 }
 
 // CandidateAttemptWorkspaceItem is safe logical metadata; it exposes neither
@@ -1244,18 +1183,14 @@ type CandidateAttemptWorkspacePage struct {
 	RefreshRequired bool
 }
 
-// Consistent reports an error unless the page names its Attempt Workspace at
-// a non-negative cursor, and a page that asks for a refresh carries no items and
+// Consistent reports whether the page names its Attempt Workspace at a
+// non-negative cursor, and a page that asks for a refresh carries no items and
 // no further page.
-func (p *CandidateAttemptWorkspacePage) Consistent() error {
-	if p == nil ||
+func (p *CandidateAttemptWorkspacePage) Consistent() bool {
+	return !(p == nil ||
 		!p.WorkspaceID.IsValid() ||
 		p.Cursor < 0 ||
-		(p.RefreshRequired && (len(p.Items) != 0 || p.HasMore)) {
-		return errors.New("missing candidate Workspace page")
-	}
-
-	return nil
+		(p.RefreshRequired && (len(p.Items) != 0 || p.HasMore)))
 }
 
 // CandidateResourceContent is an internal, post-authorization selector for the
@@ -1266,17 +1201,13 @@ type CandidateResourceContent struct {
 	RenditionID    model.FileRenditionID
 }
 
-// ConsistentWith reports an error unless the selector is for the Resource
-// that was asked for and names the File Revision and rendition to serve.
-func (c *CandidateResourceContent) ConsistentWith(resourceID model.ExamResourceID) error {
-	if c == nil ||
+// ConsistentWith reports whether the selector is for the Resource that was
+// asked for and names the File Revision and rendition to serve.
+func (c *CandidateResourceContent) ConsistentWith(resourceID model.ExamResourceID) bool {
+	return !(c == nil ||
 		c.Resource.ResourceID != resourceID ||
 		!c.FileRevisionID.IsValid() ||
-		!c.RenditionID.IsValid() {
-		return errors.New("incomplete candidate Resource selector")
-	}
-
-	return nil
+		!c.RenditionID.IsValid())
 }
 
 // CandidateWorkspaceContent is an internal, post-authorization selector for
@@ -1287,18 +1218,6 @@ type CandidateWorkspaceContent struct {
 	StarterObjectID model.StarterWorkspaceObjectID
 	AttemptObjectID model.AttemptWorkspaceObjectID
 	ContentVersion  model.WorkspaceContentVersion
-}
-
-// ConsistentWith reports an error unless the selector is for the entry that
-// was asked for and names the content version to serve.
-func (c *CandidateWorkspaceContent) ConsistentWith(entryID model.AttemptWorkspaceEntryID) error {
-	if c == nil ||
-		c.Entry.EntryID != entryID ||
-		c.ContentVersion.IsZero() {
-		return errors.New("incomplete candidate Workspace selector")
-	}
-
-	return nil
 }
 
 type ExamAttemptManagerConnection struct {
@@ -1319,34 +1238,28 @@ type ExamAttemptManagerSnapshot struct {
 	ActiveSuspension    *ExamAttemptSuspensionView
 }
 
-// ConsistentWith reports an error unless the snapshot carries a valid Attempt
-// of the given Exam, and its active Suspension, when present, is that
-// Attempt's consistent active Suspension.
-func (s *ExamAttemptManagerSnapshot) ConsistentWith(examID model.ExamID) error {
-	if s == nil ||
+// ConsistentWith reports whether the snapshot carries a valid Attempt of the
+// given Exam, and its active Suspension, when present, is that Attempt's
+// consistent active Suspension. It does not ask which Sitting the Attempt is
+// in.
+func (s *ExamAttemptManagerSnapshot) ConsistentWith(examID model.ExamID) bool {
+	return !(s == nil ||
 		s.Attempt == nil ||
 		s.Attempt.Validate() != nil ||
 		s.Attempt.ExamID != examID ||
-		s.ActiveSuspension.ConsistentActive(s.Attempt.ID) != nil {
-		return errors.New("inconsistent managed Attempt projection")
-	}
-
-	return nil
+		!s.ActiveSuspension.ConsistentActiveOrAbsent(s.Attempt.ID))
 }
 
-// ConsistentWithSitting reports an error unless the listed row carries a valid
-// Attempt of the given Exam and Sitting, and its active Suspension, when
-// present, is that Attempt's consistent active Suspension.
-func (s ExamAttemptManagerSnapshot) ConsistentWithSitting(examID model.ExamID, sittingID model.ExamSittingID) error {
-	if s.Attempt == nil ||
+// ConsistentWithExamAndSitting reports everything ConsistentWith does and also
+// that the Attempt is in the given Sitting. A Sitting-scoped listing asks it
+// of each row.
+func (s *ExamAttemptManagerSnapshot) ConsistentWithExamAndSitting(examID model.ExamID, sittingID model.ExamSittingID) bool {
+	return !(s == nil ||
+		s.Attempt == nil ||
 		s.Attempt.Validate() != nil ||
 		s.Attempt.ExamID != examID ||
 		s.Attempt.SittingID != sittingID ||
-		s.ActiveSuspension.ConsistentActive(s.Attempt.ID) != nil {
-		return errors.New("inconsistent managed Attempt page")
-	}
-
-	return nil
+		!s.ActiveSuspension.ConsistentActiveOrAbsent(s.Attempt.ID))
 }
 
 // ExamAttemptManagerListOptions is Sitting-scoped and keyset bounded. Results
@@ -1445,18 +1358,6 @@ type CandidateExamActivityPage struct {
 	Items      []CandidateExamActivityItem
 }
 
-// Consistent reports an error unless the page carries the server time it was
-// read at and an item list, which may be empty but not absent.
-func (p *CandidateExamActivityPage) Consistent() error {
-	if p == nil ||
-		p.ServerTime.IsZero() ||
-		p.Items == nil {
-		return errors.New("incomplete candidate activity projection")
-	}
-
-	return nil
-}
-
 type SittingCandidatePresenceState string
 
 const (
@@ -1530,21 +1431,17 @@ type SittingCandidateStatusPage struct {
 	Items           []SittingCandidateStatusItem
 }
 
-// ConsistentWith reports an error unless the page is for the given Exam and
-// Sitting, carries the server time it was read at, the Sitting's valid state and
+// ConsistentWith reports whether the page is for the given Exam and Sitting,
+// carries the server time it was read at, the Sitting's valid state and
 // revision, and an item list, which may be empty but not absent.
-func (p *SittingCandidateStatusPage) ConsistentWith(examID model.ExamID, sittingID model.ExamSittingID) error {
-	if p == nil ||
+func (p *SittingCandidateStatusPage) ConsistentWith(examID model.ExamID, sittingID model.ExamSittingID) bool {
+	return !(p == nil ||
 		p.ExamID != examID ||
 		p.SittingID != sittingID ||
 		p.ServerTime.IsZero() ||
 		!p.SittingState.IsValid() ||
 		p.SittingRevision < 1 ||
-		p.Items == nil {
-		return errors.New("incomplete Sitting candidate-status projection")
-	}
-
-	return nil
+		p.Items == nil)
 }
 
 // ExamAttemptInvalidationTarget is the minimal post-commit projection for an

@@ -20,43 +20,12 @@ func TestExamResourceRecordConsistentRejectsEachInconsistency(t *testing.T) {
 	consistent := func(*testing.T) *ExamResourceRecord {
 		return &ExamResourceRecord{Resource: &model.ExamResource{}, Rendition: &model.FileRendition{}}
 	}
-	const message = "incomplete resource record"
 
-	require.EqualError(t, (*ExamResourceRecord)(nil).Consistent(), message)
-	requireEachInconsistencyRejected(t, consistent, func(r *ExamResourceRecord) error { return r.Consistent() }, message,
-		[]inconsistency[ExamResourceRecord]{
-			{"no Resource", func(r *ExamResourceRecord) { r.Resource = nil }},
-			{"no rendition", func(r *ExamResourceRecord) { r.Rendition = nil }},
-		})
-}
-
-func TestExamStarterWorkspaceItemConsistentRejectsEachInconsistency(t *testing.T) {
-	t.Parallel()
-	consistent := func(*testing.T) *ExamStarterWorkspaceItem {
-		return &ExamStarterWorkspaceItem{Object: &model.StarterWorkspaceObject{}}
-	}
-	const message = "Starter Workspace Store returned incomplete file metadata"
-
-	require.EqualError(t, (*ExamStarterWorkspaceItem)(nil).Consistent(), message)
-	requireEachInconsistencyRejected(t, consistent, func(i *ExamStarterWorkspaceItem) error { return i.Consistent() }, message,
-		[]inconsistency[ExamStarterWorkspaceItem]{
-			{"no object", func(i *ExamStarterWorkspaceItem) { i.Object = nil }},
-		})
-}
-
-func TestExamStarterWorkspaceMutationResultConsistentRejectsEachInconsistency(t *testing.T) {
-	t.Parallel()
-	consistent := func(*testing.T) *ExamStarterWorkspaceMutationResult {
-		return &ExamStarterWorkspaceMutationResult{Entry: &model.StarterWorkspaceEntry{}, DraftRevision: 1}
-	}
-	const message = "Starter Workspace Store returned incomplete mutation result"
-
-	require.EqualError(t, (*ExamStarterWorkspaceMutationResult)(nil).Consistent(), message)
-	requireEachInconsistencyRejected(t, consistent, func(r *ExamStarterWorkspaceMutationResult) error { return r.Consistent() }, message,
-		[]inconsistency[ExamStarterWorkspaceMutationResult]{
-			{"no entry", func(r *ExamStarterWorkspaceMutationResult) { r.Entry = nil }},
-			{"Draft revision below one", func(r *ExamStarterWorkspaceMutationResult) { r.DraftRevision = 0 }},
-		})
+	require.False(t, (*ExamResourceRecord)(nil).Consistent())
+	requireEachInconsistencyRejected(t, consistent, func(r *ExamResourceRecord) bool { return r.Consistent() }, []inconsistency[ExamResourceRecord]{
+		{"no Resource", func(r *ExamResourceRecord) { r.Resource = nil }},
+		{"no rendition", func(r *ExamResourceRecord) { r.Rendition = nil }},
+	})
 }
 
 func TestCurrentUserContextConsistentWithRejectsEachInconsistency(t *testing.T) {
@@ -72,11 +41,10 @@ func TestCurrentUserContextConsistentWithRejectsEachInconsistency(t *testing.T) 
 			ManagementScopes:      make([]CurrentUserManagementScope, 20),
 		}
 	}
-	check := func(c *CurrentUserContext) error { return c.ConsistentWith(userID) }
-	const message = "current User context projection is incomplete"
+	check := func(c *CurrentUserContext) bool { return c.ConsistentWith(userID) }
 
-	require.EqualError(t, (*CurrentUserContext)(nil).ConsistentWith(userID), message)
-	requireEachInconsistencyRejected(t, consistent, check, message, []inconsistency[CurrentUserContext]{
+	require.False(t, (*CurrentUserContext)(nil).ConsistentWith(userID))
+	requireEachInconsistencyRejected(t, consistent, check, []inconsistency[CurrentUserContext]{
 		{"another User", func(c *CurrentUserContext) { c.UserID = model.NewUserID() }},
 		{"no username", func(c *CurrentUserContext) { c.Username = "" }},
 		{"no display name", func(c *CurrentUserContext) { c.DisplayName = "" }},
@@ -87,19 +55,5 @@ func TestCurrentUserContextConsistentWithRejectsEachInconsistency(t *testing.T) 
 
 	custom := consistent(t)
 	custom.ProfilePictureKind = model.ProfilePictureCustom
-	require.NoError(t, check(custom), "a custom profile picture is a known kind")
-}
-
-func TestSessionExpiryEnforcementResultConsistentRejectsEachInconsistency(t *testing.T) {
-	t.Parallel()
-	consistent := func(*testing.T) *SessionExpiryEnforcementResult {
-		return &SessionExpiryEnforcementResult{Session: &model.Session{}}
-	}
-	const message = "session expiry result is incomplete"
-
-	require.EqualError(t, (*SessionExpiryEnforcementResult)(nil).Consistent(), message)
-	requireEachInconsistencyRejected(t, consistent, func(r *SessionExpiryEnforcementResult) error { return r.Consistent() }, message,
-		[]inconsistency[SessionExpiryEnforcementResult]{
-			{"no Session", func(r *SessionExpiryEnforcementResult) { r.Session = nil }},
-		})
+	require.True(t, check(custom), "a custom profile picture is a known kind")
 }

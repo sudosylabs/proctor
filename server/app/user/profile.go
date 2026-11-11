@@ -9,6 +9,7 @@ package user
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"time"
 
@@ -76,8 +77,8 @@ func (s *Service) GetCurrentUserContext(ctx context.Context, invocation invocati
 		return nil, StoreErrors.Translate(err)
 	}
 
-	if err = value.ConsistentWith(principal.UserID); err != nil {
-		return nil, apperror.New("administration.unavailable").Wrap(err)
+	if !value.ConsistentWith(principal.UserID) {
+		return nil, apperror.New("administration.unavailable").Wrap(errors.New("current User context projection is incomplete"))
 	}
 
 	view := &CurrentUserContextView{

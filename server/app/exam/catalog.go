@@ -145,8 +145,8 @@ func (a *Authoring) ArchiveExam(
 	if err != nil {
 		return model.Exam{}, examStoreErrors.Translate(err)
 	}
-	if err = examAccess.Consistent(); err != nil {
-		return model.Exam{}, apperror.New("exam.unavailable").Wrap(err)
+	if !examAccess.Consistent() {
+		return model.Exam{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no access projection"))
 	}
 
 	action, err := a.actionForAccess(ctx, principal.UserID, examAccess, at, model.ActionExamManage, model.ActionExamManageOverride)
@@ -194,8 +194,8 @@ func (a *Authoring) ArchiveExam(
 		return model.Exam{}, mapped
 	}
 
-	if err = result.Consistent(); err != nil {
-		return model.Exam{}, apperror.New("exam.unavailable").Wrap(err)
+	if result == nil || result.Value == nil {
+		return model.Exam{}, apperror.New("exam.unavailable").Wrap(errors.New("exam store returned no archive result"))
 	}
 
 	if !result.Replayed {

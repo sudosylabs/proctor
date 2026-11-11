@@ -30,7 +30,7 @@ func TestSessionRevocationAppliesAllLocalEffectsBeforeStablePeerFanout(t *testin
 		order.add("broadcast")
 		return nil
 	}}
-	service := mustNewService(t, invalidator, newDiscardLogger(t))
+	service := mustNewDelivery(t, invalidator, newDiscardLogger(t))
 	require.NoError(t, service.SetSink(sink))
 	require.NoError(t, service.SetClusterFanout(fanout))
 
@@ -66,7 +66,7 @@ func TestAuthenticationAndAuthorizationInvalidationPreserveWireFixtures(t *testi
 	const userID = "bbbbbbbbbbbbbbbbbbbbbbbbbb"
 	const hash = "345bf502d577508c91103476c743217fa304f9a15e92c6bdc5810f891677891f"
 	invalidator := &recordingInvalidator{}
-	service := mustNewService(t, invalidator, newDiscardLogger(t))
+	service := mustNewDelivery(t, invalidator, newDiscardLogger(t))
 	sink := &securityRecordingSink{}
 	fanout := &recordingFanout{}
 	require.NoError(t, service.SetSink(sink))
@@ -103,7 +103,7 @@ func TestSecurityPropagationRejectsInvalidPeerAndLocalInputWithoutLeaks(t *testi
 	invalidator := &recordingInvalidator{}
 	sink := &securityRecordingSink{}
 	fanout := &recordingFanout{}
-	service := mustNewService(t, invalidator, diagnostics)
+	service := mustNewDelivery(t, invalidator, diagnostics)
 	require.NoError(t, service.SetSink(sink))
 	require.NoError(t, service.SetClusterFanout(fanout))
 
@@ -132,7 +132,7 @@ func TestSecurityPropagationMissingAndFailingFanoutIsDiagnosticOnly(t *testing.T
 	invalidator := &recordingInvalidator{}
 	sink := &securityRecordingSink{}
 	diagnostics, logs := newTestLogger(t)
-	service := mustNewService(t, invalidator, diagnostics)
+	service := mustNewDelivery(t, invalidator, diagnostics)
 	require.NoError(t, service.SetSink(sink))
 	service.SessionsRevoked(context.Background(), userID, []model.SessionID{sessionID}, nil)
 	service.AuthenticationCacheInvalidated(context.Background(), userID, nil)
@@ -145,7 +145,7 @@ func TestSecurityPropagationMissingAndFailingFanoutIsDiagnosticOnly(t *testing.T
 	require.Contains(t, missingDiagnostics, "realtime cluster fan-out is not attached")
 
 	failureDiagnostics, failureLogs := newTestLogger(t)
-	serviceWithFailure := mustNewService(t, &recordingInvalidator{}, failureDiagnostics)
+	serviceWithFailure := mustNewDelivery(t, &recordingInvalidator{}, failureDiagnostics)
 	secretFailure := "transport accidentally included credential-secret"
 	fanout := &recordingFanout{broadcast: func(string, []byte) error { return errors.New(secretFailure) }}
 	require.NoError(t, serviceWithFailure.SetClusterFanout(fanout))
@@ -164,7 +164,7 @@ func TestSecurityPropagationWithoutSinkStillInvalidatesAndFansOut(t *testing.T) 
 	const sessionID = "cccccccccccccccccccccccccc"
 	invalidator := &recordingInvalidator{}
 	fanout := &recordingFanout{}
-	service := mustNewService(t, invalidator, newDiscardLogger(t))
+	service := mustNewDelivery(t, invalidator, newDiscardLogger(t))
 	require.NoError(t, service.SetClusterFanout(fanout))
 
 	service.SessionsRevoked(context.Background(), userID, []model.SessionID{sessionID}, nil)
@@ -177,7 +177,7 @@ func TestSecurityPropagationWithoutSinkStillInvalidatesAndFansOut(t *testing.T) 
 func TestCompleteHandlerRegistrationFailureIsTerminal(t *testing.T) {
 	t.Parallel()
 
-	service := newOrdinaryTestService(t)
+	service := newOrdinaryTestDelivery(t)
 	registered := []string{}
 	fanout := &recordingFanout{register: func(event string) error {
 		registered = append(registered, event)
@@ -201,7 +201,7 @@ func TestConcurrentSecurityPropagation(t *testing.T) {
 	t.Parallel()
 
 	invalidator := &recordingInvalidator{}
-	service := mustNewService(t, invalidator, newDiscardLogger(t))
+	service := mustNewDelivery(t, invalidator, newDiscardLogger(t))
 	sink := &securityRecordingSink{}
 	fanout := &recordingFanout{}
 	require.NoError(t, service.SetSink(sink))
@@ -226,19 +226,19 @@ func TestConcurrentSecurityPropagation(t *testing.T) {
 func TestSecurityCollaboratorsAreRequiredAtConstruction(t *testing.T) {
 	t.Parallel()
 
-	_, err := New(Dependencies{AuthenticationInvalidator: nil, Diagnostics: newDiscardLogger(t)})
+	_, err := NewDelivery(DeliveryDependencies{AuthenticationInvalidator: nil, Diagnostics: newDiscardLogger(t)})
 	require.Error(t, err, "nil invalidator was accepted")
-	_, err = New(Dependencies{AuthenticationInvalidator: &recordingInvalidator{}, Diagnostics: nil})
+	_, err = NewDelivery(DeliveryDependencies{AuthenticationInvalidator: &recordingInvalidator{}, Diagnostics: nil})
 	require.Error(t, err, "nil diagnostics were accepted")
 }
 
-func mustNewService(
+func mustNewDelivery(
 	t *testing.T,
 	invalidator AuthenticationInvalidator,
 	diagnostics *logging.Logger,
-) *Service {
+) *Delivery {
 	t.Helper()
-	service, err := New(Dependencies{AuthenticationInvalidator: invalidator, Diagnostics: diagnostics})
+	service, err := NewDelivery(DeliveryDependencies{AuthenticationInvalidator: invalidator, Diagnostics: diagnostics})
 	require.NoError(t, err)
 	return service
 }

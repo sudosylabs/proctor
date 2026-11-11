@@ -74,9 +74,9 @@ type DeliveryError struct {
 func (e *DeliveryError) Error() string { return e.err.Error() }
 func (e *DeliveryError) Unwrap() error { return e.err }
 
-// Dependencies are the collaborators of Service;
-// New validates them once and Service keeps them in deps.
-type Dependencies struct {
+// DeliveryDependencies are the collaborators of Delivery;
+// NewDelivery validates them once and Delivery keeps them in deps.
+type DeliveryDependencies struct {
 	AuthenticationInvalidator AuthenticationInvalidator
 	// Diagnostics records bounded, non-fatal security propagation failures. It
 	// must not be enriched with complete payloads or security-sensitive
@@ -84,31 +84,31 @@ type Dependencies struct {
 	Diagnostics *logging.Logger
 }
 
-// Service owns ordinary realtime event delivery. It is inert after
+// Delivery owns ordinary realtime event delivery. It is inert after
 // construction and borrows its attached collaborators.
-type Service struct {
-	deps Dependencies
+type Delivery struct {
+	deps DeliveryDependencies
 
 	mu     sync.RWMutex
 	sink   Sink
 	fanout ClusterFanout
 }
 
-// New constructs an inert Realtime module with its required security
+// NewDelivery constructs an inert Realtime module with its required security
 // collaborators. Sink and peer fanout remain staged because composition builds
 // those adapters after the application graph.
-func New(deps Dependencies) (*Service, error) {
+func NewDelivery(deps DeliveryDependencies) (*Delivery, error) {
 	if deps.AuthenticationInvalidator == nil {
 		return nil, errors.New("realtime authentication invalidator is nil")
 	}
 	if deps.Diagnostics == nil {
 		return nil, errors.New("realtime diagnostics is nil")
 	}
-	return &Service{deps: deps}, nil
+	return &Delivery{deps: deps}, nil
 }
 
 // SetSink attaches the local sink exactly once.
-func (s *Service) SetSink(sink Sink) error {
+func (s *Delivery) SetSink(sink Sink) error {
 	if sink == nil {
 		return errors.New("realtime sink is nil")
 	}
@@ -124,7 +124,7 @@ func (s *Service) SetSink(sink Sink) error {
 // SetClusterFanout attaches the peer fanout exactly once and registers the
 // ordinary-publication peer handler. Registration failure is terminal for the
 // instance: composition must unwind node construction rather than retry it.
-func (s *Service) SetClusterFanout(fanout ClusterFanout) error {
+func (s *Delivery) SetClusterFanout(fanout ClusterFanout) error {
 	if fanout == nil {
 		return errors.New("realtime cluster fan-out is nil")
 	}
@@ -156,7 +156,7 @@ func (s *Service) SetClusterFanout(fanout ClusterFanout) error {
 // UnbindExamAttemptConnection clears only the runtime binding for one durable
 // Attempt Connection, locally first and then on peers. It deliberately leaves
 // the generic WebSocket open for unrelated application use.
-func (s *Service) UnbindExamAttemptConnection(ctx context.Context, connectionID model.AttemptConnectionID) error {
+func (s *Delivery) UnbindExamAttemptConnection(ctx context.Context, connectionID model.AttemptConnectionID) error {
 	if !connectionID.IsValid() {
 		return &InvalidPublicationError{err: errors.New("Exam Attempt Connection identity is invalid")}
 	}
@@ -171,7 +171,7 @@ func (s *Service) UnbindExamAttemptConnection(ctx context.Context, connectionID 
 	return nil
 }
 
-func (s *Service) unbindExamAttemptConnectionLocal(connectionID model.AttemptConnectionID) {
+func (s *Delivery) unbindExamAttemptConnectionLocal(connectionID model.AttemptConnectionID) {
 	s.mu.RLock()
 	sink := s.sink
 	s.mu.RUnlock()
@@ -184,7 +184,7 @@ type examAttemptUnboundMessage struct {
 	AttemptConnectionID string `json:"attempt_connection_id"`
 }
 
-func (s *Service) handlePeerExamAttemptUnbound(_ context.Context, data []byte) error {
+func (s *Delivery) handlePeerExamAttemptUnbound(_ context.Context, data []byte) error {
 	var message examAttemptUnboundMessage
 	if err := decodeStrictPayload(data, &message); err != nil {
 		return err
@@ -218,7 +218,7 @@ func decodeStrictPayload(data []byte, target any) error {
 
 // Publish delivers a clone locally first and then fans out the stable peer
 // payload. Callers must invoke it only after durable commit.
-func (s *Service) Publish(ctx context.Context, event Event) error {
+func (s *Delivery) Publish(ctx context.Context, event Event) error {
 	candidate := event.Clone()
 	if candidate.ID == "" {
 		candidate.ID = model.NewID()
@@ -241,7 +241,7 @@ func (s *Service) Publish(ctx context.Context, event Event) error {
 	return nil
 }
 
-func (s *Service) publishLocal(ctx context.Context, event Event) {
+func (s *Delivery) publishLocal(ctx context.Context, event Event) {
 	s.mu.RLock()
 	sink := s.sink
 	s.mu.RUnlock()
@@ -250,7 +250,7 @@ func (s *Service) publishLocal(ctx context.Context, event Event) {
 	}
 }
 
-func (s *Service) broadcast(ctx context.Context, event string, data []byte) error {
+func (s *Delivery) broadcast(ctx context.Context, event string, data []byte) error {
 	s.mu.RLock()
 	fanout := s.fanout
 	s.mu.RUnlock()
@@ -260,7 +260,7 @@ func (s *Service) broadcast(ctx context.Context, event string, data []byte) erro
 	return fanout.Broadcast(ctx, event, data)
 }
 
-func (s *Service) handlePeerPublication(ctx context.Context, data []byte) error {
+func (s *Delivery) handlePeerPublication(ctx context.Context, data []byte) error {
 	var publication realtimePublication
 	if err := decodePayload(data, &publication); err != nil {
 		return err

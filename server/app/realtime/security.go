@@ -43,7 +43,7 @@ type authorizationInvalidationMessage struct {
 
 // SessionsRevoked applies local cache and connection effects before
 // best-effort peer propagation. Invalid input is rejected without effects.
-func (s *Service) SessionsRevoked(
+func (s *Delivery) SessionsRevoked(
 	ctx context.Context,
 	userID model.UserID,
 	sessionIDs []model.SessionID,
@@ -70,7 +70,7 @@ func (s *Service) SessionsRevoked(
 
 // AuthenticationCacheInvalidated clears the available local authentication
 // cache entries before best-effort peer propagation without closing sockets.
-func (s *Service) AuthenticationCacheInvalidated(
+func (s *Delivery) AuthenticationCacheInvalidated(
 	ctx context.Context,
 	userID model.UserID,
 	accessTokenHashes []string,
@@ -94,7 +94,7 @@ func (s *Service) AuthenticationCacheInvalidated(
 
 // InvalidateAuthorization closes the affected local connections before
 // best-effort peer propagation. An empty user ID targets every connection.
-func (s *Service) InvalidateAuthorization(ctx context.Context, userID model.UserID) {
+func (s *Delivery) InvalidateAuthorization(ctx context.Context, userID model.UserID) {
 	if userID != "" && !model.UserID(userID).IsValid() {
 		s.reportSecurityFailure(ctx, "refusing invalid authorization invalidation", "invalid security propagation")
 		return
@@ -108,7 +108,7 @@ func (s *Service) InvalidateAuthorization(ctx context.Context, userID model.User
 	)
 }
 
-func (s *Service) applySessionRevocation(
+func (s *Delivery) applySessionRevocation(
 	ctx context.Context,
 	revocation sessionRevocationMessage,
 ) {
@@ -133,7 +133,7 @@ func (s *Service) applySessionRevocation(
 	}
 }
 
-func (s *Service) applyAuthorizationInvalidation(userID string) {
+func (s *Delivery) applyAuthorizationInvalidation(userID string) {
 	s.mu.RLock()
 	sink := s.sink
 	s.mu.RUnlock()
@@ -147,7 +147,7 @@ func (s *Service) applyAuthorizationInvalidation(userID string) {
 	sink.CloseUser(userID, ConnectionCloseAuthorizationChanged)
 }
 
-func (s *Service) broadcastSecurityInvalidation(
+func (s *Delivery) broadcastSecurityInvalidation(
 	ctx context.Context,
 	operation string,
 	event string,
@@ -171,7 +171,7 @@ func (s *Service) broadcastSecurityInvalidation(
 	}
 }
 
-func (s *Service) reportSecurityFailure(ctx context.Context, message, category string) {
+func (s *Delivery) reportSecurityFailure(ctx context.Context, message, category string) {
 	s.mu.RLock()
 	diagnostics := s.deps.Diagnostics
 	s.mu.RUnlock()
@@ -180,7 +180,7 @@ func (s *Service) reportSecurityFailure(ctx context.Context, message, category s
 	}
 }
 
-func (s *Service) handlePeerSessionRevocation(ctx context.Context, data []byte) error {
+func (s *Delivery) handlePeerSessionRevocation(ctx context.Context, data []byte) error {
 	var revocation sessionRevocationMessage
 	if err := decodePayload(data, &revocation); err != nil {
 		return err
@@ -192,7 +192,7 @@ func (s *Service) handlePeerSessionRevocation(ctx context.Context, data []byte) 
 	return nil
 }
 
-func (s *Service) handlePeerAuthorizationInvalidation(_ context.Context, data []byte) error {
+func (s *Delivery) handlePeerAuthorizationInvalidation(_ context.Context, data []byte) error {
 	var invalidation authorizationInvalidationMessage
 	if err := decodePayload(data, &invalidation); err != nil {
 		return err

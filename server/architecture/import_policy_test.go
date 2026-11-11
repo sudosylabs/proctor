@@ -323,7 +323,9 @@ var dependencyRules = []dependencyRule{
 		name:           "realtime application",
 		sources:        []pathPattern{subtree(serverModule + "/app/realtime")},
 		deniedStandard: standardInfrastructure,
-		project:        only(exact(serverModule+"/logging"), exact(serverModule+"/model")),
+		// Delivery stays storage-free: the one Attempt read a Session
+		// revocation needs comes through a port the parent adapts.
+		project: only(exact(serverModule+"/logging"), exact(serverModule+"/model"), exact(serverModule+"/app/apperror")),
 	},
 	{
 		name:           "mail application",

@@ -80,7 +80,7 @@ func TestUserSettingsChangedEventUsesExistingLocalFirstClusterPathWithoutLooping
 		order.add("peer")
 		return nil
 	}}
-	service := newOrdinaryTestService(t)
+	service := newOrdinaryTestDelivery(t)
 	require.NoError(t, service.SetSink(sink))
 	require.NoError(t, service.SetClusterFanout(fanout))
 	userID := model.NewUserID()

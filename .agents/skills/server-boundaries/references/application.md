@@ -85,10 +85,14 @@ still succeeds. Area tests pass `realtimetest.Publisher` and assert its
 recorded calls whole. Two publications several Exam areas owe, the Sitting
 board invalidation and the Exam activity invalidation of a Sitting's
 candidates, are functions of this module that take the Publisher and, for the
-second, a narrow candidate reader the Exam Sitting Store satisfies. The parent
-application's realtime service implements the Publisher and retains Principal
-validation, WebSocket subscription authorization, and translation between
-delivery failures and public application errors.
+second, a narrow candidate reader the Exam Sitting Store satisfies.
+`realtime.Service` implements the Publisher: it translates delivery failures
+into public application errors and adds the Attempt and current-user
+invalidations a Session revocation or authorization change owes, reading the
+affected Attempts through the module's `SessionAttemptTargets` port, which the
+parent adapts from the Exam Attempt Store. The parent application retains
+Principal validation and WebSocket subscription authorization
+(`RealtimeAdmission`).
 
 The `app/mail` child module owns all server-specific mail composition:
 the complete template-definition registry, semantic preparation operations,
@@ -339,11 +343,13 @@ nothing; `TestApplicationSurfaceIsNamedServices` keeps it that way. The parent
 package assembles: it holds `App`, `New` and `Dependencies`. The services that
 span areas are in child packages (`search.Service`, `administration.Counts`,
 `job.Operations`, `mail.Operations`), each named on `App` like an area
-service. `RealtimeService` and `RealtimeAdmission` are the two services still
-declared in the parent, because both read Store contracts that `app/realtime`
-may not import; readiness (`health.go`), the operational event seam
+service. `RealtimeAdmission` is the one service still declared in the parent,
+because it composes the identity, Exam and Access Control services that
+`app/realtime` may not import; the realtime Publisher is `realtime.Service`,
+whose one Store read the parent adapts in `realtime_attempt_targets.go`.
+Readiness (`health.go`), the operational event seam
 (`operational_metrics.go`) and build information (`version.go`) stay beside
-them.
+it.
 
 Every area service is flat: `academic.Service`, `user.Service`,
 `administration.Service`, `onboarding.Service` and `identity.Service` are each

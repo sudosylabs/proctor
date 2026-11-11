@@ -183,7 +183,7 @@ type sharedMechanics struct {
 	hasher      *identity.PasswordHasher
 	attempts    *identity.AttemptAccounting
 	invalidator *identity.CacheInvalidator
-	realtime    *RealtimeService
+	realtime    *realtime.Service
 	audit       *access.Auditor
 	mail        *mail.Composer
 	mailHealth  *mail.Health
@@ -211,17 +211,20 @@ func newSharedMechanics(deps Dependencies) (sharedMechanics, error) {
 		return sharedMechanics{}, err
 	}
 
-	delivery, err := realtime.New(realtime.Dependencies{AuthenticationInvalidator: invalidator, Diagnostics: deps.RealtimeDiagnostics})
+	delivery, err := realtime.NewDelivery(realtime.DeliveryDependencies{AuthenticationInvalidator: invalidator, Diagnostics: deps.RealtimeDiagnostics})
 	if err != nil {
 		return sharedMechanics{}, err
 	}
 
-	publication, err := newRealtimeServiceWithDelivery(realtimeServiceDependencies{Delivery: delivery, Diagnostics: deps.RealtimeDiagnostics})
+	publication, err := realtime.New(realtime.Dependencies{
+		Delivery:    delivery,
+		Diagnostics: deps.RealtimeDiagnostics,
+		Attempts:    sessionAttemptTargets{attempts: deps.Store.ExamAttempt()},
+	})
 	if err != nil {
 		return sharedMechanics{}, err
 	}
 
-	publication.attempts = deps.Store.ExamAttempt()
 	audit, err := access.NewAuditor(access.AuditorDependencies{
 		Audits:       deps.Store.Audit(),
 		Institutions: deps.Store.Institution(),

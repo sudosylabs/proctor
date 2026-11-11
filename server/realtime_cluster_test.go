@@ -97,7 +97,7 @@ func TestRealtimeClusterAdapterRegistersStableChildEventsAndPropagatesFailure(t 
 	}}
 	adapter, err := newRealtimeClusterAdapter(transport)
 	require.NoError(t, err)
-	service, err := realtime.New(realtime.Dependencies{AuthenticationInvalidator: noopRealtimeInvalidator{}, Diagnostics: newDiscardLogger(t)})
+	service, err := realtime.NewDelivery(realtime.DeliveryDependencies{AuthenticationInvalidator: noopRealtimeInvalidator{}, Diagnostics: newDiscardLogger(t)})
 	require.NoError(t, err)
 	err = service.SetClusterFanout(adapter)
 	require.ErrorIs(t, err, registrationErr, "SetClusterFanout() error")
@@ -120,7 +120,7 @@ func TestRealtimeClusterAdapterPreservesSingleNodeLocalFirstPublication(t *testi
 	require.NoError(t, err)
 	adapter, err := newRealtimeClusterAdapter(transport)
 	require.NoError(t, err)
-	service, err := realtime.New(realtime.Dependencies{AuthenticationInvalidator: noopRealtimeInvalidator{}, Diagnostics: newDiscardLogger(t)})
+	service, err := realtime.NewDelivery(realtime.DeliveryDependencies{AuthenticationInvalidator: noopRealtimeInvalidator{}, Diagnostics: newDiscardLogger(t)})
 	require.NoError(t, err)
 	sink := &countingRealtimeSink{}
 	require.NoError(t, service.SetSink(sink))

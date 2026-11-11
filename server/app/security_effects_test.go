@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/identity"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
@@ -41,10 +42,10 @@ func TestRealtimeServiceRequiresSecurityDependencies(t *testing.T) {
 func TestAuthenticationAndRealtimeRetainOnlyNarrowSiblingPorts(t *testing.T) {
 	t.Parallel()
 
-	realtimeType := reflect.TypeOf(RealtimeService{})
+	realtimeType := reflect.TypeOf(realtime.Service{})
 	identityPointerType := reflect.TypeOf((*identity.Service)(nil))
 	for index := 0; index < realtimeType.NumField(); index++ {
 		field := realtimeType.Field(index)
-		require.NotEqual(t, identityPointerType, field.Type, "RealtimeService retains the identity Service in field %q", field.Name)
+		require.NotEqual(t, identityPointerType, field.Type, "realtime.Service retains the identity Service in field %q", field.Name)
 	}
 }

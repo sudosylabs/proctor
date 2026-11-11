@@ -16,18 +16,23 @@
 
 // Package realtime tells connected clients that something changed. Event is
 // one such notice (its name, who may receive it and a small payload), event.go
-// has one constructor per event, and Service delivers an event to this node's
+// has one constructor per event, and Delivery delivers an event to this node's
 // sockets first and then to the other nodes.
 //
-// An application area does not call Service directly. It holds a Publisher,
+// An application area does not call Delivery directly. It holds a Publisher,
 // builds its events in its own effects.go, and publishes only after its Store
-// operation has committed. Delivery is best effort: nothing here queues or
-// retries, and a failed publication never undoes the committed change.
+// operation has committed. Service is the production Publisher: it turns
+// Delivery's failures into application errors and adds the Attempt and
+// current-user notices a Session revocation or an authorization change owes.
+// The one Attempt lookup that needs comes through SessionAttemptTargets, which
+// the parent application answers from the Store, so nothing here touches
+// storage. Delivery is best effort: nothing here queues or retries, and a
+// failed publication never undoes the committed change.
 //
 // The package knows nothing about WebSocket frames or the cluster wire format.
 // The websocket Hub is attached as the Sink and the cluster adapter as the
 // ClusterFanout, once each, while the node is built. Start with publisher.go,
-// then delivery.go. The realtimetest child holds the recording Publisher that
-// area tests use, and sitting_invalidation.go the two Sitting notices several
-// Exam packages share.
+// then service.go and delivery.go. The realtimetest child holds the recording
+// Publisher that area tests use, and sitting_invalidation.go the two Sitting
+// notices several Exam packages share.
 package realtime

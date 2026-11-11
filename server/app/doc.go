@@ -40,11 +40,11 @@
 //     onboarding imports and Student Progression) and search (one search
 //     across Exams, Classes and Users)
 //
-// Four things besides assembly still live here. realtime.go and
-// realtime_admission.go hold the realtime publication service and WebSocket
-// admission: both read Store contracts, which the app/realtime child may not
-// import. health.go (node readiness), operational_metrics.go (the
-// operational event seam the module root records) and version.go (build
-// information) are what the module root and transports read from the
-// application as a whole.
+// Besides assembly, a few things still live here. realtime_admission.go holds
+// WebSocket admission: it composes the identity, Exam and Access Control
+// services, which the app/realtime child may not import.
+// realtime_attempt_targets.go answers that child's one Attempt lookup from the
+// Store. health.go (node readiness), operational_metrics.go (the operational
+// event seam the module root records) and version.go (build information) are
+// what the module root and transports read from the application as a whole.
 package app

@@ -5,68 +5,87 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-package app
+package realtime
 
 import (
 	"context"
 	"errors"
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
-	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/logging"
 	"github.com/sudosylabs/proctor/server/model"
-	"github.com/sudosylabs/proctor/server/store"
 )
 
-// realtimeServiceDependencies are the collaborators of RealtimeService;
-// newRealtimeServiceWithDelivery validates them once and RealtimeService keeps them in deps.
-type realtimeServiceDependencies struct {
-	Delivery    *realtime.Service
+// SessionAttemptTarget is one Attempt a Session revocation affects: its
+// Candidate and the Exam and Sitting whose board lists it.
+type SessionAttemptTarget struct {
+	CandidateUserID model.UserID
+	ExamID          model.ExamID
+	SittingID       model.ExamSittingID
+}
+
+// SessionAttemptTargets finds the Attempts whose Candidate and Sitting board
+// must hear that some of the Candidate's Sessions were revoked. It only reads;
+// the parent application answers it from the Exam Attempt Store.
+type SessionAttemptTargets interface {
+	// ListSessionAttemptTargets returns the Candidate's Attempts that were
+	// suspended through a Participation bound to one of the given Sessions.
+	ListSessionAttemptTargets(ctx context.Context, candidateID model.UserID, sessionIDs []model.SessionID) ([]SessionAttemptTarget, error)
+}
+
+// Dependencies are the collaborators of Service; New validates them once and
+// Service keeps them in deps.
+type Dependencies struct {
+	Delivery    *Delivery
 	Diagnostics *logging.Logger
+	Attempts    SessionAttemptTargets
 }
 
-// RealtimeService is the realtime.Publisher the application areas hold. It
-// translates the child module's publication failures into parent application
-// errors and adds the Attempt and current-user invalidations that follow a
-// Session revocation or an authorization change.
-type RealtimeService struct {
-	deps realtimeServiceDependencies
-
-	attempts store.ExamAttemptStore
+// Service is the Publisher the application areas hold. It translates
+// Delivery's publication failures into application errors and adds the
+// Attempt and current-user invalidations that follow a Session revocation or
+// an authorization change.
+type Service struct {
+	deps Dependencies
 }
 
-func newRealtimeServiceWithDelivery(deps realtimeServiceDependencies) (*RealtimeService, error) {
+// New constructs the Publisher over a Delivery that composition attaches its
+// sink and cluster fan-out to.
+func New(deps Dependencies) (*Service, error) {
 	if deps.Delivery == nil {
 		return nil, errors.New("realtime delivery is required")
 	}
 	if deps.Diagnostics == nil {
 		return nil, errors.New("realtime diagnostics are required")
 	}
-	return &RealtimeService{deps: deps}, nil
+	if deps.Attempts == nil {
+		return nil, errors.New("realtime session attempt targets are required")
+	}
+	return &Service{deps: deps}, nil
 }
 
 // AttachClusterFanout wires the composition-owned cluster adapter and
 // registers peer handlers. It must be called once before the node becomes
 // ready. Peer handlers apply only local effects so Broadcast never loops.
-func (s *RealtimeService) AttachClusterFanout(fanout realtime.ClusterFanout) error {
+func (s *Service) AttachClusterFanout(fanout ClusterFanout) error {
 	return s.deps.Delivery.SetClusterFanout(fanout)
 }
 
 // AttachSink wires the composition-owned local WebSocket sink. It must
 // be called once before the node becomes ready.
-func (s *RealtimeService) AttachSink(sink realtime.Sink) error {
+func (s *Service) AttachSink(sink Sink) error {
 	return s.deps.Delivery.SetSink(sink)
 }
 
 // Publish delivers a transport-neutral event locally first, then
 // fans it out to peers best-effort. Callers must invoke this only after
 // durable commit.
-func (s *RealtimeService) Publish(ctx context.Context, event realtime.Event) error {
+func (s *Service) Publish(ctx context.Context, event Event) error {
 	err := s.deps.Delivery.Publish(ctx, event)
 	if err == nil {
 		return nil
 	}
-	var invalid *realtime.InvalidPublicationError
+	var invalid *InvalidPublicationError
 	if errors.As(err, &invalid) {
 		return invalidRealtimeRequest(invalid.Error())
 	}
@@ -75,12 +94,12 @@ func (s *RealtimeService) Publish(ctx context.Context, event realtime.Event) err
 
 // UnbindExamAttemptConnection unbinds one Attempt Connection locally and then
 // on peers, leaving its WebSocket open.
-func (s *RealtimeService) UnbindExamAttemptConnection(ctx context.Context, connectionID model.AttemptConnectionID) error {
+func (s *Service) UnbindExamAttemptConnection(ctx context.Context, connectionID model.AttemptConnectionID) error {
 	err := s.deps.Delivery.UnbindExamAttemptConnection(ctx, connectionID)
 	if err == nil {
 		return nil
 	}
-	var invalid *realtime.InvalidPublicationError
+	var invalid *InvalidPublicationError
 	if errors.As(err, &invalid) {
 		return invalidRealtimeRequest(invalid.Error())
 	}
@@ -89,7 +108,7 @@ func (s *RealtimeService) UnbindExamAttemptConnection(ctx context.Context, conne
 
 // Report records an effect that failed after commit, for the use case that
 // still succeeds. operation names what failed.
-func (s *RealtimeService) Report(ctx context.Context, operation string, err error) {
+func (s *Service) Report(ctx context.Context, operation string, err error) {
 	if s.deps.Diagnostics == nil {
 		return
 	}
@@ -103,14 +122,14 @@ func (s *RealtimeService) Report(ctx context.Context, operation string, err erro
 // SessionsRevoked propagates revoked Sessions and access tokens, then tells
 // the affected Attempts' candidate and Sitting board that their activity
 // changed. Publication failures are reported, not returned.
-func (s *RealtimeService) SessionsRevoked(
+func (s *Service) SessionsRevoked(
 	ctx context.Context,
 	userID model.UserID,
 	sessionIDs []model.SessionID,
 	accessTokenHashes []string,
 ) {
 	s.deps.Delivery.SessionsRevoked(ctx, userID, sessionIDs, accessTokenHashes)
-	if s.attempts == nil || len(sessionIDs) == 0 {
+	if len(sessionIDs) == 0 {
 		return
 	}
 
@@ -129,15 +148,15 @@ func (s *RealtimeService) SessionsRevoked(
 		}
 	}
 
-	targets, err := s.attempts.ListSessionRevocationInvalidationTargets(ctx, candidateID, parsedSessionIDs)
+	targets, err := s.deps.Attempts.ListSessionAttemptTargets(ctx, candidateID, parsedSessionIDs)
 	if err != nil {
 		s.Report(ctx, "session_revocation.attempt_invalidations", err)
 		return
 	}
 
 	for _, target := range targets {
-		candidateEvent, candidateErr := realtime.NewCandidateExamActivityChangedEvent(target.CandidateUserID)
-		managerEvent, managerErr := realtime.NewManagerSittingBoardChangedEvent(target.ExamID, target.SittingID)
+		candidateEvent, candidateErr := NewCandidateExamActivityChangedEvent(target.CandidateUserID)
+		managerEvent, managerErr := NewManagerSittingBoardChangedEvent(target.ExamID, target.SittingID)
 		publishErr := errors.Join(candidateErr, managerErr)
 		if candidateErr == nil {
 			publishErr = errors.Join(publishErr, s.Publish(ctx, candidateEvent))
@@ -155,7 +174,7 @@ func (s *RealtimeService) SessionsRevoked(
 
 // AuthenticationCacheInvalidated clears a User's cached authentications
 // locally and then on peers, without closing sockets.
-func (s *RealtimeService) AuthenticationCacheInvalidated(
+func (s *Service) AuthenticationCacheInvalidated(
 	ctx context.Context,
 	userID model.UserID,
 	accessTokenHashes []string,
@@ -166,14 +185,14 @@ func (s *RealtimeService) AuthenticationCacheInvalidated(
 // InvalidateAuthorization propagates a change to a User's authorization and
 // tells their clients to refresh their activity and current-user context.
 // Publication failures are reported, not returned.
-func (s *RealtimeService) InvalidateAuthorization(ctx context.Context, userID model.UserID) {
+func (s *Service) InvalidateAuthorization(ctx context.Context, userID model.UserID) {
 	s.deps.Delivery.InvalidateAuthorization(ctx, userID)
 	if userID == "" {
 		return
 	}
 	parsed, err := model.ParseUserID(userID.String())
 	if err == nil {
-		candidateEvent, candidateErr := realtime.NewCandidateExamActivityChangedEvent(parsed)
+		candidateEvent, candidateErr := NewCandidateExamActivityChangedEvent(parsed)
 		err = errors.Join(candidateErr, s.InvalidateCurrentUserContext(ctx, parsed))
 		if candidateErr == nil {
 			err = errors.Join(err, s.Publish(ctx, candidateEvent))
@@ -186,15 +205,15 @@ func (s *RealtimeService) InvalidateAuthorization(ctx context.Context, userID mo
 
 // InvalidateCurrentUserContext tells a User's clients that their current-user
 // context changed.
-func (s *RealtimeService) InvalidateCurrentUserContext(ctx context.Context, userID model.UserID) error {
-	event, err := realtime.NewCurrentUserContextChangedEvent(userID)
+func (s *Service) InvalidateCurrentUserContext(ctx context.Context, userID model.UserID) error {
+	event, err := NewCurrentUserContextChangedEvent(userID)
 	if err != nil {
 		return err
 	}
 	return s.Publish(ctx, event)
 }
 
-var _ realtime.Publisher = (*RealtimeService)(nil)
+var _ Publisher = (*Service)(nil)
 
 func invalidRealtimeRequest(field string) error {
 	return apperror.New("websocket.request.invalid").WithField("field", field)

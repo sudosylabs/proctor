@@ -166,7 +166,7 @@ func TestPublishClonesGeneratesIDAndDeliversLocalFirst(t *testing.T) {
 		order.add("peer")
 		return nil
 	}}
-	service := newOrdinaryTestService(t)
+	service := newOrdinaryTestDelivery(t)
 	require.NoError(t, service.SetSink(sink))
 	require.NoError(t, service.SetClusterFanout(fanout))
 
@@ -190,7 +190,7 @@ func TestPublishPreservesOrdinaryPeerWireFixtureAndDoesNotRebroadcast(t *testing
 
 	const eventID = "yyyyyyyyyyyyyyyyyyyyyyyyyy"
 	const userID = "bbbbbbbbbbbbbbbbbbbbbbbbbb"
-	service := newOrdinaryTestService(t)
+	service := newOrdinaryTestDelivery(t)
 	sink := &recordingSink{}
 	fanout := &recordingFanout{}
 	require.NoError(t, service.SetSink(sink))
@@ -227,7 +227,7 @@ func TestUnbindExamAttemptConnectionAppliesExactLocalEffectBeforePeerFanout(t *t
 		order.add("peer")
 		return nil
 	}}
-	service := newOrdinaryTestService(t)
+	service := newOrdinaryTestDelivery(t)
 	require.NoError(t, service.SetSink(sink))
 	require.NoError(t, service.SetClusterFanout(fanout))
 
@@ -249,7 +249,7 @@ func TestUnbindExamAttemptConnectionAppliesExactLocalEffectBeforePeerFanout(t *t
 func TestPeerExamAttemptUnbindRejectsNonCanonicalPayloadWithoutLocalEffect(t *testing.T) {
 	t.Parallel()
 
-	service := newOrdinaryTestService(t)
+	service := newOrdinaryTestDelivery(t)
 	sink := &recordingSink{}
 	fanout := &recordingFanout{}
 	require.NoError(t, service.SetSink(sink))
@@ -265,7 +265,7 @@ func TestPublishMissingCollaboratorsAndTypedFailures(t *testing.T) {
 	t.Parallel()
 
 	t.Run("missing sink is a no-op", func(t *testing.T) {
-		service := newOrdinaryTestService(t)
+		service := newOrdinaryTestDelivery(t)
 		fanout := &recordingFanout{}
 		require.NoError(t, service.SetClusterFanout(fanout))
 		require.NoError(t, service.Publish(context.Background(), validUserEvent()))
@@ -273,7 +273,7 @@ func TestPublishMissingCollaboratorsAndTypedFailures(t *testing.T) {
 	})
 
 	t.Run("missing fanout fails after local delivery", func(t *testing.T) {
-		service := newOrdinaryTestService(t)
+		service := newOrdinaryTestDelivery(t)
 		sink := &recordingSink{}
 		require.NoError(t, service.SetSink(sink))
 		err := service.Publish(context.Background(), validUserEvent())
@@ -283,7 +283,7 @@ func TestPublishMissingCollaboratorsAndTypedFailures(t *testing.T) {
 	})
 
 	t.Run("fanout failure is typed", func(t *testing.T) {
-		service := newOrdinaryTestService(t)
+		service := newOrdinaryTestDelivery(t)
 		fanout := &recordingFanout{broadcast: func(string, []byte) error {
 			return errors.New("peer unavailable")
 		}}
@@ -294,7 +294,7 @@ func TestPublishMissingCollaboratorsAndTypedFailures(t *testing.T) {
 	})
 
 	t.Run("invalid publication has no effects", func(t *testing.T) {
-		service := newOrdinaryTestService(t)
+		service := newOrdinaryTestDelivery(t)
 		sink := &recordingSink{}
 		fanout := &recordingFanout{}
 		require.NoError(t, service.SetSink(sink))
@@ -310,7 +310,7 @@ func TestPublishMissingCollaboratorsAndTypedFailures(t *testing.T) {
 func TestCollaboratorAttachmentIsThreadSafeAndOnce(t *testing.T) {
 	t.Parallel()
 
-	service := newOrdinaryTestService(t)
+	service := newOrdinaryTestDelivery(t)
 	var sinkSuccesses atomic.Int64
 	var fanoutSuccesses atomic.Int64
 	var group sync.WaitGroup
@@ -339,7 +339,7 @@ func TestCollaboratorAttachmentIsThreadSafeAndOnce(t *testing.T) {
 func TestClusterAttachmentRegistrationFailureIsTerminal(t *testing.T) {
 	t.Parallel()
 
-	service := newOrdinaryTestService(t)
+	service := newOrdinaryTestDelivery(t)
 	fanout := &recordingFanout{register: func(string) error {
 		return errors.New("registration failed")
 	}}
@@ -355,10 +355,10 @@ func TestClusterAttachmentRegistrationFailureIsTerminal(t *testing.T) {
 func TestServiceHasNoBackgroundLifecycle(t *testing.T) {
 	t.Parallel()
 
-	typeOfService := reflect.TypeOf(newOrdinaryTestService(t))
+	typeOfService := reflect.TypeOf(newOrdinaryTestDelivery(t))
 	for _, method := range []string{"Start", "Stop", "Close", "Run"} {
 		_, exists := typeOfService.MethodByName(method)
-		require.False(t, exists, "Service unexpectedly exposes background lifecycle method %s", method)
+		require.False(t, exists, "Delivery unexpectedly exposes background lifecycle method %s", method)
 	}
 }
 
@@ -366,9 +366,9 @@ func validUserEvent() Event {
 	return Event{Name: "user.notification", UserID: model.UserID(model.NewID())}
 }
 
-func newOrdinaryTestService(t *testing.T) *Service {
+func newOrdinaryTestDelivery(t *testing.T) *Delivery {
 	t.Helper()
-	service, err := New(Dependencies{AuthenticationInvalidator: &recordingInvalidator{}, Diagnostics: newDiscardLogger(t)})
+	service, err := NewDelivery(DeliveryDependencies{AuthenticationInvalidator: &recordingInvalidator{}, Diagnostics: newDiscardLogger(t)})
 	require.NoError(t, err)
 	return service
 }

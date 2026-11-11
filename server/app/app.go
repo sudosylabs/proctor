@@ -23,6 +23,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/onboarding"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/app/user"
 )
 
@@ -86,7 +87,7 @@ type App struct {
 	// Attempt Connections, propagates Session revocation and authentication
 	// or authorization invalidation, and receives the WebSocket sink and
 	// cluster fan-out that composition attaches.
-	Realtime *RealtimeService
+	Realtime *realtime.Service
 	// RealtimeAdmission revalidates a WebSocket connection's principal and
 	// authorizes each of its subscriptions.
 	RealtimeAdmission *RealtimeAdmission

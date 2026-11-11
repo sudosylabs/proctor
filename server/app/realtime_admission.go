@@ -92,3 +92,7 @@ func (s *RealtimeAdmission) ValidateWebSocketPrincipal(ctx context.Context, prin
 	recordOperational(s.operational, "realtime", "principal_validate", err)
 	return err
 }
+
+func invalidRealtimeRequest(field string) error {
+	return apperror.New("websocket.request.invalid").WithField("field", field)
+}

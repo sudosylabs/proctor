@@ -15,8 +15,8 @@ import (
 
 // Publisher delivers committed changes to connected clients and peer nodes.
 // An application area holds one and builds its own events beside the use case
-// that causes them; the parent application's realtime service is the
-// production implementation and realtimetest.Publisher the recording one.
+// that causes them; Service is the production implementation and
+// realtimetest.Publisher the recording one.
 // Every method is called only after the change it announces has committed.
 type Publisher interface {
 	// Publish delivers the event locally first, then to peers.

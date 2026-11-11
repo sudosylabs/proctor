@@ -57,15 +57,6 @@ type UserSettingsDiagnostic struct {
 	Column int    `json:"column"`
 }
 
-// SettingsChange describes a committed replacement of a User's settings
-// document, for the realtime effect that follows it.
-type SettingsChange struct {
-	UserID        model.UserID
-	Revision      model.UserSettingsRevision
-	FormatVersion int
-	ChangedAt     time.Time
-}
-
 // ReplaceOwnUserSettings replaces the caller's own settings document when the
 // expected revision is current, and is idempotent per key.
 func (s *Service) ReplaceOwnUserSettings(
@@ -174,13 +165,8 @@ func (s *Service) ReplaceOwnUserSettings(
 		Replayed:      stored.Replayed,
 	}
 	if result.Changed && !result.Replayed {
-		if effectErr := s.effects.SettingsChanged(ctx, SettingsChange{
-			UserID:        principal.UserID,
-			Revision:      result.Revision,
-			FormatVersion: result.FormatVersion,
-			ChangedAt:     result.UpdatedAt,
-		}); effectErr != nil {
-			s.effects.Report(ctx, "user_settings_changed", effectErr)
+		if effectErr := s.publishSettingsChanged(ctx, principal.UserID, result); effectErr != nil {
+			s.publisher.Report(ctx, "user_settings_changed", effectErr)
 		}
 	}
 

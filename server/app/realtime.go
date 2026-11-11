@@ -26,8 +26,10 @@ type realtimeServiceDependencies struct {
 	Diagnostics *logging.Logger
 }
 
-// RealtimeService translates the child module's publication failures into
-// parent application errors and retains parent-owned effect adapters.
+// RealtimeService is the realtime.Publisher the application areas hold. It
+// translates the child module's publication failures into parent application
+// errors and adds the Attempt and current-user invalidations that follow a
+// Session revocation or an authorization change.
 type RealtimeService struct {
 	deps realtimeServiceDependencies
 
@@ -86,6 +88,12 @@ func (s *RealtimeService) UnbindExamAttemptConnection(ctx context.Context, conne
 		return invalidRealtimeRequest(invalid.Error())
 	}
 	return internalRealtimeError(err)
+}
+
+// Report records an effect that failed after commit, for the area use case
+// that still succeeds.
+func (s *RealtimeService) Report(ctx context.Context, operation string, err error) {
+	s.reportTransientFailure(ctx, operation, err)
 }
 
 func (s *RealtimeService) reportTransientFailure(
@@ -197,7 +205,10 @@ func (s *RealtimeService) InvalidateCurrentUserContext(ctx context.Context, user
 	return s.PublishRealtimeEvent(ctx, event)
 }
 
-var _ identity.SecurityEffects = (*RealtimeService)(nil)
+var (
+	_ realtime.Publisher       = (*RealtimeService)(nil)
+	_ identity.SecurityEffects = (*RealtimeService)(nil)
+)
 
 func invalidRealtimeRequest(field string) error {
 	return apperror.New("websocket.request.invalid").WithField("field", field)

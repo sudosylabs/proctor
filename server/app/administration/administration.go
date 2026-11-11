@@ -11,7 +11,8 @@
 // records and candidate notices, and the audit listings. One flat Service
 // holds every one of these use cases, one file per concern; its fields are
 // the Store contracts it calls and one of each collaborator: the Authorizer,
-// the mutation auditor, Mail and Effects.
+// the mutation auditor, Mail and the realtime Publisher. effects.go builds the
+// realtime events a committed change publishes.
 //
 // The retention Jobs' system audit and notice dispatcher live here too,
 // outside Service; composition builds them with NewRetentionJobs for the Job
@@ -31,6 +32,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -62,26 +64,15 @@ type Authorizer interface {
 
 var _ Authorizer = (*access.Authorizer)(nil)
 
-// Effects publishes the realtime effects of an administration change after it
-// commits. Report records a publication that failed; the use case still
-// succeeds.
-type Effects interface {
-	// InvalidateAuthorization drops one User's cached authorization, or
-	// every User's when the identifier is empty.
-	InvalidateAuthorization(context.Context, model.UserID)
-	// AccessPolicyChanged propagates a committed Access Policy replacement.
-	AccessPolicyChanged(context.Context, AccessPolicyChange) error
-	Report(context.Context, string, error)
-}
-
 // Dependencies are the collaborators New distributes to the Service.
+// Publisher delivers the realtime effects of a committed change.
 type Dependencies struct {
 	Store        store.Catalog
 	Authorizer   Authorizer
 	Auditor      access.MutationAuditor
 	Capabilities identity.AccessPolicyCapabilitySource
 	Mail         Mail
-	Effects      Effects
+	Publisher    realtime.Publisher
 	// CanonicalOrigin, SupportAddress and PasswordMinimumLength are the
 	// operator-owned facts access discovery publishes.
 	CanonicalOrigin         string
@@ -108,7 +99,7 @@ type Service struct {
 
 	authorizer   Authorizer
 	auditor      access.MutationAuditor
-	effects      Effects
+	publisher    realtime.Publisher
 	mail         Mail
 	capabilities identity.AccessPolicyCapabilitySource
 
@@ -143,7 +134,7 @@ func New(deps Dependencies) (*Service, error) {
 		deps.Authorizer == nil ||
 		deps.Capabilities == nil ||
 		deps.Auditor == nil ||
-		deps.Effects == nil ||
+		deps.Publisher == nil ||
 		deps.Now == nil ||
 		deps.RecentAuthenticationTTL <= 0 ||
 		err != nil ||
@@ -170,7 +161,7 @@ func New(deps Dependencies) (*Service, error) {
 		retention:               catalog.Retention(),
 		authorizer:              deps.Authorizer,
 		auditor:                 deps.Auditor,
-		effects:                 deps.Effects,
+		publisher:               deps.Publisher,
 		mail:                    deps.Mail,
 		capabilities:            deps.Capabilities,
 		canonicalOrigin:         deps.CanonicalOrigin,

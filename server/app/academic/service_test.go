@@ -16,6 +16,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/secretseal"
 	"github.com/sudosylabs/proctor/server/store"
@@ -36,6 +38,7 @@ type catalogFake struct {
 	affiliation        store.AffiliationStore
 	academicUnitMember store.AcademicUnitMemberStore
 	roleBinding        store.RoleBindingStore
+	examSitting        store.ExamSittingStore
 }
 
 func (c *catalogFake) Institution() store.InstitutionStore       { return c.institution }
@@ -51,6 +54,7 @@ func (c *catalogFake) AcademicUnitMember() store.AcademicUnitMemberStore {
 	return c.academicUnitMember
 }
 func (c *catalogFake) RoleBinding() store.RoleBindingStore { return c.roleBinding }
+func (c *catalogFake) ExamSitting() store.ExamSittingStore { return c.examSitting }
 
 // mustNew builds the Service under test; New fails only without a catalog.
 func mustNew(deps Dependencies) *Service {
@@ -61,16 +65,51 @@ func mustNew(deps Dependencies) *Service {
 	return service
 }
 
-// effectsBase supplies the Effects methods a test does not record, one level
-// below the fakes so their own methods win.
-type effectsBase struct{ Effects }
+// academicUnitPublisherIn returns a recording Publisher that also places each
+// call in the log a test shares with its other fakes: "effect",
+// "effect-update" and "effect-archive" for the three Academic Unit events and
+// "effect-report" for a reported failure.
+func academicUnitPublisherIn(events *[]string) *realtimetest.Publisher {
+	return &realtimetest.Publisher{Observe: func(call realtimetest.Call) {
+		switch {
+		case call.Method == realtimetest.Report:
+			*events = append(*events, "effect-report")
+		case call.Event.Name == "academic_unit_updated":
+			*events = append(*events, "effect-update")
+		case call.Event.Name == "academic_unit_archived":
+			*events = append(*events, "effect-archive")
+		default:
+			*events = append(*events, "effect")
+		}
+	}}
+}
 
-// academicUnitEffects joins the Academic Unit change and failure-report fakes
-// into the one Effects collaborator.
-type academicUnitEffects struct {
-	effectsBase
-	*academicUnitCommandEffectsFake
-	*academicUnitEffectFailureReporterFake
+// academicUnitEventCall is the publication of one Academic Unit event: a
+// payload-free event for everyone who may view the unit.
+func academicUnitEventCall(name string, unitID model.AcademicUnitID) realtimetest.Call {
+	return realtimetest.Call{Method: realtimetest.PublishRealtimeEvent, Event: realtime.RealtimeEvent{
+		Name:     name,
+		Action:   model.ActionAcademicUnitView,
+		Resource: model.Resource{Type: model.ResourceAcademicUnit, ID: unitID.String()},
+	}}
+}
+
+// sittingTargetsFake answers the Sitting boards a Class Membership change
+// refreshes and records each Class it was asked for.
+type sittingTargetsFake struct {
+	store.ExamSittingStore
+	targets map[model.ClassID][]store.ExamSittingInvalidationTarget
+	listed  []model.ClassID
+}
+
+func (s *sittingTargetsFake) ListInvalidationTargetsByClass(
+	_ context.Context,
+	classID model.ClassID,
+	_ model.ExamSittingID,
+	_ int,
+) ([]store.ExamSittingInvalidationTarget, error) {
+	s.listed = append(s.listed, classID)
+	return s.targets[classID], nil
 }
 
 type relationshipUserStoreTestFake struct{ store.UserStore }

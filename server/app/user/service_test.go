@@ -13,6 +13,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -32,46 +33,17 @@ func (c *catalogFake) RoleBinding() store.RoleBindingStore   { return c.roleBind
 func (c *catalogFake) File() store.FileStore                 { return c.file }
 func (c *catalogFake) UserSettings() store.UserSettingsStore { return c.userSettings }
 
-// effectsBase supplies the Effects methods a test does not record, one level
-// below the fakes so their own methods win.
-type effectsBase struct{ Effects }
-
-// effectsFake records every Effects call a use case makes.
-type effectsFake struct {
-	events *[]string
-	// changes records settings announcements and err fails them.
-	changes []SettingsChange
-	err     error
-	// change records the last picture announcement and pictureErr fails it.
-	change     PictureChange
-	pictureErr error
-	// operations and errors record each reported failure.
-	operations []string
-	errors     []error
-}
-
-func (e *effectsFake) SettingsChanged(_ context.Context, change SettingsChange) error {
-	if e.events != nil {
-		*e.events = append(*e.events, "effect")
-	}
-	e.changes = append(e.changes, change)
-	return e.err
-}
-
-func (e *effectsFake) PictureChanged(_ context.Context, change PictureChange) error {
-	e.change = change
-	if e.events != nil {
-		*e.events = append(*e.events, "effect")
-	}
-	return e.pictureErr
-}
-
-func (e *effectsFake) Report(_ context.Context, operation string, err error) {
-	if e.events != nil {
-		*e.events = append(*e.events, "effect-report")
-	}
-	e.operations = append(e.operations, operation)
-	e.errors = append(e.errors, err)
+// publisherIn returns a recording Publisher that also places each call in the
+// log a test shares with its other fakes: "effect" for a publication and
+// "effect-report" for a reported failure.
+func publisherIn(events *[]string) *realtimetest.Publisher {
+	return &realtimetest.Publisher{Observe: func(call realtimetest.Call) {
+		if call.Method == realtimetest.Report {
+			*events = append(*events, "effect-report")
+			return
+		}
+		*events = append(*events, "effect")
+	}}
 }
 
 // settingsAuditFake prepares the audit event of a settings replacement.

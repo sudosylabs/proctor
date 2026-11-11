@@ -482,6 +482,7 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/idempotency"),
 			exact(serverModule+"/app/invocation"),
 			exact(serverModule+"/app/paging"),
+			exact(serverModule+"/app/realtime"),
 			exact(serverModule+"/model"),
 			exact(serverModule+"/store"),
 		),
@@ -524,6 +525,7 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/jobhandler"),
 			exact(serverModule+"/app/mail"),
 			exact(serverModule+"/app/paging"),
+			exact(serverModule+"/app/realtime"),
 			exact(serverModule+"/model"),
 			exact(serverModule+"/store"),
 		),
@@ -544,6 +546,7 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/jobhandler"),
 			exact(serverModule+"/app/mail"),
 			exact(serverModule+"/app/paging"),
+			exact(serverModule+"/app/realtime"),
 			exact(serverModule+"/app/user"),
 			exact(serverModule+"/model"),
 			exact(serverModule+"/store"),
@@ -871,10 +874,10 @@ func TestAreaPackageBoundaries(t *testing.T) {
 	for _, consumer := range []string{"/app", "/httpapi", "/filecontent"} {
 		assert.False(t, forbiddenImport(serverModule+consumer, user), "%s cannot import user", consumer)
 	}
-	for _, dependency := range []string{"/access", "/paging", "/idempotency", "/apperror", "/invocation"} {
+	for _, dependency := range []string{"/access", "/paging", "/idempotency", "/apperror", "/invocation", "/realtime"} {
 		assert.False(t, forbiddenImport(user, serverModule+"/app"+dependency), "user cannot import app%s", dependency)
 	}
-	for _, dependency := range []string{"/app/academic", "/app/mail", "/app/realtime", "/app/jobhandler"} {
+	for _, dependency := range []string{"/app/academic", "/app/mail", "/app/jobhandler"} {
 		assert.True(t, forbiddenImport(user, serverModule+dependency), "user can import forbidden dependency %s", dependency)
 	}
 	for _, area := range []string{access, paging, academic, user} {
@@ -896,20 +899,20 @@ func TestAreaPackageBoundaries(t *testing.T) {
 	for _, consumer := range []string{"/app", "/httpapi", "/websocket"} {
 		assert.False(t, forbiddenImport(serverModule+consumer, administration), "%s cannot import administration", consumer)
 	}
-	for _, dependency := range []string{"/app/access", "/app/identity", "/app/internal/batchitem", "/app/mail", "/app/paging"} {
+	for _, dependency := range []string{"/app/access", "/app/identity", "/app/internal/batchitem", "/app/mail", "/app/paging", "/app/realtime"} {
 		assert.False(t, forbiddenImport(administration, serverModule+dependency), "administration cannot import %s", dependency)
 	}
-	for _, dependency := range []string{"/app", "/app/academic", "/app/exam", "/app/realtime", "/app/job", "/httpapi", "/websocket", "/store/sqlstore", "/platform"} {
+	for _, dependency := range []string{"/app", "/app/academic", "/app/exam", "/app/job", "/httpapi", "/websocket", "/store/sqlstore", "/platform"} {
 		assert.True(t, forbiddenImport(administration, serverModule+dependency), "administration can import forbidden dependency %s", dependency)
 	}
 	onboarding := serverModule + "/app/onboarding"
 	for _, consumer := range []string{"/app", "/httpapi", "/websocket"} {
 		assert.False(t, forbiddenImport(serverModule+consumer, onboarding), "%s cannot import onboarding", consumer)
 	}
-	for _, dependency := range []string{"/app/academic", "/app/administration", "/app/identity", "/app/internal/batchitem", "/app/jobhandler"} {
+	for _, dependency := range []string{"/app/academic", "/app/administration", "/app/identity", "/app/internal/batchitem", "/app/jobhandler", "/app/realtime"} {
 		assert.False(t, forbiddenImport(onboarding, serverModule+dependency), "onboarding cannot import %s", dependency)
 	}
-	for _, dependency := range []string{"/app", "/app/exam", "/app/realtime", "/app/job", "/httpapi", "/websocket", "/store/sqlstore", "/platform"} {
+	for _, dependency := range []string{"/app", "/app/exam", "/app/job", "/httpapi", "/websocket", "/store/sqlstore", "/platform"} {
 		assert.True(t, forbiddenImport(onboarding, serverModule+dependency), "onboarding can import forbidden dependency %s", dependency)
 	}
 	assert.True(t, forbiddenImport(administration, onboarding), "administration can import the onboarding area")
@@ -975,6 +978,7 @@ func packageOrBelow(packagePath, root string) bool {
 func exemptProductionHelper(packagePath string) bool {
 	return packageOrBelow(packagePath, serverModule+"/testlib") ||
 		packageOrBelow(packagePath, serverModule+"/store/storetest") ||
+		packageOrBelow(packagePath, serverModule+"/app/realtime/realtimetest") ||
 		packageOrBelow(packagePath, serverModule+"/config/configtest")
 }
 

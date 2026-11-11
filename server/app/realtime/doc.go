@@ -21,6 +21,12 @@
 // exact Attempt-Connection unbinding, required security-collaborator
 // construction, and thread-safe, attach-once sink and peer-fanout wiring.
 //
+// Publisher is the one port through which an application area delivers the
+// effects of a committed change: the area builds its events beside the use
+// case that causes them and calls a Publisher, which the parent application's
+// realtime service implements over Service. The realtimetest child holds the
+// recording Publisher that area tests assert.
+//
 // Construction is inert. The package starts no goroutines, owns no queue or
 // retry loop, and has no infrastructure lifecycle. Callers remain responsible
 // for publishing only after durable commit and for translating typed failures

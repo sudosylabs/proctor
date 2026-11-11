@@ -69,7 +69,15 @@ connection-close reasons, local-first delivery, peer propagation codecs,
 loop prevention, attachment synchronization, and propagation of session
 revocation and authentication or authorization invalidation. It is inert after
 construction: it owns no goroutine, queue, retry loop, or infrastructure
-lifecycle. The parent application retains use-case effect timing, Principal
+lifecycle. It declares `realtime.Publisher`, the one port through which an
+application area delivers post-commit effects. An area service holds a
+Publisher, builds its own events in private `publish<Subject><Change>` methods
+(`effects.go` in the area package) and calls them from the use case after
+commit; a failed publication is passed to `Publisher.Report` and the use case
+still succeeds. Area tests pass `realtimetest.Publisher` and assert its
+recorded calls whole. The Exam areas still reach the Publisher through an
+`Effects` port and a parent adapter until they are converted. The parent
+application's realtime service implements the Publisher and retains Principal
 validation, WebSocket subscription authorization, and translation between
 delivery failures and public application errors.
 
@@ -216,8 +224,9 @@ production implementation, a fake the consumer's tests pass in, a
 type-assertion or `errors.As` capability probe, or a port across a module
 boundary that the consumer cannot name concretely, such as a File Content
 capability. Otherwise the consumer holds the concrete type. An area package
-declares each such collaborator once (typically `Authorizer`, `Auditor` and
-`Effects`), not once per service. A service never redeclares a Store contract: it holds `store.ClassStore`
+declares each such collaborator once (typically `Authorizer` and `Auditor`),
+not once per service; realtime effects go through the shared
+`realtime.Publisher`, which no area redeclares. A service never redeclares a Store contract: it holds `store.ClassStore`
 (or the root `store.Store`) directly. A test fakes a Store contract by
 embedding it and overriding only the methods the test exercises:
 

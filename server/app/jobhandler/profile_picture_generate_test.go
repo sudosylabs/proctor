@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/job"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
@@ -57,7 +58,7 @@ func defaultPictureService(t *testing.T, users *defaultPictureUsersFake) *user.S
 	service, err := user.New(user.Dependencies{
 		Store:           defaultPictureCatalogFake{users: users},
 		SettingsAuditor: struct{ user.SettingsAuditor }{},
-		Effects:         struct{ user.Effects }{},
+		Publisher:       &realtimetest.Publisher{},
 		Now:             time.Now,
 	})
 	require.NoError(t, err)

@@ -19,6 +19,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/paging"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -391,7 +392,7 @@ func TestUserSearchOmitsRolesWithoutRoleBindingView(t *testing.T) {
 func newProfileService(users store.UserStore, roleBindings store.RoleBindingStore, authorizer Authorizer, auditor Auditor, now func() time.Time) *Service {
 	service, err := New(Dependencies{
 		Store:      &catalogFake{user: users, roleBinding: roleBindings, userSettings: &userSettingsStoreFake{}},
-		Authorizer: authorizer, Auditor: auditor, SettingsAuditor: &settingsAuditFake{}, Effects: &effectsFake{}, Now: now,
+		Authorizer: authorizer, Auditor: auditor, SettingsAuditor: &settingsAuditFake{}, Publisher: &realtimetest.Publisher{}, Now: now,
 	})
 	if err != nil {
 		panic(err)

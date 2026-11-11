@@ -29,15 +29,6 @@ const (
 	desktopAuthorizationProtocolMax = 1
 )
 
-// AccessPolicyChange is a committed Access Policy replacement: the Sessions
-// it revoked and the Sessions whose deadlines it shortened.
-type AccessPolicyChange struct {
-	InstitutionID          model.InstitutionID
-	Revision               int64
-	SessionRevocations     []store.AccessPolicySessionRevocation
-	SessionDeadlineChanges []store.AccessPolicySessionDeadlineChange
-}
-
 // sessionLengthLimits derives the policy's Session length bounds from the
 // deployment lifetimes. The idle length outlasts an access credential and the
 // activity debounce; the absolute length outlasts both that floor and the
@@ -205,13 +196,8 @@ func (s *Service) ReplaceAccessPolicy(
 	}
 
 	if stored.Changed && !stored.Replayed {
-		if effectErr := s.effects.AccessPolicyChanged(ctx, AccessPolicyChange{
-			InstitutionID:          institution.ID,
-			Revision:               stored.Snapshot.Policy.Revision,
-			SessionRevocations:     stored.SessionRevocations,
-			SessionDeadlineChanges: stored.SessionDeadlineChanges,
-		}); effectErr != nil {
-			s.effects.Report(ctx, "access_policy_changed", effectErr)
+		if effectErr := s.publishAccessPolicyChanged(ctx, institution.ID, stored); effectErr != nil {
+			s.publisher.Report(ctx, "access_policy_changed", effectErr)
 		}
 	}
 

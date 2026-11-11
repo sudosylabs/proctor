@@ -11,8 +11,8 @@
 // imports and Student Progression. One flat Service holds every one of these
 // use cases, one file per concern; its fields are the Store contracts it
 // calls and one of each collaborator: the authorizer, the mutation auditor,
-// Mail, the shared password hasher and attempt accounting, the membership
-// effects, and the academic, administration and identity commands a batch
+// Mail, the shared password hasher and attempt accounting, the realtime
+// Publisher, and the academic, administration and identity commands a batch
 // runs.
 //
 // Onboarding imports and Student Progression are optional: a reduced Store
@@ -42,6 +42,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -124,15 +125,6 @@ var (
 	_ identityCommands    = (*identity.Service)(nil)
 )
 
-// MembershipEffects publishes the realtime effects of the Class Membership
-// and Role an accepted Invitation grants. Report records a publication that
-// failed; the acceptance still succeeds.
-type MembershipEffects interface {
-	MembershipChanged(context.Context, model.UserID, []model.ClassID) error
-	Report(context.Context, string, error)
-	identity.AuthorizationInvalidationEffects
-}
-
 // OnboardingImportFiles stages, opens, removes and pages the private files of
 // onboarding imports.
 type OnboardingImportFiles interface {
@@ -145,21 +137,22 @@ type OnboardingImportFiles interface {
 
 // Dependencies are the collaborators New distributes to the Service. Hasher
 // and Attempts are the shared password hasher and attempt accounting the
-// parent builds once for every flow. Wake wakes the Job runtime once it
-// exists.
+// parent builds once for every flow. Publisher delivers the realtime effects
+// of the Class Membership and Role an accepted Invitation grants. Wake wakes
+// the Job runtime once it exists.
 type Dependencies struct {
-	Store             store.Catalog
-	Content           OnboardingImportFiles
-	Authorizer        *access.Authorizer
-	Auditor           access.MutationAuditor
-	Mail              *mail.Composer
-	Hasher            *identity.PasswordHasher
-	Attempts          *identity.AttemptAccounting
-	Identity          *identity.Service
-	Academic          *academic.Service
-	Administration    *administration.Service
-	MembershipEffects MembershipEffects
-	Wake              func()
+	Store          store.Catalog
+	Content        OnboardingImportFiles
+	Authorizer     *access.Authorizer
+	Auditor        access.MutationAuditor
+	Mail           *mail.Composer
+	Hasher         *identity.PasswordHasher
+	Attempts       *identity.AttemptAccounting
+	Identity       *identity.Service
+	Academic       *academic.Service
+	Administration *administration.Service
+	Publisher      realtime.Publisher
+	Wake           func()
 
 	NodeID                  string
 	PublicURL               string
@@ -187,6 +180,8 @@ type Service struct {
 	unitMembers           store.AcademicUnitMemberStore
 	classMembers          store.ClassMemberStore
 	roleBindings          store.RoleBindingStore
+	// sittings finds the Sitting boards an accepted Class Membership refreshes.
+	sittings store.ExamSittingStore
 	// imports is nil when the Store catalog is too reduced for onboarding
 	// imports; every import use case then refuses (see requireImports).
 	imports store.OnboardingImportStore
@@ -194,16 +189,16 @@ type Service struct {
 
 	// authorizer is nil when composition supplies no Authorizer; every
 	// authorization then refuses with invitation.unavailable.
-	authorizer        resourceAuthorizer
-	auditor           access.MutationAuditor
-	mail              mailComposer
-	hasher            passwordHasher
-	attempts          *identity.AttemptAccounting
-	membershipEffects MembershipEffects
-	academic          academicCommands
-	administration    roleBindingCommands
-	identity          identityCommands
-	wake              func()
+	authorizer     resourceAuthorizer
+	auditor        access.MutationAuditor
+	mail           mailComposer
+	hasher         passwordHasher
+	attempts       *identity.AttemptAccounting
+	publisher      realtime.Publisher
+	academic       academicCommands
+	administration roleBindingCommands
+	identity       identityCommands
+	wake           func()
 
 	nodeID    string
 	publicURL string
@@ -255,7 +250,7 @@ func New(deps Dependencies) (*Service, Ports, error) {
 		catalog.AcademicUnit() == nil ||
 		catalog.Role() == nil ||
 		deps.Auditor == nil ||
-		deps.MembershipEffects == nil ||
+		deps.Publisher == nil ||
 		deps.NodeID == "" ||
 		deps.PublicURL == "" ||
 		deps.RecentAuthenticationTTL <= 0 {
@@ -296,11 +291,12 @@ func New(deps Dependencies) (*Service, Ports, error) {
 		unitMembers:             catalog.AcademicUnitMember(),
 		classMembers:            catalog.ClassMember(),
 		roleBindings:            catalog.RoleBinding(),
+		sittings:                catalog.ExamSitting(),
 		auditor:                 deps.Auditor,
 		mail:                    deps.Mail,
 		hasher:                  deps.Hasher,
 		attempts:                deps.Attempts,
-		membershipEffects:       deps.MembershipEffects,
+		publisher:               deps.Publisher,
 		academic:                deps.Academic,
 		administration:          deps.Administration,
 		identity:                deps.Identity,

@@ -12,7 +12,8 @@
 // Academic administration batches, Student Progression and onboarding imports
 // live in app/onboarding and call Service methods.
 // Start with academic.go for the Service and its collaborators, then open the
-// file named for the entity you are changing.
+// file named for the entity you are changing. effects.go builds the realtime
+// events a committed change publishes.
 package academic
 
 import (
@@ -23,6 +24,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/mail"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -59,29 +61,15 @@ type Mail interface {
 	PrepareRelationshipTransition(mail.RelationshipTransitionPreparation) (*store.PreparedMail, error)
 }
 
-// Effects publishes realtime effects after an academic change commits.
-// Report records a publication that failed; the use case still succeeds.
-type Effects interface {
-	// Created, Updated and Archived announce an Academic Unit change.
-	Created(context.Context, model.AcademicUnitID) error
-	Updated(context.Context, model.AcademicUnitID) error
-	Archived(context.Context, model.AcademicUnitID) error
-	// Changed announces that a User's Affiliations changed.
-	Changed(context.Context, model.UserID) error
-	// MembershipChanged announces a candidate's Class Membership change.
-	MembershipChanged(context.Context, model.UserID, []model.ClassID) error
-	// InvalidateAuthorization drops a User's cached authorization.
-	InvalidateAuthorization(context.Context, model.UserID)
-	Report(context.Context, string, error)
-}
-
 // Dependencies are the collaborators New distributes to the Service.
+// Publisher delivers the realtime events the use cases build in effects.go
+// after a change commits.
 type Dependencies struct {
 	Store      store.Catalog
 	Authorizer Authorizer
 	Auditor    Auditor
 	Mail       Mail
-	Effects    Effects
+	Publisher  realtime.Publisher
 	Now        func() time.Time
 	NewID      func() string
 }
@@ -99,11 +87,13 @@ type Service struct {
 	affiliations        store.AffiliationStore
 	academicUnitMembers store.AcademicUnitMemberStore
 	roleBindings        store.RoleBindingStore
+	// sittings finds the Sitting boards a Class Membership change refreshes.
+	sittings store.ExamSittingStore
 
 	authorizer Authorizer
 	auditor    Auditor
 	mail       Mail
-	effects    Effects
+	publisher  realtime.Publisher
 	now        func() time.Time
 	newID      func() string
 }
@@ -125,10 +115,11 @@ func New(deps Dependencies) (*Service, error) {
 		affiliations:        deps.Store.Affiliation(),
 		academicUnitMembers: deps.Store.AcademicUnitMember(),
 		roleBindings:        deps.Store.RoleBinding(),
+		sittings:            deps.Store.ExamSitting(),
 		authorizer:          deps.Authorizer,
 		auditor:             deps.Auditor,
 		mail:                deps.Mail,
-		effects:             deps.Effects,
+		publisher:           deps.Publisher,
 		now:                 deps.Now,
 		newID:               deps.NewID,
 	}, nil

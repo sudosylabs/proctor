@@ -9,7 +9,9 @@ package user
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -19,6 +21,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -339,8 +343,8 @@ func TestUserSettingsReplaceOwnPublishesOnePostCommitRefetchHint(t *testing.T) {
 	persistence := &userSettingsStoreFake{document: current, events: &events, replaceResult: &store.UserSettingsReplacementResult{
 		Revision: next, FormatVersion: 1, UpdatedAt: at, Changed: true,
 	}}
-	effects := &effectsFake{events: &events}
-	service, err := newSettingsService(persistence, &settingsAuditFake{event: &model.AuditEvent{Action: "user.settings.replace"}}, effects, func() time.Time { return at })
+	publisher := publisherIn(&events)
+	service, err := newSettingsService(persistence, &settingsAuditFake{event: &model.AuditEvent{Action: "user.settings.replace"}}, publisher, func() time.Time { return at })
 	require.NoError(t, err)
 
 	result, err := service.ReplaceOwnUserSettings(context.Background(), invocation.New(principal, model.RequestMetadata{}), ReplaceOwnUserSettingsCommand{
@@ -350,16 +354,11 @@ func TestUserSettingsReplaceOwnPublishesOnePostCommitRefetchHint(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, result.Changed, "result=%#v changes", result)
 	require.False(t, result.Replayed, "result=%#v changes", result)
-	require.Len(t, effects.changes, 1, "result=%#v changes", result)
-	change := effects.changes[0]
-	require.Equal(t, principal.UserID, change.UserID)
-	require.Equal(t, next, change.Revision)
-	require.Equal(t, 1, change.FormatVersion)
-	require.True(t, change.ChangedAt.Equal(at))
-	require.Len(t, events, 2)
-	require.Equal(t, "store", events[0])
-	require.Equal(t, "effect", events[1])
-	require.Empty(t, effects.operations)
+	// Contract: one refetch hint for the User, carrying the committed
+	// revision, format and instant, and no reported failure.
+	require.Equal(t, []realtimetest.Call{settingsChangedCall(principal.UserID, next, "2026-08-15T15:00:00Z")}, publisher.Calls(), "result=%#v", result)
+	// Contract: the hint is published only after the Store commit.
+	require.Equal(t, []string{"store", "effect"}, events)
 }
 
 func TestUserSettingsReplaceOwnSuppressesNoOpReplayAndRejectedCommandEvents(t *testing.T) {
@@ -383,10 +382,10 @@ func TestUserSettingsReplaceOwnSuppressesNoOpReplayAndRejectedCommandEvents(t *t
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			effects := &effectsFake{}
+			publisher := &realtimetest.Publisher{}
 			persistence := &userSettingsStoreFake{document: current, replaceResult: test.result, replaceErr: test.storeErr}
 			audit := &settingsAuditFake{err: errors.New("audit unavailable")}
-			service, err := newSettingsService(persistence, audit, effects, func() time.Time { return at.Add(time.Second) })
+			service, err := newSettingsService(persistence, audit, publisher, func() time.Time { return at.Add(time.Second) })
 			require.NoError(t, err)
 			source := "{}\n"
 			if test.source != "" {
@@ -399,16 +398,16 @@ func TestUserSettingsReplaceOwnSuppressesNoOpReplayAndRejectedCommandEvents(t *t
 				require.NoError(t, replaceErr)
 			}
 			require.Equal(t, 0, audit.calls, "suppressed command prepared")
-			require.Empty(t, effects.changes)
+			require.Empty(t, publisher.Calls())
 		})
 	}
 }
 
 func TestUserSettingsReplaceOwnRejectedPrincipalPublishesNothing(t *testing.T) {
 	t.Parallel()
-	effects := &effectsFake{}
+	publisher := &realtimetest.Publisher{}
 	persistence := &userSettingsStoreFake{}
-	service, err := newSettingsService(persistence, &settingsAuditFake{}, effects, time.Now)
+	service, err := newSettingsService(persistence, &settingsAuditFake{}, publisher, time.Now)
 	require.NoError(t, err)
 	principal := model.Principal{
 		UserID: model.NewUserID(), CredentialID: model.PrincipalCredentialID(model.NewPersonalAccessTokenID()),
@@ -421,7 +420,7 @@ func TestUserSettingsReplaceOwnRejectedPrincipalPublishesNothing(t *testing.T) {
 	require.True(t, apperror.Is(err, "authentication.token_invalid"), "error=%v reads=%d replace=%#v changes", err, persistence.reads, persistence.replaceInput)
 	require.Equal(t, 0, persistence.reads, "error=%v reads=%d replace=%#v changes", err, persistence.reads, persistence.replaceInput)
 	require.Nil(t, persistence.replaceInput, "error=%v reads=%d replace=%#v changes", err, persistence.reads, persistence.replaceInput)
-	require.Empty(t, effects.changes, "error=%v reads=%d replace=%#v changes", err, persistence.reads, persistence.replaceInput)
+	require.Empty(t, publisher.Calls(), "error=%v reads=%d replace=%#v changes", err, persistence.reads, persistence.replaceInput)
 }
 
 func TestUserSettingsRealtimeFailureDoesNotChangeCommittedResultAndReadReconciles(t *testing.T) {
@@ -434,8 +433,9 @@ func TestUserSettingsRealtimeFailureDoesNotChangeCommittedResultAndReadReconcile
 	persistence := &userSettingsStoreFake{document: current, replaceResult: &store.UserSettingsReplacementResult{
 		Revision: next, FormatVersion: 1, UpdatedAt: at, Changed: true,
 	}}
-	failures := &effectsFake{err: errors.New("peer delivery unavailable")}
-	service, err := newSettingsService(persistence, &settingsAuditFake{event: &model.AuditEvent{Action: "user.settings.replace"}}, failures, func() time.Time { return at })
+	deliveryErr := errors.New("peer delivery unavailable")
+	publisher := &realtimetest.Publisher{Fail: func(realtimetest.Call) error { return deliveryErr }}
+	service, err := newSettingsService(persistence, &settingsAuditFake{event: &model.AuditEvent{Action: "user.settings.replace"}}, publisher, func() time.Time { return at })
 	require.NoError(t, err)
 	const source = "{\"workbench.colorTheme\": \"Dark\"}\n"
 	result, err := service.ReplaceOwnUserSettings(context.Background(), invocation.New(principal, model.RequestMetadata{}), ReplaceOwnUserSettingsCommand{
@@ -444,8 +444,12 @@ func TestUserSettingsRealtimeFailureDoesNotChangeCommittedResultAndReadReconcile
 	require.NoError(t, err, "ReplaceOwn() = %#v", result)
 	require.Equal(t, next, result.Revision, "ReplaceOwn() = %#v", result)
 	require.True(t, result.Changed, "ReplaceOwn() = %#v", result)
-	require.Len(t, failures.operations, 1)
-	require.Equal(t, "user_settings_changed", failures.operations[0])
+	// Contract: the failed hint is reported once under its operation name,
+	// with the delivery error, and nothing else is published.
+	require.Equal(t, []realtimetest.Call{
+		settingsChangedCall(principal.UserID, next, "2026-08-15T15:00:00Z"),
+		{Method: realtimetest.Report, Operation: "user_settings_changed", Err: deliveryErr},
+	}, publisher.Calls())
 	committed := *current
 	committed.Source, committed.Revision, committed.UpdatedAt = source, next, at
 	persistence.document = &committed
@@ -473,16 +477,6 @@ func (s *userSettingsRaceStore) Replace(context.Context, *store.UserSettingsRepl
 	return nil, &store.ErrUserSettingsRevisionConflict{CurrentRevision: s.result.Revision}
 }
 
-type userSettingsAtomicEffects struct {
-	effectsBase
-	calls atomic.Int32
-}
-
-func (e *userSettingsAtomicEffects) SettingsChanged(context.Context, SettingsChange) error {
-	e.calls.Add(1)
-	return nil
-}
-
 type userSettingsConcurrentAudit struct{}
 
 func (userSettingsConcurrentAudit) PrepareReplacement(context.Context, access.UserSettingsAuditInput) (*model.AuditEvent, error) {
@@ -497,8 +491,8 @@ func TestUserSettingsConcurrentWritersPublishOnlyTheCommittedWinner(t *testing.T
 	persistence := &userSettingsRaceStore{document: current, result: &store.UserSettingsReplacementResult{
 		Revision: model.NewUserSettingsRevision(), FormatVersion: 1, UpdatedAt: at, Changed: true,
 	}}
-	effects := &userSettingsAtomicEffects{}
-	service, err := newSettingsService(persistence, userSettingsConcurrentAudit{}, effects, func() time.Time { return at })
+	publisher := &realtimetest.Publisher{}
+	service, err := newSettingsService(persistence, userSettingsConcurrentAudit{}, publisher, func() time.Time { return at })
 	require.NoError(t, err)
 	start := make(chan struct{})
 	errorsByWriter := make(chan error, 2)
@@ -520,7 +514,10 @@ func TestUserSettingsConcurrentWritersPublishOnlyTheCommittedWinner(t *testing.T
 		}
 	}
 	require.Equal(t, 1, successes, "successes")
-	require.Equal(t, int32(1), effects.calls.Load(), "successes")
+	// Contract: only the committed winner publishes, once.
+	require.Equal(t, []realtimetest.Call{
+		settingsChangedCall(principal.UserID, persistence.result.Revision, "2026-08-15T15:00:00Z"),
+	}, publisher.Calls())
 }
 
 func containsSensitiveText(value, sensitive string) bool {
@@ -532,13 +529,23 @@ func containsSensitiveText(value, sensitive string) bool {
 	return false
 }
 
-func newSettingsService(settings store.UserSettingsStore, audit SettingsAuditor, effects Effects, now func() time.Time) (*Service, error) {
-	return New(Dependencies{Store: &catalogFake{userSettings: settings}, SettingsAuditor: audit, Effects: effects, Now: now})
+// settingsChangedCall is the publication of a committed settings replacement
+// at format version 1: the refetch hint addressed to the User.
+func settingsChangedCall(userID model.UserID, revision model.UserSettingsRevision, changedAt string) realtimetest.Call {
+	return realtimetest.Call{Method: realtimetest.PublishRealtimeEvent, Event: realtime.RealtimeEvent{
+		Name:   "user_settings_changed",
+		UserID: userID,
+		Data:   json.RawMessage(fmt.Sprintf(`{"revision":%q,"format_version":1,"changed_at":%q}`, revision, changedAt)),
+	}}
+}
+
+func newSettingsService(settings store.UserSettingsStore, audit SettingsAuditor, publisher realtime.Publisher, now func() time.Time) (*Service, error) {
+	return New(Dependencies{Store: &catalogFake{userSettings: settings}, SettingsAuditor: audit, Publisher: publisher, Now: now})
 }
 
 func newSettingsServiceForTest(t *testing.T, settings store.UserSettingsStore, audit SettingsAuditor, now func() time.Time) *Service {
 	t.Helper()
-	service, err := newSettingsService(settings, audit, &effectsFake{}, now)
+	service, err := newSettingsService(settings, audit, &realtimetest.Publisher{}, now)
 	require.NoError(t, err)
 	return service
 }

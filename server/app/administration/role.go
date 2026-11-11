@@ -193,7 +193,7 @@ func (s *Service) UpdateRole(ctx context.Context, invocation invocation.Invocati
 		return nil, err
 	}
 
-	s.effects.InvalidateAuthorization(ctx, "")
+	s.publisher.InvalidateAuthorization(ctx, "")
 	return updated, nil
 }
 
@@ -258,7 +258,7 @@ func (s *Service) ArchiveRole(ctx context.Context, invocation invocation.Invocat
 		return err
 	}
 
-	s.effects.InvalidateAuthorization(ctx, "")
+	s.publisher.InvalidateAuthorization(ctx, "")
 	return nil
 }
 

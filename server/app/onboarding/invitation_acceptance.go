@@ -11,6 +11,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/sudosylabs/proctor/server/app/academic"
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
@@ -153,12 +154,14 @@ func (s *Service) acceptStudentClassByClaimHash(
 	}
 
 	if !result.Replayed && result.ClassMember != nil {
-		if effectErr := s.membershipEffects.MembershipChanged(
+		if effectErr := academic.PublishClassMembershipChanged(
 			ctx,
+			s.publisher,
+			s.sittings,
 			result.ClassMember.UserID,
 			[]model.ClassID{result.ClassMember.ClassID},
 		); effectErr != nil {
-			s.membershipEffects.Report(ctx, "invitation.student_class_membership_changed", effectErr)
+			s.publisher.Report(ctx, "invitation.student_class_membership_changed", effectErr)
 		}
 	}
 
@@ -312,7 +315,7 @@ func (s *Service) acceptTeacherAcademicUnitByClaimHash(
 		return nil, invalidInvitationError(err)
 	}
 	if !result.Replayed && result.User != nil {
-		s.membershipEffects.InvalidateAuthorization(ctx, result.User.ID)
+		s.publisher.InvalidateAuthorization(ctx, result.User.ID)
 	}
 
 	return &InvitationAcceptanceView{
@@ -495,16 +498,18 @@ func (s *Service) acceptExternalIdentity(
 		return nil, err
 	}
 	if result.User != nil && (result.AcademicUnitMember != nil || result.RoleBinding != nil) {
-		s.membershipEffects.InvalidateAuthorization(ctx, result.User.ID)
+		s.publisher.InvalidateAuthorization(ctx, result.User.ID)
 	}
 
 	if result.ClassMember != nil {
-		if effectErr := s.membershipEffects.MembershipChanged(
+		if effectErr := academic.PublishClassMembershipChanged(
 			ctx,
+			s.publisher,
+			s.sittings,
 			result.ClassMember.UserID,
 			[]model.ClassID{result.ClassMember.ClassID},
 		); effectErr != nil {
-			s.membershipEffects.Report(ctx, "invitation.external_student_class_membership_changed", effectErr)
+			s.publisher.Report(ctx, "invitation.external_student_class_membership_changed", effectErr)
 		}
 	}
 
@@ -594,7 +599,7 @@ func (s *Service) acceptScopedRoleByClaimHash(
 		return nil, err
 	}
 	if !result.Replayed && result.User != nil {
-		s.membershipEffects.InvalidateAuthorization(ctx, result.User.ID)
+		s.publisher.InvalidateAuthorization(ctx, result.User.ID)
 	}
 
 	return &InvitationAcceptanceView{

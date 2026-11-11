@@ -19,6 +19,8 @@ import (
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -76,6 +78,7 @@ type accessPolicyAuditFake struct {
 func (a *accessPolicyAuditFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
 	// This fake keeps no subject, so it refuses a Mutation that names one
 	// instead of dropping it.
+	// It stands in for access.MutationAuditAdapter, which records it.
 	if !attempt.Subject.IsZero() {
 		return "", apperror.New("audit.internal")
 	}
@@ -89,7 +92,7 @@ func (a *accessPolicyAuditFake) Fail(_ context.Context, id model.AuditEventID, c
 	return a.failErr
 }
 
-func accessPolicyFixture(t *testing.T) (*Service, *accessPolicyStoreFake, *accessPolicyCapabilitiesFake, *effectsFake, *accessPolicyAuditFake, invocation.Invocation) {
+func accessPolicyFixture(t *testing.T) (*Service, *accessPolicyStoreFake, *accessPolicyCapabilitiesFake, *realtimetest.Publisher, *accessPolicyAuditFake, invocation.Invocation) {
 	t.Helper()
 	at := time.UnixMilli(1_000)
 	institution, err := model.NewInstitution(model.NewInstitutionID(), "northbridge", "Northbridge", "", at)
@@ -100,12 +103,12 @@ func accessPolicyFixture(t *testing.T) (*Service, *accessPolicyStoreFake, *acces
 		Providers:   []identity.AccessPolicyProviderCapability{{Descriptor: model.ExternalAuthenticationProvider{ID: "campus-oidc", DisplayName: "Campus", Type: "oidc"}, AutoProvision: true}},
 		DurableMail: true,
 	}}
-	effects := &effectsFake{}
+	publisher := &realtimetest.Publisher{}
 	audit := &accessPolicyAuditFake{beginID: model.NewID()}
 	service, err := New(Dependencies{
 		Store: &catalogFake{accessPolicies: persistence, institutions: &institutionStoreFake{institution: institution},
 			retentionPolicies: &retentionPolicyStoreFake{}, retention: &retentionLifecycleFake{}},
-		Authorizer: &resourceAuthorizerFake{}, Capabilities: capabilities, Auditor: audit, Effects: effects,
+		Authorizer: &resourceAuthorizerFake{}, Capabilities: capabilities, Auditor: audit, Publisher: publisher,
 		CanonicalOrigin: "https://proctor.example.edu", SupportAddress: " Help@Example.edu ", PasswordMinimumLength: 12,
 		RecentAuthenticationTTL: time.Minute, Now: func() time.Time { return at.Add(time.Minute) },
 	})
@@ -113,7 +116,7 @@ func accessPolicyFixture(t *testing.T) (*Service, *accessPolicyStoreFake, *acces
 	principal := model.Principal{UserID: model.NewUserID(), SessionID: model.NewSessionID(), CredentialID: model.PrincipalCredentialID(model.NewID()),
 		CredentialType: model.CredentialSessionAccess, AuthenticationMethod: "password", AuthenticationStrength: model.AuthenticationMultiFactor,
 		AuthenticatedAt: at, MFACompletedAt: model.OptionalTimeFrom(at.Add(30 * time.Second)), ClientType: model.SessionClientWeb}
-	return service, persistence, capabilities, effects, audit, invocation.New(principal, model.RequestMetadata{RequestID: "request-1"})
+	return service, persistence, capabilities, publisher, audit, invocation.New(principal, model.RequestMetadata{RequestID: "request-1"})
 }
 
 func TestAccessPolicyPreflightUsesCurrentDeploymentCapabilities(t *testing.T) {
@@ -189,7 +192,7 @@ func TestAccessPolicyMutationRequiresInteractiveStrongRecentAuthentication(t *te
 
 func TestAccessPolicyReplacementIsIdempotentAndPublishesOnlyCommittedRevision(t *testing.T) {
 	t.Parallel()
-	service, persistence, _, effects, audit, invocation := accessPolicyFixture(t)
+	service, persistence, _, publisher, audit, invocation := accessPolicyFixture(t)
 	next := persistence.snapshot.Policy.Clone()
 	transition, err := next.Replace(1, func() model.AccessPolicySettings {
 		value := next.Settings()
@@ -209,13 +212,16 @@ func TestAccessPolicyReplacementIsIdempotentAndPublishesOnlyCommittedRevision(t 
 	require.Equal(t, model.AuditEventID(audit.beginID), persistence.replaceInput.AuditEventID, "result=%#v command=%#v replacement=%#v effects", result, persistence.command, persistence.replaceInput)
 	require.Equal(t, "replace", audit.attempt.Operation, "result=%#v command=%#v replacement=%#v effects", result, persistence.command, persistence.replaceInput)
 	require.Equal(t, model.RoleScopeInstitution, audit.attempt.ScopeType, "result=%#v command=%#v replacement=%#v effects", result, persistence.command, persistence.replaceInput)
-	require.Len(t, effects.changes, 1, "result=%#v command=%#v replacement=%#v effects", result, persistence.command, persistence.replaceInput)
-	require.Equal(t, int64(2), effects.changes[0].Revision, "result=%#v command=%#v replacement=%#v effects", result, persistence.command, persistence.replaceInput)
+	policyChanged, err := realtime.NewAccessPolicyChangedEvent(service.institutions.(*institutionStoreFake).institution.ID, 2)
+	require.NoError(t, err)
+	// Contract: a replacement that revoked and shortened no Session publishes
+	// only the refetch signal of the committed revision, and reports nothing.
+	require.Equal(t, []realtimetest.Call{{Method: realtimetest.PublishRealtimeEvent, Event: policyChanged}}, publisher.Calls())
 }
 
 func TestAccessPolicyReplacementResolvesExactReplayBeforeRevisionPreflight(t *testing.T) {
 	t.Parallel()
-	service, persistence, _, effects, audit, invocation := accessPolicyFixture(t)
+	service, persistence, _, publisher, audit, invocation := accessPolicyFixture(t)
 	replayed := persistence.snapshot.Policy.Clone()
 	replayed.Revision = 2
 	replayed.UpdatedAt = replayed.UpdatedAt.Add(time.Second)
@@ -232,7 +238,7 @@ func TestAccessPolicyReplacementResolvesExactReplayBeforeRevisionPreflight(t *te
 	require.NotNil(t, result.Policy, "replay result = %#v", result)
 	require.Equal(t, int64(2), result.Policy.Revision, "replay result = %#v", result)
 	require.Nil(t, persistence.preflightInput, "replacement performed a revision-sensitive preflight before replay resolution")
-	require.Empty(t, effects.changes)
+	require.Empty(t, publisher.Calls())
 	require.Equal(t, "replace", audit.attempt.Operation, "replay audit = %#v replacement = %#v", audit.attempt, persistence.replaceInput)
 	require.Equal(t, model.AuditEventID(audit.beginID), persistence.replaceInput.AuditEventID, "replay audit = %#v replacement = %#v", audit.attempt, persistence.replaceInput)
 }
@@ -285,7 +291,7 @@ func TestAccessPolicyReplacementCompletesRevisionBlockerAndStoreFailures(t *test
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			service, persistence, _, effects, audit, invocation := accessPolicyFixture(t)
+			service, persistence, _, publisher, audit, invocation := accessPolicyFixture(t)
 			persistence.replaceErr = tc.storeErr
 			settings := persistence.snapshot.Policy.Settings()
 			settings.DesktopAuthorizationEnabled = false
@@ -296,7 +302,7 @@ func TestAccessPolicyReplacementCompletesRevisionBlockerAndStoreFailures(t *test
 			require.Equal(t, "replace", audit.attempt.Operation, "audit = %#v fail=%q", audit.attempt, audit.failID)
 			require.Equal(t, audit.beginID, audit.failID, "audit = %#v fail=%q", audit.attempt, audit.failID)
 			require.Equal(t, tc.wantCode, audit.failCode, "audit = %#v fail=%q", audit.attempt, audit.failID)
-			require.Empty(t, effects.changes)
+			require.Empty(t, publisher.Calls())
 		})
 	}
 }

@@ -12,7 +12,8 @@
 // Account state, email addresses and account recovery belong to the identity
 // area in app/identity.
 // Start with user.go for the Service and its collaborators, then open the
-// file named for the concern you are changing.
+// file named for the concern you are changing. effects.go builds the realtime
+// events a committed change publishes.
 package user
 
 import (
@@ -23,6 +24,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -53,16 +55,6 @@ type SettingsAuditor interface {
 	PrepareReplacement(context.Context, access.UserSettingsAuditInput) (*model.AuditEvent, error)
 }
 
-// Effects publishes realtime effects after a User change commits. Report
-// records a publication that failed; the use case still succeeds.
-type Effects interface {
-	// SettingsChanged announces a replaced settings document.
-	SettingsChanged(context.Context, SettingsChange) error
-	// PictureChanged announces a changed profile picture.
-	PictureChanged(context.Context, PictureChange) error
-	Report(context.Context, string, error)
-}
-
 // DefaultPictureJobs proposes the durable generation of a User's default
 // profile picture.
 type DefaultPictureJobs interface {
@@ -70,14 +62,15 @@ type DefaultPictureJobs interface {
 }
 
 // Dependencies are the collaborators New distributes to the Service.
-// DefaultJobs may be nil, which leaves default pictures to be rendered on
-// every read.
+// Publisher delivers the realtime events the use cases build in effects.go
+// after a change commits. DefaultJobs may be nil, which leaves default
+// pictures to be rendered on every read.
 type Dependencies struct {
 	Store           store.Catalog
 	Authorizer      Authorizer
 	Auditor         Auditor
 	SettingsAuditor SettingsAuditor
-	Effects         Effects
+	Publisher       realtime.Publisher
 	DefaultJobs     DefaultPictureJobs
 	Uploads         ProfilePictureUploadFiles
 	Reads           ProfilePictureReadFiles
@@ -97,7 +90,7 @@ type Service struct {
 	authorizer      Authorizer
 	auditor         Auditor
 	settingsAuditor SettingsAuditor
-	effects         Effects
+	publisher       realtime.Publisher
 	defaultJobs     DefaultPictureJobs
 	uploads         ProfilePictureUploadFiles
 	reads           ProfilePictureReadFiles
@@ -117,8 +110,8 @@ func New(deps Dependencies) (*Service, error) {
 	if deps.SettingsAuditor == nil {
 		return nil, errors.New("user settings audit preparer is required")
 	}
-	if deps.Effects == nil {
-		return nil, errors.New("user effects are required")
+	if deps.Publisher == nil {
+		return nil, errors.New("user realtime publisher is required")
 	}
 	if deps.Now == nil {
 		return nil, errors.New("user clock is required")
@@ -132,7 +125,7 @@ func New(deps Dependencies) (*Service, error) {
 		authorizer:      deps.Authorizer,
 		auditor:         deps.Auditor,
 		settingsAuditor: deps.SettingsAuditor,
-		effects:         deps.Effects,
+		publisher:       deps.Publisher,
 		defaultJobs:     deps.DefaultJobs,
 		uploads:         deps.Uploads,
 		reads:           deps.Reads,

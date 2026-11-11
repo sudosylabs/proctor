@@ -37,6 +37,7 @@ var nonUseCaseSurface = map[string]string{
 	"InvalidateCurrentUserContext":   realtimePropagation,
 	"PublishRealtimeEvent":           realtimePropagation,
 	"UnbindExamAttemptConnection":    realtimePropagation,
+	"Report":                         "realtime.Publisher's record of a post-commit effect that failed; the area use case that owns the Invocation calls it and still succeeds",
 	"ResolveAttemptDesktopBuild":     attemptPort,
 	"ResolveNativeDeliveryBuild":     attemptPort,
 	"CreateLocalUser":                "unauthorized provisioning seam that only integration tests reach; production creates Users through bootstrap, registration and Invitations",
@@ -44,7 +45,7 @@ var nonUseCaseSurface = map[string]string{
 
 const (
 	principalResolution = "credential resolution establishes the Principal that an Invocation then carries"
-	realtimePropagation = "post-commit realtime propagation port that the realtime child and cluster peers call after the use case that owns the Invocation"
+	realtimePropagation = "post-commit realtime.Publisher method that an area use case, the realtime child or a cluster peer calls after the use case that owns the Invocation"
 	attemptPort         = "port of the Attempt child that the parent implements; it runs inside an Attempt use case that already holds the Invocation"
 )
 

@@ -26,6 +26,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/app/jobhandler"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/app/user"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/model"
@@ -64,7 +65,7 @@ func TestJobRunnerRecoversNodeLossAroundADurableDomainCommit(t *testing.T) {
 			}
 			pictures, err := user.New(user.Dependencies{
 				Store: recoveryCatalog{Catalog: persistence, files: files}, SettingsAuditor: access.UserSettingsAuditAdapter{},
-				Effects: userRealtimeEffects{}, Defaults: recoveryDefaultPictures{}, Now: time.Now,
+				Publisher: &realtimetest.Publisher{}, Defaults: recoveryDefaultPictures{}, Now: time.Now,
 			})
 			require.NoError(t, err)
 			realHandler := jobhandler.NewDefaultProfilePictureDescriptor(pictures).Handler

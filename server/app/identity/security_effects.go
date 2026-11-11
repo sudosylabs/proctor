@@ -28,12 +28,6 @@ type SecurityEffects interface {
 	SessionsRevoked(context.Context, model.UserID, []model.SessionID, []string)
 }
 
-// AuthorizationInvalidationEffects publishes, after commit, that the
-// authorization a User held may have changed.
-type AuthorizationInvalidationEffects interface {
-	InvalidateAuthorization(context.Context, model.UserID)
-}
-
 // CacheInvalidatorDependencies are the collaborators of CacheInvalidator;
 // NewCacheInvalidator validates them once and CacheInvalidator keeps them in deps.
 type CacheInvalidatorDependencies struct {

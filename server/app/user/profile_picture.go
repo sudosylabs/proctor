@@ -90,15 +90,6 @@ type ProfilePictureContent struct {
 	ETag      string
 }
 
-// PictureChange describes a committed profile-picture change, for the
-// realtime effect that follows it.
-type PictureChange struct {
-	UserID            model.UserID
-	ActiveFileEntryID model.FileEntryID
-	Revision          int64
-	ChangedAt         time.Time
-}
-
 // UploadProfilePicture normalizes the image into private renditions and then
 // publishes them as the User's custom profile picture in one audited step.
 func (s *Service) UploadProfilePicture(
@@ -325,14 +316,8 @@ func (s *Service) publishProfilePicture(
 		return nil, err
 	}
 
-	change := PictureChange{
-		UserID:            published.User.ID,
-		ActiveFileEntryID: published.User.CustomProfilePictureFileID,
-		Revision:          published.User.Revision,
-		ChangedAt:         published.User.ProfilePictureChangedAt.Time,
-	}
-	if err := s.effects.PictureChanged(ctx, change); err != nil {
-		s.effects.Report(ctx, "user_profile_picture_changed", err)
+	if err := s.publishProfilePictureChanged(ctx, published.User, published.User.CustomProfilePictureFileID); err != nil {
+		s.publisher.Report(ctx, "user_profile_picture_changed", err)
 	}
 
 	return published.User, nil
@@ -454,14 +439,8 @@ func (s *Service) RemoveProfilePicture(
 		return nil, err
 	}
 
-	change := PictureChange{
-		UserID:            updated.ID,
-		ActiveFileEntryID: updated.DefaultProfilePictureFileID,
-		Revision:          updated.Revision,
-		ChangedAt:         updated.ProfilePictureChangedAt.Time,
-	}
-	if err := s.effects.PictureChanged(ctx, change); err != nil {
-		s.effects.Report(ctx, "user_profile_picture_changed", err)
+	if err := s.publishProfilePictureChanged(ctx, updated, updated.DefaultProfilePictureFileID); err != nil {
+		s.publisher.Report(ctx, "user_profile_picture_changed", err)
 	}
 
 	return updated, nil
@@ -502,7 +481,7 @@ func (s *Service) GetProfilePicture(
 
 			if s.defaultJobs != nil {
 				if proposeErr := s.defaultJobs.ProposeDefaultProfilePicture(ctx, user.ID, model.TimeUTC(s.now())); proposeErr != nil {
-					s.effects.Report(ctx, "propose_default_profile_picture", proposeErr)
+					s.publisher.Report(ctx, "propose_default_profile_picture", proposeErr)
 				}
 			}
 

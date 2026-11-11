@@ -13,6 +13,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/access"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -48,7 +49,7 @@ func dependenciesOf(s *Service) Dependencies {
 			roles: s.roles, roleBindings: s.roleBindings, users: s.users, institutions: s.institutions, audits: s.audits,
 			accessPolicies: s.accessPolicies, retentionPolicies: s.retentionPolicies, retention: s.retention,
 		},
-		Authorizer: s.authorizer, Auditor: s.auditor, Capabilities: s.capabilities, Mail: s.mail, Effects: s.effects,
+		Authorizer: s.authorizer, Auditor: s.auditor, Capabilities: s.capabilities, Mail: s.mail, Publisher: s.publisher,
 		CanonicalOrigin: s.canonicalOrigin, SupportAddress: s.supportAddress, PasswordMinimumLength: s.passwordMinimumLength,
 		RecentAuthenticationTTL: s.recentAuthenticationTTL, Now: s.now,
 	}
@@ -70,24 +71,15 @@ func anyInstitution() *institutionStoreFake {
 	return &institutionStoreFake{institution: &model.Institution{ID: model.NewInstitutionID()}}
 }
 
-// effectsFake records the effects a committed change publishes.
-type effectsFake struct {
-	events  *[]string
-	changes []AccessPolicyChange
+// publisherIn returns a recording Publisher that also places each
+// authorization invalidation in the log a test shares with its other fakes.
+func publisherIn(events *[]string) *realtimetest.Publisher {
+	return &realtimetest.Publisher{Observe: func(call realtimetest.Call) {
+		if call.Method == realtimetest.InvalidateAuthorization {
+			*events = append(*events, "invalidate-authorization")
+		}
+	}}
 }
-
-func (e *effectsFake) InvalidateAuthorization(context.Context, model.UserID) {
-	if e.events != nil {
-		*e.events = append(*e.events, "invalidate-authorization")
-	}
-}
-
-func (e *effectsFake) AccessPolicyChanged(_ context.Context, change AccessPolicyChange) error {
-	e.changes = append(e.changes, change)
-	return nil
-}
-
-func (*effectsFake) Report(context.Context, string, error) {}
 
 func selfAuditSessionInvocation() invocation.Invocation {
 	at := time.Now().UTC()

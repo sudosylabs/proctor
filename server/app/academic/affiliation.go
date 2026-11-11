@@ -139,8 +139,8 @@ func (s *Service) CreateAffiliation(
 	}
 
 	if changed {
-		if effectErr := s.effects.Changed(ctx, result.UserID); effectErr != nil {
-			s.effects.Report(ctx, "affiliation.changed", effectErr)
+		if effectErr := s.publisher.InvalidateCurrentUserContext(ctx, result.UserID); effectErr != nil {
+			s.publisher.Report(ctx, "affiliation.changed", effectErr)
 		}
 	}
 
@@ -230,8 +230,8 @@ func (s *Service) EndAffiliation(
 	}
 
 	if changed {
-		if effectErr := s.effects.Changed(ctx, result.UserID); effectErr != nil {
-			s.effects.Report(ctx, "affiliation.changed", effectErr)
+		if effectErr := s.publisher.InvalidateCurrentUserContext(ctx, result.UserID); effectErr != nil {
+			s.publisher.Report(ctx, "affiliation.changed", effectErr)
 		}
 	}
 

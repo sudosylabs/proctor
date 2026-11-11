@@ -95,7 +95,7 @@ func academicRevisionFixture(t *testing.T, kind string, events *[]string, denied
 		service := mustNew(Dependencies{Store: &catalogFake{academicUnit: persistence}, Authorizer: academicUnitAuthorizerStub{authorize: func(context.Context, invocation.Invocation, model.Action, model.Resource) error {
 			*events = append(*events, "authorize")
 			return deniedErr
-		}}, Auditor: &academicUnitCommandAuditor{events: events, beginID: model.NewID()}, Now: now, NewID: model.NewID, Effects: academicUnitEffects{academicUnitCommandEffectsFake: &academicUnitCommandEffectsFake{events: events}, academicUnitEffectFailureReporterFake: &academicUnitEffectFailureReporterFake{events: events}}})
+		}}, Auditor: &academicUnitCommandAuditor{events: events, beginID: model.NewID()}, Now: now, NewID: model.NewID, Publisher: academicUnitPublisherIn(events)})
 		return func(expected *int64) error {
 				_, err := service.UpdateAcademicUnit(ctx, call, UpdateAcademicUnitCommand{ID: current.ID, ExpectedRevision: expected})
 				return err

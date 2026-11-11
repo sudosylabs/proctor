@@ -154,8 +154,8 @@ func (s *Service) CreateAcademicUnit(
 	// The unit and success audit are committed before transient fan-out.
 	// Publication remains best effort so callers do not retry committed work.
 	if !saved.Replayed {
-		if err := s.effects.Created(ctx, saved.Value.ID); err != nil {
-			s.effects.Report(ctx, "academic_unit_created", err)
+		if err := s.publishAcademicUnitCreated(ctx, saved.Value.ID); err != nil {
+			s.publisher.Report(ctx, "academic_unit_created", err)
 		}
 	}
 
@@ -260,8 +260,8 @@ func (s *Service) UpdateAcademicUnit(
 	if err != nil {
 		return nil, err
 	}
-	if err := s.effects.Updated(ctx, updated.ID); err != nil {
-		s.effects.Report(ctx, "academic_unit_updated", err)
+	if err := s.publishAcademicUnitUpdated(ctx, updated.ID); err != nil {
+		s.publisher.Report(ctx, "academic_unit_updated", err)
 	}
 
 	return updated, nil
@@ -321,8 +321,8 @@ func (s *Service) ArchiveAcademicUnit(
 	if err != nil {
 		return err
 	}
-	if err := s.effects.Archived(ctx, archived.ID); err != nil {
-		s.effects.Report(ctx, "academic_unit_archived", err)
+	if err := s.publishAcademicUnitArchived(ctx, archived.ID); err != nil {
+		s.publisher.Report(ctx, "academic_unit_archived", err)
 	}
 
 	return nil

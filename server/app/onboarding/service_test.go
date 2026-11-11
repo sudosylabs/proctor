@@ -25,8 +25,7 @@ import (
 )
 
 // These fakes stand in for the identity and access mechanics that
-// Invitations and public registration borrow, and for the Class Membership
-// effects of an accepted Invitation.
+// Invitations and public registration borrow.
 
 // testPasswordHasher is the password work Invitations and registration ask
 // of the shared hasher.
@@ -259,25 +258,6 @@ type institutionStoreFake struct {
 func (s institutionStoreFake) GetSingleton(context.Context) (*model.Institution, error) {
 	return s.institution, nil
 }
-
-type classMemberEffectsFake struct {
-	calls     int
-	candidate model.UserID
-	classIDs  []model.ClassID
-	err       error
-	reports   int
-}
-
-func (e *classMemberEffectsFake) MembershipChanged(_ context.Context, candidate model.UserID, classIDs []model.ClassID) error {
-	e.calls++
-	e.candidate = candidate
-	e.classIDs = append([]model.ClassID(nil), classIDs...)
-	return e.err
-}
-
-func (e *classMemberEffectsFake) Report(context.Context, string, error) { e.reports++ }
-
-func (e *classMemberEffectsFake) InvalidateAuthorization(context.Context, model.UserID) {}
 
 type mutationAttemptAuditorFake struct {
 	events   *[]string

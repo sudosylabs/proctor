@@ -135,7 +135,7 @@ func (s *Service) CreateAcademicUnitMember(
 		AcademicUnitMemberStoreErrors.Translate,
 	)
 	if err == nil && changed {
-		s.effects.InvalidateAuthorization(ctx, userID)
+		s.publisher.InvalidateAuthorization(ctx, userID)
 	}
 
 	return result, err
@@ -240,7 +240,7 @@ func (s *Service) EndAcademicUnitMember(
 		AcademicUnitMemberStoreErrors.Translate,
 	)
 	if err == nil && changed {
-		s.effects.InvalidateAuthorization(ctx, current.UserID)
+		s.publisher.InvalidateAuthorization(ctx, current.UserID)
 	}
 
 	return result, err

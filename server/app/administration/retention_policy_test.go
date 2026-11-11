@@ -17,6 +17,7 @@ import (
 
 	"github.com/sudosylabs/proctor/server/app/apperror"
 	"github.com/sudosylabs/proctor/server/app/invocation"
+	"github.com/sudosylabs/proctor/server/app/realtime/realtimetest"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -279,7 +280,7 @@ func TestRetentionPolicyConstructionRejectsIncompleteDependencies(t *testing.T) 
 	complete := func() Dependencies {
 		deps := dependenciesOf(newRetentionPolicyFixture(t).service)
 		deps.Store.(*catalogFake).accessPolicies = &accessPolicyStoreFake{}
-		deps.Capabilities, deps.Effects = &accessPolicyCapabilitiesFake{}, &effectsFake{}
+		deps.Capabilities, deps.Publisher = &accessPolicyCapabilitiesFake{}, &realtimetest.Publisher{}
 		deps.CanonicalOrigin, deps.PasswordMinimumLength = "https://proctor.example.edu", 12
 		return deps
 	}

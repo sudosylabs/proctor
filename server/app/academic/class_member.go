@@ -42,16 +42,18 @@ type EndClassMemberCommand struct {
 	Batch          batchitem.Item
 }
 
+// publishMembershipChanged publishes a committed Class Membership change of
+// the candidate and reports a failed publication; the use case still succeeds.
 func (s *Service) publishMembershipChanged(
 	ctx context.Context,
 	candidateID model.UserID,
 	classIDs ...model.ClassID,
 ) {
-	if s.effects == nil {
+	if s.publisher == nil {
 		return
 	}
-	if err := s.effects.MembershipChanged(ctx, candidateID, classIDs); err != nil {
-		s.effects.Report(ctx, "class_member.membership_changed", err)
+	if err := PublishClassMembershipChanged(ctx, s.publisher, s.sittings, candidateID, classIDs); err != nil {
+		s.publisher.Report(ctx, "class_member.membership_changed", err)
 	}
 }
 

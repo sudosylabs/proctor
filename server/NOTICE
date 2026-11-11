@@ -327,8 +327,8 @@ Corresponding Proctor paths:
 - server/store/storetest/session_store.go
 - server/store/storetest/personal_access_token_store.go
 - server/store/sqlstore/migrate_test.go
-- server/migrations/postgres/000010_create_external_login_states.up.sql
-- server/migrations/postgres/000010_create_external_login_states.down.sql
+- server/migrations/postgres/000001_baseline.up.sql
+- server/migrations/postgres/000001_baseline.down.sql
 
 Modifications:
 
@@ -392,13 +392,25 @@ Upstream paths:
 
 Corresponding Proctor paths:
 
-- server/app/authentication.go
+- server/app/identity/login.go
+- server/app/identity/login_rate_limit.go
+- server/app/identity/local_user.go
+- server/app/identity/local_proof.go
+- server/app/identity/session_issuance.go
+- server/app/identity/session_refresh.go
+- server/app/identity/access_authentication.go
+- server/app/identity/logout.go
+- server/app/identity/authentication_error.go
+- server/app/identity/diagnostics.go
 - server/app/authentication_integration_test.go
-- server/app/account_recovery.go
+- server/app/identity/account_recovery.go
 - server/app/account_recovery_integration_test.go
-- server/app/session_management.go
-- server/app/personal_access_token.go
-- server/app/mfa.go
+- server/app/identity/session_management.go
+- server/app/identity/personal_access_token.go
+- server/app/identity/mfa.go
+- server/app/identity/mfa_challenge.go
+- server/app/identity/mfa_enrollment.go
+- server/app/identity/mfa_recovery_code.go
 - server/app/mfa_integration_test.go
 - server/httpapi/authentication.go
 - server/httpapi/route/credentials.go
@@ -425,14 +437,8 @@ Corresponding Proctor paths:
 - server/store/storetest/session_store.go
 - server/store/storetest/personal_access_token_store.go
 - server/store/storetest/mfa_store.go
-- server/migrations/postgres/000006_bind_user_tokens_to_target.up.sql
-- server/migrations/postgres/000006_bind_user_tokens_to_target.down.sql
-- server/migrations/postgres/000007_add_personal_access_token_disabled_state.up.sql
-- server/migrations/postgres/000007_add_personal_access_token_disabled_state.down.sql
-- server/migrations/postgres/000008_create_mfa_credentials.up.sql
-- server/migrations/postgres/000008_create_mfa_credentials.down.sql
-- server/migrations/postgres/000009_add_session_administration_actions.up.sql
-- server/migrations/postgres/000009_add_session_administration_actions.down.sql
+- server/migrations/postgres/000001_baseline.up.sql
+- server/migrations/postgres/000001_baseline.down.sql
 
 Modifications:
 
@@ -489,7 +495,10 @@ Modifications:
 The provider-neutral external-authentication flow, instance-scoped factory
 registry, and CAS/OIDC adapters in:
 
-- `server/app/external_authentication.go`;
+- `server/app/identity/external_authentication.go`;
+- `server/app/identity/external_authentication_callback.go`;
+- `server/app/identity/external_identity_resolution.go`;
+- `server/app/identity/external_provider.go`;
 - `server/httpapi/external_authentication.go`;
 - `server/platform/externalauth/provider.go`;
 - `server/platform/externalauth/cas/provider.go`;
@@ -569,15 +578,14 @@ Corresponding Proctor paths:
 - server/model/audit_event.go
 - server/model/request_metadata.go
 - server/model/client.go
-- server/app/authorization.go
-- server/app/authorization_decision.go
-- server/app/access_scope.go
-- server/app/user_profile.go
-- server/app/academic_administration.go
-- server/app/class_member.go
-- server/app/user_administration.go
-- server/app/audit.go
-- server/app/authorization_test.go
+- server/app/access/authorization.go
+- server/app/access/access_scope.go
+- server/app/user/profile.go
+- server/app/onboarding/academic_administration_batch.go
+- server/app/academic/class_member.go
+- server/app/identity/session_administration.go
+- server/app/access/audit.go
+- server/app/access/authorization_test.go
 - server/app/authorization_integration_test.go
 - server/httpapi/audit.go
 - server/httpapi/bootstrap.go
@@ -608,10 +616,8 @@ Corresponding Proctor paths:
 - server/store/sqlstore/role_binding_store.go
 - server/store/sqlstore/audit_store.go
 - server/store/sqlstore/installation_store.go
-- server/migrations/postgres/000004_create_installation_state.up.sql
-- server/migrations/postgres/000004_create_installation_state.down.sql
-- server/migrations/postgres/000005_add_user_authorization_resource.up.sql
-- server/migrations/postgres/000005_add_user_authorization_resource.down.sql
+- server/migrations/postgres/000001_baseline.up.sql
+- server/migrations/postgres/000001_baseline.down.sql
 - server/store/storetest/role_store.go
 - server/store/storetest/role_binding_store.go
 - server/store/storetest/audit_store.go

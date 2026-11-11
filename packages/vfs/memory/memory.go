@@ -93,11 +93,11 @@ func (f *FS) Write(ctx context.Context, name string, body io.Reader, options vfs
 	if body == nil {
 		return vfs.Info{}, vfs.Error(op, name, fmt.Errorf("body is nil"))
 	}
-	if err := options.Validate(); err != nil {
-		return vfs.Info{}, vfs.Error(op, name, err)
+	if validateErr := options.Validate(); validateErr != nil {
+		return vfs.Info{}, vfs.Error(op, name, validateErr)
 	}
-	if err := ctx.Err(); err != nil {
-		return vfs.Info{}, vfs.Error(op, name, err)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return vfs.Info{}, vfs.Error(op, name, ctxErr)
 	}
 
 	data, err := readAll(ctx, body)

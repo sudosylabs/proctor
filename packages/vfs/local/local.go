@@ -19,7 +19,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/sudosylabs/proctor/packages/vfs"
 )
@@ -47,8 +46,8 @@ func New(root string) (*FS, error) {
 	if err != nil {
 		return nil, vfs.Error("new", root, err)
 	}
-	if err := os.MkdirAll(absolute, directoryMode); err != nil {
-		return nil, vfs.Error("new", root, err)
+	if mkdirAllErr := os.MkdirAll(absolute, directoryMode); mkdirAllErr != nil {
+		return nil, vfs.Error("new", root, mkdirAllErr)
 	}
 	canonical, err := filepath.EvalSymlinks(absolute)
 	if err != nil {
@@ -97,11 +96,11 @@ func (f *FS) Open(ctx context.Context, name string, options vfs.OpenOptions) (*v
 	if err != nil {
 		return nil, vfs.Error(op, name, err)
 	}
-	if err := options.Validate(); err != nil {
-		return nil, vfs.Error(op, name, err)
+	if validateErr := options.Validate(); validateErr != nil {
+		return nil, vfs.Error(op, name, validateErr)
 	}
-	if err := ctx.Err(); err != nil {
-		return nil, vfs.Error(op, name, err)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, vfs.Error(op, name, ctxErr)
 	}
 
 	f.mu.RLock()
@@ -154,11 +153,11 @@ func (f *FS) Write(ctx context.Context, name string, body io.Reader, options vfs
 	if body == nil {
 		return vfs.Info{}, vfs.Error(op, name, fmt.Errorf("body is nil"))
 	}
-	if err := options.Validate(); err != nil {
-		return vfs.Info{}, vfs.Error(op, name, err)
+	if validateErr := options.Validate(); validateErr != nil {
+		return vfs.Info{}, vfs.Error(op, name, validateErr)
 	}
-	if err := ctx.Err(); err != nil {
-		return vfs.Info{}, vfs.Error(op, name, err)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return vfs.Info{}, vfs.Error(op, name, ctxErr)
 	}
 
 	temporary, err := f.prepareWrite(ctx, name, options)
@@ -166,18 +165,18 @@ func (f *FS) Write(ctx context.Context, name string, body io.Reader, options vfs
 		return vfs.Info{}, vfs.Error(op, name, err)
 	}
 	defer func() {
-		if err := f.discardTemporary(temporary.Name()); err != nil {
-			resultErr = errors.Join(resultErr, vfs.Error(op, name, err))
+		if discardErr := f.discardTemporary(temporary.Name()); discardErr != nil {
+			resultErr = errors.Join(resultErr, vfs.Error(op, name, discardErr))
 		}
 	}()
-	if err := writeTemporary(ctx, temporary, body, options.Size); err != nil {
-		return vfs.Info{}, vfs.Error(op, name, err)
+	if writeErr := writeTemporary(ctx, temporary, body, options.Size); writeErr != nil {
+		return vfs.Info{}, vfs.Error(op, name, writeErr)
 	}
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if err := ctx.Err(); err != nil {
-		return vfs.Info{}, vfs.Error(op, name, err)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return vfs.Info{}, vfs.Error(op, name, ctxErr)
 	}
 	fullPath, err := f.writeDestination(name, options)
 	if err != nil {
@@ -193,8 +192,8 @@ func (f *FS) Stat(ctx context.Context, name string) (vfs.Info, error) {
 	if err != nil {
 		return vfs.Info{}, vfs.Error(op, name, err)
 	}
-	if err := ctx.Err(); err != nil {
-		return vfs.Info{}, vfs.Error(op, name, err)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return vfs.Info{}, vfs.Error(op, name, ctxErr)
 	}
 
 	f.mu.RLock()
@@ -219,8 +218,8 @@ func (f *FS) Remove(ctx context.Context, name string, options vfs.RemoveOptions)
 	if err != nil {
 		return vfs.Error(op, name, err)
 	}
-	if err := ctx.Err(); err != nil {
-		return vfs.Error(op, name, err)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return vfs.Error(op, name, ctxErr)
 	}
 
 	f.mu.Lock()
@@ -254,8 +253,8 @@ func (f *FS) List(ctx context.Context, options vfs.ListOptions) (vfs.Page, error
 	if err != nil {
 		return vfs.Page{}, vfs.Error(op, options.Prefix, err)
 	}
-	if err := ctx.Err(); err != nil {
-		return vfs.Page{}, vfs.Error(op, options.Prefix, err)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return vfs.Page{}, vfs.Error(op, options.Prefix, ctxErr)
 	}
 
 	root, exists, err := f.listRoot(ctx, options.Prefix)
@@ -459,13 +458,13 @@ func (f *FS) Move(ctx context.Context, source, destination string, options vfs.T
 	if err != nil {
 		return vfs.Info{}, vfs.Error(op, source+" -> "+destination, err)
 	}
-	if err := ctx.Err(); err != nil {
-		return vfs.Info{}, vfs.Error(op, source+" -> "+destination, err)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return vfs.Info{}, vfs.Error(op, source+" -> "+destination, ctxErr)
 	}
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	sourcePath, destinationPath, sourceInfo, err := f.prepareTransfer(source, destination, options)
+	sourcePath, destinationPath, _, err := f.prepareTransfer(source, destination, options)
 	if err != nil {
 		return vfs.Info{}, vfs.Error(op, source+" -> "+destination, err)
 	}
@@ -474,18 +473,18 @@ func (f *FS) Move(ctx context.Context, source, destination string, options vfs.T
 	}
 
 	if options.NoOverwrite {
-		if err := os.Link(sourcePath, destinationPath); err != nil {
-			if errors.Is(err, fs.ErrExist) {
+		if linkErr := os.Link(sourcePath, destinationPath); linkErr != nil {
+			if errors.Is(linkErr, fs.ErrExist) {
 				return vfs.Info{}, vfs.Error(op, destination, vfs.ErrAlreadyExists)
 			}
-			return vfs.Info{}, vfs.Error(op, destination, err)
+			return vfs.Info{}, vfs.Error(op, destination, linkErr)
 		}
-		if err := os.Remove(sourcePath); err != nil {
+		if removeErr := os.Remove(sourcePath); removeErr != nil {
 			_ = os.Remove(destinationPath)
-			return vfs.Info{}, vfs.Error(op, source, err)
+			return vfs.Info{}, vfs.Error(op, source, removeErr)
 		}
-	} else if err := os.Rename(sourcePath, destinationPath); err != nil {
-		return vfs.Info{}, vfs.Error(op, source+" -> "+destination, err)
+	} else if renameErr := os.Rename(sourcePath, destinationPath); renameErr != nil {
+		return vfs.Info{}, vfs.Error(op, source+" -> "+destination, renameErr)
 	}
 	if err = f.syncDirectory(filepath.Dir(destinationPath)); err != nil {
 		return vfs.Info{}, vfs.Error(op, destination, err)
@@ -496,8 +495,6 @@ func (f *FS) Move(ctx context.Context, source, destination string, options vfs.T
 		}
 	}
 
-	sourceInfo.Path = destination
-	sourceInfo.ModifiedAt = time.Now().UTC()
 	info, _, err := localInfo(destination, destinationPath)
 	if err != nil {
 		return vfs.Info{}, vfs.Error(op, destination, err)
@@ -510,8 +507,8 @@ func (f *FS) copy(ctx context.Context, op, source, destination string, options v
 	if err != nil {
 		return vfs.Info{}, vfs.Error(op, source+" -> "+destination, err)
 	}
-	if err := ctx.Err(); err != nil {
-		return vfs.Info{}, vfs.Error(op, source+" -> "+destination, err)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return vfs.Info{}, vfs.Error(op, source+" -> "+destination, ctxErr)
 	}
 
 	sourceFile, temporary, sourceInfo, err := f.prepareCopy(ctx, source, destination, options)
@@ -520,18 +517,18 @@ func (f *FS) copy(ctx context.Context, op, source, destination string, options v
 	}
 	defer sourceFile.Close()
 	defer func() {
-		if err := f.discardTemporary(temporary.Name()); err != nil {
-			resultErr = errors.Join(resultErr, vfs.Error(op, destination, err))
+		if discardErr := f.discardTemporary(temporary.Name()); discardErr != nil {
+			resultErr = errors.Join(resultErr, vfs.Error(op, destination, discardErr))
 		}
 	}()
-	if err := writeTemporary(ctx, temporary, sourceFile, &sourceInfo.Size); err != nil {
-		return vfs.Info{}, vfs.Error(op, destination, err)
+	if writeErr := writeTemporary(ctx, temporary, sourceFile, &sourceInfo.Size); writeErr != nil {
+		return vfs.Info{}, vfs.Error(op, destination, writeErr)
 	}
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if err := ctx.Err(); err != nil {
-		return vfs.Info{}, vfs.Error(op, destination, err)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return vfs.Info{}, vfs.Error(op, destination, ctxErr)
 	}
 	_, destinationPath, _, err := f.prepareTransfer(source, destination, options)
 	if err != nil {

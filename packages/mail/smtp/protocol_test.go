@@ -120,7 +120,7 @@ func TestGreetingHonorsContextCancellation(t *testing.T) {
 
 func startSMTPServer(t *testing.T, serve func(net.Conn) error) (string, func()) {
 	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("Listen() error = %v", err)
 	}
@@ -214,19 +214,19 @@ func serveSMTPThenDropBeforeCommitResponse(connection net.Conn) error {
 		command := strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
 		switch {
 		case strings.HasPrefix(command, "EHLO "):
-			if _, err := writer.WriteString("250-test.example\r\n250 SIZE 26214400\r\n"); err != nil {
-				return err
+			if _, writeStringErr := writer.WriteString("250-test.example\r\n250 SIZE 26214400\r\n"); writeStringErr != nil {
+				return writeStringErr
 			}
 		case strings.HasPrefix(command, "MAIL FROM:"), strings.HasPrefix(command, "RCPT TO:"):
-			if _, err := writer.WriteString("250 2.0.0 ok\r\n"); err != nil {
-				return err
+			if _, writeStringErr := writer.WriteString("250 2.0.0 ok\r\n"); writeStringErr != nil {
+				return writeStringErr
 			}
 		case command == "DATA":
-			if _, err := writer.WriteString("354 send message\r\n"); err != nil {
-				return err
+			if _, writeStringErr := writer.WriteString("354 send message\r\n"); writeStringErr != nil {
+				return writeStringErr
 			}
-			if err := writer.Flush(); err != nil {
-				return err
+			if flushErr := writer.Flush(); flushErr != nil {
+				return flushErr
 			}
 			for {
 				line, err = reader.ReadString('\n')

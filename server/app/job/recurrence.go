@@ -15,51 +15,24 @@ import (
 	"github.com/sudosylabs/proctor/server/logging"
 )
 
-type OccurrenceProposer interface {
-	Propose(context.Context, time.Time) error
-}
-
 // Recurrence defines application-owned work proposed at UTC interval boundaries.
 // A zero Interval retains the daily schedule. Explicit intervals must divide a
 // day and range from one minute to one day. Each proposer durably deduplicates
 // its occurrence so restarts and multiple nodes can propose the same work.
+// A Recurrence does not name the Job type it schedules: only its Proposer,
+// which builds and enqueues the Job, knows which type that is.
 type Recurrence struct {
 	Name     string
 	Proposer OccurrenceProposer
 	Interval time.Duration
 }
 
-// Clock controls recurrence time and waiting. Now must be safe for concurrent
-// use. NewTimer returns a fresh one-shot Timer for each positive duration.
-// Production uses the system clock; tests can advance occurrences without
-// sleeping.
-type Clock interface {
-	Now() time.Time
-	NewTimer(time.Duration) Timer
+// OccurrenceProposer enqueues the Job for one occurrence of a Recurrence. It
+// receives the UTC time at which the engine first proposed the occurrence,
+// and receives the same time again when a failed proposal is retried.
+type OccurrenceProposer interface {
+	Propose(context.Context, time.Time) error
 }
-
-// Timer is the bounded waiting capability used by recurrence workers. C
-// delivers at most one expiration value. Stop prevents a future delivery when
-// it returns true and is safe to call while the engine is shutting down.
-type Timer interface {
-	C() <-chan time.Time
-	Stop() bool
-}
-
-type systemClock struct{}
-
-func (systemClock) Now() time.Time { return time.Now() }
-
-func (systemClock) NewTimer(delay time.Duration) Timer {
-	return systemTimer{timer: time.NewTimer(delay)}
-}
-
-type systemTimer struct {
-	timer *time.Timer
-}
-
-func (t systemTimer) C() <-chan time.Time { return t.timer.C }
-func (t systemTimer) Stop() bool          { return t.timer.Stop() }
 
 func cloneRecurrences(values []Recurrence) ([]Recurrence, error) {
 	cloned := append([]Recurrence(nil), values...)
@@ -82,18 +55,6 @@ func cloneRecurrences(values []Recurrence) ([]Recurrence, error) {
 	}
 
 	return cloned, nil
-}
-
-func nextDailyOccurrence(now time.Time) time.Time {
-	now = now.UTC()
-	return time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.UTC)
-}
-
-func nextRecurrenceOccurrence(now time.Time, interval time.Duration) time.Time {
-	if interval == 0 {
-		return nextDailyOccurrence(now)
-	}
-	return now.UTC().Truncate(interval).Add(interval)
 }
 
 func runRecurrenceProposal(
@@ -158,4 +119,16 @@ func runRecurrenceProposal(
 			}
 		}
 	}
+}
+
+func nextRecurrenceOccurrence(now time.Time, interval time.Duration) time.Time {
+	if interval == 0 {
+		return nextDailyOccurrence(now)
+	}
+	return now.UTC().Truncate(interval).Add(interval)
+}
+
+func nextDailyOccurrence(now time.Time) time.Time {
+	now = now.UTC()
+	return time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.UTC)
 }

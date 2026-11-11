@@ -9,220 +9,290 @@ package job
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/sudosylabs/proctor/server/app/access"
+	"github.com/sudosylabs/proctor/server/app/apperror"
+	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type operatorStoreFake struct {
-	*jobRunnerStoreFake
-	job            *model.Job
-	list           []*model.Job
-	attempts       []model.JobAttempt
-	mutation       *store.JobMutation
-	listOptions    store.JobListOptions
-	attemptOptions store.JobAttemptListOptions
-	total          int
-	countOptions   store.JobListOptions
-	countMaximum   int
+type jobOperatorEngineFake struct {
+	events       *[]string
+	view         View
+	page         []View
+	prepareErr   error
+	applyErr     error
+	listQuery    ListQuery
+	applyCalls   int
+	failures     int
+	countWithin  time.Duration
+	countMaximum int
 }
 
-func (f *operatorStoreFake) Get(context.Context, model.JobID) (*model.Job, error) { return f.job, nil }
-func (f *operatorStoreFake) List(_ context.Context, options store.JobListOptions) ([]*model.Job, error) {
-	f.listOptions = options
-	return f.list, nil
-}
-func (f *operatorStoreFake) Count(_ context.Context, options store.JobListOptions, maximum int) (int, error) {
-	f.countOptions, f.countMaximum = options, maximum
-	return min(max(f.total, len(f.list)), maximum), nil
-}
-func (f *operatorStoreFake) ListAttemptsPage(_ context.Context, options store.JobAttemptListOptions) ([]model.JobAttempt, error) {
-	f.attemptOptions = options
-	return f.attempts, nil
-}
-func (f *operatorStoreFake) Cancel(_ context.Context, mutation *store.JobMutation) (*model.Job, error) {
-	f.mutation = mutation
-	return f.job.RequestCancellation(f.job.UpdatedAt.Add(time.Second))
-}
-func (f *operatorStoreFake) Retry(_ context.Context, mutation *store.JobMutation) (*model.Job, error) {
-	f.mutation = mutation
-	return f.job.ExplicitRetry(f.job.UpdatedAt.Add(time.Second))
-}
-
-func TestEngineProjectsOnlySafeOperatorFields(t *testing.T) {
-	t.Parallel()
-	at := time.Date(2026, time.August, 11, 8, 0, 0, 0, time.UTC)
-	record, err := model.NewJob(model.NewJobID(), model.JobTypeProfilePictureGenerateDefault, json.RawMessage(`{"secret":"must-not-leak"}`), "private-dedupe", at, at, 8)
-	require.NoError(t, err)
-	record.CreatedByUserID = model.NewUserID()
-	persistence := &operatorStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: record, list: []*model.Job{record}}
-	engine, err := New(Dependencies{
-		Store: persistence, Descriptors: []Descriptor{testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))},
-		NodeID: "node-a", Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Second},
-	})
-	require.NoError(t, err)
-	page, err := engine.List(context.Background(), ListQuery{Limit: 20})
-	require.NoError(t, err, "List() = %#v", page)
-	require.Len(t, page.Items, 1, "List() = %#v", page)
-	require.Equal(t, record.ID, page.Items[0].ID, "List() = %#v", page)
-	require.Equal(t, record.CreatedByUserID, page.Items[0].CreatedByUserID, "the initiator is projected")
-	encoded, err := json.Marshal(page)
-	require.NoError(t, err)
-	for _, forbidden := range []string{"must-not-leak", "private-dedupe", "command", "checkpoint", "result", "claim_token"} {
-		require.NotContains(t, string(encoded), forbidden, "safe projection leaked")
+func (f *jobOperatorEngineFake) List(_ context.Context, query ListQuery) (Page, error) {
+	*f.events = append(*f.events, "list")
+	f.listQuery = query
+	if f.page != nil {
+		return Page{Items: slices.Clone(f.page)}, nil
 	}
-	require.Len(t, persistence.listOptions.Types, 1)
-	require.Equal(t, record.Type, persistence.listOptions.Types[0])
-	require.Equal(t, 21, persistence.listOptions.Limit, "the read probes one past the page")
-	require.False(t, page.HasMore)
-
-	second, err := model.NewJob(model.NewJobID(), record.Type, json.RawMessage(`{}`), "second", record.CreatedAt, record.CreatedAt, 8)
-	require.NoError(t, err)
-	persistence.list = []*model.Job{record, second}
-	page, err = engine.List(context.Background(), ListQuery{Limit: 2})
-	require.NoError(t, err)
-	require.Len(t, page.Items, 2)
-	require.False(t, page.HasMore, "an exactly full final page has no successor")
-	page, err = engine.List(context.Background(), ListQuery{Limit: 1})
-	require.NoError(t, err)
-	require.Len(t, page.Items, 1)
-	require.True(t, page.HasMore)
+	return Page{Items: []View{f.view}}, nil
 }
 
-func TestEngineCountsTheFirstPageOfOperatorVisibleJobs(t *testing.T) {
+func (f *jobOperatorEngineFake) CountRecentFailures(_ context.Context, within time.Duration, maximum int) (int, error) {
+	*f.events = append(*f.events, "count-failures")
+	f.countWithin, f.countMaximum = within, maximum
+	return f.failures, nil
+}
+
+func (f *jobOperatorEngineFake) Get(context.Context, model.JobID) (View, error) {
+	*f.events = append(*f.events, "get")
+	return f.view, nil
+}
+
+func (f *jobOperatorEngineFake) Attempts(context.Context, AttemptListQuery) (AttemptPage, error) {
+	*f.events = append(*f.events, "attempts")
+	return AttemptPage{Items: make([]AttemptView, 0)}, nil
+}
+
+func (f *jobOperatorEngineFake) PrepareCancellation(context.Context, model.JobID) (ControlTarget, error) {
+	*f.events = append(*f.events, "prepare-cancel")
+	return ControlTarget{Projection: f.view}, f.prepareErr
+}
+
+func (f *jobOperatorEngineFake) PrepareRetry(context.Context, model.JobID) (ControlTarget, error) {
+	*f.events = append(*f.events, "prepare-retry")
+	return ControlTarget{Projection: f.view}, f.prepareErr
+}
+
+func (f *jobOperatorEngineFake) Cancel(context.Context, ControlTarget, AuditReference) (View, error) {
+	*f.events = append(*f.events, "cancel")
+	f.applyCalls++
+	return f.view, f.applyErr
+}
+
+func (f *jobOperatorEngineFake) Retry(context.Context, ControlTarget, AuditReference) (View, error) {
+	*f.events = append(*f.events, "retry")
+	f.applyCalls++
+	return f.view, f.applyErr
+}
+
+type jobOperationsAuthorizerFake struct {
+	events   *[]string
+	actions  []model.Action
+	resource model.Resource
+	err      error
+}
+
+func (f *jobOperationsAuthorizerFake) AuthorizeInstitution(_ context.Context, _ invocation.Invocation, action model.Action) (model.Resource, error) {
+	*f.events = append(*f.events, "authorize")
+	f.actions = append(f.actions, action)
+	return f.resource, f.err
+}
+
+type jobOperationsAuditorFake struct {
+	events    *[]string
+	operation string
+	params    map[string]any
+	err       error
+	failCalls int
+}
+
+func (f *jobOperationsAuditorFake) Begin(_ context.Context, attempt access.Mutation) (model.AuditEventID, error) {
+	// This fake keeps neither a scope nor a subject, so it refuses a Mutation
+	// that names one instead of dropping it.
+	// It stands in for access.MutationAuditAdapter, which records both.
+	if attempt.ScopeType != "" || attempt.ScopeID != "" || !attempt.Subject.IsZero() {
+		return "", apperror.New("audit.internal")
+	}
+
+	*f.events = append(*f.events, "audit")
+	f.operation = attempt.Operation
+	f.params = attempt.Value
+	return model.NewAuditEventID(), f.err
+}
+
+func (f *jobOperationsAuditorFake) Fail(context.Context, model.AuditEventID, string) error {
+	*f.events = append(*f.events, "audit-fail")
+	f.failCalls++
+	return nil
+}
+
+func TestJobOperationsAuthorizeBeforeEngineInspection(t *testing.T) {
 	t.Parallel()
-	at := time.Date(2026, time.August, 11, 8, 0, 0, 0, time.UTC)
-	record, err := model.NewJob(model.NewJobID(), model.JobTypeProfilePictureGenerateDefault, json.RawMessage(`{}`), "counted", at, at, 8)
-	require.NoError(t, err)
-	persistence := &operatorStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: record, list: []*model.Job{record}, total: store.MaximumListCount}
-	engine, err := New(Dependencies{Store: persistence, Descriptors: []Descriptor{testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))},
-		NodeID: "node-a", Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Second}})
+	events := make([]string, 0, 2)
+	view := View{ID: model.NewJobID(), Type: model.JobTypeProfilePictureGenerateDefault, Status: model.JobStatusQueued}
+	engine := &jobOperatorEngineFake{events: &events, view: view}
+	authorizer := &jobOperationsAuthorizerFake{events: &events, resource: model.Resource{Type: model.ResourceInstitution, ID: model.NewID()}}
+	service, err := NewOperations(OperationsDependencies{Jobs: engine, Authorization: authorizer, Audit: &jobOperationsAuditorFake{events: &events}, Users: &jobUserStoreFake{}, ExamExports: &jobExamExportStoreFake{}, Now: time.Now})
 	require.NoError(t, err)
 
-	page, err := engine.List(context.Background(), ListQuery{Statuses: []model.JobStatus{model.JobStatusFailed}, Limit: 20})
-	require.NoError(t, err)
-	require.True(t, page.Counted)
-	require.Equal(t, store.MaximumListCount, page.Total)
-	require.True(t, page.TotalIsLowerBound)
-	require.Equal(t, persistence.listOptions, persistence.countOptions, "the count reads the list's types and statuses")
-	require.Equal(t, store.MaximumListCount, persistence.countMaximum)
+	page, appErr := service.ListJobs(context.Background(), invocation.Invocation{}, ListQuery{Limit: 20})
+	require.NoError(t, appErr)
+	require.Len(t, page.Items, 1, "page=%#v query=%#v events=%v actions=%v", page, engine.listQuery, events, authorizer.actions)
+	require.Equal(t, view.ID, page.Items[0].ID, "page=%#v query=%#v events=%v actions=%v", page, engine.listQuery, events, authorizer.actions)
+	require.Equal(t, 20, engine.listQuery.Limit, "page=%#v query=%#v events=%v actions=%v", page, engine.listQuery, events, authorizer.actions)
+	// Contract: authorization precedes the read.
+	require.Equal(t, []string{"authorize", "list"}, events)
+	require.Equal(t, model.ActionJobView, authorizer.actions[0], "page=%#v query=%#v events=%v actions=%v", page, engine.listQuery, events, authorizer.actions)
 
-	persistence.countMaximum = 0
-	later, err := engine.List(context.Background(), ListQuery{BeforeCreatedAt: at, BeforeID: record.ID, Limit: 20})
-	require.NoError(t, err)
-	require.False(t, later.Counted)
-	require.Zero(t, persistence.countMaximum, "a later page is not counted")
+	events = events[:0]
+	authorizer.err = errors.New("denied")
+	_, appErr = service.GetJob(context.Background(), invocation.Invocation{}, view.ID)
+	require.Error(t, appErr, "Get() ignored authorization failure")
+	require.Equal(t, []string{"authorize"}, events)
+}
 
-	persistence.total = 3
-	failures, err := engine.CountRecentFailures(context.Background(), 7*24*time.Hour, 1000)
+func TestJobOperationsAuditAfterPreparationAndBeforeTransition(t *testing.T) {
+	t.Parallel()
+	events := make([]string, 0, 4)
+	view := View{ID: model.NewJobID(), Type: model.JobTypeProfilePictureGenerateDefault, Status: model.JobStatusQueued}
+	engine := &jobOperatorEngineFake{events: &events, view: view}
+	authorizer := &jobOperationsAuthorizerFake{events: &events, resource: model.Resource{Type: model.ResourceInstitution, ID: model.NewID()}}
+	auditor := &jobOperationsAuditorFake{events: &events}
+	service, err := NewOperations(OperationsDependencies{Jobs: engine, Authorization: authorizer, Audit: auditor, Users: &jobUserStoreFake{}, ExamExports: &jobExamExportStoreFake{}, Now: time.Now})
 	require.NoError(t, err)
-	require.Equal(t, 3, failures)
-	require.Equal(t, store.JobListOptions{Types: []model.JobType{record.Type}, Statuses: []model.JobStatus{model.JobStatusFailed},
-		UpdatedWithin: 7 * 24 * time.Hour, Limit: 1}, persistence.countOptions)
-	require.Equal(t, 1000, persistence.countMaximum)
-	for name, query := range map[string]struct {
-		within  time.Duration
-		maximum int
-	}{"no window": {0, 10}, "zero bound": {time.Hour, 0}, "bound above the maximum": {time.Hour, store.MaximumListCount + 1}} {
-		t.Run(name, func(t *testing.T) {
-			_, countErr := engine.CountRecentFailures(context.Background(), query.within, query.maximum)
-			require.ErrorIs(t, countErr, ErrQueryInvalid)
+
+	_, appErr := service.CancelJob(context.Background(), invocation.Invocation{}, CancelCommand{ID: view.ID})
+	require.NoError(t, appErr)
+	// Contract (guardrail 8): authorization precedes the audit, and the audit
+	// begins before the durable write.
+	require.Equal(t, []string{"authorize", "prepare-cancel", "audit", "cancel"}, events)
+	require.Equal(t, "cancel", auditor.operation, "events")
+	require.Equal(t, 1, engine.applyCalls, "events")
+	require.Equal(t, view.ID.String(), auditor.params["job_id"])
+	require.Equal(t, string(view.Type), auditor.params["type"])
+	require.Equal(t, string(view.Status), auditor.params["status"])
+
+	events = events[:0]
+	auditor.err = errors.New("audit unavailable")
+	_, appErr = service.RetryJob(context.Background(), invocation.Invocation{}, RetryCommand{ID: view.ID})
+	require.Error(t, appErr, "Retry() ignored audit failure")
+	// Contract (guardrail 8): authorization precedes the audit, and the audit
+	// begins before the durable write.
+	require.Equal(t, []string{"authorize", "prepare-retry", "audit"}, events)
+	require.Equal(t, 1, engine.applyCalls, "failed-audit events")
+
+	events = events[:0]
+	auditor.err = nil
+	engine.applyErr = errors.New("transition unavailable")
+	_, appErr = service.RetryJob(context.Background(), invocation.Invocation{}, RetryCommand{ID: view.ID})
+	require.Error(t, appErr, "Retry() ignored transition failure")
+	// Contract (guardrail 8): authorization precedes the audit, the audit begins
+	// before the durable write, and the audit outcome follows the write.
+	require.Equal(t, []string{"authorize", "prepare-retry", "audit", "retry", "audit-fail"}, events)
+	require.Equal(t, 1, auditor.failCalls, "failed-transition events")
+}
+
+func TestJobOperationsTranslateEnginePolicyErrors(t *testing.T) {
+	t.Parallel()
+	events := make([]string, 0, 2)
+	engine := &jobOperatorEngineFake{events: &events, prepareErr: ErrCancelUnsupported}
+	service, err := NewOperations(OperationsDependencies{Jobs: engine, Authorization: &jobOperationsAuthorizerFake{events: &events}, Audit: &jobOperationsAuditorFake{events: &events}, Users: &jobUserStoreFake{}, ExamExports: &jobExamExportStoreFake{}, Now: time.Now})
+	require.NoError(t, err)
+	_, appErr := service.CancelJob(context.Background(), invocation.Invocation{}, CancelCommand{ID: model.NewJobID()})
+	require.True(t, apperror.Is(appErr, "job.cancel.unsupported"), "Cancel() error=%#v", appErr)
+}
+
+func TestJobOperationsRequireDependencies(t *testing.T) {
+	t.Parallel()
+
+	engine := &jobOperatorEngineFake{}
+	authorizer := &jobOperationsAuthorizerFake{}
+	auditor := &jobOperationsAuditorFake{events: &[]string{}}
+	users, exports := &jobUserStoreFake{}, &jobExamExportStoreFake{}
+	tests := []struct {
+		name          string
+		jobs          operatorEngine
+		authorization institutionAuthorizer
+		audit         access.MutationAuditor
+		users         store.UserStore
+		exports       store.ExamExportStore
+		now           func() time.Time
+	}{
+		{name: "engine", authorization: authorizer, audit: auditor, users: users, exports: exports, now: time.Now},
+		{name: "authorization", jobs: engine, audit: auditor, users: users, exports: exports, now: time.Now},
+		{name: "audit", jobs: engine, authorization: authorizer, users: users, exports: exports, now: time.Now},
+		{name: "initiator names", jobs: engine, authorization: authorizer, audit: auditor, exports: exports, now: time.Now},
+		{name: "exam export titles", jobs: engine, authorization: authorizer, audit: auditor, users: users, now: time.Now},
+		{name: "clock", jobs: engine, authorization: authorizer, audit: auditor, users: users, exports: exports},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := NewOperations(OperationsDependencies{Jobs: test.jobs, Authorization: test.authorization, Audit: test.audit, Users: test.users, ExamExports: test.exports, Now: test.now})
+			require.Error(t, err, "nil %s dependency was accepted", test.name)
 		})
 	}
 }
 
-func TestEngineProjectsSafeAttemptsAndPreservesCursor(t *testing.T) {
-	t.Parallel()
-	at := time.Date(2026, time.August, 11, 8, 0, 0, 0, time.UTC)
-	record, err := model.NewJob(model.NewJobID(), model.JobTypeProfilePictureGenerateDefault, json.RawMessage(`{}`), "attempts", at, at, 8)
-	require.NoError(t, err)
-	attempt := model.JobAttempt{ID: model.NewJobAttemptID(), JobID: record.ID, Number: 3, Status: model.JobAttemptStatusRunning, NodeID: "private-node", ClaimToken: model.JobClaimToken(strings.Repeat("a", 64)), StartedAt: at, HeartbeatAt: at, LeaseExpiresAt: at.Add(time.Minute)}
-	persistence := &operatorStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: record, attempts: []model.JobAttempt{attempt}}
-	engine, err := New(Dependencies{Store: persistence, Descriptors: []Descriptor{testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))}, NodeID: "node-a", Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Second}})
-	require.NoError(t, err)
-	page, err := engine.Attempts(context.Background(), AttemptListQuery{JobID: record.ID, BeforeNumber: 4, Limit: 20})
-	require.NoError(t, err, "Attempts() = %#v, options=%#v", page, persistence.attemptOptions)
-	require.Len(t, page.Items, 1, "Attempts() = %#v, options=%#v", page, persistence.attemptOptions)
-	require.Equal(t, attempt.ID, page.Items[0].ID, "Attempts() = %#v, options=%#v", page, persistence.attemptOptions)
-	require.Equal(t, 4, persistence.attemptOptions.BeforeNumber, "Attempts() = %#v, options=%#v", page, persistence.attemptOptions)
-	require.Equal(t, 21, persistence.attemptOptions.Limit, "the read probes one past the page; Attempts() = %#v, options=%#v", page, persistence.attemptOptions)
-	require.False(t, page.HasMore)
-	encoded, err := json.Marshal(page)
-	require.NoError(t, err)
-	require.NotContains(t, string(encoded), "private-node")
-	require.NotContains(t, string(encoded), strings.Repeat("a", 64))
-
-	earlier := attempt
-	earlier.ID, earlier.Number = model.NewJobAttemptID(), 2
-	persistence.attempts = []model.JobAttempt{attempt, earlier}
-	page, err = engine.Attempts(context.Background(), AttemptListQuery{JobID: record.ID, Limit: 2})
-	require.NoError(t, err)
-	require.Len(t, page.Items, 2)
-	require.False(t, page.HasMore, "an exactly full final page has no successor")
-	page, err = engine.Attempts(context.Background(), AttemptListQuery{JobID: record.ID, Limit: 1})
-	require.NoError(t, err)
-	require.Len(t, page.Items, 1)
-	require.True(t, page.HasMore)
+type jobUserStoreFake struct {
+	store.UserStore
+	names []store.UserDisplayName
+	calls [][]model.UserID
+	err   error
 }
 
-func TestEnginePreparesAndAppliesDescriptorGovernedControls(t *testing.T) {
-	t.Parallel()
-	at := time.Date(2026, time.August, 11, 8, 0, 0, 0, time.UTC)
-	queued, err := model.NewJob(model.NewJobID(), model.JobTypeProfilePictureGenerateDefault, json.RawMessage(`{}`), "control", at, at, 8)
-	require.NoError(t, err)
-	persistence := &operatorStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: queued}
-	descriptor := testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))
-	descriptor.Cancelable = true
-	descriptor.ExplicitRetryStatuses = []model.JobStatus{model.JobStatusFailed}
-	engine, err := New(Dependencies{Store: persistence, Descriptors: []Descriptor{descriptor}, NodeID: "node-a", Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Second}})
-	require.NoError(t, err)
-	target, err := engine.PrepareCancellation(context.Background(), queued.ID)
-	require.NoError(t, err, "PrepareCancellation()")
-	require.Equal(t, queued.ID, target.View().ID, "PrepareCancellation()")
-	target.Projection.ID = model.NewJobID()
-	audit := AuditReference{EventID: model.NewAuditEventID(), At: at.Add(time.Second)}
-	_, err = engine.Cancel(context.Background(), target, AuditReference{})
-	require.ErrorIs(t, err, ErrCancelUnsupported, "Cancel() with missing audit")
-	require.Nil(t, persistence.mutation, "Cancel() with missing audit")
-	_, err = engine.Cancel(context.Background(), target, audit)
-	require.NoError(t, err)
-	require.NotNil(t, persistence.mutation)
-	require.Equal(t, queued.ID, persistence.mutation.ID)
-	require.Equal(t, queued.Revision, persistence.mutation.ExpectedRevision)
-	require.Equal(t, audit.EventID, persistence.mutation.AuditEventID)
-	require.Equal(t, audit.At, persistence.mutation.AuditAt)
-
-	running, err := queued.Start(at.Add(time.Second))
-	require.NoError(t, err)
-	failed, err := running.Fail("job.failed", at.Add(2*time.Second))
-	require.NoError(t, err)
-	persistence.job = failed
-	target, err = engine.PrepareRetry(context.Background(), failed.ID)
-	require.NoError(t, err)
-	_, err = engine.Retry(context.Background(), target, audit)
-	require.NoError(t, err)
-	require.Equal(t, failed.ID, persistence.mutation.ID)
-	require.Equal(t, failed.Revision, persistence.mutation.ExpectedRevision)
+func (f *jobUserStoreFake) ListDisplayNames(_ context.Context, ids []model.UserID) ([]store.UserDisplayName, error) {
+	f.calls = append(f.calls, slices.Clone(ids))
+	return f.names, f.err
 }
 
-func TestEngineRejectsInvalidQueriesAndUnsupportedControls(t *testing.T) {
+type jobExamExportStoreFake struct {
+	store.ExamExportStore
+	titles []store.ExamExportBuildTitle
+	calls  [][]model.JobID
+}
+
+func (f *jobExamExportStoreFake) ListBuildTitles(_ context.Context, ids []model.JobID) ([]store.ExamExportBuildTitle, error) {
+	f.calls = append(f.calls, slices.Clone(ids))
+	return f.titles, nil
+}
+
+func TestJobOperationsPresentInitiatorsAndSubjectsOncePerPage(t *testing.T) {
 	t.Parallel()
-	at := time.Date(2026, time.August, 11, 8, 0, 0, 0, time.UTC)
-	record, err := model.NewJob(model.NewJobID(), model.JobTypeProfilePictureGenerateDefault, json.RawMessage(`{}`), "unsupported", at, at, 8)
+	events := make([]string, 0, 2)
+	operator := model.NewUserID()
+	firstExport, secondExport, rekey, system := model.NewJobID(), model.NewJobID(), model.NewJobID(), model.NewJobID()
+	engine := &jobOperatorEngineFake{events: &events, page: []View{
+		{ID: firstExport, Type: model.JobTypeExamExportBuild, CreatedByUserID: operator},
+		{ID: secondExport, Type: model.JobTypeExamExportBuild, CreatedByUserID: operator},
+		{ID: rekey, Type: model.JobTypeMailRekey, CreatedByUserID: operator},
+		{ID: system, Type: model.JobTypeCleanup},
+	}}
+	users := &jobUserStoreFake{names: []store.UserDisplayName{{UserID: operator, DisplayName: "Ada Operator"}}}
+	exports := &jobExamExportStoreFake{titles: []store.ExamExportBuildTitle{
+		{JobID: firstExport, Title: "Algorithms final"}, {JobID: secondExport, Title: strings.Repeat("é", 250)},
+	}}
+	service, err := NewOperations(OperationsDependencies{Jobs: engine, Authorization: &jobOperationsAuthorizerFake{events: &events},
+		Audit: &jobOperationsAuditorFake{events: &events}, Users: users, ExamExports: exports, Now: time.Now})
 	require.NoError(t, err)
-	persistence := &operatorStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: record}
-	engine, err := New(Dependencies{Store: persistence, Descriptors: []Descriptor{testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))}, NodeID: "node-a", Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Second}})
+
+	page, err := service.ListJobs(context.Background(), invocation.Invocation{}, ListQuery{Limit: 20})
 	require.NoError(t, err)
-	_, err = engine.List(context.Background(), ListQuery{Limit: 201})
-	require.ErrorIs(t, err, ErrQueryInvalid)
-	_, err = engine.PrepareCancellation(context.Background(), record.ID)
-	require.ErrorIs(t, err, ErrCancelUnsupported)
-	_, err = engine.PrepareRetry(context.Background(), record.ID)
-	require.ErrorIs(t, err, ErrRetryUnsupported)
+	// Each fact is read once for the page, and only the export builds ask for a subject.
+	require.Equal(t, [][]model.UserID{{operator, operator, operator}}, users.calls)
+	require.Equal(t, [][]model.JobID{{firstExport, secondExport}}, exports.calls)
+	require.Equal(t, []string{"Ada Operator", "Ada Operator", "Ada Operator", ""}, []string{page.Items[0].CreatedByDisplayName, page.Items[1].CreatedByDisplayName, page.Items[2].CreatedByDisplayName, page.Items[3].CreatedByDisplayName})
+	require.Equal(t, "Algorithms final", page.Items[0].Subject)
+	require.Equal(t, strings.Repeat("é", maximumSubjectLength), page.Items[1].Subject, "a subject is bounded in characters")
+	require.Empty(t, page.Items[2].Subject, "a rekey has no subject")
+	require.True(t, page.Items[3].CreatedByUserID.IsZero(), "system work has no initiator")
+	require.Empty(t, page.Items[3].Subject)
+
+	engine.view = View{ID: system, Type: model.JobTypeCleanup}
+	single, err := service.GetJob(context.Background(), invocation.Invocation{}, system)
+	require.NoError(t, err)
+	require.Empty(t, single.CreatedByDisplayName)
+	require.Len(t, users.calls, 1, "a Job with no initiator reads no names")
+
+	users.err = errors.New("users unavailable")
+	_, err = service.ListJobs(context.Background(), invocation.Invocation{}, ListQuery{Limit: 20})
+	require.True(t, apperror.Is(err, "job.unavailable"), "ListJobs() error=%#v", err)
 }

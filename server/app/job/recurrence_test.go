@@ -36,42 +36,30 @@ func (f *occurrenceProposerFake) Propose(_ context.Context, at time.Time) error 
 	return nil
 }
 
-type manualClock struct {
-	mu     sync.Mutex
-	now    time.Time
-	timers chan *manualTimer
-}
+type noOpProposer struct{}
 
-func newManualClock(at time.Time) *manualClock {
-	return &manualClock{now: at, timers: make(chan *manualTimer, 8)}
-}
+func (noOpProposer) Propose(context.Context, time.Time) error { return nil }
 
-func (c *manualClock) Now() time.Time {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.now
+func TestEngineValidatesRecurrencesAtConstruction(t *testing.T) {
+	t.Parallel()
+	descriptor := testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))
+	config := Dependencies{
+		Store: &jobRunnerStoreFake{}, Descriptors: []Descriptor{descriptor}, NodeID: "node-a",
+		Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Second},
+		Recurrences: []Recurrence{{Name: "daily", Proposer: noOpProposer{}}, {Name: "daily", Proposer: noOpProposer{}}},
+	}
+	_, err := New(config)
+	require.Error(t, err, "New() accepted duplicate recurrence names")
+	config.Recurrences = []Recurrence{{Name: "", Proposer: noOpProposer{}}}
+	_, err = New(config)
+	require.Error(t, err, "New() accepted an unnamed recurrence")
+	config.Recurrences = []Recurrence{{Name: "unsafe\nname", Proposer: noOpProposer{}}}
+	_, err = New(config)
+	require.Error(t, err, "New() accepted an unsafe recurrence name")
+	config.Recurrences = []Recurrence{{Name: "daily"}}
+	_, err = New(config)
+	require.Error(t, err, "New() accepted a recurrence without a proposer")
 }
-
-func (c *manualClock) NewTimer(delay time.Duration) Timer {
-	timer := &manualTimer{delay: delay, ch: make(chan time.Time, 1)}
-	c.timers <- timer
-	return timer
-}
-
-func (c *manualClock) advance(timer *manualTimer, at time.Time) {
-	c.mu.Lock()
-	c.now = at
-	c.mu.Unlock()
-	timer.ch <- at
-}
-
-type manualTimer struct {
-	delay time.Duration
-	ch    chan time.Time
-}
-
-func (t *manualTimer) C() <-chan time.Time { return t.ch }
-func (*manualTimer) Stop() bool            { return true }
 
 func TestEngineRetriesSameOccurrenceWakesLocallyAndStopsRecurrence(t *testing.T) {
 	t.Parallel()

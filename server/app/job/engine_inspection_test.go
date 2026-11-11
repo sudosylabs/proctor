@@ -1,0 +1,177 @@
+// ---------------------------------------------------------------------------------------------
+// Copyright (c) 2026 Sudosy Labs. All rights reserved.
+// Licensed under the GNU Affero General Public License, version 3 only.
+// See LICENSE in the server module root for license information.
+// SPDX-License-Identifier: AGPL-3.0-only
+// ---------------------------------------------------------------------------------------------
+
+package job
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/sudosylabs/proctor/server/model"
+	"github.com/sudosylabs/proctor/server/store"
+)
+
+type operatorStoreFake struct {
+	*jobRunnerStoreFake
+	job            *model.Job
+	list           []*model.Job
+	attempts       []model.JobAttempt
+	mutation       *store.JobMutation
+	listOptions    store.JobListOptions
+	attemptOptions store.JobAttemptListOptions
+	total          int
+	countOptions   store.JobListOptions
+	countMaximum   int
+}
+
+func (f *operatorStoreFake) Get(context.Context, model.JobID) (*model.Job, error) { return f.job, nil }
+
+func (f *operatorStoreFake) List(_ context.Context, options store.JobListOptions) ([]*model.Job, error) {
+	f.listOptions = options
+	return f.list, nil
+}
+
+func (f *operatorStoreFake) Count(_ context.Context, options store.JobListOptions, maximum int) (int, error) {
+	f.countOptions, f.countMaximum = options, maximum
+	return min(max(f.total, len(f.list)), maximum), nil
+}
+
+func (f *operatorStoreFake) ListAttemptsPage(_ context.Context, options store.JobAttemptListOptions) ([]model.JobAttempt, error) {
+	f.attemptOptions = options
+	return f.attempts, nil
+}
+
+func (f *operatorStoreFake) Cancel(_ context.Context, mutation *store.JobMutation) (*model.Job, error) {
+	f.mutation = mutation
+	return f.job.RequestCancellation(f.job.UpdatedAt.Add(time.Second))
+}
+
+func (f *operatorStoreFake) Retry(_ context.Context, mutation *store.JobMutation) (*model.Job, error) {
+	f.mutation = mutation
+	return f.job.ExplicitRetry(f.job.UpdatedAt.Add(time.Second))
+}
+
+func TestEngineProjectsOnlySafeOperatorFields(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, time.August, 11, 8, 0, 0, 0, time.UTC)
+	record, err := model.NewJob(model.NewJobID(), model.JobTypeProfilePictureGenerateDefault, json.RawMessage(`{"secret":"must-not-leak"}`), "private-dedupe", at, at, 8)
+	require.NoError(t, err)
+	record.CreatedByUserID = model.NewUserID()
+	persistence := &operatorStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: record, list: []*model.Job{record}}
+	engine, err := New(Dependencies{
+		Store: persistence, Descriptors: []Descriptor{testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))},
+		NodeID: "node-a", Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Second},
+	})
+	require.NoError(t, err)
+	page, err := engine.List(context.Background(), ListQuery{Limit: 20})
+	require.NoError(t, err, "List() = %#v", page)
+	require.Len(t, page.Items, 1, "List() = %#v", page)
+	require.Equal(t, record.ID, page.Items[0].ID, "List() = %#v", page)
+	require.Equal(t, record.CreatedByUserID, page.Items[0].CreatedByUserID, "the initiator is projected")
+	encoded, err := json.Marshal(page)
+	require.NoError(t, err)
+	for _, forbidden := range []string{"must-not-leak", "private-dedupe", "command", "checkpoint", "result", "claim_token"} {
+		require.NotContains(t, string(encoded), forbidden, "safe projection leaked")
+	}
+	require.Len(t, persistence.listOptions.Types, 1)
+	require.Equal(t, record.Type, persistence.listOptions.Types[0])
+	require.Equal(t, 21, persistence.listOptions.Limit, "the read probes one past the page")
+	require.False(t, page.HasMore)
+
+	second, err := model.NewJob(model.NewJobID(), record.Type, json.RawMessage(`{}`), "second", record.CreatedAt, record.CreatedAt, 8)
+	require.NoError(t, err)
+	persistence.list = []*model.Job{record, second}
+	page, err = engine.List(context.Background(), ListQuery{Limit: 2})
+	require.NoError(t, err)
+	require.Len(t, page.Items, 2)
+	require.False(t, page.HasMore, "an exactly full final page has no successor")
+	page, err = engine.List(context.Background(), ListQuery{Limit: 1})
+	require.NoError(t, err)
+	require.Len(t, page.Items, 1)
+	require.True(t, page.HasMore)
+}
+
+func TestEngineCountsTheFirstPageOfOperatorVisibleJobs(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, time.August, 11, 8, 0, 0, 0, time.UTC)
+	record, err := model.NewJob(model.NewJobID(), model.JobTypeProfilePictureGenerateDefault, json.RawMessage(`{}`), "counted", at, at, 8)
+	require.NoError(t, err)
+	persistence := &operatorStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: record, list: []*model.Job{record}, total: store.MaximumListCount}
+	engine, err := New(Dependencies{Store: persistence, Descriptors: []Descriptor{testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))},
+		NodeID: "node-a", Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Second}})
+	require.NoError(t, err)
+
+	page, err := engine.List(context.Background(), ListQuery{Statuses: []model.JobStatus{model.JobStatusFailed}, Limit: 20})
+	require.NoError(t, err)
+	require.True(t, page.Counted)
+	require.Equal(t, store.MaximumListCount, page.Total)
+	require.True(t, page.TotalIsLowerBound)
+	require.Equal(t, persistence.listOptions, persistence.countOptions, "the count reads the list's types and statuses")
+	require.Equal(t, store.MaximumListCount, persistence.countMaximum)
+
+	persistence.countMaximum = 0
+	later, err := engine.List(context.Background(), ListQuery{BeforeCreatedAt: at, BeforeID: record.ID, Limit: 20})
+	require.NoError(t, err)
+	require.False(t, later.Counted)
+	require.Zero(t, persistence.countMaximum, "a later page is not counted")
+
+	persistence.total = 3
+	failures, err := engine.CountRecentFailures(context.Background(), 7*24*time.Hour, 1000)
+	require.NoError(t, err)
+	require.Equal(t, 3, failures)
+	require.Equal(t, store.JobListOptions{Types: []model.JobType{record.Type}, Statuses: []model.JobStatus{model.JobStatusFailed},
+		UpdatedWithin: 7 * 24 * time.Hour, Limit: 1}, persistence.countOptions)
+	require.Equal(t, 1000, persistence.countMaximum)
+	for name, query := range map[string]struct {
+		within  time.Duration
+		maximum int
+	}{"no window": {0, 10}, "zero bound": {time.Hour, 0}, "bound above the maximum": {time.Hour, store.MaximumListCount + 1}} {
+		t.Run(name, func(t *testing.T) {
+			_, countErr := engine.CountRecentFailures(context.Background(), query.within, query.maximum)
+			require.ErrorIs(t, countErr, ErrQueryInvalid)
+		})
+	}
+}
+
+func TestEngineProjectsSafeAttemptsAndPreservesCursor(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, time.August, 11, 8, 0, 0, 0, time.UTC)
+	record, err := model.NewJob(model.NewJobID(), model.JobTypeProfilePictureGenerateDefault, json.RawMessage(`{}`), "attempts", at, at, 8)
+	require.NoError(t, err)
+	attempt := model.JobAttempt{ID: model.NewJobAttemptID(), JobID: record.ID, Number: 3, Status: model.JobAttemptStatusRunning, NodeID: "private-node", ClaimToken: model.JobClaimToken(strings.Repeat("a", 64)), StartedAt: at, HeartbeatAt: at, LeaseExpiresAt: at.Add(time.Minute)}
+	persistence := &operatorStoreFake{jobRunnerStoreFake: &jobRunnerStoreFake{}, job: record, attempts: []model.JobAttempt{attempt}}
+	engine, err := New(Dependencies{Store: persistence, Descriptors: []Descriptor{testDescriptor(handlerFunc(func(context.Context, Execution) Outcome { return succeededOutcome() }))}, NodeID: "node-a", Diagnostics: newDiscardLogger(t), Policy: Policy{PollInterval: time.Second}})
+	require.NoError(t, err)
+	page, err := engine.Attempts(context.Background(), AttemptListQuery{JobID: record.ID, BeforeNumber: 4, Limit: 20})
+	require.NoError(t, err, "Attempts() = %#v, options=%#v", page, persistence.attemptOptions)
+	require.Len(t, page.Items, 1, "Attempts() = %#v, options=%#v", page, persistence.attemptOptions)
+	require.Equal(t, attempt.ID, page.Items[0].ID, "Attempts() = %#v, options=%#v", page, persistence.attemptOptions)
+	require.Equal(t, 4, persistence.attemptOptions.BeforeNumber, "Attempts() = %#v, options=%#v", page, persistence.attemptOptions)
+	require.Equal(t, 21, persistence.attemptOptions.Limit, "the read probes one past the page; Attempts() = %#v, options=%#v", page, persistence.attemptOptions)
+	require.False(t, page.HasMore)
+	encoded, err := json.Marshal(page)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "private-node")
+	require.NotContains(t, string(encoded), strings.Repeat("a", 64))
+
+	earlier := attempt
+	earlier.ID, earlier.Number = model.NewJobAttemptID(), 2
+	persistence.attempts = []model.JobAttempt{attempt, earlier}
+	page, err = engine.Attempts(context.Background(), AttemptListQuery{JobID: record.ID, Limit: 2})
+	require.NoError(t, err)
+	require.Len(t, page.Items, 2)
+	require.False(t, page.HasMore, "an exactly full final page has no successor")
+	page, err = engine.Attempts(context.Background(), AttemptListQuery{JobID: record.ID, Limit: 1})
+	require.NoError(t, err)
+	require.Len(t, page.Items, 1)
+	require.True(t, page.HasMore)
+}

@@ -9,10 +9,8 @@ package job
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"sync"
 	"time"
 
@@ -21,6 +19,9 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
+// Engine runs the registered Job types on one node: it claims Jobs from the
+// store, runs their handlers under a renewed lease, proposes recurrences and
+// runs periodic tasks. It does nothing until Start and stops at Close.
 type Engine struct {
 	deps     Dependencies
 	registry *Registry
@@ -31,71 +32,6 @@ type Engine struct {
 	closed  bool
 	cancel  context.CancelFunc
 	wg      sync.WaitGroup
-}
-
-// Recorder observes bounded Job runtime facts and never receives commands,
-// results, errors, claims, identifiers, or actor data.
-type Recorder interface {
-	Started(model.JobType)
-	Finished(model.JobType, ExecutionOutcome, time.Duration)
-	Record(Activity)
-}
-
-// Tracer encloses one claimed Job execution in a span. It receives only the
-// registered Job type; the returned context carries the span to the handler
-// and its store calls, and finish receives the closed execution outcome.
-type Tracer interface {
-	StartExecution(ctx context.Context, jobType model.JobType) (spanCtx context.Context, finish func(ExecutionOutcome))
-}
-
-// ExecutionOutcome is the closed telemetry vocabulary for one claimed Job
-// execution. It includes runtime terminal states that are not handler outcomes.
-type ExecutionOutcome string
-
-const (
-	ExecutionSucceeded        ExecutionOutcome = "succeeded"
-	ExecutionRetryableFailure ExecutionOutcome = "retryable_failure"
-	ExecutionPermanentFailure ExecutionOutcome = "permanent_failure"
-	ExecutionCanceled         ExecutionOutcome = "canceled"
-	ExecutionRelinquished     ExecutionOutcome = "relinquished"
-	ExecutionAbandoned        ExecutionOutcome = "abandoned"
-	ExecutionClaimLost        ExecutionOutcome = "claim_lost"
-	ExecutionShutdown         ExecutionOutcome = "shutdown"
-	ExecutionInvalid          ExecutionOutcome = "invalid"
-)
-
-func executionOutcomeFromHandler(outcome OutcomeKind) ExecutionOutcome {
-	switch outcome {
-	case OutcomeSucceeded:
-		return ExecutionSucceeded
-	case OutcomeRetryableFailure:
-		return ExecutionRetryableFailure
-	case OutcomePermanentFailure:
-		return ExecutionPermanentFailure
-	case OutcomeCanceled:
-		return ExecutionCanceled
-	case OutcomeRelinquished:
-		return ExecutionRelinquished
-	default:
-		return ExecutionInvalid
-	}
-}
-
-// Activity is a bounded operational fact emitted by the Job runtime. Name is
-// either a registered Job type, recurrence, or periodic-task name; Operation
-// and Outcome are selected only by this package.
-type Activity struct {
-	Kind         string
-	Name         string
-	Operation    string
-	Outcome      string
-	Duration     time.Duration
-	QueueLatency time.Duration
-}
-
-type Policy struct {
-	PollInterval       time.Duration
-	ProposalRetryDelay time.Duration
 }
 
 // Dependencies are the collaborators and policy of the Job engine; New
@@ -113,6 +49,15 @@ type Dependencies struct {
 	Clock         Clock
 	Recurrences   []Recurrence
 	PeriodicTasks []PeriodicTask
+}
+
+// Policy is the engine's timing. PollInterval is how long a claim loop that
+// found no work waits before asking the store again. ProposalRetryDelay is
+// how long a failed recurrence proposal waits before it is retried; New sets
+// one minute when it is not positive.
+type Policy struct {
+	PollInterval       time.Duration
+	ProposalRetryDelay time.Duration
 }
 
 // New validates deps once and constructs an idle Job engine; Start begins
@@ -161,6 +106,9 @@ func (r *Engine) Types() []model.JobType {
 	return r.registry.Types()
 }
 
+// Start launches, under ctx, as many claim loops per registered type as its
+// Concurrency, one proposal loop per recurrence and one loop per periodic
+// task. It fails when the engine was already started or closed.
 func (r *Engine) Start(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -183,7 +131,7 @@ func (r *Engine) Start(ctx context.Context) error {
 
 		for range descriptor.Concurrency {
 			r.wg.Add(1)
-			go r.worker(runCtx, descriptor)
+			go r.claimLoop(runCtx, descriptor)
 		}
 	}
 
@@ -238,453 +186,12 @@ func (r *Engine) Close(ctx context.Context) error {
 	}
 }
 
+// Wake makes one waiting claim loop look for work now rather than at its next
+// poll. It never blocks, and one pending wake is remembered when no loop is
+// waiting.
 func (r *Engine) Wake() {
 	select {
 	case r.wake <- struct{}{}:
 	default:
 	}
-}
-
-func (r *Engine) worker(ctx context.Context, descriptor Descriptor) {
-	defer r.wg.Done()
-	timer := time.NewTimer(0)
-	defer timer.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-r.wake:
-		case <-timer.C:
-		}
-
-		token, err := model.NewJobClaimToken()
-		if err != nil {
-			r.deps.Diagnostics.ErrorContext(ctx, "generate job claim token", logging.Err(err))
-			resetTimer(timer, r.deps.Policy.PollInterval)
-			continue
-		}
-
-		startedClaim := time.Now()
-		claim, err := r.deps.Store.ClaimNext(ctx, &store.JobClaimRequest{
-			Types:         []model.JobType{descriptor.Type},
-			NodeID:        r.deps.NodeID,
-			ClaimToken:    token,
-			LeaseDuration: descriptor.LeaseDuration,
-		})
-		claimDuration := time.Since(startedClaim)
-		if err != nil {
-			result := "error"
-			if store.IsNotFound(err) {
-				result = "empty"
-			} else if errors.Is(err, context.Canceled) {
-				result = "canceled"
-			}
-
-			r.record(Activity{Kind: "job", Name: string(descriptor.Type), Operation: "claim", Outcome: result, Duration: claimDuration})
-			if !store.IsNotFound(err) && !errors.Is(err, context.Canceled) {
-				r.deps.Diagnostics.ErrorContext(ctx, "claim durable job", logging.Err(err))
-			}
-
-			resetTimer(timer, r.deps.Policy.PollInterval)
-			continue
-		}
-
-		queueLatency := time.Since(claim.Job.AvailableAt)
-		if queueLatency < 0 {
-			queueLatency = 0
-		}
-
-		r.record(Activity{
-			Kind:         "job",
-			Name:         string(descriptor.Type),
-			Operation:    "claim",
-			Outcome:      "success",
-			Duration:     claimDuration,
-			QueueLatency: queueLatency,
-		})
-		resolved, err := r.registry.Descriptor(claim.Job.Type)
-		if err != nil {
-			r.completeUnsupported(ctx, descriptor, claim, err)
-		} else {
-			r.execute(ctx, resolved, claim)
-		}
-
-		resetTimer(timer, 0)
-	}
-}
-
-// trace starts the execution span when a Tracer is configured. The returned
-// finish must be called exactly once with the execution's final outcome.
-func (r *Engine) trace(ctx context.Context, jobType model.JobType) (context.Context, func(ExecutionOutcome)) {
-	if r.deps.Tracer == nil {
-		return ctx, func(ExecutionOutcome) {}
-	}
-	return r.deps.Tracer.StartExecution(ctx, jobType)
-}
-
-func (r *Engine) completeUnsupported(ctx context.Context, descriptor Descriptor, claim *store.JobClaim, resolutionErr error) {
-	ctx, finishSpan := r.trace(ctx, descriptor.Type)
-	defer finishSpan(ExecutionPermanentFailure)
-	startedAt := time.Now()
-	if r.deps.Recorder != nil {
-		r.deps.Recorder.Started(descriptor.Type)
-		defer func() {
-			r.deps.Recorder.Finished(descriptor.Type, ExecutionPermanentFailure, time.Since(startedAt))
-		}()
-	}
-	r.complete(ctx, descriptor, claim, PermanentFailure("job.command.unsupported", resolutionErr))
-}
-
-func (r *Engine) execute(parent context.Context, descriptor Descriptor, claim *store.JobClaim) {
-	metricOutcome := ExecutionAbandoned
-	parent, finishSpan := r.trace(parent, descriptor.Type)
-	defer func() { finishSpan(metricOutcome) }()
-	startedAt := time.Now()
-	if r.deps.Recorder != nil {
-		r.deps.Recorder.Started(descriptor.Type)
-		defer func() {
-			r.deps.Recorder.Finished(descriptor.Type, metricOutcome, time.Since(startedAt))
-		}()
-	}
-
-	handlerCtx, cancelHandler := context.WithTimeout(parent, descriptor.Timeout)
-	defer cancelHandler()
-	heartbeatDone := make(chan struct{})
-	heartbeatStopped := make(chan struct{})
-	claimLost := make(chan struct{}, 1)
-	go func() {
-		defer close(heartbeatStopped)
-		r.heartbeatClaim(claimHeartbeat{
-			parent:        parent,
-			handlerCtx:    handlerCtx,
-			cancelHandler: cancelHandler,
-			descriptor:    descriptor,
-			claim:         claim,
-			startedAt:     startedAt,
-			done:          heartbeatDone,
-			claimLost:     claimLost,
-		})
-	}()
-	execution := r.newClaimExecution(descriptor, claim)
-	outcome := runHandler(handlerCtx, descriptor.Handler, execution)
-	close(heartbeatDone)
-	<-heartbeatStopped
-	select {
-	case <-claimLost:
-		r.record(Activity{Kind: "job", Name: string(descriptor.Type), Operation: "lease", Outcome: "lost"})
-		metricOutcome = ExecutionClaimLost
-		return
-	default:
-	}
-
-	if errors.Is(parent.Err(), context.Canceled) {
-		metricOutcome = ExecutionShutdown
-		return
-	}
-
-	// A handler that returned success has committed its work, even when it
-	// finished as its timeout elapsed; only an unfinished outcome is a timeout.
-	if outcome.Kind != OutcomeSucceeded && errors.Is(handlerCtx.Err(), context.DeadlineExceeded) {
-		outcome = RetryableFailure("job.timeout", handlerCtx.Err())
-	}
-
-	metricOutcome = executionOutcomeFromHandler(outcome.Kind)
-	r.complete(parent, descriptor, claim, outcome)
-}
-
-// claimHeartbeat carries the state one claimed attempt's heartbeat loop shares with its execution.
-type claimHeartbeat struct {
-	parent        context.Context
-	handlerCtx    context.Context
-	cancelHandler context.CancelFunc
-	descriptor    Descriptor
-	claim         *store.JobClaim
-	startedAt     time.Time
-	done          <-chan struct{}
-	claimLost     chan<- struct{}
-}
-
-// heartbeatClaim renews the attempt's lease and, for cancelable types, observes cancellation on every heartbeat
-// tick until the handler finishes, abandoning the attempt when the claim is lost.
-func (r *Engine) heartbeatClaim(h claimHeartbeat) {
-	descriptor, claim := h.descriptor, h.claim
-	ticker := time.NewTicker(descriptor.HeartbeatInterval)
-	defer ticker.Stop()
-	// The lease runs from the last renewal the store accepted. A failed
-	// heartbeat abandons the attempt only when the store reports the claim
-	// lost or when the next heartbeat could no longer land inside the lease.
-	renewedAt := h.startedAt
-	for {
-		select {
-		case <-h.done:
-			return
-		case <-h.handlerCtx.Done():
-			return
-		case <-ticker.C:
-			heartbeatStarted := time.Now()
-			if _, err := r.deps.Store.Heartbeat(h.handlerCtx, &store.JobHeartbeat{
-				AttemptID:     claim.Attempt.ID,
-				ClaimToken:    claim.Attempt.ClaimToken,
-				LeaseDuration: descriptor.LeaseDuration,
-			}); err != nil {
-				r.record(Activity{
-					Kind:      "job",
-					Name:      string(descriptor.Type),
-					Operation: "heartbeat",
-					Outcome:   "error",
-					Duration:  time.Since(heartbeatStarted),
-				})
-				r.deps.Diagnostics.ErrorContext(h.parent, "heartbeat durable job", logging.Err(err))
-				if !heartbeatClaimLost(err) && time.Since(renewedAt)+descriptor.HeartbeatInterval < descriptor.LeaseDuration {
-					continue
-				}
-
-				select {
-				case h.claimLost <- struct{}{}:
-				default:
-				}
-
-				h.cancelHandler()
-				return
-			}
-
-			renewedAt = heartbeatStarted
-			r.record(Activity{
-				Kind:      "job",
-				Name:      string(descriptor.Type),
-				Operation: "heartbeat",
-				Outcome:   "success",
-				Duration:  time.Since(heartbeatStarted),
-			})
-			if descriptor.Cancelable {
-				cancellationStarted := time.Now()
-				requested, err := r.deps.Store.CancellationRequested(h.handlerCtx, claim.Attempt.ID, claim.Attempt.ClaimToken)
-				if err != nil {
-					r.record(Activity{
-						Kind:      "job",
-						Name:      string(descriptor.Type),
-						Operation: "cancellation_check",
-						Outcome:   "error",
-						Duration:  time.Since(cancellationStarted),
-					})
-					r.deps.Diagnostics.ErrorContext(h.parent, "observe durable job cancellation", logging.Err(err))
-					if !heartbeatClaimLost(err) && time.Since(renewedAt)+descriptor.HeartbeatInterval < descriptor.LeaseDuration {
-						continue
-					}
-
-					select {
-					case h.claimLost <- struct{}{}:
-					default:
-					}
-
-					h.cancelHandler()
-					return
-				}
-
-				if requested {
-					r.record(Activity{
-						Kind:      "job",
-						Name:      string(descriptor.Type),
-						Operation: "cancellation_check",
-						Outcome:   "requested",
-						Duration:  time.Since(cancellationStarted),
-					})
-					h.cancelHandler()
-					return
-				}
-
-				r.record(Activity{
-					Kind:      "job",
-					Name:      string(descriptor.Type),
-					Operation: "cancellation_check",
-					Outcome:   "clear",
-					Duration:  time.Since(cancellationStarted),
-				})
-			}
-		}
-	}
-}
-
-// newClaimExecution builds the handler's Execution with work reservation and checkpoint hooks fenced by the claim.
-func (r *Engine) newClaimExecution(descriptor Descriptor, claim *store.JobClaim) Execution {
-	execution := NewExecution(claim.Job, claim.Attempt, nil, nil)
-	execution.reserveWork = func(ctx context.Context, units, limit int) (bool, error) {
-		started := time.Now()
-		result, err := r.deps.Store.ReserveWork(ctx, &store.JobWorkReservation{
-			AttemptID:  claim.Attempt.ID,
-			ClaimToken: claim.Attempt.ClaimToken,
-			Units:      units,
-			Limit:      limit,
-		})
-		activityOutcome := "error"
-		if err == nil && result.Reserved {
-			activityOutcome = "reserved"
-		} else if err == nil {
-			activityOutcome = "limit"
-		}
-
-		r.record(Activity{
-			Kind:      "job",
-			Name:      string(descriptor.Type),
-			Operation: "reserve_work",
-			Outcome:   activityOutcome,
-			Duration:  time.Since(started),
-		})
-		if err != nil {
-			return false, err
-		}
-
-		return result.Reserved, nil
-	}
-	execution.checkpoint = func(ctx context.Context, value CheckpointValue) error {
-		if !descriptor.Checkpoints ||
-			len(value.Document) == 0 ||
-			len(value.Document) > model.JobMaximumDocumentBytes ||
-			!json.Valid(value.Document) {
-			return errors.New("job type does not declare checkpoints")
-		}
-
-		if value.Progress != nil &&
-			(value.Progress.Current < 0 ||
-				value.Progress.Total <= 0 ||
-				value.Progress.Current > value.Progress.Total ||
-				!descriptor.SupportsProgressStage(value.Progress.Stage)) {
-			return errors.New("job progress stage is not declared")
-		}
-
-		started := time.Now()
-		_, err := r.deps.Store.Checkpoint(ctx, &store.JobCheckpoint{
-			AttemptID:  claim.Attempt.ID,
-			ClaimToken: claim.Attempt.ClaimToken,
-			Progress:   value.Progress,
-			Checkpoint: value.Document,
-		})
-		r.record(Activity{
-			Kind:      "job",
-			Name:      string(descriptor.Type),
-			Operation: "checkpoint",
-			Outcome:   simpleJobOutcome(err),
-			Duration:  time.Since(started),
-		})
-		return err
-	}
-	return execution
-}
-
-// heartbeatClaimLost reports a heartbeat the store refused because another
-// owner holds the attempt or its lease already expired. Any other failure is
-// an unknown outcome that later heartbeats may still repair.
-func heartbeatClaimLost(err error) bool {
-	return store.IsConflict(err) || store.IsNotFound(err)
-}
-
-// runHandler is the only place a handler is invoked. It fails the attempt
-// without calling the handler when the Execution has no Job, and contains a
-// handler panic as a retryable failure.
-func runHandler(ctx context.Context, handler Handler, execution Execution) (outcome Outcome) {
-	if execution.Job == nil {
-		return PermanentFailure("job.command.invalid", errors.New("job is missing"))
-	}
-
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			outcome = RetryableFailure("job.handler_panic", fmt.Errorf("job handler panic: %T", recovered))
-		}
-	}()
-	return handler.Run(ctx, execution)
-}
-
-func (r *Engine) complete(ctx context.Context, descriptor Descriptor, claim *store.JobClaim, outcome Outcome) {
-	failureWithoutCode := (outcome.Kind == OutcomeRetryableFailure ||
-		outcome.Kind == OutcomeRelinquished ||
-		outcome.Kind == OutcomePermanentFailure) &&
-		outcome.PublicErrorCode == ""
-	if failureWithoutCode || !descriptor.SupportsPublicErrorCode(outcome.PublicErrorCode) {
-		outcome = PermanentFailure("job.outcome.invalid", errors.New("handler returned an undeclared public error code"))
-	}
-
-	completion := &store.JobCompletion{
-		AttemptID:       claim.Attempt.ID,
-		ClaimToken:      claim.Attempt.ClaimToken,
-		Result:          outcome.Result,
-		PublicErrorCode: outcome.PublicErrorCode,
-	}
-	switch outcome.Kind {
-	case OutcomeSucceeded:
-		if outcome.Err != nil || len(outcome.Result) == 0 {
-			completion.Kind = store.JobCompletionPermanentFailure
-			completion.PublicErrorCode = "job.result.invalid"
-		} else {
-			completion.Kind = store.JobCompletionSucceeded
-		}
-	case OutcomeRetryableFailure:
-		completion.Kind = store.JobCompletionRetryableFailure
-		completion.RetryDelay = retryDelay(descriptor, claim.Job.ID, claim.Attempt.Number)
-	case OutcomeRelinquished:
-		completion.Kind = store.JobCompletionRelinquished
-		completion.RetryDelay = retryDelay(descriptor, claim.Job.ID, claim.Attempt.Number)
-	case OutcomePermanentFailure:
-		completion.Kind = store.JobCompletionPermanentFailure
-	case OutcomeCanceled:
-		completion.Kind = store.JobCompletionCanceled
-	default:
-		completion.Kind = store.JobCompletionPermanentFailure
-		completion.PublicErrorCode = "job.outcome.invalid"
-	}
-
-	started := time.Now()
-	_, err := r.deps.Store.Complete(ctx, completion)
-	r.record(Activity{
-		Kind:      "job",
-		Name:      string(descriptor.Type),
-		Operation: "complete",
-		Outcome:   simpleJobOutcome(err),
-		Duration:  time.Since(started),
-	})
-	if err != nil && !errors.Is(err, context.Canceled) {
-		r.deps.Diagnostics.ErrorContext(ctx, "complete durable job", logging.Err(err))
-	}
-}
-
-func (r *Engine) record(activity Activity) {
-	if r.deps.Recorder != nil {
-		r.deps.Recorder.Record(activity)
-	}
-}
-
-func simpleJobOutcome(err error) string {
-	switch {
-	case err == nil:
-		return "success"
-	case errors.Is(err, context.Canceled):
-		return "canceled"
-	case errors.Is(err, context.DeadlineExceeded):
-		return "timeout"
-	default:
-		return "error"
-	}
-}
-
-func retryDelay(descriptor Descriptor, jobID model.JobID, attempt int) time.Duration {
-	delay := descriptor.BaseRetryDelay
-	for index := 1; index < attempt && delay < descriptor.MaximumRetryDelay/2; index++ {
-		delay *= 2
-	}
-	if delay > descriptor.MaximumRetryDelay {
-		delay = descriptor.MaximumRetryDelay
-	}
-	hasher := fnv.New32a()
-	_, _ = hasher.Write([]byte(jobID.String()))
-	jitter := time.Duration(hasher.Sum32()%251) * delay / 1000
-	return min(descriptor.MaximumRetryDelay, delay+jitter)
-}
-
-func resetTimer(timer *time.Timer, delay time.Duration) {
-	if !timer.Stop() {
-		select {
-		case <-timer.C:
-		default:
-		}
-	}
-	timer.Reset(delay)
 }

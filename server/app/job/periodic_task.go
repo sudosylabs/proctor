@@ -15,14 +15,6 @@ import (
 	"github.com/sudosylabs/proctor/server/logging"
 )
 
-// PeriodicRunner performs one bounded, idempotent runtime maintenance pass.
-// Unlike a durable Job, a pass has no persisted occurrence or execution
-// history. Cross-node convergence remains the responsibility of the named
-// application/Store operation invoked by the runner.
-type PeriodicRunner interface {
-	Run(context.Context) error
-}
-
 // PeriodicTask defines a non-overlapping runtime maintenance loop owned by the
 // Engine lifecycle. Each node runs one loop immediately at startup and then at
 // Interval after the preceding pass completes.
@@ -30,6 +22,14 @@ type PeriodicTask struct {
 	Name     string
 	Interval time.Duration
 	Runner   PeriodicRunner
+}
+
+// PeriodicRunner performs one bounded, idempotent runtime maintenance pass.
+// Unlike a durable Job, a pass has no persisted occurrence or execution
+// history. Cross-node convergence remains the responsibility of the named
+// application/Store operation invoked by the runner.
+type PeriodicRunner interface {
+	Run(context.Context) error
 }
 
 func clonePeriodicTasks(values []PeriodicTask) ([]PeriodicTask, error) {

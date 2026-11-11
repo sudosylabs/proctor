@@ -44,7 +44,7 @@ type userProfileHTTPApplication struct {
 	searchQuery        user.SearchUsersQuery
 	updateCommand      user.UpdateUserProfileCommand
 	changeEmailCommand identity.ChangeUserEmailCommand
-	verifyEmailCommand identity.VerifyUserEmailPrivilegedCommand
+	verifyEmailUserID  model.UserID
 	uploadCommand      user.UploadProfilePictureCommand
 	removeCommand      user.RemoveProfilePictureCommand
 	pictureQuery       user.GetProfilePictureQuery
@@ -67,8 +67,8 @@ func (a *userProfileHTTPApplication) ChangeUserEmail(_ context.Context, _ invoca
 	return &identity.UserEmailState{UserID: a.result.ID, EmailVerified: a.result.EmailVerified}, nil
 }
 
-func (a *userProfileHTTPApplication) VerifyUserEmailPrivileged(_ context.Context, _ invocation.Invocation, command identity.VerifyUserEmailPrivilegedCommand) (*identity.UserEmailState, error) {
-	a.verifyEmailCommand = command
+func (a *userProfileHTTPApplication) VerifyUserEmailPrivileged(_ context.Context, _ invocation.Invocation, userID model.UserID) (*identity.UserEmailState, error) {
+	a.verifyEmailUserID = userID
 	return &identity.UserEmailState{UserID: a.result.ID, EmailVerified: a.result.EmailVerified}, nil
 }
 
@@ -88,7 +88,8 @@ type sessionAdministrationHTTPApplication struct {
 	list             []*model.Session
 	hasMore          bool
 	listQuery        identity.ListUserSessionsQuery
-	revokeCommand    identity.RevokeUserSessionCommand
+	revokeUserID     model.UserID
+	revokeSessionID  model.SessionID
 	revokeAllCommand identity.RevokeUserSessionsCommand
 }
 
@@ -97,8 +98,8 @@ func (a *sessionAdministrationHTTPApplication) ListUserSessions(_ context.Contex
 	return paging.Page[*model.Session]{Items: a.list, HasMore: a.hasMore}, nil
 }
 
-func (a *sessionAdministrationHTTPApplication) RevokeUserSession(_ context.Context, _ invocation.Invocation, command identity.RevokeUserSessionCommand) error {
-	a.revokeCommand = command
+func (a *sessionAdministrationHTTPApplication) RevokeUserSession(_ context.Context, _ invocation.Invocation, userID model.UserID, sessionID model.SessionID) error {
+	a.revokeUserID, a.revokeSessionID = userID, sessionID
 	return nil
 }
 
@@ -109,11 +110,11 @@ func (a *sessionAdministrationHTTPApplication) RevokeUserSessions(_ context.Cont
 
 type roleHTTPApplication struct {
 	RoleApplication
-	list           []*model.Role
-	result         *model.Role
-	createCommand  administration.CreateRoleCommand
-	updateCommand  administration.UpdateRoleCommand
-	archiveCommand administration.ArchiveRoleCommand
+	list          []*model.Role
+	result        *model.Role
+	createCommand administration.CreateRoleCommand
+	updateCommand administration.UpdateRoleCommand
+	archiveID     model.RoleID
 }
 
 func (a *roleHTTPApplication) ListRoles(context.Context, invocation.Invocation) ([]*model.Role, error) {
@@ -134,8 +135,8 @@ func (a *roleHTTPApplication) UpdateRole(_ context.Context, _ invocation.Invocat
 	return a.result, nil
 }
 
-func (a *roleHTTPApplication) ArchiveRole(_ context.Context, _ invocation.Invocation, command administration.ArchiveRoleCommand) error {
-	a.archiveCommand = command
+func (a *roleHTTPApplication) ArchiveRole(_ context.Context, _ invocation.Invocation, id model.RoleID) error {
+	a.archiveID = id
 	return nil
 }
 

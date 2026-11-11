@@ -28,7 +28,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sudosylabs/proctor/server/app/administration"
-	"github.com/sudosylabs/proctor/server/app/identity"
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/app/realtime"
 	"github.com/sudosylabs/proctor/server/config"
@@ -204,7 +203,7 @@ func TestWebSocketIntegration(t *testing.T) {
 	require.NoError(t, helper.App.Identity.RevokeSession(
 		context.Background(),
 		invocation.New(*principal, model.RequestMetadata{}),
-		identity.RevokeSessionCommand{SessionID: login.Session.ID},
+		login.Session.ID,
 	))
 	_ = connection.SetReadDeadline(time.Now().Add(3 * time.Second))
 	_, _, err = connection.ReadMessage()
@@ -379,7 +378,7 @@ func TestWebSocketTwoNodeConformance(t *testing.T) {
 	require.NoError(t, nodeA.App.Identity.RevokeSession(
 		context.Background(),
 		invocation.New(*principal, model.RequestMetadata{}),
-		identity.RevokeSessionCommand{SessionID: login.Session.ID},
+		login.Session.ID,
 	))
 	_ = connection.SetReadDeadline(time.Now().Add(5 * time.Second))
 	_, _, err = connection.ReadMessage()

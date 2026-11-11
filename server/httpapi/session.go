@@ -133,7 +133,7 @@ func (h sessionHandlers) revoke(request route.Request) (route.Result, error) {
 	if err := h.app.RevokeSession(
 		request.Context,
 		request.Invocation(),
-		identity.RevokeSessionCommand{SessionID: model.SessionID(input.SessionID)},
+		model.SessionID(input.SessionID),
 	); err != nil {
 		return route.Result{}, err
 	}
@@ -174,7 +174,7 @@ func (h sessionHandlers) revokeOthers(request route.Request) (route.Result, erro
 // Sessions is the application port its handlers call; it lists and revokes the caller's own Sessions.
 type Sessions interface {
 	ListSessions(context.Context, invocation.Invocation) ([]*model.Session, error)
-	RevokeSession(context.Context, invocation.Invocation, identity.RevokeSessionCommand) error
+	RevokeSession(context.Context, invocation.Invocation, model.SessionID) error
 	RevokeAllSessions(context.Context, invocation.Invocation) error
 	RevokeOtherSessions(
 		context.Context,

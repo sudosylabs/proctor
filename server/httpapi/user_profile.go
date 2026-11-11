@@ -535,7 +535,7 @@ func (h userProfileHandlers) verifyEmail(request route.Request) (route.Result, e
 	state, appErr := h.emails.VerifyUserEmailPrivileged(
 		request.Context,
 		request.Invocation(),
-		identity.VerifyUserEmailPrivilegedCommand{UserID: userID},
+		userID,
 	)
 	if appErr != nil {
 		return route.Result{}, appErr
@@ -929,6 +929,6 @@ type UserEmailApplication interface {
 	VerifyUserEmailPrivileged(
 		context.Context,
 		invocation.Invocation,
-		identity.VerifyUserEmailPrivilegedCommand,
+		model.UserID,
 	) (*identity.UserEmailState, error)
 }

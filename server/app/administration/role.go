@@ -33,11 +33,6 @@ type UpdateRoleCommand struct {
 	Permissions *[]string
 }
 
-// ArchiveRoleCommand archives a custom Role.
-type ArchiveRoleCommand struct {
-	ID model.RoleID
-}
-
 // ListRoles returns every Role to a caller with Institution-wide role.view.
 func (s *Service) ListRoles(ctx context.Context, inv invocation.Invocation) ([]*model.Role, error) {
 	if _, err := s.authorizeRoles(ctx, inv, model.ActionRoleView); err != nil {
@@ -213,8 +208,7 @@ func addedRolePermissions(current, candidate []string) []string {
 
 // ArchiveRole archives a custom Role, refusing a built-in one, then drops
 // every User's cached authorization.
-func (s *Service) ArchiveRole(ctx context.Context, inv invocation.Invocation, command ArchiveRoleCommand) error {
-	id := command.ID
+func (s *Service) ArchiveRole(ctx context.Context, inv invocation.Invocation, id model.RoleID) error {
 	if !id.IsValid() {
 		return apperror.New("request.invalid").WithField("field", "role_id")
 	}

@@ -265,7 +265,7 @@ func (h roleHandlers) archive(request route.Request) (route.Result, error) {
 	if err := h.app.ArchiveRole(
 		request.Context,
 		request.Invocation(),
-		administration.ArchiveRoleCommand{ID: roleID},
+		roleID,
 	); err != nil {
 		return route.Result{}, err
 	}
@@ -278,5 +278,5 @@ type RoleApplication interface {
 	GetRole(context.Context, invocation.Invocation, model.RoleID) (*model.Role, error)
 	CreateRole(context.Context, invocation.Invocation, administration.CreateRoleCommand) (*model.Role, error)
 	UpdateRole(context.Context, invocation.Invocation, administration.UpdateRoleCommand) (*model.Role, error)
-	ArchiveRole(context.Context, invocation.Invocation, administration.ArchiveRoleCommand) error
+	ArchiveRole(context.Context, invocation.Invocation, model.RoleID) error
 }

@@ -230,7 +230,7 @@ func TestRoleArchiveCommitsBeforeInvalidation(t *testing.T) {
 	role := &model.Role{ID: model.NewRoleID(), Name: "teacher", DisplayName: "Teacher"}
 	publisher := publisherIn(&events)
 	service := &Service{roles: &roleStoreFake{events: &events, role: role, archiveResult: role}, institutions: anyInstitution(), authorizer: &roleAuthorizerFake{events: &events, resource: model.Resource{Type: model.ResourceInstitution, ID: model.NewID()}}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, publisher: publisher, now: func() time.Time { return time.UnixMilli(500) }}
-	require.NoError(t, service.ArchiveRole(context.Background(), invocation.Invocation{}, ArchiveRoleCommand{ID: role.ID}))
+	require.NoError(t, service.ArchiveRole(context.Background(), invocation.Invocation{}, role.ID))
 	// Contract (guardrails 8 and 14): authorization precedes the audit, the audit
 	// begins before the durable write, and the write commits before its effect.
 	require.Equal(t, []string{"authorize-manage", "get-role", "audit-begin", "store-archive", "invalidate-authorization"}, events)

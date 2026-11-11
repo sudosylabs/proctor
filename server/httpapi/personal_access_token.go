@@ -338,7 +338,7 @@ func (h personalAccessTokenHandlers) revoke(request route.Request) (route.Result
 	if _, err := h.app.RevokePersonalAccessToken(
 		request.Context,
 		request.Invocation(),
-		identity.RevokePersonalAccessTokenCommand{TokenID: tokenID},
+		tokenID,
 	); err != nil {
 		return route.Result{}, err
 	}
@@ -367,7 +367,7 @@ type PersonalAccessTokens interface {
 	RevokePersonalAccessToken(
 		context.Context,
 		invocation.Invocation,
-		identity.RevokePersonalAccessTokenCommand,
+		model.PersonalAccessTokenID,
 	) (*model.PersonalAccessToken, error)
 	SetPersonalAccessTokenDisabled(
 		context.Context,

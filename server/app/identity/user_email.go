@@ -26,11 +26,6 @@ type ChangeUserEmailCommand struct {
 	Email  string
 }
 
-// VerifyUserEmailPrivilegedCommand asks an administrator to mark a User's
-// email verified without a verification token. It requires a strong recent
-// Session and is a no-op when the email is already verified.
-type VerifyUserEmailPrivilegedCommand struct{ UserID model.UserID }
-
 // UserEmailState is the narrow result of an explicit email-security mutation.
 // It deliberately omits the mailbox and unrelated profile/account metadata.
 type UserEmailState struct {
@@ -115,11 +110,13 @@ func (s *Service) ChangeUserEmail(
 }
 
 // VerifyUserEmailPrivileged marks a User's email address verified as an
-// administrator and notifies the User.
+// administrator, without a verification token, and notifies the User. It
+// requires a strong recent Session and is a no-op when the email is already
+// verified.
 func (s *Service) VerifyUserEmailPrivileged(
 	ctx context.Context,
 	inv invocation.Invocation,
-	command VerifyUserEmailPrivilegedCommand,
+	id model.UserID,
 ) (*UserEmailState, error) {
 	if s.authorizer == nil || s.auditor == nil {
 		return nil, apperror.New("administration.unavailable")
@@ -132,12 +129,11 @@ func (s *Service) VerifyUserEmailPrivileged(
 		ctx,
 		inv,
 		model.ActionUserManage,
-		model.Resource{Type: model.ResourceUser, ID: command.UserID.String()},
+		model.Resource{Type: model.ResourceUser, ID: id.String()},
 	); err != nil {
 		return nil, err
 	}
 
-	id := command.UserID
 	if !id.IsValid() {
 		return nil, apperror.New("request.invalid").WithField("field", "user_id")
 	}

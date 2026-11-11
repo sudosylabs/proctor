@@ -101,7 +101,7 @@ func (h desktopRegistrationHandlers) revoke(request route.Request) (route.Result
 	if err = h.app.RevokeDesktopRegistration(
 		request.Context,
 		request.Invocation(),
-		identity.RevokeDesktopRegistrationCommand{RegistrationID: registrationID},
+		registrationID,
 	); err != nil {
 		return route.Result{}, err
 	}

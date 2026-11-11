@@ -160,7 +160,7 @@ func TestJobOperationsAuditAfterPreparationAndBeforeTransition(t *testing.T) {
 	service, err := NewOperations(OperationsDependencies{Jobs: engine, Authorization: authorizer, Audit: auditor, Users: &jobUserStoreFake{}, ExamExports: &jobExamExportStoreFake{}, Now: time.Now})
 	require.NoError(t, err)
 
-	_, appErr := service.CancelJob(context.Background(), invocation.Invocation{}, CancelCommand{ID: view.ID})
+	_, appErr := service.CancelJob(context.Background(), invocation.Invocation{}, view.ID)
 	require.NoError(t, appErr)
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
 	// begins before the durable write.
@@ -173,7 +173,7 @@ func TestJobOperationsAuditAfterPreparationAndBeforeTransition(t *testing.T) {
 
 	events = events[:0]
 	auditor.err = errors.New("audit unavailable")
-	_, appErr = service.RetryJob(context.Background(), invocation.Invocation{}, RetryCommand{ID: view.ID})
+	_, appErr = service.RetryJob(context.Background(), invocation.Invocation{}, view.ID)
 	require.Error(t, appErr, "Retry() ignored audit failure")
 	// Contract (guardrail 8): authorization precedes the audit, and the audit
 	// begins before the durable write.
@@ -183,7 +183,7 @@ func TestJobOperationsAuditAfterPreparationAndBeforeTransition(t *testing.T) {
 	events = events[:0]
 	auditor.err = nil
 	engine.applyErr = errors.New("transition unavailable")
-	_, appErr = service.RetryJob(context.Background(), invocation.Invocation{}, RetryCommand{ID: view.ID})
+	_, appErr = service.RetryJob(context.Background(), invocation.Invocation{}, view.ID)
 	require.Error(t, appErr, "Retry() ignored transition failure")
 	// Contract (guardrail 8): authorization precedes the audit, the audit begins
 	// before the durable write, and the audit outcome follows the write.
@@ -197,7 +197,7 @@ func TestJobOperationsTranslateEnginePolicyErrors(t *testing.T) {
 	engine := &jobOperatorEngineFake{events: &events, prepareErr: ErrCancelUnsupported}
 	service, err := NewOperations(OperationsDependencies{Jobs: engine, Authorization: &jobOperationsAuthorizerFake{events: &events}, Audit: &jobOperationsAuditorFake{events: &events}, Users: &jobUserStoreFake{}, ExamExports: &jobExamExportStoreFake{}, Now: time.Now})
 	require.NoError(t, err)
-	_, appErr := service.CancelJob(context.Background(), invocation.Invocation{}, CancelCommand{ID: model.NewJobID()})
+	_, appErr := service.CancelJob(context.Background(), invocation.Invocation{}, model.NewJobID())
 	require.True(t, apperror.Is(appErr, "job.cancel.unsupported"), "Cancel() error=%#v", appErr)
 }
 

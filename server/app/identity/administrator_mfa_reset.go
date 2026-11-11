@@ -18,32 +18,28 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// AdministratorMFAResetCommand is host authority, never a User impersonation
-// or network credential. It deliberately has no password or factor input.
-type AdministratorMFAResetCommand struct {
-	InstitutionID model.InstitutionID
-	UserID        model.UserID
-}
-
 type AdministratorMFAResetResult struct {
 	RecoveryGeneration   int64
 	ReenrollmentRequired bool
 }
 
-// ResetAdministratorMFA is absent from every network application capability.
+// ResetAdministratorMFA is host authority, never a User impersonation or
+// network credential; it deliberately takes no password or factor input. It
+// is absent from every network application capability.
 // The module root borrows it only while its Server is inert, and the Store
 // serializes it against all serving nodes and unreconciled host recovery.
 func (s *Service) ResetAdministratorMFA(
 	ctx context.Context,
 	system invocation.System,
-	command AdministratorMFAResetCommand,
+	institutionID model.InstitutionID,
+	userID model.UserID,
 ) (*AdministratorMFAResetResult, error) {
 	if !system.Valid() {
 		return nil, apperror.New("administrator_recovery.invalid")
 	}
 
-	institutionID, institutionErr := model.ParseInstitutionID(strings.TrimSpace(command.InstitutionID.String()))
-	userID, userErr := model.ParseUserID(strings.TrimSpace(command.UserID.String()))
+	institutionID, institutionErr := model.ParseInstitutionID(strings.TrimSpace(institutionID.String()))
+	userID, userErr := model.ParseUserID(strings.TrimSpace(userID.String()))
 	if institutionErr != nil || userErr != nil {
 		return nil, apperror.New("administrator_recovery.invalid")
 	}

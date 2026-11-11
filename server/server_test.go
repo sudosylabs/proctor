@@ -19,16 +19,17 @@ import (
 )
 
 type administratorRecoveryRuntimeFake struct {
-	command    identity.AdministratorRecoveryCommand
-	result     *identity.AdministratorRecoveryResult
-	err        error
-	mfaCommand identity.AdministratorMFAResetCommand
-	mfaResult  *identity.AdministratorMFAResetResult
-	system     invocation.System
+	command          identity.AdministratorRecoveryCommand
+	result           *identity.AdministratorRecoveryResult
+	err              error
+	mfaInstitutionID model.InstitutionID
+	mfaUserID        model.UserID
+	mfaResult        *identity.AdministratorMFAResetResult
+	system           invocation.System
 }
 
-func (f *administratorRecoveryRuntimeFake) ResetAdministratorMFA(_ context.Context, system invocation.System, command identity.AdministratorMFAResetCommand) (*identity.AdministratorMFAResetResult, error) {
-	f.mfaCommand, f.system = command, system
+func (f *administratorRecoveryRuntimeFake) ResetAdministratorMFA(_ context.Context, system invocation.System, institutionID model.InstitutionID, userID model.UserID) (*identity.AdministratorMFAResetResult, error) {
+	f.mfaInstitutionID, f.mfaUserID, f.system = institutionID, userID, system
 	return f.mfaResult, f.err
 }
 

@@ -186,9 +186,7 @@ func TestAdminSessionRevokeCommitsBeforePublishing(t *testing.T) {
 	}
 	mailer := &securityNoticeMailerFake{events: &events}
 	service := &Service{sessions: persistence, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: mailer, publisher: sessionAdministrationPublisher(&events), now: func() time.Time { return time.UnixMilli(500) }}
-	require.NoError(t, service.RevokeUserSession(context.Background(), invocation.Invocation{}, RevokeUserSessionCommand{
-		UserID: model.UserID(userID), SessionID: session.ID,
-	}))
+	require.NoError(t, service.RevokeUserSession(context.Background(), invocation.Invocation{}, model.UserID(userID), session.ID))
 	require.Equal(t, session.ID, persistence.revokeInput.SessionID)
 	require.NotEmpty(t, persistence.revokeInput.AuditEventID)
 	require.Len(t, mailer.requests, 1, "mail request/input = %#v / %#v", mailer.requests, persistence.revokeInput)
@@ -214,9 +212,7 @@ func TestAdminSessionRevokeFailurePublishesNoEffect(t *testing.T) {
 		session:   session,
 		revokeErr: store.NewErrConflict("session", "busy", errors.New("busy")),
 	}, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events, beginID: model.NewID()}, mail: &securityNoticeMailerFake{events: &events}, publisher: sessionAdministrationPublisher(&events), now: time.Now}
-	err := service.RevokeUserSession(context.Background(), invocation.Invocation{}, RevokeUserSessionCommand{
-		UserID: model.UserID(userID), SessionID: session.ID,
-	})
+	err := service.RevokeUserSession(context.Background(), invocation.Invocation{}, model.UserID(userID), session.ID)
 	require.True(t, apperror.Is(err, "administration.unavailable"), "error = %v", err)
 	// Contract (guardrail 8): authorization precedes the audit, the audit begins
 	// before the durable write, and the audit outcome follows the write.
@@ -280,9 +276,7 @@ func TestAdminSessionCrossUserNotFound(t *testing.T) {
 	userID := model.NewID()
 	session := &model.Session{ID: model.NewSessionID(), UserID: model.NewUserID()}
 	service := &Service{sessions: &sessionAdministrationStoreFake{events: &events, session: session}, users: &sessionAdministrationUserStoreFake{events: &events, user: sessionAdministrationTestUser(userID)}, authorizer: &sessionAdministrationAuthorizerFake{events: &events}, auditor: &institutionAuditorFake{events: &events}, mail: &securityNoticeMailerFake{events: &events}, publisher: sessionAdministrationPublisher(&events), now: time.Now}
-	err := service.RevokeUserSession(context.Background(), invocation.Invocation{}, RevokeUserSessionCommand{
-		UserID: model.UserID(userID), SessionID: session.ID,
-	})
+	err := service.RevokeUserSession(context.Background(), invocation.Invocation{}, model.UserID(userID), session.ID)
 	require.True(t, apperror.Is(err, "session.not_found"), "error = %v", err)
 	require.Equal(t, []string{"authorize-manage", "get-session"}, events)
 }

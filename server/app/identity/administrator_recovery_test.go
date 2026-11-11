@@ -101,7 +101,7 @@ func TestHostOperatorUseCasesRequireTheirSystemIdentity(t *testing.T) {
 
 	_, err := service.RecoverAdministratorAccess(context.Background(), invocation.System{}, command)
 	require.Equal(t, "administrator_recovery.invalid", apperror.CodeOf(err, ""), "recovery without its host-operator task")
-	_, err = service.ResetAdministratorMFA(context.Background(), invocation.System{}, AdministratorMFAResetCommand{InstitutionID: command.InstitutionID, UserID: command.UserID})
+	_, err = service.ResetAdministratorMFA(context.Background(), invocation.System{}, command.InstitutionID, command.UserID)
 	require.Equal(t, "administrator_recovery.invalid", apperror.CodeOf(err, ""), "MFA reset without its host-operator task")
 	require.Error(t, service.ReconcileAdministratorRecovery(context.Background(), invocation.System{}), "recovery reconciliation without its startup task")
 	require.Error(t, service.ReconcileSystemAdministratorRole(context.Background(), invocation.System{}), "Role reconciliation without its startup task")

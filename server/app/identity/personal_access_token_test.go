@@ -148,7 +148,7 @@ func TestPersonalAccessTokenAdministrationExactStateReplayEmitsNoAuditOrMail(t *
 	require.Equal(t, 0, tokens.stateCalls, "replay audit")
 
 	token.RevokedAt = model.OptionalTimeFrom(now)
-	got, appErr = service.RevokePersonalAccessToken(context.Background(), invocation.New(personalAccessTokenSessionPrincipal(userID, now), model.RequestMetadata{}), RevokePersonalAccessTokenCommand{TokenID: token.ID})
+	got, appErr = service.RevokePersonalAccessToken(context.Background(), invocation.New(personalAccessTokenSessionPrincipal(userID, now), model.RequestMetadata{}), token.ID)
 	require.NoError(t, appErr, "Revoke(replay)")
 	require.Same(t, token, got, "Revoke(replay)")
 	require.Equal(t, 0, audit.beginCalls, "replay audit")
@@ -172,7 +172,7 @@ func TestPersonalAccessTokenAdministrationConcealsAnotherUsersToken(t *testing.T
 	_, err := service.RevokePersonalAccessToken(
 		context.Background(),
 		invocation.New(personalAccessTokenSessionPrincipal(callerID, now), model.RequestMetadata{}),
-		RevokePersonalAccessTokenCommand{TokenID: token.ID},
+		token.ID,
 	)
 	require.True(t, apperror.Is(err, "resource.not_found"), "error = %v, want resource.not_found", err)
 	require.Equal(t, 0, tokens.revokeCalls, "revoke calls")
@@ -207,7 +207,7 @@ func TestPersonalAccessTokenAdministrationUsesControlledClockForStateChanges(t *
 	tokens.current = token
 	_, err = service.RevokePersonalAccessToken(
 		context.Background(), inv,
-		RevokePersonalAccessTokenCommand{TokenID: token.ID},
+		token.ID,
 	)
 	require.NoError(t, err)
 	require.Equal(t, now.UnixMilli(), tokens.revokedAt, "revoked at")

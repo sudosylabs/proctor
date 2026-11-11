@@ -25,11 +25,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-// RevokeSessionCommand revokes one of the caller's sessions by ID.
-type RevokeSessionCommand struct {
-	SessionID model.SessionID
-}
-
 // RevokeOtherSessionsResult reports how many of the caller's other Sessions
 // this request revoked.
 type RevokeOtherSessionsResult struct {
@@ -60,14 +55,14 @@ func (s *Service) ListSessions(
 func (s *Service) RevokeSession(
 	ctx context.Context,
 	inv invocation.Invocation,
-	command RevokeSessionCommand,
+	id model.SessionID,
 ) error {
 	principal := inv.Principal()
 	if principal.Validate() != nil {
 		return access.InvalidTokenAppError()
 	}
 
-	sessionID := strings.TrimSpace(command.SessionID.String())
+	sessionID := strings.TrimSpace(id.String())
 	if !model.SessionID(sessionID).IsValid() {
 		return apperror.New("session.id.invalid").WithField("field", "session_id")
 	}

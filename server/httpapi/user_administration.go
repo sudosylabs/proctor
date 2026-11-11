@@ -261,7 +261,8 @@ func (h userAdministrationHandlers) revokeSession(request route.Request) (route.
 	err = h.sessions.RevokeUserSession(
 		request.Context,
 		request.Invocation(),
-		identity.RevokeUserSessionCommand{UserID: userID, SessionID: sessionID},
+		userID,
+		sessionID,
 	)
 	if err != nil {
 		return route.Result{}, err
@@ -285,6 +286,6 @@ type AccountStateApplication interface {
 // SessionAdministrationApplication is the application port its handlers call; it lists and revokes the Sessions of another User.
 type SessionAdministrationApplication interface {
 	ListUserSessions(context.Context, invocation.Invocation, identity.ListUserSessionsQuery) (paging.Page[*model.Session], error)
-	RevokeUserSession(context.Context, invocation.Invocation, identity.RevokeUserSessionCommand) error
+	RevokeUserSession(context.Context, invocation.Invocation, model.UserID, model.SessionID) error
 	RevokeUserSessions(context.Context, invocation.Invocation, identity.RevokeUserSessionsCommand) error
 }

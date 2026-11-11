@@ -38,7 +38,7 @@ func TestAdministratorMFAResetRequiresEnabledServiceAndExactTargetBeforeMutation
 			persistence := &installationStoreFake{events: &events}
 			service := &Service{installations: persistence, capabilities: &accessPolicyCapabilitiesFake{},
 				mfa: &mfaMechanics{deps: mfaMechanicsDependencies{Settings: MFAPolicy{Enabled: test.enabled}}}}
-			result, err := service.ResetAdministratorMFA(context.Background(), invocation.Task("host-operator-test"), AdministratorMFAResetCommand{InstitutionID: model.InstitutionID(test.institution), UserID: model.UserID(test.user)})
+			result, err := service.ResetAdministratorMFA(context.Background(), invocation.Task("host-operator-test"), model.InstitutionID(test.institution), model.UserID(test.user))
 			require.Nil(t, result, "result=%#v error=%v events", result, err)
 			require.True(t, apperror.Is(err, test.code), "result=%#v error=%v events", result, err)
 			require.Empty(t, events, "result=%#v error=%v events", result, err)
@@ -73,7 +73,7 @@ func TestAdministratorMFAResetPassesCurrentDeploymentAndRequiresDurableEvidence(
 			service := bootstrapTestService(&Service{installations: persistence, hasher: &passwordHasherFake{events: &events}, nodeID: "offline", now: time.Now,
 				capabilities: capabilities, mfa: &mfaMechanics{deps: mfaMechanicsDependencies{Settings: MFAPolicy{Enabled: true}}}},
 				LoginRateLimitPolicy{}, BootstrapProtectionPolicy{})
-			result, err := service.ResetAdministratorMFA(context.Background(), invocation.Task("host-operator-test"), AdministratorMFAResetCommand{InstitutionID: model.InstitutionID(" " + institutionID.String() + " "), UserID: userID})
+			result, err := service.ResetAdministratorMFA(context.Background(), invocation.Task("host-operator-test"), model.InstitutionID(" "+institutionID.String()+" "), userID)
 			require.Equal(t, test.wantOK, err == nil, "result=%#v error=%v events", result, err)
 			require.Equal(t, []string{"reset-administrator-mfa"}, events, "result=%#v error=%v events", result, err)
 			input := persistence.mfaResetInput

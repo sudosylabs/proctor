@@ -18,10 +18,6 @@ import (
 	"github.com/sudosylabs/proctor/server/store"
 )
 
-type RevokeDesktopRegistrationCommand struct {
-	RegistrationID model.DesktopRegistrationID
-}
-
 // requireDesktopRegistration refuses a Service whose Desktop Registration
 // collaborators are incomplete. New calls it once, with the account services.
 func (s *Service) requireDesktopRegistration() error {
@@ -52,7 +48,7 @@ func (s *Service) ListDesktopRegistrations(
 func (s *Service) RevokeDesktopRegistration(
 	ctx context.Context,
 	inv invocation.Invocation,
-	command RevokeDesktopRegistrationCommand,
+	id model.DesktopRegistrationID,
 ) error {
 	principal := inv.Principal()
 	at := model.TimeUTC(s.now())
@@ -60,7 +56,7 @@ func (s *Service) RevokeDesktopRegistration(
 		return err
 	}
 
-	if !command.RegistrationID.IsValid() {
+	if !id.IsValid() {
 		return apperror.New("request.invalid").WithField("field", "desktop_registration_id")
 	}
 
@@ -69,14 +65,14 @@ func (s *Service) RevokeDesktopRegistration(
 		Action:     model.ActionDesktopRegistrationRevoke,
 		Resource:   model.Resource{Type: model.ResourceUser, ID: principal.UserID.String()},
 		Operation:  "revoke",
-		Value:      map[string]any{"registration_id": command.RegistrationID.String()},
+		Value:      map[string]any{"registration_id": id.String()},
 	})
 	if err != nil {
 		return err
 	}
 
 	result, err := s.desktopRegistrations.Revoke(ctx, &store.DesktopRegistrationRevocation{
-		RegistrationID: command.RegistrationID,
+		RegistrationID: id,
 		UserID:         principal.UserID,
 		RevokedAt:      at,
 		AuditEventID:   auditID,

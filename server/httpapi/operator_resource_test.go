@@ -71,7 +71,7 @@ func (f *focusedRoleApplication) CreateRole(_ context.Context, _ invocation.Invo
 func (f *focusedRoleApplication) UpdateRole(context.Context, invocation.Invocation, administration.UpdateRoleCommand) (*model.Role, error) {
 	return f.roles[0], nil
 }
-func (*focusedRoleApplication) ArchiveRole(context.Context, invocation.Invocation, administration.ArchiveRoleCommand) error {
+func (*focusedRoleApplication) ArchiveRole(context.Context, invocation.Invocation, model.RoleID) error {
 	return nil
 }
 
@@ -199,8 +199,8 @@ func TestAuditResourcePreservesOpaqueCursorAndSafeErrors(t *testing.T) {
 type focusedJobApplication struct {
 	listQuery    job.ListQuery
 	attemptQuery job.AttemptListQuery
-	cancel       job.CancelCommand
-	retry        job.RetryCommand
+	cancel       model.JobID
+	retry        model.JobID
 	view         job.View
 }
 
@@ -215,12 +215,12 @@ func (f *focusedJobApplication) ListJobAttempts(_ context.Context, _ invocation.
 	f.attemptQuery = query
 	return job.AttemptPage{}, nil
 }
-func (f *focusedJobApplication) CancelJob(_ context.Context, _ invocation.Invocation, command job.CancelCommand) (job.View, error) {
-	f.cancel = command
+func (f *focusedJobApplication) CancelJob(_ context.Context, _ invocation.Invocation, id model.JobID) (job.View, error) {
+	f.cancel = id
 	return f.view, nil
 }
-func (f *focusedJobApplication) RetryJob(_ context.Context, _ invocation.Invocation, command job.RetryCommand) (job.View, error) {
-	f.retry = command
+func (f *focusedJobApplication) RetryJob(_ context.Context, _ invocation.Invocation, id model.JobID) (job.View, error) {
+	f.retry = id
 	return f.view, nil
 }
 
@@ -263,8 +263,8 @@ func TestJobResourcePreservesPrivateProjectionAndBoundedControls(t *testing.T) {
 		response := serveOperatorRequest(httpAPI, http.MethodPost, "/api/v1/jobs/"+jobID.String()+"/"+action, "", true)
 		require.Equal(t, http.StatusOK, response.Code, "%s status = %d: %s", action, response.Code, response.Body.String())
 	}
-	require.Equal(t, jobID, jobs.cancel.ID, "control commands = %#v/%#v", jobs.cancel, jobs.retry)
-	require.Equal(t, jobID, jobs.retry.ID, "control commands = %#v/%#v", jobs.cancel, jobs.retry)
+	require.Equal(t, jobID, jobs.cancel, "control commands = %#v/%#v", jobs.cancel, jobs.retry)
+	require.Equal(t, jobID, jobs.retry, "control commands = %#v/%#v", jobs.cancel, jobs.retry)
 	create := serveOperatorRequest(httpAPI, http.MethodPost, "/api/v1/jobs", `{}`, true)
 	require.Equal(t, http.StatusMethodNotAllowed, create.Code, "generic job create status = %d: %s", create.Code, create.Body.String())
 }

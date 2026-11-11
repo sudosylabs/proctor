@@ -42,11 +42,6 @@ type CreatePersonalAccessTokenCommand struct {
 	ExpiresAt      int64
 }
 
-// RevokePersonalAccessTokenCommand revokes one owned PAT.
-type RevokePersonalAccessTokenCommand struct {
-	TokenID model.PersonalAccessTokenID
-}
-
 // SetPersonalAccessTokenDisabledCommand enables or disables an owned PAT.
 type SetPersonalAccessTokenDisabledCommand struct {
 	TokenID  model.PersonalAccessTokenID
@@ -233,20 +228,20 @@ func (s *Service) ListPersonalAccessTokens(
 func (s *Service) RevokePersonalAccessToken(
 	ctx context.Context,
 	inv invocation.Invocation,
-	command RevokePersonalAccessTokenCommand,
+	id model.PersonalAccessTokenID,
 ) (*model.PersonalAccessToken, error) {
 	principal := inv.Principal()
 	if err := requireInteractiveSession(principal, false, s.now(), s.recentAuthenticationTTL); err != nil {
 		return nil, err
 	}
-	if !command.TokenID.IsValid() {
+	if !id.IsValid() {
 		return nil, invalidPersonalAccessTokenRequest("personal_access_token_id")
 	}
 
-	current, err := s.personalAccessTokens.Get(ctx, command.TokenID)
+	current, err := s.personalAccessTokens.Get(ctx, id)
 	if err != nil || current.UserID != principal.UserID {
 		if err == nil {
-			err = store.NewErrNotFound("personal_access_token", command.TokenID.String())
+			err = store.NewErrNotFound("personal_access_token", id.String())
 		}
 		return nil, personalAccessTokenFailure("personal_access_token", err)
 	}
@@ -266,7 +261,7 @@ func (s *Service) RevokePersonalAccessToken(
 		model.ActionPersonalAccessTokenRevoke,
 		resource,
 		inv.RequestMetadata(),
-		map[string]any{"personal_access_token_id": command.TokenID},
+		map[string]any{"personal_access_token_id": id},
 		current.Auditable(),
 	)
 	if appErr != nil {
@@ -275,7 +270,7 @@ func (s *Service) RevokePersonalAccessToken(
 
 	prepared, err := s.personalAccessTokens.PrepareMutation(ctx, &store.PersonalAccessTokenMutationPreparation{
 		UserID:     principal.UserID,
-		TokenID:    command.TokenID,
+		TokenID:    id,
 		Kind:       store.PersonalAccessTokenMutationRevoke,
 		AuditEvent: auditDraft,
 		Lifetime:   personalAccessTokenMutationPreparationLifetime,
@@ -296,7 +291,7 @@ func (s *Service) RevokePersonalAccessToken(
 	}
 
 	result, err := s.personalAccessTokens.Revoke(ctx, &store.PersonalAccessTokenRevocation{
-		ID:            command.TokenID,
+		ID:            id,
 		UserID:        principal.UserID,
 		PreparationID: prepared.ID,
 		Notice:        notice,

@@ -27,8 +27,8 @@ type JobOperationsApplication interface {
 	ListJobs(context.Context, invocation.Invocation, job.ListQuery) (job.Page, error)
 	GetJob(context.Context, invocation.Invocation, model.JobID) (job.View, error)
 	ListJobAttempts(context.Context, invocation.Invocation, job.AttemptListQuery) (job.AttemptPage, error)
-	CancelJob(context.Context, invocation.Invocation, job.CancelCommand) (job.View, error)
-	RetryJob(context.Context, invocation.Invocation, job.RetryCommand) (job.View, error)
+	CancelJob(context.Context, invocation.Invocation, model.JobID) (job.View, error)
+	RetryJob(context.Context, invocation.Invocation, model.JobID) (job.View, error)
 }
 
 type jobProgressResponse struct {
@@ -259,7 +259,7 @@ func (h jobHandlers) cancel(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	view, err := h.app.CancelJob(request.Context, request.Invocation(), job.CancelCommand{ID: jobID})
+	view, err := h.app.CancelJob(request.Context, request.Invocation(), jobID)
 	if err != nil {
 		return route.Result{}, err
 	}
@@ -270,7 +270,7 @@ func (h jobHandlers) retry(request route.Request) (route.Result, error) {
 	if err != nil {
 		return route.Result{}, err
 	}
-	view, err := h.app.RetryJob(request.Context, request.Invocation(), job.RetryCommand{ID: jobID})
+	view, err := h.app.RetryJob(request.Context, request.Invocation(), jobID)
 	if err != nil {
 		return route.Result{}, err
 	}

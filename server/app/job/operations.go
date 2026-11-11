@@ -110,10 +110,6 @@ func NewOperations(deps OperationsDependencies) (*Operations, error) {
 	return &Operations{deps: deps}, nil
 }
 
-type CancelCommand struct{ ID model.JobID }
-
-type RetryCommand struct{ ID model.JobID }
-
 // ListJobs lists one page of operator-visible Jobs, with who started each and
 // what it is about.
 func (s *Operations) ListJobs(ctx context.Context, inv invocation.Invocation, query ListQuery) (Page, error) {
@@ -200,20 +196,20 @@ func (s *Operations) ListJobAttempts(
 }
 
 // CancelJob cancels one Job whose type is cancelable, with audit.
-func (s *Operations) CancelJob(ctx context.Context, inv invocation.Invocation, command CancelCommand) (View, error) {
+func (s *Operations) CancelJob(ctx context.Context, inv invocation.Invocation, id model.JobID) (View, error) {
 	if s == nil {
 		return View{}, apperror.New("job.unavailable")
 	}
-	return s.controlJob(ctx, inv, "cancel", command.ID, s.deps.Jobs.PrepareCancellation, s.deps.Jobs.Cancel)
+	return s.controlJob(ctx, inv, "cancel", id, s.deps.Jobs.PrepareCancellation, s.deps.Jobs.Cancel)
 }
 
 // RetryJob retries one Job whose type supports an explicit retry in its
 // current status, with audit.
-func (s *Operations) RetryJob(ctx context.Context, inv invocation.Invocation, command RetryCommand) (View, error) {
+func (s *Operations) RetryJob(ctx context.Context, inv invocation.Invocation, id model.JobID) (View, error) {
 	if s == nil {
 		return View{}, apperror.New("job.unavailable")
 	}
-	return s.controlJob(ctx, inv, "retry", command.ID, s.deps.Jobs.PrepareRetry, s.deps.Jobs.Retry)
+	return s.controlJob(ctx, inv, "retry", id, s.deps.Jobs.PrepareRetry, s.deps.Jobs.Retry)
 }
 
 func (s *Operations) controlJob(

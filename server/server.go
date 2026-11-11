@@ -25,6 +25,7 @@ import (
 	"github.com/sudosylabs/proctor/server/app/invocation"
 	"github.com/sudosylabs/proctor/server/config"
 	"github.com/sudosylabs/proctor/server/logging"
+	"github.com/sudosylabs/proctor/server/model"
 )
 
 type options struct {
@@ -154,7 +155,8 @@ type runtimeAdministratorRecovery interface {
 	ResetAdministratorMFA(
 		context.Context,
 		invocation.System,
-		identity.AdministratorMFAResetCommand,
+		model.InstitutionID,
+		model.UserID,
 	) (*identity.AdministratorMFAResetResult, error)
 }
 

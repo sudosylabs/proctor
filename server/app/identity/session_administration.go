@@ -33,11 +33,6 @@ type ListUserSessionsQuery struct {
 	BeforeID        model.SessionID
 }
 
-type RevokeUserSessionCommand struct {
-	UserID    model.UserID
-	SessionID model.SessionID
-}
-
 type RevokeUserSessionsCommand struct {
 	UserID         model.UserID
 	IdempotencyKey string
@@ -96,10 +91,9 @@ func (s *Service) ListUserSessions(
 func (s *Service) RevokeUserSession(
 	ctx context.Context,
 	inv invocation.Invocation,
-	command RevokeUserSessionCommand,
+	userID model.UserID,
+	sessionID model.SessionID,
 ) error {
-	userID := command.UserID
-	sessionID := command.SessionID
 	if !userID.IsValid() {
 		return apperror.New("request.invalid").WithField("field", "user_id")
 	}

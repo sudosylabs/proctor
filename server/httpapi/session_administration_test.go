@@ -126,8 +126,8 @@ func TestAdminSessionRevokeUsesApplicationCommand(t *testing.T) {
 	response := httptest.NewRecorder()
 	httpAPI.ServeHTTP(response, request)
 	require.Equal(t, http.StatusNoContent, response.Code, "status = %d: %s", response.Code, response.Body.String())
-	require.Equal(t, model.UserID(userID), sessions.revokeCommand.UserID)
-	require.Equal(t, model.SessionID(sessionID), sessions.revokeCommand.SessionID)
+	require.Equal(t, model.UserID(userID), sessions.revokeUserID)
+	require.Equal(t, model.SessionID(sessionID), sessions.revokeSessionID)
 }
 
 func TestSessionAdministrationOpenAPIDocument(t *testing.T) {

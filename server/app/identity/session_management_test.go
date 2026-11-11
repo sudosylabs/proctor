@@ -40,7 +40,7 @@ func TestSelfSessionServiceUsesCallerOwnershipAndPostCommitEffects(t *testing.T)
 	err := service.RevokeSession(
 		context.Background(),
 		inv,
-		RevokeSessionCommand{SessionID: session.ID},
+		session.ID,
 	)
 	require.NoError(t, err)
 	// Contract (guardrails 8 and 14): the audit begins before the durable write,
@@ -69,7 +69,7 @@ func TestSelfSessionServiceHidesAnotherUsersSession(t *testing.T) {
 	err := service.RevokeSession(
 		context.Background(),
 		invocation.New(principal, model.RequestMetadata{}),
-		RevokeSessionCommand{SessionID: persistence.session.ID},
+		persistence.session.ID,
 	)
 	require.True(t, apperror.Is(err, "session.not_found"), "error = %v, want session.not_found", err)
 	require.Equal(t, 0, persistence.revokeCalls, "revoke calls")
@@ -127,7 +127,7 @@ func TestSelfSessionRevocationsRequireAuditBeforeMutationAndEffects(t *testing.T
 				inv := invocation.New(principal, model.RequestMetadata{})
 				switch operation {
 				case "revoke_own_session":
-					err = self.RevokeSession(context.Background(), inv, RevokeSessionCommand{SessionID: principal.SessionID})
+					err = self.RevokeSession(context.Background(), inv, principal.SessionID)
 				case "revoke_own_sessions":
 					err = self.RevokeAllSessions(context.Background(), inv)
 				case "revoke_other_sessions":
@@ -209,7 +209,7 @@ func TestSelfSessionRevocationRepeatOutcomes(t *testing.T) {
 			inv := invocation.New(principal, model.RequestMetadata{})
 			switch operation {
 			case "revoke_own_session":
-				err = self.RevokeSession(context.Background(), inv, RevokeSessionCommand{SessionID: principal.SessionID})
+				err = self.RevokeSession(context.Background(), inv, principal.SessionID)
 				require.True(t, apperror.Is(err, "session.not_found"), "repeat = %v audit=%#v", err, audit)
 				require.Equal(t, "session.not_found", audit.failCode, "repeat = %v audit=%#v", err, audit)
 			case "revoke_own_sessions":

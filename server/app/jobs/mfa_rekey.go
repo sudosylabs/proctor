@@ -53,7 +53,7 @@ type MFARekeyResult struct {
 // DecodeMFARekeyCommand strictly decodes an MFA rekey Job command.
 func DecodeMFARekeyCommand(document json.RawMessage) (MFARekeyCommand, error) {
 	var value MFARekeyCommand
-	err := job.DecodeStrictUniqueDocument(document, &value)
+	err := model.DecodeStrictJobDocument(document, &value)
 	return value, err
 }
 
@@ -65,7 +65,7 @@ func DecodeMFARekeyCheckpoint(document json.RawMessage) (MFARekeyCheckpoint, err
 // DecodeMFARekeyResult strictly decodes an MFA rekey Job result.
 func DecodeMFARekeyResult(document json.RawMessage) (MFARekeyResult, error) {
 	var value MFARekeyResult
-	err := job.DecodeStrictUniqueDocument(document, &value)
+	err := model.DecodeStrictJobDocument(document, &value)
 	return value, err
 }
 
@@ -237,7 +237,7 @@ func decodeMFARekeyCheckpoint(document json.RawMessage) (MFARekeyCheckpoint, err
 		return checkpoint, nil
 	}
 
-	if job.DecodeStrictUniqueDocument(document, &checkpoint) != nil ||
+	if model.DecodeStrictJobDocument(document, &checkpoint) != nil ||
 		checkpoint.Processed < 1 ||
 		checkpoint.Resealed < 0 ||
 		checkpoint.Resealed > checkpoint.Processed ||

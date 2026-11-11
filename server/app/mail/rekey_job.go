@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/sudosylabs/proctor/server/app/job"
 	"github.com/sudosylabs/proctor/server/model"
 	"github.com/sudosylabs/proctor/server/store"
 )
@@ -44,14 +43,14 @@ type RekeyResult struct {
 // DecodeRekeyCommand strictly decodes and validates a mail rekey Job command.
 func DecodeRekeyCommand(document json.RawMessage) (RekeyCommand, error) {
 	var value RekeyCommand
-	err := job.DecodeStrictUniqueDocument(document, &value)
+	err := model.DecodeStrictJobDocument(document, &value)
 	return value, err
 }
 
 // DecodeRekeyResult strictly decodes and validates a mail rekey Job result.
 func DecodeRekeyResult(document json.RawMessage) (RekeyResult, error) {
 	var value RekeyResult
-	err := job.DecodeStrictUniqueDocument(document, &value)
+	err := model.DecodeStrictJobDocument(document, &value)
 	return value, err
 }
 
@@ -64,7 +63,7 @@ func DecodeRekeyCheckpoint(document json.RawMessage) (RekeyCheckpoint, error) {
 		return checkpoint, nil
 	}
 
-	if job.DecodeStrictUniqueDocument(document, &checkpoint) != nil ||
+	if model.DecodeStrictJobDocument(document, &checkpoint) != nil ||
 		checkpoint.Processed < 0 ||
 		checkpoint.Reencrypted < 0 ||
 		checkpoint.Reencrypted > checkpoint.Processed ||

@@ -55,7 +55,7 @@ func EncodeExamSittingLifecycleRecoveryCommand(value ExamSittingLifecycleRecover
 // DecodeExamSittingLifecycleRecoveryCommand strictly decodes and validates an Exam Sitting lifecycle recovery Job command.
 func DecodeExamSittingLifecycleRecoveryCommand(document json.RawMessage) (ExamSittingLifecycleRecoveryCommand, error) {
 	var value ExamSittingLifecycleRecoveryCommand
-	if err := job.DecodeStrictUniqueDocument(document, &value); err != nil {
+	if err := model.DecodeStrictJobDocument(document, &value); err != nil {
 		return value, err
 	}
 	if value.WorkLimit < 1 || value.WorkLimit > maximumExamSittingLifecycleRecoveryWork {
@@ -75,7 +75,7 @@ func EncodeExamSittingLifecycleRecoveryCheckpoint(value ExamSittingLifecycleReco
 // DecodeExamSittingLifecycleRecoveryCheckpoint strictly decodes and validates an Exam Sitting lifecycle recovery Job checkpoint.
 func DecodeExamSittingLifecycleRecoveryCheckpoint(document json.RawMessage) (ExamSittingLifecycleRecoveryCheckpoint, error) {
 	var value ExamSittingLifecycleRecoveryCheckpoint
-	if err := job.DecodeStrictUniqueDocument(document, &value); err != nil {
+	if err := model.DecodeStrictJobDocument(document, &value); err != nil {
 		return value, err
 	}
 	return value, validateExamSittingLifecycleRecoveryCheckpoint(value)

@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // ---------------------------------------------------------------------------------------------
 
-package job
+package model
 
 import (
 	"bytes"
@@ -14,10 +14,10 @@ import (
 	"io"
 )
 
-// DecodeStrictUniqueDocument decodes one Job command, checkpoint or result
+// DecodeStrictJobDocument decodes one Job command, checkpoint or result
 // into target. The document must be a single JSON object with no duplicate
 // member, no member target does not declare, and nothing after it.
-func DecodeStrictUniqueDocument(document json.RawMessage, target any) error {
+func DecodeStrictJobDocument(document json.RawMessage, target any) error {
 	decoder := json.NewDecoder(bytes.NewReader(document))
 	token, err := decoder.Token()
 	if err != nil || token != json.Delim('{') {

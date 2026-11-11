@@ -5,7 +5,7 @@
 ~~~text
 internal/canonicaljson ← model ← {config, store}
 store ← app/job
-{model, store, logging, app/access, app/apperror, app/invocation} ← app/job ← {app, app/identity, app/jobs, app/mail, httpapi, server}
+{model, store, logging, app/access, app/apperror, app/invocation} ← app/job ← {app, app/identity, app/jobs, httpapi, server}
 {model, store} ← app/apperror ← {app, app/idempotency, app/exam, httpapi, websocket}
 model ← app/invocation ← {app, app/idempotency, app/exam}
 {model, store, app/apperror, app/invocation} ← app/access ← {app, app/academic, app/user, app/identity, app/administration, app/onboarding, app/exam, app/job, app/mail, app/search}
@@ -89,7 +89,7 @@ are application-owned modules, not transports.
 | `app/exam` | `model`, bounded `store` contracts, standard library, consumer-owned ports, `app/apperror`, `app/invocation`, `app/idempotency`, `app/access` for the `access.Mutation` an audit attempt begins with, `app/realtime` for the Publisher and events of the seven use-case packages (`app/exam` and its `attempt`, `correction`, `resource`, `review`, `sitting` and `workspace` children), `app/mail` for the three children that prepare the mail they send (`sitting`, `attempt`, `review`), and explicitly shared leaf packages such as `app/exam/safemarkdown` | parent `app`, a sibling use-case package (`attempt` and `review` reach the Sitting service through a port), `app/mail` from `app/exam` itself or the other children, transports, platform, concrete adapters |
 | `app/exam/safemarkdown` | Standard library | model, store, parent `app`, transports, concrete adapters |
 | `app/exam/manageraccess` | `model`, bounded Store access projection, narrow membership port, standard library | parent `app` or `app/exam`, sibling use cases, transports, concrete adapters |
-| `app/mail` | `model`, bounded `store` mail records, `secretseal`, `localization`, the Exam Manager preparation contract, standard-library templating, and consumer-owned sending ports; for the operator mail service (`mail.Operations`), `app/access`, `app/apperror`, `app/invocation`, `app/paging`, and `app/job` for the strict decoder of its rekey Job documents | parent `app`, area packages (the identity test-mail rate limit is a port), `app/jobs`, transports, platform, SQL, configuration, concrete adapters |
+| `app/mail` | `model`, bounded `store` mail records, `secretseal`, `localization`, the Exam Manager preparation contract, standard-library templating, and consumer-owned sending ports; for the operator mail service (`mail.Operations`), `app/access`, `app/apperror`, `app/invocation`, and `app/paging` | parent `app`, area packages (the identity test-mail rate limit is a port), `app/job`, `app/jobs`, transports, platform, SQL, configuration, concrete adapters |
 | `app/search` | `model`, `store`, `app/access`, `app/apperror`, `app/invocation`, `app/paging`, and the `app/exam` and `app/user` services it searches through, standard library | parent `app`, other area packages, `app/job`, `app/mail`, transports, platform, concrete adapters |
 | `secretseal` | Standard library cryptography and encoding | model, persistence, configuration, transports, concrete adapters |
 | `localization` | Standard library, caller-supplied catalog filesystems, and the CLDR-aware localization engine | application, domain, persistence, transports, concrete adapters |

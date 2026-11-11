@@ -332,8 +332,7 @@ var dependencyRules = []dependencyRule{
 		thirdParty:     only(exact("golang.org/x/net/html")),
 		// Composition needs model, store, secretseal, the Exam Manager
 		// contract and localization. The operator mail service beside it
-		// authorizes, audits, pages and reports application errors, and reads
-		// the rekey Job's documents through the engine's strict decoder.
+		// authorizes, audits, pages and reports application errors.
 		project: only(
 			exact(serverModule+"/model"),
 			exact(serverModule+"/store"),
@@ -343,7 +342,6 @@ var dependencyRules = []dependencyRule{
 			exact(serverModule+"/app/access"),
 			exact(serverModule+"/app/apperror"),
 			exact(serverModule+"/app/invocation"),
-			exact(serverModule+"/app/job"),
 			exact(serverModule+"/app/paging"),
 		),
 	},
